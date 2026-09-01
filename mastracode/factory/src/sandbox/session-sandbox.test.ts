@@ -10,7 +10,7 @@ import {
   evictSessionSandbox,
   getSessionSandbox,
   peekSessionSandbox,
-  resolveSessionWorkdir,
+  resolveSessionRepoDir,
 } from './session-sandbox.js';
 
 afterEach(() => {
@@ -25,8 +25,8 @@ describe('session sandbox memo', () => {
     const first = getSessionSandbox('sess-1', 'acme/api', factory);
     const second = getSessionSandbox('sess-1', 'acme/api', factory);
     expect(second).toBe(first);
-    // Remote workdirs are a runtime fact of the VM — unresolved until start.
-    expect(first.workdir).toBeUndefined();
+    // Remote repoDirs are a runtime fact of the VM — unresolved until start.
+    expect(first.repoDir).toBeUndefined();
     expect(factory).toHaveBeenCalledTimes(1);
   });
 
@@ -40,20 +40,20 @@ describe('session sandbox memo', () => {
     expect(peekSessionSandbox('sess-1')).toBeUndefined();
     const made = getSessionSandbox('sess-1', 'acme/api', () => construct('sb-1'));
     expect(peekSessionSandbox('sess-1')?.sandbox).toBe(made.sandbox);
-    expect(peekSessionSandbox('sess-1')?.workdir).toBeUndefined();
+    expect(peekSessionSandbox('sess-1')?.repoDir).toBeUndefined();
   });
 
-  it('resolves a remote workdir from the live VM home and memoizes it on the entry', async () => {
+  it('resolves a remote repoDir from the live VM home and memoizes it on the entry', async () => {
     const executeCommand = vi.fn(async () => ({ exitCode: 0, stdout: '/home/user\n', stderr: '' }));
     const sandbox = { id: 'sb-1', provider: 'e2b', executeCommand } as unknown as WorkspaceSandbox;
     const entry = getSessionSandbox('sess-1', 'acme/api', () => sandbox);
-    expect(entry.workdir).toBeUndefined();
+    expect(entry.repoDir).toBeUndefined();
 
-    await expect(resolveSessionWorkdir('sess-1', sandbox, 'acme/api')).resolves.toBe('/home/user/api');
-    expect(peekSessionSandbox('sess-1')?.workdir).toBe('/home/user/api');
+    await expect(resolveSessionRepoDir('sess-1', sandbox, 'acme/api')).resolves.toBe('/home/user/api');
+    expect(peekSessionSandbox('sess-1')?.repoDir).toBe('/home/user/api');
 
     // Memoized: the second resolution never probes again.
-    await expect(resolveSessionWorkdir('sess-1', sandbox, 'acme/api')).resolves.toBe('/home/user/api');
+    await expect(resolveSessionRepoDir('sess-1', sandbox, 'acme/api')).resolves.toBe('/home/user/api');
     expect(executeCommand).toHaveBeenCalledTimes(1);
     expect(executeCommand).toHaveBeenCalledWith('pwd');
   });
@@ -68,7 +68,7 @@ describe('session sandbox memo', () => {
     } as unknown as WorkspaceSandbox;
     getSessionSandbox('sess-1', 'acme/api', () => sandbox);
 
-    await expect(resolveSessionWorkdir('sess-1', sandbox, 'acme/api')).resolves.toBe('/workspace/api');
+    await expect(resolveSessionRepoDir('sess-1', sandbox, 'acme/api')).resolves.toBe('/workspace/api');
     expect(executeCommand).not.toHaveBeenCalled();
   });
 
@@ -82,7 +82,7 @@ describe('session sandbox memo', () => {
     } as unknown as WorkspaceSandbox;
     getSessionSandbox('sess-1', 'acme/api', () => sandbox);
 
-    await expect(resolveSessionWorkdir('sess-1', sandbox, 'acme/api')).resolves.toBe('/home/user/api');
+    await expect(resolveSessionRepoDir('sess-1', sandbox, 'acme/api')).resolves.toBe('/home/user/api');
     expect(executeCommand).toHaveBeenCalledWith('pwd');
   });
 
@@ -94,17 +94,17 @@ describe('session sandbox memo', () => {
     const sandbox = { id: 'sb-1', provider: 'e2b', executeCommand } as unknown as WorkspaceSandbox;
     getSessionSandbox('sess-1', 'acme/api', () => sandbox);
 
-    await expect(resolveSessionWorkdir('sess-1', sandbox, 'acme/api')).rejects.toThrow(/default cwd probe failed/);
-    expect(peekSessionSandbox('sess-1')?.workdir).toBeUndefined();
-    await expect(resolveSessionWorkdir('sess-1', sandbox, 'acme/api')).resolves.toBe('/home/user/api');
+    await expect(resolveSessionRepoDir('sess-1', sandbox, 'acme/api')).rejects.toThrow(/default cwd probe failed/);
+    expect(peekSessionSandbox('sess-1')?.repoDir).toBeUndefined();
+    await expect(resolveSessionRepoDir('sess-1', sandbox, 'acme/api')).resolves.toBe('/home/user/api');
   });
 
-  it('resolves a local workdir synchronously at construction', async () => {
+  it('resolves a local repoDir synchronously at construction', async () => {
     const local = { id: 'sb-l', provider: 'local', workingDirectory: '/srv/sess-1' } as unknown as WorkspaceSandbox;
     const entry = getSessionSandbox('sess-l', 'acme/api', () => local);
-    expect(entry.workdir).toBe(path.resolve('/srv/sess-1', 'api'));
+    expect(entry.repoDir).toBe(path.resolve('/srv/sess-1', 'api'));
     // Resolution answers from the memo without any probe.
-    await expect(resolveSessionWorkdir('sess-l', local, 'acme/api')).resolves.toBe(entry.workdir);
+    await expect(resolveSessionRepoDir('sess-l', local, 'acme/api')).resolves.toBe(entry.repoDir);
   });
 
   it('evict drops the instance so the next access reconstructs', () => {
@@ -152,7 +152,7 @@ describe('session setup hook', () => {
 
   it('the hook skips setup on reconnect when the marker and checkout are present', async () => {
     const boot = path.join(dir, 'reconnect');
-    const workdir = path.join(boot, 'repo');
+    const repoDir = path.join(boot, 'repo');
     const first = new LocalSandbox({
       workingDirectory: boot,
       onStart: createSessionSetupHook(
@@ -178,7 +178,7 @@ describe('session setup hook', () => {
 
   it('a marker without its checkout does not skip setup (removed checkout heals)', async () => {
     const boot = path.join(dir, 'wiped');
-    const workdir = path.join(boot, 'repo');
+    const repoDir = path.join(boot, 'repo');
     const first = new LocalSandbox({
       workingDirectory: boot,
       onStart: createSessionSetupHook(
@@ -191,7 +191,7 @@ describe('session setup hook', () => {
 
     // The checkout is removed but the marker (beside it) survives — a stale
     // skip cache must not defeat disk truth.
-    await fs.rm(workdir, { recursive: true, force: true });
+    await fs.rm(repoDir, { recursive: true, force: true });
     const second = new LocalSandbox({
       workingDirectory: boot,
       onStart: createSessionSetupHook(

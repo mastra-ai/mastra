@@ -17,7 +17,7 @@ const projectRepositoryInput = {
   createdByUserId: 'user-1',
   branch: null,
   sandboxProvider: 'local',
-  sandboxWorkdir: '/workspace/mastra',
+  sandboxRepoDir: '/workspace/mastra',
 };
 
 describe('SourceControlStorage', () => {

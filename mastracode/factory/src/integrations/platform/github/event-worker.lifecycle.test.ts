@@ -171,7 +171,7 @@ describe('Platform GitHub event worker factory lifecycle', () => {
         repositoryId: repository.id,
         createdByUserId: 'user-1',
         sandboxProvider: 'local',
-        sandboxWorkdir: '/tmp/app',
+        sandboxRepoDir: '/tmp/app',
       });
       await github.sourceControlStorage.sessions.create({
         sessionId: 'session-1',

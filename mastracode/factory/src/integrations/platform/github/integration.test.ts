@@ -878,7 +878,7 @@ describe('PlatformGithubIntegration', () => {
       repositoryId: repository.id,
       createdByUserId: 'user-1',
       sandboxProvider: 'local',
-      sandboxWorkdir: '/tmp/app',
+      sandboxRepoDir: '/tmp/app',
     });
     const onEvent = vi.fn();
     const context = {

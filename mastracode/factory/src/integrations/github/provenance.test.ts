@@ -58,7 +58,7 @@ async function setup() {
     repositoryId: repository.id,
     createdByUserId: 'user-1',
     sandboxProvider: 'local',
-    sandboxWorkdir: '/workspace',
+    sandboxRepoDir: '/workspace',
   });
   const pullsGet = vi.fn().mockResolvedValue({
     data: { number: 17, html_url: 'https://github.com/acme/repo/pull/17', base: { repo: { id: 10 } } },

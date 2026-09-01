@@ -85,7 +85,7 @@ function projectRepositoryRow(row: Record<string, any>) {
     repositoryId,
     branch: row.defaultBranch ?? null,
     sandboxProvider: 'railway',
-    sandboxWorkdir: row.sandboxWorkdir,
+    sandboxRepoDir: row.sandboxRepoDir,
     setupCommand: null,
     teardownCommand: null,
     createdAt: now,
@@ -406,7 +406,7 @@ describe('S1: full write-back journey through the real route handlers', () => {
         repoFullName: 'octo/hello',
         repoId: 99,
         defaultBranch: 'main',
-        sandboxWorkdir: '/workspace/hello',
+        sandboxRepoDir: '/workspace/hello',
       }),
     );
     const app = buildApp({ workosId: 'u1', organizationId: 'org1' });
@@ -426,7 +426,7 @@ describe('S1: full write-back journey through the real route handlers', () => {
     expect(materializeRepo).not.toHaveBeenCalled();
     expect(sandboxCallback).not.toHaveBeenCalled();
     expect(tables.worktrees).toHaveLength(0);
-    const persistedSessionWorkdir = '/workspace/session-feat-x';
+    const persistedSessionRepoDir = '/workspace/session-feat-x';
     // Local-provider seed: the memo derives `<workingDirectory>/<repo name>`.
     getSessionSandbox(session.id, 'seed/session-feat-x', () =>
       ({
@@ -439,7 +439,7 @@ describe('S1: full write-back journey through the real route handlers', () => {
     await sourceControlStorage.sessions.setSandbox({
       id: session.id,
       sandboxId: 'sb-session',
-      sandboxWorkdir: persistedSessionWorkdir,
+      sandboxRepoDir: persistedSessionRepoDir,
     });
 
     // 4. Git operations address the materialized workspace by session id.
@@ -449,7 +449,7 @@ describe('S1: full write-back journey through the real route handlers', () => {
     });
     expect(commitRes.status).toBe(200);
     expect(await commitRes.json()).toMatchObject({ committed: true });
-    expect((commitAll.mock.calls[0] as unknown as any[])[1]).toBe(persistedSessionWorkdir);
+    expect((commitAll.mock.calls[0] as unknown as any[])[1]).toBe(persistedSessionRepoDir);
 
     // 5. Push that session branch with fresh repository-scoped access for this operation.
     const accessBeforePush = repositoryAccess.mock.calls.length;
@@ -462,8 +462,8 @@ describe('S1: full write-back journey through the real route handlers', () => {
     expect(repositoryAccess.mock.calls.length).toBe(accessBeforePush + 1);
     expect(githubStub.mintInstallationToken).not.toHaveBeenCalled();
     const pushCall = pushBranch.mock.calls[0] as unknown as any[];
-    // pushBranch(sandbox, workdir, branch, token, repoFullName)
-    expect(pushCall[1]).toBe(persistedSessionWorkdir);
+    // pushBranch(sandbox, repoDir, branch, token, repoFullName)
+    expect(pushCall[1]).toBe(persistedSessionRepoDir);
     expect(pushCall[2]).toBe('feat/x');
     const pushToken = pushCall[3] as string;
     expect(pushToken).toMatch(/^repo-token-/);
@@ -515,7 +515,7 @@ describe('S1: full write-back journey through the real route handlers', () => {
         repoFullName: 'octo/hello',
         repoId: 99,
         defaultBranch: 'main',
-        sandboxWorkdir: '/workspace/hello',
+        sandboxRepoDir: '/workspace/hello',
       }),
     );
     const response = await postJson(app, `/web/github/projects/${projectId}/pr`, {
@@ -541,7 +541,7 @@ describe('S2: concurrent pushes', () => {
         repoFullName: `octo/${id}`,
         repoId: id,
         defaultBranch: 'main',
-        sandboxWorkdir: '/workspace/hello',
+        sandboxRepoDir: '/workspace/hello',
       }),
     );
     const now = new Date();
@@ -563,7 +563,7 @@ describe('S2: concurrent pushes', () => {
       title: null,
       baseBranch: 'main',
       sandboxId: `sb-${id}`,
-      sandboxWorkdir: `/workspace/${id}`,
+      sandboxRepoDir: `/workspace/${id}`,
       materializedAt: now,
       createdAt: now,
       updatedAt: now,

@@ -209,7 +209,7 @@ describe('readWorkspaceFile', () => {
 
 // ── Session-backed (sandbox) workspace access ────────────────────────────────
 
-const WORKDIR = '/workspaces/acme/repo';
+const REPO_DIR = '/workspaces/acme/repo';
 
 function makeSession(overrides: Partial<SourceControlSession> = {}): SourceControlSession {
   return {
@@ -222,7 +222,7 @@ function makeSession(overrides: Partial<SourceControlSession> = {}): SourceContr
     title: null,
     baseBranch: 'main',
     sandboxId: 'sbx-1',
-    sandboxWorkdir: WORKDIR,
+    sandboxRepoDir: REPO_DIR,
     materializedAt: new Date(),
     createdAt: new Date(),
     updatedAt: new Date(),
@@ -238,14 +238,14 @@ function makeSession(overrides: Partial<SourceControlSession> = {}): SourceContr
  */
 function seedSessionSandbox(
   respond: (script: string, command: string, args: string[]) => { exitCode: number; stdout: string; stderr?: string },
-  { sessionRowId = 'row-1', workdir = WORKDIR } = {},
+  { sessionRowId = 'row-1', repoDir = REPO_DIR } = {},
 ) {
   const executeCommand = vi.fn(async (command: string, args: string[] = []) => {
     const script = args[1] ?? '';
     const result = respond(script, command, args);
     return { exitCode: result.exitCode, stdout: result.stdout, stderr: result.stderr ?? '' };
   });
-  // The memo derives the workdir from the constructed instance: a local
+  // The memo derives the repoDir from the constructed instance: a local
   // provider checks out under <workingDirectory>/<repo name>.
   getSessionSandbox(
     sessionRowId,
@@ -254,7 +254,7 @@ function seedSessionSandbox(
       ({
         id: 'sbx-1',
         provider: 'local',
-        workingDirectory: workdir.slice(0, workdir.lastIndexOf('/')),
+        workingDirectory: repoDir.slice(0, repoDir.lastIndexOf('/')),
         executeCommand,
       }) as never,
   );
@@ -360,12 +360,12 @@ describe('persisted session workspace files routes', () => {
 describe('listSessionRenderedPath', () => {
   it('lists rendered entries from the session sandbox in one command', async () => {
     const { executeCommand } = seedSessionSandbox(script => {
-      expect(script).toContain(`'${WORKDIR}/.artifacts'`);
+      expect(script).toContain(`'${REPO_DIR}/.artifacts'`);
       return {
         exitCode: 0,
         stdout: [
-          `d\t0\t1700000000.0\t${WORKDIR}/.artifacts/understand-pr`,
-          `f\t5\t1700000100.5\t${WORKDIR}/.artifacts/understand-pr/HISTORY.md`,
+          `d\t0\t1700000000.0\t${REPO_DIR}/.artifacts/understand-pr`,
+          `f\t5\t1700000100.5\t${REPO_DIR}/.artifacts/understand-pr/HISTORY.md`,
           '',
         ].join('\n'),
       };
@@ -376,7 +376,7 @@ describe('listSessionRenderedPath', () => {
 
     expect(listing.workspacePath).toBe(session.sessionId);
     expect(listing.root).toBe('.artifacts');
-    expect(listing.rootPath).toBe(`${WORKDIR}/.artifacts`);
+    expect(listing.rootPath).toBe(`${REPO_DIR}/.artifacts`);
     expect(listing.entries).toEqual([
       expect.objectContaining({ name: 'understand-pr', path: 'understand-pr', type: 'directory', size: 0 }),
       expect.objectContaining({ name: 'HISTORY.md', path: 'understand-pr/HISTORY.md', type: 'file', size: 5 }),
@@ -423,9 +423,9 @@ describe('listSessionRenderedPath', () => {
 
 describe('readSessionWorkspaceFile', () => {
   function respondForFile(content: string) {
-    const abs = `${WORKDIR}/.artifacts/understand-pr/HISTORY.md`;
+    const abs = `${REPO_DIR}/.artifacts/understand-pr/HISTORY.md`;
     return (script: string) => {
-      if (script.includes(`p='${abs}'`)) return { exitCode: 0, stdout: `${WORKDIR}\n${abs}` };
+      if (script.includes(`p='${abs}'`)) return { exitCode: 0, stdout: `${REPO_DIR}\n${abs}` };
       if (script.startsWith('stat -c')) return { exitCode: 0, stdout: `regular file|${content.length}|1700000000|0\n` };
       if (script.includes('base64 <')) return { exitCode: 0, stdout: Buffer.from(content, 'utf8').toString('base64') };
       return { exitCode: 1, stdout: '', stderr: `unexpected script: ${script}` };
@@ -467,8 +467,8 @@ describe('readSessionWorkspaceFile', () => {
 
   it('rejects directories', async () => {
     seedSessionSandbox(script => {
-      if (script.includes(`p='${WORKDIR}/.artifacts'`)) {
-        return { exitCode: 0, stdout: `${WORKDIR}\n${WORKDIR}/.artifacts` };
+      if (script.includes(`p='${REPO_DIR}/.artifacts'`)) {
+        return { exitCode: 0, stdout: `${REPO_DIR}\n${REPO_DIR}/.artifacts` };
       }
       if (script.startsWith('stat -c')) return { exitCode: 0, stdout: `directory|0|1700000000|0\n` };
       return { exitCode: 1, stdout: '' };
@@ -519,7 +519,7 @@ describe('workspace changes', () => {
   it('lists pending changes with per-file and total line counts', async () => {
     const { executeCommand } = seedSessionSandbox((script, command, args) => {
       if (command === 'git') {
-        expect(args).toEqual(['-C', WORKDIR, 'status', '--porcelain=v1', '-z', '--untracked-files=all']);
+        expect(args).toEqual(['-C', REPO_DIR, 'status', '--porcelain=v1', '-z', '--untracked-files=all']);
         return { exitCode: 0, stdout: ' M src/edited.ts\0?? src/new.ts\0' };
       }
 
@@ -527,7 +527,7 @@ describe('workspace changes', () => {
       expect(script).toContain('diff --numstat -z --find-renames');
       expect(script).toContain('ls-files --others --exclude-standard -z');
       expect(script).toContain('GIT_OBJECT_DIRECTORY="$object_dir"');
-      expect(args.slice(2)).toEqual(['mastracode-numstat', WORKDIR]);
+      expect(args.slice(2)).toEqual(['mastracode-numstat', REPO_DIR]);
       return { exitCode: 0, stdout: '3\t1\tsrc/edited.ts\0' + '5\t0\t\0/dev/null\0src/new.ts\0' };
     });
 
@@ -577,7 +577,7 @@ describe('workspace changes', () => {
         '0',
         '--literal-pathspecs',
         '-C',
-        WORKDIR,
+        REPO_DIR,
         'diff',
         '--find-renames',
         '--no-ext-diff',
@@ -629,7 +629,7 @@ describe('workspace changes', () => {
         '0',
         '--literal-pathspecs',
         '-C',
-        WORKDIR,
+        REPO_DIR,
         'diff',
         '--find-renames',
         '--no-ext-diff',
@@ -656,7 +656,7 @@ describe('workspace changes', () => {
         '0',
         '--literal-pathspecs',
         '-C',
-        WORKDIR,
+        REPO_DIR,
         'diff',
         '--find-renames',
         '--no-ext-diff',
@@ -687,7 +687,7 @@ describe('workspace changes', () => {
         expect(args).toEqual([
           '--literal-pathspecs',
           '-C',
-          WORKDIR,
+          REPO_DIR,
           'ls-files',
           '--others',
           '--exclude-standard',
@@ -701,7 +701,7 @@ describe('workspace changes', () => {
       expect(args.slice(3)).toEqual([
         '1',
         '-C',
-        WORKDIR,
+        REPO_DIR,
         'diff',
         '--no-index',
         '--no-ext-diff',

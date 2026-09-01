@@ -113,7 +113,7 @@ describe('ProjectRoutes', () => {
       repositoryId: repository.id,
       createdByUserId: 'user-1',
       sandboxProvider: 'local',
-      sandboxWorkdir: '/workspace/acme/api',
+      sandboxRepoDir: '/workspace/acme/api',
       teardownCommand: 'pnpm local teardown',
     });
     await github.sessions.create({
@@ -175,7 +175,7 @@ describe('ProjectRoutes', () => {
       repositoryId: repository.id,
       createdByUserId: 'user-1',
       sandboxProvider: 'local',
-      sandboxWorkdir: '/workspace/acme/api',
+      sandboxRepoDir: '/workspace/acme/api',
       teardownCommand: 'pnpm local teardown',
     });
     const session = await github.sessions.create({
@@ -189,7 +189,7 @@ describe('ProjectRoutes', () => {
     await github.sessions.setSandbox({
       id: session.id,
       sandboxId: 'sandbox-1',
-      sandboxWorkdir: '/workspace/acme/api/session-1',
+      sandboxRepoDir: '/workspace/acme/api/session-1',
     });
     const app = new Hono();
     app.use('*', async (context, next) => {
@@ -269,7 +269,7 @@ describe('ProjectRoutes', () => {
             repositoryId,
             branch,
             sandboxProvider: 'local',
-            sandboxWorkdir: `/workspace/${repositoryId}`,
+            sandboxRepoDir: `/workspace/${repositoryId}`,
             setupCommand: 'pnpm install',
             teardownCommand: 'pnpm local worktree teardown',
           }),
@@ -368,7 +368,7 @@ describe('ProjectRoutes', () => {
             body: JSON.stringify({
               repositoryId: repository.id,
               sandboxProvider: 'local',
-              sandboxWorkdir: '/workspace/repo',
+              sandboxRepoDir: '/workspace/repo',
             }),
           },
         )
@@ -438,7 +438,7 @@ describe('ProjectRoutes', () => {
           repositoryId: repository.id,
           branch: 'main',
           sandboxProvider: 'local',
-          sandboxWorkdir: '/workspace/acme/api',
+          sandboxRepoDir: '/workspace/acme/api',
         }),
       },
     );

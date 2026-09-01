@@ -38,7 +38,7 @@ async function seedLinkedRepository(options?: { pinnedBranch?: string }) {
     repositoryId: repository.id,
     createdByUserId: 'user-1',
     sandboxProvider: 'local',
-    sandboxWorkdir: '/sandbox/mastra',
+    sandboxRepoDir: '/sandbox/mastra',
     ...(options?.pinnedBranch ? { branch: options.pinnedBranch } : {}),
   });
   return { seeded, sourceControl, project, repository, projectRepository };
@@ -393,7 +393,7 @@ describe('resolveFactorySourceRepository', () => {
       repositoryId: staleRepository.id,
       createdByUserId: 'user-1',
       sandboxProvider: 'local',
-      sandboxWorkdir: '/sandbox/mastra',
+      sandboxRepoDir: '/sandbox/mastra',
     });
     // The reinstall: the installation row goes away, the connection stays.
     await sourceControl.installations.delete({ orgId: 'org-1', id: staleInstallation.id });
@@ -424,7 +424,7 @@ describe('resolveFactorySourceRepository', () => {
       repositoryId: freshRepository.id,
       createdByUserId: 'user-2',
       sandboxProvider: 'local',
-      sandboxWorkdir: '/sandbox/mastra',
+      sandboxRepoDir: '/sandbox/mastra',
     });
 
     await expect(

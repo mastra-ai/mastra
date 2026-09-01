@@ -151,11 +151,11 @@ export class SessionRetirementCoordinator {
       });
     }
 
-    // An unresolved workdir means the sandbox never started in this process:
+    // An unresolved repoDir means the sandbox never started in this process:
     // nothing was set up, so there is nothing for a teardown command to undo.
-    if (projectRepository?.teardownCommand && entry.workdir) {
+    if (projectRepository?.teardownCommand && entry.repoDir) {
       try {
-        await runTeardownCommand(requireExec(entry.sandbox), entry.workdir, projectRepository.teardownCommand, {
+        await runTeardownCommand(requireExec(entry.sandbox), entry.repoDir, projectRepository.teardownCommand, {
           timeoutMs: DEFAULT_COMMAND_TIMEOUT_MS,
         });
       } catch (error) {

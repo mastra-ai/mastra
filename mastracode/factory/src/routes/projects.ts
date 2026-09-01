@@ -24,7 +24,7 @@ const MAX_DESCRIPTION_LENGTH = 2_000;
 const MAX_REPOSITORY_COMMAND_LENGTH = 2_000;
 const MAX_BRANCH_LENGTH = 255;
 const MAX_SANDBOX_PROVIDER_LENGTH = 100;
-const MAX_SANDBOX_WORKDIR_LENGTH = 1_000;
+const MAX_SANDBOX_REPO_DIR_LENGTH = 1_000;
 const CONTROL_CHAR_RE = /[\0-\x08\x0b\x0c\x0e-\x1f\x7f]/;
 
 function loose(context: unknown): Context {
@@ -113,7 +113,7 @@ function parseRepositoryLinkInput(value: unknown): {
   repositoryId: string;
   branch: string | null;
   sandboxProvider: string;
-  sandboxWorkdir: string;
+  sandboxRepoDir: string;
   setupCommand: string | null;
   teardownCommand: string | null;
 } | null {
@@ -122,7 +122,7 @@ function parseRepositoryLinkInput(value: unknown): {
   if (typeof input.repositoryId !== 'string' || !UUID_RE.test(input.repositoryId)) return null;
   const branch = parseOptionalString(input.branch, { maxLength: MAX_BRANCH_LENGTH, nullable: true });
   const sandboxProvider = parseOptionalString(input.sandboxProvider, { maxLength: MAX_SANDBOX_PROVIDER_LENGTH });
-  const sandboxWorkdir = parseOptionalString(input.sandboxWorkdir, { maxLength: MAX_SANDBOX_WORKDIR_LENGTH });
+  const sandboxRepoDir = parseOptionalString(input.sandboxRepoDir, { maxLength: MAX_SANDBOX_REPO_DIR_LENGTH });
   const setupCommand = parseOptionalString(input.setupCommand, {
     maxLength: MAX_REPOSITORY_COMMAND_LENGTH,
     nullable: true,
@@ -134,7 +134,7 @@ function parseRepositoryLinkInput(value: unknown): {
   if (
     branch === false ||
     typeof sandboxProvider !== 'string' ||
-    typeof sandboxWorkdir !== 'string' ||
+    typeof sandboxRepoDir !== 'string' ||
     setupCommand === false ||
     teardownCommand === false
   )
@@ -143,7 +143,7 @@ function parseRepositoryLinkInput(value: unknown): {
     repositoryId: input.repositoryId,
     branch: branch ?? null,
     sandboxProvider,
-    sandboxWorkdir,
+    sandboxRepoDir,
     setupCommand: setupCommand ?? null,
     teardownCommand: teardownCommand ?? null,
   };
@@ -155,7 +155,7 @@ function parseRepositoryUpdateInput(value: unknown): UpdateProjectRepositoryInpu
   const patch: UpdateProjectRepositoryInput = {};
   const branch = parseOptionalString(input.branch, { maxLength: MAX_BRANCH_LENGTH, nullable: true });
   const sandboxProvider = parseOptionalString(input.sandboxProvider, { maxLength: MAX_SANDBOX_PROVIDER_LENGTH });
-  const sandboxWorkdir = parseOptionalString(input.sandboxWorkdir, { maxLength: MAX_SANDBOX_WORKDIR_LENGTH });
+  const sandboxRepoDir = parseOptionalString(input.sandboxRepoDir, { maxLength: MAX_SANDBOX_REPO_DIR_LENGTH });
   const setupCommand = parseOptionalString(input.setupCommand, {
     maxLength: MAX_REPOSITORY_COMMAND_LENGTH,
     nullable: true,
@@ -168,15 +168,15 @@ function parseRepositoryUpdateInput(value: unknown): UpdateProjectRepositoryInpu
     branch === false ||
     sandboxProvider === false ||
     sandboxProvider === null ||
-    sandboxWorkdir === false ||
-    sandboxWorkdir === null ||
+    sandboxRepoDir === false ||
+    sandboxRepoDir === null ||
     setupCommand === false ||
     teardownCommand === false
   )
     return null;
   if (branch !== undefined) patch.branch = branch;
   if (sandboxProvider !== undefined) patch.sandboxProvider = sandboxProvider;
-  if (sandboxWorkdir !== undefined) patch.sandboxWorkdir = sandboxWorkdir;
+  if (sandboxRepoDir !== undefined) patch.sandboxRepoDir = sandboxRepoDir;
   if (setupCommand !== undefined) patch.setupCommand = setupCommand;
   if (teardownCommand !== undefined) patch.teardownCommand = teardownCommand;
   return Object.keys(patch).length > 0 ? patch : null;

@@ -116,7 +116,7 @@ function projectRepositoryRow(row: Record<string, any>) {
     repositoryId,
     branch: 'main',
     sandboxProvider: 'railway',
-    sandboxWorkdir: '/workspace/hello',
+    sandboxRepoDir: '/workspace/hello',
     setupCommand: null,
     teardownCommand: null,
     createdAt: now,
@@ -443,7 +443,7 @@ describe('two users in one org each get their own sandbox + session workspace', 
     await sourceControlStorage.sessions.setSandbox({
       id: session.id,
       sandboxId: 'sb-a1-session',
-      sandboxWorkdir: '/workspace/a1/feat-x',
+      sandboxRepoDir: '/workspace/a1/feat-x',
     });
     // Materialization memoizes the session sandbox in-process; git write
     // routes resolve through the memo, not persisted columns.
@@ -453,7 +453,7 @@ describe('two users in one org each get their own sandbox + session workspace', 
         provider: 'stub',
         executeCommand: async () => ({ exitCode: 0, stdout: '', stderr: '' }),
       }) as never,
-    ).workdir = '/workspace/a1/feat-x';
+    ).repoDir = '/workspace/a1/feat-x';
 
     // User 2 cannot address user 1's session workspace.
     const crossCommit = await postJson(user2, '/web/github/projects/p1/commit', {
@@ -492,7 +492,7 @@ describe('cross-user session workspaces are rejected', () => {
       await sourceControlStorage.sessions.setSandbox({
         id: session.id,
         sandboxId: `sb-${userId}`,
-        sandboxWorkdir: `/workspace/sessions/${userId}/feat-x`,
+        sandboxRepoDir: `/workspace/sessions/${userId}/feat-x`,
       });
       getSessionSandbox(session.id, `sessions/${userId}`, () =>
         ({
@@ -500,7 +500,7 @@ describe('cross-user session workspaces are rejected', () => {
           provider: 'stub',
           executeCommand: async () => ({ exitCode: 0, stdout: '', stderr: '' }),
         }) as never,
-      ).workdir = `/workspace/sessions/${userId}/feat-x`;
+      ).repoDir = `/workspace/sessions/${userId}/feat-x`;
       sessions.set(userId, session);
     }
 
@@ -581,7 +581,7 @@ describe('install flow binds the installation to the org', () => {
           repositoryStorageId: tables.repositories[0]!.id,
           sandboxProvider: 'custom',
           // Display-only listing guess: repos clone into the VM's home.
-          sandboxWorkdir: '~/hello',
+          sandboxRepoDir: '~/hello',
         },
       ],
     });

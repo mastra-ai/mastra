@@ -106,7 +106,7 @@ function projectRepositoryRow(row: Record<string, any>) {
     repositoryId,
     branch: row.defaultBranch ?? null,
     sandboxProvider: row.sandboxProvider ?? 'railway',
-    sandboxWorkdir: row.sandboxWorkdir,
+    sandboxRepoDir: row.sandboxRepoDir,
     setupCommand: row.setupCommand ?? null,
     teardownCommand: row.teardownCommand ?? null,
     createdAt: now,
@@ -1319,7 +1319,7 @@ function seedMaterializedProject(
       repoFullName: 'octo/hello',
       repoId: 99,
       defaultBranch: 'main',
-      sandboxWorkdir: '/workspace/hello',
+      sandboxRepoDir: '/workspace/hello',
       setupCommand: opts.setupCommand ?? null,
       teardownCommand: opts.teardownCommand ?? null,
     }),
@@ -1330,7 +1330,7 @@ function seedMaterializedProject(
       projectRepositoryId: 'p1',
       userId,
       sandboxId: 'sb-1',
-      sandboxWorkdir: '/workspace/hello',
+      sandboxRepoDir: '/workspace/hello',
       materializedAt: new Date(),
     }),
   );
@@ -1349,7 +1349,7 @@ function seedMaterializedSession() {
     title: null,
     baseBranch: 'main',
     sandboxId: 'sb-1',
-    sandboxWorkdir: '/workspace/worktrees/feat-x',
+    sandboxRepoDir: '/workspace/worktrees/feat-x',
     materializedAt: now,
     createdAt: now,
     updatedAt: now,
@@ -1364,14 +1364,14 @@ function seedMaterializedSession() {
 
 /**
  * Seed the per-process session-sandbox memo with a live instance whose
- * derived workdir equals `workdir` exactly: a local-provider instance checks
+ * derived repoDir equals `repoDir` exactly: a local-provider instance checks
  * out under `<workingDirectory>/<repo name>`.
  */
-function seedLiveSandbox(sessionRowId: string, workdir: string, sandbox: Record<string, unknown>) {
-  const cut = workdir.lastIndexOf('/');
+function seedLiveSandbox(sessionRowId: string, repoDir: string, sandbox: Record<string, unknown>) {
+  const cut = repoDir.lastIndexOf('/');
   // Mutate in place so callers can assert on the exact seeded instance.
-  Object.assign(sandbox, { provider: 'local', workingDirectory: workdir.slice(0, cut) });
-  getSessionSandbox(sessionRowId, `seed/${workdir.slice(cut + 1)}`, () => sandbox as never);
+  Object.assign(sandbox, { provider: 'local', workingDirectory: repoDir.slice(0, cut) });
+  getSessionSandbox(sessionRowId, `seed/${repoDir.slice(cut + 1)}`, () => sandbox as never);
 }
 
 function postJson(app: ReturnType<typeof buildApp>, path: string, body: unknown) {
@@ -1707,7 +1707,7 @@ describe('Factory session routes', () => {
       title: null,
       visibility: 'org',
       sandboxId: null,
-      sandboxWorkdir: null,
+      sandboxRepoDir: null,
     });
     expect(session.sessionId).toEqual(expect.any(String));
     expect(tables.sessions).toHaveLength(1);
@@ -1886,7 +1886,7 @@ describe('Factory session routes', () => {
       baseBranch: 'main',
       visibility: 'private',
       sandboxId: null,
-      sandboxWorkdir: null,
+      sandboxRepoDir: null,
       materializedAt: null,
       createdAt: now,
       updatedAt: now,
@@ -1915,7 +1915,7 @@ describe('Factory session routes', () => {
       title: null,
       baseBranch: 'main',
       sandboxId: null,
-      sandboxWorkdir: null,
+      sandboxRepoDir: null,
       materializedAt: null,
       createdAt: now,
       updatedAt: now,
@@ -2369,7 +2369,7 @@ describe('push route', () => {
     });
     expect(githubStub.mintInstallationToken).not.toHaveBeenCalled();
     expect(pushBranch).toHaveBeenCalledOnce();
-    // pushBranch(sandbox, workdir, branch, token, repoFullName)
+    // pushBranch(sandbox, repoDir, branch, token, repoFullName)
     const call = pushBranch.mock.calls[0] as unknown as any[];
     expect(call[2]).toBe('feat/x');
     expect(call[3]).toBe('repo-token-repository-99');

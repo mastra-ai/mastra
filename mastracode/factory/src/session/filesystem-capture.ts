@@ -56,10 +56,10 @@ export async function captureSessionFilesystem(
     // Chat-only sessions run without a workspace; there is nothing to capture.
     const sandbox = session.getWorkspace()?.sandbox;
     if (!sourceSession || !sandbox?.executeCommand) return;
-    // The live workdir comes from the per-process memo (the deterministic
+    // The live repoDir comes from the per-process memo (the deterministic
     // truth) ONLY — never the persisted observability column, which a row
-    // written under a previous provider can point at a workdir that no
-    // longer exists (the stale-workdir incident class). No memo entry means
+    // written under a previous provider can point at a repoDir that no
+    // longer exists (the stale-repoDir incident class). No memo entry means
     // no live sandbox worth capturing in this replica; capture is
     // best-effort telemetry, so skip.
     const entry = peekSessionSandbox(sourceSession.id);
@@ -71,11 +71,11 @@ export async function captureSessionFilesystem(
     // running sandbox.
     if (entry.sandbox.status !== 'running') return;
     // Running-but-unresolved should not happen (the start hook resolves the
-    // workdir), but capture is best-effort — skip rather than guess.
-    const workdir = entry.workdir;
-    if (!workdir) return;
+    // repoDir), but capture is best-effort — skip rather than guess.
+    const repoDir = entry.repoDir;
+    if (!repoDir) return;
 
-    const result = await sandbox.executeCommand('git', ['-C', workdir, ...GIT_STATUS_ARGS], {
+    const result = await sandbox.executeCommand('git', ['-C', repoDir, ...GIT_STATUS_ARGS], {
       timeout: 30_000,
     });
     if (result.exitCode !== 0) {
@@ -83,7 +83,7 @@ export async function captureSessionFilesystem(
       return;
     }
 
-    const artifacts = await sandbox.executeCommand('sh', ['-c', ARTIFACTS_LIST_COMMAND, 'sh', workdir], {
+    const artifacts = await sandbox.executeCommand('sh', ['-c', ARTIFACTS_LIST_COMMAND, 'sh', repoDir], {
       timeout: 30_000,
     });
     if (artifacts.exitCode !== 0) {

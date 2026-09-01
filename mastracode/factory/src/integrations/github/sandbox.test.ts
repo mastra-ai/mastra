@@ -63,7 +63,7 @@ class FakeSandbox implements ExecutableSandbox {
   async executeCommand(command: string, args?: string[]): Promise<SandboxCommandResult> {
     const script = command === 'sh' && args?.[0] === '-c' ? args[1]! : [command, ...(args ?? [])].join(' ');
     this.calls.push(script);
-    // The workdir resolver probes the VM's default cwd (its home dir).
+    // The repoDir resolver probes the VM's default cwd (its home dir).
     if (script === 'pwd') return { exitCode: 0, stdout: '/home/user\n', stderr: '' };
     return this.responder(script);
   }
@@ -75,7 +75,7 @@ function makeRow(overrides: Partial<ProjectRepositorySandbox> = {}): ProjectRepo
     projectRepositoryId: 'project-repository-1',
     userId: 'user-1',
     sandboxId: null,
-    sandboxWorkdir: '/workspace/hello',
+    sandboxRepoDir: '/workspace/hello',
     materializedAt: null,
     createdAt: new Date(),
     ...overrides,
@@ -143,7 +143,7 @@ describe('materializeRepo', () => {
   it('re-clones when the DB says materialized but the sandbox disk was wiped', async () => {
     // A platform/remote sandbox can expire and come back with an empty disk
     // while the binding row still says `materializedAt`. Trusting the row made
-    // every `git -C <workdir>` fail with "cannot change to ...: No such file
+    // every `git -C <repoDir>` fail with "cannot change to ...: No such file
     // or directory" and the workspace never recovered. Disk is the truth: no
     // checkout on disk means clone, regardless of the row.
     const sandbox = new FakeSandbox(script => {
@@ -163,9 +163,9 @@ describe('materializeRepo', () => {
     expect(dbUpdates.at(-1)).toHaveProperty('materializedAt');
   });
 
-  it('clears a non-empty workdir before cloning so a partial tree cannot wedge the workspace', async () => {
+  it('clears a non-empty repoDir before cloning so a partial tree cannot wedge the workspace', async () => {
     // A checkpoint seed or a clone killed partway (crashed/OOM-killed server)
-    // leaves a populated workdir with no usable checkout. `git clone` refuses
+    // leaves a populated repoDir with no usable checkout. `git clone` refuses
     // a non-empty destination with a non-retryable fatal, so every later
     // workspace operation failed with "destination path ... already exists and
     // is not an empty directory" until the sandbox was wiped by hand.
@@ -184,8 +184,8 @@ describe('materializeRepo', () => {
     expect(dbUpdates.at(-1)).toHaveProperty('materializedAt');
   });
 
-  it('pulls (not clones) when the DB says first open but the workdir already holds this repo', async () => {
-    // DB/disk drift: a fresh binding row (materializedAt null) over a workdir
+  it('pulls (not clones) when the DB says first open but the repoDir already holds this repo', async () => {
+    // DB/disk drift: a fresh binding row (materializedAt null) over a repoDir
     // that was already cloned by an earlier flow or before a dev DB reset.
     const sandbox = new FakeSandbox(script => {
       if (script.includes('remote get-url origin')) {
@@ -201,7 +201,7 @@ describe('materializeRepo', () => {
     expect(dbUpdates.at(-1)).toHaveProperty('materializedAt');
   });
 
-  it('still clones when the workdir holds a checkout of a different repo', async () => {
+  it('still clones when the repoDir holds a checkout of a different repo', async () => {
     const sandbox = new FakeSandbox(script => {
       if (script.includes('remote get-url origin')) {
         return { exitCode: 0, stdout: 'https://github.com/someone/else.git\n', stderr: '' };
@@ -254,7 +254,7 @@ describe('materializeRepo', () => {
     expect(err.code).toBe('egress-blocked');
   });
 
-  it('surfaces the clone failure when the token scrub throws on a missing workdir', async () => {
+  it('surfaces the clone failure when the token scrub throws on a missing repoDir', async () => {
     const sandbox = new FakeSandbox(script => {
       if (script === 'git --version') return OK;
       if (script.includes('git clone')) {
@@ -353,7 +353,7 @@ describe('materializeRepo', () => {
   });
 
   it('keeps a diverged session branch on re-open instead of failing the pull', async () => {
-    // The shared workdir is routinely left on a session's working branch with
+    // The shared repoDir is routinely left on a session's working branch with
     // local commits. When its upstream moved, `git pull --ff-only` aborts with
     // "Not possible to fast-forward" — that is the session's work, not an
     // error, so materialization must succeed and leave the checkout alone.
@@ -823,7 +823,7 @@ describe('resolveGitIdentity', () => {
 });
 
 describe('configureGitIdentity', () => {
-  it('configures user.name and user.email in the workdir, quoted', async () => {
+  it('configures user.name and user.email in the repoDir, quoted', async () => {
     const sandbox = new FakeSandbox();
     await configureGitIdentity(sandbox, '/workspace/hello', { name: 'Ada Lovelace', email: 'ada@example.com' });
 
@@ -1014,7 +1014,7 @@ describe('runSetupCommand', () => {
 });
 
 describe('runTeardownCommand', () => {
-  it('uses the same quoted workdir shell and reports bounded command output', async () => {
+  it('uses the same quoted repoDir shell and reports bounded command output', async () => {
     const sandbox = new FakeSandbox(() => ({ exitCode: 9, stdout: '', stderr: `prefix-${'x'.repeat(3000)}` }));
     const err = await runTeardownCommand(
       sandbox,

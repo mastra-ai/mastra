@@ -283,7 +283,7 @@ describe('workspace skill invocation route', () => {
     expect(harness.sendA).not.toHaveBeenCalled();
   });
 
-  it('enforces a viewer-visible session with a live workdir at the scope before session lookup', async () => {
+  it('enforces a viewer-visible session with a live repoDir at the scope before session lookup', async () => {
     const sourceControlStorage = new SourceControlStorageInMemory();
     const sendMessage = vi.fn(async () => {});
     const getSessionByResource = vi.fn(async () => ({
@@ -362,7 +362,7 @@ describe('workspace skill invocation route', () => {
       repositoryId: repository.id,
       createdByUserId: 'user-1',
       sandboxProvider: 'local',
-      sandboxWorkdir: '/workspace/repository',
+      sandboxRepoDir: '/workspace/repository',
     });
     const sessionRow = await sourceControlStorage.sessions.create({
       sessionId: '00000000-0000-4000-8000-00000000abcd',
@@ -374,18 +374,18 @@ describe('workspace skill invocation route', () => {
     });
 
     // A session row alone is not enough: the scope must match a LIVE memoized
-    // sandbox workdir (fail closed when no VM has resolved one).
-    const noLiveWorkdir = await invoke(app, {
+    // sandbox repoDir (fail closed when no VM has resolved one).
+    const noLiveRepoDir = await invoke(app, {
       resourceId: factoryProjectId,
       projectRepositoryId: projectRepository.id,
       scope: '/worktrees/review-42',
       name: 'understand-pr',
     });
-    expect(noLiveWorkdir.status).toBe(403);
+    expect(noLiveRepoDir.status).toBe(403);
     expect(getSessionByResource).not.toHaveBeenCalled();
 
     const entry = getSessionSandbox(sessionRow.id, 'acme/repository', () => ({ provider: 'fake' }) as never);
-    entry.workdir = '/worktrees/review-42';
+    entry.repoDir = '/worktrees/review-42';
 
     const allowed = await invoke(app, {
       resourceId: factoryProjectId,

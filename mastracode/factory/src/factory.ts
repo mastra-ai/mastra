@@ -660,7 +660,7 @@ export class MastraFactory {
         // Blank project identity for the same reason: the SDK's defaults seed
         // sessions with the HOST process's own project root / name / branch,
         // which must never reach a hosted session's prompt. Repo-backed
-        // sessions get their real workdir pinned by workspace resolution;
+        // sessions get their real repo dir pinned by workspace resolution;
         // chat-only sessions legitimately have no project.
         // Factory sessions also start fail-closed on org classification: the
         // unresolved marker is set at birth, a successful org seed clears it,

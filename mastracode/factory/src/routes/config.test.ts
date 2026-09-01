@@ -500,7 +500,7 @@ describe('model pack routes with a tenant', () => {
       title: null,
       baseBranch: 'main',
       sandboxId: 'sandbox-1',
-      sandboxWorkdir: `/tmp/${sessionId}`,
+      sandboxRepoDir: `/tmp/${sessionId}`,
       materializedAt: null,
       firstMessageAt: null,
       firstMeaningfulExecAt: null,
@@ -698,8 +698,8 @@ describe('model pack routes with a tenant', () => {
     expect(await listed.json()).toMatchObject({ activePackId: null, sessionPackId: pack.id });
   });
 
-  it('rejects a scoped request when only the persisted workdir column matches (fail closed)', async () => {
-    // The persisted sandboxWorkdir is observability, never an authorization
+  it('rejects a scoped request when only the persisted repoDir column matches (fail closed)', async () => {
+    // The persisted sandboxRepoDir is observability, never an authorization
     // input — a row written under a previous provider could authorize a
     // stale scope. With no live memo entry, a scope matching the persisted
     // column must NOT authorize.
@@ -713,9 +713,9 @@ describe('model pack routes with a tenant', () => {
     expect(sessionController.getSessionByResource).not.toHaveBeenCalled();
   });
 
-  it('authorizes a scoped request against the live memoized workdir', async () => {
+  it('authorizes a scoped request against the live memoized repoDir', async () => {
     __clearSessionSandboxesForTests();
-    // Local-provider memo seed: the derived workdir is <workingDirectory>/<repo name>.
+    // Local-provider memo seed: the derived repoDir is <workingDirectory>/<repo name>.
     getSessionSandbox(
       'row-session-1',
       'seed/session-1',

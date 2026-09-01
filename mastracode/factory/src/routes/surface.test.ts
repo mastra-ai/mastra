@@ -39,7 +39,7 @@ async function seedFactoryWithRepository(options?: { defaultModelId?: string }) 
     repositoryId: repository.id,
     createdByUserId: 'user-1',
     sandboxProvider: 'local',
-    sandboxWorkdir: '/sandbox/mastra',
+    sandboxRepoDir: '/sandbox/mastra',
   });
   const github = { id: 'github', sourceControlStorage: sourceControl } as unknown as GithubIntegration;
   return { seeded, sourceControl, project, github };

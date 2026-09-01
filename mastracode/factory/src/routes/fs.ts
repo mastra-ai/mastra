@@ -475,12 +475,12 @@ export async function listSessionFilesystemFiles(
 interface SessionSandboxHandle {
   sandbox: ExecutableSandbox;
   filesystem: SandboxFilesystem;
-  workdir: string;
+  repoDir: string;
 }
 
 /**
  * Resolve the session's sandbox from the per-process memo and wrap its
- * workdir in a `SandboxFilesystem`. Returns `null` when the session has no
+ * repoDir in a `SandboxFilesystem`. Returns `null` when the session has no
  * sandbox in this process (never opened here, or evicted by retirement).
  * This is a passive read path, so it never constructs or provisions: the
  * session's files come back the next time the workspace is actually opened
@@ -488,25 +488,25 @@ interface SessionSandboxHandle {
  */
 async function sessionSandbox(session: SourceControlSession): Promise<SessionSandboxHandle | null> {
   const entry = peekSessionSandbox(session.id);
-  // An unresolved workdir means the sandbox never started in this process —
+  // An unresolved repoDir means the sandbox never started in this process —
   // nothing is materialized, so there are no files to browse.
-  if (!entry?.workdir) return null;
+  if (!entry?.repoDir) return null;
   const sandbox = requireExec(entry.sandbox);
   return {
     sandbox,
-    filesystem: new SandboxFilesystem({ sandbox, workdir: entry.workdir }),
-    workdir: entry.workdir,
+    filesystem: new SandboxFilesystem({ sandbox, workdir: entry.repoDir }),
+    repoDir: entry.repoDir,
   };
 }
 
-/** List an approved rendered root inside a Factory session's sandbox workdir. */
+/** List an approved rendered root inside a Factory session's sandbox repoDir. */
 export async function listSessionRenderedPath(
   session: SourceControlSession,
   renderedRoot: string,
 ): Promise<WorkspaceRenderedListing> {
   const safeRoot = assertApprovedRenderedRoot(renderedRoot);
   const handle = await sessionSandbox(session);
-  const rootPath = posixPath.join(handle?.workdir ?? '', safeRoot);
+  const rootPath = posixPath.join(handle?.repoDir ?? '', safeRoot);
   const empty: WorkspaceRenderedListing = { workspacePath: session.sessionId, root: safeRoot, rootPath, entries: [] };
   if (!handle) return empty;
 
@@ -653,10 +653,10 @@ export async function listSessionWorkspaceChanges(session: SourceControlSession)
   const [statusResult, statsResult] = await Promise.all([
     handle.sandbox.executeCommand(
       'git',
-      ['-C', handle.workdir, 'status', '--porcelain=v1', '-z', '--untracked-files=all'],
+      ['-C', handle.repoDir, 'status', '--porcelain=v1', '-z', '--untracked-files=all'],
       { timeout: 30_000 },
     ),
-    handle.sandbox.executeCommand('sh', ['-c', WORKSPACE_NUMSTAT_SCRIPT, 'mastracode-numstat', handle.workdir], {
+    handle.sandbox.executeCommand('sh', ['-c', WORKSPACE_NUMSTAT_SCRIPT, 'mastracode-numstat', handle.repoDir], {
       timeout: 30_000,
     }),
   ]);
@@ -709,7 +709,7 @@ export async function readSessionWorkspaceDiff(
   let result = await executeBoundedGitDiff(handle.sandbox, [
     '--literal-pathspecs',
     '-C',
-    handle.workdir,
+    handle.repoDir,
     'diff',
     '--find-renames',
     '--no-ext-diff',
@@ -724,7 +724,7 @@ export async function readSessionWorkspaceDiff(
   if (!result.stdout) {
     const untracked = await handle.sandbox.executeCommand(
       'git',
-      ['--literal-pathspecs', '-C', handle.workdir, 'ls-files', '--others', '--exclude-standard', '--', safePath],
+      ['--literal-pathspecs', '-C', handle.repoDir, 'ls-files', '--others', '--exclude-standard', '--', safePath],
       { timeout: 30_000 },
     );
     if (untracked.exitCode === 0 && untracked.stdout.trim()) {
@@ -732,7 +732,7 @@ export async function readSessionWorkspaceDiff(
         handle.sandbox,
         [
           '-C',
-          handle.workdir,
+          handle.repoDir,
           'diff',
           '--no-index',
           '--no-ext-diff',

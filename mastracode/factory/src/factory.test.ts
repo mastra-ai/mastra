@@ -284,7 +284,7 @@ describe('MastraFactory.prepare', () => {
       repositoryId: repository.id,
       createdByUserId: 'user-1',
       sandboxProvider: 'local',
-      sandboxWorkdir: '/sandbox/mastra',
+      sandboxRepoDir: '/sandbox/mastra',
     });
     await sourceControl.sessions.create({
       sessionId: 'session-1',

@@ -69,12 +69,12 @@ function createSession(results = [commandResult(), commandResult()], resourceId 
 }
 
 /**
- * Seed the per-process memo with a live sandbox whose derived workdir is
+ * Seed the per-process memo with a live sandbox whose derived repoDir is
  * `/worktree` (local provider: `<workingDirectory>/<repo name>`). Capture
- * reads the workdir from the memo ONLY — the persisted column is
+ * reads the repoDir from the memo ONLY — the persisted column is
  * observability, never a decision input.
  */
-function seedLiveWorkdir(sessionRowId = 'source-session-1', status = 'running') {
+function seedLiveRepoDir(sessionRowId = 'source-session-1', status = 'running') {
   getSessionSandbox(
     sessionRowId,
     'seed/worktree',
@@ -96,7 +96,7 @@ function createDependencies(): FilesystemCaptureDependencies {
           branch: 'main',
           baseBranch: 'main',
           sandboxId: 'sandbox-1',
-          sandboxWorkdir: '/sessions/s1/worktree',
+          sandboxRepoDir: '/sessions/s1/worktree',
           materializedAt: new Date(),
           createdAt: new Date(),
           updatedAt: new Date(),
@@ -125,11 +125,11 @@ describe('parseFilesystemCaptureFiles', () => {
 describe('captureSessionFilesystem', () => {
   beforeEach(() => {
     __clearSessionSandboxesForTests();
-    seedLiveWorkdir();
+    seedLiveRepoDir();
   });
 
-  it('skips capture when only the persisted workdir column exists (never a decision input)', async () => {
-    // The stale-workdir incident class: a row written under a previous
+  it('skips capture when only the persisted repoDir column exists (never a decision input)', async () => {
+    // The stale-repoDir incident class: a row written under a previous
     // provider points at a path that no longer exists. With no live memo
     // entry there is nothing trustworthy to capture against.
     __clearSessionSandboxesForTests();
@@ -147,7 +147,7 @@ describe('captureSessionFilesystem', () => {
     // chat-only turn whose sandbox was constructed but never started must
     // not have a VM provisioned just to read an empty git status.
     __clearSessionSandboxesForTests();
-    seedLiveWorkdir('source-session-1', 'pending');
+    seedLiveRepoDir('source-session-1', 'pending');
     const { session, executeCommand } = createSession([]);
     const dependencies = createDependencies();
 
@@ -225,7 +225,7 @@ describe('captureSessionFilesystem', () => {
 describe('observeSessionFilesystem', () => {
   beforeEach(() => {
     __clearSessionSandboxesForTests();
-    seedLiveWorkdir();
+    seedLiveRepoDir();
   });
 
   it.each(['complete', 'aborted', 'error', 'suspended'] as const)(

@@ -125,19 +125,19 @@ export class SkillRoutes extends Route<SkillRoutesDeps> {
     if (!connection || connection.factoryProjectId !== address.resourceId) {
       return { allowed: false, status: 403, code: 'session_forbidden', message: 'Session access denied.' };
     }
-    // The scope must be the live workdir of a session the viewer can see under
+    // The scope must be the live repoDir of a session the viewer can see under
     // this repository. The live memoized sandbox entry is the only truth for
-    // workdirs (persisted columns are observability); no running/memoized
+    // repoDirs (persisted columns are observability); no running/memoized
     // sandbox at that path means no grant (fail closed).
     const sessions = await storage.sessions.list({
       projectRepositoryId: address.projectRepositoryId,
       viewerUserId: tenant.userId,
     });
-    const scopeIsLiveSessionWorkdir = sessions.some(row => {
-      const liveWorkdir = peekSessionSandbox(row.id)?.workdir;
-      return liveWorkdir !== undefined && liveWorkdir === address.scope;
+    const scopeIsLiveSessionRepoDir = sessions.some(row => {
+      const liveRepoDir = peekSessionSandbox(row.id)?.repoDir;
+      return liveRepoDir !== undefined && liveRepoDir === address.scope;
     });
-    return scopeIsLiveSessionWorkdir
+    return scopeIsLiveSessionRepoDir
       ? { allowed: true }
       : { allowed: false, status: 403, code: 'session_forbidden', message: 'Session access denied.' };
   }
