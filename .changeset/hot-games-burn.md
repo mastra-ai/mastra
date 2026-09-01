@@ -2,4 +2,17 @@
 '@mastra/factory': patch
 ---
 
-Fixed session status drifting between surfaces. Every session surface now reads object state only: a sidebar row lights up while its agent runs or its workspace materializes, and marks a workspace whose card is waiting on a person (a run parked for approval, an automation that failed for good); a finished session is idle and shows nothing. Board cards, sidebar rows, and the open chat derive from the same run registry, sessions list, and card decisions, so a reload or a second tab shows the same status. The per-viewer "seen" marks are gone. The chat's favicon, composer, and status line read one shared phase (error > running > initializing > pending > awaiting), fixing the favicon claiming the session awaits input while history is still loading, and letting a rejoined running session be steered or aborted once connected. The done sound rings when a run this tab watched ends.
+**Session status**
+
+- Fixed session status disagreeing between sidebar rows, board cards, and the open chat.
+- Running, setting up, and waiting-on-you states now read the same after a reload and in every tab.
+- Removed the per-browser "your turn" mark; a card waiting on a person is marked from the card itself, and a finished session with nothing waiting shows as idle.
+
+**Chat**
+
+- Fixed the favicon claiming the session awaits input while history is still loading.
+- Allow steering or stopping a running session as soon as it is connected.
+
+**Done sound**
+
+- Plays once when a run watched in this tab ends.
