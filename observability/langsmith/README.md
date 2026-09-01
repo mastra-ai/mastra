@@ -1,6 +1,6 @@
 # @mastra/langsmith
 
-LangSmith AI Observability exporter for Mastra applications.
+Langsmith observability provider for Mastra - includes tracing and future observability features. Use `@mastra/langsmith` to connect this provider to a Mastra application.
 
 ## Installation
 
@@ -10,74 +10,22 @@ npm install @mastra/langsmith
 
 ## Usage
 
-### Zero-Config Setup
-
-The exporter automatically reads credentials from environment variables:
-
-```bash
-# Required
-LANGSMITH_API_KEY=lsv2_pt_...
-
-# Optional
-LANGCHAIN_PROJECT=my-project  # Project name, defaults to "default"
-```
+Configure the prerequisites described in the documentation.
 
 ```typescript
 import { LangSmithExporter } from '@mastra/langsmith';
 
-const mastra = new Mastra({
-  ...,
-  observability: {
-    configs: {
-      langsmith: {
-        serviceName: 'my-service',
-        exporters: [new LangSmithExporter()],
-      },
-    },
-  },
-});
+const exporter = LangSmithExporter;
 ```
 
-### Explicit Configuration
+## Documentation
 
-You can also pass credentials directly:
+- [@mastra/langsmith documentation](https://mastra.ai/docs/observability/overview)
 
-```typescript
-import { LangSmithExporter } from '@mastra/langsmith';
+## Changelog
 
-const mastra = new Mastra({
-  ...,
-  observability: {
-    configs: {
-      langsmith: {
-        serviceName: 'my-service',
-        exporters: [
-          new LangSmithExporter({
-            apiKey: 'lsv2_pt_...',
-            projectName: 'my-custom-project', // Optional
-          }),
-        ],
-      },
-    },
-  },
-});
-```
+See the [package changelog](https://github.com/mastra-ai/mastra/blob/main/observability/langsmith/CHANGELOG.md) for version history and release notes.
 
-### Configuration Options
+## Support
 
-| Option        | Type     | Description                                                                                |
-| ------------- | -------- | ------------------------------------------------------------------------------------------ |
-| `apiKey`      | `string` | LangSmith API key. Defaults to `LANGSMITH_API_KEY` env var                                 |
-| `projectName` | `string` | The name of the LangSmith project to send traces to. Overrides `LANGCHAIN_PROJECT` env var |
-| `apiUrl`      | `string` | Custom LangSmith API URL (for self-hosted instances)                                       |
-| `client`      | `Client` | Custom LangSmith client instance                                                           |
-
-## Features
-
-### Tracing
-
-- **Automatic span mapping**: Root spans become LangSmith traces
-- **Type-specific metadata**: Extracts relevant metadata for each span type (agents, tools, workflows)
-- **Error tracking**: Automatic error status and message tracking
-- **Hierarchical traces**: Maintains parent-child relationships
-- **Event span support**: Zero-duration spans for event-type traces
+We have an [open community Discord](https://discord.gg/mastra-ai). Come and say hello and let us know if you have any questions or need any help getting things running.
