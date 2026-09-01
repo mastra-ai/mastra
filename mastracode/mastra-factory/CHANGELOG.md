@@ -1,5 +1,14 @@
 # create-factory
 
+## 0.1.15-alpha.2
+
+### Patch Changes
+
+- Remove `CHANGELOG.md` from distributed npm files resulting in reduced package size ([#22737](https://github.com/mastra-ai/mastra/pull/22737))
+
+- Updated dependencies [[`28ce924`](https://github.com/mastra-ai/mastra/commit/28ce924276eeca492e6a360e5482ed20c2785ef6)]:
+  - mastra@1.27.3-alpha.2
+
 ## 0.1.15-alpha.1
 
 ### Patch Changes
