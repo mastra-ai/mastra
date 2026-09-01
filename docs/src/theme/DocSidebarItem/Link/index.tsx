@@ -39,9 +39,9 @@ export default function DocSidebarItemLink({
   ...props
 }: Props): ReactNode {
   const { href, label, className, autoAddBaseUrl } = item
-  const linkHref = normalizeSiteSectionRoot(href)
+  const isInternalLink = isInternalUrl(href)
+  const linkHref = isInternalLink ? normalizeSiteSectionRoot(href) : href
   const isActive = isActiveSidebarItem(item, activePath)
-  const isInternalLink = isInternalUrl(linkHref)
   const isContextualSidebarPane = useIsContextualSidebarPane()
 
   return (
