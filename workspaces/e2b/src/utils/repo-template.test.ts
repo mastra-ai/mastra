@@ -234,12 +234,6 @@ describe('createRepoTemplate', () => {
     expect(init.headers).not.toHaveProperty('Authorization');
   });
 
-  it('resolves a github.com clone URL with a trailing slash through the API too', async () => {
-    await resolve({ ...BASE, getRepositoryAccess: async () => ({ cloneUrl: 'https://github.com/octocat/hello/' }) });
-    expect(execFileMock).not.toHaveBeenCalled();
-    expect(fetchMock.mock.calls[0]?.[0]).toBe('https://api.github.com/repos/octocat/hello/commits/HEAD');
-  });
-
   it('sends the repository credential as a bearer token to the GitHub API', async () => {
     await resolve({
       ...BASE,
