@@ -303,7 +303,7 @@ export async function runStreamingDriver({
    * Mirrors the static driver's guard in `renderToolEvent`.
    */
   const isBlankToolMessage = (message: PostableMessage): boolean => {
-    if (typeof message === 'string') return message.length === 0;
+    if (typeof message === 'string') return message.trim().length === 0;
     return 'markdown' in message && message.markdown.trim().length === 0;
   };
 

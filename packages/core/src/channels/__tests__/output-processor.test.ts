@@ -1607,6 +1607,7 @@ describe('ChatChannelOutputProcessor', () => {
       it.each([
         ['undefined', () => undefined],
         ['an empty string', () => ({ kind: 'post', message: '' })],
+        ['a whitespace-only string', () => ({ kind: 'post', message: ' \n' })],
         ['an empty markdown message', () => ({ kind: 'post', message: { markdown: '  ' } })],
         ['a stream result', () => ({ kind: 'stream', chunk: { type: 'task_update', id: 'approval' } })],
       ])('falls back to the built-in approval card when the fn returns %s', async (_label, render) => {
