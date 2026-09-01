@@ -141,6 +141,7 @@ describe('PlatformSandbox', () => {
   });
 
   it('uses the regional workspace proxy URL for sandbox requests', async () => {
+    vi.stubEnv('SANDBOX_PROVIDER', 'e2b');
     vi.stubEnv('MASTRA_PLATFORM_REGION', 'eu');
     const fetchMock = vi.fn().mockResolvedValueOnce(json({ id: 'sbx_1', createdAt: '2026-06-26T00:00:00.000Z' }));
 
@@ -154,7 +155,7 @@ describe('PlatformSandbox', () => {
     await sandbox._start();
 
     expect(String(fetchMock.mock.calls[0]![0])).toBe(
-      'https://workspaces.eu.mastra.ai/v1/railway/projects/proj_123/sandbox',
+      'https://workspaces.eu.mastra.ai/v1/e2b/projects/proj_123/sandbox',
     );
   });
 
