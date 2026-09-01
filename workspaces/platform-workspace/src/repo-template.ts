@@ -91,13 +91,20 @@ export type PlatformRepoTemplateResolver = () => Promise<SandboxTemplateBuilder 
  * pins repositories to their current default-branch commit. Private repository
  * credentials are used for head resolution and sent to the provider as
  * transient build envs; they never enter the serialized definition. If the
- * head cannot be resolved, the resolver returns undefined so PlatformSandbox
- * boots from the provider default and the caller's runtime setup materializes
- * the checkout instead.
+ * repository or its head cannot be resolved, the resolver keeps `cpuCount` and
+ * `memoryMB` in a resources-only template so the sandbox still boots at the
+ * requested size, and the caller's runtime setup materializes the checkout.
  */
 export function createRepoTemplate(options: PlatformRepoTemplateOptions): PlatformRepoTemplateResolver | undefined {
   const getRepositoryAccess = options.getRepositoryAccess;
-  if (!getRepositoryAccess) return undefined;
+  const resourcesOnly = () => {
+    if (options.cpuCount === undefined && options.memoryMB === undefined) return undefined;
+    return withResources(Template(), options);
+  };
+  if (!getRepositoryAccess) {
+    const template = resourcesOnly();
+    return template ? async () => template : undefined;
+  }
   const resolveHead = options.resolveHead ?? resolveDefaultBranchHead;
 
   return async () => {
@@ -111,14 +118,14 @@ export function createRepoTemplate(options: PlatformRepoTemplateOptions): Platfo
       console.warn('[platform-workspace] repo template skipped: repository access unavailable', {
         error: redactSecrets(accessError),
       });
-      return undefined;
+      return resourcesOnly();
     }
     const cloneUrl = normalizeCloneUrl(access.cloneUrl);
     if (!isValidCloneUrl(cloneUrl)) {
       console.warn('[platform-workspace] repo template skipped: clone URL failed validation', {
         cloneUrl: redactSecrets(cloneUrl),
       });
-      return undefined;
+      return resourcesOnly();
     }
 
     const token = access.authorization?.token;
@@ -133,7 +140,7 @@ export function createRepoTemplate(options: PlatformRepoTemplateOptions): Platfo
         sha,
         error: redactSecrets(headError),
       });
-      return undefined;
+      return resourcesOnly();
     }
 
     const workingDirectory =
@@ -160,8 +167,7 @@ export function createRepoTemplate(options: PlatformRepoTemplateOptions): Platfo
     let template = Template();
     const buildEnv = { ...options.buildEnv, ...(token ? { [BUILD_TOKEN_ENV]: token } : {}) };
     if (Object.keys(buildEnv).length > 0) template = template.setEnvs(buildEnv, { ephemeral: true });
-    if (options.cpuCount !== undefined) template = template.cpuCount(options.cpuCount);
-    if (options.memoryMB !== undefined) template = template.memoryMB(options.memoryMB);
+    template = withResources(template, options);
     if (workingDirectory) {
       // Created by the build user so it is writable; `setWorkdir` then makes
       // it the cwd for the steps below and the runtime default, without
@@ -177,6 +183,15 @@ export function createRepoTemplate(options: PlatformRepoTemplateOptions): Platfo
     for (const command of setupCommands) template = template.runCmd(`cd "${repoDir}" && ${command}`);
     return template.withFamily(family);
   };
+}
+
+function withResources(
+  template: SandboxTemplateBuilder,
+  options: Pick<PlatformRepoTemplateOptions, 'cpuCount' | 'memoryMB'>,
+): SandboxTemplateBuilder {
+  if (options.cpuCount !== undefined) template = template.cpuCount(options.cpuCount);
+  if (options.memoryMB !== undefined) template = template.memoryMB(options.memoryMB);
+  return template;
 }
 
 function isValidCloneUrl(cloneUrl: string): boolean {
@@ -277,7 +292,9 @@ export async function resolveDefaultBranchHead(
     });
     const sha = stdout.trim().split(/\s+/, 1)[0];
     return sha && SHA_PATTERN.test(sha) ? sha : undefined;
-  } catch {
-    return undefined;
+  } catch (error) {
+    const stderr = (error as { stderr?: unknown }).stderr;
+    const detail = typeof stderr === 'string' && stderr.trim() ? stderr.trim() : String(error);
+    throw new Error(`git ls-remote failed: ${detail}`);
   }
 }

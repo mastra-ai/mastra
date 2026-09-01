@@ -208,6 +208,34 @@ describe('createRepoTemplate', () => {
     await expect(resolveTemplate()).resolves.toBeUndefined();
   });
 
+  it('keeps the requested resources when the repository template cannot be resolved', async () => {
+    const sized = { cpuCount: 4, memoryMB: 8192 };
+    const expected = {
+      schemaVersion: 1,
+      operations: [
+        { method: 'cpuCount', args: [4] },
+        { method: 'memoryMB', args: [8192] },
+      ],
+    };
+
+    const noHead = await createRepoTemplate({
+      ...sized,
+      getRepositoryAccess: accessFor('https://github.com/acme/widgets.git'),
+      resolveHead: vi.fn().mockRejectedValue(new Error('rate limited')),
+    })!();
+    expect(serializeSandboxTemplate(noHead!)).toEqual(expected);
+
+    const noAccess = await createRepoTemplate({
+      ...sized,
+      getRepositoryAccess: vi.fn(async () => undefined),
+      resolveHead: headOf(SHA_1),
+    })!();
+    expect(serializeSandboxTemplate(noAccess!)).toEqual(expected);
+
+    const noRepo = await createRepoTemplate({ ...sized, getRepositoryAccess: undefined })!();
+    expect(serializeSandboxTemplate(noRepo!)).toEqual(expected);
+  });
+
   it('returns undefined for a repo-less context so the call site needs no conditional', () => {
     // Mirrors @mastra/e2b's createRepoTemplate: the whole FactorySandboxContext
     // passes straight through, and a session with no repository asks for the
@@ -289,6 +317,16 @@ describe('createRepoTemplate', () => {
       GIT_TERMINAL_PROMPT: '0',
     });
     expect(options.env.GIT_CONFIG_VALUE_0).not.toContain('ghs_secret_token');
+  });
+
+  it('surfaces the git failure when the default-branch head cannot be resolved', async () => {
+    const execute = vi.fn(async () => {
+      throw Object.assign(new Error('Command failed'), { stderr: 'fatal: unable to access: 429 Too Many Requests\n' });
+    });
+
+    await expect(resolveDefaultBranchHead('https://github.com/acme/widgets', undefined, execute)).rejects.toThrow(
+      'git ls-remote failed: fatal: unable to access: 429 Too Many Requests',
+    );
   });
 
   it('uses repository credentials only as transient build envs', async () => {
