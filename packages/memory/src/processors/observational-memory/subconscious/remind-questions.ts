@@ -235,6 +235,7 @@ export function createAskMemoryTool(options: {
           },
           additionalTools: { reply_to_memory_question: replyTool },
           instructions: options.config.instructions,
+          maxSteps: options.config.maxSteps,
         });
         const delivery = reminderAgent.sendMessage(
           {
