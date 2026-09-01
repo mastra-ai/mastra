@@ -3,8 +3,8 @@
  *
  * The consumer's deploy entry constructs deployment-specific config instances
  * (auth adapter, pubsub) and passes them here explicitly. The only provider
- * defaults constructed here are Platform GitHub and Linear integrations when
- * Platform credentials exist and the caller did not provide those integrations.
+ * defaults constructed here are Platform-managed integrations when Platform
+ * credentials exist and the caller did not provide those integrations.
  *
  * `prepare()` resolves feature readiness, threads every dependency explicitly,
  * assembles the web routes/middleware, and returns the constructor args for
@@ -48,6 +48,7 @@ import {
 import type { FactoryPullRequestProvenanceData } from './integrations/github/provenance.js';
 import { JiraIntegration } from './integrations/jira/integration.js';
 import { PlatformGithubIntegration } from './integrations/platform/github/integration.js';
+import { PlatformGitLabIntegration } from './integrations/platform/gitlab/integration.js';
 import { PlatformLinearIntegration } from './integrations/platform/linear/integration.js';
 import { createCustomProvidersPrimer, registerCustomProvidersSource } from './routes/custom-provider-source.js';
 import { ProjectRoutes } from './routes/projects.js';
@@ -181,8 +182,8 @@ export interface MastraFactoryConfig {
    * Registered capability providers. The factory registers the pieces each
    * `FactoryIntegration` instance provides — HTTP routes, storage domains,
    * agent/session tools, intake, source control, and diagnostics — into the
-   * system. When Platform credentials are configured, missing `github` and
-   * `linear` integrations default to their Platform-backed implementations.
+   * system. When Platform credentials are configured, missing GitHub, GitLab,
+   * Linear, and Jira integrations default to their Platform-backed implementations.
    */
   integrations?: FactoryIntegration[];
   /**
@@ -343,11 +344,14 @@ export class MastraFactory {
     const routeAuth = createFactoryRouteAuth(auth);
 
     // Explicit integrations win. Platform credentials fill only missing GitHub,
-    // Linear, and Jira slots so callers can override each provider independently.
+    // GitLab, Linear, and Jira slots so callers can override each provider independently.
     const integrations = [...(this.#config.integrations ?? [])];
     if (hasPlatformCredentials()) {
       if (!integrations.some(integration => integration.id === 'github')) {
         integrations.push(new PlatformGithubIntegration({ slug: this.#config.platform?.githubAppSlug }));
+      }
+      if (!integrations.some(integration => integration.id === 'gitlab')) {
+        integrations.push(new PlatformGitLabIntegration());
       }
       if (!integrations.some(integration => integration.id === 'linear')) {
         integrations.push(new PlatformLinearIntegration());
