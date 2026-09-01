@@ -1,19 +1,24 @@
-import { knowledgeAgentImportMemoryResourceId, type Knowledge } from '@mastra/core/knowledge';
+import { randomUUID } from 'node:crypto';
+
+import type { Knowledge } from '@mastra/core/knowledge';
 import type { ApiRoute } from '@mastra/core/server';
 import { registerApiRoute } from '@mastra/core/server';
 import type {
   KnowledgeImportRun,
   KnowledgeImportRunStatus,
+  KnowledgeProposal,
+  KnowledgeProposalStatus,
   KnowledgeImportTriggerKind,
+  KnowledgeActivityAction,
   KnowledgeNode,
   KnowledgeRecord,
   KnowledgeScopeIds,
   KnowledgeStorage,
 } from '@mastra/core/storage';
 import {
-  isKnowledgeNodeVisible,
   isKnowledgeScopeVisible,
   knowledgeScopeIdsKey,
+  knowledgeImporterBindingKey,
   parseKnowledgeWikilinks,
   createKnowledgeNodeCursor,
 } from '@mastra/core/storage';
@@ -45,8 +50,6 @@ export interface KnowledgeGraphNode {
   name: string;
   kind: string;
   description?: string;
-  scopeIds: KnowledgeScopeIds;
-  rung: 'org' | 'resource' | 'thread';
   pinned: boolean;
   recordCount: number;
   createdAt: string;
@@ -74,7 +77,6 @@ export interface KnowledgeScopeTreeNode {
   name: string;
   kind: string;
   description?: string;
-  parentScopeIds: KnowledgeScopeIds;
 }
 
 export interface KnowledgeScopeTreePayload {
@@ -86,7 +88,6 @@ export interface KnowledgeScopeTreePayload {
 export interface KnowledgeGraphPayload {
   view: 'project' | 'thread';
   scopeId: string;
-  threadId?: string;
   nodes: KnowledgeGraphNode[];
   edges: KnowledgeGraphEdge[];
   records: KnowledgeGraphRecord[];
@@ -102,13 +103,10 @@ export interface KnowledgeNodeRecordPayload {
   nodeId: string;
   relation: 'owned' | 'mentions';
   text: string;
-  scopeIds: KnowledgeScopeIds;
-  rung: 'org' | 'resource' | 'thread';
-  sourceThreadId?: string;
-  capturedAt: string;
+  createdAt: string;
   when?: string;
+  reason?: string;
   pinned: boolean;
-  metadata?: Record<string, unknown>;
 }
 
 export interface KnowledgeNodePayload {
@@ -116,8 +114,6 @@ export interface KnowledgeNodePayload {
     id: string;
     name: string;
     kind: string;
-    scopeIds: KnowledgeScopeIds;
-    rung: 'org' | 'resource' | 'thread';
     createdAt: string;
     updatedAt: string;
   };
@@ -128,7 +124,7 @@ export interface KnowledgeImporterSummary {
   id: string;
   importKind: 'static' | 'agentic';
   triggers: KnowledgeImportTriggerKind[];
-  bindings: Array<{ source: string; scope: string }>;
+  bindings: Array<{ source: string; binding: string }>;
   lastRun?: KnowledgeImportRunPayload;
 }
 
@@ -137,12 +133,10 @@ export interface KnowledgeImportRunPayload {
   importerId: string;
   binding: string;
   source?: string;
-  scope?: string;
   importKind: KnowledgeImportRun['importKind'];
   triggerKind: KnowledgeImportRun['triggerKind'];
   status: KnowledgeImportRun['status'];
   error?: string;
-  transcriptThreadId?: string;
   queuedAt: string;
   startedAt?: string;
   completedAt?: string;
@@ -151,11 +145,26 @@ export interface KnowledgeImportRunPayload {
 export interface KnowledgeImportRunDetailPayload {
   run: KnowledgeImportRunPayload;
   activity: Array<{ id: string; action: string; targetType: string; createdAt: string }>;
-  transcript?: {
-    threadId: string;
-    available: boolean;
-    messages: Array<{ id: string; role: string; content: unknown; createdAt: string }>;
-  };
+}
+
+export interface KnowledgeProposalPayload {
+  id: string;
+  operation: string;
+  status: KnowledgeProposalStatus;
+  reason?: string;
+  reviewReason?: string;
+  targets: Array<{
+    type: 'node' | 'record';
+    id: string;
+    name?: string;
+    expectedVersion: number;
+    currentVersion?: number;
+  }>;
+  proposer: 'visible' | 'private';
+  reviewer?: 'visible' | 'private';
+  actions: Array<'approve' | 'reject' | 're-review'>;
+  createdAt: string;
+  reviewedAt?: string;
 }
 
 function loose(c: unknown): Context {
@@ -168,21 +177,23 @@ function boundedThreadId(raw: string | undefined): string | undefined {
   return trimmed.length > 0 && trimmed.length <= 512 ? trimmed : undefined;
 }
 
+function knowledgePerspectiveKey(projectId: string, threadId?: string): string {
+  return threadId ? `${projectId}\u0000${threadId}` : projectId;
+}
+
 interface ResolvedView {
+  projectId: string;
+  knowledge: Knowledge;
   store: KnowledgeStorage;
   view: 'project' | 'thread';
   threadId?: string;
   scopeIds: KnowledgeScopeIds;
+  perspectiveKey: string;
+  readableScopeIds: KnowledgeScopeIds;
   orgScopeId: string;
   resourceScopeId: string;
   threadScopeId?: string;
-  pinRungs: Array<{ rung: 'resource' | 'thread'; scopeId: string }>;
-}
-
-function rungForScopeIds(scopeIds: KnowledgeScopeIds, view: ResolvedView): 'org' | 'resource' | 'thread' {
-  if (view.threadScopeId && scopeIds.includes(view.threadScopeId)) return 'thread';
-  if (scopeIds.includes(view.resourceScopeId)) return 'resource';
-  return 'org';
+  pinScopes: Array<{ level: 'resource' | 'thread'; scopeId: string }>;
 }
 
 function metadataString(metadata: Record<string, unknown> | undefined, key: string): string | undefined {
@@ -190,7 +201,7 @@ function metadataString(metadata: Record<string, unknown> | undefined, key: stri
   return typeof value === 'string' ? value : undefined;
 }
 
-function importBinding(binding: string): { source?: string; scope?: string } {
+function importBinding(binding: string): { source?: string; scopeAddress?: string } {
   try {
     const parsed: unknown = JSON.parse(binding);
     if (
@@ -199,7 +210,7 @@ function importBinding(binding: string): { source?: string; scope?: string } {
       typeof parsed[0] === 'string' &&
       typeof parsed[1] === 'string'
     ) {
-      return { source: parsed[0], scope: parsed[1] };
+      return { source: parsed[0], scopeAddress: parsed[1] };
     }
   } catch {
     // Older or host-managed bindings may be opaque to this read surface.
@@ -208,30 +219,100 @@ function importBinding(binding: string): { source?: string; scope?: string } {
 }
 
 function importScopeBelongsToProject(scope: string | undefined, projectId: string): boolean {
-  const resourceAddress = `resource:${projectId}`;
-  const threadPrefix = `${resourceAddress}:thread:`;
-  return scope === resourceAddress || (scope?.startsWith(threadPrefix) === true && scope.length > threadPrefix.length);
+  return scope === `resource:${projectId}`;
 }
 
 function importRunBelongsToProject(run: KnowledgeImportRun, projectId: string): boolean {
-  return importScopeBelongsToProject(importBinding(run.binding).scope, projectId);
+  return importScopeBelongsToProject(importBinding(run.binding).scopeAddress, projectId);
 }
 
-function importRunPayload(run: KnowledgeImportRun): KnowledgeImportRunPayload {
+async function proposalPayload(
+  knowledge: Knowledge,
+  proposal: KnowledgeProposal,
+  scopeIds: KnowledgeScopeIds,
+  handle: (kind: 'proposal' | 'node' | 'record', value: string) => string,
+  allowActions = true,
+): Promise<KnowledgeProposalPayload | null> {
+  const currentTargets = await Promise.all(
+    proposal.targets.map(target =>
+      target.type === 'node'
+        ? knowledge.getNode({ id: target.id, scopeIds })
+        : knowledge.getRecord({ id: target.id, scopeIds }),
+    ),
+  );
+  if (currentTargets.some(target => !target)) return null;
+
+  const frontier = await knowledge.evaluateAccess(scopeIds);
+  const canReview =
+    allowActions &&
+    proposal.targets.every(target =>
+      target.scopeIds.every(scopeId => frontier.scopes[scopeId]?.[target.approvalCapability]),
+    );
+  const actions: KnowledgeProposalPayload['actions'] = !canReview
+    ? []
+    : proposal.status === 'pending'
+      ? ['approve', 'reject']
+      : proposal.status === 'conflicted'
+        ? ['re-review']
+        : [];
   return {
-    id: run.id,
-    importerId: run.importerId,
-    binding: run.binding,
-    ...importBinding(run.binding),
-    importKind: run.importKind,
-    triggerKind: run.triggerKind,
-    status: run.status,
-    error: run.error,
-    transcriptThreadId: run.transcriptThreadId,
-    queuedAt: run.queuedAt.toISOString(),
-    startedAt: run.startedAt?.toISOString(),
-    completedAt: run.completedAt?.toISOString(),
+    id: handle('proposal', proposal.id),
+    operation: proposal.operation,
+    status: proposal.status,
+    reason: proposal.reason,
+    reviewReason: proposal.reviewReason,
+    targets: proposal.targets.map((target, index) => {
+      const current = currentTargets[index]!;
+      if (target.type === 'node') {
+        return {
+          type: target.type,
+          id: handle('node', target.id),
+          name: 'name' in current ? current.name : undefined,
+          expectedVersion: target.expectedVersion,
+          currentVersion: current.version,
+        };
+      }
+      return {
+        type: target.type,
+        id: handle('record', target.id),
+        expectedVersion: target.expectedVersion,
+        currentVersion: current.version,
+      };
+    }),
+    proposer:
+      proposal.proposerContextScopeId && frontier.scopes[proposal.proposerContextScopeId]?.read ? 'visible' : 'private',
+    reviewer:
+      proposal.reviewerContextScopeId && frontier.scopes[proposal.reviewerContextScopeId]?.read
+        ? 'visible'
+        : proposal.reviewedAt
+          ? 'private'
+          : undefined,
+    actions,
+    createdAt: proposal.createdAt.toISOString(),
+    reviewedAt: proposal.reviewedAt?.toISOString(),
   };
+}
+
+function activityAction(value: string | undefined): KnowledgeActivityAction | undefined {
+  if (
+    value === 'create' ||
+    value === 'edit' ||
+    value === 'delete' ||
+    value === 'restore' ||
+    value === 'move' ||
+    value === 'merge' ||
+    value === 'promote' ||
+    value === 'demote' ||
+    value === 'stamp' ||
+    value === 'rebind' ||
+    value === 'propose' ||
+    value === 'approve' ||
+    value === 'reject' ||
+    value === 'conflict'
+  ) {
+    return value;
+  }
+  return undefined;
 }
 
 function importRunStatus(value: string | undefined): KnowledgeImportRunStatus | undefined {
@@ -264,19 +345,26 @@ class WikilinkResolver {
   readonly #windowIds = new Set<string>();
   readonly #fallbackCache = new Map<string, KnowledgeNode | null>();
   #fallbackLookups = 0;
+  readonly #knowledge: Knowledge;
   readonly #store: KnowledgeStorage;
   readonly #maxFallbackLookups: number;
   readonly outOfWindow = new Map<string, { id: string; name: string }>();
   readonly cappedNames: string[] = [];
   readonly #cappedSeen = new Set<string>();
 
-  private constructor(store: KnowledgeStorage, maxFallbackLookups: number) {
+  private constructor(knowledge: Knowledge, store: KnowledgeStorage, maxFallbackLookups: number) {
+    this.#knowledge = knowledge;
     this.#store = store;
     this.#maxFallbackLookups = maxFallbackLookups;
   }
 
-  static async create(store: KnowledgeStorage, nodes: KnowledgeNode[], maxFallbackLookups: number) {
-    const resolver = new WikilinkResolver(store, maxFallbackLookups);
+  static async create(
+    knowledge: Knowledge,
+    store: KnowledgeStorage,
+    nodes: KnowledgeNode[],
+    maxFallbackLookups: number,
+  ) {
+    const resolver = new WikilinkResolver(knowledge, store, maxFallbackLookups);
     await Promise.all(
       nodes.map(async node => {
         const scopeIds = await store.getNodeScopeIds(node.id);
@@ -305,7 +393,7 @@ class WikilinkResolver {
       return null;
     }
     this.#fallbackLookups += 1;
-    const resolved = await this.#store.resolveNode({ name, scopeIds }).catch(() => null);
+    const resolved = await this.#knowledge.getNodeByName({ name, scopeIds }).catch(() => null);
     this.#fallbackCache.set(cacheKey, resolved);
     return this.#track(resolved);
   }
@@ -320,17 +408,93 @@ class WikilinkResolver {
   }
 }
 
+type KnowledgeSurfaceHandleKind = 'scope' | 'node' | 'record' | 'proposal' | 'run' | 'binding' | 'cursor';
+
+interface KnowledgeSurfaceHandle {
+  projectId: string;
+  perspectiveKey: string;
+  kind: KnowledgeSurfaceHandleKind;
+  value: string;
+  expiresAt: number;
+}
+
 export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
   readonly #limits: KnowledgeRouteLimits;
+  readonly #handles = new Map<string, KnowledgeSurfaceHandle>();
+  readonly #handlesByTarget = new Map<string, string>();
+  readonly #handleTtlMs = 10 * 60_000;
 
   constructor(deps: KnowledgeRoutesDeps) {
     super(deps);
     this.#limits = { ...DEFAULT_LIMITS, ...deps.limits };
   }
 
-  async #resolveOperator(
-    c: Context,
-  ): Promise<{ knowledge: Knowledge; orgId: string; projectId: string } | { response: Response }> {
+  #mintHandle(projectId: string, perspectiveKey: string, kind: KnowledgeSurfaceHandleKind, value: string): string {
+    const now = Date.now();
+    const targetKey = `${projectId}\u0000${perspectiveKey}\u0000${kind}\u0000${value}`;
+    const existing = this.#handlesByTarget.get(targetKey);
+    if (existing) {
+      const entry = this.#handles.get(existing);
+      if (entry && entry.expiresAt > now) {
+        entry.expiresAt = now + this.#handleTtlMs;
+        return existing;
+      }
+      this.#handles.delete(existing);
+      this.#handlesByTarget.delete(targetKey);
+    }
+    const handle = `kh_${randomUUID()}`;
+    this.#handles.set(handle, { projectId, perspectiveKey, kind, value, expiresAt: now + this.#handleTtlMs });
+    this.#handlesByTarget.set(targetKey, handle);
+    return handle;
+  }
+
+  #resolveHandle(
+    projectId: string,
+    perspectiveKey: string,
+    kind: KnowledgeSurfaceHandleKind,
+    handle: string | undefined,
+  ): string | undefined {
+    if (!handle) return undefined;
+    const entry = this.#handles.get(handle);
+    if (
+      !entry ||
+      entry.projectId !== projectId ||
+      entry.perspectiveKey !== perspectiveKey ||
+      entry.kind !== kind ||
+      entry.expiresAt <= Date.now()
+    )
+      return undefined;
+    entry.expiresAt = Date.now() + this.#handleTtlMs;
+    return entry.value;
+  }
+
+  #importRunPayload(projectId: string, perspectiveKey: string, run: KnowledgeImportRun): KnowledgeImportRunPayload {
+    const binding = importBinding(run.binding);
+    return {
+      id: this.#mintHandle(projectId, perspectiveKey, 'run', run.id),
+      importerId: run.importerId,
+      binding: this.#mintHandle(projectId, perspectiveKey, 'binding', run.binding),
+      source: binding.source,
+      importKind: run.importKind,
+      triggerKind: run.triggerKind,
+      status: run.status,
+      error: run.error,
+      queuedAt: run.queuedAt.toISOString(),
+      startedAt: run.startedAt?.toISOString(),
+      completedAt: run.completedAt?.toISOString(),
+    };
+  }
+
+  async #resolveOperator(c: Context): Promise<
+    | {
+        knowledge: Knowledge;
+        orgId: string;
+        projectId: string;
+        scopeIds: KnowledgeScopeIds;
+        perspectiveKey: string;
+      }
+    | { response: Response }
+  > {
     await this.deps.auth.ensureUser(c);
     const tenant = this.deps.auth.tenant(c);
     if (!tenant) return { response: c.json({ error: 'unauthorized' }, 401) };
@@ -355,7 +519,31 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
         ),
       };
     }
-    return { knowledge, orgId: tenant.orgId, projectId };
+    const scopeIds = await this.#projectScopeIds(knowledge, tenant.orgId, projectId);
+    return {
+      knowledge,
+      orgId: tenant.orgId,
+      projectId,
+      scopeIds,
+      perspectiveKey: knowledgePerspectiveKey(projectId),
+    };
+  }
+
+  async #projectScopeIds(knowledge: Knowledge, orgId: string, projectId: string): Promise<KnowledgeScopeIds> {
+    const orgAddress = `org:${orgId}`;
+    const resourceAddress = `resource:${projectId}`;
+    const org = await knowledge.materializeScope({
+      address: orgAddress,
+      contextualScopeAddress: orgAddress,
+      parameters: { orgId },
+    });
+    const resource = await knowledge.materializeScope({
+      address: resourceAddress,
+      parentAddresses: [orgAddress],
+      contextualScopeAddress: orgAddress,
+      parameters: { orgId, resourceId: projectId },
+    });
+    return [org.scopes[orgAddress]!, resource.scopes[resourceAddress]!];
   }
 
   async #resolveView(
@@ -436,19 +624,10 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
           visited.add(current);
           pending.push(...(await store.getNodeScopeIds(current)));
         }
-        if (!reachable) {
-          return { response: c.json({ error: 'scope_not_found' }, 404) };
-        }
+        if (!reachable) return { response: c.json({ error: 'scope_not_found' }, 404) };
       }
-      if (preflight.nodeId) {
-        if (!UUID_RE.test(preflight.nodeId)) return { response: c.json({ error: 'node_not_found' }, 404) };
-        const node = await store.getNode(preflight.nodeId);
-        if (!node || node.deletedAt) return { response: c.json({ error: 'node_not_found' }, 404) };
-        const nodeScopeIds = await store.getNodeScopeIds(node.id);
-        const selectedScopeId = preflight.scopeId ?? thread?.scopeNodeId ?? existingResource.scopeNodeId;
-        if (!isKnowledgeNodeVisible(node, nodeScopeIds, [selectedScopeId])) {
-          return { response: c.json({ error: 'node_not_found' }, 404) };
-        }
+      if (preflight.nodeId && !UUID_RE.test(preflight.nodeId)) {
+        return { response: c.json({ error: 'node_not_found' }, 404) };
       }
     }
 
@@ -467,71 +646,98 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
     const resourceScopeId = resource.scopes[resourceAddress]!;
     const defaultScopeIds = [orgScopeId, resourceScopeId];
     if (!threadId) {
+      const frontier = await knowledge.evaluateAccess(defaultScopeIds);
       return {
+        projectId,
+        knowledge,
         store,
         view: 'project',
         scopeIds: defaultScopeIds,
+        perspectiveKey: knowledgePerspectiveKey(projectId),
+        readableScopeIds: Object.entries(frontier.scopes)
+          .filter(([, capabilities]) => capabilities.read)
+          .map(([scopeId]) => scopeId),
         orgScopeId,
         resourceScopeId,
-        pinRungs: [{ rung: 'resource', scopeId: resourceScopeId }],
+        pinScopes: [{ level: 'resource', scopeId: resourceScopeId }],
       };
     }
     const threadScopeId = thread!.scopeNodeId;
     const scopeIds = [...defaultScopeIds, threadScopeId];
-    const probe = await store.listRecordsBySource({ source: threadId, scopeIds, limit: 1 });
+    const frontier = await knowledge.evaluateAccess(scopeIds);
+    const readableScopeIds = Object.entries(frontier.scopes)
+      .filter(([, capabilities]) => capabilities.read)
+      .map(([scopeId]) => scopeId);
+    const probe = await knowledge.listRecordsBySource({ source: threadId, scopeIds, limit: 1 });
     if (probe.records.length === 0) return { response: c.json({ error: 'thread_not_found' }, 404) };
     return {
+      projectId,
+      knowledge,
       store,
       view: 'thread',
       threadId,
       scopeIds,
+      perspectiveKey: knowledgePerspectiveKey(projectId, threadId),
+      readableScopeIds,
       orgScopeId,
       resourceScopeId,
       threadScopeId,
-      pinRungs: [
-        { rung: 'resource', scopeId: resourceScopeId },
-        { rung: 'thread', scopeId: threadScopeId },
+      pinScopes: [
+        { level: 'resource', scopeId: resourceScopeId },
+        { level: 'thread', scopeId: threadScopeId },
       ],
     };
   }
 
   async #pinnedNodeIds(
     view: ResolvedView,
-  ): Promise<Array<{ rung: 'resource' | 'thread'; scopeId: string; id: string }>> {
-    const out: Array<{ rung: 'resource' | 'thread'; scopeId: string; id: string }> = [];
-    for (const { rung, scopeId } of view.pinRungs) {
-      const node = await view.store.getNodeByName({ name: PINNED_NODE_NAME, scopeIds: [scopeId] });
-      if (node && !node.deletedAt) out.push({ rung, scopeId, id: node.id });
+  ): Promise<Array<{ level: 'resource' | 'thread'; scopeId: string; id: string }>> {
+    const out: Array<{ level: 'resource' | 'thread'; scopeId: string; id: string }> = [];
+    for (const { level, scopeId } of view.pinScopes) {
+      const node = (
+        await view.knowledge.listNodes({
+          scopeIds: view.scopeIds,
+          membershipScopeIds: [scopeId],
+          limit: this.#limits.maxNodes,
+        })
+      ).find(candidate => candidate.name === PINNED_NODE_NAME);
+      if (node) out.push({ level, scopeId, id: node.id });
     }
     return out;
   }
 
-  async #pinnedRecords(view: ResolvedView, ids: Array<{ rung: 'resource' | 'thread'; scopeId: string; id: string }>) {
-    const out: Array<{ rung: 'resource' | 'thread'; record: KnowledgeRecord }> = [];
-    for (const { rung, scopeId, id } of ids) {
-      const { records } = await view.store.listRecords({
+  async #pinnedRecords(view: ResolvedView, ids: Array<{ level: 'resource' | 'thread'; scopeId: string; id: string }>) {
+    const out: Array<{ level: 'resource' | 'thread'; record: KnowledgeRecord }> = [];
+    for (const { level, scopeId, id } of ids) {
+      const { records } = await view.knowledge.listRecords({
         node: id,
         scopeIds: view.scopeIds,
         membershipScopeIds: [scopeId],
         limit: 200,
       });
-      for (const record of records) out.push({ rung, record });
+      for (const record of records) out.push({ level, record });
     }
     return out;
   }
 
-  async #resolveSelectedScope(view: ResolvedView, rawScopeId: string | undefined): Promise<KnowledgeNode | null> {
+  async #resolveSelectedScope(
+    view: ResolvedView,
+    rawScopeId: string | undefined,
+    requireReadable = false,
+  ): Promise<KnowledgeNode | null> {
     const scopeId = rawScopeId ?? view.threadScopeId ?? view.resourceScopeId;
     if (!UUID_RE.test(scopeId)) return null;
     const scope = await view.store.getNode(scopeId);
     if (!scope?.isScope || scope.deletedAt) return null;
-
-    const frontier = new Set(view.scopeIds);
+    const roots = new Set([view.orgScopeId, view.resourceScopeId, ...(view.threadScopeId ? [view.threadScopeId] : [])]);
     const pending = [scope.id];
     const visited = new Set<string>();
     while (pending.length > 0 && visited.size <= this.#limits.maxNodes) {
       const current = pending.pop()!;
-      if (frontier.has(current)) return scope;
+      if (roots.has(current)) {
+        if (!requireReadable) return scope;
+        return view.knowledge.getNode({ id: scope.id, scopeIds: view.scopeIds });
+      }
       if (visited.has(current)) continue;
       visited.add(current);
       pending.push(...(await view.store.getNodeScopeIds(current)));
@@ -539,20 +745,20 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
     return null;
   }
 
-  async #scopeTreeNode(store: KnowledgeStorage, node: KnowledgeNode): Promise<KnowledgeScopeTreeNode> {
+  #scopeTreeNode(projectId: string, perspectiveKey: string, node: KnowledgeNode): KnowledgeScopeTreeNode {
     const description = metadataString(node.metadata, 'description');
     return {
-      id: node.id,
+      id: this.#mintHandle(projectId, perspectiveKey, 'scope', node.id),
       name: node.name,
       kind: node.kind ?? 'scope',
       ...(description ? { description } : {}),
-      parentScopeIds: await store.getNodeScopeIds(node.id),
     };
   }
 
   async #projectImportRuns(input: {
     knowledge: Knowledge;
     projectId: string;
+    scopeIds: KnowledgeScopeIds;
     importerId: string;
     binding?: string;
     status?: KnowledgeImportRunStatus;
@@ -565,7 +771,8 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
     const runs: KnowledgeImportRun[] = [];
     let after = input.after;
     for (let pageIndex = 0; pageIndex < 100 && runs.length < input.limit; pageIndex += 1) {
-      const page = await input.knowledge.listImportRunsInternal({
+      const page = await input.knowledge.listImportRuns({
+        scopeIds: input.scopeIds,
         importerId: input.importerId,
         binding: input.binding,
         status: input.status,
@@ -606,11 +813,22 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
               ];
               const bindings = Array.from(
                 new Map(declaredBindings.map(binding => [`${binding.source}\u0000${binding.scope}`, binding])).values(),
-              ).filter(binding => importScopeBelongsToProject(binding.scope, resolved.projectId));
+              )
+                .filter(binding => importScopeBelongsToProject(binding.scope, resolved.projectId))
+                .map(binding => ({
+                  source: binding.source,
+                  binding: this.#mintHandle(
+                    resolved.projectId,
+                    resolved.perspectiveKey,
+                    'binding',
+                    knowledgeImporterBindingKey(binding),
+                  ),
+                }));
               const lastRun = (
                 await this.#projectImportRuns({
                   knowledge: resolved.knowledge,
                   projectId: resolved.projectId,
+                  scopeIds: resolved.scopeIds,
                   importerId: importer.importerId,
                   limit: 1,
                 })
@@ -621,7 +839,9 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
                 importKind: importer.agentic ? ('agentic' as const) : ('static' as const),
                 triggers: triggerKinds,
                 bindings,
-                lastRun: lastRun ? importRunPayload(lastRun) : undefined,
+                lastRun: lastRun
+                  ? this.#importRunPayload(resolved.projectId, resolved.perspectiveKey, lastRun)
+                  : undefined,
               } satisfies KnowledgeImporterSummary;
             }),
           );
@@ -635,7 +855,7 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
           const c = loose(raw);
           const resolved = await this.#resolveOperator(c);
           if ('response' in resolved) return resolved.response;
-          const importerId = c.req.param('importerId');
+          const importerId = c.req.param('importerId')!;
           if (!resolved.knowledge.getImporter(importerId)) return c.json({ error: 'importer_not_found' }, 404);
 
           const rawStatus = c.req.query('status');
@@ -649,23 +869,31 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
           if ((rawStatus && !status) || (rawTrigger && !trigger) || (rawFrom && !from) || (rawTo && !to)) {
             return c.json({ error: 'invalid_import_filters' }, 400);
           }
-          const binding = c.req.query('binding');
-          if (binding && !importScopeBelongsToProject(importBinding(binding).scope, resolved.projectId)) {
-            return c.json({ runs: [] });
-          }
+          const bindingHandle = c.req.query('binding');
+          const binding = this.#resolveHandle(resolved.projectId, resolved.perspectiveKey, 'binding', bindingHandle);
+          if (bindingHandle && !binding) return c.json({ runs: [] });
+          const cursorHandle = c.req.query('cursor');
+          const cursor = this.#resolveHandle(resolved.projectId, resolved.perspectiveKey, 'cursor', cursorHandle);
+          if (cursorHandle && !cursor) return c.json({ runs: [] });
           const page = await this.#projectImportRuns({
             knowledge: resolved.knowledge,
             projectId: resolved.projectId,
+            scopeIds: resolved.scopeIds,
             importerId,
             binding,
             status,
             trigger,
             from,
             to,
-            after: c.req.query('cursor'),
+            after: cursor,
             limit: 100,
           });
-          return c.json({ runs: page.runs.map(importRunPayload), nextCursor: page.nextCursor });
+          return c.json({
+            runs: page.runs.map(run => this.#importRunPayload(resolved.projectId, resolved.perspectiveKey, run)),
+            nextCursor: page.nextCursor
+              ? this.#mintHandle(resolved.projectId, resolved.perspectiveKey, 'cursor', page.nextCursor)
+              : undefined,
+          });
         },
       }),
       registerApiRoute('/web/factory/projects/:id/knowledge/importers/:importerId/runs/:runId', {
@@ -675,97 +903,177 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
           const c = loose(raw);
           const resolved = await this.#resolveOperator(c);
           if ('response' in resolved) return resolved.response;
-          const importerId = c.req.param('importerId');
+          const importerId = c.req.param('importerId')!;
           const importer = resolved.knowledge.getImporter(importerId);
           if (!importer) return c.json({ error: 'importer_not_found' }, 404);
-          const run = await resolved.knowledge.getImportRunInternal(c.req.param('runId'));
+          const runId = this.#resolveHandle(resolved.projectId, resolved.perspectiveKey, 'run', c.req.param('runId'));
+          if (!runId) return c.json({ error: 'import_run_not_found' }, 404);
+          const run = await resolved.knowledge.getImportRun({
+            id: runId,
+            scopeIds: resolved.scopeIds,
+          });
           if (!run || run.importerId !== importerId || !importRunBelongsToProject(run, resolved.projectId)) {
             return c.json({ error: 'import_run_not_found' }, 404);
           }
 
           const store = await resolved.knowledge.getStorageInternal();
           const binding = importBinding(run.binding);
-          const scope = binding.scope ? await store.getScopeAddress(binding.scope) : undefined;
+          const scope = binding.scopeAddress ? await store.getScopeAddress(binding.scopeAddress) : undefined;
           const activity = scope
-            ? await resolved.knowledge.listActivity({ scopeIds: [scope.scopeNodeId], importRunId: run.id, limit: 100 })
+            ? await resolved.knowledge.listActivity({
+                scopeIds: resolved.scopeIds,
+                contextScopeId: scope.scopeNodeId,
+                importRunId: run.id,
+                limit: 100,
+              })
             : [];
-          let transcript: KnowledgeImportRunDetailPayload['transcript'];
-          if (run.transcriptThreadId) {
-            const memory = importer.agentic
-              ? await importer.agentic.agent.getMemory().catch(() => undefined)
-              : undefined;
-            const recalled = memory
-              ? await memory
-                  .recall({
-                    threadId: run.transcriptThreadId,
-                    resourceId: knowledgeAgentImportMemoryResourceId(resolved.knowledge, run.importerId, run.binding),
-                    perPage: 100,
-                  })
-                  .catch(() => undefined)
-              : undefined;
-            transcript = {
-              threadId: run.transcriptThreadId,
-              available: Boolean(recalled),
-              messages:
-                recalled?.messages.map(message => ({
-                  id: message.id,
-                  role: message.role,
-                  content: message.content,
-                  createdAt: message.createdAt.toISOString(),
-                })) ?? [],
-            };
-          }
           const payload: KnowledgeImportRunDetailPayload = {
-            run: importRunPayload(run),
+            run: this.#importRunPayload(resolved.projectId, resolved.perspectiveKey, run),
             activity: activity.map(event => ({
-              id: event.id,
+              id: this.#mintHandle(resolved.projectId, resolved.perspectiveKey, 'cursor', event.id),
               action: event.action,
               targetType: event.targetType,
               createdAt: event.createdAt.toISOString(),
             })),
-            transcript,
           };
           return c.json(payload);
+        },
+      }),
+      registerApiRoute('/web/factory/projects/:id/knowledge/proposals', {
+        method: 'GET',
+        requiresAuth: false,
+        handler: async raw => {
+          const c = loose(raw);
+          const view = await this.#resolveView(c);
+          if ('response' in view) return view.response;
+          const tenant = this.deps.auth.tenant(c);
+          const allowActions =
+            !this.deps.auth.enabled() ||
+            (tenant?.orgId !== undefined && (await this.deps.auth.isOrganizationAdmin(c, tenant.orgId)));
+          const rawStatus = c.req.query('status');
+          const status =
+            rawStatus === 'pending' ||
+            rawStatus === 'approved' ||
+            rawStatus === 'rejected' ||
+            rawStatus === 'conflicted'
+              ? rawStatus
+              : undefined;
+          if (rawStatus && !status) return c.json({ error: 'invalid_proposal_status' }, 400);
+          const cursorHandle = c.req.query('cursor');
+          const cursor = this.#resolveHandle(view.projectId, view.perspectiveKey, 'cursor', cursorHandle);
+          if (cursorHandle && !cursor) return c.json({ error: 'cursor_not_found' }, 404);
+          const page = await view.knowledge.listProposals({
+            vouchedScopeIds: view.scopeIds,
+            status,
+            cursor,
+            limit: 100,
+          });
+          const proposals = (
+            await Promise.all(
+              page.proposals.map(proposal =>
+                proposalPayload(
+                  view.knowledge,
+                  proposal,
+                  view.scopeIds,
+                  (kind, value) => this.#mintHandle(view.projectId, view.perspectiveKey, kind, value),
+                  allowActions,
+                ),
+              ),
+            )
+          ).filter((proposal): proposal is KnowledgeProposalPayload => proposal !== null);
+          return c.json({
+            proposals,
+            nextCursor: page.nextCursor
+              ? this.#mintHandle(view.projectId, view.perspectiveKey, 'cursor', page.nextCursor)
+              : undefined,
+          });
+        },
+      }),
+      registerApiRoute('/web/factory/projects/:id/knowledge/proposals/:proposalId/:action', {
+        method: 'POST',
+        requiresAuth: true,
+        handler: async raw => {
+          const c = loose(raw);
+          const resolved = await this.#resolveOperator(c);
+          if ('response' in resolved) return resolved.response;
+          const action = c.req.param('action');
+          if (action !== 'approve' && action !== 'reject' && action !== 're-review') {
+            return c.json({ error: 'proposal_action_not_found' }, 404);
+          }
+          const body: { reason?: string } = await c.req.json<{ reason?: string }>().catch(() => ({}));
+          const proposalId = this.#resolveHandle(
+            resolved.projectId,
+            resolved.perspectiveKey,
+            'proposal',
+            c.req.param('proposalId'),
+          );
+          if (!proposalId) return c.json({ error: 'proposal_not_found' }, 404);
+          const vouchedScopeIds = resolved.scopeIds;
+          const decision = {
+            id: proposalId,
+            reviewerContextScopeId: vouchedScopeIds.at(-1)!,
+            vouchedScopeIds,
+            reason: typeof body.reason === 'string' ? body.reason.slice(0, 2_000) : undefined,
+          };
+          try {
+            const proposal =
+              action === 'approve'
+                ? await resolved.knowledge.approveProposal(decision)
+                : action === 'reject'
+                  ? await resolved.knowledge.rejectProposal(decision)
+                  : await resolved.knowledge.reReviewProposal(decision);
+            const payload = await proposalPayload(resolved.knowledge, proposal, vouchedScopeIds, (kind, value) =>
+              this.#mintHandle(resolved.projectId, resolved.perspectiveKey, kind, value),
+            );
+            return payload ? c.json(payload) : c.json({ error: 'proposal_not_found' }, 404);
+          } catch (error) {
+            const name = error instanceof Error ? error.name : '';
+            if (name === 'KnowledgeNotFoundError') return c.json({ error: 'proposal_not_found' }, 404);
+            if (name === 'KnowledgeConflictError') return c.json({ error: 'proposal_conflicted' }, 409);
+            throw error;
+          }
         },
       }),
       registerApiRoute('/web/factory/projects/:id/knowledge/scopes', {
         method: 'GET',
         requiresAuth: false,
         handler: async c => {
-          const scopeId = loose(c).req.query('scopeId');
+          const projectId = loose(c).req.param('id')!;
+          const perspectiveKey = knowledgePerspectiveKey(projectId, boundedThreadId(loose(c).req.query('threadId')));
+          const scopeHandle = loose(c).req.query('scopeId');
+          const scopeId = this.#resolveHandle(projectId, perspectiveKey, 'scope', scopeHandle);
+          if (scopeHandle && !scopeId) return loose(c).json({ error: 'scope_not_found' }, 404);
           const view = await this.#resolveView(loose(c), { scopeId });
           if ('response' in view) return view.response;
-          const selected = await this.#resolveSelectedScope(view, scopeId);
+          const selected = await this.#resolveSelectedScope(view, scopeId, true);
           if (!selected) return loose(c).json({ error: 'scope_not_found' }, 404);
-          const cursor = loose(c).req.query('cursor');
-          const fetched = await view.store.listNodes({
-            scopeIds: [selected.id],
+          const cursorHandle = loose(c).req.query('cursor');
+          const cursor = this.#resolveHandle(projectId, view.perspectiveKey, 'cursor', cursorHandle);
+          if (cursorHandle && !cursor) return loose(c).json({ error: 'cursor_not_found' }, 404);
+          const fetched = await view.knowledge.listNodes({
+            scopeIds: view.scopeIds,
+            membershipScopeIds: [selected.id],
             isScope: true,
             ...(cursor ? { cursor } : {}),
-            limit: this.#limits.maxNodes + 2,
+            limit: this.#limits.maxNodes + 1,
           });
-          const eligible: Array<{ node: KnowledgeNode; parentScopeIds: KnowledgeScopeIds }> = [];
-          for (const node of fetched) {
-            if (node.id === selected.id) continue;
-            const parentScopeIds = await view.store.getNodeScopeIds(node.id);
-            if (parentScopeIds.includes(selected.id)) eligible.push({ node, parentScopeIds });
-          }
+          const eligible = fetched.filter(node => node.id !== selected.id);
           const page = eligible.slice(0, this.#limits.maxNodes);
-          const children: KnowledgeScopeTreeNode[] = page.map(({ node, parentScopeIds }) => {
-            const description = metadataString(node.metadata, 'description');
-            return {
-              id: node.id,
-              name: node.name,
-              kind: node.kind ?? 'scope',
-              ...(description ? { description } : {}),
-              parentScopeIds,
-            };
-          });
-          const last = eligible.length > this.#limits.maxNodes ? page.at(-1)?.node : undefined;
+          const children = page.map(node => this.#scopeTreeNode(projectId, view.perspectiveKey, node));
+          const last = eligible.length > this.#limits.maxNodes ? page.at(-1) : undefined;
           return loose(c).json({
-            scope: await this.#scopeTreeNode(view.store, selected),
+            scope: this.#scopeTreeNode(projectId, view.perspectiveKey, selected),
             children,
-            ...(last ? { nextCursor: createKnowledgeNodeCursor(last, { isScope: true }) } : {}),
+            ...(last
+              ? {
+                  nextCursor: this.#mintHandle(
+                    projectId,
+                    view.perspectiveKey,
+                    'cursor',
+                    createKnowledgeNodeCursor(last, { isScope: true }),
+                  ),
+                }
+              : {}),
           } satisfies KnowledgeScopeTreePayload);
         },
       }),
@@ -773,20 +1081,28 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
         method: 'GET',
         requiresAuth: false,
         handler: async c => {
-          const scopeId = loose(c).req.query('scopeId');
+          const projectId = loose(c).req.param('id')!;
+          const perspectiveKey = knowledgePerspectiveKey(projectId, boundedThreadId(loose(c).req.query('threadId')));
+          const scopeHandle = loose(c).req.query('scopeId');
+          const scopeId = this.#resolveHandle(projectId, perspectiveKey, 'scope', scopeHandle);
+          if (scopeHandle && !scopeId) return loose(c).json({ error: 'scope_not_found' }, 404);
           const view = await this.#resolveView(loose(c), { scopeId });
           if ('response' in view) return view.response;
-          const selected = await this.#resolveSelectedScope(view, scopeId);
+          const selected = await this.#resolveSelectedScope(view, scopeId, true);
           if (!selected) return loose(c).json({ error: 'scope_not_found' }, 404);
           const { store } = view;
           const scopeIds = [selected.id];
-          const resolutionScopeIds = [...new Set([...view.scopeIds, selected.id])];
+          const resolutionScopeIds = view.scopeIds;
           const selectedView: ResolvedView = {
             ...view,
-            scopeIds: resolutionScopeIds,
-            pinRungs: view.pinRungs.filter(rung => rung.scopeId === selected.id),
+            pinScopes: view.pinScopes.filter(level => level.scopeId === selected.id),
           };
-          const fetched = await store.listNodes({ scopeIds, isScope: false, limit: this.#limits.maxNodes + 1 });
+          const fetched = await view.knowledge.listNodes({
+            scopeIds: view.scopeIds,
+            membershipScopeIds: scopeIds,
+            isScope: false,
+            limit: this.#limits.maxNodes + 1,
+          });
           let truncated = fetched.length > this.#limits.maxNodes;
           const pinnedNodeIds = await this.#pinnedNodeIds(selectedView);
           const pinnedNodeIdSet = new Set(pinnedNodeIds.map(value => value.id));
@@ -794,9 +1110,9 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
           const recordWindow: KnowledgeRecord[] = [];
           for (const node of nodes) {
             if (recordWindow.length > this.#limits.maxRecords) break;
-            const result = await store.listRecords({
-              node,
-              scopeIds: resolutionScopeIds,
+            const result = await view.knowledge.listRecords({
+              node: node.id,
+              scopeIds: view.scopeIds,
               membershipScopeIds: scopeIds,
               limit: this.#limits.maxRecords + 1 - recordWindow.length,
             });
@@ -807,7 +1123,7 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
             truncated = true;
             recordWindow.length = this.#limits.maxRecords;
           }
-          const resolver = await WikilinkResolver.create(store, nodes, this.#limits.maxFallbackLookups);
+          const resolver = await WikilinkResolver.create(view.knowledge, store, nodes, this.#limits.maxFallbackLookups);
           const edges: KnowledgeGraphEdge[] = [];
           const boundaryNodes = new Map<string, KnowledgeNode>();
           const edgeSeen = new Set<string>();
@@ -861,40 +1177,47 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
               }
             }
           }
-          const activity = await store.listActivity({ scopeIds, limit: 1 });
-          const graphNodes = await Promise.all(
-            [...nodes, ...boundaryNodes.values()].map(async node => {
-              const nodeScopeIds = await store.getNodeScopeIds(node.id);
-              const description = metadataString(node.metadata, 'description');
-              return {
-                id: node.id,
-                name: node.name,
-                kind: node.kind ?? 'concept',
-                ...(description ? { description } : {}),
-                scopeIds: nodeScopeIds,
-                rung: rungForScopeIds(nodeScopeIds, view),
-                pinned: accented.has(node.id),
-                recordCount: recordCounts.get(node.id) ?? 0,
-                createdAt: node.createdAt.toISOString(),
-                updatedAt: node.updatedAt.toISOString(),
-              };
-            }),
-          );
+          const activity = await view.knowledge.listActivity({
+            scopeIds: view.scopeIds,
+            contextScopeId: selected.id,
+            limit: 1,
+          });
+          const graphNodes = [...nodes, ...boundaryNodes.values()].map(node => {
+            const description = metadataString(node.metadata, 'description');
+            return {
+              id: this.#mintHandle(projectId, view.perspectiveKey, 'node', node.id),
+              name: node.name,
+              kind: node.kind ?? 'concept',
+              ...(description ? { description } : {}),
+              pinned: accented.has(node.id),
+              recordCount: recordCounts.get(node.id) ?? 0,
+              createdAt: node.createdAt.toISOString(),
+              updatedAt: node.updatedAt.toISOString(),
+            };
+          });
           const payload: KnowledgeGraphPayload = {
             view: view.view,
-            scopeId: selected.id,
-            ...(view.threadId ? { threadId: view.threadId } : {}),
+            scopeId: this.#mintHandle(projectId, view.perspectiveKey, 'scope', selected.id),
             nodes: graphNodes,
-            edges,
+            edges: edges.map(edge => ({
+              ...edge,
+              id: this.#mintHandle(projectId, view.perspectiveKey, 'record', edge.id),
+              source: this.#mintHandle(projectId, view.perspectiveKey, 'node', edge.source),
+              target: this.#mintHandle(projectId, view.perspectiveKey, 'node', edge.target),
+              recordId: this.#mintHandle(projectId, view.perspectiveKey, 'record', edge.recordId),
+            })),
             records: [],
             truncated,
-            outOfWindow: [...resolver.outOfWindow.values()],
+            outOfWindow: [...resolver.outOfWindow.values()].map(node => ({
+              id: this.#mintHandle(projectId, view.perspectiveKey, 'node', node.id),
+              name: node.name,
+            })),
             unresolvedCapped: { count: resolver.cappedCount, names: resolver.cappedNames },
             pinCensus: {
-              resource: pinnedRecords.filter(value => value.rung === 'resource').length,
-              thread: view.view === 'thread' ? pinnedRecords.filter(value => value.rung === 'thread').length : null,
+              resource: pinnedRecords.filter(value => value.level === 'resource').length,
+              thread: view.view === 'thread' ? pinnedRecords.filter(value => value.level === 'thread').length : null,
             },
-            version: activity[0]?.id ?? null,
+            version: activity[0] ? this.#mintHandle(projectId, view.perspectiveKey, 'cursor', activity[0].id) : null,
           };
           return c.json(payload);
         },
@@ -903,75 +1226,72 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
         method: 'GET',
         requiresAuth: false,
         handler: async c => {
-          const scopeId = loose(c).req.query('scopeId');
-          const nodeId = loose(c).req.param('nodeId');
-          if (!nodeId || nodeId.length > 512) return c.json({ error: 'node_not_found' }, 404);
+          const projectId = loose(c).req.param('id')!;
+          const perspectiveKey = knowledgePerspectiveKey(projectId, boundedThreadId(loose(c).req.query('threadId')));
+          const scopeHandle = loose(c).req.query('scopeId');
+          const scopeId = this.#resolveHandle(projectId, perspectiveKey, 'scope', scopeHandle);
+          if (scopeHandle && !scopeId) return c.json({ error: 'scope_not_found' }, 404);
+          const nodeId = this.#resolveHandle(projectId, perspectiveKey, 'node', loose(c).req.param('nodeId'));
+          if (!nodeId) return c.json({ error: 'node_not_found' }, 404);
           const view = await this.#resolveView(loose(c), { scopeId, nodeId });
           if ('response' in view) return view.response;
-          const selected = await this.#resolveSelectedScope(view, scopeId);
+          const selected = await this.#resolveSelectedScope(view, scopeId, true);
           if (!selected) return loose(c).json({ error: 'scope_not_found' }, 404);
-          const node = await view.store.getNode(nodeId);
-          const nodeScopeIds = node ? await view.store.getNodeScopeIds(node.id) : [];
-          if (!node || !isKnowledgeNodeVisible(node, nodeScopeIds, [selected.id]))
-            return c.json({ error: 'node_not_found' }, 404);
-          const visibilityScopeIds = [...new Set([...view.scopeIds, selected.id])];
+          const node = await view.knowledge.getNode({
+            id: nodeId,
+            scopeIds: view.scopeIds,
+            membershipScopeIds: [selected.id],
+          });
+          if (!node) return c.json({ error: 'node_not_found' }, 404);
           const selectedView: ResolvedView = {
             ...view,
-            scopeIds: visibilityScopeIds,
-            pinRungs: view.pinRungs.filter(rung => rung.scopeId === selected.id),
+            pinScopes: view.pinScopes.filter(level => level.scopeId === selected.id),
           };
           const pinnedNodeIds = await this.#pinnedNodeIds(selectedView);
           const pinnedNodeIdSet = new Set(pinnedNodeIds.map(value => value.id));
           const [owned, mentioning] = await Promise.all([
-            view.store.listRecords({
-              node,
-              scopeIds: visibilityScopeIds,
+            view.knowledge.listRecords({
+              node: node.id,
+              scopeIds: view.scopeIds,
               membershipScopeIds: [selected.id],
               limit: 200,
             }),
-            view.store.listMentioningRecords({
-              node,
-              scopeIds: visibilityScopeIds,
+            view.knowledge.listMentioningRecords({
+              node: node.id,
+              scopeIds: view.scopeIds,
               membershipScopeIds: [selected.id],
               limit: 200,
             }),
           ]);
           const seen = new Set<string>();
           const records: KnowledgeNodeRecordPayload[] = [];
-          const push = async (record: KnowledgeRecord, relation: 'owned' | 'mentions') => {
+          const push = (record: KnowledgeRecord, relation: 'owned' | 'mentions') => {
             if (seen.has(record.id)) return;
             seen.add(record.id);
-            const recordScopeIds = await view.store.getRecordScopeIds(record.id);
             const when = metadataString(record.metadata, 'when');
+            const reason = metadataString(record.metadata, 'reason');
             records.push({
-              id: record.id,
-              nodeId: record.nodeId,
+              id: this.#mintHandle(projectId, view.perspectiveKey, 'record', record.id),
+              nodeId: this.#mintHandle(projectId, view.perspectiveKey, 'node', record.nodeId),
               relation,
               text: record.text,
-              scopeIds: recordScopeIds,
-              rung: rungForScopeIds(recordScopeIds, view),
-              ...(metadataString(record.metadata, 'sourceThreadId')
-                ? { sourceThreadId: metadataString(record.metadata, 'sourceThreadId') }
-                : {}),
-              capturedAt: record.createdAt.toISOString(),
+              createdAt: record.createdAt.toISOString(),
               ...(when ? { when } : {}),
+              ...(reason ? { reason } : {}),
               pinned: pinnedNodeIdSet.has(record.nodeId),
-              ...(record.metadata ? { metadata: record.metadata } : {}),
             });
           };
-          for (const record of [...owned.records].sort((a, b) => b.id.localeCompare(a.id))) await push(record, 'owned');
+          for (const record of [...owned.records].sort((a, b) => b.id.localeCompare(a.id))) push(record, 'owned');
           for (const record of [...mentioning.records].sort((a, b) => b.id.localeCompare(a.id)))
-            await push(record, 'mentions');
+            push(record, 'mentions');
           const payload: KnowledgeNodePayload = {
             node: {
-              id: node.id,
+              id: this.#mintHandle(projectId, view.perspectiveKey, 'node', node.id),
               name: node.name,
               kind: node.kind ?? 'concept',
               ...(metadataString(node.metadata, 'description')
                 ? { description: metadataString(node.metadata, 'description') }
                 : {}),
-              scopeIds: nodeScopeIds,
-              rung: rungForScopeIds(nodeScopeIds, view),
               createdAt: node.createdAt.toISOString(),
               updatedAt: node.updatedAt.toISOString(),
             },
@@ -985,46 +1305,73 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
         requiresAuth: false,
         handler: async raw => {
           const c = loose(raw);
-          const scopeId = c.req.query('scopeId');
+          const projectId = c.req.param('id')!;
+          const perspectiveKey = knowledgePerspectiveKey(projectId, boundedThreadId(c.req.query('threadId')));
+          const scopeHandle = c.req.query('scopeId');
+          const scopeId = this.#resolveHandle(projectId, perspectiveKey, 'scope', scopeHandle);
+          if (scopeHandle && !scopeId) return c.json({ error: 'scope_not_found' }, 404);
           const view = await this.#resolveView(c, { scopeId });
           if ('response' in view) return view.response;
-          const selected = await this.#resolveSelectedScope(view, scopeId);
+          const selected = await this.#resolveSelectedScope(view, scopeId, true);
           if (!selected) return c.json({ error: 'scope_not_found' }, 404);
 
-          const action = c.req.query('action');
+          const rawAction = c.req.query('action');
+          const action = activityAction(rawAction);
           const sourceType = c.req.query('sourceType');
           const rawFrom = c.req.query('from');
           const from = boundedDate(rawFrom);
           const rawTo = c.req.query('to');
           const to = boundedDate(rawTo);
           if (
+            (rawAction && !action) ||
             (sourceType && sourceType !== 'importer' && sourceType !== 'system') ||
             (rawFrom && !from) ||
             (rawTo && !to)
           ) {
             return c.json({ error: 'invalid_activity_filters' }, 400);
           }
-          const events = await view.store.listActivity({ scopeIds: [selected.id], limit: 100 });
+          const cursorHandle = c.req.query('cursor');
+          const after = this.#resolveHandle(projectId, view.perspectiveKey, 'cursor', cursorHandle);
+          if (cursorHandle && !after) return c.json({ error: 'cursor_not_found' }, 404);
+          const events = await view.knowledge.listActivity({
+            scopeIds: view.scopeIds,
+            contextScopeId: selected.id,
+            action,
+            sourceType: sourceType === 'importer' || sourceType === 'system' ? sourceType : undefined,
+            from,
+            to,
+            after,
+            limit: 100,
+          });
           const projected = await Promise.all(
-            events
-              .filter(event => !action || event.action === action)
-              .filter(event => !from || event.createdAt >= from)
-              .filter(event => !to || event.createdAt <= to)
-              .filter(event => !sourceType || (sourceType === 'importer') === Boolean(event.importRunId))
-              .map(async event => {
-                const run = event.importRunId ? await view.store.getImportRun(event.importRunId) : undefined;
-                return {
-                  id: event.id,
-                  action: event.action,
-                  targetType: event.targetType,
-                  scopeId: event.contextScopeId ?? selected.id,
-                  sourceType: run ? ('importer' as const) : ('system' as const),
-                  ...(run ? { sourceId: run.importerId, importRunId: run.id } : {}),
-                  createdAt: event.createdAt.toISOString(),
-                };
-              }),
+            events.map(async event => {
+              const run = event.importRunId
+                ? await view.knowledge.getImportRun({ id: event.importRunId, scopeIds: view.scopeIds })
+                : undefined;
+              return {
+                id: this.#mintHandle(projectId, view.perspectiveKey, 'cursor', event.id),
+                action: event.action,
+                targetType: event.targetType,
+                scopeId: this.#mintHandle(projectId, view.perspectiveKey, 'scope', event.contextScopeId ?? selected.id),
+                sourceType: event.importRunId ? ('importer' as const) : ('system' as const),
+                ...(run
+                  ? {
+                      sourceId: run.importerId,
+                      importRunId: this.#mintHandle(projectId, view.perspectiveKey, 'run', run.id),
+                    }
+                  : {}),
+                createdAt: event.createdAt.toISOString(),
+              };
+            }),
           );
-          return c.json({ events: projected });
+          return c.json({
+            events: projected,
+            ...(events.length === 100
+              ? {
+                  nextCursor: this.#mintHandle(projectId, view.perspectiveKey, 'cursor', events.at(-1)!.id),
+                }
+              : {}),
+          });
         },
       }),
     ];

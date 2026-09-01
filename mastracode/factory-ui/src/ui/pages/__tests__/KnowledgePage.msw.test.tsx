@@ -21,8 +21,6 @@ const nodeFixture: KnowledgeNodePayload = {
     name: 'Payments Service',
     kind: 'service',
     description: 'Handles charging flows through [[Deploy Runbook]].',
-    scopeIds: ['org:org-1', `resource:${FACTORY_ID}`],
-    rung: 'resource',
     createdAt: '2026-08-13T00:00:00.000Z',
     updatedAt: '2026-08-13T01:00:00.000Z',
   },
@@ -32,22 +30,16 @@ const nodeFixture: KnowledgeNodePayload = {
       nodeId: 'ent-1',
       relation: 'owned',
       text: 'Payments Service uses [[Deploy Runbook]] for charging flows.',
-      scopeIds: ['org:org-1', `resource:${FACTORY_ID}`],
-      rung: 'resource',
-      sourceThreadId: 'thread-abc-123',
-      capturedAt: '2026-08-13T02:00:00.000Z',
+      createdAt: '2026-08-13T02:00:00.000Z',
       pinned: true,
-      metadata: { reason: 'Learned from a burned API call — costly to rediscover.' },
+      reason: 'Learned from a burned API call — costly to rediscover.',
     },
     {
       id: 'record-2',
       nodeId: 'ent-1',
       relation: 'owned',
       text: 'Deploys run nightly.',
-      scopeIds: ['org:org-1', `resource:${FACTORY_ID}`],
-      rung: 'resource',
-      sourceThreadId: 'thread-abc-123',
-      capturedAt: '2026-08-13T03:00:00.000Z',
+      createdAt: '2026-08-13T03:00:00.000Z',
       pinned: false,
     },
   ],
@@ -58,14 +50,12 @@ const scopeTreeFixture: KnowledgeScopeTreePayload = {
     id: `resource:${FACTORY_ID}`,
     name: 'Acme Factory',
     kind: 'project',
-    parentScopeIds: ['org:org-1'],
   },
   children: [
     {
       id: 'scope:payments',
       name: 'Payments',
       kind: 'feature',
-      parentScopeIds: [`resource:${FACTORY_ID}`],
     },
   ],
 };
@@ -80,8 +70,6 @@ const graphFixture: KnowledgeGraphPayload = {
       kind: 'service',
       description:
         'Handles charging flows through [[Deploy Runbook]]. Operational reference: https://github.com/mastra-ai/mastra/tree/main/mastracode/factory',
-      scopeIds: ['org:org-1', `resource:${FACTORY_ID}`],
-      rung: 'resource',
       pinned: true,
       recordCount: 3,
       createdAt: '2026-08-13T00:00:00.000Z',
@@ -91,8 +79,6 @@ const graphFixture: KnowledgeGraphPayload = {
       id: 'ent-2',
       name: 'Deploy Runbook',
       kind: 'doc',
-      scopeIds: ['org:org-1', `resource:${FACTORY_ID}`],
-      rung: 'resource',
       pinned: false,
       recordCount: 1,
       createdAt: '2026-08-13T00:00:00.000Z',
@@ -123,6 +109,7 @@ function stubKnowledgeRoute(
   graph: KnowledgeGraphPayload | { status: number; message: string } = graphFixture,
   nodePayload = nodeFixture,
 ) {
+  let proposalStatus: 'pending' | 'approved' | 'rejected' | 'conflicted' = 'pending';
   server.use(
     http.get(`${TEST_BASE_URL}/auth/me`, () =>
       HttpResponse.json({ authenticated: true, authEnabled: true, user: { userId: 'user-1' } }),
@@ -161,8 +148,6 @@ function stubKnowledgeRoute(
               id: 'ent-thread',
               name: 'Session Scratchpad',
               kind: 'note',
-              scopeIds: ['org:org-1', `resource:${FACTORY_ID}`, `thread:${threadId}`],
-              rung: 'thread' as const,
               pinned: false,
               recordCount: 1,
               createdAt: '2026-08-13T04:00:00.000Z',
@@ -202,6 +187,56 @@ function stubKnowledgeRoute(
         ],
       }),
     ),
+    http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/knowledge/proposals`, ({ request }) => {
+      const requestedStatus = new URL(request.url).searchParams.get('status');
+      return HttpResponse.json({
+        proposals:
+          !requestedStatus || requestedStatus === proposalStatus
+            ? [
+                {
+                  id: 'proposal-1',
+                  operation: 'update-node',
+                  status: proposalStatus,
+                  reason: 'The current name is stale',
+                  targets: [
+                    {
+                      type: 'node',
+                      id: 'ent-1',
+                      name: 'Payments Service',
+                      expectedVersion: 1,
+                      currentVersion: proposalStatus === 'conflicted' ? 2 : 1,
+                    },
+                  ],
+                  proposer: 'private',
+                  actions:
+                    proposalStatus === 'conflicted'
+                      ? ['re-review']
+                      : proposalStatus === 'pending'
+                        ? ['approve', 'reject']
+                        : [],
+                  createdAt: '2026-08-13T03:00:00.000Z',
+                },
+              ]
+            : [],
+      });
+    }),
+    http.post(
+      `${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/knowledge/proposals/proposal-1/:action`,
+      ({ params }) => {
+        proposalStatus = params.action === 'reject' ? 'rejected' : 'approved';
+        return HttpResponse.json({
+          id: 'proposal-1',
+          operation: 'update-node',
+          status: proposalStatus,
+          targets: [{ type: 'node', id: 'ent-1', name: 'Payments Service', expectedVersion: 1, currentVersion: 1 }],
+          proposer: 'private',
+          reviewer: 'visible',
+          actions: [],
+          createdAt: '2026-08-13T03:00:00.000Z',
+          reviewedAt: '2026-08-13T03:01:00.000Z',
+        });
+      },
+    ),
     http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/knowledge/importers`, () =>
       HttpResponse.json({
         importers: [
@@ -209,7 +244,7 @@ function stubKnowledgeRoute(
             id: 'github',
             importKind: 'agentic',
             triggers: ['programmatic', 'webhook'],
-            bindings: [{ source: 'repo:mastra', scope: 'scope:payments' }],
+            bindings: [{ source: 'repo:mastra', binding: 'kh_binding' }],
           },
         ],
       }),
@@ -220,13 +255,11 @@ function stubKnowledgeRoute(
           {
             id: 'run-1',
             importerId: 'github',
-            binding: '["repo:mastra","scope:payments"]',
+            binding: 'kh_binding',
             source: 'repo:mastra',
-            scope: 'scope:payments',
             importKind: 'agentic',
             triggerKind: 'webhook',
             status: 'succeeded',
-            transcriptThreadId: 'thread-run-1',
             queuedAt: '2026-08-13T03:00:00.000Z',
             startedAt: '2026-08-13T03:00:01.000Z',
             completedAt: '2026-08-13T03:00:02.000Z',
@@ -239,13 +272,11 @@ function stubKnowledgeRoute(
         run: {
           id: 'run-1',
           importerId: 'github',
-          binding: '["repo:mastra","scope:payments"]',
+          binding: 'kh_binding',
           source: 'repo:mastra',
-          scope: 'scope:payments',
           importKind: 'agentic',
           triggerKind: 'webhook',
           status: 'succeeded',
-          transcriptThreadId: 'thread-run-1',
           queuedAt: '2026-08-13T03:00:00.000Z',
           startedAt: '2026-08-13T03:00:01.000Z',
           completedAt: '2026-08-13T03:00:02.000Z',
@@ -253,18 +284,6 @@ function stubKnowledgeRoute(
         activity: [
           { id: 'activity-import', action: 'create', targetType: 'record', createdAt: '2026-08-13T03:00:02.000Z' },
         ],
-        transcript: {
-          threadId: 'thread-run-1',
-          available: true,
-          messages: [
-            {
-              id: 'message-1',
-              role: 'assistant',
-              content: 'Integrated repository history.',
-              createdAt: '2026-08-13T03:00:02.000Z',
-            },
-          ],
-        },
       }),
     ),
   );
@@ -302,8 +321,6 @@ describe('KnowledgePage', () => {
     expect(nodes).toHaveLength(2);
     expect(screen.getByText('Payments Service')).toBeInTheDocument();
     expect(screen.getByText('Deploy Runbook')).toBeInTheDocument();
-    // Rung + pin filter chips render.
-    expect(screen.getByRole('button', { name: 'Project' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Pinned' })).toBeInTheDocument();
     // Clean payload → no truncation banner.
     expect(screen.queryByTestId('knowledge-truncation-banner')).not.toBeInTheDocument();
@@ -323,10 +340,25 @@ describe('KnowledgePage', () => {
     expect(await screen.findByText('create')).toBeInTheDocument();
     expect(screen.getByText('record')).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'github' }));
-    expect(await screen.findByRole('heading', { name: 'Agent transcript' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Knowledge activity' })).toBeInTheDocument();
+    expect(screen.queryByText('Agent transcript')).not.toBeInTheDocument();
   });
 
-  it('shows importer runs, run activity, and retained agent transcripts', async () => {
+  it('shows the filtered approvals worklist and applies a review action', async () => {
+    stubKnowledgeRoute();
+    const user = userEvent.setup();
+    renderRoute();
+
+    await user.click(await screen.findByRole('tab', { name: 'approvals' }));
+    expect(await screen.findByText('The current name is stale')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Payments Service' })).toBeInTheDocument();
+    expect(screen.getByText('Proposer: private')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Approve' }));
+    await waitFor(() => expect(screen.getByText('No pending proposals.')).toBeInTheDocument());
+  });
+
+  it('shows importer runs and filtered run activity without private transcripts', async () => {
     stubKnowledgeRoute();
     const user = userEvent.setup();
     renderRoute();
@@ -337,8 +369,8 @@ describe('KnowledgePage', () => {
 
     await user.click(screen.getByText('repo:mastra'));
     expect(await screen.findByRole('heading', { name: 'Knowledge activity' })).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: 'Agent transcript' })).toBeInTheDocument();
-    expect(screen.getByText('Integrated repository history.')).toBeInTheDocument();
+    expect(screen.queryByText('Agent transcript')).not.toBeInTheDocument();
+    expect(screen.queryByText('Integrated repository history.')).not.toBeInTheDocument();
   });
 
   it('shows the truncation banner when the payload window was capped', async () => {
@@ -473,23 +505,17 @@ describe('KnowledgePage', () => {
     // Drill into the pinned knowledge record → provenance + reasoning.
     await user.click(screen.getByText(/for charging flows/));
     const detail = await screen.findByTestId('knowledge-record-detail');
-    expect(detail).toHaveTextContent('Captured in session');
+    expect(detail).toHaveTextContent('Created at');
     expect(screen.getByTestId('knowledge-record-reason')).toHaveTextContent(
       'Learned from a burned API call — costly to rediscover.',
     );
-    // The session link carries the source thread id.
-    expect(screen.getByRole('button', { name: /thread-abc-123/ })).toBeInTheDocument();
+    expect(detail).not.toHaveTextContent('thread-abc-123');
   });
 
-  it('drills into the thread view from the session link and back via the breadcrumb', async () => {
+  it('renders an explicitly selected thread view and returns via the breadcrumb', async () => {
     stubKnowledgeRoute();
-    renderRoute();
+    renderRoute(`/factories/${FACTORY_ID}/knowledge?thread=thread-abc-123`);
     const user = userEvent.setup();
-
-    const nodes = await screen.findAllByTestId('knowledge-node');
-    fireEvent.click(nodes[0]);
-    await user.click(await screen.findByText(/for charging flows/));
-    await user.click(await screen.findByRole('button', { name: /thread-abc-123/ }));
 
     // Thread view: breadcrumb renders and the thread-scoped node appears.
     const breadcrumb = await screen.findByRole('navigation', { name: 'Knowledge scope' });

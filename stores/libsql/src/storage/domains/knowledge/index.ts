@@ -773,7 +773,9 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
     const nodes: KnowledgeNode[] = [];
     for (const row of result.rows) {
       const node = parseNode(row);
-      if (!isKnowledgeNodeVisible(node, await this.#getNodeScopeIds(this.#client, node.id), scopeIds)) continue;
+      const nodeScopeIds = await this.#getNodeScopeIds(this.#client, node.id);
+      if (!isKnowledgeNodeVisible(node, nodeScopeIds, scopeIds)) continue;
+      if (input.membershipScopeIds && !isKnowledgeScopeVisible(nodeScopeIds, input.membershipScopeIds)) continue;
       if (input.namePrefix && !node.name.toLocaleLowerCase().startsWith(input.namePrefix.toLocaleLowerCase())) continue;
       if (input.kind && node.kind !== input.kind) continue;
       if (input.isScope !== undefined && node.isScope !== input.isScope) continue;
@@ -2033,15 +2035,38 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
 
   async listActivity(input: {
     scopeIds: KnowledgeScopeIds;
+    contextScopeId?: string;
     importRunId?: string;
+    action?: KnowledgeActivityAction;
+    sourceType?: 'importer' | 'system';
+    from?: Date;
+    to?: Date;
     after?: string;
     limit?: number;
   }): Promise<KnowledgeActivityEvent[]> {
     const clauses: string[] = [];
     const args: InValue[] = [];
+    if (input.contextScopeId) {
+      clauses.push('contextScopeId=?');
+      args.push(input.contextScopeId);
+    }
     if (input.importRunId) {
       clauses.push('importRunId=?');
       args.push(input.importRunId);
+    }
+    if (input.action) {
+      clauses.push('action=?');
+      args.push(input.action);
+    }
+    if (input.sourceType)
+      clauses.push(input.sourceType === 'importer' ? 'importRunId IS NOT NULL' : 'importRunId IS NULL');
+    if (input.from) {
+      clauses.push('createdAt>=?');
+      args.push(input.from.toISOString());
+    }
+    if (input.to) {
+      clauses.push('createdAt<=?');
+      args.push(input.to.toISOString());
     }
     if (input.after) {
       clauses.push('id < ?');

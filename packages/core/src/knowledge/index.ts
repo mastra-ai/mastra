@@ -17,6 +17,7 @@ import type {
   CreateKnowledgeImportRunInput,
   KnowledgeImportRunStatus,
   KnowledgeProposalStatus,
+  KnowledgeActivityAction,
   KnowledgeScopeIds,
   KnowledgeSemanticOutboxEntry,
   KnowledgeStructurePlan,
@@ -531,13 +532,16 @@ export class Knowledge extends MastraBase {
     return storage.createNode({ ...mutation, expectedAccessEpoch: frontier.accessEpoch });
   }
 
-  async getNode(input: { id: string; scopeIds: KnowledgeScopeIds }) {
+  async getNode(input: { id: string; scopeIds: KnowledgeScopeIds; membershipScopeIds?: KnowledgeScopeIds }) {
     const storage = await this.#getStorage();
     const scopeIds = await this.#resolveReadScopeIds(input.scopeIds);
     const node = await storage.getNode(input.id);
     if (!node || node.deletedAt) return null;
     const nodeScopeIds = await storage.getNodeScopeIds(node.id);
-    return isKnowledgeReadVisible(nodeScopeIds, scopeIds) ? node : null;
+    if (!isKnowledgeReadVisible(nodeScopeIds, scopeIds)) return null;
+    if (input.membershipScopeIds && !input.membershipScopeIds.some(scopeId => nodeScopeIds.includes(scopeId)))
+      return null;
+    return node;
   }
 
   /** @internal */
@@ -762,9 +766,20 @@ export class Knowledge extends MastraBase {
     return (await this.#getStorage()).advanceCurationCursor(input);
   }
 
-  async listActivity(input: { scopeIds: KnowledgeScopeIds; importRunId?: string; after?: string; limit?: number }) {
+  async listActivity(input: {
+    scopeIds: KnowledgeScopeIds;
+    contextScopeId?: string;
+    importRunId?: string;
+    action?: KnowledgeActivityAction;
+    sourceType?: 'importer' | 'system';
+    from?: Date;
+    to?: Date;
+    after?: string;
+    limit?: number;
+  }) {
     const storage = await this.#getStorage();
     const scopeIds = await this.#resolveReadScopeIds(input.scopeIds);
+    if (input.contextScopeId && !scopeIds.includes(input.contextScopeId)) return [];
     if (input.importRunId) {
       const run = await storage.getImportRun(input.importRunId);
       if (!run || !this.#importers.get(run.importerId)) return [];

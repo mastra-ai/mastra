@@ -1,17 +1,12 @@
 /**
  * Pure graph-model logic for the knowledge page: payload → React Flow
- * nodes/edges, degree-based node sizing (Amendment A3), and the rung/pin
- * filters. Kept free of React/DOM so it unit-tests without a renderer.
+ * nodes/edges, degree-based node sizing (Amendment A3), and pin filters.
+ * Kept free of React/DOM so it unit-tests without a renderer.
  */
 
 import type { Edge, Node } from '@xyflow/react';
 
-import type {
-  KnowledgeGraphEdge,
-  KnowledgeGraphRecord,
-  KnowledgeGraphNode,
-  KnowledgeRung,
-} from '../../services/knowledge';
+import type { KnowledgeGraphEdge, KnowledgeGraphRecord, KnowledgeGraphNode } from '../../services/knowledge';
 
 export const NODE_SIZE_MIN = 52;
 export const NODE_SIZE_MAX = 176;
@@ -67,13 +62,11 @@ export function degreeMap(edges: KnowledgeGraphEdge[]): Map<string, NodeDegree> 
 }
 
 export interface KnowledgeGraphFilters {
-  /** Scope rungs to show; empty set = show all. */
-  rungs: ReadonlySet<KnowledgeRung>;
   /** Show only pin-accented nodes (and edges between them). */
   pinnedOnly: boolean;
 }
 
-export const NO_FILTERS: KnowledgeGraphFilters = { rungs: new Set(), pinnedOnly: false };
+export const NO_FILTERS: KnowledgeGraphFilters = { pinnedOnly: false };
 
 export function filterGraph(
   nodes: KnowledgeGraphNode[],
@@ -90,7 +83,6 @@ export function filterGraph(
     }
   }
   const keep = (node: KnowledgeGraphNode): boolean => {
-    if (filters.rungs.size > 0 && !filters.rungs.has(node.rung)) return false;
     if (filters.pinnedOnly && !node.pinned && !pinnedEdgeIds.has(node.id)) return false;
     return true;
   };

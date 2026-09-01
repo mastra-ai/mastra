@@ -9,12 +9,10 @@ export interface KnowledgeImportRun {
   importerId: string;
   binding: string;
   source?: string;
-  scope?: string;
   importKind: KnowledgeImportKind;
   triggerKind: KnowledgeImportTrigger;
   status: KnowledgeImportStatus;
   error?: string;
-  transcriptThreadId?: string;
   queuedAt: string;
   startedAt?: string;
   completedAt?: string;
@@ -24,7 +22,7 @@ export interface KnowledgeImporterSummary {
   id: string;
   importKind: KnowledgeImportKind;
   triggers: KnowledgeImportTrigger[];
-  bindings: Array<{ source: string; scope: string }>;
+  bindings: Array<{ source: string; binding: string }>;
   lastRun?: KnowledgeImportRun;
 }
 
@@ -40,11 +38,6 @@ export interface KnowledgeImportRunsPayload {
 export interface KnowledgeImportRunDetailPayload {
   run: KnowledgeImportRun;
   activity: Array<{ id: string; action: string; targetType: string; createdAt: string }>;
-  transcript?: {
-    threadId: string;
-    available: boolean;
-    messages: Array<{ id: string; role: string; content: unknown; createdAt: string }>;
-  };
 }
 
 export interface KnowledgeImportFilters {

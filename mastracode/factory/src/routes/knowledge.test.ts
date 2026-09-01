@@ -24,6 +24,7 @@ interface Harness {
   projectId: string;
   orgScope: KnowledgeScopeIds;
   projectScope: KnowledgeScopeIds;
+  allScopeIds: string[];
   threadScope: (threadId: string) => Promise<KnowledgeScopeIds>;
 }
 
@@ -65,6 +66,7 @@ async function createHarness(
   });
   const orgScope = [org.scopes[orgAddress]!];
   const projectScope = [...orgScope, resource.scopes[resourceAddress]!];
+  const allScopeIds = [...projectScope];
   return {
     app,
     knowledge,
@@ -72,6 +74,7 @@ async function createHarness(
     projectId: project.id,
     orgScope,
     projectScope,
+    allScopeIds,
     threadScope: async threadId => {
       const address = `resource:${project.id}:thread:${threadId}`;
       const thread = await runtime.materializeScope({
@@ -79,7 +82,9 @@ async function createHarness(
         parentAddresses: [resourceAddress],
         contextualScopeAddress: resourceAddress,
       });
-      return [...projectScope, thread.scopes[address]!];
+      const threadScopeId = thread.scopes[address]!;
+      if (!allScopeIds.includes(threadScopeId)) allScopeIds.push(threadScopeId);
+      return [...projectScope, threadScopeId];
     },
   };
 }
@@ -127,14 +132,51 @@ async function record(
   });
 }
 
-async function graph(h: Harness, query = ''): Promise<{ status: number; body: KnowledgeGraphPayload }> {
+async function rawGraph(h: Harness, query = ''): Promise<{ status: number; body: KnowledgeGraphPayload }> {
   const response = await h.app.request(`/web/factory/projects/${h.projectId}/knowledge/subgraph${query}`);
   return { status: response.status, body: (await response.json().catch(() => ({}))) as KnowledgeGraphPayload };
 }
 
+async function graph(h: Harness, query = ''): Promise<{ status: number; body: KnowledgeGraphPayload }> {
+  const result = await rawGraph(h, query);
+  const ids = new Map<string, string>();
+  for (const item of [...(result.body.nodes ?? []), ...(result.body.outOfWindow ?? [])]) {
+    const resolved = await h.knowledge.resolveNode({ name: item.name, scopeIds: h.allScopeIds });
+    if (resolved) ids.set(item.id, resolved.id);
+  }
+  return {
+    ...result,
+    body: {
+      ...result.body,
+      nodes: result.body.nodes?.map(item => ({ ...item, id: ids.get(item.id) ?? item.id })),
+      edges: result.body.edges?.map(edge => ({
+        ...edge,
+        source: ids.get(edge.source) ?? edge.source,
+        target: ids.get(edge.target) ?? edge.target,
+      })),
+      outOfWindow: result.body.outOfWindow?.map(item => ({ ...item, id: ids.get(item.id) ?? item.id })),
+    },
+  };
+}
+
 async function scopes(h: Harness, query = ''): Promise<{ status: number; body: KnowledgeScopeTreePayload }> {
-  const response = await h.app.request(`/web/factory/projects/${h.projectId}/knowledge/scopes${query}`);
-  return { status: response.status, body: (await response.json().catch(() => ({}))) as KnowledgeScopeTreePayload };
+  let requestQuery = query;
+  const rawScopeId = new URLSearchParams(query.startsWith('?') ? query.slice(1) : query).get('scopeId');
+  if (rawScopeId) {
+    const selected = await h.knowledge.getNode(rawScopeId);
+    const rootResponse = await h.app.request(`/web/factory/projects/${h.projectId}/knowledge/scopes`);
+    const root = (await rootResponse.json()) as KnowledgeScopeTreePayload;
+    const handle = [root.scope, ...root.children].find(scope => scope.name === selected?.name)?.id;
+    if (handle) requestQuery = `?scopeId=${handle}`;
+  }
+  const response = await h.app.request(`/web/factory/projects/${h.projectId}/knowledge/scopes${requestQuery}`);
+  const body = (await response.json().catch(() => ({}))) as KnowledgeScopeTreePayload;
+  for (const item of [body.scope, ...(body.children ?? [])]) {
+    if (!item) continue;
+    const resolved = await h.knowledge.resolveNode({ name: item.name, scopeIds: h.allScopeIds });
+    if (resolved) item.id = resolved.id;
+  }
+  return { status: response.status, body };
 }
 
 async function activity(h: Harness, query = ''): Promise<{ status: number; body: { events: unknown[] } }> {
@@ -147,7 +189,14 @@ async function nodeDetail(
   entityId: string,
   query = '',
 ): Promise<{ status: number; body: KnowledgeNodePayload }> {
-  const response = await h.app.request(`/web/factory/projects/${h.projectId}/knowledge/nodes/${entityId}${query}`);
+  const internal = await h.knowledge.getNode(entityId);
+  let handle = entityId;
+  if (internal) {
+    const subgraph = await rawGraph(h, query);
+    const surfaced = subgraph.body.nodes?.find(item => item.name === internal.name);
+    handle = surfaced?.id ?? entityId;
+  }
+  const response = await h.app.request(`/web/factory/projects/${h.projectId}/knowledge/nodes/${handle}${query}`);
   return { status: response.status, body: (await response.json().catch(() => ({}))) as KnowledgeNodePayload };
 }
 
@@ -168,7 +217,7 @@ describe('KnowledgeRoutes', () => {
     }
   });
 
-  it('returns one scope-tree level and lets callers descend without fetching the whole graph', async () => {
+  it('returns one authorized scope-tree level without exposing private descendants', async () => {
     const h = await createHarness();
     const projectScopeId = h.projectScope.at(-1)!;
     const child = await h.knowledge.createNode({
@@ -179,14 +228,20 @@ describe('KnowledgeRoutes', () => {
     });
     await h.knowledge.createNode({ name: 'Nested scope', isScope: true, scopeIds: [child.id] });
 
-    const root = await scopes(h);
-    expect(root.status).toBe(200);
-    expect(root.body.scope.id).toBe(projectScopeId);
-    expect(root.body.children.map(scope => scope.id)).toEqual([child.id]);
+    const rootResponse = await h.app.request(`/web/factory/projects/${h.projectId}/knowledge/scopes`);
+    const root = (await rootResponse.json()) as KnowledgeScopeTreePayload;
+    expect(rootResponse.status).toBe(200);
+    expect(root.scope.id).toMatch(/^kh_/);
+    expect(root.scope.id).not.toBe(projectScopeId);
+    expect(root.children).toHaveLength(1);
+    expect(root.children[0]?.id).not.toBe(child.id);
 
-    const nested = await scopes(h, `?scopeId=${child.id}`);
-    expect(nested.body.scope.id).toBe(child.id);
-    expect(nested.body.children.map(scope => scope.name)).toEqual(['Nested scope']);
+    const nestedResponse = await h.app.request(
+      `/web/factory/projects/${h.projectId}/knowledge/scopes?scopeId=${root.children[0]!.id}`,
+    );
+    const nested = (await nestedResponse.json()) as KnowledgeScopeTreePayload;
+    expect(nested.scope.name).toBe(child.name);
+    expect(nested.children).toEqual([]);
   });
 
   // 1
@@ -300,6 +355,39 @@ describe('KnowledgeRoutes', () => {
     expect(body.unresolvedCapped.count).toBe(0);
   });
 
+  it('resolves an authorized node handle outside the current graph window', async () => {
+    const h = await createHarness({ limits: { maxNodes: 1 } });
+    const inWindow = await node(h.knowledge, 'A window entity', h.projectScope);
+    const outside = await node(h.knowledge, 'Z outside entity', h.projectScope);
+    await record(h.knowledge, inWindow, 'Links [[Z outside entity]].', h.projectScope);
+
+    const { body } = await rawGraph(h);
+    const outsideHandle = body.outOfWindow?.find(item => item.name === outside.name)?.id;
+    expect(outsideHandle).toMatch(/^kh_/);
+
+    const response = await h.app.request(`/web/factory/projects/${h.projectId}/knowledge/nodes/${outsideHandle}`);
+    expect(response.status).toBe(200);
+    expect((await response.json()) as KnowledgeNodePayload).toMatchObject({ node: { name: outside.name } });
+  });
+
+  it('rejects an opaque node handle outside its host-vouched thread perspective', async () => {
+    const h = await createHarness();
+    const scopeIds = await h.threadScope('thread-a');
+    const privateNode = await node(h.knowledge, 'Thread-private entity', scopeIds);
+    await record(h.knowledge, privateNode, 'Thread-private fact.', scopeIds, 'thread-a');
+
+    const threadGraph = await rawGraph(h, '?threadId=thread-a');
+    expect(threadGraph.status).toBe(200);
+    const handle = threadGraph.body.nodes.find(item => item.name === 'Thread-private entity')?.id;
+    expect(handle).toMatch(/^kh_/);
+
+    const response = await h.app.request(
+      `/web/factory/projects/${h.projectId}/knowledge/nodes/${handle}?threadId=thread-b`,
+    );
+    expect(response.status).toBe(404);
+    expect(await response.json()).toEqual({ error: 'node_not_found' });
+  });
+
   // 6
   it('enforces the payload bound and sets the truncated flag', async () => {
     const h = await createHarness({ limits: { maxNodes: 2 } });
@@ -343,7 +431,9 @@ describe('KnowledgeRoutes', () => {
     expect(defaultView.nodes.some(node => node.name === 'pinned')).toBe(false);
     expect(defaultView.nodes.find(node => node.id === accented.id)?.pinned).toBe(true);
     const pinnedEdge = defaultView.edges.find(edge => edge.pinned);
-    expect(pinnedEdge).toMatchObject({ source: relA.id, target: relB.id, recordId: relPin.id, pinned: true });
+    expect(pinnedEdge).toMatchObject({ source: relA.id, target: relB.id, pinned: true });
+    expect(pinnedEdge?.recordId).toMatch(/^kh_/);
+    expect(pinnedEdge?.recordId).not.toBe(relPin.id);
     expect(defaultView.nodes.find(node => node.id === relA.id)?.pinned).toBe(false);
     expect(defaultView.nodes.find(node => node.id === relB.id)?.pinned).toBe(false);
     expect(defaultView.pinCensus).toEqual({ resource: 2, thread: null });
@@ -370,8 +460,14 @@ describe('KnowledgeRoutes', () => {
     expect(body.edges).toHaveLength(1);
 
     const detail = await nodeDetail(h, owner.id);
-    expect(detail.status).toBe(200);
-    expect(detail.body.records.map(item => item.id).sort()).toEqual([solo.id, pair.id].sort());
+    expect(detail.status, JSON.stringify(detail.body)).toBe(200);
+    expect(detail.body.records).toHaveLength(2);
+    expect(detail.body.records.map(item => item.id)).toEqual([
+      expect.stringMatching(/^kh_/),
+      expect.stringMatching(/^kh_/),
+    ]);
+    expect(detail.body.records.map(item => item.id)).not.toContain(solo.id);
+    expect(detail.body.records.map(item => item.id)).not.toContain(pair.id);
   });
 
   it('does not reveal a selected scope node through its own identity', async () => {
@@ -383,7 +479,7 @@ describe('KnowledgeRoutes', () => {
     const detail = await nodeDetail(h, scopeId, `?scopeId=${scopeId}`);
 
     expect(detail.status).toBe(404);
-    expect(detail.body).toEqual({ error: 'node_not_found' });
+    expect(detail.body).toMatchObject({ error: expect.stringMatching(/not_found$/) });
   });
 
   // 8
@@ -424,7 +520,7 @@ describe('KnowledgeRoutes', () => {
   });
 
   // 10
-  it('merges direct and mentioning records, dedupes them, and returns metadata.reason', async () => {
+  it('merges direct and mentioning records, dedupes them, and exposes filtered reasoning', async () => {
     const h = await createHarness();
     const target = await node(h.knowledge, 'Target Entity', h.projectScope);
     const other = await node(h.knowledge, 'Other Entity', h.projectScope);
@@ -435,8 +531,12 @@ describe('KnowledgeRoutes', () => {
 
     const { status, body } = await nodeDetail(h, target.id);
     expect(status).toBe(200);
-    expect(body.records.map(f => f.id)).toEqual([owned.id, mention.id]);
-    expect(body.records[0]).toMatchObject({ relation: 'owned', metadata: { reason: 'costly to rediscover' } });
+    expect(body.records.map(f => f.id)).toEqual([expect.stringMatching(/^kh_/), expect.stringMatching(/^kh_/)]);
+    expect(body.records.map(f => f.id)).not.toContain(owned.id);
+    expect(body.records.map(f => f.id)).not.toContain(mention.id);
+    expect(body.records[0]).toMatchObject({ relation: 'owned', reason: 'costly to rediscover' });
+    expect(body.records[0]).not.toHaveProperty('metadata');
+    expect(body.records[0]).not.toHaveProperty('scopeIds');
     expect(body.records[1]).toMatchObject({ relation: 'mentions' });
   });
 
@@ -446,7 +546,7 @@ describe('KnowledgeRoutes', () => {
     const source = await node(h.knowledge, 'Source', h.projectScope);
     await node(h.knowledge, 'Linked', h.projectScope);
     const created = await record(h.knowledge, source, 'Links [[Linked]].', h.projectScope);
-    await h.knowledge.deleteRecord({ id: created.id, deletedBy: 'test' });
+    await h.knowledge.deleteRecord({ id: created.id, version: created.version, deletedBy: 'test' });
 
     const { body } = await graph(h);
     expect(body.edges).toHaveLength(0);
@@ -474,7 +574,7 @@ describe('KnowledgeRoutes', () => {
     await record(h.knowledge, source, 'Third [[Mystery]].', h.projectScope, 'thread-a', undefined, hidden);
     const spy = vi.spyOn(h.knowledge, 'resolveNode');
 
-    await graph(h);
+    await rawGraph(h);
     const mysteryLookups = spy.mock.calls.filter(([input]) => input.name.toLocaleLowerCase() === 'mystery');
     expect(mysteryLookups).toHaveLength(1);
   });
@@ -568,10 +668,18 @@ describe('KnowledgeRoutes', () => {
     const missingScopeId = '10000000-0000-4000-8000-000000000099';
     const missingNodeId = '10000000-0000-4000-8000-000000000098';
 
-    expect((await scopes(h, `?scopeId=${missingScopeId}`)).status).toBe(404);
-    expect((await graph(h, `?scopeId=${missingScopeId}`)).status).toBe(404);
-    expect((await nodeDetail(h, missingNodeId)).status).toBe(404);
-    expect((await nodeDetail(h, orgOnly.id)).status).toBe(404);
+    expect(
+      (await h.app.request(`/web/factory/projects/${h.projectId}/knowledge/scopes?scopeId=${missingScopeId}`)).status,
+    ).toBe(404);
+    expect(
+      (await h.app.request(`/web/factory/projects/${h.projectId}/knowledge/subgraph?scopeId=${missingScopeId}`)).status,
+    ).toBe(404);
+    expect((await h.app.request(`/web/factory/projects/${h.projectId}/knowledge/nodes/${missingNodeId}`)).status).toBe(
+      404,
+    );
+    expect((await h.app.request(`/web/factory/projects/${h.projectId}/knowledge/nodes/${orgOnly.id}`)).status).toBe(
+      404,
+    );
     expect(materialize).not.toHaveBeenCalled();
   });
 
@@ -603,10 +711,20 @@ describe('KnowledgeRoutes', () => {
 
     expect((await nodeDetail(h, threadEntity.id)).status).toBe(404);
 
-    const withThread = await nodeDetail(h, threadEntity.id, '?threadId=t-19');
+    const threadGraph = await rawGraph(h, '?threadId=t-19');
+    const nodeHandle = threadGraph.body.nodes.find(item => item.name === threadEntity.name)!.id;
+    const withThreadResponse = await h.app.request(
+      `/web/factory/projects/${h.projectId}/knowledge/nodes/${nodeHandle}?threadId=t-19`,
+    );
+    const withThread = {
+      status: withThreadResponse.status,
+      body: (await withThreadResponse.json()) as KnowledgeNodePayload,
+    };
     expect(withThread.status).toBe(200);
     expect(withThread.body.records).toHaveLength(1);
-    expect(withThread.body.records[0]).toMatchObject({ rung: 'thread', sourceThreadId: 't-19' });
+    expect(withThread.body.records[0]).toMatchObject({ createdAt: expect.any(String) });
+    expect(withThread.body.records[0]).not.toHaveProperty('sourceThreadId');
+    expect(withThread.body.records[0]).not.toHaveProperty('metadata');
 
     // Cross-org thread: seeded under the other org, requested from ours.
     const foreign = await createHarness({
@@ -623,7 +741,7 @@ describe('KnowledgeRoutes', () => {
     const h = await createHarness();
     const entity = await node(h.knowledge, 'Activity Entity', h.projectScope);
     const created = await record(h.knowledge, entity, 'Activity fact.', h.projectScope, 'private-thread-id');
-    await h.knowledge.deleteRecord({ id: created.id, deletedBy: 'test' });
+    await h.knowledge.deleteRecord({ id: created.id, version: created.version, deletedBy: 'test' });
 
     const response = await activity(h);
     expect(response.status).toBe(200);
@@ -674,35 +792,38 @@ describe('KnowledgeRoutes', () => {
 
     const importers = await h.app.request(`/web/factory/projects/${h.projectId}/knowledge/importers`);
     expect(importers.status).toBe(200);
-    await expect(importers.json()).resolves.toMatchObject({
+    const importersBody = await importers.json();
+    expect(importersBody).toMatchObject({
       importers: [
         {
           id: 'calendar',
           importKind: 'static',
           triggers: ['programmatic'],
           lastRun: {
-            id: run.id,
+            id: expect.stringMatching(/^kh_/),
             source: 'calendar:primary',
-            scope: `resource:${h.projectId}`,
             status: 'failed',
             error: 'private  failure',
           },
         },
       ],
     });
+    expect(JSON.stringify(importersBody)).not.toContain(`resource:${h.projectId}`);
 
     const runs = await h.app.request(
       `/web/factory/projects/${h.projectId}/knowledge/importers/calendar/runs?status=failed&trigger=programmatic`,
     );
     expect(runs.status).toBe(200);
     const runsBody = await runs.json();
-    expect(runsBody).toMatchObject({ runs: [{ id: run.id, status: 'failed' }] });
+    expect(runsBody).toMatchObject({ runs: [{ id: expect.stringMatching(/^kh_/), status: 'failed' }] });
+    expect(JSON.stringify(runsBody)).not.toContain(run.id);
 
+    const runHandle = runsBody.runs[0].id;
     const detail = await h.app.request(
-      `/web/factory/projects/${h.projectId}/knowledge/importers/calendar/runs/${run.id}`,
+      `/web/factory/projects/${h.projectId}/knowledge/importers/calendar/runs/${runHandle}`,
     );
     expect(detail.status).toBe(200);
-    await expect(detail.json()).resolves.toMatchObject({ run: { id: run.id }, activity: [] });
+    await expect(detail.json()).resolves.toMatchObject({ run: { id: runHandle }, activity: [] });
 
     const foreignDetail = await h.app.request(
       `/web/factory/projects/${h.projectId}/knowledge/importers/calendar/runs/${foreignRun.id}`,
@@ -756,7 +877,119 @@ describe('KnowledgeRoutes', () => {
       `/web/factory/projects/${h.projectId}/knowledge/importers/calendar/runs?trigger=programmatic`,
     );
     expect(response.status).toBe(200);
-    await expect(response.json()).resolves.toMatchObject({ runs: [{ id: expected.id }] });
+    const body = await response.json();
+    expect(body).toMatchObject({ runs: [{ id: expect.stringMatching(/^kh_/) }] });
+    expect(JSON.stringify(body)).not.toContain(expected.id);
+  });
+
+  it('filters proposals by the project perspective and applies admin review actions', async () => {
+    const h = await createHarness();
+    const projectScopeId = h.projectScope.at(-1)!;
+    await h.knowledge.upsertScopeGrant({
+      scopeNodeId: projectScopeId,
+      scopeRefId: projectScopeId,
+      role: 'owner',
+      canSuggest: true,
+    });
+    const target = await node(h.knowledge, 'Proposal target', h.projectScope);
+    const proposal = await h.runtime.proposeNodeUpdate({
+      mutation: { id: target.id, version: target.version, name: 'Reviewed target' },
+      proposerContextScopeId: projectScopeId,
+      vouchedScopeIds: [projectScopeId],
+      reason: 'The current name is stale',
+    });
+
+    const list = await h.app.request(`/web/factory/projects/${h.projectId}/knowledge/proposals?status=pending`);
+    expect(list.status).toBe(200);
+    const listBody = await list.json();
+    expect(listBody).toMatchObject({
+      proposals: [
+        {
+          id: expect.stringMatching(/^kh_/),
+          status: 'pending',
+          reason: 'The current name is stale',
+          actions: ['approve', 'reject'],
+          targets: [{ id: expect.stringMatching(/^kh_/), name: 'Proposal target', currentVersion: target.version }],
+        },
+      ],
+    });
+    expect(JSON.stringify(listBody)).not.toContain(proposal.id);
+    expect(JSON.stringify(listBody)).not.toContain(target.id);
+
+    const proposalHandle = listBody.proposals[0].id;
+    const approved = await h.app.request(
+      `/web/factory/projects/${h.projectId}/knowledge/proposals/${proposalHandle}/approve`,
+      { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ reason: 'Verified' }) },
+    );
+    const approvedBody = await approved.json();
+    expect(approved.status, JSON.stringify(approvedBody)).toBe(200);
+    expect(approvedBody).toMatchObject({ id: proposalHandle, status: 'approved' });
+    await expect(h.runtime.getNode({ id: target.id, scopeIds: [projectScopeId] })).resolves.toMatchObject({
+      name: 'Reviewed target',
+    });
+  });
+
+  it('does not advertise proposal review actions to non-admin callers', async () => {
+    const h = await createHarness({ isOrganizationAdmin: async () => false });
+    const projectScopeId = h.projectScope.at(-1)!;
+    await h.knowledge.upsertScopeGrant({
+      scopeNodeId: projectScopeId,
+      scopeRefId: projectScopeId,
+      role: 'owner',
+      canSuggest: true,
+    });
+    const target = await node(h.knowledge, 'Non-admin proposal target', h.projectScope);
+    await h.runtime.proposeNodeUpdate({
+      mutation: { id: target.id, version: target.version, name: 'Reviewed target' },
+      proposerContextScopeId: projectScopeId,
+      vouchedScopeIds: [projectScopeId],
+    });
+
+    const response = await h.app.request(`/web/factory/projects/${h.projectId}/knowledge/proposals?status=pending`);
+    const body = await response.json();
+    expect(response.status).toBe(200);
+    expect(body).toMatchObject({ proposals: [{ actions: [] }] });
+  });
+
+  it('creates a replacement proposal for conflicted work through an admin route', async () => {
+    const h = await createHarness();
+    const projectScopeId = h.projectScope.at(-1)!;
+    await h.knowledge.upsertScopeGrant({
+      scopeNodeId: projectScopeId,
+      scopeRefId: projectScopeId,
+      role: 'owner',
+      canSuggest: true,
+    });
+    const target = await node(h.knowledge, 'Conflicted target', h.projectScope);
+    const proposal = await h.runtime.proposeNodeUpdate({
+      mutation: { id: target.id, version: target.version, name: 'Replacement target' },
+      proposerContextScopeId: projectScopeId,
+      vouchedScopeIds: [projectScopeId],
+    });
+    await h.runtime.updateNode({
+      id: target.id,
+      version: target.version,
+      name: 'Concurrent target',
+      vouchedScopeIds: [projectScopeId],
+    });
+    await expect(
+      h.runtime.approveProposal({
+        id: proposal.id,
+        reviewerContextScopeId: projectScopeId,
+        vouchedScopeIds: [projectScopeId],
+      }),
+    ).rejects.toThrow();
+
+    const list = await h.app.request(`/web/factory/projects/${h.projectId}/knowledge/proposals?status=conflicted`);
+    const listBody = await list.json();
+    const proposalHandle = listBody.proposals[0].id;
+    const response = await h.app.request(
+      `/web/factory/projects/${h.projectId}/knowledge/proposals/${proposalHandle}/re-review`,
+      { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' },
+    );
+    const body = await response.json();
+    expect(response.status, JSON.stringify(body)).toBe(200);
+    expect(body).toMatchObject({ status: 'pending' });
   });
 
   it('gates importer run metadata at organization-admin trust', async () => {

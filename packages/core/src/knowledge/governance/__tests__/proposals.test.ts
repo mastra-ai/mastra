@@ -146,7 +146,7 @@ describe('Knowledge proposal lifecycle', () => {
     const replacement = await lifecycle.reReview({
       id: proposal.id,
       reviewerContextScopeId: ids['principal:owner']!,
-      vouchedScopeIds: [ids['principal:owner']!, ids['principal:suggest']!],
+      vouchedScopeIds: [ids['principal:owner']!],
     });
     expect(replacement).toMatchObject({ status: 'pending', targetId: node.id, expectedVersion: node.version + 1 });
     expect(replacement.id).not.toBe(proposal.id);

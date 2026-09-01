@@ -22,10 +22,10 @@ import {
 } from '@xyflow/react';
 import type { EdgeProps, NodeProps } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
-import { Boxes, Globe, Pin } from 'lucide-react';
+import { Pin } from 'lucide-react';
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
-import type { KnowledgeGraphNode, KnowledgeGraphPayload, KnowledgeRung } from '../../services/knowledge';
+import type { KnowledgeGraphNode, KnowledgeGraphPayload } from '../../services/knowledge';
 import type { NodeFlowNode, KnowledgeFlowEdge, KnowledgeGraphFilters, RecordFlowNode } from './graphModel';
 import {
   deriveRecordElements,
@@ -39,14 +39,6 @@ import {
 } from './graphModel';
 import type { Arrivals } from './graphDiff';
 import { runLayout } from './layout';
-
-const RUNG_LABELS: Record<KnowledgeRung, string> = { org: 'Org', resource: 'Project', thread: 'Session' };
-
-const RUNG_RING: Record<KnowledgeRung, string> = {
-  org: 'border-purple-300/70',
-  resource: 'border-purple-500/60',
-  thread: 'border-cyan-400/60',
-};
 
 function NodeNodeComponent({ data, selected }: NodeProps<NodeFlowNode>) {
   const { node, size, degree, focused } = data;
@@ -62,8 +54,7 @@ function NodeNodeComponent({ data, selected }: NodeProps<NodeFlowNode>) {
           markers (dot / line / junction). */}
       <div
         className={[
-          'flex h-full w-full flex-col items-center justify-center overflow-hidden rounded-full border-2 text-center transition-shadow duration-200',
-          RUNG_RING[node.rung],
+          'flex h-full w-full flex-col items-center justify-center overflow-hidden rounded-full border-2 border-purple-500/60 text-center transition-shadow duration-200',
           selected ? 'ring-2 ring-purple-300' : '',
         ].join(' ')}
         style={{
@@ -470,21 +461,6 @@ function KnowledgeGraphInner({
     return mapped;
   }, [edges, arrivals, focusedRecordId]);
 
-  const toggleRung = useCallback((rung: KnowledgeRung) => {
-    setFilters(current => {
-      const rungs = new Set(current.rungs);
-      if (rungs.has(rung)) rungs.delete(rung);
-      else rungs.add(rung);
-      return { ...current, rungs };
-    });
-  }, []);
-
-  const availableRungs = useMemo(() => {
-    const present = new Set<KnowledgeRung>();
-    for (const node of payload.nodes) present.add(node.rung);
-    return (['org', 'resource', 'thread'] as const).filter(rung => present.has(rung));
-  }, [payload.nodes]);
-
   return (
     <div
       className="border-surface5 relative h-full w-full overflow-hidden rounded-xl border"
@@ -508,15 +484,6 @@ function KnowledgeGraphInner({
       `}</style>
       <TruncationBanner payload={payload} />
       <div className="absolute top-3 left-3 z-10 flex items-center gap-2">
-        {availableRungs.map(rung => (
-          <FilterChip
-            key={rung}
-            label={RUNG_LABELS[rung]}
-            icon={rung === 'org' ? <Globe size={13} /> : <Boxes size={13} />}
-            active={filters.rungs.size === 0 || filters.rungs.has(rung)}
-            onClick={() => toggleRung(rung)}
-          />
-        ))}
         <FilterChip
           label="Pinned"
           accent
@@ -628,8 +595,6 @@ function GraphHoverCard({ hover, nodesById }: { hover: HoverCard; nodesById: Map
         <dl className="text-icon4 grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5">
           <dt>Kind</dt>
           <dd>{node.kind}</dd>
-          <dt>Scope</dt>
-          <dd>{RUNG_LABELS[node.rung]}</dd>
           <dt>Knowledge records</dt>
           <dd>{node.recordCount}</dd>
           <dt>Links</dt>

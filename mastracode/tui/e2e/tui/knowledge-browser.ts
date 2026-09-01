@@ -116,7 +116,7 @@ export const knowledgeBrowserScenario: McE2eScenario = {
     await runtime.waitForScreenText(/Sources/i, terminal);
     await runtime.waitForScreenText(/Referenced only/i, terminal);
     await runtime.waitForScreenText(/Isolated/i, terminal);
-    runtime.printScreen('knowledge node graph roles', terminal);
+    runtime.printScreen('knowledge node relationship roles', terminal);
     terminal.write('\x13');
     await runtime.waitForScreenText(/Sort: Recent/i, terminal);
     terminal.write('\x13');

@@ -6,7 +6,7 @@
  * switching views swaps payloads wholesale instead of mutating one entry.
  */
 
-import { skipToken, useQuery } from '@tanstack/react-query';
+import { skipToken, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { useApiConfig } from '../api/config';
 import { queryKeys } from '../api/keys';
@@ -14,7 +14,11 @@ import {
   fetchKnowledgeActivity,
   fetchKnowledgeNode,
   fetchKnowledgeGraph,
+  fetchKnowledgeProposals,
   fetchKnowledgeScopes,
+  reviewKnowledgeProposal,
+  type KnowledgeActivityFilters,
+  type KnowledgeProposalStatus,
 } from '../ui/domains/factory/services/knowledge';
 import { RequestError } from '../ui/domains/factory/services/request';
 
@@ -68,15 +72,43 @@ export function useKnowledgeGraph(
 export function useKnowledgeActivity(
   factoryProjectId: string | undefined,
   scopeId: string | undefined,
-  threadId?: string,
+  threadId: string | undefined,
+  filters: KnowledgeActivityFilters,
 ) {
   const { baseUrl } = useApiConfig();
   return useQuery({
-    queryKey: queryKeys.knowledgeActivity(factoryProjectId, scopeId, threadId),
+    queryKey: queryKeys.knowledgeActivity(factoryProjectId, scopeId, threadId, JSON.stringify(filters)),
     queryFn: factoryProjectId
-      ? ({ signal }) => fetchKnowledgeActivity(baseUrl, factoryProjectId, scopeId, threadId, signal)
+      ? ({ signal }) => fetchKnowledgeActivity(baseUrl, factoryProjectId, scopeId, threadId, filters, signal)
       : skipToken,
     refetchInterval: 5_000,
+  });
+}
+
+export function useKnowledgeProposals(factoryProjectId: string | undefined, status?: KnowledgeProposalStatus) {
+  const { baseUrl } = useApiConfig();
+  return useQuery({
+    queryKey: queryKeys.knowledgeProposals(factoryProjectId, status),
+    queryFn: factoryProjectId
+      ? ({ signal }) => fetchKnowledgeProposals(baseUrl, factoryProjectId, status, signal)
+      : skipToken,
+    refetchInterval: 5_000,
+  });
+}
+
+export function useReviewKnowledgeProposal(factoryProjectId: string | undefined) {
+  const { baseUrl } = useApiConfig();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { id: string; action: 'approve' | 'reject' | 're-review'; reason?: string }) => {
+      if (!factoryProjectId) throw new Error('A Factory project is required.');
+      return reviewKnowledgeProposal(baseUrl, factoryProjectId, input.id, input.action, input.reason);
+    },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['factory', 'knowledge-proposals', factoryProjectId ?? null] });
+      await queryClient.invalidateQueries({ queryKey: ['factory', 'knowledge-subgraph', factoryProjectId ?? null] });
+      await queryClient.invalidateQueries({ queryKey: ['factory', 'knowledge-activity', factoryProjectId ?? null] });
+    },
   });
 }
 

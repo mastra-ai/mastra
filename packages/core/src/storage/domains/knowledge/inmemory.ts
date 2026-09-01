@@ -612,6 +612,10 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
       .filter(node => !node.deletedAt)
       .filter(node => isKnowledgeNodeVisible(node, this.#nodeScopeIds(node.id), queryScope))
       .filter(
+        node =>
+          !input.membershipScopeIds || isKnowledgeScopeVisible(this.#nodeScopeIds(node.id), input.membershipScopeIds),
+      )
+      .filter(
         node => !input.namePrefix || node.name.toLocaleLowerCase().startsWith(input.namePrefix.toLocaleLowerCase()),
       )
       .filter(node => !input.kind || node.kind === input.kind)
@@ -1439,12 +1443,18 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
 
   async listActivity(input: {
     scopeIds: KnowledgeScopeIds;
+    contextScopeId?: string;
     importRunId?: string;
+    action?: KnowledgeActivityAction;
+    sourceType?: 'importer' | 'system';
+    from?: Date;
+    to?: Date;
     after?: string;
     limit?: number;
   }): Promise<KnowledgeActivityEvent[]> {
     const queryScope = canonicalizeKnowledgeScopeIds(input.scopeIds);
     return this.#db.knowledgeActivity
+      .filter(event => !input.contextScopeId || event.contextScopeId === input.contextScopeId)
       .filter(event => {
         if (event.contextScopeId && !queryScope.includes(event.contextScopeId)) return false;
         const visibleDeletion =
@@ -1461,6 +1471,10 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
         return record ? this.#isRecordVisible(record, queryScope) : visibleDeletion;
       })
       .filter(event => !input.importRunId || event.importRunId === input.importRunId)
+      .filter(event => !input.action || event.action === input.action)
+      .filter(event => !input.sourceType || (input.sourceType === 'importer') === Boolean(event.importRunId))
+      .filter(event => !input.from || event.createdAt >= input.from)
+      .filter(event => !input.to || event.createdAt <= input.to)
       .filter(event => !input.after || event.id < input.after)
       .sort((a, b) => b.id.localeCompare(a.id))
       .slice(0, input.limit ?? 100)
@@ -1480,13 +1494,8 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
   ): Promise<KnowledgeSemanticOutboxEntry[]> {
     const queryScope = input.scopeIds ? canonicalizeKnowledgeScopeIds(input.scopeIds) : undefined;
     const limit = Math.min(Math.max(input.limit ?? 100, 1), 100);
-    const candidates: KnowledgeSemanticOutboxEntry[] = [];
-    for (const entry of this.#db.knowledgeSemanticOutbox.values()) {
-      if (input.status && entry.status !== input.status) continue;
-      candidates.push(entry);
-      if (candidates.length >= 1_000) break;
-    }
-    return candidates
+    return [...this.#db.knowledgeSemanticOutbox.values()]
+      .filter(entry => !input.status || entry.status === input.status)
       .filter(entry => !queryScope || this.#isSemanticOutboxEntryVisible(entry, queryScope))
       .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime() || a.id.localeCompare(b.id))
       .slice(0, limit)
@@ -1505,7 +1514,8 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
       const eligible =
         (entry.status === 'pending' ||
           (entry.status === 'processing' && entry.claimedAt && now.getTime() - entry.claimedAt.getTime() >= timeout)) &&
-        entry.availableAt <= now;
+        entry.availableAt <= now &&
+        (!queryScope || this.#isSemanticOutboxEntryVisible(entry, queryScope));
       if (!eligible) {
         blockedDocuments.add(entry.documentId);
         continue;

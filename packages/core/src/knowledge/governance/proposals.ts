@@ -198,14 +198,33 @@ export class KnowledgeProposalLifecycle {
     });
     if (!proposal || proposal.status !== 'conflicted') throw new KnowledgeNotFoundError('proposal', input.id);
     const payload = decodeNodeUpdatePayload(proposal);
+    await this.#authorizeAndFindStaleTarget(proposal, frontier);
     const current = await this.storage.getNode(payload.mutation.id);
-    if (!current) throw new KnowledgeNotFoundError('node', payload.mutation.id);
-    return this.proposeNodeUpdate({
-      mutation: { ...payload.mutation, version: current.version },
-      proposerContextScopeId: input.reviewerContextScopeId,
-      vouchedScopeIds: input.vouchedScopeIds,
-      reason: input.reason ?? proposal.reason,
-    });
+    if (!current || current.deletedAt) throw new KnowledgeNotFoundError('node', payload.mutation.id);
+    const targets = await Promise.all(
+      proposal.targets.map(async target => {
+        const entity =
+          target.type === 'node'
+            ? await this.storage.getNode(target.id)
+            : await this.storage.getRecord({ id: target.id, includeDeleted: true });
+        if (!entity || entity.deletedAt) throw new KnowledgeNotFoundError(target.type, target.id);
+        return { ...target, expectedVersion: entity.version };
+      }),
+    );
+    return this.#redactAttribution(
+      await this.storage.createProposal({
+        targets,
+        operation: proposal.operation,
+        payload: {
+          ...payload,
+          mutation: { ...payload.mutation, version: current.version },
+        },
+        reason: input.reason ?? proposal.reason,
+        proposerContextScopeId: input.reviewerContextScopeId,
+        expectedAccessEpoch: frontier.accessEpoch,
+      }),
+      frontier,
+    );
   }
 
   async #getVisiblePendingProposal(id: string, frontier: KnowledgeAccessFrontier): Promise<KnowledgeProposal> {
