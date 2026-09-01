@@ -1746,4 +1746,43 @@ describe('dynamic workflow schedules (#22756)', () => {
     expect(row).toBeTruthy();
     await mastra.stopWorkers?.();
   });
+
+  it('keeps the wf_* schedule rows of a failed dynamic workflow whose id contains "__"', async () => {
+    // `encodeURIComponent` does not escape underscores, so `wf_broken__dyn`
+    // is ambiguous between workflow `broken__dyn` (single form) and workflow
+    // `broken` schedule `dyn` (array form). The sweep must match failed ids
+    // by generated row-id prefix, not by decoding the row id.
+    const storage = new InMemoryStore({ id: 'sched-failed-rehydrate-underscore' });
+    const stored = JSON.parse(JSON.stringify(toStorableGraph(buildOriginalWorkflow().stepGraph)));
+
+    const defsStore = (await storage.getStore('workflowDefinitions'))!;
+    await defsStore.upsert({
+      id: 'broken__dyn',
+      inputSchema,
+      outputSchema,
+      graph: stored,
+      schedule: { cron: '0 0 * * *' },
+    });
+
+    const schedulesStore = (await storage.getStore('schedules'))!;
+    const rowId = `wf_${encodeURIComponent('broken__dyn')}`;
+    const now = Date.now();
+    await schedulesStore.createSchedule({
+      id: rowId,
+      target: { type: 'workflow', workflowId: 'broken__dyn' },
+      cron: '0 0 * * *',
+      status: 'active',
+      nextFireAt: now + 60_000,
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    const mastra = new Mastra({ logger: false, storage });
+    await mastra.startWorkers();
+
+    expect(() => mastra.getWorkflow('broken__dyn')).toThrow();
+    const row = await schedulesStore.getSchedule(rowId);
+    expect(row).toBeTruthy();
+    await mastra.stopWorkers?.();
+  });
 });

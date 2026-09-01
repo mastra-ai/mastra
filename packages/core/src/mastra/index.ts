@@ -182,8 +182,8 @@ function declarativeScheduleRowId(workflowId: string, scheduleId?: string): stri
  * `wf_<encoded(workflowId)>__` (array form). Returns undefined when no
  * registered workflow owns the row.
  */
-function ownerWorkflowIdForRow(rowId: string, byWorkflow: Map<string, Set<string>>): string | undefined {
-  for (const workflowId of byWorkflow.keys()) {
+function ownerWorkflowIdForRow(rowId: string, workflowIds: Iterable<string>): string | undefined {
+  for (const workflowId of workflowIds) {
     const prefix = `wf_${encodeURIComponent(workflowId)}`;
     if (rowId === prefix || rowId.startsWith(`${prefix}__`)) {
       return workflowId;
@@ -2048,16 +2048,21 @@ export class Mastra<
     for (const row of allRows) {
       if (declaredIds.has(row.id)) continue;
       if (!row.id.startsWith('wf_')) continue;
-      const ownerWorkflowId = ownerWorkflowIdForRow(row.id, declaredIdsByWorkflow) ?? ownerWorkflowIdFromRowId(row.id);
-      if (!ownerWorkflowId) continue;
       // A dynamic workflow that failed to rehydrate is not deleted — keep its
-      // schedule rows so a later successful boot picks them back up.
-      if (this.#failedDynamicWorkflowIds.has(ownerWorkflowId)) {
+      // schedule rows so a later successful boot picks them back up. Match by
+      // generated row-id prefix (not by decoding the row id): workflow ids may
+      // themselves contain `__`, which `encodeURIComponent` doesn't escape, so
+      // decoding the segment before the first `__` can recover the wrong id.
+      const failedOwnerId = ownerWorkflowIdForRow(row.id, this.#failedDynamicWorkflowIds);
+      if (failedOwnerId !== undefined) {
         this.#logger?.warn?.(
-          `Keeping declarative schedule "${row.id}": dynamic workflow "${ownerWorkflowId}" failed to load this boot.`,
+          `Keeping declarative schedule "${row.id}": dynamic workflow "${failedOwnerId}" failed to load this boot.`,
         );
         continue;
       }
+      const ownerWorkflowId =
+        ownerWorkflowIdForRow(row.id, declaredIdsByWorkflow.keys()) ?? ownerWorkflowIdFromRowId(row.id);
+      if (!ownerWorkflowId) continue;
       try {
         await schedulesStore.deleteSchedule(row.id);
       } catch (error) {
