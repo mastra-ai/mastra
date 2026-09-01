@@ -5,6 +5,7 @@ import type { ReactNode } from 'react';
 import { useApiConfig } from '../../../../api/config';
 import { queryKeys } from '../../../../api/keys';
 import { useDocumentVisible } from '../../../lib/hooks/useDocumentVisible';
+import { AGENT_CONTROLLER_ID } from '../../chat/services/constants';
 import { streamFeedEvents } from '../services/feedEvents';
 import { RequestError } from '../services/request';
 
@@ -38,25 +39,30 @@ export function FeedEventsProvider({ factoryProjectId, children }: { factoryProj
 
     const refreshAttention = () =>
       void queryClient.invalidateQueries({ queryKey: queryKeys.factoryAttentionRoot(factoryProjectId) });
+    const refreshRunActivity = () =>
+      void queryClient.invalidateQueries({ queryKey: queryKeys.agentControllerActivity(AGENT_CONTROLLER_ID, baseUrl) });
 
     const connect = () => {
       streamFeedEvents(
         baseUrl,
         factoryProjectId,
         {
-          onEvent: ({ workItemId }) => {
+          onEvent: ({ workItemId, sessionId }) => {
+            if (sessionId) refreshRunActivity();
             // Card counts stay on the board's own 5s poll: a fetch per event
             // would double its load to save under 5s of badge latency.
             if (workItemId) {
               void queryClient.invalidateQueries({ queryKey: queryKeys.workItemCommentsRoot(workItemId) });
             }
-            refreshAttention();
+            // A run frame moves session markers only; the attention inbox did not change.
+            if (!sessionId) refreshAttention();
           },
           onConnected: () => {
             setConnected(true);
             // Whatever landed while this tab held no stream was never announced.
             void queryClient.invalidateQueries({ queryKey: queryKeys.workItemCommentsAll() });
             refreshAttention();
+            refreshRunActivity();
           },
         },
         abort.signal,

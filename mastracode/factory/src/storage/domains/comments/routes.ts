@@ -304,7 +304,9 @@ export function buildCommentRoutes(dependencies: CommentRouteDependencies): ApiR
             if (stream.aborted) return;
             const data = event.data;
             const workItemId = isRecord(data) && typeof data.workItemId === 'string' ? data.workItemId : undefined;
-            await stream.writeSSE({ event: 'feed', data: JSON.stringify(workItemId ? { workItemId } : {}) });
+            const sessionId = isRecord(data) && typeof data.sessionId === 'string' ? data.sessionId : undefined;
+            const frame = { ...(workItemId ? { workItemId } : {}), ...(sessionId ? { sessionId } : {}) };
+            await stream.writeSSE({ event: 'feed', data: JSON.stringify(frame) });
           };
           // Claimed before any await: `onAbort` handlers registered after the
           // reader is gone never run, and a broker subscribe is a round trip.

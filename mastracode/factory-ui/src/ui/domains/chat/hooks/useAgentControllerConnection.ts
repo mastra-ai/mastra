@@ -109,6 +109,11 @@ export function useAgentControllerConnection({
         : undefined;
     const running = event.type === 'agent_start' ? true : event.type === 'agent_end' ? false : displayStateRunning;
     const tasks = isKnownAgentControllerEvent(event) && event.type === 'task_updated' ? event.tasks : undefined;
+    if (event.type === 'agent_start' || event.type === 'agent_end') {
+      // The shared registry poll feeds every session marker outside this chat;
+      // without this nudge the open session's own row lags its ring by a poll tick.
+      void queryClient.invalidateQueries({ queryKey: queryKeys.agentControllerActivity(agentControllerId, baseUrl) });
+    }
     if (tasks) {
       taskEventGeneration.current += 1;
       liveTasks.current = { threadId: sessionThreadId, tasks };

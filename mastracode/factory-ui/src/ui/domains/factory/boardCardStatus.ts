@@ -1,4 +1,5 @@
 import type { FactoryRunPhase } from '../../../hooks/useStartFactoryRun';
+import type { SessionRowStatus } from '../workspaces/services/sessionStatus';
 import { RUN_PHASE_LABELS } from './boardRunSpecs';
 import type { FactoryDecisionSummary } from './services/decisions';
 
@@ -22,6 +23,8 @@ export interface BoardCardStatusInput {
   decision?: FactoryDecisionSummary;
   /** Why the server refused the last move. */
   transitionReason?: string;
+  /** What the run registry and workspace records say about the card's bound sessions. */
+  sessionStatus?: SessionRowStatus;
 }
 
 /** Human phrasing for a rule effect, by decision type. `underway` speaks for a leased decision. */
@@ -51,6 +54,19 @@ function automationCopy(type: string): { busy: string; underway: string; failed:
       return { busy, underway: busy, failed: 'Automation failed' };
     }
   }
+}
+
+/**
+ * A leased `invokeSkill` decision also brackets workspace materialization and
+ * kickoff, so `underway` may claim a run only while the run registry agrees.
+ */
+function leasedInvokeSkillLabel(
+  sessionStatus: SessionRowStatus | undefined,
+  copy: { busy: string; underway: string },
+): string {
+  if (sessionStatus === 'working') return copy.underway;
+  if (sessionStatus === 'initializing') return 'Preparing workspace…';
+  return copy.busy;
 }
 
 /**
@@ -92,7 +108,9 @@ export function boardCardStatus(input: BoardCardStatusInput): BoardCardStatus {
   }
   if (decision) {
     const copy = automationCopy(decision.type);
-    return { kind: 'busy', label: decision.status === 'leased' ? copy.underway : copy.busy };
+    if (decision.status !== 'leased') return { kind: 'busy', label: copy.busy };
+    const label = decision.type === 'invokeSkill' ? leasedInvokeSkillLabel(input.sessionStatus, copy) : copy.underway;
+    return { kind: 'busy', label };
   }
   // Nothing is moving on its own, so a parked run is the card's live question.
   if (input.proposal) {

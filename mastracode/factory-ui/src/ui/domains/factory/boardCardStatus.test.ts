@@ -108,9 +108,24 @@ describe('boardCardStatus', () => {
       kind: 'busy',
       label: 'Starting an automated run…',
     });
-    expect(boardCardStatus({ decision: decision({ status: 'leased' }) })).toEqual({
+    expect(boardCardStatus({ decision: decision({ status: 'leased' }), sessionStatus: 'working' })).toEqual({
       kind: 'busy',
       label: 'Automated run in progress…',
+    });
+  });
+
+  it('claims a run is in progress only while the run registry agrees', () => {
+    expect(boardCardStatus({ decision: decision({ status: 'leased' }), sessionStatus: 'initializing' })).toEqual({
+      kind: 'busy',
+      label: 'Preparing workspace…',
+    });
+    expect(boardCardStatus({ decision: decision({ status: 'leased' }) })).toEqual({
+      kind: 'busy',
+      label: 'Starting an automated run…',
+    });
+    expect(boardCardStatus({ decision: decision({ status: 'leased' }), sessionStatus: 'ready' })).toEqual({
+      kind: 'busy',
+      label: 'Starting an automated run…',
     });
   });
 

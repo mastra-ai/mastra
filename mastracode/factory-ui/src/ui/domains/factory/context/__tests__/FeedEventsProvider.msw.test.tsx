@@ -7,8 +7,10 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { pushableFeedStream } from '../../../../../../e2e/ui/feed-stream';
 import { server } from '../../../../../../e2e/ui/msw-server';
 import { renderHookWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '../../../../../../e2e/ui/render';
+import { useActiveRunResources } from '../../../../../hooks/useActiveRunResources';
 import { useFactoryAttentionHistory } from '../../../../../hooks/useFactoryAttention';
 import { useWorkItemComments } from '../../../../../hooks/useWorkItemComments';
+import { AGENT_CONTROLLER_ID } from '../../../chat/services/constants';
 import { FeedEventsProvider, useFeedEventsConnected } from '../FeedEventsProvider';
 
 const PROJECT_ID = 'project-1';
@@ -28,7 +30,15 @@ function watch() {
     connected: useFeedEventsConnected(),
     comments: useWorkItemComments({ workItemId: ITEM_ID }),
     attention: useFactoryAttentionHistory(PROJECT_ID, 'open', ''),
+    activity: useActiveRunResources({ agentControllerId: AGENT_CONTROLLER_ID, resourceIds: ['session-1'] }),
   };
+}
+
+function countActivity(count: () => void) {
+  return http.get('*/api/agent-controller/:controllerId/active-runs', () => {
+    count();
+    return HttpResponse.json({ runs: [] });
+  });
 }
 
 /** Connected, plus the catch-up refetch every fresh stream fires. */
@@ -106,6 +116,26 @@ describe('FeedEventsProvider', () => {
     await waitFor(() => expect(attentionRequests).toBe(before.attention + 1));
     // No work item is named, so no comment feed has a reason to move.
     expect(commentRequests).toBe(before.comments);
+  });
+
+  it('refetches the run registry alone on a run frame', async () => {
+    const stream = pushableFeedStream(PROJECT_ID);
+    let attentionRequests = 0;
+    let activityRequests = 0;
+    server.use(
+      stream.handler,
+      countAttention(() => (attentionRequests += 1)),
+      countActivity(() => (activityRequests += 1)),
+    );
+
+    const rendered = renderHookWithProviders(watch, { inner });
+    await settle(rendered);
+    const before = { attention: attentionRequests, activity: activityRequests };
+
+    stream.pushRun('session-1');
+    await waitFor(() => expect(activityRequests).toBe(before.activity + 1));
+    // A run frame moves session markers only; the attention inbox did not change.
+    expect(attentionRequests).toBe(before.attention);
   });
 
   it('leaves another work item alone', async () => {

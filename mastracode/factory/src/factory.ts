@@ -76,6 +76,7 @@ import { observeSessionFirstExec } from './session/first-exec-capture.js';
 import { observeSessionFirstMessage } from './session/first-message-capture.js';
 import { hydrateSessionMemorySettings } from './session/memory-settings-hydration.js';
 import { hydrateSessionModelPack } from './session/model-pack-hydration.js';
+import { observeSessionRunLifecycle } from './session/run-lifecycle-feed.js';
 import { observeSessionThreadTitle } from './session/thread-title-mirror.js';
 import { createSpaStaticMiddleware, resolveUiDistDir } from './spa-static.js';
 import { createStateSigner } from './state-signing.js';
@@ -890,6 +891,10 @@ export class MastraFactory {
       });
       observeSessionThreadTitle(session, {
         sourceControl: sourceControlStorage.forIntegration('github'),
+      });
+      observeSessionRunLifecycle(session, {
+        sourceControl: sourceControlStorage.forIntegration('github'),
+        pubsub: eventBus,
       });
     });
 
