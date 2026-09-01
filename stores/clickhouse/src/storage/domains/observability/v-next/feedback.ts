@@ -48,6 +48,7 @@ const FEEDBACK_TYPED_COLUMNS = new Set([
   'rootEntityName',
   'userId',
   'organizationId',
+  'projectId',
   'resourceId',
   'runId',
   'sessionId',

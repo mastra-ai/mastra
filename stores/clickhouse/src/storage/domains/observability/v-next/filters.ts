@@ -220,6 +220,7 @@ function addCommonFilterFields(
     rootEntityName?: string;
     userId?: string;
     organizationId?: string;
+    projectId?: string;
     experimentId?: string;
     resourceId?: string;
     runId?: string;
@@ -250,6 +251,7 @@ function addCommonFilterFields(
   addEq(col('rootEntityName'), filters.rootEntityName, 'rootEntityName', 'String', out);
   addEq(col('userId'), filters.userId, 'userId', 'String', out);
   addEq(col('organizationId'), filters.organizationId, 'organizationId', 'String', out);
+  addEq(col('projectId'), filters.projectId, 'projectId', 'String', out);
   addEq(col('experimentId'), filters.experimentId, 'experimentId', 'String', out);
   addEq(col('resourceId'), filters.resourceId, 'resourceId', 'String', out);
   addEq(col('runId'), filters.runId, 'runId', 'String', out);
@@ -290,6 +292,7 @@ export function buildTraceFilterConditions(filters: TracesFilter | undefined, ta
   addEq(col('experimentId'), filters.experimentId, 'experimentId', 'String', out);
   addEq(col('userId'), filters.userId, 'userId', 'String', out);
   addEq(col('organizationId'), filters.organizationId, 'organizationId', 'String', out);
+  addEq(col('projectId'), filters.projectId, 'projectId', 'String', out);
   addEq(col('resourceId'), filters.resourceId, 'resourceId', 'String', out);
   addEq(col('runId'), filters.runId, 'runId', 'String', out);
   addEq(col('sessionId'), filters.sessionId, 'sessionId', 'String', out);

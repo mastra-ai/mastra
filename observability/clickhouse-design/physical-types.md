@@ -36,6 +36,7 @@ Important note:
 - `entityName`: `Nullable(String)`
 - `userId`: `Nullable(String)`
 - `organizationId`: `Nullable(String)`
+- `projectId`: `Nullable(String)`
 - `resourceId`: `Nullable(String)`
 - `runId`: `Nullable(String)`
 - `sessionId`: `Nullable(String)`
@@ -79,6 +80,7 @@ Read-path notes:
 - `entityName`: `Nullable(String)`
 - `userId`: `Nullable(String)`
 - `organizationId`: `Nullable(String)`
+- `projectId`: `Nullable(String)`
 - `resourceId`: `Nullable(String)`
 - `runId`: `Nullable(String)`
 - `sessionId`: `Nullable(String)`
@@ -128,6 +130,7 @@ Read-path notes:
 - `rootEntityName`: `Nullable(String)`
 - `userId`: `Nullable(String)`
 - `organizationId`: `Nullable(String)`
+- `projectId`: `Nullable(String)`
 - `resourceId`: `Nullable(String)`
 - `runId`: `Nullable(String)`
 - `sessionId`: `Nullable(String)`
@@ -167,6 +170,7 @@ Read-path notes:
 - `rootEntityName`: `Nullable(String)`
 - `userId`: `Nullable(String)`
 - `organizationId`: `Nullable(String)`
+- `projectId`: `Nullable(String)`
 - `resourceId`: `Nullable(String)`
 - `runId`: `Nullable(String)`
 - `sessionId`: `Nullable(String)`
@@ -197,6 +201,7 @@ Read-path notes:
 - `rootEntityName`: `Nullable(String)`
 - `userId`: `Nullable(String)`
 - `organizationId`: `Nullable(String)`
+- `projectId`: `Nullable(String)`
 - `resourceId`: `Nullable(String)`
 - `runId`: `Nullable(String)`
 - `sessionId`: `Nullable(String)`
@@ -233,6 +238,7 @@ Read-path notes:
 - `feedbackUserId`: `Nullable(String)`
 - `sourceId`: `Nullable(String)`
 - `organizationId`: `Nullable(String)`
+- `projectId`: `Nullable(String)`
 - `resourceId`: `Nullable(String)`
 - `runId`: `Nullable(String)`
 - `sessionId`: `Nullable(String)`

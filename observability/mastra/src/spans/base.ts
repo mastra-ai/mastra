@@ -475,6 +475,7 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
       rootEntityVersionId: getSpanMetadataString(rootSpan, 'entityVersionId'),
       userId: getMetadataString('userId'),
       organizationId: getMetadataString('organizationId'),
+      projectId: getMetadataString('projectId'),
       resourceId: getMetadataString('resourceId'),
       runId: getMetadataString('runId'),
       sessionId: getMetadataString('sessionId'),

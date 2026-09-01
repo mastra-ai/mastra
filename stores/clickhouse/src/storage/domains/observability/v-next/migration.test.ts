@@ -427,6 +427,7 @@ CREATE TABLE mastra_ai_spans (
   "rootEntityVersionId" Nullable(String),
   "userId" Nullable(String),
   "organizationId" Nullable(String),
+  "projectId" Nullable(String),
   "resourceId" Nullable(String),
   "runId" Nullable(String),
   "sessionId" Nullable(String),
@@ -539,6 +540,7 @@ describe('migrateLegacySpans (mastra_ai_spans → mastra_span_events)', () => {
     // Missing columns are NULL
     expect(rows[0]!.entityType).toBeNull();
     expect(rows[0]!.executionSource).toBeNull();
+    expect(rows[0]!.projectId).toBeNull();
 
     // NULL endedAt coalesced from startedAt
     expect(rows[1]!.endedAt).toBe(rows[1]!.startedAt);
@@ -568,6 +570,8 @@ describe('migrateLegacySpans (mastra_ai_spans → mastra_span_events)', () => {
           metadata: '{"customKey":"val","entityType":"agent","nested":{"deep":true}}',
           environment: 'production',
           serviceName: 'my-service',
+          projectId: 'legacy-project',
+          resourceId: 'legacy-resource',
         },
       ],
       format: 'JSONEachRow',
@@ -615,6 +619,8 @@ describe('migrateLegacySpans (mastra_ai_spans → mastra_span_events)', () => {
 
     expect(row.environment).toBe('production');
     expect(row.serviceName).toBe('my-service');
+    expect(row.projectId).toBe('legacy-project');
+    expect(row.resourceId).toBe('legacy-resource');
   });
 
   it('deduplicates legacy rows, keeping the latest updatedAt', async () => {

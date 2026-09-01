@@ -81,6 +81,7 @@ type CorrelationRecordFields = Pick<
   | 'rootEntityVersionId'
   | 'userId'
   | 'organizationId'
+  | 'projectId'
   | 'resourceId'
   | 'runId'
   | 'sessionId'
@@ -109,6 +110,7 @@ function buildCorrelationRecordFields(context: CorrelationContext | undefined): 
     rootEntityVersionId: context?.rootEntityVersionId ?? null,
     userId: context?.userId ?? null,
     organizationId: context?.organizationId ?? null,
+    projectId: context?.projectId ?? null,
     resourceId: context?.resourceId ?? null,
     runId: context?.runId ?? null,
     sessionId: context?.sessionId ?? null,
@@ -183,6 +185,7 @@ export function buildCreateSpanRecord(span: AnyExportedSpan): CreateSpanRecord {
     // Identity & Tenancy - extracted from metadata if present
     userId: getStringOrNull(metadata.userId),
     organizationId: getStringOrNull(metadata.organizationId),
+    projectId: getStringOrNull(metadata.projectId),
     resourceId: getStringOrNull(metadata.resourceId),
 
     // Correlation IDs - extracted from metadata if present

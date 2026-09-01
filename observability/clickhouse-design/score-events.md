@@ -32,6 +32,7 @@ Entity hierarchy and context:
 - `rootEntityName`
 - `userId`
 - `organizationId`
+- `projectId`
 - `resourceId`
 - `runId`
 - `sessionId`
@@ -76,6 +77,7 @@ Notes:
   - `traceId`
   - `spanId`
   - `organizationId`
+  - `projectId`
   - `experimentId`
   - `scorerId`
   - `scoreSource`

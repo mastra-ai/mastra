@@ -444,7 +444,7 @@ describe('Span Filtering', () => {
       const parent = tracing.startSpan({
         type: SpanType.AGENT_RUN,
         name: 'agent',
-        metadata: { runId: 'run-1', userId: 'u-1' },
+        metadata: { runId: 'run-1', userId: 'u-1', projectId: 'project-1', resourceId: 'resource-1' },
       });
 
       const chunk = parent.createChildSpan({
@@ -454,9 +454,18 @@ describe('Span Filtering', () => {
 
       // Metadata is inherited from the parent even on filtered spans so that
       // getCorrelationContext and getLoggerContext/getMetricsContext still work.
-      expect((chunk as any).metadata).toEqual({ runId: 'run-1', userId: 'u-1' });
-      expect(chunk.getCorrelationContext().runId).toBe('run-1');
-      expect(chunk.getCorrelationContext().userId).toBe('u-1');
+      expect((chunk as any).metadata).toEqual({
+        runId: 'run-1',
+        userId: 'u-1',
+        projectId: 'project-1',
+        resourceId: 'resource-1',
+      });
+      expect(chunk.getCorrelationContext()).toMatchObject({
+        runId: 'run-1',
+        userId: 'u-1',
+        projectId: 'project-1',
+        resourceId: 'resource-1',
+      });
 
       parent.end();
     });

@@ -316,6 +316,7 @@ export async function listBranches(
     { col: 'experimentId', value: filters?.experimentId, param: 'experimentId' },
     { col: 'userId', value: filters?.userId, param: 'userId' },
     { col: 'organizationId', value: filters?.organizationId, param: 'organizationId' },
+    { col: 'projectId', value: filters?.projectId, param: 'projectId' },
     { col: 'resourceId', value: filters?.resourceId, param: 'resourceId' },
     { col: 'runId', value: filters?.runId, param: 'runId' },
     { col: 'sessionId', value: filters?.sessionId, param: 'sessionId' },

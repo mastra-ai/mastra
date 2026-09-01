@@ -76,7 +76,7 @@ function getMockLogEvent(overrides: Partial<LogEvent['log']> = {}): LogEvent {
       data: { requestId: 'req-123' },
       correlationContext: {
         organizationId: 'team-123',
-        resourceId: 'project-456',
+        resourceId: 'memory-resource-456',
         serviceName: 'cloud-exporter-test',
       },
       metadata: { source: 'test-suite' },
@@ -98,7 +98,7 @@ function getMockMetricEvent(overrides: Partial<MetricEvent['metric']> = {}): Met
       labels: { provider: 'openai' },
       correlationContext: {
         organizationId: 'team-123',
-        resourceId: 'project-456',
+        resourceId: 'memory-resource-456',
         serviceName: 'cloud-exporter-test',
       },
       metadata: { unit: 'tokens' },
@@ -121,7 +121,7 @@ function getMockScoreEvent(overrides: Partial<ScoreEvent['score']> = {}): ScoreE
       reason: 'high confidence',
       correlationContext: {
         organizationId: 'team-123',
-        resourceId: 'project-456',
+        resourceId: 'memory-resource-456',
         serviceName: 'cloud-exporter-test',
       },
       metadata: { rubric: 'v1' },
@@ -144,7 +144,7 @@ function getMockFeedbackEvent(overrides: Partial<FeedbackEvent['feedback']> = {}
       comment: 'looks good',
       correlationContext: {
         organizationId: 'team-123',
-        resourceId: 'project-456',
+        resourceId: 'memory-resource-456',
         serviceName: 'cloud-exporter-test',
       },
       metadata: { locale: 'en-US' },
