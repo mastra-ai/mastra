@@ -381,40 +381,14 @@ fresh sha ref builds in the background on E2B's side (its runtime setup
 depends on the template). A changed setup command hashes to a new template
 name.
 
-Templates build at E2B's default machine size (2 vCPU, 1024 MB) unless the
-spec asks for more. Pass `cpuCount` and `memoryMB` to size the machine the
-template's sandboxes run on:
-
-```typescript
-const sandbox = new E2BSandbox({
-  id: sessionId,
-  template: createRepoTemplate({
-    getRepositoryAccess: async () => ({
-      cloneUrl: 'https://github.com/octocat/hello-world.git',
-    }),
-    setupCommand: 'pnpm install',
-    cpuCount: 4,
-    memoryMB: 2048,
-  }),
-})
-```
-
-Resources are part of the template's identity: they hash into the template
-name alongside the repository and setup command, so resizing builds a new
-template instead of silently reusing one built at the old size. When a repo
-template's build fails and the sandbox falls back to the default mountable
-template, the fallback builds at the requested size too, so setup never
-lands in a smaller machine than it asked for. Account tier limits apply to
-the values E2B accepts.
-
 Each command (clone, fetch, checkout, and every setup command) is its own
 build step, so a failed build names the command that failed and the steps
 before it stay cached across attempts. `setupCommand` accepts an array to run
 entries as separate steps. `workingDirectory` sets an absolute directory as
 the cwd for the build steps and for sandboxes created from the template; the
 repository is cloned relative to it, at `<workingDirectory>/<repo>`. Omit it
-to use the base image's working directory. Both options are part of the
-template's identity:
+to use the base image's working directory. Templates build at E2B's default
+machine size (2 vCPU, 1024 MB) unless `cpuCount` and `memoryMB` ask for more:
 
 ```typescript
 const sandbox = new E2BSandbox({
@@ -426,9 +400,19 @@ const sandbox = new E2BSandbox({
     }),
     setupCommand: ['pnpm install', 'pnpm build'],
     workingDirectory: '/workspace',
+    cpuCount: 4,
+    memoryMB: 2048,
   }),
 })
 ```
+
+Setup commands, working directory, and resources are all part of the
+template's identity, so changing any of them builds a new template instead of
+silently reusing one built with the old inputs. When a repo template's build
+fails and the sandbox falls back to the default mountable template, the
+fallback builds at the requested size too, so setup never lands in a smaller
+machine than it asked for. Account tier limits apply to the values E2B
+accepts.
 
 To warm templates proactively instead of waiting for the first session
 after a merge, call `refreshRepoTemplate` with the same options from a
