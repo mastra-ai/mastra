@@ -5,6 +5,7 @@
   "scripts": {
     "calendar": "tsx src/calendar.ts",
     "github": "tsx src/shipyard-github.ts",
+    "wave3": "tsx src/wave-3.ts",
     "teardown": "node -e \"process.exit(0)\""
   },
   "dependencies": {
@@ -12,6 +13,6 @@
     "@mastra/libsql": "link:__LIBSQL_PATH__",
     "@mastra/memory": "link:__MEMORY_PATH__",
     "@mastra/pg": "link:__PG_PATH__",
-    "tsx": "^4.23.1"
+    "tsx": "link:__TSX_PATH__"
   }
 }
