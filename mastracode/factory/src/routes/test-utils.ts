@@ -3,7 +3,7 @@
  */
 
 import type { ApiRoute } from '@mastra/core/server';
-import type { Context, Hono } from 'hono';
+import { Hono, type Context } from 'hono';
 
 import type { RouteAuth } from './route.js';
 
@@ -21,6 +21,16 @@ export function mountApiRoutes(app: Hono<any>, routes: ApiRoute[]): void {
     if (!handler) continue;
     app.on(route.method, route.path, handler as never);
   }
+}
+
+export function createRouteTestApp(routes: ApiRoute[], user: TestAuthUser): Hono<any> {
+  const app = new Hono();
+  app.use('*', async (context, next) => {
+    context.set('factoryAuthUser' as never, user as never);
+    await next();
+  });
+  mountApiRoutes(app, routes);
+  return app;
 }
 
 /** The user shape tests stash on the request context, mirroring the web host. */
