@@ -10,8 +10,6 @@ npm install @mastra/tanstack-start
 
 ## Usage
 
-Configure the prerequisites described in the documentation.
-
 ```typescript
 import { createFileRoute } from '@tanstack/react-router';
 import { createStartRouteHandler } from '@mastra/tanstack-start';

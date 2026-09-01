@@ -10,8 +10,6 @@ npm install @mastra/braintrust
 
 ## Usage
 
-Configure the prerequisites described in the documentation.
-
 ```typescript
 import { currentSpan, initLogger } from 'braintrust';
 import { BraintrustExporter } from '@mastra/braintrust';

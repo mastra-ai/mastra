@@ -10,8 +10,6 @@ npm install @mastra/openai
 
 ## Usage
 
-Configure the prerequisites described in the documentation.
-
 ```typescript
 import { OpenAISDKAgent } from '@mastra/openai';
 

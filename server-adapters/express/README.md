@@ -10,8 +10,6 @@ npm install @mastra/express
 
 ## Usage
 
-Configure the prerequisites described in the documentation.
-
 ```typescript
 import express from 'express';
 import { MastraServer } from '@mastra/express';

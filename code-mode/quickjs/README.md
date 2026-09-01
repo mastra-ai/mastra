@@ -10,8 +10,6 @@ npm install @mastra/quickjs
 
 ## Usage
 
-Configure the prerequisites described in the documentation.
-
 ```typescript
 import { QuickJsCodeModeTransport } from '@mastra/quickjs';
 

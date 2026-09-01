@@ -77,22 +77,38 @@ function normalizeRoute(route) {
   return normalized || '/';
 }
 
+function readFrontmatter(content) {
+  return content.match(/^---\s*\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/)?.[1];
+}
+
 function readScalarSlug(content) {
-  const frontmatter = content.match(/^---\s*\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/)?.[1];
+  const frontmatter = readFrontmatter(content);
   if (!frontmatter) return undefined;
 
   const match = frontmatter.match(/^slug:\s*(?:"([^"\r\n]*)"|'([^'\r\n]*)'|([^#\r\n]+?))\s*$/m);
   return (match?.[1] ?? match?.[2] ?? match?.[3])?.trim();
 }
 
+function readFrontmatterPackages(content) {
+  const frontmatter = readFrontmatter(content);
+  const packagesBlock = frontmatter?.match(/^packages:\s*\r?\n((?:\s+-\s+[^\r\n]+\r?\n?)*)/m)?.[1] ?? '';
+  return new Set(
+    [...packagesBlock.matchAll(/^\s+-\s+(?:"([^"]+)"|'([^']+)'|([^#\r\n]+?))\s*$/gm)].map(match =>
+      (match[1] ?? match[2] ?? match[3]).trim(),
+    ),
+  );
+}
+
 export function buildDocsRouteSet(rootDir) {
-  const routes = new Set();
+  const routes = new Map();
 
   for (const [routeBase, relativeContentRoot] of Object.entries(DOCS_ROOTS)) {
     const contentRoot = path.join(rootDir, relativeContentRoot);
     if (!existsSync(contentRoot)) continue;
 
     for (const sourcePath of walkFiles(contentRoot, '.mdx')) {
+      const content = readFileSync(sourcePath, 'utf8');
+      const packages = readFrontmatterPackages(content);
       const relativeSource = toPosixPath(path.relative(contentRoot, sourcePath));
       const withoutExtension = relativeSource.replace(/\.mdx$/, '');
       const defaultRelativeRoute = withoutExtension.endsWith('/index')
@@ -101,18 +117,18 @@ export function buildDocsRouteSet(rootDir) {
           ? ''
           : withoutExtension;
       const defaultRoute = normalizeRoute(`${routeBase}/${defaultRelativeRoute}`);
-      routes.add(defaultRoute);
-      routes.add(`${defaultRoute}.mdx`);
+      routes.set(defaultRoute, packages);
+      routes.set(`${defaultRoute}.mdx`, packages);
 
-      const slug = readScalarSlug(readFileSync(sourcePath, 'utf8'));
+      const slug = readScalarSlug(content);
       if (slug === undefined) continue;
 
       const sourceDirectory = path.posix.dirname(withoutExtension);
       const slugRoute = slug.startsWith('/')
         ? normalizeRoute(`${routeBase}/${slug}`)
         : normalizeRoute(`${routeBase}/${sourceDirectory === '.' ? '' : sourceDirectory}/${slug}`);
-      routes.add(slugRoute);
-      routes.add(`${slugRoute}.mdx`);
+      routes.set(slugRoute, packages);
+      routes.set(`${slugRoute}.mdx`, packages);
     }
   }
 
@@ -157,29 +173,67 @@ export function extractLinks(content) {
   return [...links];
 }
 
-export function isResolvedMastraDocsLink(sourceUrl, docsRoutes) {
+function getMastraDocsRoute(sourceUrl) {
   let url;
   try {
     url = new URL(sourceUrl);
   } catch {
-    return true;
+    return undefined;
   }
 
-  if (url.hostname !== 'mastra.ai') return true;
+  if (url.hostname !== 'mastra.ai') return undefined;
 
   let pathname;
   try {
     pathname = decodeURIComponent(url.pathname);
   } catch {
-    return false;
+    return null;
   }
 
-  if (!/^\/(docs|integrations|models|reference)(?:\/|$)/.test(pathname)) return true;
-  return docsRoutes.has(normalizeRoute(pathname));
+  if (!/^\/(docs|integrations|models|reference)(?:\/|$)/.test(pathname)) return undefined;
+  return normalizeRoute(pathname);
+}
+
+export function isResolvedMastraDocsLink(sourceUrl, docsRoutes) {
+  const route = getMastraDocsRoute(sourceUrl);
+  return route === undefined || (route !== null && docsRoutes.has(route));
+}
+
+// Reject demonstrated no-op shapes without attempting to interpret arbitrary TypeScript examples.
+function hasDegenerateUsageExample(usage) {
+  if (/Object\.(?:keys|values|entries)\(\s*\w+\s*\)/.test(usage)) return true;
+
+  const codeBlocks = [...usage.matchAll(/```[^\r\n]*\r?\n([\s\S]*?)```/g)].map(match => match[1]);
+  return (
+    codeBlocks.length > 0 &&
+    codeBlocks.every(code => {
+      const executableLines = code
+        .split(/\r?\n/)
+        .map(line => line.trim())
+        .filter(line => line && !line.startsWith('//') && !line.startsWith('import '));
+
+      return (
+        executableLines.length === 0 ||
+        (executableLines.length === 1 &&
+          /^(?:export\s+)?const\s+\w+\s*=\s*[A-Z][\w$]*(?:\.[A-Za-z_$][\w$]*)?\s*;?$/.test(executableLines[0]))
+      );
+    })
+  );
+}
+
+function maskFencedCode(content) {
+  let fence;
+  return content.replace(/[^\r\n]*(?:\r?\n|$)/g, line => {
+    const marker = line.match(/^\s*(`{3,}|~{3,})/)?.[1];
+    const isFenceLine = marker && (!fence || marker[0] === fence);
+    if (isFenceLine) fence = fence ? undefined : marker[0];
+    return fence || isFenceLine ? line.replace(/[^\r\n]/g, ' ') : line;
+  });
 }
 
 function parseSections(content) {
-  const headings = [...content.matchAll(/^(#{1,2})\s+(.+?)\s*#*\s*$/gm)].map(match => ({
+  const headingContent = maskFencedCode(content);
+  const headings = [...headingContent.matchAll(/^(#{1,2})[ \t]+(.+?)[ \t]*#*[ \t]*\r?$/gm)].map(match => ({
     level: match[1].length,
     name: match[2].trim(),
     start: match.index,
@@ -234,8 +288,11 @@ export function validateReadme({ content, name, relativeDirectory, docsRoutes })
   }
 
   const usage = sections.get('Usage') ?? '';
-  if (/Object\.keys\(\w+\)/.test(usage) || /const\s+exporter\s*=\s*[A-Z]\w*Exporter\s*;/.test(usage)) {
-    errors.push('Usage section must contain a functional package example, not export introspection or a class alias');
+  if (usage.includes('Configure the prerequisites described in the documentation.')) {
+    errors.push('Usage section must state concrete prerequisites or omit the prerequisite preamble');
+  }
+  if (hasDegenerateUsageExample(usage)) {
+    errors.push('Usage section must contain a functional package example, not export introspection or a symbol alias');
   }
 
   const changelogUrl = `https://github.com/mastra-ai/mastra/blob/main/${relativeDirectory}/CHANGELOG.md`;
@@ -250,6 +307,13 @@ export function validateReadme({ content, name, relativeDirectory, docsRoutes })
   for (const link of extractLinks(content).sort()) {
     if (!isResolvedMastraDocsLink(link, docsRoutes)) {
       errors.push(`unresolved Mastra docs link: ${link}`);
+      continue;
+    }
+
+    const route = getMastraDocsRoute(link);
+    const documentedPackages = route && route.startsWith('/integrations/') ? docsRoutes.get(route) : undefined;
+    if (documentedPackages?.size && !documentedPackages.has(name)) {
+      errors.push(`Mastra integration docs link does not document ${name}: ${link}`);
     }
   }
 

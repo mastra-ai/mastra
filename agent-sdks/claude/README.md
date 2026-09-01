@@ -10,8 +10,6 @@ npm install @mastra/claude
 
 ## Usage
 
-Configure the prerequisites described in the documentation.
-
 ```typescript
 import { ClaudeSDKAgent } from '@mastra/claude';
 

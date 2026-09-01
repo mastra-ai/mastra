@@ -10,8 +10,6 @@ npm install @mastra/datadog
 
 ## Usage
 
-Configure the prerequisites described in the documentation.
-
 ```bash
 pnpm add @mastra/datadog
 ```

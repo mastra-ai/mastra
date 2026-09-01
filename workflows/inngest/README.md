@@ -10,8 +10,6 @@ npm install @mastra/inngest
 
 ## Usage
 
-Configure the prerequisites described in the documentation.
-
 ```typescript
 import { Inngest } from 'inngest';
 import { init } from '@mastra/inngest';

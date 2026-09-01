@@ -10,8 +10,6 @@ npm install @mastra/otel-bridge
 
 ## Usage
 
-Configure the prerequisites described in the documentation.
-
 ```typescript
 import { OtelBridge } from '@mastra/otel-bridge';
 import { Mastra } from '@mastra/core';

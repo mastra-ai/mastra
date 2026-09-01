@@ -10,10 +10,11 @@ npm install @mastra/code-sdk
 
 ## Usage
 
-Configure the prerequisites described in the documentation.
-
 ```ts
 import { loadSettings } from '@mastra/code-sdk/onboarding/settings';
+
+const settings = loadSettings();
+console.log(settings.storage.backend);
 ```
 
 ## Documentation

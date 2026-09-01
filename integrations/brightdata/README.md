@@ -10,8 +10,6 @@ npm install @mastra/brightdata
 
 ## Usage
 
-Configure the prerequisites described in the documentation.
-
 ```typescript
 import { createBrightDataFetchTool } from '@mastra/brightdata';
 

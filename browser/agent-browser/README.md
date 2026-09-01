@@ -10,8 +10,6 @@ npm install @mastra/agent-browser
 
 ## Usage
 
-Configure the prerequisites described in the documentation.
-
 ```typescript
 import { Agent } from '@mastra/core/agent';
 import { AgentBrowser } from '@mastra/agent-browser';

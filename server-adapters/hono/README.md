@@ -10,8 +10,6 @@ npm install @mastra/hono
 
 ## Usage
 
-Configure the prerequisites described in the documentation.
-
 ```typescript
 import { Hono } from 'hono';
 import { HonoBindings, HonoVariables, MastraServer } from '@mastra/hono';

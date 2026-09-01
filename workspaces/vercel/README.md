@@ -10,8 +10,6 @@ npm install @mastra/vercel
 
 ## Usage
 
-Configure the prerequisites described in the documentation.
-
 ```typescript
 import { MastraEditor } from '@mastra/core/editor';
 import { vercelSandboxProvider, vercelServerlessSandboxProvider } from '@mastra/vercel';

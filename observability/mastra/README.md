@@ -10,8 +10,6 @@ npm install @mastra/observability
 
 ## Usage
 
-Configure the prerequisites described in the documentation.
-
 ```typescript
 import { Mastra } from '@mastra/core';
 import { Observability, MastraStorageExporter, MastraPlatformExporter } from '@mastra/observability';

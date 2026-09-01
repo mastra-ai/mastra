@@ -10,8 +10,6 @@ npm install @mastra/sentry
 
 ## Usage
 
-Configure the prerequisites described in the documentation.
-
 ```typescript
 import { Mastra } from '@mastra/core';
 import { SentryExporter } from '@mastra/sentry';

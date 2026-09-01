@@ -10,8 +10,6 @@ npm install @mastra/s3
 
 ## Usage
 
-Configure the prerequisites described in the documentation.
-
 ```typescript
 import { S3Filesystem } from '@mastra/s3';
 

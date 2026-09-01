@@ -10,8 +10,6 @@ npm install @mastra/perplexity
 
 ## Usage
 
-Configure the prerequisites described in the documentation.
-
 ```typescript
 import { Agent } from '@mastra/core/agent';
 import { createPerplexitySearchTool } from '@mastra/perplexity';

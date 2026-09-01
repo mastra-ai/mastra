@@ -10,8 +10,6 @@ npm install @mastra/cursor
 
 ## Usage
 
-Configure the prerequisites described in the documentation.
-
 ```typescript
 import { CursorSDKAgent } from '@mastra/cursor';
 

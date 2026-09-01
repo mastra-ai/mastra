@@ -47,7 +47,9 @@ npm install ${name}
 ## Usage
 
 \`\`\`ts
-import '${name}';
+import { createExample } from '${name}';
+
+createExample();
 \`\`\`
 
 ## Documentation
@@ -142,6 +144,37 @@ test('requires the prescribed section order and non-empty content', () => {
   assert.match(result.stderr, /Documentation section is empty or missing/);
 });
 
+test('ignores Markdown headings inside fenced usage examples', () => {
+  const rootDir = createFixture();
+  const relativeDirectory = 'packages/fenced-heading';
+  const name = '@mastra/fenced-heading';
+  addPackage(rootDir, relativeDirectory, {
+    name,
+    readme: validReadme(name, relativeDirectory).replace(
+      'createExample();',
+      "createExample('## Not a README section');",
+    ),
+  });
+
+  const result = runCli(rootDir);
+
+  assert.equal(result.status, 0, result.stderr);
+});
+
+test('parses README headings with CRLF line endings', () => {
+  const rootDir = createFixture();
+  const relativeDirectory = 'packages/crlf';
+  const name = '@mastra/crlf';
+  addPackage(rootDir, relativeDirectory, {
+    name,
+    readme: validReadme(name, relativeDirectory).replaceAll('\n', '\r\n'),
+  });
+
+  const result = runCli(rootDir);
+
+  assert.equal(result.status, 0, result.stderr);
+});
+
 test('requires the exact package installation command', () => {
   const rootDir = createFixture();
   const relativeDirectory = 'packages/install';
@@ -167,15 +200,15 @@ test('rejects export introspection and class aliases as usage examples', () => {
   addPackage(rootDir, introspectionDirectory, {
     name: introspectionName,
     readme: validReadme(introspectionName, introspectionDirectory).replace(
-      `import '${introspectionName}';`,
-      `import * as packageApi from '${introspectionName}';\nconst availableExports = Object.keys(packageApi);`,
+      `import { createExample } from '${introspectionName}';\n\ncreateExample();`,
+      `import * as packageApi from '${introspectionName}';\nconst availableExports = Object.values(packageApi);`,
     ),
   });
   addPackage(rootDir, aliasDirectory, {
     name: aliasName,
     readme: validReadme(aliasName, aliasDirectory).replace(
-      `import '${aliasName}';`,
-      `import { ExampleExporter } from '${aliasName}';\nconst exporter = ExampleExporter;`,
+      `import { createExample } from '${aliasName}';\n\ncreateExample();`,
+      `import { XAIRealtimeVoice } from '${aliasName}';\nconst voice = XAIRealtimeVoice;`,
     ),
   });
 
@@ -185,6 +218,53 @@ test('rejects export introspection and class aliases as usage examples', () => {
   assert.match(result.stderr, /packages\/introspection\/README\.md/);
   assert.match(result.stderr, /packages\/alias\/README\.md/);
   assert.match(result.stderr, /functional package example/);
+});
+
+test('rejects generic prerequisite boilerplate and import-only usage examples', () => {
+  const rootDir = createFixture();
+  const boilerplateDirectory = 'packages/boilerplate';
+  const importOnlyDirectory = 'packages/import-only';
+
+  addPackage(rootDir, boilerplateDirectory, {
+    name: '@mastra/boilerplate',
+    readme: validReadme('@mastra/boilerplate', boilerplateDirectory).replace(
+      '## Usage\n\n',
+      '## Usage\n\nConfigure the prerequisites described in the documentation.\n\n',
+    ),
+  });
+  addPackage(rootDir, importOnlyDirectory, {
+    name: '@mastra/import-only',
+    readme: validReadme('@mastra/import-only', importOnlyDirectory).replace(
+      `import { createExample } from '@mastra/import-only';\n\ncreateExample();`,
+      `import { Example } from '@mastra/import-only';`,
+    ),
+  });
+
+  const result = runCli(rootDir);
+
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /must state concrete prerequisites or omit the prerequisite preamble/);
+  assert.match(result.stderr, /functional package example/);
+});
+
+test('requires integration docs frontmatter to include the package name', () => {
+  const rootDir = createFixture();
+  const relativeDirectory = 'packages/provider';
+  const documentationUrl = 'https://mastra.ai/integrations/provider';
+  writeText(
+    path.join(rootDir, 'docs/src/content/en/integrations/provider.mdx'),
+    '---\npackages:\n  - "@mastra/other-provider"\n---\n# Provider\n',
+  );
+  addPackage(rootDir, relativeDirectory, {
+    name: '@mastra/provider',
+    readme: validReadme('@mastra/provider', relativeDirectory, `- [Provider](${documentationUrl})`),
+  });
+
+  const result = runCli(rootDir);
+
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /integration docs link does not document @mastra\/provider/);
+  assert.match(result.stderr, new RegExp(documentationUrl.replaceAll('/', '\\/')));
 });
 
 test('requires the exact package changelog URL', () => {

@@ -10,12 +10,15 @@ npm install @mastra/telegram
 
 ## Usage
 
-Configure the prerequisites described in the documentation.
+Set `TELEGRAM_BOT_TOKEN` to the token issued by BotFather.
 
 ```typescript
 import { TelegramProvider } from '@mastra/telegram';
 
-const Provider = TelegramProvider;
+const telegram = new TelegramProvider({ mode: 'polling' });
+await telegram.connect('support-agent', {
+  botToken: process.env.TELEGRAM_BOT_TOKEN!,
+});
 ```
 
 ## Documentation

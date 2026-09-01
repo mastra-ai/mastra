@@ -10,8 +10,6 @@ npm install @mastra/koa
 
 ## Usage
 
-Configure the prerequisites described in the documentation.
-
 ```typescript
 import Koa from 'koa';
 import bodyParser from 'koa-bodyparser';

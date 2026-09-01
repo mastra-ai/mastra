@@ -10,8 +10,6 @@ npm install @mastra/agentfs
 
 ## Usage
 
-Configure the prerequisites described in the documentation.
-
 ```typescript
 import { AgentFS } from 'agentfs-sdk';
 import { AgentFSFilesystem } from '@mastra/agentfs';

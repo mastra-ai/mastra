@@ -10,8 +10,6 @@ npm install @mastra/isolated-vm
 
 ## Usage
 
-Configure the prerequisites described in the documentation.
-
 ```typescript
 import { IsolatedVmCodeModeTransport } from '@mastra/isolated-vm';
 

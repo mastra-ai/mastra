@@ -10,8 +10,6 @@ npm install @mastra/railway
 
 ## Usage
 
-Configure the prerequisites described in the documentation.
-
 ```bash
 pnpm add @mastra/railway @mastra/core
 ```

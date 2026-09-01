@@ -10,8 +10,6 @@ npm install @mastra/livekit
 
 ## Usage
 
-Configure the prerequisites described in the documentation.
-
 ```typescript
 import { createEndCallTool } from '@mastra/livekit';
 

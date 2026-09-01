@@ -10,8 +10,6 @@ npm install @mastra/temporal
 
 ## Usage
 
-Configure the prerequisites described in the documentation.
-
 ```ts
 import { NativeConnection, Worker } from '@temporalio/worker';
 import { MastraPlugin } from '@mastra/temporal/worker';

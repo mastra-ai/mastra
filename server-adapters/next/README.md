@@ -10,8 +10,6 @@ npm install @mastra/next
 
 ## Usage
 
-Configure the prerequisites described in the documentation.
-
 ```typescript
 import { createNextRouteHandler } from '@mastra/next';
 import { mastra } from '../../../mastra';

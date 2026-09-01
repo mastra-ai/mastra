@@ -10,8 +10,6 @@ npm install @mastra/browser-viewer
 
 ## Usage
 
-Configure the prerequisites described in the documentation.
-
 ```typescript
 import { BrowserViewer } from '@mastra/browser-viewer';
 

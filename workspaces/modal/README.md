@@ -10,8 +10,6 @@ npm install @mastra/modal
 
 ## Usage
 
-Configure the prerequisites described in the documentation.
-
 ```typescript
 import { ModalSandbox } from '@mastra/modal';
 

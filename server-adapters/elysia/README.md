@@ -10,8 +10,6 @@ npm install @mastra/elysia
 
 ## Usage
 
-Configure the prerequisites described in the documentation.
-
 ```typescript
 import { Elysia } from 'elysia';
 import { MastraServer } from '@mastra/elysia';

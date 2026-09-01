@@ -10,8 +10,6 @@ npm install @mastra/parallel
 
 ## Usage
 
-Configure the prerequisites described in the documentation.
-
 ```typescript
 import { getParallelClient } from '@mastra/parallel';
 

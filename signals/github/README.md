@@ -10,8 +10,6 @@ npm install @mastra/github-signals
 
 ## Usage
 
-Configure the prerequisites described in the documentation.
-
 ```typescript
 import { GithubSignals } from '@mastra/github-signals';
 

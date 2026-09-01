@@ -10,8 +10,6 @@ npm install @mastra/google-cloud-pubsub
 
 ## Usage
 
-Configure the prerequisites described in the documentation.
-
 ```typescript
 import { GoogleCloudPubSub } from '@mastra/google-cloud-pubsub';
 

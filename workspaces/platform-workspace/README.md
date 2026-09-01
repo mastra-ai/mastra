@@ -10,8 +10,6 @@ npm install @mastra/platform-workspace
 
 ## Usage
 
-Configure the prerequisites described in the documentation.
-
 ```typescript
 import { PlatformApiError } from '@mastra/platform-workspace';
 

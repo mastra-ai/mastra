@@ -10,8 +10,6 @@ npm install @mastra/files-sdk
 
 ## Usage
 
-Configure the prerequisites described in the documentation.
-
 ```typescript
 import { Agent } from '@mastra/core/agent';
 import { Workspace } from '@mastra/core/workspace';

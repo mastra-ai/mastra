@@ -10,8 +10,6 @@ npm install @mastra/acp
 
 ## Usage
 
-Configure the prerequisites described in the documentation.
-
 ```typescript
 import { AcpAgent } from '@mastra/acp';
 

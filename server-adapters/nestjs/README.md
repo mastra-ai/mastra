@@ -10,8 +10,6 @@ npm install @mastra/nestjs
 
 ## Usage
 
-Configure the prerequisites described in the documentation.
-
 ```typescript
 import {
   MastraAuthGuard,

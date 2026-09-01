@@ -10,8 +10,6 @@ npm install @mastra/tavily
 
 ## Usage
 
-Configure the prerequisites described in the documentation.
-
 ```typescript
 import { createTavilyExtractTool } from '@mastra/tavily';
 

@@ -10,8 +10,6 @@ npm install @mastra/browser-firecrawl
 
 ## Usage
 
-Configure the prerequisites described in the documentation.
-
 ```typescript
 import { FirecrawlBrowser } from '@mastra/browser-firecrawl';
 

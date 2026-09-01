@@ -10,8 +10,6 @@ npm install @mastra/fastify
 
 ## Usage
 
-Configure the prerequisites described in the documentation.
-
 ```typescript
 import Fastify from 'fastify';
 import { MastraServer } from '@mastra/fastify';

@@ -10,12 +10,14 @@ npm install @mastra/slack
 
 ## Usage
 
-Configure the prerequisites described in the documentation.
+Set `SLACK_APP_CONFIG_REFRESH_TOKEN` to your Slack app configuration refresh token.
 
 ```typescript
 import { SlackProvider } from '@mastra/slack';
 
-const Provider = SlackProvider;
+const slack = new SlackProvider({
+  refreshToken: process.env.SLACK_APP_CONFIG_REFRESH_TOKEN,
+});
 ```
 
 ## Documentation

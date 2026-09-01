@@ -10,8 +10,6 @@ npm install @mastra/daytona
 
 ## Usage
 
-Configure the prerequisites described in the documentation.
-
 ```typescript
 import { Workspace } from '@mastra/core/workspace';
 import { DaytonaSandbox } from '@mastra/daytona';

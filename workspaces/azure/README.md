@@ -10,8 +10,6 @@ npm install @mastra/azure
 
 ## Usage
 
-Configure the prerequisites described in the documentation.
-
 ```typescript
 import { AzureBlobStore } from '@mastra/azure/blob';
 

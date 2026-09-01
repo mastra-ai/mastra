@@ -10,8 +10,6 @@ npm install @mastra/opencode
 
 ## Usage
 
-Configure the prerequisites described in the documentation.
-
 ```typescript
 import { MastraPlugin } from '@mastra/opencode';
 

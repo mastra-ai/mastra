@@ -10,8 +10,6 @@ npm install @mastra/apple-container
 
 ## Usage
 
-Configure the prerequisites described in the documentation.
-
 ```bash
 pnpm add @mastra/apple-container @mastra/core
 ```

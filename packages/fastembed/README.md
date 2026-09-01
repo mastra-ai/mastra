@@ -15,7 +15,9 @@ The first call downloads the selected embedding model.
 ```typescript
 import { fastembed } from '@mastra/fastembed';
 
-const model = fastembed;
+const { embeddings } = await fastembed.doEmbed({
+  values: ['Embed this text locally.'],
+});
 ```
 
 ## Documentation

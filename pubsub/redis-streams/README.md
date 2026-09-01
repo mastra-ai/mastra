@@ -10,8 +10,6 @@ npm install @mastra/redis-streams
 
 ## Usage
 
-Configure the prerequisites described in the documentation.
-
 ```typescript
 import { RedisStreamsPubSub } from '@mastra/redis-streams';
 

@@ -10,8 +10,6 @@ npm install mastracode
 
 ## Usage
 
-Configure the prerequisites described in the documentation.
-
 ```bash
 npx mastracode
 ```
