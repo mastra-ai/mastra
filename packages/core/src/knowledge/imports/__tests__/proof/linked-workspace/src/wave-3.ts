@@ -66,16 +66,31 @@ async function readInWorker(config: {
   return {
     read: () =>
       new Promise<boolean>((resolveRead, reject) => {
+        const cleanup = () => {
+          worker.off('error', onError);
+          worker.off('exit', onExit);
+          worker.off('message', onMessage);
+        };
+        const onError = (error: Error) => {
+          cleanup();
+          reject(error);
+        };
+        const onExit = (code: number | null, signal: NodeJS.Signals | null) => {
+          cleanup();
+          reject(new Error(`Wave 3 proof worker exited during read (code ${code}, signal ${signal})`));
+        };
         const onMessage = (message: unknown) => {
           const result = message as { type?: string; visible?: boolean; message?: string };
           if (result.type === 'result') {
-            worker.off('message', onMessage);
+            cleanup();
             resolveRead(result.visible === true);
           } else if (result.type === 'error') {
-            worker.off('message', onMessage);
+            cleanup();
             reject(new Error(result.message));
           }
         };
+        worker.once('error', onError);
+        worker.once('exit', onExit);
         worker.on('message', onMessage);
         worker.send('read');
       }),
