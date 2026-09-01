@@ -168,11 +168,10 @@ function guardIntegrationRoutes({
 }
 
 /**
- * Start a factory run for a rule binding: ensure the source-control session the
- * coordinator requires, then hand it to `prepare` along with the factory's
- * default model. Exported for tests — this is the autonomous entry point with no
- * browser and no interactive user, so nothing else would catch a regression in
- * what it forwards.
+ * Resolve the source-control session the work item already holds for this role,
+ * when it still resolves to the item's org and factory project. Returns
+ * `undefined` when there is no ref or the ref no longer resolves, so the caller
+ * falls back to minting one.
  */
 async function reuseBoundSession(
   sourceControl: GithubIntegration['sourceControlStorage'],
@@ -201,6 +200,13 @@ async function reuseBoundSession(
   };
 }
 
+/**
+ * Start a factory run for a rule binding: ensure the source-control session the
+ * coordinator requires, then hand it to `prepare` along with the factory's
+ * default model. Exported for tests — this is the autonomous entry point with no
+ * browser and no interactive user, so nothing else would catch a regression in
+ * what it forwards.
+ */
 export async function prepareFactoryRuleBinding(
   github: GithubIntegration,
   coordinator: Pick<FactoryStartCoordinator, 'prepare'>,

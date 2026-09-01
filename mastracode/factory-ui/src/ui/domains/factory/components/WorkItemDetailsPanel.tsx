@@ -14,10 +14,11 @@ import type { CardPrimaryAction } from '../cardPrimaryAction';
 import type { CardMorph } from '../hooks/useCardMorph';
 import type { AuditEventPage } from '../services/audit';
 import type { WorkItem, WorkItemSessionRef } from '../services/workItems';
+import type { SessionCardStatus } from '../../workspaces/services/sessionStatus';
 import type { BoardStageId } from '../stages';
 import { workItemActivity } from '../workItemActivity';
 import { CardSourceDescription } from './BoardCardDetails';
-import { CardLabels, CardStatus } from './BoardCardParts';
+import { CardLabels, CardStatus, SessionLivenessDot } from './BoardCardParts';
 import { SourceIcon } from './BoardIcons';
 import { CardDetailsBody, CardDetailsPanel } from './CardDetailsPanel';
 import { CommentsSection } from './feed/CommentsSection';
@@ -33,6 +34,7 @@ export function WorkItemDetailsPanel({
   morph,
   relatedLinks,
   threadSession,
+  sessionStatus,
   status,
   retryingDecisionId,
   onRetryDecision,
@@ -48,6 +50,7 @@ export function WorkItemDetailsPanel({
   morph: CardMorph;
   relatedLinks: ReactNode;
   threadSession?: WorkItemSessionRef;
+  sessionStatus: SessionCardStatus;
   status: BoardCardStatus;
   retryingDecisionId?: string;
   onRetryDecision: (decisionId: string) => void;
@@ -80,7 +83,7 @@ export function WorkItemDetailsPanel({
           <div className="flex min-w-0 items-center gap-1.5">
             <div className="flex min-w-0 flex-1 items-center gap-1.5">
               <span className="text-ui-xs text-icon2 min-w-0 truncate">{workItemMeta(item)}</span>
-              {threadSession !== undefined && <span aria-hidden className="bg-accent1 size-2 shrink-0 rounded-full" />}
+              {threadSession !== undefined && <SessionLivenessDot status={sessionStatus} />}
               {relatedLinks}
             </div>
             {item.url !== null && (
