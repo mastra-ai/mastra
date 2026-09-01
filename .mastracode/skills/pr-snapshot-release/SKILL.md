@@ -40,7 +40,7 @@ When a PR is available, inspect `gh pr checks "$pr"` and mention any known faili
 
 ## 3. Choose a custom npm tag
 
-Always use a custom tag. Derive a short, memorable lowercase kebab-case tag from the purpose of the PR or branch, such as `agent-builder` or `memory-fix`; do not ask the user to choose one. Avoid generic release tags such as `latest`, `next`, or `alpha`.
+Always use a custom tag. If the user proactively supplied one, use it. Otherwise, derive a short, memorable lowercase kebab-case tag from the purpose of the PR or branch, such as `agent-builder` or `memory-fix`; do not ask the user to choose one. Tell the user which tag will be used. Avoid generic release tags such as `latest`, `next`, or `alpha`.
 
 Check whether the tag already points to a published `@mastra/core` snapshot and call out that publishing will move it:
 
