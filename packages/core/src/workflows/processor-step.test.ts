@@ -45,6 +45,9 @@ function createMockTracingContext() {
   };
   mockSpan.createChildSpan.mockReturnValue(mockSpan);
   const currentSpan = {
+    isValid: true,
+    isInternal: false,
+    parent: undefined,
     createChildSpan: vi.fn(() => mockSpan),
     findParent: vi.fn(() => undefined),
   };
