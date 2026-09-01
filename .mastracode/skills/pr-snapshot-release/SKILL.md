@@ -36,13 +36,7 @@ test "$remote_sha" = "$head_sha"
 
 If it differs, refresh the source metadata and repeat the checks. Re-run this comparison immediately before dispatch. Never publish a stale or ambiguous revision.
 
-When a PR was supplied, show its current checks:
-
-```bash
-gh pr checks "$pr"
-```
-
-If checks are failing or pending, stop unless the maintainer explicitly approves publishing despite that status. A draft PR is allowed, but call it out before confirmation. For a branch without a PR, explicitly state that PR checks and review status are unavailable.
+When a PR is available, inspect `gh pr checks "$pr"` and mention any known failing checks in the confirmation summary. Do not block snapshot publishing on pending or failing checks. Call out when the PR is a draft.
 
 ## 3. Choose a custom npm tag
 
