@@ -68,7 +68,7 @@ function resolveAgent(
 }
 
 /**
- * Configures experimental autonomous knowledge extraction and reflection.
+ * Configures experimental observation-time knowledge reminders and curation.
  *
  * @experimental This API may change without notice.
  */

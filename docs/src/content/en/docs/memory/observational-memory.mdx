@@ -115,6 +115,31 @@ It uses background agents for managing memory. When no model is set, the default
 
 :::
 
+## Experimental Subconscious knowledge
+
+`experimental_subconscious: new Subconscious()` adds durable knowledge to Observational Memory. Its two built-in agents run from completed observations:
+
+- `remind` retrieves relevant existing knowledge for the current turn.
+- `curate` receives each newly committed observation, reads related knowledge, and creates or reconciles durable records through constrained knowledge tools.
+
+```typescript title="src/mastra/agents/agent.ts"
+import { Memory, Subconscious } from '@mastra/memory'
+
+const memory = new Memory({
+  storage,
+  vector,
+  embedder,
+  options: {
+    observationalMemory: {
+      model: '__GATEWAY_OPENAI_MODEL_MINI__',
+      experimental_subconscious: new Subconscious(),
+    },
+  },
+})
+```
+
+The default built-in order is `remind`, then `curate`. Subconscious agents do not run from reflection hooks. Curation is best-effort: a failed curator run is reported, but the observation remains successfully committed and is not automatically replayed. Configure custom observation extractors through `Subconscious({ observation: [...] })`; the removed experimental `capture`, `learn`, cadence, and manual worklist-curation options are no longer supported.
+
 ## Temporal gap markers
 
 Temporal gap markers insert a short reminder before a new user message when enough time has passed since the previous message in the thread. They help the agent and the UI see that the conversation resumed after a useful pause.
