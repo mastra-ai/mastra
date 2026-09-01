@@ -305,11 +305,30 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
     this.end(options);
   }
 
-  /** Release this span from its parent's open-child set once it has ended */
+  /**
+   * Release this span from its parent's open-child set once it has ended.
+   * Children still open at that moment are handed to the nearest ancestor
+   * that has not ended, so a later endTree() on that ancestor can still
+   * reach them (e.g. a model span that finalizes on abort before the
+   * agent run's terminal handler closes the tree).
+   */
   protected detachFromParent(): void {
     const parent = this.parent;
-    if (parent instanceof BaseSpan) {
-      parent.#openChildren?.delete(this);
+    if (!(parent instanceof BaseSpan)) {
+      return;
+    }
+    parent.#openChildren?.delete(this);
+    if (this.#openChildren?.size) {
+      let ancestor: AnySpan | undefined = parent;
+      while (ancestor instanceof BaseSpan && ancestor.endTime) {
+        ancestor = ancestor.parent;
+      }
+      if (ancestor instanceof BaseSpan) {
+        for (const child of this.#openChildren) {
+          (ancestor.#openChildren ??= new Set()).add(child);
+        }
+      }
+      this.#openChildren.clear();
     }
   }
 

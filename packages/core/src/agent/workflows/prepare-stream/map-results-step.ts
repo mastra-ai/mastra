@@ -141,8 +141,8 @@ export function createMapResultsStep<OUTPUT = undefined>({
           messageList,
         });
 
-        // End agent span with tripwire information after fallback completes
-        agentSpan?.end({
+        // End agent span tree with tripwire information after fallback completes
+        agentSpan?.endTree({
           output: { tripwire: memoryData.tripwire },
           attributes: {
             tripwireAbort: {
@@ -156,10 +156,11 @@ export function createMapResultsStep<OUTPUT = undefined>({
 
         return bail(modelOutput);
       } catch (error) {
-        // End agent span with error and tripwire context so failures aren't masked
+        // Record the error with tripwire context so failures aren't masked,
+        // then end the whole span tree
         agentSpan?.error({
           error: error as Error,
-          endSpan: true,
+          endSpan: false,
           attributes: {
             tripwireAbort: {
               reason: memoryData.tripwire?.reason,
@@ -169,6 +170,7 @@ export function createMapResultsStep<OUTPUT = undefined>({
             },
           },
         });
+        agentSpan?.endTree();
         throw error;
       }
     }
@@ -306,15 +308,16 @@ export function createMapResultsStep<OUTPUT = undefined>({
               });
             }
 
-            // End the AGENT_RUN span so the trace is exported.
-            // Without this, the span is orphaned and exporters that wait
-            // for the root span to end (e.g. Datadog) never emit the trace.
-            agentSpan?.error({ error, endSpan: true });
+            // Record the error, then end the whole span tree. Ending only the
+            // root would orphan still-open descendants, and exporters that wait
+            // for every span to finish (e.g. Datadog) retain the trace forever.
+            agentSpan?.error({ error, endSpan: false });
+            agentSpan?.endTree();
             return;
           }
 
           if (payload.finishReason === 'suspended') {
-            agentSpan?.end({
+            agentSpan?.endTree({
               output: {
                 status: 'suspended',
                 reason: payload.suspendReason,
@@ -329,12 +332,12 @@ export function createMapResultsStep<OUTPUT = undefined>({
 
           if (aborted) {
             if (payload.finishReason === 'aborted') {
-              agentSpan?.end({ output: { status: 'aborted', reason: 'abort' } });
+              agentSpan?.endTree({ output: { status: 'aborted', reason: 'abort' } });
               // The aborted finish payload is synthetic; the caller already received onAbort.
               return;
             }
 
-            agentSpan?.end();
+            agentSpan?.endTree();
           } else {
             try {
               const outputText =
@@ -379,7 +382,8 @@ export function createMapResultsStep<OUTPUT = undefined>({
                       e,
                     );
 
-              agentSpan?.error({ error: spanError, endSpan: true });
+              agentSpan?.error({ error: spanError, endSpan: false });
+              agentSpan?.endTree();
             }
           }
 

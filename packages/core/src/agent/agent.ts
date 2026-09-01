@@ -7495,9 +7495,35 @@ export class Agent<
     }
 
     const observabilityContext = createObservabilityContext({ currentSpan: agentSpan });
-    const run = await executionWorkflow.createRun();
-    const result = await run.start({ requestContext, actor: options.actor, ...observabilityContext });
-    return result;
+    try {
+      const run = await executionWorkflow.createRun();
+      const result = await run.start({ requestContext, actor: options.actor, ...observabilityContext });
+      // A step failure surfaces as a resolved 'failed' result, not a rejection.
+      // The stream terminal handlers never ran, so close the span tree here.
+      if (result.status !== 'success' && agentSpan && !agentSpan.endTime) {
+        if (result.status === 'failed') {
+          // The workflow serializes step errors, so result.error may be a
+          // plain { message, stack } object rather than an Error instance.
+          const raw = result.error as unknown;
+          const error =
+            raw instanceof Error
+              ? raw
+              : new Error(
+                  typeof raw === 'string'
+                    ? raw
+                    : ((raw as { message?: string } | null | undefined)?.message ??
+                        'Agent prepare workflow failed without an error payload'),
+                );
+          agentSpan.error({ error, endSpan: false });
+        }
+        agentSpan.endTree();
+      }
+      return result;
+    } catch (error) {
+      agentSpan?.error({ error: error as Error, endSpan: false });
+      agentSpan?.endTree();
+      throw error;
+    }
   }
 
   /**
