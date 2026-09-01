@@ -818,13 +818,14 @@ describe('GitHub session workspace preparation', () => {
     const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
     try {
       await workspace.skills?.refresh();
+      // A mis-wired filesystem (e.g. a SandboxFilesystem that cannot take the
+      // lazy workdir resolver) must fail on its own message rather than be
+      // reported as an inaccessible skills path. Assert before mockRestore(),
+      // which clears the recorded calls.
+      expect(warnSpy).not.toHaveBeenCalledWith(expect.stringContaining('Cannot access skills path'));
     } finally {
       warnSpy.mockRestore();
     }
-    // A mis-wired filesystem (e.g. a SandboxFilesystem that cannot take the
-    // lazy workdir resolver) must fail on its own message rather than be
-    // reported as an inaccessible skills path.
-    expect(warnSpy).not.toHaveBeenCalledWith(expect.stringContaining('Cannot access skills path'));
     expect(sandbox.executeCommand).toHaveBeenCalled();
   });
 

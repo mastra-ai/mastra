@@ -3189,6 +3189,54 @@ Premium instructions.
       warnSpy.mockRestore();
     });
 
+    it('should rethrow ERR_INVALID_ARG_TYPE from a child SKILL.md probe during directory scan', async () => {
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+      const inner = createMockFilesystem({
+        '/skills/one/SKILL.md': '---\nname: one\ndescription: One\n---\n# One',
+      });
+      const source: SkillSource = {
+        ...inner,
+        exists: vi.fn(async (path: string) => {
+          if (path === '/skills/one/SKILL.md') {
+            throw Object.assign(new TypeError('bad child path'), { code: 'ERR_INVALID_ARG_TYPE' });
+          }
+          return inner.exists(path);
+        }),
+      };
+
+      const skills = new WorkspaceSkillsImpl({ skills: ['/skills'], source });
+
+      await expect(skills.list()).rejects.toThrow('bad child path');
+      expect(errorSpy).not.toHaveBeenCalledWith(expect.stringContaining('Failed to load skill'), expect.anything());
+
+      errorSpy.mockRestore();
+    });
+
+    it('should rethrow ERR_INVALID_ARG_TYPE surfaced from a glob-resolved entry', async () => {
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+      const inner = createMockFilesystem({
+        '/packages/a/skills/one/SKILL.md': '---\nname: one\ndescription: One\n---\n# One',
+      });
+      const source: SkillSource = {
+        ...inner,
+        exists: vi.fn(async (path: string) => {
+          if (path === '/packages/a/skills') {
+            throw Object.assign(new TypeError('bad glob entry'), { code: 'ERR_INVALID_ARG_TYPE' });
+          }
+          return inner.exists(path);
+        }),
+      };
+
+      const skills = new WorkspaceSkillsImpl({ skills: ['/packages/*/skills'], source });
+
+      await expect(skills.list()).rejects.toThrow('bad glob entry');
+      expect(errorSpy).not.toHaveBeenCalledWith(expect.stringContaining('Failed to load skill'), expect.anything());
+
+      errorSpy.mockRestore();
+    });
+
     it('should still warn and continue for access errors from source.exists', async () => {
       const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
 

@@ -886,6 +886,7 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
           const entry = resolved[index];
           if (entry && result.status === 'rejected') {
             const error = result.reason;
+            if (isProgrammingError(error)) throw error;
             if (error instanceof Error) {
               console.error(`[WorkspaceSkills] Failed to load skill from ${entry.path}:`, error.message);
             }
@@ -967,12 +968,14 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
           this.#addToSkillsMap(result.value, target);
         } else if (result.status === 'rejected') {
           const error = result.reason;
+          if (isProgrammingError(error)) throw error;
           if (error instanceof Error) {
             console.error(`[WorkspaceSkills] Failed to load skill from ${skillsPath}:`, error.message);
           }
         }
       }
     } catch (error) {
+      if (isProgrammingError(error)) throw error;
       if (error instanceof Error) {
         console.error(`[WorkspaceSkills] Failed to scan skills directory ${skillsPath}:`, error.message);
       }
@@ -1034,7 +1037,8 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
       }
 
       return false;
-    } catch {
+    } catch (error) {
+      if (isProgrammingError(error)) throw error;
       return false;
     }
   }
