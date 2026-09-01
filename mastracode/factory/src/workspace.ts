@@ -28,7 +28,6 @@ import {
   runTeardownCommand,
   SetupCommandError,
 } from './integrations/github/sandbox.js';
-import { registerGithubPatKind, registerGithubTokenInjector } from './integrations/github/token-refresh.js';
 import { getFactorySessionAddress } from './rules/binding-context.js';
 import { requireExec } from './sandbox/materialization.js';
 import type { ExecutableSandbox } from './sandbox/materialization.js';
@@ -176,6 +175,17 @@ const factorySkillExtension: WorkspaceSkillExtension = {
 
 type DynamicWorkspaceContext = Parameters<typeof getDynamicWorkspace>[0];
 
+/**
+ * Minted GitHub installation tokens live one hour. Sandbox starts install a
+ * fresh token, so staleness only matters for a sandbox that stays
+ * continuously alive past the horizon — commands there re-mint before
+ * running instead of letting `git`/`gh` fail on an expired credential. The
+ * margin below the hard one-hour expiry absorbs mint latency and clock skew
+ * (neither GitHub integration exposes the exact `expires_at` on this path,
+ * so the horizon is derived from mint time).
+ */
+const GH_TOKEN_REFRESH_AFTER_MS = 50 * 60 * 1000;
+
 export interface CreateWorkspaceFactoryOptions {
   /** Factory sandbox runtime config (session sandbox callback). */
   sandbox?: MastraFactorySandboxConfig;
@@ -234,13 +244,12 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
     inject: (token: string) => void;
     patKind: GithubPatKind;
     ghToken: string;
-    generation: number;
     tokenReplacementPending: boolean;
   };
   // The session setup path runs commands and installs credentials, so it
   // needs `executeCommand` (required by `ExecutableSandbox`) plus core's
-  // optional `setEnv`, which stays optional here because the token-refresh
-  // path checks for it and reports its absence.
+  // optional `setEnv`, which stays optional here because the credential
+  // injection paths check for it and report its absence.
   type SessionSandbox = ExecutableSandbox & { setEnv?: WorkspaceSandbox['setEnv'] };
   const githubTokenInjectors = new Map<string, GithubTokenRegistration>();
   const githubTokenReconciliations = new Map<string, Promise<void>>();
@@ -310,6 +319,48 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
     const runSetupOn = (target: unknown, workdir: string) =>
       runSessionSetup(requireExec(target as WorkspaceSandbox), workdir);
     const guardedSetup = createSessionSetupHook(runSetupOn, session.id, repoFullName);
+    // GH_TOKEN freshness for the memoized sandbox instance. The start hook
+    // records a horizon when it installs a minted token (org PATs have no
+    // visible expiry, so they never set one); the pre-command wrapper
+    // installed at construction consults it. Both closures attach exactly
+    // once per instance, so this state serves the instance's whole lifetime.
+    const ghTokenFreshness: { expiresAt?: number; refresh?: Promise<void> } = {};
+    // Pre-command credential freshness: a sandbox alive past the minted
+    // token's lifetime re-mints before the next command runs. Best effort —
+    // a failed re-mint never blocks the command (most commands do not touch
+    // GitHub, and the ones that do would fail on the expired token anyway),
+    // and the next start reinstalls fresh credentials regardless.
+    const ensureFreshGithubToken = async (target: SessionSandbox): Promise<void> => {
+      const horizon = ghTokenFreshness.expiresAt;
+      if (horizon === undefined || Date.now() < horizon || !target.setEnv) return;
+      ghTokenFreshness.refresh ??= (async () => {
+        // Re-resolve the PAT kind from the live run binding — a session bound
+        // to a review-board run mid-flight picks up the reviewer credential
+        // here instead of re-minting the worker token. Storage hiccups fall
+        // back to the kind the sandbox already holds.
+        const registered = githubTokenInjectors.get(workspaceId);
+        const patKind = await resolveGithubPatKind(registered?.patKind ?? 'default');
+        const orgPat = await getGithubPat(() => github.integrationStorage, session.orgId, patKind);
+        const fresh = orgPat ?? (await getRepositoryToken());
+        target.setEnv!(env => ({ ...env, GH_TOKEN: fresh }));
+        ghTokenFreshness.expiresAt = orgPat ? undefined : Date.now() + GH_TOKEN_REFRESH_AFTER_MS;
+        if (registered && githubTokenInjectors.get(workspaceId) === registered) {
+          registered.ghToken = fresh;
+          registered.patKind = patKind;
+        }
+      })().finally(() => {
+        ghTokenFreshness.refresh = undefined;
+      });
+      try {
+        await ghTokenFreshness.refresh;
+      } catch (error) {
+        console.warn('[Mastra Factory] GitHub token refresh before command failed', {
+          orgId: session.orgId,
+          sessionId: session.sessionId,
+          error,
+        });
+      }
+    };
     // Composed start hook: marker-guarded repo setup, then per-start
     // credential install. It runs inside the provider's start lifecycle on
     // EVERY start (create or reconnect) — providers own lazy start
@@ -336,8 +387,11 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
       // keep using the minted installation token. Resolved per start so the
       // installed credential never outlives rotation.
       const patKind = await resolveGithubPatKind('default');
-      const ghCliToken =
-        (await getGithubPat(() => github.integrationStorage, session.orgId, patKind)) ?? (await getRepositoryToken());
+      const orgPat = await getGithubPat(() => github.integrationStorage, session.orgId, patKind);
+      const ghCliToken = orgPat ?? (await getRepositoryToken());
+      // Record the freshness horizon for a minted token; a PAT clears it so
+      // the pre-command check never overwrites an org credential.
+      ghTokenFreshness.expiresAt = orgPat ? undefined : Date.now() + GH_TOKEN_REFRESH_AFTER_MS;
       target.setEnv?.(env => ({ ...env, GH_TOKEN: ghCliToken }));
       // Observability only — nothing reads these columns for decisions. The
       // workdir was resolved (and memoized on the entry) by the guarded setup.
@@ -354,11 +408,9 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
         },
         patKind,
         ghToken: ghCliToken,
-        generation: 0,
         tokenReplacementPending: false,
       };
       githubTokenInjectors.set(workspaceId, tokenRegistration);
-      registerGithubTokenContext(tokenRegistration);
       // Project skill roots were reported empty by the unmaterialized-source
       // guard before the checkout existed; rescan now. Fire-and-forget.
       void constructedWorkspaces
@@ -386,6 +438,17 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
           await setupHook(args);
           await previous?.(args);
         });
+        // Same attach-once placement: pre-command GH_TOKEN freshness rides
+        // the one choke point every consumer shares (agent execute_command,
+        // file tools, lifecycle commands). The check no-ops until the start
+        // hook records a horizon, so the lazy first start is untouched.
+        const executeDirect = sandbox.executeCommand?.bind(sandbox);
+        if (executeDirect) {
+          sandbox.executeCommand = async (command, args, options) => {
+            await ensureFreshGithubToken(requireExec(sandbox));
+            return executeDirect(command, args, options);
+          };
+        }
         return sandbox;
       });
     const sessionEntry = constructSessionEntry();
@@ -428,16 +491,6 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
         return fallback;
       }
     };
-    const registerGithubTokenContext = (registered: GithubTokenRegistration): void => {
-      const generation = registered.generation;
-      registerGithubTokenInjector(requestContext, token => {
-        if (githubTokenInjectors.get(workspaceId) !== registered || registered.generation !== generation) {
-          throw new Error('GitHub token refresh no longer matches the active Factory workspace role.');
-        }
-        registered.inject(token);
-      });
-      registerGithubPatKind(requestContext, registered.patKind);
-    };
     const reconcileGithubToken = async (): Promise<void> => {
       const previous = githubTokenReconciliations.get(workspaceId) ?? Promise.resolve();
       const reconciliation = previous
@@ -450,14 +503,12 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
           const patKind = await resolveGithubPatKind(previousPatKind);
           if (githubTokenInjectors.get(workspaceId) !== registered) return;
 
-          if (patKind !== previousPatKind) {
-            registered.patKind = patKind;
-            registered.generation += 1;
-          }
+          if (patKind !== previousPatKind) registered.patKind = patKind;
           if (patKind === 'reviewer') registered.tokenReplacementPending = false;
           if (previousPatKind === 'reviewer' && patKind === 'default') {
-            // Invalidate reviewer refresh contexts before replacement I/O so
-            // they cannot restore reviewer credentials after a failed downgrade.
+            // A downgraded sandbox must not keep the reviewer credential:
+            // replacement becomes mandatory, and a failed replacement
+            // quarantines the workspace below instead of leaving it live.
             registered.tokenReplacementPending = true;
           }
 
@@ -474,7 +525,6 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
             }
           }
           if (token && token === registered.ghToken) registered.tokenReplacementPending = false;
-          registerGithubTokenContext(registered);
         });
       githubTokenReconciliations.set(workspaceId, reconciliation);
       try {
@@ -491,7 +541,7 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
         await reconcileGithubToken();
       } catch (error) {
         if (registered?.tokenReplacementPending && githubTokenInjectors.get(workspaceId) === registered) {
-          // The role generation already invalidated reviewer refresh contexts.
+          // The downgrade marked replacement mandatory before I/O began.
           // Keep the pending registration so failed eviction cannot make a
           // still-live reviewer workspace look safe on the next reuse.
           let evicted = false;

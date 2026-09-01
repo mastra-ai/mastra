@@ -4,8 +4,8 @@
  * GitHub App installation tokens are the wrong credential for the `gh` CLI —
  * they hit "Resource not accessible by integration" on endpoints the CLI
  * needs regardless of the minted permission set. When an org pastes a PAT in
- * Settings, the sandbox `GH_TOKEN` injection sites and the
- * `github_refresh_token` tool use it instead of a minted installation token.
+ * Settings, every sandbox `GH_TOKEN` injection site (install, reconcile, and
+ * the pre-command freshness check) uses it instead of a minted token.
  * Tokens must be classic PATs whose account has access to the linked repos.
  *
  * Two kinds:

@@ -63,6 +63,11 @@ const mocks = vi.hoisted(() => ({
       }),
       setEnv: mocks.setEnv,
     };
+    // The factory wraps `executeCommand` on the instance (pre-command token
+    // freshness), so tests that program or inspect the underlying mock need a
+    // stable handle to the raw vi.fn — mock state is shared with the bound
+    // copy the wrapper delegates to.
+    sandbox.executeCommandMock = sandbox.executeCommand;
     return sandbox;
   }),
   materializeRepo: vi.fn(async (_input: unknown) => {}),
@@ -100,7 +105,6 @@ vi.mock('./integrations/github/sandbox', async importOriginal => ({
 }));
 
 import { MaterializeError, SetupCommandError } from './integrations/github/sandbox.js';
-import { injectGithubToken } from './integrations/github/token-refresh.js';
 import {
   __clearSessionSandboxesForTests,
   evictSessionSandbox,
@@ -806,12 +810,12 @@ describe('GitHub session workspace preparation', () => {
     await workspace.skills?.maybeRefresh();
     await (workspace as any).sandbox.getInfo();
     const sandbox = await mocks.createSandbox.mock.results[0]!.value;
-    sandbox.executeCommand.mockClear();
+    sandbox.executeCommandMock.mockClear();
 
     // With the sandbox live, the guarded fallback must pass skill discovery
     // through to the checkout instead of reporting empty roots.
     await workspace.skills?.refresh();
-    expect(sandbox.executeCommand).toHaveBeenCalled();
+    expect(sandbox.executeCommandMock).toHaveBeenCalled();
   });
 
   it('opens the session for a session-shaped auth user, whose org lives on the session half', async () => {
@@ -933,10 +937,10 @@ describe('GitHub session workspace preparation', () => {
    */
   function forceMarkerAbsent() {
     const sandboxInstance = mocks.createSandbox.mock.results[0]!.value as {
-      executeCommand: ReturnType<typeof vi.fn>;
+      executeCommandMock: ReturnType<typeof vi.fn>;
     };
-    const baseExec = sandboxInstance.executeCommand.getMockImplementation()!;
-    sandboxInstance.executeCommand.mockImplementation(async (command: string) => {
+    const baseExec = sandboxInstance.executeCommandMock.getMockImplementation()!;
+    sandboxInstance.executeCommandMock.mockImplementation(async (command: string) => {
       if (command.includes('.mastra-factory/bootstrap') && command.includes('test -f')) {
         return { exitCode: 1, stdout: '', stderr: '' };
       }
@@ -1042,7 +1046,7 @@ describe('GitHub session workspace preparation', () => {
     const first = await mocks.createSandbox.mock.results[0]!.value;
     const dead = new Error('sandbox gone');
     dead.name = 'SandboxDestroyedError';
-    first.executeCommand.mockRejectedValueOnce(dead);
+    first.executeCommandMock.mockRejectedValueOnce(dead);
 
     await expect((resolved as any).sandbox.executeCommand('echo', ['hi'])).rejects.toThrow('sandbox gone');
     expect(mocks.createSandbox).toHaveBeenCalledTimes(1);
@@ -1095,7 +1099,7 @@ describe('GitHub session workspace preparation', () => {
     const first = await mocks.createSandbox.mock.results[0]!.value;
     const transport = Object.assign(new Error('exec transport failed'), { opened: true });
     transport.name = 'SandboxExecTransportError';
-    first.executeCommand.mockRejectedValueOnce(transport);
+    first.executeCommandMock.mockRejectedValueOnce(transport);
 
     await expect((resolved as any).sandbox.executeCommand('git', ['commit'])).rejects.toThrow('exec transport failed');
     expect(mocks.createSandbox).toHaveBeenCalledTimes(1);
@@ -1134,7 +1138,7 @@ describe('GitHub session workspace preparation', () => {
 
     const resolved = await workspace({ requestContext: createGithubRequestContext('project-1', 'session-a') });
     const first = await mocks.createSandbox.mock.results[0]!.value;
-    first.executeCommand.mockRejectedValueOnce(
+    first.executeCommandMock.mockRejectedValueOnce(
       Object.assign(new Error('spawn nope ENOENT'), { code: 'ENOENT', syscall: 'spawn nope', path: 'nope' }),
     );
 
@@ -1175,7 +1179,7 @@ describe('GitHub session workspace preparation', () => {
 
     const resolved = await workspace({ requestContext: createGithubRequestContext('project-1', 'session-a') });
     const first = await mocks.createSandbox.mock.results[0]!.value;
-    first.executeCommand.mockRejectedValueOnce(new Error('command exited 1'));
+    first.executeCommandMock.mockRejectedValueOnce(new Error('command exited 1'));
 
     await expect((resolved as any).sandbox.executeCommand('false')).rejects.toThrow('command exited 1');
     expect(mocks.createSandbox).toHaveBeenCalledTimes(1);
@@ -1388,7 +1392,6 @@ describe('GitHub session workspace preparation', () => {
     });
 
     expect(lastGhToken()).toBe('ghp_worker');
-    expect(() => injectGithubToken(reviewerContext, 'stale-reviewer-token')).toThrow(/no longer matches/);
   });
 
   it('replaces reviewer credentials with repository access when no worker PAT is configured', async () => {
@@ -1439,7 +1442,6 @@ describe('GitHub session workspace preparation', () => {
 
     expect(removeWorkspace).toHaveBeenCalledWith('mfw-project-1-session-a-web-factory');
     expect(destroy).toHaveBeenCalled();
-    expect(() => injectGithubToken(reviewerContext, 'stale-reviewer-token')).toThrow(/no longer matches/);
   });
 
   it('keeps an unsafe reviewer workspace quarantined when eviction fails', async () => {
@@ -1473,7 +1475,6 @@ describe('GitHub session workspace preparation', () => {
     await expect(
       workspace({ requestContext: createGithubRequestContext('project-1', 'session-a'), mastra: mastra as any }),
     ).rejects.toThrow('runtime injection failed');
-    expect(() => injectGithubToken(reviewerContext, 'stale-reviewer-token')).toThrow(/no longer matches/);
 
     mocks.setEnv.mockClear();
     await expect(
@@ -1594,32 +1595,80 @@ describe('GitHub session workspace preparation', () => {
     expect(lastGhToken()).toBe('ghp_worker');
   });
 
-  it('registers a runtime injector for refreshing GH_TOKEN in the active sandbox', async () => {
-    const { workspace } = await createLocalFactory();
-    addProject();
-    addSession({ id: 'session-a' });
-    const requestContext = createGithubRequestContext('project-1', 'session-a');
+  it('re-mints GH_TOKEN before a command once the installed token ages past the refresh horizon', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    try {
+      const { workspace } = await createLocalFactory();
+      addProject();
+      addSession({ id: 'session-a' });
+      const resolved = await workspace({ requestContext: createGithubRequestContext('project-1', 'session-a') });
+      expect(lastGhToken()).toBe('repo-token-repository-1');
+      const mintsAfterStart = mocks.getRepositoryAccess.mock.calls.length;
+      const installsAfterStart = mocks.setEnv.mock.calls.length;
 
-    await workspace({ requestContext });
-    injectGithubToken(requestContext, 'fresh-token');
+      // Within the horizon commands run untouched — no mint, no re-install.
+      await (resolved as any).sandbox.executeCommand('echo hi');
+      expect(mocks.getRepositoryAccess.mock.calls.length).toBe(mintsAfterStart);
+      expect(mocks.setEnv.mock.calls.length).toBe(installsAfterStart);
 
-    expect(lastGhToken()).toBe('fresh-token');
+      // Past the horizon the next command re-mints and reinstalls before
+      // running, so late `git`/`gh` calls never see an expired credential.
+      vi.setSystemTime(Date.now() + 51 * 60 * 1000);
+      await (resolved as any).sandbox.executeCommand('git push');
+      expect(mocks.getRepositoryAccess.mock.calls.length).toBe(mintsAfterStart + 1);
+      expect(mocks.setEnv.mock.calls.length).toBe(installsAfterStart + 1);
+      expect(lastGhToken()).toBe('repo-token-repository-1');
+
+      // The horizon reset: the following command is quiet again.
+      await (resolved as any).sandbox.executeCommand('echo done');
+      expect(mocks.getRepositoryAccess.mock.calls.length).toBe(mintsAfterStart + 1);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
-  it('re-registers the token injector when reusing a workspace on a later request', async () => {
-    const { workspace } = await createLocalFactory();
-    addProject();
-    addSession({ id: 'session-a' });
-    await workspace({ requestContext: createGithubRequestContext('project-1', 'session-a') });
-    const requestContext = createGithubRequestContext('project-1', 'session-a');
+  it('never lets the freshness check overwrite an org PAT: PATs have no visible expiry', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    try {
+      mocks.githubPat = 'ghp_org_pat';
+      const { workspace } = await createLocalFactory();
+      addProject();
+      addSession({ id: 'session-a' });
+      const resolved = await workspace({ requestContext: createGithubRequestContext('project-1', 'session-a') });
+      expect(lastGhToken()).toBe('ghp_org_pat');
+      const installsAfterStart = mocks.setEnv.mock.calls.length;
 
-    await workspace({
-      requestContext,
-      mastra: { getWorkspaceById: vi.fn(() => ({ setToolsConfig: vi.fn() })) } as any,
-    });
-    injectGithubToken(requestContext, 'later-token');
+      vi.setSystemTime(Date.now() + 6 * 60 * 60 * 1000);
+      await (resolved as any).sandbox.executeCommand('git push');
 
-    expect(lastGhToken()).toBe('later-token');
+      expect(mocks.setEnv.mock.calls.length).toBe(installsAfterStart);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('resolves the live run-binding role when re-minting, so a mid-run review binding gets the reviewer PAT', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    try {
+      mocks.githubReviewerPat = 'ghp_reviewer';
+      const { workspace } = await createLocalFactory();
+      addProject();
+      addSession({ id: 'session-a' });
+      const resolved = await workspace({ requestContext: createGithubRequestContext('project-1', 'session-a') });
+      // No worker PAT and no binding yet: the minted token is installed.
+      expect(lastGhToken()).toBe('repo-token-repository-1');
+
+      // The session becomes a review-board run while the sandbox stays alive
+      // past the horizon — the pre-command refresh must pick up the reviewer
+      // credential instead of re-minting the worker token.
+      mocks.runBindingRole = 'review';
+      vi.setSystemTime(Date.now() + 51 * 60 * 1000);
+      await (resolved as any).sandbox.executeCommand('gh pr review');
+
+      expect(lastGhToken()).toBe('ghp_reviewer');
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('installs a PAT saved after provisioning into the running sandbox on the next reuse', async () => {
