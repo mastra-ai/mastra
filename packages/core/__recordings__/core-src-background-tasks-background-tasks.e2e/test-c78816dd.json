@@ -1,14 +1,15 @@
 {
   "meta": {
     "name": "test-c78816dd",
-    "testFile": "packages/core/src/background-tasks/background-tasks.e2e.test.ts",
+    "testFile": "src/background-tasks/background-tasks.e2e.test.ts",
     "testName": "Background Tasks E2E > runs a foreground tool normally",
     "model": "gpt-4o-mini",
-    "createdAt": "2026-07-14T16:54:58.958Z"
+    "createdAt": "2026-07-14T16:54:58.958Z",
+    "updatedAt": "2026-08-25T09:49:08.614Z"
   },
   "recordings": [
     {
-      "hash": "6aca66e9ec96aff7",
+      "hash": "b7e187875d9e48bb",
       "request": {
         "url": "https://api.openai.com/v1/responses",
         "method": "POST",
@@ -44,6 +45,7 @@
                   },
                   "_background": {
                     "description": "Optional: override background execution behavior for this specific call. Set enabled=false to force foreground, enabled=true to force background. Omit entirely to use the default configuration.",
+                    "type": "object",
                     "properties": {
                       "enabled": {
                         "description": "Force background (true) or foreground (false) execution for this call.",
@@ -83,63 +85,26 @@
                       }
                     },
                     "additionalProperties": false,
-                    "required": ["enabled", "timeoutMs", "maxRetries"],
-                    "x-optional": ["enabled", "timeoutMs", "maxRetries"],
-                    "anyOf": [
-                      {
-                        "description": "Optional: override background execution behavior for this specific call. Set enabled=false to force foreground, enabled=true to force background. Omit entirely to use the default configuration.",
-                        "properties": {
-                          "enabled": {
-                            "description": "Force background (true) or foreground (false) execution for this call.",
-                            "anyOf": [
-                              {
-                                "description": "Force background (true) or foreground (false) execution for this call.",
-                                "type": "boolean"
-                              },
-                              {
-                                "type": "null"
-                              }
-                            ]
-                          },
-                          "timeoutMs": {
-                            "description": "Override timeout in milliseconds for this call.",
-                            "anyOf": [
-                              {
-                                "description": "Override timeout in milliseconds for this call.",
-                                "type": "number"
-                              },
-                              {
-                                "type": "null"
-                              }
-                            ]
-                          },
-                          "maxRetries": {
-                            "description": "Override maximum retry attempts for this call.",
-                            "anyOf": [
-                              {
-                                "description": "Override maximum retry attempts for this call.",
-                                "type": "number"
-                              },
-                              {
-                                "type": "null"
-                              }
-                            ]
-                          }
-                        },
-                        "additionalProperties": false,
-                        "required": ["enabled", "timeoutMs", "maxRetries"],
-                        "x-optional": ["enabled", "timeoutMs", "maxRetries"],
-                        "type": "object"
-                      },
-                      {
-                        "type": "null"
-                      }
+                    "required": [
+                      "enabled",
+                      "timeoutMs",
+                      "maxRetries"
+                    ],
+                    "x-optional": [
+                      "enabled",
+                      "timeoutMs",
+                      "maxRetries"
                     ]
                   }
                 },
-                "required": ["topic", "_background"],
+                "required": [
+                  "topic",
+                  "_background"
+                ],
                 "additionalProperties": false,
-                "x-optional": ["_background"]
+                "x-optional": [
+                  "_background"
+                ]
               }
             },
             {
@@ -156,6 +121,7 @@
                   },
                   "_background": {
                     "description": "Optional: override background execution behavior for this specific call. Set enabled=false to force foreground, enabled=true to force background. Omit entirely to use the default configuration.",
+                    "type": "object",
                     "properties": {
                       "enabled": {
                         "description": "Force background (true) or foreground (false) execution for this call.",
@@ -195,69 +161,32 @@
                       }
                     },
                     "additionalProperties": false,
-                    "required": ["enabled", "timeoutMs", "maxRetries"],
-                    "x-optional": ["enabled", "timeoutMs", "maxRetries"],
-                    "anyOf": [
-                      {
-                        "description": "Optional: override background execution behavior for this specific call. Set enabled=false to force foreground, enabled=true to force background. Omit entirely to use the default configuration.",
-                        "properties": {
-                          "enabled": {
-                            "description": "Force background (true) or foreground (false) execution for this call.",
-                            "anyOf": [
-                              {
-                                "description": "Force background (true) or foreground (false) execution for this call.",
-                                "type": "boolean"
-                              },
-                              {
-                                "type": "null"
-                              }
-                            ]
-                          },
-                          "timeoutMs": {
-                            "description": "Override timeout in milliseconds for this call.",
-                            "anyOf": [
-                              {
-                                "description": "Override timeout in milliseconds for this call.",
-                                "type": "number"
-                              },
-                              {
-                                "type": "null"
-                              }
-                            ]
-                          },
-                          "maxRetries": {
-                            "description": "Override maximum retry attempts for this call.",
-                            "anyOf": [
-                              {
-                                "description": "Override maximum retry attempts for this call.",
-                                "type": "number"
-                              },
-                              {
-                                "type": "null"
-                              }
-                            ]
-                          }
-                        },
-                        "additionalProperties": false,
-                        "required": ["enabled", "timeoutMs", "maxRetries"],
-                        "x-optional": ["enabled", "timeoutMs", "maxRetries"],
-                        "type": "object"
-                      },
-                      {
-                        "type": "null"
-                      }
+                    "required": [
+                      "enabled",
+                      "timeoutMs",
+                      "maxRetries"
+                    ],
+                    "x-optional": [
+                      "enabled",
+                      "timeoutMs",
+                      "maxRetries"
                     ]
                   }
                 },
-                "required": ["name", "_background"],
+                "required": [
+                  "name",
+                  "_background"
+                ],
                 "additionalProperties": false,
-                "x-optional": ["_background"]
+                "x-optional": [
+                  "_background"
+                ]
               }
             }
           ],
           "tool_choice": "auto"
         },
-        "timestamp": 1784048095704
+        "timestamp": 1787651344449
       },
       "response": {
         "status": 200,
@@ -266,12 +195,12 @@
           "access-control-expose-headers": "X-Request-ID, CF-Ray, CF-Ray",
           "alt-svc": "h3=\":443\"; ma=86400",
           "cf-cache-status": "DYNAMIC",
-          "cf-ray": "a1b20d564c319efc-CDG",
+          "cf-ray": "a309af478ad76e22-LAX",
           "connection": "keep-alive",
           "content-type": "application/json",
-          "date": "Tue, 14 Jul 2026 16:54:57 GMT",
+          "date": "Tue, 25 Aug 2026 09:49:07 GMT",
           "openai-organization": "mastra-qb2kpb",
-          "openai-processing-ms": "1215",
+          "openai-processing-ms": "2540",
           "openai-project": "proj_Cvw1JiXoxHTeEWgnnK3t9AYG",
           "openai-version": "2020-10-01",
           "server": "cloudflare",
@@ -280,21 +209,21 @@
           "x-ratelimit-limit-requests": "30000",
           "x-ratelimit-limit-tokens": "150000000",
           "x-ratelimit-remaining-requests": "29999",
-          "x-ratelimit-remaining-tokens": "149999095",
+          "x-ratelimit-remaining-tokens": "149999172",
           "x-ratelimit-reset-requests": "2ms",
           "x-ratelimit-reset-tokens": "0s",
-          "x-request-id": "req_761834dfc9cf405d94e859a476691bad"
+          "x-request-id": "req_f68972e88b404de3a07d149194ba2808"
         },
         "body": {
-          "id": "resp_05181ff4f2bd6f43006a5669dfcfa881a092cc431409a23bd0",
+          "id": "resp_0494d999c0b9a1f0006a8d6510ba2087d09ba58a89145b8df8",
           "object": "response",
-          "created_at": 1784048095,
+          "created_at": 1787651344,
           "status": "completed",
           "background": false,
           "billing": {
             "payer": "developer"
           },
-          "completed_at": 1784048096,
+          "completed_at": 1787651347,
           "error": null,
           "frequency_penalty": 0,
           "incomplete_details": null,
@@ -305,11 +234,11 @@
           "moderation": null,
           "output": [
             {
-              "id": "fc_05181ff4f2bd6f43006a5669e0c1c481a08433f7ece42d2ffb",
+              "id": "fc_0494d999c0b9a1f0006a8d65123d4087d0bcb0835b57a65a09",
               "type": "function_call",
               "status": "completed",
-              "arguments": "{\"name\":\"Alice\",\"_background\":null}",
-              "call_id": "call_psoYGVdL3y2EFiKEKHs6zerW",
+              "arguments": "{\"name\":\"Alice\",\"_background\":{\"enabled\":false,\"timeoutMs\":null,\"maxRetries\":null}}",
+              "call_id": "call_PSNfdHmZ17Fut86M0ZUQNj10",
               "name": "greet"
             }
           ],
@@ -368,6 +297,7 @@
                   },
                   "_background": {
                     "description": "Optional: override background execution behavior for this specific call. Set enabled=false to force foreground, enabled=true to force background. Omit entirely to use the default configuration.",
+                    "type": "object",
                     "properties": {
                       "enabled": {
                         "description": "Force background (true) or foreground (false) execution for this call.",
@@ -407,63 +337,26 @@
                       }
                     },
                     "additionalProperties": false,
-                    "required": ["enabled", "timeoutMs", "maxRetries"],
-                    "x-optional": ["enabled", "timeoutMs", "maxRetries"],
-                    "anyOf": [
-                      {
-                        "description": "Optional: override background execution behavior for this specific call. Set enabled=false to force foreground, enabled=true to force background. Omit entirely to use the default configuration.",
-                        "properties": {
-                          "enabled": {
-                            "description": "Force background (true) or foreground (false) execution for this call.",
-                            "anyOf": [
-                              {
-                                "description": "Force background (true) or foreground (false) execution for this call.",
-                                "type": "boolean"
-                              },
-                              {
-                                "type": "null"
-                              }
-                            ]
-                          },
-                          "timeoutMs": {
-                            "description": "Override timeout in milliseconds for this call.",
-                            "anyOf": [
-                              {
-                                "description": "Override timeout in milliseconds for this call.",
-                                "type": "number"
-                              },
-                              {
-                                "type": "null"
-                              }
-                            ]
-                          },
-                          "maxRetries": {
-                            "description": "Override maximum retry attempts for this call.",
-                            "anyOf": [
-                              {
-                                "description": "Override maximum retry attempts for this call.",
-                                "type": "number"
-                              },
-                              {
-                                "type": "null"
-                              }
-                            ]
-                          }
-                        },
-                        "additionalProperties": false,
-                        "required": ["enabled", "timeoutMs", "maxRetries"],
-                        "x-optional": ["enabled", "timeoutMs", "maxRetries"],
-                        "type": "object"
-                      },
-                      {
-                        "type": "null"
-                      }
+                    "required": [
+                      "enabled",
+                      "timeoutMs",
+                      "maxRetries"
+                    ],
+                    "x-optional": [
+                      "enabled",
+                      "timeoutMs",
+                      "maxRetries"
                     ]
                   }
                 },
-                "required": ["topic", "_background"],
+                "required": [
+                  "topic",
+                  "_background"
+                ],
                 "additionalProperties": false,
-                "x-optional": ["_background"]
+                "x-optional": [
+                  "_background"
+                ]
               },
               "strict": true
             },
@@ -482,6 +375,7 @@
                   },
                   "_background": {
                     "description": "Optional: override background execution behavior for this specific call. Set enabled=false to force foreground, enabled=true to force background. Omit entirely to use the default configuration.",
+                    "type": "object",
                     "properties": {
                       "enabled": {
                         "description": "Force background (true) or foreground (false) execution for this call.",
@@ -521,63 +415,26 @@
                       }
                     },
                     "additionalProperties": false,
-                    "required": ["enabled", "timeoutMs", "maxRetries"],
-                    "x-optional": ["enabled", "timeoutMs", "maxRetries"],
-                    "anyOf": [
-                      {
-                        "description": "Optional: override background execution behavior for this specific call. Set enabled=false to force foreground, enabled=true to force background. Omit entirely to use the default configuration.",
-                        "properties": {
-                          "enabled": {
-                            "description": "Force background (true) or foreground (false) execution for this call.",
-                            "anyOf": [
-                              {
-                                "description": "Force background (true) or foreground (false) execution for this call.",
-                                "type": "boolean"
-                              },
-                              {
-                                "type": "null"
-                              }
-                            ]
-                          },
-                          "timeoutMs": {
-                            "description": "Override timeout in milliseconds for this call.",
-                            "anyOf": [
-                              {
-                                "description": "Override timeout in milliseconds for this call.",
-                                "type": "number"
-                              },
-                              {
-                                "type": "null"
-                              }
-                            ]
-                          },
-                          "maxRetries": {
-                            "description": "Override maximum retry attempts for this call.",
-                            "anyOf": [
-                              {
-                                "description": "Override maximum retry attempts for this call.",
-                                "type": "number"
-                              },
-                              {
-                                "type": "null"
-                              }
-                            ]
-                          }
-                        },
-                        "additionalProperties": false,
-                        "required": ["enabled", "timeoutMs", "maxRetries"],
-                        "x-optional": ["enabled", "timeoutMs", "maxRetries"],
-                        "type": "object"
-                      },
-                      {
-                        "type": "null"
-                      }
+                    "required": [
+                      "enabled",
+                      "timeoutMs",
+                      "maxRetries"
+                    ],
+                    "x-optional": [
+                      "enabled",
+                      "timeoutMs",
+                      "maxRetries"
                     ]
                   }
                 },
-                "required": ["name", "_background"],
+                "required": [
+                  "name",
+                  "_background"
+                ],
                 "additionalProperties": false,
-                "x-optional": ["_background"]
+                "x-optional": [
+                  "_background"
+                ]
               },
               "strict": true
             }
@@ -586,16 +443,16 @@
           "top_p": 1,
           "truncation": "disabled",
           "usage": {
-            "input_tokens": 687,
+            "input_tokens": 611,
             "input_tokens_details": {
               "cache_write_tokens": 0,
               "cached_tokens": 0
             },
-            "output_tokens": 20,
+            "output_tokens": 32,
             "output_tokens_details": {
               "reasoning_tokens": 0
             },
-            "total_tokens": 707
+            "total_tokens": 643
           },
           "user": null,
           "metadata": {}
@@ -604,7 +461,7 @@
       }
     },
     {
-      "hash": "80bf987e5638fef5",
+      "hash": "2173f3de6c1405a5",
       "request": {
         "url": "https://api.openai.com/v1/responses",
         "method": "POST",
@@ -626,13 +483,13 @@
             },
             {
               "type": "function_call",
-              "call_id": "call_psoYGVdL3y2EFiKEKHs6zerW",
+              "call_id": "call_PSNfdHmZ17Fut86M0ZUQNj10",
               "name": "greet",
-              "arguments": "{\"name\":\"Alice\",\"_background\":null}"
+              "arguments": "{\"name\":\"Alice\",\"_background\":{\"enabled\":false,\"timeoutMs\":null,\"maxRetries\":null}}"
             },
             {
               "type": "function_call_output",
-              "call_id": "call_psoYGVdL3y2EFiKEKHs6zerW",
+              "call_id": "call_PSNfdHmZ17Fut86M0ZUQNj10",
               "output": "{\"greeting\":\"Hello, Alice!\"}"
             }
           ],
@@ -651,6 +508,7 @@
                   },
                   "_background": {
                     "description": "Optional: override background execution behavior for this specific call. Set enabled=false to force foreground, enabled=true to force background. Omit entirely to use the default configuration.",
+                    "type": "object",
                     "properties": {
                       "enabled": {
                         "description": "Force background (true) or foreground (false) execution for this call.",
@@ -690,63 +548,26 @@
                       }
                     },
                     "additionalProperties": false,
-                    "required": ["enabled", "timeoutMs", "maxRetries"],
-                    "x-optional": ["enabled", "timeoutMs", "maxRetries"],
-                    "anyOf": [
-                      {
-                        "description": "Optional: override background execution behavior for this specific call. Set enabled=false to force foreground, enabled=true to force background. Omit entirely to use the default configuration.",
-                        "properties": {
-                          "enabled": {
-                            "description": "Force background (true) or foreground (false) execution for this call.",
-                            "anyOf": [
-                              {
-                                "description": "Force background (true) or foreground (false) execution for this call.",
-                                "type": "boolean"
-                              },
-                              {
-                                "type": "null"
-                              }
-                            ]
-                          },
-                          "timeoutMs": {
-                            "description": "Override timeout in milliseconds for this call.",
-                            "anyOf": [
-                              {
-                                "description": "Override timeout in milliseconds for this call.",
-                                "type": "number"
-                              },
-                              {
-                                "type": "null"
-                              }
-                            ]
-                          },
-                          "maxRetries": {
-                            "description": "Override maximum retry attempts for this call.",
-                            "anyOf": [
-                              {
-                                "description": "Override maximum retry attempts for this call.",
-                                "type": "number"
-                              },
-                              {
-                                "type": "null"
-                              }
-                            ]
-                          }
-                        },
-                        "additionalProperties": false,
-                        "required": ["enabled", "timeoutMs", "maxRetries"],
-                        "x-optional": ["enabled", "timeoutMs", "maxRetries"],
-                        "type": "object"
-                      },
-                      {
-                        "type": "null"
-                      }
+                    "required": [
+                      "enabled",
+                      "timeoutMs",
+                      "maxRetries"
+                    ],
+                    "x-optional": [
+                      "enabled",
+                      "timeoutMs",
+                      "maxRetries"
                     ]
                   }
                 },
-                "required": ["topic", "_background"],
+                "required": [
+                  "topic",
+                  "_background"
+                ],
                 "additionalProperties": false,
-                "x-optional": ["_background"]
+                "x-optional": [
+                  "_background"
+                ]
               }
             },
             {
@@ -763,6 +584,7 @@
                   },
                   "_background": {
                     "description": "Optional: override background execution behavior for this specific call. Set enabled=false to force foreground, enabled=true to force background. Omit entirely to use the default configuration.",
+                    "type": "object",
                     "properties": {
                       "enabled": {
                         "description": "Force background (true) or foreground (false) execution for this call.",
@@ -802,69 +624,32 @@
                       }
                     },
                     "additionalProperties": false,
-                    "required": ["enabled", "timeoutMs", "maxRetries"],
-                    "x-optional": ["enabled", "timeoutMs", "maxRetries"],
-                    "anyOf": [
-                      {
-                        "description": "Optional: override background execution behavior for this specific call. Set enabled=false to force foreground, enabled=true to force background. Omit entirely to use the default configuration.",
-                        "properties": {
-                          "enabled": {
-                            "description": "Force background (true) or foreground (false) execution for this call.",
-                            "anyOf": [
-                              {
-                                "description": "Force background (true) or foreground (false) execution for this call.",
-                                "type": "boolean"
-                              },
-                              {
-                                "type": "null"
-                              }
-                            ]
-                          },
-                          "timeoutMs": {
-                            "description": "Override timeout in milliseconds for this call.",
-                            "anyOf": [
-                              {
-                                "description": "Override timeout in milliseconds for this call.",
-                                "type": "number"
-                              },
-                              {
-                                "type": "null"
-                              }
-                            ]
-                          },
-                          "maxRetries": {
-                            "description": "Override maximum retry attempts for this call.",
-                            "anyOf": [
-                              {
-                                "description": "Override maximum retry attempts for this call.",
-                                "type": "number"
-                              },
-                              {
-                                "type": "null"
-                              }
-                            ]
-                          }
-                        },
-                        "additionalProperties": false,
-                        "required": ["enabled", "timeoutMs", "maxRetries"],
-                        "x-optional": ["enabled", "timeoutMs", "maxRetries"],
-                        "type": "object"
-                      },
-                      {
-                        "type": "null"
-                      }
+                    "required": [
+                      "enabled",
+                      "timeoutMs",
+                      "maxRetries"
+                    ],
+                    "x-optional": [
+                      "enabled",
+                      "timeoutMs",
+                      "maxRetries"
                     ]
                   }
                 },
-                "required": ["name", "_background"],
+                "required": [
+                  "name",
+                  "_background"
+                ],
                 "additionalProperties": false,
-                "x-optional": ["_background"]
+                "x-optional": [
+                  "_background"
+                ]
               }
             }
           ],
           "tool_choice": "auto"
         },
-        "timestamp": 1784048097097
+        "timestamp": 1787651347234
       },
       "response": {
         "status": 200,
@@ -873,12 +658,12 @@
           "access-control-expose-headers": "X-Request-ID, CF-Ray, CF-Ray",
           "alt-svc": "h3=\":443\"; ma=86400",
           "cf-cache-status": "DYNAMIC",
-          "cf-ray": "a1b20d5eea349efc-CDG",
+          "cf-ray": "a309af58adcd6e22-LAX",
           "connection": "keep-alive",
           "content-type": "application/json",
-          "date": "Tue, 14 Jul 2026 16:54:58 GMT",
+          "date": "Tue, 25 Aug 2026 09:49:08 GMT",
           "openai-organization": "mastra-qb2kpb",
-          "openai-processing-ms": "1706",
+          "openai-processing-ms": "1266",
           "openai-project": "proj_Cvw1JiXoxHTeEWgnnK3t9AYG",
           "openai-version": "2020-10-01",
           "server": "cloudflare",
@@ -887,21 +672,21 @@
           "x-ratelimit-limit-requests": "30000",
           "x-ratelimit-limit-tokens": "150000000",
           "x-ratelimit-remaining-requests": "29999",
-          "x-ratelimit-remaining-tokens": "149999062",
+          "x-ratelimit-remaining-tokens": "149999125",
           "x-ratelimit-reset-requests": "2ms",
           "x-ratelimit-reset-tokens": "0s",
-          "x-request-id": "req_5c9c3a9f13864e448aac8b3863f6a96f"
+          "x-request-id": "req_394cae61b72d4432a39206b1f1e73086"
         },
         "body": {
-          "id": "resp_0fdaaeb77cd50005006a5669e14708819fa739865f0b18970e",
+          "id": "resp_071cdd0ee10186e6006a8d65135e2487d09197f6b3a69607c8",
           "object": "response",
-          "created_at": 1784048097,
+          "created_at": 1787651347,
           "status": "completed",
           "background": false,
           "billing": {
             "payer": "developer"
           },
-          "completed_at": 1784048098,
+          "completed_at": 1787651348,
           "error": null,
           "frequency_penalty": 0,
           "incomplete_details": null,
@@ -912,7 +697,7 @@
           "moderation": null,
           "output": [
             {
-              "id": "msg_0fdaaeb77cd50005006a5669e2129c819fb0e5b9de77281c51",
+              "id": "msg_071cdd0ee10186e6006a8d6514478487d09cb0f3085e59369d",
               "type": "message",
               "status": "completed",
               "content": [
@@ -920,7 +705,7 @@
                   "type": "output_text",
                   "annotations": [],
                   "logprobs": [],
-                  "text": "I greeted Alice: \"Hello, Alice!\" If there's anything else you need, just let me know!"
+                  "text": "Hello, Alice!"
                 }
               ],
               "role": "assistant"
@@ -981,6 +766,7 @@
                   },
                   "_background": {
                     "description": "Optional: override background execution behavior for this specific call. Set enabled=false to force foreground, enabled=true to force background. Omit entirely to use the default configuration.",
+                    "type": "object",
                     "properties": {
                       "enabled": {
                         "description": "Force background (true) or foreground (false) execution for this call.",
@@ -1020,63 +806,26 @@
                       }
                     },
                     "additionalProperties": false,
-                    "required": ["enabled", "timeoutMs", "maxRetries"],
-                    "x-optional": ["enabled", "timeoutMs", "maxRetries"],
-                    "anyOf": [
-                      {
-                        "description": "Optional: override background execution behavior for this specific call. Set enabled=false to force foreground, enabled=true to force background. Omit entirely to use the default configuration.",
-                        "properties": {
-                          "enabled": {
-                            "description": "Force background (true) or foreground (false) execution for this call.",
-                            "anyOf": [
-                              {
-                                "description": "Force background (true) or foreground (false) execution for this call.",
-                                "type": "boolean"
-                              },
-                              {
-                                "type": "null"
-                              }
-                            ]
-                          },
-                          "timeoutMs": {
-                            "description": "Override timeout in milliseconds for this call.",
-                            "anyOf": [
-                              {
-                                "description": "Override timeout in milliseconds for this call.",
-                                "type": "number"
-                              },
-                              {
-                                "type": "null"
-                              }
-                            ]
-                          },
-                          "maxRetries": {
-                            "description": "Override maximum retry attempts for this call.",
-                            "anyOf": [
-                              {
-                                "description": "Override maximum retry attempts for this call.",
-                                "type": "number"
-                              },
-                              {
-                                "type": "null"
-                              }
-                            ]
-                          }
-                        },
-                        "additionalProperties": false,
-                        "required": ["enabled", "timeoutMs", "maxRetries"],
-                        "x-optional": ["enabled", "timeoutMs", "maxRetries"],
-                        "type": "object"
-                      },
-                      {
-                        "type": "null"
-                      }
+                    "required": [
+                      "enabled",
+                      "timeoutMs",
+                      "maxRetries"
+                    ],
+                    "x-optional": [
+                      "enabled",
+                      "timeoutMs",
+                      "maxRetries"
                     ]
                   }
                 },
-                "required": ["topic", "_background"],
+                "required": [
+                  "topic",
+                  "_background"
+                ],
                 "additionalProperties": false,
-                "x-optional": ["_background"]
+                "x-optional": [
+                  "_background"
+                ]
               },
               "strict": true
             },
@@ -1095,6 +844,7 @@
                   },
                   "_background": {
                     "description": "Optional: override background execution behavior for this specific call. Set enabled=false to force foreground, enabled=true to force background. Omit entirely to use the default configuration.",
+                    "type": "object",
                     "properties": {
                       "enabled": {
                         "description": "Force background (true) or foreground (false) execution for this call.",
@@ -1134,63 +884,26 @@
                       }
                     },
                     "additionalProperties": false,
-                    "required": ["enabled", "timeoutMs", "maxRetries"],
-                    "x-optional": ["enabled", "timeoutMs", "maxRetries"],
-                    "anyOf": [
-                      {
-                        "description": "Optional: override background execution behavior for this specific call. Set enabled=false to force foreground, enabled=true to force background. Omit entirely to use the default configuration.",
-                        "properties": {
-                          "enabled": {
-                            "description": "Force background (true) or foreground (false) execution for this call.",
-                            "anyOf": [
-                              {
-                                "description": "Force background (true) or foreground (false) execution for this call.",
-                                "type": "boolean"
-                              },
-                              {
-                                "type": "null"
-                              }
-                            ]
-                          },
-                          "timeoutMs": {
-                            "description": "Override timeout in milliseconds for this call.",
-                            "anyOf": [
-                              {
-                                "description": "Override timeout in milliseconds for this call.",
-                                "type": "number"
-                              },
-                              {
-                                "type": "null"
-                              }
-                            ]
-                          },
-                          "maxRetries": {
-                            "description": "Override maximum retry attempts for this call.",
-                            "anyOf": [
-                              {
-                                "description": "Override maximum retry attempts for this call.",
-                                "type": "number"
-                              },
-                              {
-                                "type": "null"
-                              }
-                            ]
-                          }
-                        },
-                        "additionalProperties": false,
-                        "required": ["enabled", "timeoutMs", "maxRetries"],
-                        "x-optional": ["enabled", "timeoutMs", "maxRetries"],
-                        "type": "object"
-                      },
-                      {
-                        "type": "null"
-                      }
+                    "required": [
+                      "enabled",
+                      "timeoutMs",
+                      "maxRetries"
+                    ],
+                    "x-optional": [
+                      "enabled",
+                      "timeoutMs",
+                      "maxRetries"
                     ]
                   }
                 },
-                "required": ["name", "_background"],
+                "required": [
+                  "name",
+                  "_background"
+                ],
                 "additionalProperties": false,
-                "x-optional": ["_background"]
+                "x-optional": [
+                  "_background"
+                ]
               },
               "strict": true
             }
@@ -1199,16 +912,16 @@
           "top_p": 1,
           "truncation": "disabled",
           "usage": {
-            "input_tokens": 721,
+            "input_tokens": 657,
             "input_tokens_details": {
               "cache_write_tokens": 0,
               "cached_tokens": 0
             },
-            "output_tokens": 23,
+            "output_tokens": 6,
             "output_tokens_details": {
               "reasoning_tokens": 0
             },
-            "total_tokens": 744
+            "total_tokens": 663
           },
           "user": null,
           "metadata": {}

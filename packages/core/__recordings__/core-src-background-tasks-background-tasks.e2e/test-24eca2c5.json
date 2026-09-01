@@ -1,14 +1,15 @@
 {
   "meta": {
     "name": "test-24eca2c5",
-    "testFile": "packages/core/src/background-tasks/background-tasks.e2e.test.ts",
+    "testFile": "src/background-tasks/background-tasks.e2e.test.ts",
     "testName": "Background Tasks E2E > dispatches a background-eligible tool and returns a placeholder",
     "model": "gpt-4o-mini",
-    "createdAt": "2026-07-14T16:54:55.697Z"
+    "createdAt": "2026-07-14T16:54:55.697Z",
+    "updatedAt": "2026-08-25T09:49:04.440Z"
   },
   "recordings": [
     {
-      "hash": "9e234e70189e19f3",
+      "hash": "65b1af53add832dd",
       "request": {
         "url": "https://api.openai.com/v1/responses",
         "method": "POST",
@@ -44,6 +45,7 @@
                   },
                   "_background": {
                     "description": "Optional: override background execution behavior for this specific call. Set enabled=false to force foreground, enabled=true to force background. Omit entirely to use the default configuration.",
+                    "type": "object",
                     "properties": {
                       "enabled": {
                         "description": "Force background (true) or foreground (false) execution for this call.",
@@ -83,63 +85,26 @@
                       }
                     },
                     "additionalProperties": false,
-                    "required": ["enabled", "timeoutMs", "maxRetries"],
-                    "x-optional": ["enabled", "timeoutMs", "maxRetries"],
-                    "anyOf": [
-                      {
-                        "description": "Optional: override background execution behavior for this specific call. Set enabled=false to force foreground, enabled=true to force background. Omit entirely to use the default configuration.",
-                        "properties": {
-                          "enabled": {
-                            "description": "Force background (true) or foreground (false) execution for this call.",
-                            "anyOf": [
-                              {
-                                "description": "Force background (true) or foreground (false) execution for this call.",
-                                "type": "boolean"
-                              },
-                              {
-                                "type": "null"
-                              }
-                            ]
-                          },
-                          "timeoutMs": {
-                            "description": "Override timeout in milliseconds for this call.",
-                            "anyOf": [
-                              {
-                                "description": "Override timeout in milliseconds for this call.",
-                                "type": "number"
-                              },
-                              {
-                                "type": "null"
-                              }
-                            ]
-                          },
-                          "maxRetries": {
-                            "description": "Override maximum retry attempts for this call.",
-                            "anyOf": [
-                              {
-                                "description": "Override maximum retry attempts for this call.",
-                                "type": "number"
-                              },
-                              {
-                                "type": "null"
-                              }
-                            ]
-                          }
-                        },
-                        "additionalProperties": false,
-                        "required": ["enabled", "timeoutMs", "maxRetries"],
-                        "x-optional": ["enabled", "timeoutMs", "maxRetries"],
-                        "type": "object"
-                      },
-                      {
-                        "type": "null"
-                      }
+                    "required": [
+                      "enabled",
+                      "timeoutMs",
+                      "maxRetries"
+                    ],
+                    "x-optional": [
+                      "enabled",
+                      "timeoutMs",
+                      "maxRetries"
                     ]
                   }
                 },
-                "required": ["topic", "_background"],
+                "required": [
+                  "topic",
+                  "_background"
+                ],
                 "additionalProperties": false,
-                "x-optional": ["_background"]
+                "x-optional": [
+                  "_background"
+                ]
               }
             },
             {
@@ -156,6 +121,7 @@
                   },
                   "_background": {
                     "description": "Optional: override background execution behavior for this specific call. Set enabled=false to force foreground, enabled=true to force background. Omit entirely to use the default configuration.",
+                    "type": "object",
                     "properties": {
                       "enabled": {
                         "description": "Force background (true) or foreground (false) execution for this call.",
@@ -195,70 +161,33 @@
                       }
                     },
                     "additionalProperties": false,
-                    "required": ["enabled", "timeoutMs", "maxRetries"],
-                    "x-optional": ["enabled", "timeoutMs", "maxRetries"],
-                    "anyOf": [
-                      {
-                        "description": "Optional: override background execution behavior for this specific call. Set enabled=false to force foreground, enabled=true to force background. Omit entirely to use the default configuration.",
-                        "properties": {
-                          "enabled": {
-                            "description": "Force background (true) or foreground (false) execution for this call.",
-                            "anyOf": [
-                              {
-                                "description": "Force background (true) or foreground (false) execution for this call.",
-                                "type": "boolean"
-                              },
-                              {
-                                "type": "null"
-                              }
-                            ]
-                          },
-                          "timeoutMs": {
-                            "description": "Override timeout in milliseconds for this call.",
-                            "anyOf": [
-                              {
-                                "description": "Override timeout in milliseconds for this call.",
-                                "type": "number"
-                              },
-                              {
-                                "type": "null"
-                              }
-                            ]
-                          },
-                          "maxRetries": {
-                            "description": "Override maximum retry attempts for this call.",
-                            "anyOf": [
-                              {
-                                "description": "Override maximum retry attempts for this call.",
-                                "type": "number"
-                              },
-                              {
-                                "type": "null"
-                              }
-                            ]
-                          }
-                        },
-                        "additionalProperties": false,
-                        "required": ["enabled", "timeoutMs", "maxRetries"],
-                        "x-optional": ["enabled", "timeoutMs", "maxRetries"],
-                        "type": "object"
-                      },
-                      {
-                        "type": "null"
-                      }
+                    "required": [
+                      "enabled",
+                      "timeoutMs",
+                      "maxRetries"
+                    ],
+                    "x-optional": [
+                      "enabled",
+                      "timeoutMs",
+                      "maxRetries"
                     ]
                   }
                 },
-                "required": ["name", "_background"],
+                "required": [
+                  "name",
+                  "_background"
+                ],
                 "additionalProperties": false,
-                "x-optional": ["_background"]
+                "x-optional": [
+                  "_background"
+                ]
               }
             }
           ],
           "tool_choice": "auto",
           "stream": true
         },
-        "timestamp": 1784048090261
+        "timestamp": 1787651335109
       },
       "response": {
         "status": 200,
@@ -267,80 +196,102 @@
           "access-control-expose-headers": "X-Request-ID, CF-Ray, CF-Ray",
           "alt-svc": "h3=\":443\"; ma=86400",
           "cf-cache-status": "DYNAMIC",
-          "cf-ray": "a1b20d345d269efc-CDG",
+          "cf-ray": "a309af0d781750af-LAX",
           "connection": "keep-alive",
           "content-type": "text/event-stream; charset=utf-8",
-          "date": "Tue, 14 Jul 2026 16:54:50 GMT",
+          "date": "Tue, 25 Aug 2026 09:48:56 GMT",
           "openai-organization": "mastra-qb2kpb",
-          "openai-processing-ms": "140",
+          "openai-processing-ms": "204",
           "openai-project": "proj_Cvw1JiXoxHTeEWgnnK3t9AYG",
           "openai-version": "2020-10-01",
           "server": "cloudflare",
           "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
           "x-content-type-options": "nosniff",
-          "x-request-id": "req_f0a1b37a32fe4e6bab64a26ca2a82a94"
+          "x-request-id": "req_c5a08fde2cad472c95582627d72efba1"
         },
         "chunks": [
-          "event: response.created\ndata: {\"type\":\"response.created\",\"response\":{\"id\":\"resp_02275622ad702233006a5669da6b9c819c86258bb47d5d1c41\",\"object\":\"response\",\"created_at\":1784048090,\"status\":\"in_progress\",\"background\":false,\"completed_at\":null,\"error\":null,\"frequency_penalty\":0.0,\"incomplete_details\":null,\"instructions\":null,\"max_output_tokens\":null,\"max_tool_cal",
-          "ls\":null,\"model\":\"gpt-4o-mini-2024-07-18\",\"moderation\":null,\"output\":[],\"parallel_tool_calls\":true,\"presence_penalty\":0.0,\"previous_response_id\":null,\"prompt_cache_key\":null,\"prompt_cache_retention\":\"in_memory\",\"reasoning\":{\"context\":null,\"effort\":null,\"summary\":null},\"safety_identifier\":null,\"service_tier\":\"auto\",\"store\":true,\"temperature\":1.0,\"text\":{\"format\":{\"type\":\"text\"},\"verbosity\":\"medium\"},\"tool_choice\":\"auto\",\"tool_usage\":{\"image_gen\":{\"input_tokens\":0,\"input_tokens_details\":{\"image_tokens\":0,\"text_tokens\":0},\"output_tokens\":0,\"output_tokens_details\":{\"image_tokens\":0,\"text_tokens\":0},\"total_tokens\":0},\"web_search\":{\"num_requests\":0}},\"tools\":[{\"type\":\"function\",\"description\":\"Research a topic. This takes a while, use it when the user asks to research something.\",\"name\":\"research\",\"output_schema\":null,\"parameters\":{\"$schema\":\"http://json-schema.org/draft-07/schema#\",\"type\":\"object\",\"properties\":{\"topic\":{\"type\":\"string\",\"description\":\"The topic to research\"},\"_background\":{\"description\":\"Optional: override background execution behavior for this specific call. Set enabled=false to force foreground, enabled=true to force background. Omit entirely to use the default configuration.\",\"properties\":{\"enabled\":{\"description\":\"Force background (true) or foreground (false) execution for this call.\",\"anyOf\":[{\"description\":\"Force background (true) ",
-          "or foreground (false) execution for this call.\",\"type\":\"boolean\"},{\"type\":\"null\"}]},\"timeoutMs\":{\"description\":\"Override timeout in milliseconds for this call.\",\"anyOf\":[{\"description\":\"Override timeout in milliseconds for this call.\",\"type\":\"number\"},{\"type\":\"null\"}]},\"maxRetries\":{\"description\":\"Override maximum retry attempts for this call.\",\"anyOf\":[{\"description\":\"Override maximum retry attempts for this call.\",\"type\":\"number\"},{\"type\":\"null\"}]}},\"additionalProperties\":false,\"required\":[\"enabled\",\"timeoutMs\",\"maxRetries\"],\"x-optional\":[\"enabled\",\"timeoutMs\",\"maxRetries\"],\"anyOf\":[{\"description\":\"Optional: override background execution behavior for this specific call. Set enabled=false to force foreground, enabled=true to force background. Omit entirely to use the default configuration.\",\"properties\":{\"enabled\":{\"description\":\"Force background (true) or foreground (false) execution for this call.\",\"anyOf\":[{\"description\":\"Force background (true) or foreground (false) execution for this call.\",\"type\":\"boolean\"},{\"type\":\"null\"}]},\"timeoutMs\":{\"description\":\"Override timeout in milliseconds for this call.\",\"anyOf\":[{\"description\":\"Override timeout in milliseconds for this call.\",\"type\":\"number\"},{\"type\":\"null\"}]},\"maxRetries\":{\"description\":\"Override maximum retry attempts for this call.\",\"anyOf\":[{\"description\":\"Override maximum retry attempts f",
-          "or this call.\",\"type\":\"number\"},{\"type\":\"null\"}]}},\"additionalProperties\":false,\"required\":[\"enabled\",\"timeoutMs\",\"maxRetries\"],\"x-optional\":[\"enabled\",\"timeoutMs\",\"maxRetries\"],\"type\":\"object\"},{\"type\":\"null\"}]}},\"required\":[\"topic\",\"_background\"],\"additionalProperties\":false,\"x-optional\":[\"_background\"]},\"strict\":true},{\"type\":\"function\",\"description\":\"Greet a person by name. Use this when the user asks to greet someone.\",\"name\":\"greet\",\"output_schema\":null,\"parameters\":{\"$schema\":\"http://json-schema.org/draft-07/schema#\",\"type\":\"object\",\"properties\":{\"name\":{\"type\":\"string\",\"description\":\"The name to greet\"},\"_background\":{\"description\":\"Optional: override background execution behavior for this specific call. Set enabled=false to force foreground, enabled=true to force background. Omit entirely to use the default configuration.\",\"properties\":{\"enabled\":{\"description\":\"Force background (true) or foreground (false) execution for this call.\",\"anyOf\":[{\"description\":\"Force background (true) or foreground (false) execution for this call.\",\"type\":\"boolean\"},{\"type\":\"null\"}]},\"timeoutMs\":{\"description\":\"Override timeout in milliseconds for this call.\",\"anyOf\":[{\"description\":\"Override timeout in milliseconds for this call.\",\"type\":\"number\"},{\"type\":\"null\"}]},\"maxRetries\":{\"description\":\"Override maximum retry attempts for this call.\",\"anyOf\":[{\"descri",
-          "ption\":\"Override maximum retry attempts for this call.\",\"type\":\"number\"},{\"type\":\"null\"}]}},\"additionalProperties\":false,\"required\":[\"enabled\",\"timeoutMs\",\"maxRetries\"],\"x-optional\":[\"enabled\",\"timeoutMs\",\"maxRetries\"],\"anyOf\":[{\"description\":\"Optional: override background execution behavior for this specific call. Set enabled=false to force foreground, enabled=true to force background. Omit entirely to use the default configuration.\",\"properties\":{\"enabled\":{\"description\":\"Force background (true) or foreground (false) execution for this call.\",\"anyOf\":[{\"description\":\"Force background (true) or foreground (false) execution for this call.\",\"type\":\"boolean\"},{\"type\":\"null\"}]},\"timeoutMs\":{\"description\":\"Override timeout in milliseconds for this call.\",\"anyOf\":[{\"description\":\"Override timeout in milliseconds for this call.\",\"type\":\"number\"},{\"type\":\"null\"}]},\"maxRetries\":{\"description\":\"Override maximum retry attempts for this call.\",\"anyOf\":[{\"description\":\"Override maximum retry attempts for this call.\",\"type\":\"number\"},{\"type\":\"null\"}]}},\"additionalProperties\":false,\"required\":[\"enabled\",\"timeoutMs\",\"maxRetries\"],\"x-optional\":[\"enabled\",\"timeoutMs\",\"maxRetries\"],\"type\":\"object\"},{\"type\":\"null\"}]}},\"required\":[\"name\",\"_background\"],\"additionalProperties\":false,\"x-optional\":[\"_background\"]},\"strict\":true}],\"top_logprobs\":0,\"top_p\":1.0,\"truncation\"",
-          ":\"disabled\",\"usage\":null,\"user\":null,\"metadata\":{}},\"sequence_number\":0}\n\n",
-          "event: response.in_progres",
-          "s\ndata: {\"type\":\"response.in_progress\",\"response\":{\"id\":\"resp_02275622ad702233006a5669da6b9c819c86258bb47d5d1c41\",\"object\":\"response\",\"created_at\":1784048090,\"status\":\"in_progress\",\"background\":false,\"completed_at\":null,\"error\":null,\"frequency_penalty\":0.0,\"incomplete_details\":null,\"instructions\":null,\"max_output_tokens\":null,\"max_tool_calls\":null,\"model\":\"gpt-4o-mini-2024-07-18\",\"moderation\":null,\"output\":[],\"parallel_tool_calls\":true,\"presence_penalty\":0.0,\"previous_response_id\":null,\"prompt_cache_key\":null,\"prompt_cache_retention\":\"in_memory\",\"reasoning\":{\"context\":null,\"effort\":null,\"summary\":null},\"safety_identifier\":null,\"service_tier\":\"auto\",\"store\":true,\"temperature\":1.0,\"text\":{\"format\":{\"type\":\"text\"},\"verbosity\":\"medium\"},\"tool_choice\":\"auto\",\"tool_usage\":{\"image_gen\":{\"input_tokens\":0,\"input_tokens_details\":{\"image_tokens\":0,\"text_tokens\":0},\"output_tokens\":0,\"output_tokens_details\":{\"image_tokens\":0,\"text_tokens\":0},\"total_tokens\":0},\"web_search\":{\"num_requests\":0}},\"tools\":[{\"type\":\"function\",\"description\":\"Research a topic. This takes a while, use it when the user asks to research something.\",\"name\":\"research\",\"output_schema\":null,\"parameters\":{\"$schema\":\"http://json-schema.org/draft-07/schema#\",\"type\":\"object\",\"properties\":{\"topic\":{\"type\":\"string\",\"description\":\"The topic to research\"},\"_background\":{\"description\":\"Optional:",
-          " override background execution behavior for this specific call. Set enabled=false to force foreground, enabled=true to force background. Omit entirely to use the default configuration.\",\"properties\":{\"enabled\":{\"description\":\"Force background (true) or foreground (false) execution for this call.\",\"anyOf\":[{\"description\":\"Force background (true) or foreground (false) execution for this call.\",\"type\":\"boolean\"},{\"type\":\"null\"}]},\"timeoutMs\":{\"description\":\"Override timeout in milliseconds for this call.\",\"anyOf\":[{\"description\":\"Override timeout in milliseconds for this call.\",\"type\":\"number\"},{\"type\":\"null\"}]},\"maxRetries\":{\"description\":\"Override maximum retry attempts for this call.\",\"anyOf\":[{\"description\":\"Override maximum retry attempts for this call.\",\"type\":\"number\"},{\"type\":\"null\"}]}},\"additionalProperties\":false,\"required\":[\"enabled\",\"timeoutMs\",\"maxRetries\"],\"x-optional\":[\"enabled\",\"timeoutMs\",\"maxRetries\"],\"anyOf\":[{\"description\":\"Optional: override background execution behavior for this specific call. Set enabled=false to force foreground, enabled=true to force background. Omit entirely to use the default configuration.\",\"properties\":{\"enabled\":{\"description\":\"Force background (true) or foreground (false) execution for this call.\",\"anyOf\":[{\"description\":\"Force background (true) or foreground (false) execution for this call.\",\"type\":\"bo",
-          "olean\"},{\"type\":\"null\"}]},\"timeoutMs\":{\"description\":\"Override timeout in milliseconds for this call.\",\"anyOf\":[{\"description\":\"Override timeout in milliseconds for this call.\",\"type\":\"number\"},{\"type\":\"null\"}]},\"maxRetries\":{\"description\":\"Override maximum retry attempts for this call.\",\"anyOf\":[{\"description\":\"Override maximum retry attempts for this call.\",\"type\":\"number\"},{\"type\":\"null\"}]}},\"additionalProperties\":false,\"required\":[\"enabled\",\"timeoutMs\",\"maxRetries\"],\"x-optional\":[\"enabled\",\"timeoutMs\",\"maxRetries\"],\"type\":\"object\"},{\"type\":\"null\"}]}},\"required\":[\"topic\",\"_background\"],\"additionalProperties\":false,\"x-optional\":[\"_background\"]},\"strict\":true},{\"type\":\"function\",\"description\":\"Greet a person by name. Use this when the user asks to greet someone.\",\"name\":\"greet\",\"output_schema\":null,\"parameters\":{\"$schema\":\"http://json-schema.org/draft-07/schema#\",\"type\":\"object\",\"properties\":{\"name\":{\"type\":\"string\",\"description\":\"The name to greet\"},\"_background\":{\"description\":\"Optional: override background execution behavior for this specific call. Set enabled=false to force foreground, enabled=true to force background. Omit entirely to use the default configuration.\",\"properties\":{\"enabled\":{\"description\":\"Force background (true) or foreground (false) execution for this call.\",\"anyOf\":[{\"description\":\"Force background (true) or foreground (fa",
-          "lse) execution for this call.\",\"type\":\"boolean\"},{\"type\":\"null\"}]},\"timeoutMs\":{\"description\":\"Override timeout in milliseconds for this call.\",\"anyOf\":[{\"description\":\"Override timeout in milliseconds for this call.\",\"type\":\"number\"},{\"type\":\"null\"}]},\"maxRetries\":{\"description\":\"Override maximum retry attempts for this call.\",\"anyOf\":[{\"description\":\"Override maximum retry attempts for this call.\",\"type\":\"number\"},{\"type\":\"null\"}]}},\"additionalProperties\":false,\"required\":[\"enabled\",\"timeoutMs\",\"maxRetries\"],\"x-optional\":[\"enabled\",\"timeoutMs\",\"maxRetries\"],\"anyOf\":[{\"description\":\"Optional: override background execution behavior for this specific call. Set enabled=false to force foreground, enabled=true to force background. Omit entirely to use the default configuration.\",\"properties\":{\"enabled\":{\"description\":\"Force background (true) or foreground (false) execution for this call.\",\"anyOf\":[{\"description\":\"Force background (true) or foreground (false) execution for this call.\",\"type\":\"boolean\"},{\"type\":\"null\"}]},\"timeoutMs\":{\"description\":\"Override timeout in milliseconds for this call.\",\"anyOf\":[{\"description\":\"Override timeout in milliseconds for this call.\",\"type\":\"number\"},{\"type\":\"null\"}]},\"maxRetries\":{\"description\":\"Override maximum retry attempts for this call.\",\"anyOf\":[{\"description\":\"Override maximum retry attempts for this call.\",\"t",
-          "ype\":\"number\"},{\"type\":\"null\"}]}},\"additionalProperties\":false,\"required\":[\"enabled\",\"timeoutMs\",\"maxRetries\"],\"x-optional\":[\"enabled\",\"timeoutMs\",\"maxRetries\"],\"type\":\"object\"},{\"type\":\"null\"}]}},\"required\":[\"name\",\"_background\"],\"additionalProperties\":false,\"x-optional\":[\"_background\"]},\"strict\":true}],\"top_logprobs\":0,\"top_p\":1.0,\"truncation\":\"disabled\",\"usage\":null,\"user\":null,\"metadata\":{}},\"sequence_number\":1}\n\n",
-          "event: response.output_item.added\ndata: {\"type\":\"response.output_item.added\",\"item\":{\"id\":\"fc_02275622ad702233006a5669db2acc819c8958969f778ff6bd\",\"type\":\"function_call\",\"status\":\"in_progress\",\"arguments\":\"\",\"call_id\":\"call_HsPRqa5F2qq4ff8cgS9qPeBw\",\"name\":\"research\"},\"output_index\":0,\"sequence_number\":2}\n\n",
-          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"{\\\"\",\"item_id\":\"fc_02275622ad702233006a5669db2acc819c8958969f778ff6bd\",\"obfuscation\":\"KrAAAIl5jguw7E\",\"output_index\":0,\"sequence_number\":3}\n\n",
-          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"topic\",\"item_id\":\"fc_02275622ad702233006a5669db2acc819c8958969f778ff6bd\",\"obfuscation\":\"bp4vDnwxDy4\",\"output_index\":0,\"sequence_number\":4}\n\n",
-          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"\\\":\\\"\",\"item_id\":\"fc_02275622ad702233006a5669db2acc819c8958969f778ff6bd\",\"obfuscation\":\"FeCLPky54J6aU\",\"output_index\":0,\"sequence_number\":5}\n\n",
-          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"quant\",\"item_id\":\"fc_02275622ad702233006a5669db2acc819c8958969f778ff6bd\",\"obfuscation\":\"qxHokL0R5LY\",\"output_index\":0,\"sequence_number\":6}\n\n",
-          "event: response.function_cal",
-          "l_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"um\",\"item_id\":\"fc_02275622ad702233006a5669db2acc819c8958969f778ff6bd\",\"obfuscation\":\"4jMU1c0l4ZyUR0\",\"output_index\":0,\"sequence_number\":7}\n\n",
-          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\" computing\",\"item_id\":\"fc_02275622ad702233006a5669db2acc819c8958969f778ff6bd\",\"obfuscation\":\"EL2zHK\",\"output_index\":0,\"sequence_number\":8}\n\n",
-          "event: response.function_cal",
-          "l_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"\\\",\\\"\",\"item_id\":\"fc_02275622ad702233006a5669db2acc819c8958969f778ff6bd\",\"obfuscation\":\"wl7MHx7T0ZX8S\",\"output_index\":0,\"sequence_number\":9}\n\n",
-          "event: response.function_cal",
-          "l_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"_\",\"item_id\":\"fc_02275622ad702233006a5669db2acc819c8958969f778ff6bd\",\"obfuscation\":\"S2TSAv7gNS6Fo2S\",\"output_index\":0,\"sequence_number\":10}\n\n",
-          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"background\",\"item_id\":\"fc_02275622ad702233006a5669db2acc819c8958969f778ff6bd\",\"obfuscation\":\"9zuNJz\",\"output_index\":0,\"sequence_number\":11}\n\n",
-          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"\\\":\",\"item_id\":\"fc_02275622ad702233006a5669db2acc819c8958969f778ff6bd\",\"obfuscation\":\"tKB99GIKCfw0lG\",\"output_index\":0,\"sequence_number\":12}\n\n",
-          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"{\",\"item_id\":\"fc_02275622ad702233006a5669db2acc819c8958969f778ff6bd\",\"obfuscation\":\"1oHEWFPr2M5NTOs\",\"output_index\":0,\"sequence_number\":13}\n\n",
-          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\" \\\"\",\"item_id\":\"fc_02275622ad702233006a5669db2acc819c8958969f778ff6bd\",\"obfuscation\":\"orSUPUGknWkFfo\",\"output_index\":0,\"sequence_number\":14}\n\n",
-          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"enabled\",\"item_id\":\"fc_02275622ad702233006a5669db2acc819c8958969f778ff6bd\",\"obfuscation\":\"EovdvOQO5\",\"output_index\":0,\"sequence_number\":15}\n\n",
-          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"\\\":\",\"item_id\":\"fc_02275622ad702233006a5669db2acc819c8958969f778ff6bd\",\"obfuscation\":\"ScjVohwBWfjV4A\",\"output_index\":0,\"sequence_number\":16}\n\n",
-          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"true\",\"item_id\":\"fc_02275622ad702233006a5669db2acc819c8958969f778ff6bd\",\"obfuscation\":\"eWTj3d0WO0Ph\",\"output_index\":0,\"sequence_number\":17}\n\n",
-          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\",\\\"\",\"item_id\":\"fc_02275622ad702233006a5669db2acc819c8958969f778ff6bd\",\"obfuscation\":\"GtnG7Ot5nDpIJs\",\"output_index\":0,\"sequence_number\":18}\n\n",
-          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"timeout\",\"item_id\":\"fc_02275622ad702233006a5669db2acc819c8958969f778ff6bd\",\"obfuscation\":\"NgyiNcP51\",\"output_index\":0,\"sequence_number\":19}\n\n",
-          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"Ms\",\"item_id\":\"fc_02275622ad702233006a5669db2acc819c8958969f778ff6bd\",\"obfuscation\":\"OY85qhTeoTUxw0\",\"output_index\":0,\"sequence_number\":20}\n\n",
-          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"\\\":\",\"item_id\":\"fc_02275622ad702233006a5669db2acc819c8958969f778ff6bd\",\"obfuscation\":\"2VeEsDGK7iXdsa\",\"output_index\":0,\"sequence_number\":21}\n\n",
-          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"300\",\"item_id\":\"fc_02275622ad702233006a5669db2acc819c8958969f778ff6bd\",\"obfuscation\":\"pkhXZk2vVuuUi\",\"output_index\":0,\"sequence_number\":22}\n\n",
-          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"00\",\"item_id\":\"fc_02275622ad702233006a5669db2acc819c8958969f778ff6bd\",\"obfuscation\":\"95lHJ6YZFfBa79\",\"output_index\":0,\"sequence_number\":23}\n\n",
-          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\",\\\"\",\"item_id\":\"fc_02275622ad702233006a5669db2acc819c8958969f778ff6bd\",\"obfuscation\":\"trbtbhcrpwWIb1\",\"output_index\":0,\"sequence_number\":24}\n\n",
-          "event: response.function_cal",
-          "l_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"max\",\"item_id\":\"fc_02275622ad702233006a5669db2acc819c8958969f778ff6bd\",\"obfuscation\":\"TXZGaKReSRdKG\",\"output_index\":0,\"sequence_number\":25}\n\n",
-          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"Retries\",\"item_id\":\"fc_02275622ad702233006a5669db2acc819c8958969f778ff6bd\",\"obfuscation\":\"B1Y1er0zh\",\"output_index\":0,\"sequence_number\":26}\n\n",
-          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"\\\":\",\"item_id\":\"fc_02275622ad702233006a5669db2acc819c8958969f778ff6bd\",\"obfuscation\":\"CpR0FzjgyMRDam\",\"output_index\":0,\"sequence_number\":27}\n\n",
-          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"3\",\"item_id\":\"fc_02275622ad702233006a5669db2acc819c8958969f778ff6bd\",\"obfuscation\":\"GqwQGfu3z0nxsC4\",\"output_index\":0,\"sequence_number\":28}\n\n",
-          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\" }}\",\"item_id\":\"fc_02275622ad702233006a5669db2acc819c8958969f778ff6bd\",\"obfuscation\":\"IJqVt2ZvLHE0U\",\"output_index\":0,\"sequence_number\":29}\n\n",
+          "event: response.created\ndata: {\"type\":\"response.created\",\"response\":{\"id\":\"resp_0917235ea6b2a5cc006a8d650854a087d0bfdfeeb6d8bfdec2\",\"object\":\"response\",\"created_at\":1787651336,\"status\":\"in_progress\",\"background\":false,\"completed_at\":null,\"error\":null,\"frequency_penalty\":0.0,\"incomplete_details\":null,\"instructions\":null,\"max_output_tokens\":null,\"max_tool_cal",
+          "ls\":null,\"model\":\"gpt-4o-mini-2024-07-18\",\"moderation\":null,\"output\":[],\"parallel_tool_calls\":true,\"presence_penalty\":0.0,\"previous_response_id\":null,\"prompt_cache_key\":null,\"prompt_cache_retention\":\"in_memory\",\"reasoning\":{\"context\":null,\"effort\":null,\"summary\":null},\"safety_identifier\":null,\"service_tier\":\"auto\",\"store\":true,\"temperature\":1.0,\"text\":{\"format\":{\"type\":\"text\"},\"verbosity\":\"medium\"},\"tool_choice\":\"auto\",\"tool_usage\":{\"image_gen\":{\"input_tokens\":0,\"input_tokens_details\":{\"image_tokens\":0,\"text_tokens\":0},\"output_tokens\":0,\"output_tokens_details\":{\"image_tokens\":0,\"text_tokens\":0},\"total_tokens\":0},\"web_search\":{\"num_requests\":0}},\"tools\":[{\"type\":\"function\",\"description\":\"Research a topic. This takes a while, use it when the user asks to research something.\",\"name\":\"research\",\"output_schema\":null,\"parameters\":{\"$schema\":\"http://json-schema.org/draft-07/schema#\",\"type\":\"object\",\"properties\":{\"topic\":{\"type\":\"string\",\"description\":\"The topic to research\"},\"_background\":{\"description\":\"Optional: override background execution behavior for this specific call. Set enabled=false to force foreground, enabled=true to force background. Omit entirely to use the default configuration.\",\"type\":\"object\",\"properties\":{\"enabled\":{\"description\":\"Force background (true) or foreground (false) execution for this call.\",\"anyOf\":[{\"description\":\"Force ba",
+          "ckground (true) or foreground (false) execution for this call.\",\"type\":\"boolean\"},{\"type\":\"null\"}]},\"timeoutMs\":{\"description\":\"Override timeout in milliseconds for this call.\",\"anyOf\":[{\"description\":\"Override timeout in milliseconds for this call.\",\"type\":\"number\"},{\"type\":\"null\"}]},\"maxRetries\":{\"description\":\"Override maximum retry attempts for this call.\",\"anyOf\":[{\"description\":\"Override maximum retry attempts for this call.\",\"type\":\"number\"},{\"type\":\"null\"}]}},\"additionalProperties\":false,\"required\":[\"enabled\",\"timeoutMs\",\"maxRetries\"],\"x-optional\":[\"enabled\",\"timeoutMs\",\"maxRetries\"]}},\"required\":[\"topic\",\"_background\"],\"additionalProperties\":false,\"x-optional\":[\"_background\"]},\"strict\":true},{\"type\":\"function\",\"description\":\"Greet a person by name. Use this when the user asks to greet someone.\",\"name\":\"greet\",\"output_schema\":null,\"parameters\":{\"$schema\":\"http://json-schema.org/draft-07/schema#\",\"type\":\"object\",\"properties\":{\"name\":{\"type\":\"string\",\"description\":\"The name to greet\"},\"_background\":{\"description\":\"Optional: override background execution behavior for this specific call. Set enabled=false to force foreground, enabled=true to force background. Omit entirely to use the default configuration.\",\"type\":\"object\",\"properties\":{\"enabled\":{\"description\":\"Force background (true) or foreground (false) execution for this call.\",\"anyOf\":[{",
+          "\"description\":\"Force background (true) or foreground (false) execution for this call.\",\"type\":\"boolean\"},{\"type\":\"null\"}]},\"timeoutMs\":{\"description\":\"Override timeout in milliseconds for this call.\",\"anyOf\":[{\"description\":\"Override timeout in milliseconds for this call.\",\"type\":\"number\"},{\"type\":\"null\"}]},\"maxRetries\":{\"description\":\"Override maximum retry attempts for this call.\",\"anyOf\":[{\"description\":\"Override maximum retry attempts for this call.\",\"type\":\"number\"},{\"type\":\"null\"}]}},\"additionalProperties\":false,\"required\":[\"enabled\",\"timeoutMs\",\"maxRetries\"],\"x-optional\":[\"enabled\",\"timeoutMs\",\"maxRetries\"]}},\"required\":[\"name\",\"_background\"],\"additionalProperties\":false,\"x-optional\":[\"_background\"]},\"strict\":true}],\"top_logprobs\":0,\"top_p\":1.0,\"truncation\":\"disabled\",\"usage\":null,\"user\":null,\"metadata\":{}},\"sequence_number\":0}\n\nevent: response.in_progre",
+          "ss\ndata: {\"type\":\"response.in_progress\",\"response\":{\"id\":\"resp_0917235ea6b2a5cc006a8d650854a087d0bfdfeeb6d8bfdec2\",\"object\":\"response\",\"created_at\":1787651336,\"status\":\"in_progress\",\"background\":false,\"completed_at\":null,\"error\":null,\"frequency_penalty\":0.0,\"incomplete_details\":null,\"instructions\":null,\"max_output_tokens\":null,\"max_tool_calls\":null,\"model\":\"gpt-4o-mini-2024-07-18\",\"moderation\":null,\"output\":[],\"parallel_tool_calls\":true,\"presence_penalty\":0.0,\"previous_response_id\":null,\"prompt_cache_key\":null,\"prompt_cache_retention\":\"in_memory\",\"reasoning\":{\"context\":null,\"effort\":null,\"summary\":null},\"safety_identifier\":null,\"service_tier\":\"auto\",\"store\":true,\"temperature\":1.0,\"text\":{\"format\":{\"type\":\"text\"},\"verbosity\":\"medium\"},\"tool_choice\":\"auto\",\"tool_usage\":{\"image_gen\":{\"input_tokens\":0,\"input_tokens_details\":{\"image_tokens\":0,\"text_tokens\":0},\"output_tokens\":0,\"output_tokens_details\":{\"image_tokens\":0,\"text_tokens\":0},\"total_tokens\":0},\"web_search\":{\"num_requests\":0}},\"tools\":[{\"type\":\"function\",\"description\":\"Research a topic. This takes a while, use it when the user asks to research something.\",\"name\":\"research\",\"output_schema\":null,\"parameters\":{\"$schema\":\"http://json-schema.org/draft-07/schema#\",\"type\":\"object\",\"properties\":{\"topic\":{\"type\":\"string\",\"description\":\"The topic to research\"},\"_background\":{\"description\":\"Optional:",
+          " override background execution behavior for this specific call. Set enabled=false to force foreground, enabled=true to force background. Omit entirely to use the default configuration.\",\"type\":\"object\",\"properties\":{\"enabled\":{\"description\":\"Force background (true) or foreground (false) execution for this call.\",\"anyOf\":[{\"description\":\"Force background (true) or foreground (false) execution for this call.\",\"type\":\"boolean\"},{\"type\":\"null\"}]},\"timeoutMs\":{\"description\":\"Override timeout in milliseconds for this call.\",\"anyOf\":[{\"description\":\"Override timeout in milliseconds for this call.\",\"type\":\"number\"},{\"type\":\"null\"}]},\"maxRetries\":{\"description\":\"Override maximum retry attempts for this call.\",\"anyOf\":[{\"description\":\"Override maximum retry attempts for this call.\",\"type\":\"number\"},{\"type\":\"null\"}]}},\"additionalProperties\":false,\"required\":[\"enabled\",\"timeoutMs\",\"maxRetries\"],\"x-optional\":[\"enabled\",\"timeoutMs\",\"maxRetries\"]}},\"required\":[\"topic\",\"_background\"],\"additionalProperties\":false,\"x-optional\":[\"_background\"]},\"strict\":true},{\"type\":\"function\",\"description\":\"Greet a person by name. Use this when the user asks to greet someone.\",\"name\":\"greet\",\"output_schema\":null,\"parameters\":{\"$schema\":\"http://json-schema.org/draft-07/schema#\",\"type\":\"object\",\"properties\":{\"name\":{\"type\":\"string\",\"description\":\"The name to greet\"},\"_background\":{\"",
+          "description\":\"Optional: override background execution behavior for this specific call. Set enabled=false to force foreground, enabled=true to force background. Omit entirely to use the default configuration.\",\"type\":\"object\",\"properties\":{\"enabled\":{\"description\":\"Force background (true) or foreground (false) execution for this call.\",\"anyOf\":[{\"description\":\"Force background (true) or foreground (false) execution for this call.\",\"type\":\"boolean\"},{\"type\":\"null\"}]},\"timeoutMs\":{\"description\":\"Override timeout in milliseconds for this call.\",\"anyOf\":[{\"description\":\"Override timeout in milliseconds for this call.\",\"type\":\"number\"},{\"type\":\"null\"}]},\"maxRetries\":{\"description\":\"Override maximum retry attempts for this call.\",\"anyOf\":[{\"description\":\"Override maximum retry attempts for this call.\",\"type\":\"number\"},{\"type\":\"null\"}]}},\"additionalProperties\":false,\"required\":[\"enabled\",\"timeoutMs\",\"maxRetries\"],\"x-optional\":[\"enabled\",\"timeoutMs\",\"maxRetries\"]}},\"required\":[\"name\",\"_background\"],\"additionalProperties\":false,\"x-optional\":[\"_background\"]},\"strict\":true}],\"top_logprobs\":0,\"top_p\":1.0,\"truncation\":\"disabled\",\"usage\":null,\"user\":null,\"metadata\":{}},\"sequence_number\":1}\n\n",
+          "event: response.output_item.added\ndata: {\"type\":\"response.output_item.added\",\"item\":{\"id\":\"fc_0917235ea6b2a5cc006a8d6509d05087d09540062d4d6d0be0\",\"type\":\"function_call\",\"status\":\"in_progress\",\"arguments\":\"\",\"call_id\":\"call_S9pq89xs7hPkcPggXdDSCD3s\",\"name\":\"research\"},\"output_index\":0,\"sequence_number\":2}\n\n",
+          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"{\\\"\",\"item_id\":\"fc_0917235ea6b2a5cc006a8d6509d05087d09540062d4d6d0be0\",\"obfuscation\":\"iTl6WoBsXPkyvN\",\"output_index\":0,\"sequence_number\":3}\n\n",
+          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"topic\",\"item_id\":\"fc_0917235ea6b2a5cc006a8d6509d05087d09540062d4d6d0be0\",\"obfuscation\":\"RCuZ1EDuN0n\",\"output_index\":0,\"sequence_number\":4}\n\nevent: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"\\\":\\\"\",\"item_id\":\"fc_0917235ea6b2a5cc006a8d6509d05087d09540062d4d6d0be0\",\"obfuscation\":\"5DlaVxFV1OC2p\",\"output_index\":0,\"sequence_number\":5}\n\n",
+          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"quant\",\"item_id\":\"fc_0917235ea6b2a5cc006a8d6509d05087d09540062d4d6d0be0\",\"obfuscation\":\"vfTieAtbJLo\",\"output_index\":0,\"sequence_number\":6}\n\nevent: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"um\",\"item_id\":\"fc_0917235ea6b2a5cc006a8d6509d05087d09540062d4d6d0be0\",\"obfuscation\":\"kVO3b8dREKi6Tu\",\"output_index\":0,\"sequence_number\":7}\n\n",
+          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\" computing\",\"item_id\":\"fc_0917235ea6b2a5cc006a8d6509d05087d09540062d4d6d0be0\",\"obfuscation\":\"batoCU\",\"output_index\":0,\"sequence_number\":8}\n\nevent: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"\\\",\\\"\",\"item_id\":\"fc_0917235ea6b2a5cc006a8d6509d05087d09540062d4d6d0be0\",\"obfuscation\":\"ejZjMr3ZlPncr\",\"output_index\":0,\"sequence_number\":9}\n\n",
+          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"_\",\"item_id\":\"fc_0917235ea6b2a5cc006a8d6509d05087d09540062d4d6d0be0\",\"obfuscation\":\"zJRWSxRYUtYCm0P\",\"output_index\":0,\"sequence_number\":10}\n\n",
+          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"background\",\"item_id\":\"fc_0917235ea6b2a5cc006a8d6509d05087d09540062d4d6d0be0\",\"obfuscation\":\"qRLBI1\",\"output_index\":0,\"sequence_number\":11}\n\n",
+          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"\\\":{\\\"\",\"item_id\":\"fc_0917235ea6b2a5cc006a8d6509d05087d09540062d4d6d0be0\",\"obfuscation\":\"2p4W8CHvAmLO\",\"output_index\":0,\"sequence_number\":12}\n\nevent: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"enabled\",\"item_id\":\"fc_0917235ea6b2a5cc006a8d6509d05087d09540062d4d6d0be0\",\"obfuscation\":\"rOJYnCQeR\",\"output_index\":0,\"sequence_number\":13}\n\n",
           "event: response.function_ca",
-          "ll_arguments.done\ndata: {\"type\":\"response.function_call_arguments.done\",\"arguments\":\"{\\\"topic\\\":\\\"quantum computing\\\",\\\"_background\\\":{ \\\"enabled\\\":true,\\\"timeoutMs\\\":30000,\\\"maxRetries\\\":3 }}\",\"item_id\":\"fc_02275622ad702233006a5669db2acc819c8958969f778ff6bd\",\"output_index\":0,\"sequence_number\":30}\n\n",
-          "event: response.output_item.done\ndata: {\"type\":\"response.output_item.done\",\"item\":{\"id\":\"fc_02275622ad702233006a5669db2acc819c8958969f778ff6bd\",\"type\":\"function_call\",\"status\":\"completed\",\"arguments\":\"{\\\"topic\\\":\\\"quantum computing\\\",\\\"_background\\\":{ \\\"enabled\\\":true,\\\"timeoutMs\\\":30000,\\\"maxRetries\\\":3 }}\",\"call_id\":\"call_HsPRqa5F2qq4ff8cgS9qPeBw\",\"name\":\"research\"},\"output_index\":0,\"sequence_number\":31}\n\n",
-          "event: response.completed\n",
-          "data: {\"type\":\"response.completed\",\"response\":{\"id\":\"resp_02275622ad702233006a5669da6b9c819c86258bb47d5d1c41\",\"object\":\"response\",\"created_at\":1784048090,\"status\":\"completed\",\"background\":false,\"completed_at\":1784048091,\"error\":null,\"frequency_penalty\":0.0,\"incomplete_details\":null,\"instructions\":null,\"max_output_tokens\":null,\"max_tool_calls\":null,\"model\":\"gpt-4o-mini-2024-07-18\",\"moderation\":null,\"output\":[{\"id\":\"fc_02275622ad702233006a5669db2acc819c8958969f778ff6bd\",\"type\":\"function_call\",\"status\":\"completed\",\"arguments\":\"{\\\"topic\\\":\\\"quantum computing\\\",\\\"_background\\\":{ \\\"enabled\\\":true,\\\"timeoutMs\\\":30000,\\\"maxRetries\\\":3 }}\",\"call_id\":\"call_HsPRqa5F2qq4ff8cgS9qPeBw\",\"name\":\"research\"}],\"parallel_tool_calls\":true,\"presence_penalty\":0.0,\"previous_response_id\":null,\"prompt_cache_key\":null,\"prompt_cache_retention\":\"in_memory\",\"reasoning\":{\"context\":null,\"effort\":null,\"summary\":null},\"safety_identifier\":null,\"service_tier\":\"default\",\"store\":true,\"temperature\":1.0,\"text\":{\"format\":{\"type\":\"text\"},\"verbosity\":\"medium\"},\"tool_choice\":\"auto\",\"tool_usage\":{\"image_gen\":{\"input_tokens\":0,\"input_tokens_details\":{\"image_tokens\":0,\"text_tokens\":0},\"output_tokens\":0,\"output_tokens_details\":{\"image_tokens\":0,\"text_tokens\":0},\"total_tokens\":0},\"web_search\":{\"num_requests\":0}},\"tools\":[{\"type\":\"function\",\"description\":\"Research a topic. This takes a while, use it when the user asks to research something.\",\"name\":\"research\",\"output_schema\":null,\"parameters\":{\"$schema\":\"http://json-schema.org/draft-07/schema#\",\"type\":\"object\",\"properties\":{\"topic\":{\"type\":\"string\",\"description\":\"The topic to research\"},\"_background\":{\"description\":\"Optional: override background execution behavior for this specific call. Set enabled=false to force foreground, enabled=true to force background. Omit entirely to use the default configuration.\",\"properties\":{\"enabled\":{\"description\":\"Force background (true) or foreground (false) execution for this call.\",\"anyOf\":[{\"description\":\"Force background (true) or foreground (false) execution for this call.\",\"type\":\"boolean\"},{\"type\":\"null\"}]},\"timeoutMs\":{\"description\":\"Override timeout in milliseconds for this call.\",\"anyOf\":[{\"description\":\"Override timeout in milliseconds for this call.\",\"type\":\"number\"},{\"type\":\"null\"}]},\"maxRetries\":{\"description\":\"Override maximum retry attempts for this call.\",\"anyOf\":[{\"description\":\"Override maximum retry attempts for this call.\",\"type\":\"number\"},{\"type\":\"null\"}]}},\"additionalProperties\":false,\"required\":[\"enabled\",\"timeoutMs\",\"maxRetries\"],\"x-optional\":[\"enabled\",\"timeoutMs\",\"maxRetries\"],\"anyOf\":[{\"description\":\"Optional: override background execution behavior for this specific call. Set enabled=false to force foreground, enabled=true to force background. Omit entirely to use the default configuration.\",\"properties\":{\"enabled\":{\"description\":\"Force background (true) or foreground (false) execution for this call.\",\"anyOf\":[{\"description\":\"Force background (true) or foreground (false) execution for this call.\",\"type\":\"boolean\"},{\"type\":\"null\"}]},\"timeoutMs\":{\"description\":\"Override timeout in milliseconds for this call.\",\"anyOf\":[{\"description\":\"Override timeout in milliseconds for this call.\",\"type\":\"number\"},{\"type\":\"null\"}]},\"maxRetries\":{\"description\":\"Override maximum retry attempts for this call.\",\"anyOf\":[{\"description\":\"Override maximum retry attempts for this call.\",\"type\":\"number\"},{\"type\":\"null\"}]}},\"additionalProperties\":false,\"required\":[\"enabled\",\"timeoutMs\",\"maxRetries\"],\"x-optional\":[\"enabled\",\"timeoutMs\",\"maxRetries\"],\"type\":\"object\"},{\"type\":\"null\"}]}},\"required\":[\"topic\",\"_background\"],\"additionalProperties\":false,\"x-optional\":[\"_background\"]},\"strict\":true},{\"type\":\"function\",\"description\":\"Greet a person by name. Use this when the user asks to greet someone.\",\"name\":\"greet\",\"output_schema\":null,\"parameters\":{\"$schema\":\"http://json-schema.org/draft-07/schema#\",\"type\":\"object\",\"properties\":{\"name\":{\"type\":\"string\",\"description\":\"The name to greet\"},\"_background\":{\"description\":\"Optional: override background execution behavior for this specific call. Set enabled=false to force foreground, enabled=true to force background. Omit entirely to use the default configuration.\",\"properti",
-          "es\":{\"enabled\":{\"description\":\"Force background (true) or foreground (false) execution for this call.\",\"anyOf\":[{\"description\":\"Force background (true) or foreground (false) execution for this call.\",\"type\":\"boolean\"},{\"type\":\"null\"}]},\"timeoutMs\":{\"description\":\"Override timeout in milliseconds for this call.\",\"anyOf\":[{\"description\":\"Override timeout in milliseconds for this call.\",\"type\":\"number\"},{\"type\":\"null\"}]},\"maxRetries\":{\"description\":\"Override maximum retry attempts for this call.\",\"anyOf\":[{\"description\":\"Override maximum retry attempts for this call.\",\"type\":\"number\"},{\"type\":\"null\"}]}},\"additionalProperties\":false,\"required\":[\"enabled\",\"timeoutMs\",\"maxRetries\"],\"x-optional\":[\"enabled\",\"timeoutMs\",\"maxRetries\"],\"anyOf\":[{\"description\":\"Optional: override background execution behavior for this specific call. Set enabled=false to force foreground, enabled=true to force background. Omit entirely to use the default configuration.\",\"properties\":{\"enabled\":{\"description\":\"Force background (true) or foreground (false) execution for this call.\",\"anyOf\":[{\"description\":\"Force background (true) or foreground (false) execution for this call.\",\"type\":\"boolean\"},{\"type\":\"null\"}]},\"timeoutMs\":{\"description\":\"Override timeout in milliseconds for this call.\",\"anyOf\":[{\"description\":\"Override timeout in milliseconds for this call.\",\"type\":\"number\"},{\"type\":\"null\"}]},\"maxRetries\":{\"description\":\"Override maximum retry attempts for this call.\",\"anyOf\":[{\"description\":\"Override maximum retry attempts for this call.\",\"type\":\"number\"},{\"type\":\"null\"}]}},\"additionalProperties\":false,\"required\":[\"enabled\",\"timeoutMs\",\"maxRetries\"],\"x-optional\":[\"enabled\",\"timeoutMs\",\"maxRetries\"],\"type\":\"object\"},{\"type\":\"null\"}]}},\"required\":[\"name\",\"_background\"],\"additionalProperties\":false,\"x-optional\":[\"_background\"]},\"strict\":true}],\"top_logprobs\":0,\"top_p\":1.0,\"truncation\":\"disabled\",\"usage\":{\"input_tokens\":691,\"input_tokens_details\":{\"cache_write_tokens\":0,\"cached_tokens\":0},\"output_tokens\":37,\"output_tokens_details\":{\"reasoning_tokens\":0},\"total_tokens\":728},\"user\":null,\"metadata\":{}},\"sequence_number\":32}\n\n"
+          "ll_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"\\\":\",\"item_id\":\"fc_0917235ea6b2a5cc006a8d6509d05087d09540062d4d6d0be0\",\"obfuscation\":\"WVhtIp5VHwyjg5\",\"output_index\":0,\"sequence_number\":14}\n\nevent: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"true\",\"item_id\":\"fc_0917235ea6b2a5cc006a8d6509d05087d09540062d4d6d0be0\",\"obfuscation\":\"GBmWML4h3Cij\",\"output_index\":0,\"sequence_number\":15}\n\n",
+          "event: response.function_cal",
+          "l_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\",\\\"\",\"item_id\":\"fc_0917235ea6b2a5cc006a8d6509d05087d09540062d4d6d0be0\",\"obfuscation\":\"gfRsufVdINPIYj\",\"output_index\":0,\"sequence_number\":16}\n\n",
+          "event: response.function_cal",
+          "l_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"timeout\",\"item_id\":\"fc_0917235ea6b2a5cc006a8d6509d05087d09540062d4d6d0be0\",\"obfuscation\":\"xBL44HM1t\",\"output_index\":0,\"sequence_number\":17}\n\n",
+          "event: response.function_cal",
+          "l_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"Ms\",\"item_id\":\"fc_0917235ea6b2a5cc006a8d6509d05087d09540062d4d6d0be0\",\"obfuscation\":\"2avCyIuzcbZoCI\",\"output_index\":0,\"sequence_number\":18}\n\n",
+          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"\\\":\",\"item_id\":\"fc_0917235ea6b2a5cc006a8d6509d05087d09540062d4d6d0be0\",\"obfuscation\":\"rZGDO0oZmrChKg\",\"output_index\":0,\"sequence_number\":19}\n\n",
+          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"100\",\"item_id\":\"fc_0917235ea6b2a5cc006a8d6509d05087d09540062d4d6d0be0\",\"obfuscation\":\"jajZhXBCMMi6c\",\"output_index\":0,\"sequence_number\":20}\n\n",
+          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"00\",\"item_id\":\"fc_0917235ea6b2a5cc006a8d6509d05087d09540062d4d6d0be0\",\"obfuscation\":\"oTcEDlnNSZVXy6\",\"output_index\":0,\"sequence_number\":21}\n\n",
+          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\",\\\"\",\"item_id\":\"fc_0917235ea6b2a5cc006a8d6509d05087d09540062d4d6d0be0\",\"obfuscation\":\"LIO3aLLR7iKCyn\",\"output_index\":0,\"sequence_number\":22}\n\n",
+          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"max\",\"item_id\":\"fc_0917235ea6b2a5cc006a8d6509d05087d09540062d4d6d0be0\",\"obfuscation\":\"s6GNuVs0cF37s\",\"output_index\":0,\"sequence_number\":23}\n\nevent: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"Retries\",\"item_id\":\"fc_0917235ea6b2a5cc006a8d6509d05087d09540062d4d6d0be0\",\"obfuscation\":\"dCRUsW8HJ\",\"output_index\":0,\"sequence_number\":24}\n\n",
+          "event: response.function_cal",
+          "l_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"\\\":\",\"item_id\":\"fc_0917235ea6b2a5cc006a8d6509d05087d09540062d4d6d0be0\",\"obfuscation\":\"LTVabBdkMBgORd\",\"output_index\":0,\"sequence_number\":25}\n\n",
+          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"3\",\"item_id\":\"fc_0917235ea6b2a5cc006a8d6509d05087d09540062d4d6d0be0\",\"obfuscation\":\"yP4L7b2zadXeQVv\",\"output_index\":0,\"sequence_number\":26}\n\n",
+          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"}}\",\"item_id\":\"fc_0917235ea6b2a5cc006a8d6509d05087d09540062d4d6d0be0\",\"obfuscation\":\"DQwNvDkGxxukNd\",\"output_index\":0,\"sequence_number\":27}\n\n",
+          "event: response.function_call_arguments.done\ndata: {\"type\":\"response.function_call_arguments.done\",\"arguments\":\"{\\\"topic\\\":\\\"quantum computing\\\",\\\"_background\\\":{\\\"enabled\\\":true,\\\"timeoutMs\\\":10000,\\\"maxRetries\\\":3}}\",\"item_id\":\"fc_0917235ea6b2a5cc006a8d6509d05087d09540062d4d6d0be0\",\"output_index\":0,\"sequence_number\":28}\n\nevent: response.output_item.done\ndata: {\"type\":\"response.output_item.done\",\"item\":{\"id\":\"fc_0917235ea6b2a5cc006a8d6509d05087d09540062d4d6d0be0\",\"type\":\"function_call\",\"status\":\"completed\",\"arguments\":\"{\\\"topic\\\":\\\"quantum computing\\\",\\\"_background\\\":{\\\"enabled\\\":true,\\\"timeoutMs\\\":10000,\\\"maxRetries\\\":3}}\",\"call_id\":\"call_S9pq89xs7hPkcPggXdDSCD3s\",\"name\":\"research\"},\"output_index\":0,\"sequence_number\":29}\n\n",
+          "event: response.completed\ndata: {\"type\":\"response.completed\",\"response\":{\"id\":\"resp_0917235ea6b2a5cc006a8d650854a087d0bfdfeeb6d8bfdec2\",\"object\":\"response\",\"created_at\":1787651336,\"status\":\"completed\",\"background\":false,\"completed_at\":1787651338,\"error\":null,\"frequency_penalty\":0.0,\"incomplete_details\":null,\"instructions\":null,\"max_output_tokens\":null,\"max_tool_calls\":null,\"model\":\"gpt-4o-mini-2024-07-18\",\"moderation\":null,\"output\":[{\"id\":\"fc_0917235ea6b2a5cc006a8d6509d05087d09540062d4d6d0be0\",\"type\":\"function_call\",\"status\":\"completed\",\"arguments\":\"{\\\"topic\\\":\\\"quantum computing\\\",\\\"_background\\\":{\\\"enabled\\\":true,\\\"timeoutMs\\\":10000,\\\"maxRetries\\\":3}}\",\"call_id\":\"call_S9pq89xs7hPkcPggXdDSCD3s\",\"name\":\"research\"}],\"parallel_tool_calls\":true,\"presence_penalty\":0.0,\"previous_response_id\":null,\"prompt_cache_key\":null,\"prompt_cache_retention\":\"in_memory\",\"reasoning\":{\"context\":null,\"effort\":null,\"summary\":null},\"safety_identifier\":null,\"service_tier\":\"default\",\"store\":true,\"temperature\":1.0,\"text\":{\"format\":{\"type\":\"text\"},\"verbosity\":\"medium\"},\"tool_choice\":\"auto\",\"tool_usage\":{\"image_gen\":{\"input_tokens\":0,\"input_tokens_details\":{\"image_tokens\":0,\"text_tokens\":0},\"output_tokens\":0,\"output_tokens_details\":{\"image_tokens\":0,\"text_tokens\":0},\"total_tokens\":0},\"web_search\":{\"num_requests\":0}},\"tools\":[{\"type\":\"function\",\"description\":\"Research a ",
+          "topic. This takes a while, use it when the user asks to research something.\",\"name\":\"research\",\"output_schema\":null,\"parameters\":{\"$schema\":\"http://json-schema.org/draft-07/schema#\",\"type\":\"object\",\"properties\":{\"topic\":{\"type\":\"string\",\"description\":\"The topic to research\"},\"_background\":{\"description\":\"Optional: override background execution behavior for this specific call. Set enabled=false to force foreground, enabled=true to force background. Omit entirely to use the default configuration.\",\"type\":\"object\",\"properties\":{\"enabled\":{\"description\":\"Force background (true) or foreground (false) execution for this call.\",\"anyOf\":[{\"description\":\"Force background (true) or foreground (false) execution for this call.\",\"type\":\"boolean\"},{\"type\":\"null\"}]},\"timeoutMs\":{\"description\":\"Override timeout in milliseconds for this call.\",\"anyOf\":[{\"description\":\"Override timeout in milliseconds for this call.\",\"type\":\"number\"},{\"type\":\"null\"}]},\"maxRetries\":{\"description\":\"Override maximum retry attempts for this call.\",\"anyOf\":[{\"description\":\"Override maximum retry attempts for this call.\",\"type\":\"number\"},{\"type\":\"null\"}]}},\"additionalProperties\":false,\"required\":[\"enabled\",\"timeoutMs\",\"maxRetries\"],\"x-optional\":[\"enabled\",\"timeoutMs\",\"maxRetries\"]}},\"required\":[\"topic\",\"_background\"],\"additionalProperties\":false,\"x-optional\":[\"_background\"]},\"strict\":tru",
+          "e},{\"type\":\"function\",\"description\":\"Greet a person by name. Use this when the user asks to greet someone.\",\"name\":\"greet\",\"output_schema\":null,\"parameters\":{\"$schema\":\"http://json-schema.org/draft-07/schema#\",\"type\":\"object\",\"properties\":{\"name\":{\"type\":\"string\",\"description\":\"The name to greet\"},\"_background\":{\"description\":\"Optional: override background execution behavior for this specific call. Set enabled=false to force foreground, enabled=true to force background. Omit entirely to use the default configuration.\",\"type\":\"object\",\"properties\":{\"enabled\":{\"description\":\"Force background (true) or foreground (false) execution for this call.\",\"anyOf\":[{\"description\":\"Force background (true) or foreground (false) execution for this call.\",\"type\":\"boolean\"},{\"type\":\"null\"}]},\"timeoutMs\":{\"description\":\"Override timeout in milliseconds for this call.\",\"anyOf\":[{\"description\":\"Override timeout in milliseconds for this call.\",\"type\":\"number\"},{\"type\":\"null\"}]},\"maxRetries\":{\"description\":\"Override maximum retry attempts for this call.\",\"anyOf\":[{\"description\":\"Override maximum retry attempts for this call.\",\"type\":\"number\"},{\"type\":\"null\"}]}},\"additionalProperties\":false,\"required\":[\"enabled\",\"timeoutMs\",\"maxRetries\"],\"x-optional\":[\"enabled\",\"timeoutMs\",\"maxRetries\"]}},\"required\":[\"name\",\"_background\"],\"additionalProperties\":false,\"x-optional\":[\"_back",
+          "ground\"]},\"strict\":true}],\"top_logprobs\":0,\"top_p\":1.0,\"truncation\":\"disabled\",\"usage\":{\"input_tokens\":615,\"input_tokens_details\":{\"cache_write_tokens\":0,\"cached_tokens\":0},\"output_tokens\":35,\"output_tokens_details\":{\"reasoning_tokens\":0},\"total_tokens\":650},\"user\":null,\"metadata\":{}},\"sequence_number\":30}\n\n"
         ],
         "chunkTimings": [
-          1, 0, 0, 0, 0, 0, 71, 1, 1, 0, 0, 0, 598, 53, 9, 9, 4, 3, 0, 11, 1, 0, 0, 0, 0, 46, 0, 17, 0, 56, 2, 30, 2,
-          55, 2, 40, 2, 26, 5, 0, 94, 3, 3, 22, 34, 0, 3, 160, 1, 0
+          0,
+          0,
+          0,
+          0,
+          1,
+          0,
+          0,
+          1193,
+          2,
+          7,
+          14,
+          29,
+          7,
+          7,
+          0,
+          32,
+          0,
+          13,
+          0,
+          2,
+          0,
+          8,
+          0,
+          1,
+          15,
+          7,
+          0,
+          5,
+          1,
+          0,
+          13,
+          3,
+          63,
+          125,
+          0,
+          0,
+          0
         ],
         "isStreaming": true
       }
     },
     {
-      "hash": "2c6769a35ee8f1e1",
+      "hash": "29ad117bc648a554",
       "request": {
         "url": "https://api.openai.com/v1/responses",
         "method": "POST",
@@ -362,14 +313,14 @@
             },
             {
               "type": "function_call",
-              "call_id": "call_HsPRqa5F2qq4ff8cgS9qPeBw",
+              "call_id": "call_S9pq89xs7hPkcPggXdDSCD3s",
               "name": "research",
-              "arguments": "{\"topic\":\"quantum computing\",\"_background\":{\"enabled\":true,\"timeoutMs\":30000,\"maxRetries\":3}}"
+              "arguments": "{\"topic\":\"quantum computing\",\"_background\":{\"enabled\":true,\"timeoutMs\":10000,\"maxRetries\":3}}"
             },
             {
               "type": "function_call_output",
-              "call_id": "call_HsPRqa5F2qq4ff8cgS9qPeBw",
-              "output": "Background task started. Task ID: 00000000-0000-4000-8000-00000000002b. The tool \"research\" is running in the background. You will be notified when it completes."
+              "call_id": "call_S9pq89xs7hPkcPggXdDSCD3s",
+              "output": "Background task started. Task ID: 00000000-0000-4000-8000-00000000002a. The tool \"research\" is running in the background. You will be notified when it completes."
             }
           ],
           "tools": [
@@ -387,6 +338,7 @@
                   },
                   "_background": {
                     "description": "Optional: override background execution behavior for this specific call. Set enabled=false to force foreground, enabled=true to force background. Omit entirely to use the default configuration.",
+                    "type": "object",
                     "properties": {
                       "enabled": {
                         "description": "Force background (true) or foreground (false) execution for this call.",
@@ -426,63 +378,26 @@
                       }
                     },
                     "additionalProperties": false,
-                    "required": ["enabled", "timeoutMs", "maxRetries"],
-                    "x-optional": ["enabled", "timeoutMs", "maxRetries"],
-                    "anyOf": [
-                      {
-                        "description": "Optional: override background execution behavior for this specific call. Set enabled=false to force foreground, enabled=true to force background. Omit entirely to use the default configuration.",
-                        "properties": {
-                          "enabled": {
-                            "description": "Force background (true) or foreground (false) execution for this call.",
-                            "anyOf": [
-                              {
-                                "description": "Force background (true) or foreground (false) execution for this call.",
-                                "type": "boolean"
-                              },
-                              {
-                                "type": "null"
-                              }
-                            ]
-                          },
-                          "timeoutMs": {
-                            "description": "Override timeout in milliseconds for this call.",
-                            "anyOf": [
-                              {
-                                "description": "Override timeout in milliseconds for this call.",
-                                "type": "number"
-                              },
-                              {
-                                "type": "null"
-                              }
-                            ]
-                          },
-                          "maxRetries": {
-                            "description": "Override maximum retry attempts for this call.",
-                            "anyOf": [
-                              {
-                                "description": "Override maximum retry attempts for this call.",
-                                "type": "number"
-                              },
-                              {
-                                "type": "null"
-                              }
-                            ]
-                          }
-                        },
-                        "additionalProperties": false,
-                        "required": ["enabled", "timeoutMs", "maxRetries"],
-                        "x-optional": ["enabled", "timeoutMs", "maxRetries"],
-                        "type": "object"
-                      },
-                      {
-                        "type": "null"
-                      }
+                    "required": [
+                      "enabled",
+                      "timeoutMs",
+                      "maxRetries"
+                    ],
+                    "x-optional": [
+                      "enabled",
+                      "timeoutMs",
+                      "maxRetries"
                     ]
                   }
                 },
-                "required": ["topic", "_background"],
+                "required": [
+                  "topic",
+                  "_background"
+                ],
                 "additionalProperties": false,
-                "x-optional": ["_background"]
+                "x-optional": [
+                  "_background"
+                ]
               }
             },
             {
@@ -499,6 +414,7 @@
                   },
                   "_background": {
                     "description": "Optional: override background execution behavior for this specific call. Set enabled=false to force foreground, enabled=true to force background. Omit entirely to use the default configuration.",
+                    "type": "object",
                     "properties": {
                       "enabled": {
                         "description": "Force background (true) or foreground (false) execution for this call.",
@@ -538,70 +454,33 @@
                       }
                     },
                     "additionalProperties": false,
-                    "required": ["enabled", "timeoutMs", "maxRetries"],
-                    "x-optional": ["enabled", "timeoutMs", "maxRetries"],
-                    "anyOf": [
-                      {
-                        "description": "Optional: override background execution behavior for this specific call. Set enabled=false to force foreground, enabled=true to force background. Omit entirely to use the default configuration.",
-                        "properties": {
-                          "enabled": {
-                            "description": "Force background (true) or foreground (false) execution for this call.",
-                            "anyOf": [
-                              {
-                                "description": "Force background (true) or foreground (false) execution for this call.",
-                                "type": "boolean"
-                              },
-                              {
-                                "type": "null"
-                              }
-                            ]
-                          },
-                          "timeoutMs": {
-                            "description": "Override timeout in milliseconds for this call.",
-                            "anyOf": [
-                              {
-                                "description": "Override timeout in milliseconds for this call.",
-                                "type": "number"
-                              },
-                              {
-                                "type": "null"
-                              }
-                            ]
-                          },
-                          "maxRetries": {
-                            "description": "Override maximum retry attempts for this call.",
-                            "anyOf": [
-                              {
-                                "description": "Override maximum retry attempts for this call.",
-                                "type": "number"
-                              },
-                              {
-                                "type": "null"
-                              }
-                            ]
-                          }
-                        },
-                        "additionalProperties": false,
-                        "required": ["enabled", "timeoutMs", "maxRetries"],
-                        "x-optional": ["enabled", "timeoutMs", "maxRetries"],
-                        "type": "object"
-                      },
-                      {
-                        "type": "null"
-                      }
+                    "required": [
+                      "enabled",
+                      "timeoutMs",
+                      "maxRetries"
+                    ],
+                    "x-optional": [
+                      "enabled",
+                      "timeoutMs",
+                      "maxRetries"
                     ]
                   }
                 },
-                "required": ["name", "_background"],
+                "required": [
+                  "name",
+                  "_background"
+                ],
                 "additionalProperties": false,
-                "x-optional": ["_background"]
+                "x-optional": [
+                  "_background"
+                ]
               }
             }
           ],
           "tool_choice": "auto",
           "stream": true
         },
-        "timestamp": 1784048091996
+        "timestamp": 1787651338206
       },
       "response": {
         "status": 200,
@@ -610,62 +489,120 @@
           "access-control-expose-headers": "X-Request-ID, CF-Ray, CF-Ray",
           "alt-svc": "h3=\":443\"; ma=86400",
           "cf-cache-status": "DYNAMIC",
-          "cf-ray": "a1b20d3f29b371e6-CDG",
+          "cf-ray": "a309af209c674113-LAX",
           "connection": "keep-alive",
           "content-type": "text/event-stream; charset=utf-8",
-          "date": "Tue, 14 Jul 2026 16:54:52 GMT",
+          "date": "Tue, 25 Aug 2026 09:48:58 GMT",
           "openai-organization": "mastra-qb2kpb",
-          "openai-processing-ms": "409",
+          "openai-processing-ms": "223",
           "openai-project": "proj_Cvw1JiXoxHTeEWgnnK3t9AYG",
           "openai-version": "2020-10-01",
           "server": "cloudflare",
           "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
           "x-content-type-options": "nosniff",
-          "x-request-id": "req_8e2b7cc079404d52a6eca6533ba1dad5"
+          "x-request-id": "req_a8d3b193569947189bf58671bc61a942"
         },
         "chunks": [
-          "event: response.created\ndata: {\"type\":\"response.created\",\"response\":{\"id\":\"resp_0db320cbe9dbcc2c006a5669dc1f48819db1b11e0681547bd4\",\"object\":\"response\",\"created_at\":1784048092,\"status\":\"in_progress\",\"background\":false,\"completed_at\":null,\"error\":null,\"frequency_penalty\":0.0,\"incomplete_details\":null,\"instructions\":null,\"max_output_tokens\":null,\"max_tool_ca",
-          "lls\":null,\"model\":\"gpt-4o-mini-2024-07-18\",\"moderation\":null,\"output\":[],\"parallel_tool_calls\":true,\"presence_penalty\":0.0,\"previous_response_id\":null,\"prompt_cache_key\":null,\"prompt_cache_retention\":\"in_memory\",\"reasoning\":{\"context\":null,\"effort\":null,\"summary\":null},\"safety_identifier\":null,\"service_tier\":\"auto\",\"store\":true,\"temperature\":1.0,\"text\":{\"format\":{\"type\":\"text\"},\"verbosity\":\"medium\"},\"tool_choice\":\"auto\",\"tool_usage\":{\"image_gen\":{\"input_tokens\":0,\"input_tokens_details\":{\"image_tokens\":0,\"text_tokens\":0},\"output_tokens\":0,\"output_tokens_details\":{\"image_tokens\":0,\"text_tokens\":0},\"total_tokens\":0},\"web_search\":{\"num_requests\":0}},\"tools\":[{\"type\":\"function\",\"description\":\"Research a topic. This takes a while, use it when the user asks to research something.\",\"name\":\"research\",\"output_schema\":null,\"parameters\":{\"$schema\":\"http://json-schema.org/draft-07/schema#\",\"type\":\"object\",\"properties\":{\"topic\":{\"type\":\"string\",\"description\":\"The topic to research\"},\"_background\":{\"description\":\"Optional: override background execution behavior for this specific call. Set enabled=false to force foreground, enabled=true to force background. Omit entirely to use the default configuration.\",\"properties\":{\"enabled\":{\"description\":\"Force background (true) or foreground (false) execution for this call.\",\"anyOf\":[{\"description\":\"Force background (true)",
-          " or foreground (false) execution for this call.\",\"type\":\"boolean\"},{\"type\":\"null\"}]},\"timeoutMs\":{\"description\":\"Override timeout in milliseconds for this call.\",\"anyOf\":[{\"description\":\"Override timeout in milliseconds for this call.\",\"type\":\"number\"},{\"type\":\"null\"}]},\"maxRetries\":{\"description\":\"Override maximum retry attempts for this call.\",\"anyOf\":[{\"description\":\"Override maximum retry attempts for this call.\",\"type\":\"number\"},{\"type\":\"null\"}]}},\"additionalProperties\":false,\"required\":[\"enabled\",\"timeoutMs\",\"maxRetries\"],\"x-optional\":[\"enabled\",\"timeoutMs\",\"maxRetries\"],\"anyOf\":[{\"description\":\"Optional: override background execution behavior for this specific call. Set enabled=false to force foreground, enabled=true to force background. Omit entirely to use the default configuration.\",\"properties\":{\"enabled\":{\"description\":\"Force background (true) or foreground (false) execution for this call.\",\"anyOf\":[{\"description\":\"Force background (true) or foreground (false) execution for this call.\",\"type\":\"boolean\"},{\"type\":\"null\"}]},\"timeoutMs\":{\"description\":\"Override timeout in milliseconds for this call.\",\"anyOf\":[{\"description\":\"Override timeout in milliseconds for this call.\",\"type\":\"number\"},{\"type\":\"null\"}]},\"maxRetries\":{\"description\":\"Override maximum retry attempts for this call.\",\"anyOf\":[{\"description\":\"Override maximum retry attempts ",
-          "for this call.\",\"type\":\"number\"},{\"type\":\"null\"}]}},\"additionalProperties\":false,\"required\":[\"enabled\",\"timeoutMs\",\"maxRetries\"],\"x-optional\":[\"enabled\",\"timeoutMs\",\"maxRetries\"],\"type\":\"object\"},{\"type\":\"null\"}]}},\"required\":[\"topic\",\"_background\"],\"additionalProperties\":false,\"x-optional\":[\"_background\"]},\"strict\":true},{\"type\":\"function\",\"description\":\"Greet a person by name. Use this when the user asks to greet someone.\",\"name\":\"greet\",\"output_schema\":null,\"parameters\":{\"$schema\":\"http://json-schema.org/draft-07/schema#\",\"type\":\"object\",\"properties\":{\"name\":{\"type\":\"string\",\"description\":\"The name to greet\"},\"_background\":{\"description\":\"Optional: override background execution behavior for this specific call. Set enabled=false to force foreground, enabled=true to force background. Omit entirely to use the default configuration.\",\"properties\":{\"enabled\":{\"description\":\"Force background (true) or foreground (false) execution for this call.\",\"anyOf\":[{\"description\":\"Force background (true) or foreground (false) execution for this call.\",\"type\":\"boolean\"},{\"type\":\"null\"}]},\"timeoutMs\":{\"description\":\"Override timeout in milliseconds for this call.\",\"anyOf\":[{\"description\":\"Override timeout in milliseconds for this call.\",\"type\":\"number\"},{\"type\":\"null\"}]},\"maxRetries\":{\"description\":\"Override maximum retry attempts for this call.\",\"anyOf\":[{\"descr",
-          "iption\":\"Override maximum retry attempts for this call.\",\"type\":\"number\"},{\"type\":\"null\"}]}},\"additionalProperties\":false,\"required\":[\"enabled\",\"timeoutMs\",\"maxRetries\"],\"x-optional\":[\"enabled\",\"timeoutMs\",\"maxRetries\"],\"anyOf\":[{\"description\":\"Optional: override background execution behavior for this specific call. Set enabled=false to force foreground, enabled=true to force background. Omit entirely to use the default configuration.\",\"properties\":{\"enabled\":{\"description\":\"Force background (true) or foreground (false) execution for this call.\",\"anyOf\":[{\"description\":\"Force background (true) or foreground (false) execution for this call.\",\"type\":\"boolean\"},{\"type\":\"null\"}]},\"timeoutMs\":{\"description\":\"Override timeout in milliseconds for this call.\",\"anyOf\":[{\"description\":\"Override timeout in milliseconds for this call.\",\"type\":\"number\"},{\"type\":\"null\"}]},\"maxRetries\":{\"description\":\"Override maximum retry attempts for this call.\",\"anyOf\":[{\"description\":\"Override maximum retry attempts for this call.\",\"type\":\"number\"},{\"type\":\"null\"}]}},\"additionalProperties\":false,\"required\":[\"enabled\",\"timeoutMs\",\"maxRetries\"],\"x-optional\":[\"enabled\",\"timeoutMs\",\"maxRetries\"],\"type\":\"object\"},{\"type\":\"null\"}]}},\"required\":[\"name\",\"_background\"],\"additionalProperties\":false,\"x-optional\":[\"_background\"",
-          "]},\"strict\":true}],\"top_logprobs\":0,\"top_p\":1.0,\"truncation\":\"disabled\",\"usage\":null,\"user\":null,\"metadata\":{}},\"sequence_number\":0}\n\nevent: response.in_progress\ndata: {\"type\":\"response.in_progress\",\"response\":{\"id\":\"resp_0db320cbe9dbcc2c006a5669dc1f48819db1b11e0681547bd4\",\"object\":\"response\",\"created_at\":1784048092,\"status\":\"in_progress\",\"background\":false,\"completed_at\":null,\"error\":null,\"frequency_penalty\":0.0,\"incomplete_details\":null,\"instructions\":null,\"max_output_tokens\":null,\"max_tool_calls\":null,\"model\":\"gpt-4o-mini-2024-07-18\",\"moderation\":null,\"output\":[],\"parallel_tool_calls\":true,\"presence_penalty\":0.0,\"previous_response_id\":null,\"prompt_cache_key\":null,\"prompt_cache_retention\":\"in_memory\",\"reasoning\":{\"context\":null,\"effort\":null,\"summary\":null},\"safety_identifier\":null,\"service_tier\":\"auto\",\"store\":true,\"temperature\":1.0,\"text\":{\"format\":{\"type\":\"text\"},\"verbosity\":\"medium\"},\"tool_choice\":\"auto\",\"tool_usage\":{\"image_gen\":{\"input_tokens\":0,\"input_tokens_details\":{\"image_tokens\":0,\"text_tokens\":0},\"output_tokens\":0,\"output_tokens_details\":{\"image_tokens\":0,\"text_tokens\":0},\"total_tokens\":0},\"web_search\":{\"num_requests\":0}},\"tools\":[{\"type\":\"function\",\"description\":\"Research a topic. This takes a while, use it when the user asks to research something.\",\"name\":\"research\",\"output_schema\":null,\"parameters\":{\"$schema\":\"http://json-sc",
-          "hema.org/draft-07/schema#\",\"type\":\"object\",\"properties\":{\"topic\":{\"type\":\"string\",\"description\":\"The topic to research\"},\"_background\":{\"description\":\"Optional: override background execution behavior for this specific call. Set enabled=false to force foreground, enabled=true to force background. Omit entirely to use the default configuration.\",\"properties\":{\"enabled\":{\"description\":\"Force background (true) or foreground (false) execution for this call.\",\"anyOf\":[{\"description\":\"Force background (true) or foreground (false) execution for this call.\",\"type\":\"boolean\"},{\"type\":\"null\"}]},\"timeoutMs\":{\"description\":\"Override timeout in milliseconds for this call.\",\"anyOf\":[{\"description\":\"Override timeout in milliseconds for this call.\",\"type\":\"number\"},{\"type\":\"null\"}]},\"maxRetries\":{\"description\":\"Override maximum retry attempts for this call.\",\"anyOf\":[{\"description\":\"Override maximum retry attempts for this call.\",\"type\":\"number\"},{\"type\":\"null\"}]}},\"additionalProperties\":false,\"required\":[\"enabled\",\"timeoutMs\",\"maxRetries\"],\"x-optional\":[\"enabled\",\"timeoutMs\",\"maxRetries\"],\"anyOf\":[{\"description\":\"Optional: override background execution behavior for this specific call. Set enabled=false to force foreground, enabled=true to force background. Omit entirely to use the default configuration.\",\"properties\":{\"enabled\":{\"description\":\"Force background (t",
-          "rue) or foreground (false) execution for this call.\",\"anyOf\":[{\"description\":\"Force background (true) or foreground (false) execution for this call.\",\"type\":\"boolean\"},{\"type\":\"null\"}]},\"timeoutMs\":{\"description\":\"Override timeout in milliseconds for this call.\",\"anyOf\":[{\"description\":\"Override timeout in milliseconds for this call.\",\"type\":\"number\"},{\"type\":\"null\"}]},\"maxRetries\":{\"description\":\"Override maximum retry attempts for this call.\",\"anyOf\":[{\"description\":\"Override maximum retry attempts for this call.\",\"type\":\"number\"},{\"type\":\"null\"}]}},\"additionalProperties\":false,\"required\":[\"enabled\",\"timeoutMs\",\"maxRetries\"],\"x-optional\":[\"enabled\",\"timeoutMs\",\"maxRetries\"],\"type\":\"object\"},{\"type\":\"null\"}]}},\"required\":[\"topic\",\"_background\"],\"additionalProperties\":false,\"x-optional\":[\"_background\"]},\"strict\":true},{\"type\":\"function\",\"description\":\"Greet a person by name. Use this when the user asks to greet someone.\",\"name\":\"greet\",\"output_schema\":null,\"parameters\":{\"$schema\":\"http://json-schema.org/draft-07/schema#\",\"type\":\"object\",\"properties\":{\"name\":{\"type\":\"string\",\"description\":\"The name to greet\"},\"_background\":{\"description\":\"Optional: override background execution behavior for this specific call. Set enabled=false to force foreground, enabled=true to force background. Omit entirely to use the default configuration.\",\"properties\":{\"ena",
-          "bled\":{\"description\":\"Force background (true) or foreground (false) execution for this call.\",\"anyOf\":[{\"description\":\"Force background (true) or foreground (false) execution for this call.\",\"type\":\"boolean\"},{\"type\":\"null\"}]},\"timeoutMs\":{\"description\":\"Override timeout in milliseconds for this call.\",\"anyOf\":[{\"description\":\"Override timeout in milliseconds for this call.\",\"type\":\"number\"},{\"type\":\"null\"}]},\"maxRetries\":{\"description\":\"Override maximum retry attempts for this call.\",\"anyOf\":[{\"description\":\"Override maximum retry attempts for this call.\",\"type\":\"number\"},{\"type\":\"null\"}]}},\"additionalProperties\":false,\"required\":[\"enabled\",\"timeoutMs\",\"maxRetries\"],\"x-optional\":[\"enabled\",\"timeoutMs\",\"maxRetries\"],\"anyOf\":[{\"description\":\"Optional: override background execution behavior for this specific call. Set enabled=false to force foreground, enabled=true to force background. Omit entirely to use the default configuration.\",\"properties\":{\"enabled\":{\"description\":\"Force background (true) or foreground (false) execution for this call.\",\"anyOf\":[{\"description\":\"Force background (true) or foreground (false) execution for this call.\",\"type\":\"boolean\"},{\"type\":\"null\"}]},\"timeoutMs\":{\"description\":\"Override timeout in milliseconds for this call.\",\"anyOf\":[{\"description\":\"Override timeout in milliseconds for this call.\",\"type\":\"number\"},{\"type\":\"n",
-          "ull\"}]},\"maxRetries\":{\"description\":\"Override maximum retry attempts for this call.\",\"anyOf\":[{\"description\":\"Override maximum retry attempts for this call.\",\"type\":\"number\"},{\"type\":\"null\"}]}},\"additionalProperties\":false,\"required\":[\"enabled\",\"timeoutMs\",\"maxRetries\"],\"x-optional\":[\"enabled\",\"timeoutMs\",\"maxRetries\"],\"type\":\"object\"},{\"type\":\"null\"}]}},\"required\":[\"name\",\"_background\"],\"additionalProperties\":false,\"x-optional\":[\"_background\"]},\"strict\":true}],\"top_logprobs\":0,\"top_p\":1.0,\"truncation\":\"disabled\",\"usage\":null,\"user\":null,\"metadata\":{}},\"sequence_number\":1}\n\n",
-          "event: response.output_item.added\ndata: {\"type\":\"response.output_item.added\",\"item\":{\"id\":\"msg_0db320cbe9dbcc2c006a5669dce184819db3159c2cbb6d8dcf\",\"type\":\"message\",\"status\":\"in_progress\",\"content\":[],\"role\":\"assistant\"},\"output_index\":0,\"sequence_number\":2}\n\n",
-          "event: response.content_part.added\ndata: {\"type\":\"response.content_part.added\",\"content_index\":0,\"item_id\":\"msg_0db320cbe9dbcc2c006a5669dce184819db3159c2cbb6d8dcf\",\"output_index\":0,\"part\":{\"type\":\"output_text\",\"annotations\":[],\"logprobs\":[],\"text\":\"\"},\"sequence_number\":3}\n\n",
-          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\"I've\",\"item_id\":\"msg_0db320cbe9dbcc2c006a5669dce184819db3159c2cbb6d8dcf\",\"logprobs\":[],\"obfuscation\":\"Xn9GfwXo31Os\",\"output_index\":0,\"sequence_number\":4}\n\n",
-          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" started\",\"item_id\":\"msg_0db320cbe9dbcc2c006a5669dce184819db3159c2cbb6d8dcf\",\"logprobs\":[],\"obfuscation\":\"bfNSYHZT\",\"output_index\":0,\"sequence_number\":5}\n\n",
-          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" researching\",\"item_id\":\"msg_0db320cbe9dbcc2c006a5669dce184819db3159c2cbb6d8dcf\",\"logprobs\":[],\"obfuscation\":\"Vc86\",\"output_index\":0,\"sequence_number\":6}\n\n",
-          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" quantum\",\"item_id\":\"msg_0db320cbe9dbcc2c006a5669dce184819db3159c2cbb6d8dcf\",\"logprobs\":[],\"obfuscation\":\"qv1ZJJhR\",\"output_index\":0,\"sequence_number\":7}\n\n",
+          "event: response.created\ndata: {\"type\":\"response.created\",\"response\":{\"id\":\"resp_007c4f628f164367006a8d650a773087d087d4de8d50da6d10\",\"object\":\"response\",\"created_at\":1787651338,\"status\":\"in_progress\",\"background\":false,\"completed_at\":null,\"error\":null,\"frequency_penalty\":0.0,\"incomplete_details\":null,\"instructions\":null,\"max_output_tokens\":null,\"max_tool_call",
+          "s\":null,\"model\":\"gpt-4o-mini-2024-07-18\",\"moderation\":null,\"output\":[],\"parallel_tool_calls\":true,\"presence_penalty\":0.0,\"previous_response_id\":null,\"prompt_cache_key\":null,\"prompt_cache_retention\":\"in_memory\",\"reasoning\":{\"context\":null,\"effort\":null,\"summary\":null},\"safety_identifier\":null,\"service_tier\":\"auto\",\"store\":true,\"temperature\":1.0,\"text\":{\"format\":{\"type\":\"text\"},\"verbosity\":\"medium\"},\"tool_choice\":\"auto\",\"tool_usage\":{\"image_gen\":{\"input_tokens\":0,\"input_tokens_details\":{\"image_tokens\":0,\"text_tokens\":0},\"output_tokens\":0,\"output_tokens_details\":{\"image_tokens\":0,\"text_tokens\":0},\"total_tokens\":0},\"web_search\":{\"num_requests\":0}},\"tools\":[{\"type\":\"function\",\"description\":\"Research a topic. This takes a while, use it when the user asks to research something.\",\"name\":\"research\",\"output_schema\":null,\"parameters\":{\"$schema\":\"http://json-schema.org/draft-07/schema#\",\"type\":\"object\",\"properties\":{\"topic\":{\"type\":\"string\",\"description\":\"The topic to research\"},\"_background\":{\"description\":\"Optional: override background execution behavior for this specific call. Set enabled=false to force foreground, enabled=true to force background. Omit entirely to use the default configuration.\",\"type\":\"object\",\"properties\":{\"enabled\":{\"description\":\"Force background (true) or foreground (false) execution for this call.\",\"anyOf\":[{\"description\":\"Force bac",
+          "kground (true) or foreground (false) execution for this call.\",\"type\":\"boolean\"},{\"type\":\"null\"}]},\"timeoutMs\":{\"description\":\"Override timeout in milliseconds for this call.\",\"anyOf\":[{\"description\":\"Override timeout in milliseconds for this call.\",\"type\":\"number\"},{\"type\":\"null\"}]},\"maxRetries\":{\"description\":\"Override maximum retry attempts for this call.\",\"anyOf\":[{\"description\":\"Override maximum retry attempts for this call.\",\"type\":\"number\"},{\"type\":\"null\"}]}},\"additionalProperties\":false,\"required\":[\"enabled\",\"timeoutMs\",\"maxRetries\"],\"x-optional\":[\"enabled\",\"timeoutMs\",\"maxRetries\"]}},\"required\":[\"topic\",\"_background\"],\"additionalProperties\":false,\"x-optional\":[\"_background\"]},\"strict\":true},{\"type\":\"function\",\"description\":\"Greet a person by name. Use this when the user asks to greet someone.\",\"name\":\"greet\",\"output_schema\":null,\"parameters\":{\"$schema\":\"http://json-schema.org/draft-07/schema#\",\"type\":\"object\",\"properties\":{\"name\":{\"type\":\"string\",\"description\":\"The name to greet\"},\"_background\":{\"description\":\"Optional: override background execution behavior for this specific call. Set enabled=false to force foreground, enabled=true to force background. Omit entirely to use the default configuration.\",\"type\":\"object\",\"properties\":{\"enabled\":{\"description\":\"Force background (true) or foreground (false) execution for this call.\",\"anyOf\":[{\"",
+          "description\":\"Force background (true) or foreground (false) execution for this call.\",\"type\":\"boolean\"},{\"type\":\"null\"}]},\"timeoutMs\":{\"description\":\"Override timeout in milliseconds for this call.\",\"anyOf\":[{\"description\":\"Override timeout in milliseconds for this call.\",\"type\":\"number\"},{\"type\":\"null\"}]},\"maxRetries\":{\"description\":\"Override maximum retry attempts for this call.\",\"anyOf\":[{\"description\":\"Override maximum retry attempts for this call.\",\"type\":\"number\"},{\"type\":\"null\"}]}},\"additionalProperties\":false,\"required\":[\"enabled\",\"timeoutMs\",\"maxRetries\"],\"x-optional\":[\"enabled\",\"timeoutMs\",\"maxRetries\"]}},\"required\":[\"name\",\"_background\"],\"additionalProperties\":false,\"x-optional\":[\"_background\"]},\"strict\":true}],\"top_logprobs\":0,\"top_p\":1.0,\"truncation\":\"disabled\",\"usage\":null,\"user\":null,\"metadata\":{}},\"sequence_number\":0}\n\n",
+          "event: response.in_progress",
+          "\ndata: {\"type\":\"response.in_progress\",\"response\":{\"id\":\"resp_007c4f628f164367006a8d650a773087d087d4de8d50da6d10\",\"object\":\"response\",\"created_at\":1787651338,\"status\":\"in_progress\",\"background\":false,\"completed_at\":null,\"error\":null,\"frequency_penalty\":0.0,\"incomplete_details\":null,\"instructions\":null,\"max_output_tokens\":null,\"max_tool_calls\":null,\"model\":\"gpt-4o-mini-2024-07-18\",\"moderation\":null,\"output\":[],\"parallel_tool_calls\":true,\"presence_penalty\":0.0,\"previous_response_id\":null,\"prompt_cache_key\":null,\"prompt_cache_retention\":\"in_memory\",\"reasoning\":{\"context\":null,\"effort\":null,\"summary\":null},\"safety_identifier\":null,\"service_tier\":\"auto\",\"store\":true,\"temperature\":1.0,\"text\":{\"format\":{\"type\":\"text\"},\"verbosity\":\"medium\"},\"tool_choice\":\"auto\",\"tool_usage\":{\"image_gen\":{\"input_tokens\":0,\"input_tokens_details\":{\"image_tokens\":0,\"text_tokens\":0},\"output_tokens\":0,\"output_tokens_details\":{\"image_tokens\":0,\"text_tokens\":0},\"total_tokens\":0},\"web_search\":{\"num_requests\":0}},\"tools\":[{\"type\":\"function\",\"description\":\"Research a topic. This takes a while, use it when the user asks to research something.\",\"name\":\"research\",\"output_schema\":null,\"parameters\":{\"$schema\":\"http://json-schema.org/draft-07/schema#\",\"type\":\"object\",\"properties\":{\"topic\":{\"type\":\"string\",\"description\":\"The topic to research\"},\"_background\":{\"description\":\"Optional: o",
+          "verride background execution behavior for this specific call. Set enabled=false to force foreground, enabled=true to force background. Omit entirely to use the default configuration.\",\"type\":\"object\",\"properties\":{\"enabled\":{\"description\":\"Force background (true) or foreground (false) execution for this call.\",\"anyOf\":[{\"description\":\"Force background (true) or foreground (false) execution for this call.\",\"type\":\"boolean\"},{\"type\":\"null\"}]},\"timeoutMs\":{\"description\":\"Override timeout in milliseconds for this call.\",\"anyOf\":[{\"description\":\"Override timeout in milliseconds for this call.\",\"type\":\"number\"},{\"type\":\"null\"}]},\"maxRetries\":{\"description\":\"Override maximum retry attempts for this call.\",\"anyOf\":[{\"description\":\"Override maximum retry attempts for this call.\",\"type\":\"number\"},{\"type\":\"null\"}]}},\"additionalProperties\":false,\"required\":[\"enabled\",\"timeoutMs\",\"maxRetries\"],\"x-optional\":[\"enabled\",\"timeoutMs\",\"maxRetries\"]}},\"required\":[\"topic\",\"_background\"],\"additionalProperties\":false,\"x-optional\":[\"_background\"]},\"strict\":true},{\"type\":\"function\",\"description\":\"Greet a person by name. Use this when the user asks to greet someone.\",\"name\":\"greet\",\"output_schema\":null,\"parameters\":{\"$schema\":\"http://json-schema.org/draft-07/schema#\",\"type\":\"object\",\"properties\":{\"name\":{\"type\":\"string\",\"description\":\"The name to greet\"},\"_background\":{\"de",
+          "scription\":\"Optional: override background execution behavior for this specific call. Set enabled=false to force foreground, enabled=true to force background. Omit entirely to use the default configuration.\",\"type\":\"object\",\"properties\":{\"enabled\":{\"description\":\"Force background (true) or foreground (false) execution for this call.\",\"anyOf\":[{\"description\":\"Force background (true) or foreground (false) execution for this call.\",\"type\":\"boolean\"},{\"type\":\"null\"}]},\"timeoutMs\":{\"description\":\"Override timeout in milliseconds for this call.\",\"anyOf\":[{\"description\":\"Override timeout in milliseconds for this call.\",\"type\":\"number\"},{\"type\":\"null\"}]},\"maxRetries\":{\"description\":\"Override maximum retry attempts for this call.\",\"anyOf\":[{\"description\":\"Override maximum retry attempts for this call.\",\"type\":\"number\"},{\"type\":\"null\"}]}},\"additionalProperties\":false,\"required\":[\"enabled\",\"timeoutMs\",\"maxRetries\"],\"x-optional\":[\"enabled\",\"timeoutMs\",\"maxRetries\"]}},\"required\":[\"name\",\"_background\"],\"additionalProperties\":false,\"x-optional\":[\"_background\"]},\"strict\":true}],\"top_logprobs\":0,\"top_p\":1.0,\"truncation\":\"disabled\",\"usage\":null,\"user\":null,\"metadata\":{}},\"sequence_number\":1}\n\n",
+          "event: response.output_item",
+          ".added\ndata: {\"type\":\"response.output_item.added\",\"item\":{\"id\":\"msg_007c4f628f164367006a8d650f0ccc87d0868300ea973ba380\",\"type\":\"message\",\"status\":\"in_progress\",\"content\":[],\"role\":\"assistant\"},\"output_index\":0,\"sequence_number\":2}\n\nevent: response.content_part.added\ndata: {\"type\":\"response.content_part.added\",\"content_index\":0,\"item_id\":\"msg_007c4f628f164367006a8d650f0ccc87d0868300ea973ba380\",\"output_index\":0,\"part\":{\"type\":\"output_text\",\"annotations\":[],\"logprobs\":[],\"text\":\"\"},\"sequence_number\":3}\n\nevent: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\"I've\",\"item_id\":\"msg_007c4f628f164367006a8d650f0ccc87d0868300ea973ba380\",\"logprobs\":[],\"obfuscation\":\"CYMfwPC6lgX1\",\"output_index\":0,\"sequence_number\":4}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" started\",\"item_id\":\"msg_007c4f628f164367006a8d650f0ccc87d0868300ea973ba380\",\"logprobs\":[],\"obfuscation\":\"gjA1L0h9\",\"output_index\":0,\"sequence_number\":5}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" researching\",\"item_id\":\"msg_007c4f628f164367006a8d650f0ccc87d0868300ea973ba380\",\"logprobs\":[],\"obfuscation\":\"rctg\",\"output_index\":0,\"sequence_number\":6}\n\n",
           "event: response.output_text",
-          ".delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" computing\",\"item_id\":\"msg_0db320cbe9dbcc2c006a5669dce184819db3159c2cbb6d8dcf\",\"logprobs\":[],\"obfuscation\":\"jN4Jnt\",\"output_index\":0,\"sequence_number\":8}\n\n",
+          ".delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" the\",\"item_id\":\"msg_007c4f628f164367006a8d650f0ccc87d0868300ea973ba380\",\"logprobs\":[],\"obfuscation\":\"DskNd9m5kGJy\",\"output_index\":0,\"sequence_number\":7}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" topic\",\"item_id\":\"msg_007c4f628f164367006a8d650f0ccc87d0868300ea973ba380\",\"logprobs\":[],\"obfuscation\":\"8IEe8ajw1O\",\"output_index\":0,\"sequence_number\":8}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" of\",\"item_id\":\"msg_007c4f628f164367006a8d650f0ccc87d0868300ea973ba380\",\"logprobs\":[],\"obfuscation\":\"GFSnCUDHsmmMA\",\"output_index\":0,\"sequence_number\":9}\n\nevent: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" \\\"\",\"item_id\":\"msg_007c4f628f164367006a8d650f0ccc87d0868300ea973ba380\",\"logprobs\":[],\"obfuscation\":\"jnRVvOPGPkBlhU\",\"output_index\":0,\"sequence_number\":10}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\"quant\",\"item_id\":\"msg_007c4f628f164367006a8d650f0ccc87d0868300ea973ba380\",\"logprobs\":[],\"obfuscation\":\"RSI2i584uIT\",\"output_index\":0,\"sequence_number\":11}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\"um\",\"item_id\":\"msg_007c4f628f164367006a8d650f0ccc87d0868300ea973ba380\",\"logprobs\":[],\"obfuscation\":\"ooTxxpNGmfwOOH\",\"output_index\":0,\"sequence_number\":12}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" computing\",\"item_id\":\"msg_007c4f628f164367006a8d650f0ccc87d0868300ea973ba380\",\"logprobs\":[],\"obfuscation\":\"XtvZqh\",\"output_index\":0,\"sequence_number\":13}\n\nevent: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\".\\\"\",\"item_id\":\"msg_007c4f628f164367006a8d650f0ccc87d0868300ea973ba380\",\"logprobs\":[],\"obfuscation\":\"E0hvUSMAQIEqm6\",\"output_index\":0,\"sequence_number\":14}\n\n",
           "event: response.output_text",
-          ".delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\".\",\"item_id\":\"msg_0db320cbe9dbcc2c006a5669dce184819db3159c2cbb6d8dcf\",\"logprobs\":[],\"obfuscation\":\"VvUQEfbWLNV5UGF\",\"output_index\":0,\"sequence_number\":9}\n\n",
-          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" I'll\",\"item_id\":\"msg_0db320cbe9dbcc2c006a5669dce184819db3159c2cbb6d8dcf\",\"logprobs\":[],\"obfuscation\":\"nYqn5OUWKPM\",\"output_index\":0,\"sequence_number\":10}\n\n",
-          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" update\",\"item_id\":\"msg_0db320cbe9dbcc2c006a5669dce184819db3159c2cbb6d8dcf\",\"logprobs\":[],\"obfuscation\":\"9E7RszL5V\",\"output_index\":0,\"sequence_number\":11}\n\n",
-          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" you\",\"item_id\":\"msg_0db320cbe9dbcc2c006a5669dce184819db3159c2cbb6d8dcf\",\"logprobs\":[],\"obfuscation\":\"GnxNaFD22z3i\",\"output_index\":0,\"sequence_number\":12}\n\n",
-          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" once\",\"item_id\":\"msg_0db320cbe9dbcc2c006a5669dce184819db3159c2cbb6d8dcf\",\"logprobs\":[],\"obfuscation\":\"3RArxWJjbBl\",\"output_index\":0,\"sequence_number\":13}\n\n",
-          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" I\",\"item_id\":\"msg_0db320cbe9dbcc2c006a5669dce184819db3159c2cbb6d8dcf\",\"logprobs\":[],\"obfuscation\":\"IeUjE3ru6LcBRh\",\"output_index\":0,\"sequence_number\":14}\n\n",
-          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" have\",\"item_id\":\"msg_0db320cbe9dbcc2c006a5669dce184819db3159c2cbb6d8dcf\",\"logprobs\":[],\"obfuscation\":\"d5KUnxUdKhA\",\"output_index\":0,\"sequence_number\":15}\n\n",
-          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" the\",\"item_id\":\"msg_0db320cbe9dbcc2c006a5669dce184819db3159c2cbb6d8dcf\",\"logprobs\":[],\"obfuscation\":\"zvsZ7Sm80Lrg\",\"output_index\":0,\"sequence_number\":16}\n\n",
+          ".delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" You'll\",\"item_id\":\"msg_007c4f628f164367006a8d650f0ccc87d0868300ea973ba380\",\"logprobs\":[],\"obfuscation\":\"r2YcWyEuZ\",\"output_index\":0,\"sequence_number\":15}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" be\",\"item_id\":\"msg_007c4f628f164367006a8d650f0ccc87d0868300ea973ba380\",\"logprobs\":[],\"obfuscation\":\"0AtLZ8HP7L7L5\",\"output_index\":0,\"sequence_number\":16}\n\n",
           "event: response.output_text",
-          ".delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" information\",\"item_id\":\"msg_0db320cbe9dbcc2c006a5669dce184819db3159c2cbb6d8dcf\",\"logprobs\":[],\"obfuscation\":\"KXN8\",\"output_index\":0,\"sequence_number\":17}\n\n",
-          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\"!\",\"item_id\":\"msg_0db320cbe9dbcc2c006a5669dce184819db3159c2cbb6d8dcf\",\"logprobs\":[],\"obfuscation\":\"4HkAfetrMWcCGPS\",\"output_index\":0,\"sequence_number\":18}\n\n",
-          "event: response.output_text.done\ndata: {\"type\":\"response.output_text.done\",\"content_index\":0,\"item_id\":\"msg_0db320cbe9dbcc2c006a5669dce184819db3159c2cbb6d8dcf\",\"logprobs\":[],\"output_index\":0,\"sequence_number\":19,\"text\":\"I've started researching quantum computing. I'll update you once I have the information!\"}\n\n",
-          "event: response.content_part.done\ndata: {\"type\":\"response.content_part.done\",\"content_index\":0,\"item_id\":\"msg_0db320cbe9dbcc2c006a5669dce184819db3159c2cbb6d8dcf\",\"output_index\":0,\"part\":{\"type\":\"output_text\",\"annotations\":[],\"logprobs\":[],\"text\":\"I've started researching quantum computing. I'll update you once I have the information!\"},\"sequence_number\":20}\n\n",
-          "event: response.output_item.done\ndata: {\"type\":\"response.output_item.done\",\"item\":{\"id\":\"msg_0db320cbe9dbcc2c006a5669dce184819db3159c2cbb6d8dcf\",\"type\":\"message\",\"status\":\"completed\",\"content\":[{\"type\":\"output_text\",\"annotations\":[],\"logprobs\":[],\"text\":\"I've started researching quantum computing. I'll update you once I have the information!\"}],\"role\":\"assistant\"},\"output_index\":0,\"sequence_number\":21}\n\n",
-          "event: response.completed\ndata: {\"type\":\"response.completed\",\"response\":{\"id\":\"resp_0db320cbe9dbcc2c006a5669dc1f48819db1b11e0681547bd4\",\"object\":\"response\",\"created_at\":1784048092,\"status\":\"completed\",\"background\":false,\"completed_at\":1784048094,\"error\":null,\"frequency_penalty\":0.0,\"incomplete_details\":null,\"instructions\":null,\"max_output_tokens\":null,\"max_tool_calls\":null,\"model\":\"gpt-4o-mini-2024-07-18\",\"moderation\":null,\"output\":[{\"id\":\"msg_0db320cbe9dbcc2c006a5669dce184819db3159c2cbb6d8dcf\",\"type\":\"message\",\"status\":\"completed\",\"content\":[{\"type\":\"output_text\",\"annotations\":[],\"logprobs\":[],\"text\":\"I've started researching quantum computing. I'll update you once I have the information!\"}],\"role\":\"assistant\"}],\"parallel_tool_calls\":true,\"presence_penalty\":0.0,\"previous_response_id\":null,\"prompt_cache_key\":null,\"prompt_cache_retention\":\"in_memory\",\"reasoning\":{\"context\":null,\"effort\":null,\"summary\":null},\"safety_identifier\":null,\"service_tier\":\"default\",\"store\":true,\"temperature\":1.0,\"text\":{\"format\":{\"type\":\"text\"},\"verbosity\":\"medium\"},\"tool_choice\":\"auto\",\"tool_usage\":{\"image_gen\":{\"input_tokens\":0,\"input_tokens_details\":{\"image_tokens\":0,\"text_tokens\":0},\"output_tokens\":0,\"output_tokens_details\":{\"image_tokens\":0,\"text_tokens\":0},\"total_tokens\":0},\"web_search\":{\"num_requests\":0}},\"tools\":[{\"type\":\"function\",\"description\":\"Research a to",
-          "pic. This takes a while, use it when the user asks to research something.\",\"name\":\"research\",\"output_schema\":null,\"parameters\":{\"$schema\":\"http://json-schema.org/draft-07/schema#\",\"type\":\"object\",\"properties\":{\"topic\":{\"type\":\"string\",\"description\":\"The topic to research\"},\"_background\":{\"description\":\"Optional: override background execution behavior for this specific call. Set enabled=false to force foreground, enabled=true to force background. Omit entirely to use the default configuration.\",\"properties\":{\"enabled\":{\"description\":\"Force background (true) or foreground (false) execution for this call.\",\"anyOf\":[{\"description\":\"Force background (true) or foreground (false) execution for this call.\",\"type\":\"boolean\"},{\"type\":\"null\"}]},\"timeoutMs\":{\"description\":\"Override timeout in milliseconds for this call.\",\"anyOf\":[{\"description\":\"Override timeout in milliseconds for this call.\",\"type\":\"number\"},{\"type\":\"null\"}]},\"maxRetries\":{\"description\":\"Override maximum retry attempts for this call.\",\"anyOf\":[{\"description\":\"Override maximum retry attempts for this call.\",\"type\":\"number\"},{\"type\":\"null\"}]}},\"additionalProperties\":false,\"required\":[\"enabled\",\"timeoutMs\",\"maxRetries\"],\"x-optional\":[\"enabled\",\"timeoutMs\",\"maxRetries\"],\"anyOf\":[{\"description\":\"Optional: override background execution behavior for this specific call. Set enabled=false to force f",
-          "oreground, enabled=true to force background. Omit entirely to use the default configuration.\",\"properties\":{\"enabled\":{\"description\":\"Force background (true) or foreground (false) execution for this call.\",\"anyOf\":[{\"description\":\"Force background (true) or foreground (false) execution for this call.\",\"type\":\"boolean\"},{\"type\":\"null\"}]},\"timeoutMs\":{\"description\":\"Override timeout in milliseconds for this call.\",\"anyOf\":[{\"description\":\"Override timeout in milliseconds for this call.\",\"type\":\"number\"},{\"type\":\"null\"}]},\"maxRetries\":{\"description\":\"Override maximum retry attempts for this call.\",\"anyOf\":[{\"description\":\"Override maximum retry attempts for this call.\",\"type\":\"number\"},{\"type\":\"null\"}]}},\"additionalProperties\":false,\"required\":[\"enabled\",\"timeoutMs\",\"maxRetries\"],\"x-optional\":[\"enabled\",\"timeoutMs\",\"maxRetries\"],\"type\":\"object\"},{\"type\":\"null\"}]}},\"required\":[\"topic\",\"_background\"],\"additionalProperties\":false,\"x-optional\":[\"_background\"]},\"strict\":true},{\"type\":\"function\",\"description\":\"Greet a person by name. Use this when the user asks to greet someone.\",\"name\":\"greet\",\"output_schema\":null,\"parameters\":{\"$schema\":\"http://json-schema.org/draft-07/schema#\",\"type\":\"object\",\"properties\":{\"name\":{\"type\":\"string\",\"description\":\"The name to greet\"},\"_background\":{\"description\":\"Optional: override background execution behavior for this sp",
-          "ecific call. Set enabled=false to force foreground, enabled=true to force background. Omit entirely to use the default configuration.\",\"properties\":{\"enabled\":{\"description\":\"Force background (true) or foreground (false) execution for this call.\",\"anyOf\":[{\"description\":\"Force background (true) or foreground (false) execution for this call.\",\"type\":\"boolean\"},{\"type\":\"null\"}]},\"timeoutMs\":{\"description\":\"Override timeout in milliseconds for this call.\",\"anyOf\":[{\"description\":\"Override timeout in milliseconds for this call.\",\"type\":\"number\"},{\"type\":\"null\"}]},\"maxRetries\":{\"description\":\"Override maximum retry attempts for this call.\",\"anyOf\":[{\"description\":\"Override maximum retry attempts for this call.\",\"type\":\"number\"},{\"type\":\"null\"}]}},\"additionalProperties\":false,\"required\":[\"enabled\",\"timeoutMs\",\"maxRetries\"],\"x-optional\":[\"enabled\",\"timeoutMs\",\"maxRetries\"],\"anyOf\":[{\"description\":\"Optional: override background execution behavior for this specific call. Set enabled=false to force foreground, enabled=true to force background. Omit entirely to use the default configuration.\",\"properties\":{\"enabled\":{\"description\":\"Force background (true) or foreground (false) execution for this call.\",\"anyOf\":[{\"description\":\"Force background (true) or foreground (false) execution for this call.\",\"type\":\"boolean\"},{\"type\":\"null\"}]},\"timeoutMs\":{\"description",
-          "\":\"Override timeout in milliseconds for this call.\",\"anyOf\":[{\"description\":\"Override timeout in milliseconds for this call.\",\"type\":\"number\"},{\"type\":\"null\"}]},\"maxRetries\":{\"description\":\"Override maximum retry attempts for this call.\",\"anyOf\":[{\"description\":\"Override maximum retry attempts for this call.\",\"type\":\"number\"},{\"type\":\"null\"}]}},\"additionalProperties\":false,\"required\":[\"enabled\",\"timeoutMs\",\"maxRetries\"],\"x-optional\":[\"enabled\",\"timeoutMs\",\"maxRetries\"],\"type\":\"object\"},{\"type\":\"null\"}]}},\"required\":[\"name\",\"_background\"],\"additionalProperties\":false,\"x-optional\":[\"_background\"]},\"strict\":true}],\"top_logprobs\":0,\"top_p\":1.0,\"truncation\":\"disabled\",\"usage\":{\"input_tokens\":777,\"input_tokens_details\":{\"cache_write_tokens\":0,\"cached_tokens\":0},\"output_tokens\":17,\"output_tokens_details\":{\"reasoning_tokens\":0},\"total_tokens\":794},\"user\":null,\"metadata\":{}},\"sequence_number\":22}\n\n"
+          ".delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" notified\",\"item_id\":\"msg_007c4f628f164367006a8d650f0ccc87d0868300ea973ba380\",\"logprobs\":[],\"obfuscation\":\"AQrSBJz\",\"output_index\":0,\"sequence_number\":17}\n\nevent: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" when\",\"item_id\":\"msg_007c4f628f164367006a8d650f0ccc87d0868300ea973ba380\",\"logprobs\":[],\"obfuscation\":\"d3iDQFrb0Ro\",\"output_index\":0,\"sequence_number\":18}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" the\",\"item_id\":\"msg_007c4f628f164367006a8d650f0ccc87d0868300ea973ba380\",\"logprobs\":[],\"obfuscation\":\"6HWEyIdZdVSn\",\"output_index\":0,\"sequence_number\":19}\n\nevent: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" results\",\"item_id\":\"msg_007c4f628f164367006a8d650f0ccc87d0868300ea973ba380\",\"logprobs\":[],\"obfuscation\":\"s6bnCqyD\",\"output_index\":0,\"sequence_number\":20}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" are\",\"item_id\":\"msg_007c4f628f164367006a8d650f0ccc87d0868300ea973ba380\",\"logprobs\":[],\"obfuscation\":\"fWA046PFVR73\",\"output_index\":0,\"sequence_number\":21}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" ready\",\"item_id\":\"msg_007c4f628f164367006a8d650f0ccc87d0868300ea973ba380\",\"logprobs\":[],\"obfuscation\":\"26WkUxmYUg\",\"output_index\":0,\"sequence_number\":22}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\".\",\"item_id\":\"msg_007c4f628f164367006a8d650f0ccc87d0868300ea973ba380\",\"logprobs\":[],\"obfuscation\":\"KRza8wVQtRe6E6J\",\"output_index\":0,\"sequence_number\":23}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" If\",\"item_id\":\"msg_007c4f628f164367006a8d650f0ccc87d0868300ea973ba380\",\"logprobs\":[],\"obfuscation\":\"OoVDb03sxPt2U\",\"output_index\":0,\"sequence_number\":24}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" you\",\"item_id\":\"msg_007c4f628f164367006a8d650f0ccc87d0868300ea973ba380\",\"logprobs\":[],\"obfuscation\":\"b2JLFrmgSdjm\",\"output_index\":0,\"sequence_number\":25}\n\nevent: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" have\",\"item_id\":\"msg_007c4f628f164367006a8d650f0ccc87d0868300ea973ba380\",\"logprobs\":[],\"obfuscation\":\"zeSgdTsxhjv\",\"output_index\":0,\"sequence_number\":26}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" any\",\"item_id\":\"msg_007c4f628f164367006a8d650f0ccc87d0868300ea973ba380\",\"logprobs\":[],\"obfuscation\":\"mWkfO4PnRXon\",\"output_index\":0,\"sequence_number\":27}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" specific\",\"item_id\":\"msg_007c4f628f164367006a8d650f0ccc87d0868300ea973ba380\",\"logprobs\":[],\"obfuscation\":\"lAZubxd\",\"output_index\":0,\"sequence_number\":28}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" questions\",\"item_id\":\"msg_007c4f628f164367006a8d650f0ccc87d0868300ea973ba380\",\"logprobs\":[],\"obfuscation\":\"pTu7UU\",\"output_index\":0,\"sequence_number\":29}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" in\",\"item_id\":\"msg_007c4f628f164367006a8d650f0ccc87d0868300ea973ba380\",\"logprobs\":[],\"obfuscation\":\"V6KwD3TN8Qk3y\",\"output_index\":0,\"sequence_number\":30}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" the\",\"item_id\":\"msg_007c4f628f164367006a8d650f0ccc87d0868300ea973ba380\",\"logprobs\":[],\"obfuscation\":\"PYbG7mbTeA6c\",\"output_index\":0,\"sequence_number\":31}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" meantime\",\"item_id\":\"msg_007c4f628f164367006a8d650f0ccc87d0868300ea973ba380\",\"logprobs\":[],\"obfuscation\":\"NGsmgoM\",\"output_index\":0,\"sequence_number\":32}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\",\",\"item_id\":\"msg_007c4f628f164367006a8d650f0ccc87d0868300ea973ba380\",\"logprobs\":[],\"obfuscation\":\"bmRNHf7wTgI9wpM\",\"output_index\":0,\"sequence_number\":33}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" feel\",\"item_id\":\"msg_007c4f628f164367006a8d650f0ccc87d0868300ea973ba380\",\"logprobs\":[],\"obfuscation\":\"1XXJwxTlIyL\",\"output_index\":0,\"sequence_number\":34}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" free\",\"item_id\":\"msg_007c4f628f164367006a8d650f0ccc87d0868300ea973ba380\",\"logprobs\":[],\"obfuscation\":\"IfvlGPUbNwK\",\"output_index\":0,\"sequence_number\":35}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" to\",\"item_id\":\"msg_007c4f628f164367006a8d650f0ccc87d0868300ea973ba380\",\"logprobs\":[],\"obfuscation\":\"CtpjdRjLejM5z\",\"output_index\":0,\"sequence_number\":36}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" ask\",\"item_id\":\"msg_007c4f628f164367006a8d650f0ccc87d0868300ea973ba380\",\"logprobs\":[],\"obfuscation\":\"hE43th7RYtBw\",\"output_index\":0,\"sequence_number\":37}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\"!\",\"item_id\":\"msg_007c4f628f164367006a8d650f0ccc87d0868300ea973ba380\",\"logprobs\":[],\"obfuscation\":\"Csb1ZLIn6AppXFv\",\"output_index\":0,\"sequence_number\":38}\n\n",
+          "event: response.output_text",
+          ".done\ndata: {\"type\":\"response.output_text.done\",\"content_index\":0,\"item_id\":\"msg_007c4f628f164367006a8d650f0ccc87d0868300ea973ba380\",\"logprobs\":[],\"output_index\":0,\"sequence_number\":39,\"text\":\"I've started researching the topic of \\\"quantum computing.\\\" You'll be notified when the results are ready. If you have any specific questions in the meantime, feel free to ask!\"}\n\n",
+          "event: response.content_part.done\ndata: {\"type\":\"response.content_part.done\",\"content_index\":0,\"item_id\":\"msg_007c4f628f164367006a8d650f0ccc87d0868300ea973ba380\",\"output_index\":0,\"part\":{\"type\":\"output_text\",\"annotations\":[],\"logprobs\":[],\"text\":\"I've started researching the topic of \\\"quantum computing.\\\" You'll be notified when the results are ready. If you have any specific questions in the meantime, feel free to ask!\"},\"sequence_number\":40}\n\n",
+          "event: response.output_item",
+          ".done\ndata: {\"type\":\"response.output_item.done\",\"item\":{\"id\":\"msg_007c4f628f164367006a8d650f0ccc87d0868300ea973ba380\",\"type\":\"message\",\"status\":\"completed\",\"content\":[{\"type\":\"output_text\",\"annotations\":[],\"logprobs\":[],\"text\":\"I've started researching the topic of \\\"quantum computing.\\\" You'll be notified when the results are ready. If you have any specific questions in the meantime, feel free to ask!\"}],\"role\":\"assistant\"},\"output_index\":0,\"sequence_number\":41}\n\n",
+          "event: response.completed\ndata: {\"type\":\"response.completed\",\"response\":{\"id\":\"resp_007c4f628f164367006a8d650a773087d087d4de8d50da6d10\",\"object\":\"response\",\"created_at\":1787651338,\"status\":\"completed\",\"background\":false,\"completed_at\":1787651343,\"error\":null,\"frequency_penalty\":0.0,\"incomplete_details\":null,\"instructions\":null,\"max_output_tokens\":null,\"max_tool_calls\":null,\"model\":\"gpt-4o-mini-2024-07-18\",\"moderation\":null,\"output\":[{\"id\":\"msg_007c4f628f164367006a8d650f0ccc87d0868300ea973ba380\",\"type\":\"message\",\"status\":\"completed\",\"content\":[{\"type\":\"output_text\",\"annotations\":[],\"logprobs\":[],\"text\":\"I've started researching the topic of \\\"quantum computing.\\\" You'll be notified when the results are ready. If you have any specific questions in the meantime, feel free to ask!\"}],\"role\":\"assistant\"}],\"parallel_tool_calls\":true,\"presence_penalty\":0.0,\"previous_response_id\":null,\"prompt_cache_key\":null,\"prompt_cache_retention\":\"in_memory\",\"reasoning\":{\"context\":null,\"effort\":null,\"summary\":null},\"safety_identifier\":null,\"service_tier\":\"default\",\"store\":true,\"temperature\":1.0,\"text\":{\"format\":{\"type\":\"text\"},\"verbosity\":\"medium\"},\"tool_choice\":\"auto\",\"tool_usage\":{\"image_gen\":{\"input_tokens\":0,\"input_tokens_details\":{\"image_tokens\":0,\"text_tokens\":0},\"output_tokens\":0,\"output_tokens_details\":{\"image_tokens\":0,\"text_tokens\":0},\"total_tokens\":0},\"web_search\":{\"num_requests\":0}},\"tools\":[{\"type\":\"function\",\"description\":\"Research a topic. This takes a while, use it when the user asks to research something.\",\"name\":\"research\",\"output_schema\":null,\"parameters\":{\"$schema\":\"http://json-schema.org/draft-07/schema#\",\"type\":\"object\",\"properties\":{\"topic\":{\"type\":\"string\",\"description\":\"The topic to research\"},\"_background\":{\"description\":\"Optional: override background execution behavior for this specific call. Set enabled=false to force foreground, enabled=true to force background. Omit entirely to use the default configuration.\",\"type\":\"object\",\"properties\":{\"enabled\":{\"description\":\"Force background (true) or foreground (false) execution for this call.\",\"anyOf\":[{\"description\":\"Force background (true) or foreground (false) execution for this call.\",\"type\":\"boolean\"},{\"type\":\"null\"}]},\"timeoutMs\":{\"description\":\"Override timeout in milliseconds for this call.\",\"anyOf\":[{\"description\":\"Override timeout in milliseconds for this call.\",\"type\":\"number\"},{\"type\":\"null\"}]},\"maxRetries\":{\"description\":\"Override maximum retry attempts for this call.\",\"anyOf\":[{\"description\":\"Override maximum retry attempts for this call.\",\"type\":\"number\"},{\"type\":\"null\"}]}},\"additionalProperties\":false,\"required\":[\"enabled\",\"timeoutMs\",\"maxRetries\"],\"x-optional\":[\"enabled\",\"timeoutMs\",\"maxRetries\"]}},\"required\":[\"topic\",\"_background\"],\"additionalProperties\":false,\"x-optional\":[\"_background\"]},\"strict\":true},{\"type\":\"function\",\"description\":\"Greet a person by name. Use this when the user asks to greet someone.\",\"name\":\"greet\",\"output_schema\":null,\"parameters\":{\"$schema\":\"http://json-schema.org/draft-07/schema#\",\"type\":\"object\",\"properties\":{\"name\":{\"type\":\"string\",\"description\":\"The name to greet\"},\"_background\":{\"description\":\"Optional: override background execution behavior for this specific call. Set enabled=false to force foreground, enabled=true to force background. Omit entirely to use the default configuration.\",\"type\":\"object\",\"properties\":{\"enabled\":{\"description\":\"Force background (true) or foreground (false) execution for this call.\",\"anyOf\":[{\"description\":\"Force background (true) or foreground (false) execution for this call.\",\"type\":\"boolean\"},{\"type\":\"null\"}]},\"timeoutMs\":{\"description\":\"Override timeout in milliseconds for this call.\",\"anyOf\":[{\"description\":\"Override timeout in milliseconds for this call.\",\"type\":\"number\"},{\"type\":\"null\"}]},\"maxRetries\":{\"description\":\"Override maximum retry attempts for this call.\",\"anyOf\":[{\"description\":\"Override maximum retry attempts for this call.\",\"type\":\"number\"},{\"type\":\"null\"}]}},\"additionalProperties\":false,\"required\":[\"enabled\",\"timeoutMs\",\"maxRetries\"],\"x-optional\":[\"enabled\",\"timeoutMs\",\"maxRetries\"]}},\"required\":[\"name\",\"_background\"],\"additionalProperties\":false,\"x-optional\":[\"_background\"]},\"strict\":true}],\"top_logp",
+          "robs\":0,\"top_p\":1.0,\"truncation\":\"disabled\",\"usage\":{\"input_tokens\":701,\"input_tokens_details\":{\"cache_write_tokens\":0,\"cached_tokens\":0},\"output_tokens\":37,\"output_tokens_details\":{\"reasoning_tokens\":0},\"total_tokens\":738},\"user\":null,\"metadata\":{}},\"sequence_number\":42}\n\n"
         ],
         "chunkTimings": [
-          0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 343, 0, 0, 22, 1, 15, 1, 0, 18, 0, 1, 37, 0, 31, 2, 39, 1, 11, 0, 1, 1461, 3, 2,
-          113, 1, 0, 1, 0
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          4410,
+          0,
+          0,
+          0,
+          2,
+          0,
+          0,
+          34,
+          4,
+          7,
+          6,
+          23,
+          0,
+          0,
+          21,
+          0,
+          6,
+          12,
+          2,
+          12,
+          3,
+          12,
+          12,
+          0,
+          9,
+          4,
+          7,
+          5,
+          22,
+          4,
+          4,
+          8,
+          12,
+          25,
+          28,
+          0,
+          0,
+          0,
+          0,
+          113,
+          0
         ],
         "isStreaming": true
       }

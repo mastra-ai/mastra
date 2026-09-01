@@ -129,6 +129,124 @@ describe('execute structured output prompt handling', () => {
     expect(JSON.stringify((capturedPrompt as any[])[3])).toContain('Extract now.');
   });
 
+  it('normalizes OpenAI strict-mode schemas through compatibility layers', async () => {
+    let capturedResponseFormat: any;
+    const model = new MockLanguageModelV2({
+      doStream: async ({ responseFormat }: any) => {
+        capturedResponseFormat = responseFormat;
+        return {
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            { type: 'response-metadata', id: 'id-openai', modelId: 'gpt-4o', timestamp: new Date(0) },
+            { type: 'text-start', id: 'text-1' },
+            { type: 'text-delta', id: 'text-1', delta: '{"name":"Mastra"}' },
+            { type: 'text-end', id: 'text-1' },
+            { type: 'finish', finishReason: 'stop', usage: testUsage, providerMetadata: undefined },
+          ]),
+          request: { body: '' },
+          response: { headers: {} },
+          warnings: [] as any[],
+        };
+      },
+    });
+    Object.assign(model, { provider: 'openai', modelId: 'gpt-4o' });
+
+    const stream = execute({
+      runId: 'test-run-id-openai-strict',
+      model: model as any,
+      inputMessages,
+      onResult: () => {},
+      methodType: 'stream',
+      structuredOutput: {
+        schema: z.object({
+          name: z.string().optional(),
+          nested: z.object({ maybeCount: z.number().optional() }).optional(),
+        }),
+      },
+    });
+    await readStream(stream);
+
+    expect(capturedResponseFormat).toMatchObject({
+      type: 'json',
+      schema: {
+        type: 'object',
+        additionalProperties: false,
+        required: ['name', 'nested'],
+        properties: {
+          name: { anyOf: [{ type: 'string' }, { type: 'null' }] },
+          // Nested objects must keep an explicit `type: 'object'` — OpenAI strict
+          // mode rejects object schemas without one.
+          nested: {
+            type: 'object',
+            additionalProperties: false,
+            required: ['maybeCount'],
+            properties: {
+              maybeCount: { anyOf: [{ type: 'number' }, { type: 'null' }] },
+            },
+          },
+        },
+      },
+    });
+  });
+
+  it('normalizes reasoning-model strict schemas through compatibility layers', async () => {
+    let capturedResponseFormat: any;
+    const model = new MockLanguageModelV2({
+      doStream: async ({ responseFormat }: any) => {
+        capturedResponseFormat = responseFormat;
+        return {
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            { type: 'response-metadata', id: 'id-o4-mini', modelId: 'o4-mini', timestamp: new Date(0) },
+            { type: 'text-start', id: 'text-1' },
+            { type: 'text-delta', id: 'text-1', delta: '{"name":"Mastra"}' },
+            { type: 'text-end', id: 'text-1' },
+            { type: 'finish', finishReason: 'stop', usage: testUsage, providerMetadata: undefined },
+          ]),
+          request: { body: '' },
+          response: { headers: {} },
+          warnings: [] as any[],
+        };
+      },
+    });
+    Object.assign(model, { provider: 'openai', modelId: 'o4-mini' });
+
+    const stream = execute({
+      runId: 'test-run-id-openai-reasoning-strict',
+      model: model as any,
+      inputMessages,
+      onResult: () => {},
+      methodType: 'stream',
+      structuredOutput: {
+        schema: z.object({
+          name: z.string().optional(),
+          nested: z.object({ maybeCount: z.number().optional() }).optional(),
+        }),
+      },
+    });
+    await readStream(stream);
+
+    expect(capturedResponseFormat).toMatchObject({
+      type: 'json',
+      schema: {
+        type: 'object',
+        additionalProperties: false,
+        required: ['name', 'nested'],
+        properties: {
+          name: { anyOf: [{ type: 'string' }, { type: 'null' }] },
+          nested: {
+            type: 'object',
+            additionalProperties: false,
+            required: ['maybeCount'],
+            properties: {
+              maybeCount: { anyOf: [{ type: 'number' }, { type: 'null' }] },
+            },
+          },
+        },
+      },
+    });
+  });
+
   it('adds a user message for inline mode when no user message exists', async () => {
     let capturedPrompt: unknown;
     const model = new MockLanguageModelV2({

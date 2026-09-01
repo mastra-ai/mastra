@@ -53,6 +53,23 @@ describe('createTool type improvements', () => {
     expect(typeof result.timestamp).toBe('number');
   });
 
+  it('should validate output schema input before returning transformed output', async () => {
+    const tool = createTool({
+      id: 'transformed-output',
+      description: 'Transforms validated output',
+      outputSchema: z.object({ count: z.string().transform(Number) }),
+      execute: async () => ({ count: '42' }),
+    });
+
+    const result = await tool.execute!({}, undefined as never);
+
+    if (result && 'error' in result && result.error) {
+      throw new Error('Unexpected validation error');
+    }
+
+    expect(result).toEqual({ count: 42 });
+  });
+
   it('should have typed input parameter based on input schema', async () => {
     const tool = createTool({
       id: 'input-typed-tool',

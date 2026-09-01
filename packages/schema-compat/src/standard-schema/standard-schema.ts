@@ -128,7 +128,9 @@ function isZodV3(schema: unknown): schema is ZodType {
   return schema instanceof z3.ZodType;
 }
 
-export function toStandardSchema<T = unknown>(schema: PublicSchema<T>): StandardSchemaWithJSON<T> {
+export function toStandardSchema<TInput = unknown, TOutput = TInput>(
+  schema: PublicSchema<TOutput, TInput>,
+): StandardSchemaWithJSON<TInput, TOutput> {
   // Work around a Zod v4 (< 4.4.0) bug where single-arg `z.record(valueSchema)`
   // puts the value in `def.keyType` and leaves `def.valueType` undefined, which
   // crashes `toJSONSchema`'s recordProcessor. This must run BEFORE the
@@ -143,7 +145,7 @@ export function toStandardSchema<T = unknown>(schema: PublicSchema<T>): Standard
   // First check: if already StandardSchemaWithJSON, return as-is
   // This handles ArkType, Zod v4 (when it has jsonSchema), and pre-wrapped schemas
   if (isStandardSchemaWithJSON(schema)) {
-    return schema;
+    return schema as StandardSchemaWithJSON<TInput, TOutput>;
   }
 
   // Check for Zod v4 schemas without ~standard.jsonSchema
@@ -153,19 +155,19 @@ export function toStandardSchema<T = unknown>(schema: PublicSchema<T>): Standard
     return toStandardSchemaZodV4(schema as any, {
       unrepresentable: JSON_SCHEMA_LIBRARY_OPTIONS.unrepresentable,
       override: JSON_SCHEMA_LIBRARY_OPTIONS.override,
-    });
+    }) as StandardSchemaWithJSON<TInput, TOutput>;
   }
 
   // Check for Zod v3 schemas (need wrapping to add JSON Schema support)
   // Important: Must use isZodV3() not instanceof z3.ZodType because
   // Zod v4 schemas are also instanceof z3.ZodType due to prototype compatibility
   if (isZodV3(schema)) {
-    return toStandardSchemaZodV3(schema as ZodType);
+    return toStandardSchemaZodV3(schema as ZodType) as StandardSchemaWithJSON<TInput, TOutput>;
   }
 
   // Check for AI SDK Schema objects (Vercel's jsonSchema wrapper)
   if (isVercelSchema(schema)) {
-    return toStandardSchemaAiSdk(schema as Schema<T>);
+    return toStandardSchemaAiSdk(schema as Schema<TOutput>) as StandardSchemaWithJSON<TInput, TOutput>;
   }
 
   // At this point, assume it's a plain JSON Schema object
@@ -179,7 +181,7 @@ export function toStandardSchema<T = unknown>(schema: PublicSchema<T>): Standard
     throw new Error(`Unsupported schema type: function (schema libraries should implement StandardSchemaWithJSON)`);
   }
 
-  return toStandardSchemaJsonSchema(schema as JSONSchema7);
+  return toStandardSchemaJsonSchema(schema as JSONSchema7) as StandardSchemaWithJSON<TInput, TOutput>;
 }
 
 /**

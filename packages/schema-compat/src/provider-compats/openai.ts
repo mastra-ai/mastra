@@ -302,6 +302,12 @@ export class OpenAISchemaCompatLayer extends SchemaCompatLayer {
                 // @ts-expect-error - keyword is a valid property for JSON Schema
                 delete prop[keyword];
               }
+            } else if (prop.type === 'object' || prop.type === 'array') {
+              // Keep structural nodes intact: OpenAI strict mode requires an explicit
+              // `type` on every object schema, so wrapping them in anyOf (which strips
+              // `type` and strands the object keywords on the outer node) breaks the
+              // request. Optionality inside the subtree is already handled by its own
+              // nullable children, and `x-optional` marks the key for null -> undefined.
             } else if (prop.type && prop.type !== 'null') {
               const originalType = prop.type;
               const propSchema = { ...prop } as JSONSchema7;
