@@ -15,6 +15,7 @@ import {
   REMIND_PROTOCOL_METADATA_KEY,
   type RemindPassiveCheckEvent,
 } from './remind-protocol';
+import { createReplyToMemoryQuestionTool } from './remind-questions';
 import { resolveKnowledgeResourceId } from './scope';
 import type { ResolvedSubconsciousAgent } from './types';
 
@@ -173,6 +174,16 @@ export class SubconsciousRemindExtractor extends Extractor<string> {
           };
           await remindMemory.saveMessages({ messages: [eventMessage] });
 
+          const replyTool = context.mainAgent
+            ? createReplyToMemoryQuestionTool({
+                memory: remindMemory,
+                parentAgent: context.mainAgent,
+                parentAgentId: context.mainAgent.id,
+                parentThreadId: context.threadId,
+                reminderThreadId: remindThread.id,
+                resourceId,
+              })
+            : undefined;
           const agent = createReminderAgent({
             model,
             memory: remindMemory,
@@ -182,7 +193,9 @@ export class SubconsciousRemindExtractor extends Extractor<string> {
             parentThreadId: context.threadId,
             parentAgent: context.mainAgent,
             fallbackSendSignal: context.sendSignal,
+            additionalTools: replyTool ? { reply_to_memory_question: replyTool } : undefined,
             instructions: config.instructions,
+            maxSteps: config.maxSteps,
           });
           const delivery = agent.sendMessage(
             {

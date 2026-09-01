@@ -134,7 +134,7 @@ function hasValidAttempts(value: unknown): value is Record<string, number> {
     typeof value === 'object' &&
     !Array.isArray(value) &&
     Object.entries(value).every(
-      ([replyId, attempt]) => isString(replyId) && Number.isInteger(attempt) && Number(attempt) > 0,
+      ([replyId, attempt]) => isString(replyId) && Number.isInteger(attempt) && Number(attempt) >= 0,
     )
   );
 }
@@ -277,8 +277,27 @@ export class RemindEventReferenceProcessor implements Processor<'remind-event-re
       const stored = await store?.listMessagesById({ messageIds: [...new Set(missingIds)] });
       for (const message of stored?.messages ?? []) {
         const protocol = getRemindProtocol(message);
-        if (protocol && !isLedgerOnlyRemindEvent(protocol) && this.isTrustedModelEvent(message, protocol)) {
+        if (!protocol || !this.isTrustedModelEvent(message, protocol)) continue;
+        if (!isLedgerOnlyRemindEvent(protocol)) {
           canonicalById.set(message.id, message);
+        } else if (protocol.kind === 'continuation') {
+          canonicalById.set(message.id, {
+            id: `${protocol.deliveryId}:model`,
+            role: 'user',
+            threadId: this.threadId,
+            resourceId: this.resourceId,
+            createdAt: new Date(protocol.createdAt),
+            content: {
+              format: 2,
+              parts: [
+                {
+                  type: 'text',
+                  text: getRemindMessageText(message),
+                },
+              ],
+              metadata: { [REMIND_DELIVERY_METADATA_KEY]: { eventId: protocol.eventId } },
+            },
+          });
         }
       }
     }

@@ -7,6 +7,7 @@ import type { JSONSchema7 } from 'json-schema';
 
 import type { Memory } from '../../..';
 import { createKnowledgeTools } from './knowledge-tools';
+import { RemindContinuationProcessor } from './remind-continuation';
 import { getRemindProtocol, RemindEventReferenceProcessor } from './remind-protocol';
 import type { SubconsciousModel } from './types';
 
@@ -28,6 +29,7 @@ export function createReminderAgent(options: {
   fallbackSendSignal: SendSignal;
   additionalTools?: Record<string, ToolAction<any, any, any>>;
   instructions?: string;
+  maxSteps?: number;
 }) {
   const deliveredEvents = new Set<string>();
   const sendReminder = createTool({
@@ -113,7 +115,23 @@ export function createReminderAgent(options: {
     },
   });
 
-  return new Agent({
+  let reminderAgent: Agent;
+  const outputProcessors =
+    options.parentAgent && options.additionalTools?.reply_to_memory_question
+      ? [
+          new RemindContinuationProcessor({
+            memory: options.memory,
+            threadId: options.threadId,
+            resourceId: options.resourceId,
+            parentThreadId: options.parentThreadId,
+            parentAgent: options.parentAgent,
+            parentAgentId: options.parentAgent.id,
+            maxSteps: options.maxSteps ?? 50,
+            getReminderAgent: () => reminderAgent,
+          }),
+        ]
+      : undefined;
+  reminderAgent = new Agent({
     id: `subconscious-remind-${options.parentThreadId}`,
     name: 'Subconscious Remind',
     instructions: [DEFAULT_INSTRUCTIONS, options.instructions?.trim()].filter(Boolean).join('\n\n'),
@@ -135,5 +153,8 @@ export function createReminderAgent(options: {
         options.parentAgent?.id,
       ),
     ],
+    outputProcessors,
+    maxProcessorRetries: outputProcessors ? 1 : undefined,
   });
+  return reminderAgent;
 }
