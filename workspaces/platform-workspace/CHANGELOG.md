@@ -1,5 +1,65 @@
 # @mastra/platform
 
+## 1.5.0-alpha.1
+
+### Minor Changes
+
+- **Added a `workingDirectory` option to `MastraSandboxOptions`, honored by every sandbox provider** ([#22697](https://github.com/mastra-ai/mastra/pull/22697))
+
+  Every sandbox now accepts one instance-level `workingDirectory` option that sets the default directory for command execution and process spawns. A per-command `cwd` always wins over it, and when neither is provided each provider keeps its previous default (E2B home, docker `/workspace`, Vercel serverless `/tmp`, and so on). The effective value is readable through the new `sandbox.workingDirectory` getter.
+
+  ```ts
+  const sandbox = new E2BSandbox({ workingDirectory: '/home/user/my-repo' });
+  await sandbox.executeCommand('pwd'); // /home/user/my-repo
+  await sandbox.executeCommand('pwd', [], { cwd: '/tmp' }); // /tmp
+  ```
+
+  Providers that already carried this concept under other names keep those names working as deprecated aliases feeding the same field: `workingDir` on `@mastra/docker` and `@mastra/apple-container`, and `workdir` on `@mastra/modal`. When both the alias and `workingDirectory` are set, `workingDirectory` wins. Use absolute paths: the value is passed to the provider as-is, so `~` and environment variables like `$HOME` are not expanded (except where a provider documents expansion, such as `LocalSandbox` expanding `~`).
+
+### Patch Changes
+
+- Remove `CHANGELOG.md` from distributed npm files resulting in reduced package size ([#22737](https://github.com/mastra-ai/mastra/pull/22737))
+
+- Updated dependencies [[`cf58c86`](https://github.com/mastra-ai/mastra/commit/cf58c86cb48ccc72677bdaa422e43f102683184c), [`449d112`](https://github.com/mastra-ai/mastra/commit/449d1120cc1f9c43a71308a9fd8b178cfb11355f), [`2a0ca02`](https://github.com/mastra-ai/mastra/commit/2a0ca021d95e23f1d1c0b5fe858b0b56f71fe0ba), [`ff539f6`](https://github.com/mastra-ai/mastra/commit/ff539f6dc21137fbeb3f0867f07069cbce45c15f), [`420052f`](https://github.com/mastra-ai/mastra/commit/420052fcac3fc672be17fe655667dfbdbd35a2cc), [`28ce924`](https://github.com/mastra-ai/mastra/commit/28ce924276eeca492e6a360e5482ed20c2785ef6)]:
+  - @mastra/core@1.64.0-alpha.2
+
+## 1.5.0-alpha.0
+
+### Minor Changes
+
+- Added reusable sandbox templates to Platform workspaces. Build templates through `PlatformSandbox` with the portable `Template()` API; Platform content-addresses each serialized definition for reuse. Public repositories can be warmed lazily with `createRepoTemplate()`. Use `cpuCount()` and `memoryMB()` to size E2B template builds and sandboxes created from the exact or a resource-matched stale build; `createRepoTemplate()` accepts the same sizing as plain options. Railway ignores these resource methods. ([#22065](https://github.com/mastra-ai/mastra/pull/22065))
+
+  ```ts
+  const sandbox = new PlatformSandbox({
+    environmentId,
+    template: Template().cpuCount(4).memoryMB(8192).runCmd('pnpm install'),
+  });
+
+  // createRepoTemplate takes the whole sandbox context: a session with no
+  // repository gets undefined back and boots the provider default.
+  const repoSandbox = new PlatformSandbox({
+    environmentId,
+    template: createRepoTemplate({
+      getRepositoryAccess: async () => ({ cloneUrl: 'https://github.com/mastra-ai/mastra.git' }),
+      setupCommand: 'pnpm install --frozen-lockfile',
+      memoryMB: 2048,
+    }),
+  });
+  ```
+
+  Template environment values are serialized by default. Pass `{ ephemeral: true }` to `setEnvs()` for short-lived build credentials that must stay outside the definition, identity, persistent record, and runtime environment. `Template.build()` can eagerly start or reuse the provider build without provisioning a sandbox. Railway includes transient values in its provider cache input, so rotating one may trigger another Railway build while the Platform template ID remains stable.
+
+  `PlatformSandbox.start()` never blocks on a template build. When the exact template is not yet ready, Platform boots the sandbox on the best available fallback (an E2B prior member of the same family with matching effective resources if one exists, otherwise the provider base template) and builds the exact template in the background. A provider-base fallback may use provider-default resources. The sandbox surfaces `templatePending` for observability; reconcile filesystem state in your own runtime setup (for example, an `onStart` hook that runs `git fetch && git checkout <sha>`).
+
+  `Template().withFamily(key)` attaches a caller-supplied family key that groups successive builds of the "same thing" (e.g. the same repository+workdir across commits) so an E2B definition can warm-start on a resource-matched prior member of the same family. Railway doesn't use family fallback. `createRepoTemplate()` populates the key automatically as `repo:<cloneUrl>:<workdir>`.
+
+- Changed Platform sandboxes to use E2B by default. Set sandboxProvider or SANDBOX_PROVIDER to railway to opt into Railway. ([#22065](https://github.com/mastra-ai/mastra/pull/22065))
+
+### Patch Changes
+
+- Updated dependencies [[`3910c77`](https://github.com/mastra-ai/mastra/commit/3910c77413a3058ab270c6dbc74a59bc3cdf67ea)]:
+  - @mastra/core@1.63.3-alpha.0
+
 ## 1.4.1
 
 ### Patch Changes

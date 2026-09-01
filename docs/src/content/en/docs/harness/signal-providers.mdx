@@ -1,6 +1,6 @@
 ---
 title: "Signal providers | Long-running agents"
-description: "Learn what signal providers are and how to build one that monitors an external source and pushes notifications into agent threads."
+description: "Build Mastra signal providers that monitor external systems through polling or webhooks and deliver notifications into long-running agent threads."
 packages:
   - "@mastra/core"
 ---
@@ -141,7 +141,7 @@ For a complete polling-provider build with notification storage, agent registrat
 
 Use polling when the external source doesn't push events to your app. Set `pollInterval` and override `poll(subscriptions)`. Each subscription includes the thread target and the external resource id to inspect.
 
-Use webhooks when the external source can call your app. Override `handleWebhook(request)`, parse the payload, find matching subscriptions, and call `notify()` for each match.
+Use webhooks when the external source can call your app. Override `handleWebhook(request)` to parse the payload, then find matching subscriptions and call `notify()` for every match.
 
 ```typescript title="src/mastra/signals/ci-signals.ts"
 import { SignalProvider } from '@mastra/core/signals'

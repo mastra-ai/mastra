@@ -120,7 +120,6 @@ export function CommentList({
   const resolveMentions = useMentionResolver(factoryProjectId);
   const comments = useWorkItemComments({
     workItemId: item.id,
-    feedActivityAt: item.feedActivityAt,
     aroundCommentId: highlightCommentId,
     enabled,
   });

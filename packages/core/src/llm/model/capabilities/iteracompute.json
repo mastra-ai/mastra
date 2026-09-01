@@ -1,5 +1,5 @@
 {
   "attachment": ["iteracompute/qwen3.8-27b"],
-  "temperature": ["iteracompute/qwen3.8-27b"],
-  "structuredOutput": ["iteracompute/qwen3.8-27b"]
+  "temperature": ["iteracompute/ornith-1.5-35b-a3b", "iteracompute/qwen3.8-27b"],
+  "structuredOutput": ["iteracompute/ornith-1.5-35b-a3b", "iteracompute/qwen3.8-27b"]
 }

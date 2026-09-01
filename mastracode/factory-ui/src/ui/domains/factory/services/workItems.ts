@@ -235,6 +235,8 @@ export interface StartFactoryRunRequest {
   threadTags?: Record<string, string>;
   kickoffKey: string;
   invocation?: { type: 'prompt'; prompt: string } | { type: 'skill'; skillName: string; arguments: string };
+  /** Hands-off run: the dispatcher approves this item's parked plans on the starter's behalf. */
+  preapprovePlans?: boolean;
   destinationStage: FactoryRuleStage;
   workItem: {
     id?: string;

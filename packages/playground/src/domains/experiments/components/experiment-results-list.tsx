@@ -2,7 +2,7 @@ import type { ClientScoreRowData, DatasetExperimentResult } from '@mastra/client
 import { DataList, DataListSkeleton, useDataListKeyboard } from '@mastra/playground-ui/components/DataList';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { ScorersIcon } from '@mastra/playground-ui/icons/ScorersIcon';
-import { CircleCheckIcon, CircleXIcon, ExternalLinkIcon } from 'lucide-react';
+import { AlertCircleIcon, ExternalLinkIcon } from 'lucide-react';
 import { useLinkComponent } from '@/lib/framework';
 
 export type ExperimentResultsListProps = {
@@ -90,22 +90,16 @@ export function ExperimentResultsList({
 
             const rowCells = (
               <>
-                <DataList.IdCell id={result.itemId} />
-                <DataList.Cell>
-                  <Tooltip>
-                    <TooltipTrigger
-                      render={
-                        <div className="relative flex h-full w-10 items-center justify-center bg-transparent">
-                          {hasError ? (
-                            <CircleXIcon role="img" aria-label="Error" className="text-error size-4" />
-                          ) : (
-                            <CircleCheckIcon role="img" aria-label="Success" className="text-accent1 size-4" />
-                          )}
-                        </div>
-                      }
-                    />
-                    <TooltipContent>{hasError ? 'Error' : 'Success'}</TooltipContent>
-                  </Tooltip>
+                <DataList.Cell className="text-ui-smd text-neutral3 flex items-center gap-1.5 tracking-wide">
+                  <span>{result.itemId?.slice(0, 8) ?? ''}</span>
+                  {hasError && (
+                    <Tooltip>
+                      <TooltipTrigger
+                        render={<AlertCircleIcon role="img" aria-label="Error" className="text-error size-3.5" />}
+                      />
+                      <TooltipContent>{result.error?.message || 'Error'}</TooltipContent>
+                    </Tooltip>
+                  )}
                 </DataList.Cell>
 
                 {hasInputColumn && (

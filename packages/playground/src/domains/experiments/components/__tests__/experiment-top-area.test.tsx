@@ -37,17 +37,36 @@ describe('ExperimentTopArea', () => {
     );
   });
 
-  it('shows the eyebrow label and the target as the page title, linked to the entity', async () => {
+  it('titles the page with the run itself', async () => {
     const { queryClient } = renderWithProviders(
       <TestLinkProvider>
         <ExperimentTopArea experiment={namedExperiment} />
       </TestLinkProvider>,
     );
 
-    expect(await screen.findByText('Evaluation target')).toBeDefined();
-    expect(await screen.findByText('Avg 0.833')).toBeDefined();
-    const title = await screen.findByRole('link', { name: /example-entity-extraction-agent/ });
-    expect(title.getAttribute('href')).toContain('example-entity-extraction-agent');
+    // The run is the subject of the page; the dataset it ran on lives in the flow chain.
+    expect(await screen.findByText(`Experiment #${namedExperiment.id.slice(0, 8)}`)).toBeDefined();
+
+    await waitForMutationsIdle(queryClient);
+  });
+
+  it('walks through the dataset, the target and the scorers', async () => {
+    const { queryClient } = renderWithProviders(
+      <TestLinkProvider>
+        <ExperimentTopArea experiment={namedExperiment} />
+      </TestLinkProvider>,
+    );
+
+    const datasetLink = await screen.findByRole('link', { name: new RegExp(namedExperiment.datasetId!) });
+    expect(datasetLink.getAttribute('href')).toBe(`/datasets/${namedExperiment.datasetId}`);
+
+    const target = await screen.findByRole('link', { name: /example-entity-extraction-agent/ });
+    expect(target.getAttribute('href')).toContain('example-entity-extraction-agent');
+
+    // Two distinct scorers produced the mocked scores.
+    expect(await screen.findByText('2 scorers')).toBeDefined();
+    expect(screen.getByText('each item')).toBeDefined();
+    expect(screen.getByText('comparing ground truth')).toBeDefined();
 
     await waitForMutationsIdle(queryClient);
   });
@@ -59,7 +78,7 @@ describe('ExperimentTopArea', () => {
       </TestLinkProvider>,
     );
 
-    expect(await screen.findByText('Entity extraction evaluation using Model A')).toBeDefined();
+    expect(await screen.findByText(namedExperiment.description!)).toBeDefined();
 
     await waitForMutationsIdle(queryClient);
   });
@@ -71,7 +90,7 @@ describe('ExperimentTopArea', () => {
       </TestLinkProvider>,
     );
 
-    expect(await screen.findByText('Evaluation target')).toBeDefined();
+    expect(await screen.findByText(`Experiment #${unnamedExperiment.id.slice(0, 8)}`)).toBeDefined();
     expect(screen.queryByText(namedExperiment.description!)).toBeNull();
 
     await waitForMutationsIdle(queryClient);

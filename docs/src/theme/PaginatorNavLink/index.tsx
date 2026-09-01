@@ -2,16 +2,19 @@ import Link from '@docusaurus/Link'
 import { cn } from '@site/src/lib/utils'
 import type { Props } from '@theme/PaginatorNavLink'
 import { type ReactNode } from 'react'
+import { normalizeSiteSectionRoot } from '@site/src/utils/canonical-url'
 
 export default function PaginatorNavLink(props: Props): ReactNode {
   const { permalink, title, subLabel, isNext } = props
+  const linkHref = normalizeSiteSectionRoot(permalink)
+
   return (
     <Link
       className={cn(
         'flex items-center gap-2 py-4 hover:no-underline!',
         isNext ? 'flex-row-reverse pl-4 2xl:-mr-8' : 'flex-row pr-4 2xl:-ml-8',
       )}
-      to={permalink}
+      to={linkHref}
       data-is-next={isNext}
     >
       <svg

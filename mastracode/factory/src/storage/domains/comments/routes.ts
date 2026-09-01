@@ -4,11 +4,14 @@
  * result status to a status code, then emit audit.
  */
 
+import type { EventCallback, PubSub } from '@mastra/core/events';
 import type { ApiRoute } from '@mastra/core/server';
 import { registerApiRoute } from '@mastra/core/server';
 import type { Context } from 'hono';
+import { streamSSE } from 'hono/streaming';
 
 import { getFactoryAuthUser } from '../../../auth.js';
+import { feedTopic } from '../../../feed-events.js';
 import type { RouteAuth } from '../../../routes/route.js';
 import type { AuditEmitter } from '../audit/domain.js';
 import type { FactoryProjectsStorage } from '../projects/base.js';
@@ -17,11 +20,15 @@ import { actorFromAuthUser } from './actor.js';
 import type { WorkItemCommentsStorage } from './base.js';
 import { decodeCommentCursor } from './base.js';
 import type { CommentEditor, CommentsDomain } from './domain.js';
-import { parseCreateCommentBody, parseEditCommentBody, readJson, UUID_RE } from './parse.js';
+import { isRecord, parseCreateCommentBody, parseEditCommentBody, readJson, UUID_RE } from './parse.js';
 import { toWireComment } from './wire.js';
 import type { WireCommentPage } from './wire.js';
 
 const MAX_AUDIT_BODY_SNAPSHOT = 1024;
+/** Comment frames only — proxies drop an idle stream, and `write` can't detect a dead peer. */
+const FEED_KEEPALIVE_MS = 25_000;
+// Ceiling: one broker subscription per open tab, not per project. A per-replica
+// topic multiplexer is the upgrade path if tab counts ever make that hurt.
 
 export interface CommentRouteDependencies {
   domain: CommentsDomain;
@@ -29,6 +36,7 @@ export interface CommentRouteDependencies {
   comments: WorkItemCommentsStorage;
   workItems: WorkItemsStorage;
   projects: FactoryProjectsStorage;
+  pubsub: PubSub;
   audit?: AuditEmitter;
 }
 
@@ -42,7 +50,7 @@ function loose(c: unknown): Context {
 }
 
 export function buildCommentRoutes(dependencies: CommentRouteDependencies): ApiRoute[] {
-  const { domain, auth, comments, workItems, projects, audit } = dependencies;
+  const { domain, auth, comments, workItems, projects, pubsub, audit } = dependencies;
 
   async function resolveTenant(c: Context): Promise<Tenant | { response: Response }> {
     await auth.ensureUser(c);
@@ -274,6 +282,51 @@ export function buildCommentRoutes(dependencies: CommentRouteDependencies): ApiR
           ? roster.filter(member => (member.name ?? member.id).toLowerCase().startsWith(query))
           : roster;
         return c.json({ members });
+      },
+    }),
+
+    registerApiRoute('/web/factory/projects/:id/feed-events', {
+      method: 'GET',
+      handler: async cc => {
+        const c = loose(cc);
+        const tenant = await resolveTenant(c);
+        if ('response' in tenant) return tenant.response;
+
+        const projectId = c.req.param('id');
+        if (!projectId || !UUID_RE.test(projectId)) return c.json({ error: 'Project not found' }, 404);
+        await projects.ensureReady();
+        const project = await projects.get({ orgId: tenant.orgId, id: projectId });
+        if (!project) return c.json({ error: 'Project not found' }, 404);
+
+        const topic = feedTopic(tenant.orgId, projectId);
+        return streamSSE(c, async stream => {
+          const onEvent: EventCallback = async event => {
+            if (stream.aborted) return;
+            const data = event.data;
+            const workItemId = isRecord(data) && typeof data.workItemId === 'string' ? data.workItemId : undefined;
+            await stream.writeSSE({ event: 'feed', data: JSON.stringify(workItemId ? { workItemId } : {}) });
+          };
+          // Claimed before any await: `onAbort` handlers registered after the
+          // reader is gone never run, and a broker subscribe is a round trip.
+          const closed = new Promise<void>(resolve => stream.onAbort(resolve));
+          let keepalive: ReturnType<typeof setInterval> | undefined;
+          try {
+            // Without `latest`, a retaining broker replays its whole backlog into
+            // every new connection as spurious invalidations.
+            await pubsub.subscribe(topic, onEvent, { startFrom: 'latest' });
+            if (!stream.aborted) {
+              keepalive = setInterval(() => {
+                if (stream.aborted) return;
+                void stream.write(': ping\n\n');
+              }, FEED_KEEPALIVE_MS);
+              // `streamSSE` closes the stream the moment this callback returns.
+              await closed;
+            }
+          } finally {
+            clearInterval(keepalive);
+            await pubsub.unsubscribe(topic, onEvent);
+          }
+        });
       },
     }),
   ];

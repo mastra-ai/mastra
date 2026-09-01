@@ -76,7 +76,7 @@ describe('FooterAnimationRenderer', () => {
     expect(harness.ui.previousLines.slice(-2)).toEqual(['new status<reset>', 'new memory<reset>']);
   });
 
-  it('redraws the current footer while a normal render is queued', () => {
+  it('defers footer animation while a normal render is queued', () => {
     const harness = createHarness();
     harness.completeFullRender();
     harness.setFooterLines(['new footer']);
@@ -84,8 +84,8 @@ describe('FooterAnimationRenderer', () => {
     const renderTimer = setTimeout(() => {}, 1_000);
     Object.assign(harness.ui, { renderTimer });
 
-    expect(harness.renderer.renderFrame()).toBe(true);
-    expect(harness.terminal.write).toHaveBeenCalledOnce();
+    expect(harness.renderer.renderFrame()).toBe(false);
+    expect(harness.terminal.write).not.toHaveBeenCalled();
     clearTimeout(renderTimer);
   });
 

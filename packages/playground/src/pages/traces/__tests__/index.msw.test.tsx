@@ -247,7 +247,7 @@ describe('Traces side panel header actions', () => {
     await waitFor(() => expect(queryClient.isFetching()).toBe(0));
 
     expect(screen.getByRole('button', { name: 'Evaluate trace' })).not.toBeNull();
-    expect(screen.getByRole('button', { name: 'Save as Dataset Item' })).not.toBeNull();
+    expect(screen.getByRole('button', { name: 'Add full trace to dataset' })).not.toBeNull();
     // The parent trace panel is no longer collapsible.
     expect(screen.queryByRole('button', { name: /collapse panel/i })).toBeNull();
   });

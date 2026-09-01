@@ -1,6 +1,5 @@
 import {
   assertKnowledgeCeilingRaised,
-  assertKnowledgeDescriptionWithinBound,
   assertKnowledgeScopeWithinCeiling,
   canonicalizeKnowledgeScope,
   createKnowledgeUlid,
@@ -46,6 +45,26 @@ import type { ClientSession, Collection, Filter } from 'mongodb';
 import type { MongoDBConnector } from '../../connectors/MongoDBConnector';
 import { resolveMongoDBConfig } from '../../db';
 import type { MongoDBDomainConfig } from '../../types';
+
+// #21830 shipped this helper in core 1.63.1; resolve it lazily so an older
+// installed core fails feature-detection instead of breaking module load.
+let assertDescriptionWithinBound: ((description: string | undefined) => void) | undefined;
+async function assertKnowledgeDescriptionWithinBoundCompat(description: string | undefined): Promise<void> {
+  let assertWithinBound = assertDescriptionWithinBound;
+  if (!assertWithinBound) {
+    const mod: Partial<typeof import('@mastra/core/storage')> = await import('@mastra/core/storage');
+    const resolvedAssert: (description: string | undefined) => void =
+      mod.assertKnowledgeDescriptionWithinBound ??
+      (value => {
+        if (value !== undefined && value.length > 400) {
+          throw new Error('Knowledge node description exceeds the 400 UTF-16 code unit limit');
+        }
+      });
+    assertDescriptionWithinBound = resolvedAssert;
+    assertWithinBound = resolvedAssert;
+  }
+  assertWithinBound(description);
+}
 
 type Document = Record<string, any>;
 
@@ -169,7 +188,7 @@ export class KnowledgeMongoDB extends KnowledgeStorage {
   }
 
   async createNode(input: CreateKnowledgeNodeInput): Promise<KnowledgeNode> {
-    assertKnowledgeDescriptionWithinBound(input.description);
+    await assertKnowledgeDescriptionWithinBoundCompat(input.description);
     const scope = canonicalizeKnowledgeScope(input.scope);
     return this.#connector.withTransaction(async session => {
       const existing = await this.#getNodeByName(input.name, scope, session);
@@ -264,7 +283,7 @@ export class KnowledgeMongoDB extends KnowledgeStorage {
   }
 
   async updateNode(input: UpdateKnowledgeNodeInput): Promise<KnowledgeNode> {
-    assertKnowledgeDescriptionWithinBound(input.description);
+    await assertKnowledgeDescriptionWithinBoundCompat(input.description);
     return this.#connector.withTransaction(async session => {
       const existing = await this.#getNode(input.id, session);
       if (!existing) throw new KnowledgeNotFoundError('node', input.id);

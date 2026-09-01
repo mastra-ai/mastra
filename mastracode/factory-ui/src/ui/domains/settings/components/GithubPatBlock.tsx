@@ -89,7 +89,7 @@ function TokenRow({
             <Txt variant="ui-md" className="text-icon5">
               {title}
             </Txt>
-            <Badge size="sm" variant={configured ? 'success' : 'default'}>
+            <Badge size="sm" variant={configured ? 'green' : 'neutral'}>
               {configured ? 'Configured' : 'Not set'}
             </Badge>
           </div>

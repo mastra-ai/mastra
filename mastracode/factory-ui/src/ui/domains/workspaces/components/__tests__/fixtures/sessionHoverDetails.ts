@@ -1,5 +1,5 @@
 import type { WorkItem } from '../../../../factory/services/workItems';
-import type { FactoryProjectPayload, MaterializeResult } from '../../../services/github';
+import type { FactoryProjectPayload } from '../../../services/github';
 import type { FactoryUserSession } from '../../../services/user-sessions';
 
 export const factoryId = 'fp-1';
@@ -128,14 +128,6 @@ export function createSessionHoverDetailsFixtures(updatedAt: string) {
       updatedAt,
     },
   ];
-  const ensureResponse: MaterializeResult = {
-    resourceId: workSessionId,
-    factoryProjectId: factoryId,
-    projectRepositoryId,
-    sandboxId: 'sandbox-1',
-    sandboxWorkdir: '/workspace/mastra',
-  };
-
   return {
     projectsResponse: { projects: [project] },
     connectionsResponse: {
@@ -156,7 +148,6 @@ export function createSessionHoverDetailsFixtures(updatedAt: string) {
     },
     sessionsResponse: { sessions: [workWorkspace, reviewWorkspace] },
     currentSessionResponse: { session: workWorkspace },
-    ensureResponse,
     workItemsResponse: { workItems: workItems.map(toWireWorkItem) },
     activeRunsResponse: { runs: [{ runId: 'run-work', resourceId: workSessionId, threadId: workSessionId }] },
   };

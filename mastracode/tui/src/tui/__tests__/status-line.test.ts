@@ -257,6 +257,17 @@ describe('updateStatusLine', () => {
     expect(rendered).not.toContain('updated');
   });
 
+  it('shows a GitHub PR subscription count when multiple PRs are active', () => {
+    const state = createState();
+    state.activeGithubPrSubscriptions = [{ prNumber: 17439 }, { prNumber: 17440 }, { prNumber: 17441 }];
+
+    updateStatusLine(state);
+
+    const rendered = state.statusLine.setText.mock.calls[0]?.[0];
+    expect(rendered).toContain('3 PRs');
+    expect(rendered).not.toContain('PR#17439');
+  });
+
   it('keeps the PR label within the available width when truncating a long thread title', () => {
     const state = createState();
     state.currentThreadTitle = 'A very long thread title that must be truncated';

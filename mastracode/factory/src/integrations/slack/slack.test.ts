@@ -1,6 +1,7 @@
 import { RequestContext } from '@mastra/core/request-context';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import type { ExternalWorkItemSource } from '../../storage/domains/work-items/base.js';
 import {
   createChannelResourceIdResolver,
   createChannelSessionStartHook,
@@ -681,6 +682,8 @@ describe('Slack thread work-item creation', () => {
     expect(call.input.stages).toEqual(['execute']);
     expect(call.input.externalSource.integrationId).toBe('slack');
     expect(call.input.externalSource.type).toBe('slack-thread');
+    // Same key shape the aside lookup rebuilds, workspace included.
+    expect(call.input.externalSource.workspaceId).toBe('T-1');
     expect(call.input.externalSource.externalId).toBe('slack:C-1:1700.42');
     expect(call.input.sessions.chat.sessionId).toBe('us-42');
     expect(call.input.sessions.chat.branch).toBe('slack/1700-42');
@@ -972,5 +975,121 @@ describe('session start (onSessionStart)', () => {
     await createChannelSessionStartHook(deps as any)(startArgs(session) as any);
 
     expect(session.model.switch).not.toHaveBeenCalled();
+  });
+});
+
+describe('Slack aside ingest', () => {
+  function makeAside(text = 'aside: looks good to me') {
+    return {
+      id: '1700.99',
+      author: { userId: 'U-sender', userName: 'caleb', fullName: 'Caleb Stone', isBot: false },
+      text,
+      metadata: { dateSent: new Date('2026-08-30T10:00:00.000Z'), edited: false },
+      raw: { team_id: 'T-1' },
+    } as any;
+  }
+
+  function makeAsideDeps({ link = { orgId: 'org-1', userId: 'user-1' } as { orgId?: string; userId: string } | null } = {}) {
+    const thread = makeThread();
+    thread.id = 'slack:C-1:1700.42';
+    thread.post = vi.fn();
+    return {
+      thread,
+      deps: {
+        accountLinks: {
+          getAccountLink: vi.fn().mockResolvedValue(link),
+          setDefaultFactory: vi.fn().mockResolvedValue(true),
+        } as any,
+        projects: makeProjects([{ id: 'fp-1', slackWorkItemsEnabled: true }]) as any,
+        workItems: {
+          getBySource: vi.fn().mockResolvedValue({ id: 'wi-1', orgId: 'org-1', factoryProjectId: 'fp-1' }),
+        } as any,
+        feed: { createComment: vi.fn().mockResolvedValue({ status: 'created' }) },
+      },
+    };
+  }
+
+  it('lands a linked sender aside on the card the thread created, attributed to their tenant user', async () => {
+    const { thread, deps } = makeAsideDeps();
+    const defaultHandler = vi.fn();
+
+    await createHandlers(deps as any).onSubscribedMessage!(thread, makeAside(), defaultHandler, handlerCtx());
+
+    // Never dispatched: an aside is human talk the agent must not answer.
+    expect(defaultHandler).not.toHaveBeenCalled();
+    // Scoped by the sending workspace: a channel id and a `ts` only identify a
+    // thread inside the team that issued them.
+    expect(deps.workItems.getBySource).toHaveBeenCalledWith({
+      integrationId: 'slack',
+      type: 'slack-thread',
+      workspaceId: 'T-1',
+      externalId: 'slack:C-1:1700.42',
+    });
+    expect(deps.feed.createComment).toHaveBeenCalledTimes(1);
+    expect(deps.feed.createComment.mock.calls[0][0]).toMatchObject({
+      orgId: 'org-1',
+      workItemId: 'wi-1',
+      // The leading `aside` marker is Slack routing, not part of what was said.
+      body: 'looks good to me',
+      author: { kind: 'user', id: 'user-1', displayName: 'Caleb Stone' },
+      occurredAt: new Date('2026-08-30T10:00:00.000Z'),
+      externalSource: { integrationId: 'slack', type: 'message', workspaceId: 'T-1', externalId: 'C-1:1700.99' },
+    });
+
+    // The next real message still belongs to the agent alone: it already shows
+    // in the bound transcript, so a comment would say the same thing twice.
+    await createHandlers(deps as any).onSubscribedMessage!(thread, makeAside('ship it'), defaultHandler, handlerCtx());
+    expect(defaultHandler).toHaveBeenCalledTimes(1);
+    expect(deps.feed.createComment).toHaveBeenCalledTimes(1);
+  });
+
+  it('stores an unlinked sender aside under their Slack identity, silently (no Connect card)', async () => {
+    process.env.MASTRACODE_PUBLIC_URL = 'https://mc.example.com';
+    const { thread, deps } = makeAsideDeps({ link: null });
+
+    await createHandlers(deps as any).onSubscribedMessage!(thread, makeAside(), vi.fn(), handlerCtx());
+
+    expect(thread.postEphemeral).not.toHaveBeenCalled();
+    expect(deps.feed.createComment.mock.calls[0][0].author).toMatchObject({
+      kind: 'user',
+      id: 'slack:U-sender',
+      displayName: 'Caleb Stone',
+    });
+  });
+
+  it('still lands an aside on a card keyed before the workspace joined the key', async () => {
+    const { thread, deps } = makeAsideDeps();
+    deps.workItems.getBySource = vi.fn(async (source: ExternalWorkItemSource) =>
+      source.workspaceId ? null : { id: 'wi-legacy', orgId: 'org-1', factoryProjectId: 'fp-1' },
+    );
+
+    await createHandlers(deps as any).onSubscribedMessage!(thread, makeAside(), vi.fn(), handlerCtx());
+
+    expect(deps.feed.createComment.mock.calls[0][0].workItemId).toBe('wi-legacy');
+  });
+
+  it('ingests nothing when the thread has no card', async () => {
+    const { thread, deps } = makeAsideDeps();
+    deps.workItems.getBySource = vi.fn().mockResolvedValue(null);
+    const defaultHandler = vi.fn();
+
+    await createHandlers(deps as any).onSubscribedMessage!(thread, makeAside(), defaultHandler, handlerCtx());
+
+    // Scoped key, then the pre-workspace one.
+    expect(deps.workItems.getBySource).toHaveBeenCalledTimes(2);
+    expect(deps.feed.createComment).not.toHaveBeenCalled();
+    expect(defaultHandler).not.toHaveBeenCalled();
+  });
+
+  it('never lets an ingest failure reach the Slack thread', async () => {
+    const { thread, deps } = makeAsideDeps();
+    deps.feed.createComment = vi.fn().mockRejectedValue(new Error('storage down'));
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    await expect(
+      createHandlers(deps as any).onSubscribedMessage!(thread, makeAside(), vi.fn(), handlerCtx()),
+    ).resolves.toBeUndefined();
+    expect(deps.feed.createComment).toHaveBeenCalledTimes(1);
+    expect(thread.post).not.toHaveBeenCalled();
   });
 });

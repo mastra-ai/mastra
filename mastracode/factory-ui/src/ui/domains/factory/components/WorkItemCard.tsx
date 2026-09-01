@@ -1,9 +1,12 @@
-import { Button } from '@mastra/playground-ui/components/Button';
+import { FACTORY_ROLE_STAGES, knownExternalAuthor } from '@mastra/factory/rules/types';
+import { Badge } from '@mastra/playground-ui/components/Badge';
+import { Button, buttonVariants } from '@mastra/playground-ui/components/Button';
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { EllipsisVertical, MessageSquare } from 'lucide-react';
 import type { ReactElement } from 'react';
-import { useParams } from 'react-router';
+import { Link, useParams } from 'react-router';
 
 import type { FactoryRunPhase } from '../../../../hooks/useStartFactoryRun';
 import { boardCardStatus } from '../boardCardStatus';
@@ -12,7 +15,7 @@ import { itemThreadSession, metadataLabels, pullRequestStatusForItem, workItemMe
 import { itemRunSpec } from '../boardRunSpecs';
 import type { ItemRunSpec, RunAction } from '../boardRunSpecs';
 import { itemStageLabel } from '../boardStages';
-import { cardPrimaryAction } from '../cardPrimaryAction';
+import { cardPrimaryAction, resumeTarget } from '../cardPrimaryAction';
 import { useCardMorph } from '../hooks/useCardMorph';
 import type { AuditEventPage } from '../services/audit';
 import type { FactoryDecisionSummary } from '../services/decisions';
@@ -20,12 +23,13 @@ import { relationshipPath } from '../services/relationships';
 import type { WorkItem } from '../services/workItems';
 import type { BoardStageId } from '../stages';
 import { workItemActivity } from '../workItemActivity';
+import { SessionActivityWick } from '../../workspaces/components/SessionActivity';
+import type { SessionRowStatus } from '../../workspaces/services/sessionStatus';
 import {
   CardDetailsHint,
   CardLabels,
   CardStatus,
   CardTitleTooltip,
-  LiveSessionLink,
   REVEAL_ON_CARD_HOVER,
   SourceTitle,
 } from './BoardCardParts';
@@ -58,6 +62,7 @@ export function WorkItemCard({
   onDismissProposal,
   onRetryDecision,
   pendingRunRoles,
+  sessionStatus,
   onCreateSession,
   onStartRun,
   onRestartRun,
@@ -91,10 +96,12 @@ export function WorkItemCard({
   onDismissProposal: (decisionId: string) => void;
   onRetryDecision: (decisionId: string) => void;
   pendingRunRoles: ReadonlyMap<string, FactoryRunPhase | undefined>;
+  /** Live status of the card's bound sessions, resolved once for the whole board. */
+  sessionStatus?: SessionRowStatus;
   /** Detail-panel fallback when the item has no run spec: open an empty session (no run). */
   onCreateSession: (spec: { branch: string; threadTitle: string }) => void;
-  onStartRun: (spec: ItemRunSpec, action: RunAction) => void;
-  onRestartRun: (spec: ItemRunSpec, action: RunAction) => void;
+  onStartRun: (spec: ItemRunSpec, action: RunAction, options?: { preapprovePlans?: boolean }) => void;
+  onRestartRun: (spec: ItemRunSpec, action: RunAction, options?: { preapprovePlans?: boolean }) => void;
   onMove: (toStage: string) => void;
   onRemove: () => void;
 }) {
@@ -126,18 +133,22 @@ export function WorkItemCard({
   // run from the menu so the card is never a dead end.
   const laneAction =
     runSpec !== undefined && reReviewAction === undefined
-      ? runSpec.actions.find(action => action.stage === columnStage && action.role in sessions)
+      ? runSpec.actions.find(action => FACTORY_ROLE_STAGES[action.role] === columnStage && action.role in sessions)
       : undefined;
   const threadSession = itemThreadSession(sessions);
+  const wickStatus = threadSession !== undefined ? sessionStatus : undefined;
   const primaryAction = cardPrimaryAction({
     item,
     runSpec,
     runAction: defaultRunAction,
+    resume: resumeTarget(columnStage, runSpec, sessions),
     proposal,
     hasSession: threadSession !== undefined,
     onApproveProposal,
     onStartRun,
+    onRestartRun,
     onCreateSession,
+    onMove,
   });
   const proposedRunLabel =
     proposal === undefined
@@ -191,13 +202,13 @@ export function WorkItemCard({
   // Dismissing a suggested run is the one entry that leaves it open.
   const panelMenu: WorkItemMenuProps = {
     ...menu,
-    onStartRun: (spec, action) => {
+    onStartRun: (spec, action, options) => {
       morph.closeDetails();
-      onStartRun(spec, action);
+      onStartRun(spec, action, options);
     },
-    onRestartRun: (spec, action) => {
+    onRestartRun: (spec, action, options) => {
       morph.closeDetails();
-      onRestartRun(spec, action);
+      onRestartRun(spec, action, options);
     },
     onApproveProposal: decisionId => {
       morph.closeDetails();
@@ -252,13 +263,14 @@ export function WorkItemCard({
           }}
           className={cn(
             'group relative flex flex-col gap-3 rounded-xl border border-border1/50 bg-neutral6/5 p-3 outline-none transition-colors hover:bg-surface3',
-            // Offscreen cards skip layout and paint; a column can hold hundreds.
-            '[content-visibility:auto] [contain-intrinsic-size:auto_7rem]',
+            // `content-visibility` clips at the padding box, which the wick's ring has to reach past.
+            wickStatus ? 'border-transparent' : '[content-visibility:auto] [contain-intrinsic-size:auto_7rem]',
             evaluating ? 'cursor-wait' : 'cursor-grab active:cursor-grabbing',
             runPending && 'opacity-70',
             highlighted && 'border-warning1/40 bg-warning1/5 ring-1 ring-warning1/30',
           )}
         >
+          {wickStatus && <SessionActivityWick status={wickStatus} />}
           <button
             ref={deepLinkRef}
             type="button"
@@ -292,9 +304,6 @@ export function WorkItemCard({
           <div className="flex min-w-0 flex-col gap-1.5">
             <div className="flex min-w-0 items-center gap-1.5 pr-8">
               <span className="text-ui-xs text-icon2 min-w-0 truncate">{workItemMeta(item)}</span>
-              {threadSession !== undefined && (
-                <LiveSessionLink factoryId={factoryId} session={threadSession} title={item.title} />
-              )}
               {relatedItems.map(relatedLink)}
               {item.commentCount > 0 && (
                 <span
@@ -330,9 +339,23 @@ export function WorkItemCard({
           {status.kind === 'idle' && (
             <CardDetailsHint className="pointer-events-none pointer-fine:absolute pointer-fine:right-3 pointer-fine:bottom-3 pointer-fine:z-20 pointer-fine:ml-0" />
           )}
-          {(activity.lastWorker !== undefined || status.kind !== 'idle') && (
+          {(activity.lastWorker !== undefined || status.kind !== 'idle' || knownExternalAuthor(item)) && (
             <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5">
               <WorkItemActivity activity={activity} actors={activityPage?.actors ?? {}} />
+              {knownExternalAuthor(item) && (
+                <Tooltip>
+                  <TooltipTrigger
+                    render={
+                      <Badge size="xs" tabIndex={0} className="relative z-10">
+                        External
+                      </Badge>
+                    }
+                  />
+                  <TooltipContent side="bottom" className="max-w-64">
+                    From someone without write access — never starts a run on its own, even with auto-start runs on.
+                  </TooltipContent>
+                </Tooltip>
+              )}
               <CardStatus
                 status={status}
                 onApprove={
@@ -343,6 +366,15 @@ export function WorkItemCard({
                 retrying={retryDecisionId !== undefined && retryDecisionId === retryingDecisionId}
               />
             </div>
+          )}
+          {threadSession !== undefined && wickStatus === undefined && (
+            <Link
+              to={`/factories/${factoryId}/workspaces/${threadSession.sessionId}/threads/${threadSession.threadId}`}
+              draggable={false}
+              className={cn(buttonVariants({ variant: 'outline', size: 'xs' }), 'relative z-10 self-start')}
+            >
+              Open session
+            </Link>
           )}
         </article>
       </CardTitleTooltip>

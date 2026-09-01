@@ -34,9 +34,9 @@ describe('TracesDataListEntityCell entity icon', () => {
 
 describe('TracesDataListStatusCell', () => {
   describe('when the trace API returns a computed status', () => {
-    it('renders a successful trace', () => {
+    it('renders a successful trace as a green badge', () => {
       render(<TracesDataListStatusCell status={TraceStatus.SUCCESS} />);
-      expect(screen.getByText('OK').style.color).toBe('var(--accent1)');
+      expect(screen.getByText('OK').className).toContain('text-badge-green-fg');
     });
 
     it('renders a running trace', () => {

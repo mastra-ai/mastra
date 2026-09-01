@@ -16,7 +16,6 @@ const draftSession: ChatSessionContextApi = {
   resourceReady: false,
   sandboxReady: false,
   sandboxPreparing: false,
-  sandboxProgress: undefined,
   resourceEnabled: false,
   projectPath: undefined,
   baseUrl: TEST_BASE_URL,

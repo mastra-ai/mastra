@@ -2,10 +2,10 @@ import type { PlanResume } from '@mastra/client-js';
 import { MarkdownRenderer } from '@mastra/playground-ui/components/MarkdownRenderer';
 import { useRevealedParts } from '@mastra/playground-ui/components/ai/message-reveal';
 import { Notice } from '@mastra/playground-ui/components/Notice';
+import { SlackIcon } from '@mastra/playground-ui/icons/SlackIcon';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { MessageFactory } from '@mastra/react/ui';
 import type { FilePart, MessageRoleRenderers, ReasoningPart, TextPart, ToolInvocationPart } from '@mastra/react/ui';
-import { Slack } from 'lucide-react';
 import { useState } from 'react';
 
 import type { MessageEntry, SuspensionPrompt } from '../services/transcript';
@@ -62,7 +62,7 @@ export function ChannelOriginBadge({ origin }: { origin: { platform: string; aut
   const label = CHANNEL_PLATFORM_LABEL[origin.platform] ?? origin.platform;
   return (
     <div className="text-ui-xs text-icon3 mt-1 flex items-center gap-1" aria-label={`Sent from ${label}`}>
-      {origin.platform === 'slack' && <Slack className="size-3" aria-hidden="true" />}
+      {origin.platform === 'slack' && <SlackIcon className="size-3" aria-hidden="true" />}
       <span>
         via {label}
         {origin.authorName ? ` · ${origin.authorName}` : ''}

@@ -306,7 +306,6 @@ describe('dispatchGithubWebhook', () => {
       tags: {
         factoryProjectId: 'resource-1',
         projectRepositoryId: 'project-repository-1',
-        worktreePath: '/worktrees/b',
       },
       requestContext: expect.any(RequestContext),
     });

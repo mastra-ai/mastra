@@ -965,7 +965,7 @@ export class BlaxelSandbox extends MastraSandbox {
 
       const execPromise = sandbox.process.exec({
         command: fullCommand,
-        workingDir: options.cwd,
+        workingDir: options.cwd ?? this.workingDirectory,
         env: envRecord,
         waitForCompletion: true,
         ...(apiTimeout && { timeout: apiTimeout }),

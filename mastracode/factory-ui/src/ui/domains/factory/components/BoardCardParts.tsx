@@ -2,13 +2,12 @@ import { Button } from '@mastra/playground-ui/components/Button';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { Maximize2, MessageSquare, Sparkles, TriangleAlert } from 'lucide-react';
+import { Maximize2, Sparkles, TriangleAlert } from 'lucide-react';
 import type { ReactElement, ReactNode } from 'react';
-import { Link } from 'react-router';
 
 import type { BoardCardStatus } from '../boardCardStatus';
 import { HIDDEN_CARD_LABELS, SOURCE_LABELS } from '../boardItems';
-import type { WorkItemSessionRef, WorkItemSource } from '../services/workItems';
+import type { WorkItemSource } from '../services/workItems';
 
 export function SourceTitle({ source, title }: { source: WorkItemSource; title: string }) {
   return (
@@ -31,39 +30,6 @@ export function CardTitleTooltip({ title, children }: { title: string; children:
       <TooltipContent side="top" className="max-w-90">
         <span className="wrap-anywhere whitespace-pre-wrap">{title}</span>
       </TooltipContent>
-    </Tooltip>
-  );
-}
-
-/**
- * The indicator that announces a live session, clickable — the same shape a
- * related item's session already has, so the card's own is not the one dead end.
- * Padding widens the target without moving its neighbours.
- */
-export function LiveSessionLink({
-  factoryId,
-  session,
-  title,
-}: {
-  factoryId: string;
-  session: WorkItemSessionRef;
-  title: string;
-}) {
-  return (
-    <Tooltip>
-      <TooltipTrigger
-        render={
-          <Link
-            to={`/factories/${factoryId}/workspaces/${session.sessionId}/threads/${session.threadId}`}
-            draggable={false}
-            aria-label={`Open live session for ${title}`}
-            className="text-accent1 hover:bg-neutral6/10 focus-visible:outline-accent1 relative z-10 -m-1 shrink-0 rounded-md p-1 outline-none focus-visible:outline-2"
-          >
-            <MessageSquare data-live-session-indicator size={11} aria-hidden />
-          </Link>
-        }
-      />
-      <TooltipContent side="top">Open live session</TooltipContent>
     </Tooltip>
   );
 }
