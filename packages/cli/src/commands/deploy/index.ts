@@ -107,18 +107,15 @@ export async function introspectEnvironmentWorkerManifest(
   env: NodeJS.ProcessEnv,
   {
     introspect = introspectWorkerManifest,
-    onFailure,
   }: {
     introspect?: typeof introspectWorkerManifest;
-    onFailure?: (error: unknown) => void;
   } = {},
-): Promise<boolean> {
+): Promise<void> {
   try {
     await introspect(bundleDirectory, env);
-    return true;
   } catch (error) {
-    onFailure?.(error);
-    return false;
+    const message = error instanceof Error ? error.message : String(error);
+    throw new Error(`Custom worker introspection failed; deploy aborted. ${message}`, { cause: error });
   }
 }
 
@@ -1456,12 +1453,7 @@ async function runUnifiedDeploy(dir: string | undefined, opts: DeployOptions) {
 
   if (await hasWorkersManifest(targetDir)) {
     const workerManifestEnv = createWorkerManifestEnvironment({ NODE_ENV: 'production', ...deploymentEnv });
-    await introspectEnvironmentWorkerManifest(join(targetDir, '.mastra', 'output'), workerManifestEnv, {
-      onFailure: error => {
-        const message = error instanceof Error ? error.message : String(error);
-        p.log.warn(`Could not inspect custom worker names; continuing with static worker configuration (${message}).`);
-      },
-    });
+    await introspectEnvironmentWorkerManifest(join(targetDir, '.mastra', 'output'), workerManifestEnv);
   }
 
   const workersConfig = await readWorkersConfig(targetDir);

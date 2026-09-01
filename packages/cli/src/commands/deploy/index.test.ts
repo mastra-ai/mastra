@@ -173,14 +173,12 @@ describe('deploy artifact', () => {
     expect(deployBuildNeedsRefresh({ isStale: false }, true, false)).toBe(false);
   });
 
-  it('continues an environment deploy when custom worker introspection cannot initialize the app', async () => {
-    const introspect = vi.fn().mockRejectedValue(new Error('storage initialization failed'));
-    const onFailure = vi.fn();
+  it('aborts an environment deploy when custom worker introspection fails', async () => {
+    const introspect = vi.fn().mockRejectedValue(new Error('worker initialization failed'));
 
     await expect(
-      introspectEnvironmentWorkerManifest('/output', { NODE_ENV: 'production' }, { introspect, onFailure }),
-    ).resolves.toBe(false);
-    expect(onFailure).toHaveBeenCalledWith(expect.objectContaining({ message: 'storage initialization failed' }));
+      introspectEnvironmentWorkerManifest('/output', { NODE_ENV: 'production' }, { introspect }),
+    ).rejects.toThrow('Custom worker introspection failed; deploy aborted. worker initialization failed');
   });
 
   it.each([
