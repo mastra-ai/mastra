@@ -36,7 +36,7 @@ Visit [Agent.stream()](/reference/streaming/agents/stream) for more information.
 
 :::tip
 
-For agents that dispatch [background tasks](/docs/harness/background-tasks), use `stream()` with the [`untilIdle` option](/reference/streaming/agents/stream#parameters), such as `untilIdle: true`, to keep the stream open until those tasks complete and the agent has had a chance to respond to their results.
+For agents that dispatch [background tasks](/docs/harness/background-tasks), use `stream()` with the [`untilIdle` option](/reference/streaming/agents/stream#parameters), such as `untilIdle: true`, to keep the stream open until those tasks complete and the agent has had a chance to respond to their results. This option requires agent memory.
 
 :::
 
@@ -89,7 +89,7 @@ const messages = [{ role: 'user', content: 'Hello' }]
 const initialMessages = toAISdkMessages(messages, { version: 'v7' })
 ```
 
-For route handlers, see [AI SDK UI](/integrations/agentic-ui/ai-sdk-ui), which covers `handleChatStream()`, `handleWorkflowStream()`, and `handleNetworkStream()`. See the [`toAISdkStream()`](/reference/ai-sdk/to-ai-sdk-stream) and [`toAISdkMessages()`](/reference/ai-sdk/to-ai-sdk-messages) references for all options.
+For route handlers, see [AI SDK UI](/integrations/agentic-ui/ai-sdk-ui), which covers `handleChatStream()`, `handleWorkflowStream()`, and `handleNetworkStream()`. Pass the version that matches your installed AI SDK to these handlers too. See the [`toAISdkStream()`](/reference/ai-sdk/to-ai-sdk-stream) and [`toAISdkMessages()`](/reference/ai-sdk/to-ai-sdk-messages) references for all options.
 
 ## Streaming with workflows
 
@@ -151,8 +151,8 @@ Agent and workflow streams emit different event types during execution.
 Common agent events include:
 
 - **`start`**: The agent run begins.
-- **`text-start`**, **`text-delta`**, and **`text-end`**: These events mark text generation boundaries and carry incremental text.
-- **`reasoning-start`**, **`reasoning-delta`**, and **`reasoning-end`**: These events mark reasoning generation boundaries and carry incremental reasoning.
+- **`text-start`**, **`text-delta`**, and **`text-end`**: The start and end events mark text generation boundaries. Delta events carry incremental text.
+- **`reasoning-start`**, **`reasoning-delta`**, and **`reasoning-end`**: The start and end events mark reasoning generation boundaries. Delta events carry incremental reasoning.
 - **`tool-call`** and **`tool-result`**: A tool is called and returns a result.
 - **`step-start`** and **`step-finish`**: A model step begins and ends.
 - **`finish`**: The agent run completes.
@@ -327,7 +327,7 @@ You must `await` the call to `writer.write(...)` or else you will lock the strea
 
 :::
 
-```typescript {5,7,14}
+```typescript {4,7,14}
 import { createStep } from '@mastra/core/workflows'
 
 export const testStep = createStep({
