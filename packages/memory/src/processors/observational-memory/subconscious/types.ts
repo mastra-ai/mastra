@@ -1,11 +1,10 @@
-import type { Agent, AgentConfig } from '@mastra/core/agent';
+import type { AgentConfig } from '@mastra/core/agent';
 import type { KnowledgeScopeLevel } from '@mastra/core/storage';
 import type { z } from 'zod';
 
 import type { ExtractorOnExtractedContext } from '../extractor';
 
-export type SubconsciousBuiltInObservationAgent = 'remind';
-export type SubconsciousBuiltInReflectionAgent = 'curate';
+export type SubconsciousBuiltInObservationAgent = 'remind' | 'curate';
 export type SubconsciousModel = Exclude<AgentConfig['model'], undefined>;
 
 export interface SubconsciousRemindConfig {
@@ -15,7 +14,14 @@ export interface SubconsciousRemindConfig {
   maxSteps?: number;
 }
 
-export type SubconsciousBuiltInObservationConfig = SubconsciousRemindConfig;
+export interface SubconsciousCurateConfig {
+  name: 'curate';
+  instructions?: string;
+  model?: SubconsciousModel;
+  maxSteps?: number;
+}
+
+export type SubconsciousBuiltInObservationConfig = SubconsciousRemindConfig | SubconsciousCurateConfig;
 
 export interface SubconsciousCustomObservationConfig<T = unknown> {
   name: string;
@@ -24,35 +30,14 @@ export interface SubconsciousCustomObservationConfig<T = unknown> {
   onExtracted: (context: ExtractorOnExtractedContext<T>) => Promise<T | void | undefined> | T | void | undefined;
 }
 
-export interface SubconsciousBuiltInReflectionConfig {
-  name: SubconsciousBuiltInReflectionAgent;
-  instructions?: string;
-  model?: SubconsciousModel;
-  maxSteps?: number;
-}
-
-export interface SubconsciousCustomReflectionConfig {
-  name: string;
-  instructions?: string;
-  agent?: Agent;
-  model?: SubconsciousModel;
-  maxSteps?: number;
-}
-
 export type SubconsciousObservationEntry =
   | SubconsciousBuiltInObservationAgent
   | SubconsciousBuiltInObservationConfig
   | SubconsciousCustomObservationConfig;
 
-export type SubconsciousReflectionEntry =
-  | SubconsciousBuiltInReflectionAgent
-  | SubconsciousBuiltInReflectionConfig
-  | SubconsciousCustomReflectionConfig;
-
 /** @experimental This API may change without notice. */
 export interface SubconsciousConfig {
   observation?: SubconsciousObservationEntry[];
-  reflection?: SubconsciousReflectionEntry[];
   model?: SubconsciousModel;
   defaultScope?: KnowledgeScopeLevel;
   maxScope?: KnowledgeScopeLevel;
@@ -70,14 +55,12 @@ export interface ResolvedSubconsciousAgent {
   name: string;
   instructions?: string;
   model?: SubconsciousModel;
-  agent?: Agent;
   maxSteps?: number;
   builtIn: boolean;
 }
 
 export interface ResolvedSubconsciousConfig {
   observation: ResolvedSubconsciousAgent[];
-  reflection: ResolvedSubconsciousAgent[];
   defaultScope: KnowledgeScopeLevel;
   maxScope?: KnowledgeScopeLevel;
   tools: boolean;

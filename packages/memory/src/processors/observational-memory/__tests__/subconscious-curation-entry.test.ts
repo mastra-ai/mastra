@@ -1,20 +1,47 @@
 import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
 import { Agent } from '@mastra/core/agent';
-import type { MastraDBMessage, MastraMessageContentV2 } from '@mastra/core/agent';
+import type { MastraDBMessage } from '@mastra/core/agent';
 import { RequestContext } from '@mastra/core/request-context';
-import { InMemoryStore, InMemoryMemory, InMemoryDB } from '@mastra/core/storage';
+import { InMemoryStore } from '@mastra/core/storage';
 import type { MastraEmbeddingModel, MastraVector } from '@mastra/core/vector';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { Memory, Subconscious } from '../../../index';
-import { ObservationalMemory } from '../observational-memory';
 import type { ObservationalMemoryModel } from '../types';
 
-const scope = ['org:acme', 'resource:user-42', 'thread:alpha'];
 const semanticInfrastructure = {
   vector: {} as MastraVector,
   embedder: {} as MastraEmbeddingModel<string>,
 };
+
+function createMockObserverModel(observations = 'User confirmed Project Atlas launches on 2026-09-15.') {
+  const text = `<observations>\n${observations}\n</observations>\n<current-task>Continue the launch work.</current-task>`;
+  return new MockLanguageModelV2({
+    doGenerate: async () => ({
+      rawCall: { rawPrompt: null, rawSettings: {} },
+      finishReason: 'stop' as const,
+      usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+      warnings: [],
+      content: [{ type: 'text' as const, text }],
+    }),
+    doStream: async () => ({
+      stream: convertArrayToReadableStream([
+        { type: 'stream-start' as const, warnings: [] },
+        { type: 'response-metadata' as const, id: 'observer-1', modelId: 'mock-observer', timestamp: new Date() },
+        { type: 'text-start' as const, id: 'text-1' },
+        { type: 'text-delta' as const, id: 'text-1', delta: text },
+        { type: 'text-end' as const, id: 'text-1' },
+        {
+          type: 'finish' as const,
+          finishReason: 'stop' as const,
+          usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+        },
+      ]),
+      rawCall: { rawPrompt: null, rawSettings: {} },
+      warnings: [],
+    }),
+  } as any);
+}
 
 function createMemory(options?: { omModel?: ObservationalMemoryModel | false }) {
   return new Memory({
@@ -23,6 +50,7 @@ function createMemory(options?: { omModel?: ObservationalMemoryModel | false }) 
     options: {
       observationalMemory: {
         ...(options?.omModel === false ? {} : { model: options?.omModel ?? 'openai/om-model' }),
+        observation: { messageTokens: 1, bufferTokens: false },
         experimental_subconscious: new Subconscious({ defaultScope: 'resource', maxScope: 'resource' }),
       },
     },
@@ -35,16 +63,28 @@ function requestContext() {
   return context;
 }
 
-async function seedItem(memory: Memory, text = 'Atlas launches soon.') {
-  const store = (await memory.storage.getStore('knowledge'))!;
-  const node = await store.createNode({ name: 'Project Atlas', kind: 'project', scope });
-  return store.appendKnowledge({
-    node: node.id,
-    text,
-    scope,
-    sourceThreadId: 'alpha',
-    resolutionScope: scope,
-    defaultScope: scope,
+async function seedMessages(memory: Memory, threadId = 'alpha', resourceId = 'user-42') {
+  const now = new Date();
+  const messageStore = (await memory.storage.getStore('memory'))!;
+  await messageStore.saveMessages({
+    messages: [
+      {
+        id: `${threadId}-user`,
+        threadId,
+        resourceId,
+        role: 'user',
+        content: { format: 2, parts: [{ type: 'text', text: 'Project Atlas launch details. '.repeat(20) }] },
+        createdAt: now,
+      },
+      {
+        id: `${threadId}-assistant`,
+        threadId,
+        resourceId,
+        role: 'assistant',
+        content: { format: 2, parts: [{ type: 'text', text: 'Understood. '.repeat(20) }] },
+        createdAt: new Date(now.getTime() + 1),
+      },
+    ] as MastraDBMessage[],
   });
 }
 
@@ -52,174 +92,73 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-describe('Memory.runCuration', () => {
-  it('runs the curate agent over the pending worklist and advances the cursor without reflection', async () => {
-    const memory = createMemory();
-    const item = await seedItem(memory);
-    const generate = vi
-      .spyOn(Agent.prototype, 'generate')
-      .mockResolvedValue({ text: `<curation-complete through="${item.id}" />` } as any);
-    generate.mockClear();
-
-    const result = await memory.runCuration({
-      threadId: 'alpha',
-      resourceId: 'user-42',
-      requestContext: requestContext(),
-    });
-
-    expect(result.outcome).toBe('ran');
-    expect(generate).toHaveBeenCalledOnce();
+describe('direct observation curation', () => {
+  it('directly curates the persisted observation delta without worklist calls', async () => {
+    const observation = 'User confirmed Project Atlas launches on 2026-09-15.';
+    const memory = createMemory({ omModel: createMockObserverModel(observation) });
     const store = (await memory.storage.getStore('knowledge'))!;
-    expect(await store.getCurationCursor({ sourceThreadId: 'alpha', agent: 'curate' })).toMatchObject({
-      lastKnowledgeId: item.id,
+    const worklist = vi.spyOn(store, 'knowledgeBySource');
+    const getCursor = vi.spyOn(store, 'getCurationCursor');
+    const advanceCursor = vi.spyOn(store, 'advanceCurationCursor');
+    const generate = vi.spyOn(Agent.prototype, 'generate').mockResolvedValue({ text: 'Done.' } as any);
+    await seedMessages(memory);
+
+    const om = await memory.omEngine;
+    expect(om).not.toBeNull();
+    const result = await om!.observe({
+      threadId: 'alpha',
+      resourceId: 'user-42',
+      requestContext: requestContext(),
     });
+
+    expect(result.observed).toBe(true);
+    expect(generate).toHaveBeenCalledWith(expect.stringContaining(observation), expect.objectContaining({}));
+    expect(worklist).not.toHaveBeenCalled();
+    expect(getCursor).not.toHaveBeenCalled();
+    expect(advanceCursor).not.toHaveBeenCalled();
   });
 
-  it('writes and refines entity content through the curator tool path', async () => {
-    let generateCall = 0;
-    let currentRecordId = '';
-    const description = 'Project Atlas is the current launch project.\n\nLinks: https://github.com/mastra-ai/mastra';
-    const refinedDescription =
-      'Project Atlas is the current launch project, now expanding its knowledge system.\n\nLinks: https://github.com/mastra-ai/mastra';
-    const memory = createMemory({
-      omModel: new MockLanguageModelV2({
-        doGenerate: async (): Promise<any> => {
-          generateCall++;
-          if (generateCall === 1 || generateCall === 3) {
-            return {
-              rawCall: { rawPrompt: null, rawSettings: {} },
-              finishReason: 'tool-calls' as const,
-              usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
-              content: [
-                {
-                  type: 'tool-call' as const,
-                  toolCallId: `write-${generateCall}`,
-                  toolName: 'knowledge_write_node_content',
-                  input: JSON.stringify({
-                    name: 'Project Atlas',
-                    content: generateCall === 1 ? description : refinedDescription,
-                    scope: 'thread',
-                    expectedVersion: generateCall === 1 ? 1 : 2,
-                  }),
-                },
-              ],
-              warnings: [],
-            };
-          }
-          return {
-            rawCall: { rawPrompt: null, rawSettings: {} },
-            finishReason: 'stop' as const,
-            usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
-            content: [{ type: 'text' as const, text: `<curation-complete through="${currentRecordId}" />` }],
-            warnings: [],
-          };
-        },
-      }),
-    });
-    const store = (await memory.storage.getStore('knowledge'))!;
-    const firstRecord = await seedItem(
-      memory,
-      'Project Atlas launches soon. Repository: https://github.com/mastra-ai/mastra',
-    );
-    currentRecordId = firstRecord.id;
+  it('awaits curator completion before resolving the observation cycle', async () => {
+    const memory = createMemory({ omModel: createMockObserverModel() });
+    await seedMessages(memory);
 
-    await memory.runCuration({
-      threadId: 'alpha',
-      resourceId: 'user-42',
-      requestContext: requestContext(),
+    let releaseCurator!: () => void;
+    const curatorFinished = new Promise<void>(resolve => {
+      releaseCurator = resolve;
+    });
+    vi.spyOn(Agent.prototype, 'generate').mockImplementation(async () => {
+      await curatorFinished;
+      return { text: 'Done.' } as any;
     });
 
-    const written = await store.resolveNode({ name: 'Project Atlas', scope });
-    expect(written).toMatchObject({ content: description, version: 2 });
+    const om = (await memory.omEngine)!;
+    let settled = false;
+    const observation = om
+      .observe({ threadId: 'alpha', resourceId: 'user-42', requestContext: requestContext() })
+      .finally(() => {
+        settled = true;
+      });
 
-    const secondRecord = await store.appendKnowledge({
-      node: written!,
-      text: '[[Mastra]] is expanding its knowledge system.',
-      scope,
-      sourceThreadId: 'alpha',
-      resolutionScope: scope,
-      defaultScope: scope,
-    });
-    currentRecordId = secondRecord.id;
+    await vi.waitFor(() => expect(Agent.prototype.generate).toHaveBeenCalled());
+    expect(settled).toBe(false);
 
-    await memory.runCuration({
-      threadId: 'alpha',
-      resourceId: 'user-42',
-      requestContext: requestContext(),
-    });
-
-    expect(await store.resolveNode({ name: 'Project Atlas', scope })).toMatchObject({
-      content: refinedDescription,
-      version: 3,
-    });
+    releaseCurator();
+    await expect(observation).resolves.toMatchObject({ observed: true });
   });
 
-  it('reports no-op when the worklist and prompt are both empty', async () => {
-    const memory = createMemory();
-    const generate = vi.spyOn(Agent.prototype, 'generate');
-    generate.mockClear();
+  it('isolates curator failure from a successfully persisted observation', async () => {
+    const memory = createMemory({ omModel: createMockObserverModel() });
+    await seedMessages(memory);
+    vi.spyOn(Agent.prototype, 'generate').mockRejectedValue(new Error('curator unavailable'));
 
-    const result = await memory.runCuration({
+    const om = (await memory.omEngine)!;
+    const result = await om.observe({
       threadId: 'alpha',
       resourceId: 'user-42',
       requestContext: requestContext(),
     });
 
-    expect(result.outcome).toBe('no-op');
-    expect(generate).not.toHaveBeenCalled();
-  });
-
-  it('threads the phase prompt into the curator run even with an empty worklist', async () => {
-    const memory = createMemory();
-    const generate = vi.spyOn(Agent.prototype, 'generate').mockResolvedValue({ text: 'Nothing to keep.' } as any);
-    generate.mockClear();
-
-    const result = await memory.runCuration({
-      threadId: 'alpha',
-      resourceId: 'user-42',
-      requestContext: requestContext(),
-      prompt: 'Now that the work item has left the build phase: anything worth remembering?',
-    });
-
-    expect(result.outcome).toBe('ran');
-    expect(generate).toHaveBeenCalledWith(expect.stringContaining('left the build phase'), expect.objectContaining({}));
-  });
-
-  it('skips when a curation for the same thread is already in flight', async () => {
-    const memory = createMemory();
-    const item = await seedItem(memory);
-    let release!: (value: any) => void;
-    const pending = new Promise(resolve => {
-      release = resolve;
-    });
-    const generate = vi.spyOn(Agent.prototype, 'generate').mockReturnValue(pending as any);
-    generate.mockClear();
-
-    const first = memory.runCuration({ threadId: 'alpha', resourceId: 'user-42', requestContext: requestContext() });
-    // Give the first call a tick to enter the handler and register in flight.
-    await new Promise(resolve => setTimeout(resolve, 10));
-    const second = await memory.runCuration({
-      threadId: 'alpha',
-      resourceId: 'user-42',
-      requestContext: requestContext(),
-    });
-
-    expect(second.outcome).toBe('skipped');
-    // Resolve the dangling curation so the first call settles cleanly.
-    release({ text: `<curation-complete through="${item.id}" />` });
-    expect((await first).outcome).toBe('ran');
-  });
-
-  it('maps a missing model to the no-model outcome instead of throwing', async () => {
-    const memory = createMemory({ omModel: false });
-    await seedItem(memory);
-
-    const result = await memory.runCuration({
-      threadId: 'alpha',
-      resourceId: 'user-42',
-      requestContext: requestContext(),
-    });
-
-    expect(result.outcome).toBe('no-model');
+    expect(result.observed).toBe(true);
+    expect(result.record.activeObservations).toContain('Project Atlas launches on 2026-09-15');
   });
 });

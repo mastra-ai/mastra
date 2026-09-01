@@ -52,7 +52,7 @@ import { LRUCache } from 'lru-cache';
 import xxhash from 'xxhash-wasm';
 import type { ObservationalMemory, ObservationalMemoryConfig } from './processors/observational-memory';
 import { KnowledgeSemanticIndexCoordinator, Subconscious } from './processors/observational-memory/subconscious';
-import { createCuratorHandler } from './processors/observational-memory/subconscious/curate';
+import { createObservationCuratorHandler } from './processors/observational-memory/subconscious/curate';
 import { createKnowledgeTools } from './processors/observational-memory/subconscious/knowledge-tools';
 import { summarizeConversation, SUMMARIZE_THREAD_DEFAULTS } from './processors/observational-memory/summarize';
 import type {
@@ -87,13 +87,9 @@ export type {
   ResolvedSubconsciousConfig,
   SubconsciousBuiltInObservationAgent,
   SubconsciousBuiltInObservationConfig,
-  SubconsciousBuiltInReflectionAgent,
-  SubconsciousBuiltInReflectionConfig,
   SubconsciousConfig,
   SubconsciousCustomObservationConfig,
-  SubconsciousCustomReflectionConfig,
   SubconsciousObservationEntry,
-  SubconsciousReflectionEntry,
 } from './processors/observational-memory/subconscious';
 export { summarizeConversation, SUMMARIZE_THREAD_DEFAULTS } from './processors/observational-memory/summarize';
 export type {
@@ -395,54 +391,6 @@ export class Memory extends MastraMemory {
         },
       },
     } as MemoryConfigInternal;
-  }
-
-  /** Threads with a curation currently in flight in this process; guards same-process double-fire only. */
-  private _curationsInFlight = new Set<string>();
-
-  /**
-   * Run the subconscious curator directly over the pending fact worklist, without a reflection.
-   * Cross-process serialization is the curation cursor's job; a lost race wastes one advisory run.
-   *
-   * Outcomes: `ran` (curator executed), `no-op` (empty worklist and no prompt, or no curate agent
-   * configured), `skipped` (a curation for this thread is already in flight in this process), and
-   * `no-model` (no per-agent, observational memory, or main-agent model could be resolved).
-   */
-  async runCuration(options: {
-    threadId: string;
-    resourceId: string;
-    requestContext?: RequestContext;
-    prompt?: string;
-  }): Promise<{ outcome: 'ran' | 'no-op' | 'skipped' | 'no-model' }> {
-    const omConfig = normalizeObservationalMemoryConfig(this.threadConfig.observationalMemory);
-    const subconscious = omConfig?.experimental_subconscious;
-    if (!omConfig || !(subconscious instanceof Subconscious)) return { outcome: 'no-op' };
-    if (this._curationsInFlight.has(options.threadId)) return { outcome: 'skipped' };
-    this._curationsInFlight.add(options.threadId);
-    try {
-      const handler = createCuratorHandler(
-        this,
-        subconscious.resolved,
-        new Memory({ storage: this.storage, options: { observationalMemory: false } }),
-        { omModel: omConfig.observation?.model ?? omConfig.model },
-      );
-      const outcome = await handler({
-        parentThreadId: options.threadId,
-        resourceId: options.resourceId,
-        // The direct path has no reflection artifacts; the optional prompt (e.g. a phase-exit
-        // framing) rides the observations slot of the curator's own prompt structure.
-        observations: options.prompt ?? '',
-        requestContext: options.requestContext,
-      });
-      return { outcome: outcome === 'ran' ? 'ran' : 'no-op' };
-    } catch (error) {
-      if (error instanceof Error && error.message.includes('requires the main agent to resolve its model')) {
-        return { outcome: 'no-model' };
-      }
-      throw error;
-    } finally {
-      this._curationsInFlight.delete(options.threadId);
-    }
   }
 
   private applyManagedWorkingMemoryDefaults(config: MemoryConfigInternal): MemoryConfigInternal {
@@ -1951,7 +1899,7 @@ ${workingMemory}`;
         }
       : undefined;
 
-    return new OMClass({
+    const observationalMemory = new OMClass({
       storage: memoryStore,
       memory: this,
       scope: omConfig.scope,
@@ -1963,22 +1911,6 @@ ${workingMemory}`;
       mastra: this._mastraInstance,
       onIndexObservations,
       hooks: omConfig.hooks,
-      onReflectionCommitted:
-        omConfig.experimental_subconscious instanceof Subconscious
-          ? (() => {
-              const resolved = omConfig.experimental_subconscious.resolved;
-              const omModel = omConfig.observation?.model ?? omConfig.model;
-              const curate = createCuratorHandler(
-                this,
-                resolved,
-                new Memory({ storage: this.storage, options: { observationalMemory: false } }),
-                { omModel },
-              );
-              return async context => {
-                await curate(context);
-              };
-            })()
-          : undefined,
       observation: omConfig.observation
         ? {
             model: omConfig.observation.model,
@@ -2012,6 +1944,20 @@ ${workingMemory}`;
           }
         : undefined,
     });
+
+    if (omConfig.experimental_subconscious instanceof Subconscious) {
+      const curateObservation = createObservationCuratorHandler(
+        this,
+        omConfig.experimental_subconscious.resolved,
+        new Memory({ storage: this.storage, options: { observationalMemory: false } }),
+        { omModel: omConfig.observation?.model ?? omConfig.model },
+      );
+      observationalMemory.setOnObservationCommitted(async context => {
+        await curateObservation(context);
+      });
+    }
+
+    return observationalMemory;
   }
 
   public defaultWorkingMemoryTemplate = `
