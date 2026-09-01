@@ -548,20 +548,29 @@ export class MastraServer extends MastraServerBase<Elysia, Request, Response> {
       if (route.method === 'POST' || route.method === 'PUT' || route.method === 'PATCH' || route.method === 'DELETE') {
         const maxSize = route.maxBodySize ?? this.bodyLimitOptions?.maxSize;
         const contentLength = ctx.request.headers.get('content-length');
-        if (this.bodyLimitOptions && maxSize && contentLength && parseInt(contentLength, 10) > maxSize) {
+        const contentType = ctx.request.headers.get('content-type') || '';
+        const exceedsDeclaredLimit =
+          maxSize !== undefined && contentLength !== null && parseInt(contentLength, 10) > maxSize;
+        const exceedsStreamedJsonLimit =
+          maxSize !== undefined &&
+          contentLength === null &&
+          contentType.includes('application/json') &&
+          ctx.body !== undefined &&
+          new TextEncoder().encode(JSON.stringify(ctx.body)).byteLength > maxSize;
+        if (exceedsDeclaredLimit || exceedsStreamedJsonLimit) {
           let errorResponse: unknown = { error: 'Request body too large' };
-          try {
-            errorResponse = this.bodyLimitOptions.onError({ error: 'Request body too large' });
-          } catch {
-            // Fall back to the default error response.
+          if (route.maxBodySize === undefined && this.bodyLimitOptions) {
+            try {
+              errorResponse = this.bodyLimitOptions.onError(errorResponse);
+            } catch {
+              // Fall back to the default error response.
+            }
           }
           return new Response(JSON.stringify(errorResponse), {
             status: 413,
             headers: { 'Content-Type': 'application/json' },
           });
         }
-
-        const contentType = ctx.request.headers.get('content-type') || '';
 
         if (contentType.includes('multipart/form-data')) {
           try {

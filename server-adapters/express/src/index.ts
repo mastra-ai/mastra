@@ -418,27 +418,30 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
     // Default prefix to this.prefix if not provided, or empty string
     const prefix = prefixParam ?? this.prefix ?? '';
 
-    // Determine if body limits should be applied
-    const shouldApplyBodyLimit =
-      this.bodyLimitOptions && ['POST', 'PUT', 'PATCH', 'DELETE'].includes(route.method.toUpperCase());
-
-    // Get the body size limit for this route (route-specific or default)
     const maxSize = route.maxBodySize ?? this.bodyLimitOptions?.maxSize;
+    const isBodyMethod = ['POST', 'PUT', 'PATCH', 'DELETE'].includes(route.method.toUpperCase());
 
     // Create middleware array
     const middlewares: Array<(req: Request, res: Response, next: NextFunction) => void> = [];
 
     // Add body limit middleware if needed
-    if (shouldApplyBodyLimit && maxSize && this.bodyLimitOptions) {
+    if (isBodyMethod && maxSize !== undefined) {
       const bodyLimitMiddleware = (req: Request, res: Response, next: NextFunction) => {
         const contentLength = req.headers['content-length'];
-        if (contentLength && parseInt(contentLength, 10) > maxSize) {
-          try {
-            const errorResponse = this.bodyLimitOptions!.onError({ error: 'Request body too large' });
-            return res.status(413).json(errorResponse);
-          } catch {
-            return res.status(413).json({ error: 'Request body too large' });
+        const parsedLength =
+          contentLength === undefined && req.body !== undefined
+            ? Buffer.byteLength(JSON.stringify(req.body), 'utf8')
+            : 0;
+        if ((contentLength && parseInt(contentLength, 10) > maxSize) || parsedLength > maxSize) {
+          let errorResponse: unknown = { error: 'Request body too large' };
+          if (route.maxBodySize === undefined && this.bodyLimitOptions) {
+            try {
+              errorResponse = this.bodyLimitOptions.onError(errorResponse);
+            } catch {
+              // Fall back to the default response.
+            }
           }
+          return res.status(413).json(errorResponse);
         }
         next();
       };

@@ -147,6 +147,47 @@ describe('Hono Server Adapter', () => {
     },
   });
 
+  it('returns the documented malformed-body response for trace queries', async () => {
+    const mastra = new Mastra({ logger: false });
+    const app = new Hono();
+    const adapter = new MastraServer({ app, mastra });
+
+    await adapter.init();
+
+    const response = await app.request('/api/observability/traces/query', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: '{"timeRange":',
+    });
+
+    expect(response.status).toBe(400);
+    expect(response.headers.get('content-type')).toContain('application/json');
+    await expect(response.json()).resolves.toEqual({
+      error: 'Invalid request body',
+      issues: [{ field: 'body', message: expect.any(String) }],
+    });
+  });
+
+  it('rejects an oversized trace-query body before planning or storage access', async () => {
+    const mastra = new Mastra({ logger: false });
+    const getStorage = vi.spyOn(mastra, 'getStorage');
+    const app = new Hono();
+    const adapter = new MastraServer({ app, mastra });
+
+    await adapter.init();
+
+    const response = await app.request('/api/observability/traces/query', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ padding: 'x'.repeat(256 * 1024) }),
+    });
+
+    expect(response.status).toBe(413);
+    expect(response.headers.get('content-type')).toContain('application/json');
+    await expect(response.json()).resolves.toEqual({ error: 'Request body too large' });
+    expect(getStorage).not.toHaveBeenCalled();
+  });
+
   it('registers createRoute routes from server.apiRoutes with runtime validation', async () => {
     const route = createRoute({
       method: 'POST',

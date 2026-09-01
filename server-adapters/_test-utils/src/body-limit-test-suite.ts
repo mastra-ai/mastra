@@ -22,7 +22,7 @@ export interface BodyLimitTestSuiteConfig<TApp> {
   setupAdapter: (
     app: TApp,
     mastra: Mastra,
-    bodyLimitOptions: BodyLimitOptions,
+    bodyLimitOptions?: BodyLimitOptions,
   ) => { adapter: any; app: TApp } | Promise<{ adapter: any; app: TApp }>;
 
   /** Register the given ServerRoute on the app through the adapter's registerRoute() */
@@ -62,6 +62,36 @@ export function createBodyLimitTestSuite<TApp>(config: BodyLimitTestSuiteConfig<
 
   describe(suiteName, () => {
     const oversizedPayload = JSON.stringify({ padding: 'x'.repeat(maxSize * 4) });
+
+    it('enforces a route-specific limit without global body limit options', async () => {
+      const mastra = new Mastra({});
+      const app = createApp();
+      const { adapter, app: wiredApp } = await setupAdapter(app, mastra);
+      let handlerCalled = false;
+
+      const testRoute: ServerRoute<any, any, any> = {
+        method: 'POST',
+        path: '/test/route-body-limit',
+        responseType: 'json',
+        maxBodySize: maxSize,
+        handler: async ({ body }) => {
+          handlerCalled = true;
+          return { receivedBody: body };
+        },
+      };
+
+      await registerRoute(adapter, wiredApp, testRoute);
+
+      const response = await executeRequest(wiredApp, 'POST', 'http://localhost/test/route-body-limit', {
+        headers: { 'Content-Type': 'application/json' },
+        body: oversizedPayload,
+      });
+
+      expect(response.status).toBe(413);
+      expect(handlerCalled).toBe(false);
+
+      await cleanupApp?.(wiredApp);
+    });
 
     it.each(['POST', 'DELETE'] as const)('rejects an oversized %s body with 413', async method => {
       const mastra = new Mastra({});
