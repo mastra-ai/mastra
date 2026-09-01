@@ -24,7 +24,7 @@ import type { FactoryUserSession } from '../services/user-sessions';
 import { getFactorySessionKind, getSessionOwnerDetails } from '../services/sessionPresentation';
 import type { SessionViewerProfile } from '../services/sessionPresentation';
 import { SessionNavRow } from './SessionNavRow';
-import type { SessionRowStatus } from './SessionNavRow';
+import type { SessionRowStatus } from './SessionActivity';
 import type { SessionPreviewDetails } from './SessionPreviewCard';
 
 const COLLAPSED_ROW_COUNT = 5;

@@ -167,9 +167,24 @@ describe('Board card session liveness', () => {
 
     const card = await screen.findByTestId('work-item-card');
     await waitFor(() => expect(card.querySelector('[data-live-session-indicator]')).not.toBeNull());
+    // Bound but idle: the belt rests instead of advertising work that is not happening.
+    expect(card.querySelector('.session-pentad.session-ready')).not.toBeNull();
 
     await user.click(screen.getByRole('button', { name: 'Details for Fix login bug' }));
     expect(await screen.findByRole('link', { name: 'Open session' })).toBeInTheDocument();
+  });
+
+  it('runs the belt while the bound session has a run in flight', async () => {
+    stubFactoryWithBoundSession();
+    server.use(
+      http.get('*/api/agent-controller/:controllerId/active-runs', () =>
+        HttpResponse.json({ runs: [{ runId: 'run-1', resourceId: SESSION_ID, threadId: SESSION_ID }] }),
+      ),
+    );
+    renderWorkBoard();
+
+    const card = await screen.findByTestId('work-item-card');
+    await waitFor(() => expect(card.querySelector('.session-pentad.session-working')).not.toBeNull());
   });
 
   it('drops the session indicator as soon as its session is deleted from the sidebar', async () => {

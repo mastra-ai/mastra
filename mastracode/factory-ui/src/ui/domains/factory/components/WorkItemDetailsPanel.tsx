@@ -7,6 +7,8 @@ import { useId } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router';
 
 import { useFactoryAuth } from '../../../../hooks/useFactoryAuth';
+import { SessionActivityPentad } from '../../workspaces/components/SessionActivity';
+import type { SessionRowStatus } from '../../workspaces/components/SessionActivity';
 import type { BoardCardStatus } from '../boardCardStatus';
 import { externalLinkLabel, metadataLabels, pullRequestStatusForItem, workItemMeta } from '../boardItems';
 import { itemStageLabel } from '../boardStages';
@@ -33,6 +35,7 @@ export function WorkItemDetailsPanel({
   morph,
   relatedLinks,
   threadSession,
+  sessionStatus,
   status,
   retryingDecisionId,
   onRetryDecision,
@@ -48,6 +51,7 @@ export function WorkItemDetailsPanel({
   morph: CardMorph;
   relatedLinks: ReactNode;
   threadSession?: WorkItemSessionRef;
+  sessionStatus: SessionRowStatus;
   status: BoardCardStatus;
   retryingDecisionId?: string;
   onRetryDecision: (decisionId: string) => void;
@@ -80,7 +84,7 @@ export function WorkItemDetailsPanel({
           <div className="flex min-w-0 items-center gap-1.5">
             <div className="flex min-w-0 flex-1 items-center gap-1.5">
               <span className="text-ui-xs text-icon2 min-w-0 truncate">{workItemMeta(item)}</span>
-              {threadSession !== undefined && <span aria-hidden className="bg-accent1 size-2 shrink-0 rounded-full" />}
+              {threadSession !== undefined && <SessionActivityPentad status={sessionStatus} className="shrink-0" />}
               {relatedLinks}
             </div>
             {item.url !== null && (

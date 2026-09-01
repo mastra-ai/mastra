@@ -22,7 +22,7 @@ import { deleteUserSession, regenerateSessionTitle } from '../services/user-sess
 import type { FactoryUserSession } from '../services/user-sessions';
 import { getSessionOwnerDetails, getUserSessionLabel } from '../services/sessionPresentation';
 import { SessionNavRow } from './SessionNavRow';
-import type { SessionRowStatus } from './SessionNavRow';
+import type { SessionRowStatus } from './SessionActivity';
 
 function userSessionStatus({
   session,

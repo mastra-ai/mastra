@@ -11,6 +11,9 @@ import { useParams } from 'react-router';
 import type { FactoryRunPhase } from '../../../../hooks/useStartFactoryRun';
 import { boardCardStatus } from '../boardCardStatus';
 import { setDragPayload } from '../boardDrag';
+import { useActiveRunResources } from '../../../../hooks/useActiveRunResources';
+import { SessionActivityPentad } from '../../workspaces/components/SessionActivity';
+import { AGENT_CONTROLLER_ID } from '../../chat/services/constants';
 import { itemThreadSession, metadataLabels, pullRequestStatusForItem, workItemMeta } from '../boardItems';
 import { itemRunSpec } from '../boardRunSpecs';
 import type { ItemRunSpec, RunAction } from '../boardRunSpecs';
@@ -131,6 +134,12 @@ export function WorkItemCard({
       ? runSpec.actions.find(action => FACTORY_ROLE_STAGES[action.role] === columnStage && action.role in sessions)
       : undefined;
   const threadSession = itemThreadSession(sessions);
+  // One poll for the whole controller, shared by every card and the sidebar alike.
+  const running = useActiveRunResources({
+    agentControllerId: AGENT_CONTROLLER_ID,
+    resourceIds: threadSession ? [threadSession.sessionId] : [],
+  });
+  const sessionStatus = threadSession && running[threadSession.sessionId] ? 'working' : 'ready';
   const primaryAction = cardPrimaryAction({
     item,
     runSpec,
@@ -298,7 +307,7 @@ export function WorkItemCard({
             <div className="flex min-w-0 items-center gap-1.5 pr-8">
               <span className="text-ui-xs text-icon2 min-w-0 truncate">{workItemMeta(item)}</span>
               {threadSession !== undefined && (
-                <span data-live-session-indicator aria-hidden className="bg-accent1 size-2 shrink-0 rounded-full" />
+                <SessionActivityPentad data-live-session-indicator status={sessionStatus} className="shrink-0" />
               )}
               {relatedItems.map(relatedLink)}
               {item.commentCount > 0 && (
@@ -374,6 +383,7 @@ export function WorkItemCard({
         morph={morph}
         relatedLinks={relatedItems.map(relatedLink)}
         threadSession={threadSession}
+        sessionStatus={sessionStatus}
         status={status}
         retryingDecisionId={retryingDecisionId}
         onRetryDecision={onRetryDecision}

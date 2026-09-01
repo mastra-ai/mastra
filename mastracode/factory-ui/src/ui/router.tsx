@@ -20,6 +20,7 @@ import { AuditPage } from './pages/AuditPage';
 import { ActivityPage } from './pages/ActivityPage';
 import { AttentionPage } from './pages/AttentionPage';
 import { KnowledgePage } from './pages/KnowledgePage';
+import { MarkerPreviewPage } from './pages/MarkerPreviewPage';
 import { ReviewBoardPage, WorkBoardPage } from './pages/BoardPage';
 import { CreateFactoryPage } from './pages/CreateFactoryPage';
 import { NewPage } from './pages/NewPage';
@@ -196,6 +197,8 @@ export function createAppRoutes(): RouteObject[] {
       ],
     },
     { path: '/signin', element: <SignInPage /> },
+    // TEMPORARY: activity-marker bench, unauthenticated so it needs no factory.
+    { path: '/markers', element: <MarkerPreviewPage /> },
   ];
 }
 

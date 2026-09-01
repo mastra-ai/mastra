@@ -7,7 +7,8 @@ import type { ReactNode, RefObject } from 'react';
 
 import { relativeTime } from '../../../../lib/date/relativeTime';
 import { PullRequestStatusIcon } from '../../factory/components/PullRequestStatusIcon';
-import type { SessionRowStatus } from './SessionNavRow';
+import { SessionActivityPentad } from './SessionActivity';
+import type { SessionRowStatus } from './SessionActivity';
 import type { SessionOwnerDetails } from '../services/sessionPresentation';
 
 export interface SessionPreviewDetails {
@@ -88,20 +89,23 @@ export function SessionPreviewCard({
       className="w-80 max-w-[calc(100vw-2rem)]"
     >
       <div className="flex flex-col gap-2.5">
-        <div className="flex flex-col gap-0.5">
-          <div className="flex items-baseline gap-3">
-            <Txt as="p" variant="ui-sm" className="text-icon6 m-0 min-w-0 flex-1 font-medium wrap-anywhere">
-              {name}
-            </Txt>
-            {updated && (
-              <Txt as="span" variant="ui-xs" className="text-icon3 shrink-0">
-                {updated}
+        <div className="flex items-center gap-2.5">
+          {status && <SessionActivityPentad status={status} className="shrink-0" />}
+          <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+            <div className="flex items-baseline gap-3">
+              <Txt as="p" variant="ui-sm" className="text-icon6 m-0 min-w-0 flex-1 font-medium wrap-anywhere">
+                {name}
               </Txt>
-            )}
+              {updated && (
+                <Txt as="span" variant="ui-xs" className="text-icon3 shrink-0">
+                  {updated}
+                </Txt>
+              )}
+            </div>
+            <Txt as="p" variant="ui-xs" className="text-icon3 m-0">
+              {statusLabel ? `${details.kind} · ${statusLabel}` : details.kind}
+            </Txt>
           </div>
-          <Txt as="p" variant="ui-xs" className="text-icon3 m-0">
-            {statusLabel ? `${details.kind} · ${statusLabel}` : details.kind}
-          </Txt>
         </div>
         <div className="flex flex-col gap-1.5">
           <DetailRow icon={<Avatar src={details.owner.avatarUrl} name={ownerName} size="sm" />} label="Owner" centered>

@@ -110,6 +110,16 @@ describe('Workspace session hover details', () => {
       expect(workRow).not.toHaveAttribute('title');
     });
 
+    it('carries the same activity state as the sidebar row', async () => {
+      const { user, workRow } = await setupSessionRows();
+
+      await user.hover(workRow);
+
+      // Decorative here — the card already spells the status out in text beside it.
+      const card = await screen.findByLabelText(`${workName} session details`);
+      expect(card.querySelector('.session-pentad.session-working')).toBeInTheDocument();
+    });
+
     it('names the icon-only rows for screen readers', async () => {
       const { user, workRow } = await setupSessionRows();
 
