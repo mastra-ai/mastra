@@ -764,6 +764,29 @@ describe('LocalSandbox', () => {
     });
 
     describe('readOnly option', () => {
+      it('mounts a fresh /dev so device nodes exist inside the namespace', () => {
+        const workspacePath = '/path/to/workspace';
+        const { args } = buildBwrapCommand('echo 1', workspacePath, { readOnly: true });
+
+        // Without a device mount, /dev/null does not exist in the namespace and
+        // shell redirections / git / ssh fail with ENOENT.
+        const devIndex = args.indexOf('--dev');
+        expect(devIndex).toBeGreaterThanOrEqual(0);
+        expect(args[devIndex + 1]).toBe('/dev');
+      });
+
+      it('allows writes to standard device nodes in the seatbelt profile', () => {
+        const workspacePath = '/path/to/workspace';
+        const profile = generateSeatbeltProfile(workspacePath, {});
+
+        // `file-ioctl` alone is not enough for opening devices O_RDWR; without
+        // `file-write-data` the default-deny profile rejects the open.
+        for (const device of ['/dev/null', '/dev/zero', '/dev/random', '/dev/urandom', '/dev/tty']) {
+          expect(profile).toContain(`(allow file-ioctl (literal "${device}"))`);
+          expect(profile).toContain(`(allow file-write-data (literal "${device}"))`);
+        }
+      });
+
       it('should generate a bwrap command with --ro-bind when readOnly is true', () => {
         const workspacePath = '/path/to/workspace';
         const { args } = buildBwrapCommand('echo 1', workspacePath, { readOnly: true });

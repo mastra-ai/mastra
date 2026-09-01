@@ -67,6 +67,11 @@ export function buildBwrapCommand(
   // Mount a new /proc for the PID namespace
   bwrapArgs.push('--proc', '/proc');
 
+  // Mount a fresh /dev with the standard device nodes (null, zero, random,
+  // urandom, tty, ...). Without it the namespace has no devices at all, so
+  // git/ssh and ordinary shell redirections (`2>/dev/null`) fail with ENOENT.
+  bwrapArgs.push('--dev', '/dev');
+
   // Mount a tmpfs at /tmp
   bwrapArgs.push('--tmpfs', '/tmp');
 
