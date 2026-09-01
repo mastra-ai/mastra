@@ -4510,9 +4510,6 @@ importers:
       '@a2a-js/sdk-v1':
         specifier: npm:@a2a-js/sdk@~1.0.1
         version: '@a2a-js/sdk@1.0.1(@bufbuild/protobuf@2.12.1)(@grpc/grpc-js@1.14.4)(express@5.2.1(supports-color@10.2.2))'
-      '@ai-sdk/provider-utils-v5':
-        specifier: npm:@ai-sdk/provider-utils@3.0.30
-        version: '@ai-sdk/provider-utils@3.0.30(zod@4.4.3)'
       '@ai-sdk/provider-utils-v6':
         specifier: npm:@ai-sdk/provider-utils@4.0.40
         version: '@ai-sdk/provider-utils@4.0.40(zod@4.4.3)'
