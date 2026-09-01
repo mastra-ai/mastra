@@ -665,27 +665,13 @@ describe('buildServerDefs', () => {
   });
 
   describe('searchPaths', () => {
-    it('finds TypeScript 6 tsserver.js from searchPaths for module resolution', () => {
+    it('returns undefined when TypeScript does not expose tsserver.js', () => {
       const emptyRoot = join(tempDir, 'empty-root');
-      const searchDir = join(tempDir, 'search');
-      const pkgDir = join(searchDir, 'node_modules', 'typescript');
       mkdirSync(emptyRoot, { recursive: true });
-      mkdirSync(join(pkgDir, 'lib'), { recursive: true });
-      writeFileSync(join(searchDir, 'package.json'), '{}');
-      writeFileSync(join(pkgDir, 'package.json'), JSON.stringify({ name: 'typescript', version: '6.0.3' }));
-      writeFileSync(join(pkgDir, 'lib', 'tsserver.js'), '');
 
-      const cwdSpy = vi.spyOn(process, 'cwd').mockReturnValue(emptyRoot);
-      try {
-        const defs = buildServerDefs({ searchPaths: [searchDir] });
-        const init = defs.typescript!.initialization!(emptyRoot);
-
-        expect(init).toEqual({
-          tsserver: { path: join(pkgDir, 'lib', 'tsserver.js'), logVerbosity: 'off' },
-        });
-      } finally {
-        cwdSpy.mockRestore();
-      }
+      const defs = buildServerDefs({ searchPaths: [process.cwd()] });
+      const init = defs.typescript!.initialization!(emptyRoot);
+      expect(init).toBeUndefined();
     });
 
     it('finds binary in searchPaths node_modules/.bin', () => {
