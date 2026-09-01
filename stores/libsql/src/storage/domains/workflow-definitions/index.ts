@@ -26,6 +26,10 @@ function parseJson<T = unknown>(val: unknown, column: string, rowId: unknown): T
   return val as T;
 }
 
+function workflowDefinitionSelectColumns(): string {
+  return buildSelectColumns(TABLE_WORKFLOW_DEFINITIONS).replace('json("schedule") as "schedule"', '"schedule"');
+}
+
 function rowToDefinition(row: Record<string, any>): WorkflowDefinition {
   const inputSchema = parseJson(row.inputSchema, 'inputSchema', row.id);
   const outputSchema = parseJson(row.outputSchema, 'outputSchema', row.id);
@@ -50,14 +54,13 @@ function rowToDefinition(row: Record<string, any>): WorkflowDefinition {
   if (stateSchema !== undefined) def.stateSchema = stateSchema;
   const requestContextSchema = parseJson(row.requestContextSchema, 'requestContextSchema', row.id);
   if (requestContextSchema !== undefined) def.requestContextSchema = requestContextSchema;
-  // Schedule is optional — malformed JSON here must not sink the whole row
-  // (list() would throw and abort dynamic workflow loading). Leave the
-  // definition unscheduled instead; rehydration's lenient path warns.
   try {
     const schedule = parseJson<WorkflowDefinition['schedule']>(row.schedule, 'schedule', row.id);
     if (schedule != null) def.schedule = schedule;
   } catch {
-    // ignore malformed schedule JSON
+    // Preserve the malformed value so lenient rehydration can report it while
+    // still loading the workflow without a schedule.
+    def.schedule = row.schedule as unknown as WorkflowDefinition['schedule'];
   }
   if (row.authorId != null) def.authorId = String(row.authorId);
   return def;
@@ -168,7 +171,7 @@ export class WorkflowDefinitionsLibSQL extends WorkflowDefinitionsStorage {
 
   async get(id: string): Promise<WorkflowDefinition | null> {
     const result = await this.#client.execute({
-      sql: `SELECT ${buildSelectColumns(TABLE_WORKFLOW_DEFINITIONS)} FROM "${TABLE_WORKFLOW_DEFINITIONS}" WHERE id = ?`,
+      sql: `SELECT ${workflowDefinitionSelectColumns()} FROM "${TABLE_WORKFLOW_DEFINITIONS}" WHERE id = ?`,
       args: [id],
     });
     const row = result.rows[0];
@@ -188,7 +191,7 @@ export class WorkflowDefinitionsLibSQL extends WorkflowDefinitionsStorage {
     }
     const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
     const result = await this.#client.execute({
-      sql: `SELECT ${buildSelectColumns(TABLE_WORKFLOW_DEFINITIONS)} FROM "${TABLE_WORKFLOW_DEFINITIONS}" ${where} ORDER BY updatedAt DESC`,
+      sql: `SELECT ${workflowDefinitionSelectColumns()} FROM "${TABLE_WORKFLOW_DEFINITIONS}" ${where} ORDER BY updatedAt DESC`,
       args: params,
     });
     const definitions = result.rows.map(row => rowToDefinition(row as Record<string, any>));

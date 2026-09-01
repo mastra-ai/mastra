@@ -169,7 +169,17 @@ function collectWorkflowScheduleConfigs(workflow: unknown): WorkflowScheduleConf
  * ids are URL-encoded so delimiters in user-supplied ids cannot collide
  * across workflows (e.g. `foo__bar` single vs `foo` array-entry `bar`).
  */
+function encodeDeclarativeScheduleId(id: string): string {
+  return encodeURIComponent(id).replaceAll('_', '%5F');
+}
+
 function declarativeScheduleRowId(workflowId: string, scheduleId?: string): string {
+  const encodedWorkflow = encodeDeclarativeScheduleId(workflowId);
+  if (scheduleId === undefined) return `wf_${encodedWorkflow}`;
+  return `wf_${encodedWorkflow}__${encodeDeclarativeScheduleId(scheduleId)}`;
+}
+
+function legacyDeclarativeScheduleRowId(workflowId: string, scheduleId?: string): string {
   const encodedWorkflow = encodeURIComponent(workflowId);
   if (scheduleId === undefined) return `wf_${encodedWorkflow}`;
   return `wf_${encodedWorkflow}__${encodeURIComponent(scheduleId)}`;
@@ -1877,10 +1887,16 @@ export class Mastra<
    */
   #collectDeclarativeSchedules(): Array<{
     scheduleId: string;
+    legacyScheduleId: string;
     workflowId: string;
     cfg: WorkflowScheduleConfig;
   }> {
-    const out: Array<{ scheduleId: string; workflowId: string; cfg: WorkflowScheduleConfig }> = [];
+    const out: Array<{
+      scheduleId: string;
+      legacyScheduleId: string;
+      workflowId: string;
+      cfg: WorkflowScheduleConfig;
+    }> = [];
     const workflows = this.#workflows as Record<string, AnyWorkflow>;
     for (const workflow of Object.values(workflows ?? {})) {
       const configs = collectWorkflowScheduleConfigs(workflow);
@@ -1890,7 +1906,10 @@ export class Mastra<
         const scheduleId = isArrayForm
           ? declarativeScheduleRowId(workflow.id, cfg.id)
           : declarativeScheduleRowId(workflow.id);
-        out.push({ scheduleId, workflowId: workflow.id, cfg });
+        const legacyScheduleId = isArrayForm
+          ? legacyDeclarativeScheduleRowId(workflow.id, cfg.id)
+          : legacyDeclarativeScheduleRowId(workflow.id);
+        out.push({ scheduleId, legacyScheduleId, workflowId: workflow.id, cfg });
       }
     }
     return out;
@@ -1953,7 +1972,19 @@ export class Mastra<
    * @internal — public so SchedulerWorker can call it, not part of the user API.
    */
   async registerDeclarativeSchedules(schedulesStore: SchedulesStorage): Promise<void> {
-    const declared = this.#collectDeclarativeSchedules();
+    const allRows = await schedulesStore.listSchedules();
+    const rowsById = new Map(allRows.map(row => [row.id, row]));
+    const declared = this.#collectDeclarativeSchedules().map(entry => {
+      const legacyRow = rowsById.get(entry.legacyScheduleId);
+      if (
+        entry.legacyScheduleId !== entry.scheduleId &&
+        legacyRow?.target.type === 'workflow' &&
+        legacyRow.target.workflowId === entry.workflowId
+      ) {
+        return { ...entry, scheduleId: entry.legacyScheduleId };
+      }
+      return entry;
+    });
     const declaredIds = new Set(declared.map(d => d.scheduleId));
 
     // Group declared ids by workflow so we can detect orphans (rows that
@@ -1977,7 +2008,7 @@ export class Mastra<
 
     for (const { scheduleId, workflowId, cfg } of declared) {
       try {
-        const existing = await schedulesStore.getSchedule(scheduleId);
+        const existing = rowsById.get(scheduleId);
         const now = Date.now();
         const target: Schedule['target'] = {
           type: 'workflow',
@@ -2044,7 +2075,6 @@ export class Mastra<
     //      loops (see WorkflowEventProcessor#dispatch).
     // User-created schedules (via the schedules API) don't use the `wf_`
     // prefix, so they're untouched.
-    const allRows = await schedulesStore.listSchedules();
     for (const row of allRows) {
       if (declaredIds.has(row.id)) continue;
       if (!row.id.startsWith('wf_')) continue;
@@ -2053,7 +2083,11 @@ export class Mastra<
       // generated row-id prefix (not by decoding the row id): workflow ids may
       // themselves contain `__`, which `encodeURIComponent` doesn't escape, so
       // decoding the segment before the first `__` can recover the wrong id.
-      const failedOwnerId = ownerWorkflowIdForRow(row.id, this.#failedDynamicWorkflowIds);
+      const targetWorkflowId = row.target.type === 'workflow' ? row.target.workflowId : undefined;
+      const failedOwnerId =
+        targetWorkflowId && this.#failedDynamicWorkflowIds.has(targetWorkflowId)
+          ? targetWorkflowId
+          : ownerWorkflowIdForRow(row.id, this.#failedDynamicWorkflowIds);
       if (failedOwnerId !== undefined) {
         this.#logger?.warn?.(
           `Keeping declarative schedule "${row.id}": dynamic workflow "${failedOwnerId}" failed to load this boot.`,
@@ -2061,7 +2095,9 @@ export class Mastra<
         continue;
       }
       const ownerWorkflowId =
-        ownerWorkflowIdForRow(row.id, declaredIdsByWorkflow.keys()) ?? ownerWorkflowIdFromRowId(row.id);
+        targetWorkflowId ??
+        ownerWorkflowIdForRow(row.id, declaredIdsByWorkflow.keys()) ??
+        ownerWorkflowIdFromRowId(row.id);
       if (!ownerWorkflowId) continue;
       try {
         await schedulesStore.deleteSchedule(row.id);
