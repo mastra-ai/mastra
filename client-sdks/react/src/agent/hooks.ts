@@ -346,6 +346,15 @@ export const useChat = ({
 }: MastraChatProps) => {
   const threadSignalsDisabled = enableThreadSignals === false;
   const _currentRunId = useRef<string | undefined>(undefined);
+  // A thread subscription can outlive multiple runs. Keep the currently active
+  // run separate from the last run used by legacy/generate continuations so a
+  // terminal thread event cannot leave a stale run id on the next idle start.
+  const _activeThreadRunId = useRef<string | undefined>(undefined);
+  // A very short run can publish its terminal event before the HTTP start
+  // acknowledgement resolves. Remember that terminal id so the late ACK does
+  // not resurrect it as an active continuation target. Late ACKs consume their
+  // entry; remaining entries are reset when the thread session changes or cancels.
+  const _terminalThreadRunIds = useRef(new Set<string>());
   const _onChunk = useRef<((chunk: ChunkType) => Promise<void>) | undefined>(undefined);
   const _networkRunId = useRef<string | undefined>(undefined);
   const _onNetworkChunk = useRef<((chunk: NetworkChunkType) => Promise<void>) | undefined>(undefined);
@@ -418,18 +427,8 @@ export const useChat = ({
     return resolution;
   };
 
-  const settleThreadRunVersionResolution = (
-    resolution: RunVersionResolution,
-    previousRunId: string | undefined,
-    settledRunId: string,
-  ) => {
+  const settleThreadRunVersionResolution = (resolution: RunVersionResolution) => {
     if (_pendingThreadVersionResolutionRef.current !== resolution) return;
-
-    if (previousRunId !== undefined && settledRunId === previousRunId) {
-      _pendingThreadVersionResolutionRef.current = undefined;
-      return;
-    }
-
     activateRunVersionResolution(resolution);
   };
 
@@ -437,6 +436,16 @@ export const useChat = ({
     if (_pendingThreadVersionResolutionRef.current === resolution) {
       _pendingThreadVersionResolutionRef.current = undefined;
     }
+  };
+
+  const acceptThreadRunId = (runId: string) => {
+    if (_terminalThreadRunIds.current.delete(runId)) {
+      if (_currentRunId.current === runId) _currentRunId.current = undefined;
+      if (_activeThreadRunId.current === runId) _activeThreadRunId.current = undefined;
+      return;
+    }
+    _currentRunId.current = runId;
+    _activeThreadRunId.current = runId;
   };
 
   const publishRunVersionIdentityRef = useRef<(value: unknown, resolution?: RunVersionResolution) => void>(() => {});
@@ -463,6 +472,9 @@ export const useChat = ({
   };
 
   useEffect(() => {
+    _currentRunId.current = undefined;
+    _activeThreadRunId.current = undefined;
+    _terminalThreadRunIds.current.clear();
     _pendingThreadVersionResolutionRef.current = undefined;
     _runVersionResolutionRef.current = undefined;
     pendingGenerateContinuationsRef.current.clear();
@@ -477,7 +489,9 @@ export const useChat = ({
     setTasks(extractLatestTasksFromMessages(formattedMessages));
     pendingToolApprovalIdsRef.current = extractPendingToolApprovalIdsFromMessages(formattedMessages);
     setIsAwaitingToolApproval(pendingToolApprovalIdsRef.current.size > 0);
-    _currentRunId.current = extractRunIdFromMessages(formattedMessages);
+    const restoredRunId = extractRunIdFromMessages(formattedMessages);
+    _currentRunId.current = restoredRunId;
+    _activeThreadRunId.current = pendingToolApprovalIdsRef.current.size > 0 ? restoredRunId : undefined;
   }, [initialMessages]);
 
   useEffect(() => {
@@ -594,14 +608,21 @@ export const useChat = ({
         onSignalEcho?.(chunk.data.id);
       }
 
+      const chunkRunId = 'runId' in chunk && typeof chunk.runId === 'string' ? chunk.runId : undefined;
+
       if (chunk.type === 'start') {
         setIsRunning(true);
-        if ('runId' in chunk && typeof chunk.runId === 'string') {
-          _currentRunId.current = chunk.runId;
+        if (chunkRunId) {
+          _currentRunId.current = chunkRunId;
+          _activeThreadRunId.current = chunkRunId;
         }
       }
 
       if (chunk.type === 'tool-call-approval' || chunk.type === 'tool-call-suspended') {
+        if (chunkRunId) {
+          _currentRunId.current = chunkRunId;
+          _activeThreadRunId.current = chunkRunId;
+        }
         const toolCallId = chunk.payload?.toolCallId;
         if (typeof toolCallId === 'string') {
           pendingToolApprovalIdsRef.current.add(toolCallId);
@@ -611,9 +632,18 @@ export const useChat = ({
       }
 
       if (chunk.type === 'finish' || chunk.type === 'abort' || chunk.type === 'error') {
-        pendingToolApprovalIdsRef.current.clear();
-        setIsAwaitingToolApproval(false);
-        setIsRunning(false);
+        if (chunkRunId) _terminalThreadRunIds.current.add(chunkRunId);
+        const endsCurrentThreadRun =
+          !chunkRunId || !_activeThreadRunId.current || _activeThreadRunId.current === chunkRunId;
+        if (endsCurrentThreadRun) {
+          _activeThreadRunId.current = undefined;
+          if (chunkRunId && _currentRunId.current === chunkRunId) {
+            _currentRunId.current = undefined;
+          }
+          pendingToolApprovalIdsRef.current.clear();
+          setIsAwaitingToolApproval(false);
+          setIsRunning(false);
+        }
       }
 
       void (onChunk ?? _onChunk.current)?.(chunk);
@@ -951,8 +981,8 @@ export const useChat = ({
       return;
     }
 
-    const versionResolution = stageThreadRunVersionResolution(resolvedVersions);
-    const previousRunId = _currentRunId.current;
+    const activeThreadRunId = _activeThreadRunId.current;
+    const versionResolution = activeThreadRunId ? undefined : stageThreadRunVersionResolution(resolvedVersions);
     const resolvedSignalId = signalId ?? uuid();
     const messageContents = getSignalContents(coreUserMessages);
     // RequestContext serializes to a plain record via its toJSON(), but the class has no
@@ -979,22 +1009,32 @@ export const useChat = ({
     };
 
     try {
-      const result = await agent.sendMessage({
-        message: clientMessageId
-          ? { contents: messageContents, metadata: { [CLIENT_MESSAGE_ID_KEY]: clientMessageId } }
-          : messageContents,
-        resourceId: resourceId || agentId,
-        threadId,
-        ifIdle: {
-          streamOptions: {
-            ...signalContinuationOptions,
-            requestContext: requestContextRecord,
-            clientTools: resolvedClientTools,
-          },
-        },
-      });
-      settleThreadRunVersionResolution(versionResolution, previousRunId, result.runId);
-      _currentRunId.current = result.runId;
+      const message = clientMessageId
+        ? { contents: messageContents, metadata: { [CLIENT_MESSAGE_ID_KEY]: clientMessageId } }
+        : messageContents;
+      const result = activeThreadRunId
+        ? await agent.sendMessage({
+            message,
+            runId: activeThreadRunId,
+            resourceId: resourceId || agentId,
+            threadId,
+          })
+        : await agent.sendMessage({
+            message,
+            resourceId: resourceId || agentId,
+            threadId,
+            ifIdle: {
+              streamOptions: {
+                ...signalContinuationOptions,
+                requestContext: requestContextRecord,
+                clientTools: resolvedClientTools,
+              },
+            },
+          });
+      if (versionResolution) {
+        settleThreadRunVersionResolution(versionResolution);
+      }
+      acceptThreadRunId(result.runId);
       const echoedSignalId =
         result.signal &&
         typeof result.signal === 'object' &&
@@ -1010,33 +1050,49 @@ export const useChat = ({
       if (isThreadSignalUnsupportedError(error)) {
         onSignalSent?.(resolvedSignalId, getSignalPreview(coreUserMessages));
         try {
-          const result = await agent.sendSignal({
-            signal: {
-              id: resolvedSignalId,
-              type: 'user-message',
-              contents: messageContents,
-            },
-            resourceId: resourceId || agentId,
-            threadId,
-            ifIdle: { streamOptions },
-          });
-          settleThreadRunVersionResolution(versionResolution, previousRunId, result.runId);
-          _currentRunId.current = result.runId;
+          const signal = {
+            id: resolvedSignalId,
+            type: 'user-message' as const,
+            contents: messageContents,
+          };
+          const result = activeThreadRunId
+            ? await agent.sendSignal({
+                signal,
+                runId: activeThreadRunId,
+                resourceId: resourceId || agentId,
+                threadId,
+              })
+            : await agent.sendSignal({
+                signal,
+                resourceId: resourceId || agentId,
+                threadId,
+                ifIdle: { streamOptions },
+              });
+          if (versionResolution) {
+            settleThreadRunVersionResolution(versionResolution);
+          }
+          acceptThreadRunId(result.runId);
           return;
         } catch (signalError) {
           onSignalEcho?.(resolvedSignalId);
           if (isThreadSignalUnsupportedError(signalError)) {
             markThreadSignalsUnsupported();
+            if (activeThreadRunId) {
+              throw signalError;
+            }
+            if (!versionResolution) {
+              throw signalError;
+            }
             setMessages(prev => [...prev, fromCoreUserMessagesToMastraDBMessage(coreUserMessages)]);
             activateRunVersionResolution(versionResolution);
             await streamWithLegacyRoute(versionResolution);
             return;
           }
-          discardThreadRunVersionResolution(versionResolution);
+          if (versionResolution) discardThreadRunVersionResolution(versionResolution);
           throw signalError;
         }
       }
-      discardThreadRunVersionResolution(versionResolution);
+      if (versionResolution) discardThreadRunVersionResolution(versionResolution);
       throw error;
     }
 
@@ -1131,6 +1187,8 @@ export const useChat = ({
     setIsAwaitingToolApproval(false);
     setIsRunning(false);
     _currentRunId.current = undefined;
+    _activeThreadRunId.current = undefined;
+    _terminalThreadRunIds.current.clear();
     _onChunk.current = undefined;
     _networkRunId.current = undefined;
     _onNetworkChunk.current = undefined;
@@ -1172,6 +1230,7 @@ export const useChat = ({
     if (_threadSubscriptionKeyRef.current && threadId) {
       try {
         await agent.sendToolApproval({
+          runId: currentRunId,
           resourceId: resourceId || agentId,
           threadId,
           toolCallId,
@@ -1233,6 +1292,7 @@ export const useChat = ({
     if (_threadSubscriptionKeyRef.current && threadId) {
       try {
         await agent.sendToolApproval({
+          runId: currentRunId,
           resourceId: resourceId || agentId,
           threadId,
           toolCallId,

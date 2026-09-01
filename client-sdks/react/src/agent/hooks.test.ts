@@ -12,7 +12,7 @@ import type { ClientToolsInput } from './types';
 // Capture spies that every constructed MastraClient instance will expose via
 // getAgent(). This lets us assert what the React hook actually forwards to the
 // underlying client-js Agent methods.
-const sendSignalMock = vi.fn(async () => ({ accepted: true, runId: 'run-mock' }));
+const sendSignalMock = vi.fn(async (_params?: unknown) => ({ accepted: true, runId: 'run-mock' }));
 const sendMessageMock = vi.fn(async (_params?: unknown) => ({ accepted: true, runId: 'run-mock' }));
 let nextApproveToolCallChunks: Array<any> = [];
 const approveToolCallProcessDataStreamMock = vi.fn(
@@ -235,6 +235,23 @@ describe('useChat forwards clientTools', () => {
       expect.objectContaining({ model: 'google/gemini-2.5-flash' }),
     );
     expect(approveToolCallMock).toHaveBeenCalledWith(expect.objectContaining({ model: 'google/gemini-2.5-flash' }));
+  });
+
+  it('retains the locally generated run ID when a legacy terminal chunk omits run identity', async () => {
+    nextStreamChunks = [{ type: 'finish', payload: {} }];
+    const { result } = renderHook(
+      () => useChat({ agentId: 'test-agent', threadId: 'thread-1', enableThreadSignals: false }),
+      { wrapper },
+    );
+
+    await act(async () => {
+      await result.current.sendMessage({ mode: 'stream', message: 'hi' });
+      await result.current.approveToolCall('tool-call-approval-1');
+    });
+
+    expect(approveToolCallMock).toHaveBeenCalledWith(
+      expect.objectContaining({ runId: expect.any(String), toolCallId: 'tool-call-approval-1' }),
+    );
   });
 
   it('uses resumeStream for custom resume data on the legacy stream transport', async () => {
@@ -611,6 +628,7 @@ describe('useChat forwards clientTools', () => {
     });
 
     expect(sendToolApprovalMock).toHaveBeenCalledWith({
+      runId: 'run-approval',
       resourceId: 'resource-1',
       threadId: 'thread-1',
       toolCallId: 'tool-call-approval-1',
@@ -619,6 +637,54 @@ describe('useChat forwards clientTools', () => {
     });
     expect(approveToolCallMock).not.toHaveBeenCalled();
     expect(approveToolCallProcessDataStreamMock).not.toHaveBeenCalled();
+    expect(result.current.isAwaitingToolApproval).toBe(false);
+
+    unmount();
+  });
+
+  it('pins subscription-native decline to the subscribed run', async () => {
+    nextSubscribeChunks = [
+      {
+        type: 'start',
+        runId: 'run-decline',
+        from: 'AGENT',
+        payload: { messageId: 'msg-decline' },
+      },
+      {
+        type: 'tool-call-approval',
+        runId: 'run-decline',
+        from: 'AGENT',
+        payload: { toolName: 'weatherTool', toolCallId: 'tool-call-decline-1', args: { city: 'Paris' } },
+      },
+    ];
+    keepSubscriptionOpen = true;
+
+    const { result, unmount } = renderHook(
+      () =>
+        useChat({
+          agentId: 'test-agent',
+          resourceId: 'resource-1',
+          threadId: 'thread-1',
+          enableThreadSignals: true,
+        }),
+      { wrapper },
+    );
+
+    await waitFor(() => expect(result.current.isAwaitingToolApproval).toBe(true));
+
+    await act(async () => {
+      await result.current.declineToolCall('tool-call-decline-1');
+    });
+
+    expect(sendToolApprovalMock).toHaveBeenCalledWith({
+      runId: 'run-decline',
+      resourceId: 'resource-1',
+      threadId: 'thread-1',
+      toolCallId: 'tool-call-decline-1',
+      approved: false,
+      requestContext: undefined,
+    });
+    expect(declineToolCallMock).not.toHaveBeenCalled();
     expect(result.current.isAwaitingToolApproval).toBe(false);
 
     unmount();
@@ -1242,6 +1308,7 @@ describe('useChat forwards clientTools', () => {
     expect(subscribeParams).toEqual({ resourceId: 'resource-1', threadId: 'thread-1' });
 
     await act(async () => {
+      await subscriptionChunkHandler?.({ type: 'finish', runId: 'run-mock', payload: {} });
       await result.current.sendMessage({
         mode: 'stream',
         message: 'second',
@@ -1801,6 +1868,119 @@ describe('useChat version selection', () => {
   });
 
   describe('when a thread run receives another user turn', () => {
+    it('does not let an overlapping late start acknowledgement replace the newer active run', async () => {
+      keepSubscriptionOpen = true;
+      let releaseFirstAcknowledgement = () => {};
+      let markFirstRunTerminated = () => {};
+      const firstAcknowledgementGate = new Promise<void>(resolve => {
+        releaseFirstAcknowledgement = resolve;
+      });
+      const firstRunTerminated = new Promise<void>(resolve => {
+        markFirstRunTerminated = resolve;
+      });
+      sendMessageMock
+        .mockImplementationOnce(async () => {
+          await subscriptionChunkHandler?.({
+            type: 'start',
+            runId: 'run-fast',
+            payload: { messageId: 'message-fast' },
+          });
+          await subscriptionChunkHandler?.({ type: 'finish', runId: 'run-fast', payload: {} });
+          markFirstRunTerminated();
+          await firstAcknowledgementGate;
+          return { accepted: true, runId: 'run-fast' };
+        })
+        .mockResolvedValueOnce({ accepted: true, runId: 'run-next' })
+        .mockResolvedValueOnce({ accepted: true, runId: 'run-next' });
+      const { result, unmount } = renderHook(
+        () =>
+          useChat({
+            agentId: 'test-agent',
+            resourceId: 'resource-1',
+            threadId: 'thread-1',
+            enableThreadSignals: true,
+            versions: { self: { label: 'candidate' } },
+          }),
+        { wrapper },
+      );
+      await waitFor(() => expect(subscriptionChunkHandler).toBeDefined());
+
+      let firstSend = Promise.resolve();
+      await act(async () => {
+        firstSend = result.current.sendMessage({ mode: 'stream', message: 'fast run', threadId: 'thread-1' });
+        await firstRunTerminated;
+      });
+      await act(async () => {
+        await result.current.sendMessage({
+          mode: 'stream',
+          message: 'new run',
+          threadId: 'thread-1',
+          versions: { self: { label: 'next' } },
+        });
+      });
+      await act(async () => {
+        releaseFirstAcknowledgement();
+        await firstSend;
+      });
+      await act(async () => {
+        await result.current.sendMessage({
+          mode: 'stream',
+          message: 'continue new run',
+          threadId: 'thread-1',
+          versions: { self: { label: 'deleted-old-target' } },
+        });
+      });
+
+      const continuationRequest = sendMessageMock.mock.calls[2]?.[0];
+      expect(continuationRequest).toMatchObject({ runId: 'run-next' });
+      expect(continuationRequest).not.toHaveProperty('ifIdle');
+      unmount();
+    });
+
+    it('does not reuse a run id that terminated before its start request was acknowledged', async () => {
+      keepSubscriptionOpen = true;
+      sendMessageMock
+        .mockImplementationOnce(async () => {
+          await subscriptionChunkHandler?.({
+            type: 'start',
+            runId: 'run-fast',
+            payload: { messageId: 'message-fast' },
+          });
+          await subscriptionChunkHandler?.({ type: 'finish', runId: 'run-fast', payload: {} });
+          return { accepted: true, runId: 'run-fast' };
+        })
+        .mockResolvedValueOnce({ accepted: true, runId: 'run-next' });
+      const { result, unmount } = renderHook(
+        () =>
+          useChat({
+            agentId: 'test-agent',
+            resourceId: 'resource-1',
+            threadId: 'thread-1',
+            enableThreadSignals: true,
+            versions: { self: { label: 'candidate' } },
+          }),
+        { wrapper },
+      );
+      await waitFor(() => expect(subscriptionChunkHandler).toBeDefined());
+
+      await act(async () => {
+        await result.current.sendMessage({ mode: 'stream', message: 'fast run', threadId: 'thread-1' });
+        await result.current.sendMessage({
+          mode: 'stream',
+          message: 'after fast run',
+          threadId: 'thread-1',
+          versions: { self: { label: 'next' } },
+        });
+      });
+
+      const nextRequest = sendMessageMock.mock.calls[1]?.[0];
+      expect(nextRequest).not.toHaveProperty('runId');
+      expect(nextRequest).toMatchObject({
+        ifIdle: { streamOptions: { versions: { self: { label: 'next' } } } },
+      });
+      unmount();
+    });
+
     it('preserves message-started identity while active and replaces it after the thread becomes idle', async () => {
       keepSubscriptionOpen = true;
       sendMessageMock
@@ -1841,6 +2021,9 @@ describe('useChat version selection', () => {
           versions: { self: { label: 'next' } },
         });
       });
+      const activeRequest = sendMessageMock.mock.calls[1]?.[0];
+      expect(activeRequest).toMatchObject({ runId: 'run-1' });
+      expect(activeRequest).not.toHaveProperty('ifIdle');
       expect(result.current.runVersionIdentity).toEqual({
         requested: { label: 'candidate' },
         resolvedVersionId: 'root-v1',
@@ -1854,6 +2037,11 @@ describe('useChat version selection', () => {
           threadId: 'thread-1',
           versions: { self: { label: 'next' } },
         });
+      });
+      const idleRequest = sendMessageMock.mock.calls[2]?.[0];
+      expect(idleRequest).not.toHaveProperty('runId');
+      expect(idleRequest).toMatchObject({
+        ifIdle: { streamOptions: { versions: { self: { label: 'next' } } } },
       });
       expect(result.current.runVersionIdentity).toBeUndefined();
 
@@ -1911,6 +2099,9 @@ describe('useChat version selection', () => {
           versions: { self: { label: 'next' } },
         });
       });
+      const activeRequest = sendSignalMock.mock.calls[1]?.[0];
+      expect(activeRequest).toMatchObject({ runId: 'run-1' });
+      expect(activeRequest).not.toHaveProperty('ifIdle');
       expect(result.current.runVersionIdentity).toEqual({
         requested: { label: 'candidate' },
         resolvedVersionId: 'root-v1',
@@ -1924,6 +2115,11 @@ describe('useChat version selection', () => {
           threadId: 'thread-1',
           versions: { self: { label: 'next' } },
         });
+      });
+      const idleRequest = sendSignalMock.mock.calls[2]?.[0];
+      expect(idleRequest).not.toHaveProperty('runId');
+      expect(idleRequest).toMatchObject({
+        ifIdle: { streamOptions: { versions: { self: { label: 'next' } } } },
       });
       expect(result.current.runVersionIdentity).toBeUndefined();
 

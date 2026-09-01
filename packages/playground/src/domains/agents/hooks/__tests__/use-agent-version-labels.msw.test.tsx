@@ -21,6 +21,7 @@ import {
   firstLabelPage,
   labelNotFoundError,
   labelMoveConflictError,
+  previewOnlyLabelList,
   secondLabelPageWithDuplicate,
   setPreviewLabelResponse,
   unsupportedVersionLabelsError,
@@ -599,6 +600,61 @@ describe('useDeleteAgentVersionLabel', () => {
 
       expect(revisionToken).toBe('revision-preview-1');
       expectAgentVersionQueriesInvalidated(queryClient);
+    });
+
+    it('removes the confirmed label from every cached label list when the authoritative refresh fails', async () => {
+      let isDeleted = false;
+      server.use(
+        http.get(`${TEST_BASE_URL}/api/stored/agents/${AGENT_ID}/labels`, ({ request }) => {
+          if (isDeleted) return HttpResponse.json({ error: 'labels unavailable' }, { status: 503 });
+          const page = Number(new URL(request.url).searchParams.get('page'));
+          return HttpResponse.json(page === 0 ? firstLabelPage : secondLabelPageWithDuplicate);
+        }),
+        http.delete(`${TEST_BASE_URL}/api/stored/agents/${AGENT_ID}/labels/preview`, () => {
+          isDeleted = true;
+          return HttpResponse.json(deletePreviewLabelResponse);
+        }),
+      );
+      const { wrapper, queryClient } = makeWrapper();
+      const alternateContextKey = agentVersionQueryKeys.labels(AGENT_ID, { tenantId: 'tenant-2' });
+      const onlyDeletedLabelContextKey = agentVersionQueryKeys.labels(AGENT_ID, { tenantId: 'tenant-3' });
+      const pendingContextKey = agentVersionQueryKeys.labels(AGENT_ID, { tenantId: 'tenant-pending' });
+      const otherAgentContextKey = agentVersionQueryKeys.labels('agent-2', { tenantId: 'tenant-2' });
+      const { result } = renderHook(
+        () => ({
+          labels: useAgentVersionLabels({ agentId: AGENT_ID }),
+          deleteLabel: useDeleteAgentVersionLabel({ agentId: AGENT_ID }),
+        }),
+        { wrapper },
+      );
+      await waitFor(() => expect(result.current.labels.isSuccess).toBe(true));
+      const verifiedLabels = result.current.labels.data;
+      expect(verifiedLabels).toBeDefined();
+      queryClient.setQueryData(alternateContextKey, verifiedLabels);
+      queryClient.setQueryData(onlyDeletedLabelContextKey, previewOnlyLabelList);
+      queryClient.setQueryData(otherAgentContextKey, firstLabelPage);
+      void queryClient.prefetchQuery({
+        queryKey: pendingContextKey,
+        queryFn: () => new Promise<typeof verifiedLabels>(() => {}),
+      });
+
+      await act(async () => {
+        await result.current.deleteLabel.mutateAsync({
+          label: 'preview',
+          input: { expectedRevisionToken: 'revision-preview-1' },
+        });
+      });
+
+      await waitFor(() => expect(result.current.labels.isError).toBe(true));
+      expect(result.current.labels.data?.labels.map(label => label.name)).toEqual(['production', 'latest']);
+      expect(result.current.labels.data?.pagination).toEqual({ total: 2, page: 0, perPage: 2, hasMore: false });
+      expect(queryClient.getQueryData<typeof verifiedLabels>(alternateContextKey)).toEqual(result.current.labels.data);
+      expect(queryClient.getQueryData<typeof previewOnlyLabelList>(onlyDeletedLabelContextKey)).toEqual({
+        labels: [],
+        pagination: { total: 0, page: 0, perPage: 50, hasMore: false },
+      });
+      expect(queryClient.getQueryData<typeof firstLabelPage>(otherAgentContextKey)).toEqual(firstLabelPage);
+      expect(queryClient.getQueryData(pendingContextKey)).toBeUndefined();
     });
   });
 

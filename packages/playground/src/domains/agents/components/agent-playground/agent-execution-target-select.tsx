@@ -45,15 +45,20 @@ export function AgentExecutionTargetSelect({
   const knownSelectedItem = selectItems.find(item => item.value === selectedValue);
   const unavailableLabel =
     knownSelectedItem?.label ?? (target.kind === 'label' ? target.label : `Exact version ${target.versionId}`);
+  const unavailableValue = knownSelectedItem ? `unavailable:${selectedValue}` : selectedValue;
   if (!isAvailable) {
     selectItems = [
-      ...selectItems.filter(item => item.value !== selectedValue),
+      ...selectItems,
       {
-        value: selectedValue,
+        value: unavailableValue,
         label: `${unavailableLabel} · unavailable`,
       },
     ];
   }
+  // Base UI retains its item-to-index refs while the controlled Select stays
+  // mounted. A delete/recreate cycle changes this collection around the
+  // unavailable sentinel, so remount the Root with fresh refs for each value set.
+  const selectCollectionKey = JSON.stringify(selectItems.map(item => item.value));
   const errorId = 'agent-execution-target-error';
 
   const handleValueChange = (value: string) => {
@@ -66,7 +71,13 @@ export function AgentExecutionTargetSelect({
       <Label htmlFor="agent-execution-target" className="sr-only">
         Run target
       </Label>
-      <Select items={selectItems} value={selectedValue} onValueChange={handleValueChange} disabled={isLoading}>
+      <Select
+        key={selectCollectionKey}
+        items={selectItems}
+        value={isAvailable ? selectedValue : unavailableValue}
+        onValueChange={handleValueChange}
+        disabled={isLoading}
+      >
         <SelectTrigger
           id="agent-execution-target"
           size="sm"
@@ -77,36 +88,32 @@ export function AgentExecutionTargetSelect({
           <SelectValue placeholder={isLoading ? 'Loading run targets…' : 'Choose run target'} />
         </SelectTrigger>
         <SelectContent>
-          {!isAvailable ? (
-            <SelectGroup aria-label="Unavailable run target">
-              <div className={GROUP_LABEL_CLASS}>Unavailable run target</div>
-              <SelectItem value={selectedValue} disabled>
-                {unavailableLabel} · unavailable
-              </SelectItem>
-            </SelectGroup>
-          ) : null}
           {groups.labels.length > 0 ? (
             <SelectGroup aria-label="Release labels">
               <div className={GROUP_LABEL_CLASS}>Release labels</div>
-              {groups.labels
-                .filter(option => isAvailable || option.value !== selectedValue)
-                .map(option => (
-                  <SelectItem key={option.value} value={option.value}>
-                    {option.label}
-                  </SelectItem>
-                ))}
-            </SelectGroup>
-          ) : null}
-          <SelectGroup aria-label="Exact versions">
-            <div className={GROUP_LABEL_CLASS}>Exact versions</div>
-            {groups.versions
-              .filter(option => isAvailable || option.value !== selectedValue)
-              .map(option => (
+              {groups.labels.map(option => (
                 <SelectItem key={option.value} value={option.value}>
                   {option.label}
                 </SelectItem>
               ))}
+            </SelectGroup>
+          ) : null}
+          <SelectGroup aria-label="Exact versions">
+            <div className={GROUP_LABEL_CLASS}>Exact versions</div>
+            {groups.versions.map(option => (
+              <SelectItem key={option.value} value={option.value}>
+                {option.label}
+              </SelectItem>
+            ))}
           </SelectGroup>
+          {!isAvailable ? (
+            <SelectGroup aria-label="Unavailable run target">
+              <div className={GROUP_LABEL_CLASS}>Unavailable run target</div>
+              <SelectItem value={unavailableValue} disabled>
+                {unavailableLabel} · unavailable
+              </SelectItem>
+            </SelectGroup>
+          ) : null}
         </SelectContent>
       </Select>
       {!isAvailable ? (

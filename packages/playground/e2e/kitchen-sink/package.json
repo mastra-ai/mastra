@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "mastra dev",
     "build": "mastra build",
-    "start": "mastra start"
+    "start": "mastra start",
+    "start:version-labels-e2e": "pnpm -C ../../../.. build:cli && mastra dev"
   },
   "dependencies": {
     "@mastra/core": "latest",

@@ -79,6 +79,16 @@ export const secondLabelPageWithDuplicate: ListAgentVersionLabelsResponse = {
   },
 };
 
+export const previewOnlyLabelList: ListAgentVersionLabelsResponse = {
+  labels: [previewLabel],
+  pagination: {
+    total: 1,
+    page: 0,
+    perPage: 50,
+    hasMore: false,
+  },
+};
+
 export const setPreviewLabelResponse: AgentVersionLabel = {
   ...previewLabel,
   revisionToken: 'revision-preview-2',

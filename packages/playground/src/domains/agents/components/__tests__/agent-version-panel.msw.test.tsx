@@ -16,6 +16,7 @@ import {
   LABELED_VERSION_ID,
   managerVersionLabels,
   managerVersionLabelsError,
+  managerVersionLabelMutationIntegrityError,
   mutableManagerVersionLabels,
   mutableVersionLabelPackages,
   mutationVersionHistory,
@@ -68,7 +69,11 @@ function createDeferred() {
 
 function renderVersionPanel(
   onVersionSelect = () => {},
-  options: { activeVersionId?: string; selectedVersionId?: string } = {},
+  options: {
+    activeVersionId?: string;
+    selectedVersionId?: string;
+    onRetryProductionState?: (options?: { throwOnError?: boolean }) => Promise<void>;
+  } = {},
 ) {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
@@ -82,6 +87,7 @@ function renderVersionPanel(
             agentId={AGENT_VERSION_LABELS_AGENT_ID}
             activeVersionId={options.activeVersionId ?? LABELED_VERSION_ID}
             selectedVersionId={options.selectedVersionId}
+            onRetryProductionState={options.onRetryProductionState}
             onVersionSelect={onVersionSelect}
           />
         </QueryClientProvider>
@@ -317,6 +323,11 @@ describe('AgentVersionPanel', () => {
       const versionsGate = createDeferred();
       registerVersionResponse(unorderedVersionLabels);
       server.use(
+        http.get(`${BASE_URL}/api/system/packages`, () => HttpResponse.json(mutableVersionLabelPackages)),
+        http.get(`${BASE_URL}/api/auth/capabilities`, () => HttpResponse.json(versionLabelPublisherCapabilities)),
+        http.get(`${BASE_URL}/api/stored/agents/${AGENT_VERSION_LABELS_AGENT_ID}/labels`, () =>
+          HttpResponse.json(mutableManagerVersionLabels),
+        ),
         http.get(`${BASE_URL}/api/stored/agents/${AGENT_VERSION_LABELS_AGENT_ID}/versions`, async () => {
           await versionsGate.promise;
           return HttpResponse.json(unorderedVersionLabels);
@@ -326,9 +337,30 @@ describe('AgentVersionPanel', () => {
 
       expect(await screen.findByText('Loading versions...')).not.toBeNull();
       expect(screen.queryByRole('button', { name: /^v3/ })).toBeNull();
+      fireEvent.click(await screen.findByRole('button', { name: 'Manage labels' }));
+      const manager = await screen.findByRole('dialog', { name: 'Manage version labels' });
+      expect(
+        within(manager).getByText(
+          'Version history is loading. Label and Production changes remain disabled until it completes.',
+        ),
+      ).not.toBeNull();
+      expect(within(manager).getByText('Production state will be shown after version history loads.')).not.toBeNull();
+      expect(within(manager).queryByText('No Production version is set.')).toBeNull();
+      expect(within(manager).queryByText('Save a version before managing labels or Production.')).toBeNull();
+      expect(
+        ((await within(manager).findByRole('button', { name: 'Move preview from v1' })) as HTMLButtonElement).disabled,
+      ).toBe(true);
+      expect(
+        (within(manager).getByRole('button', { name: 'Delete preview from v1' }) as HTMLButtonElement).disabled,
+      ).toBe(true);
 
       versionsGate.resolve();
       expect(await screen.findByRole('button', { name: /^v3/ })).not.toBeNull();
+      await waitFor(() =>
+        expect(
+          (within(manager).getByRole('button', { name: 'Move preview from v1' }) as HTMLButtonElement).disabled,
+        ).toBe(false),
+      );
     });
   });
 
@@ -651,6 +683,53 @@ describe('AgentVersionPanel', () => {
       fireEvent.click(screen.getByRole('button', { name: 'Retry label refresh' }));
       await waitFor(() => expect(screen.queryByText(/Showing the last saved result/)).toBeNull());
     });
+
+    it('keeps integrity recovery blocked until an initially failed label query also refreshes', async () => {
+      let shouldFailLabels = true;
+      let labelRequestCount = 0;
+      const onRetryProductionState = vi.fn().mockResolvedValue(undefined);
+      registerVersionResponse(mutationVersionHistory);
+      server.use(
+        http.get(`${BASE_URL}/api/system/packages`, () => HttpResponse.json(mutableVersionLabelPackages)),
+        http.get(`${BASE_URL}/api/auth/capabilities`, () => HttpResponse.json(versionLabelPublisherCapabilities)),
+        http.get(`${BASE_URL}/api/stored/agents/${AGENT_VERSION_LABELS_AGENT_ID}/labels`, () => {
+          labelRequestCount += 1;
+          return shouldFailLabels
+            ? HttpResponse.json(managerVersionLabelsError, { status: 400 })
+            : HttpResponse.json(mutableManagerVersionLabels);
+        }),
+      );
+      server.use(
+        http.post(
+          `${BASE_URL}/api/stored/agents/${AGENT_VERSION_LABELS_AGENT_ID}/versions/version-3/activate`,
+          () => HttpResponse.json(managerVersionLabelMutationIntegrityError, { status: 500 }),
+        ),
+      );
+      renderVersionPanel(() => {}, {
+        activeVersionId: 'version-2',
+        onRetryProductionState,
+      });
+
+      await waitFor(() => expect(labelRequestCount).toBeGreaterThan(0));
+      const requestsBeforeMutation = labelRequestCount;
+      fireEvent.click(await screen.findByRole('button', { name: 'Manage labels' }));
+      const manager = await screen.findByRole('dialog', { name: 'Manage version labels' });
+      fireEvent.click(within(manager).getByRole('button', { name: 'Promote v3 to Production' }));
+      const productionDialog = await screen.findByRole('dialog', { name: 'Promote v3 to Production' });
+      fireEvent.click(within(productionDialog).getByRole('button', { name: 'Promote v3 to Production' }));
+      const retry = await within(productionDialog).findByRole('button', { name: 'Retry version-label state' });
+      await waitFor(() => expect(labelRequestCount).toBeGreaterThan(requestsBeforeMutation));
+      const requestsBeforeRetry = labelRequestCount;
+
+      shouldFailLabels = false;
+      fireEvent.click(retry);
+
+      await waitFor(() => expect(labelRequestCount).toBeGreaterThan(requestsBeforeRetry));
+      await waitFor(() =>
+        expect(within(productionDialog).queryByRole('button', { name: 'Retry version-label state' })).toBeNull(),
+      );
+      expect(onRetryProductionState).toHaveBeenCalledWith({ throwOnError: true });
+    });
   });
 
   describe('when custom-label reads are unsupported', () => {
@@ -724,7 +803,7 @@ describe('AgentVersionPanel', () => {
       });
 
       expect(await within(manager).findByText(/read access is required/)).not.toBeNull();
-      expect(within(manager).queryByText('preview')).toBeNull();
+      expect(within(manager).getByText('preview').closest('[hidden]')).not.toBeNull();
     });
   });
 });

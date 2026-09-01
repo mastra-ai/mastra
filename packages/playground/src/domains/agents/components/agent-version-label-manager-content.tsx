@@ -5,6 +5,7 @@ import { CopyButton } from '@mastra/playground-ui/components/CopyButton';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 
+import type { AgentVersionIntegrityRecovery } from '../hooks/use-agent-version-mutation-integrity';
 import {
   CreateAgentVersionLabelDialog,
   DeleteAgentVersionLabelDialog,
@@ -71,6 +72,7 @@ export interface AgentVersionLabelManagerContentProps {
   versions?: readonly AgentVersionListItem[];
   canMutate?: boolean;
   mutationsDisabled?: boolean;
+  integrityRecovery?: AgentVersionIntegrityRecovery;
   onRefreshLabels?: (options?: AgentVersionLabelRefreshOptions) => Promise<readonly AgentVersionLabel[]>;
   onRefreshVersions?: (options?: AgentVersionLabelRefreshOptions) => Promise<string | null>;
   onStatus?: (message: string) => void;
@@ -86,6 +88,7 @@ export function AgentVersionLabelManagerContent({
   versions = [],
   canMutate = false,
   mutationsDisabled = false,
+  integrityRecovery,
   onRefreshLabels,
   onRefreshVersions,
   onStatus,
@@ -140,6 +143,7 @@ export function AgentVersionLabelManagerContent({
             onRefreshVersions={onRefreshVersions}
             onStatus={onStatus}
             disabled={mutationsDisabled}
+            integrityRecovery={integrityRecovery}
           />
         </div>
       ) : null}
@@ -180,6 +184,7 @@ export function AgentVersionLabelManagerContent({
                       onRefreshVersions={onRefreshVersions}
                       onStatus={onStatus}
                       disabled={mutationsDisabled}
+                      integrityRecovery={integrityRecovery}
                     />
                     <DeleteAgentVersionLabelDialog
                       agentId={agentId}
@@ -189,6 +194,7 @@ export function AgentVersionLabelManagerContent({
                       onRefreshVersions={onRefreshVersions}
                       onStatus={onStatus}
                       disabled={mutationsDisabled}
+                      integrityRecovery={integrityRecovery}
                     />
                   </div>
                 ) : null}

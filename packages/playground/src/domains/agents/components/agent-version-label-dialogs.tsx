@@ -18,6 +18,7 @@ import { useId, useState } from 'react';
 
 import { getAgentVersionLabelError } from '../hooks/agent-version-label-error';
 import { useDeleteAgentVersionLabel, useSetAgentVersionLabel } from '../hooks/use-agent-version-labels';
+import type { AgentVersionIntegrityRecovery } from '../hooks/use-agent-version-mutation-integrity';
 import { useActivateAgentVersion } from '../hooks/use-agent-versions';
 import { validateCustomVersionLabel } from './agent-version-label-validation';
 
@@ -35,6 +36,7 @@ type MutationDialogCommonProps = {
   onRefreshVersions: RefreshVersions;
   onStatus: (message: string) => void;
   disabled?: boolean;
+  integrityRecovery?: AgentVersionIntegrityRecovery;
 };
 
 function findVersion(versions: readonly AgentVersionListItem[], versionId: string | undefined) {
@@ -54,6 +56,10 @@ function isConflict(error: unknown): boolean {
   return getAgentVersionLabelError(error)?.code === 'LABEL_MOVE_CONFLICT';
 }
 
+function isVersionNotFound(error: unknown): boolean {
+  return getAgentVersionLabelError(error)?.code === 'VERSION_NOT_FOUND';
+}
+
 function conflictRefreshErrorMessage(message: string): string {
   return `${message} Studio couldn’t refresh current state. Close this dialog and reopen it before retrying.`;
 }
@@ -67,12 +73,17 @@ function VersionPicker({
 }: {
   id: string;
   value: string;
-  onValueChange: (value: string) => void;
+  onValueChange: (value: string, isExplicitSelection: boolean) => void;
   versions: readonly AgentVersionListItem[];
   disabledVersionId?: string;
 }) {
   return (
-    <Select value={value} onValueChange={onValueChange}>
+    <Select
+      value={value}
+      onValueChange={(nextValue, eventDetails) =>
+        onValueChange(nextValue, eventDetails.reason === 'item-press' || eventDetails.reason === 'list-navigation')
+      }
+    >
       <SelectTrigger id={id} aria-label="Target version" className="w-full">
         <SelectValue placeholder="Select a version" />
       </SelectTrigger>
@@ -95,6 +106,39 @@ function DialogError({ message }: { message?: string }) {
   ) : null;
 }
 
+function IntegrityRecoveryNotice({ recovery }: { recovery?: AgentVersionIntegrityRecovery }) {
+  if (!recovery?.isBlocked) return null;
+
+  return (
+    <div className="border-border1 bg-surface3 flex flex-col items-start gap-2 rounded-lg border p-3" role="alert">
+      <Txt variant="ui-sm">
+        Version-label integrity could not be verified. Mutations stay disabled until labels and version history are
+        refreshed. Retry, then contact support if the problem continues.
+      </Txt>
+      {recovery.error ? (
+        <Txt variant="ui-sm" className="text-accent2">
+          {recovery.error}
+        </Txt>
+      ) : null}
+      <Button type="button" variant="default" size="sm" onClick={recovery.onRetry} disabled={recovery.isRetrying}>
+        {recovery.isRetrying ? 'Retrying version-label state…' : 'Retry version-label state'}
+      </Button>
+    </div>
+  );
+}
+
+function TargetVersionRecoveryNotice({ isBlocked }: { isBlocked: boolean }) {
+  if (!isBlocked) return null;
+
+  return (
+    <div className="border-border1 bg-surface3 rounded-lg border p-3" role="alert">
+      <Txt variant="ui-sm">
+        The selected target version is no longer available. Choose a current version before trying again.
+      </Txt>
+    </div>
+  );
+}
+
 export function CreateAgentVersionLabelDialog({
   agentId,
   versions,
@@ -105,6 +149,7 @@ export function CreateAgentVersionLabelDialog({
   initialVersionId,
   isRowAction = false,
   disabled = false,
+  integrityRecovery,
 }: MutationDialogCommonProps & {
   labels: readonly AgentVersionLabel[];
   initialVersionId?: string;
@@ -140,6 +185,7 @@ export function CreateAgentVersionLabelDialog({
           initialVersionId={initialVersionId}
           isPending={mutation.isPending}
           disabled={disabled}
+          integrityRecovery={integrityRecovery}
           onCancel={() => setIsOpen(false)}
           onSubmit={async (label, versionId) => {
             await mutation.mutateAsync({ label, input: { versionId, expectedRevisionToken: null } });
@@ -162,6 +208,7 @@ function CreateAgentVersionLabelDialogContent({
   initialVersionId,
   isPending,
   disabled,
+  integrityRecovery,
   onCancel,
   onSubmit,
   onConflict,
@@ -171,6 +218,7 @@ function CreateAgentVersionLabelDialogContent({
   initialVersionId?: string;
   isPending: boolean;
   disabled: boolean;
+  integrityRecovery?: AgentVersionIntegrityRecovery;
   onCancel: () => void;
   onSubmit: (label: string, versionId: string) => Promise<void>;
   onConflict: RefreshLabels;
@@ -185,6 +233,7 @@ function CreateAgentVersionLabelDialogContent({
   const [conflictName, setConflictName] = useState<string>();
   const [conflictStateAvailable, setConflictStateAvailable] = useState(false);
   const [reviewed, setReviewed] = useState(false);
+  const [rejectedTargetVersionId, setRejectedTargetVersionId] = useState<string>();
 
   const handleSubmit = async () => {
     const validation = validateCustomVersionLabel(
@@ -199,11 +248,19 @@ function CreateAgentVersionLabelDialogContent({
       setError('Select a target version.');
       return;
     }
+    if (!findVersion(versions, versionId)) {
+      setError('The selected target version is no longer available.');
+      return;
+    }
+    if (integrityRecovery?.isBlocked || rejectedTargetVersionId) return;
 
     setError(undefined);
     try {
       await onSubmit(label, versionId);
     } catch (mutationError) {
+      if (isVersionNotFound(mutationError)) {
+        setRejectedTargetVersionId(versionId);
+      }
       if (isConflict(mutationError)) {
         const conflictMessage = mutationErrorMessage(mutationError, 'Couldn’t create the custom label.');
         setConflictName(label);
@@ -226,7 +283,9 @@ function CreateAgentVersionLabelDialogContent({
   const conflictApplies = conflictName === label;
   const canRetryConflict = conflictApplies && conflictStateAvailable && !conflictLabel && reviewed;
   const conflictBlocksSubmit = conflictApplies && !canRetryConflict;
-  const formattedTarget = formatVersion(findVersion(versions, versionId), versionId);
+  const targetVersion = findVersion(versions, versionId);
+  const isTargetMissing = Boolean(versionId) && !targetVersion;
+  const formattedTarget = formatVersion(targetVersion, versionId);
   const createAccessibleName = `${isPending ? 'Creating' : canRetryConflict ? 'Try creating' : 'Create'} ${label || 'custom label'} for ${formattedTarget}`;
 
   return (
@@ -257,8 +316,21 @@ function CreateAgentVersionLabelDialogContent({
           <label htmlFor={`${inputId}-version`} className="text-ui-sm text-neutral5">
             Target version
           </label>
-          <VersionPicker id={`${inputId}-version`} value={versionId} onValueChange={setVersionId} versions={versions} />
+          <VersionPicker
+            id={`${inputId}-version`}
+            value={versionId}
+            onValueChange={(nextVersionId, isExplicitSelection) => {
+              setVersionId(nextVersionId);
+              if (isExplicitSelection && nextVersionId !== rejectedTargetVersionId) {
+                setRejectedTargetVersionId(undefined);
+              }
+              setError(undefined);
+            }}
+            versions={versions}
+          />
         </div>
+        <TargetVersionRecoveryNotice isBlocked={isTargetMissing || Boolean(rejectedTargetVersionId)} />
+        <IntegrityRecoveryNotice recovery={integrityRecovery} />
         {conflictApplies ? (
           <div className="border-border1 bg-surface3 flex flex-col gap-2 rounded-lg border p-3" role="status">
             <Txt variant="ui-sm">
@@ -295,7 +367,14 @@ function CreateAgentVersionLabelDialogContent({
           variant="primary"
           aria-label={createAccessibleName}
           onClick={() => void handleSubmit()}
-          disabled={disabled || isPending || conflictBlocksSubmit}
+          disabled={
+            disabled ||
+            isPending ||
+            !targetVersion ||
+            conflictBlocksSubmit ||
+            Boolean(integrityRecovery?.isBlocked) ||
+            Boolean(rejectedTargetVersionId)
+          }
         >
           {isPending ? 'Creating…' : canRetryConflict ? 'Try again' : 'Create label'}
         </Button>
@@ -312,6 +391,7 @@ export function MoveAgentVersionLabelDialog({
   onRefreshVersions,
   onStatus,
   disabled = false,
+  integrityRecovery,
 }: MutationDialogCommonProps & { label: AgentVersionLabel }) {
   const [isOpen, setIsOpen] = useState(false);
   const mutation = useSetAgentVersionLabel({ agentId });
@@ -338,6 +418,7 @@ export function MoveAgentVersionLabelDialog({
           versions={versions}
           isPending={mutation.isPending}
           disabled={disabled}
+          integrityRecovery={integrityRecovery}
           onCancel={() => setIsOpen(false)}
           onRefreshLabels={onRefreshLabels}
           onSubmit={async (versionId, observedLabel) => {
@@ -363,6 +444,7 @@ function MoveAgentVersionLabelDialogContent({
   versions,
   isPending,
   disabled,
+  integrityRecovery,
   onCancel,
   onRefreshLabels,
   onSubmit,
@@ -371,6 +453,7 @@ function MoveAgentVersionLabelDialogContent({
   versions: readonly AgentVersionListItem[];
   isPending: boolean;
   disabled: boolean;
+  integrityRecovery?: AgentVersionIntegrityRecovery;
   onCancel: () => void;
   onRefreshLabels: RefreshLabels;
   onSubmit: (versionId: string, observedLabel: AgentVersionLabel) => Promise<void>;
@@ -382,13 +465,22 @@ function MoveAgentVersionLabelDialogContent({
   const [needsReview, setNeedsReview] = useState(false);
   const [reviewed, setReviewed] = useState(false);
   const [conflictStateAvailable, setConflictStateAvailable] = useState(false);
+  const [rejectedTargetVersionId, setRejectedTargetVersionId] = useState<string>();
 
   const handleSubmit = async () => {
     setError(undefined);
     try {
       if (!observedLabel) return;
+      if (!findVersion(versions, versionId)) {
+        setError('The selected target version is no longer available.');
+        return;
+      }
+      if (integrityRecovery?.isBlocked || rejectedTargetVersionId) return;
       await onSubmit(versionId, observedLabel);
     } catch (mutationError) {
+      if (isVersionNotFound(mutationError)) {
+        setRejectedTargetVersionId(versionId);
+      }
       if (isConflict(mutationError)) {
         setNeedsReview(true);
         setReviewed(false);
@@ -410,17 +502,21 @@ function MoveAgentVersionLabelDialogContent({
   };
 
   const isIdempotent = versionId === observedLabel?.versionId;
+  const targetVersion = findVersion(versions, versionId);
   const canSubmit =
     !disabled &&
     Boolean(observedLabel) &&
+    Boolean(targetVersion) &&
     !isPending &&
     !isIdempotent &&
+    !integrityRecovery?.isBlocked &&
+    !rejectedTargetVersionId &&
     (!needsReview || (conflictStateAvailable && reviewed));
   const formattedCurrentTarget = formatVersion(
     findVersion(versions, observedLabel?.versionId),
     observedLabel?.versionId,
   );
-  const formattedNewTarget = formatVersion(findVersion(versions, versionId), versionId);
+  const formattedNewTarget = formatVersion(targetVersion, versionId);
   const moveAccessibleName = `${needsReview ? 'Try moving' : 'Move'} ${label.name} from ${formattedCurrentTarget} to ${formattedNewTarget}`;
 
   return (
@@ -442,11 +538,21 @@ function MoveAgentVersionLabelDialogContent({
           <VersionPicker
             id={selectId}
             value={versionId}
-            onValueChange={setVersionId}
+            onValueChange={(nextVersionId, isExplicitSelection) => {
+              setVersionId(nextVersionId);
+              if (isExplicitSelection && nextVersionId !== rejectedTargetVersionId) {
+                setRejectedTargetVersionId(undefined);
+              }
+              setError(undefined);
+            }}
             versions={versions}
             disabledVersionId={observedLabel?.versionId}
           />
         </div>
+        <TargetVersionRecoveryNotice
+          isBlocked={(Boolean(versionId) && !targetVersion) || Boolean(rejectedTargetVersionId)}
+        />
+        <IntegrityRecoveryNotice recovery={integrityRecovery} />
         {needsReview ? (
           <div className="border-border1 bg-surface3 flex flex-col gap-2 rounded-lg border p-3" role="status">
             <Txt variant="ui-sm">
@@ -496,6 +602,7 @@ export function DeleteAgentVersionLabelDialog({
   onRefreshVersions,
   onStatus,
   disabled = false,
+  integrityRecovery,
 }: MutationDialogCommonProps & { label: AgentVersionLabel }) {
   const [isOpen, setIsOpen] = useState(false);
   const mutation = useDeleteAgentVersionLabel({ agentId });
@@ -522,6 +629,7 @@ export function DeleteAgentVersionLabelDialog({
           versions={versions}
           isPending={mutation.isPending}
           disabled={disabled}
+          integrityRecovery={integrityRecovery}
           onCancel={() => setIsOpen(false)}
           onRefreshLabels={onRefreshLabels}
           onSubmit={async observedLabel => {
@@ -547,6 +655,7 @@ function DeleteAgentVersionLabelDialogContent({
   versions,
   isPending,
   disabled,
+  integrityRecovery,
   onCancel,
   onRefreshLabels,
   onSubmit,
@@ -555,6 +664,7 @@ function DeleteAgentVersionLabelDialogContent({
   versions: readonly AgentVersionListItem[];
   isPending: boolean;
   disabled: boolean;
+  integrityRecovery?: AgentVersionIntegrityRecovery;
   onCancel: () => void;
   onRefreshLabels: RefreshLabels;
   onSubmit: (observedLabel: AgentVersionLabel) => Promise<void>;
@@ -625,6 +735,7 @@ function DeleteAgentVersionLabelDialogContent({
             </Button>
           </div>
         ) : null}
+        <IntegrityRecoveryNotice recovery={integrityRecovery} />
         <DialogError message={error} />
       </DialogBody>
       <DialogFooter>
@@ -636,7 +747,13 @@ function DeleteAgentVersionLabelDialogContent({
           variant="destructive"
           aria-label={`${needsReview ? 'Try deleting' : 'Delete'} ${label.name} from ${formattedTarget}`}
           onClick={() => void handleDelete()}
-          disabled={disabled || !observedLabel || isPending || (needsReview && (!conflictStateAvailable || !reviewed))}
+          disabled={
+            disabled ||
+            !observedLabel ||
+            isPending ||
+            Boolean(integrityRecovery?.isBlocked) ||
+            (needsReview && (!conflictStateAvailable || !reviewed))
+          }
         >
           {isPending ? 'Deleting…' : needsReview ? 'Try again' : 'Delete label'}
         </Button>
@@ -666,17 +783,24 @@ export function MoveAgentProductionDialog({
   onRefreshVersions,
   onStatus,
   disabled = false,
+  integrityRecovery,
+  onOpenChange,
 }: Omit<MutationDialogCommonProps, 'onRefreshLabels'> & {
   version: AgentVersionListItem;
   activeVersionId?: string;
+  onOpenChange?: (open: boolean) => void;
 }) {
   const [isOpen, setIsOpen] = useState(false);
   const mutation = useActivateAgentVersion({ agentId });
   const actionLabel = productionActionLabel(version, activeVersionId, versions);
   const isCurrent = version.id === activeVersionId;
+  const handleOpenChange = (open: boolean) => {
+    setIsOpen(open);
+    onOpenChange?.(open);
+  };
 
   return (
-    <Dialog open={isOpen} onOpenChange={setIsOpen}>
+    <Dialog open={isOpen} onOpenChange={handleOpenChange}>
       <DialogTrigger
         render={
           <Button type="button" variant="default" size="sm" disabled={disabled || isCurrent}>
@@ -692,7 +816,8 @@ export function MoveAgentProductionDialog({
           activeVersionId={activeVersionId}
           isPending={mutation.isPending}
           disabled={disabled}
-          onCancel={() => setIsOpen(false)}
+          integrityRecovery={integrityRecovery}
+          onCancel={() => handleOpenChange(false)}
           onRefreshVersions={onRefreshVersions}
           onSubmit={async expectedActiveVersionId => {
             await mutation.mutateAsync({
@@ -703,7 +828,7 @@ export function MoveAgentProductionDialog({
             const message = `${productionActionLabel(version, expectedActiveVersionId, versions)} completed. Production now points to v${version.versionNumber}.`;
             onStatus(message);
             toast.success('Production updated');
-            setIsOpen(false);
+            handleOpenChange(false);
           }}
         />
       ) : null}
@@ -717,6 +842,7 @@ function MoveAgentProductionDialogContent({
   activeVersionId,
   isPending,
   disabled,
+  integrityRecovery,
   onCancel,
   onRefreshVersions,
   onSubmit,
@@ -726,6 +852,7 @@ function MoveAgentProductionDialogContent({
   activeVersionId?: string;
   isPending: boolean;
   disabled: boolean;
+  integrityRecovery?: AgentVersionIntegrityRecovery;
   onCancel: () => void;
   onRefreshVersions: RefreshVersions;
   onSubmit: (expectedActiveVersionId?: string) => Promise<void>;
@@ -735,14 +862,18 @@ function MoveAgentProductionDialogContent({
   const [needsReview, setNeedsReview] = useState(false);
   const [reviewed, setReviewed] = useState(false);
   const [conflictStateAvailable, setConflictStateAvailable] = useState(false);
+  const [isTargetRejected, setIsTargetRejected] = useState(false);
   const actionLabel = productionActionLabel(version, observedActiveVersionId, versions);
   const productionAccessibleName = needsReview ? `Try again: ${actionLabel}` : actionLabel;
+  const isTargetAvailable = versions.some(candidate => candidate.id === version.id);
 
   const handleSubmit = async () => {
+    if (!isTargetAvailable || isTargetRejected || integrityRecovery?.isBlocked) return;
     setError(undefined);
     try {
       await onSubmit(observedActiveVersionId);
     } catch (mutationError) {
+      if (isVersionNotFound(mutationError)) setIsTargetRejected(true);
       if (isConflict(mutationError)) {
         setNeedsReview(true);
         setReviewed(false);
@@ -778,6 +909,14 @@ function MoveAgentProductionDialogContent({
           <Txt variant="ui-xs">Target change message</Txt>
           <Txt variant="ui-sm">{version.changeMessage || 'No change message'}</Txt>
         </div>
+        {!isTargetAvailable || isTargetRejected ? (
+          <div className="border-border1 bg-surface3 rounded-lg border p-3" role="alert">
+            <Txt variant="ui-sm">
+              The selected target version is no longer available. Close this dialog and choose a current version.
+            </Txt>
+          </div>
+        ) : null}
+        <IntegrityRecoveryNotice recovery={integrityRecovery} />
         {needsReview ? (
           <div className="border-border1 bg-surface3 flex flex-col gap-2 rounded-lg border p-3" role="status">
             <Txt variant="ui-sm">
@@ -816,6 +955,9 @@ function MoveAgentProductionDialogContent({
           disabled={
             disabled ||
             isPending ||
+            !isTargetAvailable ||
+            isTargetRejected ||
+            Boolean(integrityRecovery?.isBlocked) ||
             (needsReview && (!conflictStateAvailable || !reviewed)) ||
             version.id === observedActiveVersionId
           }

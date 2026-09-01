@@ -20,18 +20,29 @@ export function AgentRunVersionIdentity({ versions }: AgentRunVersionIdentityPro
   if (!identity) return null;
 
   const version = versions.find(candidate => candidate.id === identity.resolvedVersionId);
-  const versionText = version ? `v${version.versionNumber}` : identity.resolvedVersionId.slice(0, 8);
-  const label = identity.requested.versionId ? versionText : `${requestedName(identity.requested)} · ${versionText}`;
+  const versionName = version ? `v${version.versionNumber}` : identity.resolvedVersionId;
+  const visibleVersionName = version ? versionName : identity.resolvedVersionId.slice(0, 8);
+  const visibleLabel = identity.requested.versionId
+    ? visibleVersionName
+    : `${requestedName(identity.requested)} · ${visibleVersionName}`;
+  const accessibleLabel = identity.requested.versionId
+    ? versionName
+    : `${requestedName(identity.requested)} · ${versionName}`;
 
   return (
-    <div className="flex min-w-0 items-center gap-1.5" role="status" aria-live="polite">
+    <div className="flex min-w-0 max-w-full items-center gap-1.5" role="status" aria-live="polite">
       <Txt variant="ui-xs" className="text-neutral3 shrink-0">
         Current run
       </Txt>
-      <Badge variant="info">{label}</Badge>
+      <Badge variant="info" className="min-w-0 shrink" title={accessibleLabel}>
+        <span className="sr-only">{accessibleLabel}</span>
+        <span aria-hidden="true" className="min-w-0 truncate">
+          {visibleLabel}
+        </span>
+      </Badge>
       <CopyButton
         content={identity.resolvedVersionId}
-        tooltip={`Copy resolved version ID for current run ${label}`}
+        tooltip={`Copy resolved version ID for current run ${accessibleLabel}`}
         size="sm"
       />
     </div>

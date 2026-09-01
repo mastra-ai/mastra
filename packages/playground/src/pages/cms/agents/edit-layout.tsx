@@ -8,6 +8,7 @@ import { useCallback, useEffect, useMemo } from 'react';
 import { Outlet, useLocation, useNavigate, useParams, useSearchParams } from 'react-router';
 import { AgentCmsFormShell } from '@/domains/agents/components/agent-cms-form-shell';
 import { getCodeAgentOverrideSections } from '@/domains/agents/components/agent-cms-sidebar/agent-cms-sections';
+import type { AgentVersionLabelRefreshOptions } from '@/domains/agents/components/agent-version-label-dialogs';
 import { AgentVersionPanel } from '@/domains/agents/components/agent-version-panel';
 import { useAgent } from '@/domains/agents/hooks/use-agent';
 import { useAgentCmsForm } from '@/domains/agents/hooks/use-agent-cms-form';
@@ -43,6 +44,9 @@ function EditFormContent({
   canPublish = false,
   isPublishPermissionLoading = true,
   isPublishPermissionError = false,
+  isProductionStateError = false,
+  isProductionStateFetching = false,
+  onRetryProductionState,
   editorConfig,
 }: {
   agentId: string;
@@ -64,6 +68,9 @@ function EditFormContent({
   canPublish?: boolean;
   isPublishPermissionLoading?: boolean;
   isPublishPermissionError?: boolean;
+  isProductionStateError?: boolean;
+  isProductionStateFetching?: boolean;
+  onRetryProductionState?: (options?: AgentVersionLabelRefreshOptions) => Promise<void>;
   editorConfig?: NonNullable<ReturnType<typeof useAgent>['data']>['editor'];
 }) {
   const [, setSearchParams] = useSearchParams();
@@ -93,6 +100,9 @@ function EditFormContent({
       canPublish={canPublish}
       isPublishPermissionLoading={isPublishPermissionLoading}
       isPublishPermissionError={isPublishPermissionError}
+      isProductionStateError={isProductionStateError}
+      isProductionStateFetching={isProductionStateFetching}
+      onRetryProductionState={onRetryProductionState}
     />
   );
   const isEditorLocked = getEditorOwnership(isCodeAgentOverride, editorConfig).isFullyLocked;
@@ -151,7 +161,13 @@ function EditLayoutWrapper() {
 
   // Only fetch stored agent details when versions exist (avoids 404 for code-only agents)
   const hasVersions = (versionsData?.versions?.length ?? 0) > 0;
-  const { data: storedAgent, isLoading: isLoadingStoredAgent } = useStoredAgent(agentId, {
+  const {
+    data: storedAgent,
+    isLoading: isLoadingStoredAgent,
+    isError: isStoredAgentError,
+    isFetching: isFetchingStoredAgent,
+    refetch: refetchStoredAgent,
+  } = useStoredAgent(agentId, {
     status: 'draft',
     enabled: hasVersions,
   });
@@ -197,7 +213,12 @@ function EditLayoutWrapper() {
 
   const activeVersionId = agent?.activeVersionId;
   const latestVersion = versionsData?.versions?.[0];
-  const hasDraft = !!(latestVersion && latestVersion.id !== activeVersionId);
+  const hasDraft = !isStoredAgentError && !!(latestVersion && latestVersion.id !== activeVersionId);
+
+  const handleRetryProductionState = async (options?: AgentVersionLabelRefreshOptions): Promise<void> => {
+    const result = await refetchStoredAgent({ throwOnError: options?.throwOnError });
+    if (result.error) throw result.error;
+  };
 
   const isViewingVersion = !!selectedVersionId && !!versionData;
   const dataSource = useMemo<AgentDataSource>(() => {
@@ -318,6 +339,9 @@ function EditLayoutWrapper() {
               canPublish={versionAccess.canPublish}
               isPublishPermissionLoading={versionAccess.isLoading}
               isPublishPermissionError={versionAccess.isError}
+              isProductionStateError={hasVersions && isStoredAgentError}
+              isProductionStateFetching={isFetchingStoredAgent}
+              onRetryProductionState={handleRetryProductionState}
               editorConfig={undefined}
             />
           </div>
@@ -336,13 +360,16 @@ function EditLayoutWrapper() {
           onVersionSelect={handleVersionSelect}
           activeVersionId={activeVersionId}
           latestVersionId={latestVersion?.id}
-          hideVersionPanel={isCodeAgentOverride && !storedAgent}
+          hideVersionPanel={isCodeAgentOverride && !storedAgent && !hasVersions}
           isCodeAgentOverride={isCodeAgentOverride}
           isCodeSourceAgent={showCodeModeActions}
           isSourceProviderBacked={isSourceProviderBacked}
           canPublish={versionAccess.canPublish}
           isPublishPermissionLoading={versionAccess.isLoading}
           isPublishPermissionError={versionAccess.isError}
+          isProductionStateError={hasVersions && isStoredAgentError}
+          isProductionStateFetching={isFetchingStoredAgent}
+          onRetryProductionState={handleRetryProductionState}
           editorConfig={codeAgent?.editor}
         />
       )}

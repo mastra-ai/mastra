@@ -74,7 +74,7 @@ describe('AgentPlaygroundVersionBar', () => {
     expect(await screen.findByText('Production')).not.toBeNull();
     expect(screen.queryByText('Published')).toBeNull();
 
-    const action = screen.getByRole('button', { name: 'Promote to Production' });
+    const action = screen.getByRole('button', { name: 'Promote to Production v3' });
     expect(action.getAttribute('title')).toBe(
       'Moves the production pointer to this immutable version without creating a new version.',
     );
@@ -101,7 +101,7 @@ describe('AgentPlaygroundVersionBar', () => {
       />,
     );
 
-    expect(await screen.findByRole('button', { name: 'Roll Back Production' })).not.toBeNull();
+    expect(await screen.findByRole('button', { name: 'Roll Back Production v1' })).not.toBeNull();
 
     rerender(
       <VersionBarHarness
@@ -109,8 +109,8 @@ describe('AgentPlaygroundVersionBar', () => {
       />,
     );
 
-    expect(await screen.findByRole('button', { name: 'Promote to Production' })).not.toBeNull();
-    expect(screen.queryByRole('button', { name: 'Roll Back Production' })).toBeNull();
+    expect(await screen.findByRole('button', { name: 'Promote to Production v3' })).not.toBeNull();
+    expect(screen.queryByRole('button', { name: 'Roll Back Production v1' })).toBeNull();
   });
 
   it('offers an exact older version and recognizes Production when both are outside page one', async () => {
@@ -133,7 +133,7 @@ describe('AgentPlaygroundVersionBar', () => {
       />,
     );
 
-    expect(await screen.findByRole('button', { name: 'Roll Back Production' })).not.toBeNull();
+    expect(await screen.findByRole('button', { name: 'Roll Back Production v4' })).not.toBeNull();
     await openVersionSelector();
     const olderVersion = await screen.findByRole('option', { name: /v4 -/ });
     fireEvent.pointerDown(olderVersion, { pointerType: 'mouse' });
@@ -157,7 +157,7 @@ describe('AgentPlaygroundVersionBar', () => {
       />,
     );
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Roll Back Production' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Roll Back Production v1' }));
 
     const confirmation = await screen.findByRole('alertdialog');
     expect(within(confirmation).getByRole('heading', { name: 'Roll Back Production?' })).not.toBeNull();
@@ -191,7 +191,7 @@ describe('AgentPlaygroundVersionBar', () => {
       />,
     );
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Roll Back Production' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Roll Back Production v1' }));
     const confirmation = await screen.findByRole('alertdialog');
     fireEvent.click(within(confirmation).getByRole('button', { name: 'Roll Back Production v1' }));
 
@@ -204,7 +204,7 @@ describe('AgentPlaygroundVersionBar', () => {
     const onActivateProduction = vi.fn(async () => ({ status: 'success' as const }));
     const { rerender } = renderWithProviders(<VersionBarHarness {...createProps({ onActivateProduction })} />);
 
-    const action = await screen.findByRole('button', { name: 'Promote to Production' });
+    const action = await screen.findByRole('button', { name: 'Promote to Production v3' });
     await waitFor(() => expect((action as HTMLButtonElement).disabled).toBe(false));
     fireEvent.click(action);
     const confirmation = await screen.findByRole('alertdialog');
@@ -233,7 +233,7 @@ describe('AgentPlaygroundVersionBar', () => {
     const onActivateProduction = vi.fn(async () => ({ status: 'success' as const }));
     const { queryClient } = renderWithProviders(<VersionBarHarness {...createProps({ onActivateProduction })} />);
 
-    const action = await screen.findByRole('button', { name: 'Promote to Production' });
+    const action = await screen.findByRole('button', { name: 'Promote to Production v3' });
     await waitFor(() => expect((action as HTMLButtonElement).disabled).toBe(false));
     fireEvent.click(action);
     const confirmation = await screen.findByRole('alertdialog');
@@ -254,10 +254,58 @@ describe('AgentPlaygroundVersionBar', () => {
 
     fireEvent.click(within(confirmation).getByRole('button', { name: 'Cancel' }));
     await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull());
-    expect((screen.getByRole('button', { name: 'Promote to Production' }) as HTMLButtonElement).disabled).toBe(true);
-    expect(screen.getByRole('button', { name: 'Promote to Production' }).getAttribute('title')).toBe(
+    expect((screen.getByRole('button', { name: 'Promote to Production v3' }) as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.getByRole('button', { name: 'Promote to Production v3' }).getAttribute('title')).toBe(
       'Version history could not be verified. Retry before moving Production.',
     );
+  });
+
+  describe('when the frozen Production target disappears after activation fails', () => {
+    it('keeps the confirmation open and blocks resubmission until a current version is selected', async () => {
+      let currentHistory = versionControlsHistory;
+      server.use(
+        http.get(`${TEST_BASE_URL}/api/stored/agents/${VERSION_CONTROLS_AGENT_ID}/versions`, () =>
+          HttpResponse.json(currentHistory),
+        ),
+      );
+      const onActivateProduction = vi.fn(async () => ({
+        status: 'error' as const,
+        code: 'VERSION_NOT_FOUND' as const,
+        message: 'The selected version no longer exists.',
+      }));
+      const { queryClient } = renderWithProviders(<VersionBarHarness {...createProps({ onActivateProduction })} />);
+
+      fireEvent.click(await screen.findByRole('button', { name: 'Promote to Production v3' }));
+      const confirmation = await screen.findByRole('alertdialog');
+      fireEvent.click(within(confirmation).getByRole('button', { name: 'Promote to Production v3' }));
+      await waitFor(() => expect(onActivateProduction).toHaveBeenCalledOnce());
+      expect(
+        await within(confirmation).findByText(
+          'The selected target version is no longer available. Choose a current version and reopen this confirmation.',
+        ),
+      ).not.toBeNull();
+      expect(
+        within(confirmation).getByRole<HTMLButtonElement>('button', { name: 'Promote to Production v3' }).disabled,
+      ).toBe(true);
+
+      currentHistory = {
+        ...versionControlsHistory,
+        versions: versionControlsHistory.versions.filter(version => version.id !== NEWER_VERSION_ID),
+        total: 2,
+      };
+      await act(async () => {
+        await queryClient.invalidateQueries({
+          queryKey: agentVersionQueryKeys.versionLists(VERSION_CONTROLS_AGENT_ID),
+        });
+      });
+
+      const blockedConfirm = within(confirmation).getByRole<HTMLButtonElement>('button', {
+        name: 'Promote to Production v3',
+      });
+      expect(blockedConfirm.disabled).toBe(true);
+      fireEvent.click(blockedConfirm);
+      expect(onActivateProduction).toHaveBeenCalledOnce();
+    });
   });
 
   it('submits the target and Production precondition captured when confirmation opens', async () => {
@@ -274,7 +322,7 @@ describe('AgentPlaygroundVersionBar', () => {
       />,
     );
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Roll Back Production' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Roll Back Production v1' }));
     const confirmation = await screen.findByRole('alertdialog');
 
     rerender(
@@ -320,7 +368,7 @@ describe('AgentPlaygroundVersionBar', () => {
       />,
     );
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Roll Back Production' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Roll Back Production v1' }));
     const confirmation = await screen.findByRole('alertdialog');
     fireEvent.click(within(confirmation).getByRole('button', { name: 'Roll Back Production v1' }));
 
@@ -372,7 +420,7 @@ describe('AgentPlaygroundVersionBar', () => {
       />,
     );
 
-    const action = await screen.findByRole('button', { name: 'Promote to Production' });
+    const action = await screen.findByRole('button', { name: 'Promote to Production v2' });
     expect((action as HTMLButtonElement).disabled).toBe(true);
     fireEvent.click(action);
     expect(onPublish).not.toHaveBeenCalled();

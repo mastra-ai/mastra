@@ -3,9 +3,15 @@ import { Button } from '@mastra/playground-ui/components/Button';
 import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { cn } from '@mastra/playground-ui/utils/cn';
+import { useQueryClient } from '@tanstack/react-query';
 import { useCallback, useState } from 'react';
 
 import { useAgentVersionLabels } from '../hooks/use-agent-version-labels';
+import {
+  clearAgentVersionMutationIntegrity,
+  useAgentVersionMutationIntegrity,
+} from '../hooks/use-agent-version-mutation-integrity';
+import type { AgentVersionIntegrityRecovery } from '../hooks/use-agent-version-mutation-integrity';
 import { useAllAgentVersions } from '../hooks/use-agent-versions';
 import { AgentVersionLabelBadges } from './agent-version-label-badges';
 import { CreateAgentVersionLabelDialog } from './agent-version-label-dialogs';
@@ -34,6 +40,9 @@ export interface AgentVersionPanelProps {
   canPublish?: boolean;
   isPublishPermissionLoading?: boolean;
   isPublishPermissionError?: boolean;
+  isProductionStateError?: boolean;
+  isProductionStateFetching?: boolean;
+  onRetryProductionState?: (options?: AgentVersionLabelRefreshOptions) => Promise<void>;
 }
 
 function VersionHistoryError({ hasCachedData, onRetry }: { hasCachedData: boolean; onRetry: () => void }) {
@@ -60,14 +69,21 @@ export function AgentVersionPanel({
   canPublish,
   isPublishPermissionLoading,
   isPublishPermissionError,
+  isProductionStateError = false,
+  isProductionStateFetching = false,
+  onRetryProductionState,
 }: AgentVersionPanelProps) {
   const [status, setStatus] = useState('');
+  const [isRetryingIntegrity, setIsRetryingIntegrity] = useState(false);
+  const [integrityRetryError, setIntegrityRetryError] = useState<string>();
+  const queryClient = useQueryClient();
   const { data, isLoading, isError, refetch } = useAllAgentVersions({
     agentId,
     params: { orderBy: { direction: 'DESC' } },
   });
   const access = useAgentVersionAccess(agentId);
   const capability = useAgentVersionLabelCapabilities();
+  const mutationIntegrity = useAgentVersionMutationIntegrity(agentId);
   const resolvedCanPublish = canPublish ?? access.canPublish;
   const permissionLoading = isPublishPermissionLoading ?? access.isLoading;
   const permissionError = isPublishPermissionError ?? access.isError;
@@ -100,6 +116,36 @@ export function AgentVersionPanel({
     },
     [rowLabelsQuery],
   );
+  const handleRetryIntegrity = () => {
+    setIsRetryingIntegrity(true);
+    setIntegrityRetryError(undefined);
+    const refreshes: Promise<unknown>[] = [refreshVersions({ throwOnError: true })];
+    if (rowLabelsQuery.data) {
+      refreshes.push(refreshRowLabels({ throwOnError: true }));
+    }
+    if (onRetryProductionState) {
+      refreshes.push(onRetryProductionState({ throwOnError: true }));
+    }
+    void Promise.all(refreshes)
+      .then(() => {
+        clearAgentVersionMutationIntegrity(queryClient, agentId);
+        setStatus('Verified version-label state refreshed. Review the preserved intent before retrying.');
+      })
+      .catch(() => {
+        setIntegrityRetryError(
+          'Studio couldn\u2019t refresh verified version-label state. Retry again; if the problem persists, contact support.',
+        );
+      })
+      .finally(() => setIsRetryingIntegrity(false));
+  };
+  const integrityRecovery: AgentVersionIntegrityRecovery = {
+    isBlocked: mutationIntegrity.isBlocked,
+    isRetrying: isRetryingIntegrity,
+    error: integrityRetryError,
+    onRetry: handleRetryIntegrity,
+  };
+  const canRenderRowMutation = !isSourceProviderBacked && rowLabelsQuery.data !== undefined;
+  const rowMutationsDisabled = !canCreateFromRow || rowLabelsQuery.isError || mutationIntegrity.isBlocked;
 
   return (
     <div className="flex h-full flex-col">
@@ -115,7 +161,11 @@ export function AgentVersionPanel({
           canPublish={canPublish}
           isPublishPermissionLoading={isPublishPermissionLoading}
           isPublishPermissionError={isPublishPermissionError}
+          isVersionHistoryLoading={isLoading}
           isVersionHistoryError={isError}
+          isProductionStateError={isProductionStateError}
+          isProductionStateFetching={isProductionStateFetching}
+          onRetryProductionState={onRetryProductionState}
           onRefreshVersions={refreshVersions}
         />
       </div>
@@ -182,7 +232,7 @@ export function AgentVersionPanel({
                           Draft
                         </Badge>
                       )}
-                      {canCreateFromRow && rowLabelsQuery.data && !rowLabelsQuery.isError ? (
+                      {canRenderRowMutation && rowLabelsQuery.data ? (
                         <CreateAgentVersionLabelDialog
                           agentId={agentId}
                           versions={versions}
@@ -192,6 +242,8 @@ export function AgentVersionPanel({
                           onRefreshLabels={refreshRowLabels}
                           onRefreshVersions={refreshVersions}
                           onStatus={setStatus}
+                          disabled={rowMutationsDisabled}
+                          integrityRecovery={integrityRecovery}
                         />
                       ) : null}
                     </div>

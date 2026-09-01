@@ -69,6 +69,14 @@ const unsupportedMutation: VersionLabelApiError = {
   error: { code: 'VERSION_LABELS_UNSUPPORTED', message: 'Custom labels are unsupported.' },
 };
 
+const versionNotFoundMutation: VersionLabelApiError = {
+  error: { code: 'VERSION_NOT_FOUND', message: 'The selected version no longer exists.' },
+};
+
+const invalidLabelMutation: VersionLabelApiError = {
+  error: { code: 'INVALID_LABEL', message: 'The label failed server-side validation.' },
+};
+
 function registerManagerApi({
   labels = mutableManagerVersionLabels,
   versions = mutationVersionHistory,
@@ -248,6 +256,34 @@ describe('agent version-label mutation manager', () => {
     });
   });
 
+  describe('when the backend rejects the label without rejecting its target version', () => {
+    it('preserves the intent and allows a retry against the same immutable target', async () => {
+      const onPut = vi.fn();
+      registerManagerApi();
+      server.use(
+        http.put(`${BASE_URL}/api/stored/agents/${AGENT_VERSION_LABELS_AGENT_ID}/labels/release-candidate`, () => {
+          onPut();
+          return HttpResponse.json(invalidLabelMutation, { status: 400 });
+        }),
+      );
+      renderPanel();
+
+      const dialog = await openCreateDialog();
+      const nameInput = within(dialog).getByRole<HTMLInputElement>('textbox', { name: 'Label name' });
+      fireEvent.change(nameInput, { target: { value: 'release-candidate' } });
+      fireEvent.click(within(dialog).getByRole('button', { name: 'Create release-candidate for v3' }));
+
+      expect(await within(dialog).findByText('The label failed server-side validation.')).not.toBeNull();
+      expect(nameInput.value).toBe('release-candidate');
+      const retry = within(dialog).getByRole<HTMLButtonElement>('button', {
+        name: 'Create release-candidate for v3',
+      });
+      expect(retry.disabled).toBe(false);
+      fireEvent.click(retry);
+      await waitFor(() => expect(onPut).toHaveBeenCalledTimes(2));
+    });
+  });
+
   describe('when another publisher creates the same name first', () => {
     it('keeps the exact intent open and shows the concurrently created target', async () => {
       const onPut = vi.fn();
@@ -282,6 +318,43 @@ describe('agent version-label mutation manager', () => {
       expect(await within(dialog).findByText(/created by someone else and currently targets v1/)).not.toBeNull();
       expect(input.getAttribute('value')).toBe('pr-101');
       expect(onPut).toHaveBeenCalledOnce();
+    });
+  });
+
+  describe('when the backend rejects a cached Create target as removed', () => {
+    it('preserves the name and requires a fresh target selection before another submission', async () => {
+      const onPut = vi.fn();
+      registerManagerApi();
+      server.use(
+        http.put(`${BASE_URL}/api/stored/agents/${AGENT_VERSION_LABELS_AGENT_ID}/labels/release-candidate`, () => {
+          onPut();
+          return HttpResponse.json(versionNotFoundMutation, { status: 404 });
+        }),
+      );
+      renderPanel();
+
+      const dialog = await openCreateDialog();
+      const nameInput = within(dialog).getByRole<HTMLInputElement>('textbox', { name: 'Label name' });
+      fireEvent.change(nameInput, { target: { value: 'release-candidate' } });
+      fireEvent.click(within(dialog).getByRole('button', { name: 'Create release-candidate for v3' }));
+
+      expect(
+        await within(dialog).findByText(
+          'The selected target version is no longer available. Choose a current version before trying again.',
+        ),
+      ).not.toBeNull();
+      expect(nameInput.value).toBe('release-candidate');
+      const blockedSubmit = within(dialog).getByRole<HTMLButtonElement>('button', {
+        name: /Create release-candidate/,
+      });
+      expect(blockedSubmit.disabled).toBe(true);
+      fireEvent.click(blockedSubmit);
+      expect(onPut).toHaveBeenCalledOnce();
+
+      await chooseTarget(dialog, 2);
+      expect(
+        within(dialog).getByRole<HTMLButtonElement>('button', { name: 'Create release-candidate for v2' }).disabled,
+      ).toBe(false);
     });
   });
 
@@ -366,6 +439,40 @@ describe('agent version-label mutation manager', () => {
         versionId: 'version-2',
         expectedRevisionToken: 'preview-recreated-revision',
       });
+    });
+  });
+
+  describe('when the backend rejects a cached Move target as removed', () => {
+    it('requires a fresh target selection before another submission', async () => {
+      const onPut = vi.fn();
+      registerManagerApi();
+      server.use(
+        http.put(`${BASE_URL}/api/stored/agents/${AGENT_VERSION_LABELS_AGENT_ID}/labels/preview`, () => {
+          onPut();
+          return HttpResponse.json(versionNotFoundMutation, { status: 404 });
+        }),
+      );
+      renderPanel();
+      const manager = await openManager();
+      fireEvent.click(await within(manager).findByRole('button', { name: 'Move preview from v1' }));
+      const dialog = await screen.findByRole('dialog', { name: 'Move preview' });
+      await chooseTarget(dialog, 3);
+      fireEvent.click(within(dialog).getByRole('button', { name: 'Move preview from v1 to v3' }));
+
+      expect(
+        await within(dialog).findByText(
+          'The selected target version is no longer available. Choose a current version before trying again.',
+        ),
+      ).not.toBeNull();
+      const blockedSubmit = within(dialog).getByRole<HTMLButtonElement>('button', { name: /Move preview from v1/ });
+      expect(blockedSubmit.disabled).toBe(true);
+      fireEvent.click(blockedSubmit);
+      expect(onPut).toHaveBeenCalledOnce();
+
+      await chooseTarget(dialog, 2);
+      expect(
+        within(dialog).getByRole<HTMLButtonElement>('button', { name: 'Move preview from v1 to v2' }).disabled,
+      ).toBe(false);
     });
   });
 
@@ -502,6 +609,36 @@ describe('agent version-label mutation manager', () => {
 
       await waitFor(() => expect(requestBody).toEqual({ expectedActiveVersionId: 'version-2' }));
       expect(onCreateVersion).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('when the backend rejects a cached Production target as removed', () => {
+    it('keeps the confirmation open and blocks reuse of the removed target', async () => {
+      const onActivate = vi.fn();
+      registerManagerApi();
+      server.use(
+        http.post(`${BASE_URL}/api/stored/agents/${AGENT_VERSION_LABELS_AGENT_ID}/versions/version-3/activate`, () => {
+          onActivate();
+          return HttpResponse.json(versionNotFoundMutation, { status: 404 });
+        }),
+      );
+      renderPanel();
+      const manager = await openManager();
+      fireEvent.click(within(manager).getByRole('button', { name: 'Promote v3 to Production' }));
+      const dialog = await screen.findByRole('dialog', { name: 'Promote v3 to Production' });
+      fireEvent.click(within(dialog).getByRole('button', { name: 'Promote v3 to Production' }));
+
+      expect(
+        await within(dialog).findByText(
+          'The selected target version is no longer available. Close this dialog and choose a current version.',
+        ),
+      ).not.toBeNull();
+      const blockedSubmit = within(dialog).getByRole<HTMLButtonElement>('button', {
+        name: 'Promote v3 to Production',
+      });
+      expect(blockedSubmit.disabled).toBe(true);
+      fireEvent.click(blockedSubmit);
+      expect(onActivate).toHaveBeenCalledOnce();
     });
   });
 
@@ -679,6 +816,12 @@ describe('agent version-label mutation manager', () => {
       fireEvent.click(within(dialog).getByRole('button', { name: 'Create pr-101 for v3' }));
 
       expect(await screen.findByText(/Custom labels are not supported by this storage adapter/)).not.toBeNull();
+      expect(within(dialog).getByRole<HTMLInputElement>('textbox', { name: 'Label name' }).value).toBe('pr-101');
+      expect(within(dialog).getByRole<HTMLButtonElement>('button', { name: 'Create pr-101 for v3' }).disabled).toBe(
+        true,
+      );
+      fireEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }));
+      await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Create custom label' })).toBeNull());
       expect(screen.getByRole('button', { name: 'Promote v3 to Production' })).not.toBeNull();
       expect(onPut).toHaveBeenCalledOnce();
     });

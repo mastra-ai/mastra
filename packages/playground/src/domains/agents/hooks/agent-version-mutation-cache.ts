@@ -17,9 +17,15 @@ export const refreshAgentVersionMutationState = (queryClient: QueryClient, agent
   const hasStalePointerState =
     labelError?.code === 'LABEL_MOVE_CONFLICT' ||
     labelError?.code === 'VERSION_NOT_FOUND' ||
-    labelError?.code === 'LABEL_NOT_FOUND';
+    labelError?.code === 'LABEL_NOT_FOUND' ||
+    labelError?.code === 'VERSION_LABEL_INTEGRITY_ERROR';
   if (hasStalePointerState) {
     void invalidateAgentVersionState(queryClient, agentId);
+  }
+  if (labelError?.code === 'VERSION_LABEL_INTEGRITY_ERROR') {
+    queryClient.setQueryData(agentVersionQueryKeys.mutationIntegrity(agentId), {
+      message: labelError.message,
+    });
   }
   if (error instanceof MastraClientError && error.status === 403) {
     void queryClient.invalidateQueries({ queryKey: agentVersionQueryKeys.authorization });

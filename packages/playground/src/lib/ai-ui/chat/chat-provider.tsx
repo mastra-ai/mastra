@@ -424,10 +424,10 @@ export function ChatProvider({
   const guardedSend = useCallback<SendContextValue['send']>(
     args => {
       if (isToolContinuationBlocked) return;
-      if (isRunningStream ? !canContinueRun : !canStartRun) return;
+      if (isRunning ? !canContinueRun : !canStartRun) return;
       void send(args);
     },
-    [canContinueRun, canStartRun, isRunningStream, isToolContinuationBlocked, send],
+    [canContinueRun, canStartRun, isRunning, isToolContinuationBlocked, send],
   );
   const sendValue = useMemo<SendContextValue>(() => ({ send: guardedSend }), [guardedSend]);
   const tasksValue = useMemo<TasksContextValue>(() => ({ tasks }), [tasks]);

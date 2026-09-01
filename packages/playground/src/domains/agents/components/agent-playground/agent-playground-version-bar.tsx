@@ -23,6 +23,8 @@ import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { Check, ChevronDown, Download, GitPullRequest, Info, MessageSquare, Save } from 'lucide-react';
 import { useMemo, useState, useCallback } from 'react';
 
+import type { AgentVersionLabelErrorCode } from '../../hooks/agent-version-label-error';
+import type { AgentVersionIntegrityRecovery } from '../../hooks/use-agent-version-mutation-integrity';
 import { useAllAgentVersions } from '../../hooks/use-agent-versions';
 
 type AgentVersionListItem = NonNullable<ReturnType<typeof useAllAgentVersions>['data']>['versions'][number];
@@ -35,7 +37,7 @@ export interface ProductionActivationInput {
 export type ProductionActivationResult =
   | { status: 'success' }
   | { status: 'conflict'; currentActiveVersionId?: string | null; message?: string }
-  | { status: 'error'; message?: string };
+  | { status: 'error'; code?: AgentVersionLabelErrorCode; message?: string };
 
 interface ProductionIntent {
   target: AgentVersionListItem;
@@ -43,6 +45,7 @@ interface ProductionIntent {
   hasFreshActiveVersion: boolean;
   needsReview: boolean;
   reviewed: boolean;
+  isTargetRejected: boolean;
   error?: string;
 }
 
@@ -59,6 +62,10 @@ interface AgentPlaygroundVersionBarProps {
   canPublish: boolean;
   isPublishAccessLoading: boolean;
   isVersionHistoryError?: boolean;
+  isProductionStateError?: boolean;
+  isProductionStateFetching?: boolean;
+  onRetryProductionState?: () => Promise<void>;
+  integrityRecovery?: AgentVersionIntegrityRecovery;
   isCodeSourceAgent?: boolean;
   showCodeModeActions?: boolean;
   canOpenPr?: boolean;
@@ -99,6 +106,10 @@ export function AgentPlaygroundVersionBar({
   canPublish,
   isPublishAccessLoading,
   isVersionHistoryError = false,
+  isProductionStateError = false,
+  isProductionStateFetching = false,
+  onRetryProductionState,
+  integrityRecovery,
   isCodeSourceAgent = false,
   showCodeModeActions = false,
   canOpenPr = false,
@@ -123,6 +134,8 @@ export function AgentPlaygroundVersionBar({
     params: { orderBy: { direction: 'DESC' } },
   });
   const isVersionHistoryUnverified = isVersionHistoryError || isVersionQueryError;
+  const isProductionMutationBlocked =
+    isProductionStateError || isProductionStateFetching || Boolean(integrityRecovery?.isBlocked);
 
   const versions = useMemo(() => data?.versions ?? [], [data?.versions]);
   const latestVersion = versions[0];
@@ -180,14 +193,18 @@ export function AgentPlaygroundVersionBar({
     ? versions.find(version => version.id === dialogActiveVersionId)
     : undefined;
   const dialogActionLabel = getProductionActionLabel(dialogTarget, dialogActiveVersionId);
-  const currentProductionLabel = dialogActiveVersion
-    ? `v${dialogActiveVersion.versionNumber}`
-    : dialogActiveVersionId
-      ? 'Unknown production version'
-      : 'No production version';
+  const currentProductionLabel = isProductionStateError
+    ? 'Unknown — retry required'
+    : dialogActiveVersion
+      ? `v${dialogActiveVersion.versionNumber}`
+      : dialogActiveVersionId
+        ? 'Unknown production version'
+        : 'No production version';
   const targetVersionLabel =
     dialogTarget?.versionNumber === undefined ? 'Unknown version' : `v${dialogTarget.versionNumber}`;
   const targetChangeMessage = dialogTarget?.changeMessage?.trim() || 'No change message';
+  const isDialogTargetAvailable = Boolean(dialogTarget && versions.some(version => version.id === dialogTarget.id));
+  const isDialogTargetUsable = isDialogTargetAvailable && !productionIntent?.isTargetRejected;
 
   const handleSaveWithMessage = useCallback(async () => {
     if (isSavingDraft) return;
@@ -197,17 +214,23 @@ export function AgentPlaygroundVersionBar({
     setChangeMessage('');
   }, [changeMessage, onSaveDraft, isSavingDraft]);
 
+  const handleRetryProductionState = useCallback(() => {
+    if (!onRetryProductionState) return;
+    void onRetryProductionState().catch(() => undefined);
+  }, [onRetryProductionState]);
+
   const openProductionDialog = useCallback(() => {
-    if (!selectedVersion || isVersionHistoryUnverified) return;
+    if (!selectedVersion || isVersionHistoryUnverified || isProductionMutationBlocked) return;
     setProductionIntent({
       target: selectedVersion,
       expectedActiveVersionId: activeVersionId ?? null,
       hasFreshActiveVersion: true,
       needsReview: false,
       reviewed: false,
+      isTargetRejected: false,
     });
     setShowProductionDialog(true);
-  }, [activeVersionId, isVersionHistoryUnverified, selectedVersion]);
+  }, [activeVersionId, isProductionMutationBlocked, isVersionHistoryUnverified, selectedVersion]);
 
   const closeProductionDialog = useCallback(() => {
     setShowProductionDialog(false);
@@ -224,7 +247,15 @@ export function AgentPlaygroundVersionBar({
   );
 
   const handleProductionConfirm = useCallback(async () => {
-    if (isPublishing || isProductionSubmitting || isVersionHistoryUnverified || !productionIntent) return;
+    if (
+      isPublishing ||
+      isProductionSubmitting ||
+      isVersionHistoryUnverified ||
+      isProductionMutationBlocked ||
+      !productionIntent ||
+      !isDialogTargetUsable
+    )
+      return;
     setIsProductionSubmitting(true);
     setProductionIntent(intent => (intent ? { ...intent, error: undefined } : intent));
     try {
@@ -261,7 +292,13 @@ export function AgentPlaygroundVersionBar({
         return;
       }
       setProductionIntent(intent =>
-        intent ? { ...intent, error: result.message ?? 'Couldn’t update Production.' } : intent,
+        intent
+          ? {
+              ...intent,
+              isTargetRejected: result.code === 'VERSION_NOT_FOUND' || intent.isTargetRejected,
+              error: result.message ?? 'Couldn’t update Production.',
+            }
+          : intent,
       );
     } catch (error) {
       setProductionIntent(intent =>
@@ -274,7 +311,9 @@ export function AgentPlaygroundVersionBar({
     closeProductionDialog,
     isProductionSubmitting,
     isPublishing,
+    isProductionMutationBlocked,
     isVersionHistoryUnverified,
+    isDialogTargetUsable,
     onActivateProduction,
     onPublish,
     productionIntent,
@@ -355,7 +394,50 @@ export function AgentPlaygroundVersionBar({
       </div>
     ),
     actionBar: (
-      <div className="border-border1 bg-surface3 flex items-center justify-end border-t px-3 py-2">
+      <div className="border-border1 bg-surface3 flex flex-wrap items-center justify-end gap-2 border-t px-3 py-2">
+        {isProductionStateError ? (
+          <div className="mr-auto flex flex-wrap items-center gap-2" role="alert">
+            <Txt variant="ui-xs" className="text-warning">
+              Production state is unknown. Retry before moving the pointer.
+            </Txt>
+            <Button
+              type="button"
+              variant="default"
+              size="xs"
+              onClick={handleRetryProductionState}
+              disabled={!onRetryProductionState || isProductionStateFetching}
+            >
+              {isProductionStateFetching ? 'Retrying Production state…' : 'Retry Production state'}
+            </Button>
+          </div>
+        ) : isProductionStateFetching ? (
+          <Txt variant="ui-xs" className="text-neutral3 mr-auto" role="status">
+            Refreshing Production state&hellip;
+          </Txt>
+        ) : null}
+        {integrityRecovery?.isBlocked ? (
+          <div className="mr-auto flex flex-wrap items-center gap-2" role="alert">
+            <div>
+              <Txt variant="ui-xs" className="text-warning">
+                Version-label integrity could not be verified. Production stays disabled until state is refreshed.
+              </Txt>
+              {integrityRecovery.error ? (
+                <Txt variant="ui-xs" className="text-accent2">
+                  {integrityRecovery.error}
+                </Txt>
+              ) : null}
+            </div>
+            <Button
+              type="button"
+              variant="default"
+              size="xs"
+              onClick={integrityRecovery.onRetry}
+              disabled={integrityRecovery.isRetrying}
+            >
+              {integrityRecovery.isRetrying ? 'Retrying version-label state…' : 'Retry version-label state'}
+            </Button>
+          </div>
+        ) : null}
         {showCodeModeActions ? (
           <ButtonsGroup className="flex-wrap justify-end">
             <Button variant="default" size="md" onClick={() => void onDownloadJson?.()}>
@@ -428,14 +510,20 @@ export function AgentPlaygroundVersionBar({
               <Button
                 variant="primary"
                 size="md"
+                aria-label={`${productionActionLabel} ${currentVersionLabel}`}
                 onClick={openProductionDialog}
                 title={
                   isVersionHistoryUnverified
                     ? 'Version history could not be verified. Retry before moving Production.'
-                    : productionActionDescription
+                    : isProductionStateError
+                      ? 'Production state could not be verified. Retry before moving Production.'
+                      : integrityRecovery?.isBlocked
+                        ? 'Version-label integrity could not be verified. Retry before moving Production.'
+                        : productionActionDescription
                 }
                 disabled={
                   isVersionHistoryUnverified ||
+                  isProductionMutationBlocked ||
                   !selectedVersion ||
                   (isViewingPreviousVersion
                     ? selectedVersionId === activeVersionId || isUpdatingProduction || isSavingDraft
@@ -517,6 +605,56 @@ export function AgentPlaygroundVersionBar({
                 <dt className="text-neutral3">Change message</dt>
                 <dd className="text-neutral5">{targetChangeMessage}</dd>
               </dl>
+              {productionIntent && !isDialogTargetUsable ? (
+                <div className="border-border1 bg-surface3 mt-4 rounded-lg border p-3" role="alert">
+                  <Txt variant="ui-sm">
+                    The selected target version is no longer available. Choose a current version and reopen this
+                    confirmation.
+                  </Txt>
+                </div>
+              ) : null}
+              {isProductionStateError ? (
+                <div
+                  className="border-border1 bg-surface3 mt-4 flex flex-col items-start gap-2 rounded-lg border p-3"
+                  role="alert"
+                >
+                  <Txt variant="ui-sm">Production state is unknown. Retry before moving the pointer.</Txt>
+                  <Button
+                    type="button"
+                    variant="default"
+                    size="sm"
+                    onClick={handleRetryProductionState}
+                    disabled={!onRetryProductionState || isProductionStateFetching}
+                  >
+                    {isProductionStateFetching ? 'Retrying Production state…' : 'Retry Production state'}
+                  </Button>
+                </div>
+              ) : null}
+              {integrityRecovery?.isBlocked ? (
+                <div
+                  className="border-border1 bg-surface3 mt-4 flex flex-col items-start gap-2 rounded-lg border p-3"
+                  role="alert"
+                >
+                  <Txt variant="ui-sm">
+                    Version-label integrity could not be verified. Production stays disabled until labels, version
+                    history, and Production state are refreshed. Retry, then contact support if the problem continues.
+                  </Txt>
+                  {integrityRecovery.error ? (
+                    <Txt variant="ui-sm" className="text-accent2">
+                      {integrityRecovery.error}
+                    </Txt>
+                  ) : null}
+                  <Button
+                    type="button"
+                    variant="default"
+                    size="sm"
+                    onClick={integrityRecovery.onRetry}
+                    disabled={integrityRecovery.isRetrying}
+                  >
+                    {integrityRecovery.isRetrying ? 'Retrying version-label state…' : 'Retry version-label state'}
+                  </Button>
+                </div>
+              ) : null}
               {productionIntent?.needsReview ? (
                 <div
                   className="border-border1 bg-surface3 mt-4 flex flex-col gap-2 rounded-lg border p-3"
@@ -573,6 +711,8 @@ export function AgentPlaygroundVersionBar({
                   isUpdatingProduction ||
                   isPublishAccessLoading ||
                   isVersionHistoryUnverified ||
+                  isProductionMutationBlocked ||
+                  !isDialogTargetUsable ||
                   !canPublish ||
                   Boolean(
                     productionIntent?.needsReview &&

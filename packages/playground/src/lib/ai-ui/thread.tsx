@@ -281,7 +281,6 @@ const AgentComposer = ({
   const { attachments, toCoreUserMessages, clear } = useComposerAttachments();
   const {
     isRunning,
-    isRunningStream,
     canSendWhileStreaming,
     canStartRun,
     runBlockedReason,
@@ -294,10 +293,10 @@ const AgentComposer = ({
   const { hasPermission } = usePermissions();
   const hasExecutePermission = agentId ? hasPermission(`agents:execute:${agentId}`) : hasPermission('agents:execute');
   const canExecuteAgent =
-    hasExecutePermission && !isContinuationBlocked && (isRunningStream ? canContinueRun : canStartRun);
+    hasExecutePermission && !isContinuationBlocked && (isRunning ? canContinueRun : canStartRun);
   const currentRunBlockedReason = isContinuationBlocked
     ? continuationBlockedReason
-    : isRunningStream
+    : isRunning
       ? continuationBlockedReason
       : runBlockedReason;
   // On a brand-new chat, starting the call must transition the page out of its
@@ -434,7 +433,7 @@ const ComposerActionRow = ({
   return (
     <>
       {((showModelSwitcher && agentId) || runOptionsSlot) && (
-        <div className="flex max-w-full shrink-0 items-center gap-1.5">
+        <div className="flex max-w-full shrink-0 flex-wrap items-center gap-1.5">
           {showModelSwitcher && agentId && (
             <>
               <div className="bg-surface3 border-border1 duration-normal focus-within:border-border2 rounded-full border transition-colors">

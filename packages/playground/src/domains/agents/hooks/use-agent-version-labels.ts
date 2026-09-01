@@ -20,6 +20,21 @@ import { usePlaygroundStore } from '@/store/playground-store';
 const LABELS_PER_PAGE = 50;
 const observedReadErrorsByClient = new WeakMap<QueryClient, WeakSet<Error>>();
 
+const removeConfirmedLabelFromCache = (queryClient: QueryClient, agentId: string, labelName: string): void => {
+  queryClient.setQueriesData<ListAgentVersionLabelsResponse>(
+    { queryKey: agentVersionQueryKeys.labelsRoot(agentId) },
+    current => {
+      if (!Array.isArray(current?.labels) || !current.labels.some(label => label.name === labelName)) return current;
+      const labels = current.labels.filter(label => label.name !== labelName);
+      return {
+        ...current,
+        labels,
+        pagination: { ...current.pagination, total: labels.length },
+      };
+    },
+  );
+};
+
 type UseAgentVersionLabelsParams = {
   agentId?: string;
   enabled?: boolean;
@@ -124,7 +139,10 @@ export const useDeleteAgentVersionLabel = ({ agentId }: { agentId: string }) => 
 
   return useMutation<DeleteAgentVersionLabelResponse, Error, DeleteAgentVersionLabelMutationInput>({
     mutationFn: ({ label, input }) => client.getStoredAgent(agentId).deleteVersionLabel(label, input, requestContext),
-    onSuccess: () => invalidateAgentVersionState(queryClient, agentId),
+    onSuccess: (_response, variables) => {
+      removeConfirmedLabelFromCache(queryClient, agentId, variables.label);
+      return invalidateAgentVersionState(queryClient, agentId);
+    },
     onError: error => refreshAgentVersionLabelMutationState(queryClient, agentId, error),
     retry: false,
   });

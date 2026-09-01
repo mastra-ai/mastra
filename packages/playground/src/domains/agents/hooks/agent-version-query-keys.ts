@@ -21,6 +21,7 @@ export const agentVersionQueryKeys = {
   active: (agentId: string) => ['stored-agent', agentId] as const,
   resolved: (agentId: string) => ['agent', agentId] as const,
   selector: (agentId: string) => ['agent-version-selector', agentId] as const,
+  mutationIntegrity: (agentId: string) => ['agent-version-mutation-integrity', agentId] as const,
   storedCollection: ['stored-agents'] as const,
   resolvedCollection: ['agents'] as const,
   capability: mastraPackagesQueryKey,

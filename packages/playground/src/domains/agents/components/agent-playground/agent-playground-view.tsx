@@ -6,6 +6,11 @@ import { useCallback, useEffect, useState } from 'react';
 import { getAgentVersionLabelError } from '../../hooks/agent-version-label-error';
 import { agentVersionQueryKeys, invalidateAgentVersionState } from '../../hooks/agent-version-query-keys';
 import { useAgentVersionLabels } from '../../hooks/use-agent-version-labels';
+import {
+  clearAgentVersionMutationIntegrity,
+  useAgentVersionMutationIntegrity,
+} from '../../hooks/use-agent-version-mutation-integrity';
+import type { AgentVersionIntegrityRecovery } from '../../hooks/use-agent-version-mutation-integrity';
 import { AgentLayout } from '../agent-layout';
 import { SidebarPanel } from '../sidebar-panel';
 import {
@@ -23,6 +28,16 @@ import { useAgentVersionAccess } from '@/domains/auth/hooks/use-agent-version-ac
 import { useAgentVersionLabelCapabilities } from '@/domains/configuration/hooks/use-agent-version-label-capabilities';
 import { useMastraPackages } from '@/domains/configuration/hooks/use-mastra-packages';
 import type { AgentRunVersionSelectorErrorCode } from '@/types';
+
+const hasVersionLabel = (value: unknown, labelName: string): boolean | undefined => {
+  if (typeof value !== 'object' || value === null || !('labels' in value) || !Array.isArray(value.labels)) {
+    return undefined;
+  }
+
+  return value.labels.some(
+    label => typeof label === 'object' && label !== null && 'name' in label && label.name === labelName,
+  );
+};
 
 interface AgentPlaygroundViewProps {
   agentId: string;
@@ -50,6 +65,9 @@ interface AgentPlaygroundViewProps {
   onPublish: () => Promise<boolean>;
   onActivateProduction?: (input: ProductionActivationInput) => Promise<ProductionActivationResult>;
   onRefreshProduction?: () => Promise<string | null>;
+  isProductionStateError?: boolean;
+  isProductionStateFetching?: boolean;
+  onRetryProductionState?: () => Promise<void>;
   onRetryVersions?: () => Promise<void>;
   onDownloadJson?: () => Promise<void>;
   onOpenPr?: () => Promise<void>;
@@ -78,6 +96,10 @@ function LeftPanel({
   onPublish,
   onActivateProduction,
   onRefreshProduction,
+  isProductionStateError,
+  isProductionStateFetching,
+  onRetryProductionState,
+  integrityRecovery,
   onDownloadJson,
   onOpenPr,
   isViewingPreviousVersion,
@@ -103,6 +125,10 @@ function LeftPanel({
   onPublish: () => Promise<boolean>;
   onActivateProduction?: (input: ProductionActivationInput) => Promise<ProductionActivationResult>;
   onRefreshProduction?: () => Promise<string | null>;
+  isProductionStateError?: boolean;
+  isProductionStateFetching?: boolean;
+  onRetryProductionState?: () => Promise<void>;
+  integrityRecovery?: AgentVersionIntegrityRecovery;
   onDownloadJson?: () => Promise<void>;
   onOpenPr?: () => Promise<void>;
   isViewingPreviousVersion?: boolean;
@@ -128,6 +154,10 @@ function LeftPanel({
     onPublish,
     onActivateProduction,
     onRefreshProduction,
+    isProductionStateError,
+    isProductionStateFetching,
+    onRetryProductionState,
+    integrityRecovery,
     onDownloadJson,
     onOpenPr,
     isViewingPreviousVersion,
@@ -182,6 +212,9 @@ export function AgentPlaygroundView({
   onPublish,
   onActivateProduction,
   onRefreshProduction,
+  isProductionStateError = false,
+  isProductionStateFetching = false,
+  onRetryProductionState,
   onRetryVersions,
   onDownloadJson,
   onOpenPr,
@@ -195,7 +228,11 @@ export function AgentPlaygroundView({
   const [isRetryingVersionIntegrity, setIsRetryingVersionIntegrity] = useState(false);
   const [isExecutionAccessRejected, setIsExecutionAccessRejected] = useState(false);
   const [isAgentUnavailable, setIsAgentUnavailable] = useState(false);
+  const [isDeletedExecutionTargetRejected, setIsDeletedExecutionTargetRejected] = useState(false);
+  const [isRetryingMutationIntegrity, setIsRetryingMutationIntegrity] = useState(false);
+  const [mutationIntegrityRetryError, setMutationIntegrityRetryError] = useState<string>();
   const queryClient = useQueryClient();
+  const mutationIntegrity = useAgentVersionMutationIntegrity(agentId);
   const labelCapabilities = useAgentVersionLabelCapabilities();
   const versionAccess = useAgentVersionAccess(agentId);
   const packagesQuery = useMastraPackages();
@@ -215,8 +252,9 @@ export function AgentPlaygroundView({
   });
   const labelError = getAgentVersionLabelError(labelsQuery.error);
   const hasLabelIntegrityError = labelError?.code === 'VERSION_LABEL_INTEGRITY_ERROR';
-  const hasVersionLabelIntegrityError = hasLabelIntegrityError || hasRunVersionLabelIntegrityError;
-  const hasStaleLabelData = labelsQuery.isError && Boolean(labelsQuery.data) && !hasLabelIntegrityError;
+  const hasVersionLabelIntegrityError =
+    hasLabelIntegrityError || hasRunVersionLabelIntegrityError || mutationIntegrity.isBlocked;
+  const hasStaleLabelData = labelsQuery.isError && Boolean(labelsQuery.data) && !hasVersionLabelIntegrityError;
   const isAgentMissingOrInaccessible = isAgentUnavailable || labelError?.code === 'ENTITY_NOT_FOUND';
   const computedLabels = getComputedAgentVersionLabels(versions);
   const versionRowLabels = getAgentVersionLabelsFromVersions(versions);
@@ -232,21 +270,41 @@ export function AgentPlaygroundView({
     canUseVersionRowCustomLabels && !hasVersionLabelIntegrityError
       ? mergeAgentVersionLabels(versionRowLabels, labelsQuery.data?.labels)
       : computedLabels;
+  const isVersionLabelsLoading =
+    labelCapabilities.isLoading || versionAccess.isLoading || (canReadCustomLabels && labelsQuery.isLoading);
+  const isCurrentExecutionTargetAvailable = executionTarget
+    ? isAgentExecutionTargetAvailable(executionTarget, versionLabels, versions)
+    : versions.length === 0;
   const executionTargetAvailable =
     !isVersionsError &&
     !isExecutionTargetRejected &&
-    (executionTarget
-      ? isAgentExecutionTargetAvailable(executionTarget, versionLabels, versions)
-      : versions.length === 0);
-  const isVersionLabelsLoading =
-    labelCapabilities.isLoading || versionAccess.isLoading || (canReadCustomLabels && labelsQuery.isLoading);
+    !isDeletedExecutionTargetRejected &&
+    isCurrentExecutionTargetAvailable;
   useEffect(() => {
     if (!latestVersionId) return;
     setExecutionTarget(currentTarget => currentTarget ?? { kind: 'version', versionId: latestVersionId });
   }, [latestVersionId]);
+  const selectedLabel =
+    executionTarget?.kind === 'label'
+      ? versionLabels.find(candidate => candidate.name === executionTarget.label)
+      : undefined;
+  const selectedCustomLabelName = selectedLabel?.kind === 'custom' ? selectedLabel.name : undefined;
+  useEffect(() => {
+    if (!selectedCustomLabelName || isDeletedExecutionTargetRejected) return;
+    const labelsRoot = agentVersionQueryKeys.labelsRoot(agentId);
+
+    return queryClient.getQueryCache().subscribe(event => {
+      if (event.type !== 'updated' || event.query.state.status !== 'success') return;
+      if (event.query.queryKey[0] !== labelsRoot[0] || event.query.queryKey[1] !== labelsRoot[1]) return;
+      if (hasVersionLabel(event.query.state.data, selectedCustomLabelName) === false) {
+        setIsDeletedExecutionTargetRejected(true);
+      }
+    });
+  }, [agentId, isDeletedExecutionTargetRejected, queryClient, selectedCustomLabelName]);
   const handleExecutionTargetChange = useCallback((target: AgentExecutionTarget) => {
     setExecutionTarget(target);
     setIsExecutionTargetRejected(false);
+    setIsDeletedExecutionTargetRejected(false);
     setHasRunVersionLabelIntegrityError(false);
   }, []);
   const handleRunVersionSelectorError = useCallback(
@@ -283,6 +341,37 @@ export function AgentPlaygroundView({
       setIsRetryingVersionIntegrity(false);
     }
   };
+  const handleRetryMutationIntegrity = async () => {
+    setIsRetryingMutationIntegrity(true);
+    setMutationIntegrityRetryError(undefined);
+    try {
+      if (!onRetryVersions || !onRetryProductionState) {
+        throw new Error('Authoritative Production state cannot be refreshed.');
+      }
+      const refreshes: Promise<unknown>[] = [onRetryVersions(), onRetryProductionState()];
+      if (canReadCustomLabels) {
+        refreshes.push(
+          labelsQuery.refetch({ throwOnError: true }).then(result => {
+            if (result.error) throw result.error;
+          }),
+        );
+      }
+      await Promise.all(refreshes);
+      clearAgentVersionMutationIntegrity(queryClient, agentId);
+    } catch {
+      setMutationIntegrityRetryError(
+        'Studio couldn’t refresh verified version-label state. Retry again; if the problem persists, contact support.',
+      );
+    } finally {
+      setIsRetryingMutationIntegrity(false);
+    }
+  };
+  const mutationIntegrityRecovery: AgentVersionIntegrityRecovery = {
+    isBlocked: mutationIntegrity.isBlocked,
+    isRetrying: isRetryingMutationIntegrity,
+    error: mutationIntegrityRetryError,
+    onRetry: () => void handleRetryMutationIntegrity(),
+  };
   const canExecute = versionAccess.canExecute && !isExecutionAccessRejected;
 
   return (
@@ -312,6 +401,10 @@ export function AgentPlaygroundView({
           onPublish={onPublish}
           onActivateProduction={onActivateProduction}
           onRefreshProduction={onRefreshProduction}
+          isProductionStateError={isProductionStateError}
+          isProductionStateFetching={isProductionStateFetching}
+          onRetryProductionState={onRetryProductionState}
+          integrityRecovery={mutationIntegrityRecovery}
           onDownloadJson={onDownloadJson}
           onOpenPr={onOpenPr}
           isViewingPreviousVersion={isViewingPreviousVersion}
@@ -346,11 +439,13 @@ export function AgentPlaygroundView({
           isVersionLabelDataStale={hasStaleLabelData}
           hasVersionLabelIntegrityError={hasVersionLabelIntegrityError}
           isRetryingVersionLabels={labelsQuery.isFetching}
-          isRetryingVersionIntegrity={isRetryingVersionIntegrity}
+          isRetryingVersionIntegrity={isRetryingVersionIntegrity || isRetryingMutationIntegrity}
           isRetryingVersions={isVersionsFetching}
           onExecutionTargetChange={handleExecutionTargetChange}
           onRetryVersionLabels={() => void labelsQuery.refetch()}
-          onRetryVersionIntegrity={handleRetryVersionIntegrity}
+          onRetryVersionIntegrity={
+            mutationIntegrity.isBlocked ? handleRetryMutationIntegrity : handleRetryVersionIntegrity
+          }
           onRetryVersions={onRetryVersions}
           onRunVersionSelectorError={handleRunVersionSelectorError}
           onRunAuthorizationError={handleRunAuthorizationError}

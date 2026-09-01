@@ -4,6 +4,7 @@ import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
+import type { ReactNode } from 'react';
 import { MemoryRouter, Route, Routes } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
@@ -24,6 +25,7 @@ import {
   secondPlaygroundVersionPage,
 } from './fixtures/agent-version-id-regression';
 import { agentVersionQueryKeys } from '@/domains/agents/hooks/agent-version-query-keys';
+import { useDeleteAgentVersionLabel } from '@/domains/agents/hooks/use-agent-version-labels';
 import { TracingSettingsProvider } from '@/domains/observability/context/tracing-settings-context';
 import { SchemaRequestContextProvider } from '@/domains/request-context/context/schema-request-context';
 import { server } from '@/test/msw-server';
@@ -74,10 +76,11 @@ const createQueryClient = () =>
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
 
-const renderAgentPlayground = (queryClient = createQueryClient()) => {
+const renderAgentPlayground = (queryClient = createQueryClient(), companion?: ReactNode) => {
   return render(
     <MastraReactProvider baseUrl={BASE_URL}>
       <QueryClientProvider client={queryClient}>
+        {companion}
         <MemoryRouter initialEntries={[`/agents/${AGENT_ID}/editor`]}>
           <TooltipProvider>
             <TracingSettingsProvider entityId={AGENT_ID} entityType="agent">
@@ -93,6 +96,37 @@ const renderAgentPlayground = (queryClient = createQueryClient()) => {
     </MastraReactProvider>,
   );
 };
+
+const getRunTarget = (hidden = false) =>
+  screen.getByRole<HTMLButtonElement>('combobox', { name: 'Run target', hidden });
+
+const findEnabledRunTarget = async () => {
+  await waitFor(() => expect(getRunTarget().disabled).toBe(false));
+  return getRunTarget();
+};
+
+const findRunTargetContaining = async (text: string, hidden = false) => {
+  await waitFor(() => expect(getRunTarget(hidden).textContent).toContain(text));
+  return getRunTarget(hidden);
+};
+
+function DeleteSelectedLabelButton() {
+  const mutation = useDeleteAgentVersionLabel({ agentId: AGENT_ID });
+
+  return (
+    <button
+      type="button"
+      onClick={() =>
+        mutation.mutate({
+          label: 'pr-101',
+          input: { expectedRevisionToken: 'revision-pr-101-v2' },
+        })
+      }
+    >
+      Delete selected label
+    </button>
+  );
+}
 
 /** Endpoints AgentPlayground and its children hit that aren't the point of this test. */
 const registerBaselineHandlers = () => {
@@ -134,6 +168,33 @@ const registerBaselineHandlers = () => {
   );
 };
 
+const registerDatabaseEditorSource = () => {
+  server.use(
+    http.get(`${BASE_URL}/api/system/packages`, () =>
+      HttpResponse.json({
+        packages: [],
+        isDev: true,
+        cmsEnabled: true,
+        observabilityEnabled: true,
+        editorSource: 'db',
+        editorSourceCapabilities: {
+          source: 'db',
+          storage: 'database',
+          canSave: true,
+          canOpenChangeRequest: false,
+        },
+        storageCapabilities: {
+          versionLabels: {
+            entityTypes: {
+              agent: { read: true, write: true, compareAndSwap: true, retentionProtection: true },
+            },
+          },
+        },
+      }),
+    ),
+  );
+};
+
 beforeEach(() => {
   Object.defineProperty(window, 'localStorage', { configurable: true, value: createTestStorage() });
 });
@@ -171,8 +232,7 @@ describe('AgentPlayground — test chat agent version id', () => {
 
       renderAgentPlayground();
 
-      const runTarget = await screen.findByRole('combobox', { name: 'Run target' });
-      await waitFor(() => expect(runTarget.hasAttribute('disabled')).toBe(false));
+      const runTarget = await findEnabledRunTarget();
       fireEvent.click(runTarget);
       const olderVersion = await screen.findByRole('option', { name: 'v1' });
       fireEvent.pointerDown(olderVersion, { pointerType: 'mouse' });
@@ -301,7 +361,7 @@ describe('AgentPlayground — test chat agent version id', () => {
 
       renderAgentPlayground();
 
-      fireEvent.click(await screen.findByRole('button', { name: 'Promote to Production' }));
+      fireEvent.click(await screen.findByRole('button', { name: 'Promote to Production v2' }));
       const confirmation = await screen.findByRole('alertdialog');
       expect(within(confirmation).getByText('Current production').nextElementSibling?.textContent).toBe('v1');
       expect(within(confirmation).getByText('Target version').nextElementSibling?.textContent).toBe('v2');
@@ -329,6 +389,129 @@ describe('AgentPlayground — test chat agent version id', () => {
       await waitFor(() => expect(activationBodies).toHaveLength(2));
       expect(activationBodies[1]).toEqual({ expectedActiveVersionId: concurrentProductionVersionId });
       await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull());
+    });
+  });
+
+  describe('when stored Production state cannot be loaded after version history succeeds', () => {
+    it('shows an unknown retry state and keeps the target-specific Production action disabled', async () => {
+      registerBaselineHandlers();
+      registerDatabaseEditorSource();
+      let shouldFail = true;
+      let productionRequests = 0;
+      server.use(
+        http.get(`${BASE_URL}/api/stored/agents/${AGENT_ID}`, () => {
+          productionRequests += 1;
+          return shouldFail
+            ? HttpResponse.json({ error: 'Production state unavailable' }, { status: 503 })
+            : HttpResponse.json(storedAgentDraft);
+        }),
+      );
+
+      renderAgentPlayground();
+
+      expect(await screen.findByText('Production state is unknown. Retry before moving the pointer.')).not.toBeNull();
+      const action = await screen.findByRole<HTMLButtonElement>('button', { name: 'Promote to Production v2' });
+      expect(action.disabled).toBe(true);
+      expect(screen.queryByText('No Production version is set.')).toBeNull();
+
+      const requestsBeforeFailedRetry = productionRequests;
+      fireEvent.click(screen.getByRole('button', { name: 'Retry Production state' }));
+      await waitFor(() => expect(productionRequests).toBeGreaterThan(requestsBeforeFailedRetry));
+      expect(await screen.findByText('Production state is unknown. Retry before moving the pointer.')).not.toBeNull();
+      expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Promote to Production v2' }).disabled).toBe(true);
+
+      shouldFail = false;
+      fireEvent.click(screen.getByRole('button', { name: 'Retry Production state' }));
+
+      await waitFor(() =>
+        expect(screen.queryByText('Production state is unknown. Retry before moving the pointer.')).toBeNull(),
+      );
+      expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Promote to Production v2' }).disabled).toBe(false);
+    });
+  });
+
+  describe('when Production activation reports version-label integrity corruption', () => {
+    it('blocks Production and custom runs until labels, versions, and the stored pointer are refreshed', async () => {
+      registerBaselineHandlers();
+      registerDatabaseEditorSource();
+      let activationRequests = 0;
+      let labelRequests = 0;
+      let versionRequests = 0;
+      let productionRequests = 0;
+      server.use(
+        http.get(`${BASE_URL}/api/stored/agents/${AGENT_ID}/labels`, () => {
+          labelRequests += 1;
+          return HttpResponse.json(versionLabelsList);
+        }),
+        http.get(`${BASE_URL}/api/stored/agents/${AGENT_ID}/versions`, () => {
+          versionRequests += 1;
+          return HttpResponse.json(versionsList);
+        }),
+        http.get(`${BASE_URL}/api/stored/agents/${AGENT_ID}`, () => {
+          productionRequests += 1;
+          return HttpResponse.json(storedAgentDraft);
+        }),
+        http.post(`${BASE_URL}/api/stored/agents/${AGENT_ID}/versions/${LATEST_DRAFT_VERSION_ID}/activate`, () => {
+          activationRequests += 1;
+          return HttpResponse.json(
+            {
+              error: {
+                code: 'VERSION_LABEL_INTEGRITY_ERROR',
+                message: 'The version-label index is inconsistent.',
+              },
+            },
+            { status: 500 },
+          );
+        }),
+      );
+
+      renderAgentPlayground();
+
+      const runTarget = await findEnabledRunTarget();
+      fireEvent.click(runTarget);
+      const labelOption = await screen.findByRole('option', { name: 'pr-101 · v2' });
+      fireEvent.pointerDown(labelOption, { pointerType: 'mouse' });
+      fireEvent.click(labelOption, { detail: 1 });
+
+      fireEvent.click(await screen.findByRole('button', { name: 'Promote to Production v2' }));
+      const confirmation = await screen.findByRole('alertdialog');
+      const confirm = within(confirmation).getByRole<HTMLButtonElement>('button', {
+        name: 'Promote to Production v2',
+      });
+      fireEvent.click(confirm);
+
+      expect(
+        await within(confirmation).findByText(
+          /Version-label integrity could not be verified\. Production stays disabled/,
+        ),
+      ).not.toBeNull();
+      expect(confirm.disabled).toBe(true);
+      expect(activationRequests).toBe(1);
+      await findRunTargetContaining('pr-101 · unavailable', true);
+      expect(
+        await screen.findByPlaceholderText<HTMLTextAreaElement>(
+          'Choose an available run target before sending a message',
+        ),
+      ).toHaveProperty('disabled', true);
+      await waitFor(() => expect(labelRequests).toBeGreaterThanOrEqual(2));
+      await waitFor(() => expect(versionRequests).toBeGreaterThanOrEqual(2));
+      await waitFor(() => expect(productionRequests).toBeGreaterThanOrEqual(2));
+
+      fireEvent.click(within(confirmation).getByRole('button', { name: 'Cancel' }));
+      await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull());
+
+      const labelsBeforeRetry = labelRequests;
+      const versionsBeforeRetry = versionRequests;
+      const productionBeforeRetry = productionRequests;
+      fireEvent.click(screen.getByRole('button', { name: 'Retry version data for pr-101 · v2' }));
+
+      await waitFor(() => expect(labelRequests).toBeGreaterThan(labelsBeforeRetry));
+      await waitFor(() => expect(versionRequests).toBeGreaterThan(versionsBeforeRetry));
+      await waitFor(() => expect(productionRequests).toBeGreaterThan(productionBeforeRetry));
+      await waitFor(() => expect(screen.queryByText(/Version-label integrity could not be verified/)).toBeNull());
+      expect(screen.getByPlaceholderText<HTMLTextAreaElement>('Enter your message...').disabled).toBe(false);
+      expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Promote to Production v2' }).disabled).toBe(false);
+      expect(activationRequests).toBe(1);
     });
   });
 
@@ -391,8 +574,7 @@ describe('AgentPlayground — test chat agent version id', () => {
         renderAgentPlayground();
       });
 
-      const runTarget = await screen.findByRole('combobox', { name: 'Run target' });
-      await waitFor(() => expect(runTarget.hasAttribute('disabled')).toBe(false));
+      const runTarget = await findEnabledRunTarget();
       fireEvent.click(runTarget);
       const labelOption = await screen.findByRole('option', { name: 'pr-101 · v2' });
       fireEvent.pointerDown(labelOption, { pointerType: 'mouse' });
@@ -442,8 +624,7 @@ describe('AgentPlayground — test chat agent version id', () => {
 
       renderAgentPlayground();
 
-      const runTarget = await screen.findByRole('combobox', { name: 'Run target' });
-      await waitFor(() => expect(runTarget.hasAttribute('disabled')).toBe(false));
+      const runTarget = await findEnabledRunTarget();
       fireEvent.click(runTarget);
       const labelOption = await screen.findByRole('option', { name: 'pr-101 · v2' });
       fireEvent.pointerDown(labelOption, { pointerType: 'mouse' });
@@ -477,8 +658,7 @@ describe('AgentPlayground — test chat agent version id', () => {
       const queryClient = createQueryClient();
       renderAgentPlayground(queryClient);
 
-      const runTarget = await screen.findByRole('combobox', { name: 'Run target' });
-      await waitFor(() => expect(runTarget.hasAttribute('disabled')).toBe(false));
+      const runTarget = await findEnabledRunTarget();
       fireEvent.click(runTarget);
       const labelOption = await screen.findByRole('option', { name: 'pr-101 · v2' });
       fireEvent.pointerDown(labelOption, { pointerType: 'mouse' });
@@ -489,14 +669,14 @@ describe('AgentPlayground — test chat agent version id', () => {
         await queryClient.invalidateQueries({ queryKey: agentVersionQueryKeys.authorization });
       });
 
-      await waitFor(() => expect(runTarget.textContent).toContain('pr-101 · unavailable'));
+      const unavailableRunTarget = await findRunTargetContaining('pr-101 · unavailable');
       expect(
         await screen.findByPlaceholderText<HTMLTextAreaElement>(
           'Choose an available run target before sending a message',
         ),
       ).toHaveProperty('disabled', true);
 
-      fireEvent.click(runTarget);
+      fireEvent.click(unavailableRunTarget);
       expect(await screen.findByRole('option', { name: 'production · v1' })).not.toBeNull();
       expect(await screen.findByRole('option', { name: 'latest · v2' })).not.toBeNull();
       expect(await screen.findByRole('option', { name: 'v2' })).not.toBeNull();
@@ -505,6 +685,52 @@ describe('AgentPlayground — test chat agent version id', () => {
   });
 
   describe('when the selected custom label is deleted before the next run', () => {
+    it('tombstones a locally deleted target even when the confirming label refresh fails', async () => {
+      registerBaselineHandlers();
+      let deleteSucceeded = false;
+      let deleteRequests = 0;
+      let labelRequests = 0;
+      server.use(
+        http.delete(`${BASE_URL}/api/stored/agents/${AGENT_ID}/labels/pr-101`, ({ request }) => {
+          expect(new URL(request.url).searchParams.get('expectedRevisionToken')).toBe('revision-pr-101-v2');
+          deleteRequests += 1;
+          deleteSucceeded = true;
+          return HttpResponse.json({ success: true, deleted: true });
+        }),
+        http.get(`${BASE_URL}/api/stored/agents/${AGENT_ID}/labels`, () => {
+          labelRequests += 1;
+          return deleteSucceeded
+            ? HttpResponse.json({ error: 'Label refresh unavailable' }, { status: 503 })
+            : HttpResponse.json(versionLabelsList);
+        }),
+      );
+
+      const queryClient = createQueryClient();
+      renderAgentPlayground(queryClient, <DeleteSelectedLabelButton />);
+
+      const runTarget = await findEnabledRunTarget();
+      fireEvent.click(runTarget);
+      const labelOption = await screen.findByRole('option', { name: 'pr-101 · v2' });
+      fireEvent.pointerDown(labelOption, { pointerType: 'mouse' });
+      fireEvent.click(labelOption, { detail: 1 });
+      expect(await screen.findByPlaceholderText('Enter your message...')).not.toHaveProperty('disabled', true);
+
+      const labelRequestsBeforeDelete = labelRequests;
+      fireEvent.click(screen.getByRole('button', { name: 'Delete selected label' }));
+
+      await waitFor(() => expect(deleteRequests).toBe(1));
+      await waitFor(() => expect(labelRequests).toBeGreaterThan(labelRequestsBeforeDelete));
+      expect(
+        await screen.findByText('This run target is no longer available. Choose another target before running.'),
+      ).not.toBeNull();
+      await findRunTargetContaining('pr-101 · unavailable');
+      expect(
+        await screen.findByPlaceholderText<HTMLTextAreaElement>(
+          'Choose an available run target before sending a message',
+        ),
+      ).toHaveProperty('disabled', true);
+    });
+
     it('blocks the run instead of falling back to another version', async () => {
       registerBaselineHandlers();
 
@@ -522,8 +748,7 @@ describe('AgentPlayground — test chat agent version id', () => {
         renderAgentPlayground(queryClient);
       });
 
-      const runTarget = await screen.findByRole('combobox', { name: 'Run target' });
-      await waitFor(() => expect(runTarget.hasAttribute('disabled')).toBe(false));
+      const runTarget = await findEnabledRunTarget();
       fireEvent.click(runTarget);
       const labelOption = await screen.findByRole('option', { name: 'pr-101 · v2' });
       fireEvent.pointerDown(labelOption, { pointerType: 'mouse' });
@@ -545,7 +770,7 @@ describe('AgentPlayground — test chat agent version id', () => {
       expect(
         await screen.findByText('This run target is no longer available. Choose another target before running.'),
       ).not.toBeNull();
-      expect(runTarget.textContent).toContain('pr-101 · unavailable');
+      await findRunTargetContaining('pr-101 · unavailable');
       const blockedTextarea = await screen.findByPlaceholderText<HTMLTextAreaElement>(
         'Choose an available run target before sending a message',
       );
@@ -554,6 +779,63 @@ describe('AgentPlayground — test chat agent version id', () => {
 
       await new Promise(resolve => setTimeout(resolve, 25));
       expect(sentBodies).toHaveLength(0);
+    });
+
+    it('requires explicit reselection when the same label name is recreated', async () => {
+      registerBaselineHandlers();
+      let currentLabels = versionLabelsList;
+      server.use(http.get(`${BASE_URL}/api/stored/agents/${AGENT_ID}/labels`, () => HttpResponse.json(currentLabels)));
+
+      const queryClient = createQueryClient();
+      renderAgentPlayground(queryClient);
+
+      const runTarget = await findEnabledRunTarget();
+      fireEvent.click(runTarget);
+      const labelOption = await screen.findByRole('option', { name: 'pr-101 · v2' });
+      fireEvent.pointerDown(labelOption, { pointerType: 'mouse' });
+      fireEvent.click(labelOption, { detail: 1 });
+
+      currentLabels = {
+        ...versionLabelsList,
+        labels: versionLabelsList.labels.filter(label => label.name !== 'pr-101'),
+        pagination: { ...versionLabelsList.pagination, total: 2 },
+      };
+      await act(async () => {
+        await queryClient.invalidateQueries({ queryKey: agentVersionQueryKeys.labelsRoot(AGENT_ID) });
+      });
+      await screen.findByText('This run target is no longer available. Choose another target before running.');
+
+      currentLabels = {
+        ...versionLabelsList,
+        labels: versionLabelsList.labels.map(label =>
+          label.name === 'pr-101'
+            ? {
+                ...label,
+                versionId: PUBLISHED_VERSION_ID,
+                versionNumber: 1,
+                revisionToken: 'revision-pr-101-recreated-v1',
+              }
+            : label,
+        ),
+      };
+      await act(async () => {
+        await queryClient.invalidateQueries({ queryKey: agentVersionQueryKeys.labelsRoot(AGENT_ID) });
+      });
+
+      const blockedTextarea = await screen.findByPlaceholderText<HTMLTextAreaElement>(
+        'Choose an available run target before sending a message',
+      );
+      expect(blockedTextarea.disabled).toBe(true);
+      const unavailableRunTarget = await findRunTargetContaining('pr-101 · v1 · unavailable');
+
+      fireEvent.click(unavailableRunTarget);
+      const recreatedOption = await screen.findByRole('option', { name: 'pr-101 · v1' });
+      fireEvent.pointerDown(recreatedOption, { pointerType: 'mouse' });
+      fireEvent.click(recreatedOption, { detail: 1 });
+
+      await waitFor(() =>
+        expect(screen.getByPlaceholderText<HTMLTextAreaElement>('Enter your message...').disabled).toBe(false),
+      );
     });
   });
 
@@ -579,8 +861,7 @@ describe('AgentPlayground — test chat agent version id', () => {
       const queryClient = createQueryClient();
       renderAgentPlayground(queryClient);
 
-      const runTarget = await screen.findByRole('combobox', { name: 'Run target' });
-      await waitFor(() => expect(runTarget.hasAttribute('disabled')).toBe(false));
+      const runTarget = await findEnabledRunTarget();
       fireEvent.click(runTarget);
       const labelOption = await screen.findByRole('option', { name: 'pr-101 · v2' });
       fireEvent.pointerDown(labelOption, { pointerType: 'mouse' });
@@ -591,14 +872,14 @@ describe('AgentPlayground — test chat agent version id', () => {
         await queryClient.invalidateQueries({ queryKey: agentVersionQueryKeys.labelsRoot(AGENT_ID) });
       });
 
-      await waitFor(() => expect(runTarget.textContent).toContain('pr-101 · unavailable'));
+      const unavailableRunTarget = await findRunTargetContaining('pr-101 · unavailable');
       expect(
         await screen.findByPlaceholderText<HTMLTextAreaElement>(
           'Choose an available run target before sending a message',
         ),
       ).toHaveProperty('disabled', true);
 
-      fireEvent.click(runTarget);
+      fireEvent.click(unavailableRunTarget);
       expect(await screen.findByRole('option', { name: 'production · v1' })).not.toBeNull();
       expect(await screen.findByRole('option', { name: 'latest · v2' })).not.toBeNull();
       expect(await screen.findByRole('option', { name: 'v2' })).not.toBeNull();
@@ -609,7 +890,7 @@ describe('AgentPlayground — test chat agent version id', () => {
         ),
       ).not.toBeNull();
 
-      fireEvent.click(runTarget);
+      fireEvent.click(getRunTarget());
       hasIntegrityFailure = false;
       fireEvent.click(screen.getByRole('button', { name: 'Retry version data for pr-101 · v2' }));
       await waitFor(() =>
@@ -636,8 +917,7 @@ describe('AgentPlayground — test chat agent version id', () => {
       const queryClient = createQueryClient();
       renderAgentPlayground(queryClient);
 
-      const runTarget = await screen.findByRole('combobox', { name: 'Run target' });
-      await waitFor(() => expect(runTarget.hasAttribute('disabled')).toBe(false));
+      const runTarget = await findEnabledRunTarget();
       fireEvent.click(runTarget);
       const labelOption = await screen.findByRole('option', { name: 'pr-101 · v2' });
       fireEvent.pointerDown(labelOption, { pointerType: 'mouse' });
@@ -681,8 +961,7 @@ describe('AgentPlayground — test chat agent version id', () => {
       const queryClient = createQueryClient();
       renderAgentPlayground(queryClient);
 
-      const runTarget = await screen.findByRole('combobox', { name: 'Run target' });
-      await waitFor(() => expect(runTarget.hasAttribute('disabled')).toBe(false));
+      const runTarget = await findEnabledRunTarget();
       fireEvent.click(runTarget);
       expect(await screen.findByRole('option', { name: 'pr-101 · v2' })).not.toBeNull();
       fireEvent.click(runTarget);
@@ -761,8 +1040,7 @@ describe('AgentPlayground — test chat agent version id', () => {
 
       renderAgentPlayground();
 
-      const runTarget = await screen.findByRole('combobox', { name: 'Run target' });
-      await waitFor(() => expect(runTarget.hasAttribute('disabled')).toBe(false));
+      const runTarget = await findEnabledRunTarget();
       fireEvent.click(runTarget);
       const labelOption = await screen.findByRole('option', { name: 'pr-101 · v2' });
       fireEvent.pointerDown(labelOption, { pointerType: 'mouse' });
@@ -775,7 +1053,7 @@ describe('AgentPlayground — test chat agent version id', () => {
       fireEvent.click(await screen.findByRole('button', { name: /send/i }));
 
       await waitFor(() => expect(sentBodies).toHaveLength(1));
-      await waitFor(() => expect(runTarget.textContent).toContain('pr-101 · v2 · unavailable'));
+      const unavailableRunTarget = await findRunTargetContaining('pr-101 · v2 · unavailable');
       expect(
         await screen.findByText('This run target is no longer available. Choose another target before running.'),
       ).not.toBeNull();
@@ -795,7 +1073,7 @@ describe('AgentPlayground — test chat agent version id', () => {
       await new Promise(resolve => setTimeout(resolve, 25));
       expect(sentBodies).toHaveLength(1);
 
-      fireEvent.click(runTarget);
+      fireEvent.click(unavailableRunTarget);
       const productionOption = await screen.findByRole('option', { name: 'production · v1' });
       fireEvent.pointerDown(productionOption, { pointerType: 'mouse' });
       fireEvent.click(productionOption, { detail: 1 });
@@ -883,8 +1161,7 @@ describe('AgentPlayground — test chat agent version id', () => {
 
       renderAgentPlayground();
 
-      const runTarget = await screen.findByRole('combobox', { name: 'Run target' });
-      await waitFor(() => expect(runTarget.hasAttribute('disabled')).toBe(false));
+      const runTarget = await findEnabledRunTarget();
       fireEvent.click(runTarget);
       const labelOption = await screen.findByRole('option', { name: 'pr-101 · v2' });
       fireEvent.pointerDown(labelOption, { pointerType: 'mouse' });
@@ -900,13 +1177,15 @@ describe('AgentPlayground — test chat agent version id', () => {
       await waitFor(() => expect(labelRequests).toBeGreaterThan(initialLabelRequests));
       await waitFor(() => expect(versionRequests).toBeGreaterThan(initialVersionRequests));
       expect(fallbackSignalRequests).toBe(0);
-      expect(runTarget.textContent).toContain('pr-101 · unavailable');
+      await findRunTargetContaining('pr-101 · unavailable');
       expect(
         await screen.findByText(
           'Version-label integrity could not be verified. Custom labels are unavailable; Production, Latest, and exact versions remain available.',
         ),
       ).not.toBeNull();
-      expect(screen.getByText('Retry labels and version history. If the problem continues, contact support.')).not.toBeNull();
+      expect(
+        screen.getByText('Retry labels and version history. If the problem continues, contact support.'),
+      ).not.toBeNull();
       expect(
         await screen.findByPlaceholderText<HTMLTextAreaElement>(
           'Choose an available run target before sending a message',
@@ -926,8 +1205,8 @@ describe('AgentPlayground — test chat agent version id', () => {
           ),
         ).toBeNull(),
       );
-      expect(runTarget.textContent).toContain('pr-101 · v2');
-      expect(runTarget.textContent).not.toContain('unavailable');
+      await findRunTargetContaining('pr-101 · v2');
+      expect(getRunTarget().textContent).not.toContain('unavailable');
       expect((await screen.findByPlaceholderText('Enter your message...')).hasAttribute('disabled')).toBe(false);
       expect(sendRequests).toBe(1);
     });
@@ -974,8 +1253,7 @@ describe('AgentPlayground — test chat agent version id', () => {
 
       renderAgentPlayground();
 
-      const runTarget = await screen.findByRole('combobox', { name: 'Run target' });
-      await waitFor(() => expect(runTarget.hasAttribute('disabled')).toBe(false));
+      const runTarget = await findEnabledRunTarget();
       fireEvent.click(runTarget);
       const labelOption = await screen.findByRole('option', { name: 'pr-101 · v2' });
       fireEvent.pointerDown(labelOption, { pointerType: 'mouse' });
@@ -985,7 +1263,7 @@ describe('AgentPlayground — test chat agent version id', () => {
       fireEvent.click(await screen.findByRole('button', { name: /send/i }));
 
       await waitFor(() => expect(packageRequests).toBeGreaterThan(1));
-      await waitFor(() => expect(runTarget.textContent).toContain('pr-101 · unavailable'));
+      await findRunTargetContaining('pr-101 · unavailable');
       expect(sendRequests).toBe(1);
       expect(fallbackSignalRequests).toBe(0);
       expect(
@@ -1077,8 +1355,7 @@ describe('AgentPlayground — test chat agent version id', () => {
 
       renderAgentPlayground();
 
-      const runTarget = await screen.findByRole('combobox', { name: 'Run target' });
-      await waitFor(() => expect(runTarget.hasAttribute('disabled')).toBe(false));
+      const runTarget = await findEnabledRunTarget();
       fireEvent.click(runTarget);
 
       expect(await screen.findByRole('option', { name: 'production · v1' })).not.toBeNull();

@@ -8,6 +8,7 @@ import type { ReactNode } from 'react';
 import { MemoryRouter } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
+import { useChatRunning } from '../chat/chat-context';
 import { ChatProvider } from '../chat/chat-provider';
 import { Thread } from '../thread';
 import { memoryDisabled, memoryEnabled, v2Agent } from './fixtures/agent';
@@ -113,7 +114,14 @@ interface RenderThreadOptions {
   modelVersion?: string;
   selectedLabel?: string;
   chatWithGenerate?: boolean;
+  showRunningState?: boolean;
+  runOptionsSlot?: ReactNode;
 }
+
+const RunningStateProbe = () => {
+  const { isRunning, isRunningStream } = useChatRunning();
+  return <output data-testid="running-state">{`active:${isRunning};stream:${isRunningStream}`}</output>;
+};
 
 const renderThreadTree = (initialMessages: MastraDBMessage[], options: RenderThreadOptions = {}) => {
   const {
@@ -127,6 +135,8 @@ const renderThreadTree = (initialMessages: MastraDBMessage[], options: RenderThr
     modelVersion,
     selectedLabel,
     chatWithGenerate,
+    showRunningState,
+    runOptionsSlot,
   } = options;
 
   return (
@@ -146,12 +156,14 @@ const renderThreadTree = (initialMessages: MastraDBMessage[], options: RenderThr
           continuationBlockedReason={continuationBlockedReason}
           settings={{ modelSettings: { chatWithGenerate, chatWithLegacyStream: false } }}
         >
+          {showRunningState ? <RunningStateProbe /> : null}
           <Thread
             agentId="agent-1"
             agentName="Helper"
             threadId={threadId}
             suggestedPrompts={suggestedPrompts}
             hasModelList={hasModelList}
+            runOptionsSlot={runOptionsSlot}
           />
         </ChatProvider>
       </ThreadInputProvider>
@@ -203,6 +215,21 @@ describe('Thread', () => {
   beforeEach(() => {
     window.MASTRA_AGENT_SIGNALS = 'false';
     server.resetHandlers();
+  });
+
+  it('allows run options to wrap below model controls in a narrow composer', async () => {
+    server.use(...baseHandlers());
+
+    await act(async () => {
+      renderThread([], {
+        hasModelList: false,
+        runOptionsSlot: <div data-testid="run-options-slot">Run options</div>,
+      });
+    });
+
+    const controls = screen.getByTestId('run-options-slot').parentElement;
+    expect(controls?.classList.contains('max-w-full')).toBe(true);
+    expect(controls?.classList.contains('flex-wrap')).toBe(true);
   });
 
   describe('when no suggested prompts are provided for an empty thread', () => {
@@ -716,54 +743,64 @@ describe('Thread', () => {
   });
 
   describe('when a pinned signal-stream run is active', () => {
-    it('allows a continuation after the future target becomes invalid but blocks it after authorization is revoked', async () => {
+    it('keeps an approval-pending continuation pinned after the future target becomes invalid', async () => {
       window.MASTRA_AGENT_SIGNALS = 'true';
-      let subscribeController: ReadableStreamDefaultController<Uint8Array> | null = null;
-      const encoder = new TextEncoder();
       const captured: Captured[] = [];
       server.use(
         ...baseHandlers(),
-        http.post(
-          `${BASE_URL}/api/agents/agent-1/threads/subscribe`,
-          () =>
-            new HttpResponse(
-              new ReadableStream<Uint8Array>({
-                start(controller) {
-                  subscribeController = controller;
-                },
-              }),
-              { status: 200, headers: { 'content-type': 'text/event-stream' } },
-            ),
-        ),
         http.post(`${BASE_URL}/api/agents/agent-1/send-message`, async ({ request }) => {
           captured.push({ url: request.url, body: await captureBody(request) });
           return HttpResponse.json({ accepted: true, runId: 'run-pinned' });
         }),
       );
+      const initialMessages: MastraDBMessage[] = [
+        {
+          id: 'approval-message',
+          role: 'assistant',
+          createdAt: new Date(),
+          content: {
+            format: 2,
+            metadata: {
+              mode: 'stream',
+              requireApprovalMetadata: {
+                dangerousTool: {
+                  runId: 'run-pinned',
+                  toolCallId: 'tool-call-1',
+                  toolName: 'dangerousTool',
+                  args: {},
+                },
+              },
+            },
+            parts: [
+              {
+                type: 'tool-invocation',
+                toolInvocation: {
+                  toolName: 'dangerousTool',
+                  toolCallId: 'tool-call-1',
+                  state: 'call',
+                  args: {},
+                },
+              } as never,
+            ],
+          },
+        },
+      ];
 
       const initialOptions: RenderThreadOptions = {
         modelVersion: 'v2',
         selectedLabel: 'pr-101',
         canStartRun: true,
         canContinueRun: true,
+        showRunningState: true,
       };
       let rendered: ReturnType<typeof render>;
       await act(async () => {
-        rendered = render(renderThreadTree([], initialOptions));
+        rendered = render(renderThreadTree(initialMessages, initialOptions));
       });
-
-      const textarea = await screen.findByPlaceholderText<HTMLTextAreaElement>('Enter your message...');
-      fireEvent.change(textarea, { target: { value: 'start pinned run' } });
-      fireEvent.keyDown(textarea, { key: 'Enter' });
-      await waitFor(() => expect(captured).toHaveLength(1));
-      await act(async () => {
-        subscribeController?.enqueue(
-          encoder.encode(sseChunk({ type: 'start', runId: 'run-pinned', payload: { messageId: 'message-1' } })),
-        );
-      });
+      await waitFor(() => expect(screen.getByTestId('running-state').textContent).toBe('active:true;stream:false'));
 
       rendered!.rerender(
-        renderThreadTree([], {
+        renderThreadTree(initialMessages, {
           ...initialOptions,
           canStartRun: false,
           runBlockedReason: 'Choose an available run target before sending a message',
@@ -774,11 +811,13 @@ describe('Thread', () => {
       expect(continuationInput.hasAttribute('disabled')).toBe(false);
       fireEvent.change(continuationInput, { target: { value: 'continue pinned run' } });
       fireEvent.keyDown(continuationInput, { key: 'Enter' });
-      await waitFor(() => expect(captured).toHaveLength(2));
-      expect(captured[1]?.body).not.toHaveProperty('versions');
+      await waitFor(() => expect(captured).toHaveLength(1));
+      expect(captured[0]?.body).toMatchObject({ runId: 'run-pinned' });
+      expect(captured[0]?.body).not.toHaveProperty('versions');
+      expect(captured[0]?.body).not.toHaveProperty('ifIdle');
 
       rendered!.rerender(
-        renderThreadTree([], {
+        renderThreadTree(initialMessages, {
           ...initialOptions,
           canStartRun: false,
           canContinueRun: false,
@@ -792,11 +831,25 @@ describe('Thread', () => {
       );
       expect(revokedInput.hasAttribute('disabled')).toBe(true);
       await new Promise(resolve => setTimeout(resolve, 25));
-      expect(captured).toHaveLength(2);
+      expect(captured).toHaveLength(1);
 
-      await act(async () => {
-        subscribeController?.close();
-      });
+      rendered!.rerender(
+        renderThreadTree(initialMessages, {
+          ...initialOptions,
+          canStartRun: false,
+          runBlockedReason: 'Choose an available run target before sending a message',
+        }),
+      );
+      fireEvent.click(screen.getByRole('button', { name: /cancel/i }));
+
+      const idleInput = await screen.findByPlaceholderText<HTMLTextAreaElement>(
+        'Choose an available run target before sending a message',
+      );
+      expect(idleInput.disabled).toBe(true);
+      fireEvent.change(idleInput, { target: { value: 'must not start a new run' } });
+      fireEvent.keyDown(idleInput, { key: 'Enter' });
+      await new Promise(resolve => setTimeout(resolve, 25));
+      expect(captured).toHaveLength(1);
     });
 
     it('keeps the composer blocked after a fatal approval conflict until the run is cancelled', async () => {

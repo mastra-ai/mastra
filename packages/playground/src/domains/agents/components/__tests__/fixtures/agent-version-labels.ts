@@ -378,6 +378,20 @@ export const managerVersionLabelsError: VersionLabelApiError = {
   },
 };
 
+export const managerVersionLabelMutationIntegrityError: VersionLabelApiError = {
+  error: {
+    code: 'VERSION_LABEL_INTEGRITY_ERROR',
+    message: 'Version-label integrity could not be verified.',
+  },
+};
+
+export const managerForbiddenMutationError: VersionLabelApiError = {
+  error: {
+    code: 'FORBIDDEN',
+    message: 'Publishing access is required.',
+  },
+};
+
 export const managerAgentMissingError: VersionLabelApiError = {
   error: {
     code: 'ENTITY_NOT_FOUND',

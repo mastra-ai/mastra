@@ -57,6 +57,8 @@ function AgentPlayground() {
   const {
     data: storedAgent,
     isLoading: isLoadingStoredAgent,
+    isError: isStoredAgentError,
+    isFetching: isFetchingStoredAgent,
     refetch: refetchStoredAgent,
   } = useStoredAgent(agentId!, {
     status: 'draft',
@@ -83,7 +85,7 @@ function AgentPlayground() {
 
   const activeVersionId = storedAgent?.activeVersionId;
   const latestVersion = versionsData?.versions?.[0];
-  const hasDraft = !!(latestVersion && latestVersion.id !== activeVersionId);
+  const hasDraft = !isStoredAgentError && !!(latestVersion && latestVersion.id !== activeVersionId);
 
   // Determine if viewing a previous (non-latest) version
   const isViewingVersion = !!selectedVersionId && !!versionData;
@@ -135,6 +137,10 @@ function AgentPlayground() {
     if (result.error) throw result.error;
   }, [refetchVersions]);
 
+  const handleRetryProductionState = async (): Promise<void> => {
+    await handleRefreshProduction();
+  };
+
   const handleActivateProduction = useCallback(
     async (input: ProductionActivationInput): Promise<ProductionActivationResult> => {
       try {
@@ -158,7 +164,7 @@ function AgentPlayground() {
 
         const message = labelError?.message ?? (error instanceof Error ? error.message : 'Unknown error');
         toast.error(`Failed to update Production: ${message}`);
-        return { status: 'error', message };
+        return { status: 'error', code: labelError?.code, message };
       }
     },
     [activateProductionVersion, handleRefreshProduction],
@@ -261,6 +267,8 @@ function AgentPlayground() {
         isSavingDraft={isSavingDraft}
         isPublishing={isSubmitting || isActivatingProduction}
         hasDraft={hasDraft}
+        isProductionStateError={hasVersions && isStoredAgentError}
+        isProductionStateFetching={isFetchingStoredAgent}
         readOnly={isViewingPreviousVersion || !isCodeAgentEditable}
         isCodeAgentOverride={isCodeAgentOverride}
         isCodeSourceAgent={isCodeSourceAgent}
@@ -271,6 +279,7 @@ function AgentPlayground() {
         onPublish={handlePublishVersion}
         onActivateProduction={handleActivateProduction}
         onRefreshProduction={handleRefreshProduction}
+        onRetryProductionState={handleRetryProductionState}
         onRetryVersions={handleRetryVersions}
         onDownloadJson={handleDownloadJson}
         onOpenPr={handleOpenPrClick}
