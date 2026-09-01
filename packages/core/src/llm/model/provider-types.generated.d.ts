@@ -563,7 +563,6 @@ export type ProviderModelsMap = {
     'mistral-7b-instruct-v0.3',
     'mistral-large-2402',
     'mistral-large-2512',
-    'mistral-medium-2508',
     'mistral-medium-3.5',
     'mistral-nemo-instruct-2407',
     'mistral-small-2503',
