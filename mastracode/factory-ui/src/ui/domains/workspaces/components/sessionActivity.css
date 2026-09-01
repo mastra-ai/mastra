@@ -1,7 +1,6 @@
 /* Three markers, one grammar: the row's belt travels or breathes down the
  * sidebar; the card's wick runs a lit head round its outline until the whole rim
- * comes up under it; the inline pentad passes its swell round a ring or settles
- * it. Working and ready differ by amplitude — travel, breath, fill — so a run
+ * comes up under it. Working and ready differ by amplitude — travel, breath, fill — so a run
  * finishing morphs instead of cutting; initializing is working in the setup hue,
  * one 520ms colour slide away. The amplitudes rest on one rule: a rate has to be
  * expressed as a distance, never as an `animation-duration`. Durations cannot
@@ -153,99 +152,6 @@
   }
 }
 
-/* The card's pentad — five on a ring, swelling in turn. Same grammar as the
- * belt in its own vocabulary: the round-robin passes round, or settles into an
- * even ring with one slow wave going round. */
-.session-pentad {
-  --pentad-beat: 1.4s;
-
-  display: block;
-  width: 16px;
-  height: auto;
-}
-
-.session-pentad g {
-  transform-box: view-box;
-  transform-origin: 12px 12px;
-}
-
-.session-pentad circle {
-  fill: var(--belt-hue);
-  transform-box: fill-box;
-  transform-origin: 50% 50%;
-  animation: session-pentad-swell calc(var(--pentad-beat) * 1.8) ease-in-out infinite;
-}
-
-.session-pentad g:nth-of-type(1) circle {
-  animation-delay: calc(var(--pentad-beat) * -1.8);
-}
-
-.session-pentad g:nth-of-type(2) circle {
-  animation-delay: calc(var(--pentad-beat) * -1.44);
-}
-
-.session-pentad g:nth-of-type(3) circle {
-  animation-delay: calc(var(--pentad-beat) * -1.08);
-}
-
-.session-pentad g:nth-of-type(4) circle {
-  animation-delay: calc(var(--pentad-beat) * -0.72);
-}
-
-.session-pentad g:nth-of-type(5) circle {
-  animation-delay: calc(var(--pentad-beat) * -0.36);
-}
-
-@keyframes session-pentad-swell {
-  0%,
-  100% {
-    transform: scale(0.5);
-  }
-
-  14% {
-    transform: scale(1.2);
-  }
-
-  42% {
-    transform: scale(0.5);
-  }
-}
-
-.session-ready.session-pentad circle {
-  animation: session-pentad-rest calc(var(--pentad-beat) * 3) ease-in-out infinite;
-}
-
-.session-ready.session-pentad g:nth-of-type(1) circle {
-  animation-delay: calc(var(--pentad-beat) * -3);
-}
-
-.session-ready.session-pentad g:nth-of-type(2) circle {
-  animation-delay: calc(var(--pentad-beat) * -2.4);
-}
-
-.session-ready.session-pentad g:nth-of-type(3) circle {
-  animation-delay: calc(var(--pentad-beat) * -1.8);
-}
-
-.session-ready.session-pentad g:nth-of-type(4) circle {
-  animation-delay: calc(var(--pentad-beat) * -1.2);
-}
-
-.session-ready.session-pentad g:nth-of-type(5) circle {
-  animation-delay: calc(var(--pentad-beat) * -0.6);
-}
-
-@keyframes session-pentad-rest {
-  0%,
-  100% {
-    transform: scale(0.8);
-  }
-
-  50% {
-    transform: scale(1.04);
-  }
-}
-
 /* The card's wick. The head never stops — an angle cannot cross-fade its sweep
  * without snapping at the loop seam, so `--wick-fill` brings the rim up under
  * it. */
@@ -320,15 +226,14 @@
   }
 }
 
-/* Belt and pentad have nothing left once travel is off: ready and working
- * collapse to the same still frame and only the colour tells them apart. The
- * wick still reads — a parked head against a rim that is lit or not. */
+/* The belt has nothing left once travel is off: ready and working collapse to
+ * the same still frame and only the colour tells them apart. The wick still
+ * reads — a parked head against a rim that is lit or not. */
 @media (prefers-reduced-motion: reduce) {
   .session-wick,
   .session-belt,
   .session-belt-sway,
-  .session-belt-sway i,
-  .session-pentad circle {
+  .session-belt-sway i {
     transition: none;
     animation: none;
   }

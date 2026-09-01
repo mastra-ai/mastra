@@ -7,8 +7,6 @@ import './sessionActivity.css';
 
 const PILLS = [0, 1, 2, 3, 4];
 
-const PENTAD = [0, 72, 144, 216, 288];
-
 const STATUS_TITLE: Record<SessionRowStatus, string> = {
   initializing: 'Initializing',
   working: 'Working',
@@ -77,37 +75,5 @@ export function SessionActivityWick({
       title={STATUS_TITLE[status]}
       className={cn('session-wick', `session-${status}`, className)}
     />
-  );
-}
-
-/**
- * The inline marker, for a header row where there is no outline to run: five on
- * a ring, swelling in turn while the agent works — in the setup hue while the
- * sandbox is still coming up — and settling into an even ring with a slow wave
- * once it is your turn.
- */
-export function SessionActivityPentad({
-  status,
-  label,
-  className,
-  ...props
-}: ComponentProps<'svg'> & {
-  status: SessionRowStatus;
-  /** Omit where the status is already spelled out in adjacent text: the marker is then decorative. */
-  label?: string;
-}) {
-  return (
-    <svg
-      {...props}
-      {...statusAttributes(status, label)}
-      viewBox="0 0 24 24"
-      className={cn('session-pentad', `session-${status}`, className)}
-    >
-      {PENTAD.map(angle => (
-        <g key={angle} style={{ transform: `rotate(${angle}deg)` }}>
-          <circle cx="12" cy="5.4" r="2.8" />
-        </g>
-      ))}
-    </svg>
   );
 }
