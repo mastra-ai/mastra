@@ -367,7 +367,7 @@ export function WorkItemCard({
               />
             </div>
           )}
-          {threadSession !== undefined && sessionStatus === undefined && (
+          {threadSession !== undefined && wickStatus === undefined && (
             <Link
               to={`/factories/${factoryId}/workspaces/${threadSession.sessionId}/threads/${threadSession.threadId}`}
               draggable={false}
