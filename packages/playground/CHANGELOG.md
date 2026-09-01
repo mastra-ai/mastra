@@ -1,5 +1,17 @@
 # @internal/playground
 
+## 1.27.3-alpha.1
+
+### Patch Changes
+
+- Fixed the Evaluation overview in Studio truncating each scorer's history to its newest 100 scores. The Scores chart and summary now page through the full score list, so multi-week history and averages are complete for scorers with more than 100 scores. Fixes [#22540](https://github.com/mastra-ai/mastra/issues/22540). ([#22674](https://github.com/mastra-ai/mastra/pull/22674))
+
+- Updated dependencies [[`7d466c3`](https://github.com/mastra-ai/mastra/commit/7d466c3f806c7741796366543ea23d28428f6a1b), [`a3606a0`](https://github.com/mastra-ai/mastra/commit/a3606a09f3deaeef17caf04b9c6a0d7cd6b80fe6), [`4095752`](https://github.com/mastra-ai/mastra/commit/40957529233d202446ebecab1f59c76e99910230), [`a3606a0`](https://github.com/mastra-ai/mastra/commit/a3606a09f3deaeef17caf04b9c6a0d7cd6b80fe6), [`19b6f32`](https://github.com/mastra-ai/mastra/commit/19b6f322968210aa1e6d2cfd1a7a4c3a92e885d4), [`fa43c25`](https://github.com/mastra-ai/mastra/commit/fa43c257f315d1d8eec4ab6ebdad9033b4ed4bfe)]:
+  - @mastra/playground-ui@51.4.0-alpha.1
+  - @mastra/core@1.63.3-alpha.1
+  - @mastra/client-js@1.42.5-alpha.1
+  - @mastra/react@1.4.10-alpha.1
+
 ## 1.27.3-alpha.0
 
 ### Patch Changes

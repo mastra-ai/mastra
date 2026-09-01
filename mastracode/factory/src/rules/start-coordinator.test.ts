@@ -33,6 +33,7 @@ function makeController(sendMessage = vi.fn(async () => {})) {
     },
     getWorkspace: vi.fn(() => ({ skills: undefined })),
     state: { get: vi.fn(() => ({})), set: vi.fn(async () => {}) },
+    permissions: { setForTool: vi.fn(async () => {}) },
     model: { switch: vi.fn(async () => {}) },
     om: {
       observer: { modelId: vi.fn(() => undefined), switchModel: vi.fn(async () => {}) },
@@ -238,6 +239,11 @@ describe('FactoryStartCoordinator', () => {
       replayed: false,
     });
     expect((await storage.listPendingStarts('org-1', PROJECT_ID))[0]?.status).toBe('pending');
+    const session = await vi.mocked(controller.createSession).mock.results[0]?.value;
+    expect(session.permissions.setForTool).toHaveBeenCalledWith({
+      toolName: 'factory_transition_work_item',
+      policy: 'allow',
+    });
     const requestContext = vi.mocked(controller.createSession).mock.calls[0]?.[0].requestContext;
     expect(requestContext?.get('user')).toEqual({
       workosId: 'user-1',
@@ -252,6 +258,27 @@ describe('FactoryStartCoordinator', () => {
       branch: 'factory/issue-1',
       startedBy: 'user-1',
     });
+  });
+
+  it('grants plan preapproval only on a hands-off start, and a later one upgrades the item', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const { controller } = makeController();
+    const coordinator = new FactoryStartCoordinator(
+      controller as never,
+      storage,
+      undefined,
+      makeSourceControl() as never,
+    );
+
+    const plain = await coordinator.prepare(startRequest());
+    expect((await storage.get({ orgId: 'org-1', id: plain.workItemId }))?.plansPreapprovedAt ?? null).toBeNull();
+
+    const handsOff = await coordinator.prepare({
+      ...startRequest({ kickoffKey: 'kickoff-2' }),
+      preapprovePlans: true,
+    });
+    expect(handsOff.workItemId).toBe(plain.workItemId);
+    expect((await storage.get({ orgId: 'org-1', id: handsOff.workItemId }))?.plansPreapprovedAt).toBeInstanceOf(Date);
   });
 
   it('seeds caller identity into an existing request context', async () => {

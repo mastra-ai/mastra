@@ -12,7 +12,7 @@ import { INTAKE_SOURCES, stageContentCount } from '../domains/factory/boardCandi
 import type { IntakeSource } from '../domains/factory/boardCandidates';
 import { boardLoadingStages, boardStages, itemAppearsInStage } from '../domains/factory/boardStages';
 import type { BoardKind } from '../domains/factory/boardStages';
-import { BoardAutoRunToggle } from '../domains/factory/components/BoardAutoRunToggle';
+import { BoardAutomationSettings } from '../domains/factory/components/BoardAutomationSettings';
 import { BoardTooltipDelay } from '../domains/factory/components/BoardCardParts';
 import { BoardColumn, BoardColumnHeader } from '../domains/factory/components/BoardColumn';
 import { BoardColumnEmptyState } from '../domains/factory/components/BoardColumnEmptyState';
@@ -309,7 +309,11 @@ function BoardContent({
                 onReset={resetFilters}
               />
               <div className="w-full lg:w-auto [&>div]:w-full [&>div]:justify-between lg:[&>div]:w-auto lg:[&>div]:justify-start">
-                <BoardAutoRunToggle factoryProjectId={factoryProjectId} enabled={factory.autoRunEnabled ?? false} />
+                <BoardAutomationSettings
+                  factoryProjectId={factoryProjectId}
+                  autoRunEnabled={factory.autoRunEnabled ?? false}
+                  autoApprovePlans={factory.autoApprovePlans ?? false}
+                />
               </div>
             </div>
             <div className="from-surface2 via-surface2 sticky top-0 z-20 flex items-start gap-2 via-[calc(100%-0.75rem)] to-transparent px-5 max-lg:bg-linear-to-b max-lg:pb-3 lg:gap-3">
@@ -411,8 +415,8 @@ function BoardContent({
                           onRetryDecision={decisions.retry}
                           pendingRunRoles={runs.pendingRolesFor(item.id)}
                           onCreateSession={() => void runs.openOrCreateSession(item, stage.id)}
-                          onStartRun={(_spec, action) => void runs.openOrStartRun(item, action.role)}
-                          onRestartRun={(_spec, action) => void runs.restartRun(item, action.role)}
+                          onStartRun={(_spec, action, options) => void runs.openOrStartRun(item, action.role, options)}
+                          onRestartRun={(_spec, action, options) => void runs.restartRun(item, action.role, options)}
                           onMove={toStage => items.move(item.id, toStage)}
                           onRemove={() => items.remove(item.id)}
                         />

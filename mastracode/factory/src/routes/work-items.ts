@@ -342,6 +342,7 @@ function parseStartBody(
     threadTitle,
     threadTags,
     kickoffKey,
+    preapprovePlans: body.preapprovePlans === true,
     invocation,
     destinationStage,
     workItem: { id, role, input },

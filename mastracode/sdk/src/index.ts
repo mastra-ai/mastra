@@ -741,6 +741,7 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
     globalSettings.signals?.experimentalGithubSignals && !config?.disableGithubSignals
       ? new GithubSignals({
           cwd: project.rootPath,
+          pollIntervalMs: globalSettings.signals.githubPollIntervalMs,
           gitcrawlCommand:
             process.env.MASTRACODE_GITCRAWL_BIN ??
             process.env.GITCRAWL_BIN ??

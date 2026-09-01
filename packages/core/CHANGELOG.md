@@ -1,5 +1,15 @@
 # @mastra/core
 
+## 1.63.3-alpha.1
+
+### Patch Changes
+
+- Fixed plan approvals so mode changes resume the original agent run. ([#22476](https://github.com/mastra-ai/mastra/pull/22476))
+
+- Fixed durable agent output processors receiving an empty request context, including after server restarts. ([#22327](https://github.com/mastra-ai/mastra/pull/22327))
+
+- Fixed approval resumes when Agent Controller uses in-memory storage. ([#22476](https://github.com/mastra-ai/mastra/pull/22476))
+
 ## 1.63.3-alpha.0
 
 ### Patch Changes

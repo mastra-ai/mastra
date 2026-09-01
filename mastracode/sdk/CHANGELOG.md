@@ -1,5 +1,30 @@
 # @mastra/code-sdk
 
+## 1.6.0-alpha.3
+
+### Patch Changes
+
+- Improved diagnostics and error guidance when deployed tenant credential resolution fails closed. ([#22721](https://github.com/mastra-ai/mastra/pull/22721))
+
+## 1.6.0-alpha.2
+
+### Minor Changes
+
+- Enabled first-message thread title generation for all Mastra Code clients. ([#22560](https://github.com/mastra-ai/mastra/pull/22560))
+
+### Patch Changes
+
+- Updated dependencies [[`604da15`](https://github.com/mastra-ai/mastra/commit/604da153fe3170b7e4d9402b0f02ce417b39b417), [`d94e242`](https://github.com/mastra-ai/mastra/commit/d94e2423909cfc859eaf39827e83c832439e6b6d), [`8571a42`](https://github.com/mastra-ai/mastra/commit/8571a42c8039e938564e5c5fb0a6b75377c4fe67)]:
+  - @mastra/github-signals@0.4.0-alpha.0
+  - @mastra/memory@1.28.2-alpha.0
+
+## 1.6.0-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [[`a3606a0`](https://github.com/mastra-ai/mastra/commit/a3606a09f3deaeef17caf04b9c6a0d7cd6b80fe6), [`4095752`](https://github.com/mastra-ai/mastra/commit/40957529233d202446ebecab1f59c76e99910230), [`a3606a0`](https://github.com/mastra-ai/mastra/commit/a3606a09f3deaeef17caf04b9c6a0d7cd6b80fe6)]:
+  - @mastra/core@1.63.3-alpha.1
+
 ## 1.6.0-alpha.0
 
 ### Minor Changes

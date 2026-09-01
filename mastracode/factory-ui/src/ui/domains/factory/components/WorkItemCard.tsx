@@ -95,8 +95,8 @@ export function WorkItemCard({
   pendingRunRoles: ReadonlyMap<string, FactoryRunPhase | undefined>;
   /** Detail-panel fallback when the item has no run spec: open an empty session (no run). */
   onCreateSession: (spec: { branch: string; threadTitle: string }) => void;
-  onStartRun: (spec: ItemRunSpec, action: RunAction) => void;
-  onRestartRun: (spec: ItemRunSpec, action: RunAction) => void;
+  onStartRun: (spec: ItemRunSpec, action: RunAction, options?: { preapprovePlans?: boolean }) => void;
+  onRestartRun: (spec: ItemRunSpec, action: RunAction, options?: { preapprovePlans?: boolean }) => void;
   onMove: (toStage: string) => void;
   onRemove: () => void;
 }) {
@@ -196,13 +196,13 @@ export function WorkItemCard({
   // Dismissing a suggested run is the one entry that leaves it open.
   const panelMenu: WorkItemMenuProps = {
     ...menu,
-    onStartRun: (spec, action) => {
+    onStartRun: (spec, action, options) => {
       morph.closeDetails();
-      onStartRun(spec, action);
+      onStartRun(spec, action, options);
     },
-    onRestartRun: (spec, action) => {
+    onRestartRun: (spec, action, options) => {
       morph.closeDetails();
-      onRestartRun(spec, action);
+      onRestartRun(spec, action, options);
     },
     onApproveProposal: decisionId => {
       morph.closeDetails();
