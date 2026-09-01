@@ -1150,8 +1150,8 @@ export class SessionSuspensions {
    * Drop all parked suspensions (e.g. on abort or thread switch), returning the
    * dropped entries so callers can retract the corresponding prompts.
    */
-  clear(): Array<{ toolCallId: string; toolName: string }> {
-    const dropped = [...this.#pending].map(([toolCallId, { toolName }]) => ({ toolCallId, toolName }));
+  clear(): Array<{ toolCallId: string; runId: string; toolName: string }> {
+    const dropped = [...this.#pending].map(([toolCallId, { runId, toolName }]) => ({ toolCallId, runId, toolName }));
     this.#pending.clear();
     return dropped;
   }
@@ -3135,7 +3135,8 @@ export class Session<TState = unknown> {
     // Retract the prompts for every parked suspension. Dropping them silently
     // left the UI rendering `ask_user` / `request_access` prompts whose answers
     // could never land, since the run they belong to is gone.
-    for (const { toolCallId, toolName } of this.suspensions.clear()) {
+    const suspendedToolCalls = this.suspensions.clear();
+    for (const { toolCallId, toolName } of suspendedToolCalls) {
       this.emit({ type: 'tool_suspension_cancelled', toolCallId, toolName, reason: ABORTED_BY_USER_REASON });
     }
 
@@ -3149,6 +3150,15 @@ export class Session<TState = unknown> {
     this.approval.cancel();
     if (wasGated) {
       this.run.requestAbort({ deferSignal: true });
+      return;
+    }
+
+    if (suspendedToolCalls.length > 0) {
+      this.run.requestAbort({ deferSignal: true });
+      void this.runEngine
+        .settleSuspendedToolCallsAsDenied(suspendedToolCalls)
+        .catch(error => this.emit({ type: 'error', error: getErrorFromUnknown(error) }))
+        .finally(() => this.completeDeferredAbort());
       return;
     }
 
