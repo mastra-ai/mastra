@@ -66,7 +66,7 @@ function ImportRunDetail({
   if (detail.isPending) return <SkeletonRows label="Loading import run" rows={5} />;
   if (detail.isError) return <Notice variant="destructive">{detail.error.message}</Notice>;
 
-  const { run, activity, transcript } = detail.data;
+  const { run, activity } = detail.data;
   return (
     <section
       aria-label="Import run detail"
@@ -81,7 +81,7 @@ function ImportRunDetail({
             <Badge size="xs">{run.status}</Badge>
           </div>
           <Txt as="p" variant="caption" className="text-muted-foreground mt-1">
-            {run.source ?? 'Opaque source'} → {run.scope ?? 'Opaque scope'} · {run.triggerKind} · {elapsed(run)}
+            {run.source ?? 'Private source'} · {run.triggerKind} · {elapsed(run)}
           </Txt>
         </div>
         <Button variant="ghost" size="sm" onClick={onClose}>
@@ -194,14 +194,11 @@ function ImportRuns({
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All bindings</SelectItem>
-            {importer.bindings.map(value => {
-              const key = JSON.stringify([value.source, value.scope]);
-              return (
-                <SelectItem key={key} value={key}>
-                  {value.source} → {value.scope}
-                </SelectItem>
-              );
-            })}
+            {importer.bindings.map(value => (
+              <SelectItem key={value.binding} value={value.binding}>
+                {value.source}
+              </SelectItem>
+            ))}
           </SelectContent>
         </Select>
         <Select value={status ?? 'all'} onValueChange={value => setStatus(selectedStatus(value))}>
@@ -256,7 +253,7 @@ function ImportRuns({
                     <Badge size="xs">{run.status}</Badge>
                   </div>
                   <span className="text-muted-foreground mt-1 block truncate text-xs">
-                    {run.scope ?? 'Opaque scope'} · {run.triggerKind} · {elapsed(run)}
+                    {run.triggerKind} · {elapsed(run)}
                   </span>
                   {run.error ? (
                     <span className="text-muted-foreground mt-1 block truncate text-xs">{run.error}</span>
