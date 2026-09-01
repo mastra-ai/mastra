@@ -12,12 +12,12 @@ import type { ReactNode } from 'react';
 import { CardLabels } from '../domains/factory/components/BoardCardParts';
 import { SourceIcon } from '../domains/factory/components/BoardIcons';
 import { SessionActivityPentad } from '../domains/workspaces/components/SessionActivity';
-import type { SessionRowStatus } from '../domains/workspaces/components/SessionActivity';
+import type { SessionCardStatus, SessionRowStatus } from '../domains/workspaces/components/SessionActivity';
 import { SessionNavRow } from '../domains/workspaces/components/SessionNavRow';
 import type { SessionPreviewDetails } from '../domains/workspaces/components/SessionPreviewCard';
 
 interface MockItem {
-  status?: SessionRowStatus;
+  status?: SessionCardStatus;
   meta: string;
   title: string;
   labels: string[];
@@ -49,6 +49,14 @@ const CARDS: MockItem[] = [
     labels: ['linear', 'docs'],
     comments: 1,
     owner: 'Schneider Damien',
+  },
+  {
+    status: 'idle',
+    meta: '#22501 · daneatmastra · 5d',
+    title: 'Session bound, agent resting',
+    labels: ['factory'],
+    comments: 0,
+    owner: 'daneatmastra',
   },
   {
     meta: '#22488 · daneatmastra · 6d',

@@ -11,9 +11,8 @@ import { useParams } from 'react-router';
 import type { FactoryRunPhase } from '../../../../hooks/useStartFactoryRun';
 import { boardCardStatus } from '../boardCardStatus';
 import { setDragPayload } from '../boardDrag';
-import { useActiveRunResources } from '../../../../hooks/useActiveRunResources';
 import { SessionActivityPentad } from '../../workspaces/components/SessionActivity';
-import { AGENT_CONTROLLER_ID } from '../../chat/services/constants';
+import type { SessionCardStatus } from '../../workspaces/components/SessionActivity';
 import { itemThreadSession, metadataLabels, pullRequestStatusForItem, workItemMeta } from '../boardItems';
 import { itemRunSpec } from '../boardRunSpecs';
 import type { ItemRunSpec, RunAction } from '../boardRunSpecs';
@@ -63,6 +62,7 @@ export function WorkItemCard({
   onDismissProposal,
   onRetryDecision,
   pendingRunRoles,
+  sessionStatus = 'idle',
   onCreateSession,
   onStartRun,
   onRestartRun,
@@ -96,6 +96,8 @@ export function WorkItemCard({
   onDismissProposal: (decisionId: string) => void;
   onRetryDecision: (decisionId: string) => void;
   pendingRunRoles: ReadonlyMap<string, FactoryRunPhase | undefined>;
+  /** Live status of the card's bound sessions, resolved once for the whole board. */
+  sessionStatus?: SessionCardStatus;
   /** Detail-panel fallback when the item has no run spec: open an empty session (no run). */
   onCreateSession: (spec: { branch: string; threadTitle: string }) => void;
   onStartRun: (spec: ItemRunSpec, action: RunAction, options?: { preapprovePlans?: boolean }) => void;
@@ -134,12 +136,6 @@ export function WorkItemCard({
       ? runSpec.actions.find(action => FACTORY_ROLE_STAGES[action.role] === columnStage && action.role in sessions)
       : undefined;
   const threadSession = itemThreadSession(sessions);
-  // One poll for the whole controller, shared by every card and the sidebar alike.
-  const running = useActiveRunResources({
-    agentControllerId: AGENT_CONTROLLER_ID,
-    resourceIds: threadSession ? [threadSession.sessionId] : [],
-  });
-  const sessionStatus = threadSession && running[threadSession.sessionId] ? 'working' : 'ready';
   const primaryAction = cardPrimaryAction({
     item,
     runSpec,

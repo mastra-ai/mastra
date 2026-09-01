@@ -10,17 +10,24 @@ import './sessionActivity.css';
  */
 export type SessionRowStatus = 'initializing' | 'working' | 'ready';
 
+/**
+ * A board card also has to say "bound but nothing to report". Rows hide their
+ * belt instead, so `ready` keeps one meaning everywhere — it is your turn.
+ */
+export type SessionCardStatus = SessionRowStatus | 'idle';
+
 const PILLS = [0, 1, 2, 3, 4];
 
 const PENTAD = [0, 72, 144, 216, 288];
 
-const STATUS_TITLE: Record<SessionRowStatus, string> = {
+const STATUS_TITLE: Record<SessionCardStatus, string> = {
   initializing: 'Initializing',
   working: 'Working',
   ready: 'Ready',
+  idle: 'Idle',
 };
 
-function statusAttributes(status: SessionRowStatus, label: string | undefined) {
+function statusAttributes(status: SessionCardStatus, label: string | undefined) {
   return label ? { role: 'status', 'aria-label': label, title: STATUS_TITLE[status] } : { 'aria-hidden': true };
 }
 
@@ -67,7 +74,7 @@ export function SessionActivityPentad({
   className,
   ...props
 }: ComponentProps<'svg'> & {
-  status: SessionRowStatus;
+  status: SessionCardStatus;
   /** Omit where the status is already spelled out in adjacent text: the marker is then decorative. */
   label?: string;
 }) {

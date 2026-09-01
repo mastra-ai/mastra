@@ -58,6 +58,14 @@
   --belt-hue: var(--accent3);
 }
 
+/* Bound but with nothing to report: every amplitude at zero, muted. */
+.session-idle {
+  --belt-pitch: 0px;
+  --belt-jam: 0;
+  --belt-sway: 0;
+  --belt-hue: var(--neutral3);
+}
+
 .session-belt {
   --belt-beat: 1.4s;
 
@@ -309,6 +317,16 @@
   50% {
     transform: scale(1.04);
   }
+}
+
+/* The ring parks in the rest pose without the wave. */
+.session-idle.session-pentad {
+  opacity: 0.55;
+}
+
+.session-idle.session-pentad circle {
+  animation: none;
+  transform: scale(0.8);
 }
 
 /* Ready has no travel to begin with, so it and working collapse to the same

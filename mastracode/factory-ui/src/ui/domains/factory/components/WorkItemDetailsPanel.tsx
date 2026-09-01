@@ -8,7 +8,7 @@ import { Link, useParams, useSearchParams } from 'react-router';
 
 import { useFactoryAuth } from '../../../../hooks/useFactoryAuth';
 import { SessionActivityPentad } from '../../workspaces/components/SessionActivity';
-import type { SessionRowStatus } from '../../workspaces/components/SessionActivity';
+import type { SessionCardStatus } from '../../workspaces/components/SessionActivity';
 import type { BoardCardStatus } from '../boardCardStatus';
 import { externalLinkLabel, metadataLabels, pullRequestStatusForItem, workItemMeta } from '../boardItems';
 import { itemStageLabel } from '../boardStages';
@@ -51,7 +51,7 @@ export function WorkItemDetailsPanel({
   morph: CardMorph;
   relatedLinks: ReactNode;
   threadSession?: WorkItemSessionRef;
-  sessionStatus: SessionRowStatus;
+  sessionStatus: SessionCardStatus;
   status: BoardCardStatus;
   retryingDecisionId?: string;
   onRetryDecision: (decisionId: string) => void;
