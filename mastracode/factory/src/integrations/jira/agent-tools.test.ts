@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fakeRouteAuth } from '../../routes/test-utils.js';
 import { createFactoryStorageForTests } from '../../storage/test-utils.js';
 import type { FactoryStorageTestSeed } from '../../storage/test-utils.js';
+import { PlatformApiClient } from '../platform/api-client.js';
 import { buildJiraAgentTools } from './agent-tools.js';
 import { JiraApiError } from './api.js';
 import { JiraIntegration } from './integration.js';
@@ -59,7 +60,10 @@ const issueDetail = {
 beforeEach(async () => {
   PROJECT_ID = '';
   seed = await createFactoryStorageForTests();
-  jira = new JiraIntegration({ baseUrl: 'https://acme.atlassian.net', email: 'ops@acme.test', apiToken: 'jira-token' });
+  jira = new JiraIntegration({
+    client: new PlatformApiClient({ baseUrl: 'https://integrations.example.com', accessToken: 'platform-token' }),
+  });
+  vi.spyOn(jira, 'hasActiveConnections').mockResolvedValue(true);
   jira.initialize({ projects: seed.projects, auth: fakeRouteAuth() });
   vi.spyOn(jira.intake, 'getIssue').mockImplementation(input => fetchJiraIssueDetail(input.issueId));
   vi.spyOn(jira.intake, 'createComment').mockImplementation(input => createJiraIssueComment(input.issueId, input.body));
@@ -124,7 +128,7 @@ describe('jira_get_issue', () => {
     const tools = await buildJiraAgentTools({ jira, requestContext: requestContextFor(PROJECT_ID) });
     const result = await (tools.jira_get_issue!.execute as any)({ issue: 'ENG-42' });
     expect(result).toEqual({
-      error: 'Jira rejected the configured credentials. Ask the operator to check the Jira API token.',
+      error: 'Jira rejected the connected account. Reconnect it in Mastra Platform.',
     });
   });
 

@@ -1,54 +1,58 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import { PlatformApiClient } from '../platform/api-client.js';
 import { JiraApiError } from './api.js';
-import { JiraIntegration } from './integration.js';
+import {
+  decodeIssueReference,
+  decodeSourceId,
+  encodeIssueReference,
+  encodeSourceId,
+  JiraIntegration,
+} from './integration.js';
 
-const BASE = 'https://acme.atlassian.net';
+const PLATFORM_BASE = 'https://integrations.example.com';
+const connection = { type: 'oauth' as const, accessToken: 'platform-managed' };
+
+const connections = [
+  { id: 'a1b_acme', integrationId: 'jira', status: 'active', accountLabel: 'acme.atlassian.net' },
+  { id: 'a1b_beta', integrationId: 'jira', status: 'active', accountLabel: 'beta.atlassian.net' },
+  { id: 'a1b_gitlab', integrationId: 'gitlab', status: 'active', accountLabel: 'gitlab.com' },
+];
 
 function integration(): JiraIntegration {
-  return new JiraIntegration({ baseUrl: BASE, email: 'ops@acme.test', apiToken: 'jira-token' });
+  return new JiraIntegration({
+    client: new PlatformApiClient({ baseUrl: PLATFORM_BASE, accessToken: 'platform-token' }),
+  });
 }
 
-/** Contract-required connection — Jira ignores it (deployment-global credentials). */
-const connection = { type: 'oauth' as const, accessToken: 'ignored' };
-
-interface StubIssue {
-  id?: string;
-  key?: string;
-  fields?: Record<string, unknown>;
+function json(body: unknown, status = 200): Response {
+  return new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
 }
 
-function issue(overrides: StubIssue = {}): { id: string; key: string; fields: Record<string, unknown> } {
+function issue(key = 'ENG-42', projectId = '1') {
   return {
-    id: '10001',
-    key: 'ENG-42',
-    ...overrides,
+    id: `id-${key}`,
+    key,
     fields: {
-      summary: 'Fix intake',
+      summary: `Issue ${key}`,
       status: { name: 'To Do', statusCategory: { key: 'new' } },
       assignee: { displayName: 'Ada' },
       reporter: { displayName: 'Grace' },
       labels: ['bug'],
       priority: { name: 'High' },
-      issuetype: { name: 'Bug' },
-      project: { id: '1', key: 'ENG' },
+      project: { id: projectId, key: key.split('-')[0] },
       created: '2026-07-01T00:00:00Z',
       updated: '2026-07-02T00:00:00Z',
-      ...overrides.fields,
     },
   };
 }
 
-function jsonResponse(body: unknown, status = 200): Response {
-  return new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
-}
-
-/** Route-style fetch stub: first matching [method, path-substring] wins. */
 function stubRoutes(routes: Array<[string, string, () => Response]>): ReturnType<typeof vi.fn> {
-  const fetchMock = vi.fn(async (url: URL, init?: RequestInit) => {
+  const fetchMock = vi.fn<typeof fetch>(async (input, init) => {
+    const target = String(input);
     const method = init?.method ?? 'GET';
-    const target = String(url);
-    const match = routes.find(([m, path]) => m === method && target.includes(path));
+    if (target.endsWith('/v2/connections')) return json({ connections });
+    const match = routes.find(([expectedMethod, path]) => expectedMethod === method && target.includes(path));
     if (!match) throw new Error(`Unexpected request: ${method} ${target}`);
     return match[2]();
   });
@@ -56,291 +60,153 @@ function stubRoutes(routes: Array<[string, string, () => Response]>): ReturnType
   return fetchMock;
 }
 
-afterEach(() => {
-  vi.unstubAllGlobals();
-});
+afterEach(() => vi.unstubAllGlobals());
 
-describe('JiraIntegration capability surface', () => {
-  it('lists sources across project-search pages', async () => {
-    let call = 0;
+describe('JiraIntegration over integrations v2', () => {
+  it('lists projects from every active Jira connection with site-qualified source ids', async () => {
     stubRoutes([
       [
         'GET',
-        '/rest/api/3/project/search',
-        () =>
-          call++ === 0
-            ? jsonResponse({ values: [{ id: '1', key: 'ENG', name: 'Engineering' }], startAt: 0, isLast: false })
-            : jsonResponse({ values: [{ id: '2', key: 'OPS', name: 'Operations' }], startAt: 1, isLast: true }),
+        'a1b_acme/proxy/rest/api/3/project/search',
+        () => json({ values: [{ id: '1', key: 'ENG', name: 'Engineering' }], startAt: 0, isLast: true }),
+      ],
+      [
+        'GET',
+        'a1b_beta/proxy/rest/api/3/project/search',
+        () => json({ values: [{ id: '2', key: 'OPS', name: 'Operations' }], startAt: 0, isLast: true }),
       ],
     ]);
 
-    await expect(integration().intake.listSources({ orgId: 'org-1', userId: 'user-1' })).resolves.toEqual([
-      { id: '1', name: 'Engineering', type: 'project', metadata: { key: 'ENG' } },
-      { id: '2', name: 'Operations', type: 'project', metadata: { key: 'OPS' } },
-    ]);
+    const sources = await integration().intake.listSources({ orgId: 'org-1', userId: 'user-1' });
+
+    expect(sources).toHaveLength(2);
+    expect(decodeSourceId(sources[0]!.id)).toEqual({ connectionId: 'a1b_acme', projectId: '1' });
+    expect(sources[0]).toMatchObject({
+      name: 'Engineering',
+      metadata: { key: 'ENG', connectionId: 'a1b_acme', site: 'acme.atlassian.net' },
+    });
+    expect(decodeSourceId(sources[1]!.id)).toEqual({ connectionId: 'a1b_beta', projectId: '2' });
   });
 
-  it('normalizes Jira issues through the shared Intake contract with sanitized JQL and cursor round-trip', async () => {
+  it('pages selected projects across multiple Jira connections without mixing credentials', async () => {
     const fetchMock = stubRoutes([
-      ['POST', '/rest/api/3/search/jql', () => jsonResponse({ issues: [issue()], nextPageToken: 'page-2' })],
+      ['POST', 'a1b_acme/proxy/rest/api/3/search/jql', () => json({ issues: [issue('ENG-42', '1')] })],
+      ['POST', 'a1b_beta/proxy/rest/api/3/search/jql', () => json({ issues: [issue('OPS-7', '2')] })],
     ]);
-
-    const page = await integration().intake.listIssues({
-      connection,
-      sourceIds: ['1', 'ENG', 'bad id;'],
-      labels: ['bug', 'ur"gent'],
-      cursor: 'page-1',
-    });
-
-    const body = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body)) as { jql: string; nextPageToken?: string };
-    expect(body.jql).toBe(
-      'project IN (1, "ENG") AND statusCategory != Done AND labels IN ("bug", "urgent") ORDER BY updated DESC',
-    );
-    expect(body.nextPageToken).toBe('page-1');
-    expect(page).toEqual({
-      issues: [
-        expect.objectContaining({
-          id: '10001',
-          identifier: 'ENG-42',
-          title: 'Fix intake',
-          url: `${BASE}/browse/ENG-42`,
-          author: 'Grace',
-          state: 'To Do',
-          stateType: 'unstarted',
-          priority: 'High',
-          assignee: 'Ada',
-          source: 'ENG',
-          labels: ['bug'],
-        }),
-      ],
-      nextCursor: 'page-2',
-    });
-  });
-
-  it('fails closed without calling Jira when every selected project id is invalid', async () => {
-    const fetchMock = stubRoutes([['POST', '/rest/api/3/search/jql', () => jsonResponse({ issues: [issue()] })]]);
-
-    await expect(
-      integration().intake.listIssues({ connection, sourceIds: ['bad id;', '"'], labels: [] }),
-    ).resolves.toEqual({ issues: [], nextCursor: null });
-    expect(fetchMock).not.toHaveBeenCalled();
-  });
-
-  it('maps issues to intake items and skips the API entirely for an empty selection', async () => {
-    const fetchMock = stubRoutes([['POST', '/rest/api/3/search/jql', () => jsonResponse({ issues: [issue()] })]]);
     const jira = integration();
+    const sourceIds = [encodeSourceId('a1b_acme', '1'), encodeSourceId('a1b_beta', '2')];
 
-    await expect(jira.intake.listItems({ orgId: 'org-1', userId: 'user-1', sourceIds: [] })).resolves.toEqual({
-      items: [],
-      nextCursor: null,
+    const first = await jira.intake.listItems({ orgId: 'org-1', userId: 'user-1', sourceIds });
+    const second = await jira.intake.listItems({
+      orgId: 'org-1',
+      userId: 'user-1',
+      sourceIds,
+      cursor: first.nextCursor ?? undefined,
     });
-    expect(fetchMock).not.toHaveBeenCalled();
 
-    const page = await jira.intake.listItems({ orgId: 'org-1', userId: 'user-1', sourceIds: ['1'] });
-    expect(page.items).toEqual([
-      expect.objectContaining({
-        source: { type: 'issue', externalId: 'ENG-42', url: `${BASE}/browse/ENG-42` },
-        sourceId: '1',
-        title: 'ENG-42: Fix intake',
-        status: 'To Do',
-        labels: ['bug'],
-        assignee: 'Ada',
-        metadata: expect.objectContaining({ identifier: 'ENG-42', stateType: 'unstarted', project: 'ENG' }),
-      }),
-    ]);
+    expect(first.items[0]).toMatchObject({ title: 'ENG-42: Issue ENG-42', metadata: { site: 'acme.atlassian.net' } });
+    expect(second.items[0]).toMatchObject({ title: 'OPS-7: Issue OPS-7', metadata: { site: 'beta.atlassian.net' } });
+    expect(decodeIssueReference(first.items[0]!.source.externalId)).toEqual({
+      connectionId: 'a1b_acme',
+      issueId: 'ENG-42',
+      projectId: '1',
+    });
+    const proxyCalls = fetchMock.mock.calls.map(([url]) => String(url)).filter(url => url.includes('/proxy/'));
+    expect(proxyCalls[0]).toContain('a1b_acme');
+    expect(proxyCalls[1]).toContain('a1b_beta');
   });
 
-  it('fetches issue detail with flattened ADF description and comments', async () => {
-    const description = {
-      type: 'doc',
-      version: 1,
-      content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Issue body' }] }],
-    };
-    const commentBody = {
-      type: 'doc',
-      version: 1,
-      content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Looking now' }] }],
-    };
+  it('sanitizes project and label filters before proxying JQL', async () => {
+    const fetchMock = stubRoutes([['POST', '/rest/api/3/search/jql', () => json({ issues: [] })]]);
+    await integration().intake.listIssues({
+      connection,
+      sourceIds: [encodeSourceId('a1b_acme', '1')],
+      labels: ['bug', 'ur"gent'],
+    });
+    const proxyCall = fetchMock.mock.calls.find(([url]) => String(url).includes('/search/jql'))!;
+    expect(JSON.parse(String(proxyCall[1]?.body)).jql).toBe(
+      'project IN (1) AND statusCategory != Done AND labels IN ("bug", "urgent") ORDER BY updated DESC',
+    );
+  });
+
+  it('resolves persisted issue references back to their connection and project', async () => {
+    vi.stubGlobal('fetch', vi.fn());
+    const reference = encodeIssueReference({ connectionId: 'a1b_beta', issueId: 'OPS-7', projectId: '2' });
+    await expect(
+      integration().intake.resolveIntakeDispatch?.({
+        orgId: 'org-1',
+        externalSource: { type: 'issue', externalId: reference },
+      }),
+    ).resolves.toEqual({
+      connection: { type: 'oauth', accessToken: 'jira-connection:a1b_beta' },
+      sourceId: encodeSourceId('a1b_beta', '2'),
+      issueId: 'OPS-7',
+    });
+  });
+
+  it('fetches issue detail and comments through the connection encoded in the issue reference', async () => {
     stubRoutes([
+      ['GET', 'a1b_beta/proxy/rest/api/3/issue/OPS-7?', () => json(issue('OPS-7', '2'))],
       [
         'GET',
-        '/comment',
+        'a1b_beta/proxy/rest/api/3/issue/OPS-7/comment',
         () =>
-          jsonResponse({
+          json({
             comments: [
-              { id: 'c-1', author: { displayName: 'Grace' }, body: commentBody, created: '2026-07-03T00:00:00Z' },
+              {
+                id: 'c1',
+                author: { displayName: 'Grace' },
+                body: {
+                  type: 'doc',
+                  version: 1,
+                  content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Details' }] }],
+                },
+                created: '2026-07-03T00:00:00Z',
+              },
             ],
             startAt: 0,
             maxResults: 50,
             total: 1,
           }),
       ],
-      ['GET', '/rest/api/3/issue/ENG-42', () => jsonResponse(issue({ fields: { description } }))],
     ]);
+    const reference = encodeIssueReference({ connectionId: 'a1b_beta', issueId: 'OPS-7', projectId: '2' });
 
-    await expect(integration().intake.getIssue({ connection, issueId: 'ENG-42' })).resolves.toMatchObject({
-      identifier: 'ENG-42',
-      description: 'Issue body',
+    const detail = await integration().intake.getIssue({ connection, issueId: reference });
+
+    expect(detail).toMatchObject({
+      identifier: 'OPS-7',
+      url: 'https://beta.atlassian.net/browse/OPS-7',
       commentCount: 1,
-      comments: [{ author: 'Grace', body: 'Looking now', createdAt: '2026-07-03T00:00:00Z' }],
     });
+    expect(detail?.comments[0]?.body).toBe('Details');
   });
 
-  it('returns null for an unknown issue instead of throwing', async () => {
-    stubRoutes([['GET', '/rest/api/3/issue/', () => jsonResponse({ errorMessages: ['Issue does not exist'] }, 404)]]);
-
-    await expect(integration().intake.getIssue({ connection, issueId: 'ENG-404' })).resolves.toBeNull();
+  it('rejects an unqualified issue key when multiple Jira sites are connected', async () => {
+    stubRoutes([]);
+    await expect(integration().intake.getIssue({ connection, issueId: 'ENG-42' })).rejects.toMatchObject({
+      code: 'jira_request_failed',
+      status: 400,
+    } satisfies Partial<JiraApiError>);
   });
 
-  it('creates ADF comments and returns a browse URL', async () => {
-    stubRoutes([['POST', '/comment', () => jsonResponse({ id: 'c-9', created: '2026-07-04T00:00:00Z' })]]);
-
-    await expect(integration().intake.createComment({ connection, issueId: 'ENG-42', body: 'Done' })).resolves.toEqual({
-      id: 'c-9',
-      url: `${BASE}/browse/ENG-42?focusedCommentId=c-9`,
-    });
-  });
-
-  it('resolves a byType target against transitions and applies the matching one', async () => {
-    const applied: string[] = [];
-    let fetches = 0;
+  it('creates comments through the selected connection and returns a site URL', async () => {
     stubRoutes([
-      [
-        'GET',
-        '/transitions',
-        () =>
-          jsonResponse({
-            transitions: [
-              { id: '11', name: 'Start', to: { name: 'In Progress', statusCategory: { key: 'indeterminate' } } },
-              { id: '31', name: 'Finish', to: { name: 'Done', statusCategory: { key: 'done' } } },
-            ],
-          }),
-      ],
       [
         'POST',
-        '/transitions',
-        () => {
-          applied.push('posted');
-          return new Response(null, { status: 204 });
-        },
-      ],
-      [
-        'GET',
-        '/rest/api/3/issue/',
-        () =>
-          fetches++ === 0
-            ? jsonResponse(issue())
-            : jsonResponse(issue({ fields: { status: { name: 'Done', statusCategory: { key: 'done' } } } })),
+        'a1b_acme/proxy/rest/api/3/issue/ENG-42/comment',
+        () => json({ id: 'c-1', created: '2026-07-03T00:00:00Z' }),
       ],
     ]);
-
-    const result = await integration().intake.updateIssue({
+    const result = await integration().intake.createComment({
       connection,
+      sourceId: encodeSourceId('a1b_acme', '1'),
       issueId: 'ENG-42',
-      state: { kind: 'byType', stateType: 'completed' },
+      body: 'Shipping',
     });
-
-    expect(applied).toEqual(['posted']);
-    expect(result).toMatchObject({ state: 'Done', stateType: 'completed' });
-  });
-
-  it('maps byType canceled to a done-category transition whose status name contains cancel', async () => {
-    let fetches = 0;
-    stubRoutes([
-      [
-        'GET',
-        '/transitions',
-        () =>
-          jsonResponse({
-            transitions: [
-              { id: '31', name: 'Finish', to: { name: 'Done', statusCategory: { key: 'done' } } },
-              { id: '41', name: 'Abort', to: { name: 'Cancelled', statusCategory: { key: 'done' } } },
-            ],
-          }),
-      ],
-      ['POST', '/transitions', () => new Response(null, { status: 204 })],
-      [
-        'GET',
-        '/rest/api/3/issue/',
-        () =>
-          fetches++ === 0
-            ? jsonResponse(issue())
-            : jsonResponse(issue({ fields: { status: { name: 'Cancelled', statusCategory: { key: 'done' } } } })),
-      ],
-    ]);
-
-    const result = await integration().intake.updateIssue({
-      connection,
-      issueId: 'ENG-42',
-      state: { kind: 'byType', stateType: 'canceled' },
+    expect(result).toEqual({
+      id: 'c-1',
+      url: 'https://acme.atlassian.net/browse/ENG-42?focusedCommentId=c-1',
     });
-    expect(result).toMatchObject({ state: 'Cancelled' });
-  });
-
-  it('skips the transition when the current state already matches a byName target', async () => {
-    const fetchMock = stubRoutes([['GET', '/rest/api/3/issue/', () => jsonResponse(issue())]]);
-
-    const result = await integration().intake.updateIssue({
-      connection,
-      issueId: 'ENG-42',
-      state: { kind: 'byName', name: 'to do' },
-    });
-
-    expect(result).toMatchObject({ state: 'To Do' });
-    // Only the issue read — no transitions listed, nothing applied.
-    expect(fetchMock).toHaveBeenCalledTimes(1);
-  });
-
-  it('returns null when no legal transition reaches the target', async () => {
-    stubRoutes([
-      [
-        'GET',
-        '/transitions',
-        () =>
-          jsonResponse({
-            transitions: [
-              { id: '11', name: 'Start', to: { name: 'In Progress', statusCategory: { key: 'indeterminate' } } },
-            ],
-          }),
-      ],
-      ['GET', '/rest/api/3/issue/', () => jsonResponse(issue())],
-    ]);
-
-    await expect(
-      integration().intake.updateIssue({ connection, issueId: 'ENG-42', state: { kind: 'byName', name: 'Blocked' } }),
-    ).resolves.toBeNull();
-  });
-
-  it('resolves intake dispatches for issue sources only', async () => {
-    const jira = integration();
-
-    await expect(
-      jira.intake.resolveIntakeDispatch!({
-        orgId: 'org-1',
-        externalSource: { type: 'issue', externalId: 'jira:ENG-42' },
-      }),
-    ).resolves.toEqual({ connection: { type: 'oauth', accessToken: 'jira-token' }, issueId: 'ENG-42' });
-    await expect(
-      jira.intake.resolveIntakeDispatch!({ orgId: 'org-1', externalSource: { type: 'issue', externalId: 'ENG-42' } }),
-    ).resolves.toEqual({ connection: { type: 'oauth', accessToken: 'jira-token' }, issueId: 'ENG-42' });
-    await expect(
-      jira.intake.resolveIntakeDispatch!({ orgId: 'org-1', externalSource: { type: 'pull-request', externalId: '1' } }),
-    ).resolves.toBeNull();
-  });
-
-  it('surfaces auth failures as jira_auth_failed infrastructure errors', async () => {
-    stubRoutes([['POST', '/rest/api/3/search/jql', () => jsonResponse({ errorMessages: ['Unauthorized'] }, 401)]]);
-
-    const failure = integration().intake.listIssues({ connection, sourceIds: ['1'] });
-    await expect(failure).rejects.toBeInstanceOf(JiraApiError);
-    await expect(failure).rejects.toMatchObject({ code: 'jira_auth_failed', status: 401 });
-  });
-});
-
-describe('JiraIntegration diagnostics', () => {
-  it('reports the site and a masked email, never secret values', () => {
-    const snapshot = integration().diagnostics();
-    expect(snapshot).toEqual({ configured: true, site: 'acme.atlassian.net', email: 'o***@acme.test' });
-    expect(JSON.stringify(snapshot)).not.toContain('jira-token');
   });
 });

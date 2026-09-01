@@ -37,7 +37,7 @@ Day-to-day configuration (model providers, integrations) happens in the web UI. 
 | GitHub projects & intake | WorkOS + `GITHUB_APP_ID`, `GITHUB_APP_PRIVATE_KEY`, `GITHUB_APP_CLIENT_ID`, `GITHUB_APP_CLIENT_SECRET`, `GITHUB_APP_SLUG` + `DATABASE_URL`      |
 | Linear intake            | WorkOS + `LINEAR_CLIENT_ID`, `LINEAR_CLIENT_SECRET` + `DATABASE_URL` + a state secret (`GITHUB_APP_WEBHOOK_SECRET` or `WORKOS_COOKIE_PASSWORD`) |
 | Slack channels           | `SLACK_APP_SIGNING_SECRET`, `SLACK_APP_BOT_TOKEN`, `SLACK_APP_CLIENT_ID`, `SLACK_APP_CLIENT_SECRET` + WorkOS + a state secret (see above)       |
-| Jira intake              | WorkOS + `JIRA_BASE_URL`, `JIRA_EMAIL`, `JIRA_API_TOKEN` + `DATABASE_URL`                                                                       |
+| Jira intake              | Mastra Platform identity + an organization Jira connection + `DATABASE_URL`                                                                     |
 | Distributed event bus    | `REDIS_URL` (only needed for multi-process deployments)                                                                                         |
 | Cloud sandboxes          | `MASTRA_PLATFORM_SECRET_KEY`, `MASTRA_PROJECT_ID`, `MASTRA_ENVIRONMENT_ID` (defaults to a local git sandbox otherwise)                          |
 
@@ -75,12 +75,9 @@ Create a Linear OAuth app (Linear → Settings → API → OAuth applications �
 
 ### Jira (optional)
 
-Connects a Jira Cloud site (`https://<site>.atlassian.net`) with deployment-global credentials — no OAuth app needed:
+Connect Jira for the organization in Mastra Platform. Managed deployments receive the Platform identity and integrations API endpoint automatically; self-hosted deployments need `MASTRA_PLATFORM_ACCESS_TOKEN` (or `MASTRA_PLATFORM_SECRET_KEY`) and `MASTRA_INTEGRATIONS_API_URL`.
 
-1. Create an API token at https://id.atlassian.com → Security → API tokens.
-2. Set `JIRA_BASE_URL` (the site origin), `JIRA_EMAIL` (the Atlassian account the token belongs to), and `JIRA_API_TOKEN` in `.env`.
-
-All three variables are required together. Jira projects then become selectable intake sources in Settings → Intake; route each selected project to a Factory and its active issues appear on that Factory's board. Agents get a read-only `jira_get_issue` tool for full issue context. Credentials are deployment-global, so treat this as a self-hosted/single-tenant setup: the token's Jira permissions govern what every signed-in organization on the deployment can read.
+Each connected Jira site's projects become selectable intake sources in Settings → Intake. Route each selected project to a Factory and its active issues appear on that Factory's board. Provider credentials stay in Mastra Platform: the Factory accesses Jira through the organization-scoped integrations v2 proxy. Agents get a read-only `jira_get_issue` tool for full issue context.
 
 ### Slack (optional)
 

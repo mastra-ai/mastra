@@ -6,9 +6,18 @@ export interface PlatformApiClientConfig {
 
 export function platformApiClientConfigFromEnv(): PlatformApiClientConfig {
   const sharedApiUrl = process.env.MASTRA_SHARED_API_URL?.trim() || 'https://platform.mastra.ai/v1';
+  return { baseUrl: normalizeApiUrl(sharedApiUrl, '/v1'), accessToken: platformAccessTokenFromEnv() };
+}
+
+export function platformIntegrationsApiClientConfigFromEnv(): PlatformApiClientConfig {
+  const integrationsApiUrl = process.env.MASTRA_INTEGRATIONS_API_URL?.trim() || 'https://integrations.mastra.ai';
+  return { baseUrl: normalizeApiUrl(integrationsApiUrl, '/v2'), accessToken: platformAccessTokenFromEnv() };
+}
+
+function platformAccessTokenFromEnv(): string {
   // MASTRA_PLATFORM_ACCESS_TOKEN is the credential Mastra Platform injects
   // into deployed projects; MASTRA_PLATFORM_SECRET_KEY is the org secret key
-  // written by project scaffolding. The platform API accepts both forms.
+  // written by project scaffolding. The platform APIs accept both forms.
   const accessToken =
     process.env.MASTRA_PLATFORM_ACCESS_TOKEN?.trim() || process.env.MASTRA_PLATFORM_SECRET_KEY?.trim();
   if (!accessToken) {
@@ -16,11 +25,11 @@ export function platformApiClientConfigFromEnv(): PlatformApiClientConfig {
       'Platform integration: missing required environment variable MASTRA_PLATFORM_ACCESS_TOKEN (or MASTRA_PLATFORM_SECRET_KEY).',
     );
   }
-  return { baseUrl: normalizeSharedApiUrl(sharedApiUrl), accessToken };
+  return accessToken;
 }
 
-function normalizeSharedApiUrl(sharedApiUrl: string): string {
-  return sharedApiUrl.replace(/\/+$/, '').replace(/\/v1$/, '');
+function normalizeApiUrl(url: string, versionSuffix: string): string {
+  return url.replace(/\/+$/, '').replace(new RegExp(`${versionSuffix}$`), '');
 }
 
 export class PlatformApiError extends Error {

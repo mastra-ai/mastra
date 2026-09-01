@@ -46,6 +46,7 @@ import {
   resolveFactoryPullRequestParentWorkItemId,
 } from './integrations/github/provenance.js';
 import type { FactoryPullRequestProvenanceData } from './integrations/github/provenance.js';
+import { JiraIntegration } from './integrations/jira/integration.js';
 import { PlatformGithubIntegration } from './integrations/platform/github/integration.js';
 import { PlatformLinearIntegration } from './integrations/platform/linear/integration.js';
 import { createCustomProvidersPrimer, registerCustomProvidersSource } from './routes/custom-provider-source.js';
@@ -341,8 +342,8 @@ export class MastraFactory {
     // factory route module receives this handle — no service locator.
     const routeAuth = createFactoryRouteAuth(auth);
 
-    // Explicit integrations win. Platform credentials fill only missing GitHub
-    // and Linear slots so callers can override either provider independently.
+    // Explicit integrations win. Platform credentials fill only missing GitHub,
+    // Linear, and Jira slots so callers can override each provider independently.
     const integrations = [...(this.#config.integrations ?? [])];
     if (hasPlatformCredentials()) {
       if (!integrations.some(integration => integration.id === 'github')) {
@@ -350,6 +351,9 @@ export class MastraFactory {
       }
       if (!integrations.some(integration => integration.id === 'linear')) {
         integrations.push(new PlatformLinearIntegration());
+      }
+      if (!integrations.some(integration => integration.id === 'jira')) {
+        integrations.push(new JiraIntegration());
       }
     }
 

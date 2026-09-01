@@ -5,6 +5,7 @@ import { fakeRouteAuth, mountApiRoutes } from '../../routes/test-utils.js';
 import type { TestAuthUser } from '../../routes/test-utils.js';
 import { createFactoryStorageForTests } from '../../storage/test-utils.js';
 import type { FactoryStorageTestSeed } from '../../storage/test-utils.js';
+import { PlatformApiClient } from '../platform/api-client.js';
 import { JiraApiError } from './api.js';
 import { JiraIntegration } from './integration.js';
 import { buildJiraRoutes } from './routes.js';
@@ -22,6 +23,7 @@ const listActiveJiraIssues = vi.fn(async (_after?: string, _projectIds?: string[
   issues: [
     {
       id: '10001',
+      externalId: 'jira-issue:encoded-reference',
       sourceId: '1',
       identifier: 'ENG-42',
       title: 'Fix intake sync',
@@ -68,7 +70,12 @@ const org1 = (): TestAuthUser => ({ workosId: 'u1', organizationId: 'org1' });
 
 beforeEach(async () => {
   seed = await createFactoryStorageForTests();
-  jira = new JiraIntegration({ baseUrl: 'https://acme.atlassian.net', email: 'ops@acme.test', apiToken: 'jira-token' });
+  jira = new JiraIntegration({
+    client: new PlatformApiClient({ baseUrl: 'https://integrations.example.com', accessToken: 'platform-token' }),
+  });
+  vi.spyOn(jira, 'listConnections').mockResolvedValue([
+    { id: 'a1b_acme', integrationId: 'jira', status: 'active', accountLabel: 'acme.atlassian.net' },
+  ]);
   vi.spyOn(jira.intake, 'listSources').mockImplementation(listJiraSources);
   vi.spyOn(jira, 'listActiveIssues').mockImplementation(listActiveJiraIssues as never);
   await seed.intake.saveConfig({
@@ -120,6 +127,8 @@ describe('status route', () => {
       enabled: true,
       configured: true,
       site: 'acme.atlassian.net',
+      sites: ['acme.atlassian.net'],
+      connections: [{ id: 'a1b_acme', integrationId: 'jira', status: 'active', accountLabel: 'acme.atlassian.net' }],
       reason: 'ready',
       diagnostics: { jiraConfigured: true, factoryAuthEnabled: true, appDbConfigured: true },
     });
@@ -153,7 +162,9 @@ describe('projects route', () => {
 
   it('lists the site projects for the Settings picker', async () => {
     const res = await buildApp(org1()).request('/web/jira/projects');
-    expect(await res.json()).toEqual({ projects: [{ id: '1', name: 'Engineering', key: 'ENG' }] });
+    expect(await res.json()).toEqual({
+      projects: [{ id: '1', name: 'Engineering', key: 'ENG', connectionId: null, site: null }],
+    });
     expect(listJiraSources).toHaveBeenCalledWith({ orgId: 'org1', userId: 'u1' });
   });
 
@@ -170,6 +181,7 @@ describe('issues route', () => {
     const res = await buildApp(org1()).request('/web/jira/issues');
     const json = await res.json();
     expect(json.issues[0]).toMatchObject({
+      id: 'jira-issue:encoded-reference',
       identifier: 'ENG-42',
       title: 'Fix intake sync',
       state: 'To Do',
