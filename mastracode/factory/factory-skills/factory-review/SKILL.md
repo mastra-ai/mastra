@@ -74,6 +74,7 @@ Bots have false positives — verify, don't rubber-stamp. But a major finding fr
 - Is the diff coherent — one focused change, or unrelated changes mixed in?
 - Changeset present if the repo uses changesets and the change is runtime-visible?
 - Any evidence the author verified the change works (test output, repro, screenshots)?
+- For `mastra-ai/mastra`, audit documentation changes with the `docs-audit` skill.
 
 Gate failures don't stop the review — they become findings for the verdict.
 
