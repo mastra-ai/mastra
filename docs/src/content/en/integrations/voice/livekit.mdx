@@ -713,14 +713,19 @@ Returns: `VoiceTurnMessage[]`, where each entry is `{ role: 'system' | 'user' | 
 The LiveKit `voice.Agent` subclass that [`createLiveKitWorker()`](#createlivekitworker) builds for every session. Replies come from a Mastra agent (or a custom `generate` source) through the agent's `llmNode`; LiveKit keeps the audio loop, turn detection, and barge-in. Construct it yourself when you own the `voice.AgentSession`, for example to test a Mastra-backed agent with `@livekit/agents`' `voice.testing` harness without speech-to-text, text-to-speech, or a live worker. `createMastraVoiceAgent(options)` is an equivalent factory.
 
 ```typescript title="src/mastra/voice-agent.test.ts"
-import { voice } from '@livekit/agents'
+import { initializeLogger, voice } from '@livekit/agents'
 import { MastraVoiceAgent } from '@mastra/livekit/worker'
 import { supportAgent } from './agents/support'
+
+// Required outside a LiveKit worker: AgentSession needs the LiveKit logger initialized.
+initializeLogger({ level: 'silent', pretty: false })
 
 const session = new voice.AgentSession()
 await session.start({ agent: new MastraVoiceAgent({ agent: supportAgent, memory: false }) })
 
-const result = await session.run({ userInput: 'What are your opening hours?' })
+// run() returns a RunResult, not a promise; wait() resolves when the turn completes.
+const result = session.run({ userInput: 'What are your opening hours?' })
+await result.wait()
 result.expect.nextEvent().isMessage({ role: 'assistant' })
 result.expect.noMoreEvents()
 ```
