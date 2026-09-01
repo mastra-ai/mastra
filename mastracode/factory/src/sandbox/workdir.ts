@@ -38,12 +38,7 @@ export function deriveLocalWorkdir(
   return undefined;
 }
 
-/**
- * A remote sandbox constructed with an explicit `workingDirectory` declares
- * where repos live, so the repo dir is `<workingDirectory>/<repo>` with no
- * probe. Only absolute values count — `~`/`$HOME` are not expanded by
- * remote providers, so anything else falls through to the runtime probe.
- */
+/** Derive `<workingDirectory>/<repo>` when a remote sandbox declares an absolute root. */
 export function deriveRemoteRepoDir(
   sandbox: { provider: string; workingDirectory?: unknown },
   repoFullName: string,
@@ -55,12 +50,7 @@ export function deriveRemoteRepoDir(
   return undefined;
 }
 
-/**
- * `<parent>/<repo>` — where the repo checkout lands under a parent directory
- * (a declared `workingDirectory`, or the probed home dir on the fallback
- * path). Note: the rest of this module still calls the repo dir "workdir";
- * that legacy rename is a separate mechanical PR.
- */
+/** Join a parent directory and sanitized repository name. */
 export function repoDirUnder(parent: string, repoFullName: string): string {
   const [, name] = repoFullName.split('/', 2);
   let end = parent.length;

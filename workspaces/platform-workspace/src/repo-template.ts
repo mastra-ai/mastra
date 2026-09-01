@@ -48,11 +48,8 @@ export interface PlatformRepoTemplateOptions {
    */
   getRepositoryAccess: (() => Promise<PlatformRepositoryAccess | undefined>) | undefined;
   /**
-   * Setup command run inside the checkout during the provider build. An
-   * array runs each entry as its own build step, so a failure is attributed
-   * to the exact command and completed steps stay layer-cached — pass
-   * `['pnpm i', 'pnpm build']` instead of `'pnpm i && pnpm build'` when the
-   * phases are worth separating.
+   * Setup command(s) run inside the checkout. Array entries run as separate
+   * cached build steps.
    */
   setupCommand?: string | string[];
   /**
@@ -66,25 +63,13 @@ export interface PlatformRepoTemplateOptions {
   /** Memory in MB. Same identity and fallback semantics as `cpuCount`. */
   memoryMB?: number;
   /**
-   * Absolute directory the repository is cloned into: the checkout lands at
-   * `<workingDirectory>/<repo>`, and the template bakes it as the runtime
-   * default cwd (`setWorkdir`), so sandboxes created from the template
-   * start where the repo lives instead of the base image's workdir. Must be
-   * an absolute literal path — the value is baked without shell expansion,
-   * so `~` and `$HOME` are rejected. Part of the template family key: a
-   * different working directory lays out a different filesystem. Omitted
-   * keeps the provider layout (`$HOME/<repo>`, no baked workdir).
+   * Absolute parent for the checkout. The repo lands at `<workingDirectory>/<repo>`;
+   * the value becomes the runtime cwd and part of the template family. Omit for `$HOME/<repo>`.
    */
   workingDirectory?: string;
   /**
-   * Environment variables available to the build steps (for example turbo
-   * remote-cache credentials for a `pnpm build` setup command). Sent as
-   * transient build envs like the repository token: they never enter the
-   * serialized definition or template identity, so rotating a value does
-   * not rebuild the template. Meant for credentials — env that changes
-   * build output belongs in `setupCommand`, where it participates in
-   * identity. Not baked into sandboxes created from the template — pass
-   * runtime env on the sandbox itself.
+   * Build-only environment, excluded from template identity and runtime sandboxes.
+   * Use for credentials; output-changing inputs belong in `setupCommand`.
    */
   buildEnv?: Record<string, string>;
   /** Test/integration seam for resolving the default-branch head. */
@@ -114,9 +99,7 @@ export function createRepoTemplate(options: PlatformRepoTemplateOptions): Platfo
   const resolveHead = options.resolveHead ?? resolveDefaultBranchHead;
 
   return async () => {
-    // Every bail below means the sandbox boots the provider default template
-    // (base image, default resources) instead of the repo template — warn so
-    // the downgrade is diagnosable instead of silent.
+    // Warn when the sandbox falls back to the provider default template.
     let accessError: unknown;
     const access = await getRepositoryAccess().catch(error => {
       accessError = error;
@@ -155,9 +138,7 @@ export function createRepoTemplate(options: PlatformRepoTemplateOptions): Platfo
       ? `${trimTrailingSlashes(workingDirectory)}/${repoDirName(cloneUrl)}`
       : defaultRepoDir(cloneUrl);
     const auth = token ? `${gitAuthFlag()} ` : '';
-    // Blank entries dropped: a blank command would render as
-    // `cd "<repoDir>" && ` — a shell syntax error that fails the whole
-    // build — and an empty UI input is the common way to produce one.
+    // Blank commands would produce invalid shell steps.
     const setupCommands = (
       options.setupCommand === undefined
         ? []
@@ -165,18 +146,13 @@ export function createRepoTemplate(options: PlatformRepoTemplateOptions): Platfo
           ? options.setupCommand
           : [options.setupCommand]
     ).filter(command => command.trim() !== '');
-    // One step per operation below: each becomes its own provider build
-    // layer, so a failure names the exact command and the steps before it
-    // stay cached instead of re-running on the next attempt.
+    // Each operation gets its own cached provider build step.
     const steps = [
-      // An explicit workingDirectory may not exist in the base image;
-      // creating it first keeps the clone from failing on a fresh path.
       ...(workingDirectory ? [`mkdir -p "${repoDir}"`] : []),
       `git ${auth}clone ${cloneUrl} "${repoDir}"`,
       `git -C "${repoDir}" ${auth}fetch origin ${sha}`,
       `git -C "${repoDir}" checkout ${sha}`,
-      // Each step runs in a fresh shell, so `cd` cannot carry across steps —
-      // every setup entry gets its own prefix.
+      // Build steps use fresh shells, so each setup command needs its own `cd`.
       ...setupCommands.map(command => `cd "${repoDir}" && ${command}`),
     ];
 
@@ -192,12 +168,7 @@ export function createRepoTemplate(options: PlatformRepoTemplateOptions): Platfo
     if (options.memoryMB !== undefined) template = template.memoryMB(options.memoryMB);
     for (const step of steps) template = template.runCmd(step);
     if (workingDirectory) {
-      // Baked as the runtime default cwd, overriding the provider base
-      // image's workdir (e.g. /workspace), so sandboxes created from this
-      // template start in the directory repos live in and a `pwd`-based
-      // derivation (`<pwd>/<repo>`) lands exactly on the baked checkout.
-      // Literal path only — setWorkdir does no shell expansion, which is
-      // why the option requires an absolute path.
+      // `setWorkdir` sets the runtime cwd without shell expansion.
       template = template.setWorkdir(workingDirectory);
     }
     return template.withFamily(family);
@@ -229,8 +200,7 @@ function isValidCloneUrl(cloneUrl: string): boolean {
  * repository must not produce two templates.
  */
 function normalizeCloneUrl(cloneUrl: string): string {
-  // Trailing slashes are trimmed with a scan, not an end-anchored `\/+$`
-  // regex, which backtracks quadratically on slash runs.
+  // Avoid regex backtracking on long trailing-slash runs.
   let end = cloneUrl.length;
   while (end > 0 && cloneUrl[end - 1] === '/') end--;
   const withoutSuffix = cloneUrl.slice(0, end).replace(/\.git$/i, '');
@@ -248,20 +218,14 @@ function defaultRepoDir(cloneUrl: string): string {
   return `$HOME/${repoDirName(cloneUrl)}`;
 }
 
-// A scan, not an end-anchored `\/+$` regex, which backtracks quadratically
-// on slash runs.
+// Avoid regex backtracking on long trailing-slash runs.
 function trimTrailingSlashes(path: string): string {
   let end = path.length;
   while (end > 0 && path[end - 1] === '/') end--;
   return path.slice(0, end);
 }
 
-/**
- * The workingDirectory is interpolated into shell build steps and baked as
- * a literal runtime workdir, so it must be an absolute path made of plain
- * path characters: no shell metacharacters, no `~`/`$HOME` (never
- * expanded), no `..` traversal.
- */
+/** Validate a literal absolute path before embedding it in shell build steps. */
 function assertWorkingDirectory(dir: string): string {
   const valid = /^\/[A-Za-z0-9._/-]*$/.test(dir) && !dir.split('/').includes('..');
   if (!valid) {

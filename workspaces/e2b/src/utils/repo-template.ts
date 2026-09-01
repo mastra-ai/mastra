@@ -136,13 +136,8 @@ export interface RepoTemplateOptions {
    */
   getRepositoryAccess: (() => Promise<RepositoryAccess | undefined>) | undefined;
   /**
-   * Setup command run inside the checkout during the build (e.g.
-   * `pnpm install`). Hashed into the template name so a changed setup
-   * command produces a new template. An array runs each entry as its own
-   * build step, so a failure is attributed to the exact command and
-   * completed steps stay layer-cached — pass `['pnpm i', 'pnpm build']`
-   * instead of `'pnpm i && pnpm build'` when the phases are worth
-   * separating.
+   * Setup command(s) run inside the checkout and hashed into the template name.
+   * Array entries run as separate cached build steps.
    */
   setupCommand?: string | string[];
   /**
@@ -176,14 +171,8 @@ export interface RepoTemplateOptions {
    */
   memoryMB?: number;
   /**
-   * Absolute directory the repository is cloned into: the checkout lands at
-   * `<workingDirectory>/<repo>`, and the template bakes it as the runtime
-   * default cwd (`setWorkdir`), so sandboxes created from the template
-   * start where the repo lives. Must be an absolute literal path — the
-   * value is baked without shell expansion, so `~` and `$HOME` are
-   * rejected. Hashed into the template name: a different working directory
-   * lays out a different filesystem. Omitted keeps the provider layout
-   * (`$HOME/<repo>`, no baked workdir).
+   * Absolute parent for the checkout. The repo lands at `<workingDirectory>/<repo>`;
+   * the value becomes the runtime cwd and part of template identity. Omit for `$HOME/<repo>`.
    */
   workingDirectory?: string;
 }
@@ -419,16 +408,10 @@ function buildRepoTemplateSpec(identity: RepoTemplateIdentity, token?: string): 
     steps.push(`git -C "${repoDir}" ${auth}fetch origin ${sha}`, `git -C "${repoDir}" checkout ${sha}`);
   }
   for (const command of normalizeSetupCommands(setupCommand)) {
-    // Each step runs in a fresh shell, so `cd` cannot carry across steps —
-    // every setup entry gets its own prefix.
+    // Build steps use fresh shells, so each setup command needs its own `cd`.
     steps.push(`cd "${repoDir}" && ${command}`);
   }
 
-  // Build steps run as the sandbox `user` in its own home directory, so the
-  // default `$HOME/<repo>` clone needs no directory prep and keeps runtime
-  // file ownership right. An explicit workingDirectory outside `$HOME` must
-  // exist or be creatable by that user; the mkdir makes the common case
-  // (fresh absolute dir) work instead of failing the clone.
   let template = createDefaultMountableTemplate().template;
   const env: Record<string, string> = { ...buildEnv };
   if (token) env[BUILD_TOKEN_ENV] = token;
@@ -438,17 +421,11 @@ function buildRepoTemplateSpec(identity: RepoTemplateIdentity, token?: string): 
     // definition until the next rebuild.
     template = template.setEnvs(env);
   }
-  // One `runCmd` per step: each becomes its own build layer, so a failure
-  // names the exact command and the steps before it stay cached instead of
-  // re-running on the next attempt.
+  // Each command gets its own cached build layer.
   if (workingDirectory) template = template.runCmd(`mkdir -p "${repoDir}"`);
   for (const step of steps) template = template.runCmd(step);
   if (workingDirectory) {
-    // Baked as the runtime default cwd: sandboxes created from this
-    // template start in the directory repos live in, and the factory's
-    // `pwd`-based derivation (`<pwd>/<repo>`) lands exactly on the baked
-    // checkout. Literal path only — `setWorkdir` does no shell expansion
-    // (probed), which is why the option requires an absolute path.
+    // `setWorkdir` sets the runtime cwd without shell expansion.
     template = template.setWorkdir(workingDirectory);
   }
 
@@ -503,8 +480,7 @@ async function resolveDefaultBranchHead(cloneUrl: string, token?: string): Promi
  * not produce two templates.
  */
 function normalizeCloneUrl(cloneUrl: string): string {
-  // Trailing slashes are trimmed with a scan, not an end-anchored `\/+$`
-  // regex, which backtracks quadratically on slash runs.
+  // Avoid regex backtracking on long trailing-slash runs.
   let end = cloneUrl.length;
   while (end > 0 && cloneUrl[end - 1] === '/') end--;
   const withoutSuffix = cloneUrl.slice(0, end).replace(/\.git$/i, '');
@@ -526,12 +502,7 @@ function parseCloneUrl(cloneUrl: string): { host: string; owner: string; repo: s
   return { host, owner, repo };
 }
 
-/**
- * Setup commands as the list of steps that will actually run: single string
- * wrapped, blank entries dropped. A blank command would render as
- * `cd "<repoDir>" && ` — a shell syntax error that fails the whole build —
- * and an empty UI input is the common way to produce one.
- */
+/** Normalize setup commands and drop blank entries that would produce invalid shell steps. */
 function normalizeSetupCommands(setupCommand: string | string[] | undefined): string[] {
   const list = setupCommand === undefined ? [] : Array.isArray(setupCommand) ? setupCommand : [setupCommand];
   return list.filter(command => command.trim() !== '');
@@ -546,20 +517,14 @@ function defaultRepoDir(cloneUrl: string): string {
   return `$HOME/${repoDirName(cloneUrl)}`;
 }
 
-// A scan, not an end-anchored `\/+$` regex, which backtracks quadratically
-// on slash runs.
+// Avoid regex backtracking on long trailing-slash runs.
 function trimTrailingSlashes(path: string): string {
   let end = path.length;
   while (end > 0 && path[end - 1] === '/') end--;
   return path.slice(0, end);
 }
 
-/**
- * The workingDirectory is interpolated into shell build steps and baked as
- * a literal runtime workdir, so it must be an absolute path made of plain
- * path characters: no shell metacharacters, no `~`/`$HOME` (never
- * expanded), no `..` traversal.
- */
+/** Validate a literal absolute path before embedding it in shell build steps. */
 function assertWorkingDirectory(dir: string): string {
   const valid = /^\/[A-Za-z0-9._/-]*$/.test(dir) && !dir.split('/').includes('..');
   if (!valid) {
