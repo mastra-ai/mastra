@@ -406,7 +406,7 @@ See [Channels](/docs/channels) for adapter setup and platform-specific webhook c
 
 How you connect depends on where the UI runs. A terminal UI or a server that owns the controller holds the `Session` object and subscribes to it directly. A browser or React UI runs in a different process, so it reaches the same session over the controller's HTTP routes with [`@mastra/client-js`](/reference/client-js/mastra-client).
 
-### Server-side sessions (TUI or Node)
+### Server-side sessions
 
 Subscribe to Session events for incremental updates. Read the reduced display state with [`session.displayState.get()`](/reference/agent-controller/session#sessiondisplaystateget) when the UI needs a complete render snapshot:
 
@@ -425,7 +425,7 @@ unsubscribe()
 
 Subscriptions are isolated by Session. Events from another Session on the same controller aren't delivered to this listener. Read the [Building a coding agent](https://mastra.ai/blog/building-a-coding-agent) guide for a complete TUI example.
 
-### Client-side sessions (browser or React)
+### Client-side sessions
 
 `client.getAgentController(id).session(resourceId, scope?)` returns a session client bound to one resource. Sessions are get-or-create on the server, so `create()` resumes an existing conversation instead of forking it. Pass `scope` when one resource needs independent sessions, such as one per git worktree:
 
