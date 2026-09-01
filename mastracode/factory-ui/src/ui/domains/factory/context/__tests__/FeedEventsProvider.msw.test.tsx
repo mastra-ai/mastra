@@ -60,7 +60,7 @@ function countActivity(count: () => void) {
   });
 }
 
-/** Connected, plus the catch-up refetch every fresh stream fires. */
+/** Connected, with any in-flight refetches drained. */
 async function settle(rendered: { result: { current: { connected: boolean } }; client: QueryClient }): Promise<void> {
   await waitFor(() => expect(rendered.result.current.connected).toBe(true));
   await waitForMutationsIdle(rendered.client);
@@ -172,6 +172,28 @@ describe('FeedEventsProvider', () => {
     // decision projection did not change.
     expect(attentionRequests).toBe(before.attention);
     expect(decisionRequests).toBe(before.decisions);
+  });
+
+  it('stays quiet on the first connect — the mount fetches are already fresh', async () => {
+    const stream = pushableFeedStream(PROJECT_ID);
+    let commentRequests = 0;
+    let attentionRequests = 0;
+    let sessionsRequests = 0;
+    server.use(
+      stream.handler,
+      countComments(() => (commentRequests += 1)),
+      countAttention(() => (attentionRequests += 1)),
+      countSessions(() => (sessionsRequests += 1)),
+    );
+
+    const rendered = renderHookWithProviders(watch, { inner });
+    await settle(rendered);
+
+    // One fetch per query mount, none added by the connect: a refresh here
+    // would duplicate them and burn error retries app-wide.
+    expect(commentRequests).toBe(1);
+    expect(attentionRequests).toBe(1);
+    expect(sessionsRequests).toBe(1);
   });
 
   it('leaves another work item alone', async () => {

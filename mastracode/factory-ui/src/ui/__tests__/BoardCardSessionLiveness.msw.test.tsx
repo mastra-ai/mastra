@@ -220,10 +220,15 @@ describe('Board card session liveness', () => {
   it('walks idle → working → ready as a run starts and finishes unseen', async () => {
     stubFactoryWithBoundSession();
     const active = new Set<string>();
+    let runEnded = false;
     server.use(
-      // Ungated sessions list: the attention pass refetches it on run end.
+      // On run end the server stamps the row; the session frame re-reads it.
       http.get(`${TEST_BASE_URL}/web/github/projects/${REPO_ID}/sessions`, () =>
-        HttpResponse.json({ sessions: [boundSession] }),
+        HttpResponse.json({
+          sessions: [
+            { ...boundSession, ...(runEnded ? { lastRunEndedAt: new Date(Date.now() + 60_000).toISOString() } : {}) },
+          ],
+        }),
       ),
       http.get('*/api/agent-controller/:controllerId/active-runs', () =>
         HttpResponse.json({
@@ -245,7 +250,11 @@ describe('Board card session liveness', () => {
     expect(screen.queryByRole('link', { name: 'Open session' })).toBeNull();
 
     active.delete(SESSION_ID);
+    runEnded = true;
+    // The session frame invalidates both truths: the run registry and the row
+    // now carrying the `lastRunEndedAt` stamp.
     await client.invalidateQueries({ queryKey: activityKey });
+    await client.invalidateQueries({ queryKey: queryKeys.sessions(REPO_ID) });
     // The finish was never opened, so the card holds the same "your turn" mark
     // the sidebar row shows, instead of sliding silently back to idle.
     await waitFor(() => expect(card.querySelector('[data-live-session-indicator="ready"]')).not.toBeNull());

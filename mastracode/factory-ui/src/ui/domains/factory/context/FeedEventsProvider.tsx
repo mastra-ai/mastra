@@ -1,5 +1,5 @@
 import { useQueryClient } from '@tanstack/react-query';
-import { createContext, useContext, useEffect, useState } from 'react';
+import { createContext, useContext, useEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 
 import { useApiConfig } from '../../../../api/config';
@@ -32,6 +32,10 @@ export function FeedEventsProvider({ factoryProjectId, children }: { factoryProj
   // per host, so a few background tabs starve every other request to the app.
   const visible = useDocumentVisible();
   const [connected, setConnected] = useState(false);
+  // Frames can only have been missed after a stream was lost (drop, hidden
+  // tab, failed attempt). The first connect lands right after the queries'
+  // own initial fetches, where a blanket refresh would only duplicate them.
+  const streamWasLost = useRef(false);
 
   useEffect(() => {
     if (!visible) return;
@@ -70,6 +74,8 @@ export function FeedEventsProvider({ factoryProjectId, children }: { factoryProj
           },
           onConnected: () => {
             setConnected(true);
+            if (!streamWasLost.current) return;
+            streamWasLost.current = false;
             // Whatever landed while this tab held no stream was never announced.
             void queryClient.invalidateQueries({ queryKey: queryKeys.workItemCommentsAll() });
             refreshAttention();
@@ -83,6 +89,7 @@ export function FeedEventsProvider({ factoryProjectId, children }: { factoryProj
         .then(() => false)
         .catch((error: unknown) => error instanceof RequestError && error.status >= 400 && error.status < 500)
         .then(fatal => {
+          streamWasLost.current = true;
           if (abort.signal.aborted) return;
           setConnected(false);
           // An expired session or a deleted project never heals by retrying;
@@ -93,6 +100,7 @@ export function FeedEventsProvider({ factoryProjectId, children }: { factoryProj
     connect();
 
     return () => {
+      streamWasLost.current = true;
       abort.abort();
       if (retry) clearTimeout(retry);
       setConnected(false);

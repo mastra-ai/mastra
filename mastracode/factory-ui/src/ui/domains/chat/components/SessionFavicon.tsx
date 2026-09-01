@@ -1,8 +1,10 @@
 import { useEffect } from 'react';
 
+import type { ChatSessionPhase } from '../../workspaces/services/sessionStatus';
+
 const DEFAULT_FAVICON = '/mastra.svg';
 
-export type SessionFaviconState = 'initializing' | 'working' | 'awaiting' | 'error';
+export type SessionFaviconState = ChatSessionPhase;
 
 const FAVICONS: Record<SessionFaviconState, string> = {
   initializing: '/favicon-session-initializing.svg',

@@ -725,7 +725,8 @@ export class FactoryDecisionDispatcher {
           approvePlans: await this.#plansAreAutoApproved(record, item),
           onParkedRun: 'escalate',
           label: 'Factory skill run',
-          runStillActive: () => this.#controller.listActiveThreadRuns().some(active => active.threadId === binding.threadId),
+          runStillActive: () =>
+            this.#controller.listActiveThreadRuns().some(active => active.threadId === binding.threadId),
         });
 
         const sendKickoff = async () => {
@@ -1070,7 +1071,8 @@ export class FactoryDecisionDispatcher {
             approvePlans: await this.#plansAreAutoApproved(record, item),
             onParkedRun: 'await',
             label: 'Factory kickoff run',
-            runStillActive: () => this.#controller.listActiveThreadRuns().some(active => active.threadId === binding.threadId),
+            runStillActive: () =>
+              this.#controller.listActiveThreadRuns().some(active => active.threadId === binding.threadId),
           });
           const sendKickoff = (dedupeKey: string) =>
             awaitNotification(

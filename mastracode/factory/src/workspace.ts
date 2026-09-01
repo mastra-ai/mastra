@@ -610,7 +610,11 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
       // First materialization only: resumes re-run setup but the stamp is
       // write-once, and re-announcing every sandbox start would be noise.
       if (pubsub && !session.materializedAt) {
-        touchSessionFeed(pubsub, { orgId: session.orgId, factoryProjectId: connection.factoryProjectId }, session.sessionId);
+        touchSessionFeed(
+          pubsub,
+          { orgId: session.orgId, factoryProjectId: connection.factoryProjectId },
+          session.sessionId,
+        );
       }
       await checkoutSessionBranch(target, workdir, {
         branch: session.branch,
