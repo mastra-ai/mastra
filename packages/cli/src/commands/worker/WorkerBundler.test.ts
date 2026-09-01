@@ -137,14 +137,18 @@ describe('WorkerBundler', () => {
         }),
       );
       await writeFile(
-        join(tempDir, 'mastra.mjs'),
-        `export const mastra = { workers: process.env.MASTRA_WORKERS === 'false' ? [] : [
+        join(tempDir, 'workers-config.mjs'),
+        `export const workers = process.env.MASTRA_WORKERS === 'false' ? false : [
           { name: 'orchestration' },
           ...process.env.DEPLOYMENT_WORKERS.split(',').map(name => ({ name })),
           { name: 'backgroundTasks' },
-        ] };`,
+        ];`,
       );
-      await writeFile(entryPath, getWorkerManifestEntry().replace("from '#mastra'", "from './mastra.mjs'"));
+      await writeFile(join(tempDir, 'mastra.mjs'), `throw new Error('full Mastra application must not be imported');`);
+      const workerManifestEntry = getWorkerManifestEntry();
+      expect(workerManifestEntry).toContain("from './workers-config.mjs'");
+      expect(workerManifestEntry).not.toContain("from '#mastra'");
+      await writeFile(entryPath, workerManifestEntry);
 
       const deploymentEnv = createWorkerManifestEnvironment({
         DEPLOYMENT_WORKERS: 'github-events,cleanup-jobs,cleanup-jobs',

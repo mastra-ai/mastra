@@ -440,6 +440,11 @@ export const mastra = new Mastra({
           await runBuild(fixturePath);
 
           const outputPath = join(fixturePath, 'apps', 'custom', '.mastra', 'output');
+          const workerOptionBundle = await readFile(join(outputPath, 'workers-config.mjs'), 'utf-8');
+          expect(workerOptionBundle).toContain('RuntimeNamedWorker');
+          expect(workerOptionBundle).not.toContain('MastraFactory');
+          expect(workerOptionBundle).not.toContain('preparedArgs');
+
           const workersConfig = JSON.parse(await readFile(join(outputPath, 'workers.json'), 'utf-8'));
           expect(workersConfig).toEqual({
             version: 1,

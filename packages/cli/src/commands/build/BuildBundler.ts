@@ -1,7 +1,8 @@
+import { writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { Config } from '@mastra/core/mastra';
-import { FileService } from '@mastra/deployer/build';
+import { extractMastraOption, FileService } from '@mastra/deployer/build';
 import { Bundler } from '@mastra/deployer/bundler';
 import { copy } from 'fs-extra';
 import { shouldSkipDotenvLoading } from '../utils.js';
@@ -65,13 +66,15 @@ export class BuildBundler extends Bundler {
     outputDirectory: string,
     { toolsPaths, projectRoot }: { toolsPaths: (string | string[])[]; projectRoot: string },
   ): Promise<void> {
+    const bundleOutputDirectory = join(outputDirectory, this.outputDir);
+    await extractMastraOption('workers', entryFile, bundleOutputDirectory);
     await this._bundle(this.getEntry(), entryFile, { outputDirectory, projectRoot }, toolsPaths);
+    await writeFile(join(bundleOutputDirectory, `${WORKER_MANIFEST_ENTRY}.mjs`), getWorkerManifestEntry());
   }
 
   protected getAdditionalEntries(): Record<string, string> {
     return {
       worker: getWorkerEntry(),
-      [WORKER_MANIFEST_ENTRY]: getWorkerManifestEntry(),
     };
   }
 

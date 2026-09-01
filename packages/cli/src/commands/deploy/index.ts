@@ -40,6 +40,7 @@ import {
   createWorkerManifestEnvironment,
   introspectWorkerManifest,
   WORKER_MANIFEST_ENTRY,
+  WORKERS_CONFIG_ENTRY,
 } from '../worker/WorkerBundler.js';
 import { maybeAutoProvisionDatabases } from './auto-provision-database.js';
 import { getOverwrittenEnvKeys } from './env-vars.js';
@@ -618,7 +619,13 @@ export async function zipOutput(projectDir: string): Promise<string> {
       '**',
       {
         cwd: outputDir,
-        ignore: ['node_modules/**', `${WORKER_MANIFEST_ENTRY}.mjs`, `${WORKER_MANIFEST_ENTRY}.mjs.map`],
+        ignore: [
+          'node_modules/**',
+          `${WORKER_MANIFEST_ENTRY}.mjs`,
+          `${WORKER_MANIFEST_ENTRY}.mjs.map`,
+          `${WORKERS_CONFIG_ENTRY}.mjs`,
+          `${WORKERS_CONFIG_ENTRY}.mjs.map`,
+        ],
         dot: true,
       },
       { prefix: 'output' },

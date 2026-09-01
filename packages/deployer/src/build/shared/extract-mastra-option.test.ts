@@ -20,6 +20,19 @@ describe('Extract Mastra option', () => {
     } catch {}
   });
 
+  it('extracts workers without initializing unrelated Mastra configuration', async () => {
+    const entryFile = join(_dirname, '../plugins/__fixtures__/basic-with-workers.js');
+    const result = await extractMastraOption('workers', entryFile, testOutputDir);
+
+    expect(result).not.toBeNull();
+    expect(result?.bundleOutput.output[0].code).toContain('RuntimeNamedWorker');
+    expect(result?.bundleOutput.output[0].code).not.toContain('initializeStorage');
+
+    process.env.DEPLOYMENT_WORKER_NAME = 'cleanup-jobs';
+    await expect(result?.getConfig()).resolves.toMatchObject([{ name: 'cleanup-jobs' }]);
+    delete process.env.DEPLOYMENT_WORKER_NAME;
+  });
+
   describe.each([['bundler'], ['deployer'], ['server']] as const)('%s', name => {
     it.for([
       ['../plugins/__fixtures__/basic.js'],

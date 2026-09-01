@@ -1,5 +1,11 @@
+import { writeFile } from 'node:fs/promises';
 import { copy } from 'fs-extra';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+
+vi.mock('node:fs/promises', async importOriginal => ({
+  ...(await importOriginal<typeof import('node:fs/promises')>()),
+  writeFile: vi.fn().mockResolvedValue(undefined),
+}));
 
 // Mock fs-extra/esm - parent Bundler uses this import path
 vi.mock('fs-extra/esm', () => ({
@@ -14,6 +20,10 @@ vi.mock('fs-extra', () => ({
   copy: vi.fn(),
 }));
 
+const { extractMastraOption } = vi.hoisted(() => ({
+  extractMastraOption: vi.fn().mockResolvedValue(null),
+}));
+
 vi.mock('@mastra/deployer/build', () => {
   class MockFileService {
     getFirstExistingFile = vi.fn().mockReturnValue('.env');
@@ -21,6 +31,7 @@ vi.mock('@mastra/deployer/build', () => {
   }
 
   return {
+    extractMastraOption,
     FileService: MockFileService,
   };
 });
@@ -94,7 +105,12 @@ describe('BuildBundler', () => {
       await expect(
         bundler.bundle('/entry.ts', '/output', { toolsPaths: [], projectRoot: '/project' }),
       ).resolves.toBeUndefined();
+      expect(extractMastraOption).toHaveBeenCalledWith('workers', '/entry.ts', '/output/output');
       expect(bundleSpy).toHaveBeenCalledOnce();
+      expect(writeFile).toHaveBeenCalledWith(
+        '/output/output/worker-manifest.mjs',
+        expect.stringContaining("from './workers-config.mjs'"),
+      );
       expect(loadEnvVarsSpy).not.toHaveBeenCalled();
     });
   });
@@ -184,10 +200,7 @@ describe('BuildBundler', () => {
       expect(entries.worker).toContain("import { mastra } from '#mastra'");
       expect(entries.worker).toContain("request.url !== '/health'");
       expect(entries.worker).toContain('await mastra.startWorkers()');
-      expect(entries).toHaveProperty('worker-manifest');
-      expect(entries['worker-manifest']).toContain('mastra.workers');
-      expect(entries['worker-manifest']).toContain('new Set(');
-      expect(entries['worker-manifest']).toContain('!builtInWorkerNames.has(name)');
+      expect(entries).not.toHaveProperty('worker-manifest');
     });
 
     it('should include studio: true when studio is enabled', async () => {

@@ -133,6 +133,8 @@ describe('deploy artifact', () => {
     writeFileSync(join(outputDir, 'index.mjs'), 'export {};');
     writeFileSync(join(outputDir, 'worker-manifest.mjs'), 'throw new Error("build-only");');
     writeFileSync(join(outputDir, 'worker-manifest.mjs.map'), '{}');
+    writeFileSync(join(outputDir, 'workers-config.mjs'), 'export const workers = [];');
+    writeFileSync(join(outputDir, 'workers-config.mjs.map'), '{}');
     writeFileSync(join(outputDir, '.npmrc'), '//npm.pkg.github.com/:_authToken=${NPM_TOKEN}');
     mkdirSync(join(outputDir, 'node_modules', 'somedep'), { recursive: true });
     writeFileSync(join(outputDir, 'node_modules', 'somedep', 'index.js'), 'x');
@@ -154,6 +156,7 @@ describe('deploy artifact', () => {
     expect(zip).toContain('output/package.json');
     expect(zip).toContain('output/index.mjs');
     expect(zip).not.toContain('worker-manifest.mjs');
+    expect(zip).not.toContain('workers-config.mjs');
     expect(zip).not.toContain('node_modules');
     expect(zip).not.toContain('.bin');
   });

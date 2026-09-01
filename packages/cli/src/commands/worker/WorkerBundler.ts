@@ -6,17 +6,19 @@ import { Bundler } from '@mastra/deployer/bundler';
 import { shouldSkipDotenvLoading } from '../utils.js';
 
 export const WORKER_MANIFEST_ENTRY = 'worker-manifest';
+export const WORKERS_CONFIG_ENTRY = 'workers-config';
 
 export function getWorkerManifestEntry(): string {
   return `
     import { readFile, writeFile } from 'node:fs/promises';
-    import { mastra } from '#mastra';
+    import { workers } from './${WORKERS_CONFIG_ENTRY}.mjs';
 
     const manifestUrl = new URL('./workers.json', import.meta.url);
     const manifest = JSON.parse(await readFile(manifestUrl, 'utf-8'));
     const builtInWorkerNames = new Set(['orchestration', 'scheduler', 'backgroundTasks']);
+    const configuredWorkers = Array.isArray(workers) ? workers : [];
     const custom = [...new Set(
-      mastra.workers
+      configuredWorkers
         .map(worker => worker.name)
         .filter(name => !builtInWorkerNames.has(name)),
     )].sort();
