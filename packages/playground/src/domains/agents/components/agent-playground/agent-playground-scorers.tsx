@@ -121,7 +121,7 @@ export function AgentPlaygroundScorers(_props: AgentPlaygroundScorersProps) {
                           {scorer.name}
                         </Txt>
                         {scorer.isRegistered && (
-                          <Badge variant="default">
+                          <Badge>
                             <CheckCircle2 className="mr-1 h-3 w-3" />
                             Registered
                           </Badge>

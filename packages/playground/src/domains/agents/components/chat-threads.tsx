@@ -6,7 +6,6 @@ import {
   ThreadListItem,
   ThreadListItems,
   ThreadListNewItem,
-  ThreadListSeparator,
 } from '@mastra/playground-ui/components/ThreadList';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { Plus } from 'lucide-react';
@@ -48,7 +47,6 @@ export const ChatThreads = ({
           </Icon>
           New Chat
         </ThreadListNewItem>
-        <ThreadListSeparator />
 
         {threads.length === 0 ? (
           <ThreadListEmpty>Your conversations will appear here once you start chatting!</ThreadListEmpty>

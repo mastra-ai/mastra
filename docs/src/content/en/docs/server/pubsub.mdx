@@ -1,6 +1,6 @@
 ---
 title: "PubSub | Server"
-description: Learn how Mastra uses pub/sub to deliver events between components and when to configure a distributed backend for multi-process or multi-instance deployments.
+description: "Configure Mastra PubSub event delivery for components, resumable streams, workers, and schedules across one process, multiple processes, or distributed instances."
 packages:
   - "@mastra/core"
   - "@mastra/redis-streams"
@@ -11,7 +11,7 @@ packages:
 
 Mastra uses a publish/subscribe (pub/sub) system as its internal event bus. Components publish events to topics, and other components subscribe to those topics to react. The backend you configure decides how far those events travel: within one process or across processes on one host, or alternatively across separate instances.
 
-You set the backend once on the `Mastra` instance, and the rest of the system uses it without changes. By default, Mastra uses an in-process backend that needs no setup.
+Set the backend once on the `Mastra` instance for use throughout the system. The default is an in-process backend that requires no setup.
 
 ## How Mastra uses PubSub
 

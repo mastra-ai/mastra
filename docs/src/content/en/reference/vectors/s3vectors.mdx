@@ -1,6 +1,6 @@
 ---
 title: "Reference: Amazon S3 vectors store | Vectors"
-description: Documentation for the S3Vectors class in Mastra, which provides vector search using Amazon S3 Vectors (Preview).
+description: "Configure S3Vectors to create indexes, store embeddings, query similarity, filter metadata, and manage vectors with Amazon S3 Vectors."
 packages:
   - "@mastra/s3vectors"
 ---
@@ -343,7 +343,7 @@ S3 Vectors supports a strict subset of operators and value types. The Mastra fil
 
 **Examples:**
 
-```typescript prettier:false
+```typescript oxfmt:false
 // Implicit AND
 { genre: { $in: ["documentary", "comedy"] }, year: { $gte: 2020 } }
 

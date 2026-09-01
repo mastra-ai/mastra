@@ -1,6 +1,6 @@
-import { cleanup, screen } from '@testing-library/react';
+import { cleanup, fireEvent, screen } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ExperimentTopArea } from '../experiment-top-area';
 import { experiments, noAgents, noWorkflows, noScorers } from './fixtures/experiments';
 import { TestLinkProvider } from '@/test/link-provider';
@@ -37,17 +37,36 @@ describe('ExperimentTopArea', () => {
     );
   });
 
-  it('shows the eyebrow label and the target as the page title, linked to the entity', async () => {
+  it('titles the page with the run itself', async () => {
     const { queryClient } = renderWithProviders(
       <TestLinkProvider>
         <ExperimentTopArea experiment={namedExperiment} />
       </TestLinkProvider>,
     );
 
-    expect(await screen.findByText('Evaluation target')).toBeDefined();
-    expect(await screen.findByText('Avg 0.833')).toBeDefined();
-    const title = await screen.findByRole('link', { name: /example-entity-extraction-agent/ });
-    expect(title.getAttribute('href')).toContain('example-entity-extraction-agent');
+    // The run is the subject of the page; the dataset it ran on lives in the flow chain.
+    expect(await screen.findByText(`Experiment #${namedExperiment.id.slice(0, 8)}`)).toBeDefined();
+
+    await waitForMutationsIdle(queryClient);
+  });
+
+  it('walks through the dataset, the target and the scorers', async () => {
+    const { queryClient } = renderWithProviders(
+      <TestLinkProvider>
+        <ExperimentTopArea experiment={namedExperiment} />
+      </TestLinkProvider>,
+    );
+
+    const datasetLink = await screen.findByRole('link', { name: new RegExp(namedExperiment.datasetId!) });
+    expect(datasetLink.getAttribute('href')).toBe(`/datasets/${namedExperiment.datasetId}`);
+
+    const target = await screen.findByRole('link', { name: /example-entity-extraction-agent/ });
+    expect(target.getAttribute('href')).toContain('example-entity-extraction-agent');
+
+    // Two distinct scorers produced the mocked scores.
+    expect(await screen.findByText('2 scorers')).toBeDefined();
+    expect(screen.getByText('each item')).toBeDefined();
+    expect(screen.getByText('comparing ground truth')).toBeDefined();
 
     await waitForMutationsIdle(queryClient);
   });
@@ -59,7 +78,7 @@ describe('ExperimentTopArea', () => {
       </TestLinkProvider>,
     );
 
-    expect(await screen.findByText('Entity extraction evaluation using Model A')).toBeDefined();
+    expect(await screen.findByText(namedExperiment.description!)).toBeDefined();
 
     await waitForMutationsIdle(queryClient);
   });
@@ -71,8 +90,35 @@ describe('ExperimentTopArea', () => {
       </TestLinkProvider>,
     );
 
-    expect(await screen.findByText('Evaluation target')).toBeDefined();
+    expect(await screen.findByText(`Experiment #${unnamedExperiment.id.slice(0, 8)}`)).toBeDefined();
     expect(screen.queryByText(namedExperiment.description!)).toBeNull();
+
+    await waitForMutationsIdle(queryClient);
+  });
+
+  it('omits the delete action when no callback is provided', async () => {
+    const { queryClient } = renderWithProviders(
+      <TestLinkProvider>
+        <ExperimentTopArea experiment={namedExperiment} />
+      </TestLinkProvider>,
+    );
+
+    expect(await screen.findByText(`Experiment #${namedExperiment.id.slice(0, 8)}`)).toBeDefined();
+    expect(screen.queryByRole('button', { name: 'Delete experiment' })).toBeNull();
+
+    await waitForMutationsIdle(queryClient);
+  });
+
+  it('calls the delete handler from the delete action', async () => {
+    const onDeleteClick = vi.fn();
+    const { queryClient } = renderWithProviders(
+      <TestLinkProvider>
+        <ExperimentTopArea experiment={namedExperiment} onDeleteClick={onDeleteClick} />
+      </TestLinkProvider>,
+    );
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Delete experiment' }));
+    expect(onDeleteClick).toHaveBeenCalledOnce();
 
     await waitForMutationsIdle(queryClient);
   });

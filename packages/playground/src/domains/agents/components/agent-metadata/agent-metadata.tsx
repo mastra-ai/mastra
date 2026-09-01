@@ -1,6 +1,7 @@
 import { markdown, markdownLanguage } from '@codemirror/lang-markdown';
 import type { GetToolResponse, GetWorkflowResponse } from '@mastra/client-js';
 import { Badge } from '@mastra/playground-ui/components/Badge';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@mastra/playground-ui/components/Card';
 import { codeLanguages, useCodemirrorTheme } from '@mastra/playground-ui/components/CodeEditor';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
@@ -19,7 +20,6 @@ import { extractPrompt } from '../../utils/extractPrompt';
 import { AgentMetadataList, AgentMetadataListEmpty, AgentMetadataListItem } from './agent-metadata-list';
 import { AgentMetadataModelList } from './agent-metadata-model-list';
 import { AgentMetadataSection } from './agent-metadata-section';
-import { AgentMetadataWrapper } from './agent-metadata-wrapper';
 import { useIsCmsAvailable } from '@/domains/cms/hooks/use-is-cms-available';
 import { useScorers } from '@/domains/scores';
 import { WORKSPACE_TOOLS_PREFIX } from '@/domains/workspace/constants';
@@ -46,7 +46,7 @@ export const AgentMetadataNetworkList = ({ agents }: AgentMetadataNetworkListPro
       {agents.map(agent => (
         <AgentMetadataListItem key={agent.id}>
           <Link href={paths.agentLink(agent.id)} data-testid="agent-badge">
-            <Badge variant="success" icon={<AgentIcon />}>
+            <Badge variant="green" icon={<AgentIcon />}>
               {agent.name}
             </Badge>
           </Link>
@@ -88,132 +88,156 @@ export const AgentMetadata = ({ agentId }: AgentMetadataProps) => {
   const outputProcessors = agent.outputProcessors ?? [];
 
   return (
-    <AgentMetadataWrapper>
-      {agent?.description && (
-        <AgentMetadataSection title="Description">
-          <p className="text-neutral6 text-sm">{agent.description}</p>
-        </AgentMetadataSection>
-      )}
+    <div className="flex flex-col gap-4" data-testid="agent-metadata">
       {agent.modelList && (
-        <AgentMetadataSection title="Models">
-          <AgentMetadataModelList
-            modelList={agent.modelList}
-            updateModelInModelList={updateModelInModelList}
-            reorderModelList={reorderModelList}
+        <Card elevation="elevated" className="bg-surface3">
+          <CardHeader>
+            <CardTitle>Models</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <AgentMetadataModelList
+              modelList={agent.modelList}
+              updateModelInModelList={updateModelInModelList}
+              reorderModelList={reorderModelList}
+            />
+          </CardContent>
+        </Card>
+      )}
+
+      <Card elevation="elevated" className="bg-surface3">
+        <CardHeader className="flex-row items-baseline gap-2 space-y-0">
+          <CardTitle>Capabilities</CardTitle>
+          <CardDescription>Everything this agent can call at runtime</CardDescription>
+        </CardHeader>
+        <CardContent>
+          {networkAgents.length > 0 && (
+            <AgentMetadataSection
+              title={<SectionTitleWithCount title="Agents" count={networkAgents.length} />}
+              hint={{
+                link: 'https://mastra.ai/en/docs/agents/overview',
+                title: 'Agents documentation',
+              }}
+            >
+              <AgentMetadataNetworkList agents={networkAgents} />
+            </AgentMetadataSection>
+          )}
+
+          <AgentMetadataSection
+            title={<SectionTitleWithCount title="Tools" count={tools.length} />}
+            hint={{
+              link: 'https://mastra.ai/en/docs/agents/using-tools-and-mcp',
+              title: 'Using Tools and MCP documentation',
+            }}
+          >
+            <AgentMetadataToolList tools={tools} agentId={agentId} />
+          </AgentMetadataSection>
+
+          <AgentMetadataSection
+            title={<SectionTitleWithCount title="Workflows" count={workflows.length} />}
+            hint={{
+              link: 'https://mastra.ai/en/docs/workflows/overview',
+              title: 'Workflows documentation',
+            }}
+          >
+            <AgentMetadataWorkflowList workflows={workflows} />
+          </AgentMetadataSection>
+
+          {workspaceTools.length > 0 && (
+            <AgentMetadataSection
+              title={<SectionTitleWithCount title="Workspace Tools" count={workspaceTools.length} />}
+              hint={{
+                link: 'https://mastra.ai/en/reference/workspace/workspace-class#agent-tools',
+                title: 'Workspace tools documentation',
+              }}
+            >
+              <AgentMetadataWorkspaceToolsList tools={workspaceTools} />
+            </AgentMetadataSection>
+          )}
+
+          {browserTools.length > 0 && (
+            <AgentMetadataSection
+              title={<SectionTitleWithCount title="Browser Tools" count={browserTools.length} />}
+              hint={{
+                link: 'https://mastra.ai/en/docs/agents/adding-browser-control',
+                title: 'Browser tools documentation',
+              }}
+            >
+              <AgentMetadataBrowserToolsList tools={browserTools} />
+            </AgentMetadataSection>
+          )}
+
+          {(inputProcessors.length > 0 || outputProcessors.length > 0) && (
+            <AgentMetadataSection
+              title="Processors"
+              hint={{
+                link: 'https://mastra.ai/docs/agents/processors',
+                title: 'Processors documentation',
+              }}
+            >
+              <AgentMetadataCombinedProcessorList
+                inputProcessors={inputProcessors}
+                outputProcessors={outputProcessors}
+              />
+            </AgentMetadataSection>
+          )}
+
+          <AgentMetadataSection
+            title={<SectionTitleWithCount title="Skills" count={skills.length} />}
+            hint={{
+              link: 'https://mastra.ai/en/docs/workspace/skills',
+              title: 'Skills documentation',
+            }}
+          >
+            <AgentMetadataSkillList skills={skills} agentId={agentId} workspaceId={workspaceId} />
+          </AgentMetadataSection>
+
+          <AgentMetadataSection title="Scorers">
+            <AgentMetadataScorerList entityId={agent.name} entityType="AGENT" />
+          </AgentMetadataSection>
+        </CardContent>
+      </Card>
+
+      <Card elevation="elevated" className="bg-surface3">
+        <CardHeader>
+          <CardTitle>System Prompt</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <CodeMirror
+            className="border-border1 rounded-md border"
+            value={extractPrompt(agent.instructions)}
+            editable={false}
+            extensions={[markdown({ base: markdownLanguage, codeLanguages }), EditorView.lineWrapping]}
+            theme={codemirrorTheme}
           />
-        </AgentMetadataSection>
-      )}
-
-      {networkAgents.length > 0 && (
-        <AgentMetadataSection
-          title="Agents"
-          hint={{
-            link: 'https://mastra.ai/en/docs/agents/overview',
-            title: 'Agents documentation',
-          }}
-        >
-          <AgentMetadataNetworkList agents={networkAgents} />
-        </AgentMetadataSection>
-      )}
-
-      <AgentMetadataSection
-        title="Tools"
-        hint={{
-          link: 'https://mastra.ai/en/docs/agents/using-tools-and-mcp',
-          title: 'Using Tools and MCP documentation',
-        }}
-      >
-        <AgentMetadataToolList tools={tools} agentId={agentId} />
-      </AgentMetadataSection>
-
-      <AgentMetadataSection
-        title="Workflows"
-        hint={{
-          link: 'https://mastra.ai/en/docs/workflows/overview',
-          title: 'Workflows documentation',
-        }}
-      >
-        <AgentMetadataWorkflowList workflows={workflows} />
-      </AgentMetadataSection>
-
-      <AgentMetadataSection
-        title="Skills"
-        hint={{
-          link: 'https://mastra.ai/en/docs/workspace/skills',
-          title: 'Skills documentation',
-        }}
-      >
-        <AgentMetadataSkillList skills={skills} agentId={agentId} workspaceId={workspaceId} />
-      </AgentMetadataSection>
-
-      {workspaceTools.length > 0 && (
-        <AgentMetadataSection
-          title="Workspace Tools"
-          hint={{
-            link: 'https://mastra.ai/en/reference/workspace/workspace-class#agent-tools',
-            title: 'Workspace tools documentation',
-          }}
-        >
-          <AgentMetadataWorkspaceToolsList tools={workspaceTools} />
-        </AgentMetadataSection>
-      )}
-
-      {browserTools.length > 0 && (
-        <AgentMetadataSection
-          title="Browser Tools"
-          hint={{
-            link: 'https://mastra.ai/en/docs/agents/adding-browser-control',
-            title: 'Browser tools documentation',
-          }}
-        >
-          <AgentMetadataBrowserToolsList tools={browserTools} />
-        </AgentMetadataSection>
-      )}
-
-      {(inputProcessors.length > 0 || outputProcessors.length > 0) && (
-        <AgentMetadataSection
-          title="Processors"
-          hint={{
-            link: 'https://mastra.ai/docs/agents/processors',
-            title: 'Processors documentation',
-          }}
-        >
-          <AgentMetadataCombinedProcessorList inputProcessors={inputProcessors} outputProcessors={outputProcessors} />
-        </AgentMetadataSection>
-      )}
-
-      <AgentMetadataSection title="Scorers">
-        <AgentMetadataScorerList entityId={agent.name} entityType="AGENT" />
-      </AgentMetadataSection>
-      <AgentMetadataSection title="System Prompt">
-        <CodeMirror
-          className="border-border1 rounded-md border"
-          value={extractPrompt(agent.instructions)}
-          editable={false}
-          extensions={[markdown({ base: markdownLanguage, codeLanguages }), EditorView.lineWrapping]}
-          theme={codemirrorTheme}
-        />
-        {!isCmsLoading && !isCmsAvailable && (
-          <Notice variant="warning" title="Read-only">
-            <Notice.Message>
-              To edit the system prompt in Studio, add <code className="font-medium">@mastra/editor</code> to your
-              project. See the{' '}
-              <a
-                href="https://mastra.ai/docs/editor/overview"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="underline"
-              >
-                documentation
-              </a>
-              .
-            </Notice.Message>
-          </Notice>
-        )}
-      </AgentMetadataSection>
-    </AgentMetadataWrapper>
+          {!isCmsLoading && !isCmsAvailable && (
+            <Notice variant="warning" title="Read-only">
+              <Notice.Message>
+                To edit the system prompt in Studio, add <code className="font-medium">@mastra/editor</code> to your
+                project. See the{' '}
+                <a
+                  href="https://mastra.ai/docs/editor/overview"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="underline"
+                >
+                  documentation
+                </a>
+                .
+              </Notice.Message>
+            </Notice>
+          )}
+        </CardContent>
+      </Card>
+    </div>
   );
 };
+
+const SectionTitleWithCount = ({ title, count }: { title: string; count: number }) => (
+  <span className="flex items-center gap-1.5">
+    {title}
+    <Badge variant="neutral">{count}</Badge>
+  </span>
+);
 
 export interface AgentMetadataToolListProps {
   tools: GetToolResponse[];
@@ -331,7 +355,7 @@ export const AgentMetadataSkillList = ({ skills, agentId, workspaceId }: AgentMe
         const badge = (
           <Badge
             icon={<SkillIcon className={`h-3 w-3 ${isActivated ? 'text-green-400' : 'text-accent2'}`} />}
-            variant={isActivated ? 'success' : 'default'}
+            variant={isActivated ? 'green' : 'neutral'}
           >
             {skill.name}
             {isActivated && <span className="sr-only">Active</span>}

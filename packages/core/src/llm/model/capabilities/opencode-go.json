@@ -18,6 +18,7 @@
     "qwen3.5-plus",
     "qwen3.6-plus",
     "qwen3.7-plus",
+    "qwen3.8-flash",
     "qwen3.8-max"
   ],
   "temperature": [
@@ -32,6 +33,7 @@
     "grok-4.5",
     "grok-4.6",
     "hy3",
+    "hy4-preview",
     "kimi-k2.5",
     "kimi-k2.6",
     "longcat-2.0",
@@ -48,6 +50,7 @@
     "qwen3.6-plus",
     "qwen3.7-max",
     "qwen3.7-plus",
+    "qwen3.8-flash",
     "qwen3.8-max"
   ],
   "structuredOutput": [
@@ -64,6 +67,7 @@
     "kimi-k3",
     "muse-spark-1.2-contributor",
     "ox-alpha-free",
+    "qwen3.8-flash",
     "qwen3.8-max"
   ]
 }

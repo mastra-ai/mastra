@@ -59,26 +59,59 @@ describe('ExperimentMetaBar', () => {
     server.use(
       http.get(`${TEST_BASE_URL}/api/datasets/dataset-1`, () => HttpResponse.json(dataset)),
       http.get(`${TEST_BASE_URL}/api/scores/scorers`, () => HttpResponse.json(scorers)),
+      // avg of 0.5, 1 and 1 is 0.833.
+      http.get(`${TEST_BASE_URL}/api/scores/run/:experimentId`, () =>
+        HttpResponse.json({
+          scores: [
+            { entityId: 'item-1', scorerId: 'answer-relevancy', score: 0.5 },
+            { entityId: 'item-2', scorerId: 'answer-relevancy', score: 1 },
+            { entityId: 'item-2', scorerId: 'toxicity', score: 1 },
+          ],
+          pagination: { total: 3, page: 0, perPage: 100, hasMore: false },
+        }),
+      ),
     );
   });
 
   describe('for a completed experiment with a dataset and scorers', () => {
-    it('shows the four cell labels', async () => {
+    it('shows the four cell labels and no dataset cell', async () => {
       const { queryClient } = renderBar(completedExperiment);
 
-      expect(await screen.findByText('Results')).toBeDefined();
+      expect(await screen.findByText('Avg score')).toBeDefined();
+      expect(screen.getByText('Items')).toBeDefined();
       expect(screen.getByText('Started')).toBeDefined();
       expect(screen.getByText('Duration')).toBeDefined();
-      expect(screen.getByText('Dataset')).toBeDefined();
+      // The dataset now lives in the page title, not in the meta bar.
+      expect(screen.queryByText('Dataset')).toBeNull();
 
       await waitForMutationsIdle(queryClient);
     });
 
-    it('shows All passed when every item succeeds', async () => {
+    it('shows a neutral item count with no pass/fail verdict', async () => {
       const { queryClient } = renderBar(completedExperiment);
 
-      expect(await screen.findByText('All passed')).toBeDefined();
+      const total = completedExperiment.totalItems;
+      expect(await screen.findByText(`${total} item${total === 1 ? '' : 's'}`)).toBeDefined();
+      expect(screen.queryByText('All passed')).toBeNull();
       expect(screen.queryByText('failed')).toBeNull();
+
+      await waitForMutationsIdle(queryClient);
+    });
+
+    it('shows an errored suffix only when items errored', async () => {
+      const { queryClient } = renderBar({ ...completedExperiment, failedCount: 2 });
+
+      expect(await screen.findByText('· 2 errored')).toBeDefined();
+
+      await waitForMutationsIdle(queryClient);
+    });
+
+    it('shows the average of every score fetched for the run', async () => {
+      const { queryClient } = renderBar(completedExperiment);
+
+      expect(await screen.findByText('0.833')).toBeDefined();
+      // A completed run has nothing left to score, so no "so far" qualifier.
+      expect(screen.queryByText('· so far')).toBeNull();
 
       await waitForMutationsIdle(queryClient);
     });
@@ -99,24 +132,27 @@ describe('ExperimentMetaBar', () => {
       await waitForMutationsIdle(queryClient);
     });
 
-    it('links to the dataset by name with an item count', async () => {
+    it('does not link to the dataset', async () => {
       const { queryClient } = renderBar(completedExperiment);
 
-      const link = await screen.findByText('Entity extraction dataset');
-      expect(link.closest('a')?.getAttribute('href')).toBe('/datasets/dataset-1');
-      expect(screen.getByText('· 10 items')).toBeDefined();
+      expect(await screen.findByText('Duration')).toBeDefined();
+      expect(screen.queryByText('Entity extraction dataset')).toBeNull();
 
       await waitForMutationsIdle(queryClient);
     });
   });
 
   describe('for a running caller-driven experiment', () => {
-    it('shows Running… for the duration and a dash for the dataset', async () => {
+    it('shows Running… for the duration', async () => {
       const { queryClient } = renderBar(runningExperiment);
 
       expect(await screen.findByText('Running…')).toBeDefined();
-      // The Dataset cell falls back to a dash.
-      expect(screen.getAllByText('—')).toHaveLength(1);
+    });
+
+    it('qualifies the average as partial while items are still being scored', async () => {
+      const { queryClient } = renderBar(runningExperiment);
+
+      expect(await screen.findByText('· so far')).toBeDefined();
 
       await waitForMutationsIdle(queryClient);
     });

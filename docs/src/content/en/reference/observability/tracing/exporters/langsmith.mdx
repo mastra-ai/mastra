@@ -1,6 +1,6 @@
 ---
 title: "Reference: LangSmithExporter | Observability"
-description: LangSmith exporter for Tracing
+description: "Configure LangSmithExporter to send Mastra traces to LangSmith with project, client, sampling, and exporter-specific connection options."
 packages:
   - "@mastra/langsmith"
 ---
@@ -13,7 +13,7 @@ Sends Tracing data to LangSmith for observability.
 
 ## Constructor
 
-```typescript prettier:false
+```typescript oxfmt:false
 new LangSmithExporter(config: LangSmithExporterConfig)
 ```
 
@@ -88,7 +88,7 @@ Extends both `ClientConfig` (from LangSmith SDK) and `BaseExporterConfig`:
 
 ### `exportTracingEvent`
 
-```typescript prettier:false
+```typescript oxfmt:false
 async exportTracingEvent(event: TracingEvent): Promise<void>
 ```
 
@@ -96,7 +96,7 @@ Exports a tracing event to LangSmith.
 
 ### flush
 
-```typescript prettier:false
+```typescript oxfmt:false
 async flush(): Promise<void>
 ```
 
@@ -104,7 +104,7 @@ Force flushes any pending spans to LangSmith without shutting down the exporter.
 
 ### shutdown
 
-```typescript prettier:false
+```typescript oxfmt:false
 async shutdown(): Promise<void>
 ```
 

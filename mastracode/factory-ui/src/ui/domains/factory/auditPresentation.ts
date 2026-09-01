@@ -1,12 +1,15 @@
+import type { BadgeVariant } from '@mastra/playground-ui/components/Badge';
+
 import type { AuditEvent } from './services/audit';
 import { stageLabel } from './stages';
 
 export const AUDIT_CATEGORIES = [
   {
     namespace: 'work_item',
+    tone: 'purple' satisfies BadgeVariant,
     label: 'Work items',
     dotClass: 'bg-accent3',
-    fillClass: 'fill-accent3',
+    strokeClass: 'stroke-accent3',
     actions: [
       'factory.work_item.created',
       'factory.work_item.updated',
@@ -17,37 +20,42 @@ export const AUDIT_CATEGORIES = [
   },
   {
     namespace: 'run',
+    tone: 'green' satisfies BadgeVariant,
     label: 'Runs',
     dotClass: 'bg-positive1',
-    fillClass: 'fill-positive1',
+    strokeClass: 'stroke-positive1',
     actions: ['factory.run.started', 'factory.run.approved', 'factory.run.dismissed'],
   },
   {
     namespace: 'worktree',
+    tone: 'neutral' satisfies BadgeVariant,
     label: 'Worktrees',
     dotClass: 'bg-neutral3',
-    fillClass: 'fill-neutral3',
+    strokeClass: 'stroke-neutral3',
     actions: ['factory.worktree.created', 'factory.worktree.deleted'],
   },
   {
     namespace: 'git',
+    tone: 'orange' satisfies BadgeVariant,
     label: 'Git',
     dotClass: 'bg-(--chart-4)',
-    fillClass: 'fill-(--chart-4)',
+    strokeClass: 'stroke-(--chart-4)',
     actions: ['factory.git.commit', 'factory.git.push', 'factory.git.pr_opened'],
   },
   {
     namespace: 'agent',
+    tone: 'blue' satisfies BadgeVariant,
     label: 'Agent',
     dotClass: 'bg-accent6',
-    fillClass: 'fill-accent6',
+    strokeClass: 'stroke-accent6',
     actions: ['factory.agent.commit', 'factory.agent.push', 'factory.agent.pr_opened'],
   },
   {
     namespace: 'intake',
+    tone: 'cyan' satisfies BadgeVariant,
     label: 'Intake',
     dotClass: 'bg-neutral2',
-    fillClass: 'fill-neutral2',
+    strokeClass: 'stroke-neutral2',
     actions: ['factory.intake.config_updated', 'factory.intake.binding_updated'],
   },
 ] as const;
@@ -59,7 +67,8 @@ export interface AuditTimeRange {
   to: number;
 }
 
-const MINIMUM_AUDIT_RANGE = 5 * 60_000;
+const AUDIT_SINGLE_EVENT_PADDING = 30 * 60_000;
+
 export function auditEventTime(event: AuditEvent): number | undefined {
   const at = Date.parse(event.occurredAt);
   return Number.isFinite(at) ? at : undefined;
@@ -74,31 +83,39 @@ export function clamp(value: number, min: number, max: number): number {
   return Math.min(Math.max(value, min), max);
 }
 
-export function auditDayStart(date: Date): number {
-  const start = new Date(date);
-  start.setHours(0, 0, 0, 0);
-  return start.getTime();
+export function auditRangeLabel(range: AuditTimeRange): string {
+  const from = new Date(range.from);
+  const to = new Date(range.to);
+  const sameDay = from.toDateString() === to.toDateString();
+  const fromLabel = from.toLocaleString(undefined, {
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+  const toLabel = to.toLocaleString(undefined, {
+    month: sameDay ? undefined : 'short',
+    day: sameDay ? undefined : 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+  return `${fromLabel} – ${toLabel}`;
 }
 
-export function auditDayEnd(date: Date): number {
-  const end = new Date(date);
-  end.setHours(23, 59, 59, 999);
-  return end.getTime();
-}
-export function auditRangeAround(center: number, span: number, bounds: AuditTimeRange): AuditTimeRange {
-  const boundedSpan = Math.min(span, bounds.to - bounds.from);
-  const from = clamp(center - boundedSpan / 2, bounds.from, bounds.to - boundedSpan);
-  return { from, to: from + boundedSpan };
-}
+export function auditEventBounds(events: AuditEvent[]): AuditTimeRange | undefined {
+  let from = Number.POSITIVE_INFINITY;
+  let to = Number.NEGATIVE_INFINITY;
 
-export function auditRangeBetween(anchor: number, current: number, bounds: AuditTimeRange): AuditTimeRange {
-  const from = clamp(Math.min(anchor, current), bounds.from, bounds.to);
-  const to = clamp(Math.max(anchor, current), bounds.from, bounds.to);
-  const minimumSpan = Math.min(
-    Math.max((bounds.to - bounds.from) * 0.03, MINIMUM_AUDIT_RANGE),
-    bounds.to - bounds.from,
-  );
-  return to - from >= minimumSpan ? { from, to } : auditRangeAround((from + to) / 2, minimumSpan, bounds);
+  for (const event of events) {
+    const at = auditEventTime(event);
+    if (at === undefined) continue;
+    from = Math.min(from, at);
+    to = Math.max(to, at);
+  }
+
+  if (!Number.isFinite(from) || !Number.isFinite(to)) return undefined;
+  if (from === to) return { from: from - AUDIT_SINGLE_EVENT_PADDING, to: to + AUDIT_SINGLE_EVENT_PADDING };
+  return { from, to };
 }
 
 export function auditActionsForCategories(selected: ReadonlySet<AuditNamespace>): string[] | undefined {

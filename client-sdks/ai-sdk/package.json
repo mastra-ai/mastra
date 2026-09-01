@@ -29,7 +29,6 @@
   },
   "files": [
     "dist",
-    "CHANGELOG.md",
     "./**/*.d.ts"
   ],
   "peerDependencies": {

@@ -38,9 +38,7 @@ function createHarness() {
   });
 
   const machinery: SessionMachinery = {
-    getAgent: () => {
-      throw new Error('getAgent is not used by these stream-folding tests');
-    },
+    getAgent: () => ({ id: 'agent-stub' }) as unknown as ReturnType<SessionMachinery['getAgent']>,
     subscribeToThread: async () => {
       throw new Error('subscribeToThread is not used by these stream-folding tests');
     },

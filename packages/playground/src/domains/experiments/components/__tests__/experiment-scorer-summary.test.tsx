@@ -45,15 +45,20 @@ describe('ExperimentScorerSummary', () => {
   it('renders a metric card per scorer', async () => {
     const { queryClient } = renderSummary({ scoresByItemId });
 
-    // answer-relevancy: 1 of 2 items scored below 1 → failed, avg (0.5 + 1) / 2 = 0.750.
-    expect(screen.getByText('Avg score 0.750')).toBeDefined();
-    expect(screen.getByText('/2')).toBeDefined();
-    expect(screen.getAllByText('failed')).toHaveLength(2);
+    // answer-relevancy: avg (0.5 + 1) / 2 = 0.750 over 2 scored items.
+    expect(screen.getByText('0.750')).toBeDefined();
 
-    // toxicity: 0 of 1 failed, avg 1.000.
-    expect(screen.getByText('Avg score 1.000')).toBeDefined();
-    expect(screen.getByText('0').className).toContain('text-accent1');
-    expect(screen.getByText('/1')).toBeDefined();
+    // toxicity: avg 1.000 over a single scored item.
+    expect(screen.getByText('1.000')).toBeDefined();
+
+    // The scored-item count is not surfaced — the card only carries the score.
+    expect(screen.queryByText(/items? scored/)).toBeNull();
+
+    // The icon is labelled so hovering it explains what the link points at.
+    expect(screen.getAllByRole('img', { name: 'Scorer' })).toHaveLength(2);
+
+    // No invented pass/fail verdict.
+    expect(screen.queryByText('failed')).toBeNull();
 
     await waitForMutationsIdle(queryClient);
   });

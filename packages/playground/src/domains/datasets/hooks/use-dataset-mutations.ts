@@ -47,6 +47,7 @@ export const useDatasetMutations = () => {
     onSuccess: (_, variables) => {
       void queryClient.invalidateQueries({ queryKey: ['dataset-items', variables.datasetId] });
       void queryClient.invalidateQueries({ queryKey: ['dataset', variables.datasetId] });
+      void queryClient.invalidateQueries({ queryKey: ['dataset-versions', variables.datasetId] });
     },
   });
 
@@ -68,6 +69,7 @@ export const useDatasetMutations = () => {
     onSuccess: (_, variables) => {
       void queryClient.invalidateQueries({ queryKey: ['dataset-items', variables.datasetId] });
       void queryClient.invalidateQueries({ queryKey: ['dataset', variables.datasetId] });
+      void queryClient.invalidateQueries({ queryKey: ['dataset-versions', variables.datasetId] });
     },
   });
 
