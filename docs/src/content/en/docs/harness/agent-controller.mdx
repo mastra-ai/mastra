@@ -438,9 +438,9 @@ const session = client.getAgentController('coding-controller').session('user-123
 await session.create()
 
 const subscription = await session.subscribe({
-  onEvent: event => render(event),
+  onEvent: event => handleEvent(event),
   onError: error => showDisconnected(error),
-  onReconnect: async () => hydrate(await session.state()),
+  onReconnect: async () => resync(await session.state()),
   reconnect: true,
 })
 
@@ -450,7 +450,7 @@ subscription.unsubscribe()
 
 `subscribe()` takes an options object and is async, unlike the in-process listener. Its promise resolves once the stream is established and rejects when it can't connect, so a rejected call leaves nothing running in the background. `reconnect: true` re-establishes a stream that drops after it was established, with exponential backoff.
 
-The server doesn't replay events missed while the stream was down, so `onReconnect` has to re-sync. Call `session.state()` for the current mode, model, and thread, and `session.listMessages(threadId)` when the UI also needs the messages it missed. `session.displayState.get()` isn't part of the client surface.
+The server doesn't replay events missed while the stream was down, so read `session.state()` from `onReconnect` for the current mode, model, and thread. The client surface has no `session.displayState.get()`.
 
 Send work with `session.sendMessage(content)`, or `session.sendMessage({ content, files })` to attach base64-encoded files. The reply arrives as `message_*` events on the subscription, not as the return value of the call. Answer a `tool_approval_required` event with `session.approveTool(toolCallId, approved)`, and a `tool_suspended` event with `session.respondToToolSuspension(toolCallId, resumeData)`.
 
