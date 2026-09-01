@@ -76,17 +76,68 @@ export interface KnowledgeImportRun {
 }
 
 export type KnowledgeProposalStatus = 'pending' | 'approved' | 'rejected' | 'conflicted';
+
+export type KnowledgeProposalApprovalCapability = 'append' | 'edit' | 'delete' | 'createChildren' | 'manageAccess';
+
+export interface KnowledgeProposalTarget {
+  type: 'node' | 'record';
+  id: string;
+  expectedVersion: number;
+  scopeIds: KnowledgeScopeIds;
+  approvalCapability: KnowledgeProposalApprovalCapability;
+}
+
 export interface KnowledgeProposal {
   id: string;
   targetType: 'node' | 'record';
   targetId: string;
   expectedVersion: number;
+  targets: KnowledgeProposalTarget[];
   operation: string;
   payload: Record<string, unknown>;
-  scopeIds: string[];
+  reason?: string;
+  proposerContextScopeId?: string;
   status: KnowledgeProposalStatus;
+  reviewerContextScopeId?: string;
+  reviewReason?: string;
+  reviewedAt?: Date;
   createdAt: Date;
-  updatedAt: Date;
+}
+
+export interface CreateKnowledgeProposalInput {
+  id?: string;
+  targets: KnowledgeProposalTarget[];
+  operation: string;
+  payload: Record<string, unknown>;
+  reason?: string;
+  proposerContextScopeId: string;
+  expectedAccessEpoch: number;
+}
+
+export interface ListKnowledgeProposalsInput {
+  scopeIds: KnowledgeScopeIds;
+  status?: KnowledgeProposalStatus;
+  limit?: number;
+  cursor?: string;
+}
+
+export interface ListKnowledgeProposalsOutput {
+  proposals: KnowledgeProposal[];
+  nextCursor?: string;
+}
+
+export interface ReviewKnowledgeProposalInput {
+  id: string;
+  status: Exclude<KnowledgeProposalStatus, 'pending' | 'approved'>;
+  reviewerContextScopeId: string;
+  reviewReason?: string;
+  expectedAccessEpoch: number;
+}
+
+export interface ApplyKnowledgeProposalInput {
+  id: string;
+  reviewerContextScopeId: string;
+  expectedAccessEpoch: number;
 }
 
 export interface KnowledgeNode {
@@ -162,7 +213,11 @@ export type KnowledgeActivityAction =
   | 'promote'
   | 'demote'
   | 'stamp'
-  | 'rebind';
+  | 'rebind'
+  | 'propose'
+  | 'approve'
+  | 'reject'
+  | 'conflict';
 export interface KnowledgeActivityEvent {
   id: string;
   action: KnowledgeActivityAction;
@@ -629,6 +684,24 @@ export abstract class KnowledgeStorage extends StorageDomain {
     throw new KnowledgeUnsupportedError();
   }
   async updateImportRun(_input: UpdateKnowledgeImportRunInput): Promise<KnowledgeImportRun> {
+    throw new KnowledgeUnsupportedError();
+  }
+  async createProposal(_input: CreateKnowledgeProposalInput): Promise<KnowledgeProposal> {
+    throw new KnowledgeUnsupportedError();
+  }
+  async getProposal(_id: string): Promise<KnowledgeProposal | null> {
+    throw new KnowledgeUnsupportedError();
+  }
+  async getVisibleProposal(_input: { id: string; scopeIds: KnowledgeScopeIds }): Promise<KnowledgeProposal | null> {
+    throw new KnowledgeUnsupportedError();
+  }
+  async listProposals(_input: ListKnowledgeProposalsInput): Promise<ListKnowledgeProposalsOutput> {
+    throw new KnowledgeUnsupportedError();
+  }
+  async reviewProposal(_input: ReviewKnowledgeProposalInput): Promise<KnowledgeProposal> {
+    throw new KnowledgeUnsupportedError();
+  }
+  async applyProposal(_input: ApplyKnowledgeProposalInput): Promise<KnowledgeProposal> {
     throw new KnowledgeUnsupportedError();
   }
   async getScopeAddress(_address: string): Promise<KnowledgeScopeAddress | null> {

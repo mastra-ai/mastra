@@ -56,10 +56,12 @@ import {
   TABLE_SCHEMAS,
 } from '@mastra/core/storage';
 import type {
+  ApplyKnowledgeProposalInput,
   ClaimKnowledgeImportRunInput,
   CreateKnowledgeRecordInput,
   ClaimKnowledgeSemanticOutboxInput,
   CreateKnowledgeImportRunInput,
+  CreateKnowledgeProposalInput,
   CreateKnowledgeNodeInput,
   EnqueueKnowledgeImportRunInput,
   FinalizeKnowledgeImportRunInput,
@@ -71,6 +73,7 @@ import type {
   KnowledgeImportState,
   KnowledgeNode,
   KnowledgeNodeAddress,
+  KnowledgeProposal,
   KnowledgeRecord,
   KnowledgeScopeAddress,
   KnowledgeScopeGrant,
@@ -87,8 +90,11 @@ import type {
   ListKnowledgeImportRunsInput,
   ListKnowledgeImportRunsOutput,
   ListKnowledgeNodesInput,
+  ListKnowledgeProposalsInput,
+  ListKnowledgeProposalsOutput,
   SearchKnowledgeInput,
   SearchKnowledgeResult,
+  ReviewKnowledgeProposalInput,
   UpdateKnowledgeImportRunInput,
   UpdateKnowledgeNodeInput,
 } from '@mastra/core/storage';
@@ -228,6 +234,28 @@ function parseImportRun(row: Record<string, unknown>): KnowledgeImportRun {
     queuedAt: toDate(row.queuedAt),
     startedAt: optionalDate(row.startedAt),
     completedAt: optionalDate(row.completedAt),
+  };
+}
+
+function parseProposal(row: Record<string, unknown>): KnowledgeProposal {
+  const changes = parseJson<{ targets: KnowledgeProposal['targets']; payload: Record<string, unknown> }>(
+    row.changesJson ?? row.changes,
+  );
+  return {
+    id: String(row.id),
+    targetType: String(row.targetType) as KnowledgeProposal['targetType'],
+    targetId: String(row.targetId),
+    expectedVersion: Number(row.expectedVersion),
+    targets: changes.targets,
+    operation: String(row.action),
+    payload: changes.payload,
+    reason: row.reason == null ? undefined : String(row.reason),
+    proposerContextScopeId: row.proposerContextScopeId == null ? undefined : String(row.proposerContextScopeId),
+    status: String(row.status) as KnowledgeProposal['status'],
+    reviewerContextScopeId: row.reviewerContextScopeId == null ? undefined : String(row.reviewerContextScopeId),
+    reviewReason: row.reviewReason == null ? undefined : String(row.reviewReason),
+    reviewedAt: optionalDate(row.reviewedAt),
+    createdAt: toDate(row.createdAt),
   };
 }
 
@@ -730,67 +758,7 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
   }
 
   async updateNode(input: UpdateKnowledgeNodeInput): Promise<KnowledgeNode> {
-    return this.#transaction(async tx => {
-      await this.#assertExpectedAccessEpoch(tx, input.expectedAccessEpoch);
-      const existing = await this.#getNode(tx, input.id);
-      if (!existing) throw new KnowledgeNotFoundError('node', input.id);
-      const existingScopeIds = await this.#getNodeScopeIds(tx, input.id);
-      const scopeIds = await this.#assertScopeNodes(tx, input.scopeIds ?? existingScopeIds);
-      const now = new Date();
-      const updated: KnowledgeNode = {
-        ...existing,
-        name: input.name?.trim() ?? existing.name,
-        kind: input.kind ?? existing.kind,
-        isScope: input.isScope ?? existing.isScope,
-        metadata: input.metadata ?? existing.metadata,
-        version: input.version + 1,
-        updatedAt: now,
-      };
-      const collision = await this.#getNodeByName(tx, updated.name, scopeIds);
-      if (collision && collision.id !== input.id) throw new KnowledgeConflictError(collision.id);
-      await this.#assertNoSiblingNameCollision(tx, updated.name, scopeIds, input.id);
-      if (existing.isScope && input.isScope === false) await this.#assertScopeHasNoDependents(tx, existing.id);
-      const result = await tx.execute({
-        sql: `UPDATE "${TABLE_KNOWLEDGE_NODES}" SET name=?,kind=?,isScope=?,metadata=jsonb(?),version=version+1,updatedAt=? WHERE id=? AND version=?`,
-        args: [
-          updated.name,
-          updated.kind ?? null,
-          updated.isScope,
-          updated.metadata ? JSON.stringify(updated.metadata) : null,
-          now.toISOString(),
-          input.id,
-          input.version,
-        ],
-      });
-      if (result.rowsAffected === 0) throw new KnowledgeConflictError(input.id);
-      if (input.scopeIds) await this.#replaceNodeScopes(tx, input.id, scopeIds, now);
-      await this.#activity(tx, 'edit', 'node', input.id, input.contextScopeId, input.importRunId);
-      if (knowledgeScopeIdsKey(existingScopeIds) !== knowledgeScopeIdsKey(scopeIds)) {
-        await this.#outbox(tx, 'node', input.id, 'delete', updated.version, existingScopeIds);
-      }
-      await this.#outbox(tx, 'node', input.id, 'upsert', updated.version, scopeIds);
-      const recordRows = await tx.execute({
-        sql: `SELECT *,json(metadata) AS metadataJson FROM "${TABLE_KNOWLEDGE_RECORDS}" WHERE nodeId=?`,
-        args: [input.id],
-      });
-      for (const row of recordRows.rows) {
-        const record = parseKnowledge(row);
-        const recordScopeIds = await this.#getRecordScopeIds(tx, record.id);
-        await tx.execute({
-          sql: `UPDATE "${TABLE_KNOWLEDGE_RECORDS}" SET version=version+1,updatedAt=? WHERE id=?`,
-          args: [now.toISOString(), record.id],
-        });
-        await this.#outbox(
-          tx,
-          'record',
-          record.id,
-          record.deletedAt ? 'delete' : 'upsert',
-          record.version + 1,
-          recordScopeIds,
-        );
-      }
-      return updated;
-    });
+    return this.#transaction(tx => this.#updateNode(tx, input));
   }
 
   async mergeNodes(input: {
@@ -1731,6 +1699,213 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
     });
   }
 
+  async createProposal(input: CreateKnowledgeProposalInput): Promise<KnowledgeProposal> {
+    return this.#transaction(async tx => {
+      await this.#assertExpectedAccessEpoch(tx, input.expectedAccessEpoch);
+      const id = input.id ?? randomUUID();
+      const createdAt = new Date();
+      const primaryTarget = input.targets[0];
+      if (!primaryTarget) throw new Error('A knowledge proposal requires at least one target');
+      await tx.execute({
+        sql: `INSERT INTO "${TABLE_KNOWLEDGE_PROPOSALS}" (id,targetType,targetId,expectedVersion,action,changes,reason,proposerContextScopeId,status,createdAt) VALUES (?,?,?,?,?,?,?,?,?,?)`,
+        args: [
+          id,
+          primaryTarget.type,
+          primaryTarget.id,
+          primaryTarget.expectedVersion,
+          input.operation,
+          JSON.stringify({ targets: input.targets, payload: input.payload }),
+          input.reason ?? null,
+          input.proposerContextScopeId,
+          'pending',
+          createdAt.toISOString(),
+        ],
+      });
+      await this.#activity(
+        tx,
+        'propose',
+        primaryTarget.type,
+        primaryTarget.id,
+        input.proposerContextScopeId,
+        undefined,
+        {
+          proposalId: id,
+        },
+      );
+      return {
+        id,
+        targetType: primaryTarget.type,
+        targetId: primaryTarget.id,
+        expectedVersion: primaryTarget.expectedVersion,
+        targets: structuredClone(input.targets),
+        operation: input.operation,
+        payload: structuredClone(input.payload),
+        reason: input.reason,
+        proposerContextScopeId: input.proposerContextScopeId,
+        status: 'pending',
+        createdAt,
+      };
+    });
+  }
+
+  async getProposal(id: string): Promise<KnowledgeProposal | null> {
+    const result = await this.#client.execute({
+      sql: `SELECT * FROM "${TABLE_KNOWLEDGE_PROPOSALS}" WHERE id=?`,
+      args: [id],
+    });
+    return result.rows[0] ? parseProposal(result.rows[0]) : null;
+  }
+
+  async getVisibleProposal(input: { id: string; scopeIds: KnowledgeScopeIds }): Promise<KnowledgeProposal | null> {
+    const proposal = await this.getProposal(input.id);
+    return proposal && (await this.#isProposalVisible(this.#client, proposal, input.scopeIds)) ? proposal : null;
+  }
+
+  async listProposals(input: ListKnowledgeProposalsInput): Promise<ListKnowledgeProposalsOutput> {
+    const scopeIds = canonicalizeKnowledgeScopeIds(input.scopeIds);
+    if (scopeIds.length === 0) return { proposals: [] };
+    const limit = Math.min(Math.max(input.limit ?? 100, 1), 100);
+    if (input.cursor) {
+      const cursor = await this.getVisibleProposal({ id: input.cursor, scopeIds });
+      if (!cursor || (input.status && cursor.status !== input.status)) return { proposals: [] };
+    }
+    const clauses: string[] = [];
+    const args: InValue[] = [];
+    if (input.status) {
+      clauses.push('status=?');
+      args.push(input.status);
+    }
+    if (input.cursor) {
+      clauses.push(
+        `(createdAt < (SELECT createdAt FROM "${TABLE_KNOWLEDGE_PROPOSALS}" WHERE id=?) OR (createdAt = (SELECT createdAt FROM "${TABLE_KNOWLEDGE_PROPOSALS}" WHERE id=?) AND id < ?))`,
+      );
+      args.push(input.cursor, input.cursor, input.cursor);
+    }
+    const scopePlaceholders = scopeIds.map(() => '?').join(',');
+    clauses.push(`NOT EXISTS (
+      SELECT 1 FROM json_each(json_extract(changes, '$.targets')) AS target
+      WHERE NOT EXISTS (
+        SELECT 1 FROM json_each(json_extract(target.value, '$.scopeIds')) AS targetScope
+        WHERE targetScope.value IN (${scopePlaceholders})
+      )
+    )`);
+    args.push(...scopeIds);
+    args.push(limit + 1);
+    const result = await this.#client.execute({
+      sql: `SELECT * FROM "${TABLE_KNOWLEDGE_PROPOSALS}" WHERE ${clauses.join(' AND ')} ORDER BY createdAt DESC,id DESC LIMIT ?`,
+      args,
+    });
+    const proposals = result.rows.map(parseProposal);
+    return {
+      proposals: proposals.slice(0, limit),
+      nextCursor: proposals.length > limit ? proposals[limit - 1]?.id : undefined,
+    };
+  }
+
+  async reviewProposal(input: ReviewKnowledgeProposalInput): Promise<KnowledgeProposal> {
+    return this.#transaction(async tx => {
+      await this.#assertExpectedAccessEpoch(tx, input.expectedAccessEpoch);
+      const existing = await tx.execute({
+        sql: `SELECT * FROM "${TABLE_KNOWLEDGE_PROPOSALS}" WHERE id=?`,
+        args: [input.id],
+      });
+      if (!existing.rows[0]) throw new KnowledgeNotFoundError('proposal', input.id);
+      const proposal = parseProposal(existing.rows[0]);
+      if (proposal.status !== 'pending') throw new KnowledgeConflictError('Knowledge proposal was already reviewed');
+      const reviewedAt = new Date();
+      const status = input.status;
+      const updated = await tx.execute({
+        sql: `UPDATE "${TABLE_KNOWLEDGE_PROPOSALS}" SET status=?,reviewerContextScopeId=?,reviewReason=?,reviewedAt=? WHERE id=? AND status='pending'`,
+        args: [status, input.reviewerContextScopeId, input.reviewReason ?? null, reviewedAt.toISOString(), input.id],
+      });
+      if (updated.rowsAffected !== 1) throw new KnowledgeConflictError('Knowledge proposal was already reviewed');
+      await this.#activity(
+        tx,
+        status === 'rejected' ? 'reject' : 'conflict',
+        proposal.targetType,
+        proposal.targetId,
+        input.reviewerContextScopeId,
+        undefined,
+        { proposalId: proposal.id, reason: input.reviewReason },
+      );
+      return {
+        ...proposal,
+        status,
+        reviewerContextScopeId: input.reviewerContextScopeId,
+        reviewReason: input.reviewReason,
+        reviewedAt,
+      };
+    });
+  }
+
+  async applyProposal(input: ApplyKnowledgeProposalInput): Promise<KnowledgeProposal> {
+    return this.#transaction(async tx => {
+      await this.#assertExpectedAccessEpoch(tx, input.expectedAccessEpoch);
+      const existing = await tx.execute({
+        sql: `SELECT * FROM "${TABLE_KNOWLEDGE_PROPOSALS}" WHERE id=?`,
+        args: [input.id],
+      });
+      if (!existing.rows[0]) throw new KnowledgeNotFoundError('proposal', input.id);
+      const proposal = parseProposal(existing.rows[0]);
+      if (proposal.status !== 'pending') throw new KnowledgeConflictError('Knowledge proposal was already reviewed');
+      for (const target of proposal.targets) {
+        const table = target.type === 'node' ? TABLE_KNOWLEDGE_NODES : TABLE_KNOWLEDGE_RECORDS;
+        const locked = await tx.execute({
+          sql: `UPDATE "${table}" SET version=version WHERE id=? AND version=? AND deletedAt IS NULL`,
+          args: [target.id, target.expectedVersion],
+        });
+        if (locked.rowsAffected !== 1) {
+          return this.#markProposalConflicted(
+            tx,
+            proposal,
+            input.reviewerContextScopeId,
+            `Expected ${target.type} ${target.id} version ${target.expectedVersion}`,
+          );
+        }
+      }
+      const payload = proposal.payload as { kind?: unknown; mutation?: unknown };
+      if (payload.kind !== 'update-node' || !payload.mutation || typeof payload.mutation !== 'object') {
+        throw new Error(`Unsupported immutable payload for knowledge proposal ${proposal.id}`);
+      }
+      try {
+        await this.#updateNode(tx, {
+          ...(structuredClone(payload.mutation) as UpdateKnowledgeNodeInput),
+          contextScopeId: input.reviewerContextScopeId,
+          importRunId: undefined,
+          expectedAccessEpoch: input.expectedAccessEpoch,
+        });
+      } catch (error) {
+        if (error instanceof KnowledgeConflictError) {
+          return this.#markProposalConflicted(
+            tx,
+            proposal,
+            input.reviewerContextScopeId,
+            'Proposed mutation conflicts with current state',
+          );
+        }
+        throw error;
+      }
+      const reviewedAt = new Date();
+      const updated = await tx.execute({
+        sql: `UPDATE "${TABLE_KNOWLEDGE_PROPOSALS}" SET status='approved',reviewerContextScopeId=?,reviewedAt=? WHERE id=? AND status='pending'`,
+        args: [input.reviewerContextScopeId, reviewedAt.toISOString(), input.id],
+      });
+      if (updated.rowsAffected !== 1) throw new KnowledgeConflictError('Knowledge proposal was already reviewed');
+      await this.#activity(
+        tx,
+        'approve',
+        proposal.targetType,
+        proposal.targetId,
+        input.reviewerContextScopeId,
+        undefined,
+        {
+          proposalId: proposal.id,
+        },
+      );
+      return { ...proposal, status: 'approved', reviewerContextScopeId: input.reviewerContextScopeId, reviewedAt };
+    });
+  }
+
   async listActivity(input: {
     scopeIds: KnowledgeScopeIds;
     importRunId?: string;
@@ -1971,6 +2146,68 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
     return node;
   }
 
+  async #updateNode(executor: Transaction, input: UpdateKnowledgeNodeInput): Promise<KnowledgeNode> {
+    await this.#assertExpectedAccessEpoch(executor, input.expectedAccessEpoch);
+    const existing = await this.#getNode(executor, input.id);
+    if (!existing) throw new KnowledgeNotFoundError('node', input.id);
+    const existingScopeIds = await this.#getNodeScopeIds(executor, input.id);
+    const scopeIds = await this.#assertScopeNodes(executor, input.scopeIds ?? existingScopeIds);
+    const now = new Date();
+    const updated: KnowledgeNode = {
+      ...existing,
+      name: input.name?.trim() ?? existing.name,
+      kind: input.kind ?? existing.kind,
+      isScope: input.isScope ?? existing.isScope,
+      metadata: input.metadata ?? existing.metadata,
+      version: input.version + 1,
+      updatedAt: now,
+    };
+    const collision = await this.#getNodeByName(executor, updated.name, scopeIds);
+    if (collision && collision.id !== input.id) throw new KnowledgeConflictError(collision.id);
+    await this.#assertNoSiblingNameCollision(executor, updated.name, scopeIds, input.id);
+    if (existing.isScope && input.isScope === false) await this.#assertScopeHasNoDependents(executor, existing.id);
+    const result = await executor.execute({
+      sql: `UPDATE "${TABLE_KNOWLEDGE_NODES}" SET name=?,kind=?,isScope=?,metadata=jsonb(?),version=version+1,updatedAt=? WHERE id=? AND version=?`,
+      args: [
+        updated.name,
+        updated.kind ?? null,
+        updated.isScope,
+        updated.metadata ? JSON.stringify(updated.metadata) : null,
+        now.toISOString(),
+        input.id,
+        input.version,
+      ],
+    });
+    if (result.rowsAffected === 0) throw new KnowledgeConflictError(input.id);
+    if (input.scopeIds) await this.#replaceNodeScopes(executor, input.id, scopeIds, now);
+    await this.#activity(executor, 'edit', 'node', input.id, input.contextScopeId, input.importRunId);
+    if (knowledgeScopeIdsKey(existingScopeIds) !== knowledgeScopeIdsKey(scopeIds)) {
+      await this.#outbox(executor, 'node', input.id, 'delete', updated.version, existingScopeIds);
+    }
+    await this.#outbox(executor, 'node', input.id, 'upsert', updated.version, scopeIds);
+    const recordRows = await executor.execute({
+      sql: `SELECT *,json(metadata) AS metadataJson FROM "${TABLE_KNOWLEDGE_RECORDS}" WHERE nodeId=?`,
+      args: [input.id],
+    });
+    for (const row of recordRows.rows) {
+      const record = parseKnowledge(row);
+      const recordScopeIds = await this.#getRecordScopeIds(executor, record.id);
+      await executor.execute({
+        sql: `UPDATE "${TABLE_KNOWLEDGE_RECORDS}" SET version=version+1,updatedAt=? WHERE id=?`,
+        args: [now.toISOString(), record.id],
+      });
+      await this.#outbox(
+        executor,
+        'record',
+        record.id,
+        record.deletedAt ? 'delete' : 'upsert',
+        record.version + 1,
+        recordScopeIds,
+      );
+    }
+    return updated;
+  }
+
   async #getNode(executor: Executor, id: string): Promise<KnowledgeNode | null> {
     const node = await this.#getNodeIncludingDeleted(executor, id);
     return node?.deletedAt ? null : node;
@@ -2086,6 +2323,39 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
         return false;
     }
     return true;
+  }
+
+  async #markProposalConflicted(
+    tx: Transaction,
+    proposal: KnowledgeProposal,
+    reviewerContextScopeId: string,
+    reviewReason: string,
+  ): Promise<KnowledgeProposal> {
+    const reviewedAt = new Date();
+    const updated = await tx.execute({
+      sql: `UPDATE "${TABLE_KNOWLEDGE_PROPOSALS}" SET status='conflicted',reviewerContextScopeId=?,reviewReason=?,reviewedAt=? WHERE id=? AND status='pending'`,
+      args: [reviewerContextScopeId, reviewReason, reviewedAt.toISOString(), proposal.id],
+    });
+    if (updated.rowsAffected !== 1) throw new KnowledgeConflictError('Knowledge proposal was already reviewed');
+    await this.#activity(tx, 'conflict', proposal.targetType, proposal.targetId, reviewerContextScopeId, undefined, {
+      proposalId: proposal.id,
+      reason: reviewReason,
+    });
+    return {
+      ...proposal,
+      status: 'conflicted',
+      reviewerContextScopeId,
+      reviewReason,
+      reviewedAt,
+    };
+  }
+
+  async #isProposalVisible(
+    _executor: Executor,
+    proposal: KnowledgeProposal,
+    visibleScopeIds: KnowledgeScopeIds,
+  ): Promise<boolean> {
+    return proposal.targets.every(target => isKnowledgeScopeVisible(target.scopeIds, visibleScopeIds));
   }
 
   async #isSemanticOutboxEntryVisible(

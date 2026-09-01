@@ -908,6 +908,279 @@ export function createKnowledgeStorageTests(createStore: () => Promise<Knowledge
       expect(retry.createdScopeIds).toHaveLength(1);
     });
 
+    it('persists proposals while keeping hidden targets out of pages and cursors', async () => {
+      const visibleNode = await store.createNode({ name: 'Visible proposal target', scopeIds: [PROJECT_SCOPE_ID] });
+      const hiddenScope = await store.createNode({
+        name: 'Hidden proposal scope',
+        isScope: true,
+        scopeIds: [ORG_SCOPE_ID],
+      });
+      const hiddenNode = await store.createNode({ name: 'Hidden proposal target', scopeIds: [hiddenScope.id] });
+      const deepHiddenScope = await store.createNode({
+        name: 'Deep hidden proposal scope',
+        isScope: true,
+        scopeIds: [ORG_SCOPE_ID],
+      });
+      const deepHiddenNode = await store.createNode({
+        name: 'Deep hidden proposal target',
+        scopeIds: [deepHiddenScope.id],
+      });
+      const proposalAccessEpoch = await store.getAccessEpoch();
+      await expect(
+        store.createProposal({
+          id: 'empty-target-proposal',
+          targets: [],
+          operation: 'update-node',
+          payload: {},
+          proposerContextScopeId: PROJECT_SCOPE_ID,
+          expectedAccessEpoch: proposalAccessEpoch,
+        }),
+      ).rejects.toThrow('A knowledge proposal requires at least one target');
+
+      const visible = await store.createProposal({
+        id: 'a-visible-proposal',
+        targets: [
+          {
+            type: 'node',
+            id: visibleNode.id,
+            expectedVersion: visibleNode.version,
+            scopeIds: [PROJECT_SCOPE_ID],
+            approvalCapability: 'edit',
+          },
+        ],
+        operation: 'updateNode',
+        payload: { name: 'Public edit' },
+        reason: 'Correct the title',
+        proposerContextScopeId: PROJECT_SCOPE_ID,
+        expectedAccessEpoch: proposalAccessEpoch,
+      });
+      await store.createProposal({
+        id: 'z-hidden-proposal',
+        targets: [
+          {
+            type: 'node',
+            id: hiddenNode.id,
+            expectedVersion: hiddenNode.version,
+            scopeIds: [hiddenScope.id],
+            approvalCapability: 'edit',
+          },
+        ],
+        operation: 'updateNode',
+        payload: { name: 'Private edit' },
+        proposerContextScopeId: hiddenScope.id,
+        expectedAccessEpoch: proposalAccessEpoch,
+      });
+      for (let index = 0; index < 1_001; index += 1) {
+        await store.createProposal({
+          id: `deep-hidden-proposal-${index.toString().padStart(4, '0')}`,
+          targets: [
+            {
+              type: 'node',
+              id: deepHiddenNode.id,
+              expectedVersion: deepHiddenNode.version,
+              scopeIds: [deepHiddenScope.id],
+              approvalCapability: 'edit',
+            },
+          ],
+          operation: 'updateNode',
+          payload: { name: `Private edit ${index}` },
+          proposerContextScopeId: deepHiddenScope.id,
+          expectedAccessEpoch: proposalAccessEpoch,
+        });
+      }
+      await store.updateNode({
+        id: visibleNode.id,
+        version: visibleNode.version,
+        scopeIds: [ORG_SCOPE_ID],
+      });
+
+      await expect(store.listProposals({ scopeIds: [PROJECT_SCOPE_ID], limit: 1 })).resolves.toEqual({
+        proposals: [expect.objectContaining({ id: visible.id, status: 'pending', reason: 'Correct the title' })],
+        nextCursor: undefined,
+      });
+      await expect(
+        store.listProposals({ scopeIds: [PROJECT_SCOPE_ID], cursor: 'z-hidden-proposal', limit: 10 }),
+      ).resolves.toEqual({ proposals: [] });
+      await expect(store.listProposals({ scopeIds: [hiddenScope.id], limit: 10 })).resolves.toEqual({
+        proposals: [expect.objectContaining({ id: 'z-hidden-proposal' })],
+        nextCursor: undefined,
+      });
+      await expect(store.listProposals({ scopeIds: [ORG_SCOPE_ID], limit: 10 })).resolves.toEqual({
+        proposals: [],
+      });
+
+      const accessEpoch = await store.getAccessEpoch();
+      const rejected = await store.reviewProposal({
+        id: visible.id,
+        status: 'rejected',
+        reviewerContextScopeId: PROJECT_SCOPE_ID,
+        reviewReason: 'Source contradicts the change',
+        expectedAccessEpoch: accessEpoch,
+      });
+      expect(rejected).toMatchObject({
+        status: 'rejected',
+        reviewerContextScopeId: PROJECT_SCOPE_ID,
+        reviewReason: 'Source contradicts the change',
+      });
+      await expect(
+        store.reviewProposal({
+          id: visible.id,
+          status: 'rejected',
+          reviewerContextScopeId: PROJECT_SCOPE_ID,
+          expectedAccessEpoch: accessEpoch,
+        }),
+      ).rejects.toBeInstanceOf(KnowledgeConflictError);
+
+      const reopened = await createStore();
+      await reopened.init();
+      await expect(reopened.getProposal(visible.id)).resolves.toEqual(
+        expect.objectContaining({
+          id: visible.id,
+          status: 'rejected',
+          targets: visible.targets,
+          payload: visible.payload,
+          reviewReason: 'Source contradicts the change',
+        }),
+      );
+    });
+
+    it('applies complete proposal mutations atomically and preserves stale proposals for conflict review', async () => {
+      const node = await store.createNode({ name: 'Proposal apply target', scopeIds: [PROJECT_SCOPE_ID] });
+      const projectScope = await store.getNode(PROJECT_SCOPE_ID);
+      const orgScope = await store.getNode(ORG_SCOPE_ID);
+      expect(projectScope).not.toBeNull();
+      expect(orgScope).not.toBeNull();
+      const accessEpoch = await store.getAccessEpoch();
+      const proposal = await store.createProposal({
+        id: 'proposal-apply',
+        targets: [
+          {
+            type: 'node',
+            id: node.id,
+            expectedVersion: node.version,
+            scopeIds: [PROJECT_SCOPE_ID],
+            approvalCapability: 'manageAccess',
+          },
+          {
+            type: 'node',
+            id: PROJECT_SCOPE_ID,
+            expectedVersion: projectScope!.version,
+            scopeIds: [PROJECT_SCOPE_ID],
+            approvalCapability: 'manageAccess',
+          },
+          {
+            type: 'node',
+            id: ORG_SCOPE_ID,
+            expectedVersion: orgScope!.version,
+            scopeIds: [ORG_SCOPE_ID],
+            approvalCapability: 'manageAccess',
+          },
+        ],
+        operation: 'update-node',
+        payload: {
+          kind: 'update-node',
+          mutation: {
+            id: node.id,
+            version: node.version,
+            name: 'Proposal applied',
+            scopeIds: [ORG_SCOPE_ID],
+          },
+          originalScopeIds: [PROJECT_SCOPE_ID],
+        },
+        proposerContextScopeId: PROJECT_SCOPE_ID,
+        expectedAccessEpoch: accessEpoch,
+      });
+
+      await expect(
+        store.applyProposal({
+          id: proposal.id,
+          reviewerContextScopeId: PROJECT_SCOPE_ID,
+          expectedAccessEpoch: accessEpoch,
+        }),
+      ).resolves.toMatchObject({ status: 'approved', reviewerContextScopeId: PROJECT_SCOPE_ID });
+      await expect(store.getNode(node.id)).resolves.toMatchObject({
+        name: 'Proposal applied',
+        version: node.version + 1,
+      });
+      await expect(store.getNodeScopeIds(node.id)).resolves.toEqual([ORG_SCOPE_ID]);
+      await expect(store.listActivity({ scopeIds: [PROJECT_SCOPE_ID, ORG_SCOPE_ID], limit: 100 })).resolves.toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ action: 'propose', targetId: node.id }),
+          expect.objectContaining({ action: 'approve', targetId: node.id }),
+        ]),
+      );
+
+      const current = await store.getNode(node.id);
+      expect(current).not.toBeNull();
+      const stale = await store.createProposal({
+        id: 'proposal-stale',
+        targets: [
+          {
+            type: 'node',
+            id: node.id,
+            expectedVersion: current!.version,
+            scopeIds: [ORG_SCOPE_ID],
+            approvalCapability: 'edit',
+          },
+        ],
+        operation: 'update-node',
+        payload: {
+          kind: 'update-node',
+          mutation: { id: node.id, version: current!.version, name: 'Must not apply' },
+          originalScopeIds: [ORG_SCOPE_ID],
+        },
+        proposerContextScopeId: PROJECT_SCOPE_ID,
+        expectedAccessEpoch: accessEpoch,
+      });
+      await store.updateNode({ id: node.id, version: current!.version, name: 'Concurrent edit' });
+      await expect(
+        store.applyProposal({
+          id: stale.id,
+          reviewerContextScopeId: PROJECT_SCOPE_ID,
+          expectedAccessEpoch: accessEpoch,
+        }),
+      ).resolves.toMatchObject({
+        status: 'conflicted',
+        reviewReason: `Expected node ${node.id} version ${current!.version}`,
+      });
+      await expect(store.getProposal(stale.id)).resolves.toMatchObject({ status: 'conflicted' });
+      await expect(store.getNode(node.id)).resolves.toMatchObject({ name: 'Concurrent edit' });
+
+      const collisionTarget = await store.createNode({ name: 'Collision target', scopeIds: [PROJECT_SCOPE_ID] });
+      const collisionProposal = await store.createProposal({
+        id: 'collision-proposal',
+        targets: [
+          {
+            type: 'node',
+            id: collisionTarget.id,
+            expectedVersion: collisionTarget.version,
+            scopeIds: [PROJECT_SCOPE_ID],
+            approvalCapability: 'edit',
+          },
+        ],
+        operation: 'update-node',
+        payload: {
+          kind: 'update-node',
+          mutation: { id: collisionTarget.id, version: collisionTarget.version, name: 'Conflicting sibling' },
+          originalScopeIds: [PROJECT_SCOPE_ID],
+        },
+        proposerContextScopeId: PROJECT_SCOPE_ID,
+        expectedAccessEpoch: accessEpoch,
+      });
+      await store.createNode({ name: 'Conflicting sibling', scopeIds: [PROJECT_SCOPE_ID] });
+      await expect(
+        store.applyProposal({
+          id: collisionProposal.id,
+          reviewerContextScopeId: PROJECT_SCOPE_ID,
+          expectedAccessEpoch: accessEpoch,
+        }),
+      ).resolves.toMatchObject({
+        status: 'conflicted',
+        reviewReason: 'Proposed mutation conflicts with current state',
+      });
+      await expect(store.getNode(collisionTarget.id)).resolves.toMatchObject({ name: 'Collision target' });
+    });
+
     it('persists tuple-scoped importer state, run lifecycle, and activity linkage', async () => {
       const importScopes = await store.reconcileStructure({
         scopes: [
