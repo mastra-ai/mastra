@@ -3,7 +3,9 @@ import { Navigate, Outlet, useParams } from 'react-router';
 
 import { useFactoriesQuery } from '../../../../hooks/useFactories';
 import { AuthPendingSkeleton } from '../../auth/components/RootGuards';
+import { FeedEventsProvider } from '../../factory/context/FeedEventsProvider';
 import { GitHubAppCallbackHandler } from './GitHubAppCallbackHandler';
+import { WorkspaceAttentionObserver } from './WorkspaceAttentionObserver';
 
 /**
  * Route element for `factories/:factoryId`. Validates the route param against
@@ -25,16 +27,25 @@ export function FactoryLayout() {
     );
   }
 
+  const factory = factories?.find(candidate => candidate.id === factoryId);
   // Unknown/deleted factory: bounce to the landing route, which redirects to
   // the first available factory (or onboarding when none exist).
-  if (!factoryId || !factories?.some(factory => factory.id === factoryId)) {
+  if (!factoryId || !factory) {
     return <Navigate to="/" replace state={{ routeErrorNotice: 'Factory not found' }} />;
   }
 
   return (
     <>
+      {factory.repositories.map(repository => (
+        <WorkspaceAttentionObserver
+          key={repository.projectRepositoryId}
+          projectRepositoryId={repository.projectRepositoryId}
+        />
+      ))}
       <GitHubAppCallbackHandler />
-      <Outlet />
+      <FeedEventsProvider factoryProjectId={factory.id}>
+        <Outlet />
+      </FeedEventsProvider>
     </>
   );
 }

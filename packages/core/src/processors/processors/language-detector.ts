@@ -7,6 +7,7 @@ import type { ProviderOptions } from '../../llm/model/provider-options';
 import type { MastraModelConfig } from '../../llm/model/shared.types';
 import type { ObservabilityContext } from '../../observability';
 import { InternalSpans, resolveObservabilityContext } from '../../observability';
+import type { RequestContext } from '../../request-context';
 import { standardSchemaToJSONSchema } from '../../schema';
 import type { Processor } from '../index';
 import { selectMessagesToCheck } from './message-selection';
@@ -208,10 +209,11 @@ export class LanguageDetector implements Processor<'language-detector'> {
     args: {
       messages: MastraDBMessage[];
       abort: (reason?: string) => never;
+      requestContext?: RequestContext;
     } & Partial<ObservabilityContext>,
   ): Promise<MastraDBMessage[]> {
     try {
-      const { messages, abort, ...rest } = args;
+      const { messages, abort, requestContext, ...rest } = args;
       const observabilityContext = resolveObservabilityContext(rest);
 
       if (messages.length === 0) {
@@ -235,7 +237,7 @@ export class LanguageDetector implements Processor<'language-detector'> {
           continue;
         }
 
-        const detectionResult = await this.detectLanguage(textContent, observabilityContext);
+        const detectionResult = await this.detectLanguage(textContent, observabilityContext, requestContext);
 
         // Check if confidence meets threshold
         if (detectionResult.confidence && detectionResult.confidence < this.threshold) {
@@ -287,11 +289,12 @@ export class LanguageDetector implements Processor<'language-detector'> {
   private async detectLanguage(
     content: string,
     observabilityContext?: ObservabilityContext,
+    requestContext?: RequestContext,
   ): Promise<LanguageDetectionResult> {
     const prompt = this.createDetectionPrompt(content);
 
     try {
-      const model = await this.detectionAgent.getModel();
+      const model = await this.detectionAgent.getModel({ requestContext });
 
       const baseSchema = z.object({
         iso_code: z.string().describe('ISO language code').nullable(),
@@ -315,6 +318,7 @@ export class LanguageDetector implements Processor<'language-detector'> {
             temperature: 0,
           },
           providerOptions: this.providerOptions,
+          requestContext,
           ...observabilityContext,
         });
 
@@ -324,6 +328,7 @@ export class LanguageDetector implements Processor<'language-detector'> {
           output: standardSchemaToJSONSchema(schema),
           temperature: 0,
           providerOptions: this.providerOptions as SharedV2ProviderOptions,
+          requestContext,
           ...observabilityContext,
         });
 

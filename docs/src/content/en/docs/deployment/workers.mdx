@@ -1,9 +1,10 @@
 ---
 title: "Workers | Deploy"
-description: "Separate background processing from the API layer by running workflow execution, cron schedules, and background tasks in dedicated worker processes."
+description: "Run Mastra workflow orchestration, schedules, and long-running background tasks in dedicated workers to keep API processes responsive under load."
 packages:
   - "@mastra/core"
   - "@mastra/redis-streams"
+  - "@mastra/valkey-streams"
   - "@mastra/google-cloud-pubsub"
   - "@mastra/pg"
   - "@mastra/libsql"
@@ -41,11 +42,11 @@ Mastra has three built-in worker types. Each handles a specific kind of backgrou
 
 ### Orchestration worker
 
-Subscribes to workflow events on the [PubSub](/docs/server/pubsub) bus and executes workflow steps. Every `workflow.start`, step transition, and lifecycle event flows through this worker.
+This worker subscribes to workflow events on the [PubSub](/docs/server/pubsub) bus and executes workflow steps. It handles each `workflow.start` and lifecycle event together with every step transition.
 
 In a split deployment, the orchestration worker pulls events from a distributed PubSub backend and delegates step execution back to the API over HTTP. In-process, it runs steps directly.
 
-The orchestration worker requires a PubSub backend that supports pull mode (e.g., [`RedisStreamsPubSub`](/reference/pubsub/redis-streams) or [`GoogleCloudPubSub`](/reference/pubsub/google-cloud-pubsub)).
+The orchestration worker requires a PubSub backend that supports pull mode (e.g., [`RedisStreamsPubSub`](/reference/pubsub/redis-streams), [`ValkeyStreamsPubSub`](/reference/pubsub/valkey-streams), or [`GoogleCloudPubSub`](/reference/pubsub/google-cloud-pubsub)).
 
 ### Scheduler worker
 
@@ -122,7 +123,7 @@ Any [supported storage backend](/reference/workers/overview#supported-storage-ba
 
 Run the same build artifact in multiple containers, each with a different [`MASTRA_WORKERS`](/reference/workers/overview#mastra_workers) value to control which worker starts in each process.
 
-Split deployments require a distributed PubSub backend ([`RedisStreamsPubSub`](/reference/pubsub/redis-streams) or [`GoogleCloudPubSub`](/reference/pubsub/google-cloud-pubsub)), a shared [storage backend](/reference/workers/overview#supported-storage-backends), and network connectivity between the orchestration worker and the API.
+Split deployments require a distributed PubSub backend ([`RedisStreamsPubSub`](/reference/pubsub/redis-streams), [`ValkeyStreamsPubSub`](/reference/pubsub/valkey-streams), or [`GoogleCloudPubSub`](/reference/pubsub/google-cloud-pubsub)), a shared [storage backend](/reference/workers/overview#supported-storage-backends), and network connectivity between the orchestration worker and the API.
 
 ### Select workers
 
@@ -357,7 +358,7 @@ MASTRA_STEP_EXECUTION_URL=http://api:4111/api
 
 Without this variable, the orchestration worker attempts to execute steps in its own process, which doesn't have access to the full Mastra runtime in a split deployment.
 
-The endpoint uses the server's normal auth pipeline. If the API has an auth provider, set `MASTRA_WORKER_AUTH_TOKEN` to a bearer token that provider accepts. Mastra forwards the value as an `Authorization: Bearer` credential. The configured auth provider validates the token. See [Worker authentication](/docs/server/auth/workers) for server configuration and other credential formats.
+The endpoint uses the server's normal auth pipeline. If the API has an auth provider, set `MASTRA_WORKER_AUTH_TOKEN` to a bearer token that provider accepts. Mastra forwards the value as an `Authorization: Bearer` credential. The configured auth provider validates the token. See [Worker authentication](/docs/auth/workers) for server configuration and other credential formats.
 
 ### Scale workers
 
@@ -377,24 +378,27 @@ kubectl scale deployment/background-task-worker --replicas=2
 
 Run exactly one scheduler worker. Multiple schedulers polling the same storage can publish duplicate events for a schedule.
 
+### Health checks
+
+Worker build artifacts expose `GET /health` on `PORT`, or port `4111` when `PORT` isn't set. The endpoint returns `503` while `startWorkers()` is initializing and `200` after every selected worker starts successfully. Use this endpoint for deployment readiness checks. If you also use it for liveness checks, configure a startup probe or an initial delay that allows worker initialization to finish.
+
 ### Crash recovery
 
 A distributed PubSub backend persists unacknowledged events, which lets orchestration and background task workers resume after a restart. When the API is unavailable, a failed step-execution request causes the event to be delivered again. Because an event can be processed more than once, handlers should be idempotent when possible.
 
 The scheduler calculates the next fire time from the current time after it restarts. It doesn't replay schedules that elapsed while it was unavailable.
 
-If the API crashes while a step is executing, that work can be lost and the workflow run can remain in a `running` state. See [known limitations](#known-limitations) and [durable agent crash recovery](/docs/long-running-agents/durable-agents#crash-recovery).
+If the API crashes while a step is executing, that work can be lost and the workflow run can remain in a `running` state. See [known limitations](#known-limitations) and [durable agent crash recovery](/docs/harness/durable-agents#crash-recovery).
 
 ## Known limitations
 
 - **No dead-letter queue**: Failed events are nacked and retried, but there's no DLQ for events that fail after all retries.
-- **No built-in health endpoint**: Workers don't expose an HTTP health check. Use container-level liveness probes or process monitoring.
 - **Scheduler is single-instance**: Running multiple scheduler processes causes duplicate schedule fires.
-- **Runs stuck in "running" after API crash**: If the API process crashes while executing a workflow step, the run remains in `running` status with no automatic retry. For [durable agents](/docs/long-running-agents/durable-agents), set `recovery.durableAgents` to `'auto'` in the Mastra config to automatically re-drive orphaned runs on server restart. See [Crash recovery](/docs/long-running-agents/durable-agents#crash-recovery) for details.
+- **Runs stuck in "running" after API crash**: A crash during workflow-step execution leaves the run in `running` status without an automatic retry. For [durable agents](/docs/harness/durable-agents), configure `recovery.durableAgents: 'auto'` so a server restart automatically re-drives orphaned runs. See [Crash recovery](/docs/harness/durable-agents#crash-recovery) for details.
 
 ## Related
 
-- [Worker authentication](/docs/server/auth/workers): Secure worker-to-API communication
+- [Worker authentication](/docs/auth/workers): Secure worker-to-API communication
 - [Workers reference](/reference/workers/overview): Details about worker environment variables and types, with a list of supported storage backends
 - [CLI reference](/reference/cli/mastra#mastra-worker-build): `mastra worker build` and `mastra worker start`
 - [PubSub](/docs/server/pubsub): Event delivery backends

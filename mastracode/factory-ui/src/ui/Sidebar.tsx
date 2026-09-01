@@ -5,6 +5,7 @@ import { useLocation, useNavigate, useParams } from 'react-router';
 
 import { SidebarAccountLink } from './domains/auth/components/SidebarAccountLink';
 import { FactorySection } from './domains/factory/components/FactorySection';
+import { SidebarAttention } from './domains/factory/components/SidebarAttention';
 import { SidebarGlobalSearchButton } from './domains/search/components/SidebarGlobalSearchButton';
 import { SettingsNavigation } from './domains/settings/components/SettingsNavigation';
 import { useCloseSettings } from './domains/settings/hooks/useCloseSettings';
@@ -86,7 +87,7 @@ export function Sidebar() {
           </div>
         )}
       </MainSidebar.Nav>
-      <MainSidebar.Bottom role="region" aria-label="Account and settings">
+      <MainSidebar.Bottom role="region" aria-label="Attention, account, and settings">
         <SidebarFooter />
       </MainSidebar.Bottom>
     </MainSidebar>
@@ -112,6 +113,7 @@ function SidebarFooter() {
 
   return (
     <MainSidebar.NavList>
+      <SidebarAttention />
       <SidebarAccountLink />
       <MainSidebar.NavLink
         asChild

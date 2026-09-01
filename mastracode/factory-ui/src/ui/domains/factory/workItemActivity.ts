@@ -88,14 +88,11 @@ function syntheticCreatedEvent(item: WorkItem, hasRealCreateEvent: boolean): Aud
   const creator = externalCreatorProfile(item);
   return {
     id: `synthetic-created:${item.id}`,
-    orgId: item.orgId,
     actorId: isHuman ? item.createdBy : (creator?.id ?? item.createdBy),
     actorType: 'human',
     action: CREATED_ACTION,
     targets: [{ type: 'work_item', id: item.id, name: item.title }],
     metadata: {},
-    githubProjectId: item.githubProjectId,
-    context: {},
     occurredAt: item.createdAt,
   };
 }
@@ -117,14 +114,11 @@ function syntheticAssignedEvent(
   if (auditEvents.some(event => event.action === ASSIGNED_ACTION)) return undefined;
   return {
     id: `synthetic-assigned:${item.id}`,
-    orgId: item.orgId,
     actorId: assignee.id,
     actorType: 'human',
     action: ASSIGNED_ACTION,
     targets: [{ type: 'work_item', id: item.id, name: item.title }],
     metadata: {},
-    githubProjectId: item.githubProjectId,
-    context: {},
     occurredAt: item.updatedAt,
   };
 }

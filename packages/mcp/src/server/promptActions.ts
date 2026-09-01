@@ -1,11 +1,16 @@
 import type { IMastraLogger } from '@mastra/core/logger';
-import type { Server } from '@modelcontextprotocol/server';
+import type { Server, ServerNotifier } from '@modelcontextprotocol/server';
 import { broadcastNotification } from './notificationBroadcast';
 
 interface ServerPromptActionsDependencies {
   getLogger: () => IMastraLogger;
   getSdkServers: () => Server[];
-  clearDefinedPrompts: () => void;
+  /**
+   * Publish-side facade of the 2026-07-28 handler's subscription bus, when the
+   * server is pinned to that revision and the handler exists. Modern clients
+   * receive change events via `subscriptions/listen` instead of server push.
+   */
+  getModernEraNotifier?: () => ServerNotifier | undefined;
 }
 
 /**
@@ -22,7 +27,7 @@ interface ServerPromptActionsDependencies {
 export class ServerPromptActions {
   private readonly getLogger: () => IMastraLogger;
   private readonly getSdkServers: () => Server[];
-  private readonly clearDefinedPrompts: () => void;
+  private readonly getModernEraNotifier?: () => ServerNotifier | undefined;
 
   /**
    * @internal
@@ -30,14 +35,14 @@ export class ServerPromptActions {
   constructor(dependencies: ServerPromptActionsDependencies) {
     this.getLogger = dependencies.getLogger;
     this.getSdkServers = dependencies.getSdkServers;
-    this.clearDefinedPrompts = dependencies.clearDefinedPrompts;
+    this.getModernEraNotifier = dependencies.getModernEraNotifier;
   }
 
   /**
    * Notifies clients that the overall list of available prompts has changed.
    *
-   * This clears the internal prompt cache and sends a `notifications/prompts/list_changed`
-   * message to all clients, prompting them to re-fetch the prompt list.
+   * This sends a `notifications/prompts/list_changed` message to all clients,
+   * prompting them to re-fetch the prompt list.
    *
    * @throws {MastraError} If sending the notification fails on all server instances
    *
@@ -48,8 +53,9 @@ export class ServerPromptActions {
    * ```
    */
   public async notifyListChanged(): Promise<void> {
-    this.getLogger().info('Prompt list change externally notified. Clearing definedPrompts and sending notification.');
-    this.clearDefinedPrompts();
+    this.getLogger().info('Prompt list change externally notified. Sending notification.');
+    // Modern (2026-07-28) clients subscribe via subscriptions/listen; no-op when unset.
+    this.getModernEraNotifier?.()?.promptsChanged();
     await broadcastNotification({
       servers: this.getSdkServers(),
       send: server => server.sendPromptListChanged(),

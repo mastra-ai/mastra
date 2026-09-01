@@ -1,0 +1,4 @@
+{
+  "temperature": ["DeepSeek-V4-Flash", "Qwen3.8-Flash-Next"],
+  "structuredOutput": ["DeepSeek-V4-Flash", "Qwen3.8-Flash-Next"]
+}

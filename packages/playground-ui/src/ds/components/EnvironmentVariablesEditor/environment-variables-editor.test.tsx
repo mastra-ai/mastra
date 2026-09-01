@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { useState } from 'react';
+import type { ReactNode } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { EnvironmentVariablesEditor } from './environment-variables-editor';
@@ -228,6 +229,48 @@ describe('EnvironmentVariablesEditor', () => {
     });
 
     expect(getButton('Save').disabled).toBe(false);
+  });
+
+  it('spaces its own parts out, and leaves a composed layout alone', () => {
+    const Bare = ({ children }: { children?: ReactNode }) => {
+      const editor = useEnvironmentVariablesEditor({ initialRows: [{ key: 'A', value: '1' }] });
+      return <EnvironmentVariablesEditor editor={editor}>{children}</EnvironmentVariablesEditor>;
+    };
+
+    const own = render(<Bare />);
+    expect((own.container.firstElementChild as HTMLElement).classList.contains('space-y-3')).toBe(true);
+
+    cleanup();
+
+    const composed = render(
+      <Bare>
+        <div>composed</div>
+      </Bare>,
+    );
+
+    expect((composed.container.firstElementChild as HTMLElement).classList.contains('space-y-3')).toBe(false);
+  });
+
+  it('gathers the caller’s actions into a row of their own', () => {
+    const { container } = render(<TestEditor />);
+
+    const actionsRow = getButton('Save').parentElement;
+    expect(actionsRow).not.toBe(container.firstElementChild);
+    expect(actionsRow?.childElementCount).toBe(2);
+  });
+
+  it('leaves no empty row behind when the caller gives no actions', () => {
+    const WithoutActions = () => {
+      const editor = useEnvironmentVariablesEditor({ initialRows: [{ key: 'A', value: '1' }] });
+      return <EnvironmentVariablesEditor editor={editor} />;
+    };
+
+    const { container } = render(<WithoutActions />);
+
+    const empty = [...(container.firstElementChild?.children ?? [])].filter(
+      child => child.childElementCount === 0 && !child.textContent,
+    );
+    expect(empty).toHaveLength(0);
   });
 
   it('composes nested editor parts from root context', () => {

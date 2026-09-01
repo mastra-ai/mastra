@@ -1,0 +1,10 @@
+{
+  "$schema": "./node_modules/@stryker-mutator/core/schema/stryker-schema.json",
+  "mutate": [],
+  "testRunner": "vitest",
+  "plugins": ["./node_modules/@stryker-mutator/vitest-runner/dist/src/index.js"],
+  "vitest": {
+    "configFile": "vitest.config.ts",
+    "related": true
+  }
+}

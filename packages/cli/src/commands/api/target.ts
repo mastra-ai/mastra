@@ -1,7 +1,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { parse } from 'dotenv';
-import { getToken } from '../auth/credentials.js';
+import { getToken, type LoginOptions } from '../auth/credentials.js';
 import { fetchServerProjects } from '../server/platform-api.js';
 import { loadProjectConfig } from '../studio/project-config.js';
 import { ApiCliError } from './errors.js';
@@ -9,6 +9,8 @@ import { parseHeaders } from './headers.js';
 
 const LOCAL_URL = 'http://localhost:4111';
 const OBSERVABILITY_URL = 'https://observability.mastra.ai';
+const OBSERVABILITY_EU_URL = 'https://observability.eu.mastra.ai';
+const TRUSTED_OBSERVABILITY_ORIGINS = new Set([OBSERVABILITY_URL, OBSERVABILITY_EU_URL]);
 const LEARNING_URL = 'https://output.signals.mastra.ai';
 const AUTHORIZATION_HEADER = 'Authorization';
 const PROJECT_ID_HEADER = 'X-Mastra-Project-Id';
@@ -42,6 +44,10 @@ export async function resolveTarget(
   const apiPrefix = resolveApiPrefix(options);
 
   if (options.url) {
+    if (isTrustedObservabilityUrl(options.url)) {
+      return resolvePlatformServiceTarget(options.url, customHeaders, timeoutMs);
+    }
+
     const headers = { ...customHeaders };
     if (isPlatformHostedInstance(options.url) && !getHeader(customHeaders, AUTHORIZATION_HEADER)) {
       const token = await getOptionalToken();
@@ -113,7 +119,9 @@ async function resolvePlatformServiceTarget(
   const explicitProjectId = getHeader(customHeaders, PROJECT_ID_HEADER);
   const explicitOrganizationId = getHeader(customHeaders, ORGANIZATION_ID_HEADER);
   const envToken = process.env.MASTRA_PLATFORM_ACCESS_TOKEN || env.MASTRA_PLATFORM_ACCESS_TOKEN;
-  const cliToken = explicitAuthorization ? undefined : await getOptionalToken();
+  const cliToken = explicitAuthorization
+    ? undefined
+    : await getOptionalToken(envToken ? { allowLogin: false } : undefined);
   const envProjectId = process.env.MASTRA_PROJECT_ID || env.MASTRA_PROJECT_ID;
   const envOrganizationId = process.env.MASTRA_ORGANIZATION_ID || env.MASTRA_ORGANIZATION_ID;
   const projectConfig = await loadProjectConfig(process.cwd());
@@ -150,6 +158,14 @@ async function resolvePlatformServiceTarget(
     timeoutMs,
     fallbackHeaders,
   };
+}
+
+function isTrustedObservabilityUrl(url: string): boolean {
+  try {
+    return TRUSTED_OBSERVABILITY_ORIGINS.has(new URL(url).origin);
+  } catch {
+    return false;
+  }
 }
 
 /**
@@ -191,9 +207,9 @@ function loadDotenv(cwd: string): Record<string, string> {
   return parse(readFileSync(envPath));
 }
 
-async function getOptionalToken(): Promise<string | undefined> {
+async function getOptionalToken(options?: LoginOptions): Promise<string | undefined> {
   try {
-    return await getToken();
+    return await getToken(undefined, options);
   } catch {
     return undefined;
   }

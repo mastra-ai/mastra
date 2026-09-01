@@ -43,9 +43,8 @@ export function ChatTranscriptProvider({
   // post-navigation revalidation all fold in through the same path.
   const mergeWindow = useEffectEvent((messages: MastraDBMessage[]) => transcriptApi.mergeWindow(messages));
   useEffect(() => {
-    if (initialMessages && initialMessages.length > 0) {
-      mergeWindow(initialMessages);
-    }
+    if (initialMessages === undefined) return;
+    mergeWindow(initialMessages);
   }, [initialMessages]);
 
   const loadMore: LoadMoreHistory = {
@@ -103,7 +102,8 @@ function faviconStateFor({
   if (initializing) return 'initializing';
   if (!hasThread) return undefined;
   if (threadError) return 'error';
-  return busy ? 'working' : 'awaiting';
+  if (busy) return 'working';
+  return 'awaiting';
 }
 
 function ChatTranscriptValueProvider({
@@ -121,12 +121,14 @@ function ChatTranscriptValueProvider({
   const { sessionError, sandboxPreparing } = useChatSessionContext();
   const messagesInitializing = useChatMessagesInitializing();
   const messagesError = useChatMessagesError();
-  const { transcript, reset, localUser, resolvePrompt, clearPending, pushNotice } = transcriptApi;
+  const { transcript, initialHistoryReady, reset, localUser, failLocalUser, resolvePrompt, clearPending, pushNotice } =
+    transcriptApi;
   const effectiveThreadId = transcript.threadId ?? threadId ?? connection.createdThreadId;
 
   const effectiveTranscript: TranscriptState = {
     ...transcript,
     threadId: effectiveThreadId,
+    tasks: connection.state?.tasks ?? transcript.tasks,
     omProgress: transcript.omProgress ?? connection.state?.omProgress,
     usage: transcript.usage ?? connection.state?.tokenUsage,
   };
@@ -134,7 +136,9 @@ function ChatTranscriptValueProvider({
   const transcriptValue: ChatTranscriptApi = {
     transcript: effectiveTranscript,
     busy,
+    initialHistoryReady,
     localUser,
+    failLocalUser,
     reset,
     resolvePrompt,
     clearPending,

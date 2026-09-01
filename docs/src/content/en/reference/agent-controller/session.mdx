@@ -1,6 +1,6 @@
 ---
 title: "Reference: Session | AgentController"
-description: "API reference for the AgentController Session, which owns the per-conversation state for a single conversation: identity, threads, mode, model, run state, grants, and the display snapshot."
+description: "Use AgentController Session to manage per-conversation identity, threads, mode, model, run state, grants, and display snapshots within an isolated runtime."
 packages:
   - "@mastra/core"
 toc_max_heading_level: 2
@@ -805,7 +805,7 @@ const state = session.state.get()
 
 ### `session.state.set(updates)`
 
-Merge a partial update into the state. Updates are queued so concurrent calls apply in order, validated against the schema, and emit `state_changed` with the changed keys.
+Merge a partial update into the state. The queue applies concurrent calls in order and validates them against the schema before emitting `state_changed` with the changed keys.
 
 ```typescript
 await session.state.set({ yolo: true })
@@ -813,7 +813,7 @@ await session.state.set({ yolo: true })
 
 ### `session.state.update(updater)`
 
-Run an updater against the current snapshot and apply its result atomically within the write queue. Use this for read-modify-write changes that must see the latest state. The updater returns `updates` to merge, optional `events` to emit, and a `result` value that `update()` resolves to.
+Run an updater against the current snapshot and apply its result atomically within the write queue. Use this for read-modify-write changes that must see the latest state. The updater returns mergeable `updates` and optional `events`, plus the `result` value that `update()` resolves to.
 
 ```typescript
 const added = await session.state.update(current => ({
@@ -826,7 +826,7 @@ const added = await session.state.update(current => ({
 
 A `Session` is a live runtime object. Its event bus, arbitrary `session.state`, permission rules, permission grants, pending approvals, suspensions, follow-ups, run state, and stream state don't automatically survive controller or process recreation. The host must restore any of this state when recreating a session.
 
-With configured storage, threads, messages, and token usage persist. Thread settings restore mode and model choices. They can also restore observational memory settings and subagent model selections, including per-agent-type overrides. A chat channel can map back to stored threads, but channel-to-session and auto-approval state held by `AgentControllerChannels` remains in memory.
+Configured storage persists threads and messages along with token usage, while thread settings restore mode and model choices. Restored settings can include observational memory and subagent model selections with per-agent-type overrides. A chat channel can map back to stored threads. However, `AgentControllerChannels` keeps channel-to-session and auto-approval state in memory.
 
 ## Related
 

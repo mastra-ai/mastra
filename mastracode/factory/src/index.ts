@@ -1,5 +1,6 @@
 export { MastraFactory } from './factory.js';
-export type { MastraArgs, MastraFactoryConfig } from './factory.js';
+export type { MastraArgs, MastraFactoryConfig, MastraFactorySandboxConfig } from './factory.js';
+export type { FactorySandboxContext, SessionSetupRun } from './sandbox/session-sandbox.js';
 export { ChannelIdentityStorage } from './storage/domains/channel-identity/base.js';
 export type {
   ChannelAccountLink,
@@ -13,6 +14,13 @@ export { WorkItemsStorage } from './storage/domains/work-items/base.js';
 export type { CreateWorkItemInput, WorkItemRow } from './storage/domains/work-items/base.js';
 export { createStateSigner } from './state-signing.js';
 export type { StateSigner, StateTenant } from './state-signing.js';
+export { createFactorySecretEncryption, createPlaintextFactorySecretEncryption } from './secret-encryption.js';
+export type {
+  DecryptedFactorySecret,
+  FactorySecretEncryption,
+  FactorySecretEncryptionConfig,
+  FactorySecretEncryptionKey,
+} from './secret-encryption.js';
 export { createFactoryRouteAuth } from './auth.js';
 export type { RouteAuth } from './routes/route.js';
 // The integration seam, so a host can implement `FactoryIntegration` from

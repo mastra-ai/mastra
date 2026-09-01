@@ -72,6 +72,39 @@ describe('FactorySkillsSection', () => {
     expect(await screen.findByText(/Trace history and diagnose/)).toBeInTheDocument();
   });
 
+  it('toggles the expanded skill between rendered markdown and its raw source', async () => {
+    server.use(http.get(SKILLS_URL, () => HttpResponse.json(catalog)));
+
+    const user = userEvent.setup();
+    renderWithProviders(<FactorySkillsSection />);
+
+    await user.click(await screen.findByRole('button', { name: /Triage/ }));
+    expect(screen.getByRole('heading', { name: 'Triage' })).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Show raw' }));
+    expect(screen.queryByRole('heading', { name: 'Triage' })).not.toBeInTheDocument();
+    expect(screen.getByText(/# Triage/)).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Show formatted' }));
+    expect(screen.getByRole('heading', { name: 'Triage' })).toBeInTheDocument();
+  });
+
+  it('reopens a skill on the formatted view after it was left on raw', async () => {
+    server.use(http.get(SKILLS_URL, () => HttpResponse.json(catalog)));
+
+    const user = userEvent.setup();
+    renderWithProviders(<FactorySkillsSection />);
+
+    const trigger = await screen.findByRole('button', { name: /Triage/ });
+    await user.click(trigger);
+    await user.click(screen.getByRole('button', { name: 'Show raw' }));
+    await user.click(trigger);
+    await user.click(trigger);
+
+    expect(await screen.findByRole('heading', { name: 'Triage' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Show raw' })).toBeInTheDocument();
+  });
+
   it('surfaces a load failure from the server', async () => {
     server.use(http.get(SKILLS_URL, () => HttpResponse.json({ error: 'boom' }, { status: 500 })));
 

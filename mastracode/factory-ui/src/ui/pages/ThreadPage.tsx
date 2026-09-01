@@ -1,5 +1,6 @@
 import { ChatShell } from '@mastra/playground-ui/components/ChatShell';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
+import { cn } from '@mastra/playground-ui/utils/cn';
 import type { ReactNode } from 'react';
 import { useRef } from 'react';
 import { useParams } from 'react-router';
@@ -9,23 +10,24 @@ import { ChatLayout } from '../layouts/ChatLayout';
 import { useThreadWorkspacePath } from '../domains/workspace-viewer/hooks/useThreadWorkspacePath';
 import { WorkspaceFilesProvider } from '../domains/workspace-viewer/context/WorkspaceFilesProvider';
 import { WorkspaceFilesSurface } from '../domains/workspace-viewer/components/WorkspaceFilesSurface';
-import { chatColumnClass, RAIL_MIN_REM } from '../domains/workspace-viewer/layout';
+import { chatColumnClass, composerColumnClass, RAIL_MIN_REM } from '../domains/workspace-viewer/layout';
 import { useWiderThan } from '../domains/workspace-viewer/hooks/useWiderThan';
 import { useInvalidateWorkspaceChangesOnRunCompletion } from '../domains/workspace-viewer/useInvalidateWorkspaceChangesOnRunCompletion';
 import { ChatHeader } from '../domains/chat/components/ChatHeader';
 import { FactorySessionHeader } from '../domains/factory/components/RelatedFactorySessions';
 import { ComposerPanel } from '../domains/chat/components/ComposerPanel';
 import { ActivityLine } from '../domains/chat/components/ActivityLine';
-import { ConnectionNotice } from '../domains/chat/components/ConnectionNotice';
 import { EmptyThreadState } from '../domains/chat/components/EmptyThreadState';
 import { GoalPanel } from '../domains/chat/components/GoalPanel';
 import { TaskPanel } from '../domains/chat/components/TaskPanel';
 import { PageTitle } from '../domains/chat/components/PageTitle';
 import { SessionFavicon } from '../domains/chat/components/SessionFavicon';
+import { SessionPreparationOverlay } from '../domains/chat/components/SessionPreparationOverlay';
 import { Transcript } from '../domains/chat/components/Transcript';
 import { TranscriptHistoryLoader } from '../domains/chat/components/TranscriptHistoryLoader';
 import { ThreadRailLayer } from '../domains/chat/components/ThreadRailLayer';
 import { ChatMessageBoundary, ChatSessionBoundary } from '../domains/chat/context/ChatSessionProvider';
+import { useChatMessagePreparation } from '../domains/chat/context/useChatMessagePreparation';
 import { useChatTranscript } from '../domains/chat/context/useChatTranscript';
 import { useGlobalShortcuts } from '../domains/chat/hooks/useGlobalShortcuts';
 import { useHandoffPrompt } from '../domains/chat/hooks/useHandoffPrompt';
@@ -36,7 +38,11 @@ import '../domains/chat/components/chat-enter.css';
 
 // The docked workspace card claims room on the end edge; the shell pads its own
 // scroller by it, so the column stays centred on what is left.
-const threadShellClass = `chat-surface-enter flex-1 ${chatColumnClass} [--chat-inset-end:var(--workspace-files-inset,0px)] md:[--chat-gutter:1.25rem]`;
+const threadShellClass = cn(
+  'chat-surface-enter flex-1',
+  chatColumnClass,
+  '[--chat-inset-end:var(--workspace-files-inset,0px)] [--chat-gutter:0.25rem]',
+);
 
 export function ThreadPage() {
   const { factoryId, threadId } = useParams<{ factoryId: string; threadId?: string }>();
@@ -94,7 +100,7 @@ function ThreadPageMain({
   useRouteThreadSync();
   useHandoffPrompt();
   const railBoxRef = useRef<HTMLDivElement>(null);
-  const railFits = useWiderThan(railBoxRef, RAIL_MIN_REM);
+  const { wider: railFits } = useWiderThan(railBoxRef, RAIL_MIN_REM);
 
   return (
     <ThreadShell workspacePath={workspacePath} threadId={threadId}>
@@ -106,19 +112,19 @@ function ThreadPageMain({
       </ChatShell.Bar>
       <ChatShell.Stage>
         <ChatShell.Viewport>
+          <ThreadPreparationOverlay />
           <div ref={railBoxRef} className="relative flex min-h-full min-w-0 flex-1 flex-col">
             {railFits && <ThreadRailLayer />}
             <ChatShell.Content className="gap-0 pt-6">
               <ChatShell.Column className="flex-1">
-                <ConnectionNotice />
-                <ChatMessageBoundary>
+                <ChatMessageBoundary showPreparation={false}>
                   <ThreadTranscript />
                 </ChatMessageBoundary>
               </ChatShell.Column>
             </ChatShell.Content>
             <ChatShell.Dock>
               <ChatShell.ScrollButton aria-label="Jump to latest message" />
-              <ChatShell.Column className="gap-2">
+              <ChatShell.Column className={cn('gap-2', composerColumnClass)}>
                 <TaskPanel />
                 <div role="region" aria-label="Thread composer">
                   <ComposerPanel />
@@ -153,7 +159,9 @@ function ThreadShell({
       className={threadShellClass}
       scroller={{
         autoScroll: true,
-        defaultScrollPosition: 'last-anchor',
+        // A thread still answering opens on the live end and follows it; a settled
+        // one opens as a reading position, parked on the turn it left off at.
+        defaultScrollPosition: busy ? 'end' : 'last-anchor',
         preserveScrollOnPrepend: true,
         onReachStart: canLoadMore ? loadMore.load : undefined,
       }}
@@ -163,9 +171,13 @@ function ThreadShell({
   );
 }
 
+function ThreadPreparationOverlay() {
+  const { historyInitializing, preparing } = useChatMessagePreparation();
+  return <SessionPreparationOverlay historyInitializing={historyInitializing} preparing={preparing} />;
+}
+
 function ThreadTranscript() {
   const { transcript } = useChatTranscript();
-
   return (
     <>
       <TranscriptHistoryLoader />

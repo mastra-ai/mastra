@@ -81,6 +81,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
   _internal,
   logger,
   agentId,
+  agentVersionId,
   mastra,
   requireToolApproval: requireToolApprovalFromFactory,
   actor,
@@ -629,6 +630,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                 },
                 __streamState: streamState.serialize(),
                 __agentId: agentId,
+                ...(agentVersionId ? { __agentVersionId: agentVersionId } : {}),
               },
               {
                 resumeLabel: inputData.toolCallId,
@@ -778,6 +780,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                   },
                   __streamState: streamState.serialize(),
                   __agentId: agentId,
+                  ...(agentVersionId ? { __agentVersionId: agentVersionId } : {}),
                   // Persist the inner suspended run id in the workflow snapshot, partitioned per
                   // tool call (resumeLabel = toolCallId). Persisted message metadata exposes the
                   // same id as delegatedRunId for cold reloads, while the snapshot remains the
@@ -827,6 +830,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                   toolCallSuspended: suspendPayload,
                   __streamState: streamState.serialize(),
                   __agentId: agentId,
+                  ...(agentVersionId ? { __agentVersionId: agentVersionId } : {}),
                   toolCallId: inputData.toolCallId,
                   toolName: inputData.toolName,
                   resumeLabel: options?.resumeLabel,
@@ -844,7 +848,10 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
         //if resuming a subAgent or workflow tool, we want to find the runId from when it got suspended.
         // Also look up the runId when the LLM provided resumeData in args (isResumeToolCall)
         // but omitted suspendedToolRunId — without it, workflow tools start a fresh run and re-suspend.
-        const needsRunIdLookup = resumeDataToPassToToolOptions && (isAgentTool || isWorkflowTool);
+        // Nullish, not truthy, for the same reason as the cleanup gate below: a delegated tool can
+        // be resumed with `false` / `0` / `''`, and skipping the lookup there would start a fresh
+        // sub-run (and the cleanup below would drop the entry that could still recover the id).
+        const needsRunIdLookup = resumeDataToPassToToolOptions != null && (isAgentTool || isWorkflowTool);
         if (needsRunIdLookup) {
           // Primary source: the per-iteration workflow suspend payload, which carries the
           // suspended run id partitioned per tool call (resumeLabel = toolCallId). This is
@@ -909,7 +916,21 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
           }
         }
 
-        if (!toolRequiresApproval && isResumeToolCall) {
+        // Clear the suspension entry for BOTH resume conventions: `resumeData` embedded in the
+        // LLM's re-emitted args (autoResumeSuspendedTools) and the workflow-level resumeData that
+        // `agent.resumeStream(resumeData, { runId, toolCallId })` delivers. `isResumeToolCall` only
+        // covers the former — it stays args-specific because the runId lookup above depends on
+        // that narrower meaning.
+        // Nullish, not truthy: `false` / `0` / `''` are valid resume payloads for a tool whose
+        // resumeSchema is a primitive (e.g. a boolean decline), and they must clear the entry too.
+        //
+        // Keyed on `approvalGated`, not the live `toolRequiresApproval`, for the same reason as
+        // `approvalGrant` above: on an approve-after-policy-loss resume the live policy is gone
+        // while the suspension was an approval one, which cleans up its own metadata in the
+        // branch above. Using the live policy here would run the generic suspension cleanup on
+        // top of it, and `removeToolMetadata`'s toolCallId -> toolName fallback could then drop a
+        // concurrently suspended sibling that shares this tool name.
+        if (!approvalGated && resumeData != null) {
           await removeToolMetadata({ toolCallId: inputData.toolCallId, toolName: inputData.toolName }, 'suspension');
         }
 
@@ -1032,7 +1053,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                       const bgRunId = chunk.payload.runId;
                       const replayKey = `${bgRunId}:${chunk.payload.toolCallId}`;
                       if (
-                        (bgRunId !== runId || (bgRunId === runId && workflowResumeData)) &&
+                        (bgRunId !== runId || (bgRunId === runId && workflowResumeData != null)) &&
                         !emittedReplayedToolCalls.has(replayKey)
                       ) {
                         safeEnqueue(
@@ -1252,7 +1273,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                   // message so memory still records the result, even if it
                   // means a duplicate entry for that toolCallId.
                   if (!updated) {
-                    if (params.runId !== runId || (params.runId === runId && workflowResumeData)) {
+                    if (params.runId !== runId || (params.runId === runId && workflowResumeData != null)) {
                       messageList.add(
                         [
                           {
@@ -1334,7 +1355,10 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
               resourceId: readScoped(scopeCtx, RESOURCE_ID_KEY, 'resourceId'),
               toolName: inputData.toolName,
             });
-            if (isSuspended && resumeDataToPassToToolOptions) {
+            // Nullish, not truthy: a tool with a primitive resumeSchema can be resumed with
+            // `false` / `0` / `''`, and treating those as "no resume data" would fall through to
+            // `dispatch()` below, leaving the suspended task stranded and starting a second one.
+            if (isSuspended && resumeDataToPassToToolOptions != null) {
               const task = await bgTask.resume(resumeDataToPassToToolOptions);
 
               return {

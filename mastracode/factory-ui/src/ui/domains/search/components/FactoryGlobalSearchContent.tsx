@@ -42,7 +42,6 @@ export function FactoryGlobalSearchContent({ factoryId, closeSearch }: { factory
   const intake = useGlobalSearchIntake(projectRepositoryId);
   const runs = useBoardRuns({
     factoryProjectId: factoryId,
-    projectRepositoryId,
     workItems: workItems.items,
     refetchItems: workItems.refetch,
   });

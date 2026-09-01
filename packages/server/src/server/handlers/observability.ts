@@ -13,6 +13,8 @@ import {
   getSpanArgsSchema,
   getSpanResponseSchema,
   dateRangeSchema,
+  toTraceSpans,
+  traceSpanSchema,
 } from '@mastra/core/storage';
 // `branches*`, `listBranches*`, and `getBranch*` schemas are new in
 // @mastra/core@1.32.0; route them through a shim that tolerates older cores
@@ -274,7 +276,7 @@ export const GET_TRACE_ROUTE: ServerRoute = createRoute({
   path: '/observability/traces/:traceId',
   responseType: 'json',
   pathParamSchema: getTraceArgsSchema,
-  responseSchema: getTraceResponseSchema,
+  responseSchema: getTraceResponseSchema.extend({ spans: z.array(traceSpanSchema) }),
   summary: 'Get AI trace by ID',
   description: 'Returns a complete AI trace with all spans by trace ID',
   tags: ['Observability'],
@@ -288,7 +290,9 @@ export const GET_TRACE_ROUTE: ServerRoute = createRoute({
         throw new HTTPException(404, { message: `Trace with ID '${traceId}' not found` });
       }
 
-      return trace;
+      // Stored SpanRecords carry no status field; derive it from error/endedAt so
+      // trace-detail spans match the status shown in trace list rows.
+      return { ...trace, spans: toTraceSpans(trace.spans) };
     } catch (error) {
       return handleError(error, 'Error getting trace');
     }

@@ -1,24 +1,14 @@
-import type { MastraDBMessage, MessageList } from '../../agent/message-list';
-import type { RequestContext } from '../../request-context';
+import type { LanguageModelV2Prompt } from '@ai-sdk/provider-v5';
 
-import type { ProcessInputStepArgs, ProcessInputStepResult, Processor } from '../index';
+import type { ProcessLLMRequestArgs, ProcessLLMRequestResult, Processor } from '../index';
 
-/**
- * Type definition for tool invocation parts in MastraDBMessage format 2
- */
-type V2ToolInvocationPart = {
-  type: 'tool-invocation';
-  toolInvocation: {
-    toolName: string;
-    toolCallId: string;
-    args: unknown;
-    result?: unknown;
-    state: 'call' | 'result';
-  };
-  providerMetadata?: {
-    mastra?: Record<string, unknown>;
-  };
-};
+type PromptMessage = LanguageModelV2Prompt[number];
+type PromptPart = Extract<PromptMessage, { role: 'assistant' }>['content'][number];
+type ToolCallPart = Extract<PromptPart, { type: 'tool-call' }>;
+type ToolResultPart = Extract<PromptPart, { type: 'tool-result' }>;
+
+/** Per-request state key holding the tool call ids present before the loop started. */
+const HISTORY_TOOL_CALL_IDS = '__toolCallFilterHistoryToolCallIds';
 
 export type ToolCallFilterOptions = {
   exclude?: string[];
@@ -27,11 +17,15 @@ export type ToolCallFilterOptions = {
 };
 
 /**
- * Filters out tool calls and results from messages.
+ * Filters out tool calls and results from the prompt sent to the model.
  * By default (with no arguments), excludes all tool calls and their results.
  * Can be configured to exclude only specific tools by name.
  *
- * Runs on initial input (processInput). Step filtering is opt-in via filterAfterToolSteps.
+ * Filtering happens in `processLLMRequest`, which runs after the message list
+ * has been converted to a provider prompt. Changes are transient: they only
+ * affect what this model call receives and are never written back to the
+ * message list, memory, or UI history. Stored messages keep their full
+ * tool-invocation parts.
  */
 export class ToolCallFilter implements Processor {
   readonly id = 'tool-call-filter';
@@ -44,8 +38,8 @@ export class ToolCallFilter implements Processor {
    * Create a filter for tool calls and results.
    * @param options Configuration options
    * @param options.exclude List of specific tool names to exclude. If not provided, all tool calls are excluded.
-   * @param options.filterAfterToolSteps Enable agentic loop step filtering and preserve tool calls/results from this many recent tool-producing steps.
-   * @param options.preserveModelOutput Preserve sanitized model-facing output from completed filtered tool results with providerMetadata.mastra.modelOutput.
+   * @param options.filterAfterToolSteps Preserve tool calls/results from this many recent tool-producing steps.
+   * @param options.preserveModelOutput Replace filtered tool results with their compact model-facing output as text.
    */
   constructor(options: ToolCallFilterOptions = {}) {
     // If no options or exclude is provided, exclude all tools
@@ -60,129 +54,186 @@ export class ToolCallFilter implements Processor {
     this.preserveModelOutput = options.preserveModelOutput ?? false;
   }
 
-  async processInput(args: {
-    messages: MastraDBMessage[];
-    messageList: MessageList;
-    abort: (reason?: string) => never;
-    requestContext?: RequestContext;
-  }): Promise<MessageList | MastraDBMessage[]> {
-    const { messageList } = args;
-    const messages = messageList.get.all.db();
-    return this.filterMessages(messages);
-  }
-
-  async processInputStep(args: ProcessInputStepArgs): Promise<ProcessInputStepResult> {
-    if (this.filterAfterToolSteps === undefined) {
-      return {};
+  async processLLMRequest({ prompt, state }: ProcessLLMRequestArgs): Promise<ProcessLLMRequestResult> {
+    if (this.exclude !== 'all' && this.exclude.length === 0) {
+      return undefined;
     }
 
-    const { messageList } = args;
-    const messages = messageList.get.all.db();
-    return { messages: this.filterMessages(messages, this.getRecentToolStepToolCallIds(args)) };
+    const preservedToolCallIds = this.getPreservedToolCallIds(prompt, state);
+    const excludedToolCallIds = this.getExcludedToolCallIds(prompt, preservedToolCallIds);
+    if (excludedToolCallIds.size === 0) {
+      return undefined;
+    }
+
+    const replacementTexts = this.getReplacementTexts(prompt, excludedToolCallIds);
+    const idsWithToolCallPart = this.getToolCallPartIds(prompt);
+
+    const filtered: LanguageModelV2Prompt = [];
+    let changed = false;
+
+    for (const message of prompt) {
+      if (message.role === 'system' || message.role === 'user') {
+        filtered.push(message);
+        continue;
+      }
+
+      const content: PromptPart[] = [];
+      let messageChanged = false;
+
+      for (const part of message.content as PromptPart[]) {
+        const toolCallId = this.getPartToolCallId(part);
+        if (!toolCallId || !excludedToolCallIds.has(toolCallId)) {
+          content.push(part);
+          continue;
+        }
+
+        changed = true;
+        messageChanged = true;
+
+        // A call/result pair collapses into a single text part, emitted where the
+        // tool call was so message roles stay valid. Provider-executed results that
+        // have no matching tool call emit in place instead.
+        const emitsText =
+          part.type === 'tool-call' || (message.role === 'assistant' && !idsWithToolCallPart.has(toolCallId));
+        if (emitsText) {
+          const text = replacementTexts.get(toolCallId);
+          if (text) {
+            content.push({ type: 'text', text });
+          }
+        }
+      }
+
+      if (content.length === 0) {
+        // Dropping the message entirely avoids sending an empty assistant or
+        // tool message, which providers reject.
+        continue;
+      }
+
+      filtered.push(messageChanged ? ({ ...message, content } as PromptMessage) : message);
+    }
+
+    if (!changed) {
+      return undefined;
+    }
+
+    return { prompt: filtered };
   }
 
-  private getRecentToolStepToolCallIds(args: ProcessInputStepArgs): Set<string> {
-    const state = args.state as {
-      toolCallFilterSeenToolCallIds?: string[];
-      toolCallFilterStepToolCallIds?: string[][];
-    };
-    const seenToolCallIds = new Set(state.toolCallFilterSeenToolCallIds ?? []);
-    const responseToolCallIds = this.getMessageToolCallIds(args.messageList.get.response.db());
-    const newToolCallIds = [...responseToolCallIds].filter(toolCallId => !seenToolCallIds.has(toolCallId));
+  /**
+   * Tool call ids that must survive filtering.
+   *
+   * When `filterAfterToolSteps` is not configured, only prior history is filtered:
+   * every tool call produced by the current run stays in the prompt so the loop can
+   * still act on the results it just produced.
+   *
+   * When it is configured, the most recent `filterAfterToolSteps` tool-producing steps
+   * are preserved instead. Each assistant message containing tool calls counts as one
+   * step, in prompt order, so history and the current run are treated the same way.
+   */
+  private getPreservedToolCallIds(prompt: LanguageModelV2Prompt, state: Record<string, unknown>): Set<string> {
+    if (this.filterAfterToolSteps === undefined) {
+      // The first prompt of a request is the pre-loop history. Every tool call id seen
+      // after that belongs to the current run and is preserved.
+      const historyToolCallIds = (state[HISTORY_TOOL_CALL_IDS] ??= this.getToolCallIds(prompt)) as Set<string>;
+      return new Set([...this.getToolCallIds(prompt)].filter(id => !historyToolCallIds.has(id)));
+    }
 
-    state.toolCallFilterSeenToolCallIds = [...new Set([...seenToolCallIds, ...newToolCallIds])];
-    state.toolCallFilterStepToolCallIds = [...(state.toolCallFilterStepToolCallIds ?? []), newToolCallIds];
+    const preserveStepCount = Math.max(0, this.filterAfterToolSteps);
+    if (preserveStepCount === 0) {
+      return new Set();
+    }
 
-    const preserveStepCount = Math.max(0, this.filterAfterToolSteps ?? 0);
-    const recentStepToolCallIds =
-      preserveStepCount === 0 ? [] : state.toolCallFilterStepToolCallIds.slice(-preserveStepCount).flat();
+    const promptToolSteps: string[][] = [];
+    for (const message of prompt) {
+      if (message.role !== 'assistant') continue;
+      const stepToolCallIds = message.content
+        .filter((part): part is ToolCallPart => part.type === 'tool-call')
+        .map(part => part.toolCallId);
+      if (stepToolCallIds.length > 0) {
+        promptToolSteps.push(stepToolCallIds);
+      }
+    }
 
-    return new Set(recentStepToolCallIds);
+    return new Set(promptToolSteps.slice(-preserveStepCount).flat());
   }
 
-  private getMessageToolCallIds(messages: MastraDBMessage[]): Set<string> {
-    const toolCallIds = new Set<string>();
+  /**
+   * Resolves which tool call ids to remove. Ids are always excluded as a
+   * call/result pair so no dangling tool call or orphaned tool result is sent.
+   */
+  private getExcludedToolCallIds(prompt: LanguageModelV2Prompt, preservedToolCallIds: Set<string>): Set<string> {
+    const excluded = new Set<string>();
 
-    for (const message of messages) {
-      for (const part of this.getToolInvocations(message)) {
-        const invocationPart = part as unknown as V2ToolInvocationPart;
-        const toolCallId =
-          invocationPart.toolInvocation.toolCallId ?? (invocationPart.toolInvocation as any).toolCall?.id;
-        if (toolCallId) {
-          toolCallIds.add(toolCallId);
+    for (const message of prompt) {
+      if (message.role === 'system' || message.role === 'user') continue;
+
+      for (const part of message.content as PromptPart[]) {
+        if (part.type !== 'tool-call' && part.type !== 'tool-result') continue;
+        if (preservedToolCallIds.has(part.toolCallId)) continue;
+        if (this.exclude === 'all' || this.exclude.includes(part.toolName)) {
+          excluded.add(part.toolCallId);
         }
       }
     }
 
-    return toolCallIds;
+    return excluded;
   }
 
-  private filterMessages(messages: MastraDBMessage[], preserveToolCallIds = new Set<string>()): MastraDBMessage[] {
-    if (this.exclude === 'all') {
-      return this.filterAllToolCalls(messages, preserveToolCallIds);
+  /**
+   * Compact model-facing text for each excluded tool result, used when
+   * `preserveModelOutput` is enabled. The prompt's `output` already reflects
+   * `providerMetadata.mastra.modelOutput` when the tool defines `toModelOutput`.
+   */
+  private getReplacementTexts(prompt: LanguageModelV2Prompt, excludedToolCallIds: Set<string>): Map<string, string> {
+    const texts = new Map<string, string>();
+    if (!this.preserveModelOutput) {
+      return texts;
     }
 
-    if (this.exclude.length > 0) {
-      return this.filterSpecificToolCalls(messages, preserveToolCallIds);
+    for (const message of prompt) {
+      if (message.role === 'system' || message.role === 'user') continue;
+
+      for (const part of message.content as PromptPart[]) {
+        if (part.type !== 'tool-result') continue;
+        if (!excludedToolCallIds.has(part.toolCallId)) continue;
+
+        const text = this.modelOutputToText((part as ToolResultPart).output);
+        if (text) {
+          texts.set(part.toolCallId, `${part.toolName} result:\n${text}`);
+        }
+      }
     }
 
-    return messages;
+    return texts;
   }
 
-  private hasToolInvocations(message: MastraDBMessage): boolean {
-    if (typeof message.content === 'string') return false;
-    if (!message.content?.parts) return false;
-    return message.content.parts.some(part => part.type === 'tool-invocation');
+  private getToolCallIds(prompt: LanguageModelV2Prompt): Set<string> {
+    const ids = new Set<string>();
+    for (const message of prompt) {
+      if (message.role === 'system' || message.role === 'user') continue;
+      for (const part of message.content as PromptPart[]) {
+        const toolCallId = this.getPartToolCallId(part);
+        if (toolCallId) ids.add(toolCallId);
+      }
+    }
+    return ids;
   }
 
-  private getToolInvocations(message: MastraDBMessage) {
-    if (typeof message.content === 'string') return [];
-    if (!message.content?.parts) return [];
-    return message.content.parts.filter((part: any) => part.type === 'tool-invocation');
+  private getToolCallPartIds(prompt: LanguageModelV2Prompt): Set<string> {
+    const ids = new Set<string>();
+    for (const message of prompt) {
+      if (message.role !== 'assistant') continue;
+      for (const part of message.content) {
+        if (part.type === 'tool-call') {
+          ids.add(part.toolCallId);
+        }
+      }
+    }
+    return ids;
   }
 
-  private hasTopLevelTextContent(message: MastraDBMessage): boolean {
-    const content = message.content as unknown;
-    if (typeof content === 'string') {
-      return content.trim().length > 0;
-    }
-
-    if (!content || typeof content !== 'object') {
-      return false;
-    }
-
-    const topLevelContent = (content as { content?: unknown }).content;
-    return typeof topLevelContent === 'string' && topLevelContent.trim().length > 0;
-  }
-
-  private getToolCallId(invocation: V2ToolInvocationPart['toolInvocation']): string | undefined {
-    return invocation.toolCallId ?? (invocation as any).toolCall?.id;
-  }
-
-  private getPreservedModelOutputPart(part: V2ToolInvocationPart): { type: 'text'; text: string } | null {
-    if (!this.preserveModelOutput || part.toolInvocation.state !== 'result') {
-      return null;
-    }
-
-    const mastraMetadata = part.providerMetadata?.mastra;
-    if (!mastraMetadata || !Object.hasOwn(mastraMetadata, 'modelOutput')) {
-      return null;
-    }
-
-    const modelOutput = mastraMetadata.modelOutput;
-    if (modelOutput == null) {
-      return null;
-    }
-
-    const text = this.modelOutputToText(modelOutput);
-    if (!text) {
-      return null;
-    }
-
-    return {
-      type: 'text',
-      text: `${part.toolInvocation.toolName} result:\n${text}`,
-    };
+  private getPartToolCallId(part: PromptPart): string | undefined {
+    return part.type === 'tool-call' || part.type === 'tool-result' ? part.toolCallId : undefined;
   }
 
   private modelOutputToText(modelOutput: unknown): string | null {
@@ -233,158 +284,5 @@ export class ToolCallFilter implements Processor {
     } catch {
       return null;
     }
-  }
-
-  private filterAllToolCalls(messages: MastraDBMessage[], preserveToolCallIds = new Set<string>()): MastraDBMessage[] {
-    return messages
-      .map(message => {
-        if (!this.hasToolInvocations(message)) {
-          return message;
-        }
-
-        if (typeof message.content === 'string') {
-          return message;
-        }
-
-        if (!message.content?.parts) {
-          return message;
-        }
-
-        const nonToolParts = message.content.parts.flatMap((part: any) => {
-          if (part.type !== 'tool-invocation') {
-            return [part];
-          }
-
-          const toolCallId = this.getToolCallId(part.toolInvocation);
-          if (toolCallId && preserveToolCallIds.has(toolCallId)) {
-            return [part];
-          }
-
-          const modelOutputPart = this.getPreservedModelOutputPart(part);
-          return modelOutputPart ? [modelOutputPart] : [];
-        });
-
-        if (nonToolParts.length === 0 && !this.hasTopLevelTextContent(message)) {
-          return null;
-        }
-
-        const { toolInvocations: originalToolInvocations, ...contentWithoutToolInvocations } = message.content as any;
-        const updatedContent: any = {
-          ...contentWithoutToolInvocations,
-          parts: nonToolParts,
-        };
-
-        if (Array.isArray(originalToolInvocations)) {
-          const preservedToolInvocations = originalToolInvocations.filter((inv: any) =>
-            preserveToolCallIds.has(inv.toolCallId ?? inv.toolCall?.id),
-          );
-          if (preservedToolInvocations.length > 0) {
-            updatedContent.toolInvocations = preservedToolInvocations;
-          }
-        }
-
-        return {
-          ...message,
-          content: updatedContent,
-        };
-      })
-      .filter((message): message is MastraDBMessage => message !== null);
-  }
-
-  private filterSpecificToolCalls(
-    messages: MastraDBMessage[],
-    preserveToolCallIds = new Set<string>(),
-  ): MastraDBMessage[] {
-    const excludedToolCallIds = new Set<string>();
-
-    for (const message of messages) {
-      const toolInvocations = this.getToolInvocations(message);
-      for (const part of toolInvocations) {
-        const invocationPart = part as unknown as V2ToolInvocationPart;
-        const invocation = invocationPart.toolInvocation;
-
-        if (this.exclude.includes(invocation.toolName)) {
-          const toolCallId = this.getToolCallId(invocation);
-          if (toolCallId) {
-            excludedToolCallIds.add(toolCallId);
-          }
-        }
-      }
-    }
-
-    return messages
-      .map(message => {
-        if (!this.hasToolInvocations(message)) {
-          return message;
-        }
-
-        if (typeof message.content === 'string') {
-          return message;
-        }
-
-        if (!message.content?.parts) {
-          return message;
-        }
-
-        const filteredParts = message.content.parts.flatMap((part: any) => {
-          if (part.type !== 'tool-invocation') {
-            return [part];
-          }
-
-          const invocationPart = part as unknown as V2ToolInvocationPart;
-          const invocation = invocationPart.toolInvocation;
-          const toolCallId = this.getToolCallId(invocation);
-
-          if (toolCallId && preserveToolCallIds.has(toolCallId)) {
-            return [part];
-          }
-
-          const shouldExclude =
-            (invocation.state === 'call' && this.exclude.includes(invocation.toolName)) ||
-            (invocation.state === 'result' && toolCallId !== undefined && excludedToolCallIds.has(toolCallId)) ||
-            (invocation.state === 'result' && this.exclude.includes(invocation.toolName));
-
-          if (!shouldExclude) {
-            return [part];
-          }
-
-          const modelOutputPart = this.getPreservedModelOutputPart(invocationPart);
-          return modelOutputPart ? [modelOutputPart] : [];
-        });
-
-        if (filteredParts.length === 0 && !this.hasTopLevelTextContent(message)) {
-          return null;
-        }
-
-        const { toolInvocations: originalToolInvocations, ...contentWithoutToolInvocations } = message.content as any;
-        const updatedContent: any = {
-          ...contentWithoutToolInvocations,
-          parts: filteredParts,
-        };
-
-        if (Array.isArray(originalToolInvocations)) {
-          const filteredToolInvocations = originalToolInvocations.filter(
-            (inv: any) =>
-              preserveToolCallIds.has(inv.toolCallId ?? inv.toolCall?.id) ||
-              (!this.exclude.includes(inv.toolName) && !excludedToolCallIds.has(inv.toolCallId ?? inv.toolCall?.id)),
-          );
-          if (filteredToolInvocations.length > 0) {
-            updatedContent.toolInvocations = filteredToolInvocations;
-          }
-        }
-
-        const hasNoToolParts = filteredParts.length === 0;
-        const hasNoTextContent = !updatedContent.content || updatedContent.content.trim() === '';
-
-        if (hasNoToolParts && hasNoTextContent) {
-          return null;
-        }
-
-        return {
-          ...message,
-          content: updatedContent,
-        };
-      })
-      .filter((message): message is MastraDBMessage => message !== null);
   }
 }

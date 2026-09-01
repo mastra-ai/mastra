@@ -605,6 +605,12 @@ export class LSPManager {
       this.initPromises.clear();
       this.activeClientLeases.clear();
       this.fileLocks.clear();
+      // Everything is drained and cleared — return the manager to its
+      // fresh-constructed state so it can spawn clients again. This makes
+      // shutdownAll() a "stop" rather than a one-way door: Workspace.stop()
+      // relies on the same manager accepting clients after a restart.
+      this.shuttingDown = false;
+      this.shutdownPromise = undefined;
     })();
 
     return this.shutdownPromise;

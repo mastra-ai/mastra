@@ -1,0 +1,360 @@
+---
+title: "Kubernetes (Helm) | Deploy"
+description: "Deploy Mastra Enterprise to Kubernetes with the official Helm chart, configure secrets and storage, expose services securely, and scale workloads."
+---
+
+import Steps from "@site/src/components/Steps";
+import StepItem from "@site/src/components/StepItem";
+
+# Kubernetes (Helm)
+
+:::info Enterprise only
+The Helm chart is available exclusively to Mastra Enterprise customers. It is distributed from a private registry: your Enterprise license is exchanged for short-lived pull credentials. [Contact us](https://mastra.ai/contact) to get an Enterprise license.
+:::
+
+Deploy the Mastra platform — Mastra Server (your agent runtime) and Mastra Studio (the management UI) — on any Kubernetes cluster using the official `mastra-projects` Helm chart. The chart works on GKE, EKS, AKS, and generic or local clusters, and handles service exposure, TLS, and secret wiring for you.
+
+The chart follows two design principles:
+
+- **Bring your own images.** You build your Mastra project image with `mastra build` and push it to a registry. The chart never builds images.
+- **Bring your own data stores.** You point the chart at your PostgreSQL database and, optionally, an S3-compatible object store. Nothing stateful is bundled.
+
+This guide covers the Helm chart, which manages Deployments, Services, Ingress or Gateway resources, and secrets for you. To write the Kubernetes manifests yourself, or to run multiple server pods with shared pub/sub, see [Kubernetes](/integrations/deploy/kubernetes).
+
+## Before you begin
+
+You'll need:
+
+- A Kubernetes 1.27+ cluster and [`kubectl`](https://kubernetes.io/docs/tasks/tools/)
+- [Helm](https://helm.sh/docs/intro/install/) 3.8+ (OCI registry support)
+- A container registry your cluster can pull from
+- A PostgreSQL database reachable from the cluster
+- A Mastra Enterprise license key — required both to pull the chart and at runtime in production
+- For `ingress` mode: an ingress controller, or let the chart install one
+- For `gateway` mode: Gateway API CRDs and a Gateway controller (for example GKE's managed Gateway)
+
+## Deploy
+
+:::warning
+Configure [authentication](/docs/auth/overview) in your Mastra application before building and installing the image. The default `loadBalancer` mode creates externally reachable Services that may expose Server and Studio to the internet, depending on your cluster and cloud provider.
+:::
+
+<Steps>
+  <StepItem>
+    Build your Mastra project and containerize the output. Pass `--studio` so the same image can serve both Server and Studio:
+
+    ```bash
+    mastra build --studio
+    ```
+
+    ```dockerfile title="Dockerfile"
+    FROM node:22-slim
+    WORKDIR /app
+    # Install dependencies inside the image: native modules (for example libsql)
+    # are platform-specific, so node_modules built on your machine must not be
+    # copied into the image (see .dockerignore below).
+    COPY .mastra/output/package.json .mastra/output/package-lock.json* ./
+    RUN npm install --force --prefer-offline --no-audit --no-fund
+    COPY .mastra/output ./
+    EXPOSE 4111
+    CMD ["node", "index.mjs"]
+    ```
+
+    ```text title=".dockerignore"
+    .mastra/output/node_modules
+    ```
+
+    :::warning
+    Don't `COPY` the host-built `node_modules` into the image. `mastra build`
+    installs native modules for your local platform — an image built on an
+    Apple Silicon Mac for an amd64 cluster will crash at startup with errors
+    like `Cannot find module '@libsql/linux-x64-gnu'`. Installing dependencies
+    in-image (as above) always matches the target platform.
+    :::
+
+    Push the image to your registry. If your machine's architecture differs from your cluster nodes (for example an arm64 Mac deploying to amd64 nodes), build with `--platform`:
+
+    ```bash
+    docker buildx build --platform linux/amd64 \
+      -t your-registry/my-mastra-app:1.0.0 --push .
+    ```
+
+    See [Mastra server](/docs/deployment/mastra-server) for build details.
+  </StepItem>
+
+  <StepItem>
+    Store your application secrets in the release namespace. The chart reads database, license, and model-provider credentials from a Secret you own:
+
+    ```bash
+    kubectl create namespace mastra
+    kubectl create secret generic mastra-app-env -n mastra \
+      --from-literal=DATABASE_URL='postgresql://user:pass@host:5432/mastra' \
+      --from-literal=MASTRA_EE_LICENSE='<your-license-key>' \
+      --from-literal=OPENAI_API_KEY='<provider-key>'
+    ```
+
+    Include any other environment variables your agents need, such as model provider API keys.
+  </StepItem>
+
+  <StepItem>
+    Create a values file pointing the chart at your image and secret:
+
+    ```yaml title="mastra-values.yaml"
+    global:
+      cloud: generic # gke | eks | aks | generic | local
+
+    mastra-server:
+      image:
+        repository: your-registry/my-mastra-app
+        tag: '1.0.0'
+      existingSecret: mastra-app-env
+
+    mastra-studio:
+      image:
+        repository: your-registry/my-mastra-app
+        tag: '1.0.0'
+      existingSecret: mastra-app-env
+    ```
+
+    Both components reference the same Secret because this guide runs the same application image for Server and Studio. Only use separate Secrets when the Studio deployment doesn't execute routes that need your application's provider credentials.
+
+    Set `global.cloud` to your platform so the chart emits the correct LoadBalancer and Ingress annotations for that cloud.
+
+    If your cluster doesn't already have access to the application image registry, create an image pull Secret:
+
+    ```bash
+    kubectl create secret docker-registry mastra-registry -n mastra \
+      --docker-server=your-registry \
+      --docker-username='<username>' \
+      --docker-password='<access-token>'
+    ```
+
+    Reference it from both components:
+
+    ```yaml title="mastra-values.yaml"
+    mastra-server:
+      imagePullSecrets:
+        - name: mastra-registry
+
+    mastra-studio:
+      imagePullSecrets:
+        - name: mastra-registry
+    ```
+
+    Public images and registries integrated with your cluster don't need an image pull Secret.
+
+    This is only the minimal configuration. After `helm registry login`, inspect the selected chart version's annotated defaults and README for every available value:
+
+    ```bash
+    CHART_VERSION=0.2.0
+    CHART=oci://us-central1-docker.pkg.dev/mastra-cloud/mastra-helm-ee/mastra-projects
+
+    helm show values "$CHART" --version "$CHART_VERSION"
+    helm show readme "$CHART" --version "$CHART_VERSION"
+    ```
+  </StepItem>
+
+  <StepItem>
+    Exchange your Enterprise license key for a short-lived registry access token, log in to the private chart registry, then install the chart:
+
+    ```bash
+    CHART_VERSION=0.2.0
+    CHART=oci://us-central1-docker.pkg.dev/mastra-cloud/mastra-helm-ee/mastra-projects
+
+    TOKEN=$(curl -s https://license.mastra.ai/v1/registry-token \
+      -H "Authorization: Bearer $MASTRA_EE_LICENSE" | jq -r .token)
+
+    printf '%s' "$TOKEN" | helm registry login us-central1-docker.pkg.dev \
+      --username oauth2accesstoken \
+      --password-stdin
+
+    helm install mastra "$CHART" \
+      --version "$CHART_VERSION" \
+      -n mastra -f mastra-values.yaml
+    ```
+
+    Tokens expire after a short period; if an upgrade later fails with an authorization error, request a fresh token and log in again.
+
+    By default each component is exposed through a Service of type `LoadBalancer`.
+  </StepItem>
+
+  <StepItem>
+    Verify the release. Wait for the pods, then check the server's health endpoint:
+
+    ```bash
+    kubectl -n mastra rollout status deployment -l app.kubernetes.io/instance=mastra
+    kubectl -n mastra get svc
+    ```
+
+    ```bash
+    curl http://<server-external-ip>:4111/health
+    ```
+
+    A `{"success":true}` response means the server is up. Open the Studio service address in a browser to reach the Mastra Studio UI.
+  </StepItem>
+</Steps>
+
+## Exposure modes
+
+The chart supports three ways to expose Server and Studio, selected once via `global.exposure.mode`:
+
+| Mode | What you get | Required values |
+| - | - | - |
+| `loadBalancer` (default) | One `LoadBalancer` Service per component with per-cloud annotations | — |
+| `ingress` | ClusterIP Services plus one Ingress per component | `mastra-server.ingress.host`, `mastra-studio.ingress.host` |
+| `gateway` | ClusterIP Services, a shared Gateway, and one HTTPRoute per component | `mastra-server.httpRoute.host`, `mastra-studio.httpRoute.host` |
+
+### Ingress with Let's Encrypt TLS
+
+Use `ingress` mode with cert-manager to serve both components over HTTPS. The chart can install ingress-nginx and cert-manager for you, or use controllers you already run:
+
+```yaml title="mastra-values.yaml"
+global:
+  exposure:
+    mode: ingress
+  tls:
+    clusterIssuer: letsencrypt
+
+ingressController:
+  install: true # omit if you already run an ingress controller
+
+tls:
+  certManager:
+    install: true # omit if cert-manager is already installed
+  letsEncrypt:
+    email: ops@example.com
+
+mastra-server:
+  ingress:
+    host: api.example.com
+
+mastra-studio:
+  ingress:
+    host: studio.example.com
+```
+
+When `tls.letsEncrypt.email` is set, the chart renders a `ClusterIssuer` and annotates each Ingress so certificates are issued automatically. HTTP requests redirect to HTTPS.
+
+On `generic` clusters the chart doesn't set an `ingressClassName` unless you configure one, so your cluster's default ingress class applies.
+
+### Gateway API
+
+Use `gateway` mode on clusters with Gateway API support. On GKE the chart selects the managed `gke-l7-global-external-managed` class automatically; on other clouds set `global.gateway.className` explicitly:
+
+```yaml title="mastra-values.yaml"
+global:
+  exposure:
+    mode: gateway
+  tls:
+    clusterIssuer: letsencrypt
+
+mastra-server:
+  httpRoute:
+    host: api.example.com
+
+mastra-studio:
+  httpRoute:
+    host: studio.example.com
+```
+
+The chart creates a shared Gateway with HTTP and per-component HTTPS listeners. To attach to a Gateway you already run, set `global.gateway.name` instead.
+
+## Cloud presets
+
+The chart ships a values preset per platform that sets `global.cloud` and platform-appropriate defaults:
+
+| Platform | Preset | Notes |
+| - | - | - |
+| GKE | `values-gke.yaml` | Gateway API recommended; Workload Identity supported via `serviceAccount.annotations` |
+| EKS | `values-eks.yaml` | NLB by default; ALB via ingress annotations; IRSA supported |
+| AKS | `values-aks.yaml` | Azure LoadBalancer annotations |
+| Local (kind/minikube) | `values-local.yaml` | Ingress on `api.localhost` / `studio.localhost` |
+
+## Object storage
+
+To connect an S3-compatible object store (S3, GCS with HMAC interoperability, or MinIO), set the generic object-store values on the server:
+
+```yaml title="mastra-values.yaml"
+mastra-server:
+  externalServices:
+    objectStore:
+      endpoint: https://storage.googleapis.com
+      bucket: my-mastra-bucket
+      region: us-central1
+```
+
+Put `S3_ACCESS_KEY_ID` and `S3_SECRET_ACCESS_KEY` in your existing Secret rather than in values. On EKS and GKE, prefer IRSA or Workload Identity over static keys.
+
+## Scale server replicas
+
+The chart starts one Server replica by default. A HorizontalPodAutoscaler can add pods, but it doesn't make Mastra's in-process state available across them.
+
+Before setting `replicaCount` above one or enabling `mastra-server.autoscaling`:
+
+- Configure a shared storage backend, such as `PostgresStore`, for persisted run state.
+- Configure a distributed PubSub backend and shared cache. The [Kubernetes guide](/integrations/deploy/kubernetes#configure-shared-infrastructure) uses `RedisStreamsPubSub` and `RedisServerCache`, with `REDIS_URL` stored in the application Secret.
+- Use [durable agents](/docs/harness/durable-agents) for streams, approvals, and runs that must continue when requests reach different pods.
+- Start with one replica to initialize the database schema before scaling. For stricter deployments, initialize the schema in a Kubernetes Job and disable initialization in each pod.
+- Review [worker roles](/docs/deployment/workers#select-workers). Run only one scheduler instance when your application uses scheduled workflows.
+
+After those requirements are in place, set resource requests and enable autoscaling:
+
+```yaml title="mastra-values.yaml"
+mastra-server:
+  resources:
+    requests:
+      cpu: 250m
+      memory: 512Mi
+  autoscaling:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 5
+    targetCPUUtilizationPercentage: 80
+```
+
+## Production checklist
+
+- Reference credentials with `existingSecret` instead of plaintext values.
+- Set resource requests via `mastra-server.resources` and `mastra-studio.resources`.
+- Prefer standalone cert-manager and ingress controller installs over the bundled toggles; CRD lifecycle inside an umbrella chart complicates upgrades.
+- Enable multiple replicas only after configuring shared storage, distributed PubSub, shared cache, and the required process roles.
+- The chart applies hardened defaults: non-root containers, read-only root filesystem, seccomp `RuntimeDefault`, and no service account token automount.
+
+## Upgrade and uninstall
+
+Upgrade to a new chart version or roll out a new image tag with the same command:
+
+```bash
+CHART_VERSION=0.2.0
+CHART=oci://us-central1-docker.pkg.dev/mastra-cloud/mastra-helm-ee/mastra-projects
+
+helm upgrade mastra "$CHART" \
+  --version "$CHART_VERSION" \
+  -n mastra -f mastra-values.yaml
+```
+
+The chart hashes config and secret contents into pod annotations, so configuration changes trigger a rolling restart automatically.
+
+Uninstall the release:
+
+```bash
+helm uninstall mastra -n mastra
+```
+
+Your database and object store are unaffected, because the chart never manages stateful services.
+
+## Troubleshooting
+
+- **`helm install`/`upgrade` fails with `401 Unauthorized` or `UNAUTHORIZED`.** Your registry access token is missing or expired. Request a fresh token from `https://license.mastra.ai/v1/registry-token` using your Enterprise license and run `helm registry login` again.
+- **Pods crash with `Cannot find module '@libsql/linux-x64-gnu'` (or similar).** The image contains `node_modules` built for a different platform. Install dependencies inside the image and exclude host-built `node_modules` via `.dockerignore`, then rebuild with `--platform` matching your nodes.
+- **Pods crash-loop with a license error.** Production mode requires a valid `MASTRA_EE_LICENSE` in your secret when enterprise features are configured.
+- **Studio shows the server API instead of the UI.** The image was built without Studio assets. Rebuild with `mastra build --studio`.
+- **Ingress has no address.** Confirm an ingress controller is running, or set `ingressController.install=true`.
+- **Certificates stay pending in gateway mode.** Some Gateway controllers can't serve ACME challenges until a listener certificate exists. Check the chart's per-cloud presets and release notes for the bootstrap procedure on your platform.
+
+## Related
+
+- [Kubernetes](/integrations/deploy/kubernetes): Hand-written manifests and multi-pod scaling with shared pub/sub
+- [Mastra server](/docs/deployment/mastra-server): Build output and server behavior
+- [Deployment overview](/docs/deployment/overview)
+- [Workers](/docs/deployment/workers): Split background processing into separate containers

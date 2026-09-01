@@ -287,6 +287,20 @@ export function createProcessManagementTests(getContext: () => TestContext): voi
         },
         getContext().testTimeout,
       );
+
+      it.skipIf(!capabilities.supportsCloseStdin)(
+        'closes stdin to signal EOF',
+        async () => {
+          const handle = await processes.spawn(`node -e "process.stdin.pipe(process.stdout)"`);
+          await handle.sendStdin('hello before EOF');
+          await handle.closeStdin();
+
+          const result = await handle.wait();
+          expect(result.success).toBe(true);
+          expect(result.stdout).toContain('hello before EOF');
+        },
+        getContext().testTimeout,
+      );
     });
 
     describe('list', () => {
@@ -657,6 +671,22 @@ export function createProcessManagementTests(getContext: () => TestContext): voi
 
           const result = await handle.wait();
           expect(result.stdout).toContain('writer-test');
+        },
+        getContext().testTimeout,
+      );
+
+      it.skipIf(!capabilities.supportsStreaming || !capabilities.supportsCloseStdin)(
+        'writer stream signals EOF when ended',
+        async () => {
+          const handle = await processes.spawn(`node -e "process.stdin.pipe(process.stdout)"`);
+
+          await new Promise<void>(resolve => {
+            handle.writer.end('writer EOF test', resolve);
+          });
+
+          const result = await handle.wait();
+          expect(result.success).toBe(true);
+          expect(result.stdout).toContain('writer EOF test');
         },
         getContext().testTimeout,
       );

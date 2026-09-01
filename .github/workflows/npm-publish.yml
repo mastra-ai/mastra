@@ -204,21 +204,75 @@ jobs:
           permission-contents: write
           permission-issues: write
 
-      - name: Re-checkout with app token
+      - name: Re-checkout main with app token
         uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
         timeout-minutes: 20
         with:
           token: ${{ steps.app-auth.outputs.token }}
-          fetch-depth: 0
+          ref: main
+          fetch-depth: 1
+          fetch-tags: true
           persist-credentials: true
+
+      - name: Fetch enough history for Changesets
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          DEEPEN_BY=500
+
+          while true; do
+            missing=()
+
+            for f in .changeset/*.md; do
+              [ -e "$f" ] || continue
+
+              # Not an actual changeset
+              [[ "$f" == ".changeset/README.md" ]] && continue
+
+              result=$(
+                git log \
+                  --diff-filter=A \
+                  --follow \
+                  --max-count=1 \
+                  --pretty=format:'%H:%p' \
+                  -- "$f"
+              )
+
+              if [ -z "$result" ]; then
+                missing+=("$f")
+                continue
+              fi
+
+              commit="${result%%:*}"
+              parents="${result#*:}"
+
+              if [ -n "$commit" ] && [ -z "$parents" ]; then
+                missing+=("$f")
+              fi
+            done
+
+            if [ "${#missing[@]}" -eq 0 ]; then
+              echo "Enough history fetched for all changesets."
+              break
+            fi
+
+            echo "Need more history for ${#missing[@]} changeset(s):"
+            printf '  %s\n' "${missing[@]}"
+
+            if [ "$(git rev-parse --is-shallow-repository)" = "false" ]; then
+              echo "Repository is fully unshallow but some changesets still cannot be resolved."
+              exit 1
+            fi
+
+            echo "Deepening by $DEEPEN_BY commits..."
+            git fetch --deepen="$DEEPEN_BY"
+          done
 
       - name: Check for pre.json file existence
         id: check_files
         shell: bash
         run: |
-          git fetch origin main
-          git merge --ff-only origin/main
-
           if [[ -f .changeset/pre.json ]]; then
             echo "files_exists=true" >> "$GITHUB_OUTPUT"
           else
@@ -244,9 +298,6 @@ jobs:
       - name: Install dependencies
         run: pnpm install
 
-      - name: Build packages
-        run: pnpm build
-
       - name: Exit prerelease mode
         if: steps.check_files.outputs.files_exists == 'true'
         run: |
@@ -255,9 +306,11 @@ jobs:
           git add -A
           git commit -m 'chore: version - exit prerelease mode' --no-verify
           pnpm install
-          pnpm build
         env:
           GITHUB_TOKEN: ${{ steps.app-auth.outputs.token }}
+
+      - name: Build packages
+        run: pnpm build
 
       - name: Push version changes
         if: steps.check_files.outputs.files_exists == 'true' && !inputs.dry_run
@@ -332,9 +385,10 @@ jobs:
             --endpoint-url "${STUDIO_ENDPOINT_URL}" \
             --delete
 
-      - name: Updated alpha versions
-        if: ${{ !inputs.dry_run }}
-        run: node .github/scripts/publish-alpha-tags.js alpha
+      # Disabled: `npm dist-tag add` requires token authentication and cannot use npm OIDC.
+      # - name: Update alpha versions
+      #   if: ${{ !inputs.dry_run }}
+      #   run: node .github/scripts/publish-alpha-tags.js alpha
 
       - name: Publish packages - dry run
         if: ${{ inputs.dry_run }}

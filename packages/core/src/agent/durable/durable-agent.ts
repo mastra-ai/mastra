@@ -5,6 +5,7 @@ import { CachingPubSub } from '../../events/caching-pubsub';
 import { EventEmitterPubSub } from '../../events/event-emitter';
 import { isLeaseProvider, NoopLeaseProvider } from '../../events/pubsub';
 import type { LeaseProvider, PubSub } from '../../events/pubsub';
+import { isRunLocalTopic } from '../../events/topics';
 import type { Mastra } from '../../mastra';
 import { createObservabilityContext, getOrCreateSpan, SpanType, EntityType } from '../../observability';
 import { RequestContext } from '../../request-context';
@@ -23,7 +24,7 @@ import type { MessageListInput } from '../message-list';
 import { SaveQueueManager } from '../save-queue';
 import { AgentThreadLeaseConflictError, agentThreadStreamRuntime } from '../thread-stream-runtime';
 import type { AgentThreadRunRegistration } from '../thread-stream-runtime';
-import type { ToolsInput } from '../types';
+import type { AgentSubscribeToThreadOptions, ToolsInput } from '../types';
 
 import { publishAbortRequest } from './abort-transport';
 import { AGENT_STREAM_TOPIC, DurableStepIds } from './constants';
@@ -807,6 +808,7 @@ export class DurableAgent<
         // Keep recovered runs observable if they suspend again so a later
         // resume or recovery can pick them up.
         messageList,
+        requestContext: registryEntry.requestContext,
       });
       streamCleanup = stream.cleanup;
       await this.#raceRecoveryLease(stream.ready, recoveryLease);
@@ -904,6 +906,7 @@ export class DurableAgent<
     });
   }
 
+  /** Rebuilds process-local recovery state from the persisted durable workflow input. */
   async #rehydrateRecoveryState({
     runId,
     workflowInput,
@@ -924,6 +927,20 @@ export class DurableAgent<
     )?.memoryInfo;
     const threadId = workflowInput.state?.threadId ?? messageListMemoryInfo?.threadId;
     const resourceId = workflowInput.state?.resourceId ?? messageListMemoryInfo?.resourceId;
+
+    // `requestContextEntries` contains caller state captured before preparation
+    // installed the run's framework-managed memory context. Rebuild that entry
+    // from persisted run state so recovery never inherits a caller/parent thread.
+    if (threadId && resourceId) {
+      requestContext.set('MastraMemory', {
+        thread: { id: threadId },
+        resourceId,
+        memoryConfig: workflowInput.state?.memoryConfig,
+      });
+    } else {
+      requestContext.delete('MastraMemory');
+    }
+
     const messageList = new MessageList({ threadId, resourceId });
     try {
       messageList.deserialize(workflowInput.messageListState);
@@ -1053,7 +1070,15 @@ export class DurableAgent<
       // Resolve cache: user-provided > mastra's cache > default InMemoryServerCache
       const resolvedCache = this.#cacheConfig ?? this.#mastra?.serverCache ?? new InMemoryServerCache();
       this.#resolvedCache = resolvedCache;
-      this.#cachingPubsub = new CachingPubSub(this.#innerPubsub, resolvedCache);
+      // Run-local topics must never reach the cache. This wrapper sits *above*
+      // the `mastra.pubsub` proxy that tags publishes `localOnly`, so that flag
+      // is set too late for `CachingPubSub` to observe it — the policy has to be
+      // declared here instead. Without it, per-run `workflow.events.v2.*` watch
+      // events (cumulative step results, often megabytes) are RPUSHed into a
+      // shared store that no other instance can ever read from (issue #20646).
+      this.#cachingPubsub = new CachingPubSub(this.#innerPubsub, resolvedCache, {
+        shouldCache: topic => !isRunLocalTopic(topic),
+      });
     }
   }
 
@@ -1486,7 +1511,15 @@ export class DurableAgent<
     const entry = globalRunRegistry.get(runId);
     const requestContext = entry?.requestContext;
 
-    const run = await workflow.createRun({ runId, pubsub: this.pubsub });
+    // Populate the run row's resourceId column so storage-level resource
+    // filters (listSuspendedRuns / listActiveRuns) can narrow the query,
+    // mirroring the non-durable agentic loop (loop/workflows/stream.ts).
+    const memoryInfo = (
+      workflowInput.messageListState as { memoryInfo?: { threadId?: string; resourceId?: string } } | undefined
+    )?.memoryInfo;
+    const resourceId = workflowInput.state?.resourceId ?? memoryInfo?.resourceId;
+
+    const run = await workflow.createRun({ runId, resourceId, pubsub: this.pubsub });
     // Parent the workflow run under the AGENT_RUN span so the trace exports under it.
     const result = await run.start({
       inputData: workflowInput,
@@ -1533,6 +1566,69 @@ export class DurableAgent<
     // End the root spans on error so the trace exports (mirrors the non-durable map-results-step).
     endRunSpansWithError(runId, error);
     await emitErrorEvent(this.pubsub, runId, error);
+  }
+
+  /**
+   * Abort the thread's active run.
+   *
+   * The base implementation flips the run's prepared `AbortController`, which a
+   * durable run never has: its controller lives on this agent's run registry,
+   * and the steps reading it may execute in another process. Without the abort
+   * request below, aborting a thread whose active run is durable records an
+   * intent nothing reads and lets the run stream on.
+   */
+  abortThreadStream(options: AgentSubscribeToThreadOptions): boolean {
+    // Resolve the run before the base call: aborting releases the thread lease,
+    // after which the thread no longer has an active run to look up.
+    const runId = agentThreadStreamRuntime.getActiveThreadRunId(options, this.getPubSub());
+    const aborted = super.abortThreadStream(options);
+    if (!runId) return aborted;
+
+    this.#abortDurableRun(runId);
+    return true;
+  }
+
+  /**
+   * Abort a run by id.
+   *
+   * Same gap as {@link abortThreadStream}. The abort request goes out whether
+   * or not this process knows the run: a durable run is routinely executed by
+   * another process, which is the one holding the controller that has to be
+   * flipped. A request nobody is listening for is a no-op, exactly like
+   * aborting a run that already finished, and a run that has not started yet
+   * is still covered by the intent the base implementation records.
+   */
+  abortRunStream(runId: string): boolean {
+    const aborted = super.abortRunStream(runId);
+    this.#abortDurableRun(runId);
+
+    return aborted || this.#isRunExecuting(runId);
+  }
+
+  /** Whether this process can see `runId` executing, in its registries or on the thread runtime. */
+  #isRunExecuting(runId: string): boolean {
+    return (
+      this.#runRegistry.get(runId) !== undefined ||
+      globalRunRegistry.get(runId) !== undefined ||
+      agentThreadStreamRuntime.hasThreadRun(runId, this.getPubSub())
+    );
+  }
+
+  /**
+   * Stop `runId` wherever it is executing: the controller this process holds
+   * for it, if it holds one, plus the abort request that reaches the process
+   * actually running the steps. Mirrors the `abort()` handed out with a stream
+   * result, which flips the same pair without gating on what this process
+   * happens to know about the run.
+   */
+  #abortDurableRun(runId: string): void {
+    const controller = (this.#runRegistry.get(runId) ?? globalRunRegistry.get(runId))?.abortController;
+    if (controller && !controller.signal.aborted) {
+      controller.abort(new Error('Aborted'));
+    }
+    // Best-effort, like `requestRemoteAbort` itself: the caller gets the local
+    // abort synchronously and a failed publish is logged, not thrown.
+    void this.requestRemoteAbort(runId);
   }
 
   /**
@@ -1685,6 +1781,9 @@ export class DurableAgent<
         );
       }
     }
+    if (agentThreadStreamRuntime.isRunAborted(runId, this.getPubSub())) {
+      abortController.abort();
+    }
     registryEntry.abortController = abortController;
     registryEntry.abortSignal = abortController.signal;
 
@@ -1749,6 +1848,8 @@ export class DurableAgent<
       closeOnSuspend: (options as any)?.[CLOSE_ON_SUSPEND] === true,
       structuredOutput: registryEntry.structuredOutput as any,
       outputProcessors: registryEntry.outputProcessors,
+      requestContext: registryEntry.requestContext,
+      tracingContext: registryEntry.agentSpan ? { currentSpan: registryEntry.agentSpan } : undefined,
       messageList,
     });
 
@@ -1923,11 +2024,30 @@ export class DurableAgent<
         } as DurableAgentStreamOptions<TOutput>['memory'])
       : options?.memory;
 
+    let resumeRequestContext = entry.requestContext;
+    if (options?.requestContext) {
+      // Keep the caller's instance so schema-transformed contexts retain their
+      // input source. Caller values win except for framework-managed memory.
+      resumeRequestContext = options.requestContext;
+      for (const [key, value] of entry.requestContext?.entries() ?? []) {
+        if (!resumeRequestContext.has(key)) resumeRequestContext.set(key, value);
+      }
+      if (entry.requestContext?.has('MastraMemory')) {
+        resumeRequestContext.set('MastraMemory', entry.requestContext.get('MastraMemory'));
+      } else {
+        resumeRequestContext.delete('MastraMemory');
+      }
+    }
+
+    entry.requestContext = resumeRequestContext;
+    const globalEntryForContext = globalRunRegistry.get(runId);
+    if (globalEntryForContext) {
+      globalEntryForContext.requestContext = resumeRequestContext;
+    }
+
     const resolvedOptions = (await this.#resolveExecutionOptions({
       ...(options as DurableAgentStreamOptions<TOutput>),
-      requestContext:
-        options?.requestContext ??
-        (entry.requestContext as DurableAgentStreamOptions<TOutput>['requestContext'] | undefined),
+      requestContext: resumeRequestContext as DurableAgentStreamOptions<TOutput>['requestContext'],
       memory: registeredMemory ?? options?.memory,
     })) as DurableAgentResumeOptions<TOutput>;
 
@@ -1982,6 +2102,9 @@ export class DurableAgent<
         );
       }
     }
+    if (agentThreadStreamRuntime.isRunAborted(runId, this.getPubSub())) {
+      abortController.abort();
+    }
     entry.abortController = abortController;
     entry.abortSignal = abortController.signal;
     const globalEntryForAbort = globalRunRegistry.get(runId);
@@ -2014,6 +2137,59 @@ export class DurableAgent<
     // (resumeGenerate) would immediately close on the replayed SUSPENDED.
     const resumeOffset = await this.#getPubsubOffset(runId);
 
+    // Open a fresh AGENT_RUN + MODEL_GENERATION for the resumed segment on the same
+    // traceId — the originals were ended as `suspended` and can't be reopened. Post-resume
+    // steps + terminal end() target these via the registry override. (Linking = follow-up.)
+    // Opened before the stream adapter so per-chunk processor spans parent under it.
+    const origTraceId = entry.agentSpan?.traceId;
+    const origSpanId = entry.agentSpan?.id;
+    if (origTraceId && this.#mastra?.observability) {
+      try {
+        const ag = this.#wrappedAgent as Agent<string, any, any>;
+        // Match non-durable Agent.stream() resume-span shape: same name suffix
+        // `(resumed)`, forward agent-level tracingPolicy, link to the original
+        // span via `resumedFromSpanId` metadata, and carry the resolvedVersionId.
+        const rawConfig = typeof (ag as any).toRawConfig === 'function' ? (ag as any).toRawConfig() : undefined;
+        const resolvedVersionId = rawConfig?.resolvedVersionId as string | undefined;
+        const agentTracingPolicy = typeof ag.getTracingPolicy === 'function' ? ag.getTracingPolicy() : undefined;
+        const resumeAgentSpan = getOrCreateSpan({
+          type: SpanType.AGENT_RUN,
+          name: `agent run: '${ag.id}' (resumed)`,
+          entityType: EntityType.AGENT,
+          entityId: ag.id,
+          entityName: ag.name,
+          metadata: {
+            runId,
+            resumed: true,
+            ...(origSpanId ? { resumedFromSpanId: origSpanId } : {}),
+            ...(resolvedVersionId ? { entityVersionId: resolvedVersionId } : {}),
+          },
+          tracingPolicy: agentTracingPolicy,
+          tracingOptions: { traceId: origTraceId },
+          requestContext: resolvedOptions.requestContext,
+          mastra: this.#mastra,
+        });
+        const resumeModelSpan = resumeAgentSpan?.createChildSpan({
+          type: SpanType.MODEL_GENERATION,
+          name: `llm: '${resumeModel?.modelId ?? ''}'`,
+          attributes: { model: resumeModel?.modelId, provider: resumeModel?.provider, streaming: true },
+          metadata: { runId, resumed: true },
+          requestContext: resolvedOptions.requestContext,
+        });
+        for (const reg of [entry, globalRunRegistry.get(runId)]) {
+          if (!reg) continue;
+          reg.resumeAgentSpan = resumeAgentSpan;
+          reg.resumeModelSpan = resumeModelSpan;
+          reg.resumeAgentSpanData = resumeAgentSpan?.exportSpan();
+          reg.resumeModelSpanData = resumeModelSpan?.exportSpan();
+        }
+      } catch (error) {
+        // Span bookkeeping must never block resume.
+        this.#mastra?.getLogger?.()?.warn?.(`[DurableAgent] Failed to open resume spans: ${error}`);
+      }
+    }
+    const resumeSegmentSpan = entry.resumeAgentSpan ?? entry.agentSpan;
+
     const {
       output,
       cleanup: streamCleanup,
@@ -2043,63 +2219,14 @@ export class DurableAgent<
       closeOnSuspend: (resolvedOptions as any)[CLOSE_ON_SUSPEND] === true,
       structuredOutput: entry.structuredOutput as any,
       outputProcessors: entry.outputProcessors,
+      requestContext: resolvedOptions.requestContext,
+      tracingContext: resumeSegmentSpan ? { currentSpan: resumeSegmentSpan } : undefined,
       messageList: globalEntry?.messageList ?? this.#runRegistry.getMessageList(runId),
     });
 
     // Wait for subscription to be ready, then resume workflow
     const workflow = this.getWorkflow();
     const requestContext = resolvedOptions.requestContext;
-
-    // Open a fresh AGENT_RUN + MODEL_GENERATION for the resumed segment on the same
-    // traceId — the originals were ended as `suspended` and can't be reopened. Post-resume
-    // steps + terminal end() target these via the registry override. (Linking = follow-up.)
-    const origTraceId = entry.agentSpan?.traceId;
-    const origSpanId = entry.agentSpan?.id;
-    if (origTraceId && this.#mastra?.observability) {
-      try {
-        const ag = this.#wrappedAgent as Agent<string, any, any>;
-        // Match non-durable Agent.stream() resume-span shape: same name suffix
-        // `(resumed)`, forward agent-level tracingPolicy, link to the original
-        // span via `resumedFromSpanId` metadata, and carry the resolvedVersionId.
-        const rawConfig = typeof (ag as any).toRawConfig === 'function' ? (ag as any).toRawConfig() : undefined;
-        const resolvedVersionId = rawConfig?.resolvedVersionId as string | undefined;
-        const agentTracingPolicy = typeof ag.getTracingPolicy === 'function' ? ag.getTracingPolicy() : undefined;
-        const resumeAgentSpan = getOrCreateSpan({
-          type: SpanType.AGENT_RUN,
-          name: `agent run: '${ag.id}' (resumed)`,
-          entityType: EntityType.AGENT,
-          entityId: ag.id,
-          entityName: ag.name,
-          metadata: {
-            runId,
-            resumed: true,
-            ...(origSpanId ? { resumedFromSpanId: origSpanId } : {}),
-            ...(resolvedVersionId ? { entityVersionId: resolvedVersionId } : {}),
-          },
-          tracingPolicy: agentTracingPolicy,
-          tracingOptions: { traceId: origTraceId },
-          requestContext,
-          mastra: this.#mastra,
-        });
-        const resumeModelSpan = resumeAgentSpan?.createChildSpan({
-          type: SpanType.MODEL_GENERATION,
-          name: `llm: '${resumeModel?.modelId ?? ''}'`,
-          attributes: { model: resumeModel?.modelId, provider: resumeModel?.provider, streaming: true },
-          metadata: { runId, resumed: true },
-          requestContext,
-        });
-        for (const reg of [entry, globalRunRegistry.get(runId)]) {
-          if (!reg) continue;
-          reg.resumeAgentSpan = resumeAgentSpan;
-          reg.resumeModelSpan = resumeModelSpan;
-          reg.resumeAgentSpanData = resumeAgentSpan?.exportSpan();
-          reg.resumeModelSpanData = resumeModelSpan?.exportSpan();
-        }
-      } catch (error) {
-        // Span bookkeeping must never block resume.
-        this.#mastra?.getLogger?.()?.warn?.(`[DurableAgent] Failed to open resume spans: ${error}`);
-      }
-    }
 
     // Capture the prior workflow execution BEFORE creating the new promise.
     // If we read it inside the `.then()` callback, the global registry will
@@ -2121,7 +2248,7 @@ export class DurableAgent<
           });
         }
 
-        const run = await workflow.createRun({ runId, pubsub: this.pubsub });
+        const run = await workflow.createRun({ runId, resourceId: memoryInfo?.resourceId, pubsub: this.pubsub });
         if (this.__getGoalConfig()) {
           await beginGoalActivity({
             mastra: this.#mastra,
@@ -2365,7 +2492,10 @@ export class DurableAgent<
     const workflowExecution = this.#raceRecoveryLease(ready, recoveryLease)
       .then(async () => {
         recoveryLease.assertOwned();
-        const run = await this.#raceRecoveryLease(workflow.createRun({ runId, pubsub: recoveryPubsub }), recoveryLease);
+        const run = await this.#raceRecoveryLease(
+          workflow.createRun({ runId, resourceId, pubsub: recoveryPubsub }),
+          recoveryLease,
+        );
         recoveryLease.assertOwned();
         const result = await this.#raceRecoveryLease(
           run.restart({
@@ -2589,6 +2719,9 @@ export class DurableAgent<
         );
       }
     }
+    if (agentThreadStreamRuntime.isRunAborted(runId, this.getPubSub())) {
+      abortController.abort();
+    }
     registryEntry.abortController = abortController;
     registryEntry.abortSignal = abortController.signal;
 
@@ -2653,6 +2786,8 @@ export class DurableAgent<
       closeOnSuspend: true,
       structuredOutput: registryEntry.structuredOutput as any,
       outputProcessors: registryEntry.outputProcessors,
+      requestContext: registryEntry.requestContext,
+      tracingContext: registryEntry.agentSpan ? { currentSpan: registryEntry.agentSpan } : undefined,
       messageList,
     });
 
@@ -2835,11 +2970,14 @@ export class DurableAgent<
         category: ErrorCategory.USER,
         text:
           `DurableAgent "${this.name}" listActiveRuns() requires storage to discover running runs. ` +
-          `Register the agent on a Mastra instance with persistent storage (e.g. PostgreSQL, LibSQL).`,
+          `Register the agent on a Mastra instance with persistent storage (e.g. PostgreSQL, LibSQL). See https://mastra.ai/docs/storage`,
         details: { agentName: this.name },
       });
     }
 
+    // resourceId is a storage column, so it is pushed down to narrow the query
+    // (the in-process check below remains as backstop for adapters that skip
+    // the filter and for rows persisted before the column was populated).
     // Filtering by agentId/threadId happens in application code because those
     // fields only exist inside each row's `snapshot` JSON — storage adapters
     // have no predicate for them. Fetch candidates in bounded batches so peak
@@ -2852,6 +2990,7 @@ export class DurableAgent<
       const { runs, total: storageTotal } = await workflowsStore.listWorkflowRuns({
         workflowName: DurableStepIds.AGENTIC_LOOP,
         status: 'running',
+        resourceId,
         fromDate,
         toDate,
         perPage: LIST_ACTIVE_RUNS_STORAGE_BATCH_SIZE,
@@ -3072,6 +3211,9 @@ export class DurableAgent<
       }
     };
 
+    const observedEntry = globalRunRegistry.get(runId) ?? this.#runRegistry.get(runId);
+    const observedAgentSpan = observedEntry?.resumeAgentSpan ?? observedEntry?.agentSpan;
+
     const stream = createDurableAgentStream<TOutput>({
       pubsub: this.pubsub,
       runId,
@@ -3102,6 +3244,7 @@ export class DurableAgent<
       onSuspended: options?.onSuspended,
       structuredOutput: this.#runRegistry.get(runId)?.structuredOutput as any,
       outputProcessors: this.#runRegistry.get(runId)?.outputProcessors,
+      tracingContext: observedAgentSpan ? { currentSpan: observedAgentSpan } : undefined,
       messageList: globalRunRegistry.get(runId)?.messageList ?? this.#runRegistry.getMessageList(runId),
     });
     const { output, ready } = stream;

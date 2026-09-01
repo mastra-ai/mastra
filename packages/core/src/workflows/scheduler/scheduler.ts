@@ -10,6 +10,7 @@ export const TOPIC_AGENT_SCHEDULES = 'agent-schedules';
 const DEFAULT_TICK_INTERVAL_MS = 10_000;
 const DEFAULT_BATCH_SIZE = 100;
 const DEFAULT_MISSES_BEFORE_DELETE = 3;
+const DEFAULT_STALE_SKIPS_BEFORE_ESCALATION = 5;
 
 /**
  * Drives cron-based workflow triggers.
@@ -43,6 +44,20 @@ export class Scheduler extends MastraBase {
    */
   #missingWorkflowCounts = new Map<string, number>();
 
+  /**
+   * Consecutive ticks each schedule has been skipped because the local target
+   * definition is stale (see `#ensureTargetCurrent`). Doubles as the
+   * "already logged" marker so a straggler doesn't re-log every tick, and as
+   * the counter that escalates a skip that is never being picked up by anyone.
+   *
+   * Scoped to the fire window (`nextFireAt`) the skips were observed against.
+   * A window that advances is proof some other instance claimed and fired the
+   * previous one, so the count restarts rather than accumulating across
+   * unrelated fires — otherwise a long-lived straggler would escalate even
+   * though every fire is being served correctly by a current-build instance.
+   */
+  #staleDefinitionCounts = new Map<string, { fireAt: number; count: number }>();
+
   constructor({
     schedulesStore,
     pubsub,
@@ -71,6 +86,7 @@ export class Scheduler extends MastraBase {
     // over into a new start() since the workflow registry may now look
     // different.
     this.#missingWorkflowCounts.clear();
+    this.#staleDefinitionCounts.clear();
 
     try {
       // Run one tick immediately so newly-due schedules don't wait the full interval.
@@ -237,8 +253,97 @@ export class Scheduler extends MastraBase {
     return false;
   }
 
+  /**
+   * Stale-build fence (#19169). Scheduled runs execute `localOnly` in the
+   * claiming process against its own workflow registry, so an instance whose
+   * local target definition differs from the one recorded on the schedule
+   * row must not claim the fire — it would silently run an outdated step
+   * graph. Returning `false` skips the CAS claim entirely, leaving
+   * `nextFireAt` untouched so an instance with a matching definition can
+   * claim the fire on its own tick.
+   *
+   * Fails open when no predicate is configured or when the predicate
+   * throws — fencing is a safety net, not a reason to stop firing.
+   */
+  #ensureTargetCurrent(schedule: Schedule): boolean {
+    const predicate = this.#config.isTargetCurrent;
+    if (!predicate) return true;
+
+    let current: boolean;
+    try {
+      current = predicate(schedule.target);
+    } catch (err) {
+      this.logger.error('isTargetCurrent predicate threw; treating target as current', {
+        scheduleId: schedule.id,
+        error: err,
+      });
+      return true;
+    }
+
+    if (current) {
+      this.#staleDefinitionCounts.delete(schedule.id);
+      return true;
+    }
+
+    // Only count skips against the same unclaimed fire window. If `nextFireAt`
+    // has moved on, an instance with a matching definition claimed the last
+    // fire and this is a fresh window, not a continuing stall.
+    const prevEntry = this.#staleDefinitionCounts.get(schedule.id);
+    const prev = prevEntry?.fireAt === schedule.nextFireAt ? prevEntry.count : 0;
+    const next = prev + 1;
+    this.#staleDefinitionCounts.set(schedule.id, { fireAt: schedule.nextFireAt, count: next });
+
+    const targetSummary =
+      schedule.target.type === 'workflow'
+        ? { workflowId: schedule.target.workflowId }
+        : { agentId: schedule.target.agentId };
+    const limit = this.#config.staleSkipsBeforeEscalation ?? DEFAULT_STALE_SKIPS_BEFORE_ESCALATION;
+
+    if (prev === 0) {
+      this.logger.warn(
+        'Local target definition differs from the schedule row; leaving fire for an instance running the current build',
+        { scheduleId: schedule.id, targetType: schedule.target.type, ...targetSummary },
+      );
+    } else if (next === limit) {
+      // Nobody has claimed this fire for `limit` consecutive ticks, which
+      // means no running instance matches the row (bad rollout, or a hash the
+      // reconciler wrote that no build reproduces). We deliberately do NOT
+      // force the fire — running a stale graph is the bug this fence exists to
+      // prevent — but a schedule that silently never runs is just as bad, so
+      // escalate to an alertable error and leave a trail in schedule history.
+      this.logger.error(
+        'Schedule has been skipped repeatedly because no local target definition matches the schedule row; it will not fire until an instance running the recorded build is available',
+        { scheduleId: schedule.id, targetType: schedule.target.type, ...targetSummary, consecutiveStaleSkips: next },
+      );
+      void this.#recordStaleSkip(schedule, next);
+    }
+
+    return false;
+  }
+
+  /**
+   * Best-effort history entry for an escalated stale skip so the stall is
+   * visible to anyone inspecting the schedule, not just in process logs.
+   */
+  async #recordStaleSkip(schedule: Schedule, consecutiveStaleSkips: number): Promise<void> {
+    try {
+      await this.#schedulesStore.recordTrigger({
+        scheduleId: schedule.id,
+        runId: `sched_${schedule.id}_${schedule.nextFireAt}`,
+        scheduledFireAt: schedule.nextFireAt,
+        actualFireAt: Date.now(),
+        outcome: 'failed',
+        error: `Skipped: no local target definition matches the schedule row after ${consecutiveStaleSkips} consecutive ticks`,
+        triggerKind: 'schedule-fire',
+      });
+    } catch (err) {
+      this.logger.warn('Failed to record stale-definition skip', { scheduleId: schedule.id, error: err });
+    }
+  }
+
   async #fireSchedule(schedule: Schedule): Promise<void> {
     if (!(await this.#ensureTargetReady(schedule))) return;
+    if (!this.#ensureTargetCurrent(schedule)) return;
 
     const actualFireAt = Date.now();
 
@@ -348,18 +453,33 @@ export class Scheduler extends MastraBase {
   async #publishTargetStart(schedule: Schedule, claimId: string): Promise<void> {
     switch (schedule.target.type) {
       case 'workflow': {
-        const { workflowId, inputData, initialState, requestContext } = schedule.target;
-        await this.#pubsub.publish(TOPIC_WORKFLOWS, {
-          type: 'workflow.start',
-          runId: claimId,
-          data: {
-            workflowId,
+        const { workflowId, inputData, initialState, requestContext, definitionHash } = schedule.target;
+        // Claim/execute affinity (#19169). When this process also consumes
+        // workflow events, keep the fire local so the instance that proved
+        // the target ready and current is the one that runs it. A
+        // scheduler-only process has no local consumer, so it must publish
+        // to the shared topic — the `scheduleDefinitionHash` below is what
+        // protects that hop, letting a stale consumer refuse the fire
+        // instead of executing its own outdated graph.
+        const localOnly = this.#config.canExecuteLocally?.() === true;
+        await this.#pubsub.publish(
+          TOPIC_WORKFLOWS,
+          {
+            type: 'workflow.start',
             runId: claimId,
-            prevResult: { status: 'success', output: inputData ?? {} },
-            requestContext: requestContext ?? {},
-            initialState: initialState ?? {},
+            data: {
+              workflowId,
+              runId: claimId,
+              prevResult: { status: 'success', output: inputData ?? {} },
+              requestContext: requestContext ?? {},
+              initialState: initialState ?? {},
+              // Only stamped when the row carries a hash, so legacy and
+              // imperative schedules stay unfenced (fail open).
+              ...(definitionHash ? { scheduleDefinitionHash: definitionHash } : {}),
+            },
           },
-        });
+          localOnly ? { localOnly: true } : undefined,
+        );
         return;
       }
       case 'agent': {

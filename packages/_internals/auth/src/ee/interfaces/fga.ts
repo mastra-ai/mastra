@@ -43,6 +43,17 @@ export type ActorSignal =
       permissions?: MastraFGAPermissionInput[];
       /** Additional provider-specific scope for the actor (e.g. tenant, environment). */
       scope?: Record<string, string>;
+      /**
+       * Opt in to propagating this actor into the agent/tool calls the framework
+       * makes for declarative workflow steps (`.then(agent)` / `.then(tool)`)
+       * within this run's own execution tree.
+       *
+       * Never implicit, and ignored by authorization itself. Custom step
+       * `execute` closures are not covered — they already receive `actor` on the
+       * step context and must pass it explicitly. The `true` shorthand cannot
+       * opt in; use this object form.
+       */
+      propagate?: boolean;
     };
 
 /**

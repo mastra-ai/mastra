@@ -1,6 +1,6 @@
 {
   "name": "mastra",
-  "version": "1.25.1-alpha.6",
+  "version": "1.27.3-alpha.1",
   "license": "Apache-2.0",
   "description": "cli for mastra",
   "type": "module",
@@ -19,8 +19,7 @@
     ]
   },
   "files": [
-    "dist",
-    "CHANGELOG.md"
+    "dist"
   ],
   "scripts": {
     "generate:api-manifest": "pnpm --filter @mastra/server generate:api-cli-route-metadata",
@@ -69,9 +68,7 @@
     "picocolors": "^1.1.1",
     "posthog-node": "^5.46.1",
     "semver": "^7.7.4",
-    "serve": "^14.2.6",
     "serve-handler": "^6.1.7",
-    "shell-quote": "^1.8.3",
     "strip-json-comments": "^5.0.3",
     "tinyglobby": "^0.2.17",
     "yocto-spinner": "^1.1.0"
@@ -88,7 +85,6 @@
     "@types/node": "22.20.1",
     "@types/semver": "^7.7.1",
     "@types/serve-handler": "^6.1.4",
-    "@types/shell-quote": "^1.7.5",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
     "eslint": "^10.7.0",

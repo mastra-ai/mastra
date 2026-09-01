@@ -1,6 +1,6 @@
 ---
 title: "Logging | Observability"
-description: Learn how to use logging in Mastra to monitor execution and capture application behavior, helping improve the accuracy of AI applications.
+description: "Configure structured Mastra logging with PinoLogger, trace correlation, observability storage, custom logger adapters, log levels, and query APIs."
 packages:
   - "@mastra/loggers"
   - "@mastra/observability"
@@ -36,9 +36,99 @@ Visit [PinoLogger](/reference/logging/pino-logger) for all available configurati
 
 ## Logging to observability storage
 
-When [observability](/docs/observability/overview) is configured, all logger calls are automatically forwarded to your observability storage. Every `debug`, `info`, `warn`, `error`, and `trackException` call from your application and from Mastra's internal components is stored alongside your traces.
+When [observability](/docs/observability/overview) is configured, by default all logger calls are automatically forwarded to your observability storage. Every `debug`, `info`, `warn`, `error`, and `trackException` call from your application and from Mastra's internal components is stored alongside your traces.
 
-No code changes are required. Mastra wraps the configured logger so that it writes to both the original logger (console, file, or custom transport) and the observability system simultaneously.
+No code changes are required. Loggers with adapter support (`PinoLogger` and `ConsoleLogger`) write each record to their own destinations and derive the exported log from that same record. Custom loggers without adapter support are wrapped so they write to both the original logger and the observability system simultaneously.
+
+### Trace-correlated log output
+
+When a log call happens inside a traced operation (an agent run, workflow step, or tool call), Mastra injects `trace_id` and `span_id` into the logger's native output. The fields use W3C trace context format and match the trace shown in Studio, so you can correlate a stdout log line with its trace directly.
+
+To get machine-parseable JSON on stdout, configure `PinoLogger` with `prettyPrint: false`, pretty printing is enabled by default and produces human-readable text instead of JSON:
+
+```typescript title="src/mastra/index.ts"
+export const mastra = new Mastra({
+  logger: new PinoLogger({ name: 'Mastra', level: 'info', prettyPrint: false }),
+})
+```
+
+The record then looks like this:
+
+```json
+{
+  "level": 30,
+  "time": 1755522000000,
+  "name": "Mastra",
+  "trace_id": "0af7651916cd43dd8448eb211c80319c",
+  "span_id": "b7ad6b7169203331",
+  "msg": "tool executed"
+}
+```
+
+Outside a traced operation, the fields are omitted. `ConsoleLogger` appends the same fields as an object argument to its console output instead. With `PinoLogger`, the fields reach every destination: stdout, files, and custom transports. If you supply your own pino `mixin`, its fields are preserved, but `trace_id` and `span_id` win on conflicts.
+
+Correlation and export can be controlled independently with the `loggerOptions` configuration:
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core/mastra'
+import { PinoLogger } from '@mastra/loggers'
+
+export const mastra = new Mastra({
+  logger: new PinoLogger({ name: 'Mastra', level: 'info' }),
+  loggerOptions: {
+    correlation: true, // inject trace_id/span_id into native log output (default: true)
+    export: false, // keep trace-correlated output without storing logs in observability (default: true)
+  },
+})
+```
+
+### Custom loggers
+
+Custom `IMastraLogger` implementations keep working: Mastra uses a deprecated dual-write fallback that forwards log calls to observability without adding `trace_id` or `span_id` to the logger's native output. To get trace-correlated output, implement the `__attachObservability()` adapter hook from `@mastra/core/logger`:
+
+```typescript
+import { MastraLogger, buildLogRecordData } from '@mastra/core/logger'
+import type { LoggerAdapterContext } from '@mastra/core/logger'
+
+class MyLogger extends MastraLogger {
+  #adapterContext?: LoggerAdapterContext
+
+  __attachObservability(ctx: LoggerAdapterContext): void {
+    this.#adapterContext = ctx
+  }
+
+  #log(level: 'debug' | 'info' | 'warn' | 'error', message: string, args: unknown[]): void {
+    const ctx = this.#adapterContext
+    // Inject trace fields into your native record when correlation is enabled
+    const traceFields = ctx?.options.correlation ? ctx.resolveTraceFields() : undefined
+    console[level === 'debug' ? 'info' : level](
+      message,
+      ...args,
+      ...(traceFields ? [traceFields] : []),
+    )
+    // Export the same record to observability when export is enabled
+    if (ctx?.options.export) {
+      ctx.getLogSink()?.[level](message, buildLogRecordData(args))
+    }
+  }
+
+  debug(message: string, ...args: unknown[]): void {
+    this.#log('debug', message, args)
+  }
+
+  info(message: string, ...args: unknown[]): void {
+    this.#log('info', message, args)
+  }
+
+  warn(message: string, ...args: unknown[]): void {
+    this.#log('warn', message, args)
+  }
+
+  error(message: string, ...args: unknown[]): void {
+    this.#log('error', message, args)
+  }
+}
+```
 
 ### Configuring observability log level
 
@@ -99,7 +189,7 @@ Mastra provides access to a logger instance via the `mastra.getLogger()` method,
 
 Within a workflow step, access the logger via the `mastra` parameter inside the `execute` function. You can log messages relevant to the step's execution.
 
-```typescript {6-7} title="src/mastra/workflows/test-workflow.ts" prettier:false
+```typescript {6-7} title="src/mastra/workflows/test-workflow.ts" oxfmt:false
 import { createWorkflow, createStep } from "@mastra/core/workflows";
 import { z } from "zod";
 
@@ -143,7 +233,7 @@ export const testTool = createTool({
 
 Logger methods accept an optional second argument for additional data. Pass a structured object to make logs filterable in observability storage.
 
-```typescript {9} title="src/mastra/workflows/test-workflow.ts" prettier:false
+```typescript {9} title="src/mastra/workflows/test-workflow.ts" oxfmt:false
 import { createWorkflow, createStep } from "@mastra/core/workflows";
 import { z } from "zod";
 

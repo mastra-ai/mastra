@@ -38,6 +38,38 @@ describe('resolveDateRangeBoundaryLayout', () => {
     });
   });
 
+  it('pins the overlapping pair to the right edge instead of overshooting it', () => {
+    const layout = resolveDateRangeBoundaryLayout(960, { from: 95, to: 100 });
+
+    expect(layout).toEqual({
+      from: { left: 632, width: 160 },
+      to: { left: 800, width: 160 },
+      gap: 8,
+    });
+  });
+
+  it('pins the overlapping pair to the left edge when both handles sit at the start', () => {
+    const layout = resolveDateRangeBoundaryLayout(400, { from: 0, to: 0 });
+
+    expect(layout).toEqual({
+      from: { left: 0, width: 160 },
+      to: { left: 168, width: 160 },
+      gap: 8,
+    });
+  });
+
+  it('counts the gap as taken space when deciding the labels overlap', () => {
+    // `to` sits exactly one gap away from the `from` label's right edge: the
+    // labels only fit if the gap is charged against the available room.
+    const layout = resolveDateRangeBoundaryLayout(1600, { from: 0, to: 9.75 });
+
+    expect(layout).toEqual({
+      from: { left: 0, width: 160 },
+      to: { left: 168, width: 160 },
+      gap: 8,
+    });
+  });
+
   it('adapts both label widths when the timeline is narrower than the preferred pair', () => {
     const layout = resolveDateRangeBoundaryLayout(240, { from: 95, to: 100 });
 

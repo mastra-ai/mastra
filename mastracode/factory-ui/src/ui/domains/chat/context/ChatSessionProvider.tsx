@@ -8,7 +8,6 @@ import { useApiConfig } from '../../../../api/config';
 import { SkeletonRows } from '../../../ui/SkeletonRows';
 import { useAgentControllerThreadMessages } from '../../../../hooks/useAgentControllerThreadMessages';
 import { useFactoryQuery } from '../../../../hooks/useFactories';
-import { useEnsureMaterializedSandbox, useEnsureProgress } from '../../../../hooks/useEnsureMaterializedSandbox';
 import { useUserSessionQuery } from '../../../../hooks/useWorkspaces';
 import type { LinkedRepositoryPayload } from '../../workspaces/services/github';
 import { AGENT_CONTROLLER_ID } from '../services/constants';
@@ -19,6 +18,7 @@ import { ChatSessionContext } from './ChatSessionContext';
 import { ChatThreadMessagesContext } from './ChatThreadMessagesContext';
 import type { ChatThreadMessagesApi } from './ChatThreadMessagesContext';
 import { ChatTranscriptProvider } from './ChatTranscriptProvider';
+import { useChatMessagePreparation } from './useChatMessagePreparation';
 import { SessionPrepareSteps } from '../components/SessionPrepareSteps';
 import { useChatSessionContext } from './useChatSessionContext';
 
@@ -46,12 +46,9 @@ export function ChatSessionConfigProvider({
         (repo: LinkedRepositoryPayload) => repo.projectRepositoryId === storedSession.projectRepositoryId,
       )
     : factory?.repositories[0];
-  // Materializing a sandbox provisions a VM and clones the repo, so it may only
-  // happen when the caller actually enters a session. Every factory route mounts
-  // this provider (the chat shell is the router layout), so an ungated /ensure
-  // here provisioned a sandbox just for visiting the board, metrics or settings.
+  // Entering a session provisions nothing: session sandboxes boot lazily at the
+  // first real command. This provider only resolves session metadata.
   const inSession = Boolean(userScoped ? threadId : sessionId);
-  const ensureQuery = useEnsureMaterializedSandbox(inSession ? repository?.projectRepositoryId : undefined);
   const resolvingSession = inSession && sessionQuery.isPending;
   // Sessions and their threads are provisioned with the session's own id as the
   // memory resourceId and no scope (see FactoryStartCoordinator.prepare and
@@ -72,29 +69,32 @@ export function ChatSessionConfigProvider({
   const resourceOverride = userScoped
     ? null
     : new URLSearchParams(typeof window === 'undefined' ? '' : window.location.search).get('resourceId');
-  const sandboxReady = resourceOverride
-    ? Boolean(resourceOverride)
-    : ensureQuery.isSuccess && Boolean(storedSession) && !resolvingSession;
-  const sessionError = ensureQuery.error ?? undefined;
+  // `sandboxReady` — session metadata resolved; safe to run mutations. The
+  // server materializes sandboxes lazily on first use (and revives dead ones),
+  // so nothing here waits on a sandbox existing.
+  const sandboxReady = resourceOverride ? Boolean(resourceOverride) : Boolean(storedSession) && !resolvingSession;
+  // A denied or missing session (404 from the session query) is fatal and must
+  // surface the error state, not the eternal preparing loader.
+  const sessionError = sessionQuery.error ?? undefined;
   // `resourceReady` — safe to address the agent-controller session by
   // `resourceId` for reads/streaming as soon as server-side session metadata
-  // resolves. Does NOT wait on `/ensure` — the agent-controller endpoints are
-  // keyed by resourceId, not by a live sandbox, so reads and thread lookups
-  // can parallelize with sandbox provisioning.
+  // resolves. The agent-controller endpoints are keyed by resourceId, not by a
+  // live sandbox, so reads and thread lookups never wait on one.
   const resourceReady = userScoped
     ? Boolean(storedSession) && !resolvingSession
     : Boolean(resourceOverride) || (Boolean(storedSession) && !resolvingSession);
-  // `sandboxPreparing` — true only when we're actively inside a session and
-  // awaiting `/ensure`. Distinct from `!sandboxReady`, which is also false
-  // outside any session.
-  const sandboxPreparing = inSession && !sandboxReady && !sessionError;
-  const sandboxProgressQuery = useEnsureProgress(inSession ? repository?.projectRepositoryId : undefined);
-  const sandboxProgress = sandboxPreparing ? sandboxProgressQuery.data : undefined;
+  // `sandboxPreparing` — true only while session metadata is still resolving
+  // for an in-session mount. Distinct from `!sandboxReady`, which is also
+  // false outside any session. Track the pending query (not `!sandboxReady`)
+  // so a denied/missing session cannot keep the preparing loader up forever.
+  const sandboxPreparing = resolvingSession && !resourceOverride;
   // Outside a session the factory resource is addressable straight away (its id
-  // is the factory project id); inside one we keep the original ordering and
-  // wait for the workspace so resource reads follow materialization.
+  // is the factory project id); inside one it becomes addressable as soon as
+  // session metadata resolves — same as `resourceReady`.
   const resourceAddressable =
-    userScoped || !inSession ? Boolean(resourceId) : Boolean(resourceOverride) || ensureQuery.isSuccess;
+    userScoped || !inSession
+      ? Boolean(resourceId)
+      : Boolean(resourceOverride) || (Boolean(storedSession) && !resolvingSession);
   const resourceEnabled = !isUserDraft && resourceAddressable;
   const value = {
     resourceId: resourceOverride ?? resourceId ?? '',
@@ -104,10 +104,13 @@ export function ChatSessionConfigProvider({
     sandboxReady,
     resourceReady,
     sandboxPreparing,
-    sandboxProgress,
     resourceEnabled,
     sessionError,
-    retrySession: sessionError ? () => void ensureQuery.refetch() : undefined,
+    retrySession: sessionError
+      ? () => {
+          if (sessionQuery.isError) void sessionQuery.refetch();
+        }
+      : undefined,
     projectPath,
     sessionThreadId: storedSession?.sessionId,
     workspacePending: storedSession !== undefined && !storedSession.materializedAt,
@@ -117,9 +120,6 @@ export function ChatSessionConfigProvider({
         ? {
             factoryProjectId: factory.id,
             projectRepositoryId: repository.projectRepositoryId,
-            sandboxId: storedSession?.sandboxId ?? ensureQuery.data?.sandboxId,
-            sandboxWorkdir:
-              storedSession?.sandboxWorkdir ?? ensureQuery.data?.sandboxWorkdir ?? repository.sandboxWorkdir,
           }
         : undefined,
     baseUrl,
@@ -189,30 +189,43 @@ export function ChatSessionBoundary({
 }
 
 /** Limits delayed thread-history feedback to the transcript content region. */
-export function ChatMessageBoundary({ children }: { children: ReactNode }) {
+export function ChatMessageBoundary({
+  children,
+  showPreparation = true,
+}: {
+  children: ReactNode;
+  showPreparation?: boolean;
+}) {
   const value = useContext(ChatThreadMessagesContext);
   if (!value) throw new Error('ChatMessageBoundary must be used within a ChatSessionBoundary');
-  const { sessionError, sandboxPreparing } = useChatSessionContext();
+  const { sessionError } = useChatSessionContext();
+  const { historyInitializing, preparing } = useChatMessagePreparation();
 
-  // A failed workspace preparation keeps the session disabled — surface the
-  // real failure instead of an eternal skeleton or a partial-state loader.
-  if (sessionError) return <ChatMessageFeedback />;
+  if (sessionError) return <ChatMessageFeedback error={sessionError} />;
 
-  // One loader for both pre-transcript waits: a fast ensure followed by a slow
-  // messages fetch would otherwise flicker between two of them.
-  if (sandboxPreparing || value.isPending) return <SessionPrepareSteps />;
+  if (preparing) {
+    return showPreparation ? <SessionPrepareSteps historyInitializing={historyInitializing} /> : null;
+  }
 
-  if (value.threadId && value.error) return <ChatMessageFallback {...value} />;
+  if (value.threadId && value.error) {
+    return <ChatMessageFallback {...value} />;
+  }
 
-  return children;
+  return <>{children}</>;
 }
 
-function ChatMessageFeedback() {
-  const { sessionError, retrySession } = useChatSessionContext();
-  if (!sessionError) return null;
+function ChatMessageFeedback({ error }: { error: Error }) {
+  const { retrySession } = useChatSessionContext();
+  // The server intentionally returns the same 404 for a missing session and a
+  // private one owned by someone else, so the message covers both.
+  const notFound = (error as { status?: number }).status === 404;
   return (
     <div className="flex flex-col items-stretch gap-4">
-      <Notice variant="destructive">Failed to prepare the workspace: {sessionError.message}</Notice>
+      <Notice variant="destructive">
+        {notFound
+          ? 'This session was not found or is private to another user.'
+          : `Failed to prepare the workspace: ${error.message}`}
+      </Notice>
       {retrySession && (
         <div>
           <Button variant="default" onClick={retrySession}>

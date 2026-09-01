@@ -5,7 +5,7 @@
  * Wraps the E2B SDK's commands API (background mode, sendStdin, kill, list).
  */
 
-import { ProcessHandle, SandboxProcessManager } from '@mastra/core/workspace';
+import { ProcessHandle, UnsupportedStdinCloseError, SandboxProcessManager } from '@mastra/core/workspace';
 import type { CommandResult, ProcessInfo, SpawnProcessOptions } from '@mastra/core/workspace';
 import type { CommandHandle as E2BCommandHandle, Sandbox } from 'e2b';
 import type { E2BSandbox } from './index';
@@ -97,6 +97,10 @@ class E2BProcessHandle extends ProcessHandle {
     }
     await this._sandbox.commands.sendStdin(this._e2bHandle.pid, data);
   }
+
+  async closeStdin(): Promise<void> {
+    throw new UnsupportedStdinCloseError('E2B SDK does not expose a way to close stdin for a running command');
+  }
 }
 
 // =============================================================================
@@ -112,8 +116,8 @@ export class E2BProcessManager extends SandboxProcessManager<E2BSandbox> {
     return this.sandbox.retryOnDead(async () => {
       const e2b = this.sandbox.e2b;
 
-      // Merge default env with per-spawn env
-      const mergedEnv = { ...this.env, ...options.env };
+      // The base spawn wrapper already merged the sandbox env into options.env
+      const mergedEnv = { ...options.env };
       const envs = Object.fromEntries(
         Object.entries(mergedEnv).filter((entry): entry is [string, string] => entry[1] !== undefined),
       );

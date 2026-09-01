@@ -1,0 +1,5 @@
+{
+  "attachment": ["standardcompute"],
+  "temperature": ["standardcompute"],
+  "structuredOutput": ["standardcompute"]
+}

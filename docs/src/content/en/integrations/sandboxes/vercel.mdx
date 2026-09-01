@@ -1,6 +1,6 @@
 ---
 title: "Vercel | Sandbox"
-description: "API reference for VercelSandbox and VercelServerlessSandbox workspace providers."
+description: "Run Mastra workspace commands in Vercel Sandbox microVMs or stateless Serverless Functions, with authentication, files, ports, and processes."
 packages:
   - "@mastra/vercel"
 ---
@@ -211,7 +211,7 @@ Both callbacks are optional and can be used independently.
   },
   {
     name: 'onStart',
-    type: 'SandboxLifecycleHook',
+    type: 'SandboxStartHook',
     description: 'Lifecycle hook called after the sandbox reaches `running` status.',
     isOptional: true,
   },
@@ -432,7 +432,7 @@ const workspace = new Workspace({
   },
   {
     name: 'onStart',
-    type: 'SandboxLifecycleHook',
+    type: 'SandboxStartHook',
     description: 'Lifecycle hook called after the sandbox reaches `running` status.',
     isOptional: true,
   },

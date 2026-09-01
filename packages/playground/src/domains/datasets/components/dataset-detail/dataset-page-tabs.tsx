@@ -1,8 +1,11 @@
 import type { DatasetItem } from '@mastra/client-js';
 import { AlertDialog } from '@mastra/playground-ui/components/AlertDialog';
-import { Chip } from '@mastra/playground-ui/components/Chip';
+import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Tabs, Tab, TabList, TabContent } from '@mastra/playground-ui/components/Tabs';
+import { Txt } from '@mastra/playground-ui/components/Txt';
+import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { toast } from '@mastra/playground-ui/utils/toast';
+import { ClipboardCheck, FlaskConical, List } from 'lucide-react';
 import { useState } from 'react';
 import { useSearchParams } from 'react-router';
 import { useDebounce } from 'use-debounce';
@@ -19,20 +22,20 @@ import { CSVImportDialog } from '../csv-import';
 import { DatasetExperiments } from '../experiments/dataset-experiments';
 import { DatasetItems } from '../items/dataset-items';
 import { JSONImportDialog } from '../json-import';
+import { useDatasetItemPanel } from '@/domains/datasets/context/dataset-item-panel-context';
 import { DatasetReview } from '@/domains/review/components/dataset-review';
 import { useDatasetReviewItems } from '@/domains/review/hooks/use-dataset-review-items';
-import { useLinkComponent } from '@/lib/framework';
 
 export interface DatasetPageTabsProps {
   datasetId: string;
   onAddItemClick?: () => void;
   onNavigateToDataset?: (datasetId: string) => void;
+  rightSlot?: React.ReactNode;
 }
 
 export type TabValue = 'items' | 'experiments' | 'review';
 
-export function DatasetPageTabs({ datasetId, onAddItemClick, onNavigateToDataset }: DatasetPageTabsProps) {
-  const { navigate } = useLinkComponent();
+export function DatasetPageTabs({ datasetId, onAddItemClick, onNavigateToDataset, rightSlot }: DatasetPageTabsProps) {
   const [searchParams, setSearchParams] = useSearchParams();
   const {
     tab: activeTab,
@@ -48,7 +51,6 @@ export function DatasetPageTabs({ datasetId, onAddItemClick, onNavigateToDataset
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [itemIdsToDelete, setItemIdsToDelete] = useState<string[]>([]);
   const [clearSelectionTrigger, setClearSelectionTrigger] = useState(0);
-  const [featuredItemId, setSelectedItemId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [debouncedSearch] = useDebounce(searchQuery, 300);
 
@@ -61,8 +63,7 @@ export function DatasetPageTabs({ datasetId, onAddItemClick, onNavigateToDataset
     isFetchingNextPage,
     hasNextPage,
   } = useDatasetItems(datasetId, debouncedSearch || undefined, activeDatasetVersion);
-  // Unfiltered items count — used for the Items tab count when a search is
-  // active so the count reflects total dataset size, not just matches.
+  // Unfiltered, so a search narrows the list without shrinking the Items tab count.
   const { total: unfilteredItemsTotal } = useDatasetItems(datasetId, undefined, activeDatasetVersion);
   const [experimentsFilters, setExperimentsFilters] = useState<DatasetExperimentsFilters>({});
   const { data: experimentsData, isLoading: isExperimentsLoading } = useDatasetExperiments(
@@ -70,7 +71,7 @@ export function DatasetPageTabs({ datasetId, onAddItemClick, onNavigateToDataset
     undefined,
     experimentsFilters,
   );
-  // Fetch unfiltered list separately for deriving filter options (uses query cache when no filters active)
+  // Unfiltered, so the filter options stay complete; the query cache serves it when no filter is set.
   const { data: allExperimentsData } = useDatasetExperiments(datasetId);
   const { deleteItems } = useDatasetMutations();
 
@@ -85,28 +86,26 @@ export function DatasetPageTabs({ datasetId, onAddItemClick, onNavigateToDataset
   const { data: reviewItems } = useDatasetReviewItems(datasetId);
   const reviewCount = reviewItems?.length ?? 0;
 
-  // Item selection handlers
-  const handleItemSelect = (itemId: string) => {
-    setSelectedItemId(itemId);
+  // Clicking the already-open item closes the URL-driven panel.
+  const { currentItemId, openItem, close: closeItemPanel } = useDatasetItemPanel();
+  const handleItemClick = (itemId: string) => {
+    if (currentItemId === itemId) {
+      closeItemPanel();
+    } else {
+      openItem(itemId);
+    }
   };
 
-  const handleItemClose = () => {
-    setSelectedItemId(null);
-  };
-
-  // Handler for Create Dataset action from selection
   const handleCreateDatasetClick = (selectedItems: DatasetItem[]) => {
     setItemsForCreate(selectedItems);
     setCreateDialogOpen(true);
   };
 
-  // Handler for Add to Dataset action from selection
   const handleAddToDatasetClick = (selectedItems: DatasetItem[]) => {
     setItemsForAddToDataset(selectedItems);
     setAddToDatasetDialogOpen(true);
   };
 
-  // Clear selection when add to dataset dialog closes
   const handleAddToDatasetDialogOpenChange = (open: boolean) => {
     setAddToDatasetDialogOpen(open);
     if (!open) {
@@ -115,23 +114,11 @@ export function DatasetPageTabs({ datasetId, onAddItemClick, onNavigateToDataset
     }
   };
 
-  // Handler for Compare Items action from selection
-  const handleCompareItemsClick = (itemIds: string[]) => {
-    navigate(`/datasets/${datasetId}/items?items=${itemIds.join(',')}`);
-  };
-
-  // Handler for Compare Versions action from versions panel
-  const handleCompareVersionsClick = (versionNumbers: string[]) => {
-    navigate(`/datasets/${datasetId}/versions?ids=${versionNumbers.join(',')}`);
-  };
-
-  // Handler for bulk delete action from selection
   const handleBulkDeleteClick = (itemIds: string[]) => {
     setItemIdsToDelete(itemIds);
     setDeleteDialogOpen(true);
   };
 
-  // Confirm bulk delete
   const handleBulkDeleteConfirm = async () => {
     await deleteItems.mutateAsync({ datasetId, itemIds: itemIdsToDelete });
     toast.success(`Deleted ${itemIdsToDelete.length} items`);
@@ -140,7 +127,6 @@ export function DatasetPageTabs({ datasetId, onAddItemClick, onNavigateToDataset
     setClearSelectionTrigger(prev => prev + 1);
   };
 
-  // Success callback for create dataset dialog
   const handleCreateSuccess = (newDatasetId: string) => {
     setCreateDialogOpen(false);
     setItemsForCreate([]);
@@ -148,7 +134,6 @@ export function DatasetPageTabs({ datasetId, onAddItemClick, onNavigateToDataset
     onNavigateToDataset?.(newDatasetId);
   };
 
-  // Clear selection when create dialog closes (even without success)
   const handleCreateDialogOpenChange = (open: boolean) => {
     setCreateDialogOpen(open);
     if (!open) {
@@ -165,35 +150,55 @@ export function DatasetPageTabs({ datasetId, onAddItemClick, onNavigateToDataset
         onValueChange={handleTabChange}
         className="grid h-full grid-rows-[auto_1fr]"
       >
-        <TabList>
-          <Tab value="items">
-            Items <Chip color="gray">{itemsTabCount}</Chip>
-          </Tab>
-          <Tab value="experiments">
-            Experiments
-            <Chip color="gray">{experiments.length}</Chip>
-          </Tab>
-          <Tab value="review">
-            Review
-            {reviewCount > 0 && <Chip color="orange">{reviewCount}</Chip>}
-          </Tab>
-        </TabList>
+        <div className="flex items-center justify-between gap-4 px-6 py-3">
+          <TabList variant="pill-ghost">
+            <Tab value="items" className="px-3 py-2.5">
+              <Icon size="sm">
+                <List />
+              </Icon>
+              <Txt variant="ui-sm" className="text-inherit">
+                Items
+              </Txt>
+              <Badge size="sm">{itemsTabCount}</Badge>
+            </Tab>
+            <Tab value="experiments" className="px-3 py-2.5">
+              <Icon size="sm">
+                <FlaskConical />
+              </Icon>
+              <Txt variant="ui-sm" className="text-inherit">
+                Experiments
+              </Txt>
+              <Badge size="sm">{experiments.length}</Badge>
+            </Tab>
+            <Tab value="review" className="px-3 py-2.5">
+              <Icon size="sm">
+                <ClipboardCheck />
+              </Icon>
+              <Txt variant="ui-sm" className="text-inherit">
+                Review
+              </Txt>
+              {reviewCount > 0 && (
+                <Badge variant="yellow" size="sm">
+                  {reviewCount}
+                </Badge>
+              )}
+            </Tab>
+          </TabList>
+          {rightSlot && <div className="shrink-0 whitespace-nowrap">{rightSlot}</div>}
+        </div>
 
-        <TabContent value="items" className="mt-5 grid overflow-auto pb-0">
+        <TabContent value="items" className="border-border1 grid overflow-auto border-t py-0">
           <DatasetItems
-            datasetId={datasetId}
             items={items}
             isLoading={isItemsLoading}
-            featuredItemId={featuredItemId}
-            onItemSelect={handleItemSelect}
-            onItemClose={handleItemClose}
+            onItemClick={handleItemClick}
+            featuredItemId={currentItemId}
             onAddClick={onAddItemClick ?? (() => {})}
             onImportClick={() => setImportDialogOpen(true)}
             onImportJsonClick={() => setImportJsonDialogOpen(true)}
             onBulkDeleteClick={handleBulkDeleteClick}
             onCreateDatasetClick={handleCreateDatasetClick}
             onAddToDatasetClick={handleAddToDatasetClick}
-            onCompareItemsClick={handleCompareItemsClick}
             datasetName={dataset?.name}
             clearSelectionTrigger={clearSelectionTrigger}
             setEndOfListElement={setEndOfListElement}
@@ -203,11 +208,10 @@ export function DatasetPageTabs({ datasetId, onAddItemClick, onNavigateToDataset
             activeSearchQuery={debouncedSearch}
             onSearchChange={setSearchQuery}
             currentDatasetVersion={dataset?.version}
-            onCompareVersionsClick={handleCompareVersionsClick}
           />
         </TabContent>
 
-        <TabContent value="experiments" className="mt-5 grid overflow-auto pb-0">
+        <TabContent value="experiments" className="border-border1 grid overflow-auto border-t px-6 pt-3 pb-6">
           <DatasetExperiments
             experiments={experiments}
             allExperiments={allExperiments}
@@ -218,29 +222,24 @@ export function DatasetPageTabs({ datasetId, onAddItemClick, onNavigateToDataset
           />
         </TabContent>
 
-        <TabContent value="review" className="mt-2 overflow-auto pb-0">
+        <TabContent value="review" className="border-border1 overflow-auto border-t px-6 pt-3 pb-6">
           <DatasetReview datasetId={datasetId} />
         </TabContent>
       </Tabs>
-      {/* CSV Import Dialog */}
       <CSVImportDialog datasetId={datasetId} open={importDialogOpen} onOpenChange={setImportDialogOpen} />
-      {/* JSON Import Dialog */}
       <JSONImportDialog datasetId={datasetId} open={importJsonDialogOpen} onOpenChange={setImportJsonDialogOpen} />
-      {/* Create Dataset From Items Dialog */}
       <CreateDatasetFromItemsDialog
         open={createDialogOpen}
         onOpenChange={handleCreateDialogOpenChange}
         items={itemsForCreate}
         onSuccess={handleCreateSuccess}
       />
-      {/* Add Items to Dataset Dialog */}
       <AddItemsToDatasetDialog
         open={addToDatasetDialogOpen}
         onOpenChange={handleAddToDatasetDialogOpenChange}
         items={itemsForAddToDataset}
         currentDatasetId={datasetId}
       />
-      {/* Bulk Delete Confirmation Dialog */}
       <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
         <AlertDialog.Content>
           <AlertDialog.Header>

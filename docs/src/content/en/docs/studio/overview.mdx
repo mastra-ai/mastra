@@ -1,6 +1,6 @@
 ---
 title: "Studio"
-description: Learn how to use Studio to build, test, and manage your agents, workflows, and tools.
+description: "Use Mastra Studio to build, test, and manage agents, workflows, processors, tools, and MCP servers while inspecting traces and runtime behavior."
 packages:
   - "@mastra/core"
 ---
@@ -28,7 +28,7 @@ Once the server is running, you can:
 - Open the Studio UI at [`localhost:4111`](http://localhost:4111/) to interact with your agents, workflows, and tools.
 - Visit [`localhost:4111/swagger-ui`](http://localhost:4111/swagger-ui) to discover and interact with the underlying REST API.
 
-While Studio is running, you can edit your [agents](/docs/agents/overview), [workflows](/docs/workflows/overview), and other parts of your Mastra application in real time.
+Studio lets you edit your [agents](/docs/agents/overview), [workflows](/docs/workflows/overview), and other parts of your Mastra application in real time.
 
 ## Deploy Studio
 
@@ -46,7 +46,7 @@ You can also attach [scorers](#scorers) to measure and compare response quality 
 
 You can send a follow-up message in the same thread during an agent response stream. Studio shows the message as pending until the stream confirms it, then continues the response below that follow-up. Other Studio tabs that have the same thread open can observe the active stream.
 
-Use [Editor](/docs/editor/overview) to let non-technical team members iterate on agents and version every change, plus run experiments without redeploying.
+Use [Editor](/docs/studio/editor) to let non-technical team members iterate on agents and version every change, plus run experiments without redeploying.
 
 Use [Agent Builder](https://agent-builder.mastra.ai) to create and manage fully stored agents through a separate browser-based interface.
 
@@ -74,7 +74,7 @@ Run tools on their own to observe behavior and test them before assigning them t
 
 Browse the files in your agent's workspace filesystem using a built-in file browser. Switch between workspace mounts, create directories, and view file contents with syntax highlighting. Writable workspaces allow directory creation and file deletion; read-only workspaces are labeled accordingly. The Skills tab lists all discovered skills with their instructions, references, and metadata. Install community skills from [skills.sh](https://skills.sh) or remove existing ones.
 
-See [workspaces](/docs/workspace/sandbox) for configuration details.
+See [workspaces](/docs/sandbox/overview) for configuration details.
 
 ### Request context
 

@@ -4,26 +4,27 @@ export interface PlatformApiClientConfig {
   fetchImpl?: typeof fetch;
 }
 
-const DEFAULT_INTEGRATIONS_URL = 'https://integrations.mastra.ai/v1';
+const DEFAULT_INTEGRATIONS_URL = 'https://integrations.mastra.ai';
 const REGIONAL_INTEGRATIONS_URLS: Record<'us' | 'eu', string> = {
-  us: 'https://integrations.us.mastra.ai/v1',
-  eu: 'https://integrations.eu.mastra.ai/v1',
+  us: 'https://integrations.us.mastra.ai',
+  eu: 'https://integrations.eu.mastra.ai',
 };
 
 export function platformApiClientConfigFromEnv(): PlatformApiClientConfig {
   const integrationsApiUrl = process.env.MASTRA_INTEGRATIONS_API_URL?.trim() || resolveIntegrationsUrl();
-  const accessToken = process.env.MASTRA_PLATFORM_SECRET_KEY?.trim();
+  // MASTRA_PLATFORM_ACCESS_TOKEN is the credential Mastra Platform injects
+  // into deployed projects; MASTRA_PLATFORM_SECRET_KEY is the org secret key
+  // written by project scaffolding. The integrations API accepts both forms.
+  const accessToken =
+    process.env.MASTRA_PLATFORM_ACCESS_TOKEN?.trim() || process.env.MASTRA_PLATFORM_SECRET_KEY?.trim();
   if (!accessToken) {
-    throw new Error('Platform integration: missing required environment variable MASTRA_PLATFORM_SECRET_KEY.');
+    throw new Error(
+      'Platform integration: missing required environment variable MASTRA_PLATFORM_ACCESS_TOKEN (or MASTRA_PLATFORM_SECRET_KEY).',
+    );
   }
   return { baseUrl: normalizeIntegrationsApiUrl(integrationsApiUrl), accessToken };
 }
 
-/**
- * Resolves the integrations API base URL from `MASTRA_PLATFORM_REGION`
- * (case-insensitive `us` or `eu`), falling back to the global default.
- * Unknown region values fall through to the global default.
- */
 function resolveIntegrationsUrl(): string {
   const region = process.env.MASTRA_PLATFORM_REGION?.trim().toLowerCase();
   if (region === 'us' || region === 'eu') return REGIONAL_INTEGRATIONS_URLS[region];
@@ -31,7 +32,7 @@ function resolveIntegrationsUrl(): string {
 }
 
 function normalizeIntegrationsApiUrl(integrationsApiUrl: string): string {
-  return integrationsApiUrl.replace(/\/+$/, '');
+  return integrationsApiUrl.replace(/\/+$/, '').replace(/\/v1$/, '');
 }
 
 export class PlatformApiError extends Error {

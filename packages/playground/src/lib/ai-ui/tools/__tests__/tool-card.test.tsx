@@ -10,6 +10,7 @@ import { ToolCard, ToolCardInner } from '../tool-card';
 import type { ToolCardProps } from '../tool-card';
 import { WorkflowRunContext, WorkflowRunProvider } from '@/domains/workflows';
 import { WORKSPACE_TOOLS } from '@/domains/workspace/constants';
+import { ChatAgentContext, ChatRunningContext } from '@/lib/ai-ui/chat/chat-context';
 import { ToolCallProvider } from '@/services/tool-call-provider';
 import { server } from '@/test/msw-server';
 
@@ -31,19 +32,21 @@ const Providers = ({ children }: { children: ReactNode }) => {
     <MastraReactProvider baseUrl={BASE_URL}>
       <QueryClientProvider client={queryClient}>
         <MemoryRouter>
-          <ToolCallProvider
-            approveToolcall={() => {}}
-            declineToolcall={() => {}}
-            approveToolcallGenerate={() => {}}
-            declineToolcallGenerate={() => {}}
-            approveNetworkToolcall={() => {}}
-            declineNetworkToolcall={() => {}}
-            isRunning={false}
-            toolCallApprovals={{}}
-            networkToolCallApprovals={{}}
-          >
-            {children}
-          </ToolCallProvider>
+          <ChatAgentContext.Provider value={{ agentId: 'test-agent' }}>
+            <ToolCallProvider
+              approveToolcall={() => {}}
+              declineToolcall={() => {}}
+              approveToolcallGenerate={() => {}}
+              declineToolcallGenerate={() => {}}
+              approveNetworkToolcall={() => {}}
+              declineNetworkToolcall={() => {}}
+              isRunning={false}
+              toolCallApprovals={{}}
+              networkToolCallApprovals={{}}
+            >
+              {children}
+            </ToolCallProvider>
+          </ChatAgentContext.Provider>
         </MemoryRouter>
       </QueryClientProvider>
     </MastraReactProvider>
@@ -73,6 +76,80 @@ describe('ToolCard dispatch', () => {
   it('hides updateWorkingMemory tool calls', () => {
     const { container } = renderToolCard(baseProps({ toolName: 'updateWorkingMemory' }));
     expect(container.textContent).toBe('');
+  });
+
+  describe('when the submit_plan tool has completed', () => {
+    it('routes the result to the submitted plan card', () => {
+      renderToolCard(
+        baseProps({
+          toolName: 'submit_plan',
+          output: {
+            content: 'Plan approved.',
+            submittedPlan: {
+              title: 'Ship the feature',
+              path: '.mastracode/plans/ship-feature.md',
+              plan: '## Implementation\n\nBuild and verify the feature.',
+            },
+          },
+        }),
+      );
+
+      expect(screen.getByRole('group', { name: 'Submitted plan' })).toBeTruthy();
+      expect(screen.getByRole('heading', { name: 'Ship the feature' })).toBeTruthy();
+    });
+  });
+
+  describe('when an aliased submit_plan tool has completed', () => {
+    it('routes the intrinsic tool result to the submitted plan card', () => {
+      renderToolCard(
+        baseProps({
+          toolName: 'userDefinedAlias',
+          output: {
+            toolId: 'submit_plan',
+            content: 'Plan approved.',
+            submittedPlan: {
+              title: 'Aliased plan',
+              path: '.mastracode/plans/aliased.md',
+              plan: '## Implementation\n\nRender the aliased plan.',
+            },
+          },
+        }),
+      );
+
+      expect(screen.getByRole('group', { name: 'Submitted plan' })).toBeTruthy();
+      expect(screen.getByRole('heading', { name: 'Aliased plan' })).toBeTruthy();
+    });
+  });
+
+  describe('when an aliased submit_plan tool is suspended', () => {
+    it('routes the intrinsic tool payload to the approval card', async () => {
+      const path = '.mastracode/plans/aliased.md';
+      server.use(
+        http.get(`${BASE_URL}/api/agents/:agentId/plans/file`, ({ request }) => {
+          if (new URL(request.url).searchParams.get('path') !== path) {
+            return HttpResponse.json({ message: 'Plan not found' }, { status: 404 });
+          }
+          return HttpResponse.json({ path, content: '# Aliased plan\n\nRender it.' });
+        }),
+      );
+
+      renderToolCard(
+        baseProps({
+          toolName: 'userDefinedAlias',
+          toolCallId: 'aliased-call',
+          output: undefined,
+          metadata: {
+            mode: 'stream',
+            suspendedTools: {
+              userDefinedAlias: { suspendPayload: { toolId: 'submit_plan', path } },
+            },
+          },
+        }),
+      );
+
+      expect(await screen.findByRole('group', { name: 'Plan approval' })).toBeTruthy();
+      expect(await screen.findByRole('heading', { name: 'Aliased plan' })).toBeTruthy();
+    });
   });
 
   it('renders an observation marker for OM observation tool', () => {
@@ -172,7 +249,7 @@ describe('ToolCard dispatch', () => {
 
   it('renders a generic tool badge as a fallback', () => {
     renderToolCard(baseProps({ toolName: 'searchDocs' }));
-    expect(screen.getByText('searchDocs')).toBeTruthy();
+    expect(screen.getByText('SearchDocs')).toBeTruthy();
   });
 
   it('treats background-task string results as a generic tool badge', () => {
@@ -182,7 +259,30 @@ describe('ToolCard dispatch', () => {
         output: 'Background task started with id abc',
       }),
     );
-    expect(screen.getByText('startJob')).toBeTruthy();
+    expect(screen.getByText('StartJob')).toBeTruthy();
+  });
+
+  it('shimmers an unsettled call while the run is live, and marks a failed one', () => {
+    const running = { isRunning: true, cancelRun: () => {}, canSendWhileStreaming: false };
+    const { rerender } = render(
+      <ChatRunningContext.Provider value={running}>
+        <ToolCard {...baseProps({ toolName: 'searchDocs', state: 'input-available' })} />
+      </ChatRunningContext.Provider>,
+      { wrapper: Providers },
+    );
+    expect(screen.getByTestId('tool-badge').getAttribute('data-status')).toBe('running');
+
+    rerender(
+      <ChatRunningContext.Provider value={running}>
+        <ToolCard {...baseProps({ toolName: 'searchDocs', state: 'output-error' })} />
+      </ChatRunningContext.Provider>,
+    );
+    expect(screen.getByTestId('tool-badge').getAttribute('data-status')).toBe('error');
+  });
+
+  it('keeps an unsettled call from a finished run quiet', () => {
+    renderToolCard(baseProps({ toolName: 'searchDocs', state: 'input-available' }));
+    expect(screen.getByTestId('tool-badge').getAttribute('data-status')).toBe('idle');
   });
 
   it('surfaces the agent suspend payload when suspendedTools is keyed by toolCallId', () => {

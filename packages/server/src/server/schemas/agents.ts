@@ -151,6 +151,15 @@ export const agentVersionQuerySchema = z.object({
     .describe('Specific version ID to resolve. Takes precedence over status when both are provided.'),
 });
 
+export const agentPlanQuerySchema = agentVersionQuerySchema.extend({
+  path: z.string().describe('Relative path to a markdown plan under .mastracode/plans/'),
+});
+
+export const agentPlanResponseSchema = z.object({
+  path: z.string(),
+  content: z.string(),
+});
+
 export const toolIdPathParams = z.object({
   toolId: z.string().describe('Unique identifier for the tool'),
 });

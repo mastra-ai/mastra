@@ -47,5 +47,6 @@ createSandboxTestSuite({
     supportsTimeout: true,
     supportsStreaming: true,
     supportsStdin: true,
+    supportsCloseStdin: true,
   },
 });

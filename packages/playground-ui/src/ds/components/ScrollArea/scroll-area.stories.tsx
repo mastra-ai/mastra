@@ -1,5 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { ScrollArea } from './scroll-area';
+import { Badge } from '@/ds/components/Badge';
 
 const meta: Meta<typeof ScrollArea> = {
   title: 'Layout/ScrollArea',
@@ -74,7 +75,11 @@ export const HorizontalScrollButtons: Story = {
 
 export const Badges: Story = {
   render: () => (
-    <ScrollArea orientation="horizontal" scrollButtons className="border-border1 w-[350px] rounded-md border p-2">
+    <ScrollArea
+      orientation="horizontal"
+      scrollButtons
+      className="border-border1 w-[350px] max-w-[calc(100vw-2rem)] rounded-md border p-2"
+    >
       <div className="flex gap-2 py-1">
         {[
           'React',
@@ -90,9 +95,7 @@ export const Badges: Story = {
           'Next.js',
           'Tailwind',
         ].map(tech => (
-          <span key={tech} className="bg-surface4 text-neutral5 shrink-0 rounded-full px-3 py-1 text-xs">
-            {tech}
-          </span>
+          <Badge key={tech}>{tech}</Badge>
         ))}
       </div>
     </ScrollArea>

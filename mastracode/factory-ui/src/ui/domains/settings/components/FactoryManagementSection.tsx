@@ -4,15 +4,16 @@ import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Trash2 } from 'lucide-react';
 import { useParams } from 'react-router';
 
-import { useFactoryQuery, useRemoveFactoryMutation } from '../../../../hooks/useFactories';
-import { SettingsCard, SettingsRow } from './SettingsCard';
+import { useDeleteFactoryMutation, useFactoryQuery } from '../../../../hooks/useFactories';
+import { SettingsRow } from '@mastra/playground-ui/components/SettingsRow';
+import { SettingsCard } from './SettingsCard';
 import { SettingsSubsection } from './SettingsSubsection';
 
 export function FactoryManagementSection() {
   const { factoryId } = useParams<{ factoryId: string }>();
   const factoryQuery = useFactoryQuery(factoryId);
   const factory = factoryQuery.data;
-  const removeMutation = useRemoveFactoryMutation();
+  const deleteMutation = useDeleteFactoryMutation();
 
   if (!factory) {
     return <Notice variant="info">Select a factory to manage its settings.</Notice>;
@@ -21,38 +22,38 @@ export function FactoryManagementSection() {
   return (
     <SettingsSubsection title="Danger zone">
       <SettingsCard>
-        <SettingsRow label={`Remove ${factory.name}`} hint="Also unlinks its repositories.">
+        <SettingsRow variant="factory" label={`Delete ${factory.name}`} description="Also unlinks its repositories.">
           <AlertDialog>
             <AlertDialog.Trigger asChild>
               <Button
                 size="xs"
                 variant="outline"
                 className="text-notice-destructive border-notice-destructive/25 hover:bg-notice-destructive/10 hover:text-notice-destructive"
-                disabled={removeMutation.isPending}
-                aria-label={`Remove ${factory.name}`}
+                disabled={deleteMutation.isPending}
+                aria-label={`Delete ${factory.name}`}
               >
                 <Trash2 size={14} />
-                Remove
+                Delete
               </Button>
             </AlertDialog.Trigger>
             <AlertDialog.Content>
               <AlertDialog.Header>
-                <AlertDialog.Title>Remove {factory.name}?</AlertDialog.Title>
+                <AlertDialog.Title>Delete {factory.name}?</AlertDialog.Title>
                 <AlertDialog.Description>
                   This deletes the Factory and unlinks its repositories. It cannot be undone.
                 </AlertDialog.Description>
               </AlertDialog.Header>
               <AlertDialog.Footer>
                 <AlertDialog.Cancel>Cancel</AlertDialog.Cancel>
-                <AlertDialog.Action onClick={() => removeMutation.mutate(factory.id)}>Remove</AlertDialog.Action>
+                <AlertDialog.Action onClick={() => deleteMutation.mutate(factory.id)}>Delete</AlertDialog.Action>
               </AlertDialog.Footer>
             </AlertDialog.Content>
           </AlertDialog>
         </SettingsRow>
-        {removeMutation.isError && (
+        {deleteMutation.isError && (
           <div className="p-4">
             <Notice variant="destructive">
-              {removeMutation.error instanceof Error ? removeMutation.error.message : 'Failed to remove factory'}
+              {deleteMutation.error instanceof Error ? deleteMutation.error.message : 'Failed to delete Factory'}
             </Notice>
           </div>
         )}

@@ -45,8 +45,8 @@ afterEach(() => {
 });
 
 describe('PostHogProvider', () => {
-  it('initializes PostHog on the mastra.cloud apex', async () => {
-    setHostname('mastra.cloud');
+  it('initializes PostHog on localhost', async () => {
+    setHostname('localhost');
 
     render(
       <PostHogProvider>
@@ -62,34 +62,8 @@ describe('PostHogProvider', () => {
     expect(posthogMock.register).toHaveBeenCalledWith({ mastraSource: 'playground' });
   });
 
-  it('initializes PostHog on a mastra.cloud subdomain', async () => {
-    setHostname('foo.mastra.cloud');
-
-    render(
-      <PostHogProvider>
-        <div>Playground</div>
-      </PostHogProvider>,
-    );
-
-    await waitFor(() => expect(posthogMock.init).toHaveBeenCalledTimes(1));
-    expect(posthogMock.register).toHaveBeenCalledWith({ mastraSource: 'playground' });
-  });
-
-  it('initializes PostHog on a nested mastra.cloud subdomain', async () => {
-    setHostname('staging.foo.mastra.cloud');
-
-    render(
-      <PostHogProvider>
-        <div>Playground</div>
-      </PostHogProvider>,
-    );
-
-    await waitFor(() => expect(posthogMock.init).toHaveBeenCalledTimes(1));
-    expect(posthogMock.register).toHaveBeenCalledWith({ mastraSource: 'playground' });
-  });
-
-  it('does not initialize PostHog on disallowed hosts', async () => {
-    for (const hostname of ['localhost', 'foo.example.com', 'evil.notmastra.cloud']) {
+  it('initializes PostHog regardless of hostname', async () => {
+    for (const hostname of ['mastra.cloud', 'foo.mastra.cloud', 'foo.example.com', 'self-hosted.internal']) {
       setHostname(hostname);
 
       const { unmount } = render(
@@ -98,16 +72,15 @@ describe('PostHogProvider', () => {
         </PostHogProvider>,
       );
 
-      await waitFor(() => expect(posthogMock.init).not.toHaveBeenCalled());
-      expect(posthogMock.register).not.toHaveBeenCalled();
+      await waitFor(() => expect(posthogMock.init).toHaveBeenCalledTimes(1));
+      expect(posthogMock.register).toHaveBeenCalledWith({ mastraSource: 'playground' });
       unmount();
       posthogMock.init.mockReset();
       posthogMock.register.mockReset();
     }
   });
 
-  it('does not initialize PostHog when telemetry is disabled on an allowed host', async () => {
-    setHostname('foo.mastra.cloud');
+  it('does not initialize PostHog when telemetry is disabled', async () => {
     window.MASTRA_TELEMETRY_DISABLED = 'true';
 
     render(
@@ -120,8 +93,7 @@ describe('PostHogProvider', () => {
     expect(posthogMock.register).not.toHaveBeenCalled();
   });
 
-  it('does not initialize PostHog in Brave on an allowed host', async () => {
-    setHostname('foo.mastra.cloud');
+  it('does not initialize PostHog in Brave', async () => {
     setBrave({});
 
     render(

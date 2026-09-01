@@ -36,6 +36,7 @@ function modelListTests(version: 'v1' | 'v2') {
           expect.fail('Model list should exist');
         }
         expect(modelList.length).toBe(3);
+        expect(modelList.every(model => !Object.hasOwn(model, 'maxRetriesConfigured'))).toBe(true);
         const model0 = modelList[0]?.model as LanguageModelV2;
         expect(model0.modelId).toBe('gpt-4o');
         const model1 = modelList[1]?.model as LanguageModelV2;

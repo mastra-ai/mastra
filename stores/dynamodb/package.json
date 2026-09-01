@@ -1,6 +1,6 @@
 {
   "name": "@mastra/dynamodb",
-  "version": "1.3.0",
+  "version": "1.3.2",
   "description": "DynamoDB storage adapter for Mastra",
   "type": "module",
   "main": "dist/index.js",
@@ -19,8 +19,7 @@
     "./package.json": "./package.json"
   },
   "files": [
-    "dist",
-    "CHANGELOG.md"
+    "dist"
   ],
   "scripts": {
     "build:lib": "tsdown --silent --config tsdown.config.ts",

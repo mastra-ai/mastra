@@ -10,6 +10,14 @@ import type { MastraBrowser } from '@mastra/core/browser';
 import type { LSPConfig } from '@mastra/core/workspace';
 import { AuthStorage } from '../auth/storage.js';
 import { buildCodexStagehandFetch, createCodexMiddleware } from '../providers/openai-codex.js';
+import {
+  isThinkingLevelSetting,
+  resolveDefaultThinkingLevel as resolveThinkingDefault,
+  THINKING_LEVEL_VALUES,
+} from '../thinking.js';
+import type { ThinkingLevelSetting, ThinkingLevelSource } from '../thinking.js';
+export { isThinkingLevelSetting, THINKING_LEVEL_VALUES } from '../thinking.js';
+export type { ThinkingLevelSetting, ThinkingLevelSource } from '../thinking.js';
 import { getAppDataDir } from '../utils/project.js';
 import { DEFAULT_STT_PROVIDER, resolveSTTModel } from '../voice/stt-registry.js';
 
@@ -72,8 +80,8 @@ export const MEMORY_GATEWAY_PROVIDER = MASTRA_GATEWAY_PROVIDER;
 /** @deprecated Renamed to {@link MASTRA_GATEWAY_DEFAULT_URL}. */
 export const MEMORY_GATEWAY_DEFAULT_URL = MASTRA_GATEWAY_DEFAULT_URL;
 
-/** Valid persisted thinking level values. */
-export type ThinkingLevelSetting = 'off' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
+/** Preferred model-independent web search/extract provider. */
+export type WebSearchProviderSetting = 'auto' | 'tavily' | 'parallel';
 
 /** Browser provider type. */
 export type BrowserProvider = 'stagehand' | 'agent-browser';
@@ -219,11 +227,13 @@ export interface GlobalSettings {
      * Active model pack ID. Built-in packs use their id directly ("anthropic",
      * "openai"). Custom packs use "custom:<name>".
      * When set, models are resolved from the pack at startup so pack updates
-     * (e.g. new model versions) apply automatically.
-     * Cleared when the user manually overrides via /models (falls back to modeDefaults).
+     * (e.g. new model versions) apply automatically. Built-in packs may layer
+     * explicit modePackOverrides over these defaults.
      */
     activeModelPackId: string | null;
-    /** Explicit per-mode overrides — used when no activeModelPackId is set. */
+    /** Per-mode overrides keyed by built-in pack ID. */
+    modePackOverrides: Record<string, Record<string, string>>;
+    /** Explicit per-mode defaults — used when no activeModelPackId is set. */
     modeDefaults: Record<string, string>;
     /**
      * Per-mode reasoning-effort defaults (e.g. { build: "high", plan: "xhigh" }).
@@ -289,6 +299,12 @@ export interface GlobalSettings {
     quietMode: boolean;
     /** Maximum quiet-mode detail preview lines for compact tool calls. Set to 0 to hide previews. */
     quietModeMaxToolPreviewLines: number;
+    /**
+     * Default web search/extract provider. `auto` picks the first configured
+     * provider key (Tavily, then Parallel). An explicit provider is only
+     * honored while its API key is configured.
+     */
+    webSearchProvider: WebSearchProviderSetting;
   };
   // Storage backend configuration
   storage: StorageSettings;
@@ -302,8 +318,9 @@ export interface GlobalSettings {
   updateDismissedVersion: string | null;
   // Mastra gateway configuration
   memoryGateway: { baseUrl?: string };
-  // LSP configuration forwarded to the workspace
-  lsp?: LSPConfig;
+  // LSP configuration forwarded to the workspace. Disabled unless the user
+  // opts in with `true` or an LSPConfig object.
+  lsp?: boolean | LSPConfig;
   // Browser automation configuration
   browser: BrowserSettings;
   // Direct TUI `!` shell passthrough configuration
@@ -312,8 +329,17 @@ export interface GlobalSettings {
   voice: VoiceSettings;
   // Signal routing configuration
   signals: SignalSettings;
+  // Read-only discovery of MCP servers configured by other coding agents
+  mcp: McpDiscoverySettings;
   // Cloud observability configuration (per-resource project IDs; tokens stored in auth.json)
   observability: ObservabilitySettings;
+}
+
+export interface McpDiscoverySettings {
+  /** Reuse top-level MCP servers from ~/.claude.json. */
+  claudeCodeGlobal: boolean;
+  /** Reuse MCP servers from $CODEX_HOME/config.toml or ~/.codex/config.toml. */
+  codexGlobal: boolean;
 }
 
 export interface SignalSettings {
@@ -321,6 +347,8 @@ export interface SignalSettings {
   unixSocketPubSub: boolean;
   /** Experimental: enable GitHub PR subscription signals backed by gitcrawl. */
   experimentalGithubSignals: boolean;
+  /** Poll interval for GitHub PR subscriptions. */
+  githubPollIntervalMs: number;
 }
 
 export interface ObservabilityResourceConfig {
@@ -339,6 +367,10 @@ export interface ObservabilitySettings {
 
 /** Auth key prefix for observability tokens stored per-resource in auth.json */
 export const OBSERVABILITY_AUTH_PREFIX = 'observability:';
+
+export const GITHUB_POLL_INTERVAL_DEFAULT_MS = 300_000;
+export const GITHUB_POLL_INTERVAL_MIN_MS = 10_000;
+export const GITHUB_POLL_INTERVAL_MAX_MS = 2_147_483_647;
 
 export const STORAGE_DEFAULTS: StorageSettings = {
   backend: 'libsql',
@@ -362,6 +394,7 @@ const DEFAULTS: GlobalSettings = {
   },
   models: {
     activeModelPackId: null,
+    modePackOverrides: {},
     modeDefaults: {},
     modeThinkingDefaults: {},
     activeOmPackId: null,
@@ -382,6 +415,7 @@ const DEFAULTS: GlobalSettings = {
     thinkingLevel: 'off',
     quietMode: false,
     quietModeMaxToolPreviewLines: 2,
+    webSearchProvider: 'auto',
   },
   storage: { ...STORAGE_DEFAULTS },
   customModelPacks: [],
@@ -389,7 +423,7 @@ const DEFAULTS: GlobalSettings = {
   modelUseCounts: {},
   updateDismissedVersion: null,
   memoryGateway: {},
-  lsp: {},
+  lsp: false,
   browser: {
     enabled: false,
     provider: 'stagehand',
@@ -399,11 +433,16 @@ const DEFAULTS: GlobalSettings = {
   },
   shellPassthrough: { mode: 'default' },
   voice: { enabled: false, engine: defaultVoiceEngine(), provider: DEFAULT_STT_PROVIDER },
-  signals: { unixSocketPubSub: false, experimentalGithubSignals: false },
+  signals: {
+    unixSocketPubSub: false,
+    experimentalGithubSignals: false,
+    githubPollIntervalMs: GITHUB_POLL_INTERVAL_DEFAULT_MS,
+  },
+  mcp: { claudeCodeGlobal: false, codexGlobal: false },
   observability: { resources: {}, localTracing: false },
 };
 
-export const THINKING_LEVEL_VALUES: ThinkingLevelSetting[] = ['off', 'low', 'medium', 'high', 'xhigh', 'max'];
+export const WEB_SEARCH_PROVIDER_VALUES: WebSearchProviderSetting[] = ['auto', 'tavily', 'parallel'];
 const QUIET_MODE_MAX_TOOL_PREVIEW_LINES_MAX = 8;
 const loadedSignalSettings = new WeakMap<GlobalSettings, SignalSettings>();
 
@@ -419,18 +458,19 @@ function rememberLoadedSettings(settings: GlobalSettings): GlobalSettings {
 function signalSettingsEqual(left: SignalSettings, right: SignalSettings): boolean {
   return (
     left.unixSocketPubSub === right.unixSocketPubSub &&
-    left.experimentalGithubSignals === right.experimentalGithubSignals
+    left.experimentalGithubSignals === right.experimentalGithubSignals &&
+    left.githubPollIntervalMs === right.githubPollIntervalMs
   );
 }
 
-function parseThinkingLevel(value: unknown): ThinkingLevelSetting {
-  return typeof value === 'string' && THINKING_LEVEL_VALUES.includes(value as ThinkingLevelSetting)
-    ? (value as ThinkingLevelSetting)
-    : DEFAULTS.preferences.thinkingLevel;
+function parseWebSearchProvider(value: unknown): WebSearchProviderSetting {
+  return typeof value === 'string' && WEB_SEARCH_PROVIDER_VALUES.includes(value as WebSearchProviderSetting)
+    ? (value as WebSearchProviderSetting)
+    : DEFAULTS.preferences.webSearchProvider;
 }
 
-export function isThinkingLevelSetting(value: unknown): value is ThinkingLevelSetting {
-  return typeof value === 'string' && THINKING_LEVEL_VALUES.includes(value as ThinkingLevelSetting);
+function parseThinkingLevel(value: unknown): ThinkingLevelSetting {
+  return isThinkingLevelSetting(value) ? value : DEFAULTS.preferences.thinkingLevel;
 }
 
 function parseModeThinkingDefaults(value: unknown): Record<string, ThinkingLevelSetting> {
@@ -440,6 +480,21 @@ function parseModeThinkingDefaults(value: unknown): Record<string, ThinkingLevel
     if (isThinkingLevelSetting(level)) {
       result[mode] = level;
     }
+  }
+  return result;
+}
+
+function parseModePackOverrides(value: unknown): Record<string, Record<string, string>> {
+  if (!value || typeof value !== 'object') return {};
+  const result: Record<string, Record<string, string>> = {};
+  for (const [packId, overrides] of Object.entries(value as Record<string, unknown>)) {
+    if (!overrides || typeof overrides !== 'object') continue;
+    const parsedOverrides = Object.fromEntries(
+      Object.entries(overrides as Record<string, unknown>).filter(
+        (entry): entry is [string, string] => typeof entry[1] === 'string' && entry[1].length > 0,
+      ),
+    );
+    if (Object.keys(parsedOverrides).length > 0) result[packId] = parsedOverrides;
   }
   return result;
 }
@@ -458,7 +513,15 @@ function parsePreferences(rawPreferences: unknown): GlobalSettings['preferences'
     ...raw,
     thinkingLevel: parseThinkingLevel(raw.thinkingLevel),
     quietModeMaxToolPreviewLines: parseQuietModeMaxToolPreviewLines(raw.quietModeMaxToolPreviewLines),
+    webSearchProvider: parseWebSearchProvider(raw.webSearchProvider),
   };
+}
+
+function parseGithubPollIntervalMs(value: unknown): number {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return DEFAULTS.signals.githubPollIntervalMs;
+  const intervalMs = Math.floor(value);
+  if (intervalMs < GITHUB_POLL_INTERVAL_MIN_MS) return DEFAULTS.signals.githubPollIntervalMs;
+  return Math.min(intervalMs, GITHUB_POLL_INTERVAL_MAX_MS);
 }
 
 function parseSignalSettings(rawSignals: unknown): SignalSettings {
@@ -470,6 +533,15 @@ function parseSignalSettings(rawSignals: unknown): SignalSettings {
       typeof raw.experimentalGithubSignals === 'boolean'
         ? raw.experimentalGithubSignals
         : DEFAULTS.signals.experimentalGithubSignals,
+    githubPollIntervalMs: parseGithubPollIntervalMs(raw.githubPollIntervalMs),
+  };
+}
+
+function parseMcpDiscoverySettings(rawMcp: unknown): McpDiscoverySettings {
+  const raw = rawMcp && typeof rawMcp === 'object' ? (rawMcp as Record<string, unknown>) : {};
+  return {
+    claudeCodeGlobal: typeof raw.claudeCodeGlobal === 'boolean' ? raw.claudeCodeGlobal : DEFAULTS.mcp.claudeCodeGlobal,
+    codexGlobal: typeof raw.codexGlobal === 'boolean' ? raw.codexGlobal : DEFAULTS.mcp.codexGlobal,
   };
 }
 
@@ -624,6 +696,26 @@ function parseStoredViewport(raw: unknown): BrowserViewport {
 }
 
 /**
+ * Validate the `lsp` setting from JSON. Accepts both the boolean opt-in/opt-out
+ * form and the full LSPConfig object; anything else is treated as unset.
+ */
+function parseLspSettings(raw: unknown): boolean | LSPConfig | undefined {
+  if (typeof raw === 'boolean') return raw;
+  if (raw && typeof raw === 'object') return raw as LSPConfig;
+  return undefined;
+}
+
+/**
+ * Resolve the effective LSP config. LSP is opt-in: `false` and an absent
+ * setting both mean disabled, `true` means enabled with defaults.
+ */
+export function resolveLspSetting(lsp: boolean | LSPConfig | undefined): LSPConfig | false {
+  if (lsp === true) return {};
+  if (!lsp) return false;
+  return lsp;
+}
+
+/**
  * Deep-merge and validate browser settings from JSON.
  * Explicitly validates types to handle malformed settings.json gracefully.
  */
@@ -756,7 +848,12 @@ function migrateFromAuth(settingsPath: string): boolean {
       const raw = JSON.parse(readFileSync(settingsPath, 'utf-8'));
       settings = {
         onboarding: { ...DEFAULTS.onboarding, ...raw.onboarding },
-        models: { ...DEFAULTS.models, ...raw.models },
+        models: {
+          ...DEFAULTS.models,
+          ...raw.models,
+          modePackOverrides: parseModePackOverrides(raw.models?.modePackOverrides),
+          modeThinkingDefaults: parseModeThinkingDefaults(raw.models?.modeThinkingDefaults),
+        },
         preferences: parsePreferences(raw.preferences),
         storage: {
           ...STORAGE_DEFAULTS,
@@ -769,11 +866,12 @@ function migrateFromAuth(settingsPath: string): boolean {
         modelUseCounts: raw.modelUseCounts && typeof raw.modelUseCounts === 'object' ? raw.modelUseCounts : {},
         updateDismissedVersion: typeof raw.updateDismissedVersion === 'string' ? raw.updateDismissedVersion : null,
         memoryGateway: raw.memoryGateway && typeof raw.memoryGateway === 'object' ? raw.memoryGateway : {},
-        lsp: raw.lsp && typeof raw.lsp === 'object' ? (raw.lsp as LSPConfig) : undefined,
+        lsp: parseLspSettings(raw.lsp),
         browser: parseBrowserSettings(raw.browser),
         shellPassthrough: parseShellPassthroughSettings(raw.shellPassthrough),
         voice: parseVoiceSettings(raw.voice),
         signals: parseSignalSettings(raw.signals),
+        mcp: parseMcpDiscoverySettings(raw.mcp),
         observability: parseObservabilitySettings(raw.observability),
       };
       applyQuietModePreferenceRollout(settings, raw.onboarding);
@@ -882,6 +980,7 @@ export function loadSettings(filePath: string = getSettingsPath()): GlobalSettin
       models: {
         ...DEFAULTS.models,
         ...raw.models,
+        modePackOverrides: parseModePackOverrides(raw.models?.modePackOverrides),
         modeThinkingDefaults: parseModeThinkingDefaults(raw.models?.modeThinkingDefaults),
       },
       preferences: parsePreferences(raw.preferences),
@@ -896,11 +995,12 @@ export function loadSettings(filePath: string = getSettingsPath()): GlobalSettin
       modelUseCounts: raw.modelUseCounts && typeof raw.modelUseCounts === 'object' ? raw.modelUseCounts : {},
       updateDismissedVersion: typeof raw.updateDismissedVersion === 'string' ? raw.updateDismissedVersion : null,
       memoryGateway: raw.memoryGateway && typeof raw.memoryGateway === 'object' ? raw.memoryGateway : {},
-      lsp: raw.lsp && typeof raw.lsp === 'object' ? (raw.lsp as LSPConfig) : undefined,
+      lsp: parseLspSettings(raw.lsp),
       browser: parseBrowserSettings(raw.browser),
       shellPassthrough: parseShellPassthroughSettings(raw.shellPassthrough),
       voice: parseVoiceSettings(raw.voice),
       signals: parseSignalSettings(raw.signals),
+      mcp: parseMcpDiscoverySettings(raw.mcp),
       observability: parseObservabilitySettings(raw.observability),
     };
 
@@ -1012,6 +1112,14 @@ export function resolveThreadActiveModelPackId(
  * @param builtinPacks  Built-in packs for the current provider access
  *                      (from `getAvailableModePacks`). Pass `[]` if unavailable.
  */
+export function resolveModePackModels(
+  settings: GlobalSettings,
+  pack: { id: string; models: Record<string, string> },
+): Record<string, string> {
+  if (pack.id.startsWith('custom:') || pack.id === 'custom') return pack.models;
+  return { ...pack.models, ...settings.models.modePackOverrides?.[pack.id] };
+}
+
 export function resolveModelDefaults(
   settings: GlobalSettings,
   builtinPacks: Array<{ id: string; models: Record<string, string> }>,
@@ -1030,14 +1138,11 @@ export function resolveModelDefaults(
 
   // Built-in pack
   const builtin = builtinPacks.find(p => p.id === activeModelPackId);
-  if (builtin) return builtin.models;
+  if (builtin) return resolveModePackModels(settings, builtin);
 
   // Unknown pack id — fall through
   return modeDefaults;
 }
-
-/** Where a resolved default thinking level came from. */
-export type ThinkingLevelSource = 'mode-default' | 'global';
 
 /**
  * Resolve the default reasoning-effort level for a mode.
@@ -1053,9 +1158,13 @@ export function resolveDefaultThinkingLevel(
   settings: GlobalSettings,
   mode?: string | null,
 ): { level: ThinkingLevelSetting; source: ThinkingLevelSource } {
-  const modeLevel = mode ? settings.models.modeThinkingDefaults[mode] : undefined;
-  if (modeLevel) return { level: modeLevel, source: 'mode-default' };
-  return { level: settings.preferences.thinkingLevel, source: 'global' };
+  return resolveThinkingDefault(
+    {
+      globalDefault: settings.preferences.thinkingLevel,
+      modeDefaults: settings.models.modeThinkingDefaults,
+    },
+    mode,
+  );
 }
 
 /**

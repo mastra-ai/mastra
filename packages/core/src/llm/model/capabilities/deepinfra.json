@@ -4,6 +4,7 @@
     "ByteDance/Seed-2.0-mini",
     "ByteDance/Seed-2.0-pro",
     "MiniMaxAI/MiniMax-M3",
+    "Qwen/Qwen3-VL-235B-A22B-Instruct",
     "Qwen/Qwen3.5-122B-A10B",
     "Qwen/Qwen3.5-27B",
     "Qwen/Qwen3.5-35B-A3B",
@@ -11,6 +12,7 @@
     "Qwen/Qwen3.5-9B",
     "Qwen/Qwen3.6-27B",
     "Qwen/Qwen3.6-35B-A3B",
+    "Qwen/Qwen3.8-27B",
     "Qwen/Qwen3.8-Max",
     "XiaomiMiMo/MiMo-V2.5",
     "XiaomiMiMo/MiMo-V2.5-Pro",
@@ -26,7 +28,8 @@
     "nvidia/Nemotron-3-Nano-Omni-30B-A3B-Reasoning",
     "stepfun-ai/Step-3.7-Flash",
     "thinkingmachines/Inkling",
-    "thinkingmachines/Inkling-Small"
+    "thinkingmachines/Inkling-Small",
+    "zai-org/GLM-5.3-Flash"
   ],
   "temperature": [
     "ByteDance/Seed-2.0-code",
@@ -41,6 +44,7 @@
     "Qwen/Qwen3-Coder-480B-A35B-Instruct-Turbo",
     "Qwen/Qwen3-Max",
     "Qwen/Qwen3-Next-80B-A3B-Instruct",
+    "Qwen/Qwen3-VL-235B-A22B-Instruct",
     "Qwen/Qwen3.5-122B-A10B",
     "Qwen/Qwen3.5-27B",
     "Qwen/Qwen3.5-35B-A3B",
@@ -49,6 +53,8 @@
     "Qwen/Qwen3.6-27B",
     "Qwen/Qwen3.6-35B-A3B",
     "Qwen/Qwen3.7-Max",
+    "Qwen/Qwen3.8-2.4T-A95B",
+    "Qwen/Qwen3.8-27B",
     "Qwen/Qwen3.8-Max",
     "XiaomiMiMo/MiMo-V2.5",
     "XiaomiMiMo/MiMo-V2.5-Pro",
@@ -80,7 +86,9 @@
     "zai-org/GLM-4.7-Flash",
     "zai-org/GLM-5",
     "zai-org/GLM-5.1",
-    "zai-org/GLM-5.2"
+    "zai-org/GLM-5.2",
+    "zai-org/GLM-5.3",
+    "zai-org/GLM-5.3-Flash"
   ],
   "structuredOutput": [
     "ByteDance/Seed-2.0-code",
@@ -93,6 +101,7 @@
     "Qwen/Qwen3-Coder-480B-A35B-Instruct-Turbo",
     "Qwen/Qwen3-Max",
     "Qwen/Qwen3-Next-80B-A3B-Instruct",
+    "Qwen/Qwen3-VL-235B-A22B-Instruct",
     "Qwen/Qwen3.5-122B-A10B",
     "Qwen/Qwen3.5-27B",
     "Qwen/Qwen3.5-35B-A3B",
@@ -101,6 +110,8 @@
     "Qwen/Qwen3.6-27B",
     "Qwen/Qwen3.6-35B-A3B",
     "Qwen/Qwen3.7-Max",
+    "Qwen/Qwen3.8-2.4T-A95B",
+    "Qwen/Qwen3.8-27B",
     "Qwen/Qwen3.8-Max",
     "XiaomiMiMo/MiMo-V2.5",
     "XiaomiMiMo/MiMo-V2.5-Pro",
@@ -134,6 +145,8 @@
     "zai-org/GLM-4.7-Flash",
     "zai-org/GLM-5",
     "zai-org/GLM-5.1",
-    "zai-org/GLM-5.2"
+    "zai-org/GLM-5.2",
+    "zai-org/GLM-5.3",
+    "zai-org/GLM-5.3-Flash"
   ]
 }

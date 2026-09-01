@@ -999,6 +999,7 @@ export class LinearIntegration implements FactoryIntegration {
       stateSigner: ctx.stateSigner,
       baseUrl: ctx.baseUrl,
       intake: ctx.storage.intake,
+      projects: ctx.storage.projects,
       ingestFactoryIssues: attachLinearRules(ctx),
     });
   }

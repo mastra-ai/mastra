@@ -1,6 +1,6 @@
 ---
 title: "Reference: Mastra class | Core"
-description: "Documentation for the `Mastra` class in Mastra, the core entry point for managing agents, workflows, MCP servers, and server endpoints."
+description: "The Mastra class is the central orchestrator in any Mastra application, managing agents, workflows, storage, logging, observability, and more."
 packages:
   - "@mastra/core"
   - "@mastra/libsql"
@@ -96,6 +96,14 @@ Visit the [Configuration reference](/reference/configuration) for detailed docum
     defaultValue: 'Console logger with INFO level',
   },
   {
+    name: 'loggerOptions',
+    type: '{ correlation?: boolean; export?: boolean }',
+    description:
+      'Controls logger observability behavior. `correlation` injects trace_id/span_id into native log output during traced operations; `export` forwards log records to observability storage.',
+    isOptional: true,
+    defaultValue: '{ correlation: true, export: true }',
+  },
+  {
     name: 'idGenerator',
     type: '(context?: IdGeneratorContext) => string',
     description:
@@ -127,7 +135,7 @@ Visit the [Configuration reference](/reference/configuration) for detailed docum
     type: 'string',
     isOptional: true,
     description:
-      'Deployment environment name (e.g. `production`, `staging`, `development`). When set, automatically attached to all observability signals so they can be filtered by environment without passing `tracingOptions.metadata.environment` on each call. Falls back to `process.env.NODE_ENV` when unset; left undefined if neither is set. Per-call `tracingOptions.metadata.environment` always takes precedence.',
+      'Deployment environment name (e.g. `production`, `staging`, `development`). When set, automatically attached to all observability signals so they can be filtered by environment without passing `tracingOptions.metadata.environment` on each call. When unset, resolves to `development` for `mastra dev` runs, then falls back to `process.env.NODE_ENV`; left undefined if none are set. Per-call `tracingOptions.metadata.environment` always takes precedence.',
   },
   {
     name: 'deployer',
@@ -160,7 +168,8 @@ Visit the [Configuration reference](/reference/configuration) for detailed docum
   {
     name: 'scorers',
     type: 'Record<string, Scorer>',
-    description: 'Scorers for evaluating agent responses and workflow outputs',
+    description:
+      'Scorers for evaluating agent responses and workflow outputs. Registration also makes a scorer resolvable by ID, which is required to persist its scores. See [Score persistence](/docs/evals/overview#score-persistence)',
     isOptional: true,
     defaultValue: '{}',
   },
@@ -239,7 +248,7 @@ Visit the [Configuration reference](/reference/configuration) for detailed docum
     name: 'versions',
     type: 'VersionOverrides',
     description:
-      'Global version overrides for sub-agent delegation. When a supervisor agent delegates to a sub-agent, these overrides determine which stored version of that sub-agent to use instead of the code-defined default. Requires the editor package to be configured. See [Editor versioning](/docs/editor/overview#versioning) for details.',
+      'Global version overrides for sub-agent delegation. When a supervisor agent delegates to a sub-agent, these overrides determine which stored version of that sub-agent to use instead of the code-defined default. Requires the editor package to be configured. See [Editor versioning](/docs/studio/editor#versioning) for details.',
     isOptional: true,
     properties: [
       {
@@ -290,7 +299,7 @@ Visit the [Configuration reference](/reference/configuration) for detailed docum
     name: 'backgroundTasks',
     type: 'BackgroundTaskManagerConfig',
     description:
-      'Configure [background task](/docs/long-running-agents/background-tasks) execution for agents. See [background tasks configuration reference](/reference/configuration#backgroundtasks) for all options.',
+      'Configure [background task](/docs/harness/background-tasks) execution for agents. See [background tasks configuration reference](/reference/configuration#backgroundtasks) for all options.',
     isOptional: true,
     properties: [
       {
@@ -365,7 +374,7 @@ Visit the [Configuration reference](/reference/configuration) for detailed docum
     name: 'recovery',
     type: 'MastraRecoveryConfig',
     description:
-      'Boot-time recovery behavior for orphaned agent and workflow runs. See [Crash recovery](/docs/long-running-agents/durable-agents#crash-recovery).',
+      'Boot-time recovery behavior for orphaned agent and workflow runs. See [Crash recovery](/docs/harness/durable-agents#crash-recovery).',
     isOptional: true,
     defaultValue: "{ durableAgents: 'off' }",
     properties: [
@@ -378,7 +387,7 @@ Visit the [Configuration reference](/reference/configuration) for detailed docum
             isOptional: true,
             defaultValue: "'off'",
             description:
-              "Set to `'auto'` to automatically re-drive orphaned RUNNING durable agent runs on server boot. Recovery re-issues LLM calls and re-executes tool calls, so tools must be idempotent. See [Crash recovery](/docs/long-running-agents/durable-agents#crash-recovery).",
+              "Set to `'auto'` to automatically re-drive orphaned RUNNING durable agent runs on server boot. Recovery re-issues LLM calls and re-executes tool calls, so tools must be idempotent. See [Crash recovery](/docs/harness/durable-agents#crash-recovery).",
           },
         ],
       },

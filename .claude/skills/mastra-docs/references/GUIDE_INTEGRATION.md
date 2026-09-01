@@ -1,202 +1,196 @@
-# Integration guide styleguide
+# Integrations page styleguide
 
-Read STYLEGUIDE.md first.
+Use this file for every page under `docs/src/content/en/integrations`. These pages explain how Mastra works with an external product, provider, library, framework, ecosystem, or deployment target.
 
-Use this file for integration guides.
+## Goal
 
-Goal:
+- Explain the Mastra-specific integration path.
+- Take readers from the required starting point to a working result when setup is involved.
+- Cover the provider-specific setup and behavior needed for that path.
 
-- document how to use Mastra with one external library or ecosystem
-- organize by feature area, not by step order
-- make each section self-contained so the reader can jump to it
+## Titles and navigation
 
-Use this shape:
+The common frontmatter pattern is `$PRODUCT | $SIDEBAR_CATEGORY`. Use the product or integration name as the H1.
 
-````mdx
+```mdx
 ---
-title: 'Using $LIBRARY | $CATEGORY'
-description: 'Learn how Mastra integrates with $LIBRARY and how to use it in your project'
+title: '$PRODUCT | $CATEGORY'
+description: 'Use $PRODUCT with Mastra to $OUTCOME.'
 ---
 
-import Tabs from '@theme/Tabs';
-import TabItem from '@theme/TabItem';
-
-# Using $LIBRARY
-
-One or two sentences on what the library is and what the guide covers. Link to the official docs.
-
-:::note
-Link to migration guides or version notes when needed.
-:::
-
-:::tip
-Link to live examples or related quickstarts.
-:::
-
-## Getting started
-
-Briefly explain what the integration package provides and which features it enables. List the key hooks, functions, or APIs it connects to, with links to official docs.
-
-Install the required packages:
-
-```bash npm2yarn
-npm install @mastra/package@latest other-package
+# $PRODUCT
 ```
 
-One sentence confirming the reader is ready to continue.
+Follow the established pattern in the relevant integration category. Do not add `Using`, `Deploy Mastra to`, or another fixed prefix solely to satisfy a template.
 
-## $FEATURE_AREA_1
+Update `docs/src/content/en/integrations/sidebars.js` when adding or renaming an integration.
 
-Brief explanation of the feature area. Add a short list linking to the approaches below.
+## Choose the page structure
 
-- [$APPROACH_A](#approach-a)
-- [$APPROACH_B](#approach-b)
+Integration pages do not share one mandatory section order. Use a feature-oriented structure for independent capabilities and the task sequence in `STYLEGUIDE.md` when actions depend on earlier setup.
 
-### $APPROACH_A
+Integration tasks commonly add external-service setup, Mastra registration, production constraints, and verification in the destination product. Use only the sections the page needs.
 
-Context sentence.
+## Integration categories
 
-<Tabs>
-  <TabItem value="option-1" label="Option 1">
+### Frameworks
 
-Brief explanation of this option.
+Usually cover:
 
-```typescript title="src/path/to/file.ts"
-// Complete code for option 1
+- creating or opening the framework project;
+- initializing Mastra;
+- connecting routes, server code, or UI code;
+- running and verifying the project;
+- framework-specific deployment or runtime constraints.
+
+### Channels
+
+Usually cover:
+
+- service and credential prerequisites;
+- provider registration;
+- transport, webhook, or polling setup;
+- storage or memory requirements;
+- message handling and platform limitations;
+- a concrete way to send or receive a test message.
+
+### Databases and storage providers
+
+Usually cover:
+
+- the Mastra interfaces the provider implements;
+- package installation and client initialization;
+- registration with Mastra;
+- connection, schema, or index requirements;
+- persistence and deployment constraints;
+- provider-specific configuration that affects behavior.
+
+### Observability integrations
+
+Usually cover:
+
+- exporter or bridge selection;
+- credentials and environment variables;
+- registration with observability;
+- supported signals;
+- buffering, flushing, quotas, or serverless behavior;
+- verification in the destination product.
+
+### Authentication providers
+
+Usually cover:
+
+- provider-side application setup;
+- callback URLs and credentials;
+- Mastra provider registration;
+- Studio and API route behavior;
+- session, token, or authorization constraints;
+- a protected-route verification step.
+
+### Browser, sandbox, and tool providers
+
+Usually cover:
+
+- credentials and package setup;
+- agent, workspace, or Mastra registration;
+- lifecycle and cleanup;
+- filesystem, process, session, or remote-runtime boundaries;
+- tool availability and exclusions;
+- a minimal invocation.
+
+## Deployment integrations
+
+Use the following guidance for pages under `/integrations/deploy`.
+
+A deployment page should:
+
+- move a working Mastra application onto one supported target;
+- explain the deployment path that applies to that target;
+- cover runtime, persistence, networking, security, and observability constraints that affect the result.
+
+The common title pattern is `$PLATFORM | Deploy`. The H1 may be the platform name, `$PLATFORM Deployer`, or the specific deployment product.
+
+```mdx
+---
+title: '$PLATFORM | Deploy'
+description: 'Deploy a Mastra application to $PLATFORM.'
+---
+
+# $PLATFORM
 ```
 
-  </TabItem>
-  <TabItem value="option-2" label="Option 2">
+Open with what gets deployed and how the platform runs it. Add a scope note when the page covers only one path, such as the Mastra server rather than a framework adapter.
 
-Brief explanation of this option.
+### Mastra deployer package
 
-```typescript title="src/path/to/file.ts"
-// Complete code for option 2
-```
+When Mastra provides an `@mastra/deployer-*` package, cover:
 
-  </TabItem>
-</Tabs>
+- package installation;
+- registration in the Mastra configuration;
+- generated output or build behavior;
+- platform connection and deployment;
+- optional deployer overrides;
+- the matching deployer reference page.
 
-### $APPROACH_B
+### Framework or server deployment
 
-Context sentence.
+When readers deploy through a framework adapter or existing server, cover:
 
-<Tabs>
-  <TabItem value="option-1" label="Option 1">
+- supported build and start commands;
+- server adapter or framework requirements;
+- route prefixes and public endpoints;
+- environment variables;
+- platform configuration files;
+- process and filesystem assumptions.
 
-Code and explanation for option 1.
+Do not invent a Mastra deployer setup when none exists.
 
-  </TabItem>
-  <TabItem value="option-2" label="Option 2">
+### Container or infrastructure deployment
 
-Code and explanation for option 2.
+For virtual machines, containers, Kubernetes, or similar infrastructure, cover:
 
-  </TabItem>
-</Tabs>
+- the build artifact;
+- container command and exposed port;
+- health checks;
+- persistent storage and external services;
+- ingress and authentication;
+- scaling and process-role constraints;
+- graceful shutdown or recovery behavior when relevant.
 
-### $FRONTEND_HOOK
+### Workflow runner integration
 
-After the backend setup, show how to connect the frontend. Include a complete code example and highlight the key line.
+When an external platform executes Mastra workflows, cover:
 
-```typescript {3}
-// Frontend code connecting to the backend
-```
+- how Mastra workflow and step semantics map to the runner;
+- required packages and service setup;
+- registration and serving endpoints;
+- event keys, signing keys, or development-mode controls;
+- retries, memoization, suspension, and observability behavior;
+- local and production execution.
 
-## $FEATURE_AREA_2
+### Platform constraints
 
-Brief explanation of this feature area and when to use it.
+Address constraints that change how Mastra behaves:
 
-### $CONCEPT_REFERENCE
+- ephemeral filesystems;
+- cold starts and execution duration;
+- serverless process termination;
+- public and private networking;
+- required ports and route prefixes;
+- hosted storage requirements;
+- worker roles and scaling limits;
+- environment variable injection;
+- observability flushing;
+- browser or sandbox runtime support.
 
-Use a table or list for types, events, or data structures the reader needs to look up.
+State the consequence and required action. Link to an alternative deployment pattern when the platform cannot support a feature.
 
-| Type     | Source      | Description        |
-| -------- | ----------- | ------------------ |
-| `type-a` | Component A | What it represents |
-| `type-b` | Component B | What it represents |
+### Deployment security and verification
 
-### $PATTERN_1
+- Require authentication before exposing Mastra endpoints or Studio publicly.
+- Document secret and token requirements without showing real credentials.
+- Put disabled signature verification, public callbacks, or broad Studio access in warnings.
+- Verify the deployment through an endpoint, Studio route, workflow run, health check, log, or platform dashboard.
+- State the expected result.
 
-Context for the pattern.
-
-<Tabs>
-  <TabItem value="backend" label="Backend">
-
-```typescript title="src/path/to/backend.ts"
-// Backend code
-```
-
-  </TabItem>
-  <TabItem value="frontend" label="Frontend">
-
-```typescript title="src/components/component.tsx"
-// Frontend code
-```
-
-  </TabItem>
-</Tabs>
-
-:::tip
-Explain naming conventions, key points, or common gotchas.
-:::
-
-### $PATTERN_2
-
-Same structure as above.
-
-For more details, see [Related doc](/docs/category/page).
-
-## Recipes
-
-### $RECIPE_1
-
-Brief description. Link to reference docs or utilities.
-
-### $RECIPE_2
-
-Context sentence.
-
-<Tabs>
-  <TabItem value="backend" label="Backend">
-
-```typescript title="src/path/to/file.ts"
-// Backend code
-```
-
-  </TabItem>
-  <TabItem value="frontend" label="Frontend">
-
-```typescript title="src/components/component.tsx"
-// Frontend code
-```
-
-  </TabItem>
-</Tabs>
-
-Key points:
-
-- Point 1
-- Point 2
-
-For a complete implementation, see the [example-name example](https://link-to-example).
-````
-
-Rules:
-
-- frontmatter title must be `Using $LIBRARY | $CATEGORY`
-- H1 must be `Using $LIBRARY`
-- after the intro, use `note` for migration or version notes and `tip` for live examples or related quickstarts when needed
-- Getting started must install the integration package, explain what it provides, and list the main APIs it connects to
-- keep Getting started short; this is not a tutorial
-- H2 sections must be feature areas, not sequential steps
-- each H3 must be a self-contained approach or pattern
-- when a pattern has both server and client code, use `Tabs` with `Backend` and `Frontend`
-- when there are multiple backend approaches, use `Tabs` with clear labels like `Mastra Server` or `Next.js`
-- show complete working code in tabs
-- use tables for types, events, and data structures in the relevant feature area
-- put standalone patterns at the end under `Recipes`
-- each recipe should include brief context, code, key points, and a link to a complete implementation when applicable
-- after complex examples, add a `Key points:` list with one-sentence bullets
-- link to live example repositories instead of duplicating entire apps
-- do not add `Next steps` or `Related`
-- use `npm2yarn` on install commands
+Verification may be the final task step or its own section.

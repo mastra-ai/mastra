@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import * as p from '@clack/prompts';
 import type { Command } from 'commander';
 import { getToken } from '../auth/credentials.js';
@@ -35,7 +36,7 @@ export function registerEnvDbCommands(envCommand: Command) {
       '[environment]',
       "Environment name, slug, or ID (default: the project's only environment, or prompt if there are several)",
     )
-    .requiredOption('--kind <kind>', 'Database provider (turso, neon)')
+    .requiredOption('--kind <kind>', 'Database provider (turso, neon, redis)')
     .option(...PROJECT_OPTION)
     .option('--name <name>', 'Database name (default: derived from the project slug)')
     .option('--region <region>', 'Provider region ID (shared databases only; environment region wins otherwise)')
@@ -84,13 +85,18 @@ export function formatScope(db: Pick<ProjectDatabase, 'environmentId'>, environm
  * Turso names become DNS labels, so: lowercase letters, digits, hyphens,
  * no leading/trailing hyphen, max 64 chars.
  *
+ * The tail is a per-provider suffix matching the dashboard's suggested
+ * names (`suggestDatabaseName` in the platform frontend): `-turso`, `-pg`
+ * for Neon, `-redis`, `-mongo` — so a CLI-provisioned database looks the
+ * same as one created via the UI.
+ *
  * When `environment` is provided and its type is not `production`, the name
- * includes an env-derived suffix (e.g. `my-app-eu-db`). Two env-scoped
- * databases in the same project must have different names — the platform
- * rejects duplicates — so the suffix is essential for auto-provisioning
- * across environments. The `production` env is treated as the canonical
- * default and stays unsuffixed so existing single-env projects keep the
- * clean `<project>-db` name.
+ * includes an env-derived discriminator (e.g. `my-app-eu-redis`). Two
+ * env-scoped databases in the same project must have different names — the
+ * platform rejects duplicates — so the discriminator is essential for
+ * auto-provisioning across environments. The `production` env is treated
+ * as the canonical default and stays unsuffixed so existing single-env
+ * projects keep the clean `<project>-redis` name.
  *
  * We identify production by `environment.type`, not by name/slug matching,
  * because users are free to rename their production env to `main`, `live`,
@@ -102,44 +108,59 @@ export function formatScope(db: Pick<ProjectDatabase, 'environmentId'>, environm
  * prevent.
  */
 const MAX_DB_NAME_LEN = 64;
-const DB_NAME_TAIL = '-db';
+
+/**
+ * Short provider suffix used in default names, e.g. `my-app-pg`. Must stay
+ * in sync with `PROVIDER_NAME_SUFFIX` in the platform frontend's
+ * `suggest-database-name.ts` so CLI and dashboard defaults match.
+ */
+const KIND_NAME_SUFFIX: Record<DatabaseKind, string> = {
+  turso: 'turso',
+  neon: 'pg',
+  redis: 'redis',
+  mongodb: 'mongo',
+};
 
 export function defaultDatabaseName(
+  kind: DatabaseKind,
   project: Pick<Project, 'name' | 'slug'>,
   environment?: Pick<Environment, 'name' | 'slug' | 'type'> | null,
 ): string {
+  const tail = `-${KIND_NAME_SUFFIX[kind] ?? kind}`;
   const projectPart = sanitizeSegment(project.slug || project.name) || 'mastra';
 
   const shouldSuffix = Boolean(environment) && environment!.type !== 'production';
   // Prefer the env name over the slug: platforms sometimes derive the
   // production env's slug from the project name (e.g. `smoke-envdbux-1784317673`),
-  // which would produce ugly `<project>-<project>-db` duplication.
+  // which would produce ugly `<project>-<project>-redis` duplication.
   const envPart = shouldSuffix ? sanitizeSegment(environment!.name || environment!.slug || '') : '';
 
   if (!envPart) {
-    return truncateToMax(projectPart) + DB_NAME_TAIL;
+    return truncateToMax(projectPart, MAX_DB_NAME_LEN - tail.length) + tail;
   }
 
-  // Reserve room for `-<envPart>-db` and truncate the project segment first
-  // so the discriminator survives. `slice(0, 64)` on the full string would
-  // eat the tail — losing the very thing that keeps names distinct across
-  // environments (issue: same project, different envs → identical truncated
-  // name → duplicate rejected by the platform).
+  // Reserve room for `-<envPart><tail>` and truncate the project segment
+  // first so the discriminator survives. `slice(0, 64)` on the full string
+  // would eat the tail — losing the very thing that keeps names distinct
+  // across environments (issue: same project, different envs → identical
+  // truncated name → duplicate rejected by the platform).
   const separatorLen = 1; // '-' between project and env
-  const overhead = separatorLen + envPart.length + DB_NAME_TAIL.length;
+  const overhead = separatorLen + envPart.length + tail.length;
   let projectRoom = MAX_DB_NAME_LEN - overhead;
   let envSegment = envPart;
   if (projectRoom < 1) {
     // Extreme case: env name alone eats the whole budget. Give the project
     // segment 1 char (always keep some project context) and clamp the env
-    // to what remains — but keep at least 1 char of env so the discriminator
-    // survives.
+    // to what remains. Truncating the env would let two long env names with
+    // the same prefix collide, so replace the cut portion with a short hash
+    // of the full env part to keep the discriminator unique.
     projectRoom = 1;
-    const envRoom = MAX_DB_NAME_LEN - projectRoom - separatorLen - DB_NAME_TAIL.length;
-    envSegment = envPart.slice(0, Math.max(1, envRoom));
+    const hash = createHash('sha256').update(envPart).digest('hex').slice(0, 6);
+    const envRoom = MAX_DB_NAME_LEN - projectRoom - separatorLen - tail.length - hash.length - 1;
+    envSegment = `${truncateToMax(envPart, Math.max(1, envRoom))}-${hash}`;
   }
   const projectSegment = truncateToMax(projectPart, projectRoom) || projectPart.slice(0, 1);
-  return `${projectSegment}-${envSegment}${DB_NAME_TAIL}`;
+  return `${projectSegment}-${envSegment}${tail}`;
 }
 
 /**
@@ -147,7 +168,7 @@ export function defaultDatabaseName(
  * trailing hyphens produced by the cut so the result is still a valid DNS
  * label fragment.
  */
-function truncateToMax(segment: string, max: number = MAX_DB_NAME_LEN - DB_NAME_TAIL.length): string {
+function truncateToMax(segment: string, max: number): string {
   if (max < 1) return '';
   return segment.slice(0, max).replace(/-+$/g, '');
 }
@@ -259,8 +280,8 @@ async function listDatabasesAction(envArg: string | undefined, options: { projec
 /* ------------------------------------------------------------------ */
 
 function parseKind(kind: string): DatabaseKind {
-  if (kind !== 'turso' && kind !== 'neon') {
-    throw new Error(`Unsupported database kind: ${kind}. Supported kinds: turso, neon`);
+  if (kind !== 'turso' && kind !== 'neon' && kind !== 'redis') {
+    throw new Error(`Unsupported database kind: ${kind}. Supported kinds: turso, neon, redis`);
   }
   return kind;
 }
@@ -379,7 +400,7 @@ async function createDatabase(opts: {
   json?: boolean;
 }) {
   const { token, orgId, project, environment, kind } = opts;
-  const name = opts.name ?? defaultDatabaseName(project, environment);
+  const name = opts.name ?? defaultDatabaseName(kind, project, environment);
 
   const created = await attachDatabase(token, orgId, project.id, {
     kind,

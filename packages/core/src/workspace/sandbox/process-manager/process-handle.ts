@@ -134,6 +134,17 @@ class RetainedOutputBuffer {
 }
 
 /**
+ * Thrown by {@link ProcessHandle.closeStdin} when the sandbox provider has no
+ * way to close a running process's stdin.
+ *
+ * `handle.writer.end()` treats this error as a successful finish, so piping to
+ * a process stays safe on providers without stdin close support.
+ */
+export class UnsupportedStdinCloseError extends Error {
+  readonly name = 'UnsupportedStdinCloseError';
+}
+
+/**
  * Handle to a spawned process.
  *
  * Subclasses implement the platform-specific primitives (kill, sendStdin,
@@ -188,6 +199,17 @@ export abstract class ProcessHandle {
   abstract kill(): Promise<boolean>;
   /** Send data to the process's stdin */
   abstract sendStdin(data: string): Promise<void>;
+
+  /**
+   * Close the process's stdin, signaling EOF.
+   *
+   * Providers that cannot close stdin throw {@link UnsupportedStdinCloseError}.
+   * The default implementation is the unsupported case, so providers only
+   * override this when their transport exposes a stdin close primitive.
+   */
+  async closeStdin(): Promise<void> {
+    throw new UnsupportedStdinCloseError(`${this.constructor.name} does not support closing stdin`);
+  }
 
   /**
    * Wait for the process to finish and return the result.
@@ -334,6 +356,12 @@ export abstract class ProcessHandle {
       this._writer = new Writable({
         write: (chunk, _encoding, cb) => {
           this.sendStdin(chunk.toString()).then(() => cb(), cb);
+        },
+        final: cb => {
+          this.closeStdin().then(
+            () => cb(),
+            (err: unknown) => cb(err instanceof UnsupportedStdinCloseError ? null : (err as Error)),
+          );
         },
       });
     }

@@ -1,3 +1,4 @@
+import type { LanguageModelV2Prompt } from '@ai-sdk/provider-v5';
 import { describe, it, expect } from 'vitest';
 
 import type { MastraDBMessage } from '../../agent/message-list';
@@ -5,6 +6,46 @@ import { MessageList } from '../../agent/message-list';
 
 import { TokenLimiterProcessor } from './token-limiter';
 import { ToolCallFilter } from './tool-call-filter';
+
+/**
+ * ToolCallFilter rewrites the model prompt only, so these helpers build the real prompt
+ * from a MessageList and run the filter over it.
+ */
+async function filterPrompt(filter: ToolCallFilter, messageList: MessageList): Promise<LanguageModelV2Prompt> {
+  const prompt = await messageList.get.all.aiV5.llmPrompt();
+  const result = await filter.processLLMRequest?.({
+    prompt,
+    model: 'test-model' as any,
+    stepNumber: 0,
+    steps: [],
+    state: {},
+    abort: ((reason?: string) => {
+      throw new Error(reason || 'Aborted');
+    }) as (reason?: string) => never,
+  } as any);
+
+  return result?.prompt ?? prompt;
+}
+
+function toolPartsIn(prompt: LanguageModelV2Prompt, toolName?: string) {
+  return prompt.flatMap(message =>
+    typeof message.content === 'string'
+      ? []
+      : (message.content as any[]).filter(
+          part =>
+            (part.type === 'tool-call' || part.type === 'tool-result') &&
+            (toolName === undefined || part.toolName === toolName),
+        ),
+  );
+}
+
+function textsIn(prompt: LanguageModelV2Prompt): string[] {
+  return prompt.flatMap(message =>
+    typeof message.content === 'string'
+      ? [message.content]
+      : (message.content as any[]).flatMap(part => (part.type === 'text' ? [part.text] : [])),
+  );
+}
 
 describe('Processors Integration Tests', () => {
   const mockAbort = ((reason?: string) => {
@@ -114,26 +155,13 @@ describe('Processors Integration Tests', () => {
       messageList.add(msg, 'input');
     }
 
-    const filteredResult = await toolCallFilter.processInput({
-      messages: messageList.get.all.db(),
-      messageList,
-      abort: mockAbort,
-    });
-    // Extract messages from result (could be MessageList or MastraDBMessage)
-    const filteredMessages = Array.isArray(filteredResult)
-      ? filteredResult
-      : filteredResult instanceof MessageList
-        ? filteredResult.get.all.db()
-        : [filteredResult];
+    const filteredPrompt = await filterPrompt(toolCallFilter, messageList);
 
-    // Verify ToolCallFilter removed weather tool parts but preserved top-level assistant text
-    expect(filteredMessages).toHaveLength(4); // msg-1 (user), msg-2 (assistant text), msg-5 (user), msg-6 (assistant with 'time' tool)
-    const weatherMessage = filteredMessages.find(m => m.id === 'msg-2');
-    expect(weatherMessage).toBeDefined();
-    expect(typeof weatherMessage!.content === 'string' ? [] : weatherMessage!.content.parts).toEqual([]);
-    expect(filteredMessages.some(m => m.id === 'msg-6')).toBe(true); // Time tool call preserved
-    expect(filteredMessages.some(m => m.id === 'msg-1')).toBe(true); // User message preserved
-    expect(filteredMessages.some(m => m.id === 'msg-5')).toBe(true); // User message preserved
+    // Verify ToolCallFilter removed weather tool parts from the prompt only
+    expect(toolPartsIn(filteredPrompt, 'weather')).toHaveLength(0);
+    expect(toolPartsIn(filteredPrompt, 'time').length).toBeGreaterThan(0); // Time tool call preserved
+    // The stored messages are untouched
+    expect(messageList.get.all.db()).toHaveLength(4);
 
     // Step 2: Apply TokenLimiter to limit message count
     // TokenLimiter with a low limit should further reduce messages
@@ -141,7 +169,7 @@ describe('Processors Integration Tests', () => {
 
     // Create a new MessageList with the filtered messages for the token limiter
     const limiterMessageList = new MessageList({ threadId: 'test-thread', resourceId: 'test-resource' });
-    for (const msg of filteredMessages) {
+    for (const msg of messageList.get.all.db()) {
       limiterMessageList.add(msg, 'input');
     }
 
@@ -160,7 +188,7 @@ describe('Processors Integration Tests', () => {
     const limitedMessages = limiterMessageList.get.all.db();
 
     // Verify TokenLimiter further reduced messages
-    expect(limitedMessages.length).toBeLessThanOrEqual(filteredMessages.length);
+    expect(limitedMessages.length).toBeLessThanOrEqual(messageList.get.all.db().length);
     expect(limitedMessages.length).toBeGreaterThan(0); // Should have at least some messages
 
     // Verify no message duplication
@@ -168,9 +196,9 @@ describe('Processors Integration Tests', () => {
     const uniqueIds = new Set(messageIds);
     expect(messageIds.length).toBe(uniqueIds.size);
 
-    // Verify final messages are a subset of filtered messages
+    // Verify final messages are a subset of the original messages
     limitedMessages.forEach(msg => {
-      expect(filteredMessages.some(m => m.id === msg.id)).toBe(true);
+      expect(messageList.get.all.db().some(m => m.id === msg.id)).toBe(true);
     });
   });
 
@@ -279,24 +307,15 @@ describe('Processors Integration Tests', () => {
       messageList.add(msg, 'input');
     }
 
-    // Apply ToolCallFilter (exclude 'weather')
+    // Apply ToolCallFilter (exclude 'weather') — prompt-only
     const toolCallFilter = new ToolCallFilter({ exclude: ['weather'] });
-    const filteredResult = await toolCallFilter.processInput({
-      messages: messageList.get.all.db(),
-      messageList,
-      abort: mockAbort,
-    });
-
-    const filteredMessages = Array.isArray(filteredResult)
-      ? filteredResult
-      : filteredResult instanceof MessageList
-        ? filteredResult.get.all.db()
-        : [filteredResult];
+    const filteredPrompt = await filterPrompt(toolCallFilter, messageList);
+    expect(toolPartsIn(filteredPrompt, 'weather')).toHaveLength(0);
 
     // Apply TokenLimiter
     const tokenLimiter = new TokenLimiterProcessor({ limit: 100 });
     const limiterMessageList = new MessageList({ threadId: 'test-thread', resourceId: 'test-resource' });
-    for (const msg of filteredMessages) {
+    for (const msg of messageList.get.all.db()) {
       limiterMessageList.add(msg, 'input');
     }
 
@@ -326,8 +345,8 @@ describe('Processors Integration Tests', () => {
 
     expect(uniqueContents.size).toBe(messageContents.length);
 
-    // Verify final messages are subset of filtered messages
-    const filteredIds = new Set(filteredMessages.map(m => m.id));
+    // Verify final messages are subset of the original messages
+    const filteredIds = new Set(messageList.get.all.db().map(m => m.id));
     for (const msg of limitedMessages) {
       expect(filteredIds.has(msg.id)).toBe(true);
     }
@@ -459,22 +478,13 @@ describe('Processors Integration Tests', () => {
 
     // Test 1: Filter weather tool calls
     const weatherFilter = new ToolCallFilter({ exclude: ['get_weather'] });
-    const weatherFilteredResult = await weatherFilter.processInput({
-      messages: messageList.get.all.db(),
-      messageList,
-      abort: mockAbort,
-    });
+    const weatherFilteredPrompt = await filterPrompt(weatherFilter, messageList);
 
-    const weatherFilteredMessages = Array.isArray(weatherFilteredResult)
-      ? weatherFilteredResult
-      : weatherFilteredResult.get.all.db();
-
-    // Should preserve msg-2 top-level text while removing its weather tool parts
-    expect(weatherFilteredMessages.length).toBe(6);
-    const weatherMessage = weatherFilteredMessages.find(m => m.id === 'msg-2');
-    expect(weatherMessage).toBeDefined();
-    expect(typeof weatherMessage!.content === 'string' ? [] : weatherMessage!.content.parts).toEqual([]);
-    expect(weatherFilteredMessages.some(m => m.id === 'msg-4')).toBe(true); // Calculator preserved
+    // Should remove weather tool parts from the prompt while keeping the calculator
+    expect(toolPartsIn(weatherFilteredPrompt, 'get_weather')).toHaveLength(0);
+    expect(toolPartsIn(weatherFilteredPrompt, 'calculator').length).toBeGreaterThan(0);
+    // Stored messages are untouched
+    expect(messageList.get.all.db().length).toBe(6);
 
     // Test 2: Apply token limiting with a low limit to force truncation
     // The limiter uses ~24 tokens for conversation overhead + ~3.8 per message
@@ -507,19 +517,11 @@ describe('Processors Integration Tests', () => {
 
     // Test 3: Combine both processors
     const combinedFilter = new ToolCallFilter({ exclude: ['get_weather', 'calculator'] });
-    const combinedFilteredResult = await combinedFilter.processInput({
-      messages: messageList.get.all.db(),
-      messageList,
-      abort: mockAbort,
-    });
-
-    const combinedFilteredMessages = Array.isArray(combinedFilteredResult)
-      ? combinedFilteredResult
-      : combinedFilteredResult.get.all.db();
+    const combinedFilteredPrompt = await filterPrompt(combinedFilter, messageList);
 
     // Then apply token limiter
     const finalMessageList = new MessageList({ threadId: 'test-thread', resourceId: 'test-resource' });
-    for (const msg of combinedFilteredMessages) {
+    for (const msg of messageList.get.all.db()) {
       finalMessageList.add(msg, 'input');
     }
 
@@ -537,23 +539,17 @@ describe('Processors Integration Tests', () => {
 
     const finalResult = finalMessageList.get.all.db();
 
-    // Should have no tool call parts, while preserving top-level assistant text
-    const combinedWeatherMessage = combinedFilteredMessages.find(m => m.id === 'msg-2');
-    const combinedCalculatorMessage = combinedFilteredMessages.find(m => m.id === 'msg-4');
-    expect(combinedWeatherMessage).toBeDefined();
-    expect(combinedCalculatorMessage).toBeDefined();
-    expect(typeof combinedWeatherMessage!.content === 'string' ? [] : combinedWeatherMessage!.content.parts).toEqual(
-      [],
-    );
-    expect(
-      typeof combinedCalculatorMessage!.content === 'string' ? [] : combinedCalculatorMessage!.content.parts,
-    ).toEqual([]);
-    // But should still have user messages and simple assistant response
-    expect(combinedFilteredMessages.some(m => m.id === 'msg-1')).toBe(true);
-    expect(combinedFilteredMessages.some(m => m.id === 'msg-6')).toBe(true);
+    // The prompt should have no tool parts at all, while keeping the conversation text
+    expect(toolPartsIn(combinedFilteredPrompt)).toHaveLength(0);
+    expect(textsIn(combinedFilteredPrompt)).toContain('Space is vast and contains billions of galaxies.');
+
+    // Storage keeps every original message, including the tool invocations
+    expect(messageList.get.all.db().length).toBe(6);
+    expect(messageList.get.all.db().some(m => m.id === 'msg-2')).toBe(true);
+    expect(messageList.get.all.db().some(m => m.id === 'msg-4')).toBe(true);
 
     // Final result should be further limited by tokens
     expect(finalResult.length).toBeGreaterThan(0);
-    expect(finalResult.length).toBeLessThanOrEqual(combinedFilteredMessages.length);
+    expect(finalResult.length).toBeLessThanOrEqual(messageList.get.all.db().length);
   });
 });
