@@ -41,7 +41,7 @@ import { emitAutoExtractedMetrics, emitTokenMetricsForUsage } from '../metrics/a
 import { CardinalityFilter } from '../metrics/cardinality';
 import { resolveModelId } from '../model-id';
 import { NoOpSpan } from '../spans';
-import { isPlainRecord, mergeMetadata } from '../spans/metadata';
+import { isPlainRecord, mergeMetadata, stripUndefined } from '../spans/metadata';
 import { addUsageStats } from '../usage';
 
 function hasMetadataKey(metadata: unknown, key: string): boolean {
@@ -665,8 +665,9 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
       return undefined;
     }
 
-    // Explicit metadata always wins.
-    return mergeMetadata(extracted, explicitMetadata);
+    // Explicit metadata always wins, but a key it merely names with an
+    // `undefined` value must not erase the extracted RequestContext value.
+    return mergeMetadata(extracted, stripUndefined(explicitMetadata));
   }
 
   /**
