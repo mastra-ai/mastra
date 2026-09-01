@@ -246,13 +246,13 @@ const FILTER_OPERATORS: Record<OperatorType, OperatorFn> = {
     sql: `NOT (${key})`,
     needsValue: false,
   }),
-  $size: (key: string, paramIndex: number) => {
+  $size: (key: string) => {
     const jsonPath = getJsonPath(key);
     return {
       sql: `(
     CASE
-      WHEN json_type(json_extract(metadata, ${jsonPath})) = 'array' THEN 
-        json_array_length(json_extract(metadata, ${jsonPath})) = $${paramIndex}
+      WHEN json_type(json_extract(metadata, ${jsonPath})) = 'array' THEN
+        json_array_length(json_extract(metadata, ${jsonPath})) = ?
       ELSE FALSE
     END
   )`,
