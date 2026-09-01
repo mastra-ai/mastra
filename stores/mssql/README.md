@@ -30,7 +30,8 @@ const store = new MSSQLStore({
 
 ## Documentation
 
-- [@mastra/mssql documentation](https://mastra.ai/reference/storage/overview)
+- [Microsoft SQL Server integration guide](https://mastra.ai/integrations/databases/mssql)
+- [Storage reference](https://mastra.ai/reference/storage/overview)
 
 ## Changelog
 

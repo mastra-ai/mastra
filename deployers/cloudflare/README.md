@@ -38,7 +38,8 @@ const mastra = new Mastra({
 
 ## Documentation
 
-- [Reference: CloudflareDeployer](https://mastra.ai/reference/deployer/cloudflare)
+- [Deploy to Cloudflare](https://mastra.ai/integrations/deploy/cloudflare)
+- [CloudflareDeployer reference](https://mastra.ai/reference/deployer/cloudflare)
 
 ## Changelog
 

@@ -54,7 +54,8 @@ await store.close();
 
 ## Documentation
 
-- [@mastra/clickhouse documentation](https://mastra.ai/reference/storage/overview)
+- [ClickHouse integration guide](https://mastra.ai/integrations/databases/clickhouse)
+- [Storage reference](https://mastra.ai/reference/storage/overview)
 
 ## Changelog
 

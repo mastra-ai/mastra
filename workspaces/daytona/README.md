@@ -34,7 +34,8 @@ await workspace.destroy();
 
 ## Documentation
 
-- [@mastra/daytona documentation](https://mastra.ai/docs/mastra-platform/workspaces)
+- [Daytona integration guide](https://mastra.ai/integrations/sandboxes/daytona)
+- [Workspace documentation](https://mastra.ai/docs/mastra-platform/workspaces)
 
 ## Changelog
 

@@ -34,7 +34,8 @@ const result = await agent.generate('Go to google.com and search for "Mastra AI"
 
 ## Documentation
 
-- [@mastra/stagehand documentation](https://mastra.ai/reference/browser/stagehand-browser)
+- [Stagehand integration guide](https://mastra.ai/integrations/browsers/stagehand)
+- [Stagehand browser reference](https://mastra.ai/reference/browser/stagehand-browser)
 
 ## Changelog
 

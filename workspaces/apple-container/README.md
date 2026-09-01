@@ -35,7 +35,8 @@ await workspace.destroy();
 
 ## Documentation
 
-- [@mastra/apple-container documentation](https://mastra.ai/docs/mastra-platform/workspaces)
+- [Apple Container integration guide](https://mastra.ai/integrations/sandboxes/apple-container)
+- [Workspace documentation](https://mastra.ai/docs/mastra-platform/workspaces)
 
 ## Changelog
 

@@ -23,7 +23,8 @@ const store = new D1Store({
 
 ## Documentation
 
-- [@mastra/cloudflare-d1 documentation](https://mastra.ai/reference/storage/overview)
+- [Cloudflare D1 integration guide](https://mastra.ai/integrations/databases/cloudflare-d1)
+- [Storage reference](https://mastra.ai/reference/storage/overview)
 
 ## Changelog
 

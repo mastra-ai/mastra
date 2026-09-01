@@ -23,7 +23,8 @@ const mastra = new Mastra({
 
 ## Documentation
 
-- [Reference: NetlifyDeployer](https://mastra.ai/reference/deployer/netlify)
+- [Deploy to Netlify](https://mastra.ai/integrations/deploy/netlify)
+- [NetlifyDeployer reference](https://mastra.ai/reference/deployer/netlify)
 
 ## Changelog
 

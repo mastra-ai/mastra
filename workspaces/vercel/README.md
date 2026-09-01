@@ -23,7 +23,8 @@ const editor = new MastraEditor({
 
 ## Documentation
 
-- [@mastra/vercel documentation](https://mastra.ai/docs/mastra-platform/workspaces)
+- [Vercel Sandbox integration guide](https://mastra.ai/integrations/sandboxes/vercel)
+- [Workspace documentation](https://mastra.ai/docs/mastra-platform/workspaces)
 
 ## Changelog
 

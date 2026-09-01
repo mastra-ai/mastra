@@ -29,7 +29,8 @@ const storage = new ValkeyStore({
 
 ## Documentation
 
-- [@mastra/valkey documentation](https://mastra.ai/reference/storage/overview)
+- [Valkey integration guide](https://mastra.ai/integrations/databases/valkey)
+- [Storage reference](https://mastra.ai/reference/storage/overview)
 
 ## Changelog
 

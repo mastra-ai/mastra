@@ -31,7 +31,8 @@ const agent = new Agent({
 
 ## Documentation
 
-- [@mastra/google-drive documentation](https://mastra.ai/docs/mastra-platform/workspaces)
+- [Google Drive integration guide](https://mastra.ai/integrations/file-storage/google-drive)
+- [Workspace documentation](https://mastra.ai/docs/mastra-platform/workspaces)
 
 ## Changelog
 

@@ -31,7 +31,8 @@ const mastra = new Mastra({
 
 ## Documentation
 
-- [@mastra/duckdb documentation](https://mastra.ai/reference/vectors/duckdb)
+- [DuckDB integration guide](https://mastra.ai/integrations/databases/duckdb)
+- [DuckDB vector reference](https://mastra.ai/reference/vectors/duckdb)
 
 ## Changelog
 

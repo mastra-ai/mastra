@@ -34,7 +34,8 @@ const agent = new Agent({
 
 ## Documentation
 
-- [@mastra/gcs documentation](https://mastra.ai/docs/mastra-platform/workspaces)
+- [Google Cloud Storage integration guide](https://mastra.ai/integrations/file-storage/google-cloud-storage)
+- [Workspace documentation](https://mastra.ai/docs/mastra-platform/workspaces)
 
 ## Changelog
 

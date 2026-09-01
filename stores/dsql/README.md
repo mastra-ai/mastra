@@ -61,7 +61,8 @@ const messages = await store.listMessages({ threadId: 'thread-123' });
 
 ## Documentation
 
-- [@mastra/dsql documentation](https://mastra.ai/reference/storage/overview)
+- [Amazon Aurora DSQL integration guide](https://mastra.ai/integrations/databases/aurora-dsql)
+- [Storage reference](https://mastra.ai/reference/storage/overview)
 
 ## Changelog
 

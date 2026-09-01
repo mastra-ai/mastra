@@ -31,7 +31,8 @@ const agent = new Agent({
 
 ## Documentation
 
-- [@mastra/docker documentation](https://mastra.ai/docs/mastra-platform/workspaces)
+- [Docker Sandbox integration guide](https://mastra.ai/integrations/sandboxes/docker)
+- [Workspace documentation](https://mastra.ai/docs/mastra-platform/workspaces)
 
 ## Changelog
 

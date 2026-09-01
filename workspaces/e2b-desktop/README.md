@@ -30,7 +30,8 @@ const agent = new Agent({
 
 ## Documentation
 
-- [@mastra/e2b-desktop documentation](https://mastra.ai/docs/mastra-platform/workspaces)
+- [E2B Desktop integration guide](https://mastra.ai/integrations/sandboxes/e2b-desktop)
+- [Workspace documentation](https://mastra.ai/docs/mastra-platform/workspaces)
 
 ## Changelog
 

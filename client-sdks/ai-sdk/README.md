@@ -28,7 +28,8 @@ export const mastra = new Mastra({
 
 ## Documentation
 
-- [@mastra/ai-sdk documentation](https://mastra.ai/reference/ai-sdk/overview)
+- [AI SDK UI integration guide](https://mastra.ai/integrations/agentic-ui/ai-sdk-ui)
+- [AI SDK reference](https://mastra.ai/reference/ai-sdk/overview)
 
 ## Changelog
 

@@ -56,7 +56,8 @@ await vectorDB.disconnect();
 
 ## Documentation
 
-- [@mastra/mongodb documentation](https://mastra.ai/reference/vectors/mongodb)
+- [MongoDB integration guide](https://mastra.ai/integrations/databases/mongodb)
+- [MongoDB vector reference](https://mastra.ai/reference/vectors/mongodb)
 
 ## Changelog
 

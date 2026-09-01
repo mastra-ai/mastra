@@ -24,7 +24,8 @@ const workspace = new Workspace({ sandbox });
 
 ## Documentation
 
-- [@mastra/cloudflare-sandbox documentation](https://mastra.ai/docs/mastra-platform/workspaces)
+- [Cloudflare Sandbox integration guide](https://mastra.ai/integrations/sandboxes/cloudflare-sandbox)
+- [Workspace documentation](https://mastra.ai/docs/mastra-platform/workspaces)
 
 ## Changelog
 

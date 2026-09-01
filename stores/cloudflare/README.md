@@ -49,7 +49,8 @@ const messages = await store.listMessages({ threadId: 'thread-123' });
 
 ## Documentation
 
-- [@mastra/cloudflare documentation](https://mastra.ai/reference/storage/overview)
+- [Cloudflare KV integration guide](https://mastra.ai/integrations/databases/cloudflare-kv)
+- [Storage reference](https://mastra.ai/reference/storage/overview)
 
 ## Changelog
 

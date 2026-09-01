@@ -31,7 +31,8 @@ const mastra = new Mastra({
 
 ## Documentation
 
-- [Reference: VercelDeployer](https://mastra.ai/reference/deployer/vercel)
+- [Deploy to Vercel](https://mastra.ai/integrations/deploy/vercel)
+- [VercelDeployer reference](https://mastra.ai/reference/deployer/vercel)
 
 ## Changelog
 

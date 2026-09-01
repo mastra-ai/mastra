@@ -32,7 +32,8 @@ const agent = new Agent({
 
 ## Documentation
 
-- [@mastra/blaxel documentation](https://mastra.ai/docs/mastra-platform/workspaces)
+- [Blaxel integration guide](https://mastra.ai/integrations/sandboxes/blaxel)
+- [Workspace documentation](https://mastra.ai/docs/mastra-platform/workspaces)
 
 ## Changelog
 

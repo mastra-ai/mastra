@@ -26,7 +26,8 @@ await vectorStore.createIndex({ indexName: 'documents', dimension: 1536 });
 
 ## Documentation
 
-- [@mastra/convex documentation](https://mastra.ai/reference/vectors/convex)
+- [Convex integration guide](https://mastra.ai/integrations/databases/convex)
+- [Convex vector reference](https://mastra.ai/reference/vectors/convex)
 
 ## Changelog
 

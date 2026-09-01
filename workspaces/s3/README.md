@@ -33,7 +33,8 @@ const agent = new Agent({
 
 ## Documentation
 
-- [@mastra/s3 documentation](https://mastra.ai/docs/mastra-platform/workspaces)
+- [Amazon S3 integration guide](https://mastra.ai/integrations/file-storage/amazon-s3)
+- [Workspace documentation](https://mastra.ai/docs/mastra-platform/workspaces)
 
 ## Changelog
 

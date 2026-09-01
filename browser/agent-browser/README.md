@@ -35,7 +35,8 @@ const result = await agent.generate('Go to example.com and click the first link'
 
 ## Documentation
 
-- [@mastra/agent-browser documentation](https://mastra.ai/reference/browser/agent-browser)
+- [Agent Browser integration guide](https://mastra.ai/integrations/browsers/agent-browser)
+- [Agent Browser reference](https://mastra.ai/reference/browser/agent-browser)
 
 ## Changelog
 

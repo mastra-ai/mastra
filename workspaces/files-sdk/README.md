@@ -37,7 +37,8 @@ const agent = new Agent({
 
 ## Documentation
 
-- [@mastra/files-sdk documentation](https://mastra.ai/docs/mastra-platform/workspaces)
+- [Vercel Files integration guide](https://mastra.ai/integrations/file-storage/vercel-files)
+- [Workspace documentation](https://mastra.ai/docs/mastra-platform/workspaces)
 
 ## Changelog
 

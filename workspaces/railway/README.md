@@ -34,7 +34,8 @@ await workspace.destroy();
 
 ## Documentation
 
-- [@mastra/railway documentation](https://mastra.ai/docs/mastra-platform/workspaces)
+- [Railway integration guide](https://mastra.ai/integrations/sandboxes/railway)
+- [Workspace documentation](https://mastra.ai/docs/mastra-platform/workspaces)
 
 ## Changelog
 

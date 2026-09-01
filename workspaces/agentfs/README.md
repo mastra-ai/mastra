@@ -25,7 +25,8 @@ const workspace = new Workspace({
 
 ## Documentation
 
-- [@mastra/agentfs documentation](https://mastra.ai/docs/mastra-platform/workspaces)
+- [AgentFS integration guide](https://mastra.ai/integrations/file-storage/agentfs)
+- [Workspace documentation](https://mastra.ai/docs/mastra-platform/workspaces)
 
 ## Changelog
 
