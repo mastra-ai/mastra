@@ -1503,8 +1503,13 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
   }
 }
 
+/**
+ * Whether an error is a Node `ERR_INVALID_ARG*` error (e.g. a non-string path
+ * handed to `fs`/`path`). Only coded errors qualify: a bare `TypeError` can also
+ * come from `fetch` network failures in fetch-backed content sources, which must
+ * keep the warn-and-continue path.
+ */
 function isProgrammingError(error: unknown): boolean {
-  if (error instanceof TypeError) return true;
   const code = (error as { code?: unknown } | null)?.code;
   return typeof code === 'string' && code.startsWith('ERR_INVALID_ARG');
 }

@@ -3128,14 +3128,17 @@ Premium instructions.
       warnSpy.mockRestore();
     });
 
-    it('should rethrow TypeError from source.exists instead of warning', async () => {
+    it('should rethrow a coded TypeError (ERR_INVALID_ARG_TYPE) from source.exists instead of warning', async () => {
       const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
       const inner = createMockFilesystem({});
       const source: SkillSource = {
         ...inner,
         exists: vi.fn(async () => {
-          throw new TypeError('The "path" argument must be of type string. Received function workdir');
+          // Shape Node's fs/path helpers throw when handed a non-string path.
+          throw Object.assign(new TypeError('The "path" argument must be of type string. Received function workdir'), {
+            code: 'ERR_INVALID_ARG_TYPE',
+          });
         }),
       };
 
@@ -3143,6 +3146,26 @@ Premium instructions.
 
       await expect(skills.list()).rejects.toThrow(/must be of type string/);
       expect(warnSpy).not.toHaveBeenCalledWith(expect.stringContaining('Cannot access skills path'));
+
+      warnSpy.mockRestore();
+    });
+
+    it('should warn and continue for a bare TypeError (e.g. fetch network failure) from source.exists', async () => {
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+      const inner = createMockFilesystem({});
+      const source: SkillSource = {
+        ...inner,
+        exists: vi.fn(async () => {
+          // `fetch` rejects network failures with a code-less TypeError.
+          throw new TypeError('fetch failed');
+        }),
+      };
+
+      const skills = new WorkspaceSkillsImpl({ skills: ['.mastracode/skills'], source });
+
+      await expect(skills.list()).resolves.toEqual([]);
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('Cannot access skills path ".mastracode/skills"'));
 
       warnSpy.mockRestore();
     });
