@@ -8,7 +8,6 @@ For schema-backed execution, put deterministic input/output constraints (shape, 
 Use literal model names/IDs from `docs/src/plugins/remark-model-tokens/models.ts` in changesets/comments; placeholders are not replaced.
 
 Use the narrowest package build/test/lint/typecheck; run unit/integration before E2E. Prefer targeted `pnpm --filter` or `pnpm turbo build --filter` commands; avoid root setup/build scripts unless needed. Fresh clone: `pnpm install`, then build relevant dependencies. Unresolved workspace imports usually mean dependencies need building; some integration tests need `pnpm i --ignore-workspace`.
-Run `pnpm check:core-imports` to validate `packages/server` and all published stores against their `@mastra/core` peer floors; pass repo-relative package directories to scope the check.
 
 Features/new packages need docs. For docs, follow `docs/AGENTS.md` and styleguides. After code changes, read `@.mastracode/commands/changeset.md`.
 
