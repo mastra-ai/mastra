@@ -15,8 +15,8 @@ export type PendingProviderToolCall = {
   args?: unknown;
   startTime: Date;
   toolDescription?: string;
-  /** Anchor for calls whose result never arrives (run ends or stream errors). */
-  fallbackParentSpan: AnySpan;
+  /** Anchor for calls whose result never arrives (run ends or stream errors). Absent when tracing is off. */
+  fallbackParentSpan: AnySpan | undefined;
 };
 
 export function endPendingProviderToolSpan({
@@ -28,10 +28,27 @@ export function endPendingProviderToolSpan({
 }: {
   toolCallId: string;
   pending: Omit<PendingProviderToolCall, 'fallbackParentSpan'>;
-  parentSpan: AnySpan;
+  parentSpan: AnySpan | undefined;
   result?: { output: unknown; isError?: boolean };
   logger?: IMastraLogger;
 }): void {
+  // First-hand pulse facts come FIRST and unconditionally — they must not
+  // depend on tracing being configured or on span creation succeeding
+  // (runId via the ambient run context). Both are emitted at result time —
+  // that is when the provider reveals the call.
+  const pulseCtx = {
+    surface: 'tool',
+    base: 'call',
+    occurrence: toolCallId,
+    name: `provider_tool: '${pending.toolName}'`,
+    parent: { surface: 'agent', base: 'run' },
+    attributes: { toolCallId, toolType: 'provider-tool' },
+  } as const;
+  emitLifecycleFact('started', { ...pulseCtx, timestamp: pending.startTime });
+  emitLifecycleFact('ended', { ...pulseCtx, error: result?.isError === true, output: result !== undefined });
+
+  // The observability span is the optional, parallel record.
+  if (!parentSpan) return;
   let span;
   try {
     span = parentSpan.createChildSpan({
@@ -58,18 +75,6 @@ export function endPendingProviderToolSpan({
   }
   try {
     span?.end(result ? { output: result.output, attributes: { success: !result.isError } } : undefined);
-    // First-hand pulse facts (runId via the ambient run context). Both are
-    // emitted at result time — that is when the provider reveals the call.
-    const pulseCtx = {
-      surface: 'tool',
-      base: 'call',
-      occurrence: toolCallId,
-      name: `provider_tool: '${pending.toolName}'`,
-      parent: { surface: 'agent', base: 'run' },
-      attributes: { toolCallId, toolType: 'provider-tool' },
-    } as const;
-    emitLifecycleFact('started', { ...pulseCtx, timestamp: pending.startTime });
-    emitLifecycleFact('ended', { ...pulseCtx, error: result?.isError === true, output: result !== undefined });
   } catch (err) {
     logger?.warn?.('[ProviderToolObservability] failed to end PROVIDER_TOOL_CALL span', {
       error: err instanceof Error ? err.message : String(err),

@@ -524,6 +524,345 @@ describe('sovereignty: observability OFF, pulse alone', () => {
     }
   });
 
+  it('a run waiting for approval is not reported completed', async () => {
+    // Review blocker: the generation's END fact carried no parent, so the
+    // readers — which treat any parentless terminal as the ROOT terminal —
+    // let `generate_completed` impersonate the run's verdict. A suspended
+    // run showed status 'completed' while honestly waiting for a human.
+    const c = collector();
+    try {
+      const gateModel = new MockLanguageModelV2({
+        doStream: async () => ({
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          warnings: [],
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            { type: 'response-metadata', id: 'sus-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+            {
+              type: 'tool-call',
+              toolCallId: 'gate-1',
+              toolName: 'gatedTool',
+              input: '{"what":"go"}',
+              providerExecuted: false,
+            },
+            {
+              type: 'finish',
+              finishReason: 'tool-calls',
+              usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+            },
+          ]),
+        }),
+      });
+      const gatedTool = createTool({
+        id: 'gatedTool',
+        description: 'Needs a human yes.',
+        inputSchema: z.object({ what: z.string() }),
+        requireApproval: true,
+        execute: async () => ({ ok: true }),
+      });
+      const { Mastra } = await import('../mastra');
+      const { InMemoryStore } = await import('../storage');
+      const mastra = new Mastra({
+        agents: {
+          sovSuspend: new Agent({
+            id: 'sov-suspend',
+            name: 'Sovereign Suspend',
+            instructions: 'Test',
+            model: gateModel,
+            tools: { gatedTool },
+            memory: new MockMemory(),
+          }),
+        },
+        logger: false,
+        storage: new InMemoryStore(),
+      });
+      const agent = mastra.getAgent('sovSuspend');
+      const stream = await agent.stream('use the tool', { memory: { thread: 'sus-t', resource: 'sus-u' } });
+      const runId = stream.runId!;
+      let gateReached = false;
+      for await (const chunk of stream.fullStream as AsyncIterable<any>) {
+        if (chunk.type === 'tool-call-approval') gateReached = true;
+      }
+      expect(gateReached, 'run reached the approval gate').toBe(true);
+      await settle();
+      // NOBODY approves. The run is suspended, waiting.
+
+      const suspended = c.facts.find(f => f.surface === 'agent' && f.action === 'run_suspended');
+      expect(suspended, 'suspension recorded').toBeDefined();
+      const runTerminal = c.facts.find(f => f.surface === 'agent' && /run_(completed|failed|aborted)$/.test(f.action));
+      expect(runTerminal, 'no run terminal exists').toBeUndefined();
+
+      const store = new InMemoryPulseStorage();
+      await store.batchCreatePulses(c.facts.filter(f => f.traceId === runId));
+      const { flows } = await store.listFlows();
+      expect(flows).toHaveLength(1);
+      // The whole point: a waiting run must NOT be called completed.
+      expect(flows[0]!.status, 'suspended run must not read as completed').toBe('running');
+      expect(flows[0]!.durationMs, 'no terminal -> no duration').toBeNull();
+    } finally {
+      c.done();
+    }
+  });
+
+  it('a declined generate-resume still records the run terminal', async () => {
+    // The generate-flavored resume (declineToolCallGenerate) must record
+    // the run terminal like the stream resume does; and if the model
+    // retries the tool, the honest state is a second suspension.
+    const c = collector();
+    try {
+      let decCall = 0;
+      const gateModel = new MockLanguageModelV2({
+        doGenerate: async () => {
+          decCall++;
+          if (decCall === 1) {
+            return {
+              rawCall: { rawPrompt: null, rawSettings: {} },
+              warnings: [],
+              finishReason: 'tool-calls' as const,
+              usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+              content: [
+                { type: 'tool-call' as const, toolCallId: 'dec-1', toolName: 'gatedTool', input: '{"what":"go"}' },
+              ],
+            };
+          }
+          return {
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            warnings: [],
+            finishReason: 'stop' as const,
+            usage: { inputTokens: 12, outputTokens: 6, totalTokens: 18 },
+            content: [{ type: 'text' as const, text: 'understood, not sending' }],
+          };
+        },
+        doStream: async () => ({
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          warnings: [],
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            { type: 'response-metadata', id: 'dec-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+            {
+              type: 'tool-call',
+              toolCallId: 'dec-1',
+              toolName: 'gatedTool',
+              input: '{"what":"go"}',
+              providerExecuted: false,
+            },
+            {
+              type: 'finish',
+              finishReason: 'tool-calls',
+              usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+            },
+          ]),
+        }),
+      });
+      const gatedTool = createTool({
+        id: 'gatedTool',
+        description: 'Needs a human yes.',
+        inputSchema: z.object({ what: z.string() }),
+        execute: async () => ({ ok: true }),
+      });
+      const { Mastra } = await import('../mastra');
+      const { InMemoryStore } = await import('../storage');
+      const mastra = new Mastra({
+        agents: {
+          sovDecline: new Agent({
+            id: 'sov-decline',
+            name: 'Sovereign Decline',
+            instructions: 'Test',
+            model: gateModel,
+            tools: { gatedTool },
+            memory: new MockMemory(),
+          }),
+        },
+        logger: false,
+        storage: new InMemoryStore(),
+      });
+      const agent = mastra.getAgent('sovDecline');
+      // Run-level approval option — the exact matrix S10 shape.
+      const output = await (agent as any).generate('use the tool', {
+        requireToolApproval: true,
+        memory: { thread: 'dec-t', resource: 'dec-u' },
+      });
+      expect(output.finishReason, 'initial generate suspends').toBe('suspended');
+      const runId = output.runId!;
+      const toolCallId = output.suspendPayload?.toolCallId;
+      expect(toolCallId, 'suspend payload names the call').toBeTruthy();
+
+      await (agent as any).declineToolCallGenerate({ runId, toolCallId });
+      await settle(50);
+
+      const runEnd = c.facts.find(
+        f => f.surface === 'agent' && f.traceId === runId && /run_(completed|failed|aborted)$/.test(f.action),
+      );
+      expect(runEnd, 'declined run records its terminal').toBeDefined();
+
+      const store = new InMemoryPulseStorage();
+      await store.batchCreatePulses(c.facts.filter(f => f.traceId === runId));
+      const { flows } = await store.listFlows();
+      expect(flows[0]!.status, 'declined run ends completed, not running forever').toBe('completed');
+    } finally {
+      c.done();
+    }
+  });
+
+  it('provider-executed tools emit facts with NO observability configured', async () => {
+    // Review blocker: provider-tool tracking bailed out unless a tracing
+    // span existed, so with observability off the pulse facts vanished —
+    // breaking the independence claim for this surface. Real stream path,
+    // bare agent, no tracing anywhere.
+    const c = collector();
+    try {
+      const provModel = new MockLanguageModelV2({
+        doStream: async () => ({
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          warnings: [],
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            { type: 'response-metadata', id: 'prov-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+            {
+              type: 'tool-call',
+              toolCallId: 'ptc-9',
+              toolName: 'web_search',
+              input: '{"q":"news"}',
+              providerExecuted: true,
+            },
+            {
+              type: 'tool-result',
+              toolCallId: 'ptc-9',
+              toolName: 'web_search',
+              result: { hits: 2 },
+              providerExecuted: true,
+            },
+            { type: 'text-start', id: 'pt' },
+            { type: 'text-delta', id: 'pt', delta: 'found it' },
+            { type: 'text-end', id: 'pt' },
+            { type: 'finish', finishReason: 'stop', usage: { inputTokens: 12, outputTokens: 6, totalTokens: 18 } },
+          ]),
+        }),
+      });
+      const agent = new Agent({
+        id: 'sov-prov',
+        name: 'Sovereign Provider',
+        instructions: 'Test',
+        model: provModel,
+        memory: new MockMemory(),
+      });
+      const stream = await agent.stream('search please', { memory: { thread: 'prov-t', resource: 'prov-u' } });
+      await stream.consumeStream();
+      await settle(50);
+
+      const started = c.facts.find(f => f.surface === 'tool' && f.action === 'call_started');
+      const ended = c.facts.find(f => f.surface === 'tool' && f.action === 'call_completed');
+      expect(started, 'provider tool call_started without tracing').toBeDefined();
+      expect(ended, 'provider tool call_completed without tracing').toBeDefined();
+      expect(started.attributes).toMatchObject({ toolCallId: 'ptc-9', toolType: 'provider-tool' });
+    } finally {
+      c.done();
+    }
+  });
+
+  it('a delegated sub-agent run is linked to its parent', async () => {
+    // team delegates to helper via agents:{helper}. The child run starts
+    // while the PARENT's ambient run identity is still active, so the
+    // run_started site can record the family: a delegates_to arrow from
+    // the parent's run fact to the child flow, plus a parentRunId
+    // attribute for cheap list queries. Without it the two flows are
+    // strangers (the documented sub-agent gap).
+    const c = collector();
+    try {
+      let teamCall = 0;
+      const teamModel = new MockLanguageModelV2({
+        doStream: async () => {
+          teamCall++;
+          if (teamCall === 1) {
+            return {
+              rawCall: { rawPrompt: null, rawSettings: {} },
+              warnings: [],
+              stream: convertArrayToReadableStream([
+                { type: 'stream-start', warnings: [] },
+                { type: 'response-metadata', id: 'team-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+                {
+                  type: 'tool-call',
+                  toolCallId: 'delegate-1',
+                  toolName: 'agent-helper',
+                  input: '{"prompt":"what is 2+2?"}',
+                  providerExecuted: false,
+                },
+                {
+                  type: 'finish',
+                  finishReason: 'tool-calls',
+                  usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+                },
+              ]),
+            };
+          }
+          return {
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            warnings: [],
+            stream: convertArrayToReadableStream([
+              { type: 'stream-start', warnings: [] },
+              { type: 'response-metadata', id: 'team-1', modelId: 'mock-model-id', timestamp: new Date(0) },
+              { type: 'text-start', id: 't1' },
+              { type: 'text-delta', id: 't1', delta: 'the helper says 4' },
+              { type: 'text-end', id: 't1' },
+              { type: 'finish', finishReason: 'stop', usage: { inputTokens: 20, outputTokens: 8, totalTokens: 28 } },
+            ]),
+          };
+        },
+      });
+      const helper = new Agent({
+        id: 'sov-helper',
+        name: 'Sovereign Helper',
+        instructions: 'Answer with the result only.',
+        model: model(),
+        memory: new MockMemory(),
+      });
+      const { Mastra } = await import('../mastra');
+      const { InMemoryStore } = await import('../storage');
+      const mastra = new Mastra({
+        agents: {
+          sovTeam: new Agent({
+            id: 'sov-team',
+            name: 'Sovereign Team',
+            instructions: 'Delegate math to your helper.',
+            model: teamModel,
+            agents: { helper },
+            memory: new MockMemory(),
+          }),
+        },
+        logger: false,
+        storage: new InMemoryStore(),
+      });
+      const team = mastra.getAgent('sovTeam');
+
+      const stream = await team.stream('what is 2+2?', { memory: { thread: 'del-t', resource: 'del-u' } });
+      const parentRunId = stream.runId!;
+      await stream.consumeStream();
+      await settle(50);
+
+      // The child run exists as its own flow…
+      const childStart = c.facts.find(
+        f => f.surface === 'agent' && f.action === 'run_started' && f.traceId !== parentRunId,
+      );
+      expect(childStart, 'child run recorded its own flow').toBeDefined();
+      const childRunId = childStart.traceId;
+
+      // …and the family is written down: attribute + arrow.
+      expect(childStart.attributes?.delegatedFromRunId, 'child names its parent run').toBe(parentRunId);
+      expect(
+        c.edges.some(
+          e =>
+            e.type === 'delegates_to' &&
+            e.from.id === factIds.run(parentRunId) &&
+            e.to.kind === 'flow' &&
+            e.to.id === childRunId,
+        ),
+        'delegates_to arrow parent run fact -> child flow',
+      ).toBe(true);
+    } finally {
+      c.done();
+    }
+  });
+
   it('minted ids are deterministic across a replay', async () => {
     // Two independent runs of the same logical runId mint identical ids —
     // the readers collapse a replay to one logical record set.

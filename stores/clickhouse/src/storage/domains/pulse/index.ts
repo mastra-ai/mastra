@@ -307,8 +307,8 @@ export class PulseStorageClickhouse extends PulseStorage {
                min(p.timestamp) AS started_at,
                max(p.timestamp) AS ended_at,
                dateDiff('ms',
-                 minIf(p.timestamp, endsWith(p.action, '_started') AND p.parent_span_id = ''),
-                 maxIf(p.timestamp, (endsWith(p.action, '_completed') OR endsWith(p.action, '_failed') OR endsWith(p.action, '_aborted')) AND p.parent_span_id = '')
+                 minIf(p.timestamp, endsWith(p.action, '_started') AND p.parent_span_id = '' AND p.surface = 'agent'),
+                 maxIf(p.timestamp, (endsWith(p.action, '_completed') OR endsWith(p.action, '_failed') OR endsWith(p.action, '_aborted')) AND p.parent_span_id = '' AND p.surface = 'agent')
                ) AS run_ms,
                count() AS pulse_count,
                anyIf(JSONExtractString(p.metadata, 'entityName'), JSONExtractString(p.metadata, 'entityName') != '') AS entity_name,
@@ -318,9 +318,9 @@ export class PulseStorageClickhouse extends PulseStorage {
                    groupUniqArrayIf(p.run_id, p.run_id != ''),
                    (SELECT groupUniqArray(run_id) FROM exact_aborts)
                  ), 'aborted',
-                 endsWith(argMaxIf(p.action, (p.timestamp, p.seq), p.parent_span_id = '' AND (endsWith(p.action, '_completed') OR endsWith(p.action, '_failed') OR endsWith(p.action, '_aborted'))), '_aborted'), 'aborted',
-                 endsWith(argMaxIf(p.action, (p.timestamp, p.seq), p.parent_span_id = '' AND (endsWith(p.action, '_completed') OR endsWith(p.action, '_failed') OR endsWith(p.action, '_aborted'))), '_failed'), 'failed',
-                 endsWith(argMaxIf(p.action, (p.timestamp, p.seq), p.parent_span_id = '' AND (endsWith(p.action, '_completed') OR endsWith(p.action, '_failed') OR endsWith(p.action, '_aborted'))), '_completed'), 'completed',
+                 endsWith(argMaxIf(p.action, (p.timestamp, p.seq), p.parent_span_id = '' AND p.surface = 'agent' AND (endsWith(p.action, '_completed') OR endsWith(p.action, '_failed') OR endsWith(p.action, '_aborted'))), '_aborted'), 'aborted',
+                 endsWith(argMaxIf(p.action, (p.timestamp, p.seq), p.parent_span_id = '' AND p.surface = 'agent' AND (endsWith(p.action, '_completed') OR endsWith(p.action, '_failed') OR endsWith(p.action, '_aborted'))), '_failed'), 'failed',
+                 endsWith(argMaxIf(p.action, (p.timestamp, p.seq), p.parent_span_id = '' AND p.surface = 'agent' AND (endsWith(p.action, '_completed') OR endsWith(p.action, '_failed') OR endsWith(p.action, '_aborted'))), '_completed'), 'completed',
                  dateDiff('second', max(p.timestamp), now64(3)) > ${STALE_THRESHOLD_S}, 'stale',
                  'running') AS status
         FROM (SELECT * FROM pulses LIMIT 1 BY id) p

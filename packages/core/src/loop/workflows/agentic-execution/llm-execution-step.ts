@@ -677,7 +677,9 @@ async function processOutputStream<OUTPUT = undefined>({
     args?: unknown;
     providerExecuted?: boolean;
   }) => {
-    if (!pendingProviderToolCallsByToolCallId || !tracingContext?.currentSpan) {
+    // Track pending provider calls even when tracing is off: the pulse
+    // facts must not depend on observability. The span parent is optional.
+    if (!pendingProviderToolCallsByToolCallId) {
       return;
     }
 
@@ -698,10 +700,12 @@ async function processOutputStream<OUTPUT = undefined>({
       return;
     }
 
-    const fallbackParentSpan =
-      tracingContext.currentSpan.type === SpanType.AGENT_RUN
-        ? tracingContext.currentSpan
-        : (tracingContext.currentSpan.findParent(SpanType.AGENT_RUN) ?? tracingContext.currentSpan);
+    const currentSpan = tracingContext?.currentSpan;
+    const fallbackParentSpan = currentSpan
+      ? currentSpan.type === SpanType.AGENT_RUN
+        ? currentSpan
+        : (currentSpan.findParent(SpanType.AGENT_RUN) ?? currentSpan)
+      : undefined;
 
     pendingProviderToolCallsByToolCallId.set(toolCallId, {
       toolName,

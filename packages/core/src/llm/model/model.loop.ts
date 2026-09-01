@@ -300,6 +300,7 @@ export class MastraLLMVNext extends MastraBase {
                 surface: 'model',
                 base: 'generate',
                 occurrence: pulseGenerationOcc,
+                parent: { surface: 'agent', base: 'run' },
                 error: true,
               });
               this.logger.trackException(mastraError);
@@ -359,6 +360,10 @@ export class MastraLLMVNext extends MastraBase {
               surface: 'model',
               base: 'generate',
               occurrence: pulseGenerationOcc,
+              // Ends carry the same parent as starts: a parentless terminal
+              // would impersonate the ROOT terminal in the readers, flipping
+              // a suspended run to 'completed'.
+              parent: { surface: 'agent', base: 'run' },
               // Aborts and errors end the generation too — say so honestly.
               status: props?.finishReason === 'aborted' ? 'aborted' : undefined,
               error: props?.finishReason === 'error',
@@ -437,6 +442,7 @@ export class MastraLLMVNext extends MastraBase {
         surface: 'model',
         base: 'generate',
         occurrence: pulseGenerationOcc,
+        parent: { surface: 'agent', base: 'run' },
         error: true,
       });
       throw mastraError;

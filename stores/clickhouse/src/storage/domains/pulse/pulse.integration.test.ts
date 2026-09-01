@@ -707,3 +707,48 @@ describe('write idempotency by stable id (ack-lost retries, live)', () => {
     expect(f!.durationMs).toBe(700);
   });
 });
+
+describe('suspended runs and stray parentless terminals (live)', () => {
+  it('a waiting run stays running even beside a legacy parentless generation terminal', async ctx => {
+    if (!available) return ctx.skip();
+    const store = makeStore();
+    await store.init();
+    await store.dangerouslyClearAll();
+
+    // Fresh timestamps: the run must be inside the stale threshold.
+    const now = Date.now();
+    let seq = 0;
+    const p = (o: Record<string, any>) => ({
+      id: `s${++seq}`,
+      timestamp: new Date(now - 3000 + seq * 100),
+      seq,
+      type: 'state' as const,
+      surface: 'agent',
+      action: 'run_started',
+      traceId: 'flow-sus',
+      runId: 'run-sus',
+      source: 'native',
+      ...o,
+    });
+
+    await store.batchCreatePulses([
+      p({ spanId: 'agent.run.0' }),
+      p({ spanId: 'model.generate.0', parentSpanId: 'agent.run.0', surface: 'model', action: 'generate_started' }),
+      // LEGACY-SHAPED row: a generation terminal that carries NO parent.
+      // The root rule must not let it impersonate the run's verdict.
+      p({
+        spanId: 'model.generate.0',
+        parentSpanId: '',
+        surface: 'model',
+        action: 'generate_completed',
+        type: 'output',
+      }),
+      // The run is honestly waiting for a human — no run terminal exists.
+      p({ spanId: 'agent.run.0', action: 'run_suspended' }),
+    ] as any);
+
+    const { flows } = await store.listFlows();
+    expect(flows).toHaveLength(1);
+    expect(flows[0]!.status, 'suspended run must not read as completed').toBe('running');
+  });
+});

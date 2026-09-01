@@ -97,12 +97,17 @@ export class InMemoryPulseStorage extends PulseStorage {
     const resourceId = sorted.find(p => p.resourceId)?.resourceId;
     const runId = sorted.find(p => p.runId)?.runId;
 
-    const rootStart = sorted.find(p => !p.parentSpanId && p.action.endsWith('_started'));
+    // The ROOT is the agent run specifically — never "any parentless fact".
+    // A stray parentless terminal (e.g. a legacy generation end emitted
+    // without its parent) must not impersonate the run's verdict, or a
+    // suspended run reads as completed.
+    const isRoot = (p: PulseRecord) => !p.parentSpanId && p.surface === 'agent';
+    const rootStart = sorted.find(p => isRoot(p) && p.action.endsWith('_started'));
     const rootEnd = [...sorted]
       .reverse()
       .find(
         p =>
-          !p.parentSpanId &&
+          isRoot(p) &&
           (p.action.endsWith('_completed') || p.action.endsWith('_failed') || p.action.endsWith('_aborted')),
       );
 
