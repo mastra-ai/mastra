@@ -176,6 +176,28 @@ describe('DurableAgent.recover(runId)', () => {
     cleanup();
   });
 
+  it('rehydrates signal draining for signals delivered after recovery', async () => {
+    const runId = 'run-recovered-signal';
+    await seed(store, runId, 'running', 'agent-A');
+    stubWorkflow(agent, 'success');
+
+    const recovered = await agent.recover(runId);
+    const signalResult = agent.sendSignal(
+      { type: 'user-message', contents: 'after restart' },
+      { runId, resourceId: 'r', threadId: 't' },
+    );
+
+    await expect(signalResult.accepted).resolves.toEqual({ action: 'deliver', runId });
+    const drainPendingSignals = globalRunRegistry.get(runId)?.drainPendingSignals;
+    expect(drainPendingSignals).toBeTypeOf('function');
+    expect(drainPendingSignals?.('pending')).toEqual([
+      expect.objectContaining({ type: 'user', contents: 'after restart' }),
+    ]);
+
+    await globalRunRegistry.get(runId)?.workflowExecution;
+    recovered.cleanup();
+  });
+
   it("replaces a snapshotted parent memory context with the recovered run's persisted context", async () => {
     const runId = 'run-recovered-context';
     const recoveredContexts: unknown[] = [];

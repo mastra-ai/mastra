@@ -1,5 +1,26 @@
 # @mastra/platform
 
+## 1.5.0-alpha.2
+
+### Minor Changes
+
+- `createRepoTemplate` accepts `buildEnv`: environment variables for the build steps only (for example, remote cache credentials). They never enter the template definition or identity. Template fallback warnings now redact credentials. ([#22698](https://github.com/mastra-ai/mastra/pull/22698))
+
+- `createRepoTemplate` now runs each command (clone, fetch, checkout, and each setup command) as its own cached build step, and `setupCommand` accepts an array. A new `workingDirectory` option sets the cwd for the build and for sandboxes created from the template; the repository is cloned to `<workingDirectory>/<repo>`. When omitted, the clone lands in the base image's working directory instead of `$HOME`. ([#22698](https://github.com/mastra-ai/mastra/pull/22698))
+
+  ```ts
+  createRepoTemplate({
+    getRepositoryAccess,
+    setupCommand: ['pnpm i', 'pnpm build'],
+    workingDirectory: '/workspace',
+  });
+  ```
+
+### Patch Changes
+
+- Updated dependencies [[`a499422`](https://github.com/mastra-ai/mastra/commit/a499422cd7eccca184cac7b7a684a6199784aa82), [`9d3073c`](https://github.com/mastra-ai/mastra/commit/9d3073c230dbff45d58c259d676b2b137afd2ff5)]:
+  - @mastra/core@1.64.0-alpha.4
+
 ## 1.5.0-alpha.1
 
 ### Minor Changes

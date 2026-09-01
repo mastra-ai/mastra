@@ -58,6 +58,34 @@ describe('session sandbox memo', () => {
     expect(executeCommand).toHaveBeenCalledWith('pwd');
   });
 
+  it('uses a remote sandbox declared workingDirectory without probing', async () => {
+    const executeCommand = vi.fn(async () => ({ exitCode: 0, stdout: '/home/user\n', stderr: '' }));
+    const sandbox = {
+      id: 'sb-1',
+      provider: 'e2b',
+      workingDirectory: '/workspace',
+      executeCommand,
+    } as unknown as WorkspaceSandbox;
+    getSessionSandbox('sess-1', 'acme/api', () => sandbox);
+
+    await expect(resolveSessionWorkdir('sess-1', sandbox, 'acme/api')).resolves.toBe('/workspace/api');
+    expect(executeCommand).not.toHaveBeenCalled();
+  });
+
+  it('falls back to the probe when a remote workingDirectory is not absolute', async () => {
+    const executeCommand = vi.fn(async () => ({ exitCode: 0, stdout: '/home/user\n', stderr: '' }));
+    const sandbox = {
+      id: 'sb-1',
+      provider: 'e2b',
+      workingDirectory: '~/repos',
+      executeCommand,
+    } as unknown as WorkspaceSandbox;
+    getSessionSandbox('sess-1', 'acme/api', () => sandbox);
+
+    await expect(resolveSessionWorkdir('sess-1', sandbox, 'acme/api')).resolves.toBe('/home/user/api');
+    expect(executeCommand).toHaveBeenCalledWith('pwd');
+  });
+
   it('rejects a failed home probe without memoizing', async () => {
     const executeCommand = vi
       .fn()

@@ -1,5 +1,23 @@
 # @mastra/playground-ui
 
+## 51.4.0-alpha.7
+
+### Patch Changes
+
+- Updated dependencies [[`a499422`](https://github.com/mastra-ai/mastra/commit/a499422cd7eccca184cac7b7a684a6199784aa82), [`9d3073c`](https://github.com/mastra-ai/mastra/commit/9d3073c230dbff45d58c259d676b2b137afd2ff5)]:
+  - @mastra/core@1.64.0-alpha.4
+  - @mastra/client-js@1.42.5-alpha.4
+  - @mastra/react@1.4.10-alpha.5
+
+## 51.4.0-alpha.6
+
+### Patch Changes
+
+- Pinned the lucide-react peer dependency to the workspace catalog, so the published range tracks the version the design system is actually built against. Consumers now need lucide-react 1.37 or later. ([#22718](https://github.com/mastra-ai/mastra/pull/22718))
+
+- Updated dependencies [[`060daa9`](https://github.com/mastra-ai/mastra/commit/060daa92442e4075457be153cdad1e6c2506bae4)]:
+  - @mastra/react@1.4.10-alpha.4
+
 ## 51.4.0-alpha.5
 
 ### Patch Changes

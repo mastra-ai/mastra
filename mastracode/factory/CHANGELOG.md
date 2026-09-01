@@ -1,5 +1,15 @@
 # @mastra/factory
 
+## 0.12.0-alpha.8
+
+### Patch Changes
+
+- Sessions on a remote sandbox with an absolute `workingDirectory` resolve the checkout at `<workingDirectory>/<repo>` without probing the VM. Sandboxes without one (or with a non-absolute one) keep the probe behavior. ([#22698](https://github.com/mastra-ai/mastra/pull/22698))
+
+- Updated dependencies [[`a499422`](https://github.com/mastra-ai/mastra/commit/a499422cd7eccca184cac7b7a684a6199784aa82), [`9d3073c`](https://github.com/mastra-ai/mastra/commit/9d3073c230dbff45d58c259d676b2b137afd2ff5)]:
+  - @mastra/core@1.64.0-alpha.4
+  - @mastra/code-sdk@1.6.0-alpha.6
+
 ## 0.12.0-alpha.7
 
 ### Patch Changes

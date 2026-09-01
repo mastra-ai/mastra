@@ -131,12 +131,79 @@ describe('createRepoTemplate', () => {
     expect((await resolve(BASE)).ref).toBe(repoTemplateRef(IDENTITY));
   });
 
-  it('clones into $HOME, pins the sha, and runs the setup command in the workdir', async () => {
+  it('clones relative to the build cwd, pins the sha, and runs the setup command in the checkout', async () => {
     const steps = await serializedSteps(await resolve(BASE));
     // Serialized as JSON, so the shell double quotes appear escaped.
-    expect(steps).toContain('git clone https://github.com/octocat/hello \\"$HOME/hello\\"');
+    expect(steps).toContain('git clone https://github.com/octocat/hello \\"hello\\"');
     expect(steps).toContain(`checkout ${SHA}`);
-    expect(steps).toContain('cd \\"$HOME/hello\\" && pnpm install');
+    expect(steps).toContain('cd \\"hello\\" && pnpm install');
+  });
+
+  it('runs each setupCommand array entry as its own build step with its own cd prefix', async () => {
+    const serialized = await serializedSteps(await resolve({ ...BASE, setupCommand: ['pnpm i', 'pnpm build'] }));
+    const definition = JSON.parse(serialized) as { steps: { type: string; args: string[] }[] };
+    const runSteps = definition.steps.filter(step => step.type === 'RUN').map(step => step.args.join(' '));
+    expect(runSteps).toContain('cd "hello" && pnpm i');
+    expect(runSteps).toContain('cd "hello" && pnpm build');
+    // The git commands are individual steps too, not one combined chain.
+    expect(runSteps.some(step => step.includes('git clone') && !step.includes('pnpm'))).toBe(true);
+  });
+
+  it('drops blank setup entries instead of emitting broken cd-prefixed steps', async () => {
+    const serialized = await serializedSteps(await resolve({ ...BASE, setupCommand: ['pnpm i', '', '   '] }));
+    const definition = JSON.parse(serialized) as { steps: { type: string; args: string[] }[] };
+    const setupSteps = definition.steps.filter(step => step.type === 'RUN' && step.args.join(' ').includes('cd '));
+    expect(setupSteps).toHaveLength(1);
+    expect(setupSteps[0]!.args.join(' ')).toBe('cd "hello" && pnpm i');
+  });
+
+  it('treats an all-blank setupCommand as absent, including for identity', async () => {
+    const blank = await resolve({ ...BASE, setupCommand: [''] });
+    const none = await resolve({ ...BASE, setupCommand: undefined });
+    expect(blank.ref).toBe(none.ref);
+    expect(await serializedSteps(blank)).not.toContain('cd \\"hello\\" && ');
+  });
+
+  it('creates an explicit workingDirectory and sets it as the cwd before cloning', async () => {
+    const serialized = await serializedSteps(await resolve({ ...BASE, workingDirectory: '/workspace/' }));
+    const definition = JSON.parse(serialized) as { steps: { type: string; args: string[] }[] };
+    // mkdir runs as the build user, then WORKDIR makes the directory the cwd
+    // for every later step and the runtime default. Steps stay relative so
+    // the checkout lands at `<cwd>/hello` exactly as in the unset case.
+    const ordered = definition.steps
+      .filter(step => step.type === 'RUN' || step.type === 'WORKDIR')
+      .map(step => `${step.type} ${step.args.join(' ')}`);
+    const start = ordered.indexOf('RUN mkdir -p "/workspace"');
+    expect(start).toBeGreaterThan(-1);
+    expect(ordered.slice(start, start + 3)).toEqual([
+      'RUN mkdir -p "/workspace"',
+      'WORKDIR /workspace',
+      'RUN git clone https://github.com/octocat/hello "hello"',
+    ]);
+    expect(ordered).toContain('RUN cd "hello" && pnpm install');
+  });
+
+  it('emits no WORKDIR when workingDirectory is omitted, so the image cwd applies', async () => {
+    const serialized = await serializedSteps(await resolve(BASE));
+    const definition = JSON.parse(serialized) as { steps: { type: string; args: string[] }[] };
+    expect(definition.steps.map(step => step.type)).not.toContain('WORKDIR');
+  });
+
+  it('hashes workingDirectory into the template name without disturbing default names', async () => {
+    const defaulted = await resolve(BASE);
+    const custom = await resolve({ ...BASE, workingDirectory: '/workspace' });
+    expect(custom.ref).not.toBe(defaulted.ref);
+    // Absent stays absent: pre-option templates keep their names.
+    expect(defaulted.ref).toBe(repoTemplateRef(IDENTITY));
+    // One layout, one name: a trailing slash is not a different directory.
+    const slashed = await resolve({ ...BASE, workingDirectory: '/workspace/' });
+    expect(slashed.ref).toBe(custom.ref);
+  });
+
+  it('rejects a workingDirectory that is not a plain absolute path', async () => {
+    for (const bad of ['~/repos', '$HOME/repos', 'relative/path', '/tmp/../etc', '/has space', '/quo"te']) {
+      await expect(resolve({ ...BASE, workingDirectory: bad })).rejects.toThrow(/absolute path/);
+    }
   });
 
   it('pins whatever head the repository reports, so a moved branch retags', async () => {
@@ -262,7 +329,7 @@ describe('createRepoTemplate', () => {
     expect(serialized).toContain('PIP_INDEX_URL');
   });
 
-  it('needs no root prep — the clone lands in the build user home', async () => {
+  it('needs no root prep when workingDirectory is omitted', async () => {
     const steps = await serializedSteps(await resolve(BASE));
     expect(steps).not.toContain('chown');
     expect(steps).not.toContain('mkdir -p /workspace');
@@ -285,8 +352,8 @@ describe('createRepoTemplate', () => {
     );
     // The repository name keeps its real spelling in the clone URL; only
     // the derived checkout path is sanitized.
-    expect(steps).toContain('\\"$HOME/evil\\"');
-    expect(steps).not.toContain('$HOME/..');
+    expect(steps).toContain('\\"evil\\"');
+    expect(steps).not.toContain('\\"..evil\\"');
   });
 
   it('rejects clone URLs that could reach the build shell as anything but a URL', async () => {
