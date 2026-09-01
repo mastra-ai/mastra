@@ -3,7 +3,8 @@ import { Agent } from '@mastra/core/agent';
 import { createScorer } from '@mastra/core/evals';
 import { afterEach, describe, expect, it, test } from 'vitest';
 
-import { EvalPassRateError, expectScore, expectScores } from './expect-scores';
+import type { ExpectEvalOptions, ExpectEvalsOptions } from './expect-evals';
+import { EvalPassRateError, expectEval, expectEvals } from './expect-evals';
 
 function createMockAgent(response = 'The capital of France is Paris.') {
   const model = new MockLanguageModelV2({
@@ -40,9 +41,9 @@ const groundTruthGate = createScorer({
   description: 'Passes when groundTruth is "pass"',
 }).generateScore(({ run }) => (run.groundTruth === 'pass' ? 1 : 0));
 
-describe('expectScores', () => {
+describe('expectEvals', () => {
   it('resolves with the RunEvalsResult when all gates pass', async () => {
-    const result = await expectScores({
+    const result = await expectEvals({
       target: createMockAgent(),
       data: [{ input: 'q1', groundTruth: 'pass' }],
       gates: [groundTruthGate],
@@ -54,7 +55,7 @@ describe('expectScores', () => {
   });
 
   it('passes when the gate pass rate meets minPassRate', async () => {
-    const result = await expectScores({
+    const result = await expectEvals({
       target: createMockAgent(),
       data: [
         { input: 'q1', groundTruth: 'pass' },
@@ -69,7 +70,7 @@ describe('expectScores', () => {
   });
 
   it('rejects when the gate pass rate is below minPassRate', async () => {
-    const promise = expectScores({
+    const promise = expectEvals({
       target: createMockAgent(),
       data: [
         { input: 'q1', groundTruth: 'pass' },
@@ -84,7 +85,7 @@ describe('expectScores', () => {
   });
 
   it('rejects when a scorer threshold fails, regardless of minPassRate', async () => {
-    const promise = expectScores({
+    const promise = expectEvals({
       target: createMockAgent(),
       data: [{ input: 'q1' }],
       scorers: [{ scorer: fixedScorer('quality', 0.3), threshold: 0.5 }],
@@ -95,7 +96,7 @@ describe('expectScores', () => {
 
   it('rejects out-of-range minPassRate', async () => {
     await expect(
-      expectScores({
+      expectEvals({
         target: createMockAgent(),
         data: [{ input: 'q1' }],
         gates: [fixedScorer('g', 1)],
@@ -105,7 +106,7 @@ describe('expectScores', () => {
 
   it('rejects non-finite minPassRate', async () => {
     await expect(
-      expectScores({
+      expectEvals({
         target: createMockAgent(),
         data: [{ input: 'q1' }],
         gates: [fixedScorer('g', 0)],
@@ -114,7 +115,7 @@ describe('expectScores', () => {
   });
 
   it('rejects when a turn-level gate fails, even if top-level assertions pass', async () => {
-    const promise = expectScores({
+    const promise = expectEvals({
       target: createMockAgent(),
       data: [
         {
@@ -129,7 +130,7 @@ describe('expectScores', () => {
   });
 
   it('rejects when a turn-level threshold fails', async () => {
-    const promise = expectScores({
+    const promise = expectEvals({
       target: createMockAgent(),
       data: [
         {
@@ -142,7 +143,7 @@ describe('expectScores', () => {
   });
 
   test('attaches meta to the current test for the reporter', async ({ task }) => {
-    await expectScores({
+    await expectEvals({
       target: createMockAgent(),
       data: [{ input: 'q1', groundTruth: 'pass' }],
       gates: [groundTruthGate],
@@ -162,9 +163,9 @@ describe('expectScores', () => {
   });
 });
 
-describe('expectScore', () => {
+describe('expectEval', () => {
   it('runs a single data item and resolves when it passes', async () => {
-    const result = await expectScore({
+    const result = await expectEval({
       target: createMockAgent(),
       data: { input: 'q1', groundTruth: 'pass' },
       gates: [groundTruthGate],
@@ -176,7 +177,7 @@ describe('expectScore', () => {
   });
 
   it('rejects when the item fails a gate', async () => {
-    const promise = expectScore({
+    const promise = expectEval({
       target: createMockAgent(),
       data: { input: 'q1', groundTruth: 'fail' },
       gates: [groundTruthGate],
@@ -191,7 +192,7 @@ describe('expectScore', () => {
       { input: 'q1', groundTruth: 'pass' },
       { input: 'q2', groundTruth: 'pass' },
     ])('item $input passes and gets its own reporter entry', async (item, { task }) => {
-      await expectScore({
+      await expectEval({
         target: createMockAgent(),
         data: item,
         gates: [groundTruthGate],
@@ -199,5 +200,19 @@ describe('expectScore', () => {
 
       expect(task.meta.mastraEval).toMatchObject({ verdict: 'passed', totalItems: 1 });
     });
+  });
+});
+
+describe('target-specific data contracts (types)', () => {
+  it('rejects agent-only data shapes for workflow targets at the type level', () => {
+    const workflow = {} as import('@mastra/core/workflows').Workflow;
+
+    // @ts-expect-error `turns` is agent-only; workflow data items must not accept it
+    const invalidEvals: ExpectEvalsOptions = { target: workflow, data: [{ turns: [] }] };
+    // @ts-expect-error `turns` is agent-only; single-item variant must reject it too
+    const invalidEval: ExpectEvalOptions = { target: workflow, data: { turns: [] } };
+
+    expect(invalidEvals).toBeDefined();
+    expect(invalidEval).toBeDefined();
   });
 });

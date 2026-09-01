@@ -21,7 +21,7 @@ function supportsColor(): boolean {
 
 /**
  * Vitest reporter that prints a per-test score table for every eval run
- * using `expectScore`/`expectScores` (or any test that populates `task.meta.mastraEval`).
+ * using `expectEval`/`expectEvals` (or any test that populates `task.meta.mastraEval`).
  *
  * Usage in `vitest.config.ts`:
  *   test: { reporters: ['default', new MastraEvalsReporter()] }

@@ -2,7 +2,7 @@ import { Agent } from '@mastra/core/agent';
 import { createScorer } from '@mastra/core/evals';
 import { createKeywordCoverageScorer } from '@mastra/evals/scorers/prebuilt';
 import { getTextContentFromMastraDBMessage } from '@mastra/evals/scorers/utils';
-import { expectScore, expectScores } from '@mastra/evals/vitest';
+import { expectEval, expectEvals } from '@mastra/evals/vitest';
 import { test } from 'vitest';
 
 // Live evals require an OpenAI key; skip when it's not set (e.g. in CI).
@@ -30,7 +30,7 @@ const containsGroundTruth = createScorer({
 });
 
 test.skipIf(!hasOpenAIKey)('capitals agent answers with the expected city', { timeout: 60_000 }, async () => {
-  await expectScores({
+  await expectEvals({
     target: capitalsAgent,
     data: [
       { input: 'What is the capital of France?', groundTruth: 'Paris' },
@@ -48,7 +48,7 @@ test.skipIf(!hasOpenAIKey).for([
   { input: 'What is the capital of Japan?', groundTruth: 'Tokyo' },
   { input: 'What is the capital of Australia?', groundTruth: 'Canberra' },
 ])('capitals agent: $input', { timeout: 60_000 }, async item => {
-  await expectScore({
+  await expectEval({
     target: capitalsAgent,
     data: item,
     gates: [containsGroundTruth],
