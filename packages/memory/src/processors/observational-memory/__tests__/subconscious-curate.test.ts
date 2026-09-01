@@ -22,7 +22,6 @@ function resolved(): ResolvedSubconsciousConfig {
     reflection: [{ name: 'curate', maxSteps: 5, builtIn: true }],
     defaultScope: 'resource',
     maxScope: 'resource',
-    learnedGuidance: true,
     tools: true,
     activity: { recentUpdates: 10 },
     pins: false,

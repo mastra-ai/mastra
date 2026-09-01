@@ -47,8 +47,6 @@ export {
   StaleKnowledgeSemanticIndexError,
   Subconscious,
   SUBCONSCIOUS_ACTIVITY_STATE_ID,
-  SubconsciousCaptureExtractor,
-  subconsciousCaptureSchema,
   SubconsciousRemindExtractor,
 } from './subconscious';
 export type {
@@ -61,8 +59,6 @@ export type {
   SubconsciousBuiltInObservationConfig,
   SubconsciousBuiltInReflectionAgent,
   SubconsciousBuiltInReflectionConfig,
-  SubconsciousCaptureHook,
-  SubconsciousCaptureOutput,
   SubconsciousConfig,
   SubconsciousCustomObservationConfig,
   SubconsciousCustomReflectionConfig,

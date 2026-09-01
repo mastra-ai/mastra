@@ -94,7 +94,7 @@ export function armConfigHash(arm: ArmConfig): string {
 /** Build the Subconscious for an arm. The prompts are appended to the built-in contracts. */
 export function buildArmSubconscious(arm: ArmConfig): Subconscious {
   return new Subconscious({
-    observation: [{ name: 'capture', instructions: arm.prompts.capture }],
+    observation: ['remind'],
     reflection: [{ name: 'curate', instructions: arm.prompts.curate, maxSteps: arm.curateMaxSteps }],
     defaultScope: arm.defaultScope,
     maxScope: arm.maxScope,

@@ -42,17 +42,10 @@ describe('Subconscious pinned knowledge', () => {
     expect(new Subconscious({ pins: true }).resolved.pins).toEqual({
       maxPins: 20,
       maxCharacters: 2_000,
-      capturePinning: false,
     });
     expect(new Subconscious({ pins: { maxCharacters: 500, maxPins: 3 } }).resolved.pins).toEqual({
       maxPins: 3,
       maxCharacters: 500,
-      capturePinning: false,
-    });
-    expect(new Subconscious({ pins: { capturePinning: true } }).resolved.pins).toEqual({
-      maxPins: 20,
-      maxCharacters: 2_000,
-      capturePinning: true,
     });
     expect(() => new Subconscious({ pins: { maxCharacters: 100_000 } })).toThrow(/maxCharacters/);
     expect(() => new Subconscious({ pins: { maxCharacters: 0 } })).toThrow(/maxCharacters/);
