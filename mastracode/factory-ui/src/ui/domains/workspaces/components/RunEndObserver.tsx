@@ -1,7 +1,5 @@
-import { useQueryClient } from '@tanstack/react-query';
 import { useEffect } from 'react';
 
-import { queryKeys } from '../../../../api/keys';
 import { useActiveRunResources } from '../../../../hooks/useActiveRunResources';
 import { allSessionRows, useWorkspacesQuery } from '../../../../hooks/useWorkspaces';
 import { AGENT_CONTROLLER_ID } from '../../chat/services/constants';
@@ -13,9 +11,8 @@ export function resetRunEndObserverForTests(): void {
   runningBySession.clear();
 }
 
-/** A run this tab watched in flight ended: ring the done sound, refetch the sessions list it may have materialized. */
+/** Rings the done sound when a run this tab watched in flight ends. */
 export function RunEndObserver({ projectRepositoryId }: { projectRepositoryId: string | undefined }) {
-  const queryClient = useQueryClient();
   const { data } = useWorkspacesQuery(projectRepositoryId);
   const running = useActiveRunResources({
     agentControllerId: AGENT_CONTROLLER_ID,
@@ -28,10 +25,8 @@ export function RunEndObserver({ projectRepositoryId }: { projectRepositoryId: s
       if (runningBySession.get(sessionId) === true && !isRunning) runEnded = true;
       runningBySession.set(sessionId, isRunning);
     }
-    if (!runEnded) return;
-    playDoneSound();
-    void queryClient.invalidateQueries({ queryKey: queryKeys.sessions(projectRepositoryId) });
-  }, [running, queryClient, projectRepositoryId]);
+    if (runEnded) playDoneSound();
+  }, [running]);
 
   return null;
 }
