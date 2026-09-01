@@ -101,6 +101,8 @@ import type {
   RetentionTablesDescriptor,
   ScoreRecord,
   TableRetentionPolicy,
+  TraceQueryResponse,
+  TrustedTraceQueryPlan,
 } from '@mastra/core/storage';
 
 import type { DbClient } from '../../../client';
@@ -132,6 +134,7 @@ import { isDuplicateRelationError, isDuplicateSchemaError } from './pg-errors';
 import { deltaPollingFeatureEnabled } from './polling';
 import { prunePartitionedTable, pruneTimescaleTable, retentionCutoff } from './retention';
 import * as scoresOps from './scores';
+import * as traceQueryOps from './trace-query';
 import * as tracesOps from './traces';
 import * as tracingOps from './tracing';
 
@@ -333,8 +336,8 @@ export class ObservabilityStoragePostgresVNext extends ObservabilityStorage {
   }
 
   override getFeatures() {
-    if (!deltaPollingFeatureEnabled()) return ['metrics', 'logs'] as const;
-    return ['metrics', 'logs', 'delta-polling'] as const;
+    if (!deltaPollingFeatureEnabled()) return ['metrics', 'logs', 'trace-query'] as const;
+    return ['metrics', 'logs', 'delta-polling', 'trace-query'] as const;
   }
 
   async #run<T>(op: string, fn: () => Promise<T>, details?: Record<string, unknown>): Promise<T> {
@@ -400,6 +403,10 @@ export class ObservabilityStoragePostgresVNext extends ObservabilityStorage {
 
   override async listTraces(args: ListTracesArgs): Promise<ListTracesResponse> {
     return this.#run('LIST_TRACES', () => tracesOps.listTraces(this.#client, this.#schema, args));
+  }
+
+  override async queryTraces(plan: TrustedTraceQueryPlan): Promise<TraceQueryResponse> {
+    return this.#run('QUERY_TRACES', () => traceQueryOps.queryTraces(this.#client, this.#schema, plan));
   }
 
   override async listBranches(args: ListBranchesArgs): Promise<ListBranchesResponse> {

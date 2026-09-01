@@ -264,6 +264,7 @@ export function spanRecordToRow(span: CreateSpanRecord): Record<string, unknown>
     name: span.name,
     spanType: span.spanType,
     isEvent: span.isEvent,
+    isPending: !span.isEvent && span.endedAt == null,
     startedAt: toISOString(span.startedAt),
     endedAt: toISOString(endedAt),
     tags: normalizeTags(span.tags),

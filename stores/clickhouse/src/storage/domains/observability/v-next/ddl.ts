@@ -164,6 +164,7 @@ CREATE TABLE IF NOT EXISTS ${TABLE_SPAN_EVENTS} (
   name               String,
   spanType           LowCardinality(String),
   isEvent            Bool DEFAULT false,
+  isPending          Bool DEFAULT false,
   startedAt          DateTime64(3, 'UTC'),
   endedAt            DateTime64(3, 'UTC'),
 
@@ -235,6 +236,7 @@ CREATE TABLE IF NOT EXISTS ${TABLE_TRACE_ROOTS} (
   name               String,
   spanType           LowCardinality(String),
   isEvent            Bool DEFAULT false,
+  isPending          Bool DEFAULT false,
   startedAt          DateTime64(3, 'UTC'),
   endedAt            DateTime64(3, 'UTC'),
 
@@ -327,6 +329,7 @@ CREATE TABLE IF NOT EXISTS ${TABLE_TRACE_BRANCHES} (
   name               String,
   spanType           LowCardinality(String),
   isEvent            Bool DEFAULT false,
+  isPending          Bool DEFAULT false,
   startedAt          DateTime64(3, 'UTC'),
   endedAt            DateTime64(3, 'UTC'),
 
@@ -1115,10 +1118,14 @@ export const ALL_MIGRATIONS: readonly MigrationEntry[] = [
   addColumn(TABLE_SPAN_EVENTS, 'entityVersionId', 'Nullable(String)'),
   addColumn(TABLE_SPAN_EVENTS, 'parentEntityVersionId', 'Nullable(String)'),
   addColumn(TABLE_SPAN_EVENTS, 'rootEntityVersionId', 'Nullable(String)'),
+  addColumn(TABLE_SPAN_EVENTS, 'isPending', 'Bool DEFAULT false'),
   // Trace roots
   addColumn(TABLE_TRACE_ROOTS, 'entityVersionId', 'Nullable(String)'),
   addColumn(TABLE_TRACE_ROOTS, 'parentEntityVersionId', 'Nullable(String)'),
   addColumn(TABLE_TRACE_ROOTS, 'rootEntityVersionId', 'Nullable(String)'),
+  addColumn(TABLE_TRACE_ROOTS, 'isPending', 'Bool DEFAULT false'),
+  // Trace branches
+  addColumn(TABLE_TRACE_BRANCHES, 'isPending', 'Bool DEFAULT false'),
   // Metrics
   addColumn(TABLE_METRIC_EVENTS, 'entityVersionId', 'Nullable(String)'),
   addColumn(TABLE_METRIC_EVENTS, 'parentEntityVersionId', 'Nullable(String)'),

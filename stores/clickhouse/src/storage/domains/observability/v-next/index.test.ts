@@ -44,6 +44,7 @@ createObservabilityVNextTests({
   capabilities: {
     label: 'ClickHouse vNext',
     preferredStrategy: 'insert-only',
+    traceQuery: true,
   },
   getStorage: async () => {
     if (!sharedSuiteStorage) {
@@ -183,15 +184,15 @@ describe('ObservabilityStorageClickhouseVNext', () => {
       }
     }
 
-    it('advertises metrics, logs, and delta polling when the feature is enabled', () => {
-      expect(storage.getFeatures()).toEqual(['metrics', 'logs', 'delta-polling']);
+    it('advertises metrics, logs, delta polling, and trace queries when the feature is enabled', () => {
+      expect(storage.getFeatures()).toEqual(['metrics', 'logs', 'delta-polling', 'trace-query']);
     });
 
-    it('advertises metrics and logs when delta polling is disabled', () => {
+    it('continues advertising trace queries when delta polling is disabled', () => {
       coreFeatures.delete('observability-delta-polling');
 
       try {
-        expect(storage.getFeatures()).toEqual(['metrics', 'logs']);
+        expect(storage.getFeatures()).toEqual(['metrics', 'logs', 'trace-query']);
       } finally {
         coreFeatures.add('observability-delta-polling');
       }
