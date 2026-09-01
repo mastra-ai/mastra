@@ -67,7 +67,7 @@ async function prepareBoundItem(
         title: 'Factory item',
         stages: ['intake'],
         sessions: {},
-        metadata: {},
+        metadata: { authorTrusted: true },
       },
     },
     role,

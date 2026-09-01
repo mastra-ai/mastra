@@ -38,7 +38,6 @@ function sessionValue(resourceId: string, sessionEnabled: boolean): ChatSessionC
     resourceReady: true,
     sandboxReady: sessionEnabled,
     sandboxPreparing: !sessionEnabled,
-    sandboxProgress: undefined,
     resourceEnabled: true,
     baseUrl: TEST_BASE_URL,
     kind: 'factory',

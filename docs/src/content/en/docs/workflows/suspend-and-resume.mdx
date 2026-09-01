@@ -1,6 +1,6 @@
 ---
 title: "Suspend and resume | Workflows"
-description: "Suspend and resume in Mastra workflows allows you to pause execution while waiting for external input or resources."
+description: "Suspend Mastra workflows while waiting for external input, resources, or time, then resume saved runs with data and recover interrupted executions."
 packages:
   - "@mastra/core"
 ---
@@ -75,7 +75,8 @@ Use `resume()` to restart a suspended workflow from the step where it paused. Pa
 flowchart LR
   accTitle: Resuming a workflow from a saved snapshot
   accDescr: Resume restores the saved snapshot and restarts step1. The step then completes the workflow.
-  snapshot@{ shape: cyl, label: "saved snapshot" } pending1@-. resume .-> step1([step1])
+  snapshot@{ shape: cyl, label: "saved snapshot" }
+  snapshot pending1@-. resume .-> step1([step1])
   step1 -- out --> stop(( end ))
 
   class snapshot pending

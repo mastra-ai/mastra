@@ -74,6 +74,7 @@ import type { Schedule, ScheduleUpdate, SchedulesStorage } from '../storage/doma
 import { WorkflowsInMemory } from '../storage/domains/workflows/inmemory';
 import { augmentWithInit } from '../storage/storageWithInit';
 import type { StorageResolvedPromptBlockType } from '../storage/types';
+import { trackFeatureUsage } from '../telemetry/feature-telemetry';
 import type { ToolLoopAgentLike } from '../tool-loop-agent';
 import { isToolLoopAgentLike, toolLoopAgentToMastraAgent } from '../tool-loop-agent';
 import type { ToolAction, ToolPayloadTransformPolicy } from '../tools';
@@ -755,6 +756,8 @@ export class Mastra<
    * batch of agents after startup triggers one sweep rather than one per agent.
    */
   #fsScheduleSyncPending = false;
+  /** Set once file-based agent usage has been reported for this Mastra instance. */
+  #fsAgentUsageTracked = false;
   /**
    * Set when an agent registers while a sweep is already in flight. That sweep
    * may have read the agent map before the agent landed, so it runs one more
@@ -2257,18 +2260,27 @@ export class Mastra<
   /**
    * Resolve a versioned variant of an agent by applying stored overrides from the editor.
    *
-   * Requires the editor package to be configured — throws
-   * `MASTRA_EDITOR_REQUIRED_FOR_VERSIONED_AGENT_LOOKUP` if it is not.
+   * Looking up a specific `versionId` requires the editor package to be
+   * configured — throws `MASTRA_EDITOR_REQUIRED_FOR_VERSIONED_AGENT_LOOKUP` if
+   * it is not. A `status` selector is a default rather than a request for a
+   * specific stored version (the server stamps one on every agent request), so
+   * without the editor there are no stored versions and the code-defined agent
+   * is returned as-is.
    *
    * @param agent - The code-defined agent to resolve a version for.
    * @param version - Selects a version by ID or publication status.
-   * @returns A forked agent instance with the stored overrides applied.
+   * @returns The code-defined agent for a status selector without an editor, otherwise a forked
+   *   agent instance with the stored overrides applied.
    */
   public async resolveVersionedAgent<TAgent extends Agent>(
     agent: TAgent,
     version: VersionSelector | { status?: 'draft' | 'published' },
   ): Promise<TAgent> {
     const editor = this.getEditor();
+
+    if (!editor && !('versionId' in version)) {
+      return agent;
+    }
 
     if (!editor) {
       const error = new MastraError({
@@ -2779,6 +2791,7 @@ export class Mastra<
     }
 
     const agents = this.#agents as Record<string, Agent<any>>;
+    let registeredCount = 0;
     for (const [key, agent] of Object.entries(fsAgents)) {
       if (agent == null) {
         continue;
@@ -2790,6 +2803,12 @@ export class Mastra<
         continue;
       }
       this.addAgent(agent, key, { source: 'fs' });
+      registeredCount++;
+    }
+
+    if (registeredCount > 0 && !this.#fsAgentUsageTracked) {
+      this.#fsAgentUsageTracked = true;
+      trackFeatureUsage('file_based_agents', { fs_agent_count: registeredCount });
     }
   }
 

@@ -188,12 +188,12 @@ export interface DaytonaSandboxOptions extends Omit<MastraSandboxOptions, 'proce
   /**
    * Computer-use (desktop) capability configuration.
    *
-   * When enabled (the default), the sandbox exposes the `computer` capability
-   * and workspaces emit the `mastra_workspace_computer_*` tools. The desktop
-   * processes (Xvfb, xfce4, x11vnc, noVNC) are started lazily on the first
-   * computer operation.
+   * Set to `true` or provide an options object to expose the `computer`
+   * capability and emit the `mastra_workspace_computer_*` workspace tools.
+   * The desktop processes (Xvfb, xfce4, x11vnc, noVNC) are started lazily on
+   * the first computer operation.
    *
-   * Set to `false` to disable the capability entirely.
+   * @default false
    */
   computerUse?:
     | boolean
@@ -287,9 +287,9 @@ export class DaytonaSandbox extends MastraSandbox {
    * Computer-use (desktop) capability: screenshot, mouse, and keyboard control
    * of the sandbox's desktop environment via Daytona's computer use API.
    *
-   * `undefined` when the sandbox was constructed with `computerUse: false`.
-   * Desktop processes are started lazily on the first operation (unless
-   * `computerUse.autoStart` is `false`).
+   * Available when the sandbox is constructed with `computerUse: true` or an
+   * options object. Desktop processes are started lazily on the first operation
+   * unless `computerUse.autoStart` is `false`.
    */
   declare readonly computer?: SandboxComputer;
 
@@ -363,11 +363,11 @@ export class DaytonaSandbox extends MastraSandbox {
     };
     this._constructorOptions = { ...options };
 
-    const computerUseOption = options.computerUse ?? true;
+    const computerUseOption = options.computerUse;
     this.computerUseAutoStart = typeof computerUseOption === 'object' ? (computerUseOption.autoStart ?? true) : true;
     this.noVncPort =
       typeof computerUseOption === 'object' ? (computerUseOption.noVncPort ?? DEFAULT_NOVNC_PORT) : DEFAULT_NOVNC_PORT;
-    if (computerUseOption !== false) {
+    if (computerUseOption === true || typeof computerUseOption === 'object') {
       this.computer = this.createComputer();
     }
   }

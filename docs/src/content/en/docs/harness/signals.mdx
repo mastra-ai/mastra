@@ -1,6 +1,6 @@
 ---
 title: "Signals | Long-running agents"
-description: "Learn how to send real-time messages and context into a Mastra agent thread."
+description: "Send real-time messages or contextual data into a Mastra agent thread immediately or queue them for the next turn with configurable signal behavior."
 packages:
   - "@mastra/core"
   - "@mastra/client-js"
@@ -157,7 +157,7 @@ The model receives the signal as context like this:
 <notification source="github" pr="123">PR #123 has a new review comment from User X about the API surface.</notification>
 ```
 
-Use XML-safe `tagName` and attribute names. They can contain letters, numbers, shows, periods, and hyphens. They must start with a letter or underscore.
+Use XML-safe `tagName` and attribute names. They can contain letters, numbers, periods, hyphens, and the underscore character (`_`). They must start with a letter or underscore.
 
 #### Storage support
 

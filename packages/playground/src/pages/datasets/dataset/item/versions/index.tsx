@@ -1,6 +1,6 @@
+import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
-import { Chip } from '@mastra/playground-ui/components/Chip';
 import { CodeDiff } from '@mastra/playground-ui/components/CodeDiff';
 import { Column, Columns } from '@mastra/playground-ui/components/Columns';
 import { MainContentContent, MainContentLayout } from '@mastra/playground-ui/components/MainContent';
@@ -304,9 +304,9 @@ function CompareVersionColumn({
         <>
           <b>v. {v.datasetVersion}</b> - {format(date, 'MMM d, yyyy h:mm a')}
           {v.isLatest ? (
-            <Chip color="blue" size="small">
+            <Badge variant="blue" size="xs">
               Latest
-            </Chip>
+            </Badge>
           ) : null}
         </>
       ),

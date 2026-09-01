@@ -6,7 +6,13 @@
 import { LibSQLFactoryStorage } from '@mastra/libsql';
 import { describe, expect, it, vi } from 'vitest';
 
-import { applyStageTransition, isAgentActor, WorkItemRelationError, WorkItemsStorage } from './base.js';
+import {
+  applyStageTransition,
+  factoryDecisionAttentionIdentity,
+  isAgentActor,
+  WorkItemRelationError,
+  WorkItemsStorage,
+} from './base.js';
 import type { WorkItemStageEntry } from './base.js';
 
 const input = {
@@ -479,8 +485,7 @@ describe('WorkItemsStorage', () => {
     await storage.setAttentionReceipt({
       ...scope,
       userId: 'u',
-      decisionId: failed.id,
-      failureOccurrence: failed.failureOccurrence,
+      identity: factoryDecisionAttentionIdentity(failed.id, failed.failureOccurrence),
       action: 'read',
       now,
     });
@@ -493,8 +498,7 @@ describe('WorkItemsStorage', () => {
       storage.setAttentionReceipt({
         ...scope,
         userId: 'u',
-        decisionId: failed.id,
-        failureOccurrence: failed.failureOccurrence,
+        identity: factoryDecisionAttentionIdentity(failed.id, failed.failureOccurrence),
         action: 'archive',
         now,
       }),
@@ -595,5 +599,62 @@ describe('isAgentActor', () => {
     [undefined, false],
   ] as const)('isAgentActor(%j) → %s', (actor, expected) => {
     expect(isAgentActor(actor)).toBe(expected);
+  });
+});
+
+describe('getBySource', () => {
+  const slackThread = { integrationId: 'slack', type: 'slack-thread', externalId: 'slack:C-1:1700.42' };
+
+  it('resolves the card a platform thread created without knowing its tenant', async () => {
+    const storage = await makeStorage();
+    const created = await storage.upsert({
+      orgId: 'org1',
+      userId: 'u',
+      factoryProjectId: 'p1',
+      input: { ...input, externalSource: slackThread },
+    });
+
+    expect((await storage.getBySource(slackThread))?.id).toBe(created.item.id);
+  });
+
+  it('resolves to nothing for a source no card was born from', async () => {
+    const storage = await makeStorage();
+    await storage.upsert({ orgId: 'org1', userId: 'u', factoryProjectId: 'p1', input });
+
+    expect(await storage.getBySource(slackThread)).toBeNull();
+  });
+
+  it('keeps two workspaces that issued the same thread id apart', async () => {
+    const storage = await makeStorage();
+    const theirs = { ...slackThread, workspaceId: 'T-them' };
+    const ours = { ...slackThread, workspaceId: 'T-us' };
+    await storage.upsert({
+      orgId: 'org1',
+      userId: 'u',
+      factoryProjectId: 'p1',
+      input: { ...input, externalSource: theirs },
+    });
+    const mine = await storage.upsert({
+      orgId: 'org2',
+      userId: 'u',
+      factoryProjectId: 'p2',
+      input: { ...input, externalSource: ours },
+    });
+
+    expect((await storage.getBySource(ours))?.id).toBe(mine.item.id);
+  });
+
+  it('refuses to guess when two projects hold the same source', async () => {
+    const storage = await makeStorage();
+    for (const factoryProjectId of ['p1', 'p2']) {
+      await storage.upsert({
+        orgId: 'org1',
+        userId: 'u',
+        factoryProjectId,
+        input: { ...input, externalSource: slackThread },
+      });
+    }
+
+    expect(await storage.getBySource(slackThread)).toBeNull();
   });
 });

@@ -6,7 +6,7 @@ import { TraceStatus } from '@mastra/core/storage';
 type ListTracesResponse = Awaited<ReturnType<MastraClient['listTraces']>>;
 type ListBranchesResponse = Awaited<ReturnType<MastraClient['listBranches']>>;
 type MetricBreakdownResponse = Awaited<ReturnType<MastraClient['getMetricBreakdown']>>;
-type GetTraceLightResponse = Awaited<ReturnType<MastraClient['getTraceLight']>>;
+type GetTraceResponse = Awaited<ReturnType<MastraClient['getTrace']>>;
 type GetBranchResponse = Awaited<ReturnType<MastraClient['getBranch']>>;
 type ListFeedbackResponse = Awaited<ReturnType<MastraClient['listFeedback']>>;
 
@@ -73,7 +73,7 @@ export const traceUsageBreakdown: MetricBreakdownResponse = {
   ],
 };
 
-export const traceLightSpans: GetTraceLightResponse = {
+export const traceSpans: GetTraceResponse = {
   traceId: 'trace-a',
   spans: [{ ...trace, parentSpanId: null }],
 };

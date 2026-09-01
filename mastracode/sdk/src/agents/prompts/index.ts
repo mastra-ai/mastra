@@ -111,7 +111,7 @@ export function buildFullPromptSections(ctx: PromptContext): PromptSection[] {
 
   // Map new context to base context
   const baseCtx: BasePromptContext = {
-    projectPath: ctx.workingDir,
+    projectPath: ctx.workingDir || '(no workspace attached)',
     projectName: ctx.projectName || 'unknown',
     gitBranch: ctx.gitBranch,
     platform: process.platform,
@@ -153,9 +153,15 @@ export function buildFullPromptSections(ctx: PromptContext): PromptSection[] {
       ? createGitRefInstructionReader(ctx.workingDir, baseRef)
       : { exists: () => false, read: () => '' }
     : undefined;
-  const instructionSources = loadAgentInstructions(ctx.workingDir, configDir, projectReader, {
-    skipGlobal: skipGlobalInstructions,
-  });
+  // No working directory means a hosted session with no project attached:
+  // load NO instruction files at all — project locations would resolve
+  // against the server's own cwd, and global locations against the server's
+  // homedir. Neither belongs in a hosted session's prompt.
+  const instructionSources = ctx.workingDir
+    ? loadAgentInstructions(ctx.workingDir, configDir, projectReader, {
+        skipGlobal: skipGlobalInstructions,
+      })
+    : [];
   // Emitted per source so each AGENTS.md/CLAUDE.md can be costed individually.
   // The heading rides on the first source's section, which is exactly how
   // `formatAgentInstructions` lays the block out, so joining the sections

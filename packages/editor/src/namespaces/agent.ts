@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 
 import { Memory } from '@mastra/memory';
 import { Agent } from '@mastra/core/agent';
-import type { ToolsInput } from '@mastra/core/agent';
+import type { AgentInstructions, ToolsInput } from '@mastra/core/agent';
 import type { Mastra } from '@mastra/core';
 import { Workspace, CompositeVersionedSkillSource } from '@mastra/core/workspace';
 import type { SkillSource, VersionedSkillEntry } from '@mastra/core/workspace';
@@ -567,7 +567,7 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
     if (instructionsEditable && storedConfig.instructions !== undefined && storedConfig.instructions !== null) {
       const resolved = this.resolveStoredInstructions(storedConfig.instructions);
       if (resolved !== undefined) {
-        fork.__updateInstructions(resolved);
+        fork.__updateInstructions(this.mergeInstructionEnvelope(agent, resolved));
       }
     }
 
@@ -1159,6 +1159,83 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
     };
   }
 
+  /**
+   * Wrap stored instruction text in the code-defined agent's message envelope.
+   *
+   * Stored overrides can only carry plain text (`string | AgentInstructionBlock[]`),
+   * but code-defined instructions may be structured system messages carrying
+   * `providerOptions` (e.g. `anthropic.cacheControl` prompt-cache breakpoints).
+   * Studio owns the wording; code keeps the envelope, so publishing an edit
+   * can't silently drop provider options.
+   *
+   * When the code instructions are plain text (or absent, e.g. editor-owned
+   * agents), the stored value is returned unchanged. When code instructions are
+   * an array of messages, the last message's envelope is kept: an Anthropic
+   * cache breakpoint on the last system block covers everything before it, so
+   * it is the one worth preserving when Studio flattens the array into one text.
+   */
+  private mergeInstructionEnvelope(
+    agent: Agent,
+    stored:
+      | string
+      | (({ requestContext, mastra }: { requestContext: RequestContext; mastra?: Mastra }) => Promise<string>),
+  ):
+    | AgentInstructions
+    | (({
+        requestContext,
+        mastra,
+      }: {
+        requestContext: RequestContext;
+        mastra?: Mastra;
+      }) => Promise<AgentInstructions>) {
+    const raw = (
+      agent as Agent & { __getOverridableFields?: () => { instructions?: unknown } }
+    ).__getOverridableFields?.()?.instructions;
+
+    type Envelope = Record<string, unknown> & { content: unknown };
+    const pickEnvelope = (value: unknown): Envelope | undefined => {
+      const candidate = Array.isArray(value) ? value[value.length - 1] : value;
+      return typeof candidate === 'object' && candidate !== null && 'content' in candidate
+        ? (candidate as Envelope)
+        : undefined;
+    };
+    const wrap = (envelope: Envelope, text: string): AgentInstructions =>
+      ({ ...envelope, content: text }) as AgentInstructions;
+
+    // Plain-text code instructions (or none at all) — nothing to preserve.
+    if (
+      raw == null ||
+      typeof raw === 'string' ||
+      (Array.isArray(raw) && raw.every(entry => typeof entry === 'string'))
+    ) {
+      return stored;
+    }
+
+    if (typeof raw !== 'function') {
+      const envelope = pickEnvelope(raw);
+      if (!envelope) return stored;
+      if (typeof stored === 'string') return wrap(envelope, stored);
+      return async args => wrap(envelope, await stored(args));
+    }
+
+    // Dynamic code instructions: resolve the original at request time (same
+    // pattern as the tools merge above) and re-attach whatever envelope it produced.
+    const getOriginal = agent.getInstructions.bind(agent);
+    return async ({ requestContext, mastra }) => {
+      const text = typeof stored === 'string' ? stored : await stored({ requestContext, mastra });
+      let original: unknown;
+      try {
+        original = await getOriginal({ requestContext });
+      } catch {
+        // Dynamic instructions may require context this request can't provide;
+        // fall back to the stored text rather than failing the run.
+        return text;
+      }
+      const envelope = pickEnvelope(original);
+      return envelope ? wrap(envelope, text) : text;
+    };
+  }
+
   private applyStoredToolDescriptions(
     codeTools: ToolsInput,
     storedTools?: Record<string, StorageToolConfig> | string[],
@@ -1169,12 +1246,13 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
 
     let nextTools: ToolsInput | undefined;
     for (const [toolKey, toolConfig] of Object.entries(storedTools)) {
-      if (!toolConfig.description || !(toolKey in codeTools)) {
+      const codeTool = codeTools[toolKey];
+      if (toolConfig.description === undefined || !codeTool) {
         continue;
       }
 
       nextTools ??= { ...codeTools };
-      nextTools[toolKey] = { ...codeTools[toolKey], description: toolConfig.description };
+      nextTools[toolKey] = { ...codeTool, description: toolConfig.description };
     }
 
     return nextTools ?? codeTools;

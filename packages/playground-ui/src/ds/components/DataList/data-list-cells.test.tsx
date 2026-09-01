@@ -5,6 +5,7 @@ import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import {
   DataListActionsCell,
   DataListCell,
+  DataListCreatedCell,
   DataListDateCell,
   DataListDescriptionCell,
   DataListIdCell,
@@ -374,6 +375,26 @@ describe('DataListDateCell', () => {
     const { container } = render(<DataListDateCell timestamp="not a date" />);
 
     // The cell's own em-dash placeholder stands in, rather than "Invalid Date".
+    expect(container.textContent).toBe('');
+  });
+});
+
+describe('DataListCreatedCell', () => {
+  it('shows date and 12-hour time without milliseconds', () => {
+    const { container } = render(<DataListCreatedCell timestamp={new Date(2026, 7, 31, 13, 7, 47, 657)} />);
+
+    expect(container.textContent).toBe('Aug 31 1:07:47 pm');
+  });
+
+  it('reads a timestamp given as a string', () => {
+    const { container } = render(<DataListCreatedCell timestamp={new Date(2026, 4, 19, 9, 5, 3).toISOString()} />);
+
+    expect(container.textContent).toBe('May 19 9:05:03 am');
+  });
+
+  it('shows nothing for a date it cannot read', () => {
+    const { container } = render(<DataListCreatedCell timestamp="not a date" />);
+
     expect(container.textContent).toBe('');
   });
 });
