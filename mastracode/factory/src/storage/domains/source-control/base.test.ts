@@ -526,9 +526,32 @@ describe('SourceControlStorage', () => {
 describe('SourceControlStorageInMemory sessions.markMaterialized', () => {
   it('records materialized_at write-once', async () => {
     const store = new SourceControlStorageInMemory();
+    const installation = await store.installations.upsert({
+      orgId: 'org-1',
+      connectedByUserId: 'user-1',
+      externalId: '1',
+    });
+    const repository = await store.repositories.upsert({
+      orgId: 'org-1',
+      input: { installationId: installation.id, externalId: '2', slug: 'mastra-ai/mastra', defaultBranch: 'main' },
+    });
+    const connection = await store.connections.create({
+      orgId: 'org-1',
+      factoryProjectId: 'project-1',
+      installationId: installation.id,
+      createdByUserId: 'user-1',
+    });
+    const link = await store.projectRepositories.link({
+      orgId: 'org-1',
+      connectionId: connection.id,
+      repositoryId: repository.id,
+      createdByUserId: 'user-1',
+      sandboxProvider: 'local',
+      sandboxWorkdir: '/sandbox/mastra',
+    });
     const session = await store.sessions.create({
       sessionId: '00000000-0000-4000-8000-00000000aaaa',
-      projectRepositoryId: 'proj-1',
+      projectRepositoryId: link.id,
       orgId: 'org-1',
       userId: 'user-1',
       branch: 'user/session-00000000-0000-4000-8000-00000000aaaa',

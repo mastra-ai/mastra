@@ -4,8 +4,7 @@
   "description": "Browser automation for Mastra agents using agent-browser",
   "type": "module",
   "files": [
-    "dist",
-    "CHANGELOG.md"
+    "dist"
   ],
   "main": "dist/index.js",
   "types": "dist/index.d.ts",

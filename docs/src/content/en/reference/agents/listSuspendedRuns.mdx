@@ -1,6 +1,6 @@
 ---
 title: "Reference: Agent.listSuspendedRuns() | Agents"
-description: "API reference for Agent.listSuspendedRuns(), which discovers suspended agent runs from storage so approvals survive restarts."
+description: "The .listSuspendedRuns() method lists suspended agent runs from workflow snapshot storage: runs waiting on a tool call requiring approval, or on a tool that called suspend()."
 packages:
   - "@mastra/core"
 ---
@@ -9,7 +9,7 @@ packages:
 
 **Added in:** `@mastra/core@1.43.0`
 
-The `.listSuspendedRuns()` method lists suspended agent runs from workflow snapshot storage: runs waiting on a tool call requiring [approval](/docs/agents/human-in-the-loop), or on a tool that called `suspend()`. Because discovery is backed by storage rather than in-memory state, it works after a server restart and across multiple server instances.
+The `.listSuspendedRuns()` method uses workflow snapshot storage to find suspended agent runs, including runs awaiting [approval](/docs/agents/human-in-the-loop) for a tool call and runs paused by a tool that called `suspend()`. Storage-backed discovery continues to work after a server restart and across multiple server instances.
 
 Pass the returned `runId` to [`resumeStream()`](/docs/agents/human-in-the-loop#runtime-suspension-with-suspend), `approveToolCall()`, or `declineToolCall()` to continue the run.
 
@@ -138,7 +138,7 @@ interface AgentRunToolCall {
 
 ## Discovery scope
 
-Results are scoped to runs started by the agent you call `listSuspendedRuns()` on: snapshots persist the owning agent's id, so runs started by other agents on the same Mastra instance aren't returned. In [supervisor setups](/docs/agents/human-in-the-loop#tool-approval-supervisor-agents) the supervisor sees its outer run (the one to resume), while a subagent's inner run is only visible from the subagent itself. Filter by `threadId` and `resourceId` to scope results to one conversation.
+Results are scoped to the agent you call `listSuspendedRuns()` on because snapshots persist the owning agent's id. Runs started by other agents on the same Mastra instance aren't returned. In [supervisor setups](/docs/agents/human-in-the-loop#tool-approval-supervisor-agents), the supervisor sees its outer run to resume, while a subagent's inner run is visible only from the subagent itself. Filter by `threadId` and `resourceId` to limit results to one conversation.
 
 Run snapshots are only persisted while a run is waiting on input and are deleted when it finishes, so suspended runs are the only runs discoverable from storage. Suspended runs only survive restarts when the Mastra instance has a persistent [storage provider](/docs/storage) configured. With the default in-memory store, snapshots are lost on restart.
 

@@ -240,6 +240,20 @@ export function DataListDateCell({ timestamp }: DataListDateCellProps) {
   );
 }
 
+export interface DataListCreatedCellProps {
+  timestamp: Date | string;
+}
+
+/** Combined date + time cell — `MMM dd h:mm:ss a` (e.g. `Aug 31 1:07:47 pm`), no milliseconds. */
+export function DataListCreatedCell({ timestamp }: DataListCreatedCellProps) {
+  const date = toDate(timestamp);
+  return (
+    <DataListCell className="text-ui-smd text-neutral3 tabular-nums">
+      {date ? format(date, 'MMM dd h:mm:ss aaa') : null}
+    </DataListCell>
+  );
+}
+
 export interface DataListTimeCellProps {
   timestamp: Date | string;
 }

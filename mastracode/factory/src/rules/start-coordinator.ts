@@ -31,6 +31,8 @@ export interface FactoryStartRequest {
   requestContext?: RequestContext;
   /** Arm the item's autonomy in the same transaction that prepares the run. */
   armAutonomy?: boolean;
+  /** The person chose a hands-off run: the item's parked plans get approved for them. */
+  preapprovePlans?: boolean;
 }
 
 export class FactoryStartTransitionError extends Error {
@@ -202,6 +204,10 @@ export class FactoryStartCoordinator {
       defaultModelId: request.defaultModelId,
       memorySettings: this.#memorySettings,
     });
+    // The tool is `requireApproval`, and that prompt parks the run whether or not
+    // someone pressed Start — a person is reading the plan, not an approval queue.
+    // Starting the run was already the say-so; the rules engine still governs.
+    await session.permissions.setForTool({ toolName: 'factory_transition_work_item', policy: 'allow' });
     const threadId = await configureThread(session, request);
     let kickoffMessage = await resolveKickoffMessage(session, request.invocation);
     // A null kickoff is a deliberate no-send branch and must stay null.
@@ -223,6 +229,7 @@ export class FactoryStartCoordinator {
       kickoffKey: request.kickoffKey,
       kickoffMessage,
       armAutonomy: request.armAutonomy === true,
+      preapprovePlans: request.preapprovePlans === true,
     });
     await session.thread.setSetting({ key: 'factoryWorkItemId', value: prepared.item.id });
 

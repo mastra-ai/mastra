@@ -23,12 +23,14 @@ import { relationshipPath } from '../services/relationships';
 import type { WorkItem } from '../services/workItems';
 import type { BoardStageId } from '../stages';
 import { workItemActivity } from '../workItemActivity';
+import type { SessionCardStatus } from '../../workspaces/services/sessionStatus';
 import {
   CardDetailsHint,
   CardLabels,
   CardStatus,
   CardTitleTooltip,
   REVEAL_ON_CARD_HOVER,
+  SessionLivenessDot,
   SourceTitle,
 } from './BoardCardParts';
 import { SourceIcon } from './BoardIcons';
@@ -60,6 +62,7 @@ export function WorkItemCard({
   onDismissProposal,
   onRetryDecision,
   pendingRunRoles,
+  sessionStatus = 'idle',
   onCreateSession,
   onStartRun,
   onRestartRun,
@@ -93,10 +96,12 @@ export function WorkItemCard({
   onDismissProposal: (decisionId: string) => void;
   onRetryDecision: (decisionId: string) => void;
   pendingRunRoles: ReadonlyMap<string, FactoryRunPhase | undefined>;
+  /** Live status of the card's bound sessions, resolved once for the whole board. */
+  sessionStatus?: SessionCardStatus;
   /** Detail-panel fallback when the item has no run spec: open an empty session (no run). */
   onCreateSession: (spec: { branch: string; threadTitle: string }) => void;
-  onStartRun: (spec: ItemRunSpec, action: RunAction) => void;
-  onRestartRun: (spec: ItemRunSpec, action: RunAction) => void;
+  onStartRun: (spec: ItemRunSpec, action: RunAction, options?: { preapprovePlans?: boolean }) => void;
+  onRestartRun: (spec: ItemRunSpec, action: RunAction, options?: { preapprovePlans?: boolean }) => void;
   onMove: (toStage: string) => void;
   onRemove: () => void;
 }) {
@@ -196,13 +201,13 @@ export function WorkItemCard({
   // Dismissing a suggested run is the one entry that leaves it open.
   const panelMenu: WorkItemMenuProps = {
     ...menu,
-    onStartRun: (spec, action) => {
+    onStartRun: (spec, action, options) => {
       morph.closeDetails();
-      onStartRun(spec, action);
+      onStartRun(spec, action, options);
     },
-    onRestartRun: (spec, action) => {
+    onRestartRun: (spec, action, options) => {
       morph.closeDetails();
-      onRestartRun(spec, action);
+      onRestartRun(spec, action, options);
     },
     onApproveProposal: decisionId => {
       morph.closeDetails();
@@ -297,9 +302,7 @@ export function WorkItemCard({
           <div className="flex min-w-0 flex-col gap-1.5">
             <div className="flex min-w-0 items-center gap-1.5 pr-8">
               <span className="text-ui-xs text-icon2 min-w-0 truncate">{workItemMeta(item)}</span>
-              {threadSession !== undefined && (
-                <span data-live-session-indicator aria-hidden className="bg-accent1 size-2 shrink-0 rounded-full" />
-              )}
+              {threadSession !== undefined && <SessionLivenessDot status={sessionStatus} />}
               {relatedItems.map(relatedLink)}
               {item.commentCount > 0 && (
                 <span
@@ -374,6 +377,7 @@ export function WorkItemCard({
         morph={morph}
         relatedLinks={relatedItems.map(relatedLink)}
         threadSession={threadSession}
+        sessionStatus={sessionStatus}
         status={status}
         retryingDecisionId={retryingDecisionId}
         onRetryDecision={onRetryDecision}

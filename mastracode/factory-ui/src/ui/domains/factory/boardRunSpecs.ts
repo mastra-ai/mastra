@@ -17,6 +17,8 @@ export interface RunAction {
   /** Session slot the run fills on the card, e.g. `plan` or `work`. */
   role: FactoryRole;
   invocation: FactoryRunInvocation;
+  /** The run's outcome is a maintainer decision, so hands-off has nothing to remove. */
+  awaitsHumanDecision?: true;
   threadTags?: Record<string, string>;
 }
 
@@ -68,6 +70,7 @@ export function approvalRunAction(ref: string, issueNumber: number): RunAction {
   return {
     label: 'Prepare approval',
     role: 'triage',
+    awaitsHumanDecision: true,
     invocation: {
       type: 'prompt',
       prompt: `Prepare approval for ${ref}. Review the existing triage comment and summarize the decision needed before implementation or closure.`,

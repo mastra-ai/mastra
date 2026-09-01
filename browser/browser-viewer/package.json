@@ -4,8 +4,7 @@
   "description": "Playwright-based browser viewer for Mastra CLI providers",
   "type": "module",
   "files": [
-    "dist",
-    "CHANGELOG.md"
+    "dist"
   ],
   "main": "dist/index.js",
   "types": "dist/index.d.ts",

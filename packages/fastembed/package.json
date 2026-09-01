@@ -20,7 +20,6 @@
   },
   "files": [
     "dist",
-    "CHANGELOG.md",
     "LICENSE-fastembed"
   ],
   "homepage": "https://mastra.ai",

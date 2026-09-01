@@ -1,6 +1,6 @@
 ---
 title: 'Reference: DurableAgent | Agents'
-description: 'API reference for DurableAgent, which wraps an Agent with durable execution and resumable streams.'
+description: "DurableAgent wraps an existing Agent with durable execution and resumable streams."
 packages:
   - '@mastra/core'
 ---
@@ -280,7 +280,7 @@ const { output, cleanup } = await durableAgent.observe(runId, {
 await output.text
 ```
 
-By default `observe()` waits indefinitely for events. If the process running the run stops unexpectedly, the run stops producing events but never emits a completion event, so the observed stream would wait forever. Pass `idleTimeoutMs` to bound that wait: after that many milliseconds of silence the stream ends. An optional `isAlive` check is consulted first. Return `true` while the run is still being worked on (for example a long-running tool call, or a run paused waiting for human input) to keep waiting. Returning `false`, or omitting `isAlive`, ends the stream with an error. A transient throw from `isAlive` is treated as "still alive", so a momentary check failure never ends a live stream.
+By default `observe()` waits indefinitely for events. If the process running the run stops unexpectedly, the run stops producing events but never emits a completion event, so the observed stream would wait forever. Pass `idleTimeoutMs` to end the stream after a bounded period of silence. Before timing out, `observe()` can consult an optional `isAlive` check. Return `true` while work continues, such as during a long-running tool call or a pause for human input. A `false` result ends the stream with an error, as does omitting `isAlive`. A transient throw from `isAlive` is treated as "still alive", so a momentary check failure never ends a live stream.
 
 ```typescript
 const { output } = await durableAgent.observe(runId, {
@@ -325,11 +325,112 @@ interface PrepareResult {
 }
 ```
 
+### Cancellation
+
+#### `abortRunStream(runId)`
+
+Stops a run by ID from any process that shares the agent's [PubSub](/docs/server/pubsub). Only the `runId` from `stream()` or `prepare()` is needed, so a later request can stop a run it didn't start. The run ends the same way as `abort()` on the stream result: the `finish` event carries reason `abort`, `onAbort` fires, and `observe()` consumers see the stream end.
+
+```typescript
+const { runId } = await durableAgent.stream('Summarize the document')
+
+// later, from a different request handler
+durableAgent.abortRunStream(runId)
+```
+
+The abort request is published over PubSub, so a multi-process deployment needs a shared backend such as [`RedisStreamsPubSub`](/reference/pubsub/redis-streams). The default `EventEmitterPubSub` only reaches runs in the same process. `InngestAgent` doesn't implement this method. Cancel an Inngest run with the `abort()` returned by its `stream()`.
+
+Stopping a durable run through `abortRunStream()` or `abortThreadStream()` requires `@mastra/core@1.62.0` or later. Earlier versions record the abort without stopping the run.
+
+Returns: `boolean`. `true` when this process aborted the run locally or can see it executing. The abort request is published either way.
+
+#### `abortThreadStream({ threadId, resourceId? })`
+
+Aborts the active run on a memory thread with the same abort request as `abortRunStream()`. The run is resolved from this process's thread runtime, so it must have been started here or observed through `subscribeToThread()` on this process. The server route `POST /agents/:agentId/threads/abort` uses this method.
+
+```typescript
+durableAgent.abortThreadStream({ resourceId: 'user-1', threadId: 'thread-1' })
+```
+
+Returns: `boolean`. `false` when this process has no active run recorded for the thread. No abort request is sent in that case.
+
 ### Recovery
+
+#### `listActiveRuns(options?)`
+
+Lists this agent's runs whose persisted snapshot is in `running` status: runs whose agentic loop was mid-execution when the workflow engine last saved state. On a live process they transition to `suspended` or a terminal status. After a crash or restart they stay `running` with nothing driving them, which is what `recoverActiveRuns()` re-drives. Runs started by other durable agents on the same storage aren't included.
+
+```typescript
+const { runs, total } = await durableAgent.listActiveRuns({ resourceId: 'user-1' })
+
+for (const run of runs) {
+  await durableAgent.recoverActiveRuns({ runId: run.runId })
+}
+```
+
+Reads workflow snapshot storage on the Mastra instance the agent is registered with, and throws if the agent isn't registered with one. Use persistent storage: the default in-memory store loses these rows on the restart that orphans them.
+
+Only runs in `running` status are returned. Suspended runs keep their snapshots but aren't included, and finished runs aren't retained. Filter by `resourceId` to scope the list to one user.
+
+Returns:
+
+```typescript
+interface DurableAgentListActiveRunsResult {
+  runs: Array<{
+    runId: string
+    status: 'running'
+    threadId?: string
+    resourceId?: string
+    updatedAt: Date
+  }>
+  total: number
+}
+```
+
+<PropertiesTable
+  content={[
+  {
+    name: 'options.threadId',
+    type: 'string',
+    isOptional: true,
+    description: 'Only return runs that belong to this memory thread.',
+  },
+  {
+    name: 'options.resourceId',
+    type: 'string',
+    isOptional: true,
+    description: 'Only return runs that belong to this memory resource.',
+  },
+  {
+    name: 'options.fromDate',
+    type: 'Date',
+    isOptional: true,
+    description: 'Only return runs created at or after this date.',
+  },
+  {
+    name: 'options.toDate',
+    type: 'Date',
+    isOptional: true,
+    description: 'Only return runs created at or before this date.',
+  },
+  {
+    name: 'options.perPage',
+    type: 'number',
+    isOptional: true,
+    description: 'Runs per page. Applies only when `page` is also set. Must be a positive integer.',
+  },
+  {
+    name: 'options.page',
+    type: 'number',
+    isOptional: true,
+    description: 'Zero-indexed page number. Applies only when `perPage` is also set. Must be a non-negative integer.',
+  },
+]}
+/>
 
 #### `recoverActiveRuns(options?)`
 
-Discovers runs stuck in `running` status for this agent and re-drives them from the last persisted snapshot. Recovers up to `options.limit` runs (default: 100). Returns a summary of what was recovered.
+Discovers runs stuck in `running` status for this agent and re-drives them from the last persisted snapshot. Accepts the same filters and pagination as `listActiveRuns()`, plus `runId`. Returns a summary of what was recovered.
 
 ```typescript
 const result = await durableAgent.recoverActiveRuns()
@@ -358,19 +459,7 @@ interface DurableAgentRecoverActiveRunsResult {
     name: 'options.runId',
     type: 'string',
     isOptional: true,
-    description: 'Recover a specific run by ID. When set, discovery filters are ignored.',
-  },
-  {
-    name: 'options.limit',
-    type: 'number',
-    isOptional: true,
-    description: 'Maximum number of active runs to discover. Defaults to 100.',
-  },
-  {
-    name: 'options.createdBefore',
-    type: 'Date',
-    isOptional: true,
-    description: 'Only recover runs created before this date.',
+    description: 'Recover a specific run by ID. When set, the discovery filters and pagination are ignored.',
   },
 ]}
 />
@@ -401,7 +490,7 @@ Returns: [`Promise<DurableAgentStreamResult>`](#durableagentstreamresult)
     name: 'runId',
     type: 'string',
     isOptional: true,
-    description: 'Unique identifier for this run. Use it later with `resume()` or `observe()`.',
+    description: 'Unique identifier for this run. Use it later with `resume()`, `observe()`, or `abortRunStream()`.',
   },
   {
     name: 'instructions',
@@ -617,7 +706,7 @@ Returns: [`Promise<DurableAgentStreamResult>`](#durableagentstreamresult)
     type: "AgentExecutionOptions['onAbort']",
     isOptional: true,
     description:
-      'Called when the run is aborted via `abortSignal` or `result.abort()`. Receives the steps completed before the abort and, in `text`, the assistant text streamed so far.',
+      'Called when the run is aborted via `abortSignal`, `result.abort()`, `abortRunStream()`, or `abortThreadStream()`. Receives the steps completed before the abort and, in `text`, the assistant text streamed so far.',
   },
   {
     name: 'onIterationComplete',

@@ -1,13 +1,12 @@
 {
   "name": "@mastra/core",
-  "version": "1.63.3-alpha.0",
+  "version": "1.63.3-alpha.1",
   "license": "Apache-2.0",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "files": [
     "dist",
-    "CHANGELOG.md",
     "LICENSE.md",
     "./**/*.d.ts"
   ],

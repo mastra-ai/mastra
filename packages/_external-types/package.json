@@ -5,8 +5,7 @@
   "type": "module",
   "private": true,
   "files": [
-    "dist",
-    "CHANGELOG.md"
+    "dist"
   ],
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
