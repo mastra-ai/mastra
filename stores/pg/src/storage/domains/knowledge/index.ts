@@ -1103,6 +1103,14 @@ export class KnowledgePG extends KnowledgeStorage {
     if (scopeIds.length === 0) return [];
     const clauses = ['n.deletedAt IS NULL', visibleNodeSql(scopeIds)];
     const args: QueryValues = [...scopeIds];
+    if (input.membershipScopeIds) {
+      const membershipScopeIds = canonicalizeKnowledgeScopeIds(input.membershipScopeIds);
+      if (membershipScopeIds.length === 0) return [];
+      clauses.push(
+        `EXISTS (SELECT 1 FROM "${TABLE_KNOWLEDGE_NODE_SCOPES}" ms WHERE ms.nodeId=n.id AND ms.scopeNodeId IN (${membershipScopeIds.map(() => '?').join(',')}))`,
+      );
+      args.push(...membershipScopeIds);
+    }
     if (input.namePrefix) {
       clauses.push("lower(n.name) LIKE ? ESCAPE '='");
       args.push(`${escapeLikePattern(canonicalName(input.namePrefix))}%`);
@@ -2652,15 +2660,38 @@ export class KnowledgePG extends KnowledgeStorage {
 
   async listActivity(input: {
     scopeIds: KnowledgeScopeIds;
+    contextScopeId?: string;
     importRunId?: string;
+    action?: KnowledgeActivityAction;
+    sourceType?: 'importer' | 'system';
+    from?: Date;
+    to?: Date;
     after?: string;
     limit?: number;
   }): Promise<KnowledgeActivityEvent[]> {
     const clauses: string[] = [];
     const args: QueryValues = [];
+    if (input.contextScopeId) {
+      clauses.push('contextScopeId=?');
+      args.push(input.contextScopeId);
+    }
     if (input.importRunId) {
       clauses.push('importRunId=?');
       args.push(input.importRunId);
+    }
+    if (input.action) {
+      clauses.push('action=?');
+      args.push(input.action);
+    }
+    if (input.sourceType)
+      clauses.push(input.sourceType === 'importer' ? 'importRunId IS NOT NULL' : 'importRunId IS NULL');
+    if (input.from) {
+      clauses.push('createdAt>=?');
+      args.push(input.from.toISOString());
+    }
+    if (input.to) {
+      clauses.push('createdAt<=?');
+      args.push(input.to.toISOString());
     }
     if (input.after) {
       clauses.push('id < ?');

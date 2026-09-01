@@ -46,16 +46,16 @@ function scopeLabel(record: KnowledgeInspectorNodeSummary, level: KnowledgeInspe
   return `[${relation}:${record.scope.level}]`;
 }
 
-type KnowledgeGraphRole = 'bridge' | 'source' | 'referenced' | 'isolated';
+type KnowledgeRelationshipRole = 'bridge' | 'source' | 'referenced' | 'isolated';
 
-const ROLE_GROUPS: { role: KnowledgeGraphRole; label: string }[] = [
+const ROLE_GROUPS: { role: KnowledgeRelationshipRole; label: string }[] = [
   { role: 'bridge', label: 'Bridges' },
   { role: 'source', label: 'Sources' },
   { role: 'referenced', label: 'Referenced only' },
   { role: 'isolated', label: 'Isolated' },
 ];
 
-function graphRole(record: KnowledgeInspectorNodeSummary): KnowledgeGraphRole | undefined {
+function relationshipRole(record: KnowledgeInspectorNodeSummary): KnowledgeRelationshipRole | undefined {
   const counts = record.relationshipCounts;
   if (!counts) return undefined;
   if (counts.outgoing > 0 && counts.incoming > 0) return 'bridge';
@@ -64,7 +64,7 @@ function graphRole(record: KnowledgeInspectorNodeSummary): KnowledgeGraphRole | 
   return 'isolated';
 }
 
-function roleLabel(role: KnowledgeGraphRole): string {
+function roleLabel(role: KnowledgeRelationshipRole): string {
   switch (role) {
     case 'bridge':
       return 'Bridge';
@@ -85,8 +85,8 @@ function countsBadge(record: KnowledgeInspectorNodeSummary): string {
 
 function groupNodeRecords(records: KnowledgeInspectorNodeSummary[]): KnowledgeInspectorNodeSummary[] {
   const grouped: KnowledgeInspectorNodeSummary[] = [];
-  for (const group of ROLE_GROUPS) grouped.push(...records.filter(record => graphRole(record) === group.role));
-  grouped.push(...records.filter(record => graphRole(record) === undefined));
+  for (const group of ROLE_GROUPS) grouped.push(...records.filter(record => relationshipRole(record) === group.role));
+  grouped.push(...records.filter(record => relationshipRole(record) === undefined));
   return grouped;
 }
 
@@ -465,10 +465,10 @@ export class KnowledgeBrowserComponent implements Component, Focusable {
 
   private renderRecordList(width: number): string[] {
     const lines: string[] = [];
-    let lastRole: KnowledgeGraphRole | undefined | null = null;
+    let lastRole: KnowledgeRelationshipRole | undefined | null = null;
     this.nodes.forEach((record, index) => {
       if (this.section === 'nodes') {
-        const role = graphRole(record);
+        const role = relationshipRole(record);
         if (role !== lastRole) {
           lastRole = role;
           const group = ROLE_GROUPS.find(entry => entry.role === role);
@@ -508,7 +508,7 @@ export class KnowledgeBrowserComponent implements Component, Focusable {
   private renderNodeDetail(detail: KnowledgeInspectorNodeDetail, width: number): string[] {
     this.detailTargets = [];
     const counts = detail.relationshipCounts;
-    const role = graphRole(detail.node);
+    const role = relationshipRole(detail.node);
     const roleSummary = `${role ? `${roleLabel(role)} · ` : ''}${counts.records} records · ${counts.outgoing} outgoing · ${counts.incoming} incoming${counts.sampled ? ' (sampled)' : ''}`;
     const lines = [
       `${theme.bold(detail.node.name)}  ${detail.node.kind ?? 'node'}  ${scopeLabel(detail.node, this.level)}  v${detail.node.version}`,
