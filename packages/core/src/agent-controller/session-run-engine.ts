@@ -512,6 +512,9 @@ export class SessionRunEngine {
       }
 
       case 'text-start': {
+        // A late start for an id already seeded by an orphan delta must not
+        // create a duplicate part or reset the accumulated text.
+        if (state.textContentById.has(getString(getPayload(chunk).id) ?? '')) break;
         const textIndex = state.currentMessage.content.parts.length;
         state.currentMessage.content.parts.push({ type: 'text', text: '' });
         state.textContentById.set(getString(getPayload(chunk).id) ?? '', { index: textIndex, text: '' });
@@ -520,19 +523,30 @@ export class SessionRunEngine {
       }
 
       case 'text-delta': {
-        const textState = state.textContentById.get(getString(getPayload(chunk).id) ?? '');
-        if (textState) {
-          textState.text += getString(getPayload(chunk).text) ?? '';
-          const textContent = state.currentMessage.content.parts[textState.index];
-          if (textContent && textContent.type === 'text') {
-            textContent.text = textState.text;
-          }
-          this.#session.emit({ type: 'message_update', message: state.currentMessage });
+        const id = getString(getPayload(chunk).id) ?? '';
+        let textState = state.textContentById.get(id);
+        if (!textState) {
+          // Deltas can arrive without a seeded part — e.g. after a step-start
+          // rotation cleared the map mid-text. Seed a part instead of silently
+          // dropping the text, otherwise the folded message loses content.
+          const textIndex = state.currentMessage.content.parts.length;
+          state.currentMessage.content.parts.push({ type: 'text', text: '' });
+          textState = { index: textIndex, text: '' };
+          state.textContentById.set(id, textState);
+          this.#session.emit({ type: 'message_start', message: state.currentMessage });
         }
+        textState.text += getString(getPayload(chunk).text) ?? '';
+        const textContent = state.currentMessage.content.parts[textState.index];
+        if (textContent && textContent.type === 'text') {
+          textContent.text = textState.text;
+        }
+        this.#session.emit({ type: 'message_update', message: state.currentMessage });
         break;
       }
 
       case 'reasoning-start': {
+        // Mirror text-start: a late start for an already-seeded id is a no-op.
+        if (state.thinkingContentById.has(getString(getPayload(chunk).id) ?? '')) break;
         const thinkingIndex = state.currentMessage.content.parts.length;
         state.currentMessage.content.parts.push({ type: 'reasoning', reasoning: '', details: [] });
         state.thinkingContentById.set(getString(getPayload(chunk).id) ?? '', { index: thinkingIndex, text: '' });
@@ -541,16 +555,23 @@ export class SessionRunEngine {
       }
 
       case 'reasoning-delta': {
-        const thinkingState = state.thinkingContentById.get(getString(getPayload(chunk).id) ?? '');
-        if (thinkingState) {
-          thinkingState.text += getString(getPayload(chunk).text) ?? '';
-          const thinkingContent = state.currentMessage.content.parts[thinkingState.index];
-          if (thinkingContent && thinkingContent.type === 'reasoning') {
-            thinkingContent.reasoning = thinkingState.text;
-            thinkingContent.details = [{ type: 'text', text: thinkingState.text }];
-          }
-          this.#session.emit({ type: 'message_update', message: state.currentMessage });
+        const id = getString(getPayload(chunk).id) ?? '';
+        let thinkingState = state.thinkingContentById.get(id);
+        if (!thinkingState) {
+          // Same tolerance as text-delta: seed the part rather than silently
+          // dropping reasoning whose start chunk never seeded the id.
+          const thinkingIndex = state.currentMessage.content.parts.length;
+          state.currentMessage.content.parts.push({ type: 'reasoning', reasoning: '', details: [] });
+          thinkingState = { index: thinkingIndex, text: '' };
+          state.thinkingContentById.set(id, thinkingState);
         }
+        thinkingState.text += getString(getPayload(chunk).text) ?? '';
+        const thinkingContent = state.currentMessage.content.parts[thinkingState.index];
+        if (thinkingContent && thinkingContent.type === 'reasoning') {
+          thinkingContent.reasoning = thinkingState.text;
+          thinkingContent.details = [{ type: 'text', text: thinkingState.text }];
+        }
+        this.#session.emit({ type: 'message_update', message: state.currentMessage });
         break;
       }
 

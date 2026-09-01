@@ -438,6 +438,98 @@ describe('PlatformSandbox', () => {
     expect(webSocketFactory).not.toHaveBeenCalled();
   });
 
+  it('defaults exec cwd to the configured workingDirectory', async () => {
+    vi.stubEnv('SANDBOX_PROVIDER', 'e2b');
+    vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(json({ id: 'sbx_1', createdAt: '2026-06-26T00:00:00.000Z' }))
+      .mockResolvedValueOnce(e2bLeaseResponse());
+    const e2bExecRunner = vi.fn().mockResolvedValue({
+      exitCode: 0,
+      stdout: 'ok',
+      stderr: '',
+      truncated: false,
+      timedOut: false,
+      opened: true,
+    });
+    const sandbox = new PlatformSandbox({
+      accessToken: 'sk_test',
+      projectId: 'proj_123',
+      environmentId: 'env_123',
+      workingDirectory: '/srv/app',
+      fetch: fetchMock,
+      e2bExecRunner,
+    });
+
+    await sandbox._start();
+    await sandbox.executeCommand('pwd');
+
+    expect(e2bExecRunner).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ cwd: '/srv/app' }));
+    expect(sandbox.workingDirectory).toBe('/srv/app');
+  });
+
+  it('per-command cwd wins over the configured workingDirectory', async () => {
+    vi.stubEnv('SANDBOX_PROVIDER', 'e2b');
+    vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(json({ id: 'sbx_1', createdAt: '2026-06-26T00:00:00.000Z' }))
+      .mockResolvedValueOnce(e2bLeaseResponse());
+    const e2bExecRunner = vi.fn().mockResolvedValue({
+      exitCode: 0,
+      stdout: 'ok',
+      stderr: '',
+      truncated: false,
+      timedOut: false,
+      opened: true,
+    });
+    const sandbox = new PlatformSandbox({
+      accessToken: 'sk_test',
+      projectId: 'proj_123',
+      environmentId: 'env_123',
+      workingDirectory: '/srv/app',
+      fetch: fetchMock,
+      e2bExecRunner,
+    });
+
+    await sandbox._start();
+    await sandbox.executeCommand('pwd', [], { cwd: '/workspace' });
+
+    expect(e2bExecRunner).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ cwd: '/workspace' }));
+  });
+
+  it('omits cwd when neither cwd nor workingDirectory is set', async () => {
+    vi.stubEnv('SANDBOX_PROVIDER', 'e2b');
+    vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(json({ id: 'sbx_1', createdAt: '2026-06-26T00:00:00.000Z' }))
+      .mockResolvedValueOnce(e2bLeaseResponse());
+    const e2bExecRunner = vi.fn().mockResolvedValue({
+      exitCode: 0,
+      stdout: 'ok',
+      stderr: '',
+      truncated: false,
+      timedOut: false,
+      opened: true,
+    });
+    const sandbox = new PlatformSandbox({
+      accessToken: 'sk_test',
+      projectId: 'proj_123',
+      environmentId: 'env_123',
+      fetch: fetchMock,
+      e2bExecRunner,
+    });
+
+    await sandbox._start();
+    await sandbox.executeCommand('pwd');
+
+    const [, execOptions] = e2bExecRunner.mock.calls.at(-1)!;
+    expect(execOptions).not.toHaveProperty('cwd');
+    expect(sandbox.workingDirectory).toBeUndefined();
+  });
+
   it('restores E2B clones from the concrete snapshot id', async () => {
     vi.stubEnv('SANDBOX_PROVIDER', 'e2b');
     vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');

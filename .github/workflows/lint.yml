@@ -211,7 +211,7 @@ jobs:
         run: node ./scripts/validate-peerdeps.mjs
 
       - name: Check @mastra/core import floor
-        run: pnpm --filter ./packages/server check:core-imports
+        run: pnpm check:core-imports
 
       - name: Check for git changes
         run: |

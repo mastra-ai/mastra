@@ -1296,6 +1296,136 @@ describe('AgentController signal messages', () => {
     expect(messageUpdateEvents.at(-1)?.message.id).not.toBe(messageEndEvents[0].message.id);
   });
 
+  it('folds a text-delta whose id was never seeded by a text-start', async () => {
+    const { session } = await createController(new InMemoryStore());
+    const events: AgentControllerEvent[] = [];
+    session.subscribe(event => {
+      events.push(event);
+    });
+    const state = session.runEngine.createStreamState();
+    const requestContext = new RequestContext();
+
+    await session.runEngine.processStreamChunk(
+      state,
+      { type: 'text-delta', payload: { id: 'orphan-1', text: 'Hello' } },
+      requestContext,
+    );
+    await session.runEngine.processStreamChunk(
+      state,
+      { type: 'text-delta', payload: { id: 'orphan-1', text: ' world' } },
+      requestContext,
+    );
+
+    expect(events.filter(event => event.type === 'message_start')).toHaveLength(1);
+    const lastUpdate = events.filter(
+      (event): event is Extract<AgentControllerEvent, { type: 'message_update' }> => event.type === 'message_update',
+    );
+    expect(lastUpdate.at(-1)?.message.content.parts).toEqual([{ type: 'text', text: 'Hello world' }]);
+  });
+
+  it('keeps text deltas that continue after a step-start rotation cleared the seeded id', async () => {
+    const { session } = await createController(new InMemoryStore());
+    const events: AgentControllerEvent[] = [];
+    session.subscribe(event => {
+      events.push(event);
+    });
+    const state = session.runEngine.createStreamState();
+    const requestContext = new RequestContext();
+
+    await session.runEngine.processStreamChunk(
+      state,
+      { type: 'step-start', payload: { messageId: 'msg-1' } },
+      requestContext,
+    );
+    await session.runEngine.processStreamChunk(
+      state,
+      { type: 'text-start', payload: { id: 'text-1' } },
+      requestContext,
+    );
+    await session.runEngine.processStreamChunk(
+      state,
+      { type: 'text-delta', payload: { id: 'text-1', text: 'part one' } },
+      requestContext,
+    );
+    // A second step rotates the display message and clears textContentById.
+    await session.runEngine.processStreamChunk(
+      state,
+      { type: 'step-start', payload: { messageId: 'msg-2' } },
+      requestContext,
+    );
+    // Deltas continue on the old id — they must land in the new message, not vanish.
+    await session.runEngine.processStreamChunk(
+      state,
+      { type: 'text-delta', payload: { id: 'text-1', text: 'part two' } },
+      requestContext,
+    );
+
+    const updates = events.filter(
+      (event): event is Extract<AgentControllerEvent, { type: 'message_update' }> => event.type === 'message_update',
+    );
+    expect(updates.at(-1)?.message.content.parts).toEqual([{ type: 'text', text: 'part two' }]);
+    expect(updates.at(-1)?.message.id).toBe('msg-2');
+  });
+
+  it('ignores a duplicate text-start for an id already seeded by an orphan delta', async () => {
+    const { session } = await createController(new InMemoryStore());
+    const events: AgentControllerEvent[] = [];
+    session.subscribe(event => {
+      events.push(event);
+    });
+    const state = session.runEngine.createStreamState();
+    const requestContext = new RequestContext();
+
+    await session.runEngine.processStreamChunk(
+      state,
+      { type: 'text-delta', payload: { id: 'text-1', text: 'early' } },
+      requestContext,
+    );
+    await session.runEngine.processStreamChunk(
+      state,
+      { type: 'text-start', payload: { id: 'text-1' } },
+      requestContext,
+    );
+    await session.runEngine.processStreamChunk(
+      state,
+      { type: 'text-delta', payload: { id: 'text-1', text: ' late' } },
+      requestContext,
+    );
+
+    const updates = events.filter(
+      (event): event is Extract<AgentControllerEvent, { type: 'message_update' }> => event.type === 'message_update',
+    );
+    expect(updates.at(-1)?.message.content.parts).toEqual([{ type: 'text', text: 'early late' }]);
+  });
+
+  it('folds a reasoning-delta whose id was never seeded by a reasoning-start', async () => {
+    const { session } = await createController(new InMemoryStore());
+    const events: AgentControllerEvent[] = [];
+    session.subscribe(event => {
+      events.push(event);
+    });
+    const state = session.runEngine.createStreamState();
+    const requestContext = new RequestContext();
+
+    await session.runEngine.processStreamChunk(
+      state,
+      { type: 'reasoning-delta', payload: { id: 'think-1', text: 'thinking' } },
+      requestContext,
+    );
+    await session.runEngine.processStreamChunk(
+      state,
+      { type: 'reasoning-delta', payload: { id: 'think-1', text: ' more' } },
+      requestContext,
+    );
+
+    const updates = events.filter(
+      (event): event is Extract<AgentControllerEvent, { type: 'message_update' }> => event.type === 'message_update',
+    );
+    expect(updates.at(-1)?.message.content.parts).toEqual([
+      { type: 'reasoning', reasoning: 'thinking more', details: [{ type: 'text', text: 'thinking more' }] },
+    ]);
+  });
+
   it('emits generic reactive signal data parts as renderable message updates', async () => {
     const storage = new InMemoryStore();
     const { session } = await createController(storage);
