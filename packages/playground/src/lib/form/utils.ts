@@ -10,17 +10,24 @@ export const fieldConfig: FieldConfig = buildZodFieldConfig<
   }
 >();
 
+function isPlainObject(value: unknown): value is Record<string, any> {
+  if (value === null || typeof value !== 'object') return false;
+
+  const prototype = Object.getPrototypeOf(value);
+  return prototype === Object.prototype || prototype === null;
+}
+
 export function removeEmptyValues<T extends Record<string, any>>(values: T): Partial<T> {
   const result: Partial<T> = {};
   for (const key in values) {
     const value = values[key];
-    if ([null, undefined, '', [], {}].includes(value)) {
+    if (value === null || value === undefined || value === '') {
       continue;
     }
 
     if (Array.isArray(value)) {
       const newArray = value.map((item: any) => {
-        if (typeof item === 'object') {
+        if (isPlainObject(item)) {
           const cleanedItem = removeEmptyValues(item);
           if (Object.keys(cleanedItem).length > 0) {
             return cleanedItem;
@@ -33,7 +40,7 @@ export function removeEmptyValues<T extends Record<string, any>>(values: T): Par
       if (filteredArray.length > 0) {
         result[key] = filteredArray;
       }
-    } else if (typeof value === 'object') {
+    } else if (isPlainObject(value)) {
       const cleanedValue = removeEmptyValues(value);
       if (Object.keys(cleanedValue).length > 0) {
         result[key] = cleanedValue as any;
