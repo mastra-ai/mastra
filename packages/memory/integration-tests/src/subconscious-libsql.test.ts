@@ -11,6 +11,26 @@ import { Memory, Subconscious } from '@mastra/memory';
 import type { EmbeddingModel } from 'ai';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import { createLearnerHandler } from '../../src/processors/observational-memory/subconscious/learn';
+import { RemindContinuationProcessor } from '../../src/processors/observational-memory/subconscious/remind-continuation';
+import {
+  ensureOwnedRemindThread,
+  getRemindProtocol,
+  getRemindThreadId,
+  REMIND_PROTOCOL_METADATA_KEY,
+} from '../../src/processors/observational-memory/subconscious/remind-protocol';
+import type {
+  RemindContinuationEvent,
+  RemindProtocolEvent,
+  RemindQuestionEvent,
+} from '../../src/processors/observational-memory/subconscious/remind-protocol';
+import {
+  createAskMemoryTool,
+  createReplyToMemoryQuestionTool,
+} from '../../src/processors/observational-memory/subconscious/remind-questions';
+import type { ResolvedSubconsciousConfig } from '../../src/processors/observational-memory/subconscious/types';
+
+>>>>>>> 77975f3c6eb (test(memory): cover reminder sidekick persistence)
 function message(threadId: string, resourceId: string, text = 'Maya Chen owns Project Atlas.'): MastraDBMessage {
   return {
     id: randomUUID(),
@@ -19,6 +39,36 @@ function message(threadId: string, resourceId: string, text = 'Maya Chen owns Pr
     role: 'user',
     createdAt: new Date(),
     content: { format: 2, parts: [{ type: 'text', text }] },
+  };
+}
+
+function protocolMessage(event: RemindProtocolEvent, text: string): MastraDBMessage {
+  return {
+    id: event.eventId,
+    threadId: getRemindThreadId(event.parentThreadId),
+    resourceId: event.resourceId,
+    role: 'user',
+    createdAt: new Date(event.createdAt),
+    content: {
+      format: 2,
+      parts: [{ type: 'text', text }],
+      metadata: { [REMIND_PROTOCOL_METADATA_KEY]: event },
+    },
+  };
+}
+
+function questionEvent(parentThreadId: string, resourceId: string, replyId: string): RemindQuestionEvent {
+  const eventId = `${replyId}:question`;
+  return {
+    kind: 'question',
+    eventId,
+    deliveryId: `${eventId}:delivery`,
+    parentAgentId: 'main-agent',
+    parentThreadId,
+    resourceId,
+    createdAt: Date.now(),
+    replyId,
+    replyRequired: true,
   };
 }
 
@@ -188,7 +238,7 @@ describe('Subconscious LibSQL integration', () => {
     expect(hidden).toEqual({ found: false });
   });
 
-  it('runs remind after observation and emits one scoped remembered signal', async () => {
+  it('persists passive reminder continuity and suppresses a duplicate across Memory reconstruction', async () => {
     const directory = await mkdtemp(join(tmpdir(), 'subconscious-remind-libsql-'));
     directories.push(directory);
     const databaseUrl = `file:${join(directory, 'knowledge.db')}`;
@@ -197,18 +247,43 @@ describe('Subconscious LibSQL integration', () => {
     await storage.init();
 
     let streamCall = 0;
+    let sentReminder = false;
     const reminder = 'Project Atlas launches January 15. Source KnowledgeRecord: record-atlas-launch.';
     const model = new MockLanguageModelV2({
-      doStream: async () => {
+      doStream: async options => {
         streamCall += 1;
-        const text =
-          streamCall === 1 ? '<observations>\n- The user is scheduling Project Atlas.\n</observations>' : reminder;
+        const prompt = JSON.stringify(options.prompt);
+        const eventId = prompt.match(/Passive reminder check (subconscious:remind:[^"\\\\]+:event)/)?.[1];
+        if (eventId && !sentReminder) {
+          sentReminder = true;
+          const input = JSON.stringify({ eventId, reminder, sourceIds: ['record-atlas-launch'] });
+          return {
+            stream: convertArrayToReadableStream([
+              { type: 'stream-start', warnings: [] },
+              { type: 'response-metadata', id: `remind-${streamCall}`, modelId: 'aimock', timestamp: new Date() },
+              { type: 'tool-input-start', id: 'send-reminder', toolName: 'send_reminder' },
+              { type: 'tool-input-delta', id: 'send-reminder', delta: input },
+              { type: 'tool-call', toolCallId: 'send-reminder', toolName: 'send_reminder', input },
+              {
+                type: 'finish',
+                finishReason: 'tool-calls',
+                usage: { inputTokens: 20, outputTokens: 10, totalTokens: 30 },
+              },
+            ]),
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            warnings: [],
+          };
+        }
         return {
           stream: convertArrayToReadableStream([
             { type: 'stream-start', warnings: [] },
             { type: 'response-metadata', id: `remind-${streamCall}`, modelId: 'aimock', timestamp: new Date() },
             { type: 'text-start', id: `text-${streamCall}` },
-            { type: 'text-delta', id: `text-${streamCall}`, delta: text },
+            {
+              type: 'text-delta',
+              id: `text-${streamCall}`,
+              delta: '<observations>\n- The user is scheduling Project Atlas.\n</observations>',
+            },
             { type: 'text-end', id: `text-${streamCall}` },
             { type: 'finish', finishReason: 'stop', usage: { inputTokens: 20, outputTokens: 10, totalTokens: 30 } },
           ]),
@@ -258,6 +333,10 @@ describe('Subconscious LibSQL integration', () => {
     requestContext.set('organizationId', 'acme');
     const sendSignal = vi.fn(async () => undefined) as any;
     const mainAgent = new Agent({ id: 'main-agent', name: 'Main Agent', instructions: 'Help the user.', model });
+    const parentSendSignal = vi.spyOn(mainAgent, 'sendSignal').mockImplementation((signal => ({
+      signal,
+      accepted: Promise.resolve({ action: 'deliver', runId: 'parent-run' }),
+    })) as any);
     const getModel = vi.spyOn(mainAgent, 'getModel');
 
     const result = await (await memory.omEngine)!.observe({
@@ -270,11 +349,47 @@ describe('Subconscious LibSQL integration', () => {
 
     expect(result.observed).toBe(true);
     expect(getModel).not.toHaveBeenCalled();
-    expect(streamCall).toBe(1);
-    expect(sendSignal).toHaveBeenCalledOnce();
-    expect(sendSignal).toHaveBeenCalledWith(
+    expect(streamCall).toBe(3);
+    expect(parentSendSignal).toHaveBeenCalledOnce();
+    expect(parentSendSignal).toHaveBeenCalledWith(
       expect.objectContaining({ type: 'reactive', tagName: 'remembered', contents: expect.stringContaining(reminder) }),
+      expect.objectContaining({ threadId, resourceId }),
     );
+
+    const reconstructed = new Memory({
+      storage,
+      vector,
+      embedder,
+      options: {
+        observationalMemory: {
+          enabled: true,
+          model,
+          experimental_subconscious: new Subconscious({ observation: ['remind'], reflection: [] }),
+          observation: { messageTokens: 1, bufferTokens: false, previousObserverTokens: 1_000 },
+        },
+      },
+    });
+    await reconstructed.saveMessages({ messages: [message(threadId, resourceId, 'Check the launch schedule again.')] });
+    const second = await (await reconstructed.omEngine)!.observe({
+      threadId,
+      resourceId,
+      agent: mainAgent,
+      requestContext,
+      sendSignal,
+    });
+
+    expect(second.observed).toBe(true);
+    expect(parentSendSignal).toHaveBeenCalledOnce();
+    const reminderHistory = await (await storage.getStore('memory'))!.listMessages({
+      threadId: getRemindThreadId(threadId),
+      resourceId,
+      perPage: false,
+      orderBy: { field: 'createdAt', direction: 'ASC' },
+    });
+    expect(
+      reminderHistory.messages.map(getRemindProtocol).filter(event => event?.kind === 'passive-check'),
+    ).toHaveLength(2);
+    expect(reminderHistory.messages.some(message => message.role === 'assistant')).toBe(true);
   });
 
   it('targets a resource-scoped reminder to its observed thread', async () => {
@@ -289,19 +404,48 @@ describe('Subconscious LibSQL integration', () => {
     const observations = threadIds
       .map(threadId => `<thread id="${threadId}">\n- Project Atlas planning is active.\n</thread>`)
       .join('\n');
+    let sentReminder = false;
     const model = new MockLanguageModelV2({
-      doStream: async () => ({
-        stream: convertArrayToReadableStream([
-          { type: 'stream-start', warnings: [] },
-          { type: 'response-metadata', id: 'resource-observation', modelId: 'aimock', timestamp: new Date() },
-          { type: 'text-start', id: 'resource-text' },
-          { type: 'text-delta', id: 'resource-text', delta: `<observations>${observations}</observations>` },
-          { type: 'text-end', id: 'resource-text' },
-          { type: 'finish', finishReason: 'stop', usage: { inputTokens: 20, outputTokens: 10, totalTokens: 30 } },
-        ]),
-        rawCall: { rawPrompt: null, rawSettings: {} },
-        warnings: [],
-      }),
+      doStream: async options => {
+        const prompt = JSON.stringify(options.prompt);
+        const eventId = prompt.match(/Passive reminder check (subconscious:remind:[^"\\\\]+:event)/)?.[1];
+        if (eventId && !sentReminder) {
+          sentReminder = true;
+          const input = JSON.stringify({
+            eventId,
+            reminder: 'Project Atlas launches January 15. Source KnowledgeRecord: record-atlas-resource-launch.',
+            sourceIds: ['record-atlas-resource-launch'],
+          });
+          return {
+            stream: convertArrayToReadableStream([
+              { type: 'stream-start', warnings: [] },
+              { type: 'response-metadata', id: 'resource-remind', modelId: 'aimock', timestamp: new Date() },
+              { type: 'tool-input-start', id: 'resource-send', toolName: 'send_reminder' },
+              { type: 'tool-input-delta', id: 'resource-send', delta: input },
+              { type: 'tool-call', toolCallId: 'resource-send', toolName: 'send_reminder', input },
+              {
+                type: 'finish',
+                finishReason: 'tool-calls',
+                usage: { inputTokens: 20, outputTokens: 10, totalTokens: 30 },
+              },
+            ]),
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            warnings: [],
+          };
+        }
+        return {
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            { type: 'response-metadata', id: 'resource-observation', modelId: 'aimock', timestamp: new Date() },
+            { type: 'text-start', id: 'resource-text' },
+            { type: 'text-delta', id: 'resource-text', delta: `<observations>${observations}</observations>` },
+            { type: 'text-end', id: 'resource-text' },
+            { type: 'finish', finishReason: 'stop', usage: { inputTokens: 20, outputTokens: 10, totalTokens: 30 } },
+          ]),
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          warnings: [],
+        };
+      },
       doGenerate: async () => ({
         rawCall: { rawPrompt: null, rawSettings: {} },
         finishReason: 'stop' as const,
@@ -386,5 +530,463 @@ describe('Subconscious LibSQL integration', () => {
         ifIdle: { behavior: 'persist' },
       }),
     ]);
+  });
+
+  it('persists an accepted memory question and correlated terminal reply across Memory reconstruction', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'subconscious-question-libsql-'));
+    directories.push(directory);
+    const storage = new LibSQLStore({ id: randomUUID(), url: `file:${join(directory, 'memory.db')}` });
+    await storage.init();
+    const parentThreadId = randomUUID();
+    const resourceId = randomUUID();
+    const memory = new Memory({ storage });
+    await memory.createThread({ threadId: parentThreadId, resourceId, title: 'Question parent' });
+    const model = new MockLanguageModelV2({
+      doGenerate: async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        finishReason: 'stop' as const,
+        usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+        warnings: [],
+        content: [{ type: 'text' as const, text: 'idle' }],
+      }),
+    });
+    const parentAgent = new Agent({ id: 'main-agent', name: 'Main Agent', instructions: 'Help.', model });
+    const sendMessage = vi.spyOn(Agent.prototype, 'sendMessage').mockImplementation((() => ({
+      accepted: Promise.resolve({ action: 'deliver', runId: 'sidekick-run' }),
+    })) as any);
+    const ask = createAskMemoryTool({
+      memory,
+      config: { name: 'remind', builtIn: true, maxSteps: 5 },
+      getParentAgent: () => parentAgent,
+    });
+    const requestContext = new RequestContext();
+    requestContext.set('organizationId', 'acme');
+
+    const accepted = (await ask.execute?.({ question: 'What is the Atlas launch date?' }, {
+      agent: { agentId: 'main-agent', threadId: parentThreadId, resourceId, messages: [] },
+      requestContext,
+    } as any)) as { accepted: boolean; replyId: string; status: string };
+    sendMessage.mockRestore();
+
+    expect(accepted).toMatchObject({ accepted: true, status: 'pending', replyId: expect.any(String) });
+    const reconstructed = new Memory({ storage });
+    const reminderThreadId = getRemindThreadId(parentThreadId);
+    const stored = await (await storage.getStore('memory'))!.listMessages({
+      threadId: reminderThreadId,
+      resourceId,
+      perPage: false,
+      orderBy: { field: 'createdAt', direction: 'ASC' },
+    });
+    const question = stored.messages.find(message => getRemindProtocol(message)?.kind === 'question')!;
+    expect(getRemindProtocol(question)).toMatchObject({ replyId: accepted.replyId, parentThreadId, resourceId });
+
+    const deliveredSignals: unknown[] = [];
+    vi.spyOn(parentAgent, 'sendSignal').mockImplementation((signal => {
+      deliveredSignals.push(signal);
+      return { signal, accepted: Promise.resolve({ action: 'deliver', runId: 'parent-run' }) };
+    }) as any);
+    const reply = createReplyToMemoryQuestionTool({
+      memory: reconstructed,
+      parentAgent,
+      parentAgentId: 'main-agent',
+      parentThreadId,
+      reminderThreadId,
+      resourceId,
+    });
+    const result = await reply.execute?.({ replyId: accepted.replyId, answer: 'January 15.', moreComing: false }, {
+      agent: { messages: [question] },
+    } as any);
+
+    expect(result).toMatchObject({ delivered: true, replyId: accepted.replyId, moreComing: false });
+    expect(deliveredSignals).toEqual([
+      expect.objectContaining({ id: `${accepted.replyId}:terminal:signal`, contents: 'January 15.' }),
+    ]);
+    const finalStored = await (await storage.getStore('memory'))!.listMessages({
+      threadId: reminderThreadId,
+      resourceId,
+      perPage: false,
+    });
+    expect(finalStored.messages.map(getRemindProtocol).filter(Boolean)).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ kind: 'terminal-pending-delivery', replyId: accepted.replyId }),
+        expect.objectContaining({ kind: 'terminal-delivered', replyId: accepted.replyId }),
+      ]),
+    );
+  });
+
+  it('reconstructs two continuation attempts and emits one terminal failure through LibSQL', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'subconscious-continuation-libsql-'));
+    directories.push(directory);
+    const storage = new LibSQLStore({ id: randomUUID(), url: `file:${join(directory, 'memory.db')}` });
+    await storage.init();
+    const memory = new Memory({ storage });
+    const parentThreadId = randomUUID();
+    const resourceId = randomUUID();
+    const reminderThreadId = getRemindThreadId(parentThreadId);
+    await memory.createThread({ threadId: parentThreadId, resourceId });
+    await ensureOwnedRemindThread({ memory, parentThreadId, resourceId });
+    const replyId = `subconscious:remind:${randomUUID()}:reply`;
+    const question = questionEvent(parentThreadId, resourceId, replyId);
+    const continuation = (attempt: number): RemindContinuationEvent => {
+      const eventId = `${replyId}:continuation:${attempt}`;
+      return {
+        kind: 'continuation',
+        eventId,
+        deliveryId: `${eventId}:delivery`,
+        parentAgentId: 'main-agent',
+        parentThreadId,
+        resourceId,
+        createdAt: question.createdAt + attempt,
+        outstandingReplyIds: [replyId],
+        attempts: { [replyId]: attempt },
+      };
+    };
+    await memory.saveMessages({
+      messages: [
+        protocolMessage(question, 'Memory question\n\nWhat is the launch date?'),
+        protocolMessage(continuation(1), `Continue unresolved memory question ${replyId}.`),
+        protocolMessage(continuation(2), `Continue unresolved memory question ${replyId}.`),
+      ],
+    });
+
+    const reconstructed = new Memory({ storage });
+    const parentSignals: unknown[] = [];
+    const parentAgent = {
+      sendSignal: vi.fn((signal: unknown) => {
+        parentSignals.push(signal);
+        return { signal, accepted: Promise.resolve({ action: 'deliver', runId: 'parent-run' }) };
+      }),
+    } as any;
+    const processor = new RemindContinuationProcessor({
+      memory: reconstructed,
+      threadId: reminderThreadId,
+      resourceId,
+      parentThreadId,
+      parentAgent,
+      parentAgentId: 'main-agent',
+      maxSteps: 5,
+      getReminderAgent: () => {
+        throw new Error('No continuation wake should occur after attempt two.');
+      },
+    });
+
+    await processor.processOutputResult({
+      state: {},
+      messages: [],
+      requestContext: new RequestContext(),
+      result: { text: '', finishReason: 'stop', steps: [] },
+    } as any);
+
+    expect(parentSignals).toEqual([
+      expect.objectContaining({
+        id: `${replyId}:terminal:signal`,
+        contents: 'Unable to answer this memory question after two continuation attempts.',
+      }),
+    ]);
+    const finalStored = await (await storage.getStore('memory'))!.listMessages({
+      threadId: reminderThreadId,
+      resourceId,
+      perPage: false,
+    });
+    expect(finalStored.messages.map(getRemindProtocol).filter(Boolean)).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ kind: 'terminal-pending-delivery', replyId, outcome: 'unable-to-answer' }),
+        expect.objectContaining({ kind: 'terminal-delivered', replyId, outcome: 'unable-to-answer' }),
+      ]),
+    );
+  });
+
+  it('isolates owned reminder threads by resource and cascades deletion conservatively', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'subconscious-delete-libsql-'));
+    directories.push(directory);
+    const storage = new LibSQLStore({ id: randomUUID(), url: `file:${join(directory, 'memory.db')}` });
+    await storage.init();
+    const memory = new Memory({ storage });
+    const ownedParentId = randomUUID();
+    const unmarkedParentId = randomUUID();
+    const foreignParentId = randomUUID();
+    const ownedResourceId = randomUUID();
+    const foreignResourceId = randomUUID();
+    for (const [threadId, resourceId] of [
+      [ownedParentId, ownedResourceId],
+      [unmarkedParentId, ownedResourceId],
+      [foreignParentId, ownedResourceId],
+    ]) {
+      await memory.createThread({ threadId, resourceId });
+    }
+    const owned = await ensureOwnedRemindThread({ memory, parentThreadId: ownedParentId, resourceId: ownedResourceId });
+    await memory.saveMessages({ messages: [message(owned.id, ownedResourceId, 'Owned reminder history')] });
+    await memory.createThread({ threadId: getRemindThreadId(unmarkedParentId), resourceId: ownedResourceId });
+    await memory.createThread({ threadId: getRemindThreadId(foreignParentId), resourceId: foreignResourceId });
+
+    await memory.deleteThread(ownedParentId);
+    await memory.deleteThread(unmarkedParentId);
+    await memory.deleteThread(foreignParentId);
+    await memory.settled();
+
+    expect(await memory.getThreadById({ threadId: owned.id })).toBeNull();
+    expect(await memory.getThreadById({ threadId: getRemindThreadId(unmarkedParentId) })).not.toBeNull();
+    expect(await memory.getThreadById({ threadId: getRemindThreadId(foreignParentId) })).not.toBeNull();
+    await expect(
+      ensureOwnedRemindThread({ memory, parentThreadId: foreignParentId, resourceId: ownedResourceId }),
+    ).rejects.toThrow('ownership metadata does not match');
+  });
+
+  it('deduplicates a retried deterministic parent signal ID through native persistence', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'subconscious-signal-dedupe-libsql-'));
+    directories.push(directory);
+    const storage = new LibSQLStore({ id: randomUUID(), url: `file:${join(directory, 'memory.db')}` });
+    await storage.init();
+    const memory = new Memory({ storage });
+    const threadId = randomUUID();
+    const resourceId = randomUUID();
+    await memory.createThread({ threadId, resourceId });
+    const model = new MockLanguageModelV2({
+      doGenerate: async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        finishReason: 'stop' as const,
+        usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+        warnings: [],
+        content: [{ type: 'text' as const, text: 'unused' }],
+      }),
+    });
+    const parentAgent = new Agent({ id: 'main-agent', name: 'Main Agent', instructions: 'Help.', model, memory });
+    const signalId = `subconscious:remind:${randomUUID()}:terminal:signal`;
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const sent = parentAgent.sendSignal(
+        {
+          id: signalId,
+          type: 'reactive',
+          tagName: 'memory-reply',
+          contents: 'January 15.',
+          metadata: { origin: 'subconscious', moreComing: false },
+        },
+        { threadId, resourceId, ifIdle: { behavior: 'persist' } },
+      );
+      await expect(sent.accepted).resolves.toMatchObject({ action: 'persist' });
+      await expect(sent.persisted).resolves.toBeUndefined();
+    }
+
+    const persisted = await (await storage.getStore('memory'))!.listMessagesById({ messageIds: [signalId] });
+    expect(persisted.messages).toHaveLength(1);
+    expect(persisted.messages[0]).toMatchObject({ id: signalId, threadId, resourceId, role: 'signal' });
+  });
+
+  it('runs curate after reflection with cursor recovery, CAS, and application restore', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'subconscious-curate-libsql-'));
+    directories.push(directory);
+    const databaseUrl = `file:${join(directory, 'knowledge.db')}`;
+    const storage = new LibSQLStore({ id: randomUUID(), url: databaseUrl });
+    const vector = new LibSQLVector({ id: randomUUID(), url: databaseUrl });
+    await storage.init();
+    const threadId = randomUUID();
+    const resourceId = randomUUID();
+    const streamCall = vi.fn(async () => ({
+      stream: convertArrayToReadableStream([
+        { type: 'stream-start', warnings: [] },
+        { type: 'response-metadata', id: randomUUID(), modelId: 'aimock', timestamp: new Date() },
+        { type: 'text-start', id: 'text' },
+        {
+          type: 'text-delta',
+          id: 'text',
+          delta:
+            streamCall.mock.calls.length === 1
+              ? '<observations>- Project Atlas launches soon.</observations>'
+              : '- Project Atlas launches soon.',
+        },
+        { type: 'text-end', id: 'text' },
+        { type: 'finish', finishReason: 'stop', usage: { inputTokens: 20, outputTokens: 10, totalTokens: 30 } },
+      ]),
+      rawCall: { rawPrompt: null, rawSettings: {} },
+      warnings: [],
+    }));
+    const model = new MockLanguageModelV2({ doStream: streamCall as never });
+    let completionItemId = '';
+    const curateGenerate = vi.fn(async () => ({
+      rawCall: { rawPrompt: null, rawSettings: {} },
+      finishReason: 'stop' as const,
+      usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+      warnings: [],
+      content: [{ type: 'text' as const, text: `<curation-complete through="${completionItemId}" />` }],
+    }));
+    const curatorModel = new MockLanguageModelV2({ doGenerate: curateGenerate as never });
+    const memory = new Memory({
+      storage,
+      vector,
+      embedder,
+      options: {
+        observationalMemory: {
+          enabled: true,
+          model,
+          experimental_subconscious: new Subconscious({
+            observation: [],
+            reflection: [{ name: 'curate', model: curatorModel }],
+          }),
+          observation: { messageTokens: 1, bufferTokens: false, previousObserverTokens: 1_000 },
+          reflection: { observationTokens: 1, bufferActivation: 0 },
+        },
+      },
+    });
+    await memory.createThread({ threadId, resourceId, title: 'Curator lifecycle' });
+    const knowledge = (await storage.getStore('knowledge'))!;
+    const scope = ['org:acme', `resource:${resourceId}`, `thread:${threadId}`];
+    const node = await knowledge.createNode({ name: 'Project Atlas', kind: 'project', scope });
+    const record = await knowledge.appendKnowledge({
+      node: node.id,
+      text: '[[Project Atlas]] launches soon.',
+      scope,
+      sourceThreadId: threadId,
+      resolutionScope: scope,
+      defaultScope: scope,
+    });
+    completionItemId = record.id;
+    await memory.saveMessages({ messages: [message(threadId, resourceId, 'Project Atlas launches soon.')] });
+    const requestContext = new RequestContext();
+    requestContext.set('organizationId', 'acme');
+
+    const mainAgent = new Agent({ id: 'main', name: 'Main', instructions: 'Help.', model });
+    const om = (await memory.omEngine)!;
+    const result = await om.observe({
+      threadId,
+      resourceId,
+      agent: mainAgent,
+      requestContext,
+      sendStateSignal: vi.fn(async () => ({ skipped: false }) as any),
+    });
+    if (curateGenerate.mock.calls.length === 0) {
+      const memoryStore = (await storage.getStore('memory'))!;
+      const record = (await memoryStore.getObservationalMemory(threadId, resourceId))!;
+      await om.reflector.maybeReflect({
+        record,
+        observationTokens: 100_000,
+        threadId,
+        mainAgent,
+        requestContext,
+        sendStateSignal: vi.fn(async () => ({ skipped: false }) as any),
+      });
+    }
+
+    expect(result.observed).toBe(true);
+    expect(curateGenerate).toHaveBeenCalledOnce();
+    expect(await knowledge.getCurationCursor({ sourceThreadId: threadId, agent: 'curate' })).toMatchObject({
+      lastKnowledgeId: record.id,
+    });
+    await expect(knowledge.updateNode({ id: node.id, version: node.version + 1, name: 'Stale Atlas' })).rejects.toThrow(
+      'version',
+    );
+
+    await knowledge.removeKnowledge({ id: record.id, deletedBy: 'subconscious:curate' });
+    expect(await knowledge.getKnowledge({ id: record.id })).toBeNull();
+    await memory.drainKnowledgeSemanticIndex(scope);
+    const indexName = (await vector.listIndexes()).find(name => name.startsWith('knowledge_documents_dimension'))!;
+    const queryVector = (await embedder.doEmbed({ values: ['Project Atlas launch'] })).embeddings[0]!;
+    expect((await vector.query({ indexName, queryVector, topK: 20 })).some(match => match.id.endsWith(record.id))).toBe(
+      false,
+    );
+
+    await knowledge.restoreKnowledge({ id: record.id });
+    await memory.drainKnowledgeSemanticIndex(scope);
+    expect(await knowledge.getKnowledge({ id: record.id })).toMatchObject({
+      deletedAt: undefined,
+      deletedBy: undefined,
+    });
+    expect((await vector.query({ indexName, queryVector, topK: 20 })).some(match => match.id.endsWith(record.id))).toBe(
+      true,
+    );
+  });
+
+  it('learns and updates one skill with idempotent LibSQL evidence', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'subconscious-learn-libsql-'));
+    directories.push(directory);
+    const storage = new LibSQLStore({ id: randomUUID(), url: `file:${join(directory, 'knowledge.db')}` });
+    await storage.init();
+    const memory = new Memory({ storage });
+    const knowledge = (await storage.getStore('knowledge'))!;
+    const threadId = randomUUID();
+    const resourceId = randomUUID();
+    const scope = ['org:acme', `resource:${resourceId}`, `thread:${threadId}`];
+    const project = await knowledge.createNode({ name: 'Project Atlas', kind: 'project', scope });
+    const appendSource = (text: string) =>
+      knowledge.appendKnowledge({
+        node: project.id,
+        text,
+        scope,
+        sourceThreadId: threadId,
+        resolutionScope: scope,
+        defaultScope: scope,
+      });
+    const first = await appendSource('Deploy Atlas by validating then publishing.');
+    const second = await appendSource('Another deploy validated, published, then checked health.');
+    let pendingIds = [first.id, second.id];
+    let modelStep = 0;
+    const learnGenerate = async () => {
+      modelStep++;
+      if (modelStep % 2 === 1) {
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'tool-calls' as const,
+          usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+          warnings: [],
+          content: [
+            {
+              type: 'tool-call' as const,
+              toolCallId: `learn-${modelStep}`,
+              toolName: 'knowledge_record_skill',
+              input: JSON.stringify({
+                name: 'deploy-atlas-safely',
+                procedure: 'Validate, publish, then verify the health check.',
+                sourceRecordIds: pendingIds,
+              }),
+            },
+          ],
+        };
+      }
+      return {
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        finishReason: 'stop' as const,
+        usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+        warnings: [],
+        content: [{ type: 'text' as const, text: `<learning-complete through="${pendingIds.at(-1)}" />` }],
+      };
+    };
+    const learnerModel = new MockLanguageModelV2({ doGenerate: learnGenerate as never });
+    const config: ResolvedSubconsciousConfig = {
+      observation: [],
+      reflection: [{ name: 'learn', maxSteps: 5, builtIn: true }],
+      defaultScope: 'resource',
+      learnedGuidance: true,
+      tools: true,
+      activity: { recentUpdates: 10 },
+    };
+    const requestContext = new RequestContext();
+    requestContext.set('organizationId', 'acme');
+    const handler = createLearnerHandler(
+      memory as any,
+      config,
+      new Memory({ storage, options: { observationalMemory: false } }) as any,
+    );
+    const run = () =>
+      handler({
+        parentThreadId: threadId,
+        resourceId,
+        observations: 'Full raw observations preserve the repeated deploy sequence.',
+        requestContext,
+        mainAgent: { getModel: vi.fn(async () => learnerModel) } as any,
+      });
+
+    await run();
+    const third = await appendSource('A third deploy repeated validation and publish.');
+    const fourth = await appendSource('Recovery again finished with a health check.');
+    pendingIds = [third.id, fourth.id];
+    await run();
+
+    const skills = await knowledge.listNodes({ scope, kind: 'skill' });
+    expect(skills).toHaveLength(1);
+    const evidence = await knowledge.listKnowledgeAbout({ node: skills[0]!.id, scope });
+    expect(evidence.records).toHaveLength(4);
+    expect(new Set(evidence.records.map(record => record.id)).size).toBe(4);
+    expect(await knowledge.getCurationCursor({ sourceThreadId: threadId, agent: 'learn' })).toMatchObject({
+      lastKnowledgeId: fourth.id,
+    });
   });
 });
