@@ -353,9 +353,9 @@ export class LibSQLVector extends MastraVector<LibSQLVectorFilter> {
     }
   }
 
-  public upsert(args: UpsertVectorParams): Promise<string[]> {
+  public async upsert(args: UpsertVectorParams): Promise<string[]> {
     try {
-      return this.executeMutation(() => this.doUpsert(args), true);
+      return await this.executeMutation(() => this.doUpsert(args), true);
     } catch (error) {
       throw new MastraError(
         {
@@ -414,9 +414,9 @@ export class LibSQLVector extends MastraVector<LibSQLVectorFilter> {
     }
   }
 
-  public createIndex(args: CreateIndexParams): Promise<void> {
+  public async createIndex(args: CreateIndexParams): Promise<void> {
     try {
-      return this.executeMutation(() => this.doCreateIndex(args));
+      return await this.executeMutation(() => this.doCreateIndex(args));
     } catch (error) {
       throw new MastraError(
         {
@@ -456,9 +456,9 @@ export class LibSQLVector extends MastraVector<LibSQLVectorFilter> {
     this.vectorIndexes.add(`${parsedIndexName}_vector_idx`);
   }
 
-  public deleteIndex(args: DeleteIndexParams): Promise<void> {
+  public async deleteIndex(args: DeleteIndexParams): Promise<void> {
     try {
-      return this.executeMutation(() => this.doDeleteIndex(args));
+      return await this.executeMutation(() => this.doDeleteIndex(args));
     } catch (error) {
       throw new MastraError(
         {
@@ -730,9 +730,9 @@ export class LibSQLVector extends MastraVector<LibSQLVectorFilter> {
    * @returns A promise that resolves when the deletion is complete.
    * @throws Will throw an error if the deletion operation fails.
    */
-  public deleteVector(args: DeleteVectorParams): Promise<void> {
+  public async deleteVector(args: DeleteVectorParams): Promise<void> {
     try {
-      return this.executeMutation(() => this.doDeleteVector(args));
+      return await this.executeMutation(() => this.doDeleteVector(args));
     } catch (error) {
       throw new MastraError(
         {
@@ -874,9 +874,9 @@ export class LibSQLVector extends MastraVector<LibSQLVectorFilter> {
     }
   }
 
-  public truncateIndex(args: DeleteIndexParams): Promise<void> {
+  public async truncateIndex(args: DeleteIndexParams): Promise<void> {
     try {
-      return this.executeMutation(() => this._doTruncateIndex(args));
+      return await this.executeMutation(() => this._doTruncateIndex(args));
     } catch (error) {
       throw new MastraError(
         {
