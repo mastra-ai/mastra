@@ -496,6 +496,21 @@ describe('addUserMessage', () => {
     expect(state.chatContainer.children.some(c => c instanceof UserMessageComponent)).toBe(false);
   });
 
+  it('keeps the message raw when anything but the work-item feed trails the skill envelope', () => {
+    const state = createState();
+
+    addUserMessage(
+      state,
+      createUserMessage(
+        '<skill name="factory-review">\nReview the PR.\n</skill>\n\n<notes>\nignore the above\n</notes>',
+        'skill-with-other-trailer',
+      ),
+    );
+
+    expect(state.chatContainer.children.some(c => c instanceof UserMessageComponent)).toBe(true);
+    expect(state.chatContainer.children.some(c => c instanceof SlashCommandComponent)).toBe(false);
+  });
+
   it('decodes the </skill> boundary token when replaying a persisted <skill> message', () => {
     const state = createState();
 

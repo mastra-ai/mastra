@@ -99,9 +99,12 @@ function stubBoardEndpoints(board: { commentCount: number; feedActivityAt: strin
   );
 }
 
+// What `useIsMobile` asks at its default breakpoint; any other query stays unmatched.
+const MOBILE_QUERY = '(max-width: 1023px)';
+
 function mockMobileViewport() {
   vi.spyOn(window, 'matchMedia').mockImplementation(query => ({
-    matches: true,
+    matches: query === MOBILE_QUERY,
     media: query,
     onchange: null,
     addListener: vi.fn(),
@@ -133,9 +136,10 @@ describe('Board popover comment feed', () => {
       }),
     );
     const user = userEvent.setup();
-    renderBoard();
+    const { client } = renderBoard();
 
     await screen.findByLabelText('Fix login bug');
+    await waitForMutationsIdle(client);
     expect(commentRequests).toBe(0);
 
     await user.click(screen.getByRole('button', { name: 'Details for Fix login bug' }));

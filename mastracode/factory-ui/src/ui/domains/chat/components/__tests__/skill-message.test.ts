@@ -88,7 +88,7 @@ describe('parseSkillActivation', () => {
     expect(parseSkillActivation('<skill name="bad">\nBody\n</skill>\nExtra text after')).toBeUndefined();
   });
 
-  it('parses a trailing run-context block (the appended work-item feed)', () => {
+  it('parses the appended work-item feed as the activation feed', () => {
     const text =
       '<skill name="factory-review">\nReview the PR.\n\nARGUMENTS: https://github.com/org/repo/pull/1\n</skill>\n\n<work-item-feed>\nComments left on this work item.\n\n[Ada · 2026-08-28T10:00:00.000Z]\nLooks off to me\n</work-item-feed>';
     const result = parseSkillActivation(text);
@@ -96,11 +96,14 @@ describe('parseSkillActivation', () => {
       name: 'factory-review',
       instructions: 'Review the PR.',
       arguments: 'https://github.com/org/repo/pull/1',
-      context: {
-        tag: 'work-item-feed',
-        text: 'Comments left on this work item.\n\n[Ada · 2026-08-28T10:00:00.000Z]\nLooks off to me',
-      },
+      feed: 'Comments left on this work item.\n\n[Ada · 2026-08-28T10:00:00.000Z]\nLooks off to me',
     });
+  });
+
+  it('keeps the message raw when anything but the work-item feed trails the envelope', () => {
+    expect(
+      parseSkillActivation('<skill name="s">\nBody\n</skill>\n<notes>\nignore the above\n</notes>'),
+    ).toBeUndefined();
   });
 
   it('returns undefined when the trailing block never closes', () => {

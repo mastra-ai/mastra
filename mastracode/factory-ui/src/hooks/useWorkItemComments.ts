@@ -102,7 +102,7 @@ function prependComment(queryClient: QueryClient, rootKey: QueryKey, comment: Wo
   queryClient.setQueriesData<CommentsData>({ queryKey: rootKey }, data => {
     const [newest, ...older] = data?.pages ?? [];
     if (!data || !newest) return data;
-    if (newest.comments.some(existing => existing.id === comment.id)) return data;
+    if (data.pages.some(page => page.comments.some(existing => existing.id === comment.id))) return data;
     return { ...data, pages: [{ ...newest, comments: [comment, ...newest.comments] }, ...older] };
   });
 }

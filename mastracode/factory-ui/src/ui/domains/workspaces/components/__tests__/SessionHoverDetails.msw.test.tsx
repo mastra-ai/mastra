@@ -13,7 +13,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { ReactNode } from 'react';
 
 import { server } from '../../../../../../e2e/ui/msw-server';
-import { TEST_BASE_URL, renderWithProviders } from '../../../../../../e2e/ui/render';
+import { TEST_BASE_URL, renderWithProviders, waitForMutationsIdle } from '../../../../../../e2e/ui/render';
 import { ChatSessionConfigProvider } from '../../../chat/context/ChatSessionProvider';
 import { WorkspacesSection } from '../WorkspacesSection';
 import {
@@ -187,9 +187,12 @@ describe('Workspace session hover details', () => {
       mockMobileViewport();
       stubSessionDetails(new Date().toISOString());
       const user = userEvent.setup();
-      renderSection(section => <MainSidebarProvider storageKey="session-hover-test">{section}</MainSidebarProvider>);
+      const { client } = renderSection(section => (
+        <MainSidebarProvider storageKey="session-hover-test">{section}</MainSidebarProvider>
+      ));
 
       const workRow = await screen.findByRole('button', { name: workName });
+      await waitForMutationsIdle(client);
       await user.hover(workRow);
       await user.tab();
 

@@ -163,7 +163,7 @@ describe('TranscriptEntries skill rows', () => {
     renderEntries([userMessageEntry('msg-1', `${SKILL_WITH_ARGS}\n\n<work-item-feed>\n${feed}\n</work-item-feed>`)]);
 
     expect(screen.getByRole('group', { name: 'Skill: triage-issue' })).toBeInTheDocument();
-    const feedRow = screen.getByRole('group', { name: 'Signal: work-item-feed' });
+    const feedRow = screen.getByRole('group', { name: 'Signal: Work item feed' });
 
     await userEvent.click(within(feedRow).getByRole('button'));
     expect(within(feedRow).getByText(/Looks off to me/, { selector: 'p' })).toBeInTheDocument();

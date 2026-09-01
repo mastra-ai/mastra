@@ -20,18 +20,6 @@ import { CardDetailsPanel } from './CardDetailsPanel';
 import { WorkItemCardRows } from './WorkItemCardRows';
 import { WorkItemTray } from './WorkItemTray';
 
-/** Anything started from the copy hands back to the board first. */
-function startAfterClosing(action: CardAction, close: () => void): CardAction {
-  if (!('start' in action)) return action;
-  return {
-    ...action,
-    start: () => {
-      close();
-      action.start();
-    },
-  };
-}
-
 export function WorkItemDetailsPanel({
   item,
   columnStage,
@@ -64,7 +52,6 @@ export function WorkItemDetailsPanel({
   const events = timelineEvents(activity);
   const actors = { ...activityPage?.actors, ...activity.extraActors };
   const identifier = workItemIdentifier(item);
-  const copyActions = actions.map(action => startAfterClosing(action, morph.closeDetails));
 
   return (
     <CardDetailsPanel
@@ -79,7 +66,8 @@ export function WorkItemDetailsPanel({
           activity={activity}
           actors={actors}
           status={status}
-          actions={copyActions}
+          actions={actions}
+          beforeStart={morph.closeDetails}
           open
           controls={
             <>

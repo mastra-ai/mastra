@@ -104,12 +104,10 @@ export function CandidateDetailsPanel({
                 {
                   label: runPending ? 'Starting…' : defaultAction.label,
                   disabled: disabled || runPending,
-                  start: () => {
-                    morph.closeDetails();
-                    onRun(defaultAction);
-                  },
+                  start: () => onRun(defaultAction),
                 },
               ]}
+              beforeStart={morph.closeDetails}
             >
               <Button
                 ref={promptAnchorRef}

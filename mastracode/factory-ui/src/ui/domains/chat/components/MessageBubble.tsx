@@ -229,12 +229,12 @@ export function MessageBubble({
       ? parseSkillActivation(parts[0].text)
       : undefined;
   if (skillActivation) {
-    return skillActivation.context === undefined ? (
+    return skillActivation.feed === undefined ? (
       <SkillMessage activation={skillActivation} />
     ) : (
       <div className="flex flex-col">
         <SkillMessage activation={skillActivation} />
-        <SignalRow kind="reactive" label={skillActivation.context.tag} message={skillActivation.context.text} />
+        <SignalRow kind="reactive" label="Work item feed" message={skillActivation.feed} />
       </div>
     );
   }

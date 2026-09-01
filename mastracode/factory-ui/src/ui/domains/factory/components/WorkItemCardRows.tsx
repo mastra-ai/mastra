@@ -28,6 +28,7 @@ export function WorkItemCardRows({
   actors,
   status,
   actions,
+  beforeStart,
   controls,
   open,
 }: {
@@ -40,6 +41,7 @@ export function WorkItemCardRows({
   status: BoardCardStatus;
   /** Bottom left, the likeliest first. */
   actions: CardAction[];
+  beforeStart?: () => void;
   /** The top-right group: the card's menu, or the copy's link, collapse and menu. */
   controls: ReactNode;
   /** The copy: its labelled source link and two controls to clear. */
@@ -106,7 +108,11 @@ export function WorkItemCardRows({
           )}
         </div>
       )}
-      <CardActions actions={actions} trailing={<WorkItemActivity activity={activity} actors={actors} />} />
+      <CardActions
+        actions={actions}
+        beforeStart={beforeStart}
+        trailing={<WorkItemActivity activity={activity} actors={actors} />}
+      />
     </>
   );
 }

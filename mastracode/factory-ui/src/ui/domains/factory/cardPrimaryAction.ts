@@ -97,6 +97,45 @@ export type CardAction = { label: string; ariaLabel?: string; disabled?: boolean
   | { start: () => void }
 );
 
+export function sessionLink(href: string | undefined): CardAction | undefined {
+  return href === undefined ? undefined : { label: 'Open session', href };
+}
+
+export function retryButton({
+  decisionId,
+  retryingDecisionId,
+  onRetry,
+}: {
+  decisionId?: string;
+  retryingDecisionId?: string;
+  onRetry: (decisionId: string) => void;
+}): CardAction | undefined {
+  if (decisionId === undefined) return undefined;
+  const retrying = decisionId === retryingDecisionId;
+  return { label: retrying ? 'Retrying…' : 'Retry', disabled: retrying, start: () => onRetry(decisionId) };
+}
+
+export function runButton({
+  action,
+  pending,
+  disabled,
+  suggestion,
+}: {
+  action?: CardPrimaryAction;
+  pending: boolean;
+  disabled: boolean;
+  /** The waiting suggestion's label, so the button says which run it releases. */
+  suggestion?: string;
+}): CardAction | undefined {
+  if (action === undefined) return undefined;
+  return {
+    label: pending ? 'Starting…' : action.label,
+    ariaLabel: suggestion === undefined ? undefined : `Start suggested run: ${suggestion}`,
+    disabled: disabled || pending,
+    start: action.start,
+  };
+}
+
 /** The card's buttons, the likeliest next click first; `urgent` marks the one the card waits on a person for. */
 export function cardActions({
   running,

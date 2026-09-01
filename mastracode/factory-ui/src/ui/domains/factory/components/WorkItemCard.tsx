@@ -13,8 +13,14 @@ import { itemThreadSession, pullRequestStatusForItem } from '../boardItems';
 import { itemRunSpec } from '../boardRunSpecs';
 import type { ItemRunSpec, RunAction } from '../boardRunSpecs';
 import { itemStageLabel } from '../boardStages';
-import { cardActions, cardPrimaryAction, resumeTarget } from '../cardPrimaryAction';
-import type { CardAction } from '../cardPrimaryAction';
+import {
+  cardActions,
+  cardPrimaryAction,
+  resumeTarget,
+  retryButton,
+  runButton,
+  sessionLink,
+} from '../cardPrimaryAction';
 import { useCardMorph } from '../hooks/useCardMorph';
 import type { AuditEventPage } from '../services/audit';
 import type { FactoryDecisionSummary } from '../services/decisions';
@@ -239,29 +245,18 @@ export function WorkItemCard({
     );
   };
 
-  const retrying = retryDecisionId !== undefined && retryDecisionId === retryingDecisionId;
-  const sessionButton: CardAction | undefined =
-    sessionHref === undefined ? undefined : { label: 'Open session', href: sessionHref };
-  const retryButton: CardAction | undefined =
-    retryDecisionId === undefined
-      ? undefined
-      : { label: retrying ? 'Retrying…' : 'Retry', disabled: retrying, start: () => onRetryDecision(retryDecisionId) };
-  const runButton: CardAction | undefined =
-    primaryAction === undefined
-      ? undefined
-      : {
-          label: runPending ? 'Starting…' : primaryAction.label,
-          ariaLabel: status.kind === 'waiting' ? `Start suggested run: ${status.label}` : undefined,
-          disabled: runDisabled || runPending,
-          start: primaryAction.start,
-        };
   const actions = cardActions({
     running: wickStatus !== undefined,
     waiting: status.kind === 'waiting',
     attention: wickStatus === 'ready',
-    session: sessionButton,
-    retry: retryButton,
-    run: runButton,
+    session: sessionLink(sessionHref),
+    retry: retryButton({ decisionId: retryDecisionId, retryingDecisionId, onRetry: onRetryDecision }),
+    run: runButton({
+      action: primaryAction,
+      pending: runPending,
+      disabled: runDisabled,
+      suggestion: status.kind === 'waiting' ? status.label : undefined,
+    }),
   });
 
   return (

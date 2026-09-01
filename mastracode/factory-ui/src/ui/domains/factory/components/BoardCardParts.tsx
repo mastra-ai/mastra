@@ -130,10 +130,13 @@ export function CardLabels({ labels }: { labels: readonly string[] }) {
 /** Pinned to the card's bottom: the likeliest click first, lit only while the card waits on a person, the rest stacked under it, `trailing` at the right. */
 export function CardActions({
   actions,
+  beforeStart,
   trailing,
   children,
 }: {
   actions: CardAction[];
+  /** Runs before any button's `start`: the open copy hands back to the board with it. */
+  beforeStart?: () => void;
   trailing?: ReactNode;
   children?: ReactNode;
 }) {
@@ -143,7 +146,7 @@ export function CardActions({
     <div className="mt-auto flex items-center justify-between gap-2">
       <div className="board-card-actions relative z-10 flex">
         {actions.map(action => (
-          <CardActionButton key={action.label} action={action} main={action === main} />
+          <CardActionButton key={action.label} action={action} main={action === main} beforeStart={beforeStart} />
         ))}
         {children}
       </div>
@@ -158,7 +161,15 @@ function pillVariant(action: CardAction, main: boolean) {
   return 'default';
 }
 
-function CardActionButton({ action, main }: { action: CardAction; main: boolean }) {
+function CardActionButton({
+  action,
+  main,
+  beforeStart,
+}: {
+  action: CardAction;
+  main: boolean;
+  beforeStart?: () => void;
+}) {
   const variant = pillVariant(action, main);
   // Both through Button, so the two pills can never differ by a class.
   if ('href' in action) {
@@ -175,7 +186,10 @@ function CardActionButton({ action, main }: { action: CardAction; main: boolean 
       size="sm"
       aria-label={action.ariaLabel}
       disabled={action.disabled}
-      onClick={action.start}
+      onClick={() => {
+        beforeStart?.();
+        action.start();
+      }}
     >
       {action.label}
     </Button>
