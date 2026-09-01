@@ -293,7 +293,11 @@ toolDisplay: event => {
 
 Approve/deny prompts (`requireApproval`) always render as a separate card
 regardless of mode, because inline task entries can't carry interactive
-buttons.
+buttons. With a `toolDisplay` function, the `approval` event is passed to your
+function in both streaming and static modes; return `{ kind: 'post', message }`
+to replace the built-in card (for example, with a localized message). Returning
+`undefined`, an empty message, or `{ kind: 'stream' }` falls back to the
+built-in card so the approval stays actionable.
 
 ```typescript title="src/mastra/agents/streaming.ts"
 import { Agent } from '@mastra/core/agent'
