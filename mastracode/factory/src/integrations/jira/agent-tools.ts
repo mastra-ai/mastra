@@ -26,11 +26,11 @@ import type { JiraIntegration } from './integration.js';
  * live on the integration instance — this placeholder is accepted and
  * ignored (see `JiraIntegration`).
  */
-const DEPLOYMENT_CONNECTION: IntegrationConnection = { type: 'oauth', accessToken: 'deployment-global' };
+const PLATFORM_CONNECTION: IntegrationConnection = { type: 'oauth', accessToken: 'platform-managed' };
 
 function toolError(action: string, err: unknown): { error: string } {
   if (err instanceof JiraApiError && err.code === 'jira_auth_failed') {
-    return { error: 'Jira rejected the configured credentials. Ask the operator to check the Jira API token.' };
+    return { error: 'Jira rejected the connected account. Reconnect it in Mastra Platform.' };
   }
   return { error: `${action}: ${err instanceof Error ? err.message : String(err)}` };
 }
@@ -46,7 +46,7 @@ function createJiraGetIssueTool(jira: JiraIntegration) {
     execute: async ({ issue }: { issue: string }) => {
       try {
         const detail = await jira.intake.getIssue({
-          connection: DEPLOYMENT_CONNECTION,
+          connection: PLATFORM_CONNECTION,
           issueId: issue.trim(),
         });
         if (!detail) {
@@ -86,7 +86,7 @@ export async function buildJiraAgentTools({
   if (!resourceId) return {};
 
   const orgId = await jira.resolveOrgId(resourceId);
-  if (!orgId) return {};
+  if (!orgId || !(await jira.hasActiveConnections())) return {};
 
   return {
     jira_get_issue: createJiraGetIssueTool(jira),

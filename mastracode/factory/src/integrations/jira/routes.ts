@@ -2,11 +2,10 @@
  * Mastra `apiRoutes` for the Jira intake feature.
  *
  * Registered alongside the other `/web/*` routes, behind the host auth gate.
- * Mirrors the Linear module minus everything OAuth: there is no
- * connect/callback flow, no state signer, and no per-org connection storage —
- * Jira credentials are deployment-global constructor config on the
- * integration instance. Every route still re-resolves the authenticated user
- * from the request and scopes intake selections by the caller's org.
+ * Jira connections are owned by the caller's Mastra Platform organization;
+ * provider requests stay server-side and flow through the integrations v2
+ * proxy. Every route re-resolves the authenticated user and scopes intake
+ * selections by the caller's org.
  *
  * When the feature is disabled (no auth, or no intake storage),
  * `buildJiraRoutes` returns only `GET /web/jira/status`, which reports
@@ -143,7 +142,7 @@ function jiraFetchError(c: RouteContext, err: unknown) {
     return c.json(
       {
         error: 'jira_auth_failed',
-        message: 'Jira rejected the configured credentials. Check JIRA_EMAIL and JIRA_API_TOKEN.',
+        message: 'Jira rejected the connected account. Reconnect it in Mastra Platform.',
       },
       409,
     );
@@ -184,27 +183,35 @@ export function buildJiraRoutes(options: MountJiraRoutesOptions): ApiRoute[] {
         const tenant = auth.tenant(loose(c));
         if (!tenant) return c.json({ error: 'unauthorized', reason: 'auth_required' }, 401);
 
-        const site = new URL(jira.baseUrl).host;
         if (!tenant.orgId) {
           return c.json({
             enabled: true,
-            configured: true,
+            configured: false,
             organizationRequired: true,
-            site,
+            site: null,
+            sites: [],
+            connections: [],
             reason: 'organization_required',
             diagnostics: diagnostics(),
           });
         }
 
-        // Deployment-global credentials: configured means ready — there is no
-        // per-org connection step like Linear's OAuth.
-        return c.json({
-          enabled: true,
-          configured: true,
-          site,
-          reason: 'ready',
-          diagnostics: diagnostics(),
-        });
+        try {
+          const connections = await jira.listConnections();
+          const active = connections.filter(connection => connection.status === 'active');
+          const sites = active.flatMap(connection => (connection.accountLabel ? [connection.accountLabel] : []));
+          return c.json({
+            enabled: true,
+            configured: active.length > 0,
+            site: sites.length === 1 ? sites[0] : null,
+            sites,
+            connections,
+            reason: active.length > 0 ? 'ready' : 'not_connected',
+            diagnostics: diagnostics(),
+          });
+        } catch (err) {
+          return jiraFetchError(loose(c), err);
+        }
       },
     }),
   );
@@ -231,6 +238,8 @@ export function buildJiraRoutes(options: MountJiraRoutesOptions): ApiRoute[] {
               id: source.id,
               name: source.name,
               key: typeof source.metadata?.key === 'string' ? source.metadata.key : null,
+              connectionId: typeof source.metadata?.connectionId === 'string' ? source.metadata.connectionId : null,
+              site: typeof source.metadata?.site === 'string' ? source.metadata.site : null,
             })),
           });
         } catch (err) {
@@ -291,7 +300,7 @@ export function buildJiraRoutes(options: MountJiraRoutesOptions): ApiRoute[] {
           const { issues, nextCursor } = await jira.listActiveIssues(after, projectIds);
           return c.json({
             issues: issues.map(issue => ({
-              id: issue.id,
+              id: issue.externalId,
               identifier: issue.identifier,
               title: issue.title,
               url: issue.url,

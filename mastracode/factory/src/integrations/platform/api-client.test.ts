@@ -1,6 +1,11 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { PlatformApiClient, PlatformApiError, platformApiClientConfigFromEnv } from './api-client.js';
+import {
+  PlatformApiClient,
+  PlatformApiError,
+  platformApiClientConfigFromEnv,
+  platformIntegrationsApiClientConfigFromEnv,
+} from './api-client.js';
 
 const accessToken = 'platform-secret-token';
 
@@ -22,6 +27,16 @@ describe('PlatformApiClient', () => {
 
     expect(platformApiClientConfigFromEnv()).toEqual({
       baseUrl: 'https://platform.example.com',
+      accessToken,
+    });
+  });
+
+  it('resolves integrations API config from the managed deployment environment', () => {
+    vi.stubEnv('MASTRA_INTEGRATIONS_API_URL', 'https://integrations.example.com/v2/');
+    vi.stubEnv('MASTRA_PLATFORM_ACCESS_TOKEN', accessToken);
+
+    expect(platformIntegrationsApiClientConfigFromEnv()).toEqual({
+      baseUrl: 'https://integrations.example.com',
       accessToken,
     });
   });

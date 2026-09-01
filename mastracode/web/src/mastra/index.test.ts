@@ -168,9 +168,7 @@ describe('platform entry (src/mastra/index.ts)', () => {
         'GITHUB_APP_WEBHOOK_SECRET',
         'LINEAR_CLIENT_ID',
         'LINEAR_CLIENT_SECRET',
-        'JIRA_BASE_URL',
-        'JIRA_EMAIL',
-        'JIRA_API_TOKEN',
+        'MASTRA_INTEGRATIONS_API_URL',
         'SLACK_APP_SIGNING_SECRET',
       ]) {
         vi.stubEnv(name, '');
@@ -245,29 +243,22 @@ describe('platform entry (src/mastra/index.ts)', () => {
       expect(paths).toContain('/auth/linear/connect');
     });
 
-    it('boots without Jira routes when the Jira group is partially configured', { timeout: 60_000 }, async () => {
+    it('boots without Jira routes when no Platform identity is configured', { timeout: 60_000 }, async () => {
       vi.resetModules();
-      vi.stubEnv('JIRA_BASE_URL', 'https://acme.atlassian.net');
-      vi.stubEnv('JIRA_EMAIL', 'ops@acme.test');
-      vi.stubEnv('JIRA_API_TOKEN', '');
+      vi.stubEnv('MASTRA_PLATFORM_ACCESS_TOKEN', '');
+      vi.stubEnv('MASTRA_PLATFORM_SECRET_KEY', '');
       const mod = await import('./index.js');
       expect(mod.mastra).toBeDefined();
-      // No integration instance means no /web/jira/* routes mount at all;
-      // the SPA degrades the status 404 to "disabled" (Linear parity).
       const paths = mod.mastra.getServer()?.apiRoutes?.map(route => route.path) ?? [];
       expect(paths).not.toContain('/web/jira/status');
     });
 
-    it('registers the Jira integration when the full group is configured', { timeout: 60_000 }, async () => {
+    it('registers Jira intake through Platform integrations v2', { timeout: 60_000 }, async () => {
       vi.resetModules();
-      vi.stubEnv('MASTRA_PLATFORM_SECRET_KEY', '');
-      vi.stubEnv('JIRA_BASE_URL', 'https://acme.atlassian.net');
-      vi.stubEnv('JIRA_EMAIL', 'ops@acme.test');
-      vi.stubEnv('JIRA_API_TOKEN', 'jira-token');
+      vi.stubEnv('MASTRA_PLATFORM_SECRET_KEY', 'platform-secret');
+      vi.stubEnv('MASTRA_INTEGRATIONS_API_URL', 'https://integrations.example.com');
       const mod = await import('./index.js');
       const paths = mod.mastra.getServer()?.apiRoutes?.map(route => route.path) ?? [];
-      // The status route is registered only by the JiraIntegration, so its
-      // presence proves the env group wired the integration onto the factory.
       expect(paths).toContain('/web/jira/status');
     });
 
