@@ -29,6 +29,31 @@ import { createStep } from './workflow';
 // Shared storage for all tests - provides persistence for resume tests
 const sharedStorage = new MockStore();
 
+describe('workflow active run resource scoping', () => {
+  it('forwards the resource filter to each native active-run query', async () => {
+    const step = createStep({
+      id: 'step',
+      inputSchema: z.object({}),
+      outputSchema: z.object({}),
+      execute: async () => ({}),
+    });
+    const workflow = createWorkflow({
+      id: 'resource-scoped-active-runs',
+      inputSchema: z.object({}),
+      outputSchema: z.object({}),
+      steps: [step],
+    })
+      .then(step)
+      .commit();
+    const listWorkflowRuns = vi.spyOn(workflow, 'listWorkflowRuns').mockResolvedValue({ runs: [], total: 0 });
+
+    await workflow.listActiveWorkflowRuns({ resourceId: 'tenant-a' });
+
+    expect(listWorkflowRuns).toHaveBeenNthCalledWith(1, { status: 'running', resourceId: 'tenant-a' });
+    expect(listWorkflowRuns).toHaveBeenNthCalledWith(2, { status: 'waiting', resourceId: 'tenant-a' });
+  });
+});
+
 // Create a shared Mastra instance for tests that need it
 let _mastra: Mastra;
 

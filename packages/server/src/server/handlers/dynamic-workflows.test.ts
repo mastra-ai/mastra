@@ -7,6 +7,7 @@ import { createTool } from '@mastra/core/tools';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { z } from 'zod/v4';
 
+import { MASTRA_RESOURCE_ID_KEY, MASTRA_USER_PERMISSIONS_KEY } from '../constants';
 import { HTTPException } from '../http-exception';
 import { upsertDynamicWorkflowBodySchema } from '../schemas/dynamic-workflows';
 import type { ServerContext } from '../server-adapter';
@@ -83,10 +84,15 @@ function buildMastra() {
   return mastra;
 }
 
-function ctx(mastra: MastraType): ServerContext {
+function ctx(mastra: MastraType, options: { authorId?: string | null; admin?: boolean } = {}): ServerContext {
+  const requestContext = new RequestContext();
+  const authorId = options.authorId === undefined ? 'test-user' : options.authorId;
+  if (authorId) requestContext.set(MASTRA_RESOURCE_ID_KEY, authorId);
+  if (options.admin) requestContext.set(MASTRA_USER_PERMISSIONS_KEY, ['stored-workflows:admin']);
+
   return {
     mastra,
-    requestContext: new RequestContext(),
+    requestContext,
     abortSignal: new AbortController().signal,
   };
 }
@@ -106,6 +112,18 @@ const baseSchemas = {
   inputSchema: objectWith({ value: stringSchema }, ['value']),
   outputSchema: objectWith({ value: stringSchema }, ['value']),
 };
+
+function workflowDefinition(id: string, description?: string) {
+  return {
+    id,
+    description,
+    metadata: undefined,
+    stateSchema: undefined,
+    requestContextSchema: undefined,
+    ...baseSchemas,
+    graph: toolOnlyGraph(),
+  };
+}
 
 // =============================================================================
 // Tests
@@ -186,6 +204,222 @@ describe('Dynamic Workflows handlers', () => {
       });
       expect(row.id).toBe('wf-get');
       expect(row.status).toBe('active');
+    });
+  });
+
+  describe('trusted author scoping', () => {
+    it('scopes ordinary lists to the caller and reserves cross-author filters for admins', async () => {
+      await UPSERT_DYNAMIC_WORKFLOW_ROUTE.handler({
+        ...ctx(mastra, { authorId: 'user-a' }),
+        ...workflowDefinition('wf-a'),
+      });
+      await UPSERT_DYNAMIC_WORKFLOW_ROUTE.handler({
+        ...ctx(mastra, { authorId: 'user-b' }),
+        ...workflowDefinition('wf-b'),
+      });
+
+      const userAList = await LIST_DYNAMIC_WORKFLOWS_ROUTE.handler({
+        ...ctx(mastra, { authorId: 'user-a' }),
+        status: undefined,
+        authorId: undefined,
+      });
+      expect(userAList.workflows.map(workflow => workflow.id)).toEqual(['wf-a']);
+
+      const userAExplicitList = await LIST_DYNAMIC_WORKFLOWS_ROUTE.handler({
+        ...ctx(mastra, { authorId: 'user-a' }),
+        status: undefined,
+        authorId: 'user-a',
+      });
+      expect(userAExplicitList.workflows.map(workflow => workflow.id)).toEqual(['wf-a']);
+
+      await expect(
+        LIST_DYNAMIC_WORKFLOWS_ROUTE.handler({
+          ...ctx(mastra, { authorId: 'user-a' }),
+          status: undefined,
+          authorId: 'user-b',
+        }),
+      ).rejects.toMatchObject({ status: 400 });
+
+      const adminList = await LIST_DYNAMIC_WORKFLOWS_ROUTE.handler({
+        ...ctx(mastra, { authorId: 'admin', admin: true }),
+        status: undefined,
+        authorId: undefined,
+      });
+      expect(adminList.workflows.map(workflow => workflow.id).sort()).toEqual(['wf-a', 'wf-b']);
+
+      const adminFiltered = await LIST_DYNAMIC_WORKFLOWS_ROUTE.handler({
+        ...ctx(mastra, { authorId: 'admin', admin: true }),
+        status: undefined,
+        authorId: 'user-b',
+      });
+      expect(adminFiltered.workflows.map(workflow => workflow.id)).toEqual(['wf-b']);
+    });
+
+    it('returns the same 404 for missing and cross-owner reads while allowing an admin read', async () => {
+      await UPSERT_DYNAMIC_WORKFLOW_ROUTE.handler({
+        ...ctx(mastra, { authorId: 'user-b' }),
+        ...workflowDefinition('wf-private'),
+      });
+
+      await expect(
+        GET_DYNAMIC_WORKFLOW_ROUTE.handler({
+          ...ctx(mastra, { authorId: 'user-a' }),
+          dynamicWorkflowId: 'wf-private',
+        }),
+      ).rejects.toMatchObject({ status: 404, message: 'Not found' });
+      await expect(
+        GET_DYNAMIC_WORKFLOW_ROUTE.handler({
+          ...ctx(mastra, { authorId: 'user-a' }),
+          dynamicWorkflowId: 'missing',
+        }),
+      ).rejects.toMatchObject({ status: 404, message: 'Not found' });
+
+      const adminRead = await GET_DYNAMIC_WORKFLOW_ROUTE.handler({
+        ...ctx(mastra, { authorId: 'admin', admin: true }),
+        dynamicWorkflowId: 'wf-private',
+      });
+      expect(adminRead.authorId).toBe('user-b');
+    });
+
+    it('requires a stable caller for list, get, and upsert', async () => {
+      await expect(
+        LIST_DYNAMIC_WORKFLOWS_ROUTE.handler({
+          ...ctx(mastra, { authorId: null }),
+          status: undefined,
+          authorId: undefined,
+        }),
+      ).rejects.toMatchObject({ status: 401 });
+      await expect(
+        GET_DYNAMIC_WORKFLOW_ROUTE.handler({
+          ...ctx(mastra, { authorId: null }),
+          dynamicWorkflowId: 'missing',
+        }),
+      ).rejects.toMatchObject({ status: 401 });
+      await expect(
+        UPSERT_DYNAMIC_WORKFLOW_ROUTE.handler({
+          ...ctx(mastra, { authorId: null }),
+          ...workflowDefinition('wf-missing-caller'),
+        }),
+      ).rejects.toMatchObject({ status: 401 });
+    });
+
+    it('derives the owner from RequestContext and strips a forged body author', async () => {
+      const parsed = upsertDynamicWorkflowBodySchema.parse({
+        ...workflowDefinition('wf-forged'),
+        authorId: 'user-b',
+      });
+      expect(parsed).not.toHaveProperty('authorId');
+
+      await UPSERT_DYNAMIC_WORKFLOW_ROUTE.handler({
+        ...ctx(mastra, { authorId: 'user-a' }),
+        ...parsed,
+      });
+
+      const row = await GET_DYNAMIC_WORKFLOW_ROUTE.handler({
+        ...ctx(mastra, { authorId: 'user-a' }),
+        dynamicWorkflowId: 'wf-forged',
+      });
+      expect(row.authorId).toBe('user-a');
+    });
+
+    it('rejects a cross-owner update with a non-disclosing conflict', async () => {
+      await UPSERT_DYNAMIC_WORKFLOW_ROUTE.handler({
+        ...ctx(mastra, { authorId: 'user-b' }),
+        ...workflowDefinition('wf-owned', 'original'),
+      });
+
+      await expect(
+        UPSERT_DYNAMIC_WORKFLOW_ROUTE.handler({
+          ...ctx(mastra, { authorId: 'user-a' }),
+          ...workflowDefinition('wf-owned', 'takeover'),
+        }),
+      ).rejects.toMatchObject({
+        status: 409,
+        message: 'Dynamic workflow conflicts with an existing definition',
+      });
+
+      const row = await GET_DYNAMIC_WORKFLOW_ROUTE.handler({
+        ...ctx(mastra, { authorId: 'admin', admin: true }),
+        dynamicWorkflowId: 'wf-owned',
+      });
+      expect(row).toMatchObject({ authorId: 'user-b', description: 'original' });
+    });
+
+    it('lets an admin update an owned bundle without transferring its owner', async () => {
+      await UPSERT_DYNAMIC_WORKFLOW_ROUTE.handler({
+        ...ctx(mastra, { authorId: 'user-b' }),
+        ...workflowDefinition('wf-owned', 'original'),
+      });
+
+      await UPSERT_DYNAMIC_WORKFLOW_ROUTE.handler({
+        ...ctx(mastra, { authorId: 'admin', admin: true }),
+        ...workflowDefinition('wf-owned', 'admin edit'),
+        dependencies: [workflowDefinition('wf-helper')],
+      });
+
+      const store = (await mastra.getStorage()!.getStore('workflowDefinitions'))!;
+      await expect(store.get('wf-owned')).resolves.toMatchObject({ authorId: 'user-b', description: 'admin edit' });
+      await expect(store.get('wf-helper')).resolves.toMatchObject({ authorId: 'user-b' });
+    });
+
+    it("doesn't let an existing helper choose the owner of a new admin-created root", async () => {
+      await UPSERT_DYNAMIC_WORKFLOW_ROUTE.handler({
+        ...ctx(mastra, { authorId: 'user-b' }),
+        ...workflowDefinition('wf-helper', 'original'),
+      });
+
+      await expect(
+        UPSERT_DYNAMIC_WORKFLOW_ROUTE.handler({
+          ...ctx(mastra, { authorId: 'admin', admin: true }),
+          ...workflowDefinition('wf-new-root'),
+          dependencies: [workflowDefinition('wf-helper', 'admin edit')],
+        }),
+      ).rejects.toMatchObject({
+        status: 409,
+        message: 'Dynamic workflow conflicts with an existing definition',
+      });
+
+      const store = (await mastra.getStorage()!.getStore('workflowDefinitions'))!;
+      await expect(store.get('wf-new-root')).resolves.toBeNull();
+      await expect(store.get('wf-helper')).resolves.toMatchObject({ authorId: 'user-b', description: 'original' });
+    });
+
+    it('keeps legacy unowned definitions hidden from users and read-only for admins', async () => {
+      await mastra.addDynamicWorkflow(workflowDefinition('wf-legacy'));
+
+      const userList = await LIST_DYNAMIC_WORKFLOWS_ROUTE.handler({
+        ...ctx(mastra, { authorId: 'user-a' }),
+        status: undefined,
+        authorId: undefined,
+      });
+      expect(userList.workflows).toEqual([]);
+      await expect(
+        GET_DYNAMIC_WORKFLOW_ROUTE.handler({
+          ...ctx(mastra, { authorId: 'user-a' }),
+          dynamicWorkflowId: 'wf-legacy',
+        }),
+      ).rejects.toMatchObject({ status: 404, message: 'Not found' });
+
+      const adminRead = await GET_DYNAMIC_WORKFLOW_ROUTE.handler({
+        ...ctx(mastra, { authorId: 'admin', admin: true }),
+        dynamicWorkflowId: 'wf-legacy',
+      });
+      expect(adminRead.authorId).toBeUndefined();
+      const adminList = await LIST_DYNAMIC_WORKFLOWS_ROUTE.handler({
+        ...ctx(mastra, { authorId: 'admin', admin: true }),
+        status: undefined,
+        authorId: undefined,
+      });
+      expect(adminList.workflows.map(workflow => workflow.id)).toEqual(['wf-legacy']);
+
+      for (const caller of [{ authorId: 'user-a' }, { authorId: 'admin', admin: true }]) {
+        await expect(
+          UPSERT_DYNAMIC_WORKFLOW_ROUTE.handler({
+            ...ctx(mastra, caller),
+            ...workflowDefinition('wf-legacy', 'claimed'),
+          }),
+        ).rejects.toMatchObject({ status: 409 });
+      }
     });
   });
 

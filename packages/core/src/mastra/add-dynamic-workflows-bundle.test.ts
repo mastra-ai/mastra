@@ -10,7 +10,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod/v4';
-import { InMemoryStore } from '../storage';
+import { InMemoryStore, WorkflowDefinitionOwnershipConflictError } from '../storage';
 import { createTool } from '../tools';
 import { Mastra } from './index';
 
@@ -260,6 +260,134 @@ describe('Mastra.addDynamicWorkflows', () => {
       'lookup-second-customer',
       'parallel-customer-lookup',
     ]);
+  });
+
+  it('persists one trusted author for every member outside the workflow definitions', async () => {
+    const storage = new InMemoryStore({ id: 'bundle-author' });
+    const mastra = new Mastra({ logger: false, tools: { 'lookup-customer': lookupCustomer } as any, storage });
+
+    const untrustedHelper = {
+      ...helperDefinition('lookup-first-customer', 'email1'),
+      authorId: 'forged-author',
+    };
+
+    await mastra.addDynamicWorkflows(
+      [untrustedHelper, helperDefinition('lookup-second-customer', 'email2'), rootDefinition],
+      { authorId: 'verified-author' },
+    );
+
+    const store = (await storage.getStore('workflowDefinitions'))!;
+    const { definitions } = await store.list({ status: 'active' });
+
+    expect(definitions).toHaveLength(3);
+    expect(definitions.every(definition => definition.authorId === 'verified-author')).toBe(true);
+  });
+
+  it('rejects an authored bundle before live registration when workflow definition storage is unavailable', async () => {
+    const storage = new InMemoryStore({ id: 'bundle-author-no-definition-store' });
+    const getStore = storage.getStore.bind(storage);
+    storage.getStore = (async domain =>
+      domain === 'workflowDefinitions' ? undefined : getStore(domain)) as typeof storage.getStore;
+    const mastra = new Mastra({ logger: false, tools: { 'lookup-customer': lookupCustomer } as any, storage });
+
+    await expect(
+      mastra.addDynamicWorkflow(helperDefinition('lookup-first-customer', 'email1'), {
+        authorId: 'verified-author',
+      }),
+    ).rejects.toThrow(/workflowDefinitions storage domain is required/);
+
+    expect(() => mastra.getWorkflow('lookup-first-customer')).toThrow();
+  });
+
+  it('preserves an existing author when a trusted author is omitted on replacement', async () => {
+    const storage = new InMemoryStore({ id: 'bundle-author-preserved' });
+    const mastra = new Mastra({ logger: false, tools: { 'lookup-customer': lookupCustomer } as any, storage });
+
+    await mastra.addDynamicWorkflow(helperDefinition('lookup-first-customer', 'email1'), {
+      authorId: 'verified-author',
+    });
+    await mastra.addDynamicWorkflow(helperDefinition('lookup-first-customer', 'email2'));
+
+    const store = (await storage.getStore('workflowDefinitions'))!;
+    const definition = await store.get('lookup-first-customer');
+
+    expect(definition?.authorId).toBe('verified-author');
+  });
+
+  it('rejects a different trusted author and restores the previous registration', async () => {
+    const storage = new InMemoryStore({ id: 'bundle-author-conflict' });
+    const mastra = new Mastra({ logger: false, tools: { 'lookup-customer': lookupCustomer } as any, storage });
+
+    await mastra.addDynamicWorkflow(helperDefinition('lookup-first-customer', 'email1'), {
+      authorId: 'verified-author',
+    });
+    const original = mastra.getWorkflow('lookup-first-customer');
+
+    await expect(
+      mastra.addDynamicWorkflow(helperDefinition('lookup-first-customer', 'email2'), {
+        authorId: 'other-author',
+      }),
+    ).rejects.toBeInstanceOf(WorkflowDefinitionOwnershipConflictError);
+
+    expect(mastra.getWorkflow('lookup-first-customer')).toBe(original);
+    const store = (await storage.getStore('workflowDefinitions'))!;
+    expect((await store.get('lookup-first-customer'))?.authorId).toBe('verified-author');
+  });
+
+  it('serializes overlapping bundles so a rejected owner cannot roll back the winner', async () => {
+    const storage = new InMemoryStore({ id: 'bundle-concurrent-owner-conflict' });
+    const mastra = new Mastra({ logger: false, tools: { 'lookup-customer': lookupCustomer } as any, storage });
+    const store = (await storage.getStore('workflowDefinitions'))!;
+    const realUpsert = store.upsert.bind(store);
+
+    let releaseFirstUpsert!: () => void;
+    const firstUpsertEntered = new Promise<void>(resolve => {
+      releaseFirstUpsert = resolve;
+    });
+    let upsertCalls = 0;
+    store.upsert = (async definition => {
+      upsertCalls += 1;
+      if (upsertCalls === 1) {
+        releaseFirstUpsert();
+        // Keep the first bundle inside persistence for one event-loop turn.
+        // Without registration serialization, the overlapping bundle can
+        // replace its registry slots and win storage before this write resumes.
+        await new Promise<void>(resolve => setTimeout(resolve, 0));
+      }
+      return realUpsert(definition);
+    }) as typeof store.upsert;
+
+    const winner = mastra.addDynamicWorkflows(
+      [
+        { ...helperDefinition('shared-helper', 'email1'), description: 'winner' },
+        helperDefinition('winner-only', 'email1'),
+      ],
+      { authorId: 'winner-author' },
+    );
+    await firstUpsertEntered;
+
+    const loser = mastra.addDynamicWorkflows(
+      [
+        { ...helperDefinition('shared-helper', 'email2'), description: 'loser' },
+        helperDefinition('loser-only', 'email2'),
+      ],
+      { authorId: 'loser-author' },
+    );
+
+    const [winnerResult, loserResult] = await Promise.allSettled([winner, loser]);
+    expect(winnerResult.status).toBe('fulfilled');
+    expect(loserResult).toMatchObject({
+      status: 'rejected',
+      reason: expect.any(WorkflowDefinitionOwnershipConflictError),
+    });
+
+    expect(await store.get('shared-helper')).toMatchObject({ authorId: 'winner-author', description: 'winner' });
+    expect(await store.get('winner-only')).toMatchObject({ authorId: 'winner-author' });
+    expect(await store.get('loser-only')).toBeNull();
+
+    expect(mastra.getWorkflow('shared-helper').description).toBe('winner');
+    expect(mastra.getWorkflow('winner-only')).toBeDefined();
+    expect(() => mastra.getWorkflow('loser-only')).toThrow();
   });
 
   it('is a no-op for an empty bundle', async () => {

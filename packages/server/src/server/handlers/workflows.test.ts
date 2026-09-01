@@ -6,7 +6,7 @@ import { createStep, createWorkflow } from '@mastra/core/workflows';
 import type { Workflow } from '@mastra/core/workflows';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { z } from 'zod/v4';
-import { MASTRA_RESOURCE_ID_KEY } from '../constants';
+import { MASTRA_RESOURCE_ID_KEY, MASTRA_USER_KEY } from '../constants';
 import { HTTPException } from '../http-exception';
 import { checkRouteFGA } from '../server-adapter';
 import { WORKFLOWS_ROUTES } from '../server-adapter/routes/workflows';
@@ -23,6 +23,7 @@ import {
   CREATE_WORKFLOW_RUN_ROUTE,
   START_WORKFLOW_RUN_ROUTE,
   RESUME_ASYNC_WORKFLOW_ROUTE,
+  RESUME_NO_WAIT_WORKFLOW_ROUTE,
   RESUME_WORKFLOW_ROUTE,
   RESUME_STREAM_WORKFLOW_ROUTE,
   OBSERVE_STREAM_WORKFLOW_ROUTE,
@@ -30,6 +31,14 @@ import {
   LIST_WORKFLOW_RUNS_ROUTE,
   STREAM_WORKFLOW_ROUTE,
   TIME_TRAVEL_WORKFLOW_ROUTE,
+  TIME_TRAVEL_ASYNC_WORKFLOW_ROUTE,
+  TIME_TRAVEL_STREAM_WORKFLOW_ROUTE,
+  RESTART_ASYNC_WORKFLOW_ROUTE,
+  RESTART_WORKFLOW_ROUTE,
+  RESTART_ALL_ACTIVE_WORKFLOW_RUNS_ASYNC_ROUTE,
+  RESTART_ALL_ACTIVE_WORKFLOW_RUNS_ROUTE,
+  STREAM_LEGACY_WORKFLOW_ROUTE,
+  OBSERVE_STREAM_LEGACY_WORKFLOW_ROUTE,
 } from './workflows';
 
 function createMockWorkflow(name: string) {
@@ -85,6 +94,197 @@ function createReusableMockWorkflow(name: string) {
 function serializeWorkflow(workflow: Workflow) {
   return getWorkflowInfo(workflow);
 }
+
+function authenticatedContext(userId: string) {
+  const requestContext = new RequestContext();
+  requestContext.set(MASTRA_RESOURCE_ID_KEY, userId);
+  requestContext.set(MASTRA_USER_KEY, { id: userId });
+  return requestContext;
+}
+
+async function createOwnedDynamicWorkflow(ownerId = 'user-a') {
+  const echoTool = createTool({
+    id: 'dynamic-echo',
+    description: 'echoes input',
+    inputSchema: z.object({ value: z.string() }),
+    outputSchema: z.object({ value: z.string() }),
+    execute: async ({ value }) => ({ value }),
+  });
+  const mastra = new Mastra({
+    logger: false,
+    tools: { 'dynamic-echo': echoTool } as any,
+    storage: new MockStore(),
+  });
+
+  await mastra.addDynamicWorkflow(
+    {
+      id: 'owned-dynamic',
+      inputSchema: {
+        type: 'object',
+        properties: { value: { type: 'string' } },
+        required: ['value'],
+      },
+      outputSchema: {
+        type: 'object',
+        properties: { value: { type: 'string' } },
+        required: ['value'],
+      },
+      graph: [{ type: 'tool', id: 'echo', toolId: 'dynamic-echo' }],
+    },
+    { authorId: ownerId },
+  );
+
+  return mastra;
+}
+
+describe('dynamic workflow execution ownership', () => {
+  it('filters dynamic workflow discovery to the authenticated owner while retaining code workflows', async () => {
+    const mastra = await createOwnedDynamicWorkflow();
+    const codeWorkflow = createMockWorkflow('code-workflow');
+    mastra.addWorkflow(codeWorkflow, 'code-workflow');
+
+    const ownerResult = await LIST_WORKFLOWS_ROUTE.handler({
+      ...createTestServerContext({ mastra }),
+      requestContext: authenticatedContext('user-a'),
+    });
+    const otherResult = await LIST_WORKFLOWS_ROUTE.handler({
+      ...createTestServerContext({ mastra }),
+      requestContext: authenticatedContext('user-b'),
+    });
+
+    expect(ownerResult).toHaveProperty('owned-dynamic');
+    expect(ownerResult).toHaveProperty('code-workflow');
+    expect(otherResult).not.toHaveProperty('owned-dynamic');
+    expect(otherResult).toHaveProperty('code-workflow');
+
+    const ownerCounts = await LIST_WORKFLOW_RUN_COUNTS_ROUTE.handler({
+      ...createTestServerContext({ mastra }),
+      requestContext: authenticatedContext('user-a'),
+    });
+    const otherCounts = await LIST_WORKFLOW_RUN_COUNTS_ROUTE.handler({
+      ...createTestServerContext({ mastra }),
+      requestContext: authenticatedContext('user-b'),
+    });
+    expect(ownerCounts).toHaveProperty('owned-dynamic');
+    expect(otherCounts).not.toHaveProperty('owned-dynamic');
+  });
+
+  it('does not cache caller-filtered dynamic counts when identity comes only from the user context', async () => {
+    const mastra = await createOwnedDynamicWorkflow();
+    const ownerContext = new RequestContext();
+    ownerContext.set(MASTRA_USER_KEY, { id: 'user-a' });
+    const otherContext = new RequestContext();
+    otherContext.set(MASTRA_USER_KEY, { id: 'user-b' });
+
+    const ownerCounts = await LIST_WORKFLOW_RUN_COUNTS_ROUTE.handler({
+      ...createTestServerContext({ mastra }),
+      requestContext: ownerContext,
+    });
+    const otherCounts = await LIST_WORKFLOW_RUN_COUNTS_ROUTE.handler({
+      ...createTestServerContext({ mastra }),
+      requestContext: otherContext,
+    });
+
+    expect(ownerCounts).toHaveProperty('owned-dynamic');
+    expect(otherCounts).not.toHaveProperty('owned-dynamic');
+  });
+
+  it('returns a non-disclosing 404 from every ordinary dynamic workflow execution and run-control route', async () => {
+    const mastra = await createOwnedDynamicWorkflow();
+    const requestContext = authenticatedContext('user-b');
+    const routes = [
+      GET_WORKFLOW_BY_ID_ROUTE,
+      LIST_WORKFLOW_RUNS_ROUTE,
+      GET_WORKFLOW_RUN_BY_ID_ROUTE,
+      DELETE_WORKFLOW_RUN_BY_ID_ROUTE,
+      CREATE_WORKFLOW_RUN_ROUTE,
+      STREAM_WORKFLOW_ROUTE,
+      RESUME_STREAM_WORKFLOW_ROUTE,
+      START_ASYNC_WORKFLOW_ROUTE,
+      START_WORKFLOW_RUN_ROUTE,
+      OBSERVE_STREAM_WORKFLOW_ROUTE,
+      RESUME_ASYNC_WORKFLOW_ROUTE,
+      RESUME_NO_WAIT_WORKFLOW_ROUTE,
+      RESUME_WORKFLOW_ROUTE,
+      RESTART_ASYNC_WORKFLOW_ROUTE,
+      RESTART_WORKFLOW_ROUTE,
+      RESTART_ALL_ACTIVE_WORKFLOW_RUNS_ASYNC_ROUTE,
+      RESTART_ALL_ACTIVE_WORKFLOW_RUNS_ROUTE,
+      TIME_TRAVEL_ASYNC_WORKFLOW_ROUTE,
+      TIME_TRAVEL_WORKFLOW_ROUTE,
+      TIME_TRAVEL_STREAM_WORKFLOW_ROUTE,
+      CANCEL_WORKFLOW_RUN_ROUTE,
+      STREAM_LEGACY_WORKFLOW_ROUTE,
+      OBSERVE_STREAM_LEGACY_WORKFLOW_ROUTE,
+    ];
+
+    for (const route of routes) {
+      await expect(
+        (route.handler as any)({
+          ...createTestServerContext({ mastra }),
+          requestContext,
+          workflowId: 'owned-dynamic',
+          runId: 'opaque-run',
+          resourceId: 'user-a',
+        }),
+      ).rejects.toMatchObject({ status: 404, message: 'Workflow not found' });
+    }
+  });
+
+  it('requires an authenticated principal for direct dynamic workflow resolution', async () => {
+    const mastra = await createOwnedDynamicWorkflow();
+
+    await expect(
+      GET_WORKFLOW_BY_ID_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        workflowId: 'owned-dynamic',
+      }),
+    ).rejects.toMatchObject({ status: 401, message: 'Authentication required' });
+  });
+
+  it('binds new runs to the authenticated owner and ignores a client-supplied resource id', async () => {
+    const mastra = await createOwnedDynamicWorkflow();
+    const requestContext = authenticatedContext('user-a');
+
+    const created = await CREATE_WORKFLOW_RUN_ROUTE.handler({
+      ...createTestServerContext({ mastra }),
+      requestContext,
+      workflowId: 'owned-dynamic',
+      runId: 'owned-run',
+      resourceId: 'user-b',
+      disableScorers: undefined,
+    });
+    const workflow = mastra.getWorkflow('owned-dynamic');
+    const storedRun = await workflow.getWorkflowRunById(created.runId);
+
+    expect(storedRun?.resourceId).toBe('user-a');
+
+    const listed = await LIST_WORKFLOW_RUNS_ROUTE.handler({
+      ...createTestServerContext({ mastra }),
+      requestContext,
+      workflowId: 'owned-dynamic',
+      resourceId: 'user-b',
+    });
+    expect(listed.runs.map(run => run.runId)).toContain('owned-run');
+  });
+
+  it('returns 404 when a dynamic workflow run is not bound to the definition owner', async () => {
+    const mastra = await createOwnedDynamicWorkflow();
+    const workflow = mastra.getWorkflow('owned-dynamic');
+    await workflow.createRun({ runId: 'wrong-owner-run', resourceId: 'user-b' });
+
+    await expect(
+      GET_WORKFLOW_RUN_BY_ID_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        requestContext: authenticatedContext('user-a'),
+        workflowId: 'owned-dynamic',
+        runId: 'wrong-owner-run',
+        fields: undefined,
+        withNestedWorkflows: undefined,
+      }),
+    ).rejects.toMatchObject({ status: 404, message: 'Workflow run not found' });
+  });
+});
 
 describe('vNext Workflow Handlers', () => {
   let mockMastra: Mastra;
@@ -262,15 +462,19 @@ describe('vNext Workflow Handlers', () => {
         storage: new MockStore(),
       });
 
-      await mastraForStored.addDynamicWorkflow({
-        id: 'stored-only',
-        inputSchema: { type: 'object', properties: {}, required: [] },
-        outputSchema: { type: 'object', properties: { result: { type: 'string' } }, required: ['result'] },
-        graph: [{ type: 'step', step: { id: 'echo' } }] as any,
-      });
+      await mastraForStored.addDynamicWorkflow(
+        {
+          id: 'stored-only',
+          inputSchema: { type: 'object', properties: {}, required: [] },
+          outputSchema: { type: 'object', properties: { result: { type: 'string' } }, required: ['result'] },
+          graph: [{ type: 'step', step: { id: 'echo' } }] as any,
+        },
+        { authorId: 'test-user' },
+      );
 
       const result = await LIST_WORKFLOWS_ROUTE.handler({
         ...createTestServerContext({ mastra: mastraForStored }),
+        requestContext: authenticatedContext('test-user'),
       });
       expect(result['stored-only']?.origin).toBe('dynamic');
       // Code-defined workflows keep their 'code' origin in the same response.
