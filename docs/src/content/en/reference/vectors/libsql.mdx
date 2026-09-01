@@ -91,6 +91,12 @@ const results = await store.query({
 ]}
 />
 
+### Local file concurrency
+
+For ordinary local `file:` databases, `LibSQLVector` applies write-ahead logging (WAL) and a five-second busy timeout before running vector operations. Multiple `LibSQLVector` instances in the same Node.js process coordinate mutations when they target the same database file.
+
+This coordination is process-local. If separate application processes write concurrently, use Turso or another server-backed libSQL deployment. Alternatively, provide a deployment-level single-writer boundary for the local file.
+
 ## Methods
 
 ### `createIndex()`
