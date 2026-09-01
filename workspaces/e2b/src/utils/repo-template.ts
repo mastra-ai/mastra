@@ -324,7 +324,7 @@ async function resolveSpecAtHead(options: RepoTemplateOptions): Promise<{ spec: 
     ...(options.cpuCount !== undefined ? { cpuCount: options.cpuCount } : {}),
     ...(options.memoryMB !== undefined ? { memoryMB: options.memoryMB } : {}),
     ...(options.workingDirectory !== undefined
-      ? { workingDirectory: assertWorkingDirectory(options.workingDirectory) }
+      ? { workingDirectory: trimTrailingSlashes(assertWorkingDirectory(options.workingDirectory)) }
       : {}),
   };
   return { spec: buildRepoTemplateSpec(identity, token), ...(sha ? { sha } : {}) };

@@ -195,6 +195,9 @@ describe('createRepoTemplate', () => {
     expect(custom.ref).not.toBe(defaulted.ref);
     // Absent stays absent: pre-option templates keep their names.
     expect(defaulted.ref).toBe(repoTemplateRef(IDENTITY));
+    // One layout, one name: a trailing slash is not a different directory.
+    const slashed = await resolve({ ...BASE, workingDirectory: '/workspace/' });
+    expect(slashed.ref).toBe(custom.ref);
   });
 
   it('rejects a workingDirectory that is not a plain absolute path', async () => {
