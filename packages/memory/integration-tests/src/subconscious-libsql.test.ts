@@ -48,38 +48,36 @@ describe('Subconscious LibSQL integration', () => {
     const vector = new LibSQLVector({ id: randomUUID(), url: databaseUrl });
     await storage.init();
 
-    const doStream = vi.fn(async () => ({
-      stream: convertArrayToReadableStream([
-        { type: 'stream-start', warnings: [] },
-        { type: 'response-metadata', id: 'curate-observation', modelId: 'aimock', timestamp: new Date() },
-        { type: 'text-start', id: 'curate-text' },
-        {
-          type: 'text-delta',
-          id: 'curate-text',
-          delta: '<observations>Maya Chen owns Project Atlas. The staging region is cobalt.</observations>',
-        },
-        { type: 'text-end', id: 'curate-text' },
-        { type: 'finish', finishReason: 'stop', usage: { inputTokens: 50, outputTokens: 10, totalTokens: 60 } },
-      ]),
-      rawCall: { rawPrompt: null, rawSettings: {} },
-      warnings: [],
-    }));
-    let generateCall = 0;
-    const doGenerate = vi.fn(async () => {
-      generateCall += 1;
-      return {
-        rawCall: { rawPrompt: null, rawSettings: {} },
-        finishReason: generateCall === 1 ? ('tool-calls' as const) : ('stop' as const),
-        usage: { inputTokens: 20, outputTokens: 10, totalTokens: 30 },
-        warnings: [],
-        content:
-          generateCall === 1
+    let streamCall = 0;
+    const doStream = vi.fn(async () => {
+      streamCall += 1;
+      const chunks =
+        streamCall === 1
+          ? [
+              { type: 'stream-start' as const, warnings: [] },
+              { type: 'response-metadata' as const, id: 'observe', modelId: 'aimock', timestamp: new Date() },
+              { type: 'text-start' as const, id: 'observe-text' },
+              {
+                type: 'text-delta' as const,
+                id: 'observe-text',
+                delta: '<observations>Maya Chen owns Project Atlas. The staging region is cobalt.</observations>',
+              },
+              { type: 'text-end' as const, id: 'observe-text' },
+              {
+                type: 'finish' as const,
+                finishReason: 'stop' as const,
+                usage: { inputTokens: 50, outputTokens: 10, totalTokens: 60 },
+              },
+            ]
+          : streamCall === 2
             ? [
+                { type: 'stream-start' as const, warnings: [] },
+                { type: 'response-metadata' as const, id: 'curate', modelId: 'aimock', timestamp: new Date() },
+                { type: 'tool-input-start' as const, id: 'create-atlas', toolName: 'knowledge_create' },
                 {
-                  type: 'tool-call' as const,
-                  toolCallId: 'create-atlas',
-                  toolName: 'knowledge_create',
-                  input: JSON.stringify({
+                  type: 'tool-input-delta' as const,
+                  id: 'create-atlas',
+                  delta: JSON.stringify({
                     name: 'Project Atlas',
                     kind: 'project',
                     text: '[[Maya Chen]] owns [[Project Atlas]]. The staging region is cobalt.',
@@ -87,11 +85,12 @@ describe('Subconscious LibSQL integration', () => {
                     scope: 'resource',
                   }),
                 },
+                { type: 'tool-input-end' as const, id: 'create-atlas' },
+                { type: 'tool-input-start' as const, id: 'create-alpha-secret', toolName: 'knowledge_create' },
                 {
-                  type: 'tool-call' as const,
-                  toolCallId: 'create-alpha-secret',
-                  toolName: 'knowledge_create',
-                  input: JSON.stringify({
+                  type: 'tool-input-delta' as const,
+                  id: 'create-alpha-secret',
+                  delta: JSON.stringify({
                     name: 'Alpha Secret',
                     kind: 'note',
                     text: 'Only the alpha thread may see this.',
@@ -99,11 +98,28 @@ describe('Subconscious LibSQL integration', () => {
                     scope: 'thread',
                   }),
                 },
+                { type: 'tool-input-end' as const, id: 'create-alpha-secret' },
+                {
+                  type: 'finish' as const,
+                  finishReason: 'tool-calls' as const,
+                  usage: { inputTokens: 20, outputTokens: 10, totalTokens: 30 },
+                },
               ]
-            : [{ type: 'text' as const, text: 'Curated.' }],
-      };
+            : [
+                { type: 'stream-start' as const, warnings: [] },
+                { type: 'response-metadata' as const, id: 'curated', modelId: 'aimock', timestamp: new Date() },
+                { type: 'text-start' as const, id: 'curated-text' },
+                { type: 'text-delta' as const, id: 'curated-text', delta: 'Curated.' },
+                { type: 'text-end' as const, id: 'curated-text' },
+                {
+                  type: 'finish' as const,
+                  finishReason: 'stop' as const,
+                  usage: { inputTokens: 20, outputTokens: 10, totalTokens: 30 },
+                },
+              ];
+      return { stream: convertArrayToReadableStream(chunks as never) };
     });
-    const model = new MockLanguageModelV2({ doStream: doStream as never, doGenerate: doGenerate as never });
+    const model = new MockLanguageModelV2({ doStream: doStream as never });
     const memory = new Memory({
       storage,
       vector,
@@ -131,7 +147,7 @@ describe('Subconscious LibSQL integration', () => {
       sendStateSignal: vi.fn(async () => ({ skipped: false }) as any),
     });
     expect(result.observed).toBe(true);
-    expect(doGenerate).toHaveBeenCalledTimes(2);
+    expect(doStream).toHaveBeenCalledTimes(3);
 
     const knowledge = (await storage.getStore('knowledge'))!;
     const scope = ['org:acme', `resource:${resourceId}`, `thread:${threadId}`];
