@@ -8,12 +8,13 @@ import { applyExtractorHooks } from '../extracted-values';
 import { buildExtractorOutputSections, Extractor } from '../extractor';
 import { SubconsciousRemindExtractor } from '../subconscious';
 import {
+  getRemindMessageMetadata,
+  getRemindMessageText,
   getRemindThreadId,
   REMIND_PARENT_THREAD_METADATA_KEY,
-  REMIND_PROTOCOL_METADATA_KEY,
 } from '../subconscious/remind-protocol';
 
-function createModel(response: string, prompts?: string[]) {
+function createModel(response: string, prompts?: string[], repeatToolCall = false) {
   let streamCall = 0;
   return new MockLanguageModelV2({
     doGenerate: async () => ({
@@ -30,15 +31,16 @@ function createModel(response: string, prompts?: string[]) {
       const eventId = JSON.stringify(options.prompt).match(
         /Passive reminder check (subconscious:remind:[^"\\\\]+:event)/,
       )?.[1];
-      if (streamCall === 1 && sourceId && eventId) {
+      if (streamCall <= (repeatToolCall ? 2 : 1) && sourceId && eventId) {
         const input = JSON.stringify({ eventId, reminder: response, sourceIds: [sourceId] });
+        const callId = `call-${streamCall}`;
         return {
           stream: convertArrayToReadableStream([
             { type: 'stream-start', warnings: [] },
             { type: 'response-metadata', id: 'remind-1', modelId: 'remind-model', timestamp: new Date() },
-            { type: 'tool-input-start', id: 'call-1', toolName: 'send_reminder' },
-            { type: 'tool-input-delta', id: 'call-1', delta: input },
-            { type: 'tool-call', toolCallId: 'call-1', toolName: 'send_reminder', input },
+            { type: 'tool-input-start', id: callId, toolName: 'send_reminder' },
+            { type: 'tool-input-delta', id: callId, delta: input },
+            { type: 'tool-call', toolCallId: callId, toolName: 'send_reminder', input },
             {
               type: 'finish',
               finishReason: 'tool-calls',
@@ -78,7 +80,10 @@ function createContext(response: string, storage = new InMemoryStore()) {
       getModel: vi.fn(async () => createModel(response)),
       getMastraInstance: vi.fn(),
       getPubSub: vi.fn(),
-      sendSignal: vi.fn((signal: unknown) => {
+      sendSignal: vi.fn((signal: unknown, options: { ifActive: { behavior: string } }) => {
+        if (options.ifActive.behavior === 'persist') {
+          return { signal, accepted: Promise.resolve({ action: 'persist' }), persisted: Promise.resolve() };
+        }
         void sendSignal(signal);
         return {
           signal,
@@ -144,7 +149,7 @@ describe('Subconscious remind', () => {
       defaultScope: ['org:acme', 'resource:user-42'],
     });
     context.mainAgent.getModel = vi.fn(async () =>
-      createModel(`Project Atlas launches January 15. Source: ${record.id}`),
+      createModel(`Project Atlas launches January 15. Source: ${record.id}`, undefined, true),
     );
 
     const result = await applyExtractorHooks({
@@ -381,6 +386,8 @@ describe('Subconscious remind', () => {
       builtIn: true,
     });
     const context = createContext('<no-reminder />');
+    const prompts: string[] = [];
+    context.mainAgent.getModel = vi.fn(async () => createModel('<no-reminder />', prompts));
     const store = await context.memory.storage.getStore('knowledge');
     const node = await store.createNode({
       name: 'Moon weather',
@@ -404,16 +411,8 @@ describe('Subconscious remind', () => {
       ...context,
     });
 
-    const memoryStore = await context.memory.storage.getStore('memory');
-    const stored = await memoryStore.listMessages({
-      threadId: 'subconscious:alpha:remind',
-      resourceId: 'user-42',
-      perPage: false,
-    });
-    const canonical = stored.messages.find(message => message.content.metadata?.subconsciousRemind);
-    const prompt = canonical?.content.parts.find(part => part.type === 'text')?.text;
-    expect(prompt).toContain('user: what is the weather like on the moon?');
-    expect(prompt).toContain('already visible');
+    expect(prompts[0]).toContain('user: what is the weather like on the moon?');
+    expect(prompts[0]).toContain('already visible');
   });
 
   it('stays silent when no main agent and no observational memory model are available', async () => {
@@ -450,8 +449,9 @@ describe('Subconscious remind', () => {
       defaultScope: ['org:acme', 'resource:user-42'],
     });
     const prompts: string[] = [];
-    const model = createModel(`Project Atlas launches January 15. Source: ${record.id}`, prompts);
-    first.mainAgent.getModel = vi.fn(async () => model);
+    first.mainAgent.getModel = vi.fn(async () =>
+      createModel(`Project Atlas launches January 15. Source: ${record.id}`, prompts),
+    );
     const extractor = new SubconsciousRemindExtractor({ name: 'remind', maxSteps: 3, builtIn: true });
 
     await applyExtractorHooks({
@@ -462,7 +462,9 @@ describe('Subconscious remind', () => {
     });
 
     const second = createContext('unused', storage);
-    second.mainAgent.getModel = vi.fn(async () => model);
+    second.mainAgent.getModel = vi.fn(async () =>
+      createModel(`Project Atlas launches January 15. Source: ${record.id}`, prompts),
+    );
     await applyExtractorHooks({
       source: 'observer',
       extractors: [extractor],
@@ -478,13 +480,11 @@ describe('Subconscious remind', () => {
       resourceId: 'user-42',
       perPage: false,
     });
-    const passiveEvents = stored.messages.filter(
-      message =>
-        (message.content.metadata?.[REMIND_PROTOCOL_METADATA_KEY] as { kind?: string } | undefined)?.kind ===
-        'passive-check',
+    const passiveChecks = stored.messages.filter(message =>
+      getRemindMessageText(message).startsWith('Passive reminder check'),
     );
-    expect(passiveEvents).toHaveLength(2);
-    expect(prompts.at(-1)).toContain(passiveEvents[0]!.id);
+    expect(passiveChecks).toHaveLength(2);
+    expect(prompts.at(-1)).toContain('Passive reminder check');
   });
 
   it('creates isolated sidekick memory and propagates the parent runtime', async () => {

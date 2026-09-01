@@ -15,21 +15,9 @@ import { resolveSubconsciousAgentModel } from './model';
 import { createReminderAgent } from './remind-agent';
 import {
   ensureOwnedRemindThread,
-  getRemindMessageText,
-  getRemindProtocol,
-  REMIND_DELIVERY_METADATA_KEY,
-  REMIND_PROTOCOL_METADATA_KEY,
-} from './remind-protocol';
-import type {
-  RemindDeliveryFailureEvent,
-  RemindPartialReplyEvent,
-  RemindPassiveCheckEvent,
-  RemindProtocolEvent,
-  RemindQuestionEvent,
-  RemindRoutingFailureEvent,
-  RemindTerminalDeliveredEvent,
-  RemindTerminalOutcome,
-  RemindTerminalPendingEvent,
+  getRemindMessageMetadata,
+  getRemindThreadId,
+  REMIND_MESSAGE_METADATA_KEY,
 } from './remind-protocol';
 import type { ResolvedSubconsciousAgent } from './types';
 
@@ -48,83 +36,10 @@ type ReplyMemoryToolContext = Pick<AskMemoryToolContext, 'agent' | 'writer'>;
 
 export type AskMemoryResult =
   | { accepted: true; replyId: string; status: 'pending' }
-  | { accepted: false; replyId?: string; status: 'rejected' | 'delivery_unknown'; error: string };
-
-function protocolMessage(options: {
-  event: RemindProtocolEvent;
-  threadId: string;
-  resourceId: string;
-  text: string;
-}): MastraDBMessage {
-  return {
-    id: options.event.eventId,
-    role: 'user',
-    threadId: options.threadId,
-    resourceId: options.resourceId,
-    createdAt: new Date(options.event.createdAt),
-    content: {
-      format: 2,
-      parts: [{ type: 'text', text: options.text }],
-      metadata: { [REMIND_PROTOCOL_METADATA_KEY]: options.event },
-    },
-  };
-}
-
-async function saveProtocolMessage(
-  memory: Memory,
-  options: Parameters<typeof protocolMessage>[0],
-): Promise<MastraDBMessage> {
-  const message = protocolMessage(options);
-  await memory.saveMessages({ messages: [message] });
-  return message;
-}
-
-async function listProtocolEvents(memory: Memory, threadId: string, resourceId: string, replyId: string) {
-  const store = await memory.storage.getStore('memory');
-  const entries = new Map<string, { event: RemindProtocolEvent; message: MastraDBMessage }>();
-  for (let page = 0; ; page++) {
-    const result = await store?.listMessages({
-      threadId,
-      resourceId,
-      page,
-      perPage: 100,
-      orderBy: { field: 'createdAt', direction: 'DESC' },
-    });
-    const messages = result?.messages ?? [];
-    for (const message of messages) {
-      const event = getRemindProtocol(message);
-      if (event) entries.set(message.id, { event, message });
-    }
-    const foundQuestion = [...entries.values()].some(
-      entry => entry.event.kind === 'question' && entry.event.replyId === replyId,
-    );
-    if (foundQuestion || messages.length < 100) break;
-  }
-  return [...entries.values()].sort((a, b) => a.event.createdAt - b.event.createdAt);
-}
+  | { accepted: false; replyId?: string; status: 'rejected'; error: string };
 
 function errorText(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
-}
-
-function collectText(value: unknown, output: string[]): void {
-  if (typeof value === 'string') {
-    output.push(value);
-    return;
-  }
-  if (Array.isArray(value)) {
-    for (const item of value) collectText(item, output);
-    return;
-  }
-  if (!value || typeof value !== 'object') return;
-  for (const nested of Object.values(value as Record<string, unknown>)) collectText(nested, output);
-}
-
-function trustedInputContainsQuestion(messages: unknown, questionMessage: MastraDBMessage): boolean {
-  const texts: string[] = [];
-  collectText(messages, texts);
-  const questionText = getRemindMessageText(questionMessage);
-  return texts.some(text => text.includes(questionMessage.id) || text.includes(questionText));
 }
 
 function consumeWakeOutput(output: { consumeStream(): Promise<unknown> }, writer?: ProcessorStreamWriter): void {
@@ -133,15 +48,89 @@ function consumeWakeOutput(output: { consumeStream(): Promise<unknown> }, writer
   });
 }
 
-function commonEventFields(options: {
-  eventId: string;
-  deliveryId: string;
-  parentAgentId: string;
-  parentThreadId: string;
-  resourceId: string;
-  createdAt?: number;
-}) {
-  return { ...options, createdAt: options.createdAt ?? Date.now() };
+function messageText(message: unknown): string {
+  if (!message || typeof message !== 'object') return '';
+  const content = (message as { content?: unknown }).content;
+  if (typeof content === 'string') return content;
+  const parts = Array.isArray(content)
+    ? content
+    : Array.isArray((content as { parts?: unknown } | undefined)?.parts)
+      ? (content as { parts: unknown[] }).parts
+      : [];
+  return parts
+    .filter((part): part is { type: 'text'; text: string } => {
+      return (
+        !!part &&
+        typeof part === 'object' &&
+        (part as { type?: unknown }).type === 'text' &&
+        typeof (part as { text?: unknown }).text === 'string'
+      );
+    })
+    .map(part => part.text)
+    .join('\n');
+}
+
+function trustedQuestion(messages: unknown, replyId: string, threadId: string, resourceId: string): boolean {
+  if (!Array.isArray(messages)) return false;
+  return messages.some(message => {
+    if (!message || typeof message !== 'object') return false;
+    const dbMessage = message as MastraDBMessage;
+    const content = (message as { content?: unknown }).content;
+    const isStoredMessage = !!content && typeof content === 'object' && !Array.isArray(content) && 'format' in content;
+    if (isStoredMessage && (dbMessage.threadId !== threadId || dbMessage.resourceId !== resourceId)) return false;
+    const metadata = getRemindMessageMetadata(dbMessage);
+    if (metadata?.type === 'question' && metadata.replyId === replyId) return true;
+    return dbMessage.role === 'user' && messageText(message).startsWith(`Memory question ${replyId}\n`);
+  });
+}
+
+function hasTerminalReply(messages: unknown, replyId: string, threadId: string, resourceId: string): boolean {
+  if (!Array.isArray(messages)) return false;
+  return messages.some(message => {
+    if (!message || typeof message !== 'object') return false;
+    const dbMessage = message as MastraDBMessage;
+    const content = (message as { content?: unknown }).content;
+    const isStoredMessage = !!content && typeof content === 'object' && !Array.isArray(content) && 'format' in content;
+    if (isStoredMessage && (dbMessage.threadId !== threadId || dbMessage.resourceId !== resourceId)) return false;
+    const parts = Array.isArray((content as { parts?: unknown } | undefined)?.parts)
+      ? (content as MastraDBMessage['content']).parts
+      : [];
+    return parts.some(part => {
+      if (part.type !== 'tool-invocation') return false;
+      const invocation = part.toolInvocation;
+      if (invocation.toolName !== 'reply_to_memory_question' || invocation.state !== 'result') return false;
+      const result = invocation.result as { delivered?: unknown; replyId?: unknown; moreComing?: unknown } | undefined;
+      return result?.delivered === true && result.replyId === replyId && result.moreComing === false;
+    });
+  });
+}
+
+async function persistParentSignal(
+  parentAgent: Agent,
+  signal: Parameters<Agent['sendSignal']>[0],
+  options: {
+    parentThreadId: string;
+    resourceId: string;
+  },
+) {
+  const result = parentAgent.sendSignal(signal, {
+    resourceId: options.resourceId,
+    threadId: options.parentThreadId,
+    ifActive: { behavior: 'persist' },
+    ifIdle: { behavior: 'persist' },
+  });
+  const accepted = await result.accepted;
+  if (accepted.action !== 'persist') throw new Error(`Reminder reply was not persisted (${accepted.action}).`);
+  await result.persisted;
+
+  const delivery = parentAgent.sendSignal(signal, {
+    resourceId: options.resourceId,
+    threadId: options.parentThreadId,
+    ifActive: { behavior: 'deliver' },
+    ifIdle: { behavior: 'discard' },
+  });
+  const delivered = await delivery.accepted;
+  if (delivered.action === 'blocked') throw new Error('Reminder reply delivery was blocked.');
 }
 
 export function createAskMemoryTool(options: {
@@ -153,7 +142,7 @@ export function createAskMemoryTool(options: {
   return createTool({
     id: 'ask_memory',
     description:
-      'Ask the durable reminder sidekick a memory question. Returns immediately after durable acceptance; the answer arrives later as a correlated signal.',
+      'Ask the reminder sidekick a memory question. Returns immediately after the sidekick accepts the question; the answer arrives later as a correlated signal.',
     inputSchema: {
       type: 'object',
       properties: { question: { type: 'string', minLength: 1 } },
@@ -183,8 +172,7 @@ export function createAskMemoryTool(options: {
         } satisfies AskMemoryResult;
       }
 
-      let replyId: string | undefined;
-      let questionSaved = false;
+      const replyId = `subconscious:remind:${crypto.randomUUID()}:reply`;
       try {
         const scope = resolveKnowledgeToolScope(context);
         const model = await resolveSubconsciousAgentModel({
@@ -196,43 +184,18 @@ export function createAskMemoryTool(options: {
         if (!model) {
           return {
             accepted: false,
+            replyId,
             status: 'rejected',
             error: 'ask_memory requires a usable reminder model.',
           } satisfies AskMemoryResult;
         }
 
         const reminderMemory = options.memory.createSubconsciousMemory();
-        const reminderThread = await ensureOwnedRemindThread({
-          memory: reminderMemory,
-          parentThreadId,
-          resourceId,
-        });
-        replyId = `subconscious:remind:${crypto.randomUUID()}:reply`;
-        const eventId = `${replyId}:question`;
-        const deliveryId = `${replyId}:question:delivery`;
-        const event: RemindQuestionEvent = {
-          kind: 'question',
-          ...commonEventFields({ eventId, deliveryId, parentAgentId, parentThreadId, resourceId }),
-          replyId,
-          replyRequired: true,
-        };
-        await saveProtocolMessage(reminderMemory, {
-          event,
-          threadId: reminderThread.id,
-          resourceId,
-          text: `Memory question ${replyId}\n\n${question}`,
-        });
-        questionSaved = true;
-
-        const acceptedTerminalSignals = new Set<string>();
+        const reminderThread = await ensureOwnedRemindThread({ memory: reminderMemory, parentThreadId, resourceId });
         const replyTool = createReplyToMemoryQuestionTool({
-          memory: reminderMemory,
           parentAgent,
-          parentAgentId,
           parentThreadId,
-          reminderThreadId: reminderThread.id,
           resourceId,
-          acceptedTerminalSignals,
         });
         const reminderAgent = createReminderAgent({
           model,
@@ -246,14 +209,15 @@ export function createAskMemoryTool(options: {
             throw new Error('The registered parent agent is required for reminder question replies.');
           },
           additionalTools: { reply_to_memory_question: replyTool },
-          acceptedTerminalSignals,
           instructions: options.config.instructions,
           maxSteps: options.config.maxSteps,
         });
         const delivery = reminderAgent.sendMessage(
           {
-            contents: `Resolve canonical reminder event ${eventId}.`,
-            metadata: { [REMIND_DELIVERY_METADATA_KEY]: { eventId, deliveryId } },
+            contents: `Memory question ${replyId}\n\n${question}`,
+            metadata: {
+              [REMIND_MESSAGE_METADATA_KEY]: { type: 'question', replyId, askedAt: Date.now() },
+            },
           },
           {
             resourceId,
@@ -278,61 +242,22 @@ export function createAskMemoryTool(options: {
       } catch (error) {
         const message = errorText(error);
         await publishSubconsciousError({ error: `remind: ${message}`, agent: 'remind', writer: context.writer });
-        if (!replyId || !questionSaved) {
-          return { accepted: false, replyId, status: 'rejected', error: message } satisfies AskMemoryResult;
-        }
-
-        const event: RemindRoutingFailureEvent = {
-          kind: 'routing-failure',
-          ...commonEventFields({
-            eventId: `${replyId}:routing-failure`,
-            deliveryId: `${replyId}:routing-failure:delivery`,
-            parentAgentId,
-            parentThreadId,
-            resourceId,
-          }),
-          replyId,
-          error: message,
-        };
-        try {
-          await saveProtocolMessage(options.memory, {
-            event,
-            threadId: `subconscious:${parentThreadId}:remind`,
-            resourceId,
-            text: `Memory question ${replyId} could not be routed: ${message}`,
-          });
-          return { accepted: false, replyId, status: 'rejected', error: message } satisfies AskMemoryResult;
-        } catch (persistenceError) {
-          const ambiguous = `${message}; routing-failure persistence also failed: ${errorText(persistenceError)}`;
-          await publishSubconsciousError({ error: `remind: ${ambiguous}`, agent: 'remind', writer: context.writer });
-          return {
-            accepted: false,
-            replyId,
-            status: 'delivery_unknown',
-            error: ambiguous,
-          } satisfies AskMemoryResult;
-        }
+        return { accepted: false, replyId, status: 'rejected', error: message } satisfies AskMemoryResult;
       }
     },
   });
 }
 
 export function createReplyToMemoryQuestionTool(options: {
-  memory: Memory;
   parentAgent: Agent;
-  parentAgentId: string;
   parentThreadId: string;
-  reminderThreadId: string;
   resourceId: string;
-  acceptedTerminalSignals?: Set<string>;
 }): ToolAction<any, any, any> {
-  const attemptedTerminalSignals = new Set<string>();
-  const acceptedTerminalSignals = options.acceptedTerminalSignals ?? new Set<string>();
-
+  const deliveredSignalIds = new Set<string>();
   return createTool({
     id: 'reply_to_memory_question',
     description:
-      'Reply to a trusted memory question. Use moreComing=true for incremental progress, or false for the single terminal answer.',
+      'Reply to a memory question from the current reminder conversation. Use moreComing=true for progress, or false for the final answer.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -355,290 +280,55 @@ export function createReplyToMemoryQuestionTool(options: {
         replyId: string;
         answer: string;
         moreComing: boolean;
-        outcome?: RemindTerminalOutcome;
+        outcome?: 'answer' | 'unable-to-answer' | 'error';
       };
-      const entries = await listProtocolEvents(options.memory, options.reminderThreadId, options.resourceId, replyId);
-      const questionEntry = entries.find(
-        entry =>
-          entry.event.kind === 'question' &&
-          entry.event.replyId === replyId &&
-          entry.event.parentAgentId === options.parentAgentId &&
-          entry.event.parentThreadId === options.parentThreadId &&
-          entry.event.resourceId === options.resourceId,
-      );
-      if (!questionEntry || !trustedInputContainsQuestion(context.agent?.messages, questionEntry.message)) {
-        return { delivered: false, reason: 'untrusted-or-unknown-reply-id' };
+      const messages = context.agent?.messages;
+      const reminderThreadId = getRemindThreadId(options.parentThreadId);
+      if (
+        context.agent?.threadId !== reminderThreadId ||
+        context.agent.resourceId !== options.resourceId ||
+        !trustedQuestion(messages, replyId, reminderThreadId, options.resourceId)
+      ) {
+        return { delivered: false, replyId, reason: 'question-not-in-current-conversation' };
+      }
+      if (!moreComing && hasTerminalReply(messages, replyId, reminderThreadId, options.resourceId)) {
+        return { delivered: false, replyId, reason: 'already-terminal' };
       }
 
-      const replyEvents = entries
-        .map(entry => entry.event)
-        .filter((event): event is Exclude<RemindProtocolEvent, RemindPassiveCheckEvent | RemindQuestionEvent> =>
-          'replyId' in event ? event.replyId === replyId : false,
-        );
-      const delivered = replyEvents.some(event => event.kind === 'terminal-delivered');
-      const exhausted = replyEvents.some(event => event.kind === 'delivery-failure' && event.exhausted);
-      if (delivered || exhausted) return { delivered: false, reason: 'already-terminal' };
-
-      if (moreComing) {
-        const sequence =
-          Math.max(0, ...replyEvents.filter(event => event.kind === 'partial-reply').map(event => event.sequence)) + 1;
-        const eventId = `${replyId}:partial:${sequence}`;
-        const event: RemindPartialReplyEvent = {
-          kind: 'partial-reply',
-          ...commonEventFields({
-            eventId,
-            deliveryId: `${eventId}:delivery`,
-            parentAgentId: options.parentAgentId,
-            parentThreadId: options.parentThreadId,
-            resourceId: options.resourceId,
-          }),
-          replyId,
-          sequence,
-          moreComing: true,
-        };
-        await saveProtocolMessage(options.memory, {
-          event,
-          threadId: options.reminderThreadId,
-          resourceId: options.resourceId,
-          text: `Partial reply ${sequence} for ${replyId}\n\n${answer}`,
-        });
-        const signalId = `${replyId}:partial:${sequence}:signal`;
-        try {
-          const result = options.parentAgent.sendSignal(
-            {
-              id: signalId,
-              type: 'reactive',
-              tagName: 'memory-reply',
-              contents: answer,
-              attributes: { replyId, sequence, moreComing: true },
-              metadata: { origin: 'subconscious', replyId, sequence, moreComing: true },
-            },
-            {
-              threadId: options.parentThreadId,
-              resourceId: options.resourceId,
-              ifActive: { behavior: 'deliver' },
-              ifIdle: { behavior: 'persist' },
-            },
-          );
-          const accepted = await result.accepted;
-          if (accepted.action === 'blocked' || accepted.action === 'discard') {
-            throw new Error(`Partial reply delivery was not accepted (${accepted.action}).`);
-          }
-          if (accepted.action === 'persist') await result.persisted;
-          return { delivered: true, replyId, sequence, moreComing: true };
-        } catch (error) {
-          const failure: RemindDeliveryFailureEvent = {
-            kind: 'delivery-failure',
-            ...commonEventFields({
-              eventId: `${replyId}:delivery-failure:partial:${sequence}`,
-              deliveryId: signalId,
-              parentAgentId: options.parentAgentId,
-              parentThreadId: options.parentThreadId,
-              resourceId: options.resourceId,
-            }),
-            replyId,
-            deliveryKind: 'partial',
-            attempt: 1,
-            exhausted: false,
-            error: errorText(error),
-          };
-          await saveProtocolMessage(options.memory, {
-            event: failure,
-            threadId: options.reminderThreadId,
-            resourceId: options.resourceId,
-            text: `Partial reply delivery failed for ${replyId}: ${failure.error}`,
-          });
-          return { delivered: false, reason: 'delivery-failed', replyId, sequence, moreComing: true };
-        }
-      }
-
-      const signalId = `${replyId}:terminal:signal`;
-      if (attemptedTerminalSignals.has(signalId))
-        return { delivered: false, reason: 'terminal-delivery-already-attempted' };
-      const existingPending = entries.find(
-        entry => entry.event.kind === 'terminal-pending-delivery' && entry.event.replyId === replyId,
-      );
-      const persistedPendingText = existingPending ? getRemindMessageText(existingPending.message) : undefined;
-      const answerToDeliver = persistedPendingText?.split('\n\n').slice(1).join('\n\n') || answer;
-      const terminalOutcome =
-        existingPending?.event.kind === 'terminal-pending-delivery' ? existingPending.event.outcome : outcome;
-      const parentSignalStore = await options.memory.storage.getStore('memory');
-      const persistedParentSignal = await parentSignalStore?.listMessagesById({ messageIds: [signalId] });
-      const hasPersistedParentSignal = persistedParentSignal?.messages.some(
-        message =>
-          message.id === signalId &&
-          message.role === 'signal' &&
-          message.threadId === options.parentThreadId &&
-          message.resourceId === options.resourceId,
-      );
-      if (hasPersistedParentSignal) {
-        const deliveredEvent: RemindTerminalDeliveredEvent = {
-          kind: 'terminal-delivered',
-          ...commonEventFields({
-            eventId: `${replyId}:terminal:delivered`,
-            deliveryId: signalId,
-            parentAgentId: options.parentAgentId,
-            parentThreadId: options.parentThreadId,
-            resourceId: options.resourceId,
-          }),
-          replyId,
-          outcome: terminalOutcome,
-        };
-        await saveProtocolMessage(options.memory, {
-          event: deliveredEvent,
-          threadId: options.reminderThreadId,
-          resourceId: options.resourceId,
-          text: `Terminal reply delivered for ${replyId}.`,
-        });
-        return { delivered: true, replyId, moreComing: false, outcome: terminalOutcome };
-      }
-      attemptedTerminalSignals.add(signalId);
-      const pending: RemindTerminalPendingEvent = {
-        kind: 'terminal-pending-delivery',
-        ...commonEventFields({
-          eventId: `${replyId}:terminal:pending`,
-          deliveryId: signalId,
-          parentAgentId: options.parentAgentId,
-          parentThreadId: options.parentThreadId,
-          resourceId: options.resourceId,
-        }),
-        replyId,
-        outcome: terminalOutcome,
-      };
-      if (!existingPending) {
-        await saveProtocolMessage(options.memory, {
-          event: pending,
-          threadId: options.reminderThreadId,
-          resourceId: options.resourceId,
-          text: `Terminal reply pending delivery for ${replyId}\n\n${answer}`,
-        });
-      }
-
-      const terminalSignal = {
+      const trimmedAnswer = answer.trim();
+      const suffix = moreComing
+        ? `partial:${crypto.createHash('sha256').update(trimmedAnswer).digest('hex').slice(0, 12)}`
+        : 'terminal';
+      const signalId = `${replyId}:${suffix}:signal`;
+      if (deliveredSignalIds.has(signalId)) return { delivered: true, replyId, moreComing, outcome };
+      const signal = {
         id: signalId,
         type: 'reactive' as const,
-        tagName: 'memory-reply',
-        contents: answerToDeliver,
-        attributes: { replyId, moreComing: false, outcome: terminalOutcome },
-        metadata: { origin: 'subconscious', replyId, moreComing: false, outcome: terminalOutcome },
-      };
-      for (let attempt = 1; attempt <= 2; attempt++) {
-        try {
-          const result = options.parentAgent.sendSignal(terminalSignal, {
-            threadId: options.parentThreadId,
-            resourceId: options.resourceId,
-            ifActive: { behavior: 'deliver' },
-            ifIdle: { behavior: 'wake' },
-          });
-          const accepted = await result.accepted;
-          if (accepted.action !== 'wake' && accepted.action !== 'deliver') {
-            throw new Error(`Terminal reply delivery was not accepted (${accepted.action}).`);
-          }
-          acceptedTerminalSignals.add(signalId);
-          if (accepted.action === 'wake') consumeWakeOutput(accepted.output, context.writer);
-        } catch (error) {
-          const failure: RemindDeliveryFailureEvent = {
-            kind: 'delivery-failure',
-            ...commonEventFields({
-              eventId: `${replyId}:delivery-failure:terminal:${attempt}`,
-              deliveryId: signalId,
-              parentAgentId: options.parentAgentId,
-              parentThreadId: options.parentThreadId,
-              resourceId: options.resourceId,
-            }),
-            replyId,
-            deliveryKind: 'terminal',
-            attempt,
-            exhausted: attempt === 2,
-            error: errorText(error),
-          };
-          try {
-            await saveProtocolMessage(options.memory, {
-              event: failure,
-              threadId: options.reminderThreadId,
-              resourceId: options.resourceId,
-              text: `Terminal reply delivery attempt ${attempt} failed for ${replyId}: ${failure.error}`,
-            });
-          } catch (persistenceError) {
-            await publishSubconsciousError({
-              error: `remind: ${failure.error}; delivery-failure persistence failed: ${errorText(persistenceError)}`,
-              agent: 'remind',
-              writer: context.writer,
-            });
-          }
-          if (attempt === 2) {
-            return {
-              delivered: false,
-              reason: 'delivery-exhausted',
-              replyId,
-              moreComing: false,
-              outcome: terminalOutcome,
-            };
-          }
-          continue;
-        }
-
-        const deliveredEvent: RemindTerminalDeliveredEvent = {
-          kind: 'terminal-delivered',
-          ...commonEventFields({
-            eventId: `${replyId}:terminal:delivered`,
-            deliveryId: signalId,
-            parentAgentId: options.parentAgentId,
-            parentThreadId: options.parentThreadId,
-            resourceId: options.resourceId,
-          }),
+        tagName: 'remind-answer',
+        contents: trimmedAnswer,
+        createdAt: new Date(),
+        metadata: { origin: 'subconscious' },
+        attributes: {
+          source: 'subconscious',
+          agent: 'remind',
           replyId,
-          outcome: terminalOutcome,
-        };
-        try {
-          await saveProtocolMessage(options.memory, {
-            event: deliveredEvent,
-            threadId: options.reminderThreadId,
-            resourceId: options.resourceId,
-            text: `Terminal reply delivered for ${replyId}.`,
-          });
-          return { delivered: true, replyId, moreComing: false, outcome: terminalOutcome };
-        } catch (persistenceError) {
-          try {
-            const persisted = options.parentAgent.sendSignal(terminalSignal, {
-              threadId: options.parentThreadId,
-              resourceId: options.resourceId,
-              ifActive: { behavior: 'persist' },
-              ifIdle: { behavior: 'persist' },
-            });
-            const persistedAccepted = await persisted.accepted;
-            if (persistedAccepted.action !== 'persist') {
-              throw new Error(`Terminal signal persistence was not accepted (${persistedAccepted.action}).`);
-            }
-            await persisted.persisted;
-          } catch (signalPersistenceError) {
-            await publishSubconsciousError({
-              error: `remind: terminal signal ${signalId} could not be persisted after marker failure: ${errorText(signalPersistenceError)}`,
-              agent: 'remind',
-              writer: context.writer,
-            });
-          }
-          await publishSubconsciousError({
-            error: `remind: terminal reply ${replyId} was accepted, but its delivered marker failed: ${errorText(persistenceError)}`,
-            agent: 'remind',
-            writer: context.writer,
-          });
-          return {
-            delivered: false,
-            reason: 'delivery-marker-unknown',
-            replyId,
-            moreComing: false,
-            outcome: terminalOutcome,
-          };
-        }
-      }
-      return {
-        delivered: false,
-        reason: 'delivery-exhausted',
-        replyId,
-        moreComing: false,
-        outcome: terminalOutcome,
+          moreComing: String(moreComing),
+          outcome,
+        },
       };
+      try {
+        await persistParentSignal(options.parentAgent, signal, options);
+        deliveredSignalIds.add(signalId);
+        return { delivered: true, replyId, moreComing, outcome };
+      } catch (error) {
+        deliveredSignalIds.delete(signalId);
+        await publishSubconsciousError({
+          error: `remind: ${errorText(error)}`,
+          agent: 'remind',
+          writer: context.writer,
+        });
+        return { delivered: false, replyId, reason: 'delivery-failed', error: errorText(error) };
+      }
     },
   });
 }

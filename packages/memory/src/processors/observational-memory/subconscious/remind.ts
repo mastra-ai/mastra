@@ -1,4 +1,3 @@
-import type { MastraDBMessage } from '@mastra/core/agent';
 import type { KnowledgeScope, KnowledgeStorage, SearchKnowledgeResult } from '@mastra/core/storage';
 import { canonicalizeKnowledgeScope } from '@mastra/core/storage';
 
@@ -8,13 +7,7 @@ import type { ObservationalMemoryModel } from '../types';
 import { publishSubconsciousActivity } from './activity';
 import { resolveSubconsciousAgentModel } from './model';
 import { createReminderAgent } from './remind-agent';
-import {
-  ensureOwnedRemindThread,
-  getRemindThreadId,
-  REMIND_DELIVERY_METADATA_KEY,
-  REMIND_PROTOCOL_METADATA_KEY,
-  type RemindPassiveCheckEvent,
-} from './remind-protocol';
+import { ensureOwnedRemindThread, getRemindThreadId, REMIND_MESSAGE_METADATA_KEY } from './remind-protocol';
 import { createReplyToMemoryQuestionTool } from './remind-questions';
 import { resolveKnowledgeResourceId } from './scope';
 import type { ResolvedSubconsciousAgent } from './types';
@@ -140,50 +133,20 @@ export class SubconsciousRemindExtractor extends Extractor<string> {
             resourceId,
           });
           const eventId = `subconscious:remind:${crypto.randomUUID()}:event`;
-          const deliveryId = `subconscious:remind:${crypto.randomUUID()}:delivery`;
           const createdAt = Date.now();
-          const candidateIds = [...new Set(sources.flatMap(source => [source.id, source.recordId]))];
-          const protocol: RemindPassiveCheckEvent = {
-            kind: 'passive-check',
-            eventId,
-            deliveryId,
-            parentAgentId: context.mainAgent?.id ?? 'unknown',
-            parentThreadId: context.threadId,
-            resourceId,
-            createdAt,
-            replyRequired: false,
-            candidateIds,
-          };
+          const candidateIds = [
+            ...new Set(
+              sources
+                .flatMap(source => [source.id, source.recordId])
+                .filter((id): id is string => typeof id === 'string'),
+            ),
+          ];
           const recentMessages = context.recentMessages?.trim() || '(none)';
-          const eventMessage: MastraDBMessage = {
-            id: eventId,
-            role: 'user',
-            threadId: remindThread.id,
-            resourceId,
-            createdAt: new Date(createdAt),
-            content: {
-              format: 2,
-              parts: [
-                {
-                  type: 'text',
-                  text: `Passive reminder check ${eventId}\n\nCurrent time: ${new Date(createdAt).toISOString()}\n\nScoped source candidates:\n${JSON.stringify(sources)}\n\nCurrent observations:\n${context.rawObservations}\n\nRecent conversation messages already visible to the parent agent:\n${recentMessages}`,
-                },
-              ],
-              metadata: { [REMIND_PROTOCOL_METADATA_KEY]: protocol },
-            },
-          };
-          await remindMemory.saveMessages({ messages: [eventMessage] });
-
-          const acceptedTerminalSignals = new Set<string>();
           const replyTool = context.mainAgent
             ? createReplyToMemoryQuestionTool({
-                memory: remindMemory,
                 parentAgent: context.mainAgent,
-                parentAgentId: context.mainAgent.id,
                 parentThreadId: context.threadId,
-                reminderThreadId: remindThread.id,
                 resourceId,
-                acceptedTerminalSignals,
               })
             : undefined;
           const agent = createReminderAgent({
@@ -196,14 +159,15 @@ export class SubconsciousRemindExtractor extends Extractor<string> {
             parentAgent: context.mainAgent,
             fallbackSendSignal: context.sendSignal,
             additionalTools: replyTool ? { reply_to_memory_question: replyTool } : undefined,
-            acceptedTerminalSignals,
             instructions: config.instructions,
             maxSteps: config.maxSteps,
           });
           const delivery = agent.sendMessage(
             {
-              contents: `Resolve canonical reminder event ${eventId}.`,
-              metadata: { [REMIND_DELIVERY_METADATA_KEY]: { eventId, deliveryId } },
+              contents: `Passive reminder check ${eventId}\n\nCurrent time: ${new Date(createdAt).toISOString()}\n\nScoped source candidates:\n${JSON.stringify(sources)}\n\nCurrent observations:\n${context.rawObservations}\n\nRecent conversation messages already visible to the parent agent:\n${recentMessages}`,
+              metadata: {
+                [REMIND_MESSAGE_METADATA_KEY]: { type: 'passive-check', eventId, candidateIds },
+              },
             },
             {
               resourceId,
