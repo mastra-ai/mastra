@@ -1897,6 +1897,34 @@ describe('Tracing', () => {
       span.end();
     });
 
+    it('does not let undefined tracingOptions metadata erase span metadata', () => {
+      const observability = new DefaultObservabilityInstance({
+        serviceName: 'test-service',
+        name: 'test',
+        exporters: [testExporter],
+      });
+
+      const span = observability.startSpan({
+        type: SpanType.AGENT_RUN,
+        name: 'test-agent',
+        attributes: { agentId: 'agent-1' },
+        metadata: { threadId: 'thread-explicit', runId: 'run-1' },
+        tracingOptions: {
+          metadata: { threadId: undefined, experiment: 'v2' },
+        },
+      });
+
+      // A key tracingOptions.metadata merely names with undefined must not
+      // erase the span's own value; defined keys still take precedence.
+      expect(span.metadata).toEqual({
+        threadId: 'thread-explicit',
+        runId: 'run-1',
+        experiment: 'v2',
+      });
+
+      span.end();
+    });
+
     it('should preserve tags across span lifecycle', () => {
       const observability = new DefaultObservabilityInstance({
         serviceName: 'test-service',

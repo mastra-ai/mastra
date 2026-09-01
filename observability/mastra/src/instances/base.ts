@@ -233,9 +233,10 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
       traceState = this.computeTraceState(tracingOptions);
     }
 
-    // Merge tracingOptions.metadata with span metadata (tracingOptions.metadata takes precedence for root spans)
+    // Merge tracingOptions.metadata with span metadata (tracingOptions.metadata takes precedence for root
+    // spans, but a key it merely names with an `undefined` value must not erase the span's own value)
     const tracingMetadata = !options.parent ? tracingOptions?.metadata : undefined;
-    const mergedMetadata = mergeMetadata(metadata, tracingMetadata);
+    const mergedMetadata = mergeMetadata(stripUndefined(metadata), stripUndefined(tracingMetadata));
 
     // Extract metadata from RequestContext
     const enrichedMetadata = this.extractMetadataFromRequestContext(requestContext, mergedMetadata, traceState);
