@@ -69,7 +69,15 @@ function watchRun(
     approvePlans,
     onParkedRun,
     label,
-  }: { timeoutMs: number; approvePlans: boolean; onParkedRun: ParkedRunPolicy; label: string },
+    runStillActive,
+  }: {
+    timeoutMs: number;
+    approvePlans: boolean;
+    onParkedRun: ParkedRunPolicy;
+    label: string;
+    /** Level-triggered check against the run registry, consulted when the edge-triggered wait times out. */
+    runStillActive: () => boolean;
+  },
 ) {
   let resolveAgentEnd!: () => void;
   let agentEnd!: Promise<void>;
@@ -98,7 +106,15 @@ function watchRun(
       parked = undefined;
     }
   });
-  const wait = () => waitForAgentEndOrTimeout(agentEnd, timeoutMs);
+  // The timeout is a fallback for a run that never started or whose end was
+  // missed, never a verdict on a slow one: while the registry still shows the
+  // run in flight, failing here would both lie on the card and schedule a
+  // duplicate kickoff into a busy session, so keep waiting.
+  const wait = async () => {
+    let ended = await waitForAgentEndOrTimeout(agentEnd, timeoutMs);
+    while (!ended && runStillActive()) ended = await waitForAgentEndOrTimeout(agentEnd, timeoutMs);
+    return ended;
+  };
 
   return {
     arm,
@@ -192,7 +208,7 @@ interface DispatcherSession extends SkillSession {
   respondToToolSuspension(input: { resumeData: SubmitPlanResumeData; toolCallId?: string }): Promise<void>;
 }
 
-type FactoryController = Pick<AgentController<MastraCodeState>, 'getSessionByResource'>;
+type FactoryController = Pick<AgentController<MastraCodeState>, 'getSessionByResource' | 'listActiveThreadRuns'>;
 type BoundDispatcherSession = Session<MastraCodeState>;
 
 export interface FactoryBindingPreparationInput {
@@ -709,6 +725,7 @@ export class FactoryDecisionDispatcher {
           approvePlans: await this.#plansAreAutoApproved(record, item),
           onParkedRun: 'escalate',
           label: 'Factory skill run',
+          runStillActive: () => this.#controller.listActiveThreadRuns().some(active => active.threadId === binding.threadId),
         });
 
         const sendKickoff = async () => {
@@ -1053,6 +1070,7 @@ export class FactoryDecisionDispatcher {
             approvePlans: await this.#plansAreAutoApproved(record, item),
             onParkedRun: 'await',
             label: 'Factory kickoff run',
+            runStillActive: () => this.#controller.listActiveThreadRuns().some(active => active.threadId === binding.threadId),
           });
           const sendKickoff = (dedupeKey: string) =>
             awaitNotification(
