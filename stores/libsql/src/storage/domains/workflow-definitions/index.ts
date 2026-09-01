@@ -50,6 +50,8 @@ function rowToDefinition(row: Record<string, any>): WorkflowDefinition {
   if (stateSchema !== undefined) def.stateSchema = stateSchema;
   const requestContextSchema = parseJson(row.requestContextSchema, 'requestContextSchema', row.id);
   if (requestContextSchema !== undefined) def.requestContextSchema = requestContextSchema;
+  const schedule = parseJson<WorkflowDefinition['schedule']>(row.schedule, 'schedule', row.id);
+  if (schedule != null) def.schedule = schedule;
   if (row.authorId != null) def.authorId = String(row.authorId);
   return def;
 }
@@ -69,6 +71,11 @@ export class WorkflowDefinitionsLibSQL extends WorkflowDefinitionsStorage {
     await this.#db.createTable({
       tableName: TABLE_WORKFLOW_DEFINITIONS,
       schema: TABLE_SCHEMAS[TABLE_WORKFLOW_DEFINITIONS],
+    });
+    await this.#db.alterTable({
+      tableName: TABLE_WORKFLOW_DEFINITIONS,
+      schema: TABLE_SCHEMAS[TABLE_WORKFLOW_DEFINITIONS],
+      ifNotExists: ['schedule'],
     });
     await this.#client.execute({
       sql: `CREATE INDEX IF NOT EXISTS idx_workflow_definitions_status ON "${TABLE_WORKFLOW_DEFINITIONS}" ("status")`,
@@ -102,6 +109,7 @@ export class WorkflowDefinitionsLibSQL extends WorkflowDefinitionsStorage {
         stateSchema: input.stateSchema ?? null,
         requestContextSchema: input.requestContextSchema ?? null,
         graph: input.graph,
+        schedule: 'schedule' in input ? (input.schedule ?? null) : null,
         status: 'active',
         source: 'storage',
         authorId: 'authorId' in input ? (input.authorId ?? null) : null,
@@ -141,6 +149,7 @@ export class WorkflowDefinitionsLibSQL extends WorkflowDefinitionsStorage {
     if ('requestContextSchema' in input && input.requestContextSchema !== undefined)
       data.requestContextSchema = input.requestContextSchema;
     if ('graph' in input && input.graph !== undefined) data.graph = input.graph;
+    if ('schedule' in input && input.schedule !== undefined) data.schedule = input.schedule;
     if ('status' in input && input.status !== undefined) data.status = input.status;
     if ('authorId' in input && input.authorId !== undefined) data.authorId = input.authorId;
 

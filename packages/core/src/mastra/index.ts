@@ -753,6 +753,13 @@ export class Mastra<
    */
   #hasScheduledWorkflow = false;
   /**
+   * Ids of persisted dynamic workflow definitions that failed to rehydrate at
+   * boot. Their declarative `wf_*` schedule rows are exempt from orphan
+   * deletion — the workflow still exists in storage, so its schedules aren't
+   * orphans; deleting them would silently lose the user's schedules.
+   */
+  #failedDynamicWorkflowIds = new Set<string>();
+  /**
    * Set while a file-based agent schedule sync is queued, so registering a
    * batch of agents after startup triggers one sweep rather than one per agent.
    */
@@ -2043,6 +2050,14 @@ export class Mastra<
       if (!row.id.startsWith('wf_')) continue;
       const ownerWorkflowId = ownerWorkflowIdForRow(row.id, declaredIdsByWorkflow) ?? ownerWorkflowIdFromRowId(row.id);
       if (!ownerWorkflowId) continue;
+      // A dynamic workflow that failed to rehydrate is not deleted — keep its
+      // schedule rows so a later successful boot picks them back up.
+      if (this.#failedDynamicWorkflowIds.has(ownerWorkflowId)) {
+        this.#logger?.warn?.(
+          `Keeping declarative schedule "${row.id}": dynamic workflow "${ownerWorkflowId}" failed to load this boot.`,
+        );
+        continue;
+      }
       try {
         await schedulesStore.deleteSchedule(row.id);
       } catch (error) {
@@ -4879,6 +4894,27 @@ export class Mastra<
     (this.#workflows as Record<string, AnyWorkflow>)[key] = workflow;
     this.#hiddenWorkflowKeys.delete(key);
     this.registerStaticWorkflowScorers(workflow);
+
+    // Mirror addWorkflow(): a replaced dynamic workflow may declare schedules,
+    // which must be (re-)registered into the running scheduler worker.
+    if (collectWorkflowScheduleConfigs(workflow).length > 0) {
+      this.#hasScheduledWorkflow = true;
+      const worker = this.#findSchedulerWorker();
+      if (worker?.scheduler) {
+        void (async () => {
+          try {
+            const schedulesStore = await this.#storage?.getStore('schedules');
+            if (!schedulesStore) return;
+            await this.registerDeclarativeSchedules(schedulesStore);
+          } catch (error) {
+            this.#logger?.error('Failed to register declarative schedule for workflow', {
+              workflowId: workflow.id,
+              error,
+            });
+          }
+        })();
+      }
+    }
   }
 
   /**
@@ -4997,6 +5033,7 @@ export class Mastra<
         stateSchema: def.stateSchema,
         requestContextSchema: def.requestContextSchema,
         graph: def.graph,
+        schedule: def.schedule,
       }),
     }));
 
@@ -5076,6 +5113,7 @@ export class Mastra<
             stateSchema: normalized.stateSchema,
             requestContextSchema: normalized.requestContextSchema,
             graph: normalized.graph,
+            schedule: normalized.schedule,
           });
         }
       }
@@ -5097,6 +5135,7 @@ export class Mastra<
     if (!store) return;
 
     const { definitions } = await store.list({ status: 'active' });
+    this.#failedDynamicWorkflowIds.clear();
 
     // Code-registered workflows win; storage is additive.
     const pending = definitions.filter(d => !(this.#workflows as Record<string, AnyWorkflow>)[d.id]);
@@ -5132,6 +5171,7 @@ export class Mastra<
               stateSchema: def.stateSchema as Record<string, any> | undefined,
               requestContextSchema: def.requestContextSchema as Record<string, any> | undefined,
               graph: def.graph,
+              schedule: def.schedule,
             },
             this,
             // Lenient at boot (save path is strict): degrade to z.any() + warn.
@@ -5143,11 +5183,13 @@ export class Mastra<
           this.addWorkflow(workflow as AnyWorkflow, def.id);
           loaded.add(def.id);
         } catch (error) {
+          this.#failedDynamicWorkflowIds.add(def.id);
           this.#logger?.error?.(`Failed to load dynamic workflow "${def.id}"`, { error });
         }
       }
     }
     if (remaining.size > 0) {
+      for (const id of remaining.keys()) this.#failedDynamicWorkflowIds.add(id);
       const stuck = Array.from(remaining.keys()).join(', ');
       this.#logger?.error?.(
         `Failed to load dynamic workflows (cycle or unresolved nested-workflow reference): ${stuck}`,
