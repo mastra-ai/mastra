@@ -638,6 +638,61 @@ if (ENABLE_TESTS) {
       expect(await channels.getConfig('slack')).toBeNull();
       await expect(channels.deleteConfig('slack')).resolves.not.toThrow();
     });
+
+    const inAnHour = () => Date.now() + 60 * 60 * 1000;
+    const anHourAgo = () => Date.now() - 60 * 60 * 1000;
+
+    it('setState round-trips values, scopes them by owner, and hides expired ones', async () => {
+      await channels.setState('agent-1', 'k', { replied: true }, null);
+      await channels.setState('agent-2', 'k', 'other-agent', null);
+      await channels.setState('agent-1', 'stale', 'gone', anHourAgo());
+      await channels.setState('agent-1', 'fresh', 'here', inAnHour());
+
+      expect(await channels.getState('agent-1', 'k')).toEqual({ value: { replied: true } });
+      expect(await channels.getState('agent-2', 'k')).toEqual({ value: 'other-agent' });
+      expect(await channels.getState('agent-1', 'stale')).toBeNull();
+      expect(await channels.getState('agent-1', 'fresh')).toEqual({ value: 'here' });
+      expect(await channels.getState('agent-1', 'missing')).toBeNull();
+    });
+
+    it('setState stores null as a value rather than as a missing key', async () => {
+      await channels.setState('agent-1', 'k', null, null);
+
+      expect(await channels.getState('agent-1', 'k')).toEqual({ value: null });
+    });
+
+    it('setStateIfNotExists grants one claim, refuses while live, and reopens once expired', async () => {
+      expect(await channels.setStateIfNotExists('agent-1', 'msg-1', 'winner', inAnHour())).toBe(true);
+      expect(await channels.setStateIfNotExists('agent-1', 'msg-1', 'loser', inAnHour())).toBe(false);
+      expect(await channels.getState('agent-1', 'msg-1')).toEqual({ value: 'winner' });
+
+      await channels.setState('agent-1', 'msg-2', 'old', anHourAgo());
+      expect(await channels.setStateIfNotExists('agent-1', 'msg-2', 'new', inAnHour())).toBe(true);
+    });
+
+    it('setStateIfNotExists grants exactly one claim when callers race', async () => {
+      // The transaction is what makes this safe; a plain read-then-write would let several
+      // callers claim the same message and each send a reply.
+      const results = await Promise.all(
+        Array.from({ length: 5 }, (_, i) => channels.setStateIfNotExists('agent-1', 'race', `caller-${i}`, inAnHour())),
+      );
+
+      expect(results.filter(Boolean)).toHaveLength(1);
+    });
+
+    it('deleteState is idempotent and deleteExpiredState spares live rows', async () => {
+      await channels.setState('agent-1', 'k', 'v', null);
+      await channels.deleteState('agent-1', 'k');
+      expect(await channels.getState('agent-1', 'k')).toBeNull();
+      await expect(channels.deleteState('agent-1', 'k')).resolves.not.toThrow();
+
+      await channels.setState('agent-1', 'dead', 'x', anHourAgo());
+      await channels.setState('agent-1', 'alive', 'y', inAnHour());
+      await channels.deleteExpiredState(Date.now());
+
+      expect(await channels.setStateIfNotExists('agent-1', 'dead', 'reclaimed', inAnHour())).toBe(true);
+      expect(await channels.getState('agent-1', 'alive')).toEqual({ value: 'y' });
+    });
   });
 
   describe('ExperimentsSpanner methods', () => {

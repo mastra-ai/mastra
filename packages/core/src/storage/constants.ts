@@ -47,6 +47,7 @@ export const TABLE_WORKFLOW_DEFINITIONS = 'mastra_workflow_definitions';
 // Channel tables
 export const TABLE_CHANNEL_INSTALLATIONS = 'mastra_channel_installations';
 export const TABLE_CHANNEL_CONFIG = 'mastra_channel_config';
+export const TABLE_CHANNEL_STATE = 'mastra_channel_state';
 
 // Tool provider connections
 export const TABLE_TOOL_PROVIDER_CONNECTIONS = 'mastra_tool_provider_connections';
@@ -103,6 +104,7 @@ export type TABLE_NAMES =
   | typeof TABLE_SCHEDULE_TRIGGERS
   | typeof TABLE_CHANNEL_INSTALLATIONS
   | typeof TABLE_CHANNEL_CONFIG
+  | typeof TABLE_CHANNEL_STATE
   | typeof TABLE_TOOL_PROVIDER_CONNECTIONS
   | typeof TABLE_NOTIFICATIONS
   | typeof TABLE_HARNESS_SESSIONS
@@ -482,6 +484,20 @@ export const THREAD_STATE_SCHEMA: Record<string, StorageColumn> = {
   threadId: { type: 'text', nullable: false },
   type: { type: 'text', nullable: false },
   value: { type: 'jsonb', nullable: false },
+  createdAt: { type: 'timestamp', nullable: false },
+  updatedAt: { type: 'timestamp', nullable: false },
+};
+
+export const CHANNEL_STATE_SCHEMA: Record<string, StorageColumn> = {
+  ownerId: { type: 'text', nullable: false },
+  key: { type: 'text', nullable: false },
+  // Always JSON-encoded, never SQL NULL: row presence is the hit/miss signal, so a
+  // cached `null`, `false` or `0` must still read back as a hit.
+  value: { type: 'jsonb', nullable: false },
+  // Epoch-ms rather than `timestamp`, because pg auto-generates an `<name>Z TIMESTAMPTZ`
+  // companion for every timestamp column — two columns to bind and read for a value only
+  // ever used in a `<=` comparison.
+  expiresAt: { type: 'bigint', nullable: true },
   createdAt: { type: 'timestamp', nullable: false },
   updatedAt: { type: 'timestamp', nullable: false },
 };
@@ -884,6 +900,7 @@ export const TABLE_SCHEMAS: Record<TABLE_NAMES, Record<string, StorageColumn>> =
     data: { type: 'jsonb', nullable: false },
     updatedAt: { type: 'timestamp', nullable: false },
   },
+  [TABLE_CHANNEL_STATE]: CHANNEL_STATE_SCHEMA,
   [TABLE_TOOL_PROVIDER_CONNECTIONS]: TOOL_PROVIDER_CONNECTIONS_SCHEMA,
   [TABLE_NOTIFICATIONS]: NOTIFICATIONS_SCHEMA,
   [TABLE_HARNESS_SESSIONS]: HARNESS_SESSIONS_SCHEMA,
@@ -910,6 +927,7 @@ export const TABLE_CONFIGS: Partial<Record<TABLE_NAMES, StorageTableConfig>> = {
   },
   [TABLE_NOTIFICATIONS]: { columns: NOTIFICATIONS_SCHEMA, compositePrimaryKey: ['threadId', 'id'] },
   [TABLE_THREAD_STATE]: { columns: THREAD_STATE_SCHEMA, compositePrimaryKey: ['threadId', 'type'] },
+  [TABLE_CHANNEL_STATE]: { columns: CHANNEL_STATE_SCHEMA, compositePrimaryKey: ['ownerId', 'key'] },
   [TABLE_KNOWLEDGE_MENTIONS]: {
     columns: KNOWLEDGE_MENTIONS_SCHEMA,
     compositePrimaryKey: ['sourceType', 'sourceId', 'recordId'],

@@ -227,6 +227,34 @@ export const mastraChannelConfigTable = defineTable({
   .index('by_platform', ['platform']);
 
 /**
+ * Channel state table - shared key/value state for channel integrations.
+ *
+ * This is what stops two Mastra instances behind a load balancer from both
+ * replying to the same inbound message: dedupe keys written by one instance are
+ * visible to the others.
+ *
+ * The synthetic id is `JSON.stringify([ownerId, key])` so the generic Convex storage
+ * operations can use their existing by-record-id lookup path, and so the
+ * (ownerId, key) pair is unique the way it is in the SQL stores.
+ *
+ * `expiresAt` is an absolute epoch-ms deadline (`null` never expires) held as a
+ * number rather than an int64 so it survives the JSON transport the admin
+ * client uses and can be range-scanned by the expiry sweep.
+ */
+export const mastraChannelStateTable = defineTable({
+  id: v.string(),
+  ownerId: v.string(),
+  key: v.string(),
+  value: v.string(),
+  expiresAt: v.union(v.number(), v.null()),
+  createdAt: v.string(),
+  updatedAt: v.string(),
+})
+  .index('by_record_id', ['id'])
+  .index('by_owner_key', ['ownerId', 'key'])
+  .index('by_expires_at', ['expiresAt']);
+
+/**
  * Background tasks table - stores durable background task state.
  *
  * JSON-like payloads are stored as encoded strings to match the existing
@@ -486,6 +514,11 @@ export {
 export const TABLE_VECTOR_INDEXES = 'mastra_vector_indexes';
 export const TABLE_VECTORS = 'mastra_vectors';
 export const TABLE_DOCUMENTS = 'mastra_documents';
+
+// Channel state table name. Defined locally for the same reason as
+// TABLE_OBSERVATIONAL_MEMORY below: older @mastra/core versions in the peer
+// range do not export it.
+export const TABLE_CHANNEL_STATE = 'mastra_channel_state';
 
 // Observational memory table name. Defined locally (not imported from core)
 // because this file is bundled into the user's Convex deployment and must not

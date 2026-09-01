@@ -1,5 +1,6 @@
 import type { Lock, QueueEntry, StateAdapter } from 'chat';
 
+import type { ChannelsStorage } from '../storage/domains/channels/base';
 import type { MemoryStorage } from '../storage/domains/memory/base';
 
 interface CachedValue<T = unknown> {
@@ -7,30 +8,48 @@ interface CachedValue<T = unknown> {
   expiresAt: number | null; // null = no expiry
 }
 
+/** Owner id used when no `getOwnerId` hook is supplied; the `ownerId` column is NOT NULL. */
+const UNSCOPED_STATE_OWNER_ID = '__unscoped__';
+
+/**
+ * Dedupe keys are never read again once they expire, so nothing deletes them on read.
+ * Without this sweep the table grows by one dead row per inbound message, forever.
+ */
+const STATE_SWEEP_INTERVAL_MS = 5 * 60 * 1000;
+
 /**
  * Chat SDK StateAdapter backed by Mastra storage.
  *
  * Thread subscriptions are persisted to the Mastra `MemoryStorage` domain
  * using thread metadata (`channel_subscribed`), so they survive restarts.
  *
- * Cache, locks, and dedup keys remain in-memory — they are inherently
- * short-lived (seconds to minutes) and don't need persistence.
+ * Cache and dedup keys are persisted to the `ChannelsStorage` domain when one is
+ * supplied, so that instances behind a load balancer see each other's writes — a
+ * per-process cache means every instance replies to the same inbound message.
+ *
+ * Locks, lists, and queues remain in-memory.
  */
 export class MastraStateAdapter implements StateAdapter {
   private memoryStore: MemoryStorage;
   private getOwnerId?: () => string | null;
+  private channelsStore?: ChannelsStorage;
   private connected = false;
   private connectPromise: Promise<void> | null = null;
+  private sweepTimer: ReturnType<typeof setInterval> | null = null;
 
-  // In-memory ephemeral state (cache, locks, lists, queues)
+  // In-memory ephemeral state (locks, lists, queues, and the cache when no channels store)
   private readonly cache = new Map<string, CachedValue>();
   private readonly locks = new Map<string, Lock>();
   private readonly lists = new Map<string, { values: unknown[]; expiresAt: number | null }>();
   private readonly queues = new Map<string, QueueEntry[]>();
 
-  constructor(memoryStore: MemoryStorage, getOwnerId?: () => string | null) {
+  constructor(memoryStore: MemoryStorage, getOwnerId?: () => string | null, channelsStore?: ChannelsStorage) {
     this.memoryStore = memoryStore;
     this.getOwnerId = getOwnerId;
+    // A store package older than this core implements the channels domain without the
+    // state methods, so the domain being present is not enough to call them. Dropping it
+    // here keeps every call site below on the in-memory path instead of crashing.
+    this.channelsStore = channelsStore?.supportsChannelState ? channelsStore : undefined;
   }
 
   async connect(): Promise<void> {
@@ -38,6 +57,7 @@ export class MastraStateAdapter implements StateAdapter {
     if (!this.connectPromise) {
       this.connectPromise = Promise.resolve().then(() => {
         this.connected = true;
+        this.startStateSweep();
       });
     }
     await this.connectPromise;
@@ -46,10 +66,26 @@ export class MastraStateAdapter implements StateAdapter {
   async disconnect(): Promise<void> {
     this.connected = false;
     this.connectPromise = null;
+    if (this.sweepTimer) {
+      clearInterval(this.sweepTimer);
+      this.sweepTimer = null;
+    }
+    // Only the local Map is cleared — the channels store is shared with other instances,
+    // and wiping it here would drop dedupe keys they are still relying on.
     this.cache.clear();
     this.locks.clear();
     this.lists.clear();
     this.queues.clear();
+  }
+
+  private startStateSweep(): void {
+    const store = this.channelsStore;
+    if (!store || this.sweepTimer) return;
+    this.sweepTimer = setInterval(() => {
+      // Best-effort: a failed sweep must not reject or stop later sweeps.
+      void store.deleteExpiredState(Date.now()).catch(() => {});
+    }, STATE_SWEEP_INTERVAL_MS);
+    this.sweepTimer.unref?.();
   }
 
   // ---------------------------------------------------------------------------
@@ -90,10 +126,22 @@ export class MastraStateAdapter implements StateAdapter {
   }
 
   // ---------------------------------------------------------------------------
-  // Cache — in-memory with TTL
+  // Cache — shared via the channels store when present, in-memory otherwise
   // ---------------------------------------------------------------------------
 
+  private stateOwnerId(): string {
+    return this.getOwnerId?.() ?? UNSCOPED_STATE_OWNER_ID;
+  }
+
+  private deadlineFrom(ttlMs?: number): number | null {
+    return ttlMs ? Date.now() + ttlMs : null;
+  }
+
   async get<T = unknown>(key: string): Promise<T | null> {
+    if (this.channelsStore) {
+      const entry = await this.channelsStore.getState(this.stateOwnerId(), key);
+      return entry ? (entry.value as T) : null;
+    }
     const cached = this.cache.get(key);
     if (!cached) return null;
     if (cached.expiresAt !== null && cached.expiresAt <= Date.now()) {
@@ -104,6 +152,10 @@ export class MastraStateAdapter implements StateAdapter {
   }
 
   async set<T = unknown>(key: string, value: T, ttlMs?: number): Promise<void> {
+    if (this.channelsStore) {
+      await this.channelsStore.setState(this.stateOwnerId(), key, value, this.deadlineFrom(ttlMs));
+      return;
+    }
     this.cache.set(key, {
       value,
       expiresAt: ttlMs ? Date.now() + ttlMs : null,
@@ -111,6 +163,9 @@ export class MastraStateAdapter implements StateAdapter {
   }
 
   async setIfNotExists(key: string, value: unknown, ttlMs?: number): Promise<boolean> {
+    if (this.channelsStore) {
+      return this.channelsStore.setStateIfNotExists(this.stateOwnerId(), key, value, this.deadlineFrom(ttlMs));
+    }
     const existing = this.cache.get(key);
     if (existing) {
       if (existing.expiresAt !== null && existing.expiresAt <= Date.now()) {
@@ -127,6 +182,10 @@ export class MastraStateAdapter implements StateAdapter {
   }
 
   async delete(key: string): Promise<void> {
+    if (this.channelsStore) {
+      await this.channelsStore.deleteState(this.stateOwnerId(), key);
+      return;
+    }
     this.cache.delete(key);
   }
 

@@ -167,7 +167,7 @@ The storage adapter creates the following tables, all using the GoogleSQL dialec
 - `mastra_datasets` / `mastra_dataset_items` / `mastra_dataset_versions`: evaluation datasets, SCD-2 versioned items, and version snapshots
 - `mastra_experiments` / `mastra_experiment_results`: experiment runs and their per-item results
 - `mastra_favorites`: per-user favorites for agents and skills, with denormalized `favoriteCount` maintained on the parent record
-- `mastra_channel_installations` / `mastra_channel_config`: multi-platform channel installations and per-platform configuration
+- `mastra_channel_installations` / `mastra_channel_config` / `mastra_channel_state`: multi-platform channel installations, per-platform configuration, and shared channel state (deduplication keys and interactive state)
 - `mastra_ai_spans`: AI tracing spans for observability (per-trace and per-span records, used to power the Studio traces UI)
 
 Tables are created with `STRING(MAX)` for text and JSON payloads, `INT64`, `FLOAT64`, `BOOL`, and `TIMESTAMP`.

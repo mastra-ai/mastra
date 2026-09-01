@@ -228,6 +228,7 @@ describe('findBestIndex', () => {
       expect(TABLE_INDEX_MAP).toHaveProperty('mastra_schedule_triggers');
       expect(TABLE_INDEX_MAP).toHaveProperty('mastra_channel_installations');
       expect(TABLE_INDEX_MAP).toHaveProperty('mastra_channel_config');
+      expect(TABLE_INDEX_MAP).toHaveProperty('mastra_channel_state');
       expect(TABLE_INDEX_MAP).toHaveProperty('mastra_background_tasks');
       expect(TABLE_INDEX_MAP).toHaveProperty('mastra_vector_indexes');
     });
@@ -264,6 +265,9 @@ describe('findBestIndex', () => {
 
       const channelConfigPlatform = TABLE_INDEX_MAP['mastra_channel_config']!.find(i => i.name === 'by_platform');
       expect(channelConfigPlatform!.fields).toEqual(['platform']);
+
+      const channelStateOwnerKey = TABLE_INDEX_MAP['mastra_channel_state']!.find(i => i.name === 'by_owner_key');
+      expect(channelStateOwnerKey!.fields).toEqual(['ownerId', 'key']);
 
       const backgroundAgentStatus = TABLE_INDEX_MAP['mastra_background_tasks']!.find(i => i.name === 'by_agent_status');
       expect(backgroundAgentStatus!.fields).toEqual(['agent_id', 'status']);

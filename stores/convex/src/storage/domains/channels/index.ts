@@ -1,8 +1,9 @@
 import { ChannelsStorage, TABLE_CHANNEL_CONFIG, TABLE_CHANNEL_INSTALLATIONS } from '@mastra/core/storage';
-import type { ChannelConfig, ChannelInstallation } from '@mastra/core/storage';
+import type { ChannelConfig, ChannelInstallation, ChannelStateEntry } from '@mastra/core/storage';
 
 import { ConvexDB, resolveConvexConfig } from '../../db';
 import type { ConvexDomainConfig } from '../../db';
+import { TABLE_CHANNEL_STATE } from '../../types';
 
 type ChannelInstallationRecord = {
   id: string;
@@ -22,6 +23,40 @@ type ChannelConfigRecord = Omit<ChannelConfig, 'updatedAt' | 'data'> & {
   updatedAt: string;
   data: string;
 };
+
+type ChannelStateRecord = {
+  id: string;
+  ownerId: string;
+  key: string;
+  value: string;
+  expiresAt: number | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+/**
+ * Convex has no composite primary key, so the (ownerId, key) pair is folded into
+ * the record id the generic operations already index on. JSON keeps the encoding
+ * unambiguous without relying on control characters surviving in a stored string.
+ */
+function stateId(ownerId: string, key: string): string {
+  return JSON.stringify([ownerId, key]);
+}
+
+function stateRecord(ownerId: string, key: string, value: unknown, expiresAt: number | null): ChannelStateRecord {
+  const now = new Date().toISOString();
+  return {
+    id: stateId(ownerId, key),
+    ownerId,
+    key,
+    // Always JSON-encoded, matching the SQL stores: row presence is the hit/miss
+    // signal, so a stored `null` must still read back as a hit.
+    value: JSON.stringify(value ?? null),
+    expiresAt,
+    createdAt: now,
+    updatedAt: now,
+  };
+}
 
 const statusPriority: Record<ChannelInstallation['status'], number> = {
   active: 0,
@@ -99,6 +134,8 @@ function sortInstallationsForAgent(a: ChannelInstallation, b: ChannelInstallatio
 }
 
 export class ChannelsConvex extends ChannelsStorage {
+  override readonly supportsChannelState = true;
+
   #db: ConvexDB;
 
   constructor(config: ConvexDomainConfig) {
@@ -114,6 +151,7 @@ export class ChannelsConvex extends ChannelsStorage {
   async dangerouslyClearAll(): Promise<void> {
     await this.#db.clearTable({ tableName: TABLE_CHANNEL_INSTALLATIONS });
     await this.#db.clearTable({ tableName: TABLE_CHANNEL_CONFIG });
+    await this.#db.clearTable({ tableName: TABLE_CHANNEL_STATE });
   }
 
   async saveInstallation(installation: ChannelInstallation): Promise<void> {
@@ -183,5 +221,36 @@ export class ChannelsConvex extends ChannelsStorage {
 
   async deleteConfig(platform: string): Promise<void> {
     await this.#db.deleteMany(TABLE_CHANNEL_CONFIG, [platform]);
+  }
+
+  async getState(ownerId: string, key: string): Promise<ChannelStateEntry | null> {
+    const record = await this.#db.load<ChannelStateRecord | null>({
+      tableName: TABLE_CHANNEL_STATE,
+      keys: { id: stateId(ownerId, key) },
+    });
+
+    if (!record) return null;
+    if (record.expiresAt !== null && record.expiresAt <= Date.now()) return null;
+
+    return { value: JSON.parse(record.value) as unknown };
+  }
+
+  async setState(ownerId: string, key: string, value: unknown, expiresAt: number | null): Promise<void> {
+    await this.#db.insert({
+      tableName: TABLE_CHANNEL_STATE,
+      record: stateRecord(ownerId, key, value, expiresAt),
+    });
+  }
+
+  async setStateIfNotExists(ownerId: string, key: string, value: unknown, expiresAt: number | null): Promise<boolean> {
+    return await this.#db.claimChannelState(stateRecord(ownerId, key, value, expiresAt), Date.now());
+  }
+
+  async deleteState(ownerId: string, key: string): Promise<void> {
+    await this.#db.deleteMany(TABLE_CHANNEL_STATE, [stateId(ownerId, key)]);
+  }
+
+  async deleteExpiredState(now: number): Promise<void> {
+    await this.#db.deleteExpiredChannelState(now);
   }
 }

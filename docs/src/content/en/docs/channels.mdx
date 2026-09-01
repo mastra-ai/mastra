@@ -55,7 +55,7 @@ Channel adapters require provider-specific environment variables for credentials
 
 :::
 
-We recommend configuring [storage](/docs/storage) for channels. Storage lets Mastra persist channel state, thread subscriptions, tool approvals, and memory across restarts:
+Channels require [storage](/docs/storage) unless you provide your own `state` adapter in the channel config. Starting an agent with channels and neither configured throws. Storage lets Mastra persist channel state, thread subscriptions, tool approvals, and memory across restarts:
 
 ```typescript title="src/mastra/index.ts"
 import { Mastra } from '@mastra/core'
@@ -230,6 +230,8 @@ channels: {
 
 Platform retries also mean the same event can arrive more than once. Adapters deduplicate redelivered events using channel state, so configure [storage](/docs/storage) to keep deduplication reliable across restarts. Deduplication is best effort, so keep side effects in custom handlers idempotent so a duplicate that slips through doesn't repeat work like creating a ticket.
 
+Storage shares that channel state between instances when the backend supports it. The Convex, Google Cloud Spanner, libSQL, MySQL, and PostgreSQL stores support shared channel state, and every instance needs to reach the same store. Other backends, and store packages older than your `@mastra/core` version, keep channel state per-process: each instance keeps its own deduplication keys and they all reply to the same message. Run those with a single instance, or provide a shared `state` adapter in the channel config. Interactive elements have the same constraint: a modal opened by one instance can't be submitted through another.
+
 ## Multimodal content
 
 Models like Gemini can process images, video, and audio natively. Combine `inlineMedia` and `inlineLinks` to let users share rich content with your agent across platforms:
@@ -322,6 +324,8 @@ export const mastra = new Mastra({
 ```
 
 Vercel's managed Redis integration and Upstash Redis both work well. For more on when a distributed pub/sub is needed, see the [PubSub guide](/docs/server/pubsub) and the [`RedisStreamsPubSub` reference](/reference/pubsub/redis-streams).
+
+Shared pub/sub coordinates active runs. Deduplication and interactive state need shared channel state, through storage on a backend that supports it (see [Error handling and delivery](#error-handling-and-delivery)) or a shared `state` adapter in the channel config. Multi-instance deployments need both.
 
 ## Other adapters
 
