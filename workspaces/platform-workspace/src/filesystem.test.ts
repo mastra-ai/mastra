@@ -57,7 +57,7 @@ describe('PlatformFilesystem', () => {
     await expect(fs.readFile('/dir/file.txt', { encoding: 'utf8' })).resolves.toBe('hello');
 
     expect(String(fetchMock.mock.calls[0]![0])).toBe(
-      'https://workspaces.us.mastra.ai/v1/projects/proj_123/fs/dev-bucket/dir/file.txt',
+      'https://workspaces.us.mastra.ai/v1/railway/projects/proj_123/fs/dev-bucket/dir/file.txt',
     );
   });
 
