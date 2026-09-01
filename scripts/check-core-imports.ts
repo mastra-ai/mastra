@@ -2,6 +2,7 @@ import { spawnSync } from 'node:child_process';
 import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import semver from 'semver';
 import ts from 'typescript-classic';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -9,7 +10,7 @@ const repoRoot = resolve(__dirname, '..');
 const corePackageRoot = join(repoRoot, 'packages', 'core');
 const corePackageJsonPath = join(corePackageRoot, 'package.json');
 const corePackageJson = JSON.parse(readFileSync(corePackageJsonPath, 'utf-8')) as {
-  version?: string;
+  version: string;
 };
 const skippedDirectories = new Set([
   '.git',
@@ -30,8 +31,9 @@ type CoreValueImport = {
 
 type PackageInfo = {
   coreRange: string;
-  coreFloorVersion: string;
-  corePackVersion: string;
+  coreFloorVersion?: string;
+  corePackVersion?: string;
+  coreRangeError?: string;
   name: string;
   packageJsonPath: string;
   root: string;
@@ -53,6 +55,20 @@ function findPackageRoots(dir: string): string[] {
   }
 
   return roots;
+}
+
+function resolveCoreSemverRange(coreRange: string) {
+  if (!coreRange.startsWith('workspace:')) {
+    return coreRange;
+  }
+
+  const workspaceRange = coreRange.slice('workspace:'.length);
+
+  if (workspaceRange === '*' || workspaceRange === '^' || workspaceRange === '~') {
+    return workspaceRange === '*' ? corePackageJson.version : `${workspaceRange}${corePackageJson.version}`;
+  }
+
+  return workspaceRange;
 }
 
 function getPackageInfo(packageRoot: string): PackageInfo | undefined {
@@ -77,23 +93,35 @@ function getPackageInfo(packageRoot: string): PackageInfo | undefined {
     return undefined;
   }
 
-  const coreFloorVersion = coreRange.match(/\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?/)?.[0];
-  const corePackVersion = coreFloorVersion?.endsWith('-0') ? coreFloorVersion.slice(0, -2) : coreFloorVersion;
-
-  if (!coreFloorVersion || !corePackVersion) {
-    throw new Error(
-      `Could not determine @mastra/core peer dependency floor from ${relative(repoRoot, packageJsonPath)}`,
-    );
-  }
-
-  return {
+  const packageInfo = {
     coreRange,
-    coreFloorVersion,
-    corePackVersion,
     name: packageJson.name ?? relative(repoRoot, packageRoot),
     packageJsonPath,
     root: packageRoot,
   };
+
+  try {
+    const coreFloorVersion = semver.minVersion(resolveCoreSemverRange(coreRange), { includePrerelease: true })?.version;
+    const corePackVersion = coreFloorVersion?.endsWith('-0') ? coreFloorVersion.slice(0, -2) : coreFloorVersion;
+
+    if (!coreFloorVersion || !corePackVersion) {
+      return {
+        ...packageInfo,
+        coreRangeError: `Could not determine @mastra/core peer dependency floor from range "${coreRange}"`,
+      };
+    }
+
+    return {
+      ...packageInfo,
+      coreFloorVersion,
+      corePackVersion,
+    };
+  } catch {
+    return {
+      ...packageInfo,
+      coreRangeError: `Could not determine @mastra/core peer dependency floor from range "${coreRange}"`,
+    };
+  }
 }
 
 function getPackagesToCheck() {
@@ -429,15 +457,24 @@ try {
   );
 
   for (const packageInfo of packages) {
+    const corePackVersion = packageInfo.corePackVersion;
+
+    if (packageInfo.coreRangeError || !corePackVersion) {
+      console.error(`\n✗ Failed to check ${packageInfo.name}`);
+      console.error(
+        `${packageInfo.coreRangeError ?? 'Could not determine @mastra/core peer dependency floor'} in ${relative(repoRoot, packageInfo.packageJsonPath)}`,
+      );
+      exitCode = 1;
+      continue;
+    }
+
     try {
-      let floorCoreRoot = floorCoreRoots.get(packageInfo.corePackVersion);
+      let floorCoreRoot = floorCoreRoots.get(corePackVersion);
 
       if (!floorCoreRoot) {
-        const versionTempDir = mkdtempSync(
-          join(tempRoot, `core-${packageInfo.corePackVersion.replace(/[^0-9A-Za-z.-]/g, '-')}-`),
-        );
-        floorCoreRoot = extractCorePackage(packageInfo.corePackVersion, versionTempDir);
-        floorCoreRoots.set(packageInfo.corePackVersion, floorCoreRoot);
+        const versionTempDir = mkdtempSync(join(tempRoot, `core-${corePackVersion.replace(/[^0-9A-Za-z.-]/g, '-')}-`));
+        floorCoreRoot = extractCorePackage(corePackVersion, versionTempDir);
+        floorCoreRoots.set(corePackVersion, floorCoreRoot);
       }
 
       if (checkPackage(packageInfo, floorCoreRoot, tempRoot) !== 0) {
