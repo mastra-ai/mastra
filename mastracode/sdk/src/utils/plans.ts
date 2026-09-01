@@ -10,16 +10,46 @@ export function getPlansDir(): string {
 
 export interface LocalPlansOptions {
   factoryProjectId?: string | null;
+  /**
+   * The repo checkout's subdir under the workspace root, when file tools root
+   * at the repo's parent (`workspaceRoot !== projectPath`). Prefixes the
+   * workspace-relative plans dir spelling so relative writes land inside the
+   * repo (where the plans dir actually lives) instead of beside it.
+   */
+  repoSubdir?: string | null;
+  /**
+   * The root the agent's file tools resolve relative paths against. When set,
+   * plan-path checks resolve relatives there instead of at `projectPath` —
+   * matching what the write tool will actually do.
+   */
+  workspaceRoot?: string | null;
+}
+
+/**
+ * The repo checkout's subdir relative to the workspace root — the prefix for
+ * repo-relative spellings under a split root. Undefined when the roots are
+ * coupled (equal) or the project is not nested under the workspace root.
+ */
+export function repoSubdirForRoots(projectPath?: string | null, workspaceRoot?: string | null): string | undefined {
+  if (!projectPath || !workspaceRoot) return undefined;
+  const rel = path.relative(path.resolve(workspaceRoot), path.resolve(projectPath));
+  if (!rel || rel.startsWith('..') || path.isAbsolute(rel)) return undefined;
+  return rel;
 }
 
 /** Workspace-relative directory the agent writes plan files into. */
 export function getLocalPlansRelativeDir(options: LocalPlansOptions = {}): string {
-  return options.factoryProjectId ? path.join('.artifacts', 'plans') : path.join(DEFAULT_CONFIG_DIR, 'plans');
+  const base = options.factoryProjectId ? path.join('.artifacts', 'plans') : path.join(DEFAULT_CONFIG_DIR, 'plans');
+  return options.repoSubdir ? path.join(options.repoSubdir, base) : base;
 }
 
-/** Local (project-scoped) plans directory where the agent writes named plan files. */
+/**
+ * Local (project-scoped) plans directory where the agent writes named plan
+ * files. `projectPath` already IS the repo, so the repoSubdir prefix (a
+ * workspace-relative spelling concern) never applies here.
+ */
 export function getLocalPlansDir(projectPath: string, options: LocalPlansOptions = {}): string {
-  return path.join(projectPath, getLocalPlansRelativeDir(options));
+  return path.join(projectPath, getLocalPlansRelativeDir({ factoryProjectId: options.factoryProjectId }));
 }
 
 function slugify(str: string): string {
@@ -60,7 +90,10 @@ export function resolvePlanPath(projectPath: string, submittedPath: string): str
  * outside that directory.
  */
 export function isPlanFilePath(projectPath: string, targetPath: string, options: LocalPlansOptions = {}): boolean {
-  const abs = resolvePlanPath(projectPath, targetPath);
+  // Relative paths resolve where the agent's file tools resolve them — the
+  // workspace root when the embedder split it from the project path.
+  const resolutionRoot = options.workspaceRoot ? path.resolve(options.workspaceRoot) : projectPath;
+  const abs = resolvePlanPath(resolutionRoot, targetPath);
   if (!abs) return false;
   if (path.extname(abs).toLowerCase() !== '.md') return false;
 

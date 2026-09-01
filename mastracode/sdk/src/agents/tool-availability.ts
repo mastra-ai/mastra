@@ -1,7 +1,7 @@
 import { WORKSPACE_TOOLS } from '@mastra/core/workspace';
 import type { WorkspaceToolHookContext, WorkspaceToolsConfig } from '@mastra/core/workspace';
 import { MC_TOOLS, TOOL_NAME_OVERRIDES } from '../tool-names.js';
-import { getLocalPlansRelativeDir, isPlanFilePath } from '../utils/plans.js';
+import { getLocalPlansRelativeDir, isPlanFilePath, repoSubdirForRoots } from '../utils/plans.js';
 
 const PLAN_MODE_WRITE_TOOL_NAMES = new Set<string>([
   WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE,
@@ -54,6 +54,11 @@ function getHarnessFactoryProjectId(harness: PlanModeGuardHarness | undefined): 
   return typeof factoryProjectId === 'string' ? factoryProjectId : undefined;
 }
 
+function getHarnessWorkspaceRoot(harness: PlanModeGuardHarness | undefined): string | undefined {
+  const workspaceRoot = getHarnessState(harness)?.workspaceRoot;
+  return typeof workspaceRoot === 'string' ? workspaceRoot : undefined;
+}
+
 function getToolInputPath(input: unknown): string | undefined {
   const toolPath = (input as { path?: unknown } | undefined)?.path;
   return typeof toolPath === 'string' ? toolPath : undefined;
@@ -66,9 +71,14 @@ export function guardPlanModePlanFileWrites({ workspaceToolName, input, context 
   if (getHarnessModeId(harness) !== 'plan') return;
 
   const factoryProjectId = getHarnessFactoryProjectId(harness);
-  const planOptions = { factoryProjectId };
-  const planDirHint = `${getLocalPlansRelativeDir(planOptions)}/`;
   const projectPath = getHarnessProjectPath(harness);
+  const workspaceRoot = getHarnessWorkspaceRoot(harness);
+  // Advertise the plans dir the way relative writes actually resolve: with
+  // the repo subdir prefix when file tools root at the repo's parent.
+  const planDirHint = `${getLocalPlansRelativeDir({
+    factoryProjectId,
+    repoSubdir: repoSubdirForRoots(projectPath, workspaceRoot),
+  })}/`;
   const inputPath = getToolInputPath(input);
   if (!projectPath || !inputPath) {
     return {
@@ -79,7 +89,7 @@ export function guardPlanModePlanFileWrites({ workspaceToolName, input, context 
 
   // Plan mode may write any `.md` file directly inside the configured plan directory,
   // but nothing else in the project.
-  if (isPlanFilePath(projectPath, inputPath, planOptions)) return;
+  if (isPlanFilePath(projectPath, inputPath, { factoryProjectId, workspaceRoot })) return;
 
   return {
     proceed: false as const,

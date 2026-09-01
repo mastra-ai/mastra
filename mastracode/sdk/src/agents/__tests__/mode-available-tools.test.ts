@@ -99,6 +99,61 @@ describe('mode availableTools configuration', () => {
       });
     });
 
+    it('resolves plan paths against the workspace root when file tools root at the repo parent', () => {
+      // Factory split: file tools root at the workspace root; the repo is a
+      // plain subdir. The write tool resolves relative paths against the
+      // workspace root, so the guard must accept the repo-prefixed spelling
+      // (which lands in <repo>/.artifacts/plans) and refuse the bare one
+      // (which would land OUTSIDE the repo, invisible to the artifacts browser).
+      const workspaceRoot = '/tmp/mastracode-split-guard';
+      const projectPath = `${workspaceRoot}/hello`;
+      const context = {
+        requestContext: {
+          harness: {
+            session: {
+              modeId: 'plan',
+              state: { get: () => ({ projectPath, workspaceRoot, factoryProjectId: 'factory-123' }) },
+            },
+          },
+        },
+      };
+
+      // Repo-prefixed relative path → resolves to <repo>/.artifacts/plans → allowed.
+      expect(
+        guardPlanModePlanFileWrites({
+          toolName: MC_TOOLS.WRITE_FILE,
+          workspaceToolName: WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE,
+          input: { path: 'hello/.artifacts/plans/add-dark-mode.md' },
+          context,
+        }),
+      ).toBeUndefined();
+
+      // Absolute path into the repo plans dir → allowed.
+      expect(
+        guardPlanModePlanFileWrites({
+          toolName: MC_TOOLS.STRING_REPLACE_LSP,
+          workspaceToolName: WORKSPACE_TOOLS.FILESYSTEM.EDIT_FILE,
+          input: { path: `${projectPath}/.artifacts/plans/another-plan.md` },
+          context,
+        }),
+      ).toBeUndefined();
+
+      // Bare `.artifacts/plans/...` now resolves OUTSIDE the repo — refused,
+      // and the hint names the repo-prefixed spelling.
+      expect(
+        guardPlanModePlanFileWrites({
+          toolName: MC_TOOLS.WRITE_FILE,
+          workspaceToolName: WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE,
+          input: { path: '.artifacts/plans/escapee.md' },
+          context,
+        }),
+      ).toMatchObject({
+        proceed: false,
+        output:
+          'Plan mode can only write plan files inside hello/.artifacts/plans/. Refusing to edit .artifacts/plans/escapee.md.',
+      });
+    });
+
     it('allows Factory plan files only inside .artifacts/plans/', () => {
       const projectPath = '/tmp/mastracode-factory-plan-guard';
       const context = {

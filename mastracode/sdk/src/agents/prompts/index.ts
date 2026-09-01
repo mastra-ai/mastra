@@ -12,7 +12,7 @@ import type { PromptContext as BasePromptContext } from '@mastra/core/coding-age
 import { loadSettings, resolveLspSetting } from '../../onboarding/settings.js';
 import { MC_TOOLS } from '../../tool-names.js';
 import { hasParallelKey, hasTavilyKey } from '../../tools/index.js';
-import { getLocalPlansRelativeDir } from '../../utils/plans.js';
+import { getLocalPlansRelativeDir, repoSubdirForRoots } from '../../utils/plans.js';
 import {
   loadAgentInstructions,
   formatInstructionSource,
@@ -109,20 +109,24 @@ export function buildFullPromptSections(ctx: PromptContext): PromptSection[] {
   // guidance must not be advertised either.
   if (resolveLspSetting(loadSettings().lsp) === false) deniedTools.add(MC_TOOLS.LSP_INSPECT);
 
-  // Build mode-aware tool guidance
-  const factoryProjectId = typeof ctx.state?.factoryProjectId === 'string' ? ctx.state.factoryProjectId : undefined;
-  const toolGuidance = buildToolGuidance(ctx.modeId, {
-    hasWebSearch,
-    deniedTools,
-    plansDir: getLocalPlansRelativeDir({ factoryProjectId }),
-  });
-
   // The workspace root the prompt advertises as the working directory. When
   // an embedder roots tools at a parent directory (factory: the dir the repo
   // is cloned into), the agent must be told THAT root — relative paths then
   // read `<repo>/...`. Instruction loading below stays `workingDir`-scoped.
   const workspaceRoot =
     ctx.workspaceRoot && ctx.workingDir && ctx.workspaceRoot !== ctx.workingDir ? ctx.workspaceRoot : undefined;
+
+  // Build mode-aware tool guidance. The advertised plans dir must be spelled
+  // the way relative writes resolve — repo-prefixed under a split root.
+  const factoryProjectId = typeof ctx.state?.factoryProjectId === 'string' ? ctx.state.factoryProjectId : undefined;
+  const toolGuidance = buildToolGuidance(ctx.modeId, {
+    hasWebSearch,
+    deniedTools,
+    plansDir: getLocalPlansRelativeDir({
+      factoryProjectId,
+      repoSubdir: repoSubdirForRoots(ctx.workingDir, workspaceRoot),
+    }),
+  });
 
   // Map new context to base context
   const baseCtx: BasePromptContext = {

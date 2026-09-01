@@ -132,7 +132,7 @@ Recompute the complete header and handoff, including independent effort and impa
 
 For GitHub issues, fetch the current issue body, labels, and full comment thread before writing the handoff. Then publish that handoff as one GitHub comment. The comment must begin with the exact `<!-- mastra-factory-triage -->` marker shown in the output contract.
 
-If you write the handoff to disk, use `.artifacts/factory-triage/issue-<number>.md`.
+If you write the handoff to disk, use `<repo>/.artifacts/factory-triage/issue-<number>.md` (the `.artifacts` directory inside the repository checkout).
 
 Publish the handoff only with `github_upsert_factory_triage_comment`, passing the issue number and `COMMENT_BODY`. Set `COMMENT_BODY` to the marker followed by the structured handoff. The tool updates the oldest marked comment authored by Factory, or creates one when no Factory-owned marker remains. Use its returned canonical comment identity to confirm publication.
 

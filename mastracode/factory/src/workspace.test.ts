@@ -324,14 +324,16 @@ describe('bundled Factory skill assets', () => {
       ['factory-triage', 'factory-plan', 'factory-review', 'factory-rereview'].map(read),
     );
 
-    expect(triage).toContain('.artifacts/factory-triage/issue-<number>.md');
-    expect(plan).toContain('Write it to `.artifacts/plans/issue-<number>.md`');
+    // Artifact paths are repo-prefixed: file tools root at the workspace root
+    // (the repo's parent), and `.artifacts` lives inside the repo checkout.
+    expect(triage).toContain('<repo>/.artifacts/factory-triage/issue-<number>.md');
+    expect(plan).toContain('Write it to `<repo>/.artifacts/plans/issue-<number>.md`');
     expect(plan).toContain('include the same plan in the conversation');
-    expect(review).toContain('.artifacts/factory-review/pr-<number>.md');
-    expect(review).toContain('.artifacts/factory-review/follow-up-pr-<number>.md');
+    expect(review).toContain('<repo>/.artifacts/factory-review/pr-<number>.md');
+    expect(review).toContain('<repo>/.artifacts/factory-review/follow-up-pr-<number>.md');
     expect(review).toContain('Review runtime: <model>, reasoning setting: <reasoning>.');
-    expect(rereview).toContain('.artifacts/factory-rereview/pr-<number>.md');
-    expect(rereview).toContain('.artifacts/factory-rereview/follow-up-pr-<number>.md');
+    expect(rereview).toContain('<repo>/.artifacts/factory-rereview/pr-<number>.md');
+    expect(rereview).toContain('<repo>/.artifacts/factory-rereview/follow-up-pr-<number>.md');
     expect(rereview).toContain('Review runtime: <model>, reasoning setting: <reasoning>.');
   });
 

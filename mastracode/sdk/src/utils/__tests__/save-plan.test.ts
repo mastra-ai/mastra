@@ -7,6 +7,7 @@ import {
   getLocalPlansDir,
   getLocalPlansRelativeDir,
   getSuggestedPlanRelativePath,
+  repoSubdirForRoots,
   isPlanFilePath,
   readPlanFile,
   approvePlanFile,
@@ -177,6 +178,39 @@ describe('local plan directories', () => {
     expect(getLocalPlansRelativeDir(options)).toBe('.artifacts/plans');
     expect(getSuggestedPlanRelativePath('Add dark mode', options)).toBe('.artifacts/plans/add-dark-mode.md');
     expect(getLocalPlansDir(tmpProjectPath, options)).toBe(path.join(tmpProjectPath, '.artifacts', 'plans'));
+  });
+});
+
+describe('local plan directories under a split workspace root', () => {
+  it('prefixes the workspace-relative plans dir with the repo subdir', () => {
+    const options = { factoryProjectId: 'factory-123', repoSubdir: 'hello' };
+    expect(getLocalPlansRelativeDir(options)).toBe('hello/.artifacts/plans');
+    expect(getSuggestedPlanRelativePath('Add dark mode', options)).toBe('hello/.artifacts/plans/add-dark-mode.md');
+    // The absolute repo plans dir is unchanged — projectPath already IS the repo.
+    expect(getLocalPlansDir(tmpProjectPath, options)).toBe(path.join(tmpProjectPath, '.artifacts', 'plans'));
+  });
+
+  it('derives the repo subdir from the two roots, empty when coupled or not nested', () => {
+    expect(repoSubdirForRoots('/ws/hello', '/ws')).toBe('hello');
+    expect(repoSubdirForRoots('/ws/hello', '/ws/hello')).toBeUndefined();
+    expect(repoSubdirForRoots('/elsewhere/hello', '/ws')).toBeUndefined();
+    expect(repoSubdirForRoots(undefined, '/ws')).toBeUndefined();
+    expect(repoSubdirForRoots('/ws/hello', undefined)).toBeUndefined();
+  });
+
+  it('resolves relative plan paths against the workspace root while containing in the repo plans dir', () => {
+    const workspaceRoot = path.dirname(tmpProjectPath);
+    const repoSubdir = path.basename(tmpProjectPath);
+    const options = { factoryProjectId: 'factory-123', workspaceRoot };
+    // The write tool resolves relatives at the workspace root: the repo-prefixed
+    // spelling lands inside the repo plans dir → accepted.
+    expect(isPlanFilePath(tmpProjectPath, `${repoSubdir}/.artifacts/plans/x.md`, options)).toBe(true);
+    // The bare spelling lands OUTSIDE the repo → refused.
+    expect(isPlanFilePath(tmpProjectPath, '.artifacts/plans/x.md', options)).toBe(false);
+    // Absolute path into the repo plans dir still accepted.
+    expect(isPlanFilePath(tmpProjectPath, path.join(tmpProjectPath, '.artifacts', 'plans', 'x.md'), options)).toBe(
+      true,
+    );
   });
 });
 
