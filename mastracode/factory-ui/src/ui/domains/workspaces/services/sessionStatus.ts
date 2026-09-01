@@ -1,16 +1,14 @@
-import type { SessionRowStatus } from '../components/SessionNavRow';
-
 /**
- * A board card also has to say "bound but nothing to report". Rows hide their
- * dot instead, so `ready` keeps one meaning everywhere — it is your turn.
+ * Session lifecycle states a marker can surface. The colour scheme mirrors
+ * `SessionFavicon`, so the sidebar and the tab favicon read the same way.
  */
-export type SessionCardStatus = SessionRowStatus | 'idle';
+export type SessionRowStatus = 'initializing' | 'working' | 'ready';
 
 /**
  * The one precedence every session surface reads: an active run means work is
  * happening even before the workspace record is stamped materialized, and an
  * attention mark only speaks once nothing louder does. `undefined` is a session
- * with nothing to report — rows hide their dot, cards fall back to `idle`.
+ * with nothing to report, which runs no marker at all.
  */
 export function sessionRowStatus(input: {
   running: boolean;
