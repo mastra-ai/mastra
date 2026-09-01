@@ -1,7 +1,6 @@
 /**
- * Parent-mode tool: delete a saved workflow from storage and unregister the
- * live in-process Workflow instance so a subsequent save-workflow with the
- * same id re-registers cleanly.
+ * Parent-mode tool: delete a saved dynamic workflow from storage and
+ * unregister its live in-process instance.
  */
 import type { Mastra } from '@mastra/core/mastra';
 import { createTool } from '@mastra/core/tools';
@@ -10,8 +9,7 @@ import { deleteWorkflow } from '../../workflows/service.js';
 
 export const deleteWorkflowTool = createTool({
   id: 'delete-workflow',
-  description:
-    'Remove a saved workflow from storage and unregister the live in-process Workflow instance. Idempotent. Subsequent save-workflow calls with the same id re-register cleanly.',
+  description: 'Remove a saved dynamic workflow from storage and unregister its live in-process instance. Idempotent.',
   inputSchema: z.object({
     id: z.string().describe('The workflow id to delete.'),
   }),
