@@ -81,9 +81,19 @@ export interface LifecycleSiteContext {
 export function emitLifecycleFact(phase: 'started' | 'ended', ctx: LifecycleSiteContext | undefined): void {
   if (!ctx) return;
   // Sites without a runId in scope inherit the ambient run identity.
-  const ambient = ctx.runId ? undefined : activePulseRun();
-  const runId = ctx.runId ?? ambient?.runId;
+  const ambientRaw = activePulseRun();
+  const ambient = ctx.runId ? undefined : ambientRaw;
+  const runId = ctx.runId ?? ambientRaw?.runId;
   if (!runId) return;
+
+  // Delegation detection: an agent run STARTING while a DIFFERENT run's
+  // ambient identity is still active is a child run (sub-agent, nested
+  // invocation). Record the family once, here — every entry path funnels
+  // through this emit.
+  const delegatedFrom =
+    phase === 'started' && ctx.surface === 'agent' && ctx.base === 'run' && ambientRaw && ambientRaw.runId !== runId
+      ? ambientRaw.runId
+      : undefined;
 
   const isEnd = phase === 'ended';
   const occ = ctx.occurrence ?? 0;
@@ -131,6 +141,13 @@ export function emitLifecycleFact(phase: 'started' | 'ended', ctx: LifecycleSite
     for (const def of ctx.definitionIds ?? []) {
       edges.push({ type: 'uses_definition' as any, to: { kind: 'definition', id: def } });
     }
+    if (delegatedFrom) {
+      edges.push({
+        type: 'delegates_to' as any,
+        from: { kind: 'pulse', id: mintFactId(delegatedFrom, 'agent', 'run', 'started', 0) },
+        to: { kind: 'flow', id: runId },
+      });
+    }
   }
 
   const data: Record<string, number> = {};
@@ -138,6 +155,7 @@ export function emitLifecycleFact(phase: 'started' | 'ended', ctx: LifecycleSite
 
   const attributes: Record<string, unknown> = {};
   if (ctx.attributes) for (const [k, v] of Object.entries(ctx.attributes)) if (v !== undefined) attributes[k] = v;
+  if (delegatedFrom) attributes.delegatedFromRunId = delegatedFrom;
 
   emitPulseFact({
     id: pulseId,
