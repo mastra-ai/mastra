@@ -226,9 +226,9 @@
   }
 }
 
-/* The belt has nothing left once travel is off: ready and working collapse to
- * the same still frame and only the colour tells them apart. The wick still
- * reads — a parked head against a rim that is lit or not. */
+/* The belt has nothing left once travel is off: its states collapse to the same
+ * still frame and only the colour tells them apart. The wick keeps reading —
+ * a parked head against a rim lit none, part or whole. */
 @media (prefers-reduced-motion: reduce) {
   .session-wick,
   .session-belt,
@@ -236,5 +236,12 @@
   .session-belt-sway i {
     transition: none;
     animation: none;
+  }
+
+  /* Motion was what told working from initializing. With it off, the setup state
+   * takes the middle of the fill it already owns, so the rim reads at three
+   * coverages — none, part, whole — and never by hue alone. */
+  .session-wick.session-initializing {
+    --wick-fill: 0.4;
   }
 }
