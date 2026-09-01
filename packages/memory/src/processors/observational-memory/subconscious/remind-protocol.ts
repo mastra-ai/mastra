@@ -246,6 +246,7 @@ export class RemindEventReferenceProcessor implements Processor<'remind-event-re
 
   private isTrustedModelEvent(message: MastraDBMessage, protocol: RemindProtocolEvent): boolean {
     return (
+      message.id === protocol.eventId &&
       message.threadId === this.threadId &&
       message.resourceId === this.resourceId &&
       protocol.resourceId === this.resourceId &&
