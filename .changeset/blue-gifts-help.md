@@ -2,4 +2,4 @@
 '@mastra/playground-ui': patch
 ---
 
-Widened the lucide-react peer range to >=0.474.0, so consumers can pair the design system with either lucide-react 0.x or 1.x. Every icon the design system imports exists in both.
+Pinned the lucide-react peer dependency to the workspace catalog, so the published range tracks the version the design system is actually built against. Consumers now need lucide-react 1.37 or later.
