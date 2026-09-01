@@ -1,5 +1,5 @@
 /**
- * Sidebar activity dot for user sessions.
+ * Sidebar activity belt for user sessions.
  *
  * User sessions are addressed by their own `sessionId` as `resourceId`, so they
  * read the same active-run registry as factory workspaces. This suite pins down
@@ -102,7 +102,7 @@ function renderSection() {
 }
 
 describe('User sessions sidebar activity', () => {
-  it('lights the working dot when the session has an active thread', async () => {
+  it('lights the working belt when the session has an active thread', async () => {
     stubProjectAndSessions([makeSession({ sessionId: 'sess-1', branch: 'user/feature-a' })]);
     stubActiveSessions(new Set(['sess-1']));
 
@@ -112,7 +112,7 @@ describe('User sessions sidebar activity', () => {
     await screen.findByRole('status', { name: 'Agent working in feature-a' });
   });
 
-  it('shows the initializing dot for a session that has not materialized yet', async () => {
+  it('shows the initializing belt for a session that has not materialized yet', async () => {
     stubProjectAndSessions([makeSession({ sessionId: 'sess-2', branch: 'user/feature-b', materializedAt: null })]);
     stubActiveSessions(new Set());
 
@@ -122,7 +122,7 @@ describe('User sessions sidebar activity', () => {
     await screen.findByRole('status', { name: 'Initializing feature-b' });
   });
 
-  it('resolves the initializing dot once the run that materialized the session finishes', async () => {
+  it('resolves the initializing belt once the run that materialized the session finishes', async () => {
     let materialized = false;
     const active = new Set(['sess-4']);
     stubProjectAndSessions([]);
@@ -157,13 +157,13 @@ describe('User sessions sidebar activity', () => {
     });
     await waitForMutationsIdle(client);
 
-    // Run end must refetch the sessions list: the dot lands on solid attention,
+    // Run end must refetch the sessions list: the belt lands on solid attention,
     // not back on (or stuck at) initializing.
     await screen.findByRole('status', { name: 'feature-d ready — open to dismiss' });
     expect(screen.queryByRole('status', { name: 'Initializing feature-d' })).not.toBeInTheDocument();
   });
 
-  it('leaves an idle materialized session without a status dot', async () => {
+  it('leaves an idle materialized session without a status belt', async () => {
     stubProjectAndSessions([makeSession({ sessionId: 'sess-3', branch: 'user/feature-c' })]);
     stubActiveSessions(new Set());
 

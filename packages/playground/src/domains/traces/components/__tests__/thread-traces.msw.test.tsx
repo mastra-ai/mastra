@@ -3,7 +3,14 @@ import { http, HttpResponse } from 'msw';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import { ThreadTraces } from '../thread-traces';
-import { THREAD_ID, emptyThreadTracesList, spanADetail, threadTracesList, traceASpans } from './fixtures/thread-traces';
+import {
+  THREAD_ID,
+  emptyThreadTracesList,
+  spanADetail,
+  threadTracesList,
+  traceASpans,
+  traceBSpans,
+} from './fixtures/thread-traces';
 import { TestLinkProvider } from '@/test/link-provider';
 import { server } from '@/test/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '@/test/render';
@@ -33,7 +40,9 @@ const installHandlers = ({ list = threadTracesList }: { list?: typeof threadTrac
       return HttpResponse.json(list);
     }),
     http.get(`${TEST_BASE_URL}/api/observability/traces/:traceId/spans/:spanId`, () => HttpResponse.json(spanADetail)),
-    http.get(`${TEST_BASE_URL}/api/observability/traces/:traceId`, () => HttpResponse.json(traceASpans)),
+    http.get(`${TEST_BASE_URL}/api/observability/traces/:traceId`, ({ params }) =>
+      HttpResponse.json(params.traceId === 'trace-b' ? traceBSpans : traceASpans),
+    ),
   );
 };
 
@@ -114,6 +123,28 @@ describe('ThreadTraces', () => {
     fireEvent.click(screen.getByLabelText('Close Panel'));
     await waitFor(() => expect(screen.queryByText(/# trace-a/)).toBeNull());
     expect(await screen.findByText('Chef agent follow-up')).not.toBeNull();
+  });
+
+  it('navigates to the adjacent trace with the previous/next arrows in the panel header', async () => {
+    installHandlers();
+    const { queryClient } = renderPanel();
+
+    fireEvent.click(await screen.findByText('Chef agent run'));
+    expect(await screen.findByText(/# trace-a/)).not.toBeNull();
+    await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+
+    // trace-a is first in the list, so "Previous trace" is disabled.
+    expect(screen.getByLabelText<HTMLButtonElement>('Previous trace').disabled).toBe(true);
+
+    fireEvent.click(screen.getByLabelText('Next trace'));
+    expect(await screen.findByText(/# trace-b/)).not.toBeNull();
+    await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+
+    // trace-b is last, so "Next trace" is disabled; going back restores trace-a.
+    expect(screen.getByLabelText<HTMLButtonElement>('Next trace').disabled).toBe(true);
+    fireEvent.click(screen.getByLabelText('Previous trace'));
+    expect(await screen.findByText(/# trace-a/)).not.toBeNull();
+    await waitFor(() => expect(queryClient.isFetching()).toBe(0));
   });
 
   it('shows the span detail panel and notifies onSpanOpenChange when a span is selected', async () => {

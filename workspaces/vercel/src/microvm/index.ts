@@ -351,10 +351,11 @@ export class VercelSandbox extends MastraSandbox {
       : null;
 
     try {
+      const cwd = options?.cwd ?? this.workingDirectory;
       const commandPromise = this.sandbox.runCommand({
         cmd: command,
         args: args ?? [],
-        ...(options?.cwd ? { cwd: options.cwd } : {}),
+        ...(cwd ? { cwd } : {}),
         ...(Object.keys(env).length ? { env } : {}),
         signal,
       });

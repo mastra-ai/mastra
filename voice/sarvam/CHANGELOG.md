@@ -1,5 +1,11 @@
 # @mastra/voice-sarvam
 
+## 1.1.1-alpha.0
+
+### Patch Changes
+
+- Remove `CHANGELOG.md` from distributed npm files resulting in reduced package size ([#22737](https://github.com/mastra-ai/mastra/pull/22737))
+
 ## 1.1.0
 
 ### Minor Changes

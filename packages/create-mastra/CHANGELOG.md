@@ -1,5 +1,17 @@
 # create-mastra
 
+## 1.27.3-alpha.5
+
+## 1.27.3-alpha.4
+
+## 1.27.3-alpha.3
+
+## 1.27.3-alpha.2
+
+### Patch Changes
+
+- Remove `CHANGELOG.md` from distributed npm files resulting in reduced package size ([#22737](https://github.com/mastra-ai/mastra/pull/22737))
+
 ## 1.27.3-alpha.1
 
 ## 1.27.3-alpha.0

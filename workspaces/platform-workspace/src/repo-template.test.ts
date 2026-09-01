@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { createRepoTemplate, resolveDefaultBranchHead } from './repo-template.js';
+import { createRepoTemplate, redactSecrets, resolveDefaultBranchHead } from './repo-template.js';
 import { getSandboxTemplateBuildEnvs, serializeSandboxTemplate } from './template.js';
 
 const SHA_1 = '0123456789abcdef0123456789abcdef01234567';
@@ -34,20 +34,98 @@ describe('createRepoTemplate', () => {
     expect(serializeSandboxTemplate(template!)).toEqual({
       schemaVersion: 1,
       operations: [
-        {
-          method: 'runCmd',
-          args: [
-            [
-              'git clone https://github.com/acme/widgets "$HOME/widgets"',
-              `git -C "$HOME/widgets" fetch origin ${SHA_1}`,
-              `git -C "$HOME/widgets" checkout ${SHA_1}`,
-              'cd "$HOME/widgets" && pnpm install --frozen-lockfile',
-            ],
-          ],
-        },
+        { method: 'runCmd', args: ['git clone https://github.com/acme/widgets "widgets"'] },
+        { method: 'runCmd', args: [`git -C "widgets" fetch origin ${SHA_1}`] },
+        { method: 'runCmd', args: [`git -C "widgets" checkout ${SHA_1}`] },
+        { method: 'runCmd', args: ['cd "widgets" && pnpm install --frozen-lockfile'] },
       ],
-      family: 'repo:https://github.com/acme/widgets:$HOME/widgets',
+      family: 'repo:https://github.com/acme/widgets:/widgets',
     });
+  });
+
+  it('runs each setupCommand array entry as its own build step with its own cd prefix', async () => {
+    const template = await createRepoTemplate({
+      getRepositoryAccess: accessFor('https://github.com/acme/widgets.git'),
+      setupCommand: ['pnpm i', 'pnpm build'],
+      resolveHead: headOf(SHA_1),
+    })!();
+
+    const operations = serializeSandboxTemplate(template!).operations;
+    expect(operations.slice(-2)).toEqual([
+      { method: 'runCmd', args: ['cd "widgets" && pnpm i'] },
+      { method: 'runCmd', args: ['cd "widgets" && pnpm build'] },
+    ]);
+  });
+
+  it('drops blank setup entries instead of emitting broken cd-prefixed steps', async () => {
+    const template = await createRepoTemplate({
+      getRepositoryAccess: accessFor('https://github.com/acme/widgets.git'),
+      setupCommand: ['pnpm i', '', '   '],
+      resolveHead: headOf(SHA_1),
+    })!();
+
+    const operations = serializeSandboxTemplate(template!).operations;
+    const setupOps = operations.filter(op => op.method === 'runCmd' && String(op.args[0]).startsWith('cd '));
+    expect(setupOps).toEqual([{ method: 'runCmd', args: ['cd "widgets" && pnpm i'] }]);
+  });
+
+  it('treats an all-blank setupCommand as absent', async () => {
+    const template = await createRepoTemplate({
+      getRepositoryAccess: accessFor('https://github.com/acme/widgets.git'),
+      setupCommand: '',
+      resolveHead: headOf(SHA_1),
+    })!();
+
+    const operations = serializeSandboxTemplate(template!).operations;
+    expect(operations.filter(op => op.method === 'runCmd')).toHaveLength(3);
+  });
+
+  it('creates an explicit workingDirectory, sets it as the cwd before cloning, and keys the family on it', async () => {
+    const template = await createRepoTemplate({
+      getRepositoryAccess: accessFor('https://github.com/acme/widgets.git'),
+      setupCommand: 'pnpm i',
+      workingDirectory: '/workspace/',
+      resolveHead: headOf(SHA_1),
+    })!();
+
+    const serialized = serializeSandboxTemplate(template!);
+    // mkdir runs as the build user, then setWorkdir makes the directory the
+    // cwd for every later step and the runtime default. Steps stay relative
+    // so the checkout lands at `<cwd>/widgets` exactly as in the unset case.
+    expect(serialized.operations.slice(0, 3)).toEqual([
+      { method: 'runCmd', args: ['mkdir -p "/workspace"'] },
+      { method: 'setWorkdir', args: ['/workspace'] },
+      { method: 'runCmd', args: ['git clone https://github.com/acme/widgets "widgets"'] },
+    ]);
+    const commands = serialized.operations.filter(op => op.method === 'runCmd').map(op => String(op.args[0]));
+    expect(commands.at(-1)).toBe('cd "widgets" && pnpm i');
+    expect(serialized.family).toBe('repo:https://github.com/acme/widgets:/workspace/widgets');
+  });
+
+  it('keeps steps relative to the base image cwd when workingDirectory is omitted', async () => {
+    const template = await createRepoTemplate({
+      getRepositoryAccess: accessFor('https://github.com/acme/widgets.git'),
+      resolveHead: headOf(SHA_1),
+    })!();
+
+    const serialized = serializeSandboxTemplate(template!);
+    expect(serialized.operations.map(op => op.method)).not.toContain('setWorkdir');
+    expect(serialized.operations[0]).toEqual({
+      method: 'runCmd',
+      args: ['git clone https://github.com/acme/widgets "widgets"'],
+    });
+  });
+
+  it('rejects a workingDirectory that is not a plain absolute path', async () => {
+    for (const bad of ['~/repos', '$HOME/repos', 'relative', '/tmp/../etc']) {
+      await expect(
+        createRepoTemplate({
+          getRepositoryAccess: accessFor('https://github.com/acme/widgets.git'),
+          workingDirectory: bad,
+          resolveHead: headOf(SHA_1),
+        })!(),
+      ).rejects.toThrow(/absolute path/);
+    }
   });
 
   it('threads cpuCount and memoryMB into the template as resource operations', async () => {
@@ -62,20 +140,13 @@ describe('createRepoTemplate', () => {
     expect(serialized.operations).toEqual([
       { method: 'cpuCount', args: [4] },
       { method: 'memoryMB', args: [8_192] },
-      {
-        method: 'runCmd',
-        args: [
-          [
-            'git clone https://github.com/acme/widgets "$HOME/widgets"',
-            `git -C "$HOME/widgets" fetch origin ${SHA_1}`,
-            `git -C "$HOME/widgets" checkout ${SHA_1}`,
-          ],
-        ],
-      },
+      { method: 'runCmd', args: ['git clone https://github.com/acme/widgets "widgets"'] },
+      { method: 'runCmd', args: [`git -C "widgets" fetch origin ${SHA_1}`] },
+      { method: 'runCmd', args: [`git -C "widgets" checkout ${SHA_1}`] },
     ]);
     // Sizing never leaks into the commit-independent family key; the platform
     // namespaces warm fallbacks by size server-side.
-    expect(serialized.family).toBe('repo:https://github.com/acme/widgets:$HOME/widgets');
+    expect(serialized.family).toBe('repo:https://github.com/acme/widgets:/widgets');
   });
 
   it('omits resource operations entirely when sizing is not requested', async () => {
@@ -97,7 +168,7 @@ describe('createRepoTemplate', () => {
       getRepositoryAccess: accessFor('https://github.com/acme/widgets.git'),
       resolveHead: headOf(SHA_2),
     })!();
-    expect(serializeSandboxTemplate(a!).family).toBe('repo:https://github.com/acme/widgets:$HOME/widgets');
+    expect(serializeSandboxTemplate(a!).family).toBe('repo:https://github.com/acme/widgets:/widgets');
     expect(serializeSandboxTemplate(a!).family).toBe(serializeSandboxTemplate(b!).family);
 
     const other = await createRepoTemplate({
@@ -137,6 +208,34 @@ describe('createRepoTemplate', () => {
     await expect(resolveTemplate()).resolves.toBeUndefined();
   });
 
+  it('keeps the requested resources when the repository template cannot be resolved', async () => {
+    const sized = { cpuCount: 4, memoryMB: 8192 };
+    const expected = {
+      schemaVersion: 1,
+      operations: [
+        { method: 'cpuCount', args: [4] },
+        { method: 'memoryMB', args: [8192] },
+      ],
+    };
+
+    const noHead = await createRepoTemplate({
+      ...sized,
+      getRepositoryAccess: accessFor('https://github.com/acme/widgets.git'),
+      resolveHead: vi.fn().mockRejectedValue(new Error('rate limited')),
+    })!();
+    expect(serializeSandboxTemplate(noHead!)).toEqual(expected);
+
+    const noAccess = await createRepoTemplate({
+      ...sized,
+      getRepositoryAccess: vi.fn(async () => undefined),
+      resolveHead: headOf(SHA_1),
+    })!();
+    expect(serializeSandboxTemplate(noAccess!)).toEqual(expected);
+
+    const noRepo = await createRepoTemplate({ ...sized, getRepositoryAccess: undefined })!();
+    expect(serializeSandboxTemplate(noRepo!)).toEqual(expected);
+  });
+
   it('returns undefined for a repo-less context so the call site needs no conditional', () => {
     // Mirrors @mastra/e2b's createRepoTemplate: the whole FactorySandboxContext
     // passes straight through, and a session with no repository asks for the
@@ -159,6 +258,40 @@ describe('createRepoTemplate', () => {
       resolveHead: headOf(SHA_1),
     })!;
     await expect(empty()).resolves.toBeUndefined();
+  });
+
+  it('redacts credentials from the bail warnings', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    let logged: string;
+    try {
+      await createRepoTemplate({
+        getRepositoryAccess: vi.fn(async () => {
+          throw new Error('401 for https://x-access-token:ghs_abc123@github.com/acme/widgets (Bearer ghp_zzz)');
+        }),
+        resolveHead: headOf(SHA_1),
+      })!();
+      await createRepoTemplate({
+        getRepositoryAccess: async () => ({ cloneUrl: 'https://ghs_leak@github.com/acme/widgets.git' }),
+        resolveHead: headOf(SHA_1),
+      })!();
+      logged = JSON.stringify(warn.mock.calls);
+    } finally {
+      warn.mockRestore();
+    }
+
+    expect(logged).not.toContain('ghs_abc123');
+    expect(logged).not.toContain('ghp_zzz');
+    expect(logged).not.toContain('ghs_leak');
+    expect(logged).toContain('https://***@github.com/acme/widgets');
+    expect(logged).toContain('401 for');
+  });
+
+  it('redactSecrets masks userinfo, authorization values, and token shapes', () => {
+    expect(redactSecrets(new Error('https://user:pw@host/x Basic abc== github_pat_11AB_cd ghp_1234'))).toBe(
+      'https://***@host/x Basic *** github_pat_*** ghp_***',
+    );
+    expect(redactSecrets(undefined)).toBeUndefined();
+    expect(redactSecrets({ code: 1 })).toBe('[object Object]');
   });
 
   it('keeps the repository token out of git process arguments while resolving the default branch', async () => {
@@ -186,6 +319,16 @@ describe('createRepoTemplate', () => {
     expect(options.env.GIT_CONFIG_VALUE_0).not.toContain('ghs_secret_token');
   });
 
+  it('surfaces the git failure when the default-branch head cannot be resolved', async () => {
+    const execute = vi.fn(async () => {
+      throw Object.assign(new Error('Command failed'), { stderr: 'fatal: unable to access: 429 Too Many Requests\n' });
+    });
+
+    await expect(resolveDefaultBranchHead('https://github.com/acme/widgets', undefined, execute)).rejects.toThrow(
+      'git ls-remote failed: fatal: unable to access: 429 Too Many Requests',
+    );
+  });
+
   it('uses repository credentials only as transient build envs', async () => {
     const resolveHead = headOf(SHA_1);
     const resolveTemplate = createRepoTemplate({
@@ -203,17 +346,29 @@ describe('createRepoTemplate', () => {
     expect(getSandboxTemplateBuildEnvs(template!)).toEqual({
       MASTRA_REPOSITORY_ACCESS_TOKEN: 'ghs_secret_token',
     });
-    expect(definition.operations[0]).toEqual({
-      method: 'runCmd',
-      args: [
-        [
-          expect.stringContaining('$MASTRA_REPOSITORY_ACCESS_TOKEN'),
-          expect.stringContaining('$MASTRA_REPOSITORY_ACCESS_TOKEN'),
-          `git -C "$HOME/widgets" checkout ${SHA_1}`,
-        ],
-      ],
-    });
+    expect(definition.operations).toEqual([
+      { method: 'runCmd', args: [expect.stringContaining('$MASTRA_REPOSITORY_ACCESS_TOKEN')] },
+      { method: 'runCmd', args: [expect.stringContaining('$MASTRA_REPOSITORY_ACCESS_TOKEN')] },
+      { method: 'runCmd', args: [`git -C "widgets" checkout ${SHA_1}`] },
+    ]);
     expect(JSON.stringify(definition)).not.toContain('ghs_secret_token');
+  });
+
+  it('sends buildEnv as transient build envs outside the serialized definition', async () => {
+    const resolveTemplate = createRepoTemplate({
+      getRepositoryAccess: async () => ({ cloneUrl: 'https://github.com/acme/widgets.git' }),
+      resolveHead: headOf(SHA_1),
+      buildEnv: { TURBO_TOKEN: 'turbo_secret', TURBO_TEAM: 'acme' },
+    })!;
+
+    const template = await resolveTemplate();
+    const definition = serializeSandboxTemplate(template!);
+
+    expect(getSandboxTemplateBuildEnvs(template!)).toEqual({
+      TURBO_TOKEN: 'turbo_secret',
+      TURBO_TEAM: 'acme',
+    });
+    expect(JSON.stringify(definition)).not.toContain('turbo_secret');
   });
 
   it('rejects a hostile clone URL instead of interpolating it into build commands', async () => {

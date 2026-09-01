@@ -1304,9 +1304,10 @@ export class PlatformSandbox extends MastraSandbox {
       }
       lastLease = lease;
       attemptsMade = attempt + 1;
+      const leaseCwd = options?.cwd ?? this.workingDirectory;
       const execOptions = {
         command: fullCommand,
-        ...(options?.cwd !== undefined && { cwd: options.cwd }),
+        ...(leaseCwd !== undefined && { cwd: leaseCwd }),
         ...(filteredEnv !== undefined && { env: filteredEnv }),
         ...(effectiveTimeout != null && effectiveTimeout > 0 && { timeoutMs: effectiveTimeout }),
         ...(this._webSocketFactory && { webSocketFactory: this._webSocketFactory }),
@@ -1373,9 +1374,10 @@ export class PlatformSandbox extends MastraSandbox {
   ): Promise<PrivateNetExecResult | undefined> {
     const filteredEnv = this._execEnv(options);
 
+    const privateNetCwd = options?.cwd ?? this.workingDirectory;
     const execOptions: PrivateNetExecOptions = {
       command: fullCommand,
-      ...(options?.cwd !== undefined && { cwd: options.cwd }),
+      ...(privateNetCwd !== undefined && { cwd: privateNetCwd }),
       ...(filteredEnv !== undefined && { env: filteredEnv }),
       ...(effectiveTimeout != null && effectiveTimeout > 0 && { timeoutMs: effectiveTimeout }),
       ...(this._privateNetFetch && { fetch: this._privateNetFetch }),
