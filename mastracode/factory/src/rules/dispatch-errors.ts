@@ -13,6 +13,7 @@ const FAILURE_METADATA = {
   notification_delivery_failed: { canRetry: true, label: 'Factory message delivery failed' },
   plan_awaiting_approval: { canRetry: false, label: 'Plan waiting for review' },
   run_awaiting_input: { canRetry: false, label: 'Agent is waiting for an answer' },
+  run_overdue: { canRetry: false, label: 'Agent run is overdue' },
   repository_git_missing: { canRetry: false, label: 'Git is unavailable in the workspace' },
   repository_egress_blocked: { canRetry: false, label: 'Repository network access is blocked' },
   repository_clone_failed: { canRetry: true, label: 'Repository clone failed' },

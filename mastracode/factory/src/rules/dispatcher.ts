@@ -34,7 +34,12 @@ const MAX_ATTEMPTS = 5;
 const MAX_PLAN_APPROVALS = 3;
 const MAX_ERROR_LENGTH = 512;
 const MAX_BACKOFF_MS = 60_000;
-const SKILL_COMPLETION_OBSERVATION_TIMEOUT_MS = 10 * 60_000;
+// A run the registry no longer shows never started or ended unobserved:
+// checked at this cadence, and failed for retry.
+const RUN_REGISTRY_HEARTBEAT_MS = 10 * 60_000;
+// A run the registry still shows past this is a hang, not a slow run: failed
+// terminally so the lease and the in-flight slot come back.
+const SKILL_COMPLETION_OBSERVATION_TIMEOUT_MS = 6 * 60 * 60_000;
 // Dispatches can legitimately run for minutes. Woken skill invocations hold
 // capacity until their agent run reaches a terminal state; binding preparation
 // also runs detached from the poll loop under this concurrency cap.
@@ -69,7 +74,15 @@ function watchRun(
     approvePlans,
     onParkedRun,
     label,
-  }: { timeoutMs: number; approvePlans: boolean; onParkedRun: ParkedRunPolicy; label: string },
+    runStillActive,
+  }: {
+    timeoutMs: number;
+    approvePlans: boolean;
+    onParkedRun: ParkedRunPolicy;
+    label: string;
+    /** Level-triggered check against the run registry, consulted at every heartbeat the edge-triggered wait misses. */
+    runStillActive: () => boolean;
+  },
 ) {
   let resolveAgentEnd!: () => void;
   let agentEnd!: Promise<void>;
@@ -98,7 +111,19 @@ function watchRun(
       parked = undefined;
     }
   });
-  const wait = () => waitForAgentEndOrTimeout(agentEnd, timeoutMs);
+  // Failing a run the registry still shows would kick off a duplicate into a busy session.
+  const wait = async () => {
+    const deadline = Date.now() + timeoutMs;
+    while (Date.now() < deadline) {
+      const heartbeatMs = Math.min(RUN_REGISTRY_HEARTBEAT_MS, deadline - Date.now());
+      if (await waitForAgentEndOrTimeout(agentEnd, heartbeatMs)) return true;
+      if (!runStillActive()) return false;
+    }
+    throw new FactoryDispatchError(
+      'run_overdue',
+      `${label} is still in flight after ${Math.round(timeoutMs / 3_600_000)} hours and needs a person.`,
+    );
+  };
 
   return {
     arm,
@@ -192,7 +217,7 @@ interface DispatcherSession extends SkillSession {
   respondToToolSuspension(input: { resumeData: SubmitPlanResumeData; toolCallId?: string }): Promise<void>;
 }
 
-type FactoryController = Pick<AgentController<MastraCodeState>, 'getSessionByResource'>;
+type FactoryController = Pick<AgentController<MastraCodeState>, 'getSessionByResource' | 'listActiveThreadRuns'>;
 type BoundDispatcherSession = Session<MastraCodeState>;
 
 export interface FactoryBindingPreparationInput {
@@ -226,7 +251,10 @@ export interface FactoryDecisionDispatcherOptions {
   staleBindingTtlMs?: number;
   /** How often the bound-thread reconcile walk runs. Defaults to 30 seconds. */
   reconcileIntervalMs?: number;
-  /** How long to wait for a run's terminal event before failing for retry. Defaults to 10 minutes. */
+  /**
+   * How long a run the registry still shows in flight is observed before it fails as overdue. Defaults to 6 hours.
+   * A run the registry no longer shows fails for retry at the next ten-minute heartbeat instead.
+   */
   skillCompletionObservationTimeoutMs?: number;
 }
 
@@ -709,6 +737,8 @@ export class FactoryDecisionDispatcher {
           approvePlans: await this.#plansAreAutoApproved(record, item),
           onParkedRun: 'escalate',
           label: 'Factory skill run',
+          runStillActive: () =>
+            this.#controller.listActiveThreadRuns().some(active => active.threadId === binding.threadId),
         });
 
         const sendKickoff = async () => {
@@ -1053,6 +1083,8 @@ export class FactoryDecisionDispatcher {
             approvePlans: await this.#plansAreAutoApproved(record, item),
             onParkedRun: 'await',
             label: 'Factory kickoff run',
+            runStillActive: () =>
+              this.#controller.listActiveThreadRuns().some(active => active.threadId === binding.threadId),
           });
           const sendKickoff = (dedupeKey: string) =>
             awaitNotification(
@@ -1121,6 +1153,7 @@ export const FACTORY_DISPATCH_CONSTANTS = {
   maxErrorLength: MAX_ERROR_LENGTH,
   maxBackoffMs: MAX_BACKOFF_MS,
   skillCompletionObservationTimeoutMs: SKILL_COMPLETION_OBSERVATION_TIMEOUT_MS,
+  runRegistryHeartbeatMs: RUN_REGISTRY_HEARTBEAT_MS,
   maxInFlight: MAX_IN_FLIGHT,
   stages: FACTORY_RULE_STAGES,
 } as const;
