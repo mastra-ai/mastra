@@ -8,8 +8,7 @@
   ],
   "files": [
     "dist",
-    "theme.css",
-    "CHANGELOG.md"
+    "theme.css"
   ],
   "exports": {
     "./style.css": "./dist/style.css",

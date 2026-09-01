@@ -5,7 +5,6 @@
   "type": "module",
   "files": [
     "dist",
-    "CHANGELOG.md",
     "./**/*.d.ts"
   ],
   "main": "dist/index.js",

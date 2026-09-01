@@ -9,8 +9,7 @@
   "files": [
     "dist",
     ".docs",
-    "README.md",
-    "CHANGELOG.md"
+    "README.md"
   ],
   "exports": {
     ".": {

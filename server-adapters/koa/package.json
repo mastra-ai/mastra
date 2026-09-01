@@ -60,8 +60,7 @@
     "node": ">=22.13.0"
   },
   "files": [
-    "dist",
-    "CHANGELOG.md"
+    "dist"
   ],
   "homepage": "https://mastra.ai",
   "repository": {
