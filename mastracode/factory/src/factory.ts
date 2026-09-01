@@ -71,6 +71,7 @@ import { PlatformLinearIntegration } from './integrations/platform/linear/integr
 import { prepareSessionRunContext } from './integrations/subscription-session.js';
 import { resolveDeploymentModelProviders } from './routes/config.js';
 import { createCustomProvidersPrimer, registerCustomProvidersSource } from './routes/custom-provider-source.js';
+import type { KnowledgeAccessProfileResolver } from './routes/knowledge.js';
 import { ProjectRoutes } from './routes/projects.js';
 import { assembleFactoryApiRoutes, buildIntegrationContext } from './routes/surface.js';
 import type { FactoryApiRoutesDeps } from './routes/surface.js';
@@ -186,6 +187,11 @@ export interface MastraFactoryConfig {
    * key for its read surfaces. Omitted leaves Mastra Code's experimental default wiring in place.
    */
   knowledge?: { key: string; instance: Knowledge };
+  /**
+   * Host-owned mapping from the authenticated request and intake to the exact
+   * vouched scope profile used by every Factory Knowledge surface.
+   */
+  knowledgeAccessProfile?: KnowledgeAccessProfileResolver;
   /**
    * Distributed event bus instance (e.g. `new RedisStreamsPubSub({ url })`).
    * When set, streams/workflows/signals ride it across processes and the
@@ -1393,6 +1399,9 @@ export class MastraFactory {
             knowledgeKey: this.#config.knowledge?.key,
             configVersion,
             boardRegistry: this.#boards,
+            ...(this.#config.knowledgeAccessProfile
+              ? { knowledgeAccessProfile: this.#config.knowledgeAccessProfile }
+              : {}),
             factoryTransitionService: transitionService,
             onFactoryRuntime: ({ transitionService: runtimeTransitionService, prepareBinding }) => {
               this.#dispatcher ??= new FactoryDecisionDispatcher({
