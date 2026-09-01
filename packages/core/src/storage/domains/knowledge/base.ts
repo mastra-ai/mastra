@@ -1073,6 +1073,7 @@ export abstract class KnowledgeStorage extends StorageDomain {
   }
   async listActivity(_input: {
     scopeIds: KnowledgeScopeIds;
+    membershipScopeIds?: KnowledgeScopeIds;
     contextScopeId?: string;
     importRunId?: string;
     action?: KnowledgeActivityAction;
