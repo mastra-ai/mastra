@@ -6,14 +6,29 @@ import { queryKeys } from '../../../../../api/keys';
 import { server } from '../../../../../../e2e/ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '../../../../../../e2e/ui/render';
 import { AGENT_CONTROLLER_ID } from '../../../chat/services/constants';
-import { playDoneSound } from '../../../settings/services/doneSound';
+import { saveDoneSound } from '../../../settings/services/doneSound';
 import type { FactoryUserSession } from '../../services/user-sessions';
-import { resetRunEndSoundForTests, RunEndSoundObserver } from '../RunEndSoundObserver';
-
-vi.mock('../../../settings/services/doneSound', () => ({ playDoneSound: vi.fn() }));
+import { resetRunEndObserverForTests, RunEndObserver } from '../RunEndObserver';
 
 const REPOSITORY_ID = 'repository-1';
 const SESSION_ID = 'session-1';
+const oscillatorStart = vi.fn();
+
+class AudioContextStub {
+  state = 'running';
+  currentTime = 0;
+  destination = {};
+
+  resume = vi.fn();
+
+  createOscillator() {
+    return { type: 'sine', frequency: { value: 0 }, connect: vi.fn(), start: oscillatorStart, stop: vi.fn() };
+  }
+
+  createGain() {
+    return { gain: { value: 0, setValueAtTime: vi.fn(), exponentialRampToValueAtTime: vi.fn() }, connect: vi.fn() };
+  }
+}
 
 const session: FactoryUserSession = {
   id: 'workspace-1',
@@ -33,16 +48,19 @@ const session: FactoryUserSession = {
 };
 
 function stubRegistry(running: () => boolean) {
+  const sessionsList = { requests: 0 };
   server.use(
-    http.get(`${TEST_BASE_URL}/web/github/projects/${REPOSITORY_ID}/sessions`, () =>
-      HttpResponse.json({ sessions: [session] }),
-    ),
+    http.get(`${TEST_BASE_URL}/web/github/projects/${REPOSITORY_ID}/sessions`, () => {
+      sessionsList.requests += 1;
+      return HttpResponse.json({ sessions: [session] });
+    }),
     http.get(`${TEST_BASE_URL}/api/agent-controller/${AGENT_CONTROLLER_ID}/active-runs`, () =>
       HttpResponse.json({
         runs: running() ? [{ runId: 'run-1', resourceId: SESSION_ID, threadId: SESSION_ID }] : [],
       }),
     ),
   );
+  return sessionsList;
 }
 
 async function refetchRegistry(client: QueryClient) {
@@ -51,34 +69,41 @@ async function refetchRegistry(client: QueryClient) {
 }
 
 beforeEach(() => {
-  resetRunEndSoundForTests();
-  vi.mocked(playDoneSound).mockClear();
+  resetRunEndObserverForTests();
+  oscillatorStart.mockClear();
+  saveDoneSound('arcade');
+  Object.defineProperty(window, 'AudioContext', { configurable: true, value: AudioContextStub });
 });
 
-describe('RunEndSoundObserver', () => {
-  it('rings once when a run it watched in flight ends, never on mount or on an idle refetch', async () => {
+describe('RunEndObserver', () => {
+  it('rings and refetches the sessions list once when a run it watched in flight ends', async () => {
     let running = false;
-    stubRegistry(() => running);
-    const { client } = renderWithProviders(<RunEndSoundObserver projectRepositoryId={REPOSITORY_ID} />);
+    const sessionsList = stubRegistry(() => running);
+    const { client } = renderWithProviders(<RunEndObserver projectRepositoryId={REPOSITORY_ID} />);
     await waitForMutationsIdle(client);
+    expect(sessionsList.requests).toBe(1);
 
     running = true;
     await refetchRegistry(client);
-    expect(playDoneSound).not.toHaveBeenCalled();
+    expect(oscillatorStart).not.toHaveBeenCalled();
+    expect(sessionsList.requests).toBe(1);
 
     running = false;
     await refetchRegistry(client);
-    expect(playDoneSound).toHaveBeenCalledTimes(1);
+    expect(oscillatorStart).toHaveBeenCalled();
+    expect(sessionsList.requests).toBe(2);
 
+    oscillatorStart.mockClear();
     await refetchRegistry(client);
-    expect(playDoneSound).toHaveBeenCalledTimes(1);
+    expect(oscillatorStart).not.toHaveBeenCalled();
+    expect(sessionsList.requests).toBe(2);
   });
 
   it('stays silent for a run already over when the tab opened', async () => {
     stubRegistry(() => false);
-    const { client } = renderWithProviders(<RunEndSoundObserver projectRepositoryId={REPOSITORY_ID} />);
+    const { client } = renderWithProviders(<RunEndObserver projectRepositoryId={REPOSITORY_ID} />);
     await waitForMutationsIdle(client);
     await refetchRegistry(client);
-    expect(playDoneSound).not.toHaveBeenCalled();
+    expect(oscillatorStart).not.toHaveBeenCalled();
   });
 });
