@@ -1,5 +1,11 @@
 # @mastra/core
 
+## 1.64.0-alpha.3
+
+### Patch Changes
+
+- Fixed AgentController dropping streamed assistant text and reasoning after page reload. Text and reasoning deltas that arrive without a seeded part (for example after a mid-stream step rotation) are now folded into the message instead of being silently discarded. Fixes #22712 ([#22775](https://github.com/mastra-ai/mastra/pull/22775))
+
 ## 1.64.0-alpha.2
 
 ### Minor Changes

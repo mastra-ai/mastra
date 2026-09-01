@@ -1,5 +1,15 @@
 # @mastra/hono
 
+## 1.7.6-alpha.3
+
+### Patch Changes
+
+- Fixed custom API routes registered with registerApiRoute failing with a 500 error ("Response body object should not be disturbed or locked") when server middleware read the request body (e.g. await c.req.json()) before the route handler ran. Request bodies now survive middleware reads via json(), text(), formData(), or the raw request. Fixes https://github.com/mastra-ai/mastra/issues/22596 ([#22776](https://github.com/mastra-ai/mastra/pull/22776))
+
+- Updated dependencies [[`fd22a0e`](https://github.com/mastra-ai/mastra/commit/fd22a0e231943f0d5607cf976ffd78ba4bfc7b64), [`2e87ffb`](https://github.com/mastra-ai/mastra/commit/2e87ffbb454cc88bd8a8c022d1e46325e7907482)]:
+  - @mastra/server@1.64.0-alpha.3
+  - @mastra/core@1.64.0-alpha.3
+
 ## 1.7.6-alpha.2
 
 ### Patch Changes
