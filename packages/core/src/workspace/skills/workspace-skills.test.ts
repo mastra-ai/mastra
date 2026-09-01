@@ -3127,6 +3127,63 @@ Premium instructions.
 
       warnSpy.mockRestore();
     });
+
+    it('should rethrow TypeError from source.exists instead of warning', async () => {
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+      const inner = createMockFilesystem({});
+      const source: SkillSource = {
+        ...inner,
+        exists: vi.fn(async () => {
+          throw new TypeError('The "path" argument must be of type string. Received function workdir');
+        }),
+      };
+
+      const skills = new WorkspaceSkillsImpl({ skills: ['.mastracode/skills'], source });
+
+      await expect(skills.list()).rejects.toThrow(/must be of type string/);
+      expect(warnSpy).not.toHaveBeenCalledWith(expect.stringContaining('Cannot access skills path'));
+
+      warnSpy.mockRestore();
+    });
+
+    it('should rethrow ERR_INVALID_ARG_TYPE errors from source.exists instead of warning', async () => {
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+      const inner = createMockFilesystem({});
+      const source: SkillSource = {
+        ...inner,
+        exists: vi.fn(async () => {
+          throw Object.assign(new Error('bad argument'), { code: 'ERR_INVALID_ARG_TYPE' });
+        }),
+      };
+
+      const skills = new WorkspaceSkillsImpl({ skills: ['.mastracode/skills'], source });
+
+      await expect(skills.list()).rejects.toThrow('bad argument');
+      expect(warnSpy).not.toHaveBeenCalledWith(expect.stringContaining('Cannot access skills path'));
+
+      warnSpy.mockRestore();
+    });
+
+    it('should still warn and continue for access errors from source.exists', async () => {
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+      const inner = createMockFilesystem({});
+      const source: SkillSource = {
+        ...inner,
+        exists: vi.fn(async () => {
+          throw Object.assign(new Error('EACCES: permission denied'), { code: 'EACCES' });
+        }),
+      };
+
+      const skills = new WorkspaceSkillsImpl({ skills: ['.mastracode/skills'], source });
+
+      await expect(skills.list()).resolves.toEqual([]);
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('Cannot access skills path ".mastracode/skills"'));
+
+      warnSpy.mockRestore();
+    });
   });
 
   // ===========================================================================

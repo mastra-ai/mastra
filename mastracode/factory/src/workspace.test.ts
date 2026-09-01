@@ -815,7 +815,16 @@ describe('GitHub session workspace preparation', () => {
 
     // With the sandbox live, the guarded fallback must pass skill discovery
     // through to the checkout instead of reporting empty roots.
-    await workspace.skills?.refresh();
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      await workspace.skills?.refresh();
+    } finally {
+      warnSpy.mockRestore();
+    }
+    // A mis-wired filesystem (e.g. a SandboxFilesystem that cannot take the
+    // lazy workdir resolver) must fail on its own message rather than be
+    // reported as an inaccessible skills path.
+    expect(warnSpy).not.toHaveBeenCalledWith(expect.stringContaining('Cannot access skills path'));
     expect(sandbox.executeCommand).toHaveBeenCalled();
   });
 

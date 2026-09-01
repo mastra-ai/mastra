@@ -917,6 +917,10 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
         return;
       }
     } catch (error) {
+      // Programming errors (bad argument types, mis-wired content sources) must
+      // surface rather than be mistaken for an inaccessible path.
+      if (isProgrammingError(error)) throw error;
+
       const msg = error instanceof Error ? error.message : String(error);
       let hint = '';
 
@@ -1505,6 +1509,12 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
  * absolute paths (e.g. via `new Workspace({ skills: [...] })`) may use backslashes
  * on Windows.
  */
+function isProgrammingError(error: unknown): boolean {
+  if (error instanceof TypeError) return true;
+  const code = (error as { code?: unknown } | null)?.code;
+  return typeof code === 'string' && code.startsWith('ERR_INVALID_ARG');
+}
+
 function splitPathSegments(path: string): string[] {
   return path.split(/[\\/]+/);
 }
