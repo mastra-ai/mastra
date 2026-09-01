@@ -281,7 +281,7 @@ function parseGithubRepo(cloneUrl: string): { owner: string; repo: string } | un
     return undefined;
   }
   if (url.hostname.toLowerCase() !== 'github.com') return undefined;
-  const [owner, repo, ...rest] = url.pathname.replace(/^\/+/, '').split('/');
+  const [owner, repo, ...rest] = url.pathname.split('/').filter(Boolean);
   if (!owner || !repo || rest.length > 0) return undefined;
   return { owner, repo: repo.replace(/\.git$/i, '') };
 }

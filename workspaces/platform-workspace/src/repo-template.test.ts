@@ -314,8 +314,9 @@ describe('createRepoTemplate', () => {
   it('sends no Authorization header for public repositories without a token', async () => {
     const fetchImpl = vi.fn(async () => new Response(SHA_1, { status: 200 }));
     await expect(
-      resolveDefaultBranchHead('https://github.com/acme/widgets', undefined, vi.fn(), fetchImpl),
+      resolveDefaultBranchHead('https://github.com/acme/widgets/', undefined, vi.fn(), fetchImpl),
     ).resolves.toBe(SHA_1);
+    expect(fetchImpl.mock.calls[0]?.[0]).toBe('https://api.github.com/repos/acme/widgets/commits/HEAD');
     const [, init] = fetchImpl.mock.calls[0] as unknown as [string, RequestInit];
     expect(init.headers).not.toHaveProperty('Authorization');
   });
