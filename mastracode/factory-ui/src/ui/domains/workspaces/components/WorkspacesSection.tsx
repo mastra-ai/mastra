@@ -78,7 +78,7 @@ export function WorkspacesSection() {
     agentControllerId: AGENT_CONTROLLER_ID,
     resourceIds: workspaceIds,
   });
-  const { attentionByPath, clearAttention } = useWorkspaceAttentionState({
+  const { attentionByPath } = useWorkspaceAttentionState({
     projectRepositoryId,
     sessionKind: 'factory',
   });
@@ -164,7 +164,6 @@ export function WorkspacesSection() {
   const pending = deleteWorkspace.isPending;
 
   const openWorkspaceThread = (workspace: FactoryUserSession) => {
-    clearAttention(workspace.sessionId);
     // A workspace's thread id is its own session id (FactoryStartCoordinator
     // seeds the session with threadId = sessionId), so navigate straight there
     // instead of blocking on a session create + thread listing round-trip. The

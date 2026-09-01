@@ -51,7 +51,7 @@ export function UserSessionsSection() {
     agentControllerId: AGENT_CONTROLLER_ID,
     resourceIds: sessions.map(session => session.sessionId),
   });
-  const { attentionByPath: attentionBySessionId, clearAttention } = useWorkspaceAttentionState({
+  const { attentionByPath: attentionBySessionId } = useWorkspaceAttentionState({
     projectRepositoryId: repository?.projectRepositoryId,
     sessionKind: 'user',
   });
@@ -151,10 +151,7 @@ export function UserSessionsSection() {
                 disabled={pending}
                 status={status}
                 pinned={pinnedSessions.has(session.sessionId)}
-                onSelect={() => {
-                  clearAttention(session.sessionId);
-                  void navigate(url);
-                }}
+                onSelect={() => void navigate(url)}
                 onPinChange={pinned => setPinned(session.sessionId, pinned)}
                 // The DELETE route is owner-only and 404s for non-owners, which
                 // deleteUserSession treats as an idempotent success; offering
