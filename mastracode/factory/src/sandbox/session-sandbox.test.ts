@@ -67,8 +67,10 @@ describe('session sandbox memo', () => {
       workingDirectory: '/workspace',
       executeCommand,
     } as unknown as MastraSandbox;
-    getSessionSandbox('sess-1', 'acme/api', () => sandbox);
+    const entry = getSessionSandbox('sess-1', 'acme/api', () => sandbox);
 
+    expect(entry.repoDir).toBe('/workspace/api');
+    expect(entry.workspaceRoot).toBe('/workspace');
     await expect(resolveSessionRepoDir('sess-1', sandbox, 'acme/api')).resolves.toBe('/workspace/api');
     expect(executeCommand).not.toHaveBeenCalled();
   });

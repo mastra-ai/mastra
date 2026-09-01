@@ -13,6 +13,8 @@ const mocks = vi.hoisted(() => ({
   updates: [] as Array<{ set: Record<string, unknown>; where: unknown }>,
   /** When set, the stub models a local-provider callback rooted at <localRoot>/<sessionId>. */
   localRoot: null as string | null,
+  /** When set, the stub models a remote provider with a declared workspace root. */
+  remoteWorkingDirectory: null as string | null,
   createSandbox: vi.fn((ctx: { sessionId: string }) => {
     // Models a well-behaved provider: lazy start via ensureRunning() on the
     // first command/info call (coalesced, failures never latch), the hook
@@ -24,7 +26,11 @@ const mocks = vi.hoisted(() => ({
       id: `sbx-${ctx.sessionId}`,
       provider: mocks.localRoot ? 'local' : 'stub',
       status: 'pending',
-      ...(mocks.localRoot ? { workingDirectory: `${mocks.localRoot}/${ctx.sessionId}` } : {}),
+      ...(mocks.localRoot
+        ? { workingDirectory: `${mocks.localRoot}/${ctx.sessionId}` }
+        : mocks.remoteWorkingDirectory
+          ? { workingDirectory: mocks.remoteWorkingDirectory }
+          : {}),
       setOnStart: vi.fn((update: (previous: typeof onStart) => NonNullable<typeof onStart>) => {
         onStart = update(onStart);
       }),
@@ -130,6 +136,7 @@ afterEach(async () => {
   mocks.updates.splice(0);
   mocks.createSandbox.mockClear();
   mocks.localRoot = null;
+  mocks.remoteWorkingDirectory = null;
   __clearSessionSandboxesForTests();
   mocks.materializeRepo.mockClear();
   mocks.checkoutSessionBranch.mockClear();
@@ -870,6 +877,32 @@ describe('GitHub session workspace preparation', () => {
     await expect(workspace({ requestContext })).rejects.toThrow(
       'Factory session session-a was resolved without a caller identity',
     );
+  });
+
+  it('pins a declared remote workspace root into controller state before the first prompt', async () => {
+    mocks.remoteWorkingDirectory = '/workspace';
+    const resolver = createWorkspaceFactory({
+      sandbox: mocks.createSandbox as any,
+      github: fakeGithubIntegration() as any,
+      workItems: { findRunBindingBySession: mocks.findRunBindingBySession } as any,
+    });
+    addProject();
+    addSession({ id: 'session-a' });
+    const requestContext = createGithubRequestContext('project-1', 'session-a');
+
+    await resolver({ requestContext });
+
+    const ctx = requestContext.get('controller') as {
+      getState: () => { projectPath?: string; projectName?: string; workspaceRoot?: string };
+    };
+    expect(ctx.getState()).toMatchObject({
+      projectPath: '/workspace/hello',
+      projectName: 'octocat/hello',
+      workspaceRoot: '/workspace',
+    });
+    const sandbox = await mocks.createSandbox.mock.results[0]!.value;
+    expect(sandbox.start).not.toHaveBeenCalled();
+    expect(sandbox.executeCommand).not.toHaveBeenCalled();
   });
 
   it('pins the session repoDir into controller state so the agent prompt never points at the host checkout', async () => {

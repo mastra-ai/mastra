@@ -521,8 +521,9 @@ export async function listSessionRenderedPath(
   };
   if (!handle) return empty;
 
-  // Generated artifacts live at the workspace root. Fall back to the old
-  // repo-local location so persisted plan cards from existing sessions remain readable.
+  // Generated artifacts live at the workspace root. Merge the old repo-local
+  // location so persisted plan cards from existing sessions remain visible;
+  // workspace-root entries win when both locations contain the same path.
   const repoRootPath = posixPath.join(handle.repoDir, safeRoot);
   const quotedWorkspaceRoot = `'${workspaceRootPath.replace(/'/g, `'\\''`)}'`;
   const quotedRepoRoot = `'${repoRootPath.replace(/'/g, `'\\''`)}'`;
@@ -530,35 +531,32 @@ export async function listSessionRenderedPath(
     'sh',
     [
       '-c',
-      `root=${quotedWorkspaceRoot}; if [ ! -d "$root" ]; then root=${quotedRepoRoot}; fi; printf 'R\\t0\\t0\\t%s\\n' "$root"; test -d "$root" && find "$root" -mindepth 1 -printf '%y\\t%s\\t%T@\\t%p\\n' 2>/dev/null || true`,
+      `(test -d ${quotedWorkspaceRoot} && find ${quotedWorkspaceRoot} -mindepth 1 -printf 'W\\t%y\\t%s\\t%T@\\t%p\\n' 2>/dev/null) || true; (test -d ${quotedRepoRoot} && find ${quotedRepoRoot} -mindepth 1 -printf 'L\\t%y\\t%s\\t%T@\\t%p\\n' 2>/dev/null) || true`,
     ],
     { timeout: 30_000 },
   );
   if (result.exitCode !== 0) return empty;
 
-  let rootPath = workspaceRootPath;
-  const entries: WorkspaceRenderedEntry[] = [];
+  const entriesByPath = new Map<string, WorkspaceRenderedEntry>();
   for (const line of result.stdout.split('\n')) {
     if (!line) continue;
-    const [type, sizeStr, mtimeStr, ...pathParts] = line.split('\t');
+    const [source, type, sizeStr, mtimeStr, ...pathParts] = line.split('\t');
+    const sourceRoot = source === 'W' ? workspaceRootPath : source === 'L' ? repoRootPath : undefined;
     const fullPath = pathParts.join('\t');
-    if (type === 'R' && fullPath) {
-      rootPath = fullPath;
-      continue;
-    }
-    if (!fullPath || !fullPath.startsWith(`${rootPath}/`)) continue;
-    const relativePath = fullPath.slice(rootPath.length + 1);
-    entries.push({
+    if (!sourceRoot || !fullPath || !fullPath.startsWith(`${sourceRoot}/`)) continue;
+    const relativePath = fullPath.slice(sourceRoot.length + 1);
+    const entry: WorkspaceRenderedEntry = {
       name: posixPath.basename(relativePath),
       path: relativePath,
       type: type === 'd' ? 'directory' : 'file',
       size: type === 'd' ? 0 : Number(sizeStr) || 0,
       updatedAt: new Date((Number(mtimeStr) || 0) * 1000).toISOString(),
-    });
+    };
+    if (source === 'W' || !entriesByPath.has(relativePath)) entriesByPath.set(relativePath, entry);
   }
-  entries.sort((a, b) => a.path.localeCompare(b.path));
+  const entries = [...entriesByPath.values()].toSorted((a, b) => a.path.localeCompare(b.path));
 
-  return { workspacePath: session.sessionId, root: safeRoot, rootPath, entries };
+  return { workspacePath: session.sessionId, root: safeRoot, rootPath: workspaceRootPath, entries };
 }
 
 /** Read a file inside a session's sandbox. Paths outside rendered roots require a persisted-file allowlist check in the route. */

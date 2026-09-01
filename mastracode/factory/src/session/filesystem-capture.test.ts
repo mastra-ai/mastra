@@ -177,7 +177,7 @@ describe('captureSessionFilesystem', () => {
       'sh',
       [
         '-c',
-        'if [ -d "$1/.artifacts" ]; then cd "$1"; else cd "$2"; fi && test -d .artifacts && find .artifacts -type f -print0 || true',
+        'for root in "$1" "$2"; do test -d "$root/.artifacts" && (cd "$root" && find .artifacts -type f -print0) || true; done',
         'sh',
         '/sessions/s1',
         '/sessions/s1/worktree',
@@ -188,6 +188,24 @@ describe('captureSessionFilesystem', () => {
       resourceId: 'resource-1',
       threadId: 'thread-1',
       files: [{ path: '.artifacts/hello-world.md' }, { path: 'new.txt' }, { path: 'src/app.ts' }],
+    });
+  });
+
+  it('merges workspace-root and repo-local artifacts when both locations exist', async () => {
+    const { session } = createSession([
+      commandResult(),
+      commandResult({
+        stdout: './.artifacts/current.md\0./.artifacts/shared.md\0./.artifacts/legacy.md\0./.artifacts/shared.md\0',
+      }),
+    ]);
+    const dependencies = createDependencies();
+
+    await captureSessionFilesystem(session, dependencies);
+
+    expect(dependencies.filesystem.replaceFiles).toHaveBeenCalledWith({
+      resourceId: 'resource-1',
+      threadId: 'thread-1',
+      files: [{ path: '.artifacts/current.md' }, { path: '.artifacts/legacy.md' }, { path: '.artifacts/shared.md' }],
     });
   });
 

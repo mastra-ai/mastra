@@ -365,9 +365,8 @@ describe('listSessionRenderedPath', () => {
       return {
         exitCode: 0,
         stdout: [
-          `R\t0\t0\t${WORKSPACE_ROOT}/.artifacts`,
-          `d\t0\t1700000000.0\t${WORKSPACE_ROOT}/.artifacts/understand-pr`,
-          `f\t5\t1700000100.5\t${WORKSPACE_ROOT}/.artifacts/understand-pr/HISTORY.md`,
+          `W\td\t0\t1700000000.0\t${WORKSPACE_ROOT}/.artifacts/understand-pr`,
+          `W\tf\t5\t1700000100.5\t${WORKSPACE_ROOT}/.artifacts/understand-pr/HISTORY.md`,
           '',
         ].join('\n'),
       };
@@ -392,17 +391,37 @@ describe('listSessionRenderedPath', () => {
       expect(script).toContain(`'${REPO_DIR}/.artifacts'`);
       return {
         exitCode: 0,
-        stdout: [`R\t0\t0\t${REPO_DIR}/.artifacts`, `f\t5\t1700000100.5\t${REPO_DIR}/.artifacts/legacy.md`, ''].join(
-          '\n',
-        ),
+        stdout: [`L\tf\t5\t1700000100.5\t${REPO_DIR}/.artifacts/legacy.md`, ''].join('\n'),
       };
     });
 
     const listing = await listSessionRenderedPath(makeSession(), '.artifacts');
 
-    expect(listing.rootPath).toBe(`${REPO_DIR}/.artifacts`);
+    expect(listing.rootPath).toBe(`${WORKSPACE_ROOT}/.artifacts`);
     expect(listing.entries).toEqual([
       expect.objectContaining({ name: 'legacy.md', path: 'legacy.md', type: 'file', size: 5 }),
+    ]);
+  });
+
+  it('merges workspace-root and repo-local artifacts with workspace entries taking precedence', async () => {
+    seedSessionSandbox(() => ({
+      exitCode: 0,
+      stdout: [
+        `W\tf\t7\t1700000200.0\t${WORKSPACE_ROOT}/.artifacts/current.md`,
+        `W\tf\t9\t1700000300.0\t${WORKSPACE_ROOT}/.artifacts/shared.md`,
+        `L\tf\t6\t1700000100.0\t${REPO_DIR}/.artifacts/legacy.md`,
+        `L\tf\t5\t1700000000.0\t${REPO_DIR}/.artifacts/shared.md`,
+        '',
+      ].join('\n'),
+    }));
+
+    const listing = await listSessionRenderedPath(makeSession(), '.artifacts');
+
+    expect(listing.rootPath).toBe(`${WORKSPACE_ROOT}/.artifacts`);
+    expect(listing.entries).toEqual([
+      expect.objectContaining({ path: 'current.md', size: 7 }),
+      expect.objectContaining({ path: 'legacy.md', size: 6 }),
+      expect.objectContaining({ path: 'shared.md', size: 9 }),
     ]);
   });
 
@@ -434,7 +453,7 @@ describe('listSessionRenderedPath', () => {
   it('ignores find output outside the rendered root', async () => {
     seedSessionSandbox(() => ({
       exitCode: 0,
-      stdout: `f\t5\t1700000000.0\t/etc/passwd\n`,
+      stdout: `W\tf\t5\t1700000000.0\t/etc/passwd\n`,
     }));
 
     const listing = await listSessionRenderedPath(makeSession(), '.artifacts');

@@ -9,7 +9,7 @@ import { isMeaningfulToolName } from './first-exec-capture.js';
 
 const GIT_STATUS_ARGS = ['status', '--porcelain=v1', '-z', '--untracked-files=all'];
 const ARTIFACTS_LIST_COMMAND =
-  'if [ -d "$1/.artifacts" ]; then cd "$1"; else cd "$2"; fi && test -d .artifacts && find .artifacts -type f -print0 || true';
+  'for root in "$1" "$2"; do test -d "$root/.artifacts" && (cd "$root" && find .artifacts -type f -print0) || true; done';
 
 export interface FilesystemCaptureSession {
   readonly identity: { getResourceId(): string };
@@ -95,12 +95,14 @@ export async function captureSessionFilesystem(
     }
 
     const files = new Map(parseFilesystemCaptureFiles(result.stdout).map(file => [file.path, file]));
+    const artifactFiles = new Map<string, FilesystemFile>();
     for (const path of artifacts.stdout.split('\0')) {
       const normalizedPath = path.replace(/^\.\//, '');
-      if (normalizedPath) {
-        files.set(normalizedPath, { path: normalizedPath });
+      if (normalizedPath && !artifactFiles.has(normalizedPath)) {
+        artifactFiles.set(normalizedPath, { path: normalizedPath });
       }
     }
+    for (const [path, file] of artifactFiles) files.set(path, file);
 
     await filesystem.replaceFiles({
       resourceId,

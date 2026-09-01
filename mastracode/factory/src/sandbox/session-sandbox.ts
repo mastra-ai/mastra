@@ -80,10 +80,10 @@ interface SessionSandboxEntry {
   sandbox: MastraSandbox;
   /**
    * The session's repo checkout root, recorded for passive readers (fs
-   * routes, capture, authz). Local sandboxes derive it at construction;
-   * remote sandboxes clone into the VM's own home, so it is undefined until
-   * `resolveSessionRepoDir` probes the first started VM — passive readers
-   * treat an unresolved repoDir as "nothing materialized".
+   * routes, capture, authz). Local and declared remote sandboxes derive it
+   * at construction; undeclared remote sandboxes clone into the VM's own
+   * home, so it is undefined until `resolveSessionRepoDir` probes the first
+   * started VM — passive readers treat an unresolved repoDir as "nothing materialized".
    */
   repoDir?: string;
   /**
@@ -100,8 +100,8 @@ const sessionSandboxes = new Map<string, SessionSandboxEntry>();
 /**
  * Get the session's memoized sandbox entry, constructing (and memoizing) it on
  * first access. Construction is cheap and side-effect-free by contract; VMs
- * are provisioned on `start()` only. Local sandboxes get their repoDir here;
- * remote repoDirs are a runtime fact of the VM, resolved on first start.
+ * are provisioned on `start()` only. Local and declared remote sandboxes get
+ * their repoDir here; undeclared remote repoDirs are resolved on first start.
  */
 export function getSessionSandbox(
   sessionId: string,
@@ -111,10 +111,10 @@ export function getSessionSandbox(
   const existing = sessionSandboxes.get(sessionId);
   if (existing) return existing;
   const sandbox = construct();
-  const local = deriveLocalRepoDir(sandbox, repoFullName);
+  const repoDir = deriveLocalRepoDir(sandbox, repoFullName) ?? deriveRemoteRepoDir(sandbox, repoFullName);
   const entry: SessionSandboxEntry = {
     sandbox,
-    ...(local ? { repoDir: local, workspaceRoot: workspaceRootFor(sandbox, local) } : {}),
+    ...(repoDir ? { repoDir, workspaceRoot: workspaceRootFor(sandbox, repoDir) } : {}),
   };
   sessionSandboxes.set(sessionId, entry);
   return entry;
