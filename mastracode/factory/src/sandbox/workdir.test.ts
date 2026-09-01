@@ -1,6 +1,6 @@
 import * as path from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { deriveLocalWorkdir, remoteWorkdirFromHome, resolveContainedLocalWorkdir, sanitizeSegment } from './workdir.js';
+import { deriveLocalWorkdir, repoDirUnder, resolveContainedLocalWorkdir, sanitizeSegment } from './workdir.js';
 
 describe('sanitizeSegment', () => {
   it('keeps safe characters and replaces separators and traversal', () => {
@@ -23,20 +23,20 @@ describe('sanitizeSegment', () => {
   });
 });
 
-describe('remoteWorkdirFromHome', () => {
+describe('repoDirUnder', () => {
   it('nests the sanitized repo name under the probed home', () => {
-    expect(remoteWorkdirFromHome('/home/user', 'acme/api')).toBe('/home/user/api');
-    expect(remoteWorkdirFromHome('/home/daytona', 'acme/api')).toBe('/home/daytona/api');
+    expect(repoDirUnder('/home/user', 'acme/api')).toBe('/home/user/api');
+    expect(repoDirUnder('/home/daytona', 'acme/api')).toBe('/home/daytona/api');
   });
 
   it('tolerates a trailing slash on the probed home', () => {
-    expect(remoteWorkdirFromHome('/home/user/', 'acme/api')).toBe('/home/user/api');
+    expect(repoDirUnder('/home/user/', 'acme/api')).toBe('/home/user/api');
   });
 
   it('sanitizes hostile repo names into a single segment', () => {
     // The name piece is `..` → traversal neutralized to the fallback segment.
-    expect(remoteWorkdirFromHome('/home/user', 'acme/../../..')).toBe('/home/user/repo');
-    expect(remoteWorkdirFromHome('/home/user', 'api')).toBe('/home/user/repo');
+    expect(repoDirUnder('/home/user', 'acme/../../..')).toBe('/home/user/repo');
+    expect(repoDirUnder('/home/user', 'api')).toBe('/home/user/repo');
   });
 });
 

@@ -1,5 +1,17 @@
 # @internal/playground
 
+## 1.27.3-alpha.5
+
+### Patch Changes
+
+- Fixed Studio's workflow Request Context dialog running the workflow when clicking Save. Saving request context values now only stores them, and the next run includes the saved values. Fixes https://github.com/mastra-ai/mastra/issues/22482 ([#22792](https://github.com/mastra-ai/mastra/pull/22792))
+
+- Updated dependencies [[`a499422`](https://github.com/mastra-ai/mastra/commit/a499422cd7eccca184cac7b7a684a6199784aa82), [`9d3073c`](https://github.com/mastra-ai/mastra/commit/9d3073c230dbff45d58c259d676b2b137afd2ff5)]:
+  - @mastra/core@1.64.0-alpha.4
+  - @mastra/client-js@1.42.5-alpha.4
+  - @mastra/react@1.4.10-alpha.5
+  - @mastra/playground-ui@51.4.0-alpha.7
+
 ## 1.27.3-alpha.4
 
 ### Patch Changes

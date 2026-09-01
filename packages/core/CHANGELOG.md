@@ -1,5 +1,13 @@
 # @mastra/core
 
+## 1.64.0-alpha.4
+
+### Patch Changes
+
+- Fixed LocalSandbox native isolation being unable to open /dev/null, which broke git, ssh, and shell redirections (e.g. `2>/dev/null`) inside the sandbox. On Linux, the Bubblewrap backend now mounts a fresh /dev with standard device nodes, emitted after all configured binds so existing workarounds like `readOnlyPaths: ['/dev']` no longer shadow it. On macOS, the Seatbelt profile now allows writing to the standard device nodes (/dev/null, /dev/zero, /dev/random, /dev/urandom, /dev/tty). Fixes https://github.com/mastra-ai/mastra/issues/22702 ([#22791](https://github.com/mastra-ai/mastra/pull/22791))
+
+- Removed the vulnerable @ai-sdk/provider-utils@3.x dependency (CVE-2026-8769 / GHSA-866g-f22w-33x8) from @mastra/core. The helpers it supplied are now sourced from the patched provider-utils 4.x line already installed, so security audits no longer flag @mastra/core and its dependents. AI SDK v5 model compatibility is unchanged. Fixes #22592. ([#22790](https://github.com/mastra-ai/mastra/pull/22790))
+
 ## 1.64.0-alpha.3
 
 ### Patch Changes

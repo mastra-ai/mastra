@@ -102,7 +102,7 @@ describe('Traces page usage columns', () => {
       expect(screen.getByText('Input tokens')).not.toBeNull();
     });
 
-    it('reuses list usage data for a selected trace', async () => {
+    it('keeps usage totals in the trace list when a trace is selected', async () => {
       setTracePageHandlers(metricsCapableSystemPackages);
       server.use(
         http.get(`${TEST_BASE_URL}/api/observability/traces`, () => HttpResponse.json(traceListWithTwoTraces)),
@@ -111,11 +111,11 @@ describe('Traces page usage columns', () => {
         http.get(`${TEST_BASE_URL}/api/observability/feedback`, () => HttpResponse.json(emptyFeedback)),
       );
 
-      const { queryClient } = renderPage('/traces?traceId=trace-a');
+      renderPage('/traces?traceId=trace-a');
 
-      await waitFor(() => expect(queryClient.isFetching()).toBe(0));
-      expect(onBreakdownRequest).toHaveBeenCalledTimes(1);
-      expect(screen.getByText('Trace est. cost')).not.toBeNull();
+      await waitFor(() => expect(onBreakdownRequest).toHaveBeenCalledTimes(1));
+      await waitFor(() => expect(screen.getAllByText('Input tokens')).toHaveLength(1));
+      expect(screen.queryByText('Est. cost')).toBeNull();
     });
   });
 
@@ -132,7 +132,7 @@ describe('Traces page usage columns', () => {
   });
 
   describe('when a trace is opened from a direct link', () => {
-    it('shows the trace cost when the trace is outside the loaded list', async () => {
+    it('does not request or show usage in the side panel when usage columns are hidden', async () => {
       window.localStorage.setItem(
         TRACE_COLUMN_STORAGE_KEY,
         serializeTraceColumnPreferences({ visibleColumns: [], metadataKeys: [] }),
@@ -149,16 +149,17 @@ describe('Traces page usage columns', () => {
         http.get(`${TEST_BASE_URL}/api/observability/feedback`, () => HttpResponse.json(emptyFeedback)),
       );
 
-      renderPage('/traces?traceId=trace-a');
+      const { queryClient } = renderPage('/traces?traceId=trace-a');
 
-      await waitFor(() => expect(onBreakdownRequest).toHaveBeenCalled());
-      expect(await screen.findByText('Trace est. cost')).not.toBeNull();
-      expect(await screen.findByText('$0.0010')).not.toBeNull();
+      await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+      expect(onBreakdownRequest).not.toHaveBeenCalled();
+      expect(screen.queryByText('Input tokens')).toBeNull();
+      expect(screen.queryByText('Est. cost')).toBeNull();
     });
   });
 
   describe('when Branches mode is selected', () => {
-    it('shows trace totals for a root trace panel', async () => {
+    it('does not show trace totals in a root trace panel', async () => {
       setTracePageHandlers(metricsCapableSystemPackages);
       server.use(
         http.get(`${TEST_BASE_URL}/api/observability/branches`, () => HttpResponse.json(rootBranchList)),
@@ -168,11 +169,11 @@ describe('Traces page usage columns', () => {
         http.get(`${TEST_BASE_URL}/api/observability/feedback`, () => HttpResponse.json(emptyFeedback)),
       );
 
-      renderPage('/traces?listMode=branches&traceId=trace-a&anchorSpanId=span-a');
+      const { queryClient } = renderPage('/traces?listMode=branches&traceId=trace-a&anchorSpanId=span-a');
 
-      await waitFor(() => expect(onBreakdownRequest).toHaveBeenCalled());
-      expect(await screen.findByText('Trace est. cost')).not.toBeNull();
-      expect(await screen.findByText('$0.0010')).not.toBeNull();
+      await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+      expect(screen.queryByText('Trace est. cost')).toBeNull();
+      expect(onBreakdownRequest).not.toHaveBeenCalled();
     });
 
     it('suppresses usage columns and metric requests', async () => {
