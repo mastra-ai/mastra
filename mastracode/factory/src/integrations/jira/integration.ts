@@ -20,7 +20,7 @@ import type {
 import type { RouteAuth } from '../../routes/route.js';
 import type { FactoryProjectsStorage } from '../../storage/domains/projects/base.js';
 import type { FactoryIntegration, IntegrationContext, IntegrationTools } from '../base.js';
-import { PlatformApiClient, platformIntegrationsApiClientConfigFromEnv } from '../platform/api-client.js';
+import { PlatformApiClient, platformApiClientConfigFromEnv } from '../platform/api-client.js';
 import { adfToText } from './adf.js';
 import { buildJiraAgentTools } from './agent-tools.js';
 import type { JiraComment, JiraIssue, JiraTransition } from './api.js';
@@ -92,7 +92,7 @@ export class JiraIntegration implements FactoryIntegration {
       this.#endpointHost = config.endpointHost ?? 'configured-client';
       return;
     }
-    const platformConfig = platformIntegrationsApiClientConfigFromEnv();
+    const platformConfig = platformApiClientConfigFromEnv();
     this.#client = new PlatformApiClient(platformConfig);
     this.#endpointHost = new URL(platformConfig.baseUrl).host;
   }

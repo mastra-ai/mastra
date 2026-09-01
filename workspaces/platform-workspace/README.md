@@ -21,7 +21,7 @@ All options can be passed to the constructor or read from environment variables:
 | `sandboxProvider` | `SANDBOX_PROVIDER`             | No (sandbox)     |
 | `bucketName`      | `MASTRA_PLATFORM_BUCKET_NAME`  | Yes (filesystem) |
 
-The sandbox provider resolves from the explicit `sandboxProvider` option, then `SANDBOX_PROVIDER`, then defaults to `e2b`. Set either option to `railway` to use Railway sandboxes. The proxy URL defaults to `https://workspaces.mastra.ai` and can be overridden with the `MASTRA_WORKSPACE_PROXY_URL` env var (useful for staging).
+The sandbox provider resolves from the explicit `sandboxProvider` option, then `SANDBOX_PROVIDER`, then defaults to `e2b`. Set either option to `railway` to use Railway sandboxes. The proxy URL defaults to `https://workspaces.mastra.ai`; set `MASTRA_PLATFORM_REGION` to `us` or `eu` to use the matching regional replica. An explicit `MASTRA_WORKSPACE_PROXY_URL` override wins over the region.
 
 Requests to the proxy are authenticated with `Authorization: Bearer <accessToken>`. For sandbox requests authenticated with a project access token, set `actingUserId` to the stable opaque user subject from your authentication system. It is sent as `x-acting-user-id` for token partitioning and attribution; it is not an authorization claim.
 
