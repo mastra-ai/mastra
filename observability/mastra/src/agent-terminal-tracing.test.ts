@@ -146,6 +146,14 @@ describe('agent terminal tracing', () => {
     expect(sawDelta).toBe(true);
     expect(incompleteSpanNames(), 'spans left open after the agent abort terminal').toEqual([]);
     expect(endedAgentSpan()?.output).toMatchObject({ status: 'aborted' });
+    const descendantOutputs = exporter
+      .getByEventType(TracingEventType.SPAN_ENDED)
+      .filter(event => event.exportedSpan.type !== SpanType.AGENT_RUN)
+      .map(event => event.exportedSpan.output as { status?: string } | undefined);
+    expect(
+      descendantOutputs.filter(output => output?.status === 'aborted'),
+      'descendant spans must not inherit the terminal output',
+    ).toEqual([]);
   });
 
   it('ends the agent span when a prepare step fails before streaming starts', async () => {

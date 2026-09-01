@@ -2593,7 +2593,7 @@ describe('AGENT_RUN span must be ended on LLM errors', () => {
       expect(agentRunSpan).toBeDefined();
       expect(agentRunSpan.endTree).toHaveBeenCalled();
       expect(agentRunSpan.error).not.toHaveBeenCalled();
-      expect(agentRunSpan.endTree.mock.calls[0][0]).toMatchObject({
+      expect(agentRunSpan.update).toHaveBeenCalledWith({
         output: {
           status: 'suspended',
           reason: 'tool-call-approval',
@@ -2670,7 +2670,7 @@ describe('AGENT_RUN span must be ended on LLM errors', () => {
       expect(agentRunSpan).toBeDefined();
       expect(agentRunSpan.endTree).toHaveBeenCalled();
       expect(agentRunSpan.error).not.toHaveBeenCalled();
-      expect(agentRunSpan.endTree.mock.calls[0][0]).toMatchObject({
+      expect(agentRunSpan.update).toHaveBeenCalledWith({
         output: {
           status: 'aborted',
           reason: 'abort',

@@ -141,8 +141,9 @@ export function createMapResultsStep<OUTPUT = undefined>({
           messageList,
         });
 
-        // End agent span tree with tripwire information after fallback completes
-        agentSpan?.endTree({
+        // Record tripwire information on the agent span, then end the whole
+        // tree; descendants close without inheriting the terminal output
+        agentSpan?.update({
           output: { tripwire: memoryData.tripwire },
           attributes: {
             tripwireAbort: {
@@ -153,6 +154,7 @@ export function createMapResultsStep<OUTPUT = undefined>({
             },
           },
         });
+        agentSpan?.endTree();
 
         return bail(modelOutput);
       } catch (error) {
@@ -317,7 +319,7 @@ export function createMapResultsStep<OUTPUT = undefined>({
           }
 
           if (payload.finishReason === 'suspended') {
-            agentSpan?.endTree({
+            agentSpan?.update({
               output: {
                 status: 'suspended',
                 reason: payload.suspendReason,
@@ -325,6 +327,7 @@ export function createMapResultsStep<OUTPUT = undefined>({
                 toolCallId: payload.toolCallId,
               },
             });
+            agentSpan?.endTree();
             return;
           }
 
@@ -332,7 +335,8 @@ export function createMapResultsStep<OUTPUT = undefined>({
 
           if (aborted) {
             if (payload.finishReason === 'aborted') {
-              agentSpan?.endTree({ output: { status: 'aborted', reason: 'abort' } });
+              agentSpan?.update({ output: { status: 'aborted', reason: 'abort' } });
+              agentSpan?.endTree();
               // The aborted finish payload is synthetic; the caller already received onAbort.
               return;
             }
