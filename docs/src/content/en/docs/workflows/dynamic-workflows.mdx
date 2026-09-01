@@ -101,9 +101,14 @@ The definition uses JSON Schema because it must survive a JSON round trip. The `
 A definition can come from any source that produces JSON. For example, an API route can accept a definition created by a visual editor and register it directly:
 
 ```typescript
+const authenticatedUser = await authenticate(request)
 const definition = await request.json()
-await mastra.addDynamicWorkflow(definition)
+await mastra.addDynamicWorkflow(definition, {
+  authorId: authenticatedUser.id,
+})
 ```
+
+Derive `authorId` from verified server identity. Never accept it from the submitted workflow definition.
 
 ### Register dependencies first
 
@@ -138,13 +143,27 @@ Applications don't need direct access to the `Mastra` instance to manage dynamic
 - [Client SDK workflows API](/reference/client-js/workflows): Call `upsertDynamicWorkflow()` from a JavaScript or TypeScript client.
 - [Server routes](/reference/server/routes): Send definitions to `POST /api/stored/workflows`.
 
-On authenticated servers, dynamic-workflow management requires the `stored-workflows:read` and `stored-workflows:write` permissions. Running the registered workflow requires `workflows:execute`.
+On authenticated servers, listing, reading, and upserting dynamic workflows derives the author from the server-owned request context. Regular callers can only list, read, and replace their own definitions. Callers with `stored-workflows:admin` can inspect every definition and can replace an owned definition without changing its author. Definitions created before ownership metadata was available are hidden from regular callers and read-only for admins.
+
+These management routes still require `stored-workflows:read` or `stored-workflows:write`. Deletion and execution aren't owner-scoped yet. Running the registered workflow requires `workflows:execute`, but this permission doesn't establish tenant ownership by itself.
 
 ### Persist definitions
 
 Stored definitions use the `workflowDefinitions` storage domain. On startup, Mastra loads active definitions from storage and registers them in dependency order.
 
 Without a storage adapter that supports this domain, `addDynamicWorkflow()` still registers the workflow in memory, but the definition is lost when the process restarts. See the [storage reference](/reference/storage/overview) for adapter support.
+
+### Record a verified author
+
+Pass trusted author metadata as the second argument. Keep it outside the workflow definition when the definition comes from a user, agent, or external system.
+
+```typescript
+await mastra.addDynamicWorkflow(untrustedDefinition, {
+  authorId: authenticatedUser.id,
+})
+```
+
+Mastra stores `authorId` with the definition in the same write. Once set, the author is immutable: replacing the definition without `authorId` retains its stored author, while using a different author fails with an ownership conflict. The authenticated server's list, get, and upsert routes enforce this ownership. Direct Core calls, deletion, execution, and nested workflow references still require application-level authorization.
 
 ## Related
 
