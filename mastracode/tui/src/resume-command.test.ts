@@ -23,4 +23,11 @@ describe('resume command', () => {
       "To continue this session, run mastracode resume 'thread '\\''quoted'\\'''",
     );
   });
+
+  it('escapes terminal control characters in the exit hint', () => {
+    const hint = formatResumeHint("thread-\u001b[31m'\\name");
+
+    expect(hint).toBe("To continue this session, run mastracode resume $'thread-\\x1b[31m\\'\\\\name'");
+    expect(hint).not.toContain('\u001b');
+  });
 });
