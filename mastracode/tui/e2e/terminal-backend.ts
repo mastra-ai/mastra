@@ -357,6 +357,7 @@ async function startMastraCodeApp(
       ? { ...(envInitialState ?? {}), ...(configuredInitialState ?? {}) }
       : undefined;
   const result = await createMastraCode({
+    createInitialThread: false,
     unixSocketPubSub: !isTruthyEnv('MASTRACODE_DISABLE_UNIX_SOCKET_PUBSUB'),
     disableMcp: isTruthyEnv('MASTRACODE_DISABLE_MCP'),
     disableHooks: isTruthyEnv('MASTRACODE_DISABLE_HOOKS'),

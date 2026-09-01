@@ -121,7 +121,7 @@ Message rendering is owned by the adapter, not this provider — so there is no 
 
 ## Module format
 
-Dual **ESM + CJS**. `@chat-adapter/telegram` is ESM-only (its `exports` declares only an `import` condition), and tsup externalises `dependencies` by default — so the adapter is kept external in the ESM build (lean, deduped) but bundled into the CJS output via `noExternal`. Both `import` and `require('@mastra/telegram')` therefore work. See `tsup.config.ts` for why this intentionally differs from `channels/slack`.
+Dual **ESM + CJS**. `@chat-adapter/telegram` is ESM-only (its `exports` declares only an `import` condition), so the tsdown config keeps the adapter external in the ESM build (lean, deduped) but bundles it into the CJS output. Both `import` and `require('@mastra/telegram')` therefore work. See `tsdown.config.ts` for why this intentionally differs from `channels/slack`.
 
 ## Development
 
@@ -129,7 +129,7 @@ Dual **ESM + CJS**. `@chat-adapter/telegram` is ESM-only (its `exports` declares
 pnpm install
 pnpm --filter @mastra/telegram typecheck
 pnpm --filter @mastra/telegram test    # vitest, undici-mocked Bot API
-pnpm --filter @mastra/telegram build   # tsup → dist
+pnpm --filter @mastra/telegram build   # tsdown → dist
 ```
 
 ## License

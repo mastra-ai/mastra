@@ -76,6 +76,7 @@ export type GithubPRSubscription = {
   lastNotificationKind?: string;
   lastNotificationPriority?: 'medium' | 'high';
   lastNotificationSummary?: string;
+  lastNotificationDedupeKey?: string;
 };
 
 export type GithubSignalsThreadMetadata = {
@@ -252,17 +253,38 @@ type GithubToolExecuteContext = {
   };
 };
 
+type GithubToolPRInput = { owner?: string; repo?: string; number: number };
+
+type GithubSubscribeToolInput = {
+  prs: GithubToolPRInput[];
+  mode?: GithubSubscriptionMode;
+};
+
+type GithubUnsubscribeToolInput = {
+  prs?: GithubToolPRInput[];
+  all?: boolean;
+};
+
 type GithubToolFactory = (definition: {
   id: string;
   description: string;
   inputSchema: z.ZodTypeAny;
   execute: (
-    input: { owner?: string; repo?: string; number: number; mode?: GithubSubscriptionMode },
+    input: GithubSubscribeToolInput | GithubUnsubscribeToolInput,
     context?: GithubToolExecuteContext,
   ) => Promise<unknown>;
 }) => unknown;
 
 const createGithubTool = createTool as unknown as GithubToolFactory;
+
+type GithubPRSubscriptionSummary = {
+  owner: string;
+  repo: string;
+  number: number;
+  subscribedAt?: string;
+  updatedAt?: string;
+  lastSyncStatus?: 'success' | 'error' | 'skipped';
+};
 
 type GithubOperationResult = {
   owner: string;
@@ -452,6 +474,9 @@ function getGithubMetadata(threadMetadata: Record<string, unknown> | undefined):
       ...(readString(rawSubscription.lastNotificationSummary)
         ? { lastNotificationSummary: readString(rawSubscription.lastNotificationSummary)! }
         : {}),
+      ...(readString(rawSubscription.lastNotificationDedupeKey)
+        ? { lastNotificationDedupeKey: readString(rawSubscription.lastNotificationDedupeKey)! }
+        : {}),
     });
   }
 
@@ -625,6 +650,37 @@ function getCommentNotificationSummary(pr: string, snapshot: GithubPullRequestSn
   return `${snapshot.latestCommentAuthor} commented on ${pr}: ${getCommentExcerpt(snapshot.latestCommentBody)}`;
 }
 
+function isNoisyBotComment(input: { author?: string; body?: string }): boolean {
+  const author = input.author?.toLowerCase();
+  const body = input.body?.toLowerCase().trim();
+  if (!author || !body) return false;
+
+  if (author.includes('coderabbit')) {
+    return (
+      body.includes('## review skipped') ||
+      body.includes('review_stack_entry_start') ||
+      body.includes('review change stack') ||
+      body.includes('storage.googleapis.com/coderabbit_public_assets/review-stack') ||
+      body.includes('no actionable comments were generated') ||
+      (body.includes('actions performed') && body.includes('review triggered'))
+    );
+  }
+
+  if (author === 'vercel[bot]') return body.startsWith('[vc]:');
+  if (author === 'socket-security[bot]') return body.includes('review the following changes in direct dependencies');
+  if (author === 'dane-ai-mastra[bot]') {
+    return (
+      body.includes('mastra-pr-automation') || body.includes('## pr triage') || body.includes('## pr complexity score')
+    );
+  }
+
+  return false;
+}
+
+function hasNoisyLatestBotComment(snapshot: GithubPullRequestSnapshot): boolean {
+  return isNoisyBotComment({ author: snapshot.latestCommentAuthor, body: snapshot.latestCommentBody });
+}
+
 type GithubActivityNotificationPlan = { kind: string; priority: 'medium' | 'high'; summary: string };
 
 const githubActivityNotificationPriority: Record<GithubActivityNotificationPlan['priority'], number> = {
@@ -656,7 +712,7 @@ function classifyGithubCommentActivityNotification(input: {
   subscription: GithubPRSubscription;
   snapshot: GithubPullRequestSnapshot;
 }): GithubActivityNotificationPlan | undefined {
-  if (isBotOnlyActivity(input.snapshot)) return undefined;
+  if (isBotOnlyActivity(input.snapshot) || hasNoisyLatestBotComment(input.snapshot)) return undefined;
   const pr = `${input.subscription.owner}/${input.subscription.repo}#${input.subscription.number}`;
   const summary = getCommentNotificationSummary(pr, input.snapshot);
   if (!summary) return undefined;
@@ -893,7 +949,7 @@ function classifyGithubActivityNotification(input: {
     };
   }
   if (input.snapshot.ciState === 'pending' && input.subscription.lastObservedCiState === 'pending') return undefined;
-  if (isBotOnlyActivity(input.snapshot)) return undefined;
+  if (isBotOnlyActivity(input.snapshot) || hasNoisyLatestBotComment(input.snapshot)) return undefined;
   const commentSummary = getCommentNotificationSummary(pr, input.snapshot);
   return {
     kind: 'pull-request-activity',
@@ -1370,13 +1426,6 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
     }
 
     const key = this.#pollingKey(input);
-    for (const [pollingKey, state] of this.#polling.entries()) {
-      if (pollingKey === key) continue;
-      this.#invalidatePollingThread(pollingKey);
-      clearInterval(state.timer);
-      this.#polling.delete(pollingKey);
-    }
-
     if (this.#polling.has(key)) return true;
 
     const runPoll = (pollOptions: { includeComments?: boolean } = {}) => {
@@ -1555,83 +1604,170 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
       threadId: context?.agent?.threadId ?? threadContext.threadId,
       resourceId: context?.agent?.resourceId ?? threadContext.resourceId,
     });
+    const prSchema = z.object({
+      number: z.number().int().positive(),
+      owner: z.string().optional(),
+      repo: z.string().optional(),
+    });
+    const subscribeSchema = z.object({
+      prs: z.array(prSchema).min(1),
+      mode: z.enum(['working', 'review']).optional(),
+    });
+    const unsubscribeSchema = z
+      .object({
+        prs: z.array(prSchema).min(1).optional(),
+        all: z.boolean().optional(),
+      })
+      .refine(input => [!!input.prs, input.all === true].filter(Boolean).length === 1, {
+        message: 'Provide exactly one of prs or all.',
+      });
+    const dedupePrs = (prs: GithubToolPRInput[]): GithubToolPRInput[] => {
+      const byKey = new Map<string, GithubToolPRInput>();
+      for (const pr of prs) {
+        byKey.set(`${pr.owner ?? ''}/${pr.repo ?? ''}#${pr.number}`, pr);
+      }
+      return [...byKey.values()];
+    };
+    const getSubscribeMessage = (result: GithubOperationResult) =>
+      result.terminalState
+        ? `Not subscribed to ${result.owner}/${result.repo}#${result.number} in review mode because it is already ${result.terminalState}.`
+        : result.syncResult?.ok === false
+          ? `Subscribed to ${result.owner}/${result.repo}#${result.number} in ${result.mode} mode, but gitcrawl sync failed: ${result.syncResult.error}`
+          : `Subscribed to ${result.owner}/${result.repo}#${result.number} in ${result.mode} mode.`;
+    const getUnsubscribeMessage = (result: GithubOperationResult) =>
+      result.removed
+        ? `Unsubscribed from ${result.owner}/${result.repo}#${result.number}.`
+        : `No GitHub subscription found for ${result.owner}/${result.repo}#${result.number}.`;
     return {
       ...args.tools,
       github_subscribe_pr: createGithubTool({
         id: 'github_subscribe_pr',
         description:
-          'Subscribe this thread to a GitHub pull request. Use review mode for new commits, authorized latest PR comments, review-thread-state changes including all threads resolved, and PR close or merge updates. Use working mode for all actionable PR activity. Omitted mode defaults to working. Do not subscribe for a one-off inspection.',
-        inputSchema: z.object({
-          number: z.number().int().positive(),
-          owner: z.string().optional(),
-          repo: z.string().optional(),
-          mode: z.enum(['working', 'review']).optional(),
-        }),
+          'Subscribe this thread to one or more GitHub pull requests. Use review mode for new commits, authorized latest PR comments, review-thread-state changes including all threads resolved, and PR close or merge updates. Use working mode for all actionable PR activity. Omitted mode defaults to working. Do not subscribe for a one-off inspection.',
+        inputSchema: subscribeSchema,
         execute: async (input, context) => {
+          const subscribeInput = input as GithubSubscribeToolInput;
           const executionThreadContext = getExecutionThreadContext(context);
-          const result = await this.#subscribe({
-            id: `github-tool-subscribe-${randomUUID()}`,
-            owner: input.owner,
-            repo: input.repo,
-            number: input.number,
-            mode: normalizeGithubSubscriptionMode(input.mode),
-            threadId: executionThreadContext.threadId,
-            resourceId: executionThreadContext.resourceId,
-          });
-          if (result.terminalState) {
-            return {
-              subscribed: false,
-              mode: result.mode,
-              terminalState: result.terminalState,
-              reason: 'terminal',
-              owner: result.owner,
-              repo: result.repo,
-              number: result.number,
-              message: `Not subscribed to ${result.owner}/${result.repo}#${result.number} in review mode because it is already ${result.terminalState}.`,
-            };
+          const mode = normalizeGithubSubscriptionMode(subscribeInput.mode);
+          const requestedPrs = dedupePrs(subscribeInput.prs);
+          const results: Array<{
+            subscribed: boolean;
+            mode: GithubSubscriptionMode;
+            owner: string;
+            repo: string;
+            number: number;
+            terminalState?: 'closed' | 'merged';
+            reason?: 'terminal' | 'error';
+            syncStatus?: 'success' | 'error';
+            message: string;
+          }> = [];
+
+          for (const pr of requestedPrs) {
+            try {
+              const result = await this.#subscribe({
+                id: `github-tool-subscribe-${randomUUID()}`,
+                owner: pr.owner,
+                repo: pr.repo,
+                number: pr.number,
+                mode,
+                threadId: executionThreadContext.threadId,
+                resourceId: executionThreadContext.resourceId,
+              });
+              results.push({
+                subscribed: !result.terminalState,
+                mode: result.mode ?? mode,
+                owner: result.owner,
+                repo: result.repo,
+                number: result.number,
+                ...(result.terminalState ? { terminalState: result.terminalState, reason: 'terminal' as const } : {}),
+                syncStatus: result.syncResult?.ok === false ? 'error' : result.syncResult ? 'success' : undefined,
+                message: getSubscribeMessage(result),
+              });
+            } catch (error) {
+              results.push({
+                subscribed: false,
+                mode,
+                owner: pr.owner ?? '',
+                repo: pr.repo ?? '',
+                number: pr.number,
+                reason: 'error',
+                syncStatus: 'error',
+                message: `Could not subscribe to PR #${pr.number}: ${error instanceof Error ? error.message : String(error)}`,
+              });
+            }
           }
-          return {
-            subscribed: true,
-            mode: result.mode,
-            owner: result.owner,
-            repo: result.repo,
-            number: result.number,
-            syncStatus: result.syncResult?.ok === false ? 'error' : result.syncResult ? 'success' : undefined,
-            message:
-              result.syncResult?.ok === false
-                ? `Subscribed to ${result.owner}/${result.repo}#${result.number} in ${result.mode} mode, but gitcrawl sync failed: ${result.syncResult.error}`
-                : `Subscribed to ${result.owner}/${result.repo}#${result.number} in ${result.mode} mode.`,
+
+          const subscriptions = await this.#getSubscriptionSummaries(
+            executionThreadContext as GithubPollingThread,
+          ).catch(() => []);
+          const response: Record<string, unknown> = {
+            subscribed: results.some(result => result.subscribed),
+            results,
+            subscriptions,
           };
+          if (results.length === 1) Object.assign(response, results[0]);
+          return response;
         },
       }),
       github_unsubscribe_pr: createGithubTool({
         id: 'github_unsubscribe_pr',
-        description: 'Unsubscribe this thread from a GitHub pull request.',
-        inputSchema: z.object({
-          number: z.number().int().positive(),
-          owner: z.string().optional(),
-          repo: z.string().optional(),
-        }),
+        description: 'Unsubscribe this thread from one or more GitHub pull requests, or unsubscribe all current PRs.',
+        inputSchema: unsubscribeSchema,
         execute: async (input, context) => {
           const executionThreadContext = getExecutionThreadContext(context);
-          const result = await this.#unsubscribe({
-            id: `github-tool-unsubscribe-${randomUUID()}`,
-            owner: input.owner,
-            repo: input.repo,
-            number: input.number,
-            threadId: executionThreadContext.threadId,
-            resourceId: executionThreadContext.resourceId,
-          });
-          return {
-            unsubscribed: result.removed ?? false,
-            owner: result.owner,
-            repo: result.repo,
-            number: result.number,
-            remainingSubscriptions: result.remainingSubscriptions,
-            message: result.removed
-              ? `Unsubscribed from ${result.owner}/${result.repo}#${result.number}.`
-              : `No GitHub subscription found for ${result.owner}/${result.repo}#${result.number}.`,
+          const unsubscribeInput = input as GithubUnsubscribeToolInput;
+          const requestedPrs = unsubscribeInput.all
+            ? await this.#getSubscriptionSummaries(executionThreadContext as GithubPollingThread)
+            : dedupePrs(unsubscribeInput.prs ?? []);
+          const results: Array<{
+            owner: string;
+            repo: string;
+            number: number;
+            unsubscribed: boolean;
+            reason?: 'error';
+            message: string;
+          }> = [];
+
+          for (const pr of requestedPrs) {
+            try {
+              const result = await this.#unsubscribe({
+                id: `github-tool-unsubscribe-${randomUUID()}`,
+                owner: pr.owner,
+                repo: pr.repo,
+                number: pr.number,
+                threadId: executionThreadContext.threadId,
+                resourceId: executionThreadContext.resourceId,
+              });
+              results.push({
+                owner: result.owner,
+                repo: result.repo,
+                number: result.number,
+                unsubscribed: result.removed ?? false,
+                message: getUnsubscribeMessage(result),
+              });
+            } catch (error) {
+              results.push({
+                owner: pr.owner ?? '',
+                repo: pr.repo ?? '',
+                number: pr.number,
+                unsubscribed: false,
+                reason: 'error',
+                message: `Could not unsubscribe from PR #${pr.number}: ${error instanceof Error ? error.message : String(error)}`,
+              });
+            }
+          }
+
+          const subscriptions = await this.#getSubscriptionSummaries(
+            executionThreadContext as GithubPollingThread,
+          ).catch(() => []);
+          const response: Record<string, unknown> = {
+            unsubscribed: results.some(result => result.unsubscribed),
+            results,
+            subscriptions,
+            remainingSubscriptions: subscriptions.length,
           };
+          if (results.length === 1) Object.assign(response, results[0]);
+          return response;
         },
       }),
     };
@@ -1676,6 +1812,16 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
     this.#pollingThreadGenerations.set(key, (this.#pollingThreadGenerations.get(key) ?? 0) + 1);
   }
 
+  #invalidatePollingForThread(input: GithubPollingThread): void {
+    const key = this.#pollingKey(input);
+    this.#invalidatePollingThread(key);
+    const state = this.#polling.get(key);
+    if (!state) return;
+    clearInterval(state.timer);
+    this.#polling.delete(key);
+    this.#notifyPollingChanged({ threadId: input.threadId, resourceId: input.resourceId, running: false });
+  }
+
   #getNotificationAgent(_input?: { agentId?: string }): GithubSignalAgent | undefined {
     if (this.#agent) return this.#agent;
     const agentId = _input?.agentId ?? this.#options.agentId;
@@ -1685,6 +1831,18 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
   async #getThreadSubscriptions(input: GithubPollingThread): Promise<GithubPRSubscription[]> {
     const { loadedThread } = await this.#loadThread(input);
     return getGithubMetadata(loadedThread.metadata).subscriptions;
+  }
+
+  async #getSubscriptionSummaries(input: GithubPollingThread): Promise<GithubPRSubscriptionSummary[]> {
+    const subscriptions = await this.#getThreadSubscriptions(input);
+    return subscriptions.map(subscription => ({
+      owner: subscription.owner,
+      repo: subscription.repo,
+      number: subscription.number,
+      subscribedAt: subscription.subscribedAt,
+      updatedAt: subscription.updatedAt,
+      ...(subscription.lastSyncStatus ? { lastSyncStatus: subscription.lastSyncStatus } : {}),
+    }));
   }
 
   #notifySubscriptionsChanged(input: GithubSubscriptionsChangedEvent): void {
@@ -1834,6 +1992,7 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
             nextSubscription.lastNotificationKind = primaryNotification.kind;
             nextSubscription.lastNotificationPriority = primaryNotification.priority;
             nextSubscription.lastNotificationSummary = primaryNotification.summary;
+            nextSubscription.lastNotificationDedupeKey = primaryNotification.dedupeKey;
             if (!terminalState) {
               shouldKeepSubscription = notifications.every(notification => notification.kind !== 'pull-request-merged');
             }
@@ -2037,6 +2196,7 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
 
     for (const comment of comments) {
       if (isCurrentGeneration && !isCurrentGeneration()) return snapshot;
+      if (isNoisyBotComment({ author: comment.author, body: comment.body })) continue;
       if (
         !(await this.#isAuthorizedAuthor(
           owner,
@@ -2124,7 +2284,7 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
     reviewStateChanged?: boolean;
     terminalState?: 'closed' | 'merged';
     isCurrentGeneration: () => boolean;
-  }): Promise<Array<{ kind: string; priority: 'medium' | 'high'; summary: string }>> {
+  }): Promise<Array<GithubActivityNotificationPlan & { dedupeKey: string }>> {
     const agent = this.#getNotificationAgent(input.polling);
     if (!agent?.sendNotificationSignal) return [];
     const notifications: Array<GithubActivityNotificationPlan | undefined> = [];
@@ -2177,7 +2337,7 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
       }
     }
 
-    const sent: GithubActivityNotificationPlan[] = [];
+    const sent: Array<GithubActivityNotificationPlan & { dedupeKey: string }> = [];
     const notificationInputs = [];
     for (const notification of notifications.sort(compareGithubActivityNotifications)) {
       if (!notification) continue;
@@ -2195,17 +2355,21 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
         if (!input.isCurrentGeneration()) return [];
         if (!authorized) continue;
       }
-      notificationInputs.push(
-        this.#createGithubNotificationInput({
-          subscription: input.subscription,
-          snapshot: input.snapshot,
-          notification,
-          dedupeSuffix: input.snapshot.contentHash ?? input.snapshot.githubUpdatedAt ?? String(Date.now()),
-          previousGithubUpdatedAt: input.previousGithubUpdatedAt,
-          previousContentHash: input.previousContentHash,
-        }),
-      );
-      sent.push(notification);
+      const notificationInput = this.#createGithubNotificationInput({
+        subscription: input.subscription,
+        snapshot: input.snapshot,
+        notification,
+        dedupeSuffix: input.snapshot.contentHash ?? input.snapshot.githubUpdatedAt ?? String(Date.now()),
+        previousGithubUpdatedAt: input.previousGithubUpdatedAt,
+        previousContentHash: input.previousContentHash,
+      });
+      const alreadySent = input.subscription.lastNotificationDedupeKey
+        ? input.subscription.lastNotificationDedupeKey === notificationInput.dedupeKey
+        : input.subscription.lastNotificationKind === notification.kind &&
+          input.subscription.lastNotificationSummary === notification.summary;
+      if (alreadySent) continue;
+      notificationInputs.push(notificationInput);
+      sent.push({ ...notification, dedupeKey: notificationInput.dedupeKey });
     }
     if (notificationInputs.length > 0) {
       const target = { resourceId: input.polling.resourceId, threadId: input.polling.threadId };
@@ -2270,6 +2434,11 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
       ...(typeof existing?.lastObservedCommentIsBot === 'boolean'
         ? { lastObservedCommentIsBot: existing.lastObservedCommentIsBot }
         : {}),
+      ...(existing?.lastNotificationAt ? { lastNotificationAt: existing.lastNotificationAt } : {}),
+      ...(existing?.lastNotificationKind ? { lastNotificationKind: existing.lastNotificationKind } : {}),
+      ...(existing?.lastNotificationPriority ? { lastNotificationPriority: existing.lastNotificationPriority } : {}),
+      ...(existing?.lastNotificationSummary ? { lastNotificationSummary: existing.lastNotificationSummary } : {}),
+      ...(existing?.lastNotificationDedupeKey ? { lastNotificationDedupeKey: existing.lastNotificationDedupeKey } : {}),
     };
 
     let syncResult: GithubSignalsSyncResult | undefined;
@@ -2306,10 +2475,18 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
     }
 
     const terminalState = mode === 'review' ? getGithubTerminalState(baselineSnapshot) : undefined;
+    const subscriptions = terminalState
+      ? githubMetadata.subscriptions.filter(
+          candidate => !(candidate.owner === owner && candidate.repo === repo && candidate.number === input.number),
+        )
+      : existingIndex >= 0
+        ? githubMetadata.subscriptions.map((existingSubscription, index) =>
+            index === existingIndex ? subscription : existingSubscription,
+          )
+        : [...githubMetadata.subscriptions, subscription];
+
     if (terminalState) {
-      const subscriptions = githubMetadata.subscriptions.filter(
-        candidate => !(candidate.owner === owner && candidate.repo === repo && candidate.number === input.number),
-      );
+      this.#invalidatePollingForThread({ threadId: input.threadId!, resourceId: input.resourceId! });
       await threadStore.saveThread({
         thread: {
           ...loadedThread,
@@ -2323,11 +2500,11 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
       this.#notifySubscriptionsChanged({ threadId: input.threadId!, resourceId: input.resourceId!, subscriptions });
       if (subscriptions.length === 0)
         this.stopPollingForThread({ threadId: input.threadId!, resourceId: input.resourceId! });
+      else await this.startPollingForThread({ threadId: input.threadId!, resourceId: input.resourceId! });
       return { owner, repo, number: input.number, mode, terminalState, syncResult };
     }
 
-    const subscriptions = [subscription];
-
+    this.#invalidatePollingForThread({ threadId: input.threadId!, resourceId: input.resourceId! });
     await threadStore.saveThread({
       thread: {
         ...loadedThread,
@@ -2364,6 +2541,7 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
     );
     const removed = subscriptions.length !== githubMetadata.subscriptions.length;
     if (removed) {
+      this.#invalidatePollingForThread({ threadId: input.threadId!, resourceId: input.resourceId! });
       await threadStore.saveThread({
         thread: {
           ...loadedThread,
@@ -2377,6 +2555,7 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
       this.#notifySubscriptionsChanged({ threadId: input.threadId!, resourceId: input.resourceId!, subscriptions });
       if (subscriptions.length === 0)
         this.stopPollingForThread({ threadId: input.threadId!, resourceId: input.resourceId! });
+      else await this.startPollingForThread({ threadId: input.threadId!, resourceId: input.resourceId! });
     }
     return { owner, repo, number: input.number, removed, remainingSubscriptions: subscriptions.length };
   }

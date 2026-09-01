@@ -75,3 +75,37 @@ export const WORK_ITEM_COMMENT_MENTIONS_SCHEMA: CollectionSchema = {
     },
   ],
 };
+
+export const WORK_ITEM_ACTIVITY_SCHEMA: CollectionSchema = {
+  name: 'work_item_activity',
+  columns: {
+    id: { type: 'uuid-pk' },
+    org_id: { type: 'text' },
+    factory_project_id: { type: 'text' },
+    work_item_id: { type: 'text' },
+    participant_id: { type: 'text' },
+    occurrence: { type: 'integer', default: 1 },
+    latest_comment_id: { type: 'text' },
+    latest_author_id: { type: 'text' },
+    latest_author_name: { type: 'text', nullable: true },
+    occurred_at: { type: 'timestamp' },
+    created_at: { type: 'timestamp' },
+    updated_at: { type: 'timestamp' },
+  },
+  uniqueIndexes: [
+    {
+      name: 'work_item_activity_item_participant_unique',
+      columns: ['work_item_id', 'participant_id'],
+    },
+  ],
+  indexes: [
+    {
+      name: 'work_item_activity_inbox_idx',
+      columns: ['org_id', 'factory_project_id', 'participant_id', 'occurred_at', 'id'],
+    },
+    {
+      name: 'work_item_activity_item_idx',
+      columns: ['org_id', 'factory_project_id', 'work_item_id'],
+    },
+  ],
+};

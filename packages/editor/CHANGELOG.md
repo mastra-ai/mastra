@@ -1,5 +1,21 @@
 # @mastra/editor
 
+## 0.14.3-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [[`d94e242`](https://github.com/mastra-ai/mastra/commit/d94e2423909cfc859eaf39827e83c832439e6b6d), [`8571a42`](https://github.com/mastra-ai/mastra/commit/8571a42c8039e938564e5c5fb0a6b75377c4fe67)]:
+  - @mastra/memory@1.28.2-alpha.0
+
+## 0.14.3-alpha.0
+
+### Patch Changes
+
+- Preserved tool schemas when applying stored descriptions. ([#22459](https://github.com/mastra-ai/mastra/pull/22459))
+
+- Updated dependencies [[`3910c77`](https://github.com/mastra-ai/mastra/commit/3910c77413a3058ab270c6dbc74a59bc3cdf67ea)]:
+  - @mastra/core@1.63.3-alpha.0
+
 ## 0.14.2
 
 ### Patch Changes

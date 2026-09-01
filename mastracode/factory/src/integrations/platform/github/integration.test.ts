@@ -745,7 +745,7 @@ describe('PlatformGithubIntegration', () => {
     const integration = createIntegration();
     const context = {
       auth: fakeAuth(),
-      fleet: { enabled: true },
+      sandbox: { enabled: true, provider: 'stub' },
       storage: {
         generic: seed.integrations.forIntegration('github'),
         sourceControl: seed.sourceControl.forIntegration('github'),
@@ -883,7 +883,8 @@ describe('PlatformGithubIntegration', () => {
     const onEvent = vi.fn();
     const context = {
       auth: fakeAuth(),
-      fleet: { enabled: false },
+      // Only presence is read here; the callback is never invoked.
+      sandbox: (() => ({})) as never,
       storage: {
         generic: seed.integrations.forIntegration('github'),
         sourceControl,
@@ -953,7 +954,7 @@ describe('PlatformGithubIntegration', () => {
     const integration = createIntegration(fetchImpl);
     const context = {
       auth: fakeAuth(),
-      fleet: { enabled: true },
+      sandbox: { enabled: true, provider: 'stub' },
       storage: {
         generic: seed.integrations.forIntegration('github'),
         sourceControl: seed.sourceControl.forIntegration('github'),
@@ -1031,7 +1032,7 @@ describe('PlatformGithubIntegration', () => {
     const integration = createIntegration(fetchImpl);
     const context = {
       auth: fakeAuth(),
-      fleet: { enabled: true },
+      sandbox: { enabled: true, provider: 'stub' },
       storage: {
         generic: seed.integrations.forIntegration('github'),
         sourceControl: seed.sourceControl.forIntegration('github'),
@@ -1079,7 +1080,7 @@ describe('PlatformGithubIntegration', () => {
     const integration = createIntegration(fetchImpl);
     const context = {
       auth: fakeAuth(),
-      fleet: { enabled: true },
+      sandbox: { enabled: true, provider: 'stub' },
       storage: {
         generic: seed.integrations.forIntegration('github'),
         sourceControl: seed.sourceControl.forIntegration('github'),

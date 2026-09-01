@@ -22,7 +22,7 @@ const agent = new Agent({
   id: "my-agent",
   name: "My Agent",
   instructions: "You are a helpful assistant",
-  model: "coralbricks/glm-5.2-fp4"
+  model: "coralbricks/glm-5.3-fp4"
 });
 
 // Generate a response
@@ -46,7 +46,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
 <ProviderModelsTable
   models={[
   {
-    "model": "coralbricks/glm-5.2-fp4",
+    "model": "coralbricks/glm-5.3-fp4",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
@@ -94,7 +94,7 @@ const agent = new Agent({
   name: "custom-agent",
   model: {
     url: "https://inference.coralbricks.ai/v1",
-    id: "coralbricks/glm-5.2-fp4",
+    id: "coralbricks/glm-5.3-fp4",
     apiKey: process.env.CORAL_API_KEY,
     headers: {
       "X-Custom-Header": "value"
@@ -113,7 +113,7 @@ const agent = new Agent({
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
       ? "coralbricks/kimi-k3"
-      : "coralbricks/glm-5.2-fp4";
+      : "coralbricks/glm-5.3-fp4";
   }
 });
 ```

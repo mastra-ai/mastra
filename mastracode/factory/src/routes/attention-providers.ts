@@ -81,7 +81,7 @@ export interface AttentionProvider {
   ): Promise<{ hasMore: boolean; continuation?: AttentionStreamPosition }>;
 }
 
-const SCAN_PAGE_SIZE = 50;
+export const SCAN_PAGE_SIZE = 50;
 // Receipt filtering is bounded per request; the response cursor resumes after the last scan.
 const MAX_RECEIPT_SCAN_PAGES = 4;
 
@@ -96,7 +96,7 @@ interface ScanBatch<T> {
  * from `before` until the stream runs dry or the page budget is spent; the
  * final batch of a budget stop carries the position to resume from.
  */
-async function* scanBatches<T>(
+export async function* scanBatches<T>(
   fetchBatch: (before?: AttentionStreamPosition) => Promise<{ rows: T[]; hasMore: boolean }>,
   positionOf: (row: T) => AttentionStreamPosition,
   before?: AttentionStreamPosition,
@@ -114,7 +114,7 @@ async function* scanBatches<T>(
 }
 
 /** Fills a page from the scan, stopping at `limit` entries or at the scan budget. */
-async function collectPage<T>(
+export async function collectPage<T>(
   batches: AsyncGenerator<ScanBatch<T>>,
   limit: number,
   toEntries: (rows: T[]) => Promise<AttentionEntry[]>,
@@ -131,7 +131,7 @@ async function collectPage<T>(
 }
 
 /** Marks every scanned batch read, reporting where a budget stop left off. */
-async function markScanRead<T>(
+export async function markScanRead<T>(
   batches: AsyncGenerator<ScanBatch<T>>,
   markBatch: (rows: T[]) => Promise<void>,
 ): Promise<{ hasMore: boolean; continuation?: AttentionStreamPosition }> {
@@ -150,7 +150,7 @@ function failureOccurredAt(decision: FactoryDeferredDecisionRecord): Date {
   return decision.completedAt ?? decision.updatedAt;
 }
 
-function matchesView(view: FactoryAttentionView, receipt: FactoryAttentionReceiptRecord | undefined): boolean {
+export function matchesView(view: FactoryAttentionView, receipt: FactoryAttentionReceiptRecord | undefined): boolean {
   if (view === 'archived') return receipt?.state === 'archived';
   if (view === 'unread') return receipt === undefined;
   return receipt?.state !== 'archived';
@@ -174,7 +174,7 @@ function attentionTarget(decision: FactoryDeferredDecisionRecord, item: WorkItem
   };
 }
 
-function workItemBoard(item: WorkItemRow): 'review' | 'work' {
+export function workItemBoard(item: WorkItemRow): 'review' | 'work' {
   const review = item.externalSource?.integrationId === 'github' && item.externalSource.type === 'pull-request';
   return review ? 'review' : 'work';
 }
@@ -506,6 +506,6 @@ function toMentionItem(scope: AttentionScope, { mention, comment, item, identity
   };
 }
 
-function receiptScope(scope: AttentionScope): { orgId: string; factoryProjectId: string; userId: string } {
+export function receiptScope(scope: AttentionScope): { orgId: string; factoryProjectId: string; userId: string } {
   return { orgId: scope.orgId, factoryProjectId: scope.factoryProjectId, userId: scope.userId };
 }

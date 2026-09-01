@@ -9,7 +9,7 @@ import { commentBodyError, MAX_COMMENT_MENTIONS, MAX_COMMENT_QUOTE_LENGTH } from
 export const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const CLIENT_TOKEN_RE = /^[A-Za-z0-9-]{8,64}$/;
 
-function isRecord(value: unknown): value is Record<string, unknown> {
+export function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 

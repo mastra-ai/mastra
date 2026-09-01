@@ -148,7 +148,6 @@ function stubBoardEndpoints({ issues = [] as object[], workItems = [issueWorkIte
       HttpResponse.json({ error: 'pull_request_not_found' }, { status: 404 }),
     ),
     http.get(`${TEST_BASE_URL}/web/github/projects/${REPO_ID}/sessions`, () => HttpResponse.json({ sessions: [] })),
-    http.post(`${TEST_BASE_URL}/web/github/projects/${REPO_ID}/ensure`, () => HttpResponse.json({ ok: true })),
     http.post(`${TEST_BASE_URL}/web/github/projects/${REPO_ID}/sessions`, () =>
       HttpResponse.json({ session: { sessionId: 'session-1', branch: 'factory/issue-7' } }),
     ),
@@ -188,6 +187,35 @@ describe('Board card details open the default run', () => {
       invocation: { type: 'skill', skillName: 'factory-triage' },
       workItem: { id: 'item-1', role: 'triage' },
     });
+  });
+
+  it('starts a hands-off run from the card menu, asking the server to preapprove its plans', async () => {
+    const { startRequests } = stubBoardEndpoints();
+    renderWorkBoard();
+    const user = userEvent.setup();
+
+    await user.click(await screen.findByRole('button', { name: 'Actions for Fix login bug' }));
+    await user.click(await screen.findByRole('menuitem', { name: 'Investigate hands-off' }));
+
+    await waitFor(() => expect(startRequests).toHaveLength(1));
+    expect(startRequests[0]).toMatchObject({
+      preapprovePlans: true,
+      workItem: { id: 'item-1', role: 'triage' },
+    });
+  });
+
+  it('offers no hands-off twin for Prepare approval, whose outcome is a maintainer decision', async () => {
+    stubBoardEndpoints({
+      workItems: [
+        { ...issueWorkItem, metadata: { number: 7, labels: ['status: needs approval'] }, stages: ['triage'] },
+      ],
+    });
+    renderWorkBoard();
+    const user = userEvent.setup();
+
+    await user.click(await screen.findByRole('button', { name: 'Actions for Fix login bug' }));
+    await screen.findByRole('menuitem', { name: 'Prepare approval' });
+    expect(screen.queryByRole('menuitem', { name: 'Prepare approval hands-off' })).not.toBeInTheDocument();
   });
 
   it("shows a Linear card's own description in its details", async () => {

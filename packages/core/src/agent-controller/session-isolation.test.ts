@@ -163,6 +163,37 @@ describe('AgentController.createSession — cross-session isolation', () => {
 
     expect(restarted.thread.requireId()).toBe(threadId);
   });
+
+  it('can defer thread creation when no thread matches', async () => {
+    const storage = new InMemoryStore();
+    const controller = createController(storage, {
+      resourceId: 'current-resource',
+      initialState: { projectPath: '/tmp/mastra-project' },
+    });
+    await controller.init();
+
+    const session = await controller.createSession({ createInitialThread: false });
+
+    expect(session.thread.getId()).toBeNull();
+    expect(await session.thread.list()).toEqual([]);
+  });
+
+  it('still resumes a matching thread when initial thread creation is deferred', async () => {
+    const storage = new InMemoryStore();
+    const projectPath = '/tmp/mastra-project';
+    const firstController = createController(storage, { resourceId: 'current-resource', initialState: { projectPath } });
+    await firstController.init();
+    const first = await firstController.createSession();
+
+    const restartedController = createController(storage, {
+      resourceId: 'current-resource',
+      initialState: { projectPath },
+    });
+    await restartedController.init();
+    const restarted = await restartedController.createSession({ createInitialThread: false });
+
+    expect(restarted.thread.requireId()).toBe(first.thread.requireId());
+  });
 });
 
 describe('AgentController session — cross-resource thread ownership', () => {

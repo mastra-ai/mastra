@@ -407,8 +407,9 @@ export class AgentController<TState = {}> {
     session.thread.connect(this.createThreadDataStore(session), session as Session);
     session.setMachinery({
       getAgent: () => this.getCurrentAgent(session),
-      subscribeToThread: ({ resourceId, threadId }) =>
-        this.getCurrentAgent(session).subscribeToThread({ resourceId, threadId }),
+      getRunScope: runId => this.getMastra()?.__getRunScope(runId),
+      subscribeToThread: ({ agent, resourceId, threadId }) =>
+        (agent ?? this.getCurrentAgent(session)).subscribeToThread({ resourceId, threadId }),
       buildStreamOptions: input => this.buildAgentMessageStreamOptions({ session, ...input }),
       buildSharedRunOptions: () => this.buildSharedRunOptions(session),
       buildToolsets: requestContext => this.buildToolsets(session, requestContext),
@@ -452,6 +453,7 @@ export class AgentController<TState = {}> {
    * @param id - Stable session identifier (mirrors `SessionRecord.id`). Defaults to the controller `id`.
    * @param ownerId - Stable session owner (mirrors `SessionRecord.ownerId`). Defaults to the controller `id`.
    * @param resourceId - Memory resource to bind this session to. Defaults to the controller `resourceId` or `id`.
+   * @param createInitialThread - Create a thread when no existing thread matches. Defaults to true.
    */
   async createSession({
     resourceId,
@@ -460,6 +462,7 @@ export class AgentController<TState = {}> {
     scope,
     tags,
     threadId,
+    createInitialThread = true,
     workspace,
     browser,
     requestContext,
@@ -487,6 +490,8 @@ export class AgentController<TState = {}> {
     tags?: Record<string, string>;
     /** Exact thread id to bind during session creation. Existing threads are resumed; missing threads are created with this id. */
     threadId?: string;
+    /** Create a thread when no existing thread matches. Set false when the caller must choose a thread after session creation. */
+    createInitialThread?: boolean;
     workspace?: Workspace;
     browser?: MastraBrowser;
     requestContext?: RequestContext;
@@ -569,6 +574,7 @@ export class AgentController<TState = {}> {
       const creation = this.#createSessionForResource(effectiveOwnerId, effectiveSessionId, effectiveResourceId, tags, {
         scope,
         threadId,
+        createInitialThread,
         workspace,
         browser,
         requestContext,
@@ -602,6 +608,7 @@ export class AgentController<TState = {}> {
     overrides?: {
       scope?: string;
       threadId?: string;
+      createInitialThread?: boolean;
       workspace?: Workspace;
       browser?: MastraBrowser;
       requestContext?: RequestContext;
@@ -714,9 +721,9 @@ export class AgentController<TState = {}> {
         return scopeEntries.every(([key, value]) => metadata[key] === value);
       });
 
-      if (candidates.length === 0) {
+      if (candidates.length === 0 && overrides?.createInitialThread !== false) {
         await session.thread.create();
-      } else {
+      } else if (candidates.length > 0) {
         const mostRecent = [...candidates].sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime())[0]!;
         await this.config.threadLock?.acquire(mostRecent.id);
         session.thread.set({ threadId: mostRecent.id });
@@ -930,14 +937,14 @@ export class AgentController<TState = {}> {
   #storageInitPromise?: Promise<void>;
 
   private async runStorageInit(): Promise<void> {
-    // Create an internal Mastra instance so agents have access to storage
-    // (required for tool approval snapshot persistence/resume).
+    // Create an internal Mastra instance so mode agents share the run state
+    // needed to persist and resume tool approvals, even without configured storage.
     // We init storage through Mastra's proxied storage so augmentWithInit
     // tracks it and won't double-init.
     //
     // Skip this when registered on a parent Mastra: that Mastra already owns
     // storage/agents/gateways, and getMastra() resolves to it.
-    if (this.config.storage && !this.#externalMastra) {
+    if (!this.#externalMastra) {
       const enabledGateways = this.config.gateways?.filter(gateway => gateway.shouldEnable?.() ?? true);
       const gateways = enabledGateways?.length
         ? Object.fromEntries(enabledGateways.map(gateway => [gateway.id, gateway]))
@@ -945,7 +952,7 @@ export class AgentController<TState = {}> {
 
       this.#internalMastra = new Mastra({
         logger: false,
-        storage: this.config.storage,
+        ...(this.config.storage ? { storage: this.config.storage } : {}),
         ...(this.config.pubsub ? { pubsub: this.config.pubsub } : {}),
         ...(this.config.observability ? { observability: this.config.observability } : {}),
         ...(gateways ? { gateways } : {}),

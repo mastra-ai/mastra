@@ -26,7 +26,6 @@
     "gemini-flash-latest",
     "gemini-flash-lite-latest",
     "gemini-omni-flash-preview",
-    "gemini-robotics-er-1.6-preview",
     "gemma-4-26b-a4b-it",
     "gemma-4-31b-it",
     "lyria-3-clip-preview",
@@ -65,7 +64,6 @@
     "gemini-flash-latest",
     "gemini-flash-lite-latest",
     "gemini-omni-flash-preview",
-    "gemini-robotics-er-1.6-preview",
     "gemma-4-26b-a4b-it",
     "gemma-4-31b-it",
     "lyria-3-clip-preview",
@@ -86,7 +84,6 @@
     "gemini-3.7-flash",
     "gemini-flash-latest",
     "gemini-flash-lite-latest",
-    "gemini-robotics-er-1.6-preview",
     "gemma-4-26b-a4b-it",
     "gemma-4-31b-it"
   ]

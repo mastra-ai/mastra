@@ -1,6 +1,5 @@
 import {
   assertKnowledgeCeilingRaised,
-  assertKnowledgeDescriptionWithinBound,
   assertKnowledgeScopeWithinCeiling,
   canonicalizeKnowledgeScope,
   createKnowledgeUlid,
@@ -56,6 +55,26 @@ import type {
   SqliteTransaction as Transaction,
 } from '../../db/client';
 import { withClientWriteLock } from '../../db/write-lock';
+
+// #21830 shipped this helper in core 1.63.1; resolve it lazily so an older
+// installed core fails feature-detection instead of breaking module load.
+let assertDescriptionWithinBound: ((description: string | undefined) => void) | undefined;
+async function assertKnowledgeDescriptionWithinBoundCompat(description: string | undefined): Promise<void> {
+  let assertWithinBound = assertDescriptionWithinBound;
+  if (!assertWithinBound) {
+    const mod: Partial<typeof import('@mastra/core/storage')> = await import('@mastra/core/storage');
+    const resolvedAssert: (description: string | undefined) => void =
+      mod.assertKnowledgeDescriptionWithinBound ??
+      (value => {
+        if (value !== undefined && value.length > 400) {
+          throw new Error('Knowledge node description exceeds the 400 UTF-16 code unit limit');
+        }
+      });
+    assertDescriptionWithinBound = resolvedAssert;
+    assertWithinBound = resolvedAssert;
+  }
+  assertWithinBound(description);
+}
 
 interface Executor {
   execute(statement: string | { sql: string; args?: InValue[] }): Promise<ResultSet>;
@@ -236,7 +255,7 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
   }
 
   async createNode(input: CreateKnowledgeNodeInput): Promise<KnowledgeNode> {
-    assertKnowledgeDescriptionWithinBound(input.description);
+    await assertKnowledgeDescriptionWithinBoundCompat(input.description);
     const scope = canonicalizeKnowledgeScope(input.scope);
     return this.#transaction(async tx => {
       const existing = await this.#getNodeByName(tx, input.name, scope);
@@ -331,7 +350,7 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
   }
 
   async updateNode(input: UpdateKnowledgeNodeInput): Promise<KnowledgeNode> {
-    assertKnowledgeDescriptionWithinBound(input.description);
+    await assertKnowledgeDescriptionWithinBoundCompat(input.description);
     return this.#transaction(async tx => {
       const existing = await this.#getNode(tx, input.id);
       if (!existing) throw new KnowledgeNotFoundError('node', input.id);

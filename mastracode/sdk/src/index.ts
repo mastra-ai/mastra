@@ -276,6 +276,8 @@ export interface MastraCodeConfig {
   settingsPath?: string;
   /** Initial state overrides (yolo, thinkingLevel, etc.) */
   initialState?: Partial<MastraCodeState>;
+  /** Create a thread during local boot when no existing thread matches. Default: true */
+  createInitialThread?: boolean;
   /** Override id generation for threads/messages. Primarily useful for deterministic tests. */
   idGenerator?: AgentControllerConfig<MastraCodeState>['idGenerator'];
   /** Override interval handlers. Default: gateway-sync */
@@ -741,6 +743,7 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
     globalSettings.signals?.experimentalGithubSignals && !config?.disableGithubSignals
       ? new GithubSignals({
           cwd: project.rootPath,
+          pollIntervalMs: globalSettings.signals.githubPollIntervalMs,
           gitcrawlCommand:
             process.env.MASTRACODE_GITCRAWL_BIN ??
             process.env.GITCRAWL_BIN ??
@@ -1368,7 +1371,11 @@ export async function bootLocalAgentController(config?: MastraCodeConfig) {
   await mastra?.startWorkers();
   base.registerConfiguredProcessorsWithMastra();
   base.startPluginSignalProviders();
-  const session = await controller.createSession({ id: sessionId, ownerId });
+  const session = await controller.createSession({
+    id: sessionId,
+    ownerId,
+    createInitialThread: config?.createInitialThread,
+  });
   await wireSessionConcerns(base, session);
   const knowledgeInspector = await base.createKnowledgeInspector(session);
 

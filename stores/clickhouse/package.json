@@ -55,8 +55,7 @@
     "zod": "^3.25.0 || ^4.0.0"
   },
   "files": [
-    "dist",
-    "CHANGELOG.md"
+    "dist"
   ],
   "homepage": "https://mastra.ai",
   "repository": {

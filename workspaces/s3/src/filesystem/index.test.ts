@@ -1452,6 +1452,7 @@ describe('S3Filesystem SDK Operations', () => {
       const lastMod = new Date('2024-01-15T10:30:00Z');
       mockSend.mockResolvedValueOnce({
         ContentLength: 1024,
+        ContentType: 'text/plain',
         LastModified: lastMod,
       });
 
@@ -1462,9 +1463,20 @@ describe('S3Filesystem SDK Operations', () => {
         path: '/docs/readme.txt',
         type: 'file',
         size: 1024,
+        mimeType: 'text/plain',
         createdAt: lastMod,
         modifiedAt: lastMod,
       });
+    });
+
+    it('falls back to an extension-based MIME type when HeadObject has no ContentType', async () => {
+      mockSend.mockResolvedValueOnce({
+        ContentLength: 2048,
+      });
+
+      const stat = await fs.stat('/images/no-content-type.png');
+
+      expect(stat.mimeType).toBe('image/png');
     });
 
     it('returns directory stat when file not found but prefix exists', async () => {

@@ -1,5 +1,47 @@
 # @internal/playground
 
+## 1.27.3-alpha.1
+
+### Patch Changes
+
+- Fixed the Evaluation overview in Studio truncating each scorer's history to its newest 100 scores. The Scores chart and summary now page through the full score list, so multi-week history and averages are complete for scorers with more than 100 scores. Fixes [#22540](https://github.com/mastra-ai/mastra/issues/22540). ([#22674](https://github.com/mastra-ai/mastra/pull/22674))
+
+- Updated dependencies [[`7d466c3`](https://github.com/mastra-ai/mastra/commit/7d466c3f806c7741796366543ea23d28428f6a1b), [`a3606a0`](https://github.com/mastra-ai/mastra/commit/a3606a09f3deaeef17caf04b9c6a0d7cd6b80fe6), [`4095752`](https://github.com/mastra-ai/mastra/commit/40957529233d202446ebecab1f59c76e99910230), [`a3606a0`](https://github.com/mastra-ai/mastra/commit/a3606a09f3deaeef17caf04b9c6a0d7cd6b80fe6), [`19b6f32`](https://github.com/mastra-ai/mastra/commit/19b6f322968210aa1e6d2cfd1a7a4c3a92e885d4), [`fa43c25`](https://github.com/mastra-ai/mastra/commit/fa43c257f315d1d8eec4ab6ebdad9033b4ed4bfe)]:
+  - @mastra/playground-ui@51.4.0-alpha.1
+  - @mastra/core@1.63.3-alpha.1
+  - @mastra/client-js@1.42.5-alpha.1
+  - @mastra/react@1.4.10-alpha.1
+
+## 1.27.3-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [[`3910c77`](https://github.com/mastra-ai/mastra/commit/3910c77413a3058ab270c6dbc74a59bc3cdf67ea)]:
+  - @mastra/core@1.63.3-alpha.0
+  - @mastra/client-js@1.42.5-alpha.0
+  - @mastra/react@1.4.10-alpha.0
+  - @mastra/playground-ui@51.3.2-alpha.0
+
+## 1.27.2
+
+### Patch Changes
+
+- Updated dependencies [[`0a9d29c`](https://github.com/mastra-ai/mastra/commit/0a9d29c0c4dbbaa6afc1c8146cdd41759cbd4002)]:
+  - @mastra/core@1.63.2
+  - @mastra/client-js@1.42.4
+  - @mastra/react@1.4.9
+  - @mastra/playground-ui@51.3.1
+
+## 1.27.2-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [[`0a9d29c`](https://github.com/mastra-ai/mastra/commit/0a9d29c0c4dbbaa6afc1c8146cdd41759cbd4002)]:
+  - @mastra/core@1.63.2-alpha.0
+  - @mastra/client-js@1.42.4-alpha.0
+  - @mastra/react@1.4.9-alpha.0
+  - @mastra/playground-ui@51.3.1-alpha.0
+
 ## 1.27.1
 
 ### Patch Changes

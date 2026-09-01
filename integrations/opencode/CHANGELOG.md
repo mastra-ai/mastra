@@ -1,5 +1,42 @@
 # @mastra/opencode
 
+## 0.1.23-alpha.2
+
+### Patch Changes
+
+- Updated dependencies [[`d94e242`](https://github.com/mastra-ai/mastra/commit/d94e2423909cfc859eaf39827e83c832439e6b6d), [`8571a42`](https://github.com/mastra-ai/mastra/commit/8571a42c8039e938564e5c5fb0a6b75377c4fe67)]:
+  - @mastra/memory@1.28.2-alpha.0
+
+## 0.1.23-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [[`a3606a0`](https://github.com/mastra-ai/mastra/commit/a3606a09f3deaeef17caf04b9c6a0d7cd6b80fe6), [`4095752`](https://github.com/mastra-ai/mastra/commit/40957529233d202446ebecab1f59c76e99910230), [`a3606a0`](https://github.com/mastra-ai/mastra/commit/a3606a09f3deaeef17caf04b9c6a0d7cd6b80fe6)]:
+  - @mastra/core@1.63.3-alpha.1
+
+## 0.1.23-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [[`3910c77`](https://github.com/mastra-ai/mastra/commit/3910c77413a3058ab270c6dbc74a59bc3cdf67ea)]:
+  - @mastra/core@1.63.3-alpha.0
+
+## 0.1.22
+
+### Patch Changes
+
+- Updated dependencies [[`3e7eced`](https://github.com/mastra-ai/mastra/commit/3e7eced50f51fb068cba581763248a012f295ba4), [`0a9d29c`](https://github.com/mastra-ai/mastra/commit/0a9d29c0c4dbbaa6afc1c8146cdd41759cbd4002)]:
+  - @mastra/libsql@1.22.2
+  - @mastra/core@1.63.2
+
+## 0.1.22-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [[`3e7eced`](https://github.com/mastra-ai/mastra/commit/3e7eced50f51fb068cba581763248a012f295ba4), [`0a9d29c`](https://github.com/mastra-ai/mastra/commit/0a9d29c0c4dbbaa6afc1c8146cdd41759cbd4002)]:
+  - @mastra/libsql@1.22.2-alpha.0
+  - @mastra/core@1.63.2-alpha.0
+
 ## 0.1.21
 
 ### Patch Changes
