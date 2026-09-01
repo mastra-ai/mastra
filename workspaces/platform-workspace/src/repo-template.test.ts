@@ -34,12 +34,12 @@ describe('createRepoTemplate', () => {
     expect(serializeSandboxTemplate(template!)).toEqual({
       schemaVersion: 1,
       operations: [
-        { method: 'runCmd', args: ['git clone https://github.com/acme/widgets "$HOME/widgets"'] },
-        { method: 'runCmd', args: [`git -C "$HOME/widgets" fetch origin ${SHA_1}`] },
-        { method: 'runCmd', args: [`git -C "$HOME/widgets" checkout ${SHA_1}`] },
-        { method: 'runCmd', args: ['cd "$HOME/widgets" && pnpm install --frozen-lockfile'] },
+        { method: 'runCmd', args: ['git clone https://github.com/acme/widgets "widgets"'] },
+        { method: 'runCmd', args: [`git -C "widgets" fetch origin ${SHA_1}`] },
+        { method: 'runCmd', args: [`git -C "widgets" checkout ${SHA_1}`] },
+        { method: 'runCmd', args: ['cd "widgets" && pnpm install --frozen-lockfile'] },
       ],
-      family: 'repo:https://github.com/acme/widgets:$HOME/widgets',
+      family: 'repo:https://github.com/acme/widgets:/widgets',
     });
   });
 
@@ -52,8 +52,8 @@ describe('createRepoTemplate', () => {
 
     const operations = serializeSandboxTemplate(template!).operations;
     expect(operations.slice(-2)).toEqual([
-      { method: 'runCmd', args: ['cd "$HOME/widgets" && pnpm i'] },
-      { method: 'runCmd', args: ['cd "$HOME/widgets" && pnpm build'] },
+      { method: 'runCmd', args: ['cd "widgets" && pnpm i'] },
+      { method: 'runCmd', args: ['cd "widgets" && pnpm build'] },
     ]);
   });
 
@@ -66,7 +66,7 @@ describe('createRepoTemplate', () => {
 
     const operations = serializeSandboxTemplate(template!).operations;
     const setupOps = operations.filter(op => op.method === 'runCmd' && String(op.args[0]).startsWith('cd '));
-    expect(setupOps).toEqual([{ method: 'runCmd', args: ['cd "$HOME/widgets" && pnpm i'] }]);
+    expect(setupOps).toEqual([{ method: 'runCmd', args: ['cd "widgets" && pnpm i'] }]);
   });
 
   it('treats an all-blank setupCommand as absent', async () => {
@@ -80,21 +80,40 @@ describe('createRepoTemplate', () => {
     expect(operations.filter(op => op.method === 'runCmd')).toHaveLength(3);
   });
 
-  it('clones under an explicit workingDirectory, bakes it as the runtime workdir, and keys the family on it', async () => {
+  it('creates an explicit workingDirectory, sets it as the cwd before cloning, and keys the family on it', async () => {
     const template = await createRepoTemplate({
       getRepositoryAccess: accessFor('https://github.com/acme/widgets.git'),
       setupCommand: 'pnpm i',
-      workingDirectory: '/workspace',
+      workingDirectory: '/workspace/',
       resolveHead: headOf(SHA_1),
     })!();
 
     const serialized = serializeSandboxTemplate(template!);
+    // mkdir runs as the build user, then setWorkdir makes the directory the
+    // cwd for every later step and the runtime default. Steps stay relative
+    // so the checkout lands at `<cwd>/widgets` exactly as in the unset case.
+    expect(serialized.operations.slice(0, 3)).toEqual([
+      { method: 'runCmd', args: ['mkdir -p "/workspace"'] },
+      { method: 'setWorkdir', args: ['/workspace'] },
+      { method: 'runCmd', args: ['git clone https://github.com/acme/widgets "widgets"'] },
+    ]);
     const commands = serialized.operations.filter(op => op.method === 'runCmd').map(op => String(op.args[0]));
-    expect(commands[0]).toBe('mkdir -p "/workspace/widgets"');
-    expect(commands[1]).toBe('git clone https://github.com/acme/widgets "/workspace/widgets"');
-    expect(commands.at(-1)).toBe('cd "/workspace/widgets" && pnpm i');
-    expect(serialized.operations.at(-1)).toEqual({ method: 'setWorkdir', args: ['/workspace'] });
+    expect(commands.at(-1)).toBe('cd "widgets" && pnpm i');
     expect(serialized.family).toBe('repo:https://github.com/acme/widgets:/workspace/widgets');
+  });
+
+  it('keeps steps relative to the base image cwd when workingDirectory is omitted', async () => {
+    const template = await createRepoTemplate({
+      getRepositoryAccess: accessFor('https://github.com/acme/widgets.git'),
+      resolveHead: headOf(SHA_1),
+    })!();
+
+    const serialized = serializeSandboxTemplate(template!);
+    expect(serialized.operations.map(op => op.method)).not.toContain('setWorkdir');
+    expect(serialized.operations[0]).toEqual({
+      method: 'runCmd',
+      args: ['git clone https://github.com/acme/widgets "widgets"'],
+    });
   });
 
   it('rejects a workingDirectory that is not a plain absolute path', async () => {
@@ -121,13 +140,13 @@ describe('createRepoTemplate', () => {
     expect(serialized.operations).toEqual([
       { method: 'cpuCount', args: [4] },
       { method: 'memoryMB', args: [8_192] },
-      { method: 'runCmd', args: ['git clone https://github.com/acme/widgets "$HOME/widgets"'] },
-      { method: 'runCmd', args: [`git -C "$HOME/widgets" fetch origin ${SHA_1}`] },
-      { method: 'runCmd', args: [`git -C "$HOME/widgets" checkout ${SHA_1}`] },
+      { method: 'runCmd', args: ['git clone https://github.com/acme/widgets "widgets"'] },
+      { method: 'runCmd', args: [`git -C "widgets" fetch origin ${SHA_1}`] },
+      { method: 'runCmd', args: [`git -C "widgets" checkout ${SHA_1}`] },
     ]);
     // Sizing never leaks into the commit-independent family key; the platform
     // namespaces warm fallbacks by size server-side.
-    expect(serialized.family).toBe('repo:https://github.com/acme/widgets:$HOME/widgets');
+    expect(serialized.family).toBe('repo:https://github.com/acme/widgets:/widgets');
   });
 
   it('omits resource operations entirely when sizing is not requested', async () => {
@@ -149,7 +168,7 @@ describe('createRepoTemplate', () => {
       getRepositoryAccess: accessFor('https://github.com/acme/widgets.git'),
       resolveHead: headOf(SHA_2),
     })!();
-    expect(serializeSandboxTemplate(a!).family).toBe('repo:https://github.com/acme/widgets:$HOME/widgets');
+    expect(serializeSandboxTemplate(a!).family).toBe('repo:https://github.com/acme/widgets:/widgets');
     expect(serializeSandboxTemplate(a!).family).toBe(serializeSandboxTemplate(b!).family);
 
     const other = await createRepoTemplate({
@@ -258,7 +277,7 @@ describe('createRepoTemplate', () => {
     expect(definition.operations).toEqual([
       { method: 'runCmd', args: [expect.stringContaining('$MASTRA_REPOSITORY_ACCESS_TOKEN')] },
       { method: 'runCmd', args: [expect.stringContaining('$MASTRA_REPOSITORY_ACCESS_TOKEN')] },
-      { method: 'runCmd', args: [`git -C "$HOME/widgets" checkout ${SHA_1}`] },
+      { method: 'runCmd', args: [`git -C "widgets" checkout ${SHA_1}`] },
     ]);
     expect(JSON.stringify(definition)).not.toContain('ghs_secret_token');
   });

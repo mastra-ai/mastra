@@ -63,8 +63,10 @@ export interface PlatformRepoTemplateOptions {
   /** Memory in MB. Same identity and fallback semantics as `cpuCount`. */
   memoryMB?: number;
   /**
-   * Absolute parent for the checkout. The repo lands at `<workingDirectory>/<repo>`;
-   * the value becomes the runtime cwd and part of the template family. Omit for `$HOME/<repo>`.
+   * Absolute parent for the checkout. Created by the build user, so its parent
+   * must already be writable by that user. Becomes the build cwd, the runtime
+   * cwd, and part of the template family; the repo lands at `<workingDirectory>/<repo>`.
+   * Omit to use the base image's working directory for all of the above.
    */
   workingDirectory?: string;
   /**
@@ -133,10 +135,12 @@ export function createRepoTemplate(options: PlatformRepoTemplateOptions): Platfo
     }
 
     const workingDirectory =
-      options.workingDirectory === undefined ? undefined : assertWorkingDirectory(options.workingDirectory);
-    const repoDir = workingDirectory
-      ? `${trimTrailingSlashes(workingDirectory)}/${repoDirName(cloneUrl)}`
-      : defaultRepoDir(cloneUrl);
+      options.workingDirectory === undefined
+        ? undefined
+        : trimTrailingSlashes(assertWorkingDirectory(options.workingDirectory));
+    // Relative to the build cwd, which `setWorkdir` (or the base image) also
+    // makes the runtime cwd, so the checkout sits at `<cwd>/<repo>` either way.
+    const repoDir = repoDirName(cloneUrl);
     const auth = token ? `${gitAuthFlag()} ` : '';
     // Blank commands would produce invalid shell steps.
     const setupCommands = (
@@ -148,7 +152,6 @@ export function createRepoTemplate(options: PlatformRepoTemplateOptions): Platfo
     ).filter(command => command.trim() !== '');
     // Each operation gets its own cached provider build step.
     const steps = [
-      ...(workingDirectory ? [`mkdir -p "${repoDir}"`] : []),
       `git ${auth}clone ${cloneUrl} "${repoDir}"`,
       `git -C "${repoDir}" ${auth}fetch origin ${sha}`,
       `git -C "${repoDir}" checkout ${sha}`,
@@ -157,20 +160,22 @@ export function createRepoTemplate(options: PlatformRepoTemplateOptions): Platfo
     ];
 
     // Commit-independent family key that groups every commit of the same
-    // repo+repoDir together. The platform uses it to find a prior build in
+    // repo+layout together. The platform uses it to find a prior build in
     // the same family so new commits boot on a warm filesystem while the
     // exact template continues to build in the background.
-    const family = `repo:${cloneUrl}:${repoDir}`;
+    const family = `repo:${cloneUrl}:${workingDirectory ?? ''}/${repoDir}`;
     let template = Template();
     const buildEnv = { ...options.buildEnv, ...(token ? { [BUILD_TOKEN_ENV]: token } : {}) };
     if (Object.keys(buildEnv).length > 0) template = template.setEnvs(buildEnv, { ephemeral: true });
     if (options.cpuCount !== undefined) template = template.cpuCount(options.cpuCount);
     if (options.memoryMB !== undefined) template = template.memoryMB(options.memoryMB);
-    for (const step of steps) template = template.runCmd(step);
     if (workingDirectory) {
-      // `setWorkdir` sets the runtime cwd without shell expansion.
-      template = template.setWorkdir(workingDirectory);
+      // Created by the build user so it is writable; `setWorkdir` then makes
+      // it the cwd for the steps below and the runtime default, without
+      // shell expansion.
+      template = template.runCmd(`mkdir -p "${workingDirectory}"`).setWorkdir(workingDirectory);
     }
+    for (const step of steps) template = template.runCmd(step);
     return template.withFamily(family);
   };
 }
@@ -214,14 +219,10 @@ function repoDirName(cloneUrl: string): string {
   return repo.replace(/[^\w.-]/g, '-').replace(/^\.+/, '') || 'repo';
 }
 
-function defaultRepoDir(cloneUrl: string): string {
-  return `$HOME/${repoDirName(cloneUrl)}`;
-}
-
-// Avoid regex backtracking on long trailing-slash runs.
+// Avoid regex backtracking on long trailing-slash runs. Keeps a bare `/`.
 function trimTrailingSlashes(path: string): string {
   let end = path.length;
-  while (end > 0 && path[end - 1] === '/') end--;
+  while (end > 1 && path[end - 1] === '/') end--;
   return path.slice(0, end);
 }
 

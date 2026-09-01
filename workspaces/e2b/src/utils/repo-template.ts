@@ -171,8 +171,10 @@ export interface RepoTemplateOptions {
    */
   memoryMB?: number;
   /**
-   * Absolute parent for the checkout. The repo lands at `<workingDirectory>/<repo>`;
-   * the value becomes the runtime cwd and part of template identity. Omit for `$HOME/<repo>`.
+   * Absolute parent for the checkout. Created by the build user, so its parent
+   * must already be writable by that user. Becomes the build cwd, the runtime
+   * cwd, and part of template identity; the repo lands at `<workingDirectory>/<repo>`.
+   * Omit to use the base image's working directory for all of the above.
    */
   workingDirectory?: string;
 }
@@ -394,13 +396,12 @@ function gitAuthFlag(): string {
 function buildRepoTemplateSpec(identity: RepoTemplateIdentity, token?: string): NamedTemplateSpec {
   const { sha, setupCommand, buildEnv, workingDirectory } = identity;
   const cloneUrl = normalizeCloneUrl(identity.cloneUrl);
-  const repoDir = workingDirectory
-    ? `${trimTrailingSlashes(workingDirectory)}/${repoDirName(cloneUrl)}`
-    : defaultRepoDir(cloneUrl);
+  // Relative to the build cwd, which `setWorkdir` (or the base image) also
+  // makes the runtime cwd, so the checkout sits at `<cwd>/<repo>` either way.
+  const repoDir = repoDirName(cloneUrl);
 
   const auth = token ? `${gitAuthFlag()} ` : '';
 
-  // Double quotes so a `$HOME`-relative repoDir expands in the build shell.
   const steps: string[] = [`git ${auth}clone ${cloneUrl} "${repoDir}"`];
   if (sha) {
     // GitHub serves fetches of reachable shas, so pinning after a default
@@ -421,13 +422,15 @@ function buildRepoTemplateSpec(identity: RepoTemplateIdentity, token?: string): 
     // definition until the next rebuild.
     template = template.setEnvs(env);
   }
-  // Each command gets its own cached build layer.
-  if (workingDirectory) template = template.runCmd(`mkdir -p "${repoDir}"`);
-  for (const step of steps) template = template.runCmd(step);
   if (workingDirectory) {
-    // `setWorkdir` sets the runtime cwd without shell expansion.
-    template = template.setWorkdir(workingDirectory);
+    // Created by the build user so it is writable; `setWorkdir` then makes
+    // it the cwd for the steps below and the runtime default, without
+    // shell expansion.
+    const dir = trimTrailingSlashes(workingDirectory);
+    template = template.runCmd(`mkdir -p "${dir}"`).setWorkdir(dir);
   }
+  // Each command gets its own cached build layer.
+  for (const step of steps) template = template.runCmd(step);
 
   return {
     ref: repoTemplateRef(identity),
@@ -513,14 +516,10 @@ function repoDirName(cloneUrl: string): string {
   return repo.replace(/[^\w.-]/g, '-').replace(/^\.+/, '') || 'repo';
 }
 
-function defaultRepoDir(cloneUrl: string): string {
-  return `$HOME/${repoDirName(cloneUrl)}`;
-}
-
 // Avoid regex backtracking on long trailing-slash runs.
 function trimTrailingSlashes(path: string): string {
   let end = path.length;
-  while (end > 0 && path[end - 1] === '/') end--;
+  while (end > 1 && path[end - 1] === '/') end--;
   return path.slice(0, end);
 }
 
