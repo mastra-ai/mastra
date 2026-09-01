@@ -2,6 +2,7 @@ import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tansta
 
 import { useApiConfig } from '../api/config';
 import { queryKeys } from '../api/keys';
+import { useFeedPollInterval } from '../ui/domains/factory/context/FeedEventsProvider';
 import { actOnFactoryDecision, fetchFactoryDecisions } from '../ui/domains/factory/services/decisions';
 import type {
   FactoryDecisionAction,
@@ -12,11 +13,12 @@ import type {
 export function useFactoryDecisionStatus(githubProjectId: string | undefined, statuses: FactoryDecisionStatus[]) {
   const { baseUrl } = useApiConfig();
   const statusKey = statuses.join(',');
+  const refetchInterval = useFeedPollInterval(2_000);
   return useQuery({
     queryKey: queryKeys.factoryDecisions(githubProjectId, statusKey),
     queryFn: () => fetchFactoryDecisions(baseUrl, githubProjectId!, { statuses, limit: 50 }),
     enabled: Boolean(githubProjectId),
-    refetchInterval: 2_000,
+    refetchInterval,
     staleTime: 1_000,
   });
 }

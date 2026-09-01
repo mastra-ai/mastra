@@ -2,7 +2,7 @@ import { skipToken, useInfiniteQuery, useMutation, useQuery, useQueryClient } fr
 
 import { useApiConfig } from '../api/config';
 import { queryKeys } from '../api/keys';
-import { useFeedEventsConnected } from '../ui/domains/factory/context/FeedEventsProvider';
+import { useFeedPollInterval } from '../ui/domains/factory/context/FeedEventsProvider';
 import {
   fetchFactoryAttention,
   markAllFactoryAttentionRead,
@@ -25,13 +25,14 @@ export function useFactoryAttention(
   tier?: FactoryAttentionTier,
 ) {
   const { baseUrl } = useApiConfig();
+  const refetchInterval = useFeedPollInterval(ATTENTION_POLL_MS);
   return useQuery({
     queryKey: queryKeys.factoryAttention(factoryProjectId, view, limit, tier),
     queryFn: factoryProjectId
       ? ({ signal }) =>
           fetchFactoryAttention(baseUrl, factoryProjectId, { view, limit, signal, ...(tier ? { tier } : {}) })
       : skipToken,
-    refetchInterval: ATTENTION_POLL_MS,
+    refetchInterval,
     staleTime: 2_000,
   });
 }
@@ -42,7 +43,7 @@ export function useFactoryAttentionHistory(
   search: string,
 ) {
   const { baseUrl } = useApiConfig();
-  const connected = useFeedEventsConnected();
+  const refetchInterval = useFeedPollInterval(ATTENTION_POLL_MS);
   const initialPageParam: string | undefined = undefined;
   const queryFn = factoryProjectId
     ? ({ pageParam, signal }: { pageParam: string | undefined; signal: AbortSignal }) =>
@@ -53,9 +54,7 @@ export function useFactoryAttentionHistory(
     queryFn,
     initialPageParam,
     getNextPageParam: lastPage => lastPage.nextCursor,
-    // The stream announces every attention change; the poll only bridges
-    // the window where no stream is up.
-    refetchInterval: connected ? false : ATTENTION_POLL_MS,
+    refetchInterval,
     staleTime: 2_000,
   });
 }
