@@ -61,6 +61,17 @@ const AGENT_THREAD_LEASE_RENEW_INTERVAL_MS = readPositiveIntEnv(
 const AGENT_SUSPENDED_RUN_TTL_MS = readPositiveIntEnv('MASTRA_SUSPENDED_RUN_TTL_MS', 30 * 60 * 1000);
 
 export const AGENT_THREAD_LEASE_CONFLICT_CODE = 'AGENT_THREAD_LEASE_CONFLICT';
+export const REPLAYED_STREAM_PART = Symbol('mastra.replayedStreamPart');
+
+export function markReplayedStreamPart<T extends object>(part: T): T {
+  const markedPart = { ...part };
+  Object.defineProperty(markedPart, REPLAYED_STREAM_PART, { value: true, enumerable: false });
+  return markedPart as T;
+}
+
+export function isReplayedStreamPart(part: unknown): boolean {
+  return Boolean(part && typeof part === 'object' && REPLAYED_STREAM_PART in part);
+}
 
 export class AgentThreadLeaseConflictError extends Error {
   readonly code = AGENT_THREAD_LEASE_CONFLICT_CODE;
@@ -153,6 +164,8 @@ type AgentThreadRunRecord<OUTPUT = unknown> = {
   resourceId?: string;
   streamOptions: AgentExecutionOptions<OUTPUT>;
   createSubscriberStream?: () => ReadableStream<unknown>;
+  /** Whether this record was reconstructed from retained pubsub history. */
+  isReplay?: boolean;
   /** Settles once every stream-part broadcast publish for this run completed. */
   broadcastFinished?: Promise<void>;
 };
@@ -2112,7 +2125,12 @@ export class AgentThreadStreamRuntime {
       wake();
     };
 
-    const createRemoteRun = (runId: string, streamId: string, streamSeq: number): AgentThreadRunRecord<any> => {
+    const createRemoteRun = (
+      runId: string,
+      streamId: string,
+      streamSeq: number,
+      isReplay: boolean,
+    ): AgentThreadRunRecord<any> => {
       const remoteRun = {
         parts: [] as unknown[],
         waiters: [] as Array<() => void>,
@@ -2163,6 +2181,7 @@ export class AgentThreadStreamRuntime {
         streamId,
         streamSeq,
         lifecycle: 'running',
+        isReplay,
         threadId: options.threadId,
         resourceId: options.resourceId,
         streamOptions: {},
@@ -2185,6 +2204,7 @@ export class AgentThreadStreamRuntime {
     let activeReaderRunId: string | null = null;
     let activeReaderStreamId: string | null = null;
     let currentRunRequestContext: RequestContext | undefined;
+    let isSubscribing = true;
     let cancelledByAbort = false;
 
     const markActiveIfLive = async (runId: string, streamId: string, local: boolean) => {
@@ -2293,7 +2313,7 @@ export class AgentThreadStreamRuntime {
       );
     };
 
-    const handleEvent = async (event: Parameters<EventCallback>[0]) => {
+    const handleEvent = async (event: Parameters<EventCallback>[0], deliveredWhileSubscribing: boolean) => {
       if (done) return;
       const data = event.data as AgentThreadStreamRuntimeEvent | undefined;
       if (!data) return;
@@ -2326,7 +2346,7 @@ export class AgentThreadStreamRuntime {
         const record =
           localRecord ??
           deferredRunsByStreamId.get(data.streamId) ??
-          createRemoteRun(data.runId, data.streamId, data.streamSeq);
+          createRemoteRun(data.runId, data.streamId, data.streamSeq, deliveredWhileSubscribing || !live);
         if (live) {
           deferredRunsByStreamId.delete(data.streamId);
           enqueueRun(record);
@@ -2356,8 +2376,14 @@ export class AgentThreadStreamRuntime {
           // A subscriber can attach after another runtime already broadcast run-registered.
           // Treat the first stream-part on this thread topic as proof of the remote run and
           // create the local proxy stream from that point forward.
-          const record = createRemoteRun(data.runId, data.streamId, state.streamSeqByRunId.get(data.runId) ?? 1);
-          if (await this.#hasLiveThreadLease(resolvedPubSub, key, data.runId)) {
+          const live = await this.#hasLiveThreadLease(resolvedPubSub, key, data.runId);
+          const record = createRemoteRun(
+            data.runId,
+            data.streamId,
+            state.streamSeqByRunId.get(data.runId) ?? 1,
+            deliveredWhileSubscribing || !live,
+          );
+          if (live) {
             enqueueRun(record);
           } else {
             deferredRunsByStreamId.set(data.streamId, record);
@@ -2404,7 +2430,7 @@ export class AgentThreadStreamRuntime {
         let errorRun: AgentThreadRunRecord<any> | undefined;
         let remoteRun = remoteRuns.get(eventStreamId);
         if (!remoteRun) {
-          errorRun = createRemoteRun(data.runId, eventStreamId, state.streamSeqByRunId.get(data.runId) ?? 1);
+          errorRun = createRemoteRun(data.runId, eventStreamId, state.streamSeqByRunId.get(data.runId) ?? 1, false);
           remoteRun = remoteRuns.get(eventStreamId);
         }
         if (remoteRun) {
@@ -2502,12 +2528,13 @@ export class AgentThreadStreamRuntime {
 
     let eventTail = Promise.resolve();
     const onEvent: EventCallback = (event, ack) => {
+      const deliveredWhileSubscribing = isSubscribing;
       // Events are processed strictly in publish order, but each delivery is
       // acknowledged on its own outcome. Every delivered event is acked once it
       // has been inspected — including events this subscriber filters out —
       // because a persistent backend (Redis consumer groups) keeps unacked
       // deliveries pending for the lifetime of the subscription.
-      const processed = eventTail.then(() => handleEvent(event));
+      const processed = eventTail.then(() => handleEvent(event, deliveredWhileSubscribing));
       // The tail must survive a failed event so later events still run.
       eventTail = processed.then(
         () => {},
@@ -2517,7 +2544,11 @@ export class AgentThreadStreamRuntime {
       return processed.then(() => ack?.());
     };
 
-    await resolvedPubSub.subscribe(topic, onEvent);
+    try {
+      await resolvedPubSub.subscribe(topic, onEvent);
+    } finally {
+      isSubscribing = false;
+    }
 
     const currentRunId = activeRunId();
     const currentRecord = currentRunId ? state.threadRunsById.get(currentRunId) : undefined;
@@ -2576,7 +2607,7 @@ export class AgentThreadStreamRuntime {
                   typedPart && typeof typedPart === 'object' && !('runId' in typedPart)
                     ? { ...typedPart, runId: run.runId }
                     : typedPart;
-                yield partWithRunId;
+                yield run.isReplay ? markReplayedStreamPart(partWithRunId) : partWithRunId;
                 if (done) break;
                 const finishReason = typedPart.finishReason ?? typedPart.payload?.finishReason;
                 const terminalBoundary =

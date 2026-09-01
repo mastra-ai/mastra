@@ -5,6 +5,7 @@ import type {
   MastraProviderMetadata,
   MastraToolInvocationPart,
 } from '../agent/message-list/state/types';
+import { isReplayedStreamPart } from '../agent/thread-stream-runtime';
 import type { AgentThreadSubscription } from '../agent/types';
 import { getErrorFromUnknown } from '../error';
 import type { RequestContext } from '../request-context';
@@ -268,6 +269,18 @@ export class SessionRunEngine {
       content: { format: 2, parts: [] },
       createdAt: new Date(),
     };
+  }
+
+  private async hasDurableSuspension(agent: Agent, toolCallId: string): Promise<boolean> {
+    const threadId = this.#session.thread.getId();
+    const runId = this.#session.run.getRunId();
+    if (!threadId || !runId) return false;
+
+    const { runs } = await agent.listSuspendedRuns({
+      threadId,
+      resourceId: this.#session.identity.getResourceId(),
+    });
+    return runs.some(run => run.runId === runId && run.toolCalls.some(toolCall => toolCall.toolCallId === toolCallId));
   }
 
   /**
@@ -679,6 +692,10 @@ export class SessionRunEngine {
           ? approvalTransform.transformed
           : getDisplayTransform(chunk.metadata, 'input-available', getPayload(chunk).args);
 
+        if (isReplayedStreamPart(chunk) && !(await this.hasDurableSuspension(agent, toolCallId))) {
+          break;
+        }
+
         const policy = this.#session.resolveToolApproval(toolName);
 
         if (policy === 'allow') {
@@ -737,6 +754,10 @@ export class SessionRunEngine {
         const suspArgs = getDisplayTransform(chunk.metadata, 'input-available', getPayload(chunk).args);
         const suspPayload = getDisplayTransform(chunk.metadata, 'suspend', getPayload(chunk).suspendPayload);
         const suspResumeSchema = getString(getPayload(chunk).resumeSchema);
+
+        if (isReplayedStreamPart(chunk) && !(await this.hasDurableSuspension(agent, suspToolCallId))) {
+          break;
+        }
 
         const suspRunId = this.#session.run.getRunId();
         if (suspRunId) {
