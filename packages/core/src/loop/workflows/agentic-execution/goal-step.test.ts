@@ -295,7 +295,7 @@ describe('goal step waiting semantics', () => {
         useMemory: true,
       });
 
-      expect(record.status).toBe('paused');
+      expect(record.status).toBe('active');
       expect(chunk.payload.judgeFailed).toBe(true);
       expect(judgeContext).not.toBe(parentContext);
       expect(judgeContext?.get('tenantId')).toBe('tenant-1');
@@ -476,30 +476,33 @@ describe('goal step waiting semantics', () => {
 });
 
 describe('goal step judge-failure semantics', () => {
-  it('pauses the objective and stops the loop when the judge/scorer throws', async () => {
+  it('keeps the objective active, consumes no budget, and retries when the judge/scorer throws once', async () => {
     // The decision the model "would" have returned is irrelevant: the scorer
-    // throws before it matters. The step must not treat the error as continue.
+    // throws before it matters. A single transient failure is a missing
+    // verdict, not a verdict — the loop retries the judge next iteration.
     const { record, stepResult, chunk } = await runGoalStep('done', makeRecord(), { throwingScorer: true });
 
-    expect(record.status).toBe('paused');
-    // The judge returned no verdict, so the evaluation budget is not charged.
+    expect(record.status).toBe('active');
+    // A failed evaluation must not consume run budget.
     expect(record.runsUsed).toBe(0);
-    // A failed judge must stop the loop, not silently iterate against it.
-    expect(stepResult.isContinued).toBe(false);
-    expect(chunk.payload.status).toBe('paused');
+    expect(record.judgeFailureCount).toBe(1);
+    expect(stepResult.isContinued).toBe(true);
+    expect(chunk.payload.status).toBe('active');
     expect(chunk.payload.judgeFailed).toBe(true);
     expect(chunk.payload.passed).toBe(false);
-    // The error reason is captured as the pause reason.
-    expect(record.pausedReason).toContain('judge model exploded');
-    expect(chunk.payload.pausedReason).toContain('judge model exploded');
+    expect(record.pausedReason).toBeUndefined();
+    // The retried failure still surfaces its cause in the payload reason.
+    expect(chunk.payload.reason).toContain('judge model exploded');
   });
 
   it('does not mark a thrown judge as complete even when the score is 0 like "continue"', async () => {
     // Guards the core correctness bug: a thrown scorer reports score 0, which
     // must NOT be conflated with a legitimate "keep working" (continue) result.
     const { record, chunk } = await runGoalStep('continue', makeRecord(), { throwingScorer: true });
-    expect(record.status).toBe('paused');
+    expect(record.status).toBe('active');
+    expect(record.runsUsed).toBe(0);
     expect(chunk.payload.judgeFailed).toBe(true);
+    expect(chunk.payload.passed).toBe(false);
   });
 
   it('persists judge failure feedback as a goal-judge signal, not assistant-authored transcript text', async () => {
@@ -515,21 +518,26 @@ describe('goal step judge-failure semantics', () => {
     expect(chunk.payload.reason).toContain('judge model exploded');
   });
 
-  it('stops on the FIRST judge failure instead of iterating toward a large budget (infinite-loop regression)', async () => {
+  it('pauses after MAX_CONSECUTIVE_JUDGE_FAILURES instead of iterating toward a large budget (infinite-loop regression)', async () => {
     // Reproduces the reported infinite loop: a judge that keeps returning
-    // "Bad Request" with a huge maxRuns (e.g. 500) must pause on the first
-    // failure rather than burning a failing judge call every iteration until the
-    // budget runs out. The error reason carries the underlying "Bad Request".
-    const { record, stepResult, chunk } = await runGoalStep('continue', makeRecord({ runsUsed: 3, maxRuns: 500 }), {
-      throwingScorer: true,
-      throwMessage: 'Scorer Run Failed: Bad Request',
-    });
+    // "Bad Request" with a huge maxRuns (e.g. 500) must pause once the
+    // consecutive-failure threshold is hit rather than burning a failing judge
+    // call every iteration until the budget runs out.
+    const { record, stepResult, chunk } = await runGoalStep(
+      'continue',
+      makeRecord({ runsUsed: 3, maxRuns: 500, judgeFailureCount: 2 }),
+      {
+        throwingScorer: true,
+        throwMessage: 'Scorer Run Failed: Bad Request',
+      },
+    );
 
-    // Loop stops immediately (isContinued false) — no march toward 500.
+    // Loop stops at the threshold (isContinued false) — no march toward 500.
     expect(stepResult.isContinued).toBe(false);
     expect(record.status).toBe('paused');
-    // No verdict, no charge — and certainly not the whole budget.
+    // Failed evaluations never consumed budget (still 3).
     expect(record.runsUsed).toBe(3);
+    expect(record.judgeFailureCount).toBe(3);
     expect(chunk.payload.judgeFailed).toBe(true);
     // The status drives the TUI label away from "continue" → it renders "paused".
     expect(chunk.payload.status).toBe('paused');
@@ -540,41 +548,22 @@ describe('goal step judge-failure semantics', () => {
     expect(chunk.payload.reason).toContain('Bad Request');
   });
 
-  // Regression: the provider layer has already exhausted its own retries by the
-  // time a transport error reaches the step, but a single dropped connection
-  // still parked the objective with most of its budget unspent.
-  it('retries the judge once before parking, so a transient failure does not strand the goal', async () => {
-    let calls = 0;
-    const flakyScorer: any = {
-      id: 'goal-scorer',
-      name: 'Goal (LLM)',
-      run: async () => {
-        calls++;
-        if (calls === 1) throw new Error('Cannot connect to API: other side closed');
-        return { score: 1, reason: 'r:done' };
-      },
-    };
-    const { record, stepResult, chunk } = await runGoalStep('done', makeRecord({ runsUsed: 3 }), {
-      scorer: flakyScorer,
-    });
-
-    expect(calls).toBe(2);
-    expect(chunk.payload.judgeFailed).toBe(false);
-    expect(record.status).toBe('done');
-    // The successful second attempt is the verdict, and it charges one run.
+  it('a verdict after transient failures resets the consecutive-failure count', async () => {
+    const { record } = await runGoalStep('continue', makeRecord({ runsUsed: 3, judgeFailureCount: 2 }));
+    expect(record.status).toBe('active');
     expect(record.runsUsed).toBe(4);
-    expect(stepResult.isContinued).toBe(false);
+    expect(record.judgeFailureCount).toBeUndefined();
   });
 
-  it('pauses (does not throw or loop) when the judge fails DURING resolution, not just inside scorer.run', async () => {
+  it('handles (does not throw or loop forever) a judge failing DURING resolution, not just inside scorer.run', async () => {
     // The throw originates in the goal.tools resolver — i.e. before scoring even
     // begins. This used to escape the entire step (the loop had already emitted
     // model output but never set isContinued=false → re-run forever). The step
-    // must swallow it and route to the same paused outcome.
+    // must swallow it and route to the same judge-failure outcome.
     let thrown: unknown;
     let res: Awaited<ReturnType<typeof runGoalStep>> | undefined;
     try {
-      res = await runGoalStep('continue', makeRecord({ runsUsed: 3, maxRuns: 500 }), {
+      res = await runGoalStep('continue', makeRecord({ runsUsed: 3, maxRuns: 500, judgeFailureCount: 2 }), {
         throwingToolsResolver: 'Bad Request',
       });
     } catch (e) {

@@ -122,8 +122,23 @@ describe('GoalStateProcessor', () => {
     expect(result!.mode).toBe('snapshot');
     expect(result!.tagName).toBe('current-objective');
     expect(result!.contents).not.toContain('Ship the feature');
-    expect(result!.attributes).toMatchObject({ status: 'none' });
+    expect(result!.attributes).toMatchObject({ status: 'none', reason: 'done' });
+    expect(result!.cacheKey).toBe('goal:none');
     expect((result!.metadata as any).value.objective).toBeUndefined();
+  });
+
+  it('carries a "paused" reason when retracting a paused objective', async () => {
+    const { processor } = await createProcessor(objective({ status: 'paused' }));
+    const result = await processor.computeStateSignal(createArgs({ lastSnapshot: objective(), hasSnapshot: true }));
+    expect(result!.attributes).toMatchObject({ status: 'none', reason: 'paused' });
+  });
+
+  it('carries an "absent" reason when retracting because no record exists', async () => {
+    const { processor } = await createProcessor();
+    const result = await processor.computeStateSignal(createArgs({ lastSnapshot: objective(), hasSnapshot: true }));
+    expect(result!.attributes).toMatchObject({ status: 'none', reason: 'absent' });
+    // The reason is diagnostic only: the cacheKey stays stable across causes.
+    expect(result!.cacheKey).toBe('goal:none');
   });
 
   it('retracts a stale snapshot when the objective was cleared this turn but a base is in window', async () => {
@@ -133,7 +148,15 @@ describe('GoalStateProcessor', () => {
     );
 
     expect(result).toBeTruthy();
-    expect(result!.attributes).toMatchObject({ status: 'none' });
+    expect(result!.attributes).toMatchObject({ status: 'none', reason: 'cleared' });
+  });
+
+  it('emits nothing (not a retraction) when the store is unresolvable', async () => {
+    // Never registered with Mastra — the store cannot be resolved. Missing
+    // information must not retract an objective the store may report as active.
+    const processor = new GoalStateProcessor();
+    const result = await processor.computeStateSignal(createArgs({ lastSnapshot: objective(), hasSnapshot: true }));
+    expect(result).toBeUndefined();
   });
 
   it('does not re-emit the retraction once the base snapshot is already empty', async () => {

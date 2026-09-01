@@ -15,12 +15,10 @@ import { createStep } from '../../../../workflows/workflow';
 import type { ResolvedGoalStore } from '../../../goal';
 import {
   createGoalScorer,
-  erroredJudgeResult,
-  GOAL_SCORE_WAITING,
   GOAL_SCORER_ID,
-  judgeFailureReason,
   readObjective,
   resolveEffectiveGoalSettings,
+  resolveGoalEvaluationOutcome,
   resolveGoalStore,
   writeObjective,
 } from '../../../goal';
@@ -391,60 +389,54 @@ export function createDurableGoalStep() {
           } as any).catch(() => {});
         }
 
-        // Retry once inline: an errored or silent judge is most often a
-        // transient transport failure, and parking the objective on the first
-        // one strands a goal that still has budget left.
-        const evaluate = async () => {
-          try {
-            return await runStreamCompletionScorers([scorer], goalContext, { strategy: 'all' });
-          } catch (error: any) {
-            return erroredJudgeResult(`Goal evaluation failed: ${error?.message ?? String(error)}`);
-          }
-        };
-        result = await evaluate();
-        if (judgeFailureReason(result)) result = await evaluate();
+        result = await runStreamCompletionScorers([scorer], goalContext, { strategy: 'all' });
       } catch (error: any) {
-        result = erroredJudgeResult(`Goal evaluation failed: ${error?.message ?? String(error)}`);
+        const reason = `Goal evaluation failed: ${error?.message ?? String(error)}`;
+        result = {
+          complete: false,
+          completionReason: undefined,
+          scorers: [
+            {
+              score: 0,
+              passed: false,
+              reason,
+              scorerId: GOAL_SCORER_ID,
+              scorerName: 'Goal (LLM)',
+              duration: 0,
+              errored: true,
+            },
+          ],
+          totalDuration: 0,
+          timedOut: false,
+        };
       }
 
-      // Tri-state decision: done / waiting / keep working / errored.
-      // A judge that timed out is absent from `result.scorers` entirely, so an
-      // absent verdict counts as a failure too — otherwise the silence reads as
-      // "not complete, keep going".
-      const judgeFailureReasonText = judgeFailureReason(result);
-      const judgeFailed = !!judgeFailureReasonText;
-      const waiting =
-        !judgeFailed &&
-        !result.complete &&
-        result.scorers.some(s => s.scorerId === GOAL_SCORER_ID && s.score === GOAL_SCORE_WAITING);
-
-      // Increment runs and update status.
-      // A failed judge produced no verdict, so it does not charge the budget.
-      const runsUsed = judgeFailed ? record.runsUsed : record.runsUsed + 1;
-      const maxRunsReached = runsUsed >= effective.maxRuns;
-      let status: GoalObjectiveRecord['status'] = record.status;
-      let pausedReason: string | undefined;
-      if (judgeFailed) {
-        status = 'paused';
-        pausedReason = judgeFailureReasonText;
-      } else if (result.complete) {
-        status = 'done';
-      } else if (maxRunsReached && !waiting) {
-        status = 'paused';
-        pausedReason = `Ran out of evaluation budget (${effective.maxRuns} runs) before reaching the goal — raise maxRuns to resume.`;
-      }
+      // Shared decision logic with the streaming goal step — see
+      // agent/goal/evaluation-outcome.ts for the rules (judge failures consume
+      // no budget and retry until MAX_CONSECUTIVE_JUDGE_FAILURES, timeouts
+      // missing the goal scorer count as failures, etc.).
+      const {
+        judgeFailed,
+        failureReason,
+        waiting,
+        runsUsed,
+        judgeFailureCount,
+        maxRunsReached,
+        status,
+        pausedReason,
+        shouldContinue,
+      } = resolveGoalEvaluationOutcome({ record, result, maxRuns: effective.maxRuns });
 
       const updated: GoalObjectiveRecord = {
         ...record,
         runsUsed,
+        judgeFailureCount: judgeFailureCount > 0 ? judgeFailureCount : undefined,
         status,
         pausedReason: status === 'paused' ? pausedReason : undefined,
         updatedAt: Date.now(),
       };
       await writeObjective(store, threadId, updated, requestContext);
 
-      // Continuation decision.
-      const shouldContinue = !result.complete && !waiting && !judgeFailed && !maxRunsReached;
       if (nextState.lastStepResult) {
         nextState.lastStepResult = {
           ...nextState.lastStepResult,
@@ -463,7 +455,7 @@ export function createDurableGoalStep() {
         judgeFailed,
         waitingForUser: waiting,
         results: result.scorers,
-        reason: status === 'paused' ? pausedReason : result.completionReason,
+        reason: status === 'paused' ? pausedReason : judgeFailed ? failureReason : result.completionReason,
         duration: result.totalDuration,
         timedOut: result.timedOut,
         maxRunsReached,
