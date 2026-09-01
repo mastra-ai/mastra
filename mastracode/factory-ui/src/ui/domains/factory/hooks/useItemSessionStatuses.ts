@@ -18,7 +18,7 @@ export function useItemSessionStatuses({
   projectRepositoryId: string;
   items: readonly WorkItem[];
 }): ReadonlyMap<string, SessionCardStatus> {
-  const boundSessionIds = items.flatMap(item => Object.values(item.sessions).map(ref => ref.sessionId));
+  const boundSessionIds = items.flatMap(item => Object.values(item.sessions ?? {}).map(ref => ref.sessionId));
   const runningBySessionId = useActiveRunResources({
     agentControllerId: AGENT_CONTROLLER_ID,
     resourceIds: boundSessionIds,
@@ -33,7 +33,7 @@ export function useItemSessionStatuses({
 
   const statuses = new Map<string, SessionCardStatus>();
   for (const item of items) {
-    const refs = Object.values(item.sessions);
+    const refs = Object.values(item.sessions ?? {});
     if (refs.length === 0) continue;
     const status = sessionRowStatus({
       running: refs.some(ref => runningBySessionId[ref.sessionId] === true),

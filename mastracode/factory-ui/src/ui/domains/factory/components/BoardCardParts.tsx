@@ -24,7 +24,8 @@ export function SessionLivenessDot({ status, className }: { status: SessionCardS
   return (
     <span
       data-live-session-indicator={status}
-      aria-hidden
+      role="status"
+      aria-label={dot.title}
       title={dot.title}
       className={cn('size-2 shrink-0 rounded-full', dot.className, className)}
     />
