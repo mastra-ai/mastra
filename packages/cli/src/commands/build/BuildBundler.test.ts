@@ -105,12 +105,9 @@ describe('BuildBundler', () => {
       await expect(
         bundler.bundle('/entry.ts', '/output', { toolsPaths: [], projectRoot: '/project' }),
       ).resolves.toBeUndefined();
-      expect(extractMastraOption).toHaveBeenCalledWith('workers', '/entry.ts', '/output/output');
+      expect(extractMastraOption).not.toHaveBeenCalled();
       expect(bundleSpy).toHaveBeenCalledOnce();
-      expect(writeFile).toHaveBeenCalledWith(
-        '/output/output/worker-manifest.mjs',
-        expect.stringContaining("from './workers-config.mjs'"),
-      );
+      expect(writeFile).not.toHaveBeenCalledWith('/output/output/worker-manifest.mjs', expect.any(String));
       expect(loadEnvVarsSpy).not.toHaveBeenCalled();
     });
   });

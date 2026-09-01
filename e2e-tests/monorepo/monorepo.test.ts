@@ -438,8 +438,8 @@ export const environmentRoute = registerApiRoute('/environment', {
           )
           .replace(
             'export const mastra = new Mastra({',
-            `class RuntimeNamedWorker extends MastraWorker {
-  readonly name = ['cleanup', 'jobs'].join('-');
+            `class CleanupWorker extends MastraWorker {
+  readonly name = 'cleanup-jobs';
   get isRunning() { return false; }
   async start() {}
   async stop() {}
@@ -454,7 +454,7 @@ export const mastra = new Mastra({
   ...preparedArgs,
   scheduler: { tickIntervalMs: 10_000 },
   backgroundTasks: { enabled: true, globalConcurrency: 20, mode: 'worker' },
-  workers: [new RuntimeNamedWorker()],`,
+  workers: [new CleanupWorker()],`,
           );
 
         try {
@@ -462,12 +462,9 @@ export const mastra = new Mastra({
           await runBuild(fixturePath);
 
           const outputPath = join(fixturePath, 'apps', 'custom', '.mastra', 'output');
-          const workerOptionBundle = await readFile(join(outputPath, 'workers-config.mjs'), 'utf-8');
-          expect(workerOptionBundle).toContain('RuntimeNamedWorker');
-          expect(workerOptionBundle).not.toContain('MastraFactory');
-          expect(workerOptionBundle).not.toContain('preparedArgs');
-
-          await execaNode(join(outputPath, 'worker-manifest.mjs'), { cwd: outputPath });
+          const outputFiles = await readdir(outputPath);
+          expect(outputFiles).not.toContain('workers-config.mjs');
+          expect(outputFiles).not.toContain('worker-manifest.mjs');
 
           const workersConfig = JSON.parse(await readFile(join(outputPath, 'workers.json'), 'utf-8'));
           expect(workersConfig).toEqual({

@@ -36,12 +36,6 @@ import type { Environment } from '../env/platform-api.js';
 import { getDeployEnvFiles, loadDeployEnvFromDotenv, readEnvVars, getMastraVersion } from '../studio/deploy.js';
 import { createProject } from '../studio/platform-api.js';
 import { getProjectConfigToSave, loadProjectConfig, saveProjectConfig } from '../studio/project-config.js';
-import {
-  createWorkerManifestEnvironment,
-  introspectWorkerManifest,
-  WORKER_MANIFEST_ENTRY,
-  WORKERS_CONFIG_ENTRY,
-} from '../worker/WorkerBundler.js';
 import { maybeAutoProvisionDatabases } from './auto-provision-database.js';
 import { getOverwrittenEnvKeys } from './env-vars.js';
 import { assertDeployDir } from './validate-dir.js';
@@ -72,13 +66,11 @@ function elapsed(ms: number): string {
 }
 
 const workersManifestPath = (targetDir: string): string => join(targetDir, '.mastra', 'output', 'workers.json');
-const workerManifestEntryPath = (targetDir: string): string =>
-  join(targetDir, '.mastra', 'output', `${WORKER_MANIFEST_ENTRY}.mjs`);
 const workerManifestCheckPath = (targetDir: string): string => join(targetDir, '.mastra', 'worker-manifest-checked');
 
 async function hasWorkersManifest(targetDir: string): Promise<boolean> {
   try {
-    await Promise.all([access(workersManifestPath(targetDir)), access(workerManifestEntryPath(targetDir))]);
+    await access(workersManifestPath(targetDir));
     return true;
   } catch {
     return false;
@@ -100,23 +92,6 @@ export function deployBuildNeedsRefresh(
   workerManifestChecked: boolean,
 ): boolean {
   return staleness.isStale || (!workersManifestExists && !workerManifestChecked);
-}
-
-export async function introspectEnvironmentWorkerManifest(
-  bundleDirectory: string,
-  env: NodeJS.ProcessEnv,
-  {
-    introspect = introspectWorkerManifest,
-  }: {
-    introspect?: typeof introspectWorkerManifest;
-  } = {},
-): Promise<void> {
-  try {
-    await introspect(bundleDirectory, env);
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    throw new Error(`Custom worker introspection failed; deploy aborted. ${message}`, { cause: error });
-  }
 }
 
 interface WorkerManifestSection {
@@ -409,6 +384,7 @@ function renderDeploymentPanel(
     colors.dim(formatArchitectureDate(input.renderedAt)),
     '',
     colors.bold('Workers Config'),
+    colors.dim('Static analysis only; runtime workers may differ.'),
     ...workersConfigLines,
   ];
 }
@@ -618,10 +594,11 @@ export async function zipOutput(projectDir: string): Promise<string> {
         cwd: outputDir,
         ignore: [
           'node_modules/**',
-          `${WORKER_MANIFEST_ENTRY}.mjs`,
-          `${WORKER_MANIFEST_ENTRY}.mjs.map`,
-          `${WORKERS_CONFIG_ENTRY}.mjs`,
-          `${WORKERS_CONFIG_ENTRY}.mjs.map`,
+          // Exclude build-only worker introspection artifacts left by older CLI builds.
+          'worker-manifest.mjs',
+          'worker-manifest.mjs.map',
+          'workers-config.mjs',
+          'workers-config.mjs.map',
         ],
         dot: true,
       },
@@ -1449,11 +1426,6 @@ async function runUnifiedDeploy(dir: string | undefined, opts: DeployOptions) {
       p.cancel('Deploy cancelled.');
       process.exit(0);
     }
-  }
-
-  if (await hasWorkersManifest(targetDir)) {
-    const workerManifestEnv = createWorkerManifestEnvironment({ NODE_ENV: 'production', ...deploymentEnv });
-    await introspectEnvironmentWorkerManifest(join(targetDir, '.mastra', 'output'), workerManifestEnv);
   }
 
   const workersConfig = await readWorkersConfig(targetDir);

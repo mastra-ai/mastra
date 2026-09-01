@@ -264,6 +264,68 @@ function resolvedObjectProperty(
  * explicitly provides both storage and pubsub so its processes can coordinate.
  * Dynamic values and callbacks are omitted from the display-only manifest.
  */
+function findStaticCustomWorkerNames(ast: AstNode, workers: AstNode | undefined): string[] {
+  const variableInitializers = new Map<string, AstNode>();
+  const classWorkerNames = new Map<string, string>();
+
+  walkAst(ast, node => {
+    if (node.type === 'VariableDeclarator') {
+      const id = node.id as AstNode | undefined;
+      const init = node.init as AstNode | undefined;
+      if (id?.type === 'Identifier' && init) variableInitializers.set(id.name as string, init);
+      return;
+    }
+
+    if (node.type !== 'ClassDeclaration' && node.type !== 'ClassExpression') return;
+    const id = node.id as AstNode | undefined;
+    const body = node.body as AstNode | undefined;
+    if (id?.type !== 'Identifier' || body?.type !== 'ClassBody') return;
+
+    for (const member of (body.body as AstNode[] | undefined) ?? []) {
+      if (member.type !== 'PropertyDefinition' || propertyName(member) !== 'name') continue;
+      const value = member.value as AstNode | undefined;
+      const name = value ? staticJsonValue(value) : undefined;
+      if (typeof name === 'string') classWorkerNames.set(id.name as string, name);
+    }
+  });
+
+  const names = new Set<string>();
+  const seen = new Set<AstNode>();
+  const visit = (node: AstNode | undefined): void => {
+    if (!node || seen.has(node)) return;
+    seen.add(node);
+
+    if (node.type === 'Identifier') {
+      visit(variableInitializers.get(node.name as string));
+      return;
+    }
+    if (node.type === 'ArrayExpression') {
+      for (const element of (node.elements as Array<AstNode | null> | undefined) ?? []) {
+        if (element?.type === 'SpreadElement') {
+          visit(element.argument as AstNode | undefined);
+        } else {
+          visit(element ?? undefined);
+        }
+      }
+      return;
+    }
+    if (node.type === 'NewExpression') {
+      const callee = node.callee as AstNode | undefined;
+      const name = callee?.type === 'Identifier' ? classWorkerNames.get(callee.name as string) : undefined;
+      if (name) names.add(name);
+      return;
+    }
+    if (node.type === 'ObjectExpression') {
+      const name = staticObjectValue(node).name;
+      if (typeof name === 'string') names.add(name);
+    }
+  };
+
+  visit(workers);
+  for (const builtIn of ['orchestration', 'scheduler', 'backgroundTasks']) names.delete(builtIn);
+  return [...names].sort();
+}
+
 function findWorkersConfig(ast: AstNode): WorkersConfig | undefined {
   const preparedConfigs = findPreparedConfigSources(ast);
   let workersConfig: WorkersConfig | undefined;
@@ -289,9 +351,7 @@ function findWorkersConfig(ast: AstNode): WorkersConfig | undefined {
       orchestration: { enabled: true },
       scheduler: { ...scheduler, enabled: scheduler.enabled !== false },
       backgroundTasks: { ...backgroundTasks, enabled: backgroundTasks.enabled === true },
-      // The built Mastra instance is introspected after bundling so dynamic and
-      // factory-provided workers are represented accurately.
-      custom: [],
+      custom: findStaticCustomWorkerNames(ast, workers),
     };
   });
   return workersConfig;

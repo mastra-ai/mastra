@@ -29,7 +29,6 @@ vi.mock('../env/platform-api.js', () => ({
 import {
   deployBuildNeedsRefresh,
   hasEnabledWorkers,
-  introspectEnvironmentWorkerManifest,
   renderDeploymentArchitecture,
   resolveEnvironment,
   resolveProject,
@@ -173,14 +172,6 @@ describe('deploy artifact', () => {
     expect(deployBuildNeedsRefresh({ isStale: false }, true, false)).toBe(false);
   });
 
-  it('aborts an environment deploy when custom worker introspection fails', async () => {
-    const introspect = vi.fn().mockRejectedValue(new Error('worker initialization failed'));
-
-    await expect(
-      introspectEnvironmentWorkerManifest('/output', { NODE_ENV: 'production' }, { introspect }),
-    ).rejects.toThrow('Custom worker introspection failed; deploy aborted. worker initialization failed');
-  });
-
   it.each([
     [
       'a versioned manifest',
@@ -288,6 +279,7 @@ describe('deploy artifact', () => {
     const panelLines = diagram.split('\n').map(line => line.split('│')[0].trimEnd());
     expect(panelLines.slice(0, 3)).toEqual(['My Agent', 'production (US West)', formattedRenderedAt]);
     expect(diagram).toContain('Workers Config');
+    expect(diagram).toContain('Static analysis only; runtime workers may differ.');
     expect(diagram).toContain('● Orchestration');
     expect(diagram).toContain('● Scheduler');
     expect(diagram).toContain('    Tick Interval: 10 seconds');
