@@ -6327,6 +6327,7 @@ export class Agent<
       methodType,
       ...observabilityContext,
       autoResumeSuspendedTools,
+      backgroundTaskEnabled,
     });
 
     const workspaceTools = await this.listWorkspaceTools({
