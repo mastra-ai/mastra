@@ -6,6 +6,8 @@ import type {
   KnowledgeActivityEvent,
   KnowledgeImportRun,
   KnowledgeImportRunStatus,
+  KnowledgeProposal,
+  KnowledgeProposalStatus,
   KnowledgeRecord,
   KnowledgeNode,
   KnowledgeScopeIds,
@@ -18,6 +20,7 @@ import type { MastraCodeState } from './schema.js';
 
 export type KnowledgeInspectorScopeLevel = 'org' | 'resource' | 'thread';
 export type KnowledgeInspectorRecordType = 'node';
+type KnowledgeInspectorHandleKind = KnowledgeInspectorRecordType | 'import-binding' | 'import-run';
 export type KnowledgeInspectorNodeSort = 'relevant' | 'recent' | 'connected';
 
 export interface KnowledgeInspectorScopeRoot {
@@ -59,8 +62,7 @@ export interface KnowledgeInspectorNodeSummary {
 export interface KnowledgeInspectorRecordSummary {
   text: string;
   scope: KnowledgeInspectorScopeBadge;
-  sourceThreadId: string;
-  capturedAt: string;
+  createdAt: string;
   when?: string;
 }
 
@@ -98,7 +100,6 @@ export interface KnowledgeInspectorActivityEvent {
   action: KnowledgeActivityEvent['action'];
   recordType: KnowledgeActivityEvent['targetType'];
   scope: KnowledgeInspectorScopeBadge;
-  sourceThreadId?: string;
   createdAt: string;
   record?: KnowledgeInspectorNodeSummary;
 }
@@ -113,7 +114,7 @@ export interface KnowledgeInspectorActivityList {
 export interface KnowledgeInspectorImporter {
   id: string;
   importKind: 'static' | 'agentic';
-  bindings: Array<{ source: string; scope: string }>;
+  bindings: Array<{ source: string; handle: string }>;
 }
 
 export interface KnowledgeInspectorImportRun {
@@ -124,7 +125,6 @@ export interface KnowledgeInspectorImportRun {
   triggerKind: KnowledgeImportRun['triggerKind'];
   status: KnowledgeImportRun['status'];
   error?: string;
-  transcriptThreadId?: string;
   queuedAt: string;
   startedAt?: string;
   completedAt?: string;
@@ -133,10 +133,31 @@ export interface KnowledgeInspectorImportRun {
 export interface KnowledgeInspectorImportRunDetail {
   run: KnowledgeInspectorImportRun;
   activity: Array<{ id: string; action: string; targetType: string; createdAt: string }>;
-  transcript?: {
-    available: boolean;
-    messages: Array<{ id: string; role: string; content: unknown; createdAt: string }>;
-  };
+}
+
+export interface KnowledgeInspectorProposal {
+  id: string;
+  operation: string;
+  reason?: string;
+  status: KnowledgeProposalStatus;
+  targets: Array<{
+    type: 'node' | 'record';
+    handle?: string;
+    name?: string;
+    expectedVersion: number;
+  }>;
+  proposer: 'visible' | 'private';
+  reviewer?: 'visible' | 'private';
+  reviewReason?: string;
+  reviewedAt?: string;
+  createdAt: string;
+}
+
+export interface KnowledgeInspectorProposalList {
+  identityKey: string;
+  scopeLevel: KnowledgeInspectorScopeLevel;
+  proposals: KnowledgeInspectorProposal[];
+  nextCursor?: string;
 }
 
 export interface KnowledgeInspector {
@@ -169,6 +190,27 @@ export interface KnowledgeInspector {
     limit?: number;
   }): Promise<{ runs: KnowledgeInspectorImportRun[]; nextCursor?: string }>;
   getImportRun(input: { importerId: string; runId: string }): Promise<KnowledgeInspectorImportRunDetail>;
+  listProposals(input: {
+    level: KnowledgeInspectorScopeLevel;
+    status?: KnowledgeProposalStatus;
+    cursor?: string;
+    limit?: number;
+  }): Promise<KnowledgeInspectorProposalList>;
+  approveProposal(input: {
+    level: KnowledgeInspectorScopeLevel;
+    id: string;
+    reason?: string;
+  }): Promise<KnowledgeInspectorProposal>;
+  rejectProposal(input: {
+    level: KnowledgeInspectorScopeLevel;
+    id: string;
+    reason?: string;
+  }): Promise<KnowledgeInspectorProposal>;
+  reReviewProposal(input: {
+    level: KnowledgeInspectorScopeLevel;
+    id: string;
+    reason?: string;
+  }): Promise<KnowledgeInspectorProposal>;
 }
 
 export class KnowledgeInspectorError extends Error {
@@ -194,7 +236,7 @@ interface Binding {
 interface HandleEntry {
   identityKey: string;
   level: KnowledgeInspectorScopeLevel;
-  type: KnowledgeInspectorRecordType;
+  type: KnowledgeInspectorHandleKind;
   recordId: string;
   expiresAt: number;
 }
@@ -202,7 +244,7 @@ interface HandleEntry {
 interface CursorEntry {
   identityKey: string;
   level: KnowledgeInspectorScopeLevel;
-  kind: 'node' | 'ranked-node' | 'records' | 'mentioning-records' | 'activity';
+  kind: 'node' | 'ranked-node' | 'records' | 'mentioning-records' | 'activity' | 'proposal' | 'import-run';
   value: string;
   filters?: { namePrefix?: string; kind?: string; sort?: KnowledgeInspectorNodeSort };
   expiresAt: number;
@@ -226,6 +268,7 @@ const DEFAULT_FACT_LIMIT = 25;
 const MAX_FACT_LIMIT = 100;
 const DEFAULT_ACTIVITY_LIMIT = 20;
 const MAX_ACTIVITY_LIMIT = 100;
+const MAX_ACTIVITY_SCAN = 500;
 const MAX_RELATED_RECORDS = 25;
 const MAX_RANK_CANDIDATES = 50;
 const MAX_RANK_FACTS = 100;
@@ -256,13 +299,12 @@ function knowledgeSummary(
   return {
     text: record.text,
     scope: scopeBadge(binding, level),
-    sourceThreadId: String(record.metadata?.sourceThreadId ?? record.source ?? ''),
-    capturedAt: record.createdAt.toISOString(),
+    createdAt: record.createdAt.toISOString(),
     when: typeof record.metadata?.when === 'string' ? record.metadata.when : undefined,
   };
 }
 
-function importerBinding(binding: string): { source?: string; scope?: string } {
+function importerBinding(binding: string): { source?: string; scopeAddress?: string } {
   try {
     const parsed: unknown = JSON.parse(binding);
     if (
@@ -271,7 +313,7 @@ function importerBinding(binding: string): { source?: string; scope?: string } {
       typeof parsed[0] === 'string' &&
       typeof parsed[1] === 'string'
     ) {
-      return { source: parsed[0], scope: parsed[1] };
+      return { source: parsed[0], scopeAddress: parsed[1] };
     }
   } catch {
     return {};
@@ -279,16 +321,15 @@ function importerBinding(binding: string): { source?: string; scope?: string } {
   return {};
 }
 
-function importRunSummary(run: KnowledgeImportRun): KnowledgeInspectorImportRun {
+function importRunSummary(run: KnowledgeImportRun, id: string, binding: string): KnowledgeInspectorImportRun {
   return {
-    id: run.id,
+    id,
     importerId: run.importerId,
-    binding: run.binding,
+    binding,
     importKind: run.importKind,
     triggerKind: run.triggerKind,
     status: run.status,
     error: run.error,
-    transcriptThreadId: run.transcriptThreadId,
     queuedAt: run.queuedAt.toISOString(),
     startedAt: run.startedAt?.toISOString(),
     completedAt: run.completedAt?.toISOString(),
@@ -296,9 +337,9 @@ function importRunSummary(run: KnowledgeImportRun): KnowledgeInspectorImportRun 
 }
 
 function bindingBelongsToSession(binding: string, resourceId: string, threadId?: string): boolean {
-  const scope = importerBinding(binding).scope;
+  const scopeAddress = importerBinding(binding).scopeAddress;
   const resource = `resource:${resourceId}`;
-  return scope === resource || (threadId !== undefined && scope === `${resource}:thread:${threadId}`);
+  return scopeAddress === resource || (threadId !== undefined && scopeAddress === `${resource}:thread:${threadId}`);
 }
 
 function truncateUtf8(value: string, maxBytes: number): { value: string; truncated: boolean } {
@@ -365,7 +406,7 @@ class ScopedKnowledgeInspector implements KnowledgeInspector {
         kind: input.kind,
         sort,
       });
-      const records = await this.#knowledge.listNodes({
+      const records = await this.#runtime.listNodes({
         scopeIds: scope,
         isScope: false,
         namePrefix: input.namePrefix,
@@ -414,8 +455,8 @@ class ScopedKnowledgeInspector implements KnowledgeInspector {
     const page = snapshot.entries.slice(snapshot.offset, snapshot.offset + limit);
     const nodes: KnowledgeInspectorNodeSummary[] = [];
     for (const entry of page) {
-      const node = await this.#knowledge.getNode(entry.id);
-      if (!node || !(await this.#isNodeVisible(node, scope))) continue;
+      const node = await this.#runtime.getNode({ id: entry.id, scopeIds: scope });
+      if (!node) continue;
       nodes.push({ ...this.#recordSummary(node, binding, input.level), relationshipCounts: entry.counts });
     }
     const nextOffset = snapshot.offset + limit;
@@ -448,8 +489,8 @@ class ScopedKnowledgeInspector implements KnowledgeInspector {
     const binding = await this.#binding();
     const handle = this.#readHandle(input.handle, binding, 'node');
     const scope = await this.#scope(binding, handle.level);
-    const node = await this.#knowledge.getNode(handle.recordId);
-    if (!node || !(await this.#isNodeVisible(node, scope))) {
+    const node = await this.#runtime.getNode({ id: handle.recordId, scopeIds: scope });
+    if (!node) {
       throw new KnowledgeInspectorError('not-visible', 'Knowledge record is not visible in the selected scope.');
     }
     const limit = boundedLimit(input.recordLimit, DEFAULT_FACT_LIMIT, MAX_FACT_LIMIT);
@@ -461,8 +502,8 @@ class ScopedKnowledgeInspector implements KnowledgeInspector {
       'mentioning-records',
     );
     const [recordsResult, mentioningResult] = await Promise.all([
-      this.#knowledge.listRecords({ node: node.id, scopeIds: scope, after: recordsAfter, limit }),
-      this.#knowledge.listMentioningRecords({ node: node.id, scopeIds: scope, after: mentioningAfter, limit }),
+      this.#runtime.listRecords({ node: node.id, scopeIds: scope, after: recordsAfter, limit }),
+      this.#runtime.listMentioningRecords({ node: node.id, scopeIds: scope, after: mentioningAfter, limit }),
     ]);
     const mentioningRecords = mentioningResult.records.filter(record => record.nodeId !== node.id);
     const nodeContent = typeof node.metadata?.description === 'string' ? node.metadata.description : '';
@@ -476,7 +517,7 @@ class ScopedKnowledgeInspector implements KnowledgeInspector {
       parseKnowledgeWikilinks(content.value)
         .slice(0, MAX_RELATED_RECORDS)
         .map(async label => {
-          const target = await this.#knowledge.resolveNode({ name: label, scopeIds: scope });
+          const target = await this.#runtime.resolveNode({ name: label, scopeIds: scope });
           return {
             label,
             node: target ? this.#recordSummary(target, binding, handle.level) : undefined,
@@ -520,19 +561,28 @@ class ScopedKnowledgeInspector implements KnowledgeInspector {
     const scope = await this.#scope(binding, input.level);
     const limit = boundedLimit(input.limit, DEFAULT_ACTIVITY_LIMIT, MAX_ACTIVITY_LIMIT);
     const after = this.#consumeCursor(input.cursor, binding, input.level, 'activity');
-    const events = await this.#knowledge.listActivity({ scopeIds: scope, after, limit });
     const activityEvents: KnowledgeInspectorActivityEvent[] = [];
-    for (const event of events) {
-      const record = await this.#activityRecord(event, scope, binding, input.level);
-      activityEvents.push({
-        action: event.action,
-        recordType: event.targetType,
-        scope: scopeBadge(binding, input.level),
-        sourceThreadId:
-          record && typeof event.details?.sourceThreadId === 'string' ? event.details.sourceThreadId : undefined,
-        createdAt: event.createdAt.toISOString(),
-        record,
-      });
+    let scanned = 0;
+    let scanAfter = after;
+    let hasMore = true;
+    while (activityEvents.length < limit && scanned < MAX_ACTIVITY_SCAN && hasMore) {
+      const pageLimit = Math.min(MAX_ACTIVITY_LIMIT, MAX_ACTIVITY_SCAN - scanned);
+      const events = await this.#runtime.listActivity({ scopeIds: scope, after: scanAfter, limit: pageLimit });
+      scanned += events.length;
+      hasMore = events.length === pageLimit;
+      for (const event of events) {
+        scanAfter = event.id;
+        const record = await this.#activityRecord(event, scope, binding, input.level);
+        if (!record) continue;
+        activityEvents.push({
+          action: event.action,
+          recordType: event.targetType,
+          scope: scopeBadge(binding, input.level),
+          createdAt: event.createdAt.toISOString(),
+          record,
+        });
+        if (activityEvents.length === limit) break;
+      }
     }
     await this.#assertStable(binding);
     return {
@@ -540,7 +590,9 @@ class ScopedKnowledgeInspector implements KnowledgeInspector {
       scopeLevel: input.level,
       events: activityEvents,
       nextCursor:
-        events.length === limit ? this.#mintCursor(binding, input.level, 'activity', events.at(-1)!.id) : undefined,
+        scanAfter && (hasMore || activityEvents.length === limit)
+          ? this.#mintCursor(binding, input.level, 'activity', scanAfter)
+          : undefined,
     };
   }
 
@@ -562,7 +614,15 @@ class ScopedKnowledgeInspector implements KnowledgeInspector {
         {
           id: importer.importerId,
           importKind: importer.agentic ? ('agentic' as const) : ('static' as const),
-          bindings: declaredBindings,
+          bindings: declaredBindings.map(candidate => ({
+            source: candidate.source,
+            handle: this.#mintHandle(
+              binding,
+              'resource',
+              'import-binding',
+              JSON.stringify([candidate.source, candidate.scope]),
+            ),
+          })),
         },
       ];
     });
@@ -576,28 +636,35 @@ class ScopedKnowledgeInspector implements KnowledgeInspector {
     limit?: number;
   }): Promise<{ runs: KnowledgeInspectorImportRun[]; nextCursor?: string }> {
     const binding = await this.#binding();
-    if (!bindingBelongsToSession(input.binding, binding.resourceId, binding.threadId)) {
-      throw new KnowledgeInspectorError('not-visible', 'Knowledge importer binding is not visible.');
-    }
-    const page = await this.#runtime.listImportRunsInternal({
+    const importBinding = this.#readHandle(input.binding, binding, 'import-binding').recordId;
+    const after = this.#consumeCursor(input.cursor, binding, 'resource', 'import-run');
+    const scopeIds = await this.#scope(binding, binding.threadId ? 'thread' : 'resource');
+    const page = await this.#runtime.listImportRuns({
+      scopeIds,
       importerId: input.importerId,
-      binding: input.binding,
+      binding: importBinding,
       status: input.status,
-      after: input.cursor,
+      after,
       limit: boundedLimit(input.limit, DEFAULT_RECORD_LIMIT, MAX_RECORD_LIMIT),
     });
     await this.#assertStable(binding);
     return {
-      runs: page.runs
-        .filter(run => run.importerId === input.importerId && run.binding === input.binding)
-        .map(importRunSummary),
-      nextCursor: page.nextCursor,
+      runs: page.runs.map(run =>
+        importRunSummary(
+          run,
+          this.#mintHandle(binding, 'resource', 'import-run', run.id),
+          this.#mintHandle(binding, 'resource', 'import-binding', run.binding),
+        ),
+      ),
+      nextCursor: page.nextCursor ? this.#mintCursor(binding, 'resource', 'import-run', page.nextCursor) : undefined,
     };
   }
 
   async getImportRun(input: { importerId: string; runId: string }): Promise<KnowledgeInspectorImportRunDetail> {
     const binding = await this.#binding();
-    const run = await this.#runtime.getImportRunInternal(input.runId);
+    const runId = this.#readHandle(input.runId, binding, 'import-run').recordId;
+    const scopeIds = await this.#scope(binding, binding.threadId ? 'thread' : 'resource');
+    const run = await this.#runtime.getImportRun({ id: runId, scopeIds });
     if (
       !run ||
       run.importerId !== input.importerId ||
@@ -605,45 +672,139 @@ class ScopedKnowledgeInspector implements KnowledgeInspector {
     ) {
       throw new KnowledgeInspectorError('not-visible', 'Knowledge import run is not visible.');
     }
-    const importer = this.#runtime.getImporter(run.importerId);
-    const scopeAddress = importerBinding(run.binding).scope;
+    const scopeAddress = importerBinding(run.binding).scopeAddress;
     const scope = scopeAddress ? await this.#knowledge.getScopeAddress(scopeAddress) : null;
     const activity = scope
-      ? await this.#runtime.listActivity({ scopeIds: [scope.scopeNodeId], importRunId: run.id, limit: 100 })
+      ? await this.#runtime.listActivity({
+          scopeIds,
+          contextScopeId: scope.scopeNodeId,
+          importRunId: run.id,
+          limit: 100,
+        })
       : [];
-    let transcript: KnowledgeInspectorImportRunDetail['transcript'];
-    if (run.transcriptThreadId && importer?.agentic) {
-      const memory = await importer.agentic.agent.getMemory().catch(() => undefined);
-      const recalled = memory
-        ? await memory
-            .recall({
-              threadId: run.transcriptThreadId,
-              resourceId: knowledgeAgentImportMemoryResourceId(this.#runtime, run.importerId, run.binding),
-              perPage: 100,
-            })
-            .catch(() => undefined)
-        : undefined;
-      transcript = {
-        available: Boolean(recalled),
-        messages:
-          recalled?.messages.map(message => ({
-            id: message.id,
-            role: message.role,
-            content: message.content,
-            createdAt: message.createdAt.toISOString(),
-          })) ?? [],
-      };
-    }
     await this.#assertStable(binding);
     return {
-      run: importRunSummary(run),
+      run: importRunSummary(run, input.runId, this.#mintHandle(binding, 'resource', 'import-binding', run.binding)),
       activity: activity.map(event => ({
         id: event.id,
         action: event.action,
         targetType: event.targetType,
         createdAt: event.createdAt.toISOString(),
       })),
-      transcript,
+    };
+  }
+
+  async listProposals(input: {
+    level: KnowledgeInspectorScopeLevel;
+    status?: KnowledgeProposalStatus;
+    cursor?: string;
+    limit?: number;
+  }): Promise<KnowledgeInspectorProposalList> {
+    const binding = await this.#binding();
+    const scopeIds = await this.#scope(binding, input.level);
+    const cursor = this.#consumeCursor(input.cursor, binding, input.level, 'proposal');
+    const page = await this.#runtime.listProposals({
+      vouchedScopeIds: scopeIds,
+      status: input.status,
+      cursor,
+      limit: boundedLimit(input.limit, DEFAULT_ACTIVITY_LIMIT, MAX_ACTIVITY_LIMIT),
+    });
+    const proposals = await Promise.all(
+      page.proposals.map(proposal => this.#proposalSummary(proposal, binding, input.level, scopeIds)),
+    );
+    await this.#assertStable(binding);
+    return {
+      identityKey: binding.identityKey,
+      scopeLevel: input.level,
+      proposals,
+      nextCursor: page.nextCursor ? this.#mintCursor(binding, input.level, 'proposal', page.nextCursor) : undefined,
+    };
+  }
+
+  async approveProposal(input: {
+    level: KnowledgeInspectorScopeLevel;
+    id: string;
+    reason?: string;
+  }): Promise<KnowledgeInspectorProposal> {
+    return this.#reviewProposal('approve', input);
+  }
+
+  async rejectProposal(input: {
+    level: KnowledgeInspectorScopeLevel;
+    id: string;
+    reason?: string;
+  }): Promise<KnowledgeInspectorProposal> {
+    return this.#reviewProposal('reject', input);
+  }
+
+  async reReviewProposal(input: {
+    level: KnowledgeInspectorScopeLevel;
+    id: string;
+    reason?: string;
+  }): Promise<KnowledgeInspectorProposal> {
+    return this.#reviewProposal('re-review', input);
+  }
+
+  async #reviewProposal(
+    action: 'approve' | 'reject' | 're-review',
+    input: { level: KnowledgeInspectorScopeLevel; id: string; reason?: string },
+  ): Promise<KnowledgeInspectorProposal> {
+    const binding = await this.#binding();
+    const scopeIds = await this.#scope(binding, input.level);
+    const decision = {
+      id: input.id,
+      reviewerContextScopeId: scopeIds.at(-1)!,
+      vouchedScopeIds: scopeIds,
+      reason: input.reason,
+    };
+    const proposal =
+      action === 'approve'
+        ? await this.#runtime.approveProposal(decision)
+        : action === 'reject'
+          ? await this.#runtime.rejectProposal(decision)
+          : await this.#runtime.reReviewProposal(decision);
+    await this.#assertStable(binding);
+    return this.#proposalSummary(proposal, binding, input.level, scopeIds);
+  }
+
+  async #proposalSummary(
+    proposal: KnowledgeProposal,
+    binding: Binding,
+    level: KnowledgeInspectorScopeLevel,
+    scopeIds: KnowledgeScopeIds,
+  ): Promise<KnowledgeInspectorProposal> {
+    const frontier = await this.#runtime.evaluateAccess(scopeIds);
+    const targets = await Promise.all(
+      proposal.targets.map(async target => {
+        if (target.type !== 'node') return { type: target.type, expectedVersion: target.expectedVersion };
+        const node = await this.#runtime.getNode({ id: target.id, scopeIds });
+        return {
+          type: target.type,
+          handle: node ? this.#mintHandle(binding, level, 'node', node.id) : undefined,
+          name: node?.name,
+          expectedVersion: target.expectedVersion,
+        };
+      }),
+    );
+    return {
+      id: proposal.id,
+      operation: proposal.operation,
+      reason: proposal.reason,
+      status: proposal.status,
+      targets,
+      proposer:
+        proposal.proposerContextScopeId && frontier.scopes[proposal.proposerContextScopeId]?.read
+          ? 'visible'
+          : 'private',
+      reviewer:
+        proposal.reviewerContextScopeId && frontier.scopes[proposal.reviewerContextScopeId]?.read
+          ? 'visible'
+          : proposal.reviewedAt
+            ? 'private'
+            : undefined,
+      reviewReason: proposal.reviewReason,
+      reviewedAt: proposal.reviewedAt?.toISOString(),
+      createdAt: proposal.createdAt.toISOString(),
     };
   }
 
@@ -723,11 +884,11 @@ class ScopedKnowledgeInspector implements KnowledgeInspector {
   }
 
   async #isNodeVisible(node: KnowledgeNode, scopeIds: KnowledgeScopeIds): Promise<boolean> {
-    return isKnowledgeScopeVisible(await this.#knowledge.getNodeScopeIds(node.id), scopeIds);
+    return Boolean(await this.#runtime.getNode({ id: node.id, scopeIds }));
   }
 
   async #isRecordVisible(record: KnowledgeRecord, scopeIds: KnowledgeScopeIds): Promise<boolean> {
-    return isKnowledgeScopeVisible(await this.#knowledge.getRecordScopeIds(record.id), scopeIds);
+    return Boolean(await this.#runtime.getRecord({ id: record.id, scopeIds }));
   }
 
   #recordSummary(
@@ -753,7 +914,7 @@ class ScopedKnowledgeInspector implements KnowledgeInspector {
     kind: string | undefined,
     sort: Exclude<KnowledgeInspectorNodeSort, 'recent'>,
   ): Promise<RankedNodeSnapshot> {
-    const records = await this.#knowledge.listNodes({
+    const records = await this.#runtime.listNodes({
       scopeIds: scope,
       isScope: false,
       namePrefix,
@@ -790,8 +951,8 @@ class ScopedKnowledgeInspector implements KnowledgeInspector {
     scope: KnowledgeScopeIds,
   ): Promise<{ degree: number; counts: KnowledgeInspectorRelationshipCounts }> {
     const [aboutResult, mentioningResult] = await Promise.all([
-      this.#knowledge.listRecords({ node: node.id, scopeIds: scope, limit: MAX_RANK_FACTS }),
-      this.#knowledge.listMentioningRecords({ node: node.id, scopeIds: scope, limit: MAX_RANK_FACTS }),
+      this.#runtime.listRecords({ node: node.id, scopeIds: scope, limit: MAX_RANK_FACTS }),
+      this.#runtime.listMentioningRecords({ node: node.id, scopeIds: scope, limit: MAX_RANK_FACTS }),
     ]);
     const [outgoing, incoming] = await Promise.all([
       this.#outgoingNodeRecords(node, aboutResult.records, scope),
@@ -829,7 +990,7 @@ class ScopedKnowledgeInspector implements KnowledgeInspector {
           truncated = true;
           break;
         }
-        const node = await this.#knowledge.resolveNode({ name, scopeIds: scope });
+        const node = await this.#runtime.resolveNode({ name, scopeIds: scope });
         if (node && node.id !== current.id && (await this.#isNodeVisible(node, scope))) {
           related.set(node.id, node);
         }
@@ -905,7 +1066,7 @@ class ScopedKnowledgeInspector implements KnowledgeInspector {
   #mintHandle(
     binding: Binding,
     level: KnowledgeInspectorScopeLevel,
-    type: KnowledgeInspectorRecordType,
+    type: KnowledgeInspectorHandleKind,
     recordId: string,
   ): string {
     this.#pruneOpaqueEntries();
@@ -920,7 +1081,7 @@ class ScopedKnowledgeInspector implements KnowledgeInspector {
     return token;
   }
 
-  #readHandle(handle: string, binding: Binding, expectedType: KnowledgeInspectorRecordType): HandleEntry {
+  #readHandle(handle: string, binding: Binding, expectedType: KnowledgeInspectorHandleKind): HandleEntry {
     const entry = this.#handles.get(handle);
     if (!entry || entry.expiresAt < Date.now() || entry.type !== expectedType) {
       throw new KnowledgeInspectorError('invalid-handle', 'Knowledge record handle is invalid or expired.');

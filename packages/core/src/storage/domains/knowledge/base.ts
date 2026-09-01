@@ -605,6 +605,7 @@ export interface CreateKnowledgeRecordInput extends KnowledgeMutationFence {
 }
 export interface ListKnowledgeNodesInput {
   scopeIds: KnowledgeScopeIds;
+  membershipScopeIds?: KnowledgeScopeIds;
   namePrefix?: string;
   kind?: string;
   isScope?: boolean;
@@ -1278,7 +1279,12 @@ export abstract class KnowledgeStorage extends StorageDomain {
   }
   async listActivity(_input: {
     scopeIds: KnowledgeScopeIds;
+    contextScopeId?: string;
     importRunId?: string;
+    action?: KnowledgeActivityAction;
+    sourceType?: 'importer' | 'system';
+    from?: Date;
+    to?: Date;
     after?: string;
     limit?: number;
   }): Promise<KnowledgeActivityEvent[]> {
