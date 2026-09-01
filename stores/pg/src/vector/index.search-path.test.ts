@@ -34,7 +34,8 @@ describe('PgVector without schemaName honours the "$user" search_path schema', (
   beforeAll(async () => {
     admin = new pg.Pool({ connectionString: adminConnectionString });
     const adminUrl = new URL(adminConnectionString);
-    roleConnectionString = `postgresql://${role}:${password}@${adminUrl.host}${adminUrl.pathname}`;
+    // Keep any DB_URL query parameters (e.g. sslmode) so the role connects the same way admin does.
+    roleConnectionString = `postgresql://${role}:${password}@${adminUrl.host}${adminUrl.pathname}${adminUrl.search}`;
 
     await admin.query('CREATE EXTENSION IF NOT EXISTS vector');
     await dropRole();
