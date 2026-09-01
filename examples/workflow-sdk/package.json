@@ -1,0 +1,43 @@
+{
+  "name": "examples-workflow-sdk",
+  "type": "module",
+  "private": true,
+  "version": "0.0.0",
+  "description": "Mastra workflows running on the Vercel Workflow SDK",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "typecheck": "tsc --noEmit",
+    "workflow": "workflow"
+  },
+  "dependencies": {
+    "@libsql/client": "^0.17.4",
+    "@mastra/core": "latest",
+    "@mastra/libsql": "latest",
+    "@mastra/loggers": "latest",
+    "@mastra/workflow": "latest",
+    "@swc/helpers": "^0.5.17",
+    "next": "^16.2.11",
+    "react": "^19.2.5",
+    "react-dom": "^19.2.5",
+    "workflow": "5.0.0-beta.36",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@types/node": "22.19.15",
+    "@types/react": "^19.2.7",
+    "@types/react-dom": "^19.2.3",
+    "typescript": "^6.0.3"
+  },
+  "pnpm": {
+    "overrides": {
+      "@mastra/core": "link:../../packages/core",
+      "@mastra/libsql": "link:../../stores/libsql",
+      "@mastra/loggers": "link:../../packages/loggers",
+      "@mastra/workflow": "link:../../workflows/workflow"
+    }
+  },
+  "license": "Apache-2.0",
+  "packageManager": "pnpm@10.29.3+sha512.498e1fb4cca5aa06c1dcf2611e6fafc50972ffe7189998c409e90de74566444298ffe43e6cd2acdc775ba1aa7cc5e092a8b7054c811ba8c5770f84693d33d2dc"
+}
