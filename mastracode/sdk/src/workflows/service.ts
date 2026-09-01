@@ -1,9 +1,16 @@
 /**
- * Thin wrapper around `mastra.getStorage().getStore('workflowDefinitions')` and
- * `mastra.getWorkflow(id).createRun().stream(...)` so both the parent-mode
- * tools and the `/workflows` slash command go through one implementation.
+ * Thin wrapper around Mastra's dynamic workflow and run APIs so both the
+ * parent-mode tools and the `/workflows` slash command go through one
+ * implementation.
  */
 import type { Mastra } from '@mastra/core/mastra';
+import type { RequestContext } from '@mastra/core/request-context';
+import type { WorkflowDefinitionsStorage } from '@mastra/core/storage';
+import {
+  DynamicWorkflowAccessDeniedError,
+  type DynamicWorkflowAccessPolicy,
+  resolveDynamicWorkflowAuthorId,
+} from './access-policy.js';
 
 export interface StoredWorkflowRow {
   id: string;
@@ -37,101 +44,160 @@ interface WorkflowRunOutputLike {
   result: Promise<unknown>;
 }
 
-interface WorkflowDefinitionsStore {
-  list: (args?: { status?: 'active' | 'archived' }) => Promise<{ definitions: StoredWorkflowRow[]; total: number }>;
-  get: (id: string) => Promise<StoredWorkflowRow | null>;
-  delete: (id: string) => Promise<void>;
+export interface WorkflowServiceContext {
+  requestContext?: RequestContext;
 }
 
-async function workflowDefinitionsStore(mastra: Mastra): Promise<WorkflowDefinitionsStore> {
+export interface CreateWorkflowServiceOptions {
+  accessPolicy?: DynamicWorkflowAccessPolicy;
+}
+
+async function workflowDefinitionsStore(mastra: Mastra): Promise<WorkflowDefinitionsStorage> {
   const storage = mastra.getStorage();
   if (!storage) throw new Error('Storage is not configured on the Mastra instance.');
-  // `getStore` is a generic domain accessor; workflowDefinitions is registered
-  // by mastracode. The domain shape is validated at boot; cast the resolved
-  // store to the interface we exercise.
-  const store = (await (storage as unknown as { getStore: (name: string) => Promise<unknown> }).getStore(
-    'workflowDefinitions',
-  )) as WorkflowDefinitionsStore | undefined;
+  const store = await storage.getStore('workflowDefinitions');
   if (!store) throw new Error('workflowDefinitions storage domain is not available.');
   return store;
 }
 
-export async function listWorkflows(mastra: Mastra): Promise<{ workflows: StoredWorkflowRow[]; total: number }> {
-  const store = await workflowDefinitionsStore(mastra);
-  const result = await store.list({ status: 'active' });
-  return { workflows: result.definitions, total: result.total };
-}
-
-export async function getWorkflow(mastra: Mastra, id: string): Promise<StoredWorkflowRow | null> {
-  const store = await workflowDefinitionsStore(mastra);
-  return store.get(id);
-}
-
-export async function deleteWorkflow(mastra: Mastra, id: string): Promise<{ ok: true; id: string }> {
-  const store = await workflowDefinitionsStore(mastra);
-  await store.delete(id);
-  // Also unregister the live in-process Workflow instance so a subsequent
-  // save-workflow with the same id re-registers cleanly instead of getting
-  // no-op'd by addWorkflow's first-write-wins guard.
-  mastra.removeWorkflow(id);
-  return { ok: true, id };
-}
-
-export async function runWorkflow(
+async function assertDynamicWorkflowAccess(
   mastra: Mastra,
-  workflowId: string,
-  inputData: unknown,
-  /**
-   * Optional. When provided, passed through to `run.stream(...)` so agent steps
-   * (like `code-agent`) that depend on session state — `getDynamicModel` reads
-   * `controller.session.modelId` off it — can resolve correctly.
-   *
-   * Chat-driven `run-workflow` inherits its context from the parent code-agent
-   * turn, so this is unused there. The `/workflows run` slash handler builds a
-   * synthetic context from the current TUI session and passes it here.
-   */
-  requestContext?: unknown,
-  /**
-   * Optional. When provided, invoked for every `WorkflowStreamEvent` the run
-   * emits — used by the `/workflows run` slash handler to render live per-step
-   * progress in the TUI. Non-fatal: errors in the callback are swallowed so a
-   * misbehaving consumer can't take the workflow down.
-   */
-  onEvent?: WorkflowRunEventCallback,
-): Promise<RunResult> {
-  // `getWorkflow` is generic over the statically-registered workflow map, but
-  // stored workflows are registered dynamically at load time — the id is a
-  // runtime value, not a compile-time key. `as never` widens the arg past the
-  // generic constraint; the runtime lookup already validates.
-  let wf: ReturnType<Mastra['getWorkflow']> | undefined;
-  let lookupError: unknown;
-  try {
-    wf = mastra.getWorkflow(workflowId as never);
-  } catch (error) {
-    lookupError = error;
+  id: string,
+  authorId: string | undefined,
+  scoped: boolean,
+): Promise<StoredWorkflowRow> {
+  const definition = await (await workflowDefinitionsStore(mastra)).get(id);
+  if (!definition || (scoped && (!authorId || definition.authorId !== authorId))) {
+    throw new DynamicWorkflowAccessDeniedError();
   }
-  if (!wf) {
-    throw new Error(`No workflow registered with id "${workflowId}". Was it built and saved?`, { cause: lookupError });
-  }
-
-  const run = await wf.createRun();
-  if (!onEvent) {
-    return (await run.start({
-      inputData,
-      requestContext: requestContext as Parameters<typeof run.start>[0]['requestContext'],
-    })) as RunResult;
-  }
-
-  const output = run.stream({
-    inputData,
-    requestContext: requestContext as Parameters<typeof run.stream>[0]['requestContext'],
-  }) as unknown as WorkflowRunOutputLike;
-  for await (const event of output.fullStream) {
-    try {
-      onEvent(event);
-    } catch {
-      // Never let a bad consumer break the run.
-    }
-  }
-  return (await output.result) as RunResult;
+  return definition;
 }
+
+export function createWorkflowService(options: CreateWorkflowServiceOptions = {}) {
+  const { accessPolicy } = options;
+
+  async function resolveAuthorId(context?: WorkflowServiceContext): Promise<string | undefined> {
+    return resolveDynamicWorkflowAuthorId(accessPolicy, context?.requestContext);
+  }
+
+  return {
+    async listWorkflows(
+      mastra: Mastra,
+      context?: WorkflowServiceContext,
+    ): Promise<{ workflows: StoredWorkflowRow[]; total: number }> {
+      const authorId = await resolveAuthorId(context);
+      if (accessPolicy && !authorId) return { workflows: [], total: 0 };
+      const result = await (
+        await workflowDefinitionsStore(mastra)
+      ).list({
+        status: 'active',
+        ...(authorId !== undefined ? { authorId } : {}),
+      });
+      return { workflows: result.definitions, total: result.total };
+    },
+
+    async getWorkflow(mastra: Mastra, id: string, context?: WorkflowServiceContext): Promise<StoredWorkflowRow | null> {
+      const authorId = await resolveAuthorId(context);
+      if (accessPolicy && !authorId) return null;
+      const definition = await (await workflowDefinitionsStore(mastra)).get(id);
+      if (!definition || (authorId !== undefined && definition.authorId !== authorId)) return null;
+      return definition;
+    },
+
+    async listAccessibleRegisteredWorkflows(mastra: Mastra, context?: WorkflowServiceContext) {
+      const authorId = await resolveAuthorId(context);
+      if (!accessPolicy) return mastra.listWorkflows?.() ?? {};
+
+      const result = authorId
+        ? await (await workflowDefinitionsStore(mastra)).list({ status: 'active', authorId })
+        : { definitions: [] };
+      const accessibleDynamicIds = new Set(result.definitions.map(definition => definition.id));
+      return Object.fromEntries(
+        Object.entries(mastra.listWorkflows?.() ?? {}).filter(([, workflow]) => {
+          const workflowId = (workflow as { id: string }).id;
+          return mastra.getWorkflowOrigin(workflowId) !== 'dynamic' || accessibleDynamicIds.has(workflowId);
+        }),
+      );
+    },
+
+    async deleteWorkflow(
+      mastra: Mastra,
+      id: string,
+      context?: WorkflowServiceContext,
+    ): Promise<{ ok: true; id: string }> {
+      const authorId = await resolveAuthorId(context);
+      if (accessPolicy && !authorId) return { ok: true, id };
+      await mastra.deleteDynamicWorkflow(id, authorId !== undefined ? { authorId } : undefined);
+      return { ok: true, id };
+    },
+
+    async runWorkflow(
+      mastra: Mastra,
+      workflowId: string,
+      inputData: unknown,
+      /**
+       * Optional. When provided, passed through to `run.stream(...)` so agent steps
+       * (like `code-agent`) that depend on session state — `getDynamicModel` reads
+       * `controller.session.modelId` off it — can resolve correctly.
+       *
+       * Chat-driven `run-workflow` inherits its context from the parent code-agent
+       * turn, so this is unused there. The `/workflows run` slash handler builds a
+       * synthetic context from the current TUI session and passes it here.
+       */
+      requestContext?: RequestContext,
+      /**
+       * Optional. When provided, invoked for every `WorkflowStreamEvent` the run
+       * emits — used by the `/workflows run` slash handler to render live per-step
+       * progress in the TUI. Non-fatal: errors in the callback are swallowed so a
+       * misbehaving consumer can't take the workflow down.
+       */
+      onEvent?: WorkflowRunEventCallback,
+    ): Promise<RunResult> {
+      // `getWorkflow` is generic over the statically-registered workflow map, but
+      // stored workflows are registered dynamically at load time — the id is a
+      // runtime value, not a compile-time key. `as never` widens the arg past the
+      // generic constraint; the runtime lookup already validates.
+      let wf: ReturnType<Mastra['getWorkflow']> | undefined;
+      let lookupError: unknown;
+      try {
+        wf = mastra.getWorkflow(workflowId as never);
+      } catch (error) {
+        lookupError = error;
+      }
+      if (!wf) {
+        if (accessPolicy) throw new DynamicWorkflowAccessDeniedError();
+        throw new Error(`No workflow registered with id "${workflowId}". Was it built and saved?`, {
+          cause: lookupError,
+        });
+      }
+
+      if (mastra.getWorkflowOrigin?.(wf.id) === 'dynamic') {
+        const authorId = await resolveAuthorId({ requestContext });
+        await assertDynamicWorkflowAccess(mastra, wf.id, authorId, Boolean(accessPolicy));
+      }
+
+      const run = await wf.createRun();
+      if (!onEvent) {
+        return (await run.start({ inputData, requestContext })) as RunResult;
+      }
+
+      const output = run.stream({ inputData, requestContext }) as unknown as WorkflowRunOutputLike;
+      for await (const event of output.fullStream) {
+        try {
+          onEvent(event);
+        } catch {
+          // Never let a bad consumer break the run.
+        }
+      }
+      return (await output.result) as RunResult;
+    },
+  };
+}
+
+const defaultWorkflowService = createWorkflowService();
+
+export const listWorkflows = defaultWorkflowService.listWorkflows;
+export const getWorkflow = defaultWorkflowService.getWorkflow;
+export const listAccessibleRegisteredWorkflows = defaultWorkflowService.listAccessibleRegisteredWorkflows;
+export const deleteWorkflow = defaultWorkflowService.deleteWorkflow;
+export const runWorkflow = defaultWorkflowService.runWorkflow;
