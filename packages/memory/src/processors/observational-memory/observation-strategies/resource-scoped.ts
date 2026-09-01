@@ -400,6 +400,10 @@ export class ResourceScopedObservationStrategy extends ObservationStrategy {
 
     return {
       observations: currentObservations,
+      cycleObservations: this.observationResults.map(({ threadId, result }) => ({
+        sourceThreadId: threadId,
+        observations: result.observations,
+      })),
       observationTokens,
       cycleObservationTokens,
       observedMessageIds,

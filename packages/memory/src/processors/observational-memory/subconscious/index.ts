@@ -8,17 +8,10 @@ import type {
   SubconsciousConfig,
   SubconsciousCustomObservationConfig,
   SubconsciousObservationEntry,
-  SubconsciousReflectionEntry,
 } from './types';
 
-const BUILT_IN_OBSERVATION = new Set(['remind']);
-const BUILT_IN_REFLECTION = new Set(['curate']);
+const BUILT_IN_OBSERVATION = new Set(['remind', 'curate']);
 const DEFAULT_MAX_STEPS = 50;
-/**
- * Curation walks a worklist that can reach hundreds of records, and its completion marker is
- * fail-closed: a curator that runs out of steps advances no cursor at all. It gets a much larger
- * default budget than the other agents, which each handle a single bounded prompt.
- */
 const DEFAULT_MAX_STEPS_BY_AGENT: Record<string, number> = { curate: 200 };
 const MAX_MAX_STEPS = 500;
 const DEFAULT_RECENT_UPDATES = 10;
@@ -69,7 +62,6 @@ function resolveAgent(
     name,
     instructions: config?.instructions,
     model: config?.model ?? globalModel,
-    agent: config?.agent,
     maxSteps: boundedSteps(config, fallbackMaxSteps),
     builtIn: builtIns.has(name),
   };
@@ -85,14 +77,11 @@ export class Subconscious {
   readonly resolved: Readonly<ResolvedSubconsciousConfig>;
 
   constructor(config: SubconsciousConfig = {}) {
-    const observation = config.observation ?? ['remind'];
-    const reflection = config.reflection ?? ['curate'];
+    const observation = config.observation ?? ['remind', 'curate'];
     assertUniqueNames(observation, 'observation');
-    assertUniqueNames(reflection, 'reflection');
 
     const maxSteps = config.maxSteps === undefined ? undefined : boundedSteps(config, DEFAULT_MAX_STEPS);
     for (const entry of observation) this.#validateObservationEntry(entry);
-    for (const entry of reflection) this.#validateReflectionEntry(entry);
 
     const recentUpdates =
       config.activity === false ? false : (config.activity?.recentUpdates ?? DEFAULT_RECENT_UPDATES);
@@ -126,14 +115,13 @@ export class Subconscious {
       }
     }
 
-    this.config = Object.freeze({ ...config, observation: [...observation], reflection: [...reflection] });
+    this.config = Object.freeze({ ...config, observation: [...observation] });
     this.resolved = Object.freeze({
       observation: observation.map(entry =>
-        entryName(entry) === 'remind'
+        BUILT_IN_OBSERVATION.has(entryName(entry))
           ? resolveAgent(entry, BUILT_IN_OBSERVATION, config.model, maxSteps)
           : resolveExtractor(entry),
       ),
-      reflection: reflection.map(entry => resolveAgent(entry, BUILT_IN_REFLECTION, config.model, maxSteps)),
       defaultScope: config.defaultScope ?? 'resource',
       maxScope: config.maxScope,
       tools: config.tools !== false,
@@ -182,20 +170,6 @@ export class Subconscious {
       throw new Error(`Custom Subconscious observation agent "${name}" requires schema and onExtracted.`);
     }
   }
-
-  #validateReflectionEntry(entry: SubconsciousReflectionEntry): void {
-    const name = entryName(entry);
-    if (typeof entry === 'string') {
-      if (!BUILT_IN_REFLECTION.has(name)) throw new Error(`Unknown Subconscious reflection agent: ${name}`);
-      return;
-    }
-    if (BUILT_IN_REFLECTION.has(name) && 'agent' in entry && entry.agent) {
-      throw new Error(`Built-in Subconscious reflection agent "${name}" cannot be replaced with a custom agent.`);
-    }
-    if (!BUILT_IN_REFLECTION.has(name) && !entry.instructions?.trim() && !('agent' in entry && entry.agent)) {
-      throw new Error(`Custom Subconscious reflection agent "${name}" requires instructions or agent.`);
-    }
-  }
 }
 
 export {
@@ -238,11 +212,7 @@ export type {
   ResolvedSubconsciousConfig,
   SubconsciousBuiltInObservationAgent,
   SubconsciousBuiltInObservationConfig,
-  SubconsciousBuiltInReflectionAgent,
-  SubconsciousBuiltInReflectionConfig,
   SubconsciousConfig,
   SubconsciousCustomObservationConfig,
-  SubconsciousCustomReflectionConfig,
   SubconsciousObservationEntry,
-  SubconsciousReflectionEntry,
 } from './types';

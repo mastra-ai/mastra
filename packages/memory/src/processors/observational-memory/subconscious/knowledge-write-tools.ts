@@ -58,6 +58,51 @@ export function createKnowledgeWriteTools(
   }
 
   return {
+    knowledge_create: createTool({
+      id: 'knowledge_create',
+      description:
+        'Create a scoped knowledge node and its first record. Provenance and capture time are stamped by code.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          name: { type: 'string', minLength: 1 },
+          kind: { type: 'string', minLength: 1 },
+          text: { type: 'string', minLength: 1 },
+          nodeScope: scopeLevelSchema,
+          scope: scopeLevelSchema,
+          when: { type: 'string' },
+        },
+        required: ['name', 'kind', 'text'],
+        additionalProperties: false,
+      } satisfies JSONSchema7,
+      execute: async input => {
+        const value = input as {
+          name: string;
+          kind: string;
+          text: string;
+          nodeScope?: KnowledgeScopeLevel;
+          scope?: KnowledgeScopeLevel;
+          when?: string;
+        };
+        const store = await getStore(memory);
+        const nodeScope = resolveWriteScope(options, value.nodeScope);
+        const recordScope = resolveWriteScope(options, value.scope);
+        const when = value.when ? new Date(value.when) : undefined;
+        if (when && Number.isNaN(when.getTime())) throw new Error('KnowledgeRecord when must be a valid date.');
+        const node = await store.createNode({ name: value.name, kind: value.kind, scope: nodeScope });
+        const record = await store.appendKnowledge({
+          node: node.id,
+          text: value.text,
+          scope: recordScope,
+          sourceThreadId: options.sourceThreadId,
+          when,
+          maxScope: options.maxScope,
+          resolutionScope: options.scope,
+          defaultScope: nodeScope,
+        });
+        return { node, record };
+      },
+    }),
     knowledge_append: createTool({
       id: 'knowledge_append',
       description: 'Append a scoped record to an existing node. Provenance and capture time are stamped by code.',

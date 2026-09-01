@@ -94,8 +94,7 @@ export function armConfigHash(arm: ArmConfig): string {
 /** Build the Subconscious for an arm. The prompts are appended to the built-in contracts. */
 export function buildArmSubconscious(arm: ArmConfig): Subconscious {
   return new Subconscious({
-    observation: ['remind'],
-    reflection: [{ name: 'curate', instructions: arm.prompts.curate, maxSteps: arm.curateMaxSteps }],
+    observation: ['remind', { name: 'curate', instructions: arm.prompts.curate, maxSteps: arm.curateMaxSteps }],
     defaultScope: arm.defaultScope,
     maxScope: arm.maxScope,
   });
@@ -143,9 +142,9 @@ export function assertCuratorConfigured(memory: MemoryLike): void {
   if (!(subconscious instanceof Subconscious)) {
     throw new Error('Replay requires a Memory with an experimental_subconscious configured; refusing to run.');
   }
-  const hasCurator = subconscious.resolved.reflection.some(agent => agent.name === 'curate');
+  const hasCurator = subconscious.resolved.observation.some(agent => agent.name === 'curate');
   if (!hasCurator) {
-    throw new Error('Replay requires a Subconscious with a "curate" reflection agent; refusing to run.');
+    throw new Error('Replay requires a Subconscious with a "curate" observation agent; refusing to run.');
   }
 }
 

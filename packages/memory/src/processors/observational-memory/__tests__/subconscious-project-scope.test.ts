@@ -1,3 +1,4 @@
+import { Agent } from '@mastra/core/agent';
 import type { ComputeStateSignalArgs } from '@mastra/core/processors';
 import { RequestContext } from '@mastra/core/request-context';
 import { InMemoryStore } from '@mastra/core/storage';
@@ -6,32 +7,29 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { Memory } from '../../../index';
 import { createPinnedTools, PinnedStateProcessor, Subconscious } from '../subconscious';
-import { createCuratorHandler } from '../subconscious/curate';
+import { createObservationCuratorHandler } from '../subconscious/curate';
 import { SubconsciousRemindExtractor } from '../subconscious/remind';
 
 const PROJECT_SCOPE = ['org:acme', 'resource:project-1'];
+const semanticInfrastructure = {
+  vector: {
+    indexSeparator: '_',
+    listIndexes: vi.fn(async () => ['knowledge_documents_dimension_2']),
+    createIndex: vi.fn(async () => undefined),
+    upsert: vi.fn(async () => []),
+    deleteVectors: vi.fn(async () => undefined),
+    query: vi.fn(async () => []),
+  } as unknown as MastraVector,
+  embedder: {
+    doEmbed: vi.fn(async ({ values }: { values: string[] }) => ({ embeddings: values.map(() => [0.1, 0.2]) })),
+  } as unknown as MastraEmbeddingModel<string>,
+};
 
 function requestContextWith(overrides: Record<string, unknown> = {}) {
   const requestContext = new RequestContext();
   requestContext.set('organizationId', 'acme');
   for (const [key, value] of Object.entries(overrides)) requestContext.set(key, value);
   return requestContext;
-}
-
-function createSemanticDependencies() {
-  const indexes = new Set<string>();
-  const vector = {
-    indexSeparator: '_',
-    listIndexes: vi.fn(async () => [...indexes]),
-    createIndex: vi.fn(async ({ indexName }: { indexName: string }) => void indexes.add(indexName)),
-    upsert: vi.fn(async ({ ids }: any) => ids),
-    deleteVectors: vi.fn(async () => undefined),
-    query: vi.fn(async () => []),
-  } as unknown as MastraVector;
-  const embedder = {
-    doEmbed: vi.fn(async ({ values }: { values: string[] }) => ({ embeddings: values.map(() => [0.1, 0.2, 0.3]) })),
-  } as unknown as MastraEmbeddingModel<string>;
-  return { vector, embedder };
 }
 
 function makeSignalArgs(
@@ -107,36 +105,32 @@ describe('Subconscious project scope override', () => {
     expect(second).toBeUndefined();
   });
 
-  it('curate and remind resolve the worklist and search scope from the override', async () => {
-    const memory = new Memory({ storage: new InMemoryStore() });
+  it('curate and remind resolve search scope from the override', async () => {
+    const memory = new Memory({ storage: new InMemoryStore(), ...semanticInfrastructure });
     const store = (await memory.storage.getStore('knowledge'))!;
-    const knowledgeBySource = vi.spyOn(store, 'knowledgeBySource');
     const search = vi.spyOn(store, 'search');
-
-    const resolved = {
-      observation: [],
-      reflection: [{ name: 'curate', maxSteps: 5, builtIn: true }],
+    const subconscious = new Subconscious({
+      observation: [{ name: 'curate', model: 'mock/model', maxSteps: 5 }],
       defaultScope: 'resource',
       maxScope: 'resource',
-      tools: true,
-      activity: { recentUpdates: 10 },
-      pins: false,
-    } as any;
-    const reflectionContext = () =>
-      ({
-        parentThreadId: 'thread-a',
-        resourceId: 'session-a',
-        observations: '',
-        requestContext: requestContextWith({ knowledgeResourceId: 'project-1' }),
-        mainAgent: { getModel: vi.fn(async () => 'mock/model') },
-      }) as any;
+    });
+    vi.spyOn(Agent.prototype, 'generate').mockImplementation(async function (this: Agent) {
+      const tools = await this.listTools();
+      await (tools.knowledge_search as any).execute({ query: 'Project Atlas' }, {});
+      return { text: 'Done.' } as any;
+    });
 
-    await createCuratorHandler(memory, resolved)(reflectionContext());
-    for (const call of knowledgeBySource.mock.calls) {
+    await createObservationCuratorHandler(memory, subconscious.resolved, memory, { omModel: 'mock/model' })({
+      parentThreadId: 'thread-a',
+      resourceId: 'session-a',
+      observations: 'Project Atlas launches soon.',
+      requestContext: requestContextWith({ knowledgeResourceId: 'project-1' }),
+    } as any);
+    expect(search).toHaveBeenCalled();
+    for (const call of search.mock.calls) {
       expect(call[0]!.scope).toContain('resource:project-1');
       expect(call[0]!.scope).not.toContain('resource:session-a');
     }
-    expect(knowledgeBySource).toHaveBeenCalled();
 
     const remind = new SubconsciousRemindExtractor({ name: 'remind', maxSteps: 3, builtIn: true } as any);
     await Promise.resolve(

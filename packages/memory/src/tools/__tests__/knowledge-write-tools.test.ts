@@ -1,7 +1,7 @@
 import { InMemoryStore, MAX_KNOWLEDGE_NODE_DESCRIPTION_LENGTH } from '@mastra/core/storage';
 import { GoogleSchemaCompatLayer } from '@mastra/schema-compat';
 import { standardSchemaToJSONSchema } from '@mastra/schema-compat/schema';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import { Memory } from '../..';
 import { createKnowledgeWriteTools } from '../../processors/observational-memory/subconscious/knowledge-write-tools';
@@ -23,7 +23,7 @@ async function fixture() {
 }
 
 describe('Subconscious knowledge write tools', () => {
-  it('keeps snapshots of all nine public input schemas', async () => {
+  it('keeps snapshots of all ten public input schemas', async () => {
     const { tools } = await fixture();
     // Snapshot the resolved JSON Schema, not the wrapper: `tool.inputSchema` serializes to
     // an opaque `JsonSchemaWrapper` whose snapshot never changes when the schema does.
@@ -35,6 +35,52 @@ describe('Subconscious knowledge write tools', () => {
         ]),
       ),
     ).toMatchSnapshot();
+  });
+
+  it('creates a node and first record with code-owned provenance and capture time', async () => {
+    const { store, tools } = await fixture();
+    const before = Date.now();
+
+    const result = (await tools.knowledge_create!.execute?.(
+      {
+        name: 'Atlas Launch',
+        kind: 'project',
+        text: 'Project Atlas launches on 2026-09-15.',
+        nodeScope: 'resource',
+        scope: 'resource',
+        when: '2026-09-15T00:00:00.000Z',
+      },
+      {} as any,
+    )) as any;
+
+    expect(result.node).toMatchObject({
+      name: 'Atlas Launch',
+      kind: 'project',
+      scope: ['org:acme', 'resource:user-42'],
+    });
+    expect(result.record).toMatchObject({
+      node: result.node.id,
+      text: 'Project Atlas launches on 2026-09-15.',
+      scope: ['org:acme', 'resource:user-42'],
+      sourceThreadId: 'alpha',
+      when: new Date('2026-09-15T00:00:00.000Z'),
+    });
+    expect(result.record.capturedAt.getTime()).toBeGreaterThanOrEqual(before);
+    expect(await store.getNode(result.node.id)).toMatchObject({ name: 'Atlas Launch' });
+  });
+
+  it('preserves capture node-first partial-write semantics when the first record fails', async () => {
+    const { store, tools } = await fixture();
+    vi.spyOn(store, 'appendKnowledge').mockRejectedValueOnce(new Error('record write failed'));
+
+    await expect(
+      tools.knowledge_create!.execute?.(
+        { name: 'Partial Atlas', kind: 'project', text: 'This record fails.' },
+        {} as any,
+      ),
+    ).rejects.toThrow('record write failed');
+
+    expect(await store.resolveNode({ name: 'Partial Atlas', scope })).toBeTruthy();
   });
 
   it('keeps tool schemas free of top-level composition keywords Gemini rejects', async () => {
@@ -228,6 +274,7 @@ describe('Subconscious knowledge write tools', () => {
       ),
     ).rejects.toThrow('limited');
     expect(Object.keys(tools)).toEqual([
+      'knowledge_create',
       'knowledge_append',
       'knowledge_remove',
       'knowledge_update_node',
