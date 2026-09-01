@@ -38,6 +38,8 @@ const feedbackValueField = z
   .describe('Feedback value (rating number or correction text)');
 const feedbackCommentField = z.string().describe('Additional comment or context');
 const feedbackUserIdField = z.string().describe('User who provided the feedback');
+export const feedbackReviewStatusSchema = z.enum(['needs-review', 'reviewed']);
+export type FeedbackReviewStatus = z.infer<typeof feedbackReviewStatusSchema>;
 
 function normalizeLegacyFeedbackActor<T>(input: T): T {
   if (!input || typeof input !== 'object' || Array.isArray(input)) {
@@ -93,6 +95,8 @@ const feedbackRecordObjectSchema = z.object({
 
   // User-defined metadata (context fields stored here)
   metadata: z.record(z.string(), z.unknown()).nullish().describe('User-defined metadata'),
+
+  reviewStatus: feedbackReviewStatusSchema.default('needs-review').describe('Feedback review workflow status'),
 });
 
 export const feedbackRecordSchema = z
@@ -157,7 +161,7 @@ export type CreateFeedbackArgs = z.infer<typeof createFeedbackArgsSchema>;
 /** Schema for createFeedback operation body in client/server */
 export const createFeedbackBodySchema = z
   .object({
-    feedback: feedbackRecordObjectSchema.omit({ timestamp: true }),
+    feedback: feedbackRecordObjectSchema.omit({ timestamp: true, reviewStatus: true }),
   })
   .describe('Arguments for creating feedback');
 
@@ -182,6 +186,17 @@ export const batchCreateFeedbackArgsSchema = z
 /** Arguments for batch creating feedback */
 export type BatchCreateFeedbackArgs = z.infer<typeof batchCreateFeedbackArgsSchema>;
 
+/** Schema for updating a feedback record's review status */
+export const updateFeedbackReviewStatusArgsSchema = z
+  .object({
+    feedbackId: z.string(),
+    reviewStatus: feedbackReviewStatusSchema,
+  })
+  .describe("Arguments for updating a feedback record's review status");
+
+/** Arguments for updating a feedback record's review status */
+export type UpdateFeedbackReviewStatusArgs = z.infer<typeof updateFeedbackReviewStatusArgsSchema>;
+
 // ============================================================================
 // Feedback Filter Schema
 // ============================================================================
@@ -201,6 +216,7 @@ const feedbackFilterObjectSchema = z.object({
    */
   source: feedbackSourceField.optional(),
   feedbackUserId: feedbackUserIdField.optional(),
+  reviewStatus: feedbackReviewStatusSchema.optional(),
 });
 
 export const feedbackFilterSchema = z

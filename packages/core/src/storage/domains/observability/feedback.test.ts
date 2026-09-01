@@ -43,6 +43,7 @@ describe('Feedback Schemas', () => {
       expect(record.value).toBe(1);
       expect(record.feedbackUserId).toBe('user-123');
       expect(record.userId).toBe('trace-user-123');
+      expect(record.reviewStatus).toBe('needs-review');
     });
 
     it('accepts string value', () => {
@@ -159,10 +160,12 @@ describe('Feedback Schemas', () => {
         tags: ['prod'],
         environment: 'production',
         executionSource: 'cloud',
+        reviewStatus: 'reviewed',
       });
       expect(filter.feedbackType).toEqual(['thumbs', 'rating']);
       expect(filter.feedbackSource).toBe('user');
       expect(filter.executionSource).toBe('cloud');
+      expect(filter.reviewStatus).toBe('reviewed');
     });
 
     it('accepts single feedback type as string', () => {

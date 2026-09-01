@@ -58,6 +58,7 @@ const createMockObservabilityStore = () => ({
   getScorePercentiles: vi.fn(),
   listFeedback: vi.fn(),
   createFeedback: vi.fn(),
+  updateFeedbackReviewStatus: vi.fn(),
   getFeedbackAggregate: vi.fn(),
   getFeedbackBreakdown: vi.fn(),
   getFeedbackTimeSeries: vi.fn(),
@@ -1733,6 +1734,33 @@ describe('Observability Handlers', () => {
       ).rejects.toThrow();
 
       expect(handleErrorSpy).toHaveBeenCalledWith(storageError, "Error calling: 'list feedback'");
+    });
+  });
+
+  describe('UPDATE_FEEDBACK_REVIEW_STATUS_ROUTE', () => {
+    it('should update and return the feedback review status', async () => {
+      const feedback = {
+        feedbackId: 'feedback-123',
+        timestamp: new Date('2026-09-01T12:00:00.000Z'),
+        traceId: 'trace-123',
+        feedbackSource: 'user',
+        feedbackType: 'comment',
+        value: 'Needs follow-up',
+        reviewStatus: 'reviewed' as const,
+      };
+      (mockObservabilityStore.updateFeedbackReviewStatus as ReturnType<typeof vi.fn>).mockResolvedValue(feedback);
+
+      const result = await NEW_ROUTES.UPDATE_FEEDBACK_REVIEW_STATUS.handler({
+        ...createTestServerContext({ mastra: mockMastra }),
+        feedbackId: 'feedback-123',
+        reviewStatus: 'reviewed',
+      });
+
+      expect(result).toEqual(feedback);
+      expect(mockObservabilityStore.updateFeedbackReviewStatus).toHaveBeenCalledWith({
+        feedbackId: 'feedback-123',
+        reviewStatus: 'reviewed',
+      });
     });
   });
 
