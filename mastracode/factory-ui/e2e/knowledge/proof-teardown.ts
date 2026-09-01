@@ -14,12 +14,19 @@ export default function verifyKnowledgeProof() {
   if (!configured) return;
   const output = path.resolve(configured);
   const artifacts = path.join(output, 'artifacts');
-  const required = [path.join(output, 'results.json'), path.join(output, 'explore.png')];
+  const required = [
+    'results.json',
+    'explore.png',
+    'imports-completed.png',
+    'reader.png',
+    'suggester.png',
+    'reviewer.png',
+  ].map(file => path.join(output, file));
   if (required.some(file => !fs.existsSync(file))) throw new Error('Knowledge proof output is incomplete.');
-  if (find(artifacts, file => file.endsWith('trace.zip')).length === 0) {
-    throw new Error('Knowledge proof must include a Playwright trace.');
+  if (find(artifacts, file => file.endsWith('trace.zip')).length < 5) {
+    throw new Error('Knowledge proof must include a Playwright trace for every journey.');
   }
-  if (find(artifacts, file => file.endsWith('.webm')).length === 0) {
-    throw new Error('Knowledge proof must include a Playwright video.');
+  if (find(artifacts, file => file.endsWith('.webm')).length < 5) {
+    throw new Error('Knowledge proof must include a Playwright video for every journey.');
   }
 }
