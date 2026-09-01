@@ -9,17 +9,20 @@ import { useRef } from 'react';
 import type { RefObject } from 'react';
 
 import { PullRequestStatusIcon } from '../../factory/components/PullRequestStatusIcon';
+import type { SessionRowStatus } from '../services/sessionStatus';
+import { SessionActivityBelt } from './SessionActivity';
 import { SessionPreviewCard } from './SessionPreviewCard';
 import type { SessionPreviewDetails } from './SessionPreviewCard';
 
 /**
  * Shared sidebar row for workspace/user sessions. Built on `MainSidebar.NavLink`
  * so every session list (work, review, user) renders with identical density,
- * hover, and active states. Spinner, status dot and actions menu share one
- * trailing slot beside the label: they swap in place, and the slot collapses
- * when there is nothing to show so the label gets the full row. Because that
- * slot comes and goes, the menu and the preview card anchor to the row box
- * instead — a resized or hidden anchor would drag them across the screen.
+ * hover, and active states. Lifecycle lives on the left as an activity belt;
+ * the trailing slot beside the label is left to the spinner, the merge badge
+ * and the actions menu, which swap in place and collapse the slot when there is
+ * nothing to show so the label gets the full row. Because that slot comes and
+ * goes, the belt, the menu and the preview card anchor to the row box instead —
+ * a resized or hidden anchor would drag them across the screen.
  */
 export function SessionNavRow({
   name,
@@ -80,23 +83,37 @@ export function SessionNavRow({
       ) : null}
     </button>
   );
-  const indicator = indicatorKind({ loading, status, merged });
+  const belt = loading ? undefined : status;
+  const trailing = trailingKind({ loading, status, merged });
   const action = (
-    <span className={cn(trailingSlot, indicator ? 'grid' : revealedSlot)}>
-      {indicator ? <SessionRowIndicator kind={indicator} name={name} /> : null}
-      {indicator === 'loading' ? null : (
-        <SessionActionsMenu
-          name={name}
-          anchor={anchor}
-          disabled={disabled}
-          pinned={pinned}
-          onPinChange={onPinChange}
-          onDelete={onDelete}
-          onRegenerateTitle={onRegenerateTitle}
-          regeneratingTitle={regeneratingTitle}
-        />
-      )}
-    </span>
+    <>
+      {belt ? <SessionActivityBelt status={belt} label={beltLabel(belt, name)} /> : null}
+      <span className={cn(trailingSlot, trailing ? 'grid' : revealedSlot)}>
+        {trailing === 'loading' ? <Spinner size="sm" aria-label={`Opening ${name}`} className="text-icon3" /> : null}
+        {trailing === 'merged' ? (
+          <span
+            role="img"
+            aria-label={`Pull request merged for ${name}`}
+            title="Pull request merged"
+            className={cn('flex', yieldsToActions)}
+          >
+            <PullRequestStatusIcon status="merged" className="size-3!" decorative />
+          </span>
+        ) : null}
+        {trailing === 'loading' ? null : (
+          <SessionActionsMenu
+            name={name}
+            anchor={anchor}
+            disabled={disabled}
+            pinned={pinned}
+            onPinChange={onPinChange}
+            onDelete={onDelete}
+            onRegenerateTitle={onRegenerateTitle}
+            regeneratingTitle={regeneratingTitle}
+          />
+        )}
+      </span>
+    </>
   );
   const row = (
     <MainSidebar.NavLink
@@ -126,27 +143,16 @@ const trailingSlot = 'size-form-sm shrink-0 place-items-center *:col-start-1 *:r
 const revealedSlot =
   'hidden group-focus-within/session:grid group-hover/session:grid group-has-[[data-popup-open]]/session:grid';
 
-/**
- * Session lifecycle states surfaced by the row's status dot. The color scheme
- * mirrors `SessionFavicon` so the sidebar and the tab-favicon read the same
- * way at a glance.
- */
-export type SessionRowStatus = 'initializing' | 'working' | 'ready';
+function beltLabel(status: SessionRowStatus, name: string) {
+  if (status === 'initializing') return `Initializing ${name}`;
+  if (status === 'working') return `Agent working in ${name}`;
+  return `${name} ready — open to dismiss`;
+}
 
-type IndicatorKind = 'loading' | SessionRowStatus | 'merged';
-
-function indicatorKind({
-  loading,
-  status,
-  merged,
-}: {
-  loading?: boolean;
-  status?: SessionRowStatus;
-  merged?: boolean;
-}): IndicatorKind | undefined {
+/** A merge badge is worth the slot only on a session with no lifecycle left to report. */
+function trailingKind({ loading, status, merged }: { loading?: boolean; status?: SessionRowStatus; merged?: boolean }) {
   if (loading) return 'loading';
-  if (status) return status;
-  return merged ? 'merged' : undefined;
+  return merged && !status ? 'merged' : undefined;
 }
 
 function SessionActionsMenu({
@@ -209,48 +215,3 @@ function SessionActionsMenu({
 // The actions menu owns the slot as soon as the row is hovered, focused, or its menu is open.
 const yieldsToActions =
   'group-hover/session:hidden group-focus-within/session:hidden group-has-[[data-popup-open]]/session:hidden';
-
-function SessionRowIndicator({ kind, name }: { kind: IndicatorKind; name: string }) {
-  if (kind === 'loading') return <Spinner size="sm" aria-label={`Opening ${name}`} className="text-icon3" />;
-
-  if (kind === 'initializing')
-    return (
-      <span
-        role="status"
-        aria-label={`Initializing ${name}`}
-        title="Initializing"
-        className={cn('bg-warning1 size-2 animate-pulse rounded-full', yieldsToActions)}
-      />
-    );
-
-  if (kind === 'working')
-    return (
-      <span
-        role="status"
-        aria-label={`Agent working in ${name}`}
-        title="Working"
-        className={cn('bg-positive1 size-2 animate-pulse rounded-full', yieldsToActions)}
-      />
-    );
-
-  if (kind === 'ready')
-    return (
-      <span
-        role="status"
-        aria-label={`${name} ready — open to dismiss`}
-        title="Ready"
-        className={cn('bg-accent3 size-2 rounded-full', yieldsToActions)}
-      />
-    );
-
-  return (
-    <span
-      role="img"
-      aria-label={`Pull request merged for ${name}`}
-      title="Pull request merged"
-      className={cn('flex', yieldsToActions)}
-    >
-      <PullRequestStatusIcon status="merged" className="size-3!" decorative />
-    </span>
-  );
-}

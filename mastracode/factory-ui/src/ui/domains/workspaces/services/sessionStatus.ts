@@ -1,4 +1,8 @@
-import type { SessionRowStatus } from '../components/SessionNavRow';
+/**
+ * Session lifecycle states a sidebar row can surface. The colour scheme mirrors
+ * `SessionFavicon`, so the sidebar and the tab favicon read the same way.
+ */
+export type SessionRowStatus = 'initializing' | 'working' | 'ready';
 
 /**
  * A board card also has to say "bound but nothing to report". Rows hide their
