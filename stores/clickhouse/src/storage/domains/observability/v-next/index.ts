@@ -111,14 +111,14 @@ import {
   MV_DISCOVERY_PAIRS,
   TABLE_DISCOVERY_VALUES,
   TABLE_DISCOVERY_PAIRS,
-  buildLifecycleRetentionEntries,
-  LIFECYCLE_TTL_TABLES,
+  buildRetentionEntries,
+  parseTtlExpression,
 } from './ddl';
 import type { MigrationEntry, RetentionEntry, RetentionConfig } from './ddl';
 export { TABLE_DELETION_REQUESTS } from './ddl';
-export type { RetentionConfig } from './ddl';
 export { recordDeletionRequest } from './deletion-requests';
 export type { DeletionRequestRow, RecordDeletionRequestArgs } from './deletion-requests';
+export type { RetentionConfig } from './ddl';
 
 /** Extended config for v-next observability, adding per-signal retention. */
 export type VNextObservabilityConfig = ClickhouseDomainConfig & {
@@ -217,22 +217,37 @@ async function filterAppliedMigrations(
 }
 
 /**
- * Reconciles managed age retention and deletion lifecycle TTLs against the DDL
- * ClickHouse actually stores. Introspection errors are allowed to fail init so
- * an unknown compound TTL is never overwritten destructively.
+ * Returns retention entries whose `MODIFY TTL` would actually change the
+ * table's TTL. Falls back to running every entry if introspection fails.
  */
-async function buildPendingLifecycleRetention(
+async function filterAppliedRetention(
   client: ClickHouseClient,
-  retention?: RetentionConfig,
+  entries: readonly RetentionEntry[],
 ): Promise<readonly RetentionEntry[]> {
-  const result = await client.query({
-    query: `SELECT name, create_table_query FROM system.tables WHERE database = currentDatabase() AND name IN ({tables:Array(String)})`,
-    query_params: { tables: LIFECYCLE_TTL_TABLES },
-    format: 'JSONEachRow',
+  if (entries.length === 0) return entries;
+
+  const tables = [...new Set(entries.map(e => e.table))];
+
+  let createQueries: Map<string, string>;
+  try {
+    const result = await client.query({
+      query: `SELECT name, create_table_query FROM system.tables WHERE database = currentDatabase() AND name IN ({tables:Array(String)})`,
+      query_params: { tables },
+      format: 'JSONEachRow',
+    });
+    const rows = (await result.json()) as Array<{ name: string; create_table_query: string }>;
+    createQueries = new Map(rows.map(r => [r.name, r.create_table_query ?? '']));
+  } catch {
+    return entries;
+  }
+
+  return entries.filter(e => {
+    const createQuery = createQueries.get(e.table);
+    if (!createQuery) return true;
+    const current = parseTtlExpression(createQuery);
+    if (!current) return true;
+    return current.column !== e.column || current.days !== e.days;
   });
-  const rows = (await result.json()) as Array<{ name: string; create_table_query: string }>;
-  const createQueries = new Map(rows.map(row => [row.name, row.create_table_query ?? '']));
-  return buildLifecycleRetentionEntries(createQueries, retention);
 }
 
 /**
@@ -515,13 +530,15 @@ export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
         await this.#client.command({ query: addOnClusterToDDL(migration.sql, this.#replication) });
       }
 
-      // Reconcile configured age retention and the deletion lifecycle TTL
-      // against the complete stored TTL expression. This preserves unmanaged
-      // MOVE, recompression, and conditional DELETE clauses while avoiding
-      // metadata churn when the managed clauses already match.
-      const pendingRetention = await buildPendingLifecycleRetention(this.#client, this.#retention);
-      for (const entry of pendingRetention) {
-        await this.#client.command({ query: addOnClusterToDDL(entry.sql, this.#replication) });
+      // Apply retention TTL if configured (per design doc: per-signal, day increments).
+      // Skip statements whose current TTL already matches: `MODIFY TTL` bumps the
+      // metadata version unconditionally, so re-issuing it on every boot is the
+      // primary source of replica-catch-up races in deployments with retention.
+      if (this.#retention) {
+        const pendingRetention = await filterAppliedRetention(this.#client, buildRetentionEntries(this.#retention));
+        for (const entry of pendingRetention) {
+          await this.#client.command({ query: addOnClusterToDDL(entry.sql, this.#replication) });
+        }
       }
 
       // Burn `cursorId = 0` for every delta stream on the `serial` strategy.

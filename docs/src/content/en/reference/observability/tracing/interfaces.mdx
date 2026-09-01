@@ -54,7 +54,7 @@ interface BatchDeleteTracesArgs {
 
 When `organizationId` or `resourceId` is provided, only records matching the scope are deleted. Storage adapters that don't support tenant-scoped trace deletion throw an error rather than applying an unscoped delete.
 
-For ClickHouse vNext, the method records the complete predicate before stamping matching rows with a deletion timestamp. It then waits for lightweight delete masks to be applied. Normal reads no longer return the rows matched by that operation when the call resolves. ClickHouse can physically remove masked rows during an earlier merge; otherwise, a conditional TTL makes stamped rows eligible for removal after 30 days. The deletion request remains available for 90 days for an external reapply and purge-verification scheduler.
+For ClickHouse vNext, the method records the complete predicate and waits for lightweight delete masks to be applied. Normal reads no longer return the rows matched by that operation when the call resolves. Lightweight deletion is hide-only through ClickHouse's `_row_exists` mask. Physical removal depends on merges and deployment-configured retention TTLs, which Mastra OSS doesn't configure by default. The deletion request remains available for 45 days for an external reapply and purge-verification scheduler.
 
 ### `SpanTypeMap`
 

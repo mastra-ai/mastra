@@ -135,6 +135,22 @@ ORDER BY id`;
     );
   });
 
+  it('rewrites parameterized table engines without retaining the original arguments', () => {
+    const ddl = `CREATE TABLE IF NOT EXISTS mastra_threads (
+  id String,
+  updatedAt DateTime64(3)
+)
+ENGINE = ReplacingMergeTree(updatedAt)
+ORDER BY id`;
+
+    expect(applyReplicationToDDL(ddl, {})).toBe(`CREATE TABLE IF NOT EXISTS mastra_threads (
+  id String,
+  updatedAt DateTime64(3)
+)
+ENGINE = ReplicatedReplacingMergeTree('/clickhouse/tables/{shard}/{database}/{table}', '{replica}', updatedAt)
+ORDER BY id`);
+  });
+
   it('rewrites table DDL engines with nested parentheses in engine args', () => {
     const ddl = `CREATE TABLE IF NOT EXISTS mastra_threads (
   id String

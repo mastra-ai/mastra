@@ -31,7 +31,6 @@ import type {
   SpanRecord,
 } from '@mastra/core/storage';
 
-import { addOnClusterToDDL } from '../../../db/replication';
 import type { ClickhouseReplicationConfig } from '../../../db/replication';
 import {
   TABLE_FEEDBACK_EVENTS,
@@ -222,14 +221,12 @@ export async function getTraceLight(
  * so span deletes never propagate to it. Delta tables self-expire via TTL and
  * discovery tables self-heal, so neither needs explicit deletes.
  *
- * Before masking, the complete predicate is recorded for re-application and
- * every matching row is synchronously stamped with `deletedAt = now()` to
- * start its physical-purge clock. Lightweight deletes are also synchronous,
- * so successful calls return only after normal reads hide every matched row.
+ * Records the predicate before using lightweight DELETE FROM on every table.
+ * Lightweight deletes hide rows through ClickHouse's delete mask; physical
+ * removal depends on the deployment's configured retention and merge policy.
  *
  * When the optional tenant scope (`organizationId` / `resourceId`) is set,
- * every lifecycle command additionally requires the row's tenant columns to
- * match.
+ * every DELETE additionally requires the row's tenant columns to match.
  */
 export async function batchDeleteTraces(
   client: ClickHouseClient,
@@ -238,7 +235,6 @@ export async function batchDeleteTraces(
 ): Promise<void> {
   if (args.traceIds.length === 0) return;
 
-  const requestedAt = new Date().toISOString();
   await recordDeletionRequest(client, {
     requestId: randomUUID(),
     organizationId: args.organizationId,
@@ -246,12 +242,11 @@ export async function batchDeleteTraces(
     signal: 'traces',
     predicateType: 'traceIds',
     predicateValues: [...args.traceIds],
-    requestedAt,
+    requestedAt: new Date().toISOString(),
     replication,
   });
 
-  // Build one parameterized predicate per table and reuse it unchanged for
-  // both the stamp and mask phases.
+  // Build parameterized IN list and dedupeKey prefix conditions
   const params: Record<string, string> = {};
   const traceInPlaceholders: string[] = [];
   const dedupeOrParts: string[] = [];
@@ -266,6 +261,7 @@ export async function batchDeleteTraces(
   const traceInList = traceInPlaceholders.join(', ');
   const dedupeCondition = dedupeOrParts.length === 1 ? dedupeOrParts[0] : `(${dedupeOrParts.join(' OR ')})`;
 
+  // Optional tenant scope conditions applied to every table
   let scopeCondition = '';
   if (args.organizationId !== undefined) {
     params.scope_org = args.organizationId;
@@ -276,38 +272,28 @@ export async function batchDeleteTraces(
     scopeCondition += ` AND resourceId = {scope_res:String}`;
   }
 
-  const tracingPredicate = `traceId IN (${traceInList}) AND ${dedupeCondition}${scopeCondition}`;
-  const signalPredicate = `traceId IN (${traceInList})${scopeCondition}`;
-  const operations = [
-    ...[TABLE_SPAN_EVENTS, TABLE_TRACE_ROOTS, TABLE_TRACE_BRANCHES].map(table => ({
-      table,
-      predicate: tracingPredicate,
-    })),
-    ...[TABLE_METRIC_EVENTS, TABLE_LOG_EVENTS, TABLE_SCORE_EVENTS, TABLE_FEEDBACK_EVENTS].map(table => ({
-      table,
-      predicate: signalPredicate,
-    })),
-  ];
+  const tracingTables = [TABLE_SPAN_EVENTS, TABLE_TRACE_ROOTS, TABLE_TRACE_BRANCHES];
+  const signalTables = [TABLE_METRIC_EVENTS, TABLE_LOG_EVENTS, TABLE_SCORE_EVENTS, TABLE_FEEDBACK_EVENTS];
 
-  await Promise.all(
-    operations.map(({ table, predicate }) =>
+  // Wait for every replica to apply the lightweight delete mask before the
+  // operation resolves. Physical byte removal is handled separately by the
+  // deployment's retention and merge policy.
+  await Promise.all([
+    ...tracingTables.map(table =>
       client.command({
-        query: addOnClusterToDDL(`ALTER TABLE ${table} UPDATE deletedAt = now() WHERE ${predicate}`, replication),
-        query_params: params,
-        clickhouse_settings: { mutations_sync: '2' },
-      }),
-    ),
-  );
-
-  await Promise.all(
-    operations.map(({ table, predicate }) =>
-      client.command({
-        query: `DELETE FROM ${table} WHERE ${predicate}`,
+        query: `DELETE FROM ${table} WHERE traceId IN (${traceInList}) AND ${dedupeCondition}${scopeCondition}`,
         query_params: params,
         clickhouse_settings: { lightweight_deletes_sync: '2' },
       }),
     ),
-  );
+    ...signalTables.map(table =>
+      client.command({
+        query: `DELETE FROM ${table} WHERE traceId IN (${traceInList})${scopeCondition}`,
+        query_params: params,
+        clickhouse_settings: { lightweight_deletes_sync: '2' },
+      }),
+    ),
+  ]);
 }
 
 /** Truncate all tracing tables (span_events + trace_roots). */

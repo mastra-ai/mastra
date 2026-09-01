@@ -2,4 +2,4 @@
 '@mastra/clickhouse': patch
 ---
 
-Improved trace deletion with a durable deletion request, synchronous purge-clock stamping, and lightweight delete masking across trace branches, metrics, logs, scores, and feedback. A conditional TTL provides a 30-day purge path when ClickHouse hasn't already removed masked rows during a merge.
+Improved trace deletion with a durable 45-day deletion request and synchronous lightweight delete masking across trace branches, metrics, logs, scores, and feedback. Physical removal follows the deployment's configured retention TTL and merge policy.

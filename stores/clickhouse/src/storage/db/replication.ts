@@ -180,27 +180,49 @@ export function addOnClusterToDDL(sql: string, replication?: ClickhouseReplicati
 }
 
 function rewriteEngineClauses(sql: string, replication: ClickhouseReplicationConfig): string {
-  return sql.replace(/ENGINE\s*=\s*(\w+)\s*/gi, (match, engineName: string, offset: number, source: string) => {
-    const argsStart = offset + match.length;
-    if (source[argsStart] !== '(') {
-      return `ENGINE = ${buildReplicatedTableEngine(engineName, replication)}`;
-    }
+  const enginePattern = /ENGINE\s*=\s*(\w+)\s*/gi;
+  let result = '';
+  let consumedUntil = 0;
 
-    let depth = 0;
-    for (let i = argsStart; i < source.length; i++) {
-      const char = source[i];
-      if (char === '(') depth++;
-      else if (char === ')') {
-        depth--;
-        if (depth === 0) {
-          const engine = `${engineName}${source.slice(argsStart, i + 1)}`;
-          return `ENGINE = ${buildReplicatedTableEngine(engine, replication)}`;
+  for (let match = enginePattern.exec(sql); match; match = enginePattern.exec(sql)) {
+    const engineName = match[1];
+    if (!engineName) continue;
+
+    let engineEnd = enginePattern.lastIndex;
+    let engine = engineName;
+
+    if (sql[engineEnd] === '(') {
+      let depth = 0;
+      let closingParenEnd: number | undefined;
+      for (let i = engineEnd; i < sql.length; i++) {
+        const char = sql[i];
+        if (char === '(') depth++;
+        else if (char === ')') {
+          depth--;
+          if (depth === 0) {
+            closingParenEnd = i + 1;
+            break;
+          }
         }
       }
+
+      if (closingParenEnd === undefined) {
+        result += sql.slice(consumedUntil, enginePattern.lastIndex);
+        consumedUntil = enginePattern.lastIndex;
+        continue;
+      }
+
+      engineEnd = closingParenEnd;
+      engine = `${engineName}${sql.slice(enginePattern.lastIndex, engineEnd)}`;
     }
 
-    return match;
-  });
+    result += sql.slice(consumedUntil, match.index);
+    result += `ENGINE = ${buildReplicatedTableEngine(engine, replication)}`;
+    consumedUntil = engineEnd;
+    enginePattern.lastIndex = engineEnd;
+  }
+
+  return result + sql.slice(consumedUntil);
 }
 
 export function applyReplicationToDDL(sql: string, replication?: ClickhouseReplicationConfig): string {

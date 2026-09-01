@@ -4,18 +4,16 @@ import { describe, expect, it, vi } from 'vitest';
 import { TABLE_DELETION_REQUESTS } from './ddl';
 import { batchDeleteTraces } from './tracing';
 
-function createClient(options?: { rejectStamp?: boolean }) {
+function createClient(options?: { rejectDelete?: boolean }) {
   const insert = vi.fn().mockResolvedValue(undefined);
-  const command = vi.fn().mockImplementation(({ query }: { query: string }) => {
-    if (options?.rejectStamp && query.startsWith('ALTER TABLE')) {
-      return Promise.reject(new Error('stamp failed'));
-    }
+  const command = vi.fn().mockImplementation(() => {
+    if (options?.rejectDelete) return Promise.reject(new Error('delete failed'));
     return Promise.resolve(undefined);
   });
   return { client: { insert, command } as unknown as ClickHouseClient, insert, command };
 }
 
-describe('batchDeleteTraces deletion lifecycle', () => {
+describe('batchDeleteTraces deletion requests', () => {
   it('keeps an empty batch as a no-op', async () => {
     const { client, insert, command } = createClient();
     await batchDeleteTraces(client, { traceIds: [] });
@@ -23,7 +21,7 @@ describe('batchDeleteTraces deletion lifecycle', () => {
     expect(command).not.toHaveBeenCalled();
   });
 
-  it('records the full predicate, stamps every table, then applies every mask', async () => {
+  it('records the full predicate before applying synchronous lightweight delete masks', async () => {
     const { client, insert, command } = createClient();
     await batchDeleteTraces(client, {
       traceIds: ['trace-2', 'trace-1', 'trace-2'],
@@ -32,8 +30,7 @@ describe('batchDeleteTraces deletion lifecycle', () => {
     });
 
     expect(insert).toHaveBeenCalledTimes(1);
-    const request = insert.mock.calls[0]?.[0];
-    expect(request).toMatchObject({
+    expect(insert.mock.calls[0]?.[0]).toMatchObject({
       table: TABLE_DELETION_REQUESTS,
       format: 'JSONEachRow',
       values: [
@@ -49,38 +46,25 @@ describe('batchDeleteTraces deletion lifecycle', () => {
       ],
     });
 
-    expect(command).toHaveBeenCalledTimes(14);
+    expect(command).toHaveBeenCalledTimes(7);
     const calls = command.mock.calls.map(
       ([call]) =>
         call as {
           query: string;
-          query_params: unknown;
-          clickhouse_settings: Record<string, unknown> | undefined;
+          query_params: Record<string, string>;
+          clickhouse_settings: Record<string, unknown>;
         },
     );
-    const stamps = calls.slice(0, 7);
-    const masks = calls.slice(7);
-    expect(stamps.every(call => call.query.startsWith('ALTER TABLE'))).toBe(true);
-    expect(stamps.every(call => call.query.includes('UPDATE deletedAt = now() WHERE'))).toBe(true);
-    expect(stamps.every(call => call.clickhouse_settings && call.clickhouse_settings.mutations_sync === '2')).toBe(
-      true,
-    );
-    expect(masks.every(call => call.query.startsWith('DELETE FROM'))).toBe(true);
-    expect(
-      masks.every(call => call.clickhouse_settings && call.clickhouse_settings.lightweight_deletes_sync === '2'),
-    ).toBe(true);
-
-    for (let index = 0; index < stamps.length; index++) {
-      const stampPredicate = stamps[index]!.query.split(' WHERE ')[1];
-      const maskPredicate = masks[index]!.query.split(' WHERE ')[1];
-      expect(maskPredicate).toBe(stampPredicate);
-      expect(masks[index]!.query_params).toBe(stamps[index]!.query_params);
-    }
-
+    expect(calls.every(call => call.query.startsWith('DELETE FROM'))).toBe(true);
+    expect(calls.every(call => call.clickhouse_settings.lightweight_deletes_sync === '2')).toBe(true);
+    expect(calls.every(call => call.query.includes('organizationId = {scope_org:String}'))).toBe(true);
+    expect(calls.every(call => call.query.includes('resourceId = {scope_res:String}'))).toBe(true);
+    expect(calls.every(call => call.query_params.scope_org === 'org-1')).toBe(true);
+    expect(calls.every(call => call.query_params.scope_res === 'resource-1')).toBe(true);
     expect(insert.mock.invocationCallOrder[0]).toBeLessThan(command.mock.invocationCallOrder[0]!);
   });
 
-  it('adds ON CLUSTER only to stamp mutations and uses request insert quorum', async () => {
+  it('uses request insert quorum without adding ON CLUSTER to lightweight deletes', async () => {
     const { client, insert, command } = createClient();
     await batchDeleteTraces(client, { traceIds: ['trace-1'] }, { cluster: 'test_cluster' });
 
@@ -88,18 +72,15 @@ describe('batchDeleteTraces deletion lifecycle', () => {
       clickhouse_settings: expect.objectContaining({ insert_quorum: 'auto', insert_quorum_parallel: 1 }),
     });
     const queries = command.mock.calls.map(([call]) => (call as { query: string }).query);
-    expect(queries.slice(0, 7).every(query => query.includes(" ON CLUSTER 'test_cluster' UPDATE "))).toBe(true);
-    expect(queries.slice(7).every(query => !query.includes(' ON CLUSTER '))).toBe(true);
+    expect(queries.every(query => query.startsWith('DELETE FROM'))).toBe(true);
+    expect(queries.every(query => !query.includes(' ON CLUSTER '))).toBe(true);
   });
 
-  it('leaves the durable request in place when stamping fails and does not start masks', async () => {
-    const { client, insert, command } = createClient({ rejectStamp: true });
-    await expect(batchDeleteTraces(client, { traceIds: ['trace-1'] })).rejects.toThrow('stamp failed');
+  it('leaves the durable request in place when a lightweight delete fails', async () => {
+    const { client, insert, command } = createClient({ rejectDelete: true });
+    await expect(batchDeleteTraces(client, { traceIds: ['trace-1'] })).rejects.toThrow('delete failed');
 
     expect(insert).toHaveBeenCalledTimes(1);
     expect(command).toHaveBeenCalledTimes(7);
-    expect(command.mock.calls.every(([call]) => (call as { query: string }).query.startsWith('ALTER TABLE'))).toBe(
-      true,
-    );
   });
 });
