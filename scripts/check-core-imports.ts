@@ -89,7 +89,7 @@ function getPackageInfo(packageRoot: string): PackageInfo | undefined {
   };
   const coreRange = packageJson.peerDependencies?.['@mastra/core'];
 
-  if (!coreRange) {
+  if (packageJson.private || !coreRange) {
     return undefined;
   }
 
@@ -146,9 +146,6 @@ function getPackagesToCheck() {
   const defaultPackageRoots = [join(repoRoot, 'packages', 'server'), ...findPackageRoots(join(repoRoot, 'stores'))];
 
   for (const packageRoot of defaultPackageRoots) {
-    const packageJson = JSON.parse(readFileSync(join(packageRoot, 'package.json'), 'utf-8')) as { private?: boolean };
-    if (packageJson.private) continue;
-
     const packageInfo = getPackageInfo(packageRoot);
     if (packageInfo) packages.push(packageInfo);
   }
