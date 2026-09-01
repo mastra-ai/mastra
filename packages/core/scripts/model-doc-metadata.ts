@@ -30,14 +30,14 @@ export function getProviderPageMetadata(providerName: string, models: ModelPageD
   }
 
   return {
-    title: `${providerName} Models: IDs & TypeScript Usage`,
+    title: `${providerName} | Models`,
     description: `Browse ${providerName} model IDs and capabilities. Learn how to use them in TypeScript with Mastra's model router.`,
   };
 }
 
 export function getGatewayPageMetadata(gatewayName: string, modelCount: number) {
   return {
-    title: `${gatewayName} Models: IDs & TypeScript Usage`,
+    title: `${gatewayName} | Models`,
     description: `Browse ${modelCount} ${gatewayName} model IDs and learn how to configure authentication and use the gateway in TypeScript with Mastra's model router.`,
   };
 }
