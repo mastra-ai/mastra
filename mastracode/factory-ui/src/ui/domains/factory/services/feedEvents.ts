@@ -5,8 +5,6 @@ import { RequestError } from './request';
 export interface FeedEvent {
   /** Absent when the project's attention moved but no work item's comments did. */
   workItemId?: string;
-  /** A run started or ended on this session: the run registry has news. */
-  sessionId?: string;
 }
 
 export async function streamFeedEvents(
@@ -28,9 +26,6 @@ export async function streamFeedEvents(
     if (event !== 'feed') return;
     const parsed: unknown = JSON.parse(data);
     if (!isRecord(parsed)) return;
-    handlers.onEvent({
-      ...(typeof parsed.workItemId === 'string' ? { workItemId: parsed.workItemId } : {}),
-      ...(typeof parsed.sessionId === 'string' ? { sessionId: parsed.sessionId } : {}),
-    });
+    handlers.onEvent(typeof parsed.workItemId === 'string' ? { workItemId: parsed.workItemId } : {});
   });
 }

@@ -35,10 +35,6 @@ export function pushableFeedStream(factoryProjectId: string) {
       const data = JSON.stringify(workItemId ? { workItemId } : {});
       controller?.enqueue(encoder.encode(`event: feed\ndata: ${data}\n\n`));
     },
-    pushRun(sessionId: string) {
-      const data = JSON.stringify({ sessionId });
-      controller?.enqueue(encoder.encode(`event: feed\ndata: ${data}\n\n`));
-    },
     close() {
       controller?.close();
       controller = undefined;

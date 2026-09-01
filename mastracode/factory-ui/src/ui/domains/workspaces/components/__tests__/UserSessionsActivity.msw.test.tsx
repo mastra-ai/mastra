@@ -117,9 +117,9 @@ describe('User sessions sidebar activity', () => {
     let settled = false;
     const active = new Set(['sess-4']);
     stubProjectAndSessions([]);
-    // Serve a mutable session row so the refetch on the run's feed frames
-    // observes the stamped `materializedAt` (registered after the base stub —
-    // the most recent handler wins).
+    // Serve a mutable session row so the next sessions refetch observes the
+    // stamped `materializedAt` (registered after the base stub — the most
+    // recent handler wins).
     server.use(
       http.get(`${TEST_BASE_URL}/web/github/projects/${projectRepositoryId}/sessions`, () =>
         HttpResponse.json({
@@ -139,8 +139,8 @@ describe('User sessions sidebar activity', () => {
     await waitForMutationsIdle(client);
     await screen.findByRole('status', { name: 'Agent working in feature-d' });
 
-    // The run finishes: the server stamps materializedAt, and its feed frames
-    // invalidate the registry and the sessions list.
+    // The run finishes and the server stamps materializedAt; the sessions
+    // list refetches on its own cadence.
     settled = true;
     active.delete('sess-4');
     await client.invalidateQueries({

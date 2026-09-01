@@ -76,7 +76,6 @@ import { observeSessionFirstExec } from './session/first-exec-capture.js';
 import { observeSessionFirstMessage } from './session/first-message-capture.js';
 import { hydrateSessionMemorySettings } from './session/memory-settings-hydration.js';
 import { hydrateSessionModelPack } from './session/model-pack-hydration.js';
-import { observeSessionRunLifecycle } from './session/run-lifecycle-feed.js';
 import { observeSessionThreadTitle } from './session/thread-title-mirror.js';
 import { createSpaStaticMiddleware, resolveUiDistDir } from './spa-static.js';
 import { createStateSigner } from './state-signing.js';
@@ -371,7 +370,7 @@ export class MastraFactory {
     const intakeStorage = storage.registerDomain(new IntakeStorage());
     const auditStorage = storage.registerDomain(new AuditStorage());
     const workItemsStorage = storage.registerDomain(new WorkItemsStorage());
-    workItemsStorage.onFeedTouch(scope => touchFeed(eventBus, scope));
+    workItemsStorage.onAttentionChanged(scope => touchFeed(eventBus, scope));
     const modelCredentialsStorage = storage.registerDomain(new ModelCredentialsStorage(secretEncryption));
     const modelPacksStorage = storage.registerDomain(new ModelPacksStorage());
     const memorySettingsStorage = storage.registerDomain(new MemorySettingsStorage());
@@ -650,7 +649,6 @@ export class MastraFactory {
           ...(githubIntegration ? { github: githubIntegration } : {}),
           ...(workItemsStorage ? { workItems: workItemsStorage } : {}),
           workspaceRegistry,
-          pubsub: eventBus,
         }),
         disableGithubSignals: true,
         // Memory settings live in the factory's `memory-settings` app table (per
@@ -892,10 +890,6 @@ export class MastraFactory {
       });
       observeSessionThreadTitle(session, {
         sourceControl: sourceControlStorage.forIntegration('github'),
-      });
-      observeSessionRunLifecycle(session, {
-        sourceControl: sourceControlStorage.forIntegration('github'),
-        pubsub: eventBus,
       });
     });
 

@@ -7,7 +7,6 @@ import type { getDynamicWorkspace, WorkspaceSkillExtension } from '@mastra/code-
 import { DEFAULT_CONFIG_DIR } from '@mastra/code-sdk/constants';
 import type { MastraCodeState } from '@mastra/code-sdk/schema';
 import type { AgentControllerRequestContext } from '@mastra/core/agent-controller';
-import type { PubSub } from '@mastra/core/events';
 import { LocalSkillSource, Workspace } from '@mastra/core/workspace';
 import type {
   SandboxStartHook,
@@ -18,7 +17,6 @@ import type {
 } from '@mastra/core/workspace';
 import { getFactoryAuthUserFromContext, getFactoryAuthUserId } from './auth.js';
 import type { MastraFactorySandboxConfig } from './factory.js';
-import { touchSessionFeed } from './feed-events.js';
 import type { GithubIntegration } from './integrations/github/integration.js';
 import { getGithubPat } from './integrations/github/pat.js';
 import type { GithubPatKind } from './integrations/github/pat.js';
@@ -230,8 +228,6 @@ export interface CreateWorkspaceFactoryOptions {
   workItems?: Pick<WorkItemsStorage, 'findRunBindingBySession'>;
   /** Runtime workspace/token registrations invalidated when a session retires. */
   workspaceRegistry?: FactoryWorkspaceRegistry;
-  /** Project feed bus: announces the session's first materialization so clients refetch instead of polling for the stamp. */
-  pubsub?: Pick<PubSub, 'publish'>;
 }
 
 type WorkspaceUnregister = () => Promise<void> | void;
@@ -273,7 +269,7 @@ export class FactoryWorkspaceRegistry {
 }
 
 export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = {}) {
-  const { sandbox: sandboxConfig, github, workItems, pubsub } = options;
+  const { sandbox: sandboxConfig, github, workItems } = options;
   const workspaceRegistry = options.workspaceRegistry ?? new FactoryWorkspaceRegistry();
   type GithubTokenRegistration = {
     inject: (token: string) => void;
@@ -607,15 +603,6 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
         token,
         storage: storage.sessions,
       });
-      // First materialization only: resumes re-run setup but the stamp is
-      // write-once, and re-announcing every sandbox start would be noise.
-      if (pubsub && !session.materializedAt) {
-        touchSessionFeed(
-          pubsub,
-          { orgId: session.orgId, factoryProjectId: connection.factoryProjectId },
-          session.sessionId,
-        );
-      }
       await checkoutSessionBranch(target, workdir, {
         branch: session.branch,
         baseBranch: session.baseBranch || projectRepository.branch || repository.defaultBranch,

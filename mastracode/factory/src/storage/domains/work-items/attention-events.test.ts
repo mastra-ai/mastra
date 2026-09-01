@@ -1,8 +1,7 @@
 /**
- * The announcement every feed-relevant write owes its readers — attention
- * items and board decisions alike: clients stop polling while their feed
- * stream is up, so a write that stays silent leaves every open page stale
- * until it is reloaded.
+ * The announcement every attention-changing write owes its readers: clients
+ * stop polling while their feed stream is up, so a write that stays silent
+ * leaves every open page stale until it is reloaded.
  */
 
 import { LibSQLFactoryStorage } from '@mastra/libsql';
@@ -22,7 +21,7 @@ async function makeStorage(): Promise<{ storage: WorkItemsStorage; announced: Fa
   const storage = backend.registerDomain(new WorkItemsStorage());
   await backend.init();
   const announced: FactoryAttentionScope[] = [];
-  storage.onFeedTouch(scope => announced.push({ orgId: scope.orgId, factoryProjectId: scope.factoryProjectId }));
+  storage.onAttentionChanged(scope => announced.push({ orgId: scope.orgId, factoryProjectId: scope.factoryProjectId }));
   return { storage, announced };
 }
 
@@ -31,7 +30,11 @@ async function seedWorkItem(storage: WorkItemsStorage): Promise<string> {
   return created.item.id;
 }
 
-async function queueDecision(storage: WorkItemsStorage, workItemId: string, key: string): Promise<void> {
+async function claimDecision(
+  storage: WorkItemsStorage,
+  workItemId: string,
+  key: string,
+): Promise<FactoryDeferredDecisionRecord> {
   const workItem = await storage.get({ orgId: SCOPE.orgId, id: workItemId });
   if (!workItem) throw new Error('Expected the seeded work item');
   await storage.commitRuleEvaluation({
@@ -46,14 +49,6 @@ async function queueDecision(storage: WorkItemsStorage, workItemId: string, key:
     causalChain: [],
     now: NOW,
   });
-}
-
-async function claimDecision(
-  storage: WorkItemsStorage,
-  workItemId: string,
-  key: string,
-): Promise<FactoryDeferredDecisionRecord> {
-  await queueDecision(storage, workItemId, key);
   const [claimed] = await storage.claimDeferredDecisions(LEASE);
   if (!claimed) throw new Error('Expected a claimed decision');
   return claimed;
@@ -73,7 +68,6 @@ describe('attention announcements', () => {
     const { storage, announced } = await makeStorage();
     const workItemId = await seedWorkItem(storage);
     const claimed = await claimDecision(storage, workItemId, 'park');
-    announced.length = 0;
 
     const proposed = await storage.proposeDeferredDecision(leaseOf(claimed), NOW);
     expect(announced).toEqual([SCOPE]);
@@ -83,41 +77,18 @@ describe('attention announcements', () => {
     expect(announced).toEqual([SCOPE, SCOPE]);
   });
 
-  it('announces every lease transition: claim, retryable failure, reclaim, terminal failure', async () => {
+  it('stays quiet on a retryable failure and announces the terminal one', async () => {
     const { storage, announced } = await makeStorage();
     const workItemId = await seedWorkItem(storage);
     const claimed = await claimDecision(storage, workItemId, 'fail');
-    expect(announced).toEqual([SCOPE]);
     const failure = { now: NOW, availableAt: NOW, lastError: 'nope', failureCode: 'session_unavailable' } as const;
 
     await storage.failDeferredDecision({ ...leaseOf(claimed), ...failure, terminal: false });
-    expect(announced).toEqual([SCOPE, SCOPE]);
+    expect(announced).toEqual([]);
 
     const [reclaimed] = await storage.claimDeferredDecisions(LEASE);
     if (!reclaimed) throw new Error('Expected the decision back on the queue');
     await storage.failDeferredDecision({ ...leaseOf(reclaimed), ...failure, terminal: true });
-    expect(announced).toEqual([SCOPE, SCOPE, SCOPE, SCOPE]);
-  });
-
-  it('announces a claimed batch once per project, not once per decision', async () => {
-    const { storage, announced } = await makeStorage();
-    const workItemId = await seedWorkItem(storage);
-    await queueDecision(storage, workItemId, 'batch-a');
-    await queueDecision(storage, workItemId, 'batch-b');
-    announced.length = 0;
-
-    const claimed = await storage.claimDeferredDecisions({ ...LEASE, limit: 2 });
-    expect(claimed).toHaveLength(2);
-    expect(announced).toEqual([SCOPE]);
-  });
-
-  it('announces a completed decision', async () => {
-    const { storage, announced } = await makeStorage();
-    const workItemId = await seedWorkItem(storage);
-    const claimed = await claimDecision(storage, workItemId, 'complete');
-    announced.length = 0;
-
-    await storage.completeDeferredDecision(leaseOf(claimed), NOW);
     expect(announced).toEqual([SCOPE]);
   });
 
