@@ -24,6 +24,9 @@ catalogs:
     date-fns:
       specifier: 4.4.0
       version: 4.4.0
+    lucide-react:
+      specifier: ^1.37.0
+      version: 1.37.0
     oxfmt:
       specifier: 0.59.0
       version: 0.59.0
@@ -1308,8 +1311,8 @@ importers:
         specifier: ^2.3.6
         version: 2.3.6(supports-color@10.2.2)
       lucide-react:
-        specifier: ^0.522.0
-        version: 0.522.0(react@19.2.7)
+        specifier: 'catalog:'
+        version: 1.37.0(react@19.2.7)
       shiki:
         specifier: ^1.29.2
         version: 1.29.2
@@ -1767,10 +1770,10 @@ importers:
         version: 0.9.10(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
       '@mastra/docusaurus-plugin-algolia':
         specifier: ^1.1.2
-        version: 1.1.2(@docusaurus/types@3.10.2(@swc/core@1.16.0(@swc/helpers@0.5.17))(clean-css@5.3.3)(csso@5.0.5)(esbuild@0.28.1)(lightningcss@1.32.0)(postcss@8.5.23)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(supports-color@10.2.2)(uglify-js@3.19.3))(@types/react-dom@19.2.3(@types/react@19.2.17))(@types/react@19.2.17)(clsx@2.1.1)(lucide-react@1.23.0(react@19.2.7))(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
+        version: 1.1.2(@docusaurus/types@3.10.2(@swc/core@1.16.0(@swc/helpers@0.5.17))(clean-css@5.3.3)(csso@5.0.5)(esbuild@0.28.1)(lightningcss@1.32.0)(postcss@8.5.23)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(supports-color@10.2.2)(uglify-js@3.19.3))(@types/react-dom@19.2.3(@types/react@19.2.17))(@types/react@19.2.17)(clsx@2.1.1)(lucide-react@1.37.0(react@19.2.7))(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
       '@mastra/docusaurus-plugin-kapa':
         specifier: ^1.2.1
-        version: 1.2.1(079a9066ee545f5e5a6c0098edc18b70)
+        version: 1.2.1(c90a0c26edd650767fd3de35604d64c3)
       '@mdx-js/react':
         specifier: ^3.1.1
         version: 3.1.1(@types/react@19.2.17)(react@19.2.7)
@@ -1820,8 +1823,8 @@ importers:
         specifier: ^10.1.2
         version: 10.1.2
       lucide-react:
-        specifier: ^1.23.0
-        version: 1.23.0(react@19.2.7)
+        specifier: ^1.37.0
+        version: 1.37.0(react@19.2.7)
       mermaid:
         specifier: ^11.16.1
         version: 11.16.1
@@ -2461,8 +2464,8 @@ importers:
         specifier: 'catalog:'
         version: 4.4.0
       lucide-react:
-        specifier: ^0.474.0
-        version: 0.474.0(react@19.2.7)
+        specifier: 'catalog:'
+        version: 1.37.0(react@19.2.7)
       react:
         specifier: 'catalog:'
         version: 19.2.7
@@ -5650,8 +5653,8 @@ importers:
         specifier: ^2.19.2
         version: 2.20.0(@types/dom-mediacapture-record@1.0.22)
       lucide-react:
-        specifier: ^0.522.0
-        version: 0.522.0(react@19.2.7)
+        specifier: 'catalog:'
+        version: 1.37.0(react@19.2.7)
       nanoid:
         specifier: 5.1.16
         version: 5.1.16
@@ -5851,9 +5854,6 @@ importers:
       date-fns:
         specifier: 'catalog:'
         version: 4.4.0
-      lucide-react:
-        specifier: ^0.474.0
-        version: 0.474.0(react@19.2.7)
       prettier:
         specifier: ^3.9.5
         version: 3.9.5
@@ -5975,6 +5975,9 @@ importers:
       jsdom:
         specifier: ^26.1.0
         version: 26.1.0(bufferutil@4.1.0)(supports-color@10.2.2)
+      lucide-react:
+        specifier: 'catalog:'
+        version: 1.37.0(react@19.2.7)
       msw:
         specifier: ^2.12.11
         version: 2.14.6(@types/node@22.19.15)(typescript@7.0.2)
@@ -27426,18 +27429,8 @@ packages:
     resolution: {integrity: sha512-DqC6n3QQ77zdFpCMASA1a3Jlb64Hv2N2DciFGkO/4L9+q/IpIAuRlKOvCXabtRW6cQf8usbmM6BE/TOPysCdIA==}
     engines: {bun: '>=1.0.0', deno: '>=1.30.0', node: '>=8.0.0'}
 
-  lucide-react@0.474.0:
-    resolution: {integrity: sha512-CmghgHkh0OJNmxGKWc0qfPJCYHASPMVSyGY8fj3xgk4v84ItqDg64JNKFZn5hC6E0vHi6gxnbCgwhyVB09wQtA==}
-    peerDependencies:
-      react: ^16.5.1 || ^17.0.0 || ^18.0.0 || ^19.0.0
-
-  lucide-react@0.522.0:
-    resolution: {integrity: sha512-jnJbw974yZ7rQHHEFKJOlWAefG3ATSCZHANZxIdx8Rk/16siuwjgA4fBULpXEAWx/RlTs3FzmKW/udWUuO0aRw==}
-    peerDependencies:
-      react: ^16.5.1 || ^17.0.0 || ^18.0.0 || ^19.0.0
-
-  lucide-react@1.23.0:
-    resolution: {integrity: sha512-38BpJcD0JhFosxHApP/BYsBetLpQFRoTRzEzstM/XCc3jsAG7wqaY1lgVwxiUe3xqYE+lNxo2PkCmYwXWrwwIw==}
+  lucide-react@1.37.0:
+    resolution: {integrity: sha512-LPsB4rD1TD6wZu1djKOf9vUnS1jTNaHbolXebXDgiTdb6jeA1agIJhJsIybCmjKmQClcOaal1o1OaiYahEftyQ==}
     peerDependencies:
       react: ^16.5.1 || ^17.0.0 || ^18.0.0 || ^19.0.0
 
@@ -40337,14 +40330,14 @@ snapshots:
 
   '@marijn/find-cluster-break@1.0.2': {}
 
-  '@mastra/docusaurus-plugin-algolia@1.1.2(@docusaurus/types@3.10.2(@swc/core@1.16.0(@swc/helpers@0.5.17))(clean-css@5.3.3)(csso@5.0.5)(esbuild@0.28.1)(lightningcss@1.32.0)(postcss@8.5.23)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(supports-color@10.2.2)(uglify-js@3.19.3))(@types/react-dom@19.2.3(@types/react@19.2.17))(@types/react@19.2.17)(clsx@2.1.1)(lucide-react@1.23.0(react@19.2.7))(react-dom@19.2.7(react@19.2.7))(react@19.2.7)':
+  '@mastra/docusaurus-plugin-algolia@1.1.2(@docusaurus/types@3.10.2(@swc/core@1.16.0(@swc/helpers@0.5.17))(clean-css@5.3.3)(csso@5.0.5)(esbuild@0.28.1)(lightningcss@1.32.0)(postcss@8.5.23)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(supports-color@10.2.2)(uglify-js@3.19.3))(@types/react-dom@19.2.3(@types/react@19.2.17))(@types/react@19.2.17)(clsx@2.1.1)(lucide-react@1.37.0(react@19.2.7))(react-dom@19.2.7(react@19.2.7))(react@19.2.7)':
     dependencies:
       '@docusaurus/types': 3.10.2(@swc/core@1.16.0(@swc/helpers@0.5.17))(clean-css@5.3.3)(cssnano@6.1.2(postcss@8.5.23))(csso@5.0.5)(esbuild@0.28.1)(html-minifier-terser@7.2.0)(lightningcss@1.32.0)(postcss@8.5.23)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(supports-color@10.2.2)(uglify-js@3.19.3)
       '@radix-ui/react-dialog': 1.1.19(@types/react-dom@19.2.3(@types/react@19.2.17))(@types/react@19.2.17)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
       '@tanstack/react-virtual': 3.14.5(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
       algoliasearch: 5.55.2
       clsx: 2.1.1
-      lucide-react: 1.23.0(react@19.2.7)
+      lucide-react: 1.37.0(react@19.2.7)
       react: 19.2.7
       react-dom: 19.2.7(react@19.2.7)
       react-hotkeys-hook: 5.3.3(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
@@ -40352,14 +40345,14 @@ snapshots:
       - '@types/react'
       - '@types/react-dom'
 
-  '@mastra/docusaurus-plugin-kapa@1.2.1(079a9066ee545f5e5a6c0098edc18b70)':
+  '@mastra/docusaurus-plugin-kapa@1.2.1(c90a0c26edd650767fd3de35604d64c3)':
     dependencies:
       '@docusaurus/theme-common': 3.10.2(@docusaurus/plugin-content-docs@3.10.2(@docusaurus/faster@3.10.2(@docusaurus/types@3.10.2(@swc/core@1.16.0(@swc/helpers@0.5.17))(clean-css@5.3.3)(csso@5.0.5)(esbuild@0.28.1)(lightningcss@1.32.0)(postcss@8.5.23)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(supports-color@10.2.2)(uglify-js@3.19.3))(@swc/helpers@0.5.17)(clean-css@5.3.3)(csso@5.0.5)(esbuild@0.28.1)(postcss@8.5.23)(uglify-js@3.19.3))(@mdx-js/react@3.1.1(@types/react@19.2.17)(react@19.2.7))(@rspack/core@1.7.12(@swc/helpers@0.5.17))(@swc/core@1.16.0(@swc/helpers@0.5.17))(bufferutil@4.1.0)(clean-css@5.3.3)(csso@5.0.5)(debug@4.4.3(supports-color@10.2.2))(esbuild@0.28.1)(lightningcss@1.32.0)(postcss@8.5.23)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(supports-color@10.2.2)(typescript@5.9.3)(uglify-js@3.19.3))(@swc/core@1.16.0(@swc/helpers@0.5.17))(clean-css@5.3.3)(csso@5.0.5)(esbuild@0.28.1)(lightningcss@1.32.0)(postcss@8.5.23)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(supports-color@10.2.2)(uglify-js@3.19.3)
       '@docusaurus/types': 3.10.2(@swc/core@1.16.0(@swc/helpers@0.5.17))(clean-css@5.3.3)(cssnano@6.1.2(postcss@8.5.23))(csso@5.0.5)(esbuild@0.28.1)(html-minifier-terser@7.2.0)(lightningcss@1.32.0)(postcss@8.5.23)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(supports-color@10.2.2)(uglify-js@3.19.3)
       '@kapaai/react-sdk': 0.9.10(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
       '@streamdown/code': 1.1.1(react@19.2.7)
       clsx: 2.1.1
-      lucide-react: 1.23.0(react@19.2.7)
+      lucide-react: 1.37.0(react@19.2.7)
       react: 19.2.7
       react-dom: 19.2.7(react@19.2.7)
       streamdown: 2.5.0(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(supports-color@10.2.2)
@@ -53135,15 +53128,7 @@ snapshots:
 
   lru.min@1.1.4: {}
 
-  lucide-react@0.474.0(react@19.2.7):
-    dependencies:
-      react: 19.2.7
-
-  lucide-react@0.522.0(react@19.2.7):
-    dependencies:
-      react: 19.2.7
-
-  lucide-react@1.23.0(react@19.2.7):
+  lucide-react@1.37.0(react@19.2.7):
     dependencies:
       react: 19.2.7
 
