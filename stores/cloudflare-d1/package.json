@@ -4,8 +4,7 @@
   "description": "D1 provider for Mastra - includes db storage capabilities",
   "type": "module",
   "files": [
-    "dist",
-    "CHANGELOG.md"
+    "dist"
   ],
   "main": "dist/index.js",
   "types": "dist/index.d.ts",

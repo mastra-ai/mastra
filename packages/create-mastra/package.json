@@ -9,8 +9,7 @@
     "create-mastra": "./dist/index.js"
   },
   "files": [
-    "dist",
-    "CHANGELOG.md"
+    "dist"
   ],
   "scripts": {
     "build": "rollup -c",

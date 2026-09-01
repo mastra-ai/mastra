@@ -5,7 +5,6 @@
   "type": "module",
   "files": [
     "dist",
-    "CHANGELOG.md",
     "versions.json"
   ],
   "main": "dist/index.js",
