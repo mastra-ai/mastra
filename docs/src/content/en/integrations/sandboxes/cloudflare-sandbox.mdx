@@ -119,7 +119,8 @@ await workspace.sandbox?.writeFiles?.([
   {
     name: 'workingDirectory',
     type: 'string',
-    description: 'Working directory applied to every command.',
+    description:
+      'Default directory for command execution when no per-command `cwd` is given. A per-command `cwd` always wins.',
     isOptional: true,
   },
   {

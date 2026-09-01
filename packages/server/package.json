@@ -102,7 +102,6 @@
     "generate:api-cli-route-metadata": "tsx scripts/generate-api-cli-route-metadata.ts",
     "generate:route-types": "tsx scripts/generate-route-types.ts",
     "check:permissions": "tsx scripts/check-permissions.ts",
-    "check:core-imports": "tsx scripts/check-core-imports.ts",
     "test": "vitest run",
     "lint": "oxlint . && eslint .",
     "lint:fix": "oxlint --fix . && eslint --fix ."

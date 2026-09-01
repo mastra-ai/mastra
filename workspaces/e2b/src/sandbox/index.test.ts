@@ -1102,6 +1102,42 @@ describe('E2BSandbox', () => {
         }),
       );
     });
+
+    it('defaults cwd to the configured workingDirectory', async () => {
+      const sandbox = new E2BSandbox({ workingDirectory: '/srv/app' });
+      await sandbox._start();
+
+      await sandbox.executeCommand('pwd');
+
+      expect(mockSandbox.commands.run).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.objectContaining({ background: true, cwd: '/srv/app' }),
+      );
+      expect(sandbox.workingDirectory).toBe('/srv/app');
+    });
+
+    it('per-command cwd wins over the configured workingDirectory', async () => {
+      const sandbox = new E2BSandbox({ workingDirectory: '/srv/app' });
+      await sandbox._start();
+
+      await sandbox.executeCommand('pwd', [], { cwd: '/tmp' });
+
+      expect(mockSandbox.commands.run).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.objectContaining({ background: true, cwd: '/tmp' }),
+      );
+    });
+
+    it('omits cwd when neither cwd nor workingDirectory is set', async () => {
+      const sandbox = new E2BSandbox();
+      await sandbox._start();
+
+      await sandbox.executeCommand('pwd');
+
+      const [, runOpts] = mockSandbox.commands.run.mock.calls.at(-1)!;
+      expect(runOpts.cwd).toBeUndefined();
+      expect(sandbox.workingDirectory).toBeUndefined();
+    });
   });
 });
 

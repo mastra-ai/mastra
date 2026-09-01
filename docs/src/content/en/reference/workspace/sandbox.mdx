@@ -121,6 +121,23 @@ Semantics:
 - Each call wraps the current hook, so attach once per sandbox instance. Attaching on a path that runs per request stacks duplicate work on every start.
 - Only starts that begin after the call see the new hook.
 
+### `workingDirectory` (constructor option)
+
+Sets the default directory for command execution and process spawns. When a command provides no per-command `cwd`, the sandbox runs it from this directory. A per-command `cwd` always wins. When neither is provided, each provider keeps its own default (E2B home, Docker `/workspace`, Vercel serverless `/tmp`, and so on).
+
+```typescript
+const sandbox = new E2BSandbox({ workingDirectory: '/home/user/my-repo' })
+await sandbox.executeCommand('pwd') // /home/user/my-repo
+await sandbox.executeCommand('pwd', [], { cwd: '/tmp' }) // /tmp
+```
+
+The effective value is readable through the `sandbox.workingDirectory` getter. Providers that compute their value, such as Daytona's automatic probe or Docker's `/workspace` default, report the effective directory through the same getter.
+
+Semantics:
+
+- The value passes to the provider as-is, and the sandbox doesn't create the directory. Absolute paths are recommended: `~`-prefixed paths only work where the provider documents expansion.
+- Some providers keep earlier option names as deprecated aliases feeding the same field: `workingDir` on Docker and Apple container, `workdir` on Modal. When both the alias and `workingDirectory` are set, `workingDirectory` wins.
+
 ### `stop()`
 
 Stop the sandbox.
@@ -189,7 +206,8 @@ const result = await sandbox.executeCommand('npm', ['install', 'lodash'])
           {
             name: 'cwd',
             type: 'string',
-            description: 'Working directory for the command',
+            description:
+              "Working directory for this command. Defaults to the sandbox's configured `workingDirectory`, then the provider default.",
             isOptional: true,
           },
           {

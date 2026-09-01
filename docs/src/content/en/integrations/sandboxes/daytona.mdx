@@ -390,6 +390,13 @@ For Daytona-specific desktop APIs (regions, compressed screenshots, screen recor
     defaultValue: '{}',
   },
   {
+    name: 'workingDirectory',
+    type: 'string',
+    description:
+      'Default directory for command execution when no per-command `cwd` is given. A per-command `cwd` always wins. When set, the sandbox skips its automatic working-directory probe; when omitted, the probe fills the `workingDirectory` getter after start.',
+    isOptional: true,
+  },
+  {
     name: 'labels',
     type: 'Record<string, string>',
     description: 'Custom metadata labels.',

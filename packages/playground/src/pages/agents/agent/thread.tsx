@@ -1,4 +1,5 @@
 import { v4 as uuid } from '@lukeed/uuid';
+import { AlertDialog } from '@mastra/playground-ui/components/AlertDialog';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { LogoWithoutText } from '@mastra/playground-ui/components/Logo';
 import { MainContentLayout } from '@mastra/playground-ui/components/MainContent';
@@ -7,7 +8,7 @@ import { PermissionDenied } from '@mastra/playground-ui/components/PermissionDen
 import { SessionExpired } from '@mastra/playground-ui/components/SessionExpired';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
-import { ArrowLeft, ChartNoAxesGantt, Plus } from 'lucide-react';
+import { ArrowLeft, ChartNoAxesGantt, Plus, X } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router';
 import { AgentChat } from '@/domains/agents/components/agent-chat';
@@ -23,9 +24,10 @@ import { MemoryTimelineProvider } from '@/domains/agents/context/memory-timeline
 import { useAgent } from '@/domains/agents/hooks/use-agent';
 import { buildAgentDefaultSettings } from '@/domains/agents/utils/agent-default-settings';
 import { getAgentSuggestedPrompts } from '@/domains/agents/utils/agent-suggested-prompts';
+import { usePermissions } from '@/domains/auth/hooks/use-permissions';
 import { ThreadAside } from '@/domains/conversation/components/thread-aside';
 import { ThreadInputProvider } from '@/domains/conversation/context/ThreadInputContext';
-import { useMemory, useThreads } from '@/domains/memory/hooks/use-memory';
+import { useDeleteThread, useMemory, useThreads } from '@/domains/memory/hooks/use-memory';
 import { TracingSettingsProvider } from '@/domains/observability/context/tracing-settings-context';
 import { SchemaRequestContextProvider } from '@/domains/request-context/context/schema-request-context';
 import { ThreadTraces } from '@/domains/traces/components/thread-traces';
@@ -231,6 +233,21 @@ interface ThreadSidebarProps {
 const ThreadSidebar = ({ agentId, agentName, threads, threadId, isLoading }: ThreadSidebarProps) => {
   const { Link } = useLinkComponent();
   const { state } = useMainSidebar();
+  const navigate = useNavigate();
+  const { canDelete } = usePermissions();
+  const { mutateAsync: deleteThread } = useDeleteThread();
+  const [deleteId, setDeleteId] = useState<string | null>(null);
+
+  const canDeleteThread = canDelete('memory');
+
+  const handleDelete = async () => {
+    if (!deleteId) return;
+    await deleteThread({ threadId: deleteId, agentId });
+    if (deleteId === threadId) {
+      void navigate(`/agents/${agentId}/threads/new`);
+    }
+    setDeleteId(null);
+  };
 
   const threadsNav = (
     <MainSidebar.Nav>
@@ -247,6 +264,20 @@ const ThreadSidebar = ({ agentId, agentName, threads, threadId, isLoading }: Thr
                 state={state}
                 isActive={thread.id === threadId}
                 link={{ name: threadDisplayName(thread), url: `/agents/${agentId}/threads/${thread.id}` }}
+                className="group/thread-row"
+                action={
+                  canDeleteThread ? (
+                    <Button
+                      variant="ghost"
+                      size="icon-sm"
+                      className="shrink-0 opacity-0 transition-opacity group-focus-within/thread-row:opacity-100 group-hover/thread-row:opacity-100"
+                      onClick={() => setDeleteId(thread.id)}
+                      aria-label="Delete thread"
+                    >
+                      <X />
+                    </Button>
+                  ) : undefined
+                }
               />
             ))}
           </MainSidebar.NavList>
@@ -256,45 +287,77 @@ const ThreadSidebar = ({ agentId, agentName, threads, threadId, isLoading }: Thr
   );
 
   return (
-    <MainSidebar>
-      <div className="mb-1.5 pt-2.5">
-        <span className="flex h-7 items-center gap-2 pr-2 pl-3">
-          <LogoWithoutText className="h-[1.5rem] w-[1.5rem] shrink-0" />
-          <span className="font-display truncate text-sm font-semibold tracking-tight whitespace-nowrap">
-            Mastra Studio
+    <>
+      <DeleteThreadDialog
+        open={!!deleteId}
+        onOpenChange={() => setDeleteId(null)}
+        onDelete={() => void handleDelete()}
+      />
+      <MainSidebar>
+        <div className="mb-1.5 pt-2.5">
+          <span className="flex h-7 items-center gap-2 pr-2 pl-3">
+            <LogoWithoutText className="h-[1.5rem] w-[1.5rem] shrink-0" />
+            <span className="font-display truncate text-sm font-semibold tracking-tight whitespace-nowrap">
+              Mastra Studio
+            </span>
           </span>
-        </span>
-      </div>
-
-      <div className="mb-1">
-        <MainSidebar.NavList>
-          <MainSidebar.NavLink state={state} asChild>
-            <Link href={`/agents/${agentId}/overview`} data-testid="thread-sidebar-back">
-              <ArrowLeft />
-              <MainSidebar.NavLabel state={state}>Back to {agentName ?? 'agent'}</MainSidebar.NavLabel>
-            </Link>
-          </MainSidebar.NavLink>
-          <MainSidebar.NavLink state={state} asChild>
-            <Link href={`/agents/${agentId}/threads/new`} data-testid="thread-sidebar-new-chat">
-              <Plus />
-              <MainSidebar.NavLabel state={state}>New Chat</MainSidebar.NavLabel>
-            </Link>
-          </MainSidebar.NavLink>
-        </MainSidebar.NavList>
-      </div>
-
-      {state === 'collapsed' ? (
-        threadsNav
-      ) : (
-        // The memory body wraps the threads nav so the Memory card docks at the
-        // bottom and expands over the thread list (same UX as the old sidebar).
-        <div className="min-h-0 flex-1">
-          <MemorySidebarBody agentId={agentId} threadId={threadId} threadsSlot={threadsNav} />
         </div>
-      )}
-    </MainSidebar>
+
+        <div className="mb-1">
+          <MainSidebar.NavList>
+            <MainSidebar.NavLink state={state} asChild>
+              <Link href={`/agents/${agentId}/overview`} data-testid="thread-sidebar-back">
+                <ArrowLeft />
+                <MainSidebar.NavLabel state={state}>Back to {agentName ?? 'agent'}</MainSidebar.NavLabel>
+              </Link>
+            </MainSidebar.NavLink>
+            <MainSidebar.NavLink state={state} asChild>
+              <Link href={`/agents/${agentId}/threads/new`} data-testid="thread-sidebar-new-chat">
+                <Plus />
+                <MainSidebar.NavLabel state={state}>New Chat</MainSidebar.NavLabel>
+              </Link>
+            </MainSidebar.NavLink>
+          </MainSidebar.NavList>
+        </div>
+
+        {state === 'collapsed' ? (
+          threadsNav
+        ) : (
+          // The memory body wraps the threads nav so the Memory card docks at the
+          // bottom and expands over the thread list (same UX as the old sidebar).
+          <div className="min-h-0 flex-1">
+            <MemorySidebarBody agentId={agentId} threadId={threadId} threadsSlot={threadsNav} />
+          </div>
+        )}
+      </MainSidebar>
+    </>
   );
 };
+
+const DeleteThreadDialog = ({
+  open,
+  onOpenChange,
+  onDelete,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onDelete: () => void;
+}) => (
+  <AlertDialog open={open} onOpenChange={onOpenChange}>
+    <AlertDialog.Content>
+      <AlertDialog.Header>
+        <AlertDialog.Title>Are you absolutely sure?</AlertDialog.Title>
+        <AlertDialog.Description>
+          This action cannot be undone. This will permanently delete your chat and remove it from our servers.
+        </AlertDialog.Description>
+      </AlertDialog.Header>
+      <AlertDialog.Footer>
+        <AlertDialog.Cancel>Cancel</AlertDialog.Cancel>
+        <AlertDialog.Action onClick={onDelete}>Continue</AlertDialog.Action>
+      </AlertDialog.Footer>
+    </AlertDialog.Content>
+  </AlertDialog>
+);
 
 /** Compact skeleton matching the thread NavLink rows — the overview sidebar skeleton doesn't fit here. */
 const ThreadListLoadingSkeleton = () => (
