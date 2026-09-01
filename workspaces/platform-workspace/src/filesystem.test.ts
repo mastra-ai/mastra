@@ -43,6 +43,7 @@ describe('PlatformFilesystem', () => {
   });
 
   it('uses the regional workspace proxy URL for filesystem requests', async () => {
+    vi.stubEnv('SANDBOX_PROVIDER', 'e2b');
     vi.stubEnv('MASTRA_PLATFORM_REGION', 'us');
     const fetchMock = vi.fn().mockResolvedValueOnce(response('hello', { status: 200 }));
 
@@ -57,7 +58,7 @@ describe('PlatformFilesystem', () => {
     await expect(fs.readFile('/dir/file.txt', { encoding: 'utf8' })).resolves.toBe('hello');
 
     expect(String(fetchMock.mock.calls[0]![0])).toBe(
-      'https://workspaces.us.mastra.ai/v1/railway/projects/proj_123/fs/dev-bucket/dir/file.txt',
+      'https://workspaces.us.mastra.ai/v1/e2b/projects/proj_123/fs/dev-bucket/dir/file.txt',
     );
   });
 
