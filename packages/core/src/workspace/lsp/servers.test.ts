@@ -665,16 +665,27 @@ describe('buildServerDefs', () => {
   });
 
   describe('searchPaths', () => {
-    it('finds typescript/lib/tsserver.js from searchPaths for module resolution', () => {
-      // Use a root dir that does NOT contain typescript so resolution can only succeed via searchPaths.
+    it('finds TypeScript 6 tsserver.js from searchPaths for module resolution', () => {
       const emptyRoot = join(tempDir, 'empty-root');
+      const searchDir = join(tempDir, 'search');
+      const pkgDir = join(searchDir, 'node_modules', 'typescript');
       mkdirSync(emptyRoot, { recursive: true });
+      mkdirSync(join(pkgDir, 'lib'), { recursive: true });
+      writeFileSync(join(searchDir, 'package.json'), '{}');
+      writeFileSync(join(pkgDir, 'package.json'), JSON.stringify({ name: 'typescript', version: '6.0.3' }));
+      writeFileSync(join(pkgDir, 'lib', 'tsserver.js'), '');
 
-      // searchPaths points to cwd (monorepo root) which has typescript installed.
-      const defs = buildServerDefs({ searchPaths: [process.cwd()] });
-      const init = defs.typescript!.initialization!(emptyRoot);
-      expect(init).toBeDefined();
-      expect((init as { tsserver: { path: string } }).tsserver.path).toContain('tsserver.js');
+      const cwdSpy = vi.spyOn(process, 'cwd').mockReturnValue(emptyRoot);
+      try {
+        const defs = buildServerDefs({ searchPaths: [searchDir] });
+        const init = defs.typescript!.initialization!(emptyRoot);
+
+        expect(init).toEqual({
+          tsserver: { path: join(pkgDir, 'lib', 'tsserver.js'), logVerbosity: 'off' },
+        });
+      } finally {
+        cwdSpy.mockRestore();
+      }
     });
 
     it('finds binary in searchPaths node_modules/.bin', () => {
