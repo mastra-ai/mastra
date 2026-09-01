@@ -1,4 +1,5 @@
 import { useQueryClient } from '@tanstack/react-query';
+import { useMatch } from 'react-router';
 
 import { queryKeys } from '../../../../api/keys';
 import { useActiveRunResources } from '../../../../hooks/useActiveRunResources';
@@ -8,6 +9,12 @@ import { AGENT_CONTROLLER_ID } from '../../chat/services/constants';
 
 export function WorkspaceAttentionObserver({ projectRepositoryId }: { projectRepositoryId: string | undefined }) {
   const queryClient = useQueryClient();
+  // `useParams` above the thread routes can't see their params, so match them
+  // explicitly. Whatever door opened the session — sidebar row, board card,
+  // deep link — landing on its route is what dismisses its attention mark.
+  const workspaceMatch = useMatch('/factories/:factoryId/workspaces/:sessionId/*');
+  const userThreadMatch = useMatch('/factories/:factoryId/user/threads/:threadId');
+  const openSessionId = workspaceMatch?.params.sessionId ?? userThreadMatch?.params.threadId;
   const sessions = useWorkspacesQuery(projectRepositoryId);
   const factorySessions = sessions.data?.workspaces ?? [];
   const userSessions = sessions.data?.userSessions ?? [];
@@ -29,6 +36,7 @@ export function WorkspaceAttentionObserver({ projectRepositoryId }: { projectRep
     sessionKind: 'factory',
     runningByPath: factoryRunning,
     ready: sessions.isSuccess,
+    openPath: openSessionId,
     onRunsFinished: refreshSessions,
   });
   useWorkspaceAttention({
@@ -36,6 +44,7 @@ export function WorkspaceAttentionObserver({ projectRepositoryId }: { projectRep
     sessionKind: 'user',
     runningByPath: userRunning,
     ready: sessions.isSuccess,
+    openPath: openSessionId,
     onRunsFinished: refreshSessions,
   });
   return null;
