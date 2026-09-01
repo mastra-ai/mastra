@@ -36,6 +36,16 @@ describe.sequential.for([['pnpm'] as const])(`%s monorepo`, ([pkgManager]) => {
 
   let buildQueue: Promise<unknown> = Promise.resolve();
 
+  function reserveBuildQueue() {
+    const waitForTurn = buildQueue;
+    let release!: () => void;
+    const reservation = new Promise<void>(resolve => {
+      release = resolve;
+    });
+    buildQueue = waitForTurn.then(() => reservation);
+    return { waitForTurn, release };
+  }
+
   async function removeOutputDir(path: string) {
     const outputDir = join(path, 'apps', 'custom', '.mastra', 'output');
     for (let attempt = 0; attempt < 5; attempt++) {
@@ -138,29 +148,32 @@ describe.sequential.for([['pnpm'] as const])(`%s monorepo`, ([pkgManager]) => {
   }
 
   describe.sequential('dev', async () => {
+    const buildReservation = reserveBuildQueue();
     let port = await getPort();
-    let proc: ReturnType<typeof execa> | undefined;
+    let proc: ReturnType<typeof execaNode> | undefined;
     const controller = new AbortController();
     const cancelSignal = controller.signal;
 
     beforeAll(async () => {
-      const inputFile = join(fixturePath, 'apps', 'custom');
-      const mastraIndexPath = join(inputFile, 'src', 'mastra', 'index.ts');
-      const mastraIndex = (await readFile(mastraIndexPath, 'utf8'))
-        .replace(
-          "import { testRoute } from '@/api/route/test';",
-          "import { testRoute } from '@/api/route/test';\nimport { environmentRoute } from '@/api/route/environment';",
-        )
-        .replace('apiRoutes: [testRoute,', 'apiRoutes: [testRoute, environmentRoute,');
-      await Promise.all([
-        writeFile(mastraIndexPath, mastraIndex),
-        writeFile(join(inputFile, '.env'), 'BASE_ONLY=base\nSHARED=base\n'),
-        writeFile(join(inputFile, '.env.local'), 'LOCAL_ONLY=local\nSHARED=local\n'),
-        writeFile(join(inputFile, '.env.development'), 'ENVIRONMENT_ONLY=development\n'),
-        writeFile(join(inputFile, '.env.production'), 'ENVIRONMENT_ONLY=production\n'),
-        writeFile(
-          join(inputFile, 'src', 'mastra', 'api', 'route', 'environment.ts'),
-          `import { registerApiRoute } from '@mastra/core/server';
+      await buildReservation.waitForTurn;
+      try {
+        const inputFile = join(fixturePath, 'apps', 'custom');
+        const mastraIndexPath = join(inputFile, 'src', 'mastra', 'index.ts');
+        const mastraIndex = (await readFile(mastraIndexPath, 'utf8'))
+          .replace(
+            "import { testRoute } from '@/api/route/test';",
+            "import { testRoute } from '@/api/route/test';\nimport { environmentRoute } from '@/api/route/environment';",
+          )
+          .replace('apiRoutes: [testRoute,', 'apiRoutes: [testRoute, environmentRoute,');
+        await Promise.all([
+          writeFile(mastraIndexPath, mastraIndex),
+          writeFile(join(inputFile, '.env'), 'BASE_ONLY=base\nSHARED=base\n'),
+          writeFile(join(inputFile, '.env.local'), 'LOCAL_ONLY=local\nSHARED=local\n'),
+          writeFile(join(inputFile, '.env.development'), 'ENVIRONMENT_ONLY=development\n'),
+          writeFile(join(inputFile, '.env.production'), 'ENVIRONMENT_ONLY=production\n'),
+          writeFile(
+            join(inputFile, 'src', 'mastra', 'api', 'route', 'environment.ts'),
+            `import { registerApiRoute } from '@mastra/core/server';
 
 export const environmentRoute = registerApiRoute('/environment', {
   method: 'GET',
@@ -172,54 +185,62 @@ export const environmentRoute = registerApiRoute('/environment', {
   }),
 });
 `,
-        ),
-      ]);
-      proc = execa('npm', ['run', 'dev'], {
-        cwd: inputFile,
-        cancelSignal,
-        gracefulCancel: true,
-        env: {
-          OPENAI_API_KEY: process.env.OPENAI_API_KEY,
-          MASTRA_PORT: port.toString(),
-          SHARED: 'shell',
-        },
-      });
-
-      activeProcesses.push({ controller, proc });
-
-      await new Promise<void>((resolve, reject) => {
-        proc!.stderr?.on('data', data => {
-          const errMsg = data?.toString();
-          if (errMsg && errMsg.includes('punycode')) {
-            // Ignore punycode warning
-            return;
-          }
-          if (errMsg && errMsg.includes('falling back to an in-memory store')) {
-            // Ignore in-memory storage fallback warning (no storage configured in fixture)
-            return;
-          }
-          reject(new Error('failed to start dev: ' + errMsg));
+          ),
+        ]);
+        proc = execaNode(join(inputFile, 'node_modules', 'mastra', 'dist', 'index.js'), ['dev'], {
+          cwd: inputFile,
+          cancelSignal,
+          gracefulCancel: true,
+          env: {
+            OPENAI_API_KEY: process.env.OPENAI_API_KEY,
+            MASTRA_PORT: port.toString(),
+            SHARED: 'shell',
+          },
         });
-        proc!.stdout?.on('data', data => {
-          process.stdout.write(data?.toString());
-          if (data?.toString()?.includes(`http://localhost:${port}`)) {
-            resolve();
-          }
+
+        activeProcesses.push({ controller, proc });
+
+        await new Promise<void>((resolve, reject) => {
+          proc!.stderr?.on('data', data => {
+            const errMsg = data?.toString();
+            if (errMsg && errMsg.includes('punycode')) {
+              // Ignore punycode warning
+              return;
+            }
+            if (errMsg && errMsg.includes('falling back to an in-memory store')) {
+              // Ignore in-memory storage fallback warning (no storage configured in fixture)
+              return;
+            }
+            reject(new Error('failed to start dev: ' + errMsg));
+          });
+          proc!.stdout?.on('data', data => {
+            process.stdout.write(data?.toString());
+            if (data?.toString()?.includes(`http://localhost:${port}`)) {
+              resolve();
+            }
+          });
         });
-      });
+      } catch (error) {
+        buildReservation.release();
+        throw error;
+      }
     }, timeout);
 
     afterAll(async () => {
-      if (proc) {
-        try {
-          proc.kill('SIGKILL');
-          await Promise.race([proc.catch(() => {}), new Promise(resolve => setTimeout(resolve, 5_000))]);
-        } catch (err) {
-          // @ts-expect-error - isCanceled is not typed
-          if (!err.killed) {
-            console.log('failed to kill build proc', err);
+      try {
+        if (proc) {
+          try {
+            proc.kill('SIGKILL');
+            await Promise.race([proc.catch(() => {}), new Promise(resolve => setTimeout(resolve, 5_000))]);
+          } catch (err) {
+            // @ts-expect-error - isCanceled is not typed
+            if (!err.killed) {
+              console.log('failed to kill build proc', err);
+            }
           }
         }
+      } finally {
+        buildReservation.release();
       }
     }, timeout);
 
@@ -444,6 +465,8 @@ export const mastra = new Mastra({
           expect(workerOptionBundle).toContain('RuntimeNamedWorker');
           expect(workerOptionBundle).not.toContain('MastraFactory');
           expect(workerOptionBundle).not.toContain('preparedArgs');
+
+          await execaNode(join(outputPath, 'worker-manifest.mjs'), { cwd: outputPath });
 
           const workersConfig = JSON.parse(await readFile(join(outputPath, 'workers.json'), 'utf-8'));
           expect(workersConfig).toEqual({
