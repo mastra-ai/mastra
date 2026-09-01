@@ -12,6 +12,7 @@ import { useMemo, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router';
 import { AgentChat } from '@/domains/agents/components/agent-chat';
 import { AgentChatLoadingSkeleton } from '@/domains/agents/components/agent-loading-skeletons';
+import { MemorySidebarBody } from '@/domains/agents/components/memory-sidebar/memory-sidebar';
 import { ActivatedSkillsProvider } from '@/domains/agents/context/activated-skills-context';
 import { AgentSettingsProvider } from '@/domains/agents/context/agent-context';
 import { ObservationalMemoryProvider } from '@/domains/agents/context/agent-observational-memory-context';
@@ -231,6 +232,29 @@ const ThreadSidebar = ({ agentId, agentName, threads, threadId, isLoading }: Thr
   const { Link } = useLinkComponent();
   const { state } = useMainSidebar();
 
+  const threadsNav = (
+    <MainSidebar.Nav>
+      <MainSidebar.NavSection>
+        <MainSidebar.NavHeader state={state}>Threads</MainSidebar.NavHeader>
+        {isLoading ? (
+          <ThreadListLoadingSkeleton />
+        ) : (
+          <MainSidebar.NavList data-testid="thread-list">
+            {threads.map(thread => (
+              <MainSidebar.NavLink
+                key={thread.id}
+                LinkComponent={Link}
+                state={state}
+                isActive={thread.id === threadId}
+                link={{ name: threadDisplayName(thread), url: `/agents/${agentId}/threads/${thread.id}` }}
+              />
+            ))}
+          </MainSidebar.NavList>
+        )}
+      </MainSidebar.NavSection>
+    </MainSidebar.Nav>
+  );
+
   return (
     <MainSidebar>
       <div className="mb-1.5 pt-2.5">
@@ -259,26 +283,15 @@ const ThreadSidebar = ({ agentId, agentName, threads, threadId, isLoading }: Thr
         </MainSidebar.NavList>
       </div>
 
-      <MainSidebar.Nav>
-        <MainSidebar.NavSection>
-          <MainSidebar.NavHeader state={state}>Threads</MainSidebar.NavHeader>
-          {isLoading ? (
-            <ThreadListLoadingSkeleton />
-          ) : (
-            <MainSidebar.NavList>
-              {threads.map(thread => (
-                <MainSidebar.NavLink
-                  key={thread.id}
-                  LinkComponent={Link}
-                  state={state}
-                  isActive={thread.id === threadId}
-                  link={{ name: threadDisplayName(thread), url: `/agents/${agentId}/threads/${thread.id}` }}
-                />
-              ))}
-            </MainSidebar.NavList>
-          )}
-        </MainSidebar.NavSection>
-      </MainSidebar.Nav>
+      {state === 'collapsed' ? (
+        threadsNav
+      ) : (
+        // The memory body wraps the threads nav so the Memory card docks at the
+        // bottom and expands over the thread list (same UX as the old sidebar).
+        <div className="min-h-0 flex-1">
+          <MemorySidebarBody agentId={agentId} threadId={threadId} threadsSlot={threadsNav} />
+        </div>
+      )}
     </MainSidebar>
   );
 };

@@ -28,8 +28,10 @@ import { useMemory } from '@/domains/memory/hooks/use-memory';
 export interface MemorySidebarProps {
   agentId: string;
   threadId: string;
-  threads: StorageThreadType[];
-  onDelete: (threadId: string) => void;
+  threads?: StorageThreadType[];
+  onDelete?: (threadId: string) => void;
+  /** When provided, rendered as the thread layer instead of the built-in ChatThreads list. */
+  threadsSlot?: React.ReactNode;
 }
 
 const barColor = (percent: number): string => {
@@ -89,7 +91,7 @@ export function MemorySidebar({ agentId, threadId, threads, onDelete }: MemorySi
   );
 }
 
-function MemorySidebarBody({ agentId, threadId, threads, onDelete }: MemorySidebarProps) {
+export function MemorySidebarBody({ agentId, threadId, threads, onDelete, threadsSlot }: MemorySidebarProps) {
   // Derive memory state from the shared (React Query deduped) hook instead of
   // accepting it as props — see structure-derive-dont-duplicate.
   const { data: memory, isLoading: isMemoryLoading } = useMemory(agentId);
@@ -203,13 +205,15 @@ function MemorySidebarBody({ agentId, threadId, threads, onDelete }: MemorySideb
             className="min-h-0 flex-1 overflow-hidden"
             style={{ paddingBottom: hasMemory ? collapsedCardSize.offset || undefined : undefined }}
           >
-            {hasMemory ? (
+            {threadsSlot ? (
+              threadsSlot
+            ) : hasMemory ? (
               <ChatThreads
                 resourceId={agentId}
                 resourceType="agent"
-                threads={threads}
+                threads={threads ?? []}
                 threadId={threadId}
-                onDelete={onDelete}
+                onDelete={onDelete ?? (() => {})}
                 embedded
               />
             ) : (
