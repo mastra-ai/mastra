@@ -1,6 +1,6 @@
 # @mastra/voice-modelslab
 
-[ModelsLab](https://modelslab.com) voice integration for Mastra. Provides text-to-speech using ModelsLab's TTS API.
+Mastra ModelsLab voice integration. Use `@mastra/voice-modelslab` to connect this provider to a Mastra application.
 
 ## Installation
 
@@ -9,6 +9,8 @@ npm install @mastra/voice-modelslab
 ```
 
 ## Usage
+
+Set the API credentials required by your voice provider.
 
 ```typescript
 import { ModelsLabVoice } from '@mastra/voice-modelslab';
@@ -31,28 +33,14 @@ const audioStream = await voice.speak('Hello, world!', {
 const speakers = await voice.getSpeakers();
 ```
 
-## Configuration
+## Documentation
 
-| Option               | Type     | Default                 | Description                                 |
-| -------------------- | -------- | ----------------------- | ------------------------------------------- |
-| `speechModel.apiKey` | `string` | `MODELSLAB_API_KEY` env | ModelsLab API key                           |
-| `speaker`            | `string` | `'1'`                   | Default voice ID (1–6) or OpenAI voice name |
+- [@mastra/voice-modelslab documentation](https://mastra.ai/reference/voice/overview)
 
-## Voice IDs
+## Changelog
 
-| ID  | Name         | Gender  |
-| --- | ------------ | ------- |
-| 1   | Neutral      | neutral |
-| 2   | Male         | male    |
-| 3   | Warm         | male    |
-| 4   | Deep Male    | male    |
-| 5   | Female       | female  |
-| 6   | Clear Female | female  |
+See the [package changelog](https://github.com/mastra-ai/mastra/blob/main/voice/modelslab/CHANGELOG.md) for version history and release notes.
 
-OpenAI voice names are also accepted: `alloy`, `echo`, `fable`, `onyx`, `nova`, `shimmer`.
+## Support
 
-## API Reference
-
-See [ModelsLab TTS docs](https://docs.modelslab.com) for full API details.
-
-ModelsLab uses key-in-body authentication (`MODELSLAB_API_KEY`) and asynchronous audio generation with polling.
+We have an [open community Discord](https://discord.gg/mastra-ai). Come and say hello and let us know if you have any questions or need any help getting things running.

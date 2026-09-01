@@ -1,6 +1,6 @@
 # @mastra/voice-openai-realtime
 
-OpenAI Realtime Voice integration for Mastra, providing real-time voice interaction capabilities using OpenAI's WebSocket-based API. This integration enables seamless voice conversations with real-time speech to speech capabilities.
+Mastra OpenAI Realtime API integration. Use `@mastra/voice-openai-realtime` to connect this provider to a Mastra application.
 
 ## Installation
 
@@ -8,143 +8,24 @@ OpenAI Realtime Voice integration for Mastra, providing real-time voice interact
 npm install @mastra/voice-openai-realtime
 ```
 
-## Configuration
-
-The module requires an OpenAI API key, which can be provided through environment variables or directly in the configuration:
-
-```bash
-OPENAI_API_KEY=your_api_key
-```
-
 ## Usage
 
-```typescript
-import { OpenAIRealtimeVoice } from '@mastra/voice-openai-realtime';
-import { getMicrophoneStream } from '@mastra/node-audio';
-
-// Create a voice instance with default configuration
-const voice = new OpenAIRealtimeVoice();
-
-// Create a voice instance with configuration
-const voice = new OpenAIRealtimeVoice({
-  apiKey: 'your-api-key', // Optional, can use OPENAI_API_KEY env var
-  model: 'gpt-4o-mini-realtime', // Optional, uses latest model by default
-});
-
-voice.updateSession({
-  turn_detection: {
-    type: 'server_vad',
-    threshold: 0.5,
-    silence_duration_ms: 1000,
-  },
-});
-
-// Connect to the realtime service
-await voice.open();
-
-// Audio data from voice provider
-voice.on('speaking', (audioData: Int16Array) => {
-  // Handle audio data
-});
-
-// Text data from voice provider
-voice.on('writing', (text: string) => {
-  // Handle transcribed text
-});
-
-// Error from voice provider
-voice.on('error', (error: Error) => {
-  console.error('Voice error:', error);
-});
-
-// Generate speech
-await voice.speak('Hello from Mastra!', {
-  speaker: 'echo', // Optional: override default speaker
-});
-
-// Listen to audio input
-await voice.listen(audioData);
-
-// Process audio input
-const microphoneStream = getMicrophoneStream();
-await voice.send(microphoneStream);
-
-// Clean up
-voice.close();
-```
-
-## Features
-
-- Real-time voice interactions via WebSocket
-- Seamless speech to speech
-- Voice activity detection (VAD)
-- Multiple voice options
-- Event-based audio streaming
-- Tool integration support
-
-## Voice Options
-
-Available voices include:
-
-- alloy (Neutral)
-- ash (Balanced)
-- echo (Warm)
-- shimmer (Clear)
-- coral (Expressive)
-- sage (Professional)
-- ballad (Melodic)
-- verse (Dynamic)
-
-## Events
-
-The voice instance emits several events:
-
-- `speaking`: Emitted while generating speech, provides Int16Array audio data
-- `writing`: Emitted when speech is transcribed to text
-- `error`: Emitted when an error occurs
-
-You can also listen to OpenAI Realtime [sdk utility events](https://github.com/openai/openai-realtime-api-beta/tree/main?tab=readme-ov-file#reference-client-utility-events) by prefixing with 'openAIRealtime:', such as:
-
-- `openAIRealtime:conversation.item.completed`
-- `openAIRealtime:conversation.updated`
-
-## Voice Activity Detection
-
-The realtime voice integration includes server-side VAD (Voice Activity Detection) with configurable parameters:
+Set the API credentials required by your voice provider.
 
 ```typescript
-voice.updateConfig({
-  voice: 'echo',
-  turn_detection: {
-    type: 'server_vad',
-    threshold: 0.5, // Speech detection sensitivity
-    silence_duration_ms: 1000, // Wait time before ending turn
-    prefix_padding_ms: 1000, // Audio padding before speech
-  },
-});
+import * as packageApi from '@mastra/voice-openai-realtime';
+
+const availableExports = Object.keys(packageApi);
 ```
 
-## Tool Integration
+## Documentation
 
-You can add tools to the voice instance with tools that extend its capabilities:
+- [@mastra/voice-openai-realtime documentation](https://mastra.ai/reference/voice/overview)
 
-```typescript
-export const menuTool = createTool({
-  id: 'menuTool',
-  description: 'Get menu items',
-  inputSchema: z
-    .object({
-      query: z.string(),
-    })
-    .required(),
-  execute: async (inputData, context) => {
-    // Implement menu search functionality
-  },
-});
+## Changelog
 
-voice.addTools(menuTool);
-```
+See the [package changelog](https://github.com/mastra-ai/mastra/blob/main/voice/openai-realtime-api/CHANGELOG.md) for version history and release notes.
 
-## API Reference
+## Support
 
-For detailed API documentation, refer to the JSDoc comments in the source code or generate documentation using TypeDoc.
+We have an [open community Discord](https://discord.gg/mastra-ai). Come and say hello and let us know if you have any questions or need any help getting things running.

@@ -1,6 +1,6 @@
 # @mastra/voice-cloudflare
 
-Cloudflare Voice integration for Mastra, providing Text-to-Speech (TTS) capabilities using open source speech models.
+Mastra Cloudflare AI voice integration. Use `@mastra/voice-cloudflare` to connect this provider to a Mastra application.
 
 ## Installation
 
@@ -8,28 +8,9 @@ Cloudflare Voice integration for Mastra, providing Text-to-Speech (TTS) capabili
 npm install @mastra/voice-cloudflare
 ```
 
-## Configuration
-
-The module requires the following environment variables:
-
-If using Cloudflare Native Bindings:
-
-`./wrangler.jsonc`
-
-```json
-"ai": {
-    "binding": "AI",
-  },
-```
-
-If using Cloudflare REST API:
-
-```bash
-CLOUDFLARE_AI_API_KEY=your_api_key
-CLOUDFLARE_ACCOUNT_ID=your_account_id
-```
-
 ## Usage
+
+Set the API credentials required by your voice provider.
 
 ```typescript
 import { CloudflareVoice } from '@mastra/voice-cloudflare';
@@ -55,18 +36,14 @@ const voice = new CloudflareVoice({
 const text = await voice.listen(audioStream);
 ```
 
-## Features
+## Documentation
 
-- Open source models
+- [@mastra/voice-cloudflare documentation](https://mastra.ai/reference/voice/overview)
 
-## Available Models
+## Changelog
 
-### Speech Models
+See the [package changelog](https://github.com/mastra-ai/mastra/blob/main/voice/cloudflare/CHANGELOG.md) for version history and release notes.
 
-The following speech-to-text models are available:
+## Support
 
-| Model                               | Description                    |
-| ----------------------------------- | ------------------------------ |
-| `@cf/openai/whisper-tiny-en`        | Lightweight English-only model |
-| `@cf/openai/whisper`                | Standard multilingual model    |
-| `@cf/openai/whisper-large-v3-turbo` | High-accuracy turbo model      |
+We have an [open community Discord](https://discord.gg/mastra-ai). Come and say hello and let us know if you have any questions or need any help getting things running.

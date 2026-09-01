@@ -1,6 +1,6 @@
 # @mastra/voice-gladia
 
-Gladia AI Voice integration for Mastra, providing Speech-to-text (STT) capabilities using Gladia's voice technology.
+Mastra Gladia AI voice integration. Use `@mastra/voice-gladia` to connect this provider to a Mastra application.
 
 ## Installation
 
@@ -8,15 +8,9 @@ Gladia AI Voice integration for Mastra, providing Speech-to-text (STT) capabilit
 npm install @mastra/voice-gladia
 ```
 
-## Configuration
-
-The module requires the following environment variable:
-
-```bash
-GLADIA_API_KEY=your_api_key
-```
-
 ## Usage
+
+Set the API credentials required by your voice provider.
 
 ```typescript
 import { GladiaVoice } from '@mastra/voice-gladia';
@@ -53,21 +47,14 @@ try {
 }
 ```
 
-## Features
+## Documentation
 
-- High-quality Speech-to-Text recognition
-- Support for various audio formats
-- Advanced diarization and translation options
-- Easy integration with Mastra agents
+- [@mastra/voice-gladia documentation](https://mastra.ai/reference/voice/overview)
 
-## Limitations
+## Changelog
 
-- Only supports Speech-to-Text (STT) functionality. Text-to-Speech (TTS) is not supported.
+See the [package changelog](https://github.com/mastra-ai/mastra/blob/main/voice/gladia/CHANGELOG.md) for version history and release notes.
 
-## Available Voices
+## Support
 
-Gladia does not expose a list of available "voices" in the traditional sense. The service focuses on providing high-quality transcription across various languages and audio characteristics.
-
-### Languages
-
-Gladia supports a wide range of languages. For a complete list, please refer to the [Gladia documentation](https://docs.gladia.io/).
+We have an [open community Discord](https://discord.gg/mastra-ai). Come and say hello and let us know if you have any questions or need any help getting things running.
