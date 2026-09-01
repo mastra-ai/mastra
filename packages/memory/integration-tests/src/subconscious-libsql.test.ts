@@ -65,15 +65,13 @@ describe('Subconscious LibSQL integration', () => {
       }),
     });
     let curatorCall = 0;
-    const doGenerate = vi.fn(async () => {
+    const curatorStream = vi.fn(async () => {
       curatorCall += 1;
       if (curatorCall === 1) {
         return {
-          rawCall: { rawPrompt: null, rawSettings: {} },
-          finishReason: 'tool-calls' as const,
-          usage: { inputTokens: 20, outputTokens: 10, totalTokens: 30 },
-          text: '',
-          content: [
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start' as const, warnings: [] },
+            { type: 'response-metadata' as const, id: 'curate-tools', modelId: 'aimock', timestamp: new Date() },
             {
               type: 'tool-call' as const,
               toolCallId: 'create-atlas',
@@ -98,20 +96,34 @@ describe('Subconscious LibSQL integration', () => {
                 scope: 'thread',
               }),
             },
-          ],
+            {
+              type: 'finish' as const,
+              finishReason: 'tool-calls' as const,
+              usage: { inputTokens: 20, outputTokens: 10, totalTokens: 30 },
+            },
+          ]),
+          rawCall: { rawPrompt: null, rawSettings: {} },
           warnings: [],
         };
       }
       return {
+        stream: convertArrayToReadableStream([
+          { type: 'stream-start' as const, warnings: [] },
+          { type: 'response-metadata' as const, id: 'curate-done', modelId: 'aimock', timestamp: new Date() },
+          { type: 'text-start' as const, id: 'curate-text' },
+          { type: 'text-delta' as const, id: 'curate-text', delta: 'Curated.' },
+          { type: 'text-end' as const, id: 'curate-text' },
+          {
+            type: 'finish' as const,
+            finishReason: 'stop' as const,
+            usage: { inputTokens: 20, outputTokens: 10, totalTokens: 30 },
+          },
+        ]),
         rawCall: { rawPrompt: null, rawSettings: {} },
-        finishReason: 'stop' as const,
-        usage: { inputTokens: 20, outputTokens: 10, totalTokens: 30 },
-        text: 'Curated.',
-        content: [{ type: 'text' as const, text: 'Curated.' }],
         warnings: [],
       };
     });
-    const curatorModel = new MockLanguageModelV2({ doGenerate });
+    const curatorModel = new MockLanguageModelV2({ doStream: curatorStream });
     const memory = new Memory({
       storage,
       vector,
@@ -139,7 +151,7 @@ describe('Subconscious LibSQL integration', () => {
       sendStateSignal: vi.fn(async () => ({ skipped: false }) as any),
     });
     expect(result.observed).toBe(true);
-    expect(doGenerate).toHaveBeenCalledTimes(2);
+    expect(curatorStream).toHaveBeenCalledTimes(2);
 
     const knowledge = (await storage.getStore('knowledge'))!;
     const scope = ['org:acme', `resource:${resourceId}`, `thread:${threadId}`];
