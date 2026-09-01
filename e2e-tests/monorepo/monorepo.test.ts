@@ -19,9 +19,14 @@ async function killOrphanedDevServer(projectDir: string) {
   const lockPath = join(projectDir, '.mastra', 'dev.lock');
   try {
     const { pid } = JSON.parse(await readFile(lockPath, 'utf-8'));
-    if (typeof pid === 'number' && pid > 0) process.kill(pid, 'SIGKILL');
+    if (typeof pid !== 'number' || pid <= 0) return;
+    try {
+      process.kill(pid, 'SIGKILL');
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'ESRCH') return;
+    }
+    await rm(lockPath, { force: true });
   } catch {}
-  await rm(lockPath, { force: true });
 }
 
 const activeProcesses: Array<{ controller: AbortController; proc: ReturnType<typeof execa | typeof execaNode> }> = [];
