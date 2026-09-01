@@ -1,3 +1,5 @@
+export * from './trace-query';
+
 import { coreFeatures } from '@mastra/core/features';
 import { EntityType, SpanType } from '@mastra/core/observability';
 import type { CreateSpanRecord, ObservabilityStorage } from '@mastra/core/storage';
