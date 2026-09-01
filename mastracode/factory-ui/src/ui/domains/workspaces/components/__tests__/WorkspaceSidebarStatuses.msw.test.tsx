@@ -264,7 +264,8 @@ describe('Workspace sidebar statuses', () => {
       decisions: [decision('issue-24', 'proposed')],
     });
 
-    renderSection();
+    const { client } = renderSection();
+    await waitForMutationsIdle(client);
 
     await screen.findByRole('status', { name: 'Implement loader waiting on you' });
   });
@@ -277,7 +278,8 @@ describe('Workspace sidebar statuses', () => {
       decisions: [decision('issue-24', 'failed')],
     });
 
-    renderSection();
+    const { client } = renderSection();
+    await waitForMutationsIdle(client);
 
     await screen.findByRole('status', { name: 'Implement loader waiting on you' });
   });
