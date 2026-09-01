@@ -8,6 +8,29 @@ import type { ReactElement, ReactNode } from 'react';
 import type { BoardCardStatus } from '../boardCardStatus';
 import { HIDDEN_CARD_LABELS, SOURCE_LABELS } from '../boardItems';
 import type { WorkItemSource } from '../services/workItems';
+import type { SessionCardStatus } from '../../workspaces/services/sessionStatus';
+
+// Same palette as the sidebar's SessionRowIndicator, so both surfaces read alike.
+const SESSION_DOT: Record<SessionCardStatus, { className: string; title: string }> = {
+  idle: { className: 'bg-accent1', title: 'Session bound' },
+  initializing: { className: 'bg-warning1 animate-pulse', title: 'Initializing' },
+  working: { className: 'bg-positive1 animate-pulse', title: 'Working' },
+  ready: { className: 'bg-accent3', title: 'Ready' },
+};
+
+/** The card's session marker; carries its status on the data attribute. */
+export function SessionLivenessDot({ status, className }: { status: SessionCardStatus; className?: string }) {
+  const dot = SESSION_DOT[status];
+  return (
+    <span
+      data-live-session-indicator={status}
+      role="status"
+      aria-label={dot.title}
+      title={dot.title}
+      className={cn('size-2 shrink-0 rounded-full', dot.className, className)}
+    />
+  );
+}
 
 export function SourceTitle({ source, title }: { source: WorkItemSource; title: string }) {
   return (

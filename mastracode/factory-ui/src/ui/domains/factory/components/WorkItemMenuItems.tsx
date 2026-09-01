@@ -1,5 +1,5 @@
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
-import { ArrowUpRight, CircleSlash, Trash2 } from 'lucide-react';
+import { ArrowUpRight, CircleSlash, FastForward, Trash2 } from 'lucide-react';
 import type { ReactElement } from 'react';
 
 import type { FactoryRunPhase } from '../../../../hooks/useStartFactoryRun';
@@ -23,13 +23,42 @@ export interface WorkItemMenuProps {
   pendingRunRoles: ReadonlyMap<string, FactoryRunPhase | undefined>;
   runDisabled: boolean;
   approvingDecisionId?: string;
-  onStartRun: (spec: ItemRunSpec, action: RunAction) => void;
+  onStartRun: (spec: ItemRunSpec, action: RunAction, options?: { preapprovePlans?: boolean }) => void;
   /** Re-run an action whose session slot is already used (e.g. re-review an updated PR). */
-  onRestartRun: (spec: ItemRunSpec, action: RunAction) => void;
+  onRestartRun: (spec: ItemRunSpec, action: RunAction, options?: { preapprovePlans?: boolean }) => void;
   onApproveProposal: (decisionId: string) => void;
   onDismissProposal: (decisionId: string) => void;
   onMove: (toStage: string) => void;
   onRemove: () => void;
+}
+
+/** An action's menu entries: the plain run and, unless a person must decide its outcome, a hands-off twin. */
+function runItemPair(
+  spec: ItemRunSpec,
+  action: RunAction,
+  label: string,
+  startRun: WorkItemMenuProps['onStartRun'],
+  { runDisabled, pendingRunRoles }: Pick<WorkItemMenuProps, 'runDisabled' | 'pendingRunRoles'>,
+): ReactElement[] {
+  const starting = pendingRunRoles.has(action.role);
+  return [
+    <DropdownMenu.Item key={label} disabled={runDisabled || starting} onClick={() => startRun(spec, action)}>
+      {actionIcon(action.label)}
+      <span>{starting ? 'Starting…' : label}</span>
+    </DropdownMenu.Item>,
+    ...(action.awaitsHumanDecision
+      ? []
+      : [
+          <DropdownMenu.Item
+            key={`${label} hands-off`}
+            disabled={runDisabled || starting}
+            onClick={() => startRun(spec, action, { preapprovePlans: true })}
+          >
+            <FastForward aria-hidden />
+            <span>{`${label} hands-off`}</span>
+          </DropdownMenu.Item>,
+        ]),
+  ];
 }
 
 export function WorkItemMenuItems({
@@ -54,37 +83,15 @@ export function WorkItemMenuItems({
   return (
     <>
       {runSpec !== undefined &&
-        runActions.map(action => {
-          const starting = pendingRunRoles.has(action.role);
-          return (
-            <DropdownMenu.Item
-              key={action.label}
-              disabled={runDisabled || starting}
-              onClick={() => onStartRun(runSpec, action)}
-            >
-              {actionIcon(action.label)}
-              <span>{starting ? 'Starting…' : action.label}</span>
-            </DropdownMenu.Item>
-          );
-        })}
-      {runSpec !== undefined && reReviewAction !== undefined && (
-        <DropdownMenu.Item
-          disabled={runDisabled || pendingRunRoles.has(reReviewAction.role)}
-          onClick={() => onRestartRun(runSpec, reReviewAction)}
-        >
-          {actionIcon(reReviewAction.label)}
-          <span>{pendingRunRoles.has(reReviewAction.role) ? 'Starting…' : 'Re-review'}</span>
-        </DropdownMenu.Item>
-      )}
-      {runSpec !== undefined && laneAction !== undefined && (
-        <DropdownMenu.Item
-          disabled={runDisabled || pendingRunRoles.has(laneAction.role)}
-          onClick={() => onRestartRun(runSpec, laneAction)}
-        >
-          {actionIcon(laneAction.label)}
-          <span>{pendingRunRoles.has(laneAction.role) ? 'Starting…' : laneAction.label}</span>
-        </DropdownMenu.Item>
-      )}
+        runActions.flatMap(action =>
+          runItemPair(runSpec, action, action.label, onStartRun, { runDisabled, pendingRunRoles }),
+        )}
+      {runSpec !== undefined &&
+        reReviewAction !== undefined &&
+        runItemPair(runSpec, reReviewAction, 'Re-review', onRestartRun, { runDisabled, pendingRunRoles })}
+      {runSpec !== undefined &&
+        laneAction !== undefined &&
+        runItemPair(runSpec, laneAction, laneAction.label, onRestartRun, { runDisabled, pendingRunRoles })}
       {/* Once the card has a live session its surface opens details, so the
           menus stay the only place left to release a proposed run. */}
       {proposal !== undefined && (

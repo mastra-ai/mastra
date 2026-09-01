@@ -89,7 +89,8 @@
     "qwen/qwen3.7-plus",
     "qwen/qwen3.8-27b",
     "qwen/qwen3.8-27b-free",
-    "qwen/qwen3.8-max"
+    "qwen/qwen3.8-max",
+    "z-ai/glm-5.3-flash"
   ],
   "temperature": [
     "anthropic/claude-haiku-4.5",
@@ -180,7 +181,8 @@
     "z-ai/glm-5",
     "z-ai/glm-5.1",
     "z-ai/glm-5.2",
-    "z-ai/glm-5.3"
+    "z-ai/glm-5.3",
+    "z-ai/glm-5.3-flash"
   ],
   "structuredOutput": [
     "deepseek/deepseek-v4-flash",
@@ -263,6 +265,7 @@
     "qwen/qwen3.8-27b-free",
     "z-ai/glm-5.1",
     "z-ai/glm-5.2",
-    "z-ai/glm-5.3"
+    "z-ai/glm-5.3",
+    "z-ai/glm-5.3-flash"
   ]
 }

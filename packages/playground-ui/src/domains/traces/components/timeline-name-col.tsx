@@ -63,8 +63,15 @@ export function TimelineNameCol({
             style={{ backgroundColor: spanUI.color }}
           />
         )}
-        {/* Searchable: the span name is what the timeline search matches on. */}
-        <span data-highlight className="min-w-0 truncate">
+        {/* Searchable: the span name is what the timeline search matches on. When the match
+            is in the span's payload instead, the whole name is painted in the indirect color
+            so the row explains its own presence. */}
+        <span
+          data-highlight={span.matchedInPayloadOnly ? undefined : ''}
+          data-highlight-indirect={span.matchedInPayloadOnly ? '' : undefined}
+          title={span.matchedInPayloadOnly ? 'Matches your search in this span’s details' : undefined}
+          className="min-w-0 truncate"
+        >
           {span.name}
         </span>
       </button>

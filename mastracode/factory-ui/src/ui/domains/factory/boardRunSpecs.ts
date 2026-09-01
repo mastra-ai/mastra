@@ -1,8 +1,8 @@
+import type { FactoryRole } from '@mastra/factory/rules/types';
 import { workItemBranch } from '@mastra/factory/work-item-branch';
 import type { FactoryRunInvocation, FactoryRunPhase } from '../../../hooks/useStartFactoryRun';
 import { NEEDS_APPROVAL_LABEL, githubNumberForItem, hasLabel, metadataLabels } from './boardItems';
 import type { WorkItem } from './services/workItems';
-import type { BoardStageId } from './stages';
 
 export const RUN_PHASE_LABELS: Record<FactoryRunPhase, string> = {
   workspace: 'preparing workspace…',
@@ -10,20 +10,15 @@ export const RUN_PHASE_LABELS: Record<FactoryRunPhase, string> = {
   opening: 'opening thread…',
 };
 
-/**
- * One agent run a card or candidate can start, and the lane it lands the card
- * in. Cards offer several: e.g. an issue can be investigated (understand it →
- * Planning) or built right away (implement it → Building). All of an item's
- * runs share one branch/worktree, so a later run continues the same
- * conversation as a follow-up.
- */
+// One startable run; its lane is the role's stage (`FACTORY_ROLE_STAGES`), and
+// all of an item's runs share one branch/worktree, so a later run is a follow-up.
 export interface RunAction {
   label: 'Investigate' | 'Build' | 'Prepare approval' | 'Review';
   /** Session slot the run fills on the card, e.g. `plan` or `work`. */
-  role: 'triage' | 'plan' | 'work' | 'review';
-  /** Lane the card lands in once the run is underway. */
-  stage: BoardStageId;
+  role: FactoryRole;
   invocation: FactoryRunInvocation;
+  /** The run's outcome is a maintainer decision, so hands-off has nothing to remove. */
+  awaitsHumanDecision?: true;
   threadTags?: Record<string, string>;
 }
 
@@ -50,13 +45,10 @@ export function guidedPrompt(base: string, instructions: string): string {
 /** Investigate an issue, then Build it when needed. */
 export function issueRunActions(ref: string, extra?: { context?: string; triage?: boolean }): RunAction[] {
   const context = extra?.context ? `\n\n${extra.context}` : '';
-  const role = extra?.triage ? 'triage' : 'plan';
-  const stage = extra?.triage ? 'triage' : 'planning';
   return [
     {
       label: 'Investigate',
-      role,
-      stage,
+      role: extra?.triage ? 'triage' : 'plan',
       invocation: {
         type: 'skill',
         skillName: 'factory-triage',
@@ -66,7 +58,6 @@ export function issueRunActions(ref: string, extra?: { context?: string; triage?
     {
       label: 'Build',
       role: 'work',
-      stage: 'execute',
       invocation: {
         type: 'prompt',
         prompt: `Implement a fix for ${ref}: investigate the root cause, make the change with tests, and open a pull request.${extra?.context ? ` ${extra.context}` : ''}`,
@@ -79,7 +70,7 @@ export function approvalRunAction(ref: string, issueNumber: number): RunAction {
   return {
     label: 'Prepare approval',
     role: 'triage',
-    stage: 'triage',
+    awaitsHumanDecision: true,
     invocation: {
       type: 'prompt',
       prompt: `Prepare approval for ${ref}. Review the existing triage comment and summarize the decision needed before implementation or closure.`,
@@ -92,7 +83,6 @@ export function reviewRunAction(ref: string, checkout: string): RunAction {
   return {
     label: 'Review',
     role: 'review',
-    stage: 'review',
     invocation: {
       type: 'skill',
       skillName: 'factory-review',

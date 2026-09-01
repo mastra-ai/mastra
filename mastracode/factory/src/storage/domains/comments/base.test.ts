@@ -201,6 +201,28 @@ describe('WorkItemCommentsStorage', () => {
     expect(second?.externalSource).toEqual(slack);
   });
 
+  it('keeps two workspaces apart when their message ids collide on one project', async () => {
+    const seed = await createFactoryStorageForTests();
+    const message = { integrationId: 'slack', type: 'message', externalId: 'C1:1700.42' };
+
+    const one = await seed.comments.create({
+      ...scope,
+      author: alice,
+      body: 'said in the first workspace',
+      externalSource: { ...message, workspaceId: 'T-one' },
+    });
+    const two = await seed.comments.create({
+      ...scope,
+      author: alice,
+      body: 'said in the second workspace',
+      externalSource: { ...message, workspaceId: 'T-two' },
+    });
+
+    expect(two.id).not.toBe(one.id);
+    expect(two.body).toBe('said in the second workspace');
+    expect((await seed.comments.list(scope)).comments).toHaveLength(2);
+  });
+
   it('creates distinct rows for tokenless creates with identical bodies', async () => {
     const seed = await createFactoryStorageForTests();
     await seed.comments.create({ ...scope, author: alice, body: 'same words' });

@@ -4,8 +4,7 @@
   "description": "Mastra Inworld AI voice integration — streaming TTS, batch STT, and realtime full-duplex voice",
   "type": "module",
   "files": [
-    "dist",
-    "CHANGELOG.md"
+    "dist"
   ],
   "main": "dist/index.js",
   "types": "dist/index.d.ts",

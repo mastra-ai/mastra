@@ -34,6 +34,8 @@ import type { StateSigner } from '../state-signing.js';
 import type { AuditEventRow } from '../storage/domains/audit/base.js';
 import type { AuditEmitter } from '../storage/domains/audit/domain.js';
 import type { ChannelIdentityStorage } from '../storage/domains/channel-identity/base.js';
+import type { CommentsDomain } from '../storage/domains/comments/domain.js';
+import type { WorkItemFeedPublisher } from '../storage/domains/comments/feed-sync.js';
 import type { IntakeStorage } from '../storage/domains/intake/base.js';
 import type { IntegrationStorageHandle } from '../storage/domains/integrations/base.js';
 import type { MemorySettingsStorage } from '../storage/domains/memory-settings/base.js';
@@ -94,6 +96,8 @@ export interface IntegrationContext {
   sessionRetirement?: SessionRetirementCoordinator;
   /** Work-items domain slice — deleting a session strips the refs work items hold on it. */
   workItems?: Pick<WorkItemsStorage, 'clearSessionReferences'>;
+  /** Feed slice for ingesting platform messages; present once work items are ready. */
+  feed?: Pick<CommentsDomain, 'createComment'>;
   /** Persistence handles pre-scoped to this integration's stable id. */
   storage: {
     generic: IntegrationStorageHandle;
@@ -236,6 +240,11 @@ export interface FactoryIntegration {
    * loser would silently never receive a message.
    */
   channels?(ctx: IntegrationContext): FactoryChannelsConfig;
+  /**
+   * Mirrors web feed comments to the platform thread a work item is bound to.
+   * Collected alongside `channels()`: a publisher posts through the channel SDK.
+   */
+  feedPublisher?(ctx: IntegrationContext): WorkItemFeedPublisher;
   /**
    * Non-secret config snapshot (booleans + names only, never values). The
    * factory merges it into system diagnostics/startup logs.

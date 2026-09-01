@@ -4,9 +4,9 @@ import { http, HttpResponse } from 'msw';
 import { createMemoryRouter, RouterProvider } from 'react-router';
 import { describe, expect, it } from 'vitest';
 
+import { pushableFeedStream } from '../../../e2e/ui/feed-stream';
 import { server } from '../../../e2e/ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '../../../e2e/ui/render';
-import { queryKeys } from '../../api/keys';
 import type { WorkItemComment } from '../domains/factory/services/commentsWire';
 import { createAppRoutes } from '../router';
 
@@ -177,11 +177,38 @@ describe('Board popover comment feed', () => {
     expect(await screen.findByLabelText('2 comments')).toBeInTheDocument();
   });
 
-  it('stops watching the feed once the details close', async () => {
+  it('shows a comment pushed over the feed stream while the board stays still', async () => {
     const board = { commentCount: 1, feedActivityAt: '2026-08-26T10:00:00.000Z' };
-    let commentRequests = 0;
+    const serverComments = [wireComment('c1', 'hello from the feed')];
+    const stream = pushableFeedStream(FACTORY_ID);
     stubBoardEndpoints(board);
     server.use(
+      stream.handler,
+      http.get(COMMENTS_URL, () => HttpResponse.json({ comments: [...serverComments] })),
+    );
+    const user = userEvent.setup();
+    renderBoard();
+
+    await screen.findByLabelText('Fix login bug');
+    await user.click(screen.getByRole('button', { name: 'Details for Fix login bug' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Fix login bug' });
+    await within(dialog).findByText('hello from the feed');
+
+    // A teammate comments. Nothing on the board response moves — the frame is
+    // the only thing that says so.
+    serverComments.unshift(wireComment('c2', 'a teammate answered'));
+    stream.push(ITEM_ID);
+
+    expect(await within(dialog).findByText('a teammate answered')).toBeInTheDocument();
+  });
+
+  it('leaves a closed feed alone when a frame names its item', async () => {
+    const board = { commentCount: 1, feedActivityAt: '2026-08-26T10:00:00.000Z' };
+    let commentRequests = 0;
+    const stream = pushableFeedStream(FACTORY_ID);
+    stubBoardEndpoints(board);
+    server.use(
+      stream.handler,
       http.get(COMMENTS_URL, () => {
         commentRequests += 1;
         return HttpResponse.json({ comments: [wireComment('c1', 'hello from the feed')] });
@@ -198,11 +225,7 @@ describe('Board popover comment feed', () => {
     const requestsWhileOpen = commentRequests;
 
     await user.click(within(dialog).getByRole('button', { name: 'Collapse Fix login bug' }));
-    // Activity moves while the popover is closed: the closed feed must not refetch.
-    board.feedActivityAt = '2026-08-26T10:10:00.000Z';
-    await act(async () => {
-      await client.invalidateQueries({ queryKey: queryKeys.workItems(FACTORY_ID) });
-    });
+    stream.push(ITEM_ID);
     await waitForMutationsIdle(client);
     expect(commentRequests).toBe(requestsWhileOpen);
   });

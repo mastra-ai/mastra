@@ -1,6 +1,6 @@
 ---
 title: "Reference: RegexFilterProcessor | Processors"
-description: "API reference for RegexFilterProcessor, a zero-cost regex-based content filter for blocking, redacting, or warning on pattern matches in agent messages."
+description: "The RegexFilterProcessor applies zero-cost regex pattern matching to filter, redact, or block content in agent messages."
 packages:
   - "@mastra/core"
 ---
@@ -221,7 +221,7 @@ When the `block` strategy is active (default), `RegexFilterProcessor` throws a `
 
 ## Redaction behavior
 
-Every rule is matched independently, so two rules can claim text that overlaps. A card number written without separators matches both `phone` and `credit-card`, for example. Overlapping matches are combined into a single region and replaced once, using the replacement of the longest match.
+Every rule is matched independently, which lets two rules claim overlapping text. For example, a card number without separators matches both `phone` and `credit-card`. Overlapping matches are combined into one region and replaced once with the replacement from the longest match.
 
 ```typescript
 const filter = new RegexFilterProcessor({
@@ -232,11 +232,11 @@ const filter = new RegexFilterProcessor({
 // "Charge 4111111111111111 today" becomes "Charge [CREDIT_CARD] today"
 ```
 
-A replacement string can reference capture groups with `$1` or `$&`. Those references resolve for a single match whose pattern also matches the matched text on its own. In a combined region, or for a rule anchored on its surroundings with a lookbehind or lookahead, the replacement string is inserted as written. The region is redacted either way.
+A replacement string can use `$1` or `$&` to reference capture groups for an independent single match. When matches form a combined region, the replacement string is inserted as written. The same applies when a rule relies on surrounding text through a lookbehind or lookahead. The region is redacted in either case.
 
 ## Redaction reporting
 
-The `redact` strategy rewrites text in place, so nothing downstream can tell what changed. Assign `onViolation` to record it. The processor calls it once per redacted message, message part, or stream chunk, and offsets are relative to that piece of text. Async callbacks are awaited, and errors are caught so an unavailable audit sink can't fail the request.
+Because the `redact` strategy rewrites text in place, downstream code can't determine what changed. Assign `onViolation` to record the change for each redacted message or message part and for each stream chunk, with offsets relative to that text. Async callbacks are awaited, while errors are caught so an unavailable audit sink can't fail the request.
 
 ```typescript
 import { RegexFilterProcessor, type RegexRedactionDetail } from '@mastra/core/processors'

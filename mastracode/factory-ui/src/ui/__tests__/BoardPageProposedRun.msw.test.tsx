@@ -295,9 +295,10 @@ describe('Board card with a proposed run', () => {
     renderWorkBoard();
 
     await user.click(await screen.findByRole('button', { name: 'Needs attention, 1 waiting for approval, 1 open' }));
-    expect(await screen.findByRole('link', { name: /1 items waiting for approval/i })).toHaveAttribute(
+    expect(await screen.findByText('waiting for approval')).toBeVisible();
+    expect(screen.getByRole('link', { name: 'View all attention' })).toHaveAttribute(
       'href',
-      `/factories/${FACTORY_ID}/rules?group=proposed`,
+      `/factories/${FACTORY_ID}/attention`,
     );
   });
 

@@ -1,6 +1,5 @@
 import type { InfiniteData, QueryClient, QueryKey } from '@tanstack/react-query';
 import { skipToken, useInfiniteQuery, useMutation, useMutationState, useQueryClient } from '@tanstack/react-query';
-import { useEffect, useRef } from 'react';
 
 import { useApiConfig } from '../api/config';
 import { isRecord } from '../lib/isRecord';
@@ -12,6 +11,7 @@ import {
   listWorkItemComments,
 } from '../ui/domains/factory/services/comments';
 import type { CreateWorkItemCommentInput, EditWorkItemCommentInput } from '../ui/domains/factory/services/comments';
+import { useFeedEventsConnected } from '../ui/domains/factory/context/FeedEventsProvider';
 import type { WorkItemComment, WorkItemCommentPage } from '../ui/domains/factory/services/commentsWire';
 
 export interface WorkItemFeedScope {
@@ -23,6 +23,9 @@ type CommentsData = InfiniteData<WorkItemCommentPage, string | undefined>;
 
 /** Invalidation refetches every loaded page serially, so keep the window bounded. */
 const MAX_COMMENT_PAGES = 5;
+
+/** Only runs while the feed stream is down; the provider's reconnect closes the gap. */
+export const FEED_FALLBACK_POLL_MS = 5_000;
 
 function requireWorkItemId(workItemId: string | undefined): string {
   if (!workItemId) throw new Error('Work item is required');
@@ -58,42 +61,21 @@ function findComment(queryClient: QueryClient, rootKey: QueryKey, commentId: str
 }
 
 /**
- * The feed has no poll of its own: the board query already flows every 5s on
- * both surfaces, so a moving `feedActivityAt` is the refetch signal.
- *
- * TODO: temporary until the feed is pushed over SSE, which replaces this whole
- * hook and the `staleTime: 0` it forces on the query below.
- */
-function useFeedActivityInvalidation(workItemId: string | undefined, feedActivityAt: string | null | undefined) {
-  const queryClient = useQueryClient();
-  const lastSeen = useRef(feedActivityAt);
-  useEffect(() => {
-    const previous = lastSeen.current;
-    lastSeen.current = feedActivityAt;
-    // `undefined` is "not watching yet" or "no longer watching", never a move.
-    if (previous === undefined || feedActivityAt === undefined || previous === feedActivityAt) return;
-    void queryClient.invalidateQueries({ queryKey: queryKeys.workItemCommentsRoot(workItemId) });
-  }, [feedActivityAt, queryClient, workItemId]);
-}
-
-/**
  * Newest-first pages of a work item's comment feed; rendering reverses them.
  * `aroundCommentId` anchors the first page on a deep-linked comment, so it
  * arrives with the feed instead of being paged back to.
  */
 export function useWorkItemComments({
   workItemId,
-  feedActivityAt,
   aroundCommentId,
   enabled = true,
 }: {
   workItemId: string | undefined;
-  feedActivityAt?: string | null;
   aroundCommentId?: string;
   enabled?: boolean;
 }) {
   const { baseUrl } = useApiConfig();
-  useFeedActivityInvalidation(workItemId, enabled ? feedActivityAt : undefined);
+  const connected = useFeedEventsConnected();
   const initialPageParam: string | undefined = undefined;
   const queryFn =
     enabled && workItemId
@@ -111,16 +93,15 @@ export function useWorkItemComments({
     initialPageParam,
     getNextPageParam: lastPage => lastPage.nextCursor,
     maxPages: MAX_COMMENT_PAGES,
-    // The activity watcher swallows its first value on remount, so the global
-    // 30s staleTime would show a reopened feed stale. Always refetch on mount.
-    staleTime: 0,
+    refetchInterval: connected ? false : FEED_FALLBACK_POLL_MS,
   });
 }
 
 /**
  * Writes nothing into the query cache — a poll tick landing mid-flight would
  * replace the pages wholesale and drop the row. The pending row is rendered
- * from mutation state instead, and `feedActivityAt` drives the one refetch.
+ * from mutation state instead, and the settled create pulls its own row in:
+ * an author never waits on the broker to see what they just wrote.
  */
 export function useCreateWorkItemCommentMutation({ workItemId, factoryProjectId }: WorkItemFeedScope) {
   const { baseUrl } = useApiConfig();
@@ -130,7 +111,10 @@ export function useCreateWorkItemCommentMutation({ workItemId, factoryProjectId 
     mutationFn: (input: CreateWorkItemCommentInput) =>
       createWorkItemComment(baseUrl, requireWorkItemId(workItemId), input),
     onSettled: async () => {
-      await queryClient.invalidateQueries({ queryKey: queryKeys.workItems(factoryProjectId) });
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: queryKeys.workItemCommentsRoot(workItemId) }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.workItems(factoryProjectId) }),
+      ]);
     },
   });
 }

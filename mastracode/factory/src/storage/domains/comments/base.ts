@@ -13,11 +13,15 @@
 
 import { FactoryStorageDomain, UniqueViolationError } from '@mastra/core/storage';
 
+import { externalSourceKey } from '../work-items/base.js';
 import type { ExternalWorkItemSource } from '../work-items/base.js';
+import { fanOutWorkItemActivity, listActivityForUser, PARTICIPANT_SCAN_LIMIT } from './activity.js';
+import type { WorkItemActivityRow } from './activity.js';
 import type { FactoryActorExternalIdentity, FactoryActorRef } from './actor.js';
-import { WORK_ITEM_COMMENT_MENTIONS_SCHEMA, WORK_ITEM_COMMENTS_SCHEMA } from './schema.js';
+import { WORK_ITEM_ACTIVITY_SCHEMA, WORK_ITEM_COMMENT_MENTIONS_SCHEMA, WORK_ITEM_COMMENTS_SCHEMA } from './schema.js';
 
-export { WORK_ITEM_COMMENT_MENTIONS_SCHEMA, WORK_ITEM_COMMENTS_SCHEMA } from './schema.js';
+export type { WorkItemActivityRow } from './activity.js';
+export { WORK_ITEM_ACTIVITY_SCHEMA, WORK_ITEM_COMMENT_MENTIONS_SCHEMA, WORK_ITEM_COMMENTS_SCHEMA } from './schema.js';
 
 export type WorkItemCommentKind = 'comment';
 
@@ -184,10 +188,7 @@ export function commentSourceKey(input: {
   externalSource?: ExternalWorkItemSource;
   clientToken?: string;
 }): string | null {
-  if (input.externalSource) {
-    const source = input.externalSource;
-    return `${source.integrationId}:${source.type}:${source.externalId}`;
-  }
+  if (input.externalSource) return externalSourceKey(input.externalSource);
   if (input.clientToken) return `local:comment:${input.clientToken}`;
   return null;
 }
@@ -311,10 +312,15 @@ export class WorkItemCommentsStorage extends FactoryStorageDomain {
   }
 
   async init(): Promise<void> {
-    await this.ensureCollections([WORK_ITEM_COMMENTS_SCHEMA, WORK_ITEM_COMMENT_MENTIONS_SCHEMA]);
+    await this.ensureCollections([
+      WORK_ITEM_COMMENTS_SCHEMA,
+      WORK_ITEM_COMMENT_MENTIONS_SCHEMA,
+      WORK_ITEM_ACTIVITY_SCHEMA,
+    ]);
   }
 
   async dangerouslyClearAll(): Promise<void> {
+    await this.ops.deleteMany('work_item_activity', {});
     await this.ops.deleteMany('work_item_comment_mentions', {});
     await this.ops.deleteMany('work_item_comments', {});
   }
@@ -384,10 +390,50 @@ export class WorkItemCommentsStorage extends FactoryStorageDomain {
     return this.#insertWithMentions(row);
   }
 
+  /**
+   * The one insert path a genuinely new comment takes — `create()`'s recover
+   * branches never reach it, so a replay writes no mention or activity rows.
+   */
   async #insertWithMentions(row: Partial<WorkItemCommentDbRow>): Promise<WorkItemCommentRow> {
     const comment = toComment(await this.ops.insertOne<WorkItemCommentDbRow>('work_item_comments', row));
     await this.#writeMentionRows(comment, comment.mentions);
+    await this.#fanOutActivity(comment);
     return comment;
+  }
+
+  /**
+   * Participants come off the item's recent authors, so the scan happens here
+   * rather than in the fan-out, which must stay free of its own queries.
+   */
+  async #fanOutActivity(comment: WorkItemCommentRow): Promise<void> {
+    const item = await this.ops.findOne<{ created_by: string } & Record<string, unknown>>('work_items', {
+      id: comment.workItemId,
+      org_id: comment.orgId,
+      factory_project_id: comment.factoryProjectId,
+    });
+    if (!item) return;
+    const recent = await this.listRecent({
+      orgId: comment.orgId,
+      factoryProjectId: comment.factoryProjectId,
+      workItemId: comment.workItemId,
+      limit: PARTICIPANT_SCAN_LIMIT,
+    });
+    await fanOutWorkItemActivity(this.ops, {
+      comment,
+      recentAuthors: recent.filter(row => row.author.kind === 'user').map(row => row.author.id),
+      createdBy: item.created_by,
+      mentions: comment.mentions,
+    });
+  }
+
+  async listActivityForUser(args: {
+    orgId: string;
+    factoryProjectId: string;
+    userId: string;
+    before?: { occurredAt: Date; id: string };
+    limit: number;
+  }): Promise<WorkItemActivityRow[]> {
+    return listActivityForUser(this.ops, args);
   }
 
   /**

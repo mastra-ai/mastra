@@ -21,6 +21,7 @@
 import { MastraAuthStudio } from '@mastra/auth-studio';
 import { prepareAgentControllerMount } from '@mastra/code-sdk';
 import { AgentControllerChannels } from '@mastra/core/channels';
+import { EventEmitterPubSub } from '@mastra/core/events';
 import type { PubSub } from '@mastra/core/events';
 import type { Mastra } from '@mastra/core/mastra';
 import type { RequestContext } from '@mastra/core/request-context';
@@ -37,6 +38,7 @@ import {
   getFactoryAuthUserFromContext,
   getFactoryAuthUserId,
 } from './auth.js';
+import { touchFeed } from './feed-events.js';
 import type { FactoryIntegration, IntegrationPostToolContext, IntegrationTools } from './integrations/base.js';
 import type { GithubIntegration } from './integrations/github/integration.js';
 import {
@@ -84,6 +86,7 @@ import { ChannelIdentityStorage } from './storage/domains/channel-identity/base.
 import { WorkItemCommentsStorage } from './storage/domains/comments/base.js';
 import { CommentsDomain } from './storage/domains/comments/domain.js';
 import { FactoryFeedReader } from './storage/domains/comments/feed-context.js';
+import type { WorkItemFeedPublisher } from './storage/domains/comments/feed-sync.js';
 import { ModelCredentialsStorage } from './storage/domains/credentials/base.js';
 import { CustomProvidersStorage } from './storage/domains/custom-providers/base.js';
 import { FilesystemStorage } from './storage/domains/filesystem/base.js';
@@ -315,6 +318,9 @@ export class MastraFactory {
     const storage = this.#config.storage;
     const vector = this.#config.vector;
     const pubsub = this.#config.pubsub;
+    // One bus for feed/attention events: a second fallback instance would leave
+    // SSE subscribers and producers on different emitters in single-process runs.
+    const eventBus = pubsub ?? new EventEmitterPubSub();
     // Default auth: honor an explicitly-passed provider (including `null` to
     // disable auth) as-is; otherwise fall back to `MastraAuthStudio`
     // (platform-proxied identity). The default derives its cookie domain
@@ -364,6 +370,7 @@ export class MastraFactory {
     const intakeStorage = storage.registerDomain(new IntakeStorage());
     const auditStorage = storage.registerDomain(new AuditStorage());
     const workItemsStorage = storage.registerDomain(new WorkItemsStorage());
+    workItemsStorage.onAttentionChanged(scope => touchFeed(eventBus, scope));
     const modelCredentialsStorage = storage.registerDomain(new ModelCredentialsStorage(secretEncryption));
     const modelPacksStorage = storage.registerDomain(new ModelPacksStorage());
     const memorySettingsStorage = storage.registerDomain(new MemorySettingsStorage());
@@ -405,6 +412,8 @@ export class MastraFactory {
         return { orgId: getFactoryAuthOrgId(user), userId: getFactoryAuthUserId(user) };
       },
     });
+    // Held by reference: the channel attach below pushes into it, long after this.
+    const feedPublishers: WorkItemFeedPublisher[] = [];
     const commentsDomain = new CommentsDomain({
       auth: routeAuth,
       comments: workItemCommentsStorage,
@@ -412,6 +421,8 @@ export class MastraFactory {
       projects: factoryProjectsStorage,
       channelIdentity: channelIdentityStorage,
       audit: auditDomain,
+      publishers: feedPublishers,
+      pubsub: eventBus,
     });
 
     // The sandbox config is a bare callback constructing a session's sandbox
@@ -763,6 +774,7 @@ export class MastraFactory {
             integrationStorage,
             sourceControlStorage,
             domains,
+            feed: commentsDomain,
             integrations: integrationRegistrations,
             intakeReady,
             factoryReady,
@@ -779,6 +791,11 @@ export class MastraFactory {
                   await factoryProjectsStorage.ensureReady();
                   const project = await factoryProjectsStorage.get({ orgId, id: factoryProjectId });
                   return project?.autoRunEnabled ?? false;
+                },
+                autoApprovePlans: async ({ orgId, factoryProjectId }) => {
+                  await factoryProjectsStorage.ensureReady();
+                  const project = await factoryProjectsStorage.get({ orgId, id: factoryProjectId });
+                  return project?.autoApprovePlans ?? false;
                 },
                 reconcileToolResults: () => factoryProcessor?.reconcileAllBoundThreads() ?? Promise.resolve(),
                 prepareBinding,
@@ -923,30 +940,29 @@ export class MastraFactory {
       );
     }
     for (const { integration } of channelRegistrations) {
-      // Integrations return a channels CONFIG; the factory owns construction.
-      prepared.base.controller.setChannels(
-        new AgentControllerChannels(
-          integration.channels!(
-            buildIntegrationContext(
-              {
-                controller: prepared.base.controller,
-                publicOrigin,
-                auth: routeAuth,
-                stateSigner,
-                sandbox: sandboxConfig,
-                factoryStorage: storage,
-                integrationStorage,
-                sourceControlStorage,
-                rules,
-                factoryReady,
-                domains,
-                ...(githubIntegration ? { sourceControlOwnerId: 'github' } : {}),
-              },
-              integration.id,
-            ),
-          ),
-        ),
+      const context = buildIntegrationContext(
+        {
+          controller: prepared.base.controller,
+          publicOrigin,
+          auth: routeAuth,
+          stateSigner,
+          sandbox: sandboxConfig,
+          factoryStorage: storage,
+          integrationStorage,
+          sourceControlStorage,
+          rules,
+          factoryReady,
+          domains,
+          feed: commentsDomain,
+          ...(githubIntegration ? { sourceControlOwnerId: 'github' } : {}),
+        },
+        integration.id,
       );
+      // Integrations return a channels CONFIG; the factory owns construction.
+      prepared.base.controller.setChannels(new AgentControllerChannels(integration.channels!(context)));
+      // A publisher posts through the channel SDK this loop just wired up.
+      const publisher = integration.feedPublisher?.(context);
+      if (publisher) feedPublishers.push(publisher);
     }
 
     // Integration lifecycle workers (e.g. polling an upstream without
@@ -972,6 +988,7 @@ export class MastraFactory {
               rules,
               factoryReady,
               domains,
+              feed: commentsDomain,
               ...(githubIntegration ? { sourceControlOwnerId: 'github' } : {}),
             },
             integration.id,

@@ -680,16 +680,6 @@ export function subscribeToAgentController(state: TUIState, handleEvent: (event:
 }
 
 // =============================================================================
-// Terminal Title
-// =============================================================================
-
-export function updateTerminalTitle(state: TUIState): void {
-  const appName = state.options.appName || 'Mastra Code';
-  const cwd = process.cwd().split('/').pop() || '';
-  state.ui.terminal.setTitle(`${appName} - ${cwd}`);
-}
-
-// =============================================================================
 // Thread Selection
 // =============================================================================
 
