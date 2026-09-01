@@ -526,8 +526,14 @@ describe('Subconscious LibSQL integration', () => {
       expect.objectContaining({
         resourceId,
         threadId: threadIds[0],
-        ifActive: { behavior: 'deliver' },
+        ifActive: { behavior: 'persist' },
         ifIdle: { behavior: 'persist' },
+      }),
+      expect.objectContaining({
+        resourceId,
+        threadId: threadIds[0],
+        ifActive: { behavior: 'deliver' },
+        ifIdle: { behavior: 'discard' },
       }),
     ]);
   });

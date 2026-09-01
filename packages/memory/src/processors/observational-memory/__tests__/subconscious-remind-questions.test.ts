@@ -478,6 +478,34 @@ describe('Subconscious reminder questions', () => {
     ]);
   });
 
+  it('records partial delivery failure when idle signal persistence rejects', async () => {
+    const memory = new Memory({ storage: new InMemoryStore() });
+    const { event, message } = await seedQuestion(memory);
+    const parentAgent = createParentAgent();
+    parentAgent.sendSignal = vi.fn((signal: unknown) => ({
+      signal,
+      accepted: Promise.resolve({ action: 'persist' }),
+      persisted: Promise.reject(new Error('parent signal storage unavailable')),
+    }));
+    const tool = createReplyTool(memory, parentAgent);
+
+    const result = await tool.execute?.(
+      { replyId: event.replyId, answer: 'Partial answer', moreComing: true },
+      toolContext([message]),
+    );
+
+    expect(result).toMatchObject({ delivered: false, reason: 'delivery-failed', sequence: 1, moreComing: true });
+    expect(await storedProtocols(memory)).toContainEqual(
+      expect.objectContaining({
+        kind: 'delivery-failure',
+        replyId: event.replyId,
+        deliveryKind: 'partial',
+        exhausted: false,
+        error: 'parent signal storage unavailable',
+      }),
+    );
+  });
+
   it('persists terminal pending before delivery and delivered after acceptance', async () => {
     const memory = new Memory({ storage: new InMemoryStore() });
     const { event, message } = await seedQuestion(memory);

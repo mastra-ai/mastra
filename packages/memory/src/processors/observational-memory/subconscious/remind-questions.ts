@@ -424,6 +424,7 @@ export function createReplyToMemoryQuestionTool(options: {
           if (accepted.action === 'blocked' || accepted.action === 'discard') {
             throw new Error(`Partial reply delivery was not accepted (${accepted.action}).`);
           }
+          if (accepted.action === 'persist') await result.persisted;
           return { delivered: true, replyId, sequence, moreComing: true };
         } catch (error) {
           const failure: RemindDeliveryFailureEvent = {
