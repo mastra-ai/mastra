@@ -48,78 +48,70 @@ describe('Subconscious LibSQL integration', () => {
     const vector = new LibSQLVector({ id: randomUUID(), url: databaseUrl });
     await storage.init();
 
-    let streamCall = 0;
-    const doStream = vi.fn(async () => {
-      streamCall += 1;
-      const chunks =
-        streamCall === 1
-          ? [
-              { type: 'stream-start' as const, warnings: [] },
-              { type: 'response-metadata' as const, id: 'observe', modelId: 'aimock', timestamp: new Date() },
-              { type: 'text-start' as const, id: 'observe-text' },
-              {
-                type: 'text-delta' as const,
-                id: 'observe-text',
-                delta: '<observations>Maya Chen owns Project Atlas. The staging region is cobalt.</observations>',
-              },
-              { type: 'text-end' as const, id: 'observe-text' },
-              {
-                type: 'finish' as const,
-                finishReason: 'stop' as const,
-                usage: { inputTokens: 50, outputTokens: 10, totalTokens: 60 },
-              },
-            ]
-          : streamCall === 2
-            ? [
-                { type: 'stream-start' as const, warnings: [] },
-                { type: 'response-metadata' as const, id: 'curate', modelId: 'aimock', timestamp: new Date() },
-                { type: 'tool-input-start' as const, id: 'create-atlas', toolName: 'knowledge_create' },
-                {
-                  type: 'tool-input-delta' as const,
-                  id: 'create-atlas',
-                  delta: JSON.stringify({
-                    name: 'Project Atlas',
-                    kind: 'project',
-                    text: '[[Maya Chen]] owns [[Project Atlas]]. The staging region is cobalt.',
-                    nodeScope: 'resource',
-                    scope: 'resource',
-                  }),
-                },
-                { type: 'tool-input-end' as const, id: 'create-atlas' },
-                { type: 'tool-input-start' as const, id: 'create-alpha-secret', toolName: 'knowledge_create' },
-                {
-                  type: 'tool-input-delta' as const,
-                  id: 'create-alpha-secret',
-                  delta: JSON.stringify({
-                    name: 'Alpha Secret',
-                    kind: 'note',
-                    text: 'Only the alpha thread may see this.',
-                    nodeScope: 'thread',
-                    scope: 'thread',
-                  }),
-                },
-                { type: 'tool-input-end' as const, id: 'create-alpha-secret' },
-                {
-                  type: 'finish' as const,
-                  finishReason: 'tool-calls' as const,
-                  usage: { inputTokens: 20, outputTokens: 10, totalTokens: 30 },
-                },
-              ]
-            : [
-                { type: 'stream-start' as const, warnings: [] },
-                { type: 'response-metadata' as const, id: 'curated', modelId: 'aimock', timestamp: new Date() },
-                { type: 'text-start' as const, id: 'curated-text' },
-                { type: 'text-delta' as const, id: 'curated-text', delta: 'Curated.' },
-                { type: 'text-end' as const, id: 'curated-text' },
-                {
-                  type: 'finish' as const,
-                  finishReason: 'stop' as const,
-                  usage: { inputTokens: 20, outputTokens: 10, totalTokens: 30 },
-                },
-              ];
-      return { stream: convertArrayToReadableStream(chunks as never) };
+    const observerModel = new MockLanguageModelV2({
+      doStream: async () => ({
+        stream: convertArrayToReadableStream([
+          { type: 'stream-start', warnings: [] },
+          { type: 'response-metadata', id: 'observe', modelId: 'aimock', timestamp: new Date() },
+          { type: 'text-start', id: 'observe-text' },
+          {
+            type: 'text-delta',
+            id: 'observe-text',
+            delta: '<observations>Maya Chen owns Project Atlas. The staging region is cobalt.</observations>',
+          },
+          { type: 'text-end', id: 'observe-text' },
+          { type: 'finish', finishReason: 'stop', usage: { inputTokens: 50, outputTokens: 10, totalTokens: 60 } },
+        ]),
+      }),
     });
-    const model = new MockLanguageModelV2({ doStream: doStream as never });
+    let curatorCall = 0;
+    const doGenerate = vi.fn(async () => {
+      curatorCall += 1;
+      if (curatorCall === 1) {
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'tool-calls' as const,
+          usage: { inputTokens: 20, outputTokens: 10, totalTokens: 30 },
+          text: '',
+          content: [
+            {
+              type: 'tool-call' as const,
+              toolCallId: 'create-atlas',
+              toolName: 'knowledge_create',
+              input: JSON.stringify({
+                name: 'Project Atlas',
+                kind: 'project',
+                text: '[[Maya Chen]] owns [[Project Atlas]]. The staging region is cobalt.',
+                nodeScope: 'resource',
+                scope: 'resource',
+              }),
+            },
+            {
+              type: 'tool-call' as const,
+              toolCallId: 'create-alpha-secret',
+              toolName: 'knowledge_create',
+              input: JSON.stringify({
+                name: 'Alpha Secret',
+                kind: 'note',
+                text: 'Only the alpha thread may see this.',
+                nodeScope: 'thread',
+                scope: 'thread',
+              }),
+            },
+          ],
+          warnings: [],
+        };
+      }
+      return {
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        finishReason: 'stop' as const,
+        usage: { inputTokens: 20, outputTokens: 10, totalTokens: 30 },
+        text: 'Curated.',
+        content: [{ type: 'text' as const, text: 'Curated.' }],
+        warnings: [],
+      };
+    });
+    const curatorModel = new MockLanguageModelV2({ doGenerate });
     const memory = new Memory({
       storage,
       vector,
@@ -127,8 +119,8 @@ describe('Subconscious LibSQL integration', () => {
       options: {
         observationalMemory: {
           enabled: true,
-          model,
-          experimental_subconscious: new Subconscious({ observation: [{ name: 'curate', model }] }),
+          model: observerModel,
+          experimental_subconscious: new Subconscious({ observation: [{ name: 'curate', model: curatorModel }] }),
           observation: { messageTokens: 1, bufferTokens: false, previousObserverTokens: 1_000 },
         },
       },
@@ -147,7 +139,7 @@ describe('Subconscious LibSQL integration', () => {
       sendStateSignal: vi.fn(async () => ({ skipped: false }) as any),
     });
     expect(result.observed).toBe(true);
-    expect(doStream).toHaveBeenCalledTimes(3);
+    expect(doGenerate).toHaveBeenCalledTimes(2);
 
     const knowledge = (await storage.getStore('knowledge'))!;
     const scope = ['org:acme', `resource:${resourceId}`, `thread:${threadId}`];
