@@ -1,12 +1,13 @@
 import { Knowledge } from '@mastra/core/knowledge';
-import { InMemoryStore } from '@mastra/core/storage';
 import { expect, test, type BrowserContext } from '@playwright/test';
+import { randomUUID } from 'node:crypto';
 import fs from 'node:fs';
+import { tmpdir } from 'node:os';
 import path from 'node:path';
 
 import { KnowledgeRoutes } from '../../../factory/src/routes/knowledge.js';
 import { createRouteTestApp, fakeRouteAuth } from '../../../factory/src/routes/test-utils.js';
-import { createFactoryStorageForTests } from '../../../factory/src/storage/test-utils.js';
+import { createFactoryStorageForTests, LibSQLStore } from '../../../factory/src/storage/test-utils.js';
 
 const orgId = 'governance-proof-org';
 const output = process.env.KNOWLEDGE_PROOF_OUTPUT ? path.resolve(process.env.KNOWLEDGE_PROOF_OUTPUT) : undefined;
@@ -22,8 +23,11 @@ async function createGovernanceHarness(perspective: Perspective) {
     userId: 'user-1',
     input: { name: 'Governance proof' },
   });
-  const knowledge = new Knowledge({ id: 'mastra', storage: new InMemoryStore() });
+  const knowledgeDbPath = path.join(tmpdir(), `knowledge-governance-${perspective}-${randomUUID()}.db`);
+  const knowledgeStorage = new LibSQLStore({ id: `knowledge-${perspective}`, url: `file:${knowledgeDbPath}` });
+  const knowledge = new Knowledge({ id: 'mastra', storage: knowledgeStorage });
   const store = await knowledge.getStorageInternal();
+  await store.init();
   const orgAddress = `org:${orgId}`;
   const resourceAddress = `resource:${project.id}`;
   const org = await knowledge.materializeScope({ address: orgAddress, contextualScopeAddress: orgAddress });
@@ -118,7 +122,15 @@ async function createGovernanceHarness(perspective: Perspective) {
     organizationId: orgId,
   });
 
-  return { app, projectId: project.id, close: () => factory.storage.close() };
+  return {
+    app,
+    projectId: project.id,
+    close: async () => {
+      await knowledgeStorage.close();
+      fs.rmSync(knowledgeDbPath, { force: true });
+      await factory.storage.close();
+    },
+  };
 }
 
 async function installRoutes(context: BrowserContext, perspective: Perspective) {
@@ -179,33 +191,28 @@ test.describe('Knowledge governance perspectives', () => {
   test.describe.configure({ mode: 'serial' });
 
   test.describe('when the host vouches only readonly access', () => {
-    test('shows proposals without mutation actions', async ({ browser }) => {
-      const context = await browser.newContext();
+    test('shows proposals without mutation actions', async ({ context }) => {
       const page = await openApprovals(context, 'reader');
       await expect(page.getByText('Rename the deployment guide')).toBeVisible();
       await expect(page.getByText('Proposer: private')).toBeVisible();
       await expect(page.getByRole('button', { name: 'Approve' })).toHaveCount(0);
       await expect(page.getByRole('button', { name: 'Reject' })).toHaveCount(0);
       await capture(page, 'reader');
-      await context.close();
     });
   });
 
   test.describe('when the host vouches suggest access without edit authority', () => {
-    test('keeps review actions unavailable', async ({ browser }) => {
-      const context = await browser.newContext();
+    test('keeps review actions unavailable', async ({ context }) => {
       const page = await openApprovals(context, 'suggester');
       await expect(page.getByText('Rename the deployment guide')).toBeVisible();
       await expect(page.getByRole('button', { name: 'Approve' })).toHaveCount(0);
       await expect(page.getByRole('button', { name: 'Reject' })).toHaveCount(0);
       await capture(page, 'suggester');
-      await context.close();
     });
   });
 
   test.describe('when the host vouches owner authority', () => {
-    test('persists rejection and conflict re-review through Factory routes', async ({ browser }) => {
-      const context = await browser.newContext();
+    test('persists rejection and conflict re-review through Factory routes', async ({ context }) => {
       const page = await openApprovals(context, 'reviewer');
       await page.getByRole('button', { name: 'Reject' }).click();
       await expect(page.getByText('No pending proposals.')).toBeVisible();
@@ -218,7 +225,6 @@ test.describe('Knowledge governance perspectives', () => {
       await page.getByRole('option', { name: 'Pending' }).click();
       await expect(page.getByText('Refresh the incident guide')).toBeVisible();
       await capture(page, 'reviewer');
-      await context.close();
     });
   });
 
