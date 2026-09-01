@@ -105,7 +105,11 @@ async function protocols(memory: Memory) {
 
 function createHarness(
   memory: Memory,
-  options?: { continuationAction?: 'wake' | 'deliver' | 'blocked'; parentAction?: 'deliver' | 'blocked' },
+  options?: {
+    continuationAction?: 'wake' | 'deliver' | 'blocked';
+    parentAction?: 'deliver' | 'blocked';
+    acceptedTerminalSignals?: Set<string>;
+  },
 ) {
   const parentSignals: unknown[] = [];
   const parentAgent = {
@@ -135,6 +139,7 @@ function createHarness(
     parentAgent,
     parentAgentId,
     maxSteps: 7,
+    acceptedTerminalSignals: options?.acceptedTerminalSignals,
     getReminderAgent: () => reminderAgent,
   });
   return { processor, parentAgent, parentSignals, reminderAgent, sendMessage, consumeStream };
@@ -434,6 +439,26 @@ describe('Subconscious reminder continuation', () => {
     const recovered = createHarness(memory);
     await recovered.processor.processOutputResult(resultArgs());
     expect(recovered.sendMessage).toHaveBeenCalledOnce();
+  });
+
+  it('does not resend a terminal signal accepted earlier in the same sidekick run', async () => {
+    const replyId = 'reply-a';
+    const memory = await setup([
+      question(replyId, 100),
+      {
+        kind: 'terminal-pending-delivery',
+        ...base(`${replyId}:terminal:pending`, 300),
+        replyId,
+        outcome: 'answer',
+      },
+    ]);
+    const harness = createHarness(memory, {
+      acceptedTerminalSignals: new Set([`${replyId}:terminal:signal`]),
+    });
+
+    await harness.processor.processOutputResult(resultArgs());
+
+    expect(harness.parentSignals).toEqual([]);
   });
 
   it('preserves a successful pending answer when continuation exhaustion retries its delivery', async () => {

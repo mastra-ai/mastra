@@ -28,10 +28,11 @@ export function createReminderAgent(options: {
   parentAgent?: ProcessorContext['agent'];
   fallbackSendSignal: SendSignal;
   additionalTools?: Record<string, ToolAction<any, any, any>>;
+  acceptedTerminalSignals?: Set<string>;
   instructions?: string;
   maxSteps?: number;
 }) {
-  const deliveredEvents = new Set<string>();
+  const fallbackDeliveredEvents = new Set<string>();
   const sendReminder = createTool({
     id: 'send_reminder',
     description: 'Deliver one grounded reminder to the parent conversation for a passive reminder check.',
@@ -57,11 +58,20 @@ export function createReminderAgent(options: {
         reminder: string;
         sourceIds: string[];
       };
-      if (deliveredEvents.has(eventId)) return { delivered: false, reason: 'already-delivered' };
+      const signalId = `subconscious:remind:${eventId}:remembered`;
+      if (fallbackDeliveredEvents.has(eventId)) return { delivered: false, reason: 'already-delivered' };
 
       const store = await options.memory.storage.getStore('memory');
-      const stored = await store?.listMessagesById({ messageIds: [eventId] });
+      const stored = await store?.listMessagesById({ messageIds: [eventId, signalId] });
       const eventMessage = stored?.messages.find(message => message.id === eventId);
+      const deliveredSignal = stored?.messages.find(
+        message =>
+          message.id === signalId &&
+          message.role === 'signal' &&
+          message.threadId === options.parentThreadId &&
+          message.resourceId === options.resourceId,
+      );
+      if (deliveredSignal) return { delivered: false, reason: 'already-delivered' };
       const protocol = eventMessage && getRemindProtocol(eventMessage);
       if (
         !eventMessage ||
@@ -75,10 +85,9 @@ export function createReminderAgent(options: {
         return { delivered: false, reason: 'ungrounded' };
       }
 
-      deliveredEvents.add(eventId);
       const contents = `${reminder.trim()}\n\nSources: ${sourceIds.join(', ')}`;
       const signal = {
-        id: `subconscious:remind:${eventId}:remembered`,
+        id: signalId,
         type: 'reactive' as const,
         tagName: 'remembered',
         contents,
@@ -93,23 +102,33 @@ export function createReminderAgent(options: {
       };
       try {
         if (options.parentAgent) {
-          const result = options.parentAgent.sendSignal(signal, {
+          const persisted = options.parentAgent.sendSignal(signal, {
+            resourceId: options.resourceId,
+            threadId: options.parentThreadId,
+            ifActive: { behavior: 'persist' },
+            ifIdle: { behavior: 'persist' },
+          });
+          const persistenceAccepted = await persisted.accepted;
+          if (persistenceAccepted.action !== 'persist') {
+            return { delivered: false, reason: persistenceAccepted.action };
+          }
+          await persisted.persisted;
+
+          const activeDelivery = options.parentAgent.sendSignal(signal, {
             resourceId: options.resourceId,
             threadId: options.parentThreadId,
             ifActive: { behavior: 'deliver' },
-            ifIdle: { behavior: 'persist' },
+            ifIdle: { behavior: 'discard' },
           });
-          const accepted = await result.accepted;
-          if (accepted.action === 'blocked' || accepted.action === 'discard') {
-            deliveredEvents.delete(eventId);
-            return { delivered: false, reason: accepted.action };
-          }
+          const deliveryAccepted = await activeDelivery.accepted;
+          if (deliveryAccepted.action === 'blocked') return { delivered: false, reason: deliveryAccepted.action };
         } else {
           await options.fallbackSendSignal(signal);
+          fallbackDeliveredEvents.add(eventId);
         }
         return { delivered: true };
       } catch (error) {
-        deliveredEvents.delete(eventId);
+        fallbackDeliveredEvents.delete(eventId);
         throw error;
       }
     },
@@ -127,6 +146,7 @@ export function createReminderAgent(options: {
             parentAgent: options.parentAgent,
             parentAgentId: options.parentAgent.id,
             maxSteps: options.maxSteps ?? 50,
+            acceptedTerminalSignals: options.acceptedTerminalSignals,
             getReminderAgent: () => reminderAgent,
           }),
         ]

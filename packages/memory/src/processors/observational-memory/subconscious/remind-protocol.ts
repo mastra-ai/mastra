@@ -309,12 +309,13 @@ export class RemindEventReferenceProcessor implements Processor<'remind-event-re
       if (!protocol) return !hasRemindProtocolMetadata(message);
       return !isLedgerOnlyRemindEvent(protocol) && this.isTrustedModelEvent(message, protocol);
     });
+    const resolvedEventIds = new Set(nextMessages.map(message => message.id));
     for (const { eventId } of references) {
-      if (!nextMessages.some(message => message.id === eventId)) {
-        const canonical = canonicalById.get(eventId);
-        if (!canonical) throw new Error(`Reminder event ${eventId} could not be resolved from canonical storage.`);
-        nextMessages.push(canonical);
-      }
+      if (resolvedEventIds.has(eventId)) continue;
+      const canonical = canonicalById.get(eventId);
+      if (!canonical) throw new Error(`Reminder event ${eventId} could not be resolved from canonical storage.`);
+      nextMessages.push(canonical);
+      resolvedEventIds.add(eventId);
     }
 
     const hasTrustedQuestion = nextMessages.some(message => getRemindProtocol(message)?.kind === 'question');

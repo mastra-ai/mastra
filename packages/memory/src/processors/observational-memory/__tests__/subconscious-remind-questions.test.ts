@@ -383,6 +383,11 @@ describe('Subconscious reminder questions', () => {
 
     const deduplicated = await processor.processInputStep({ messages: [message, reference] } as any);
     expect(deduplicated?.messages).toEqual([message]);
+
+    const duplicateReference = { ...reference, id: `${reference.id}:duplicate` };
+    const resolvedOnce = await processor.processInputStep({ messages: [reference, duplicateReference] } as any);
+    expect(resolvedOnce?.messages).toHaveLength(1);
+    expect(resolvedOnce?.messages[0]).toMatchObject({ id: message.id, role: 'user' });
   });
 
   it('exposes the reply tool to the provider only with a trusted question in input', async () => {
@@ -592,11 +597,15 @@ describe('Subconscious reminder questions', () => {
 
     expect(first).toMatchObject({ delivered: false, reason: 'delivery-marker-unknown' });
     expect(second).toMatchObject({ delivered: false, reason: 'terminal-delivery-already-attempted' });
-    expect(parentAgent.sendSignal).toHaveBeenCalledOnce();
-    expect(parentAgent.sendSignal).toHaveBeenCalledWith(
-      expect.objectContaining({ id: `${event.replyId}:terminal:signal` }),
-      expect.anything(),
-    );
+    expect(parentAgent.sendSignal).toHaveBeenCalledTimes(2);
+    expect(parentAgent.sendSignal.mock.calls.map(call => call[0].id)).toEqual([
+      `${event.replyId}:terminal:signal`,
+      `${event.replyId}:terminal:signal`,
+    ]);
+    expect(parentAgent.sendSignal.mock.calls[1]?.[1]).toMatchObject({
+      ifActive: { behavior: 'persist' },
+      ifIdle: { behavior: 'persist' },
+    });
   });
 
   it('reconstructs terminal state from canonical events with a second Memory instance', async () => {

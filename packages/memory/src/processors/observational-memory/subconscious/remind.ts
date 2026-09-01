@@ -174,6 +174,7 @@ export class SubconsciousRemindExtractor extends Extractor<string> {
           };
           await remindMemory.saveMessages({ messages: [eventMessage] });
 
+          const acceptedTerminalSignals = new Set<string>();
           const replyTool = context.mainAgent
             ? createReplyToMemoryQuestionTool({
                 memory: remindMemory,
@@ -182,6 +183,7 @@ export class SubconsciousRemindExtractor extends Extractor<string> {
                 parentThreadId: context.threadId,
                 reminderThreadId: remindThread.id,
                 resourceId,
+                acceptedTerminalSignals,
               })
             : undefined;
           const agent = createReminderAgent({
@@ -194,6 +196,7 @@ export class SubconsciousRemindExtractor extends Extractor<string> {
             parentAgent: context.mainAgent,
             fallbackSendSignal: context.sendSignal,
             additionalTools: replyTool ? { reply_to_memory_question: replyTool } : undefined,
+            acceptedTerminalSignals,
             instructions: config.instructions,
             maxSteps: config.maxSteps,
           });
