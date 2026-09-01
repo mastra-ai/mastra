@@ -9,15 +9,11 @@
 
 import { requestJson } from './request';
 
-export type KnowledgeRung = 'org' | 'resource' | 'thread';
-
 export interface KnowledgeGraphNode {
   id: string;
   name: string;
   kind: string;
   description?: string;
-  scopeIds: string[];
-  rung: KnowledgeRung;
   /** A pinned record's wikilinks reference this node (the pin accent). */
   pinned: boolean;
   /** Knowledge records owned by this node inside the snapshot window (not a total). */
@@ -55,7 +51,6 @@ export interface KnowledgeScopeTreeNode {
   name: string;
   kind: string;
   description?: string;
-  parentScopeIds: string[];
 }
 
 export interface KnowledgeScopeTreePayload {
@@ -83,14 +78,11 @@ export interface KnowledgeNodeRecord {
   nodeId: string;
   relation: 'owned' | 'mentions';
   text: string;
-  scopeIds: string[];
-  rung: KnowledgeRung;
-  sourceThreadId?: string;
-  capturedAt: string;
+  createdAt: string;
   when?: string;
+  reason?: string;
   /** This record IS a pin (authored under the reserved pinned node). */
   pinned: boolean;
-  metadata?: Record<string, unknown>;
 }
 
 export interface KnowledgeActivityEvent {
@@ -106,6 +98,41 @@ export interface KnowledgeActivityEvent {
 
 export interface KnowledgeActivityPayload {
   events: KnowledgeActivityEvent[];
+  nextCursor?: string;
+}
+
+export interface KnowledgeActivityFilters {
+  action?: string;
+  sourceType?: 'importer' | 'system';
+  from?: string;
+  to?: string;
+}
+
+export type KnowledgeProposalStatus = 'pending' | 'approved' | 'rejected' | 'conflicted';
+
+export interface KnowledgeProposal {
+  id: string;
+  operation: string;
+  status: KnowledgeProposalStatus;
+  reason?: string;
+  reviewReason?: string;
+  targets: Array<{
+    type: 'node' | 'record';
+    id: string;
+    name?: string;
+    expectedVersion: number;
+    currentVersion?: number;
+  }>;
+  proposer: 'visible' | 'private';
+  reviewer?: 'visible' | 'private';
+  actions: Array<'approve' | 'reject' | 're-review'>;
+  createdAt: string;
+  reviewedAt?: string;
+}
+
+export interface KnowledgeProposalsPayload {
+  proposals: KnowledgeProposal[];
+  nextCursor?: string;
 }
 
 export interface KnowledgeNodePayload {
@@ -114,8 +141,6 @@ export interface KnowledgeNodePayload {
     name: string;
     kind: string;
     description?: string;
-    scopeIds: string[];
-    rung: KnowledgeRung;
     createdAt: string;
     updatedAt: string;
   };
@@ -126,11 +151,23 @@ function knowledgeBase(baseUrl: string, factoryProjectId: string): string {
   return `${baseUrl}/web/factory/projects/${encodeURIComponent(factoryProjectId)}/knowledge`;
 }
 
-function knowledgeQuery(input: { threadId?: string; scopeId?: string; cursor?: string }): string {
+function knowledgeQuery(input: {
+  threadId?: string;
+  scopeId?: string;
+  cursor?: string;
+  action?: string;
+  sourceType?: 'importer' | 'system';
+  from?: string;
+  to?: string;
+}): string {
   const params = new URLSearchParams();
   if (input.threadId) params.set('threadId', input.threadId);
   if (input.scopeId) params.set('scopeId', input.scopeId);
   if (input.cursor) params.set('cursor', input.cursor);
+  if (input.action) params.set('action', input.action);
+  if (input.sourceType) params.set('sourceType', input.sourceType);
+  if (input.from) params.set('from', input.from);
+  if (input.to) params.set('to', input.to);
   const query = params.toString();
   return query ? `?${query}` : '';
 }
@@ -166,11 +203,41 @@ export async function fetchKnowledgeActivity(
   factoryProjectId: string,
   scopeId?: string,
   threadId?: string,
+  filters: KnowledgeActivityFilters = {},
   signal?: AbortSignal,
 ): Promise<KnowledgeActivityPayload> {
   return requestJson<KnowledgeActivityPayload>(
-    `${knowledgeBase(baseUrl, factoryProjectId)}/activity${knowledgeQuery({ threadId, scopeId })}`,
+    `${knowledgeBase(baseUrl, factoryProjectId)}/activity${knowledgeQuery({ threadId, scopeId, ...filters })}`,
     { signal },
+  );
+}
+
+export async function fetchKnowledgeProposals(
+  baseUrl: string,
+  factoryProjectId: string,
+  status: KnowledgeProposalStatus | undefined,
+  signal?: AbortSignal,
+): Promise<KnowledgeProposalsPayload> {
+  const query = status ? `?status=${encodeURIComponent(status)}` : '';
+  return requestJson<KnowledgeProposalsPayload>(`${knowledgeBase(baseUrl, factoryProjectId)}/proposals${query}`, {
+    signal,
+  });
+}
+
+export async function reviewKnowledgeProposal(
+  baseUrl: string,
+  factoryProjectId: string,
+  proposalId: string,
+  action: 'approve' | 'reject' | 're-review',
+  reason?: string,
+): Promise<KnowledgeProposal> {
+  return requestJson<KnowledgeProposal>(
+    `${knowledgeBase(baseUrl, factoryProjectId)}/proposals/${encodeURIComponent(proposalId)}/${action}`,
+    {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ reason }),
+    },
   );
 }
 
