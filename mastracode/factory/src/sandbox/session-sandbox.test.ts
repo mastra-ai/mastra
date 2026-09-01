@@ -2,7 +2,7 @@ import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { setupMarkerContent } from '@internal/workspace';
-import type { WorkspaceSandbox } from '@mastra/core/workspace';
+import type { MastraSandbox, WorkspaceSandbox } from '@mastra/core/workspace';
 import { LocalSandbox } from '@mastra/core/workspace';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
@@ -12,6 +12,7 @@ import {
   getSessionSandbox,
   peekSessionSandbox,
   resolveSessionWorkdir,
+  resolveSessionWorkingDirectory,
 } from './session-sandbox.js';
 import type { SessionSetupGate } from './session-sandbox.js';
 
@@ -20,7 +21,7 @@ afterEach(() => {
 });
 
 describe('session sandbox memo', () => {
-  const construct = (id: string) => ({ id, provider: 'test' }) as unknown as WorkspaceSandbox;
+  const construct = (id: string) => ({ id, provider: 'test' }) as unknown as MastraSandbox;
 
   it('constructs once per session id and returns the memoized entry', () => {
     const factory = vi.fn(() => construct('sb-1'));
@@ -47,7 +48,7 @@ describe('session sandbox memo', () => {
 
   it('resolves a remote workdir from the live VM home and memoizes it on the entry', async () => {
     const executeCommand = vi.fn(async () => ({ exitCode: 0, stdout: '/home/user\n', stderr: '' }));
-    const sandbox = { id: 'sb-1', provider: 'e2b', executeCommand } as unknown as WorkspaceSandbox;
+    const sandbox = { id: 'sb-1', provider: 'e2b', executeCommand } as unknown as MastraSandbox;
     const entry = getSessionSandbox('sess-1', 'acme/api', () => sandbox);
     expect(entry.workdir).toBeUndefined();
 
@@ -67,9 +68,11 @@ describe('session sandbox memo', () => {
       provider: 'e2b',
       workingDirectory: '/workspace',
       executeCommand,
-    } as unknown as WorkspaceSandbox;
-    getSessionSandbox('sess-1', 'acme/api', () => sandbox);
+    } as unknown as MastraSandbox;
+    const entry = getSessionSandbox('sess-1', 'acme/api', () => sandbox);
 
+    expect(entry.workdir).toBe('/workspace/api');
+    expect(entry.workingDirectory).toBe('/workspace');
     await expect(resolveSessionWorkdir('sess-1', sandbox, 'acme/api')).resolves.toBe('/workspace/api');
     expect(executeCommand).not.toHaveBeenCalled();
   });
@@ -81,7 +84,7 @@ describe('session sandbox memo', () => {
       provider: 'e2b',
       workingDirectory: '~/repos',
       executeCommand,
-    } as unknown as WorkspaceSandbox;
+    } as unknown as MastraSandbox;
     getSessionSandbox('sess-1', 'acme/api', () => sandbox);
 
     await expect(resolveSessionWorkdir('sess-1', sandbox, 'acme/api')).resolves.toBe('/home/user/api');
@@ -93,7 +96,7 @@ describe('session sandbox memo', () => {
       .fn()
       .mockResolvedValueOnce({ exitCode: 1, stdout: '', stderr: 'no shell' })
       .mockResolvedValue({ exitCode: 0, stdout: '/home/user\n', stderr: '' });
-    const sandbox = { id: 'sb-1', provider: 'e2b', executeCommand } as unknown as WorkspaceSandbox;
+    const sandbox = { id: 'sb-1', provider: 'e2b', executeCommand } as unknown as MastraSandbox;
     getSessionSandbox('sess-1', 'acme/api', () => sandbox);
 
     await expect(resolveSessionWorkdir('sess-1', sandbox, 'acme/api')).rejects.toThrow(/default cwd probe failed/);
@@ -102,7 +105,7 @@ describe('session sandbox memo', () => {
   });
 
   it('resolves a local workdir synchronously at construction', async () => {
-    const local = { id: 'sb-l', provider: 'local', workingDirectory: '/srv/sess-1' } as unknown as WorkspaceSandbox;
+    const local = { id: 'sb-l', provider: 'local', workingDirectory: '/srv/sess-1' } as unknown as MastraSandbox;
     const entry = getSessionSandbox('sess-l', 'acme/api', () => local);
     expect(entry.workdir).toBe(path.resolve('/srv/sess-1', 'api'));
     // Resolution answers from the memo without any probe.
@@ -123,6 +126,44 @@ describe('session sandbox memo', () => {
       }),
     ).toThrow('boom');
     expect(peekSessionSandbox('sess-1')).toBeUndefined();
+  });
+
+  it('resolves the working directory from a declared workingDirectory with no probe', async () => {
+    const executeCommand = vi.fn(async () => ({ exitCode: 0, stdout: '/home/user\n', stderr: '' }));
+    const sandbox = {
+      id: 'sb-1',
+      provider: 'e2b',
+      workingDirectory: '/workspace',
+      executeCommand,
+    } as unknown as MastraSandbox;
+    getSessionSandbox('sess-1', 'acme/api', () => sandbox);
+
+    await expect(resolveSessionWorkingDirectory('sess-1', sandbox, 'acme/api')).resolves.toBe('/workspace');
+    expect(executeCommand).not.toHaveBeenCalled();
+  });
+
+  it('degrades the working directory to the parent of the probed workdir when nothing is declared', async () => {
+    const executeCommand = vi.fn(async () => ({ exitCode: 0, stdout: '/home/user\n', stderr: '' }));
+    const sandbox = { id: 'sb-1', provider: 'e2b', executeCommand } as unknown as MastraSandbox;
+    getSessionSandbox('sess-1', 'acme/api', () => sandbox);
+
+    await expect(resolveSessionWorkingDirectory('sess-1', sandbox, 'acme/api')).resolves.toBe('/home/user');
+    expect(executeCommand).toHaveBeenCalledWith('pwd');
+    // Both fields memoized on the handle for passive readers.
+    expect(peekSessionSandbox('sess-1')?.workdir).toBe('/home/user/api');
+    expect(peekSessionSandbox('sess-1')?.workingDirectory).toBe('/home/user');
+    // Memoized: the second resolution never probes again.
+    await expect(resolveSessionWorkingDirectory('sess-1', sandbox, 'acme/api')).resolves.toBe('/home/user');
+    expect(executeCommand).toHaveBeenCalledTimes(1);
+  });
+
+  it('roots the working directory at the local sandbox workingDirectory, the parent of the local workdir', async () => {
+    const local = { id: 'sb-l', provider: 'local', workingDirectory: '/srv/sess-1' } as unknown as MastraSandbox;
+    const entry = getSessionSandbox('sess-l', 'acme/api', () => local);
+    // Local handles carry both fields synchronously at construction.
+    expect(entry.workingDirectory).toBe('/srv/sess-1');
+    await expect(resolveSessionWorkingDirectory('sess-l', local, 'acme/api')).resolves.toBe('/srv/sess-1');
+    expect(path.dirname(entry.workdir!)).toBe('/srv/sess-1');
   });
 });
 

@@ -1,6 +1,14 @@
 import * as path from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { deriveLocalWorkdir, repoDirUnder, resolveContainedLocalWorkdir, sanitizeSegment } from './workdir.js';
+import {
+  declaredWorkingDirectory,
+  deriveLocalWorkdir,
+  repoDirUnder,
+  repoSubdirName,
+  resolveContainedLocalWorkdir,
+  sanitizeSegment,
+  workingDirectoryFor,
+} from './workdir.js';
 
 describe('sanitizeSegment', () => {
   it('keeps safe characters and replaces separators and traversal', () => {
@@ -80,5 +88,50 @@ describe('resolveContainedLocalWorkdir', () => {
   it('throws when the resolved path escapes the root', () => {
     expect(() => resolveContainedLocalWorkdir(root, '..', 'outside')).toThrow(/outside configured root/);
     expect(() => resolveContainedLocalWorkdir(root)).toThrow(/outside configured root/);
+  });
+});
+
+describe('repoSubdirName', () => {
+  it('is the sanitized repo name every workdir derivation nests under its parent', () => {
+    expect(repoSubdirName('octocat/hello-world')).toBe('hello-world');
+    expect(repoSubdirName('octocat/..evil')).toBe('evil');
+    expect(repoDirUnder('/workspace', 'octocat/hello')).toBe(`/workspace/${repoSubdirName('octocat/hello')}`);
+  });
+
+  it('falls back to a safe segment when the name is missing', () => {
+    expect(repoSubdirName('octocat')).toBe('repo');
+  });
+});
+
+describe('declaredWorkingDirectory', () => {
+  it('answers an absolute declared workingDirectory, trimming trailing slashes', () => {
+    expect(declaredWorkingDirectory({ workingDirectory: '/workspace' })).toBe('/workspace');
+    expect(declaredWorkingDirectory({ workingDirectory: '/workspace///' })).toBe('/workspace');
+  });
+
+  it('keeps the filesystem root itself intact', () => {
+    expect(declaredWorkingDirectory({ workingDirectory: '/' })).toBe('/');
+  });
+
+  it('ignores undeclared and non-absolute values since remote providers never expand ~ or $HOME', () => {
+    expect(declaredWorkingDirectory({})).toBeUndefined();
+    expect(declaredWorkingDirectory({ workingDirectory: undefined })).toBeUndefined();
+    expect(declaredWorkingDirectory({ workingDirectory: '~/repos' })).toBeUndefined();
+    expect(declaredWorkingDirectory({ workingDirectory: '$HOME/repos' })).toBeUndefined();
+    expect(declaredWorkingDirectory({ workingDirectory: '' })).toBeUndefined();
+  });
+});
+
+describe('workingDirectoryFor', () => {
+  it('prefers the declared workingDirectory', () => {
+    expect(workingDirectoryFor({ workingDirectory: '/workspace' }, '/workspace/mastra')).toBe('/workspace');
+  });
+
+  it('degrades to the parent of the workdir when nothing is declared (pre-split behavior)', () => {
+    expect(workingDirectoryFor({}, '/home/user/mastra')).toBe('/home/user');
+  });
+
+  it('handles a root-level workdir on the fallback path', () => {
+    expect(workingDirectoryFor({}, '/mastra')).toBe('/');
   });
 });

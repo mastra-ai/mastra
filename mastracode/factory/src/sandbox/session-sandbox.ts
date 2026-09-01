@@ -3,7 +3,13 @@ import { SETUP_MARKER_PATH, setupMarkerContent } from '@internal/workspace';
 
 import type { MastraSandbox, SandboxStartHook, WorkspaceSandbox } from '@mastra/core/workspace';
 import type { RepositoryAccess } from '../capabilities/version-control.js';
-import { deriveLocalWorkdir, deriveRemoteRepoDir, repoDirUnder } from './workdir.js';
+import {
+  declaredWorkingDirectory,
+  deriveLocalWorkdir,
+  deriveRemoteRepoDir,
+  repoDirUnder,
+  workingDirectoryFor,
+} from './workdir.js';
 
 /**
  * Everything factory knows about a session's sandbox needs — the whole
@@ -88,15 +94,22 @@ export type SessionSetupRun = (sandbox: WorkspaceSandbox, workdir: string, gate:
  * fleet was also per-replica).
  */
 interface SessionSandboxEntry {
-  sandbox: WorkspaceSandbox;
+  sandbox: MastraSandbox;
   /**
    * The session's repo checkout root, recorded for passive readers (fs
-   * routes, capture, authz). Local sandboxes derive it at construction;
-   * remote sandboxes clone into the VM's own home, so it is undefined until
-   * `resolveSessionWorkdir` probes the first started VM — passive readers
-   * treat an unresolved workdir as "nothing materialized".
+   * routes, capture, authz). Local and declared remote sandboxes derive it
+   * at construction; undeclared remote sandboxes clone into the VM's own
+   * home, so it is undefined until `resolveSessionWorkdir` probes the first
+   * started VM — passive readers treat an unresolved workdir as "nothing materialized".
    */
   workdir?: string;
+  /**
+   * The session's working directory: the parent directory the repo clones
+   * into, and the root for the agent's file tools. Derivable (declared
+   * `workingDirectory`, else the workdir's parent), memoized here alongside
+   * `workdir` for the same passive readers. Never persisted.
+   */
+  workingDirectory?: string;
 }
 
 const sessionSandboxes = new Map<string, SessionSandboxEntry>();
@@ -104,19 +117,22 @@ const sessionSandboxes = new Map<string, SessionSandboxEntry>();
 /**
  * Get the session's memoized sandbox entry, constructing (and memoizing) it on
  * first access. Construction is cheap and side-effect-free by contract; VMs
- * are provisioned on `start()` only. Local sandboxes get their workdir here;
- * remote workdirs are a runtime fact of the VM, resolved on first start.
+ * are provisioned on `start()` only. Local and declared remote sandboxes get
+ * their workdir here; undeclared remote workdirs are resolved on first start.
  */
 export function getSessionSandbox(
   sessionId: string,
   repoFullName: string,
-  construct: () => WorkspaceSandbox,
+  construct: () => MastraSandbox,
 ): SessionSandboxEntry {
   const existing = sessionSandboxes.get(sessionId);
   if (existing) return existing;
   const sandbox = construct();
-  const local = deriveLocalWorkdir(sandbox, repoFullName);
-  const entry: SessionSandboxEntry = { sandbox, ...(local ? { workdir: local } : {}) };
+  const workdir = deriveLocalWorkdir(sandbox, repoFullName) ?? deriveRemoteRepoDir(sandbox, repoFullName);
+  const entry: SessionSandboxEntry = {
+    sandbox,
+    ...(workdir ? { workdir, workingDirectory: workingDirectoryFor(sandbox, workdir) } : {}),
+  };
   sessionSandboxes.set(sessionId, entry);
   return entry;
 }
@@ -143,6 +159,30 @@ export async function resolveSessionWorkdir(
     repoDirUnder(await probeHome(sandbox), repoFullName);
   if (entry && entry.sandbox === sandbox) entry.workdir = workdir;
   return workdir;
+}
+
+/**
+ * Resolve the session's working directory: the parent directory the repo
+ * clones into, and the root for the agent's file tools (exec already
+ * defaults there via the sandbox's own `workingDirectory` chain). A
+ * declared absolute `workingDirectory` answers with no probe; otherwise the
+ * root degrades to the parent of the resolved workdir, so sandboxes with no
+ * declared workingDirectory behave exactly as before the split. Like
+ * `resolveSessionWorkdir`, calling this against a stopped undeclared remote
+ * sandbox lazily starts it (the fallback probes with one command).
+ */
+export async function resolveSessionWorkingDirectory(
+  sessionId: string,
+  sandbox: MastraSandbox,
+  repoFullName: string,
+): Promise<string> {
+  const entry = sessionSandboxes.get(sessionId);
+  if (entry?.workingDirectory && entry.sandbox === sandbox) return entry.workingDirectory;
+  const workingDirectory =
+    declaredWorkingDirectory(sandbox) ??
+    path.posix.dirname(await resolveSessionWorkdir(sessionId, sandbox, repoFullName));
+  if (entry && entry.sandbox === sandbox) entry.workingDirectory = workingDirectory;
+  return workingDirectory;
 }
 
 /** One `pwd` in the VM's default shell cwd — its home dir, by provider convention. */

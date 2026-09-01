@@ -17,6 +17,8 @@ const mocks = vi.hoisted(() => ({
   updates: [] as Array<{ set: Record<string, unknown>; where: unknown }>,
   /** When set, the stub models a local-provider callback rooted at <localRoot>/<sessionId>. */
   localRoot: null as string | null,
+  /** When set, the stub models a remote provider with a declared working directory. */
+  remoteWorkingDirectory: null as string | null,
   createSandbox: vi.fn((ctx: { sessionId: string }) => {
     // Models a well-behaved provider: lazy start via ensureRunning() on the
     // first command/info call (coalesced, failures never latch), the hook
@@ -28,7 +30,11 @@ const mocks = vi.hoisted(() => ({
       id: `sbx-${ctx.sessionId}`,
       provider: mocks.localRoot ? 'local' : 'stub',
       status: 'pending',
-      ...(mocks.localRoot ? { workingDirectory: `${mocks.localRoot}/${ctx.sessionId}` } : {}),
+      ...(mocks.localRoot
+        ? { workingDirectory: `${mocks.localRoot}/${ctx.sessionId}` }
+        : mocks.remoteWorkingDirectory
+          ? { workingDirectory: mocks.remoteWorkingDirectory }
+          : {}),
       setOnStart: vi.fn((update: (previous: typeof onStart) => NonNullable<typeof onStart>) => {
         onStart = update(onStart);
       }),
@@ -142,6 +148,7 @@ afterEach(async () => {
   mocks.createSandbox.mockClear();
   mocks.localRoot = null;
   mocks.markerPresent = false;
+  mocks.remoteWorkingDirectory = null;
   __clearSessionSandboxesForTests();
   mocks.materializeRepo.mockClear();
   mocks.checkoutSessionBranch.mockClear();
@@ -336,6 +343,7 @@ describe('bundled Factory skill assets', () => {
       ['factory-triage', 'factory-plan', 'factory-review', 'factory-rereview'].map(read),
     );
 
+    // Generated artifacts live at the working directory, outside the repo checkout.
     expect(triage).toContain('.artifacts/factory-triage/issue-<number>.md');
     expect(plan).toContain('Write it to `.artifacts/plans/issue-<number>.md`');
     expect(plan).toContain('include the same plan in the conversation');
@@ -929,6 +937,32 @@ describe('GitHub session workspace preparation', () => {
     );
   });
 
+  it('pins a declared remote working directory into controller state before the first prompt', async () => {
+    mocks.remoteWorkingDirectory = '/workspace';
+    const resolver = createWorkspaceFactory({
+      sandbox: mocks.createSandbox as any,
+      github: fakeGithubIntegration() as any,
+      workItems: { findRunBindingBySession: mocks.findRunBindingBySession } as any,
+    });
+    addProject();
+    addSession({ id: 'session-a' });
+    const requestContext = createGithubRequestContext('project-1', 'session-a');
+
+    await resolver({ requestContext });
+
+    const ctx = requestContext.get('controller') as {
+      getState: () => { projectPath?: string; projectName?: string; workingDirectory?: string };
+    };
+    expect(ctx.getState()).toMatchObject({
+      projectPath: '/workspace/hello',
+      projectName: 'octocat/hello',
+      workingDirectory: '/workspace',
+    });
+    const sandbox = await mocks.createSandbox.mock.results[0]!.value;
+    expect(sandbox.start).not.toHaveBeenCalled();
+    expect(sandbox.executeCommand).not.toHaveBeenCalled();
+  });
+
   it('pins the session workdir into controller state so the agent prompt never points at the host checkout', async () => {
     const { root, workspace } = await createLocalFactory();
     addProject();
@@ -938,10 +972,47 @@ describe('GitHub session workspace preparation', () => {
     await workspace({ requestContext });
 
     const ctx = requestContext.get('controller') as {
-      getState: () => { projectPath?: string; projectName?: string };
+      getState: () => { projectPath?: string; projectName?: string; workingDirectory?: string };
     };
     expect(ctx.getState().projectPath).toBe(path.join(root, 'session-a', 'hello'));
     expect(ctx.getState().projectName).toBe('octocat/hello');
+    // The working directory rides along: the parent dir the repo clones into,
+    // so the SDK roots file tools there while instructions stay repo-scoped.
+    expect(ctx.getState().workingDirectory).toBe(path.join(root, 'session-a'));
+  });
+
+  it('roots the agent filesystem at the working directory, with the repo as a plain subdir', async () => {
+    const { root, workspace } = await createLocalFactory();
+    addProject();
+    addSession({ id: 'session-a' });
+
+    const ws = (await workspace({ requestContext: createGithubRequestContext('project-1', 'session-a') })) as {
+      filesystem: { basePath: string; readFile: (p: string) => Promise<unknown> };
+    };
+    // First op resolves (and memoizes) the lazy root.
+    await ws.filesystem.readFile('hello/README.md').catch(() => {});
+    expect(ws.filesystem.basePath).toBe(path.join(root, 'session-a'));
+  });
+
+  it('keeps project skill roots repo-scoped under the checkout subdir', async () => {
+    const { workspace } = await createLocalFactory();
+    addProject();
+    addSession({ id: 'session-a' });
+    const createSource = vi.fn((fallback: unknown) => fallback);
+
+    await workspace({
+      requestContext: createGithubRequestContext('project-1', 'session-a'),
+      skillExtension: { id: 'ext', paths: [], createSource } as any,
+    } as any);
+
+    // The filesystem roots at the working directory, so repo-relative skill
+    // roots carry the `hello/` checkout prefix.
+    expect(createSource).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.arrayContaining(['hello/.claude/skills', 'hello/.agents/skills']),
+    );
+    const roots = createSource.mock.calls[0]![1] as string[];
+    expect(roots.every(root => root.startsWith('hello/'))).toBe(true);
   });
 
   it('runs best-effort teardown after setup fails without masking the setup error', async () => {
