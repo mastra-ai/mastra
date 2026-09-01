@@ -110,6 +110,13 @@ if (!result?.success) {
     defaultValue: 'application/vnd.amazon.eventstream',
   },
   {
+    name: 'workingDirectory',
+    type: 'string',
+    description:
+      'Default directory for command execution when no per-command `cwd` is given, applied as a shell `cd` prefix. A per-command `cwd` always wins. The path is shell-quoted, so `~` is not expanded — use an absolute path.',
+    isOptional: true,
+  },
+  {
     name: 'commandTimeout',
     type: 'number',
     description: 'Default command timeout in milliseconds.',

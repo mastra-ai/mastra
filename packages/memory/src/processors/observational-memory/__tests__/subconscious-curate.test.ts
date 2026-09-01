@@ -118,7 +118,7 @@ describe('Subconscious curator', () => {
       'ceiling',
     );
     await expect(
-      tools.knowledge_update_node!.execute?.(
+      tools.knowledge_rename_node!.execute?.(
         { node: node.id, expectedVersion: node.version + 1, name: 'Atlas' },
         {} as any,
       ),

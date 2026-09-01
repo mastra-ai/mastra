@@ -1,5 +1,31 @@
 # @mastra/nestjs
 
+## 0.2.23-alpha.3
+
+### Patch Changes
+
+- Updated dependencies [[`fd22a0e`](https://github.com/mastra-ai/mastra/commit/fd22a0e231943f0d5607cf976ffd78ba4bfc7b64), [`2e87ffb`](https://github.com/mastra-ai/mastra/commit/2e87ffbb454cc88bd8a8c022d1e46325e7907482)]:
+  - @mastra/server@1.64.0-alpha.3
+  - @mastra/core@1.64.0-alpha.3
+
+## 0.2.23-alpha.2
+
+### Patch Changes
+
+- Remove `CHANGELOG.md` from distributed npm files resulting in reduced package size ([#22737](https://github.com/mastra-ai/mastra/pull/22737))
+
+- Updated dependencies [[`cf58c86`](https://github.com/mastra-ai/mastra/commit/cf58c86cb48ccc72677bdaa422e43f102683184c), [`449d112`](https://github.com/mastra-ai/mastra/commit/449d1120cc1f9c43a71308a9fd8b178cfb11355f), [`2a0ca02`](https://github.com/mastra-ai/mastra/commit/2a0ca021d95e23f1d1c0b5fe858b0b56f71fe0ba), [`ff539f6`](https://github.com/mastra-ai/mastra/commit/ff539f6dc21137fbeb3f0867f07069cbce45c15f), [`420052f`](https://github.com/mastra-ai/mastra/commit/420052fcac3fc672be17fe655667dfbdbd35a2cc), [`28ce924`](https://github.com/mastra-ai/mastra/commit/28ce924276eeca492e6a360e5482ed20c2785ef6)]:
+  - @mastra/core@1.64.0-alpha.2
+  - @mastra/server@1.64.0-alpha.2
+
+## 0.2.23-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [[`a3606a0`](https://github.com/mastra-ai/mastra/commit/a3606a09f3deaeef17caf04b9c6a0d7cd6b80fe6), [`4095752`](https://github.com/mastra-ai/mastra/commit/40957529233d202446ebecab1f59c76e99910230), [`a3606a0`](https://github.com/mastra-ai/mastra/commit/a3606a09f3deaeef17caf04b9c6a0d7cd6b80fe6), [`3b5b56a`](https://github.com/mastra-ai/mastra/commit/3b5b56aebfa0820db8f4fb146ffe3f4e4658ac38)]:
+  - @mastra/core@1.63.3-alpha.1
+  - @mastra/server@1.63.3-alpha.1
+
 ## 0.2.23-alpha.0
 
 ### Patch Changes

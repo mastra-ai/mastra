@@ -78,6 +78,13 @@ const agent = new Agent({
     isOptional: true,
   },
   {
+    name: 'workingDirectory',
+    type: 'string',
+    description:
+      'Default directory for command execution when no per-command `cwd` is given. A per-command `cwd` always wins; when neither is set, commands run from the sandbox home directory. Use an absolute path.',
+    isOptional: true,
+  },
+  {
     name: 'id',
     type: 'string',
     description: 'Unique identifier for this sandbox instance',

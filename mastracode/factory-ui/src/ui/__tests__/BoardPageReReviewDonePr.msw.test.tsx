@@ -188,6 +188,22 @@ describe('Re-review action for open PRs in Done', () => {
     });
   });
 
+  it('starts the re-review hands-off, asking the server to preapprove its plans', async () => {
+    const { startRequests } = stubReviewBoard();
+    const user = userEvent.setup();
+    const { client } = renderReviewBoard();
+
+    await user.click(await screen.findByRole('button', { name: 'Actions for Add rate limiting' }));
+    await user.click(await screen.findByRole('menuitem', { name: 'Re-review hands-off' }));
+
+    await waitForMutationsIdle(client);
+    expect(startRequests).toHaveLength(1);
+    expect(startRequests[0]).toMatchObject({
+      preapprovePlans: true,
+      workItem: { id: 'item-pr-42', role: 'review' },
+    });
+  });
+
   it('does not offer Re-review for a merged PR in Done', async () => {
     stubReviewBoard({
       workItems: [{ ...donePrWorkItem, metadata: { number: 42, state: 'closed', merged: true } }],

@@ -347,6 +347,8 @@ export interface SignalSettings {
   unixSocketPubSub: boolean;
   /** Experimental: enable GitHub PR subscription signals backed by gitcrawl. */
   experimentalGithubSignals: boolean;
+  /** Poll interval for GitHub PR subscriptions. */
+  githubPollIntervalMs: number;
 }
 
 export interface ObservabilityResourceConfig {
@@ -365,6 +367,10 @@ export interface ObservabilitySettings {
 
 /** Auth key prefix for observability tokens stored per-resource in auth.json */
 export const OBSERVABILITY_AUTH_PREFIX = 'observability:';
+
+export const GITHUB_POLL_INTERVAL_DEFAULT_MS = 300_000;
+export const GITHUB_POLL_INTERVAL_MIN_MS = 10_000;
+export const GITHUB_POLL_INTERVAL_MAX_MS = 2_147_483_647;
 
 export const STORAGE_DEFAULTS: StorageSettings = {
   backend: 'libsql',
@@ -427,7 +433,11 @@ const DEFAULTS: GlobalSettings = {
   },
   shellPassthrough: { mode: 'default' },
   voice: { enabled: false, engine: defaultVoiceEngine(), provider: DEFAULT_STT_PROVIDER },
-  signals: { unixSocketPubSub: false, experimentalGithubSignals: false },
+  signals: {
+    unixSocketPubSub: false,
+    experimentalGithubSignals: false,
+    githubPollIntervalMs: GITHUB_POLL_INTERVAL_DEFAULT_MS,
+  },
   mcp: { claudeCodeGlobal: false, codexGlobal: false },
   observability: { resources: {}, localTracing: false },
 };
@@ -448,7 +458,8 @@ function rememberLoadedSettings(settings: GlobalSettings): GlobalSettings {
 function signalSettingsEqual(left: SignalSettings, right: SignalSettings): boolean {
   return (
     left.unixSocketPubSub === right.unixSocketPubSub &&
-    left.experimentalGithubSignals === right.experimentalGithubSignals
+    left.experimentalGithubSignals === right.experimentalGithubSignals &&
+    left.githubPollIntervalMs === right.githubPollIntervalMs
   );
 }
 
@@ -506,6 +517,13 @@ function parsePreferences(rawPreferences: unknown): GlobalSettings['preferences'
   };
 }
 
+function parseGithubPollIntervalMs(value: unknown): number {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return DEFAULTS.signals.githubPollIntervalMs;
+  const intervalMs = Math.floor(value);
+  if (intervalMs < GITHUB_POLL_INTERVAL_MIN_MS) return DEFAULTS.signals.githubPollIntervalMs;
+  return Math.min(intervalMs, GITHUB_POLL_INTERVAL_MAX_MS);
+}
+
 function parseSignalSettings(rawSignals: unknown): SignalSettings {
   const raw = rawSignals && typeof rawSignals === 'object' ? (rawSignals as Record<string, unknown>) : {};
   return {
@@ -515,6 +533,7 @@ function parseSignalSettings(rawSignals: unknown): SignalSettings {
       typeof raw.experimentalGithubSignals === 'boolean'
         ? raw.experimentalGithubSignals
         : DEFAULTS.signals.experimentalGithubSignals,
+    githubPollIntervalMs: parseGithubPollIntervalMs(raw.githubPollIntervalMs),
   };
 }
 

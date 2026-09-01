@@ -22,22 +22,7 @@ import { deleteUserSession, regenerateSessionTitle } from '../services/user-sess
 import type { FactoryUserSession } from '../services/user-sessions';
 import { getSessionOwnerDetails, getUserSessionLabel } from '../services/sessionPresentation';
 import { SessionNavRow } from './SessionNavRow';
-import type { SessionRowStatus } from './SessionNavRow';
-
-function userSessionStatus({
-  session,
-  running,
-  attention,
-}: {
-  session: FactoryUserSession;
-  running: boolean;
-  attention: boolean;
-}): SessionRowStatus | undefined {
-  if (running) return 'working';
-  if (!session.materializedAt) return 'initializing';
-  if (attention) return 'ready';
-  return undefined;
-}
+import { sessionRowStatus } from '../services/sessionStatus';
 
 export function UserSessionsSection() {
   const { baseUrl } = useApiConfig();
@@ -66,7 +51,7 @@ export function UserSessionsSection() {
     agentControllerId: AGENT_CONTROLLER_ID,
     resourceIds: sessions.map(session => session.sessionId),
   });
-  const { attentionByPath: attentionBySessionId, clearAttention } = useWorkspaceAttentionState({
+  const { attentionByPath: attentionBySessionId } = useWorkspaceAttentionState({
     projectRepositoryId: repository?.projectRepositoryId,
     sessionKind: 'user',
   });
@@ -145,9 +130,9 @@ export function UserSessionsSection() {
             const url = `/factories/${factoryId}/user/threads/${session.sessionId}`;
             const active = location.pathname === url;
 
-            const status = userSessionStatus({
-              session,
+            const status = sessionRowStatus({
               running: runningBySessionId[session.sessionId] === true,
+              initializing: !session.materializedAt,
               attention: attentionBySessionId[session.sessionId] === true,
             });
             return (
@@ -166,10 +151,7 @@ export function UserSessionsSection() {
                 disabled={pending}
                 status={status}
                 pinned={pinnedSessions.has(session.sessionId)}
-                onSelect={() => {
-                  clearAttention(session.sessionId);
-                  void navigate(url);
-                }}
+                onSelect={() => void navigate(url)}
                 onPinChange={pinned => setPinned(session.sessionId, pinned)}
                 // The DELETE route is owner-only and 404s for non-owners, which
                 // deleteUserSession treats as an idempotent success; offering

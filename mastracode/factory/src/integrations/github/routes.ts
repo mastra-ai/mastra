@@ -37,6 +37,7 @@ import type {
   SourceControlInstallation,
   SourceControlRepository,
 } from '../../storage/domains/source-control/base.js';
+import { listRepositoryCommits } from './commits.js';
 import { getGithubFeatureDiagnostics, isGithubFeatureEnabled } from './config.js';
 import type { GithubIntegration } from './integration.js';
 import { clearGithubPat, getGithubPat, getGithubPatStatus, setGithubPat } from './pat.js';
@@ -1040,7 +1041,7 @@ async function loadOrgProject(options: {
   github: GithubIntegration;
   auth: RouteAuth;
   c: RouteContext;
-}): Promise<{ project: ResolvedProjectRepository; userId: string } | { response: Response }> {
+}): Promise<{ project: ResolvedProjectRepository; orgId: string; userId: string } | { response: Response }> {
   const { github, auth, c } = options;
   const resolved = await resolveOrgTenant(c, auth);
   if ('response' in resolved) return { response: resolved.response };
@@ -1054,7 +1055,7 @@ async function loadOrgProject(options: {
   if (!project) {
     return { response: c.json({ error: 'Project repository not found' }, 404) };
   }
-  return { project, userId };
+  return { project, orgId, userId };
 }
 
 /** Derive a commit/author identity from the authenticated host user. */
@@ -1142,6 +1143,10 @@ interface SessionOwnerProfile {
 }
 
 type SessionOwnerUserProvider = Pick<IUserProvider, 'getUser'> & Partial<Pick<IUserProvider, 'getUsers'>>;
+
+/** A screenful of history; GitHub caps its own page at 100. */
+const DEFAULT_COMMIT_PAGE = 20;
+const MAX_COMMIT_PAGE = 100;
 
 const MAX_SESSION_OWNER_PROFILES = 100;
 const MAX_SESSION_OWNER_PROFILE_CACHE_ENTRIES = 500;
@@ -1511,6 +1516,32 @@ function buildProjectGitRoutes({
             }
             return c.json({ committed: result.committed });
           });
+        } catch (err) {
+          return gitErrorResponse(loose(c), err);
+        }
+      },
+    }),
+
+    // ── Recent commits on a repository branch ───────────────────────────────
+    registerApiRoute('/web/github/projects/:id/commits', {
+      method: 'GET',
+      requiresAuth: false,
+      handler: async c => {
+        const loaded = await loadOrgProject({ github, auth, c: loose(c) });
+        if ('response' in loaded) return loaded.response;
+        const { orgId, project } = loaded;
+
+        const branch = c.req.query('branch') ?? project.defaultBranch;
+        if (!isValidGitRefSandbox(branch)) return c.json({ error: 'Invalid branch' }, 400);
+        // GitHub takes `per_page` as an integer, so a fractional limit would go out verbatim.
+        const limit = Math.min(
+          Math.max(Math.floor(Number(c.req.query('limit') ?? DEFAULT_COMMIT_PAGE)) || DEFAULT_COMMIT_PAGE, 1),
+          MAX_COMMIT_PAGE,
+        );
+
+        try {
+          const commits = await listRepositoryCommits(github, { orgId, project, branch, limit });
+          return c.json({ commits, branch });
         } catch (err) {
           return gitErrorResponse(loose(c), err);
         }

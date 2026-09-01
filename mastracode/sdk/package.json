@@ -1,14 +1,13 @@
 {
   "name": "@mastra/code-sdk",
-  "version": "1.6.0-alpha.0",
+  "version": "1.6.0-alpha.5",
   "description": "Mastra Code SDK: the agent core behind Mastra Code (everything except the TUI) — build your own UIs and surfaces on top of it",
   "type": "module",
   "publishConfig": {
     "access": "public"
   },
   "files": [
-    "dist",
-    "CHANGELOG.md"
+    "dist"
   ],
   "main": "dist/index.js",
   "types": "dist/index.d.ts",

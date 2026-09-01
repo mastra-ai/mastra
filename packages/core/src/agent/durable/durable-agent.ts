@@ -1849,6 +1849,7 @@ export class DurableAgent<
       structuredOutput: registryEntry.structuredOutput as any,
       outputProcessors: registryEntry.outputProcessors,
       requestContext: registryEntry.requestContext,
+      tracingContext: registryEntry.agentSpan ? { currentSpan: registryEntry.agentSpan } : undefined,
       messageList,
     });
 
@@ -2136,6 +2137,59 @@ export class DurableAgent<
     // (resumeGenerate) would immediately close on the replayed SUSPENDED.
     const resumeOffset = await this.#getPubsubOffset(runId);
 
+    // Open a fresh AGENT_RUN + MODEL_GENERATION for the resumed segment on the same
+    // traceId — the originals were ended as `suspended` and can't be reopened. Post-resume
+    // steps + terminal end() target these via the registry override. (Linking = follow-up.)
+    // Opened before the stream adapter so per-chunk processor spans parent under it.
+    const origTraceId = entry.agentSpan?.traceId;
+    const origSpanId = entry.agentSpan?.id;
+    if (origTraceId && this.#mastra?.observability) {
+      try {
+        const ag = this.#wrappedAgent as Agent<string, any, any>;
+        // Match non-durable Agent.stream() resume-span shape: same name suffix
+        // `(resumed)`, forward agent-level tracingPolicy, link to the original
+        // span via `resumedFromSpanId` metadata, and carry the resolvedVersionId.
+        const rawConfig = typeof (ag as any).toRawConfig === 'function' ? (ag as any).toRawConfig() : undefined;
+        const resolvedVersionId = rawConfig?.resolvedVersionId as string | undefined;
+        const agentTracingPolicy = typeof ag.getTracingPolicy === 'function' ? ag.getTracingPolicy() : undefined;
+        const resumeAgentSpan = getOrCreateSpan({
+          type: SpanType.AGENT_RUN,
+          name: `agent run: '${ag.id}' (resumed)`,
+          entityType: EntityType.AGENT,
+          entityId: ag.id,
+          entityName: ag.name,
+          metadata: {
+            runId,
+            resumed: true,
+            ...(origSpanId ? { resumedFromSpanId: origSpanId } : {}),
+            ...(resolvedVersionId ? { entityVersionId: resolvedVersionId } : {}),
+          },
+          tracingPolicy: agentTracingPolicy,
+          tracingOptions: { traceId: origTraceId },
+          requestContext: resolvedOptions.requestContext,
+          mastra: this.#mastra,
+        });
+        const resumeModelSpan = resumeAgentSpan?.createChildSpan({
+          type: SpanType.MODEL_GENERATION,
+          name: `llm: '${resumeModel?.modelId ?? ''}'`,
+          attributes: { model: resumeModel?.modelId, provider: resumeModel?.provider, streaming: true },
+          metadata: { runId, resumed: true },
+          requestContext: resolvedOptions.requestContext,
+        });
+        for (const reg of [entry, globalRunRegistry.get(runId)]) {
+          if (!reg) continue;
+          reg.resumeAgentSpan = resumeAgentSpan;
+          reg.resumeModelSpan = resumeModelSpan;
+          reg.resumeAgentSpanData = resumeAgentSpan?.exportSpan();
+          reg.resumeModelSpanData = resumeModelSpan?.exportSpan();
+        }
+      } catch (error) {
+        // Span bookkeeping must never block resume.
+        this.#mastra?.getLogger?.()?.warn?.(`[DurableAgent] Failed to open resume spans: ${error}`);
+      }
+    }
+    const resumeSegmentSpan = entry.resumeAgentSpan ?? entry.agentSpan;
+
     const {
       output,
       cleanup: streamCleanup,
@@ -2166,63 +2220,13 @@ export class DurableAgent<
       structuredOutput: entry.structuredOutput as any,
       outputProcessors: entry.outputProcessors,
       requestContext: resolvedOptions.requestContext,
+      tracingContext: resumeSegmentSpan ? { currentSpan: resumeSegmentSpan } : undefined,
       messageList: globalEntry?.messageList ?? this.#runRegistry.getMessageList(runId),
     });
 
     // Wait for subscription to be ready, then resume workflow
     const workflow = this.getWorkflow();
     const requestContext = resolvedOptions.requestContext;
-
-    // Open a fresh AGENT_RUN + MODEL_GENERATION for the resumed segment on the same
-    // traceId — the originals were ended as `suspended` and can't be reopened. Post-resume
-    // steps + terminal end() target these via the registry override. (Linking = follow-up.)
-    const origTraceId = entry.agentSpan?.traceId;
-    const origSpanId = entry.agentSpan?.id;
-    if (origTraceId && this.#mastra?.observability) {
-      try {
-        const ag = this.#wrappedAgent as Agent<string, any, any>;
-        // Match non-durable Agent.stream() resume-span shape: same name suffix
-        // `(resumed)`, forward agent-level tracingPolicy, link to the original
-        // span via `resumedFromSpanId` metadata, and carry the resolvedVersionId.
-        const rawConfig = typeof (ag as any).toRawConfig === 'function' ? (ag as any).toRawConfig() : undefined;
-        const resolvedVersionId = rawConfig?.resolvedVersionId as string | undefined;
-        const agentTracingPolicy = typeof ag.getTracingPolicy === 'function' ? ag.getTracingPolicy() : undefined;
-        const resumeAgentSpan = getOrCreateSpan({
-          type: SpanType.AGENT_RUN,
-          name: `agent run: '${ag.id}' (resumed)`,
-          entityType: EntityType.AGENT,
-          entityId: ag.id,
-          entityName: ag.name,
-          metadata: {
-            runId,
-            resumed: true,
-            ...(origSpanId ? { resumedFromSpanId: origSpanId } : {}),
-            ...(resolvedVersionId ? { entityVersionId: resolvedVersionId } : {}),
-          },
-          tracingPolicy: agentTracingPolicy,
-          tracingOptions: { traceId: origTraceId },
-          requestContext,
-          mastra: this.#mastra,
-        });
-        const resumeModelSpan = resumeAgentSpan?.createChildSpan({
-          type: SpanType.MODEL_GENERATION,
-          name: `llm: '${resumeModel?.modelId ?? ''}'`,
-          attributes: { model: resumeModel?.modelId, provider: resumeModel?.provider, streaming: true },
-          metadata: { runId, resumed: true },
-          requestContext,
-        });
-        for (const reg of [entry, globalRunRegistry.get(runId)]) {
-          if (!reg) continue;
-          reg.resumeAgentSpan = resumeAgentSpan;
-          reg.resumeModelSpan = resumeModelSpan;
-          reg.resumeAgentSpanData = resumeAgentSpan?.exportSpan();
-          reg.resumeModelSpanData = resumeModelSpan?.exportSpan();
-        }
-      } catch (error) {
-        // Span bookkeeping must never block resume.
-        this.#mastra?.getLogger?.()?.warn?.(`[DurableAgent] Failed to open resume spans: ${error}`);
-      }
-    }
 
     // Capture the prior workflow execution BEFORE creating the new promise.
     // If we read it inside the `.then()` callback, the global registry will
@@ -2783,6 +2787,7 @@ export class DurableAgent<
       structuredOutput: registryEntry.structuredOutput as any,
       outputProcessors: registryEntry.outputProcessors,
       requestContext: registryEntry.requestContext,
+      tracingContext: registryEntry.agentSpan ? { currentSpan: registryEntry.agentSpan } : undefined,
       messageList,
     });
 
@@ -3206,6 +3211,9 @@ export class DurableAgent<
       }
     };
 
+    const observedEntry = globalRunRegistry.get(runId) ?? this.#runRegistry.get(runId);
+    const observedAgentSpan = observedEntry?.resumeAgentSpan ?? observedEntry?.agentSpan;
+
     const stream = createDurableAgentStream<TOutput>({
       pubsub: this.pubsub,
       runId,
@@ -3236,6 +3244,7 @@ export class DurableAgent<
       onSuspended: options?.onSuspended,
       structuredOutput: this.#runRegistry.get(runId)?.structuredOutput as any,
       outputProcessors: this.#runRegistry.get(runId)?.outputProcessors,
+      tracingContext: observedAgentSpan ? { currentSpan: observedAgentSpan } : undefined,
       messageList: globalRunRegistry.get(runId)?.messageList ?? this.#runRegistry.getMessageList(runId),
     });
     const { output, ready } = stream;

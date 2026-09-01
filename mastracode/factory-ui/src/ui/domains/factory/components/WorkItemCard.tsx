@@ -1,12 +1,12 @@
 import { FACTORY_ROLE_STAGES, knownExternalAuthor } from '@mastra/factory/rules/types';
 import { Badge } from '@mastra/playground-ui/components/Badge';
-import { Button } from '@mastra/playground-ui/components/Button';
+import { Button, buttonVariants } from '@mastra/playground-ui/components/Button';
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { EllipsisVertical, MessageSquare } from 'lucide-react';
 import type { ReactElement } from 'react';
-import { useParams } from 'react-router';
+import { Link, useParams } from 'react-router';
 
 import type { FactoryRunPhase } from '../../../../hooks/useStartFactoryRun';
 import { boardCardStatus } from '../boardCardStatus';
@@ -23,6 +23,8 @@ import { relationshipPath } from '../services/relationships';
 import type { WorkItem } from '../services/workItems';
 import type { BoardStageId } from '../stages';
 import { workItemActivity } from '../workItemActivity';
+import { SessionActivityWick } from '../../workspaces/components/SessionActivity';
+import type { SessionRowStatus } from '../../workspaces/services/sessionStatus';
 import {
   CardDetailsHint,
   CardLabels,
@@ -60,6 +62,7 @@ export function WorkItemCard({
   onDismissProposal,
   onRetryDecision,
   pendingRunRoles,
+  sessionStatus,
   onCreateSession,
   onStartRun,
   onRestartRun,
@@ -93,10 +96,12 @@ export function WorkItemCard({
   onDismissProposal: (decisionId: string) => void;
   onRetryDecision: (decisionId: string) => void;
   pendingRunRoles: ReadonlyMap<string, FactoryRunPhase | undefined>;
+  /** Live status of the card's bound sessions, resolved once for the whole board. */
+  sessionStatus?: SessionRowStatus;
   /** Detail-panel fallback when the item has no run spec: open an empty session (no run). */
   onCreateSession: (spec: { branch: string; threadTitle: string }) => void;
-  onStartRun: (spec: ItemRunSpec, action: RunAction) => void;
-  onRestartRun: (spec: ItemRunSpec, action: RunAction) => void;
+  onStartRun: (spec: ItemRunSpec, action: RunAction, options?: { preapprovePlans?: boolean }) => void;
+  onRestartRun: (spec: ItemRunSpec, action: RunAction, options?: { preapprovePlans?: boolean }) => void;
   onMove: (toStage: string) => void;
   onRemove: () => void;
 }) {
@@ -131,6 +136,7 @@ export function WorkItemCard({
       ? runSpec.actions.find(action => FACTORY_ROLE_STAGES[action.role] === columnStage && action.role in sessions)
       : undefined;
   const threadSession = itemThreadSession(sessions);
+  const wickStatus = threadSession !== undefined ? sessionStatus : undefined;
   const primaryAction = cardPrimaryAction({
     item,
     runSpec,
@@ -196,13 +202,13 @@ export function WorkItemCard({
   // Dismissing a suggested run is the one entry that leaves it open.
   const panelMenu: WorkItemMenuProps = {
     ...menu,
-    onStartRun: (spec, action) => {
+    onStartRun: (spec, action, options) => {
       morph.closeDetails();
-      onStartRun(spec, action);
+      onStartRun(spec, action, options);
     },
-    onRestartRun: (spec, action) => {
+    onRestartRun: (spec, action, options) => {
       morph.closeDetails();
-      onRestartRun(spec, action);
+      onRestartRun(spec, action, options);
     },
     onApproveProposal: decisionId => {
       morph.closeDetails();
@@ -257,13 +263,14 @@ export function WorkItemCard({
           }}
           className={cn(
             'group relative flex flex-col gap-3 rounded-xl border border-border1/50 bg-neutral6/5 p-3 outline-none transition-colors hover:bg-surface3',
-            // Offscreen cards skip layout and paint; a column can hold hundreds.
-            '[content-visibility:auto] [contain-intrinsic-size:auto_7rem]',
+            // `content-visibility` clips at the padding box, which the wick's ring has to reach past.
+            wickStatus ? 'border-transparent' : '[content-visibility:auto] [contain-intrinsic-size:auto_7rem]',
             evaluating ? 'cursor-wait' : 'cursor-grab active:cursor-grabbing',
             runPending && 'opacity-70',
             highlighted && 'border-warning1/40 bg-warning1/5 ring-1 ring-warning1/30',
           )}
         >
+          {wickStatus && <SessionActivityWick status={wickStatus} />}
           <button
             ref={deepLinkRef}
             type="button"
@@ -297,9 +304,6 @@ export function WorkItemCard({
           <div className="flex min-w-0 flex-col gap-1.5">
             <div className="flex min-w-0 items-center gap-1.5 pr-8">
               <span className="text-ui-xs text-icon2 min-w-0 truncate">{workItemMeta(item)}</span>
-              {threadSession !== undefined && (
-                <span data-live-session-indicator aria-hidden className="bg-accent1 size-2 shrink-0 rounded-full" />
-              )}
               {relatedItems.map(relatedLink)}
               {item.commentCount > 0 && (
                 <span
@@ -362,6 +366,15 @@ export function WorkItemCard({
                 retrying={retryDecisionId !== undefined && retryDecisionId === retryingDecisionId}
               />
             </div>
+          )}
+          {threadSession !== undefined && wickStatus === undefined && (
+            <Link
+              to={`/factories/${factoryId}/workspaces/${threadSession.sessionId}/threads/${threadSession.threadId}`}
+              draggable={false}
+              className={cn(buttonVariants({ variant: 'outline', size: 'xs' }), 'relative z-10 self-start')}
+            >
+              Open session
+            </Link>
           )}
         </article>
       </CardTitleTooltip>

@@ -105,10 +105,10 @@ export function useBoardRuns({
     }
   };
 
-  const openOrStartRun = async (item: WorkItem, role: RunAction['role']) => {
+  const openOrStartRun = async (item: WorkItem, role: RunAction['role'], options?: { preapprovePlans?: boolean }) => {
     if (!beginPreparingItem(item.id, 'Preparing run…')) return;
     try {
-      await startRunForItem(item, role, { openExisting: true });
+      await startRunForItem(item, role, { openExisting: true, preapprovePlans: options?.preapprovePlans });
     } finally {
       clearPreparingItem(item.id);
     }
@@ -118,10 +118,10 @@ export function useBoardRuns({
   // it — e.g. re-reviewing a Done-lane PR that got new commits. All of an
   // item's runs share one branch/worktree, so the kickoff lands in the
   // existing thread as a follow-up instead of minting a parallel session.
-  const restartRun = async (item: WorkItem, role: RunAction['role']) => {
+  const restartRun = async (item: WorkItem, role: RunAction['role'], options?: { preapprovePlans?: boolean }) => {
     if (!beginPreparingItem(item.id, 'Preparing run…')) return;
     try {
-      await startRunForItem(item, role, { openExisting: false });
+      await startRunForItem(item, role, { openExisting: false, preapprovePlans: options?.preapprovePlans });
     } finally {
       clearPreparingItem(item.id);
     }
@@ -130,7 +130,7 @@ export function useBoardRuns({
   const startRunForItem = async (
     item: WorkItem,
     role: RunAction['role'],
-    { openExisting }: { openExisting: boolean },
+    { openExisting, preapprovePlans }: { openExisting: boolean; preapprovePlans?: boolean },
   ) => {
     const refreshed = await refreshItem(item.id);
     if (!refreshed) return;
@@ -150,6 +150,7 @@ export function useBoardRuns({
       threadTitle: spec.threadTitle,
       threadTags: action.threadTags,
       invocation: action.invocation,
+      preapprovePlans,
       workItem: {
         id: refreshed.id,
         role: action.role,

@@ -1,6 +1,6 @@
 {
   "name": "@mastra/fastify",
-  "version": "1.5.8-alpha.0",
+  "version": "1.5.8-alpha.3",
   "description": "Mastra Fastify adapter for the server",
   "type": "module",
   "main": "dist/index.js",
@@ -59,8 +59,7 @@
     "node": ">=22.13.0"
   },
   "files": [
-    "dist",
-    "CHANGELOG.md"
+    "dist"
   ],
   "homepage": "https://mastra.ai",
   "repository": {

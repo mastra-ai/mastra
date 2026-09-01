@@ -256,6 +256,13 @@ const result = await sandbox.executeCommand('cat', ['/tmp/state.txt'])
     defaultValue: '{}',
   },
   {
+    name: 'workingDirectory',
+    type: 'string',
+    description:
+      'Default directory for command execution when no per-command `cwd` is given. A per-command `cwd` always wins. Use an absolute path.',
+    isOptional: true,
+  },
+  {
     name: 'template',
     type: 'SandboxTemplate | (base: SandboxTemplate) => SandboxTemplate',
     description:
