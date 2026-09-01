@@ -222,6 +222,10 @@ export class Knowledge extends MastraBase {
     return (await this.#getProposalLifecycle()).list(input);
   }
 
+  async getProposal(input: { id: string; vouchedScopeIds: KnowledgeScopeIds }) {
+    return (await this.#getProposalLifecycle()).get(input);
+  }
+
   async approveProposal(input: ReviewKnowledgeProposalDecisionInput) {
     return (await this.#getProposalLifecycle()).approve(input);
   }
@@ -236,7 +240,12 @@ export class Knowledge extends MastraBase {
 
   async #getProposalLifecycle(): Promise<KnowledgeProposalLifecycle> {
     const storage = await this.#getStorage();
-    this.#proposalLifecycle ??= new KnowledgeProposalLifecycle(storage, scopeIds => this.evaluateAccess(scopeIds));
+    this.#proposalLifecycle ??= new KnowledgeProposalLifecycle(
+      storage,
+      scopeIds => this.evaluateAccess(scopeIds),
+      input => this.getNode(input),
+      input => this.getRecord(input),
+    );
     return this.#proposalLifecycle;
   }
 
@@ -768,6 +777,7 @@ export class Knowledge extends MastraBase {
 
   async listActivity(input: {
     scopeIds: KnowledgeScopeIds;
+    membershipScopeIds?: KnowledgeScopeIds;
     contextScopeId?: string;
     importRunId?: string;
     action?: KnowledgeActivityAction;
@@ -779,13 +789,16 @@ export class Knowledge extends MastraBase {
   }) {
     const storage = await this.#getStorage();
     const scopeIds = await this.#resolveReadScopeIds(input.scopeIds);
-    if (input.contextScopeId && !scopeIds.includes(input.contextScopeId)) return [];
+    const membershipScopeIds = input.membershipScopeIds
+      ? input.membershipScopeIds.filter(scopeId => scopeIds.includes(scopeId))
+      : undefined;
+    if (input.membershipScopeIds && membershipScopeIds?.length === 0) return [];
     if (input.importRunId) {
       const run = await storage.getImportRun(input.importRunId);
       if (!run || !this.#importers.get(run.importerId)) return [];
       if (!(await this.#isImportBindingVisible(storage, run.binding, scopeIds))) return [];
     }
-    return storage.listActivity({ ...input, scopeIds });
+    return storage.listActivity({ ...input, scopeIds, membershipScopeIds });
   }
 
   async listSemanticOutbox(input: {

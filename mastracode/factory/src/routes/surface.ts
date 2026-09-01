@@ -46,6 +46,7 @@ import { invalidateCustomProvidersSnapshots } from './custom-provider-source.js'
 import { buildFsRoutes } from './fs.js';
 import { IntakeRoutes } from './intake.js';
 import { KnowledgeRoutes } from './knowledge.js';
+import type { KnowledgeAccessProfileResolver } from './knowledge.js';
 import { OAuthRoutes } from './oauth.js';
 import type { RouteAuth } from './route.js';
 import { SkillRoutes } from './skills.js';
@@ -106,6 +107,7 @@ export interface FactoryApiRoutesDeps {
   factoryReady: boolean;
   knowledgeEnabled: boolean;
   knowledgeKey?: string;
+  knowledgeAccessProfile?: KnowledgeAccessProfileResolver;
   /** Resolved Factory rule set, threaded from the host (no service locator). */
   rules: FactoryRules;
   factoryTransitionService?: FactoryTransitionService;
@@ -497,6 +499,7 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
           projects: deps.domains.projects,
           knowledge: async () =>
             deps.knowledgeKey ? deps.controller.getMastra()?.getKnowledge(deps.knowledgeKey) : undefined,
+          accessProfile: deps.knowledgeAccessProfile ?? (async () => undefined),
         }).routes()
       : []),
     ...(deps.factoryReady

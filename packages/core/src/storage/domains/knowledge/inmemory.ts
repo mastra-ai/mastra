@@ -1443,6 +1443,7 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
 
   async listActivity(input: {
     scopeIds: KnowledgeScopeIds;
+    membershipScopeIds?: KnowledgeScopeIds;
     contextScopeId?: string;
     importRunId?: string;
     action?: KnowledgeActivityAction;
@@ -1453,21 +1454,23 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
     limit?: number;
   }): Promise<KnowledgeActivityEvent[]> {
     const queryScope = canonicalizeKnowledgeScopeIds(input.scopeIds);
+    const membershipScope = input.membershipScopeIds
+      ? canonicalizeKnowledgeScopeIds(input.membershipScopeIds)
+      : undefined;
     return this.#db.knowledgeActivity
       .filter(event => !input.contextScopeId || event.contextScopeId === input.contextScopeId)
       .filter(event => {
-        if (event.contextScopeId && !queryScope.includes(event.contextScopeId)) return false;
-        const visibleDeletion =
-          event.action === 'delete' &&
-          (event.targetType === 'record'
-            ? isKnowledgeScopeVisible(activityVisibilityScopeIds(event.details), queryScope)
-            : Boolean(event.contextScopeId) ||
-              isKnowledgeScopeVisible(activityVisibilityScopeIds(event.details), queryScope));
+        const retainedScopeIds = activityVisibilityScopeIds(event.details);
+        const visibleDeletion = event.action === 'delete' && isKnowledgeScopeVisible(retainedScopeIds, queryScope);
         if (event.targetType === 'node') {
           const node = this.#db.knowledgeNodes.get(event.targetId);
-          return visibleDeletion || Boolean(node && isKnowledgeScopeVisible(this.#nodeScopeIds(node.id), queryScope));
+          const targetScopeIds = node ? this.#nodeScopeIds(node.id) : retainedScopeIds;
+          if (membershipScope && !isKnowledgeScopeVisible(targetScopeIds, membershipScope)) return false;
+          return visibleDeletion || Boolean(node && isKnowledgeScopeVisible(targetScopeIds, queryScope));
         }
         const record = this.#db.knowledgeRecords.get(event.targetId);
+        const targetScopeIds = record ? this.#recordScopeIds(record.id) : retainedScopeIds;
+        if (membershipScope && !isKnowledgeScopeVisible(targetScopeIds, membershipScope)) return false;
         return record ? this.#isRecordVisible(record, queryScope) : visibleDeletion;
       })
       .filter(event => !input.importRunId || event.importRunId === input.importRunId)

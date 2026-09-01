@@ -2035,6 +2035,7 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
 
   async listActivity(input: {
     scopeIds: KnowledgeScopeIds;
+    membershipScopeIds?: KnowledgeScopeIds;
     contextScopeId?: string;
     importRunId?: string;
     action?: KnowledgeActivityAction;
@@ -2077,28 +2078,26 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
       args,
     });
     const scopeIds = canonicalizeKnowledgeScopeIds(input.scopeIds);
-    const visible = new Set(scopeIds);
+    const membershipScopeIds = input.membershipScopeIds
+      ? canonicalizeKnowledgeScopeIds(input.membershipScopeIds)
+      : undefined;
     const events: KnowledgeActivityEvent[] = [];
     for (const row of result.rows) {
-      if (row.contextScopeId != null && !visible.has(String(row.contextScopeId))) continue;
       const action = String(row.action) as KnowledgeActivityAction;
       const details = row.detailsJson == null ? undefined : parseJson<Record<string, unknown>>(row.detailsJson);
+      const retainedScopeIds = activityVisibilityScopeIds(details);
       const targetType = String(row.targetType) as KnowledgeSemanticDocumentType;
-      const visibleDeletion =
-        action === 'delete' &&
-        (targetType === 'record'
-          ? isKnowledgeScopeVisible(activityVisibilityScopeIds(details), scopeIds)
-          : row.contextScopeId != null || isKnowledgeScopeVisible(activityVisibilityScopeIds(details), scopeIds));
+      const visibleDeletion = action === 'delete' && isKnowledgeScopeVisible(retainedScopeIds, scopeIds);
       const targetId = String(row.targetId);
       if (targetType === 'node') {
         const node = await this.#getNodeIncludingDeleted(this.#client, targetId);
-        if (
-          !visibleDeletion &&
-          (!node || !isKnowledgeScopeVisible(await this.#getNodeScopeIds(this.#client, targetId), scopeIds))
-        )
-          continue;
+        const targetScopeIds = node ? await this.#getNodeScopeIds(this.#client, targetId) : retainedScopeIds;
+        if (membershipScopeIds && !isKnowledgeScopeVisible(targetScopeIds, membershipScopeIds)) continue;
+        if (!visibleDeletion && (!node || !isKnowledgeScopeVisible(targetScopeIds, scopeIds))) continue;
       } else {
         const record = await this.#getRecord(this.#client, targetId, true);
+        const targetScopeIds = record ? await this.getRecordScopeIds(targetId) : retainedScopeIds;
+        if (membershipScopeIds && !isKnowledgeScopeVisible(targetScopeIds, membershipScopeIds)) continue;
         if (record ? !(await this.#isRecordVisible(this.#client, record, scopeIds)) : !visibleDeletion) continue;
       }
       events.push({

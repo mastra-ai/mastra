@@ -220,6 +220,26 @@ function stubKnowledgeRoute(
             : [],
       });
     }),
+    http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/knowledge/proposals/proposal-1`, () =>
+      HttpResponse.json({
+        id: 'proposal-1',
+        operation: 'update-node',
+        status: proposalStatus,
+        reason: 'The current name is stale',
+        targets: [
+          {
+            type: 'node',
+            id: 'ent-1',
+            name: 'Payments Service',
+            expectedVersion: 1,
+            currentVersion: proposalStatus === 'conflicted' ? 2 : 1,
+          },
+        ],
+        proposer: 'private',
+        actions: proposalStatus === 'pending' ? ['approve', 'reject'] : [],
+        createdAt: '2026-08-13T03:00:00.000Z',
+      }),
+    ),
     http.post(
       `${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/knowledge/proposals/proposal-1/:action`,
       ({ params }) => {
@@ -356,6 +376,54 @@ describe('KnowledgePage', () => {
 
     await user.click(screen.getByRole('button', { name: 'Approve' }));
     await waitFor(() => expect(screen.getByText('No pending proposals.')).toBeInTheDocument());
+  });
+
+  it('keeps proposal deep links addressable and loads authorized continuation pages', async () => {
+    stubKnowledgeRoute();
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/knowledge/proposals`, ({ request }) => {
+        const cursor = new URL(request.url).searchParams.get('cursor');
+        if (cursor === 'page-2') {
+          return HttpResponse.json({
+            proposals: [
+              {
+                id: 'proposal-2',
+                operation: 'update-node',
+                status: 'pending',
+                reason: 'Second authorized proposal',
+                targets: [{ type: 'node', id: 'ent-2', name: 'Deploy Runbook', expectedVersion: 1, currentVersion: 1 }],
+                proposer: 'private',
+                actions: ['approve', 'reject'],
+                createdAt: '2026-08-13T02:00:00.000Z',
+              },
+            ],
+          });
+        }
+        return HttpResponse.json({
+          proposals: [
+            {
+              id: 'proposal-1',
+              operation: 'update-node',
+              status: 'pending',
+              reason: 'The current name is stale',
+              targets: [{ type: 'node', id: 'ent-1', name: 'Payments Service', expectedVersion: 1, currentVersion: 1 }],
+              proposer: 'private',
+              actions: ['approve', 'reject'],
+              createdAt: '2026-08-13T03:00:00.000Z',
+            },
+          ],
+          nextCursor: 'page-2',
+        });
+      }),
+    );
+    const user = userEvent.setup();
+    const { router } = renderRoute(`/factories/${FACTORY_ID}/knowledge?view=approvals`);
+
+    expect(await screen.findByText('The current name is stale')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Open proposal' }));
+    await waitFor(() => expect(router.state.location.search).toContain('proposal=proposal-1'));
+    await user.click(screen.getByRole('button', { name: 'Load more proposals' }));
+    expect(await screen.findByText('Second authorized proposal')).toBeInTheDocument();
   });
 
   it('shows importer runs and filtered run activity without private transcripts', async () => {

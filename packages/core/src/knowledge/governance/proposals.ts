@@ -1,8 +1,10 @@
 import {
   KnowledgeConflictError,
   KnowledgeNotFoundError,
+  type KnowledgeNode,
   type KnowledgeProposal,
   type KnowledgeProposalApprovalCapability,
+  type KnowledgeRecord,
   type KnowledgeProposalTarget,
   type KnowledgeScopeIds,
   type KnowledgeStorage,
@@ -45,6 +47,10 @@ function proposalNodeUpdateMutation(input: UpdateKnowledgeNodeInput): UpdateKnow
   };
 }
 
+function sameScopeIds(left: KnowledgeScopeIds, right: KnowledgeScopeIds): boolean {
+  return left.length === right.length && left.every((scopeId, index) => scopeId === right[index]);
+}
+
 function decodeNodeUpdatePayload(proposal: KnowledgeProposal): NodeUpdateProposalPayload {
   const payload = proposal.payload as Partial<NodeUpdateProposalPayload>;
   if (
@@ -62,14 +68,19 @@ export class KnowledgeProposalLifecycle {
   constructor(
     private readonly storage: KnowledgeStorage,
     private readonly evaluateAccess: (vouchedScopeIds: KnowledgeScopeIds) => Promise<KnowledgeAccessFrontier>,
+    private readonly resolveNode: (input: { id: string; scopeIds: KnowledgeScopeIds }) => Promise<KnowledgeNode | null>,
+    private readonly resolveRecord: (input: {
+      id: string;
+      scopeIds: KnowledgeScopeIds;
+    }) => Promise<KnowledgeRecord | null>,
   ) {}
 
   async proposeNodeUpdate(input: ProposeKnowledgeNodeUpdateInput): Promise<KnowledgeProposal> {
     const frontier = await this.evaluateAccess(input.vouchedScopeIds);
     this.#assertContextScope(frontier, input.proposerContextScopeId);
 
-    const node = await this.storage.getNode(input.mutation.id);
-    if (!node || node.deletedAt) throw new KnowledgeNotFoundError('node', input.mutation.id);
+    const node = await this.resolveNode({ id: input.mutation.id, scopeIds: input.vouchedScopeIds });
+    if (!node) throw new KnowledgeNotFoundError('node', input.mutation.id);
     const originalScopeIds = await this.storage.getNodeScopeIds(node.id);
     assertKnowledgeTargetCapability({
       frontier,
@@ -146,12 +157,21 @@ export class KnowledgeProposalLifecycle {
     };
   }
 
+  async get(input: { id: string; vouchedScopeIds: KnowledgeScopeIds }): Promise<KnowledgeProposal | null> {
+    const frontier = await this.evaluateAccess(input.vouchedScopeIds);
+    const proposal = await this.storage.getVisibleProposal({
+      id: input.id,
+      scopeIds: getKnowledgeReadableScopeIds(frontier),
+    });
+    return proposal ? this.#redactAttribution(proposal, frontier) : null;
+  }
+
   async approve(input: ReviewKnowledgeProposalDecisionInput): Promise<KnowledgeProposal> {
     const frontier = await this.evaluateAccess(input.vouchedScopeIds);
     this.#assertContextScope(frontier, input.reviewerContextScopeId);
     const proposal = await this.#getVisiblePendingProposal(input.id, frontier);
     decodeNodeUpdatePayload(proposal);
-    const staleTarget = await this.#authorizeAndFindStaleTarget(proposal, frontier);
+    const staleTarget = await this.#authorizeAndFindStaleTarget(proposal, frontier, input.vouchedScopeIds);
     if (staleTarget) {
       await this.storage.reviewProposal({
         id: proposal.id,
@@ -176,7 +196,7 @@ export class KnowledgeProposalLifecycle {
     this.#assertContextScope(frontier, input.reviewerContextScopeId);
     const proposal = await this.#getVisiblePendingProposal(input.id, frontier);
     decodeNodeUpdatePayload(proposal);
-    await this.#authorizeAndFindStaleTarget(proposal, frontier);
+    await this.#authorizeAndFindStaleTarget(proposal, frontier, input.vouchedScopeIds);
     return this.#redactAttribution(
       await this.storage.reviewProposal({
         id: proposal.id,
@@ -198,19 +218,40 @@ export class KnowledgeProposalLifecycle {
     });
     if (!proposal || proposal.status !== 'conflicted') throw new KnowledgeNotFoundError('proposal', input.id);
     const payload = decodeNodeUpdatePayload(proposal);
-    await this.#authorizeAndFindStaleTarget(proposal, frontier);
-    const current = await this.storage.getNode(payload.mutation.id);
-    if (!current || current.deletedAt) throw new KnowledgeNotFoundError('node', payload.mutation.id);
-    const targets = await Promise.all(
-      proposal.targets.map(async target => {
-        const entity =
-          target.type === 'node'
-            ? await this.storage.getNode(target.id)
-            : await this.storage.getRecord({ id: target.id, includeDeleted: true });
-        if (!entity || entity.deletedAt) throw new KnowledgeNotFoundError(target.type, target.id);
-        return { ...target, expectedVersion: entity.version };
-      }),
-    );
+    const current = await this.resolveNode({ id: payload.mutation.id, scopeIds: input.vouchedScopeIds });
+    if (!current) throw new KnowledgeNotFoundError('node', payload.mutation.id);
+    const currentScopeIds = await this.storage.getNodeScopeIds(current.id);
+    const approvalCapability = payload.mutation.scopeIds ? 'manageAccess' : 'edit';
+    this.#assertApprovalCapability(frontier, currentScopeIds, approvalCapability, 'node', current.id);
+    const targets: KnowledgeProposalTarget[] = [
+      {
+        type: 'node',
+        id: current.id,
+        expectedVersion: current.version,
+        scopeIds: currentScopeIds,
+        approvalCapability,
+      },
+    ];
+    if (payload.mutation.scopeIds) {
+      const structuralScopeIds = [...new Set([...currentScopeIds, ...payload.mutation.scopeIds])].sort();
+      assertKnowledgeScopeCapabilities({
+        frontier,
+        scopeIds: structuralScopeIds,
+        capability: 'manageAccess',
+        targetType: 'scope',
+      });
+      for (const scopeId of structuralScopeIds) {
+        const scope = await this.storage.getNode(scopeId);
+        if (!scope?.isScope || scope.deletedAt) throw new KnowledgeNotFoundError('scope', scopeId);
+        targets.push({
+          type: 'node',
+          id: scope.id,
+          expectedVersion: scope.version,
+          scopeIds: [scope.id],
+          approvalCapability: 'manageAccess',
+        });
+      }
+    }
     return this.#redactAttribution(
       await this.storage.createProposal({
         targets,
@@ -218,6 +259,7 @@ export class KnowledgeProposalLifecycle {
         payload: {
           ...payload,
           mutation: { ...payload.mutation, version: current.version },
+          originalScopeIds: currentScopeIds,
         },
         reason: input.reason ?? proposal.reason,
         proposerContextScopeId: input.reviewerContextScopeId,
@@ -236,16 +278,33 @@ export class KnowledgeProposalLifecycle {
   async #authorizeAndFindStaleTarget(
     proposal: KnowledgeProposal,
     frontier: KnowledgeAccessFrontier,
+    vouchedScopeIds: KnowledgeScopeIds,
   ): Promise<KnowledgeProposalTarget | undefined> {
     for (const target of proposal.targets) {
-      this.#assertApprovalCapability(frontier, target.scopeIds, target.approvalCapability, target.type, target.id);
-    }
-    for (const target of proposal.targets) {
-      const entity =
-        target.type === 'node'
+      const isPrimaryTarget = target.id === proposal.targetId;
+      const entity = isPrimaryTarget
+        ? target.type === 'node'
+          ? await this.resolveNode({ id: target.id, scopeIds: vouchedScopeIds })
+          : await this.resolveRecord({ id: target.id, scopeIds: vouchedScopeIds })
+        : target.type === 'node'
           ? await this.storage.getNode(target.id)
           : await this.storage.getRecord({ id: target.id, includeDeleted: true });
-      if (!entity || entity.deletedAt || entity.version !== target.expectedVersion) return target;
+      if (isPrimaryTarget && !entity) throw new KnowledgeNotFoundError(target.type, target.id);
+      const currentScopeIds =
+        target.type === 'node'
+          ? entity && 'isScope' in entity && entity.isScope
+            ? [entity.id]
+            : await this.storage.getNodeScopeIds(target.id)
+          : await this.storage.getRecordScopeIds(target.id);
+      this.#assertApprovalCapability(frontier, currentScopeIds, target.approvalCapability, target.type, target.id);
+      if (!entity) throw new KnowledgeNotFoundError(target.type, target.id);
+      if (
+        entity.deletedAt ||
+        entity.version !== target.expectedVersion ||
+        !sameScopeIds(currentScopeIds, target.scopeIds)
+      ) {
+        return target;
+      }
     }
     return undefined;
   }
