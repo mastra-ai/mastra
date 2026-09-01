@@ -218,7 +218,8 @@ describe('Board card session liveness', () => {
   });
 
   it('walks idle → working → idle as a run starts and finishes', async () => {
-    stubFactoryWithBoundSession();
+    const { refetchGate } = stubFactoryWithBoundSession();
+    refetchGate.resolve();
     const active = new Set<string>();
     server.use(
       http.get('*/api/agent-controller/:controllerId/active-runs', () =>
