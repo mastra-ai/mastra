@@ -64,35 +64,46 @@ describe('Subconscious LibSQL integration', () => {
       rawCall: { rawPrompt: null, rawSettings: {} },
       warnings: [],
     }));
-    const model = new MockLanguageModelV2({ doStream: doStream as never });
-    const generate = (vi.spyOn(Agent.prototype, 'generate') as any).mockImplementation(async function (
-      this: Agent,
-      _prompt: any,
-      options: any,
-    ) {
-      const tools = (await this.listTools({ requestContext: options?.requestContext })) as any;
-      await tools.knowledge_create!.execute?.(
-        {
-          name: 'Project Atlas',
-          kind: 'project',
-          text: '[[Maya Chen]] owns [[Project Atlas]]. The staging region is cobalt.',
-          nodeScope: 'resource',
-          scope: 'resource',
-        },
-        {} as any,
-      );
-      await tools.knowledge_create!.execute?.(
-        {
-          name: 'Alpha Secret',
-          kind: 'note',
-          text: 'Only the alpha thread may see this.',
-          nodeScope: 'thread',
-          scope: 'thread',
-        },
-        {} as any,
-      );
-      return { text: 'Curated.', toolResults: [] } as any;
+    let generateCall = 0;
+    const doGenerate = vi.fn(async () => {
+      generateCall += 1;
+      return {
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        finishReason: generateCall === 1 ? ('tool-calls' as const) : ('stop' as const),
+        usage: { inputTokens: 20, outputTokens: 10, totalTokens: 30 },
+        warnings: [],
+        content:
+          generateCall === 1
+            ? [
+                {
+                  type: 'tool-call' as const,
+                  toolCallId: 'create-atlas',
+                  toolName: 'knowledge_create',
+                  input: JSON.stringify({
+                    name: 'Project Atlas',
+                    kind: 'project',
+                    text: '[[Maya Chen]] owns [[Project Atlas]]. The staging region is cobalt.',
+                    nodeScope: 'resource',
+                    scope: 'resource',
+                  }),
+                },
+                {
+                  type: 'tool-call' as const,
+                  toolCallId: 'create-alpha-secret',
+                  toolName: 'knowledge_create',
+                  input: JSON.stringify({
+                    name: 'Alpha Secret',
+                    kind: 'note',
+                    text: 'Only the alpha thread may see this.',
+                    nodeScope: 'thread',
+                    scope: 'thread',
+                  }),
+                },
+              ]
+            : [{ type: 'text' as const, text: 'Curated.' }],
+      };
     });
+    const model = new MockLanguageModelV2({ doStream: doStream as never, doGenerate: doGenerate as never });
     const memory = new Memory({
       storage,
       vector,
@@ -120,7 +131,7 @@ describe('Subconscious LibSQL integration', () => {
       sendStateSignal: vi.fn(async () => ({ skipped: false }) as any),
     });
     expect(result.observed).toBe(true);
-    expect(generate).toHaveBeenCalledOnce();
+    expect(doGenerate).toHaveBeenCalledTimes(2);
 
     const knowledge = (await storage.getStore('knowledge'))!;
     const scope = ['org:acme', `resource:${resourceId}`, `thread:${threadId}`];
@@ -148,7 +159,6 @@ describe('Subconscious LibSQL integration', () => {
     expect(read).toMatchObject({ found: true, node: { name: 'Project Atlas' } });
     const hidden = await tools.knowledge_read!.execute?.({ name: 'Alpha Secret' }, toolContext);
     expect(hidden).toEqual({ found: false });
-    generate.mockRestore();
   });
 
   it('runs remind after observation and emits one scoped remembered signal', async () => {
@@ -214,6 +224,7 @@ describe('Subconscious LibSQL integration', () => {
       resolutionScope: scope,
       defaultScope: scope.slice(0, 2),
     });
+    await memory.drainKnowledgeSemanticIndex(scope);
     await memory.createThread({ threadId, resourceId, title: 'Subconscious remind' });
     await memory.saveMessages({ messages: [message(threadId, resourceId, 'Help me schedule the launch.')] });
     const requestContext = new RequestContext();
@@ -306,6 +317,7 @@ describe('Subconscious LibSQL integration', () => {
       resolutionScope: ['org:acme', `resource:${resourceId}`, `thread:${threadIds[0]}`],
       defaultScope: ['org:acme', `resource:${resourceId}`],
     });
+    await memory.drainKnowledgeSemanticIndex(['org:acme', `resource:${resourceId}`]);
     for (const threadId of threadIds) {
       await memory.createThread({ threadId, resourceId, title: `Resource reminder ${threadId}` });
       await memory.saveMessages({ messages: [message(threadId, resourceId, 'Plan Project Atlas.')] });
