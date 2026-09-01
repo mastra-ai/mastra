@@ -17,7 +17,109 @@ type Shared_Auxiliary_298 =
       [key: string]: Shared_Auxiliary_298;
     };
 
-type Shared_Auxiliary_1095 =
+type Shared_Auxiliary_591 =
+  | {
+      op: 'eq' | 'ne' | 'lt' | 'lte' | 'gt' | 'gte';
+      left:
+        | {
+            path: string;
+          }
+        | {
+            literal: string | number | boolean | null;
+          };
+      right:
+        | {
+            path: string;
+          }
+        | {
+            literal: string | number | boolean | null;
+          };
+    }
+  | {
+      op: 'in' | 'notIn';
+      value:
+        | {
+            path: string;
+          }
+        | {
+            literal: string | number | boolean | null;
+          };
+      set: (string | number | boolean | null)[];
+    }
+  | {
+      op: 'exists' | 'notExists';
+      path: string;
+    }
+  | {
+      op: 'and' | 'or';
+      args: Shared_Auxiliary_591[];
+    }
+  | {
+      op: 'not';
+      arg: Shared_Auxiliary_591;
+    }
+  | {
+      spans:
+        | {
+            some: Shared_Auxiliary_609;
+          }
+        | {
+            none: Shared_Auxiliary_609;
+          };
+    }
+  | {
+      scores:
+        | {
+            some: Shared_Auxiliary_609;
+          }
+        | {
+            none: Shared_Auxiliary_609;
+          };
+    };
+
+type Shared_Auxiliary_609 =
+  | {
+      op: 'eq' | 'ne' | 'lt' | 'lte' | 'gt' | 'gte';
+      left:
+        | {
+            path: string;
+          }
+        | {
+            literal: string | number | boolean | null;
+          };
+      right:
+        | {
+            path: string;
+          }
+        | {
+            literal: string | number | boolean | null;
+          };
+    }
+  | {
+      op: 'in' | 'notIn';
+      value:
+        | {
+            path: string;
+          }
+        | {
+            literal: string | number | boolean | null;
+          };
+      set: (string | number | boolean | null)[];
+    }
+  | {
+      op: 'exists' | 'notExists';
+      path: string;
+    }
+  | {
+      op: 'and' | 'or';
+      args: Shared_Auxiliary_609[];
+    }
+  | {
+      op: 'not';
+      arg: Shared_Auxiliary_609;
+    };
+
+type Shared_Auxiliary_1141 =
   | {
       op: 'eq' | 'ne' | 'lt' | 'lte' | 'gt' | 'gte';
       left:
@@ -62,19 +164,19 @@ type Shared_Auxiliary_1095 =
     }
   | {
       op: 'and' | 'or';
-      args: Shared_Auxiliary_1095[];
+      args: Shared_Auxiliary_1141[];
     }
   | {
       op: 'not';
-      arg: Shared_Auxiliary_1095;
+      arg: Shared_Auxiliary_1141;
     };
 
-type Shared_Auxiliary_1236 = {
+type Shared_Auxiliary_1282 = {
   id?: string | undefined;
   name: string;
   type: 'file' | 'folder';
   content?: string | undefined;
-  children?: Shared_Auxiliary_1236[] | undefined;
+  children?: Shared_Auxiliary_1282[] | undefined;
 };
 
 type Shared_Type_0 = {
@@ -2482,13 +2584,13 @@ type Shared_Type_107 =
   | {
       type: 'conditional';
       steps: Shared_Type_105[];
-      predicates: Shared_Auxiliary_1095[];
+      predicates: Shared_Auxiliary_1141[];
     }
   | {
       type: 'loop';
       step: Shared_Type_105;
       loopType: 'dowhile' | 'dountil';
-      predicate: Shared_Auxiliary_1095;
+      predicate: Shared_Auxiliary_1141;
     };
 
 type Shared_Type_108 = {
@@ -2825,7 +2927,7 @@ type Shared_Type_120 = {
   /** List of asset file paths */
   assets?: string[] | undefined;
   /** Full file tree structure for the skill */
-  files?: Shared_Auxiliary_1236[] | undefined;
+  files?: Shared_Auxiliary_1282[] | undefined;
   /** Additional metadata for the skill */
   metadata?:
     | {
@@ -8934,6 +9036,78 @@ export interface GetObservabilityTracesTraceIdSpanIdScores_RouteContract {
   body: never;
   request: GetObservabilityTracesTraceIdSpanIdScores_Request;
   response: GetObservabilityTracesTraceIdSpanIdScores_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: POST /observability/traces/query
+// ============================================================================
+export type PostObservabilityTracesQuery_Body = {
+  timeRange: {
+    from: string;
+    to: string;
+  };
+  where?: Shared_Auxiliary_591 | undefined;
+  group?:
+    | {
+        by: ['threadId'];
+      }
+    | undefined;
+  orderBy?:
+    | {
+        field: 'startedAt' | 'endedAt';
+        direction: 'asc' | 'desc';
+      }[]
+    | undefined;
+  page: {
+    limit: number;
+    after?: (string | null) | undefined;
+  };
+};
+
+export type PostObservabilityTracesQuery_Response =
+  | {
+      traces: {
+        traceId: string;
+        rootSpanId: string;
+        threadId: string | null;
+        resourceId: string | null;
+        startedAt: string;
+        endedAt: string;
+        entityName: string | null;
+        entityType: string | null;
+        environment: string | null;
+        status: 'success' | 'error';
+      }[];
+      page: {
+        next: string | null;
+      };
+    }
+  | {
+      groups: {
+        threadId: string;
+      }[];
+      page: {
+        next: string | null;
+      };
+    };
+
+export type PostObservabilityTracesQuery_Request = Simplify<
+  (never extends never ? {} : { params: never }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (PostObservabilityTracesQuery_Body extends never
+      ? {}
+      : {} extends PostObservabilityTracesQuery_Body
+        ? { body?: PostObservabilityTracesQuery_Body }
+        : { body: PostObservabilityTracesQuery_Body })
+>;
+
+export interface PostObservabilityTracesQuery_RouteContract {
+  pathParams: never;
+  queryParams: never;
+  body: PostObservabilityTracesQuery_Body;
+  request: PostObservabilityTracesQuery_Request;
+  response: PostObservabilityTracesQuery_Response;
   responseType: 'json';
 }
 
@@ -16439,7 +16613,7 @@ export type PostStoredSkills_Body = {
   /** List of asset file paths */
   assets?: string[] | undefined;
   /** Full file tree structure for the skill */
-  files?: Shared_Auxiliary_1236[] | undefined;
+  files?: Shared_Auxiliary_1282[] | undefined;
   /** Additional metadata for the skill */
   metadata?:
     | {
@@ -16497,7 +16671,7 @@ export type PatchStoredSkillsStoredSkillId_Body = {
   /** List of asset file paths */
   assets?: (string[] | undefined) | undefined;
   /** Full file tree structure for the skill */
-  files?: (Shared_Auxiliary_1236[] | undefined) | undefined;
+  files?: (Shared_Auxiliary_1282[] | undefined) | undefined;
   /** Additional metadata for the skill */
   metadata?:
     | (
@@ -21770,6 +21944,7 @@ export interface RouteTypes {
   'GET /observability/traces/:traceId/trajectory': GetObservabilityTracesTraceIdTrajectory_RouteContract;
   'POST /observability/traces/score': PostObservabilityTracesScore_RouteContract;
   'GET /observability/traces/:traceId/:spanId/scores': GetObservabilityTracesTraceIdSpanIdScores_RouteContract;
+  'POST /observability/traces/query': PostObservabilityTracesQuery_RouteContract;
   'GET /observability/metrics': GetObservabilityMetrics_RouteContract;
   'GET /observability/logs': GetObservabilityLogs_RouteContract;
   'GET /observability/scores': GetObservabilityScores_RouteContract;
@@ -22690,6 +22865,9 @@ export interface Client {
   };
   '/observability/traces/light': {
     GET: GetObservabilityTracesLight_RouteContract;
+  };
+  '/observability/traces/query': {
+    POST: PostObservabilityTracesQuery_RouteContract;
   };
   '/observability/traces/score': {
     POST: PostObservabilityTracesScore_RouteContract;

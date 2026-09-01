@@ -62,6 +62,8 @@ import {
 } from '@internal/core/storage';
 import { coreFeatures } from '@mastra/core/features';
 import { generateSignalId } from '@mastra/core/observability';
+import type { ValidationErrorHook } from '@mastra/core/server';
+import * as coreStorage from '@mastra/core/storage';
 import { z } from 'zod/v4';
 import { HTTPException } from '../http-exception';
 import type { InferParams, ServerContext, ServerRouteHandler } from '../server-adapter/routes';
@@ -70,6 +72,7 @@ import { handleError } from './error';
 import { paginationArgsSchema } from './observability-list-query-schemas';
 import {
   assertObservabilityDeltaSupported,
+  assertObservabilityTraceQuerySupported,
   createObservabilityListQuerySchema,
   getObservabilityStore,
   NEW_ROUTE_DEFS,
@@ -89,10 +92,12 @@ function createNewRoute<
     queryParamSchema?: TQuerySchema;
     bodySchema?: TBodySchema;
     responseSchema?: TResponseSchema;
+    onValidationError?: ValidationErrorHook;
+    preserveHttpExceptions?: boolean;
     handler: ServerRouteHandler<InferParams<TPathSchema, TQuerySchema, TBodySchema>>;
   },
 ) {
-  const { handler, ...schemas } = config;
+  const { handler, preserveHttpExceptions, ...schemas } = config;
   return createRoute({
     ...def,
     ...schemas,
@@ -109,6 +114,7 @@ function createNewRoute<
 
         return await handler(params);
       } catch (error) {
+        if (preserveHttpExceptions && error instanceof HTTPException) throw error;
         return handleError(error, `Error calling: '${def.summary.toLocaleLowerCase()}'`);
       }
     }) as ServerRouteHandler<
@@ -117,6 +123,71 @@ function createNewRoute<
       'json'
     >,
   });
+}
+
+// ============================================================================
+// Trace query route
+// ============================================================================
+
+const traceQueryValidationError: ValidationErrorHook = error => ({
+  status: 422,
+  body: {
+    code: 'TRACE_QUERY_INVALID',
+    message: 'The trace query is invalid',
+    issues: error.issues.map(issue => ({
+      code: 'invalid_request',
+      path: issue.path.map(part => (typeof part === 'symbol' ? String(part) : part)),
+      message: issue.message,
+    })),
+  },
+});
+
+function throwTraceQueryError(status: 400 | 409 | 422, body: Record<string, unknown>): never {
+  const message = typeof body.message === 'string' ? body.message : 'Trace query failed';
+  throw new HTTPException(status, {
+    message,
+    res: new Response(JSON.stringify(body), {
+      status,
+      headers: { 'content-type': 'application/json' },
+    }),
+  });
+}
+
+export const QUERY_TRACES = createNewRoute(NEW_ROUTE_DEFS.QUERY_TRACES, {
+  bodySchema: coreStorage.traceQueryRequestSchema,
+  responseSchema: coreStorage.traceQueryResponseSchema,
+  onValidationError: traceQueryValidationError,
+  preserveHttpExceptions: true,
+  handler: async ({ mastra, timeRange, where, group, orderBy, page }) => {
+    let plan;
+    try {
+      plan = coreStorage.planTraceQuery({ timeRange, where, group, orderBy, page });
+    } catch (error) {
+      if (error instanceof coreStorage.TraceQueryValidationError) {
+        throwTraceQueryError(422, { code: error.code, message: error.message, issues: error.issues });
+      }
+      if (error instanceof coreStorage.TraceQueryCursorError) {
+        throwTraceQueryError(error.code === 'TRACE_QUERY_CURSOR_CONFLICT' ? 409 : 400, {
+          code: error.code,
+          message: error.message,
+        });
+      }
+      throw error;
+    }
+
+    const observabilityStore = await getObservabilityStore(mastra);
+    assertObservabilityTraceQuerySupported(observabilityStore);
+    return await observabilityStore.queryTraces(plan);
+  },
+});
+
+if (QUERY_TRACES.openapi) {
+  QUERY_TRACES.openapi.responses[400] = { description: 'Malformed JSON or malformed cursor' };
+  QUERY_TRACES.openapi.responses[409] = { description: 'Cursor does not match the normalized query' };
+  QUERY_TRACES.openapi.responses[422] = { description: 'Structurally or semantically invalid trace query' };
+  QUERY_TRACES.openapi.responses[501] = {
+    description: 'The configured observability store does not support trace queries',
+  };
 }
 
 // ============================================================================
@@ -476,6 +547,7 @@ export const GET_TAGS = createNewRoute(NEW_ROUTE_DEFS.GET_TAGS, {
 });
 
 export const NEW_ROUTES = {
+  QUERY_TRACES,
   LIST_LOGS,
   LIST_SCORES,
   CREATE_SCORE,

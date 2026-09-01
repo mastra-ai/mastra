@@ -1,0 +1,154 @@
+---
+title: 'Advanced trace queries'
+description: 'Query completed logical traces with recursive predicates, related span and score conditions, grouping, ordering, and cursor pagination.'
+packages:
+  - '@mastra/client-js'
+  - '@mastra/server'
+---
+
+# Advanced trace queries
+
+Use `POST /api/observability/traces/query` to find completed logical traces that match trace fields and related span or score records. The endpoint returns a fixed lightweight trace projection, or distinct thread IDs when you group by `threadId`.
+
+The endpoint uses the same authentication as other observability routes and requires the `observability:read` permission. The configured observability store must support advanced trace queries.
+
+## Query traces with the client SDK
+
+Pass the query to `queryTraces()`:
+
+```typescript
+const result = await mastraClient.queryTraces({
+  timeRange: {
+    from: '2026-08-01T00:00:00.000Z',
+    to: '2026-08-08T00:00:00.000Z',
+  },
+  where: {
+    scores: {
+      some: {
+        op: 'and',
+        args: [
+          { op: 'eq', left: { path: 'scorerId' }, right: { literal: 'factuality' } },
+          { op: 'lt', left: { path: 'score' }, right: { literal: 0.6 } },
+        ],
+      },
+    },
+  },
+  orderBy: [{ field: 'startedAt', direction: 'desc' }],
+  page: { limit: 25 },
+})
+```
+
+A `some` clause matches when one related record satisfies its complete nested predicate. In this example, `scorerId` and `score` must match on the same score record. A `none` clause matches when no related record satisfies its complete nested predicate.
+
+## Send an HTTP request
+
+```bash
+curl --request POST \
+  --url http://localhost:4111/api/observability/traces/query \
+  --header 'Authorization: Bearer <token>' \
+  --header 'Content-Type: application/json' \
+  --data '{
+    "timeRange": {
+      "from": "2026-08-01T00:00:00.000Z",
+      "to": "2026-08-08T00:00:00.000Z"
+    },
+    "where": {
+      "spans": {
+        "some": {
+          "op": "and",
+          "args": [
+            { "op": "eq", "left": { "path": "spanType" }, "right": { "literal": "tool_call" } },
+            { "op": "exists", "path": "error" }
+          ]
+        }
+      }
+    }
+  }'
+```
+
+## Request fields
+
+| Field | Required | Description |
+| - | - | - |
+| `timeRange` | Yes | Trace start-time boundary. `from` is inclusive, `to` is exclusive, and the range can span at most 31 days. Both values must be ISO timestamps. |
+| `where` | No | Recursive trace predicate. Supports scalar conditions and `spans.some`, `spans.none`, `scores.some`, and `scores.none`. |
+| `group` | No | Set to `{ by: ['threadId'] }` to return distinct non-null thread IDs. |
+| `orderBy` | No | One item ordering ungrouped results by `startedAt` or `endedAt`, in `asc` or `desc` order. Defaults to `startedAt desc`. Not accepted with `group`. |
+| `page` | No | `{ limit, after }`. `limit` defaults to 100 and has a maximum of 1000. Pass the opaque `page.next` value as `after`. |
+
+Unknown fields are rejected. The request cannot select a projection, declare joins, or control authorization.
+
+## Fields and operators
+
+| Predicate context | Fields | Operators |
+| - | - | - |
+| Trace | `traceId`, `threadId`, `resourceId`, `entityName`, `entityType`, `environment`, `status` | `eq`, `ne`, `in`, `notIn`, `exists`, `notExists` |
+| Trace | `startedAt`, `endedAt` | `eq`, `ne`, `in`, `notIn`, `lt`, `lte`, `gt`, `gte`, `exists`, `notExists` |
+| Span | `spanType` | `eq`, `ne`, `in`, `notIn`, `exists`, `notExists` |
+| Span | `error` | `exists`, `notExists` |
+| Score | `scorerId` | `eq`, `ne`, `in`, `notIn`, `exists`, `notExists` |
+| Score | `score` | `eq`, `ne`, `in`, `notIn`, `lt`, `lte`, `gt`, `gte`, `exists`, `notExists` |
+
+Compose predicates with `{ op: 'and', args: [...] }`, `{ op: 'or', args: [...] }`, and `{ op: 'not', arg: ... }`. Comparison predicates place a field reference on the left and a literal on the right. Membership predicates use a field reference in `value` and a homogeneous literal array in `set`.
+
+## Responses
+
+An ungrouped query returns only lightweight completed traces:
+
+```json
+{
+  "traces": [
+    {
+      "traceId": "trace-123",
+      "rootSpanId": "span-123",
+      "threadId": "thread-123",
+      "resourceId": "resource-123",
+      "startedAt": "2026-08-03T10:00:00.000Z",
+      "endedAt": "2026-08-03T10:00:01.000Z",
+      "entityName": "support-agent",
+      "entityType": "agent",
+      "environment": "production",
+      "status": "success"
+    }
+  ],
+  "page": { "next": null }
+}
+```
+
+A grouped query returns distinct non-null thread IDs in ascending order:
+
+```typescript
+const result = await mastraClient.queryTraces({
+  timeRange: {
+    from: '2026-08-01T00:00:00.000Z',
+    to: '2026-08-08T00:00:00.000Z',
+  },
+  group: { by: ['threadId'] },
+})
+// { groups: [{ threadId: 'thread-123' }], page: { next: null } }
+```
+
+Related evidence is not embedded in either response. Use the trace-detail and branch APIs to load spans after selecting a result.
+
+## Pagination and errors
+
+Ordering is deterministic. Ungrouped ordering appends `traceId` ascending as a tie-breaker. Grouped queries always order by `threadId` ascending.
+
+Cursors are bound to the normalized query. Reusing a cursor after changing the time range, predicates, grouping, or ordering returns `409`. A malformed cursor returns `400`.
+
+| Status | Meaning |
+| - | - |
+| `400` | Malformed JSON or malformed cursor. |
+| `409` | The cursor does not match the query. |
+| `422` | The JSON is well formed, but the request is structurally or semantically invalid. The response includes stable issue codes and paths. |
+| `501` | The configured observability store does not support advanced trace queries. |
+
+## Limitations
+
+The endpoint returns completed traces only. It does not support running traces, custom projections, embedded evidence, summaries, aggregations, grouping by fields other than `threadId`, or conditions over an entire group.
+
+## Related
+
+- [Client SDK observability reference](/reference/client-js/observability)
+- [Tracing overview](/docs/observability/tracing/overview)
+- [Span interfaces](/reference/observability/tracing/spans)
