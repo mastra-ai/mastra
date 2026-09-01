@@ -10,36 +10,36 @@ export const fieldConfig: FieldConfig = buildZodFieldConfig<
   }
 >();
 
+function isPlainObject(value: unknown): value is Record<string, any> {
+  if (value === null || typeof value !== 'object') return false;
+  const proto = Object.getPrototypeOf(value);
+  return proto === Object.prototype || proto === null;
+}
+
+// Returns `undefined` when the value is considered empty and should be dropped.
+function cleanValue(value: any): any {
+  if (value === null || value === undefined || value === '') return undefined;
+
+  if (Array.isArray(value)) {
+    const cleaned = value.map(cleanValue).filter(item => item !== undefined);
+    return cleaned.length > 0 ? cleaned : undefined;
+  }
+
+  if (isPlainObject(value)) {
+    const cleaned = removeEmptyValues(value);
+    return Object.keys(cleaned).length > 0 ? cleaned : undefined;
+  }
+
+  // Primitives and non-plain objects (Date, File, Blob, Map, class instances) pass through untouched.
+  return value;
+}
+
 export function removeEmptyValues<T extends Record<string, any>>(values: T): Partial<T> {
   const result: Partial<T> = {};
   for (const key in values) {
-    const value = values[key];
-    if ([null, undefined, '', [], {}].includes(value)) {
-      continue;
-    }
-
-    if (Array.isArray(value)) {
-      const newArray = value.map((item: any) => {
-        if (typeof item === 'object') {
-          const cleanedItem = removeEmptyValues(item);
-          if (Object.keys(cleanedItem).length > 0) {
-            return cleanedItem;
-          }
-          return null;
-        }
-        return item;
-      });
-      const filteredArray = newArray.filter((item: any) => item !== null);
-      if (filteredArray.length > 0) {
-        result[key] = filteredArray;
-      }
-    } else if (typeof value === 'object') {
-      const cleanedValue = removeEmptyValues(value);
-      if (Object.keys(cleanedValue).length > 0) {
-        result[key] = cleanedValue as any;
-      }
-    } else {
-      result[key] = value;
+    const cleaned = cleanValue(values[key]);
+    if (cleaned !== undefined) {
+      result[key] = cleaned;
     }
   }
 

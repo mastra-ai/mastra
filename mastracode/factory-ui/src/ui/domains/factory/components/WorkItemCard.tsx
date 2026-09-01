@@ -175,6 +175,7 @@ export function WorkItemCard({
     preparing: busyLabel,
     decision,
     transitionReason,
+    sessionStatus,
   });
   const retryDecisionId = status.kind === 'error' ? status.retryDecisionId : undefined;
 

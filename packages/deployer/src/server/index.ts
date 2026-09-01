@@ -241,32 +241,33 @@ export async function createHonoServer(
       : await setupBrowserStream(app, {
           getToolset: async (agentId: string) => {
             // Look up agent and return its browser if configured.
-            // SDK providers live on `agent.browser`. CLI providers (e.g. @mastra/browser-viewer)
-            // live on the workspace and are only copied onto the agent during a request, so
-            // resolve the workspace explicitly to find them before any request has run.
-            const resolveBrowser = async (agent: Agent | null | undefined) => {
+            // First try the runtime registry (code-defined + previously hydrated agents),
+            // then fall back to the editor for stored agents (hydrates on first access).
+            // Agent-level SDK browsers live on `agent.browser`; CLI providers
+            // (e.g. @mastra/browser-viewer) live on the agent's workspace.
+            const resolveBrowser = async (agent: Agent | undefined | null) => {
               if (!agent) return undefined;
               if (agent.browser) return agent.browser;
               try {
-                return (await agent.getWorkspace())?.browser;
+                const workspace = await agent.getWorkspace();
+                return workspace?.browser;
               } catch {
                 return undefined;
               }
             };
 
-            // First try the runtime registry (code-defined + previously hydrated agents),
-            // then fall back to the editor for stored agents (hydrates on first access).
             try {
               const runtimeAgent = mastra.getAgentById(agentId);
               if (runtimeAgent) {
-                return resolveBrowser(runtimeAgent);
+                return await resolveBrowser(runtimeAgent);
               }
             } catch {
               // Agent not in runtime registry — try stored agents via editor
             }
 
             try {
-              return resolveBrowser(await mastra.getEditor?.()?.agent.getById(agentId));
+              const storedAgent = await mastra.getEditor?.()?.agent.getById(agentId);
+              return await resolveBrowser(storedAgent);
             } catch {
               return undefined;
             }

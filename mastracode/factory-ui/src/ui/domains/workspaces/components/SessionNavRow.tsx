@@ -146,7 +146,7 @@ const revealedSlot =
 function beltLabel(status: SessionRowStatus, name: string) {
   if (status === 'initializing') return `Initializing ${name}`;
   if (status === 'working') return `Agent working in ${name}`;
-  return `${name} ready — open to dismiss`;
+  return `${name} waiting on you`;
 }
 
 /** A merge badge is worth the slot only on a session with no lifecycle left to report. */

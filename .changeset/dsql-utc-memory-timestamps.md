@@ -2,4 +2,4 @@
 '@mastra/dsql': patch
 ---
 
-Write memory thread and resource timestamps as UTC ISO strings so `timestamp` columns no longer store the server's local wall clock (mirrors the `@mastra/pg` fix).
+Fixed memory thread and resource timestamps being written in the server's local timezone. `createdAt` and `updatedAt` are now stored as UTC, so both timestamp column variants hold the same instant regardless of where the process runs.
