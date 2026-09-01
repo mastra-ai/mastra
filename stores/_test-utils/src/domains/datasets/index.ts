@@ -18,7 +18,8 @@ export function createDatasetsTests({
   // Skip tests if storage doesn't have datasets domain
   const describeDatasets = storage.stores?.datasets ? describe : describe.skip;
   const supportsToolMocks = capabilities.toolMocks !== false;
-  const itItemIdentity = capabilities.datasetItemIdentity === false ? it.skip : it;
+  const supportsItemIdentity = capabilities.datasetItemIdentity !== false;
+  const itItemIdentity = supportsItemIdentity ? it : it.skip;
   const itExperiments = storage.stores?.experiments ? it : it.skip;
 
   let datasetsStorage: DatasetsStorage;
@@ -864,7 +865,7 @@ export function createDatasetsTests({
         const ds = await datasetsStorage.createDataset({ name: 'scd2-purge' });
         const item = await datasetsStorage.addItem({
           datasetId: ds.id,
-          externalId: 'durable-identity',
+          externalId: supportsItemIdentity ? 'durable-identity' : undefined,
           input: { patient: 'Alice' },
           groundTruth: { diagnosis: 'secret' },
           expectedTrajectory: [{ role: 'assistant', content: 'private response' }],
@@ -897,7 +898,9 @@ export function createDatasetsTests({
         expect(historyByVersion.map(row => row.isDeleted)).toEqual([false, false, true]);
 
         for (const row of historyByVersion) {
-          expect(row.externalId).toBe('durable-identity');
+          if (supportsItemIdentity) {
+            expect(row.externalId).toBe('durable-identity');
+          }
           expect(row.input).toBeNull();
           expect(row.groundTruth).toBeNull();
           expect(row.expectedTrajectory).toBeNull();
