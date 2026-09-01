@@ -8,4 +8,4 @@
 '@mastra/pg': patch
 ---
 
-Added support for persisting the schedule configuration of dynamically created workflow definitions.
+Fixed schedules of dynamically created workflows disappearing after a restart. Their schedule configuration is now persisted and restored, so the Schedules tab in Studio keeps showing them and they continue to run.

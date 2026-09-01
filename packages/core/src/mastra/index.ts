@@ -4894,27 +4894,12 @@ export class Mastra<
     (this.#workflows as Record<string, AnyWorkflow>)[key] = workflow;
     this.#hiddenWorkflowKeys.delete(key);
     this.registerStaticWorkflowScorers(workflow);
-
-    // Mirror addWorkflow(): a replaced dynamic workflow may declare schedules,
-    // which must be (re-)registered into the running scheduler worker.
     if (collectWorkflowScheduleConfigs(workflow).length > 0) {
       this.#hasScheduledWorkflow = true;
-      const worker = this.#findSchedulerWorker();
-      if (worker?.scheduler) {
-        void (async () => {
-          try {
-            const schedulesStore = await this.#storage?.getStore('schedules');
-            if (!schedulesStore) return;
-            await this.registerDeclarativeSchedules(schedulesStore);
-          } catch (error) {
-            this.#logger?.error('Failed to register declarative schedule for workflow', {
-              workflowId: workflow.id,
-              error,
-            });
-          }
-        })();
-      }
     }
+    // Declarative schedule (re-)registration happens in addDynamicWorkflows()
+    // after definition persistence succeeds, so a persistence failure can't
+    // leave schedule rows reflecting a rolled-back registry.
   }
 
   /**
@@ -5120,6 +5105,26 @@ export class Mastra<
     } catch (error) {
       restoreRegistry();
       throw error;
+    }
+
+    // Synchronize declarative schedules only after every registry replacement
+    // and definition upsert has succeeded. Run for every replacement — a
+    // replacement that dropped its schedules must still sweep the old wf_*
+    // rows. A sync failure is logged, not thrown: the registry and persisted
+    // definitions are already consistent, and the next boot re-syncs.
+    const worker = this.#findSchedulerWorker();
+    if (worker?.scheduler) {
+      try {
+        const schedulesStore = await this.#storage?.getStore('schedules');
+        if (schedulesStore) {
+          await this.registerDeclarativeSchedules(schedulesStore);
+        }
+      } catch (error) {
+        this.#logger?.error('Failed to synchronize declarative schedules after dynamic workflow registration', {
+          workflowIds: ordered.map(({ normalized }) => normalized.id),
+          error,
+        });
+      }
     }
   }
 

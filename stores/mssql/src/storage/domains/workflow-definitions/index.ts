@@ -56,8 +56,15 @@ function rowToDefinition(row: Record<string, unknown>): WorkflowDefinition {
   if (stateSchema != null) def.stateSchema = stateSchema;
   const requestContextSchema = parseJson(row.requestContextSchema, 'requestContextSchema', row.id);
   if (requestContextSchema != null) def.requestContextSchema = requestContextSchema;
-  const schedule = parseJson(row.schedule, 'schedule', row.id);
-  if (schedule != null) def.schedule = schedule as WorkflowDefinition['schedule'];
+  // Schedule is optional — malformed JSON here must not sink the whole row
+  // (list() would throw and abort dynamic workflow loading). Leave the
+  // definition unscheduled instead; rehydration's lenient path warns.
+  try {
+    const schedule = parseJson(row.schedule, 'schedule', row.id);
+    if (schedule != null) def.schedule = schedule as WorkflowDefinition['schedule'];
+  } catch {
+    // ignore malformed schedule JSON
+  }
   if (row.authorId != null) def.authorId = String(row.authorId);
   return def;
 }
