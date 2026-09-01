@@ -1,5 +1,43 @@
 # @mastra/core
 
+## 1.64.0-alpha.2
+
+### Minor Changes
+
+- **Added a `workingDirectory` option to `MastraSandboxOptions`, honored by every sandbox provider** ([#22697](https://github.com/mastra-ai/mastra/pull/22697))
+
+  Every sandbox now accepts one instance-level `workingDirectory` option that sets the default directory for command execution and process spawns. A per-command `cwd` always wins over it, and when neither is provided each provider keeps its previous default (E2B home, docker `/workspace`, Vercel serverless `/tmp`, and so on). The effective value is readable through the new `sandbox.workingDirectory` getter.
+
+  ```ts
+  const sandbox = new E2BSandbox({ workingDirectory: '/home/user/my-repo' });
+  await sandbox.executeCommand('pwd'); // /home/user/my-repo
+  await sandbox.executeCommand('pwd', [], { cwd: '/tmp' }); // /tmp
+  ```
+
+  Providers that already carried this concept under other names keep those names working as deprecated aliases feeding the same field: `workingDir` on `@mastra/docker` and `@mastra/apple-container`, and `workdir` on `@mastra/modal`. When both the alias and `workingDirectory` are set, `workingDirectory` wins. Use absolute paths: the value is passed to the provider as-is, so `~` and environment variables like `$HOME` are not expanded (except where a provider documents expansion, such as `LocalSandbox` expanding `~`).
+
+### Patch Changes
+
+- Fixed durable agent traces being polluted by output-stream processor spans. The durable per-chunk processor pipeline ran without a tracing context, so every `output stream processor` span exported with no parent. Span stores that label a trace by its newest root row then showed a processor id instead of the agent. ([#22677](https://github.com/mastra-ai/mastra/pull/22677))
+
+  - Output-stream processor spans now nest under the run's `agent run` span.
+  - Tool-call chunks and resumed runs parent their processor spans the same way.
+  - The tool-call pipeline ends its processor spans right after each chunk, so none stay open.
+  - Callers without a tracing context no longer create processor spans, so orphan trace roots can never appear.
+
+  Fixes #22602
+
+- Fixed observability signals from Studio (mastra dev) being tagged with environment: production. Runs started through mastra dev now resolve to development unless an explicit environment is configured. Fixes #21941 ([#22734](https://github.com/mastra-ai/mastra/pull/22734))
+
+- Record TripWire aborts on workflow-path PROCESSOR_RUN spans as span errors with the structured `tripwireAbort` attribute (reason, retry, metadata), matching the legacy processor-runner path. Previously these spans ended like successful runs with only `output.tripwire`, dropping the retry flag and error info. ([#22350](https://github.com/mastra-ai/mastra/pull/22350))
+
+- Fixed span metadata values being silently erased by keys whose value is undefined. Values extracted via requestContextKeys (for example a threadId set on a RequestContext) now reach exported spans even when the agent has no memory configured, so exporters like Arize can group traces into sessions again. Keys passed in tracingOptions.metadata with undefined values no longer remove values the span already has; keys with real values still take precedence. Fixes [#22597](https://github.com/mastra-ai/mastra/issues/22597). ([#22742](https://github.com/mastra-ai/mastra/pull/22742))
+
+- Remove `CHANGELOG.md` from distributed npm files resulting in reduced package size ([#22737](https://github.com/mastra-ai/mastra/pull/22737))
+
+- Updated dependencies [[`28ce924`](https://github.com/mastra-ai/mastra/commit/28ce924276eeca492e6a360e5482ed20c2785ef6)]:
+  - @mastra/schema-compat@1.3.8-alpha.0
+
 ## 1.63.3-alpha.1
 
 ### Patch Changes

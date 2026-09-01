@@ -1,5 +1,34 @@
 # @mastra/factory
 
+## 0.12.0-alpha.6
+
+### Patch Changes
+
+- Improved Factory issue triage to label issues by domain in addition to confirmed direct @mastra/core bugs. Triage now selects domain labels such as Agents, Workflows, Memory, Observability (AI Telemetry), and RAG from where the change would land, applying several only when a change genuinely spans domains. ([#22753](https://github.com/mastra-ai/mastra/pull/22753))
+
+- Fixed repository-local Factory skills not loading when the bundled skills exist. Factory now layers the consumer repo's src/mastra/public/factory-skills directory over the bundled Factory skills, so projects can add custom pipeline skills (or override built-in ones) without patching node_modules. The local skills root is also resolved correctly for the cwd variants used by mastra factory dev --dir src/mastra. Fixes #22707. ([#22723](https://github.com/mastra-ai/mastra/pull/22723))
+
+- Fixed Factory project sessions using organization model credentials. ([#22741](https://github.com/mastra-ai/mastra/pull/22741))
+
+- Improved how a session says what it is doing. A sidebar row now carries an activity rail down its left edge instead of a dot in its trailing slot: marks travel down the rail while a run is underway, in the setup colour while the sandbox is still starting, and settle into a slow breath once the session is waiting on you. A board card shows the same thing on its own border — a lit head running the outline while work is in flight, the whole outline lit once the card is waiting on you. ([#22751](https://github.com/mastra-ai/mastra/pull/22751))
+
+  Removed the marker for a session that is merely bound to a card: the card offers an Open session button instead, and the work item panel drops its dot for the same reason. Moving lifecycle off the row's trailing slot frees it — the actions menu no longer displaces the marker on hover, and a merged pull request keeps its badge.
+
+- Fixed the "ready — your turn" mark only going away when a session was opened from the sidebar. Opening the same thread through a board card, a deep link, or the attention inbox left the mark lit, and a run finishing in the very thread being read marked it as needing attention. Landing on a session's route — through any door — now dismisses its mark, and the open session never gets marked at all. The completion sound still plays for it, so a backgrounded tab still calls you back. ([#22749](https://github.com/mastra-ai/mastra/pull/22749))
+
+- Factory board cards now show live session status: idle, initializing, working, and ready. Cards and sidebar rows read the same status, so they always agree. A cloning workspace shows initializing, a running session shows working, and a finished run waiting for you shows ready. ([#22748](https://github.com/mastra-ai/mastra/pull/22748))
+
+- Improved Factory PR review to audit documentation changes on mastra-ai/mastra with the repository's `docs-audit` skill, so docs changes are graded against the canonical authoring guidance instead of only general review judgement. ([#22766](https://github.com/mastra-ai/mastra/pull/22766))
+
+- Remove `CHANGELOG.md` from distributed npm files resulting in reduced package size ([#22737](https://github.com/mastra-ai/mastra/pull/22737))
+
+- Updated dependencies [[`cf58c86`](https://github.com/mastra-ai/mastra/commit/cf58c86cb48ccc72677bdaa422e43f102683184c), [`449d112`](https://github.com/mastra-ai/mastra/commit/449d1120cc1f9c43a71308a9fd8b178cfb11355f), [`2a0ca02`](https://github.com/mastra-ai/mastra/commit/2a0ca021d95e23f1d1c0b5fe858b0b56f71fe0ba), [`ff539f6`](https://github.com/mastra-ai/mastra/commit/ff539f6dc21137fbeb3f0867f07069cbce45c15f), [`420052f`](https://github.com/mastra-ai/mastra/commit/420052fcac3fc672be17fe655667dfbdbd35a2cc), [`28ce924`](https://github.com/mastra-ai/mastra/commit/28ce924276eeca492e6a360e5482ed20c2785ef6)]:
+  - @mastra/core@1.64.0-alpha.2
+  - @mastra/slack@1.6.3-alpha.0
+  - @mastra/code-sdk@1.6.0-alpha.4
+  - @mastra/auth-studio@1.3.5-alpha.0
+  - @mastra/auth-workos@1.6.5-alpha.0
+
 ## 0.12.0-alpha.5
 
 ### Minor Changes
