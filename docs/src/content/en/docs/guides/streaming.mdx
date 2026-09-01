@@ -85,8 +85,7 @@ Convert stored messages for `useChat()`'s `initialMessages` with `toAISdkMessage
 ```typescript
 import { toAISdkMessages } from '@mastra/ai-sdk/ui'
 
-const messages = [{ role: 'user', content: 'Hello' }]
-const initialMessages = toAISdkMessages(messages, { version: 'v7' })
+const initialMessages = toAISdkMessages([{ role: 'user', content: 'Hello' }], { version: 'v7' })
 ```
 
 For route handlers, see [AI SDK UI](/integrations/agentic-ui/ai-sdk-ui), which covers `handleChatStream()`, `handleWorkflowStream()`, and `handleNetworkStream()`. Pass the version that matches your installed AI SDK to these handlers too. See the [`toAISdkStream()`](/reference/ai-sdk/to-ai-sdk-stream) and [`toAISdkMessages()`](/reference/ai-sdk/to-ai-sdk-messages) references for all options.
@@ -97,18 +96,18 @@ Streaming from a workflow returns a sequence of structured events describing the
 
 ### Using `Run.stream()`
 
-The `stream()` method returns a `ReadableStream` of events directly.
+The `stream()` method returns a `WorkflowRunOutput`. Its `fullStream` property is a `ReadableStream` of workflow events.
 
 ```typescript
 const run = await testWorkflow.createRun()
 
-const stream = await run.stream({
+const stream = run.stream({
   inputData: {
     value: 'initial data',
   },
 })
 
-for await (const chunk of stream) {
+for await (const chunk of stream.fullStream) {
   console.log(chunk)
 }
 ```
@@ -175,14 +174,14 @@ See the [`Run.stream()` reference](/reference/streaming/workflows/stream) for wo
 
 ## Inspecting agent streams
 
-Iterate over the `stream` with a `for await` loop to inspect all emitted event chunks.
+Iterate over `stream.fullStream` with a `for await` loop to inspect all emitted event chunks.
 
 ```typescript
 const testAgent = mastra.getAgent('testAgent')
 
 const stream = await testAgent.stream([{ role: 'user', content: 'Help me organize my day' }])
 
-for await (const chunk of stream) {
+for await (const chunk of stream.fullStream) {
   console.log(chunk)
 }
 ```
@@ -327,27 +326,31 @@ You must `await` the call to `writer.write(...)` or else you will lock the strea
 
 :::
 
-```typescript {4,7,14}
+```typescript {8,11,18}
 import { createStep } from '@mastra/core/workflows'
+import { z } from 'zod'
 
 export const testStep = createStep({
+  id: 'test-step',
+  inputSchema: z.object({ url: z.url() }),
+  outputSchema: z.object({ status: z.number() }),
   execute: async ({ inputData, writer }) => {
-    const { value } = inputData
+    const { url } = inputData
 
-    await writer?.write({
+    await writer.write({
       type: 'custom-event',
       status: 'pending',
     })
 
-    const response = await fetch(value)
+    const response = await fetch(url)
 
-    await writer?.write({
+    await writer.write({
       type: 'custom-event',
       status: 'success',
     })
 
     return {
-      value: '',
+      status: response.status,
     }
   },
 })
