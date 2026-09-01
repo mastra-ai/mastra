@@ -381,7 +381,7 @@ fresh sha ref builds in the background on E2B's side (its runtime setup
 depends on the template). A changed setup command hashes to a new template
 name.
 
-`setupCommand` also accepts an array; each entry runs as its own cached build
+`setupCommand` also accepts an array. Each entry runs as its own cached build
 step. `workingDirectory` sets the cwd for the build and the sandbox, and the
 repository is cloned to `<workingDirectory>/<repo>`.
 

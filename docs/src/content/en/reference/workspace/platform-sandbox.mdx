@@ -167,7 +167,7 @@ await sandbox.start()
 
 `createRepoTemplate()` accepts the same `cpuCount` and `memoryMB` sizing as the `Template()` builder methods, as plain options. They carry the identity and stale-fallback semantics described above. Omit them for the provider defaults.
 
-`setupCommand` also accepts an array; each entry runs as its own cached build step. `workingDirectory` sets the cwd for the build and the sandbox, and the repository is cloned to `<workingDirectory>/<repo>`. `buildEnv` passes environment variables to the build steps only; they never enter the serialized definition.
+`setupCommand` also accepts an array. Each entry runs as its own cached build step. `workingDirectory` sets the cwd for the build and the sandbox, and the repository is cloned to `<workingDirectory>/<repo>`. `buildEnv` passes environment variables to the build steps only. They never enter the serialized definition.
 
 `getRepositoryAccess` mirrors the resolver a Factory sandbox context carries, so a host can pass its context straight through; when it's absent, `createRepoTemplate()` returns `undefined` and the sandbox boots the provider default. The resolver skips reattachment to an existing `sandboxId`; on a fresh start, it resolves the repository's default-branch head before Platform starts or reuses the corresponding template build. If the repository head can't be resolved or the provider build fails, sandbox creation continues with the provider's default template so runtime setup can perform a cold checkout. For private repositories, the short-lived authorization token is sent as an ephemeral build environment value that stays out of the serialized definition and the persisted template record. It has no effect on content identity.
 
