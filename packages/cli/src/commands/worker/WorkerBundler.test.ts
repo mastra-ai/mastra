@@ -116,10 +116,12 @@ describe('WorkerBundler', () => {
     expect(createWorkerManifestEnvironment({ NODE_ENV: 'production' })).not.toHaveProperty('CI_SECRET_TOKEN');
   });
 
-  it('introspects workers with deployment env, filters built-ins, and deduplicates custom names', async () => {
+  it('introspects workers in an isolated cwd and lets the parent update the manifest from stdout', async () => {
     const { createWorkerManifestEnvironment, getWorkerManifestEntry, introspectWorkerManifest, WORKER_MANIFEST_ENTRY } =
       await import('./WorkerBundler');
     const tempDir = await mkdtemp(join(tmpdir(), 'mastra-worker-manifest-'));
+    const captureDir = await mkdtemp(join(tmpdir(), 'mastra-worker-cwd-capture-'));
+    const capturePath = join(captureDir, 'cwd.txt');
     const manifestPath = join(tempDir, 'workers.json');
     const entryPath = join(tempDir, `${WORKER_MANIFEST_ENTRY}.mjs`);
 
@@ -138,7 +140,11 @@ describe('WorkerBundler', () => {
       );
       await writeFile(
         join(tempDir, 'workers-config.mjs'),
-        `export const workers = process.env.MASTRA_WORKERS === 'false' ? false : [
+        `import { writeFile } from 'node:fs/promises';
+        await writeFile(process.env.INTROSPECTION_CWD_CAPTURE, process.cwd());
+        await writeFile('relative-side-effect.txt', 'must not touch the build artifact');
+        console.log('worker config startup output');
+        export const workers = process.env.MASTRA_WORKERS === 'false' ? false : [
           { name: 'orchestration' },
           ...process.env.DEPLOYMENT_WORKERS.split(',').map(name => ({ name })),
           { name: 'backgroundTasks' },
@@ -148,16 +154,86 @@ describe('WorkerBundler', () => {
       const workerManifestEntry = getWorkerManifestEntry();
       expect(workerManifestEntry).toContain("from './workers-config.mjs'");
       expect(workerManifestEntry).not.toContain("from '#mastra'");
+      expect(workerManifestEntry).not.toContain('workers.json');
+      expect(workerManifestEntry).toContain('process.stdout.write');
       await writeFile(entryPath, workerManifestEntry);
 
       const deploymentEnv = createWorkerManifestEnvironment({
         DEPLOYMENT_WORKERS: 'github-events,cleanup-jobs,cleanup-jobs',
+        INTROSPECTION_CWD_CAPTURE: capturePath,
       });
       await introspectWorkerManifest(tempDir, deploymentEnv);
 
       const manifest = JSON.parse(await readFile(manifestPath, 'utf-8'));
       expect(manifest.custom).toEqual(['cleanup-jobs', 'github-events']);
+      const introspectionCwd = await readFile(capturePath, 'utf-8');
+      expect(introspectionCwd).not.toBe(tempDir);
+      expect(introspectionCwd).toContain('mastra-worker-introspection-');
+      await expect(access(join(tempDir, 'relative-side-effect.txt'))).rejects.toThrow();
       await expect(access(entryPath)).resolves.toBeUndefined();
+    } finally {
+      await rm(tempDir, { recursive: true, force: true });
+      await rm(captureDir, { recursive: true, force: true });
+    }
+  });
+
+  it('surfaces subprocess output and leaves the manifest unchanged when introspection fails', async () => {
+    const { getWorkerManifestEntry, introspectWorkerManifest, WORKER_MANIFEST_ENTRY } = await import('./WorkerBundler');
+    const tempDir = await mkdtemp(join(tmpdir(), 'mastra-worker-manifest-failure-'));
+    const manifestPath = join(tempDir, 'workers.json');
+    const originalManifest = JSON.stringify({
+      version: 1,
+      orchestration: { enabled: false },
+      scheduler: { enabled: false },
+      backgroundTasks: { enabled: false },
+      custom: [],
+    });
+
+    try {
+      await writeFile(manifestPath, originalManifest);
+      await writeFile(
+        join(tempDir, 'workers-config.mjs'),
+        `console.log('startup stdout detail');
+        console.error('startup stderr detail');
+        throw new Error('worker initialization exploded');
+        export const workers = [];`,
+      );
+      await writeFile(join(tempDir, `${WORKER_MANIFEST_ENTRY}.mjs`), getWorkerManifestEntry());
+
+      await expect(introspectWorkerManifest(tempDir, {})).rejects.toThrow(
+        /startup stdout detail[\s\S]*startup stderr detail/,
+      );
+      await expect(readFile(manifestPath, 'utf-8')).resolves.toBe(originalManifest);
+    } finally {
+      await rm(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it('terminates introspection after the configured timeout and leaves the manifest unchanged', async () => {
+    const { getWorkerManifestEntry, introspectWorkerManifest, WORKER_MANIFEST_ENTRY } = await import('./WorkerBundler');
+    const tempDir = await mkdtemp(join(tmpdir(), 'mastra-worker-manifest-timeout-'));
+    const manifestPath = join(tempDir, 'workers.json');
+    const originalManifest = JSON.stringify({
+      version: 1,
+      orchestration: { enabled: false },
+      scheduler: { enabled: false },
+      backgroundTasks: { enabled: false },
+      custom: [],
+    });
+
+    try {
+      await writeFile(manifestPath, originalManifest);
+      await writeFile(
+        join(tempDir, 'workers-config.mjs'),
+        `await new Promise(resolve => setTimeout(resolve, 60_000));
+        export const workers = [];`,
+      );
+      await writeFile(join(tempDir, `${WORKER_MANIFEST_ENTRY}.mjs`), getWorkerManifestEntry());
+
+      await expect(introspectWorkerManifest(tempDir, {}, { timeoutMs: 50 })).rejects.toThrow(
+        'Worker manifest introspection timed out after 50ms',
+      );
+      await expect(readFile(manifestPath, 'utf-8')).resolves.toBe(originalManifest);
     } finally {
       await rm(tempDir, { recursive: true, force: true });
     }
