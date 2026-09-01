@@ -89,7 +89,7 @@ export interface KnowledgeActivityEvent {
   id: string;
   action: string;
   targetType: string;
-  scopeId: string;
+  scopeId?: string;
   sourceType: 'importer' | 'system';
   sourceId?: string;
   importRunId?: string;
@@ -216,12 +216,31 @@ export async function fetchKnowledgeProposals(
   baseUrl: string,
   factoryProjectId: string,
   status: KnowledgeProposalStatus | undefined,
+  cursor: string | undefined,
+  threadId?: string,
   signal?: AbortSignal,
 ): Promise<KnowledgeProposalsPayload> {
-  const query = status ? `?status=${encodeURIComponent(status)}` : '';
-  return requestJson<KnowledgeProposalsPayload>(`${knowledgeBase(baseUrl, factoryProjectId)}/proposals${query}`, {
+  const query = new URLSearchParams();
+  if (status) query.set('status', status);
+  if (cursor) query.set('cursor', cursor);
+  if (threadId) query.set('threadId', threadId);
+  const suffix = query.size ? `?${query.toString()}` : '';
+  return requestJson<KnowledgeProposalsPayload>(`${knowledgeBase(baseUrl, factoryProjectId)}/proposals${suffix}`, {
     signal,
   });
+}
+
+export async function fetchKnowledgeProposal(
+  baseUrl: string,
+  factoryProjectId: string,
+  proposalId: string,
+  threadId?: string,
+  signal?: AbortSignal,
+): Promise<KnowledgeProposal> {
+  return requestJson<KnowledgeProposal>(
+    `${knowledgeBase(baseUrl, factoryProjectId)}/proposals/${encodeURIComponent(proposalId)}${knowledgeQuery({ threadId })}`,
+    { signal },
+  );
 }
 
 export async function reviewKnowledgeProposal(
@@ -230,9 +249,10 @@ export async function reviewKnowledgeProposal(
   proposalId: string,
   action: 'approve' | 'reject' | 're-review',
   reason?: string,
+  threadId?: string,
 ): Promise<KnowledgeProposal> {
   return requestJson<KnowledgeProposal>(
-    `${knowledgeBase(baseUrl, factoryProjectId)}/proposals/${encodeURIComponent(proposalId)}/${action}`,
+    `${knowledgeBase(baseUrl, factoryProjectId)}/proposals/${encodeURIComponent(proposalId)}/${action}${knowledgeQuery({ threadId })}`,
     {
       method: 'POST',
       headers: { 'content-type': 'application/json' },

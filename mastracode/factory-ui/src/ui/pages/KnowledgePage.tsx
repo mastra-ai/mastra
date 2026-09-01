@@ -266,6 +266,8 @@ function ActiveKnowledgeView({
   threadId,
   importerId,
   runId,
+  proposalId,
+  onSelectProposal,
   onOpenRun,
   onOpenNode,
   explore,
@@ -276,6 +278,8 @@ function ActiveKnowledgeView({
   threadId?: string;
   importerId?: string;
   runId?: string;
+  proposalId?: string;
+  onSelectProposal: (proposalId: string | undefined) => void;
   onOpenRun: (importerId: string, runId: string) => void;
   onOpenNode: (nodeId: string, name: string) => void;
   explore: React.ReactNode;
@@ -286,7 +290,15 @@ function ActiveKnowledgeView({
     );
   }
   if (view === 'approvals') {
-    return factoryProjectId ? <KnowledgeApprovals factoryProjectId={factoryProjectId} onOpenNode={onOpenNode} /> : null;
+    return factoryProjectId ? (
+      <KnowledgeApprovals
+        factoryProjectId={factoryProjectId}
+        threadId={threadId}
+        proposalId={proposalId}
+        onSelectProposal={onSelectProposal}
+        onOpenNode={onOpenNode}
+      />
+    ) : null;
   }
   if (view === 'imports') {
     return <KnowledgeImports factoryProjectId={factoryProjectId} initialImporterId={importerId} initialRunId={runId} />;
@@ -318,6 +330,7 @@ function KnowledgeContent({ factoryProjectId }: { factoryProjectId: string | und
       : 'explore';
   const importerId = searchParams.get('importer') ?? undefined;
   const runId = searchParams.get('run') ?? undefined;
+  const proposalId = searchParams.get('proposal') ?? undefined;
   // The node trail (A7): the flyout shows the LAST entry; earlier entries
   // are clickable breadcrumbs back through the hops.
   const [trail, setTrail] = useState<TrailEntry[]>([]);
@@ -475,6 +488,7 @@ function KnowledgeContent({ factoryProjectId }: { factoryProjectId: string | und
       else copy.set('view', view);
       copy.delete('importer');
       copy.delete('run');
+      if (view !== 'approvals') copy.delete('proposal');
       return copy;
     });
   };
@@ -484,6 +498,15 @@ function KnowledgeContent({ factoryProjectId }: { factoryProjectId: string | und
       copy.set('view', 'imports');
       copy.set('importer', selectedImporterId);
       copy.set('run', selectedRunId);
+      return copy;
+    });
+  };
+  const selectProposal = (selectedProposalId: string | undefined) => {
+    setSearchParams(params => {
+      const copy = new URLSearchParams(params);
+      copy.set('view', 'approvals');
+      if (selectedProposalId) copy.set('proposal', selectedProposalId);
+      else copy.delete('proposal');
       return copy;
     });
   };
@@ -537,6 +560,8 @@ function KnowledgeContent({ factoryProjectId }: { factoryProjectId: string | und
             threadId={threadId}
             importerId={importerId}
             runId={runId}
+            proposalId={proposalId}
+            onSelectProposal={selectProposal}
             onOpenRun={openImportRun}
             onOpenNode={(nodeId, name) => {
               setTrail([{ nodeId, name }]);
