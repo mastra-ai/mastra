@@ -252,6 +252,7 @@ export class RemindContinuationProcessor implements Processor<'remind-continuati
       parentAgent: Agent;
       parentAgentId: string;
       maxSteps: number;
+      acceptedTerminalSignals?: Set<string>;
       getReminderAgent(): Agent;
     },
   ) {}
@@ -309,7 +310,10 @@ export class RemindContinuationProcessor implements Processor<'remind-continuati
       const exhausted = outstanding.filter(
         question => question.terminalPending || question.attempts >= MAX_CONTINUATION_ATTEMPTS,
       );
-      for (const question of exhausted) await this.deliverUnableToAnswer(question.replyId, args.writer);
+      for (const question of exhausted) {
+        if (this.options.acceptedTerminalSignals?.has(`${question.replyId}:terminal:signal`)) continue;
+        await this.deliverUnableToAnswer(question.replyId, args.writer);
+      }
 
       const refreshed = await reconstructRemindContinuationView(this.options);
       const retryable = [...refreshed.outstanding.values()].filter(
@@ -395,7 +399,7 @@ export class RemindContinuationProcessor implements Processor<'remind-continuati
     const failureEventIds = [1, 2].map(attempt => `${replyId}:delivery-failure:terminal:${attempt}`);
     const store = await this.options.memory.storage.getStore('memory');
     const stored = await store?.listMessagesById({
-      messageIds: [pendingEventId, deliveredEventId, ...failureEventIds],
+      messageIds: [pendingEventId, deliveredEventId, signalId, ...failureEventIds],
     });
     const storedById = new Map((stored?.messages ?? []).map(message => [message.id, message]));
     const existingDeliveredMessage = storedById.get(deliveredEventId);
@@ -415,6 +419,33 @@ export class RemindContinuationProcessor implements Processor<'remind-continuati
     const answer =
       (existingPendingMessage && getRemindMessageText(existingPendingMessage).split('\n\n').slice(1).join('\n\n')) ||
       'Unable to answer this memory question after two continuation attempts.';
+    const persistedParentSignal = storedById.get(signalId);
+    if (
+      persistedParentSignal?.role === 'signal' &&
+      persistedParentSignal.threadId === this.options.parentThreadId &&
+      persistedParentSignal.resourceId === this.options.resourceId
+    ) {
+      const delivered: RemindTerminalDeliveredEvent = {
+        kind: 'terminal-delivered',
+        ...commonEventFields({
+          eventId: deliveredEventId,
+          deliveryId: signalId,
+          parentAgentId: this.options.parentAgentId,
+          parentThreadId: this.options.parentThreadId,
+          resourceId: this.options.resourceId,
+          createdAt: await nextProtocolCreatedAt(this.options.memory, this.options.threadId, this.options.resourceId),
+        }),
+        replyId,
+        outcome: terminalOutcome,
+      };
+      await saveProtocolMessage(this.options.memory, {
+        event: delivered,
+        threadId: this.options.threadId,
+        resourceId: this.options.resourceId,
+        text: `Terminal reply delivered for ${replyId}.`,
+      });
+      return;
+    }
     if (existingPending?.kind !== 'terminal-pending-delivery') {
       const pending: RemindTerminalPendingEvent = {
         kind: 'terminal-pending-delivery',
@@ -437,29 +468,28 @@ export class RemindContinuationProcessor implements Processor<'remind-continuati
       });
     }
 
+    const terminalSignal = {
+      id: signalId,
+      type: 'reactive' as const,
+      tagName: 'memory-reply',
+      contents: answer,
+      attributes: { replyId, moreComing: false, outcome: terminalOutcome },
+      metadata: { origin: 'subconscious', replyId, moreComing: false, outcome: terminalOutcome },
+    };
     const firstAttempt = Math.max(0, ...existingFailures.map(failure => failure.attempt)) + 1;
     for (let attempt = firstAttempt; attempt <= MAX_TERMINAL_DELIVERY_ATTEMPTS; attempt++) {
       try {
-        const result = this.options.parentAgent.sendSignal(
-          {
-            id: signalId,
-            type: 'reactive',
-            tagName: 'memory-reply',
-            contents: answer,
-            attributes: { replyId, moreComing: false, outcome: terminalOutcome },
-            metadata: { origin: 'subconscious', replyId, moreComing: false, outcome: terminalOutcome },
-          },
-          {
-            threadId: this.options.parentThreadId,
-            resourceId: this.options.resourceId,
-            ifActive: { behavior: 'deliver' },
-            ifIdle: { behavior: 'wake' },
-          },
-        );
+        const result = this.options.parentAgent.sendSignal(terminalSignal, {
+          threadId: this.options.parentThreadId,
+          resourceId: this.options.resourceId,
+          ifActive: { behavior: 'deliver' },
+          ifIdle: { behavior: 'wake' },
+        });
         const accepted = await result.accepted;
         if (accepted.action !== 'wake' && accepted.action !== 'deliver') {
           throw new Error(`Terminal reply delivery was not accepted (${accepted.action}).`);
         }
+        this.options.acceptedTerminalSignals?.add(signalId);
         if (accepted.action === 'wake') consumeWakeOutput(accepted.output, writer);
       } catch (error) {
         const failure: RemindDeliveryFailureEvent = {
@@ -518,6 +548,25 @@ export class RemindContinuationProcessor implements Processor<'remind-continuati
           text: `Terminal reply delivered for ${replyId}.`,
         });
       } catch (error) {
+        try {
+          const persisted = this.options.parentAgent.sendSignal(terminalSignal, {
+            threadId: this.options.parentThreadId,
+            resourceId: this.options.resourceId,
+            ifActive: { behavior: 'persist' },
+            ifIdle: { behavior: 'persist' },
+          });
+          const persistedAccepted = await persisted.accepted;
+          if (persistedAccepted.action !== 'persist') {
+            throw new Error(`Terminal signal persistence was not accepted (${persistedAccepted.action}).`);
+          }
+          await persisted.persisted;
+        } catch (signalPersistenceError) {
+          await publishSubconsciousError({
+            error: `remind: terminal signal ${signalId} could not be persisted after marker failure: ${errorText(signalPersistenceError)}`,
+            agent: 'remind',
+            writer,
+          });
+        }
         await publishSubconsciousError({
           error: `remind: terminal reply ${replyId} was accepted, but its delivered marker failed: ${errorText(error)}`,
           agent: 'remind',

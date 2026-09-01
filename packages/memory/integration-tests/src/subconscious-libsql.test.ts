@@ -732,15 +732,20 @@ describe('Subconscious LibSQL integration', () => {
     ).rejects.toThrow('ownership metadata does not match');
   });
 
-  it('deduplicates a retried deterministic parent signal ID through native persistence', async () => {
+  it('deduplicates terminal delivery after delivered-marker persistence fails and state is reconstructed', async () => {
     const directory = await mkdtemp(join(tmpdir(), 'subconscious-signal-dedupe-libsql-'));
     directories.push(directory);
     const storage = new LibSQLStore({ id: randomUUID(), url: `file:${join(directory, 'memory.db')}` });
     await storage.init();
     const memory = new Memory({ storage });
-    const threadId = randomUUID();
+    const parentThreadId = randomUUID();
     const resourceId = randomUUID();
-    await memory.createThread({ threadId, resourceId });
+    const replyId = `subconscious:remind:${randomUUID()}:reply`;
+    const question = questionEvent(parentThreadId, resourceId, replyId);
+    await memory.createThread({ threadId: parentThreadId, resourceId });
+    const reminderThread = await ensureOwnedRemindThread({ memory, parentThreadId, resourceId });
+    const questionMessage = protocolMessage(question, `Memory question ${replyId}\n\nWhen is the launch?`);
+    await memory.saveMessages({ messages: [questionMessage] });
     const model = new MockLanguageModelV2({
       doGenerate: async () => ({
         rawCall: { rawPrompt: null, rawSettings: {} },
@@ -751,25 +756,62 @@ describe('Subconscious LibSQL integration', () => {
       }),
     });
     const parentAgent = new Agent({ id: 'main-agent', name: 'Main Agent', instructions: 'Help.', model, memory });
-    const signalId = `subconscious:remind:${randomUUID()}:terminal:signal`;
-    for (let attempt = 0; attempt < 2; attempt++) {
-      const sent = parentAgent.sendSignal(
-        {
-          id: signalId,
-          type: 'reactive',
-          tagName: 'memory-reply',
-          contents: 'January 15.',
-          metadata: { origin: 'subconscious', moreComing: false },
-        },
-        { threadId, resourceId, ifIdle: { behavior: 'persist' } },
-      );
-      await expect(sent.accepted).resolves.toMatchObject({ action: 'persist' });
-      await expect(sent.persisted).resolves.toBeUndefined();
-    }
+    const sendSignal = vi.spyOn(parentAgent, 'sendSignal');
+    const originalSave = memory.saveMessages.bind(memory);
+    let failDeliveredMarker = true;
+    vi.spyOn(memory, 'saveMessages').mockImplementation(async args => {
+      if (failDeliveredMarker && getRemindProtocol(args.messages[0]!)?.kind === 'terminal-delivered') {
+        failDeliveredMarker = false;
+        throw new Error('marker unavailable');
+      }
+      return await originalSave(args);
+    });
+    const firstReply = createReplyToMemoryQuestionTool({
+      memory,
+      parentAgent,
+      parentAgentId: 'main-agent',
+      parentThreadId,
+      reminderThreadId: reminderThread.id,
+      resourceId,
+    });
+    const first = await firstReply.execute?.({ replyId, answer: 'January 15.', moreComing: false }, {
+      agent: { messages: [questionMessage] },
+    } as any);
+    expect(first).toMatchObject({ delivered: false, reason: 'delivery-marker-unknown' });
+    const callsAfterFirstDelivery = sendSignal.mock.calls.length;
 
-    const persisted = await (await storage.getStore('memory'))!.listMessagesById({ messageIds: [signalId] });
-    expect(persisted.messages).toHaveLength(1);
-    expect(persisted.messages[0]).toMatchObject({ id: signalId, threadId, resourceId, role: 'signal' });
+    const reconstructed = new Memory({ storage });
+    const secondReply = createReplyToMemoryQuestionTool({
+      memory: reconstructed,
+      parentAgent,
+      parentAgentId: 'main-agent',
+      parentThreadId,
+      reminderThreadId: reminderThread.id,
+      resourceId,
+    });
+    const second = await secondReply.execute?.({ replyId, answer: 'January 15.', moreComing: false }, {
+      agent: { messages: [questionMessage] },
+    } as any);
+    expect(second).toMatchObject({ delivered: true, replyId });
+    expect(sendSignal).toHaveBeenCalledTimes(callsAfterFirstDelivery);
+
+    const signalId = `${replyId}:terminal:signal`;
+    const persisted = await (await storage.getStore('memory'))!.listMessagesById({
+      messageIds: [signalId, `${replyId}:terminal:delivered`],
+    });
+    expect(persisted.messages.filter(message => message.id === signalId)).toHaveLength(1);
+    expect(persisted.messages.find(message => message.id === signalId)).toMatchObject({
+      id: signalId,
+      threadId: parentThreadId,
+      resourceId,
+      role: 'signal',
+    });
+    expect(
+      getRemindProtocol(persisted.messages.find(message => message.id === `${replyId}:terminal:delivered`)!),
+    ).toMatchObject({
+      kind: 'terminal-delivered',
+      replyId,
+    });
   });
 
   it('runs curate after reflection with cursor recovery, CAS, and application restore', async () => {
