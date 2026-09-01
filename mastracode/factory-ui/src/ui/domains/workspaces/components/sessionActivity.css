@@ -257,11 +257,13 @@
 
 .session-wick {
   --belt-beat: 1.4s;
+
   /* Lap length, in belt beats. Long, because the head is crossing a whole card
    * rather than a 6px rail: it has to read as travelling, not as spinning. */
   --wick-lap: 6;
 
   position: absolute;
+
   /* The ring is the card's border, not a line inside it: the card turns its own
    * 1px border transparent and the wick paints that exact strip — same box,
    * same radius, same width, resting colour included. Reaching the border box
