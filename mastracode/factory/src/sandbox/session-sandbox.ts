@@ -1,6 +1,13 @@
+import * as path from 'node:path';
 import type { MastraSandbox, SandboxStartHook, WorkspaceSandbox } from '@mastra/core/workspace';
 import type { RepositoryAccess } from '../capabilities/version-control.js';
-import { deriveLocalRepoDir, deriveRemoteRepoDir, repoDirUnder } from './repo-dir.js';
+import {
+  declaredWorkingDirectory,
+  deriveLocalRepoDir,
+  deriveRemoteRepoDir,
+  repoDirUnder,
+  workspaceRootFor,
+} from './repo-dir.js';
 
 /**
  * Everything factory knows about a session's sandbox needs — the whole
@@ -79,6 +86,13 @@ interface SessionSandboxEntry {
    * treat an unresolved repoDir as "nothing materialized".
    */
   repoDir?: string;
+  /**
+   * The session's workspace root — the parent directory the repo clones
+   * into, and the root for the agent's file tools. Derivable (declared
+   * `workingDirectory`, else the repoDir's parent), memoized here alongside
+   * `repoDir` for the same passive readers. Never persisted.
+   */
+  workspaceRoot?: string;
 }
 
 const sessionSandboxes = new Map<string, SessionSandboxEntry>();
@@ -98,7 +112,10 @@ export function getSessionSandbox(
   if (existing) return existing;
   const sandbox = construct();
   const local = deriveLocalRepoDir(sandbox, repoFullName);
-  const entry: SessionSandboxEntry = { sandbox, ...(local ? { repoDir: local } : {}) };
+  const entry: SessionSandboxEntry = {
+    sandbox,
+    ...(local ? { repoDir: local, workspaceRoot: workspaceRootFor(sandbox, local) } : {}),
+  };
   sessionSandboxes.set(sessionId, entry);
   return entry;
 }
@@ -125,6 +142,30 @@ export async function resolveSessionRepoDir(
     repoDirUnder(await probeHome(sandbox), repoFullName);
   if (entry && entry.sandbox === sandbox) entry.repoDir = repoDir;
   return repoDir;
+}
+
+/**
+ * Resolve the session's workspace root — the parent directory the repo
+ * clones into, and the root for the agent's file tools (exec already
+ * defaults there via the sandbox's own `workingDirectory` chain). A
+ * declared absolute `workingDirectory` answers with no probe; otherwise the
+ * root degrades to the parent of the resolved repoDir, so sandboxes with no
+ * declared workingDirectory behave exactly as before the split. Like
+ * `resolveSessionRepoDir`, calling this against a stopped undeclared remote
+ * sandbox lazily starts it (the fallback probes with one command).
+ */
+export async function resolveSessionWorkspaceRoot(
+  sessionId: string,
+  sandbox: WorkspaceSandbox,
+  repoFullName: string,
+): Promise<string> {
+  const entry = sessionSandboxes.get(sessionId);
+  if (entry?.workspaceRoot && entry.sandbox === sandbox) return entry.workspaceRoot;
+  const workspaceRoot =
+    declaredWorkingDirectory(sandbox) ??
+    path.posix.dirname(await resolveSessionRepoDir(sessionId, sandbox, repoFullName));
+  if (entry && entry.sandbox === sandbox) entry.workspaceRoot = workspaceRoot;
+  return workspaceRoot;
 }
 
 /** One `pwd` in the VM's default shell cwd — its home dir, by provider convention. */

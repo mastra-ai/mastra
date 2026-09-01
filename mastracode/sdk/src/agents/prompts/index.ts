@@ -6,6 +6,7 @@ export { buildModePrompt, buildModePromptFn } from './build.js';
 export { planModePrompt } from './plan.js';
 export { fastModePrompt } from './fast.js';
 
+import * as path from 'node:path';
 import { buildBasePrompt } from '@mastra/core/coding-agent';
 import type { PromptContext as BasePromptContext } from '@mastra/core/coding-agent';
 import { loadSettings, resolveLspSetting } from '../../onboarding/settings.js';
@@ -30,6 +31,13 @@ export interface PromptContext extends Omit<BasePromptContext, 'toolGuidance'> {
   state?: any;
   currentDate: string;
   workingDir: string;
+  /**
+   * The workspace root the agent's file tools and exec root at, when it
+   * differs from `workingDir` (embedders like factory root tools at the
+   * parent directory the repo is checked out into). Instruction loading and
+   * git stay `workingDir`-scoped regardless.
+   */
+  workspaceRoot?: string;
 }
 
 const modePrompts: Record<string, string | ((ctx: PromptContext) => string)> = {
@@ -109,9 +117,16 @@ export function buildFullPromptSections(ctx: PromptContext): PromptSection[] {
     plansDir: getLocalPlansRelativeDir({ factoryProjectId }),
   });
 
+  // The workspace root the prompt advertises as the working directory. When
+  // an embedder roots tools at a parent directory (factory: the dir the repo
+  // is cloned into), the agent must be told THAT root — relative paths then
+  // read `<repo>/...`. Instruction loading below stays `workingDir`-scoped.
+  const workspaceRoot =
+    ctx.workspaceRoot && ctx.workingDir && ctx.workspaceRoot !== ctx.workingDir ? ctx.workspaceRoot : undefined;
+
   // Map new context to base context
   const baseCtx: BasePromptContext = {
-    projectPath: ctx.workingDir || '(no workspace attached)',
+    projectPath: workspaceRoot ?? (ctx.workingDir || '(no workspace attached)'),
     projectName: ctx.projectName || 'unknown',
     gitBranch: ctx.gitBranch,
     platform: process.platform,
@@ -182,8 +197,21 @@ export function buildFullPromptSections(ctx: PromptContext): PromptSection[] {
     };
   });
 
+  // When the tool root is the parent of the repo checkout, spell the layout
+  // out so the agent writes repo paths as `<repo>/...` instead of assuming
+  // the working directory is the repo itself.
+  const repoSubdir = workspaceRoot ? path.posix.basename(ctx.workingDir) : undefined;
+  const layoutSection: PromptSection | undefined = repoSubdir
+    ? {
+        id: 'workspace-layout',
+        label: 'Workspace layout',
+        content: `# Workspace Layout\nThe working directory above is the workspace root. The project repository is checked out at \`${repoSubdir}/\` inside it — reference repo files as \`${repoSubdir}/...\` (e.g. \`${repoSubdir}/package.json\`). Sibling checkouts, if any, are other subdirectories of the workspace root.`,
+      }
+    : undefined;
+
   return [
     { id: 'base-prompt', label: 'Base system prompt', content: base },
+    ...(layoutSection ? [layoutSection] : []),
     ...instructionSections,
     { id: 'model-prompt', label: 'Model-specific prompt', detail: ctx.modelId, content: modelSpecific.trim() },
     { id: 'mode-prompt', label: 'Mode prompt', detail: ctx.modeId, content: modeSpecific.trim() },

@@ -17,6 +17,14 @@ export interface MastraCodeState {
   [key: `subagentModelId_${string}`]: string | undefined;
   subagentModelId?: string;
   projectPath?: string;
+  /**
+   * The workspace root the agent's file tools and exec root at — the parent
+   * directory the project is checked out into (e.g. a sandbox's declared
+   * `workingDirectory`). When absent it defaults to `projectPath`, keeping
+   * standalone consumers on today's coupled-root behavior. `projectPath`
+   * stays repo-scoped either way (AGENTS.md/instructions, git, skills).
+   */
+  workspaceRoot?: string;
   projectName?: string;
   /** Factory project that owns this session. */
   factoryProjectId?: string;
@@ -113,6 +121,7 @@ export const stateSchema = z.object({
   modeId: z.string().optional(),
   subagentModelId: z.string().optional(),
   projectPath: z.string().optional(),
+  workspaceRoot: z.string().optional(),
   projectName: z.string().optional(),
   factoryProjectId: z.string().optional(),
   factoryOrgId: z.string().optional(),

@@ -45,6 +45,12 @@ export interface RegisterWorkflowBuilderPrimitivesOptions {
    */
   allowedPaths?: string[];
   /**
+   * Root for the workspace's file tools and exec. Defaults to `projectPath`
+   * (today's coupled behavior); embedders that check the project out under a
+   * parent workspace root pass that parent here.
+   */
+  workspaceRoot?: string;
+  /**
    * The code-agent Agent instance. Registered as `code-agent` so workflows
    * can compose it in agent steps. It already has full dynamic tool access
    * (workspace/MCP/web/etc.) via its own `tools: createDynamicTools(...)`.
@@ -61,21 +67,22 @@ export async function registerWorkflowBuilderPrimitives(
   mastra: Mastra,
   options: RegisterWorkflowBuilderPrimitivesOptions,
 ): Promise<void> {
-  const { projectPath, allowedPaths = [], codeAgent, mcpManager } = options;
+  const { projectPath, allowedPaths = [], workspaceRoot = projectPath, codeAgent, mcpManager } = options;
 
   // 1. Agents workflows can compose.
   mastra.addAgent(workflowBuilderAgent, 'workflow-builder');
   mastra.addAgent(codeAgent, 'code-agent');
 
-  // 2. Workspace tools — bound to a project-rooted local workspace.
+  // 2. Workspace tools — file tools and exec root at the workspace root
+  //    (the project path itself unless the embedder split them).
   const workspace = new Workspace({
     id: 'workflow-builder-workspace',
     name: 'Mastra Code Workspace (workflows)',
     filesystem: new LocalFilesystem({
-      basePath: projectPath,
-      allowedPaths: [projectPath, ...allowedPaths],
+      basePath: workspaceRoot,
+      allowedPaths: [workspaceRoot, ...allowedPaths],
     }),
-    sandbox: new LocalSandbox({ workingDirectory: projectPath }),
+    sandbox: new LocalSandbox({ workingDirectory: workspaceRoot }),
     tools: MASTRACODE_WORKSPACE_TOOLS,
   });
   const workspaceTools = await createWorkspaceTools(workspace, { workspace });

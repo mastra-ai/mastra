@@ -880,10 +880,26 @@ describe('GitHub session workspace preparation', () => {
     await workspace({ requestContext });
 
     const ctx = requestContext.get('controller') as {
-      getState: () => { projectPath?: string; projectName?: string };
+      getState: () => { projectPath?: string; projectName?: string; workspaceRoot?: string };
     };
     expect(ctx.getState().projectPath).toBe(path.join(root, 'session-a', 'hello'));
     expect(ctx.getState().projectName).toBe('octocat/hello');
+    // The workspace root rides along: the parent dir the repo clones into,
+    // so the SDK roots file tools there while instructions stay repo-scoped.
+    expect(ctx.getState().workspaceRoot).toBe(path.join(root, 'session-a'));
+  });
+
+  it('roots the agent filesystem at the workspace root, with the repo as a plain subdir', async () => {
+    const { root, workspace } = await createLocalFactory();
+    addProject();
+    addSession({ id: 'session-a' });
+
+    const ws = (await workspace({ requestContext: createGithubRequestContext('project-1', 'session-a') })) as {
+      filesystem: { basePath: string; readFile: (p: string) => Promise<unknown> };
+    };
+    // First op resolves (and memoizes) the lazy root.
+    await ws.filesystem.readFile('hello/README.md').catch(() => {});
+    expect(ws.filesystem.basePath).toBe(path.join(root, 'session-a'));
   });
 
   it('runs best-effort teardown after setup fails without masking the setup error', async () => {

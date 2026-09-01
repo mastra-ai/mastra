@@ -46,6 +46,7 @@ export async function getDynamicInstructionSections({
     modeId: modeId,
     currentDate: new Date().toISOString().split('T')[0]!,
     workingDir: projectPath,
+    workspaceRoot: state?.workspaceRoot,
     state,
   };
 

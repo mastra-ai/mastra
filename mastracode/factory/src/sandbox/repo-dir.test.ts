@@ -1,6 +1,13 @@
 import * as path from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { deriveLocalRepoDir, repoDirUnder, resolveContainedLocalRepoDir, sanitizeSegment } from './repo-dir.js';
+import {
+  declaredWorkingDirectory,
+  deriveLocalRepoDir,
+  repoDirUnder,
+  resolveContainedLocalRepoDir,
+  sanitizeSegment,
+  workspaceRootFor,
+} from './repo-dir.js';
 
 describe('sanitizeSegment', () => {
   it('keeps safe characters and replaces separators and traversal', () => {
@@ -80,5 +87,38 @@ describe('resolveContainedLocalRepoDir', () => {
   it('throws when the resolved path escapes the root', () => {
     expect(() => resolveContainedLocalRepoDir(root, '..', 'outside')).toThrow(/outside configured root/);
     expect(() => resolveContainedLocalRepoDir(root)).toThrow(/outside configured root/);
+  });
+});
+
+describe('declaredWorkingDirectory', () => {
+  it('answers an absolute declared workingDirectory, trimming trailing slashes', () => {
+    expect(declaredWorkingDirectory({ workingDirectory: '/workspace' })).toBe('/workspace');
+    expect(declaredWorkingDirectory({ workingDirectory: '/workspace///' })).toBe('/workspace');
+  });
+
+  it('keeps the filesystem root itself intact', () => {
+    expect(declaredWorkingDirectory({ workingDirectory: '/' })).toBe('/');
+  });
+
+  it('ignores undeclared and non-absolute values — remote providers never expand ~ or $HOME', () => {
+    expect(declaredWorkingDirectory({})).toBeUndefined();
+    expect(declaredWorkingDirectory({ workingDirectory: undefined })).toBeUndefined();
+    expect(declaredWorkingDirectory({ workingDirectory: '~/repos' })).toBeUndefined();
+    expect(declaredWorkingDirectory({ workingDirectory: '$HOME/repos' })).toBeUndefined();
+    expect(declaredWorkingDirectory({ workingDirectory: '' })).toBeUndefined();
+  });
+});
+
+describe('workspaceRootFor', () => {
+  it('prefers the declared workingDirectory', () => {
+    expect(workspaceRootFor({ workingDirectory: '/workspace' }, '/workspace/mastra')).toBe('/workspace');
+  });
+
+  it('degrades to the parent of the repoDir when nothing is declared — pre-split behavior', () => {
+    expect(workspaceRootFor({}, '/home/user/mastra')).toBe('/home/user');
+  });
+
+  it('handles a root-level repoDir on the fallback path', () => {
+    expect(workspaceRootFor({}, '/mastra')).toBe('/');
   });
 });

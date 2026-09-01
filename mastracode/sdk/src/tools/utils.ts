@@ -25,19 +25,23 @@ export function isPathAllowed(targetPath: string, projectRoot: string, allowedPa
 export function getAllowedPathsFromContext(
   toolContext: { requestContext?: { get: (key: string) => unknown } } | undefined,
 ): string[] {
+  type PathState = { sandboxAllowedPaths?: string[]; projectPath?: string; workspaceRoot?: string; configDir?: string };
   const agentControllerCtx = toolContext?.requestContext?.get('controller') as
     | {
-        getState?: () => { sandboxAllowedPaths?: string[]; projectPath?: string; configDir?: string };
+        getState?: () => PathState;
         session?: {
-          state?: { get?: () => { sandboxAllowedPaths?: string[]; projectPath?: string; configDir?: string } };
+          state?: { get?: () => PathState };
         };
       }
     | undefined;
   const state = agentControllerCtx?.getState?.() ?? agentControllerCtx?.session?.state?.get?.();
   const projectPath = state?.projectPath ? path.resolve(state.projectPath) : process.cwd();
   const configDir = state?.configDir ?? DEFAULT_CONFIG_DIR;
+  // Skill roots stay project-scoped; the workspace root (when an embedder
+  // split it from the project path) is allowed as the file-tool root.
+  const workspaceRoot = state?.workspaceRoot ? path.resolve(state.workspaceRoot) : undefined;
   const skillPaths = buildSkillPaths(projectPath, configDir);
   const sandboxPaths = state?.sandboxAllowedPaths ?? [];
 
-  return [...skillPaths, ...sandboxPaths];
+  return [...(workspaceRoot ? [workspaceRoot] : []), ...skillPaths, ...sandboxPaths];
 }

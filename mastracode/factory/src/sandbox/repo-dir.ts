@@ -32,8 +32,7 @@ export function deriveLocalRepoDir(
 ): string | undefined {
   const wd = sandbox.workingDirectory;
   if (sandbox.provider === 'local' && typeof wd === 'string' && wd.length > 0) {
-    const [, name] = repoFullName.split('/', 2);
-    return resolveContainedLocalRepoDir(wd, sanitizeSegment(name || 'repo'));
+    return resolveContainedLocalRepoDir(wd, repoSubdirName(repoFullName));
   }
   return undefined;
 }
@@ -58,14 +57,50 @@ export function deriveRemoteRepoDir(
 /**
  * `<parent>/<repo>` — where the repo checkout lands under a parent directory
  * (a declared `workingDirectory`, or the probed home dir on the fallback
- * path). Note: the rest of this module still calls the repo dir "repoDir";
- * that legacy rename is a separate mechanical PR.
+ * path).
  */
 export function repoDirUnder(parent: string, repoFullName: string): string {
-  const [, name] = repoFullName.split('/', 2);
   let end = parent.length;
   while (end > 0 && parent[end - 1] === '/') end--;
-  return `${parent.slice(0, end)}/${sanitizeSegment(name || 'repo')}`;
+  return `${parent.slice(0, end)}/${repoSubdirName(repoFullName)}`;
+}
+
+/**
+ * The repo checkout's directory name under the workspace root — the same
+ * segment every repoDir derivation path produces, so repo-relative paths
+ * (skill roots, agent-visible `<repo>/...` spellings) can be built without
+ * resolving the full repoDir.
+ */
+export function repoSubdirName(repoFullName: string): string {
+  const [, name] = repoFullName.split('/', 2);
+  return sanitizeSegment(name || 'repo');
+}
+
+/**
+ * The sandbox's declared absolute `workingDirectory`, if any. LocalSandbox
+ * always answers (its getter is narrowed to `string`); remote providers only
+ * answer when the deploy configured one — and `~`/`$HOME` are never expanded
+ * by remote providers, so non-absolute values fall through to the runtime
+ * fallback instead of becoming a bogus root. Trailing slashes are trimmed.
+ */
+export function declaredWorkingDirectory(sandbox: { workingDirectory?: unknown }): string | undefined {
+  const wd = sandbox.workingDirectory;
+  if (typeof wd !== 'string' || !wd.startsWith('/')) return undefined;
+  let end = wd.length;
+  while (end > 1 && wd[end - 1] === '/') end--;
+  return wd.slice(0, end);
+}
+
+/**
+ * The session's workspace root — the parent directory repos clone into and
+ * the root for the agent's file tools. A declared `workingDirectory` names it
+ * outright; otherwise it degrades to the parent of the resolved repoDir, so
+ * sandboxes with no declared workingDirectory keep exactly the pre-split
+ * layout (`<home>` on the probed remote path, the local sandbox root
+ * locally).
+ */
+export function workspaceRootFor(sandbox: { workingDirectory?: unknown }, repoDir: string): string {
+  return declaredWorkingDirectory(sandbox) ?? path.posix.dirname(repoDir);
 }
 
 /** Resolve a repoDir under `root`, refusing any path that escapes the configured root. */

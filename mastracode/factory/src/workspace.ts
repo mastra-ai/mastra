@@ -32,13 +32,14 @@ import { registerGithubPatKind, registerGithubTokenInjector } from './integratio
 import { getFactorySessionAddress } from './rules/binding-context.js';
 import { requireExec } from './sandbox/materialization.js';
 import type { ExecutableSandbox } from './sandbox/materialization.js';
+import { repoSubdirName, workspaceRootFor } from './sandbox/repo-dir.js';
 import {
   createSessionSetupHook,
   evictSessionSandbox,
   getSessionSandbox,
   hasFailedSetupCommand,
   recordFailedSetupCommand,
-  resolveSessionRepoDir,
+  resolveSessionWorkspaceRoot,
 } from './sandbox/session-sandbox.js';
 
 import type { WorkItemsStorage } from './storage/domains/work-items/base.js';
@@ -395,10 +396,18 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
     // and falls back to the server's own process.cwd() when unset — which
     // points the agent at the host checkout (and lets it run `git checkout`
     // there instead of in its session repoDir). Pin it to the session repoDir
-    // once known. A remote repoDir resolves at the sandbox's first start, so
-    // the pin self-heals on the next resolution after the VM has run.
-    if (ctx && repoDir && ctx.getState()?.projectPath !== repoDir) {
-      await ctx.setState({ projectPath: repoDir, projectName: repoFullName });
+    // once known, alongside the workspace root (the repoDir's parent, or the
+    // sandbox's declared workingDirectory) so the SDK advertises the parent
+    // as the tool root while instructions stay repo-scoped. A remote repoDir
+    // resolves at the sandbox's first start, so the pin self-heals on the
+    // next resolution after the VM has run.
+    const workspaceRoot = repoDir ? workspaceRootFor(sessionEntry.sandbox, repoDir) : undefined;
+    if (
+      ctx &&
+      repoDir &&
+      (ctx.getState()?.projectPath !== repoDir || ctx.getState()?.workspaceRoot !== workspaceRoot)
+    ) {
+      await ctx.setState({ projectPath: repoDir, projectName: repoFullName, workspaceRoot });
     }
 
     const extensionId = effectiveSkillExtension ? `-${effectiveSkillExtension.id}` : '';
@@ -625,12 +634,21 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
     const filesystem = new SandboxFilesystem({
       id: `sandbox-fs:${workspaceId}`,
       sandbox: sessionSandbox,
-      // Lazy: a remote repoDir is only knowable once a VM runs. The first
-      // file operation resolves it (starting the VM — which materializes the
-      // repo via the onStart hook — when needed) and memoizes it.
-      workdir: () => resolveSessionRepoDir(session.id, sessionEntry.sandbox, repoFullName),
+      // The agent's file tools root at the session's workspace root — the
+      // parent dir the repo clones into — so the checkout is an ordinary
+      // `<repo>/` subdirectory. Lazy: a declared workingDirectory answers
+      // immediately; an undeclared remote root is only knowable once a VM
+      // runs (the first file operation resolves it — starting the VM, which
+      // materializes the repo via the onStart hook — and memoizes it).
+      workdir: () => resolveSessionWorkspaceRoot(session.id, sessionEntry.sandbox, repoFullName),
     });
-    const projectSkillPaths = [path.join(configDir, 'skills'), '.claude/skills', '.agents/skills'];
+    // Skill roots stay repo-scoped: the filesystem roots at the workspace
+    // root, so repo-relative skill paths carry the checkout's subdir prefix
+    // (the same segment every repoDir derivation produces).
+    const repoSubdir = repoSubdirName(repoFullName);
+    const projectSkillPaths = [path.join(configDir, 'skills'), '.claude/skills', '.agents/skills'].map(p =>
+      path.posix.join(repoSubdir, p),
+    );
     const guardedSkillFallback = new UnmaterializedAwareSkillSource(
       filesystem,
       () => sessionEntry.sandbox.status === 'running',

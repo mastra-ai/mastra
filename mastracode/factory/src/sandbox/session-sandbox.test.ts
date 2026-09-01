@@ -11,6 +11,7 @@ import {
   getSessionSandbox,
   peekSessionSandbox,
   resolveSessionRepoDir,
+  resolveSessionWorkspaceRoot,
 } from './session-sandbox.js';
 
 afterEach(() => {
@@ -121,6 +122,44 @@ describe('session sandbox memo', () => {
       }),
     ).toThrow('boom');
     expect(peekSessionSandbox('sess-1')).toBeUndefined();
+  });
+
+  it('resolves the workspace root from a declared workingDirectory with no probe', async () => {
+    const executeCommand = vi.fn(async () => ({ exitCode: 0, stdout: '/home/user\n', stderr: '' }));
+    const sandbox = {
+      id: 'sb-1',
+      provider: 'e2b',
+      workingDirectory: '/workspace',
+      executeCommand,
+    } as unknown as WorkspaceSandbox;
+    getSessionSandbox('sess-1', 'acme/api', () => sandbox);
+
+    await expect(resolveSessionWorkspaceRoot('sess-1', sandbox, 'acme/api')).resolves.toBe('/workspace');
+    expect(executeCommand).not.toHaveBeenCalled();
+  });
+
+  it('degrades the workspace root to the parent of the probed repoDir when nothing is declared', async () => {
+    const executeCommand = vi.fn(async () => ({ exitCode: 0, stdout: '/home/user\n', stderr: '' }));
+    const sandbox = { id: 'sb-1', provider: 'e2b', executeCommand } as unknown as WorkspaceSandbox;
+    getSessionSandbox('sess-1', 'acme/api', () => sandbox);
+
+    await expect(resolveSessionWorkspaceRoot('sess-1', sandbox, 'acme/api')).resolves.toBe('/home/user');
+    expect(executeCommand).toHaveBeenCalledWith('pwd');
+    // Both fields memoized on the handle for passive readers.
+    expect(peekSessionSandbox('sess-1')?.repoDir).toBe('/home/user/api');
+    expect(peekSessionSandbox('sess-1')?.workspaceRoot).toBe('/home/user');
+    // Memoized: the second resolution never probes again.
+    await expect(resolveSessionWorkspaceRoot('sess-1', sandbox, 'acme/api')).resolves.toBe('/home/user');
+    expect(executeCommand).toHaveBeenCalledTimes(1);
+  });
+
+  it('roots the workspace at the local sandbox workingDirectory — the parent of the local repoDir', async () => {
+    const local = { id: 'sb-l', provider: 'local', workingDirectory: '/srv/sess-1' } as unknown as WorkspaceSandbox;
+    const entry = getSessionSandbox('sess-l', 'acme/api', () => local);
+    // Local handles carry both fields synchronously at construction.
+    expect(entry.workspaceRoot).toBe('/srv/sess-1');
+    await expect(resolveSessionWorkspaceRoot('sess-l', local, 'acme/api')).resolves.toBe('/srv/sess-1');
+    expect(path.dirname(entry.repoDir!)).toBe('/srv/sess-1');
   });
 });
 
