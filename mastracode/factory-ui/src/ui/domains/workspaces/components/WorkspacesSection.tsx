@@ -24,7 +24,7 @@ import type { FactoryUserSession } from '../services/user-sessions';
 import { getFactorySessionKind, getSessionOwnerDetails } from '../services/sessionPresentation';
 import type { SessionViewerProfile } from '../services/sessionPresentation';
 import { SessionNavRow } from './SessionNavRow';
-import type { SessionRowStatus } from './SessionNavRow';
+import { sessionRowStatus } from '../services/sessionStatus';
 import type { SessionPreviewDetails } from './SessionPreviewCard';
 
 const COLLAPSED_ROW_COUNT = 5;
@@ -57,15 +57,6 @@ const bySessionPriority = (a: FactoryWorkspaceRow, b: FactoryWorkspaceRow) =>
   watchRank(a) - watchRank(b) ||
   b.createdAt.localeCompare(a.createdAt) ||
   b.workspace.sessionId.localeCompare(a.workspace.sessionId);
-
-function workspaceStatus(row: FactoryWorkspaceRow): SessionRowStatus | undefined {
-  // An active thread means work is happening even if the workspace record has
-  // not yet been stamped materialized — surface the more informative state.
-  if (row.running) return 'working';
-  if (row.initializing) return 'initializing';
-  if (row.attention) return 'ready';
-  return undefined;
-}
 
 export function WorkspacesSection() {
   const { factoryId, sessionId } = useParams<{ factoryId: string; sessionId: string }>();
@@ -324,7 +315,7 @@ function WorkspaceGroup({
             active={row.active}
             disabled={pending}
             merged={mergedByPath[row.workspace.sessionId] ?? row.knownMerged}
-            status={workspaceStatus(row)}
+            status={sessionRowStatus(row)}
             pinned={row.pinned}
             preview={{
               kind,
