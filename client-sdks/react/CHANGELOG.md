@@ -1,5 +1,19 @@
 # @mastra/react
 
+## 1.4.10-alpha.4
+
+### Patch Changes
+
+- Moved the lucide-react icon dependency to 1.37, in step with the rest of the repo. No API change: the icons ship inside the built bundle and never appear in the published types. Apps pinned to lucide-react 0.x keep working, they just resolve a second copy. ([#22718](https://github.com/mastra-ai/mastra/pull/22718))
+
+## 1.4.10-alpha.3
+
+### Patch Changes
+
+- Updated dependencies [[`2e87ffb`](https://github.com/mastra-ai/mastra/commit/2e87ffbb454cc88bd8a8c022d1e46325e7907482)]:
+  - @mastra/core@1.64.0-alpha.3
+  - @mastra/client-js@1.42.5-alpha.3
+
 ## 1.4.10-alpha.2
 
 ### Patch Changes

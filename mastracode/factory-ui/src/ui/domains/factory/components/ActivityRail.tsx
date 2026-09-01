@@ -1,13 +1,13 @@
 import { Avatar } from '@mastra/playground-ui/components/Avatar';
 import type { BadgeVariant } from '@mastra/playground-ui/components/Badge';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { GithubIcon } from '@mastra/playground-ui/icons/GithubIcon';
 import {
   Bot,
   Check,
   ChevronRight,
   Eye,
   FolderGit2,
-  Github,
   GitCommitHorizontal,
   Hammer,
   Inbox,
@@ -20,6 +20,7 @@ import {
   Zap,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
+import type { ComponentType, SVGProps } from 'react';
 import { Link } from 'react-router';
 
 import type { ActivityBlock, ActivityEntry } from '../activity';
@@ -113,9 +114,9 @@ function Node({ entry }: { entry: ActivityEntry }) {
   return <Glyph size={14} className={RAIL_MARK_TONE[entryTone(entry)]} aria-hidden />;
 }
 
-const ACTOR_GLYPHS: Array<[string, LucideIcon]> = [
+const ACTOR_GLYPHS: Array<[string, ComponentType<SVGProps<SVGSVGElement>>]> = [
   ['agent:', Bot],
-  ['github:', Github],
+  ['github:', GithubIcon],
   ['factory-', Zap],
 ];
 
@@ -126,7 +127,7 @@ function Actor({ by, avatarUrl, name }: { by: string | undefined; avatarUrl?: st
 
   return (
     <span className="border-border1 bg-surface3 text-icon3 h-avatar-sm w-avatar-sm grid shrink-0 place-items-center rounded-full border">
-      <Glyph size={13} aria-hidden />
+      <Glyph className="size-[13px]" aria-hidden />
     </span>
   );
 }
