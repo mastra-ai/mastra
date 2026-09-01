@@ -59,6 +59,7 @@ import { invalidateCustomProvidersSnapshots } from './custom-provider-source.js'
 import { buildFsRoutes } from './fs.js';
 import { IntakeRoutes } from './intake.js';
 import { KnowledgeRoutes } from './knowledge.js';
+import type { KnowledgeAccessProfileResolver } from './knowledge.js';
 import { OAuthRoutes } from './oauth.js';
 import type { RouteAuth } from './route.js';
 import { SkillRoutes } from './skills.js';
@@ -124,6 +125,7 @@ export interface FactoryApiRoutesDeps {
   /** Providers the operator opted in to run on the server process's own credentials. */
   deploymentModelProviders?: ReadonlySet<string>;
   knowledgeKey?: string;
+  knowledgeAccessProfile?: KnowledgeAccessProfileResolver;
   /** Resolved Factory rule set, threaded from the host (no service locator). */
   configVersion: string;
   /** Boards installed for this Factory instance. */
@@ -765,6 +767,7 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
           projects: deps.domains.projects,
           knowledge: async key => deps.controller.getMastra()?.getKnowledge(key),
           defaultKnowledgeKey: deps.knowledgeKey,
+          accessProfile: deps.knowledgeAccessProfile ?? (async () => undefined),
         }).routes()
       : []),
     ...(deps.factoryReady
