@@ -176,3 +176,22 @@ export class FilesystemNotReadyError extends FilesystemError {
     this.name = 'FilesystemNotReadyError';
   }
 }
+
+// =============================================================================
+// Skill Errors
+// =============================================================================
+
+export class SkillNotFoundError extends WorkspaceError {
+  constructor(
+    public readonly identifier: string,
+    public readonly availableSkills: string[],
+  ) {
+    super(
+      availableSkills.length > 0
+        ? `Skill "${identifier}" not found. Available skills: ${availableSkills.join(', ')}`
+        : `Skill "${identifier}" not found. No skills are available in this workspace.`,
+      'SKILL_NOT_FOUND',
+    );
+    this.name = 'SkillNotFoundError';
+  }
+}
