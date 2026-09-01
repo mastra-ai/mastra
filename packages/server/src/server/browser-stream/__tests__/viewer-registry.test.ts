@@ -69,6 +69,19 @@ describe('ViewerRegistry', () => {
 
       expect(mockToolset.startScreencastIfBrowserActive).toHaveBeenCalled();
     });
+
+    it('should check browser running state for the viewer thread, not the global current thread', async () => {
+      (mockToolset.isBrowserRunning as ReturnType<typeof vi.fn>).mockReturnValue(true);
+      (mockToolset.startScreencastIfBrowserActive as ReturnType<typeof vi.fn>).mockResolvedValue({
+        on: vi.fn(),
+        stop: vi.fn().mockResolvedValue(undefined),
+      });
+
+      await registry.addViewer('agent-1:thread-1', mockWs1, getToolset, 'agent-1', 'thread-1');
+
+      expect(mockToolset.isBrowserRunning).toHaveBeenCalledWith('thread-1');
+      expect(mockToolset.startScreencastIfBrowserActive).toHaveBeenCalledWith({ threadId: 'thread-1' });
+    });
   });
 
   describe('removeViewer', () => {

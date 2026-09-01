@@ -210,10 +210,6 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
         visibleColumns: traceColumns.preferences.visibleColumns.filter(column => !isTraceUsageColumn(column)),
       }
     : traceColumns.preferences;
-  const selectedBranchAnchor =
-    url.listMode === 'branches' && anchorSpanId ? traceSpans?.find(span => span.spanId === anchorSpanId) : undefined;
-  const canShowSelectedTraceUsage =
-    url.listMode === 'traces' || (selectedBranchAnchor !== undefined && selectedBranchAnchor.parentSpanId == null);
   const listUsageEnabled =
     !usageColumnsUnavailable && !observabilityCapabilities.isLoading && hasTraceUsageColumn(displayedColumnPreferences);
   const traceUsage = useTraceUsage({
@@ -221,27 +217,19 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
     enabled: listUsageEnabled,
     autoRefetch: autoRefetchTraces,
   });
-  const selectedTraceId = url.traceIdParam;
-  const selectedTraceCoveredByListUsage =
-    canShowSelectedTraceUsage &&
-    selectedTraceId !== undefined &&
-    listUsageEnabled &&
-    traces.some(trace => trace.traceId === selectedTraceId);
-  const selectedTraceUsageFromList = selectedTraceId ? traceUsage.data?.get(selectedTraceId) : undefined;
-  const selectedTraceNeedsOwnQuery =
-    canShowSelectedTraceUsage &&
-    selectedTraceId !== undefined &&
-    (!selectedTraceCoveredByListUsage ||
-      (!traceUsage.isFetching && traceUsage.data !== undefined && !traceUsage.data.has(selectedTraceId)));
-  // Fetch independently when the list query cannot supply the selected trace,
-  // such as when usage columns are hidden or a direct link is outside the loaded page.
+  const selectedTraceUsesListQuery = listUsageEnabled && traces.some(trace => trace.traceId === url.traceIdParam);
   const selectedTraceUsage = useTraceUsage({
-    traceIds: selectedTraceNeedsOwnQuery && selectedTraceId ? [selectedTraceId] : [],
+    traceIds: url.traceIdParam ? [url.traceIdParam] : [],
     enabled:
-      selectedTraceNeedsOwnQuery && !observabilityCapabilities.isLoading && observabilityCapabilities.supportsMetrics,
+      url.listMode === 'traces' &&
+      !observabilityCapabilities.isLoading &&
+      observabilityCapabilities.supportsMetrics &&
+      !selectedTraceUsesListQuery,
     autoRefetch: autoRefetchTraces,
   });
-
+  const selectedTraceUsageSummary = url.traceIdParam
+    ? (traceUsage.data?.get(url.traceIdParam) ?? selectedTraceUsage.data?.get(url.traceIdParam))
+    : undefined;
   // Storage providers that don't implement `listBranches` throw a known MastraError. When that
   // surfaces in branches mode, treat the provider as branches-incapable for the rest of the
   // session: flip the URL back to traces mode so the next query succeeds, and remove the
@@ -463,12 +451,8 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
               key={`${url.traceIdParam}:${url.anchorSpanIdParam ?? ''}`}
               traceId={url.traceIdParam}
               spans={traceSpans}
-              usage={
-                canShowSelectedTraceUsage
-                  ? (selectedTraceUsageFromList ?? selectedTraceUsage.data?.get(url.traceIdParam))
-                  : undefined
-              }
               anchorSpanId={anchorSpanId}
+              usage={selectedTraceUsageSummary}
               isLoadingSpans={isLoadingTraceSpans}
               selectedSpanId={url.spanIdParam ?? null}
               onClose={url.handleTraceClose}
