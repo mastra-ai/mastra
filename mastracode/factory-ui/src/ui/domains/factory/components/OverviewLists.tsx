@@ -1,6 +1,7 @@
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { Bot, CircleAlert, Github, MessageSquare, User, Zap } from 'lucide-react';
+import { GithubIcon } from '@mastra/playground-ui/icons/GithubIcon';
+import { Bot, CircleAlert, MessageSquare, User, Zap } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { useState, type ReactNode } from 'react';
 import { Link } from 'react-router';
@@ -27,11 +28,11 @@ function ActorIcon({ by }: { by: string | undefined }) {
       : by.startsWith('agent:')
         ? [Bot, 'an agent']
         : by.startsWith('github:')
-          ? [Github, 'GitHub']
+          ? [GithubIcon, 'GitHub']
           : by.startsWith('factory-')
             ? [Zap, 'a rule']
             : [User, 'a person'];
-  return <Glyph size={13} className="text-icon3 shrink-0" aria-label={`Moved by ${label}`} />;
+  return <Glyph className="text-icon3 size-[13px] shrink-0" aria-label={`Moved by ${label}`} />;
 }
 
 function Empty({ children }: { children: ReactNode }) {
