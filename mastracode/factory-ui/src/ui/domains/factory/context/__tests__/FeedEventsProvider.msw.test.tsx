@@ -9,11 +9,14 @@ import { server } from '../../../../../../e2e/ui/msw-server';
 import { renderHookWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '../../../../../../e2e/ui/render';
 import { useActiveRunResources } from '../../../../../hooks/useActiveRunResources';
 import { useFactoryAttentionHistory } from '../../../../../hooks/useFactoryAttention';
+import { useFactoryDecisionStatus } from '../../../../../hooks/useFactoryDecisions';
 import { useWorkItemComments } from '../../../../../hooks/useWorkItemComments';
+import { useWorkspacesQuery } from '../../../../../hooks/useWorkspaces';
 import { AGENT_CONTROLLER_ID } from '../../../chat/services/constants';
 import { FeedEventsProvider, useFeedEventsConnected } from '../FeedEventsProvider';
 
 const PROJECT_ID = 'project-1';
+const REPOSITORY_ID = 'repository-1';
 const ITEM_ID = 'item-1';
 const COMMENTS_URL = `${TEST_BASE_URL}/web/factory/work-items/${ITEM_ID}/comments`;
 const ATTENTION_URL = `${TEST_BASE_URL}/web/factory/projects/${PROJECT_ID}/attention`;
@@ -31,7 +34,23 @@ function watch() {
     comments: useWorkItemComments({ workItemId: ITEM_ID }),
     attention: useFactoryAttentionHistory(PROJECT_ID, 'open', ''),
     activity: useActiveRunResources({ agentControllerId: AGENT_CONTROLLER_ID, resourceIds: ['session-1'] }),
+    sessions: useWorkspacesQuery(REPOSITORY_ID),
+    decisions: useFactoryDecisionStatus(PROJECT_ID, ['leased']),
   };
+}
+
+function countSessions(count: () => void) {
+  return http.get('*/web/github/projects/:projectRepositoryId/sessions', () => {
+    count();
+    return HttpResponse.json({ sessions: [] });
+  });
+}
+
+function countDecisions(count: () => void) {
+  return http.get(`${TEST_BASE_URL}/web/factory/projects/${PROJECT_ID}/decisions`, () => {
+    count();
+    return HttpResponse.json({ decisions: [] });
+  });
 }
 
 function countActivity(count: () => void) {
@@ -97,45 +116,62 @@ describe('FeedEventsProvider', () => {
     await waitFor(() => expect(attentionRequests).toBe(before.attention + 1));
   });
 
-  it('moves attention alone on a frame that names no work item', async () => {
+  it('moves attention and decisions on a frame that names no work item', async () => {
     const stream = pushableFeedStream(PROJECT_ID);
     let commentRequests = 0;
     let attentionRequests = 0;
+    let decisionRequests = 0;
     server.use(
       stream.handler,
       countComments(() => (commentRequests += 1)),
       countAttention(() => (attentionRequests += 1)),
+      countDecisions(() => (decisionRequests += 1)),
     );
 
     const rendered = renderHookWithProviders(watch, { inner });
     const { result } = rendered;
     await settle(rendered);
-    const before = { comments: commentRequests, attention: attentionRequests };
+    const before = { comments: commentRequests, attention: attentionRequests, decisions: decisionRequests };
 
     stream.push();
     await waitFor(() => expect(attentionRequests).toBe(before.attention + 1));
+    await waitFor(() => expect(decisionRequests).toBe(before.decisions + 1));
     // No work item is named, so no comment feed has a reason to move.
     expect(commentRequests).toBe(before.comments);
   });
 
-  it('refetches the run registry alone on a run frame', async () => {
+  it('refetches the run registry and the sessions list alone on a session frame', async () => {
     const stream = pushableFeedStream(PROJECT_ID);
     let attentionRequests = 0;
     let activityRequests = 0;
+    let sessionsRequests = 0;
+    let decisionRequests = 0;
     server.use(
       stream.handler,
       countAttention(() => (attentionRequests += 1)),
       countActivity(() => (activityRequests += 1)),
+      countSessions(() => (sessionsRequests += 1)),
+      countDecisions(() => (decisionRequests += 1)),
     );
 
     const rendered = renderHookWithProviders(watch, { inner });
     await settle(rendered);
-    const before = { attention: attentionRequests, activity: activityRequests };
+    const before = {
+      attention: attentionRequests,
+      activity: activityRequests,
+      sessions: sessionsRequests,
+      decisions: decisionRequests,
+    };
 
     stream.pushRun('session-1');
     await waitFor(() => expect(activityRequests).toBe(before.activity + 1));
-    // A run frame moves session markers only; the attention inbox did not change.
+    // The stamped session row must be re-read too: attention marks and the
+    // initializing state derive from it.
+    await waitFor(() => expect(sessionsRequests).toBe(before.sessions + 1));
+    // A session frame moves session truths only; the attention inbox and the
+    // decision projection did not change.
     expect(attentionRequests).toBe(before.attention);
+    expect(decisionRequests).toBe(before.decisions);
   });
 
   it('leaves another work item alone', async () => {

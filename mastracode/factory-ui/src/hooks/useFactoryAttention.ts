@@ -25,13 +25,16 @@ export function useFactoryAttention(
   tier?: FactoryAttentionTier,
 ) {
   const { baseUrl } = useApiConfig();
+  const connected = useFeedEventsConnected();
   return useQuery({
     queryKey: queryKeys.factoryAttention(factoryProjectId, view, limit, tier),
     queryFn: factoryProjectId
       ? ({ signal }) =>
           fetchFactoryAttention(baseUrl, factoryProjectId, { view, limit, signal, ...(tier ? { tier } : {}) })
       : skipToken,
-    refetchInterval: ATTENTION_POLL_MS,
+    // Every attention change publishes a feed frame; the poll only bridges
+    // the window where no stream is up.
+    refetchInterval: connected ? false : ATTENTION_POLL_MS,
     staleTime: 2_000,
   });
 }

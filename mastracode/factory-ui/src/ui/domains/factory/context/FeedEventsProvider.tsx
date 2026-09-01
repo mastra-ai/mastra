@@ -20,8 +20,10 @@ export function useFeedEventsConnected(): boolean {
 
 /**
  * Holds the project's feed stream for every surface under the factory route.
- * A frame carries a work item id at most; the queries it invalidates refetch
- * through their own authed GET.
+ * Three frame kinds: a session frame (run started/ended, workspace
+ * materialized) refreshes session-scoped truths, a work-item frame refreshes
+ * its comments, and a plain frame refreshes the attention and decision
+ * projections. The queries refetch through their own authed GET.
  */
 export function FeedEventsProvider({ factoryProjectId, children }: { factoryProjectId: string; children: ReactNode }) {
   const { baseUrl } = useApiConfig();
@@ -41,6 +43,11 @@ export function FeedEventsProvider({ factoryProjectId, children }: { factoryProj
       void queryClient.invalidateQueries({ queryKey: queryKeys.factoryAttentionRoot(factoryProjectId) });
     const refreshRunActivity = () =>
       void queryClient.invalidateQueries({ queryKey: queryKeys.agentControllerActivity(AGENT_CONTROLLER_ID, baseUrl) });
+    // The stream is scoped to the factory project, the sessions cache to a
+    // repository: without the repository id on the frame, refresh them all.
+    const refreshSessions = () => void queryClient.invalidateQueries({ queryKey: queryKeys.sessionsRoot() });
+    const refreshDecisions = () =>
+      void queryClient.invalidateQueries({ queryKey: queryKeys.factoryDecisionsRoot(factoryProjectId) });
 
     const connect = () => {
       streamFeedEvents(
@@ -48,14 +55,18 @@ export function FeedEventsProvider({ factoryProjectId, children }: { factoryProj
         factoryProjectId,
         {
           onEvent: ({ workItemId, sessionId }) => {
-            if (sessionId) refreshRunActivity();
-            // Card counts stay on the board's own 5s poll: a fetch per event
-            // would double its load to save under 5s of badge latency.
+            // A session frame moves session-scoped truths only; the attention
+            // and decision projections did not change.
+            if (sessionId) {
+              refreshRunActivity();
+              refreshSessions();
+              return;
+            }
             if (workItemId) {
               void queryClient.invalidateQueries({ queryKey: queryKeys.workItemCommentsRoot(workItemId) });
             }
-            // A run frame moves session markers only; the attention inbox did not change.
-            if (!sessionId) refreshAttention();
+            refreshAttention();
+            refreshDecisions();
           },
           onConnected: () => {
             setConnected(true);
@@ -63,6 +74,8 @@ export function FeedEventsProvider({ factoryProjectId, children }: { factoryProj
             void queryClient.invalidateQueries({ queryKey: queryKeys.workItemCommentsAll() });
             refreshAttention();
             refreshRunActivity();
+            refreshSessions();
+            refreshDecisions();
           },
         },
         abort.signal,

@@ -36,14 +36,14 @@ export function FactoryLayout() {
 
   return (
     <>
-      {factory.repositories.map(repository => (
-        <WorkspaceAttentionObserver
-          key={repository.projectRepositoryId}
-          projectRepositoryId={repository.projectRepositoryId}
-        />
-      ))}
       <GitHubAppCallbackHandler />
       <FeedEventsProvider factoryProjectId={factory.id}>
+        {factory.repositories.map(repository => (
+          <WorkspaceAttentionObserver
+            key={repository.projectRepositoryId}
+            projectRepositoryId={repository.projectRepositoryId}
+          />
+        ))}
         <Outlet />
       </FeedEventsProvider>
     </>

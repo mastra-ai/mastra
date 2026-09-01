@@ -1,101 +1,82 @@
-import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useEffect, useEffectEvent } from 'react';
+import { useEffect, useSyncExternalStore } from 'react';
 
-import { queryKeys } from '../api/keys';
-import { playDoneSound } from '../ui/domains/settings/services/doneSound';
+import { playAttentionSoundOnce } from '../ui/domains/factory/services/attentionSound';
+import { markSessionsSeen, seenSnapshot, subscribeSeen } from '../ui/domains/workspaces/services/sessionSeen';
 
-interface WorkspaceAttentionState {
-  runningByPath: Record<string, boolean>;
-  attentionByPath: Record<string, true>;
+interface SessionRunStamp {
+  sessionId: string;
+  lastRunEndedAt?: string | null;
 }
 
-interface WorkspaceAttentionScope {
-  projectRepositoryId: string | undefined;
-  sessionKind: 'factory' | 'user';
+/**
+ * Attention derives from two durable facts — the server's `lastRunEndedAt`
+ * stamp and the viewer's seen store — so a reload, a hidden tab, or a run
+ * shorter than any poll interval cannot lose a mark. A session the store has
+ * never seen is baselined by the observer instead of marked: runs that ended
+ * before this viewer ever watched the list are history, not news.
+ */
+export function useSessionAttentionMarks(sessions: readonly SessionRunStamp[]): Record<string, true> {
+  const seen = useSyncExternalStore(subscribeSeen, seenSnapshot);
+  const marks: Record<string, true> = {};
+  for (const session of sessions) {
+    const endedAt = session.lastRunEndedAt;
+    if (!endedAt) continue;
+    const seenAt = seen[session.sessionId];
+    if (seenAt !== undefined && seenAt < endedAt) marks[session.sessionId] = true;
+  }
+  return marks;
 }
 
-interface WorkspaceAttentionOptions extends WorkspaceAttentionScope {
-  runningByPath: Record<string, boolean>;
-  ready: boolean;
-  /**
-   * Session the viewer has open: it never advertises attention — the reader is
-   * already there. Its done sound still plays, calling back a backgrounded tab.
-   */
-  openPath: string | undefined;
-  onRunsFinished?: () => void;
+// Module-level so remounts (route changes) do not replay a ring for a stamp
+// this tab already watched land.
+const lastObservedRunEnd = new Map<string, string>();
+
+/** Test-only: forget which stamps this tab has already seen land. */
+export function resetRunObserverForTests(): void {
+  lastObservedRunEnd.clear();
 }
 
-function recordsMatch(a: Record<string, boolean>, b: Record<string, boolean>): boolean {
-  const aEntries = Object.entries(a);
-  if (aEntries.length !== Object.keys(b).length) return false;
-  return aEntries.every(([path, running]) => b[path] === running);
-}
-
-function useWorkspaceAttentionCache({ projectRepositoryId, sessionKind }: WorkspaceAttentionScope) {
-  const queryClient = useQueryClient();
-  const queryKey = queryKeys.workspaceAttention(projectRepositoryId, sessionKind);
-  const { data } = useQuery<WorkspaceAttentionState>({
-    queryKey,
-    queryFn: () => ({ runningByPath: {}, attentionByPath: {} }),
-    enabled: false,
-    initialData: () => ({ runningByPath: {}, attentionByPath: {} }),
-  });
-  return { queryClient, data };
-}
-
-export function useWorkspaceAttentionState(scope: WorkspaceAttentionScope) {
-  const { data } = useWorkspaceAttentionCache(scope);
-  return { attentionByPath: data.attentionByPath };
-}
-
-export function useWorkspaceAttention({
-  projectRepositoryId,
-  sessionKind,
-  runningByPath,
+/**
+ * The write side of the derivation: baseline unknown sessions, absorb run
+ * ends the viewer is watching happen (the open session never advertises a
+ * mark — the reader is already there), and ring once per run end across every
+ * open tab. The done sound still plays for the open session, calling back a
+ * backgrounded tab.
+ */
+export function useSessionRunObserver({
+  sessions,
+  openSessionId,
   ready,
-  openPath,
-  onRunsFinished,
-}: WorkspaceAttentionOptions): {
-  attentionByPath: Record<string, true>;
-} {
-  const { queryClient, data } = useWorkspaceAttentionCache({
-    projectRepositoryId,
-    sessionKind,
-  });
-  const runsFinished = useEffectEvent(() => onRunsFinished?.());
-
+}: {
+  sessions: readonly SessionRunStamp[];
+  openSessionId: string | undefined;
+  ready: boolean;
+}): void {
   useEffect(() => {
     if (!ready) return;
-    const queryKey = queryKeys.workspaceAttention(projectRepositoryId, sessionKind);
-    const current = queryClient.getQueryData<WorkspaceAttentionState>(queryKey) ?? {
-      runningByPath: {},
-      attentionByPath: {},
-    };
-    const attentionByPath = { ...current.attentionByPath };
-    const finished: string[] = [];
+    const now = new Date().toISOString();
+    const seen = seenSnapshot();
 
-    for (const path of Object.keys(attentionByPath)) {
-      if (!(path in runningByPath) || path === openPath) delete attentionByPath[path];
-    }
-    for (const [path, running] of Object.entries(runningByPath)) {
-      if (running) delete attentionByPath[path];
-      else if (current.runningByPath[path] === true) {
-        if (path !== openPath) attentionByPath[path] = true;
-        finished.push(path);
+    const unknown = sessions.filter(session => seen[session.sessionId] === undefined).map(session => session.sessionId);
+    if (unknown.length > 0) markSessionsSeen(unknown, now);
+
+    for (const session of sessions) {
+      const endedAt = session.lastRunEndedAt;
+      if (!endedAt) continue;
+      const previous = lastObservedRunEnd.get(session.sessionId);
+      lastObservedRunEnd.set(session.sessionId, endedAt);
+      // Ring only for an end this tab watched land; a reload replays history silently.
+      if (previous !== undefined && previous < endedAt) {
+        void playAttentionSoundOnce(`run:${session.sessionId}`, endedAt);
       }
     }
 
-    const attentionChanged =
-      Object.keys(attentionByPath).length !== Object.keys(current.attentionByPath).length ||
-      Object.keys(attentionByPath).some(path => current.attentionByPath[path] !== true);
-    if (!attentionChanged && recordsMatch(current.runningByPath, runningByPath)) return;
-
-    queryClient.setQueryData<WorkspaceAttentionState>(queryKey, { runningByPath, attentionByPath });
-    if (finished.length > 0) {
-      playDoneSound();
-      runsFinished();
+    if (openSessionId) {
+      const openStamp = sessions.find(session => session.sessionId === openSessionId)?.lastRunEndedAt;
+      // Absorb to the stamp, and only when a new end needs it: an
+      // unconditional write would re-notify subscribers every render and
+      // never converge.
+      if (openStamp && (seen[openSessionId] ?? '') < openStamp) markSessionsSeen([openSessionId], openStamp);
     }
-  }, [openPath, projectRepositoryId, queryClient, ready, runningByPath, sessionKind]);
-
-  return { attentionByPath: data.attentionByPath };
+  }, [sessions, openSessionId, ready]);
 }

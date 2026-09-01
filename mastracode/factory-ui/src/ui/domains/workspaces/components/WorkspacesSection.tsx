@@ -9,7 +9,7 @@ import { useLocation, useNavigate, useParams } from 'react-router';
 
 import { useFactoryAuth } from '../../../../hooks/useFactoryAuth';
 import { useActiveRunResources } from '../../../../hooks/useActiveRunResources';
-import { useWorkspaceAttentionState } from '../../../../hooks/useWorkspaceAttention';
+import { useSessionAttentionMarks } from '../../../../hooks/useWorkspaceAttention';
 import { useWorkItemsQuery } from '../../../../hooks/useWorkItems';
 import { useWorkspacePullRequestMerges } from '../../../../hooks/useWorkspacePullRequestMerges';
 import { useDeleteWorkspaceMutation, useWorkspacesQuery } from '../../../../hooks/useWorkspaces';
@@ -78,10 +78,7 @@ export function WorkspacesSection() {
     agentControllerId: AGENT_CONTROLLER_ID,
     resourceIds: workspaceIds,
   });
-  const { attentionByPath } = useWorkspaceAttentionState({
-    projectRepositoryId,
-    sessionKind: 'factory',
-  });
+  const attentionByPath = useSessionAttentionMarks(workspaceRows);
 
   const allWorkItems = workItems.data ?? [];
   const workItemByPath = new Map(

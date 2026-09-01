@@ -1,21 +1,27 @@
+import type { QueryClient } from '@tanstack/react-query';
 import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { MemoryRouter, useNavigate } from 'react-router';
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { queryKeys } from '../../../../../api/keys';
-import { useWorkspaceAttentionState } from '../../../../../hooks/useWorkspaceAttention';
+import { resetRunObserverForTests, useSessionAttentionMarks } from '../../../../../hooks/useWorkspaceAttention';
+import { useWorkspacesQuery } from '../../../../../hooks/useWorkspaces';
 import { server } from '../../../../../../e2e/ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '../../../../../../e2e/ui/render';
-import { AGENT_CONTROLLER_ID } from '../../../chat/services/constants';
+import { playAttentionSoundOnce } from '../../../factory/services/attentionSound';
+import { resetSeenForTests } from '../../services/sessionSeen';
 import type { FactoryUserSession } from '../../services/user-sessions';
 import { WorkspaceAttentionObserver } from '../WorkspaceAttentionObserver';
 
+vi.mock('../../../factory/services/attentionSound', () => ({
+  playAttentionSoundOnce: vi.fn().mockResolvedValue(undefined),
+}));
+
 const REPOSITORY_ID = 'repository-1';
 const SESSION_ID = 'session-1';
-const SECOND_REPOSITORY_ID = 'repository-2';
-const SECOND_SESSION_ID = 'session-2';
+const HISTORICAL_END = '2026-08-20T11:00:00.000Z';
 
 const session: FactoryUserSession = {
   id: 'workspace-1',
@@ -34,23 +40,6 @@ const session: FactoryUserSession = {
   updatedAt: '2026-08-20T10:00:00.000Z',
 };
 
-const secondSession: FactoryUserSession = {
-  ...session,
-  id: 'workspace-2',
-  sessionId: SECOND_SESSION_ID,
-  projectRepositoryId: SECOND_REPOSITORY_ID,
-  title: 'Review loader',
-  branch: 'factory/pr-24',
-};
-
-const siblingSession: FactoryUserSession = {
-  ...session,
-  id: 'workspace-3',
-  sessionId: 'session-sibling',
-  title: 'Review the loader fix',
-  branch: 'factory/pr-31',
-};
-
 const scratchSession: FactoryUserSession = {
   ...session,
   id: 'workspace-4',
@@ -59,26 +48,21 @@ const scratchSession: FactoryUserSession = {
   branch: 'user/scratchpad',
 };
 
-function AttentionProbe() {
-  const first = useWorkspaceAttentionState({ projectRepositoryId: REPOSITORY_ID, sessionKind: 'factory' });
-  const second = useWorkspaceAttentionState({ projectRepositoryId: SECOND_REPOSITORY_ID, sessionKind: 'factory' });
-  return (
-    <>
-      <output aria-label="Ready sessions one">{Object.keys(first.attentionByPath).length}</output>
-      <output aria-label="Ready sessions two">{Object.keys(second.attentionByPath).length}</output>
-    </>
+function stubSessions(rows: () => FactoryUserSession[]) {
+  server.use(
+    http.get(`${TEST_BASE_URL}/web/github/projects/${REPOSITORY_ID}/sessions`, () =>
+      HttpResponse.json({ sessions: rows() }),
+    ),
   );
 }
 
-function AttentionKeysProbe() {
-  const factory = useWorkspaceAttentionState({ projectRepositoryId: REPOSITORY_ID, sessionKind: 'factory' });
-  const user = useWorkspaceAttentionState({ projectRepositoryId: REPOSITORY_ID, sessionKind: 'user' });
-  return (
-    <>
-      <output aria-label="Factory attention">{Object.keys(factory.attentionByPath).join(' ') || 'none'}</output>
-      <output aria-label="User attention">{Object.keys(user.attentionByPath).join(' ') || 'none'}</output>
-    </>
-  );
+function MarksProbe() {
+  const sessions = useWorkspacesQuery(REPOSITORY_ID);
+  const marks = useSessionAttentionMarks([
+    ...(sessions.data?.workspaces ?? []),
+    ...(sessions.data?.userSessions ?? []),
+  ]);
+  return <output aria-label="Attention">{Object.keys(marks).join(' ') || 'none'}</output>;
 }
 
 function OpenSessionButton({ to }: { to: string }) {
@@ -90,188 +74,148 @@ function OpenSessionButton({ to }: { to: string }) {
   );
 }
 
-function stubActivity() {
-  let running = true;
-  let sessionsFail = false;
-  let activityRequests = 0;
-  server.use(
-    http.get(`${TEST_BASE_URL}/web/github/projects/:projectRepositoryId/sessions`, ({ params }) => {
-      if (sessionsFail) return HttpResponse.json({ error: 'unavailable' }, { status: 503 });
-      return HttpResponse.json({
-        sessions: params.projectRepositoryId === SECOND_REPOSITORY_ID ? [secondSession] : [session],
-      });
-    }),
-    http.get(`${TEST_BASE_URL}/api/agent-controller/${AGENT_CONTROLLER_ID}/active-runs`, () => {
-      activityRequests += 1;
-      return HttpResponse.json({
-        runs: running
-          ? [
-              { runId: 'run-1', resourceId: SESSION_ID, threadId: SESSION_ID },
-              { runId: 'run-2', resourceId: SECOND_SESSION_ID, threadId: SECOND_SESSION_ID },
-            ]
-          : [],
-      });
-    }),
-  );
-  return {
-    finishRuns: () => {
-      running = false;
-    },
-    failSessions: () => {
-      sessionsFail = true;
-    },
-    activityRequests: () => activityRequests,
-  };
+/** A stamp later than the observer's baseline, like a run ending after mount. */
+function freshRunEnd(): string {
+  return new Date(Date.now() + 60_000).toISOString();
 }
 
-function stubRepositoryActivity(initiallyRunning: string[]) {
-  const running = new Set(initiallyRunning);
-  let sessionsRequests = 0;
-  server.use(
-    http.get(`${TEST_BASE_URL}/web/github/projects/${REPOSITORY_ID}/sessions`, () => {
-      sessionsRequests += 1;
-      return HttpResponse.json({ sessions: [session, siblingSession, scratchSession] });
-    }),
-    http.get(`${TEST_BASE_URL}/api/agent-controller/${AGENT_CONTROLLER_ID}/active-runs`, () =>
-      HttpResponse.json({
-        runs: [...running].map(sessionId => ({
-          runId: `run-${sessionId}`,
-          resourceId: sessionId,
-          threadId: sessionId,
-        })),
-      }),
-    ),
-  );
-  return {
-    finishRun: (sessionId: string) => {
-      running.delete(sessionId);
-    },
-    sessionsRequests: () => sessionsRequests,
-  };
+async function refetchSessions(client: QueryClient) {
+  await client.invalidateQueries({ queryKey: queryKeys.sessions(REPOSITORY_ID) });
 }
+
+beforeEach(() => {
+  localStorage.clear();
+  resetSeenForTests();
+  resetRunObserverForTests();
+  vi.mocked(playAttentionSoundOnce).mockClear();
+});
 
 describe('WorkspaceAttentionObserver', () => {
-  it('keeps Ready state across every linked repository', async () => {
-    const activity = stubActivity();
+  it('marks a session whose run ends while the viewer watches, and rings once', async () => {
+    let lastRunEndedAt: string | null = HISTORICAL_END;
+    stubSessions(() => [{ ...session, lastRunEndedAt }]);
     const { client } = renderWithProviders(
       <MemoryRouter initialEntries={['/factories/factory-1/work']}>
         <WorkspaceAttentionObserver projectRepositoryId={REPOSITORY_ID} />
-        <WorkspaceAttentionObserver projectRepositoryId={SECOND_REPOSITORY_ID} />
-        <AttentionProbe />
+        <MarksProbe />
       </MemoryRouter>,
     );
-
-    await waitFor(() => expect(activity.activityRequests()).toBeGreaterThan(0));
     await waitForMutationsIdle(client);
-    expect(screen.getByRole('status', { name: 'Ready sessions one' })).toHaveTextContent('0');
-    expect(screen.getByRole('status', { name: 'Ready sessions two' })).toHaveTextContent('0');
+    expect(screen.getByRole('status', { name: 'Attention' })).toHaveTextContent('none');
 
-    activity.finishRuns();
-    await client.invalidateQueries({
-      queryKey: queryKeys.agentControllerActivity(AGENT_CONTROLLER_ID, TEST_BASE_URL),
-    });
+    lastRunEndedAt = freshRunEnd();
+    await refetchSessions(client);
+    await waitFor(() => expect(screen.getByRole('status', { name: 'Attention' })).toHaveTextContent(SESSION_ID));
+    expect(playAttentionSoundOnce).toHaveBeenCalledExactlyOnceWith(`run:${SESSION_ID}`, lastRunEndedAt);
 
+    // The same stamp arriving again is not a second run end.
+    await refetchSessions(client);
     await waitForMutationsIdle(client);
-    expect(screen.getByRole('status', { name: 'Ready sessions one' })).toHaveTextContent('1');
-    expect(screen.getByRole('status', { name: 'Ready sessions two' })).toHaveTextContent('1');
+    expect(playAttentionSoundOnce).toHaveBeenCalledTimes(1);
   });
 
-  it('does not derive Ready state from activity when session loading fails', async () => {
-    const activity = stubActivity();
+  it('never marks a run that ended before this viewer first saw the list', async () => {
+    stubSessions(() => [{ ...session, lastRunEndedAt: HISTORICAL_END }]);
     const { client } = renderWithProviders(
       <MemoryRouter initialEntries={['/factories/factory-1/work']}>
         <WorkspaceAttentionObserver projectRepositoryId={REPOSITORY_ID} />
-        <AttentionProbe />
+        <MarksProbe />
       </MemoryRouter>,
     );
-    await waitFor(() => expect(activity.activityRequests()).toBeGreaterThan(0));
     await waitForMutationsIdle(client);
-
-    activity.failSessions();
-    await client.invalidateQueries({ queryKey: queryKeys.sessions(REPOSITORY_ID) });
-    await waitForMutationsIdle(client);
-    activity.finishRuns();
-    await client.invalidateQueries({
-      queryKey: queryKeys.agentControllerActivity(AGENT_CONTROLLER_ID, TEST_BASE_URL),
-    });
-    await waitForMutationsIdle(client);
-
-    expect(screen.getByRole('status', { name: 'Ready sessions one' })).toHaveTextContent('0');
+    expect(screen.getByRole('status', { name: 'Attention' })).toHaveTextContent('none');
+    expect(playAttentionSoundOnce).not.toHaveBeenCalled();
   });
 
-  it('keeps the open session out of attention while still refreshing when its run finishes', async () => {
-    const activity = stubRepositoryActivity([SESSION_ID, 'session-sibling']);
+  it('keeps a mark across a reload, silently', async () => {
+    let lastRunEndedAt: string | null = HISTORICAL_END;
+    stubSessions(() => [{ ...session, lastRunEndedAt }]);
+    const first = renderWithProviders(
+      <MemoryRouter initialEntries={['/factories/factory-1/work']}>
+        <WorkspaceAttentionObserver projectRepositoryId={REPOSITORY_ID} />
+        <MarksProbe />
+      </MemoryRouter>,
+    );
+    await waitForMutationsIdle(first.client);
+    lastRunEndedAt = freshRunEnd();
+    await refetchSessions(first.client);
+    await waitFor(() => expect(screen.getByRole('status', { name: 'Attention' })).toHaveTextContent(SESSION_ID));
+    first.unmount();
+
+    // A reload starts a fresh tab: new query cache, no in-memory run history —
+    // only localStorage survives.
+    resetRunObserverForTests();
+    resetSeenForTests();
+    vi.mocked(playAttentionSoundOnce).mockClear();
+    const second = renderWithProviders(
+      <MemoryRouter initialEntries={['/factories/factory-1/work']}>
+        <WorkspaceAttentionObserver projectRepositoryId={REPOSITORY_ID} />
+        <MarksProbe />
+      </MemoryRouter>,
+    );
+    await waitForMutationsIdle(second.client);
+    await waitFor(() => expect(screen.getByRole('status', { name: 'Attention' })).toHaveTextContent(SESSION_ID));
+    expect(playAttentionSoundOnce).not.toHaveBeenCalled();
+  });
+
+  it('keeps the open session out of attention while its run ends, still ringing', async () => {
+    let lastRunEndedAt: string | null = HISTORICAL_END;
+    stubSessions(() => [{ ...session, lastRunEndedAt }]);
     const { client } = renderWithProviders(
       <MemoryRouter initialEntries={[`/factories/factory-1/workspaces/${SESSION_ID}/threads/${SESSION_ID}`]}>
         <WorkspaceAttentionObserver projectRepositoryId={REPOSITORY_ID} />
-        <AttentionKeysProbe />
+        <MarksProbe />
       </MemoryRouter>,
     );
     await waitForMutationsIdle(client);
-    expect(screen.getByRole('status', { name: 'Factory attention' })).toHaveTextContent('none');
-    const sessionsRequestsBefore = activity.sessionsRequests();
 
-    activity.finishRun(SESSION_ID);
-    await client.invalidateQueries({
-      queryKey: queryKeys.agentControllerActivity(AGENT_CONTROLLER_ID, TEST_BASE_URL),
-    });
+    lastRunEndedAt = freshRunEnd();
+    await refetchSessions(client);
     await waitForMutationsIdle(client);
-
-    expect(screen.getByRole('status', { name: 'Factory attention' })).toHaveTextContent('none');
-    expect(activity.sessionsRequests()).toBeGreaterThan(sessionsRequestsBefore);
-
-    activity.finishRun('session-sibling');
-    await client.invalidateQueries({
-      queryKey: queryKeys.agentControllerActivity(AGENT_CONTROLLER_ID, TEST_BASE_URL),
-    });
-    await waitForMutationsIdle(client);
-
-    expect(screen.getByRole('status', { name: 'Factory attention' })).toHaveTextContent('session-sibling');
+    expect(screen.getByRole('status', { name: 'Attention' })).toHaveTextContent('none');
+    expect(playAttentionSoundOnce).toHaveBeenCalledExactlyOnceWith(`run:${SESSION_ID}`, lastRunEndedAt);
   });
 
-  it('dismisses a marked session through whichever door opens its thread', async () => {
-    const activity = stubRepositoryActivity([SESSION_ID]);
+  it('dismisses a marked user session through its thread route', async () => {
+    let lastRunEndedAt: string | null = HISTORICAL_END;
+    stubSessions(() => [{ ...scratchSession, lastRunEndedAt }]);
     const user = userEvent.setup();
     const { client } = renderWithProviders(
       <MemoryRouter initialEntries={['/factories/factory-1/work']}>
         <WorkspaceAttentionObserver projectRepositoryId={REPOSITORY_ID} />
-        <AttentionKeysProbe />
-        <OpenSessionButton to={`/factories/factory-1/workspaces/${SESSION_ID}`} />
-      </MemoryRouter>,
-    );
-    await waitForMutationsIdle(client);
-    activity.finishRun(SESSION_ID);
-    await client.invalidateQueries({
-      queryKey: queryKeys.agentControllerActivity(AGENT_CONTROLLER_ID, TEST_BASE_URL),
-    });
-    await waitForMutationsIdle(client);
-    expect(screen.getByRole('status', { name: 'Factory attention' })).toHaveTextContent(SESSION_ID);
-
-    await user.click(screen.getByRole('button', { name: 'Open session' }));
-
-    await waitFor(() => expect(screen.getByRole('status', { name: 'Factory attention' })).toHaveTextContent('none'));
-  });
-
-  it('dismisses a marked user session on its thread route', async () => {
-    const activity = stubRepositoryActivity(['session-scratch']);
-    const user = userEvent.setup();
-    const { client } = renderWithProviders(
-      <MemoryRouter initialEntries={['/factories/factory-1/work']}>
-        <WorkspaceAttentionObserver projectRepositoryId={REPOSITORY_ID} />
-        <AttentionKeysProbe />
+        <MarksProbe />
         <OpenSessionButton to="/factories/factory-1/user/threads/session-scratch" />
       </MemoryRouter>,
     );
     await waitForMutationsIdle(client);
-    activity.finishRun('session-scratch');
-    await client.invalidateQueries({
-      queryKey: queryKeys.agentControllerActivity(AGENT_CONTROLLER_ID, TEST_BASE_URL),
-    });
-    await waitForMutationsIdle(client);
-    expect(screen.getByRole('status', { name: 'User attention' })).toHaveTextContent('session-scratch');
+    lastRunEndedAt = freshRunEnd();
+    await refetchSessions(client);
+    await waitFor(() =>
+      expect(screen.getByRole('status', { name: 'Attention' })).toHaveTextContent('session-scratch'),
+    );
 
     await user.click(screen.getByRole('button', { name: 'Open session' }));
 
-    await waitFor(() => expect(screen.getByRole('status', { name: 'User attention' })).toHaveTextContent('none'));
+    await waitFor(() => expect(screen.getByRole('status', { name: 'Attention' })).toHaveTextContent('none'));
+  });
+
+  it("clears a mark when another tab absorbs it, through the storage event", async () => {
+    let lastRunEndedAt: string | null = HISTORICAL_END;
+    stubSessions(() => [{ ...session, lastRunEndedAt }]);
+    const { client } = renderWithProviders(
+      <MemoryRouter initialEntries={['/factories/factory-1/work']}>
+        <WorkspaceAttentionObserver projectRepositoryId={REPOSITORY_ID} />
+        <MarksProbe />
+      </MemoryRouter>,
+    );
+    await waitForMutationsIdle(client);
+    lastRunEndedAt = freshRunEnd();
+    await refetchSessions(client);
+    await waitFor(() => expect(screen.getByRole('status', { name: 'Attention' })).toHaveTextContent(SESSION_ID));
+
+    localStorage.setItem('mastracode.sessionSeen.v1', JSON.stringify({ [SESSION_ID]: lastRunEndedAt }));
+    window.dispatchEvent(new StorageEvent('storage', { key: 'mastracode.sessionSeen.v1' }));
+
+    await waitFor(() => expect(screen.getByRole('status', { name: 'Attention' })).toHaveTextContent('none'));
   });
 });

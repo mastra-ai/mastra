@@ -123,12 +123,12 @@ describe('User sessions sidebar activity', () => {
   });
 
   it('resolves the initializing belt once the run that materialized the session finishes', async () => {
-    let materialized = false;
+    let settled = false;
     const active = new Set(['sess-4']);
     stubProjectAndSessions([]);
-    // Serve a mutable session row so the refetch after run end observes the
-    // freshly stamped `materializedAt` (registered after the base stub — the
-    // most recent handler wins).
+    // Serve a mutable session row so the refetch on the run's feed frames
+    // observes the stamped `materializedAt` and `lastRunEndedAt` (registered
+    // after the base stub — the most recent handler wins).
     server.use(
       http.get(`${TEST_BASE_URL}/web/github/projects/${projectRepositoryId}/sessions`, () =>
         HttpResponse.json({
@@ -136,7 +136,8 @@ describe('User sessions sidebar activity', () => {
             makeSession({
               sessionId: 'sess-4',
               branch: 'user/feature-d',
-              materializedAt: materialized ? '2026-07-20T00:00:00.000Z' : null,
+              materializedAt: settled ? '2026-07-20T00:00:00.000Z' : null,
+              ...(settled ? { lastRunEndedAt: new Date(Date.now() + 60_000).toISOString() } : {}),
             }),
           ],
         }),
@@ -148,17 +149,17 @@ describe('User sessions sidebar activity', () => {
     await waitForMutationsIdle(client);
     await screen.findByRole('status', { name: 'Agent working in feature-d' });
 
-    // The run finishes and the server stamps materializedAt. Force the next
-    // activity poll instead of waiting out the real 5s interval.
-    materialized = true;
+    // The run finishes: the server stamps materializedAt and lastRunEndedAt,
+    // and its feed frames invalidate the registry and the sessions list.
+    settled = true;
     active.delete('sess-4');
     await client.invalidateQueries({
       queryKey: queryKeys.agentControllerActivity(AGENT_CONTROLLER_ID, TEST_BASE_URL),
     });
+    await client.invalidateQueries({ queryKey: queryKeys.sessions(projectRepositoryId) });
     await waitForMutationsIdle(client);
 
-    // Run end must refetch the sessions list: the belt lands on solid attention,
-    // not back on (or stuck at) initializing.
+    // The belt lands on solid attention, not back on (or stuck at) initializing.
     await screen.findByRole('status', { name: 'feature-d ready — open to dismiss' });
     expect(screen.queryByRole('status', { name: 'Initializing feature-d' })).not.toBeInTheDocument();
   });
