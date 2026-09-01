@@ -1820,7 +1820,7 @@ importers:
         specifier: ^10.1.2
         version: 10.1.2
       lucide-react:
-        specifier: 'catalog:'
+        specifier: ^1.37.0
         version: 1.37.0(react@19.2.7)
       mermaid:
         specifier: ^11.16.1
