@@ -1,5 +1,14 @@
 # create-factory
 
+## 0.1.15-alpha.3
+
+### Patch Changes
+
+- Fixed generated Factory projects so the optional E2B sandbox dependency is installed. ([#22785](https://github.com/mastra-ai/mastra/pull/22785))
+
+- Updated dependencies:
+  - mastra@1.27.3-alpha.3
+
 ## 0.1.15-alpha.2
 
 ### Patch Changes
