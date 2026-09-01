@@ -35,6 +35,7 @@ class RecordingDbClient {
   }
 }
 
+/** A minimal thread whose only interesting fields are the two timestamps under test. */
 function makeThread(createdAt: Date, updatedAt: Date): StorageThreadType {
   return {
     id: 'thread-1',
@@ -74,5 +75,38 @@ describe('MemoryDSQL.saveThread', () => {
     const insert = client.queries.find(q => q.query.includes('INSERT INTO'));
     expect(insert!.values![4]).toBe('2026-08-29T00:30:00.000Z');
     expect(String(insert!.values![4])).toMatch(/Z$/);
+  });
+});
+
+describe('MemoryDSQL.saveResource', () => {
+  /**
+   * saveResource does not bind its own parameters — it hands the record to
+   * db.insert, whose prepareValuesForInsert passed values through untouched, so
+   * a resource's Date timestamps reached the driver raw exactly as saveThread's
+   * did. addTimestampZColumns copies the same values into the Z columns, so both
+   * variants were affected.
+   */
+  it('binds UTC strings for the resource timestamps', async () => {
+    const client = new RecordingDbClient();
+    const memory = new MemoryDSQL({ client } as any);
+    const createdAt = new Date('2026-08-29T00:30:00.000Z');
+    const updatedAt = new Date('2026-08-29T01:45:00.000Z');
+
+    await memory.saveResource({
+      resource: { id: 'resource-1', workingMemory: 'wm', metadata: {}, createdAt, updatedAt },
+    });
+
+    const insert = client.queries.find(q => q.query.includes('INSERT INTO'));
+    expect(insert).toBeDefined();
+
+    const bound = insert!.values!;
+    expect(bound.some(v => v instanceof Date)).toBe(false);
+    expect(bound).toContain(createdAt.toISOString());
+    expect(bound).toContain(updatedAt.toISOString());
+    for (const value of bound) {
+      if (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}T/.test(value)) {
+        expect(value).toMatch(/Z$/);
+      }
+    }
   });
 });

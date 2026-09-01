@@ -193,6 +193,14 @@ export class DsqlDB extends MastraBase {
       if (columnSchema?.type === 'jsonb' && value !== null && value !== undefined && typeof value === 'object') {
         return JSON.stringify(value);
       }
+      // Bind dates as UTC strings. node-postgres renders a Date parameter using
+      // the process's local timezone, which a TIMESTAMP column then stores as
+      // local wall clock rather than the instant. Callers that already pass an
+      // ISO string are unaffected. Runs after addTimestampZColumns, so the Z
+      // copies are converted here too.
+      if (value instanceof Date) {
+        return value.toISOString();
+      }
       return value;
     });
   }
