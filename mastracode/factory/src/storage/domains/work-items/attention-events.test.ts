@@ -1,7 +1,8 @@
 /**
- * The announcement every attention-changing write owes its readers: clients
- * stop polling while their feed stream is up, so a write that stays silent
- * leaves every open page stale until it is reloaded.
+ * The announcement every feed-relevant write owes its readers — attention
+ * items and board decisions alike: clients stop polling while their feed
+ * stream is up, so a write that stays silent leaves every open page stale
+ * until it is reloaded.
  */
 
 import { LibSQLFactoryStorage } from '@mastra/libsql';
@@ -21,7 +22,7 @@ async function makeStorage(): Promise<{ storage: WorkItemsStorage; announced: Fa
   const storage = backend.registerDomain(new WorkItemsStorage());
   await backend.init();
   const announced: FactoryAttentionScope[] = [];
-  storage.onAttentionChanged(scope => announced.push({ orgId: scope.orgId, factoryProjectId: scope.factoryProjectId }));
+  storage.onFeedTouch(scope => announced.push({ orgId: scope.orgId, factoryProjectId: scope.factoryProjectId }));
   return { storage, announced };
 }
 
@@ -68,6 +69,7 @@ describe('attention announcements', () => {
     const { storage, announced } = await makeStorage();
     const workItemId = await seedWorkItem(storage);
     const claimed = await claimDecision(storage, workItemId, 'park');
+    announced.length = 0;
 
     const proposed = await storage.proposeDeferredDecision(leaseOf(claimed), NOW);
     expect(announced).toEqual([SCOPE]);
@@ -77,18 +79,29 @@ describe('attention announcements', () => {
     expect(announced).toEqual([SCOPE, SCOPE]);
   });
 
-  it('stays quiet on a retryable failure and announces the terminal one', async () => {
+  it('announces every lease transition: claim, retryable failure, reclaim, terminal failure', async () => {
     const { storage, announced } = await makeStorage();
     const workItemId = await seedWorkItem(storage);
     const claimed = await claimDecision(storage, workItemId, 'fail');
+    expect(announced).toEqual([SCOPE]);
     const failure = { now: NOW, availableAt: NOW, lastError: 'nope', failureCode: 'session_unavailable' } as const;
 
     await storage.failDeferredDecision({ ...leaseOf(claimed), ...failure, terminal: false });
-    expect(announced).toEqual([]);
+    expect(announced).toEqual([SCOPE, SCOPE]);
 
     const [reclaimed] = await storage.claimDeferredDecisions(LEASE);
     if (!reclaimed) throw new Error('Expected the decision back on the queue');
     await storage.failDeferredDecision({ ...leaseOf(reclaimed), ...failure, terminal: true });
+    expect(announced).toEqual([SCOPE, SCOPE, SCOPE, SCOPE]);
+  });
+
+  it('announces a completed decision', async () => {
+    const { storage, announced } = await makeStorage();
+    const workItemId = await seedWorkItem(storage);
+    const claimed = await claimDecision(storage, workItemId, 'complete');
+    announced.length = 0;
+
+    await storage.completeDeferredDecision(leaseOf(claimed), NOW);
     expect(announced).toEqual([SCOPE]);
   });
 

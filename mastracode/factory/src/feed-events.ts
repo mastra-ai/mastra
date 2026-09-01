@@ -18,8 +18,12 @@ export function touchFeed(pubsub: PubSub, scope: FeedScope, workItemId?: string)
   publishFeedFrame(pubsub, scope, workItemId ? { workItemId } : {}, workItemId ?? scope.factoryProjectId);
 }
 
-/** A run started or ended on `sessionId`: readers of the run registry should refetch now. */
-export function touchRunFeed(pubsub: Pick<PubSub, 'publish'>, scope: FeedScope, sessionId: string): void {
+/**
+ * Something about `sessionId` changed server-side — a run started or ended,
+ * or its workspace materialized. Readers of session-scoped truths (the run
+ * registry, the sessions listing) should refetch now.
+ */
+export function touchSessionFeed(pubsub: Pick<PubSub, 'publish'>, scope: FeedScope, sessionId: string): void {
   publishFeedFrame(pubsub, scope, { sessionId }, sessionId);
 }
 

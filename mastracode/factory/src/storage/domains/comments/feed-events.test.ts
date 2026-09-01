@@ -10,7 +10,7 @@ import type { EventCallback, SubscribeOptions } from '@mastra/core/events';
 import { Hono } from 'hono';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { feedTopic, touchRunFeed } from '../../../feed-events.js';
+import { feedTopic, touchSessionFeed } from '../../../feed-events.js';
 import { fakeRouteAuth, mountApiRoutes } from '../../../routes/test-utils.js';
 import type { TestAuthUser } from '../../../routes/test-utils.js';
 import { createFactoryStorageForTests } from '../../test-utils.js';
@@ -271,7 +271,7 @@ describe('project-wide touches on the feed stream', () => {
 
     const feed = openFeed(await app.request(`/web/factory/projects/${project.id}/feed-events`));
     await vi.waitFor(() => expect(emitter.listenerCount(topic)).toBe(1));
-    touchRunFeed(pubsub, { orgId: ORG, factoryProjectId: project.id }, 'session-9');
+    touchSessionFeed(pubsub, { orgId: ORG, factoryProjectId: project.id }, 'session-9');
 
     await vi.waitFor(() => expect(feed.frames).toHaveLength(1));
     expect(feed.frames[0]).toEqual({ event: 'feed', data: '{"sessionId":"session-9"}' });

@@ -35,15 +35,16 @@ function createDependencies({ sessionRow = true }: { sessionRow?: boolean } = {}
   const getBySessionId = vi
     .fn()
     .mockResolvedValue(sessionRow ? { orgId: ORG_ID, projectRepositoryId: 'repo-1' } : null);
+  const markRunEnded = vi.fn().mockResolvedValue(undefined);
   const dependencies: RunLifecycleFeedDependencies = {
     sourceControl: {
-      sessions: { getBySessionId },
+      sessions: { getBySessionId, markRunEnded },
       projectRepositories: { get: vi.fn().mockResolvedValue({ connectionId: 'connection-1' }) },
       connections: { get: vi.fn().mockResolvedValue({ factoryProjectId: PROJECT_ID }) },
     },
     pubsub: { publish },
   };
-  return { dependencies, publish, getBySessionId };
+  return { dependencies, publish, getBySessionId, markRunEnded };
 }
 
 async function settled() {
@@ -66,6 +67,40 @@ describe('observeSessionRunLifecycle', () => {
       runId: SESSION_ID,
       data: { sessionId: SESSION_ID },
     });
+  });
+
+  it('stamps the run end before its frame goes out, and never on start', async () => {
+    const { session, emit } = createSession();
+    const { dependencies, publish, markRunEnded } = createDependencies();
+    observeSessionRunLifecycle(session, dependencies);
+
+    emit({ type: 'agent_start' });
+    await settled();
+    expect(markRunEnded).not.toHaveBeenCalled();
+
+    let stampSettled = false;
+    markRunEnded.mockImplementation(async () => {
+      stampSettled = true;
+    });
+    publish.mockImplementation(async () => {
+      // A client refetching on the frame must read the stamped row.
+      expect(stampSettled).toBe(true);
+    });
+    emit({ type: 'agent_end', reason: 'complete' });
+    await settled();
+    expect(markRunEnded).toHaveBeenCalledWith({ sessionId: SESSION_ID });
+    expect(publish).toHaveBeenCalledTimes(2);
+  });
+
+  it('still publishes the frame when the stamp write fails', async () => {
+    const { session, emit } = createSession();
+    const { dependencies, publish, markRunEnded } = createDependencies();
+    markRunEnded.mockRejectedValue(new Error('db down'));
+    observeSessionRunLifecycle(session, dependencies);
+
+    emit({ type: 'agent_end', reason: 'complete' });
+    await settled();
+    expect(publish).toHaveBeenCalledTimes(1);
   });
 
   it('resolves the session project once for the session lifetime', async () => {

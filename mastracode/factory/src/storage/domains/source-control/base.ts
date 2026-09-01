@@ -129,6 +129,7 @@ export const SOURCE_CONTROL_SCHEMAS: CollectionSchema[] = [
       materialized_at: { type: 'timestamp', nullable: true },
       first_message_at: { type: 'timestamp', nullable: true },
       first_meaningful_exec_at: { type: 'timestamp', nullable: true },
+      last_run_ended_at: { type: 'timestamp', nullable: true },
       created_at: { type: 'timestamp' },
       updated_at: { type: 'timestamp' },
     },
@@ -270,6 +271,8 @@ export interface SourceControlSession {
   firstMessageAt: Date | null;
   /** When the agent's first successful sandbox exec finished. Write-once. */
   firstMeaningfulExecAt: Date | null;
+  /** When the session's most recent agent run ended. Overwritten on every run end. */
+  lastRunEndedAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -380,6 +383,13 @@ export interface SourceControlStorageHandle {
      * `sessionId`.
      */
     markFirstMeaningfulExec(args: { sessionId: string }): Promise<void>;
+    /**
+     * Record that an agent run just ended on the session. Overwrites on every
+     * run end — the column carries "when did this session last finish work",
+     * which attention marks derive from. Keyed by the controller-facing
+     * `sessionId`; sessions without a source-control row are a zero-row no-op.
+     */
+    markRunEnded(args: { sessionId: string }): Promise<void>;
     delete(id: string): Promise<void>;
   };
 }
@@ -445,6 +455,7 @@ interface SessionDbRow extends Record<string, unknown> {
   materialized_at: Date | null;
   first_message_at: Date | null;
   first_meaningful_exec_at: Date | null;
+  last_run_ended_at: Date | null;
   created_at: Date;
   updated_at: Date;
 }
@@ -519,6 +530,7 @@ function toSession(row: SessionDbRow): SourceControlSession {
     materializedAt: row.materialized_at,
     firstMessageAt: row.first_message_at,
     firstMeaningfulExecAt: row.first_meaningful_exec_at,
+    lastRunEndedAt: row.last_run_ended_at,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -1009,6 +1021,13 @@ export class SourceControlStorage extends FactoryStorageDomain {
             SESSIONS,
             { session_id: sessionId, first_meaningful_exec_at: null },
             { first_meaningful_exec_at: new Date(), updated_at: new Date() },
+          );
+        },
+        markRunEnded: async ({ sessionId }) => {
+          await db().updateMany(
+            SESSIONS,
+            { session_id: sessionId },
+            { last_run_ended_at: new Date(), updated_at: new Date() },
           );
         },
         delete: async id => {

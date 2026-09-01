@@ -371,7 +371,7 @@ export class MastraFactory {
     const intakeStorage = storage.registerDomain(new IntakeStorage());
     const auditStorage = storage.registerDomain(new AuditStorage());
     const workItemsStorage = storage.registerDomain(new WorkItemsStorage());
-    workItemsStorage.onAttentionChanged(scope => touchFeed(eventBus, scope));
+    workItemsStorage.onFeedTouch(scope => touchFeed(eventBus, scope));
     const modelCredentialsStorage = storage.registerDomain(new ModelCredentialsStorage(secretEncryption));
     const modelPacksStorage = storage.registerDomain(new ModelPacksStorage());
     const memorySettingsStorage = storage.registerDomain(new MemorySettingsStorage());
@@ -650,6 +650,7 @@ export class MastraFactory {
           ...(githubIntegration ? { github: githubIntegration } : {}),
           ...(workItemsStorage ? { workItems: workItemsStorage } : {}),
           workspaceRegistry,
+          pubsub: eventBus,
         }),
         disableGithubSignals: true,
         // Memory settings live in the factory's `memory-settings` app table (per
