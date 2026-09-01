@@ -1,5 +1,11 @@
 # @mastra/voice-azure
 
+## 0.12.1-alpha.0
+
+### Patch Changes
+
+- Remove `CHANGELOG.md` from distributed npm files resulting in reduced package size ([#22737](https://github.com/mastra-ai/mastra/pull/22737))
+
 ## 0.12.0
 
 ### Minor Changes

@@ -291,7 +291,7 @@ await mastra.backgroundTaskManager?.resume(taskId, {
 
 ### What happens to the agent loop
 
-When a task suspends mid-`stream()` with `untilIdle`, the wrapper treats it as terminal for the current iteration and closes. To continue the agent immediately when the resume payload is in hand, call `agent.resumeStream(resumeData, { runId, toolCallId, memory, untilIdle: true })`: the resumed bg task runs to completion and adds its result to the message list. The agent then runs a follow-up turn, all on the same SSE connection. If you'd rather drive the resume out-of-band, call `mastra.backgroundTaskManager.resume(taskId, resumeData)` directly and the result still writes into the thread for the next user turn to pick up.
+When a task suspends mid-`stream()` with `untilIdle`, the wrapper treats it as terminal for the current iteration and closes. Once the resume payload is available, call `agent.resumeStream(resumeData, { runId, toolCallId, memory, untilIdle: true })` to continue immediately. The resumed background task completes and adds its result to the message list before the agent runs a follow-up turn on the same SSE connection. To drive the resume out of band, call `mastra.backgroundTaskManager.resume(taskId, resumeData)` directly. Its result is still written into the thread for the next user turn.
 
 ### Re-registering the executor on resume
 

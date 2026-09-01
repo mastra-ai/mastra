@@ -28,6 +28,7 @@ import { useBoardComposer } from '../domains/factory/hooks/useBoardComposer';
 import { useBoardDeepLink } from '../domains/factory/hooks/useBoardDeepLink';
 import { useBoardDecisions } from '../domains/factory/hooks/useBoardDecisions';
 import { useBoardIntake } from '../domains/factory/hooks/useBoardIntake';
+import { useItemSessionStatuses } from '../domains/factory/hooks/useItemSessionStatuses';
 import { useBoardItems } from '../domains/factory/hooks/useBoardItems';
 import { useBoardRuns } from '../domains/factory/hooks/useBoardRuns';
 import { isTerminalStage } from '../domains/factory/stages';
@@ -135,6 +136,10 @@ function BoardContent({
     refetchItems: items.refetch,
   });
   const relatedItemsFor = relatedWorkItemIndex(items.all);
+  const sessionStatuses = useItemSessionStatuses({
+    projectRepositoryId: repository.projectRepositoryId,
+    items: items.all,
+  });
   const decisions = useBoardDecisions(factoryProjectId);
   const composer = useBoardComposer(factoryProjectId);
   const activityProfileActorIds = [...new Set(items.all.flatMap(workItemHumanActorIds))];
@@ -400,6 +405,7 @@ function BoardContent({
                           highlighted={targetItemId === item.id}
                           columnStage={stage.id}
                           relatedItems={relatedItemsFor(item)}
+                          sessionStatus={sessionStatuses.get(item.id)}
                           projectRepositoryId={repository.projectRepositoryId}
                           activityPage={activityPage}
                           runDisabled={runs.disabled}

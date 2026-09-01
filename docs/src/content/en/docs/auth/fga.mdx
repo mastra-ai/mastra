@@ -274,7 +274,7 @@ Autonomous and scheduled agents run without an end user. Mark these calls with a
 - `true` or `{ actorKind: 'system' }` identifies an anonymous system actor.
 - The object form can also carry `agentId`, `permissions`, and `scope` to identify and constrain the acting agent.
 
-By default, a trusted actor skips the user-centric `require()` check after a tenant-scope check. To enforce per-agent least privilege, implement the optional `requireActor` method on your provider. It receives the actor and the same `FGACheckParams` as `require`, and throws `FGADeniedError` to deny. When your provider doesn't implement `requireActor`, the trusted-actor bypass is preserved, so adding it's backward compatible.
+By default, a trusted actor skips the user-centric `require()` check after a tenant-scope check. To enforce per-agent least privilege, implement the optional `requireActor` method on your provider. The method receives the actor with the same `FGACheckParams` as `require` and denies access by throwing `FGADeniedError`. Providers that omit `requireActor` preserve the trusted-actor bypass, which makes the addition backward compatible.
 
 ```typescript
 import { FGADeniedError } from '@mastra/core/auth/ee'

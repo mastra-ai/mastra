@@ -245,6 +245,9 @@ importers:
       '@types/node':
         specifier: 22.19.15
         version: 22.19.15
+      '@types/semver':
+        specifier: ^7.7.1
+        version: 7.7.1
       '@vitest/coverage-v8':
         specifier: 'catalog:'
         version: 4.1.10(vitest@4.1.10)

@@ -1,7 +1,7 @@
 {
   "name": "@internal/playground",
   "private": true,
-  "version": "1.27.3-alpha.1",
+  "version": "1.27.3-alpha.2",
   "type": "module",
   "main": "./src/exports.ts",
   "types": "./src/exports.ts",
@@ -15,7 +15,6 @@
   "homepage": "https://mastra.ai",
   "files": [
     "dist",
-    "CHANGELOG.md",
     "./**/*.d.ts"
   ],
   "repository": {

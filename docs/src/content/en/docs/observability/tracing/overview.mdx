@@ -149,7 +149,7 @@ export const mastra = new Mastra({
 })
 ```
 
-If `environment` isn't set, Mastra falls back to `process.env.NODE_ENV`. If neither is set, the field is left undefined rather than guessed.
+If `environment` isn't set, runs started through `mastra dev` resolve to `development` (even though the dev server itself runs with `NODE_ENV=production`); otherwise Mastra falls back to `process.env.NODE_ENV`. If none of these are set, the field is left undefined rather than guessed.
 
 Per-call `tracingOptions.metadata.environment` always takes precedence, so individual calls can override the value when needed.
 

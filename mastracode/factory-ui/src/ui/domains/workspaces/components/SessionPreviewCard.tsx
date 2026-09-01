@@ -7,7 +7,7 @@ import type { ReactNode, RefObject } from 'react';
 
 import { relativeTime } from '../../../../lib/date/relativeTime';
 import { PullRequestStatusIcon } from '../../factory/components/PullRequestStatusIcon';
-import type { SessionRowStatus } from './SessionNavRow';
+import type { SessionRowStatus } from '../services/sessionStatus';
 import type { SessionOwnerDetails } from '../services/sessionPresentation';
 
 export interface SessionPreviewDetails {

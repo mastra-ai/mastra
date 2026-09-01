@@ -46,7 +46,7 @@ import type { WorkItemsStorage } from './storage/domains/work-items/base.js';
 const WORKSPACE_ID_PREFIX = 'mfw';
 const bundleDirectory = dirname(fileURLToPath(import.meta.url));
 const bundledFactorySkillsPath = join(bundleDirectory, 'factory-skills');
-export const FACTORY_SKILLS_SOURCE_PATH =
+export const BUNDLED_FACTORY_SKILLS_PATH =
   [
     // Deploy bundle: the consumer copies `factory-skills/` next to the built
     // server module (e.g. via its public/ dir).
@@ -54,9 +54,25 @@ export const FACTORY_SKILLS_SOURCE_PATH =
     // Package layout: `dist/../factory-skills` (also `src/../factory-skills`
     // when running tests against sources).
     join(bundleDirectory, '..', 'factory-skills'),
-    // Consumer repo running from its package root before a build.
-    join(process.cwd(), 'src', 'mastra', 'public', 'factory-skills'),
   ].find(existsSync) ?? bundledFactorySkillsPath;
+
+/**
+ * Resolve the consumer repo's local Factory skills root, if any. Checked in
+ * addition to the bundled skills so projects can add (or override) Factory
+ * skills without patching the installed package. Candidates cover the cwd
+ * variants the dev server runs with (`repo root`, `--dir src/mastra` which
+ * runs with cwd `src/mastra/public`).
+ */
+export function resolveLocalFactorySkillsPath(cwd: string = process.cwd()): string | undefined {
+  const candidates = [
+    join(cwd, 'src', 'mastra', 'public', 'factory-skills'),
+    join(cwd, 'public', 'factory-skills'),
+    join(cwd, 'factory-skills'),
+  ];
+  return candidates.find(
+    candidate => path.normalize(candidate) !== path.normalize(BUNDLED_FACTORY_SKILLS_PATH) && existsSync(candidate),
+  );
+}
 const FACTORY_SKILLS_MOUNT = path.resolve(path.parse(process.cwd()).root, '__mastracode_factory_skills__');
 export const FACTORY_SKILL_NAMES = new Set([
   'configure-factory-rules',
@@ -67,14 +83,17 @@ export const FACTORY_SKILL_NAMES = new Set([
   'factory-triage',
 ]);
 
-class FactorySkillSource implements SkillSource {
-  readonly #factorySource = new LocalSkillSource({ basePath: FACTORY_SKILLS_SOURCE_PATH });
+export class FactorySkillSource implements SkillSource {
+  readonly #bundledSource = new LocalSkillSource({ basePath: BUNDLED_FACTORY_SKILLS_PATH });
+  readonly #localSource: LocalSkillSource | undefined;
   readonly #fallbackSkillRoots: Set<string>;
 
   constructor(
     readonly fallback: SkillSource,
     fallbackSkillRoots: string[],
+    localSkillsPath: string | undefined = resolveLocalFactorySkillsPath(),
   ) {
+    this.#localSource = localSkillsPath ? new LocalSkillSource({ basePath: localSkillsPath }) : undefined;
     this.#fallbackSkillRoots = new Set(fallbackSkillRoots.map(skillPath => path.normalize(skillPath)));
   }
 
@@ -87,27 +106,48 @@ class FactorySkillSource implements SkillSource {
     return path.relative(FACTORY_SKILLS_MOUNT, path.normalize(skillPath));
   }
 
-  exists(skillPath: string): Promise<boolean> {
-    return this.#isFactoryPath(skillPath)
-      ? this.#factorySource.exists(this.#factoryPath(skillPath))
-      : this.fallback.exists(skillPath);
+  /** Pick the layer serving this mount-relative path: local wins when it has the entry. */
+  async #layerFor(relativePath: string): Promise<LocalSkillSource> {
+    if (this.#localSource && (await this.#localSource.exists(relativePath))) return this.#localSource;
+    return this.#bundledSource;
   }
 
-  stat(skillPath: string): Promise<SkillSourceStat> {
-    return this.#isFactoryPath(skillPath)
-      ? this.#factorySource.stat(this.#factoryPath(skillPath))
-      : this.fallback.stat(skillPath);
+  async exists(skillPath: string): Promise<boolean> {
+    if (!this.#isFactoryPath(skillPath)) return this.fallback.exists(skillPath);
+    const relative = this.#factoryPath(skillPath);
+    if (this.#localSource && (await this.#localSource.exists(relative))) return true;
+    return this.#bundledSource.exists(relative);
   }
 
-  readFile(skillPath: string): Promise<string | Buffer> {
-    return this.#isFactoryPath(skillPath)
-      ? this.#factorySource.readFile(this.#factoryPath(skillPath))
-      : this.fallback.readFile(skillPath);
+  async stat(skillPath: string): Promise<SkillSourceStat> {
+    if (!this.#isFactoryPath(skillPath)) return this.fallback.stat(skillPath);
+    const relative = this.#factoryPath(skillPath);
+    return (await this.#layerFor(relative)).stat(relative);
+  }
+
+  async readFile(skillPath: string): Promise<string | Buffer> {
+    if (!this.#isFactoryPath(skillPath)) return this.fallback.readFile(skillPath);
+    const relative = this.#factoryPath(skillPath);
+    return (await this.#layerFor(relative)).readFile(relative);
   }
 
   async readdir(skillPath: string): Promise<SkillSourceEntry[]> {
     if (this.#isFactoryPath(skillPath)) {
-      return this.#factorySource.readdir(this.#factoryPath(skillPath));
+      const relative = this.#factoryPath(skillPath);
+      const [bundledExists, localExists] = await Promise.all([
+        this.#bundledSource.exists(relative),
+        this.#localSource?.exists(relative) ?? Promise.resolve(false),
+      ]);
+      if (!bundledExists && !localExists) throw skillSourceEnoent(skillPath);
+      const [bundledEntries, localEntries] = await Promise.all([
+        bundledExists ? this.#bundledSource.readdir(relative) : [],
+        localExists ? this.#localSource!.readdir(relative) : [],
+      ]);
+      const merged = new Map<string, SkillSourceEntry>();
+      for (const entry of bundledEntries) merged.set(entry.name, entry);
+      // Local entries override bundled names.
+      for (const entry of localEntries) merged.set(entry.name, entry);
+      return [...merged.values()];
     }
     const entries = await this.fallback.readdir(skillPath);
     if (this.#fallbackSkillRoots.has(path.normalize(skillPath))) {
@@ -122,6 +162,7 @@ class FactorySkillSource implements SkillSource {
   }
 }
 
+/** Build a Node-style ENOENT error so callers can treat missing skills like fs misses. */
 function skillSourceEnoent(skillPath: string): Error {
   const error = new Error(`ENOENT: no such file or directory, '${skillPath}'`) as Error & { code: string };
   error.code = 'ENOENT';

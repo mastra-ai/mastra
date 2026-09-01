@@ -1,6 +1,6 @@
 {
   "name": "@mastra/platform-workspace",
-  "version": "1.5.0-alpha.0",
+  "version": "1.5.0-alpha.1",
   "description": "Mastra Platform workspace sandbox and filesystem providers",
   "type": "module",
   "main": "dist/index.js",
@@ -47,8 +47,7 @@
     "@mastra/core": ">=1.62.0-0 <2.0.0-0"
   },
   "files": [
-    "dist",
-    "CHANGELOG.md"
+    "dist"
   ],
   "homepage": "https://mastra.ai",
   "repository": {
