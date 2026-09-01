@@ -331,8 +331,9 @@ export class ViewerRegistry implements ViewerRegistryLike {
       this.browserClosedCleanups.set(viewerKey, cleanup);
     }
 
-    // Check if browser is already running
-    if (toolset.isBrowserRunning()) {
+    // Check if browser is already running for this viewer's thread.
+    // Pass threadId so thread-scoped viewers don't fall back to the globally "current" thread.
+    if (toolset.isBrowserRunning(threadId)) {
       // Browser is running, start screencast immediately
       await this.doStartScreencast(viewerKey, toolset, threadId);
     } else {
