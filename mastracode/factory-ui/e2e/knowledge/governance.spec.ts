@@ -78,17 +78,27 @@ async function createGovernanceHarness(perspective: Perspective) {
     })
     .catch(() => undefined);
 
+  const principal = await store.createNode({
+    name: `${perspective} host profile`,
+    isScope: true,
+    scopeIds: [orgScopeId],
+  });
   await store.upsertScopeGrant({
     scopeNodeId: resourceScopeId,
-    scopeRefId: orgScopeId,
+    scopeRefId: principal.id,
     role: perspective === 'reviewer' ? 'owner' : 'readonly',
     canSuggest: perspective !== 'reader',
   });
-
   const routes = new KnowledgeRoutes({
     auth: fakeRouteAuth({ isOrganizationAdmin: async () => perspective === 'reviewer' }),
     projects: factory.projects,
     knowledge: async () => knowledge,
+    accessProfile: async () => ({
+      id: perspective,
+      rootScopeId: resourceScopeId,
+      baselineScopeIds: [resourceScopeId],
+      intakeScopeIds: [principal.id],
+    }),
   }).routes();
   const app = createRouteTestApp(routes, {
     workosId: `${perspective}-user`,
@@ -160,7 +170,7 @@ test.describe('Knowledge governance perspectives', () => {
       const context = await browser.newContext();
       const page = await openApprovals(context, 'reader');
       await expect(page.getByText('Rename the deployment guide')).toBeVisible();
-      await expect(page.getByText('Proposer: visible')).toBeVisible();
+      await expect(page.getByText('Proposer: private')).toBeVisible();
       await expect(page.getByRole('button', { name: 'Approve' })).toHaveCount(0);
       await expect(page.getByRole('button', { name: 'Reject' })).toHaveCount(0);
       await capture(page, 'reader');

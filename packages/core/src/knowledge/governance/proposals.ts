@@ -71,6 +71,11 @@ export class KnowledgeProposalLifecycle {
   constructor(
     private readonly storage: KnowledgeStorage,
     private readonly evaluateAccess: (vouchedScopeIds: KnowledgeScopeIds) => Promise<KnowledgeAccessFrontier>,
+    private readonly resolveNode: (input: { id: string; scopeIds: KnowledgeScopeIds }) => Promise<KnowledgeNode | null>,
+    private readonly resolveRecord: (input: {
+      id: string;
+      scopeIds: KnowledgeScopeIds;
+    }) => Promise<KnowledgeRecord | null>,
   ) {}
 
   async proposeNodeUpdate(input: ProposeKnowledgeNodeUpdateInput): Promise<KnowledgeProposal> {
@@ -130,12 +135,21 @@ export class KnowledgeProposalLifecycle {
     };
   }
 
+  async get(input: { id: string; vouchedScopeIds: KnowledgeScopeIds }): Promise<KnowledgeProposal | null> {
+    const frontier = await this.evaluateAccess(input.vouchedScopeIds);
+    const proposal = await this.storage.getVisibleProposal({
+      id: input.id,
+      scopeIds: getKnowledgeReadableScopeIds(frontier),
+    });
+    return proposal ? this.#redactAttribution(proposal, frontier) : null;
+  }
+
   async approve(input: ReviewKnowledgeProposalDecisionInput): Promise<KnowledgeProposal> {
     const frontier = await this.evaluateAccess(input.vouchedScopeIds);
     this.#assertContextScope(frontier, input.reviewerContextScopeId);
     const proposal = await this.#getVisiblePendingProposal(input.id, frontier);
     decodeMutation(proposal);
-    const staleTarget = await this.#authorizeAndFindStaleTarget(proposal, frontier);
+    const staleTarget = await this.#authorizeAndFindStaleTarget(proposal, frontier, input.vouchedScopeIds);
     if (staleTarget) {
       await this.storage.reviewProposal({
         id: proposal.id,
@@ -160,7 +174,7 @@ export class KnowledgeProposalLifecycle {
     this.#assertContextScope(frontier, input.reviewerContextScopeId);
     const proposal = await this.#getVisiblePendingProposal(input.id, frontier);
     decodeMutation(proposal);
-    await this.#authorizeAndFindStaleTarget(proposal, frontier);
+    await this.#authorizeAndFindStaleTarget(proposal, frontier, input.vouchedScopeIds);
     return this.#redactAttribution(
       await this.storage.reviewProposal({
         id: proposal.id,
@@ -366,23 +380,32 @@ export class KnowledgeProposalLifecycle {
   async #authorizeAndFindStaleTarget(
     proposal: KnowledgeProposal,
     frontier: KnowledgeAccessFrontier,
+    vouchedScopeIds: KnowledgeScopeIds,
   ): Promise<KnowledgeProposalTarget | undefined> {
     for (const target of proposal.targets) {
+      const isPrimaryTarget = target.id === proposal.targetId;
+      const entity =
+        isPrimaryTarget && !target.expectedDeleted
+          ? target.type === 'node'
+            ? await this.resolveNode({ id: target.id, scopeIds: vouchedScopeIds })
+            : await this.resolveRecord({ id: target.id, scopeIds: vouchedScopeIds })
+          : target.type === 'node'
+            ? await this.storage.getNodeIncludingDeleted(target.id)
+            : await this.storage.getRecord({ id: target.id, includeDeleted: true });
+      if (!entity) throw new KnowledgeNotFoundError(target.type, target.id);
+      const currentScopeIds =
+        target.type === 'node'
+          ? entity.isScope && !target.expectedDeleted
+            ? [entity.id]
+            : await this.storage.getNodeScopeIds(entity.id)
+          : await this.storage.getRecordScopeIds(entity.id);
       assertKnowledgeScopeCapabilities({
         frontier,
-        scopeIds: target.scopeIds,
+        scopeIds: currentScopeIds,
         capability: target.approvalCapability,
         targetType: `${target.type} ${target.id}`,
       });
-      const entity =
-        target.type === 'node'
-          ? await this.storage.getNodeIncludingDeleted(target.id)
-          : await this.storage.getRecord({ id: target.id, includeDeleted: true });
-      if (
-        !entity ||
-        Boolean(entity.deletedAt) !== Boolean(target.expectedDeleted) ||
-        entity.version !== target.expectedVersion
-      ) {
+      if (Boolean(entity.deletedAt) !== Boolean(target.expectedDeleted) || entity.version !== target.expectedVersion) {
         return target;
       }
     }

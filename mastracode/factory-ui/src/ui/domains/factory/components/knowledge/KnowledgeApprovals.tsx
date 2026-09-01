@@ -5,7 +5,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger } from '@mastra/playgr
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useState } from 'react';
 
-import { useKnowledgeProposals, useReviewKnowledgeProposal } from '../../../../../hooks/useKnowledgeGraph';
+import {
+  useKnowledgeProposal,
+  useKnowledgeProposals,
+  useReviewKnowledgeProposal,
+} from '../../../../../hooks/useKnowledgeGraph';
 import type { KnowledgeProposalStatus } from '../../services/knowledge';
 import { SkeletonRows } from '../../../../ui/SkeletonRows';
 
@@ -16,22 +20,41 @@ function proposalStatus(value: string): KnowledgeProposalStatus | undefined {
 
 export function KnowledgeApprovals({
   factoryProjectId,
+  threadId,
+  proposalId,
+  onSelectProposal,
   onOpenNode,
 }: {
   factoryProjectId: string;
+  threadId?: string;
+  proposalId?: string;
+  onSelectProposal: (proposalId: string | undefined) => void;
   onOpenNode: (nodeId: string, name: string) => void;
 }) {
   const [status, setStatus] = useState<KnowledgeProposalStatus>('pending');
-  const proposals = useKnowledgeProposals(factoryProjectId, status);
-  const review = useReviewKnowledgeProposal(factoryProjectId);
+  const proposals = useKnowledgeProposals(factoryProjectId, status, threadId);
+  const selectedProposal = useKnowledgeProposal(factoryProjectId, proposalId, threadId);
+  const review = useReviewKnowledgeProposal(factoryProjectId, threadId);
 
   if (proposals.isPending) return <SkeletonRows label="Loading Knowledge approvals" rows={6} />;
   if (proposals.isError) return <Notice variant="destructive">{proposals.error.message}</Notice>;
+  if (selectedProposal.isError) return <Notice variant="destructive">Proposal not found.</Notice>;
+
+  const listed = proposals.data.pages.flatMap(page => page.proposals);
+  const visibleProposals = selectedProposal.data
+    ? [selectedProposal.data, ...listed.filter(proposal => proposal.id !== selectedProposal.data.id)]
+    : listed;
 
   return (
     <section aria-label="Knowledge approvals" className="flex flex-col gap-3">
       <div className="flex items-center justify-between gap-3">
-        <Select value={status} onValueChange={value => setStatus(proposalStatus(value) ?? 'pending')}>
+        <Select
+          value={status}
+          onValueChange={value => {
+            setStatus(proposalStatus(value) ?? 'pending');
+            onSelectProposal(undefined);
+          }}
+        >
           <SelectTrigger size="sm" aria-label="Proposal status" className="w-40">
             {status}
           </SelectTrigger>
@@ -48,13 +71,13 @@ export function KnowledgeApprovals({
       </div>
 
       {review.isError ? <Notice variant="destructive">{review.error.message}</Notice> : null}
-      {proposals.data.proposals.length === 0 ? (
+      {visibleProposals.length === 0 ? (
         <Txt as="p" variant="ui-md" className="text-icon3 py-8">
           No {status} proposals.
         </Txt>
       ) : (
         <ol className="flex flex-col gap-3">
-          {proposals.data.proposals.map(proposal => {
+          {visibleProposals.map(proposal => {
             const stale = proposal.targets.some(
               target => target.currentVersion !== undefined && target.currentVersion !== target.expectedVersion,
             );
@@ -78,9 +101,19 @@ export function KnowledgeApprovals({
                       Proposer: {proposal.proposer}
                     </Txt>
                   </div>
-                  <time className="text-icon3 text-xs" dateTime={proposal.createdAt}>
-                    {new Date(proposal.createdAt).toLocaleString()}
-                  </time>
+                  <div className="flex flex-col items-end gap-1">
+                    <time className="text-icon3 text-xs" dateTime={proposal.createdAt}>
+                      {new Date(proposal.createdAt).toLocaleString()}
+                    </time>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      aria-current={proposal.id === proposalId ? 'true' : undefined}
+                      onClick={() => onSelectProposal(proposal.id)}
+                    >
+                      Open proposal
+                    </Button>
+                  </div>
                 </div>
 
                 <ul className="mt-3 flex flex-col gap-1" aria-label="Proposal targets">
@@ -145,6 +178,18 @@ export function KnowledgeApprovals({
               </li>
             );
           })}
+          {proposals.hasNextPage ? (
+            <li className="flex justify-center py-2">
+              <Button
+                variant="ghost"
+                size="sm"
+                disabled={proposals.isFetchingNextPage}
+                onClick={() => void proposals.fetchNextPage()}
+              >
+                {proposals.isFetchingNextPage ? 'Loading proposals…' : 'Load more proposals'}
+              </Button>
+            </li>
+          ) : null}
         </ol>
       )}
     </section>
