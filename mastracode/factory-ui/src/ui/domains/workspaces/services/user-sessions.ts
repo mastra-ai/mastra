@@ -28,8 +28,6 @@ export interface FactoryUserSession {
   sandboxId: string | null;
   sandboxWorkdir: string | null;
   materializedAt: string | null;
-  /** When the session's most recent agent run ended; absent from servers predating the stamp. */
-  lastRunEndedAt?: string | null;
   createdAt: string;
   updatedAt: string;
 }

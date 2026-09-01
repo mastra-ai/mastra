@@ -18,6 +18,13 @@ export function useFeedEventsConnected(): boolean {
   return useContext(FeedEventsContext);
 }
 
+const FEED_FALLBACK_POLL_MS = 30_000;
+
+/** Under a live stream frames drive refresh; the slow tick only heals a frame that never arrived. */
+export function useFeedPollInterval<T extends number | false>(noStreamMs: T): number | T {
+  return useFeedEventsConnected() ? FEED_FALLBACK_POLL_MS : noStreamMs;
+}
+
 /**
  * Holds the project's feed stream for every surface under the factory route.
  * Three frame kinds: a session frame (run started/ended, workspace

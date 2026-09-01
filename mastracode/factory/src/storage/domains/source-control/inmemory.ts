@@ -376,7 +376,6 @@ export class SourceControlStorageInMemory implements SourceControlStorageHandle 
         materializedAt: null,
         firstMessageAt: null,
         firstMeaningfulExecAt: null,
-        lastRunEndedAt: null,
         createdAt: now,
         updatedAt: now,
       };
@@ -408,10 +407,6 @@ export class SourceControlStorageInMemory implements SourceControlStorageHandle 
       if (row && row.firstMeaningfulExecAt === null) {
         Object.assign(row, { firstMeaningfulExecAt: new Date(), updatedAt: new Date() });
       }
-    },
-    markRunEnded: async ({ sessionId }: { sessionId: string }) => {
-      const row = this.sessionsRows.find(candidate => candidate.sessionId === sessionId);
-      if (row) Object.assign(row, { lastRunEndedAt: new Date(), updatedAt: new Date() });
     },
     delete: async (id: string) => {
       this.sessionsRows.splice(0, this.sessionsRows.length, ...this.sessionsRows.filter(row => row.id !== id));

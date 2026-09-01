@@ -2,7 +2,7 @@ import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tansta
 
 import { useApiConfig } from '../api/config';
 import { queryKeys } from '../api/keys';
-import { useFeedEventsConnected } from '../ui/domains/factory/context/FeedEventsProvider';
+import { useFeedPollInterval } from '../ui/domains/factory/context/FeedEventsProvider';
 import { actOnFactoryDecision, fetchFactoryDecisions } from '../ui/domains/factory/services/decisions';
 import type {
   FactoryDecisionAction,
@@ -13,14 +13,12 @@ import type {
 export function useFactoryDecisionStatus(githubProjectId: string | undefined, statuses: FactoryDecisionStatus[]) {
   const { baseUrl } = useApiConfig();
   const statusKey = statuses.join(',');
-  const connected = useFeedEventsConnected();
+  const refetchInterval = useFeedPollInterval(2_000);
   return useQuery({
     queryKey: queryKeys.factoryDecisions(githubProjectId, statusKey),
     queryFn: () => fetchFactoryDecisions(baseUrl, githubProjectId!, { statuses, limit: 50 }),
     enabled: Boolean(githubProjectId),
-    // Every decision transition publishes a feed frame; the poll only
-    // bridges the window where no stream is up.
-    refetchInterval: connected ? false : 2_000,
+    refetchInterval,
     staleTime: 1_000,
   });
 }

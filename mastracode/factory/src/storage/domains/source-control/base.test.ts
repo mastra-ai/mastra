@@ -457,33 +457,6 @@ describe('SourceControlStorage', () => {
     await expect(github.sessions.markFirstMessage({ sessionId: 'missing-session' })).resolves.toBeUndefined();
   });
 
-  it('overwrites last_run_ended_at on every markRunEnded', async () => {
-    const project = await createProject();
-    const link = await linkRepository({ factoryProjectId: project.id });
-    const session = await github.sessions.create({
-      sessionId: '00000000-0000-4000-8000-000000000007',
-      projectRepositoryId: link.id,
-      orgId: 'org-1',
-      userId: 'user-1',
-      branch: 'user/session-00000000-0000-4000-8000-000000000007',
-      baseBranch: 'main',
-    });
-    expect(session.lastRunEndedAt).toBeNull();
-
-    await github.sessions.markRunEnded({ sessionId: session.sessionId });
-    const first = await github.sessions.getBySessionId(session.sessionId);
-    expect(first?.lastRunEndedAt).toBeInstanceOf(Date);
-
-    // Unlike the write-once marks, every run end moves the stamp forward.
-    await new Promise(resolve => setTimeout(resolve, 5));
-    await github.sessions.markRunEnded({ sessionId: session.sessionId });
-    const second = await github.sessions.getBySessionId(session.sessionId);
-    expect(second!.lastRunEndedAt!.getTime()).toBeGreaterThan(first!.lastRunEndedAt!.getTime());
-
-    // Sessions without a source-control row are a zero-row no-op.
-    await expect(github.sessions.markRunEnded({ sessionId: 'missing-session' })).resolves.toBeUndefined();
-  });
-
   it('records first_meaningful_exec_at write-once via markFirstMeaningfulExec', async () => {
     const project = await createProject();
     const link = await linkRepository({ factoryProjectId: project.id });

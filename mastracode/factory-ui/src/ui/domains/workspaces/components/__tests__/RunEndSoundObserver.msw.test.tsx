@@ -5,17 +5,15 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { queryKeys } from '../../../../../api/keys';
 import { server } from '../../../../../../e2e/ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '../../../../../../e2e/ui/render';
-import { playAttentionSoundOnce } from '../../../factory/services/attentionSound';
+import { AGENT_CONTROLLER_ID } from '../../../chat/services/constants';
+import { playDoneSound } from '../../../settings/services/doneSound';
 import type { FactoryUserSession } from '../../services/user-sessions';
 import { resetRunEndSoundForTests, RunEndSoundObserver } from '../RunEndSoundObserver';
 
-vi.mock('../../../factory/services/attentionSound', () => ({
-  playAttentionSoundOnce: vi.fn().mockResolvedValue(undefined),
-}));
+vi.mock('../../../settings/services/doneSound', () => ({ playDoneSound: vi.fn() }));
 
 const REPOSITORY_ID = 'repository-1';
 const SESSION_ID = 'session-1';
-const HISTORICAL_END = '2026-08-20T11:00:00.000Z';
 
 const session: FactoryUserSession = {
   id: 'workspace-1',
@@ -34,48 +32,53 @@ const session: FactoryUserSession = {
   updatedAt: '2026-08-20T10:00:00.000Z',
 };
 
-function stubSessions(rows: () => FactoryUserSession[]) {
+function stubRegistry(running: () => boolean) {
   server.use(
     http.get(`${TEST_BASE_URL}/web/github/projects/${REPOSITORY_ID}/sessions`, () =>
-      HttpResponse.json({ sessions: rows() }),
+      HttpResponse.json({ sessions: [session] }),
+    ),
+    http.get(`${TEST_BASE_URL}/api/agent-controller/${AGENT_CONTROLLER_ID}/active-runs`, () =>
+      HttpResponse.json({
+        runs: running() ? [{ runId: 'run-1', resourceId: SESSION_ID, threadId: SESSION_ID }] : [],
+      }),
     ),
   );
 }
 
-async function refetchSessions(client: QueryClient) {
-  await client.invalidateQueries({ queryKey: queryKeys.sessions(REPOSITORY_ID) });
+async function refetchRegistry(client: QueryClient) {
+  await client.invalidateQueries({ queryKey: queryKeys.agentControllerActivity(AGENT_CONTROLLER_ID, TEST_BASE_URL) });
   await waitForMutationsIdle(client);
 }
 
 beforeEach(() => {
   resetRunEndSoundForTests();
-  vi.mocked(playAttentionSoundOnce).mockClear();
+  vi.mocked(playDoneSound).mockClear();
 });
 
 describe('RunEndSoundObserver', () => {
-  it('rings once for a run end it watches land, never for the stamp already there at mount', async () => {
-    let lastRunEndedAt: string | null = HISTORICAL_END;
-    stubSessions(() => [{ ...session, lastRunEndedAt }]);
+  it('rings once when a run it watched in flight ends, never on mount or on an idle refetch', async () => {
+    let running = false;
+    stubRegistry(() => running);
     const { client } = renderWithProviders(<RunEndSoundObserver projectRepositoryId={REPOSITORY_ID} />);
     await waitForMutationsIdle(client);
-    expect(playAttentionSoundOnce).not.toHaveBeenCalled();
 
-    lastRunEndedAt = new Date().toISOString();
-    await refetchSessions(client);
-    expect(playAttentionSoundOnce).toHaveBeenCalledExactlyOnceWith(`run:${SESSION_ID}`, lastRunEndedAt);
+    running = true;
+    await refetchRegistry(client);
+    expect(playDoneSound).not.toHaveBeenCalled();
 
-    await refetchSessions(client);
-    expect(playAttentionSoundOnce).toHaveBeenCalledTimes(1);
+    running = false;
+    await refetchRegistry(client);
+    expect(playDoneSound).toHaveBeenCalledTimes(1);
+
+    await refetchRegistry(client);
+    expect(playDoneSound).toHaveBeenCalledTimes(1);
   });
 
-  it('rings the first run of a session that had never run', async () => {
-    let lastRunEndedAt: string | null = null;
-    stubSessions(() => [{ ...session, lastRunEndedAt }]);
+  it('stays silent for a run already over when the tab opened', async () => {
+    stubRegistry(() => false);
     const { client } = renderWithProviders(<RunEndSoundObserver projectRepositoryId={REPOSITORY_ID} />);
     await waitForMutationsIdle(client);
-
-    lastRunEndedAt = new Date().toISOString();
-    await refetchSessions(client);
-    expect(playAttentionSoundOnce).toHaveBeenCalledExactlyOnceWith(`run:${SESSION_ID}`, lastRunEndedAt);
+    await refetchRegistry(client);
+    expect(playDoneSound).not.toHaveBeenCalled();
   });
 });

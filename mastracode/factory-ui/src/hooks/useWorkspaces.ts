@@ -12,7 +12,7 @@ import { useNavigate, useParams } from 'react-router';
 
 import { useApiConfig } from '../api/config';
 import { queryKeys } from '../api/keys';
-import { useFeedEventsConnected } from '../ui/domains/factory/context/FeedEventsProvider';
+import { useFeedPollInterval } from '../ui/domains/factory/context/FeedEventsProvider';
 import { stripCachedSessionRefs } from './useWorkItems';
 import {
   createUserSession,
@@ -142,10 +142,10 @@ const UNMATERIALIZED_POLL_MS = 15_000;
 const UNMATERIALIZED_POLL_WINDOW_MS = 10 * 60_000;
 
 /**
- * Poll gently while any listed session has not been materialized yet and no
- * feed stream is up. The sidebar status dots derive "initializing" from
- * `materializedAt`; the server announces the stamp with a session frame, and
- * this poll only bridges the window where no stream carries it.
+ * With no feed stream, poll gently while any listed session has not been
+ * materialized yet: the sidebar status dots derive "initializing" from
+ * `materializedAt`, which the server stamps out-of-band and announces with a
+ * session frame.
  */
 export function sessionsRefetchInterval(data: WorkspacesData | undefined, now = Date.now()): number | false {
   if (!data) return false;
@@ -157,13 +157,13 @@ export function sessionsRefetchInterval(data: WorkspacesData | undefined, now = 
 
 export function useWorkspacesQuery(projectRepositoryId: string | undefined) {
   const { baseUrl } = useApiConfig();
-  const connected = useFeedEventsConnected();
+  const streamedPollMs = useFeedPollInterval(false);
   return useQuery({
     queryKey: queryKeys.sessions(projectRepositoryId),
     queryFn: projectRepositoryId
       ? ({ signal }): Promise<WorkspacesData> => loadWorkspaces(baseUrl, projectRepositoryId, signal)
       : skipToken,
-    refetchInterval: query => (connected ? false : sessionsRefetchInterval(query.state.data)),
+    refetchInterval: query => streamedPollMs || sessionsRefetchInterval(query.state.data),
   });
 }
 

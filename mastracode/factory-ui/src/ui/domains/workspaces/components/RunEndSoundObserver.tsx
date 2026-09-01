@@ -1,32 +1,30 @@
 import { useEffect } from 'react';
 
+import { useActiveRunResources } from '../../../../hooks/useActiveRunResources';
 import { allSessionRows, useWorkspacesQuery } from '../../../../hooks/useWorkspaces';
-import { playAttentionSoundOnce } from '../../factory/services/attentionSound';
+import { AGENT_CONTROLLER_ID } from '../../chat/services/constants';
+import { playDoneSound } from '../../settings/services/doneSound';
 
-// Module-level so remounts (route changes) do not replay a ring for a stamp
-// this tab already watched land.
-const lastObservedRunEnd = new Map<string, string>();
+const runningBySession = new Map<string, boolean>();
 
-/** Test-only: forget which stamps this tab has already seen land. */
 export function resetRunEndSoundForTests(): void {
-  lastObservedRunEnd.clear();
+  runningBySession.clear();
 }
 
-/**
- * Rings once per run end this tab watches land, deduplicated across open tabs
- * and including the open session, so a backgrounded tab is called back. A stamp
- * already there at mount is history: a reload replays nothing.
- */
+/** Rings this tab's done sound when a run it watched in flight ends. */
 export function RunEndSoundObserver({ projectRepositoryId }: { projectRepositoryId: string | undefined }) {
-  const { data, isSuccess } = useWorkspacesQuery(projectRepositoryId);
+  const { data } = useWorkspacesQuery(projectRepositoryId);
+  const running = useActiveRunResources({
+    agentControllerId: AGENT_CONTROLLER_ID,
+    resourceIds: allSessionRows(data).map(session => session.sessionId),
+  });
   useEffect(() => {
-    if (!isSuccess) return;
-    for (const { sessionId, lastRunEndedAt } of allSessionRows(data)) {
-      const endedAt = lastRunEndedAt ?? '';
-      const previous = lastObservedRunEnd.get(sessionId);
-      lastObservedRunEnd.set(sessionId, endedAt);
-      if (previous !== undefined && previous < endedAt) void playAttentionSoundOnce(`run:${sessionId}`, endedAt);
+    let runEnded = false;
+    for (const [sessionId, isRunning] of Object.entries(running)) {
+      if (runningBySession.get(sessionId) === true && !isRunning) runEnded = true;
+      runningBySession.set(sessionId, isRunning);
     }
-  }, [data, isSuccess]);
+    if (runEnded) playDoneSound();
+  }, [running]);
   return null;
 }

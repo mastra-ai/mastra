@@ -11,10 +11,7 @@ export interface RunLifecycleFeedSession {
 
 export interface RunLifecycleFeedDependencies {
   sourceControl: {
-    sessions: {
-      getBySessionId(sessionId: string): Promise<{ orgId: string; projectRepositoryId: string } | null>;
-      markRunEnded(args: { sessionId: string }): Promise<void>;
-    };
+    sessions: { getBySessionId(sessionId: string): Promise<{ orgId: string; projectRepositoryId: string } | null> };
     projectRepositories: { get(args: { orgId: string; id: string }): Promise<{ connectionId: string } | null> };
     connections: { get(args: { orgId: string; id: string }): Promise<{ factoryProjectId: string } | null> };
   };
@@ -49,21 +46,9 @@ export function observeSessionRunLifecycle(
 
   return session.subscribe(event => {
     if (event.type !== 'agent_start' && event.type !== 'agent_end') return;
-    // Stamp before publishing so a client refetching on the frame reads the
-    // stamped row; a lost stamp still gets a frame (the registry refetch).
-    const stamped =
-      event.type === 'agent_end'
-        ? sourceControl.sessions.markRunEnded({ sessionId }).catch((error: unknown) => {
-            console.warn('[Factory run feed] Unable to stamp the run end.', {
-              sessionId,
-              error: error instanceof Error ? error.message : String(error),
-            });
-          })
-        : Promise.resolve();
     const pending = scopePromise ?? resolveScope();
     scopePromise = pending;
-    void stamped
-      .then(() => pending)
+    void pending
       .then(scope => {
         // Null is not cached: the session row can land after the controller
         // session exists, and a chat-only session simply has no row at all.
