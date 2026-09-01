@@ -1,6 +1,7 @@
 import { Agent } from '@mastra/core/agent';
 import type { ProcessorContext } from '@mastra/core/processors';
 import type { KnowledgeScope } from '@mastra/core/storage';
+import type { ToolAction } from '@mastra/core/tools';
 import { createTool } from '@mastra/core/tools';
 import type { JSONSchema7 } from 'json-schema';
 
@@ -25,6 +26,7 @@ export function createReminderAgent(options: {
   parentThreadId: string;
   parentAgent?: ProcessorContext['agent'];
   fallbackSendSignal: SendSignal;
+  additionalTools?: Record<string, ToolAction<any, any, any>>;
   instructions?: string;
 }) {
   const deliveredEvents = new Set<string>();
@@ -63,7 +65,8 @@ export function createReminderAgent(options: {
         !eventMessage ||
         eventMessage.threadId !== options.threadId ||
         eventMessage.resourceId !== options.resourceId ||
-        protocol?.parentThreadId !== options.parentThreadId ||
+        protocol?.kind !== 'passive-check' ||
+        protocol.parentThreadId !== options.parentThreadId ||
         protocol.resourceId !== options.resourceId ||
         sourceIds.some(sourceId => !protocol.candidateIds.includes(sourceId))
       ) {
@@ -120,8 +123,17 @@ export function createReminderAgent(options: {
     pubsub: options.parentAgent?.getPubSub(),
     tools: {
       ...createKnowledgeTools(options.memory, options.scope),
+      ...options.additionalTools,
       send_reminder: sendReminder,
     },
-    inputProcessors: [new RemindEventReferenceProcessor(options.memory, options.threadId, options.resourceId)],
+    inputProcessors: [
+      new RemindEventReferenceProcessor(
+        options.memory,
+        options.threadId,
+        options.resourceId,
+        options.additionalTools?.reply_to_memory_question ? 'reply_to_memory_question' : undefined,
+        options.parentAgent?.id,
+      ),
+    ],
   });
 }
