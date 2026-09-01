@@ -30,7 +30,10 @@ function parseSkillMarkdown(name: string, raw: string): FactorySkillInfo {
   return { name, description, content: content.trim() };
 }
 
-/** List the bundled Factory skills, skipping any missing from the bundle. */
+/**
+ * List the Factory skills, preferring repo-local versions over bundled ones and
+ * skipping any skill missing from both roots.
+ */
 export async function listFactorySkills(): Promise<FactorySkillInfo[]> {
   const skills: FactorySkillInfo[] = [];
   const localRoot = resolveLocalFactorySkillsPath();

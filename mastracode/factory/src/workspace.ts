@@ -162,6 +162,7 @@ export class FactorySkillSource implements SkillSource {
   }
 }
 
+/** Build a Node-style ENOENT error so callers can treat missing skills like fs misses. */
 function skillSourceEnoent(skillPath: string): Error {
   const error = new Error(`ENOENT: no such file or directory, '${skillPath}'`) as Error & { code: string };
   error.code = 'ENOENT';
