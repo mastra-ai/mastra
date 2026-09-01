@@ -1,14 +1,11 @@
-import { SpanDataPanelView } from '@mastra/playground-ui/domains/traces/components/span-data-panel-view';
 import { TracesErrorContent } from '@mastra/playground-ui/domains/traces/components/traces-error-content';
 import { TracesListView } from '@mastra/playground-ui/domains/traces/components/traces-list-view';
-import { useSpanDetail } from '@mastra/playground-ui/domains/traces/hooks/use-span-detail';
+import { useTraceListNavigation } from '@mastra/playground-ui/domains/traces/hooks/use-trace-list-navigation';
 import { useTraceOrBranchSpans } from '@mastra/playground-ui/domains/traces/hooks/use-trace-or-branch-spans';
-import { useTraceSpanNavigation } from '@mastra/playground-ui/domains/traces/hooks/use-trace-span-navigation';
 import { useTraces } from '@mastra/playground-ui/domains/traces/hooks/use-traces';
 import { useMemo, useState } from 'react';
 
-import { TraceDataPanel } from '@/domains/traces/components/trace-data-panel';
-import { Link } from '@/lib/link';
+import { TraceSpanPanel } from '@/domains/traces/components/trace-span-panel';
 
 export interface ThreadTracesProps {
   threadId: string;
@@ -53,17 +50,23 @@ export function ThreadTraces({ threadId, onTraceOpenChange, onSpanOpenChange }: 
     onTraceOpenChange?.(false);
   };
 
+  // Prev/next trace arrows in the panel header, navigating within the thread's list.
+  // Trace navigation clears any open span (the new trace has its own span tree).
+  const { handlePreviousTrace, handleNextTrace } = useTraceListNavigation(
+    traces,
+    featuredTraceId ?? undefined,
+    null,
+    traceId => {
+      selectSpan(undefined);
+      setFeaturedTraceId(traceId);
+    },
+  );
+
   const { spans: traceSpans, isLoading: isLoadingTraceSpans } = useTraceOrBranchSpans({
     traceId: featuredTraceId,
     anchorSpanId: null,
     listMode: 'traces',
   });
-  const { data: spanDetailData, isLoading: isLoadingSpanDetail } = useSpanDetail(
-    featuredTraceId ?? '',
-    featuredSpanId ?? '',
-  );
-  const { handlePreviousSpan, handleNextSpan } = useTraceSpanNavigation(traceSpans, featuredSpanId ?? null, selectSpan);
-
   if (error) {
     return (
       <div className="flex h-full items-center justify-center p-4">
@@ -74,34 +77,21 @@ export function ThreadTraces({ threadId, onTraceOpenChange, onSpanOpenChange }: 
 
   if (featuredTraceId) {
     return (
-      <TraceDataPanel
+      <TraceSpanPanel
         key={featuredTraceId}
-        // The aside Card already draws the border/rounding — flatten the nested panel.
+        // The aside Card already draws the border/rounding — flatten the nested panels
+        // (the span slot wrapper draws its own `border-l` separator).
         className="h-full rounded-none border-0"
+        spanPanelClassName="rounded-none border-0"
         traceId={featuredTraceId}
         spans={traceSpans}
-        isLoading={isLoadingTraceSpans}
+        isLoadingSpans={isLoadingTraceSpans}
+        selectedSpanId={featuredSpanId ?? null}
         onClose={closeTrace}
         onSpanSelect={selectSpan}
-        initialSpanId={featuredSpanId ?? null}
-        placement="traces-list"
-        LinkComponent={Link}
+        onPrevious={handlePreviousTrace}
+        onNext={handleNextTrace}
         traceHref={`/traces?traceId=${encodeURIComponent(featuredTraceId)}`}
-        spanPanelSlot={
-          featuredSpanId ? (
-            <SpanDataPanelView
-              // The slot wrapper already draws a `border-l` separator — flatten the nested panel.
-              className="rounded-none border-0"
-              traceId={featuredTraceId}
-              spanId={featuredSpanId}
-              span={spanDetailData?.span}
-              isLoading={isLoadingSpanDetail}
-              onClose={() => selectSpan(undefined)}
-              onPrevious={handlePreviousSpan}
-              onNext={handleNextSpan}
-            />
-          ) : null
-        }
       />
     );
   }

@@ -1,5 +1,14 @@
 # @mastra/voice-google-gemini-live
 
+## 0.14.8-alpha.0
+
+### Patch Changes
+
+- Remove `CHANGELOG.md` from distributed npm files resulting in reduced package size ([#22737](https://github.com/mastra-ai/mastra/pull/22737))
+
+- Updated dependencies [[`28ce924`](https://github.com/mastra-ai/mastra/commit/28ce924276eeca492e6a360e5482ed20c2785ef6)]:
+  - @mastra/schema-compat@1.3.8-alpha.0
+
 ## 0.14.7
 
 ### Patch Changes
