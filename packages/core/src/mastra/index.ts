@@ -711,6 +711,7 @@ export class Mastra<
   #workflows: TWorkflows;
   #harnesses: Record<string, Harness<any>> = {};
   #hiddenWorkflowKeys = new Set<string>();
+  #durableWorkflowKeys = new Set<string>();
   #observability: ObservabilityEntrypoint;
   #observabilityExplicit = false;
   #onScorerHook?: ReturnType<typeof createOnScorerHook>;
@@ -2512,8 +2513,13 @@ export class Mastra<
 
       // Register durable workflows if the wrapper provides them
       const durableWorkflows = durableAgent.getDurableWorkflows?.() ?? [];
+      const workflows = this.#workflows as Record<string, AnyWorkflow>;
       for (const workflow of durableWorkflows) {
+        if (workflows[workflow.id]) {
+          continue;
+        }
         this.addWorkflow(workflow, workflow.id);
+        this.#durableWorkflowKeys.add(workflow.id);
       }
 
       // Register configured processor workflows from the agent
@@ -3781,8 +3787,11 @@ export class Mastra<
       return { runs: [], total: 0 };
     }
 
-    // Get all workflows with default engine type
-    const defaultEngineWorkflows = Object.values(this.#workflows).filter(workflow => workflow.engineType === 'default');
+    // Get all workflows with default engine type, excluding durable-agent-owned
+    // definitions that are recovered through the dedicated durable path.
+    const defaultEngineWorkflows = Object.entries(this.#workflows)
+      .filter(([key, workflow]) => workflow.engineType === 'default' && !this.#durableWorkflowKeys.has(key))
+      .map(([, workflow]) => workflow);
 
     const activeRunsByWorkflow = await Promise.all(
       defaultEngineWorkflows.map(workflow => workflow.listActiveWorkflowRuns()),
@@ -4762,6 +4771,7 @@ export class Mastra<
     if (workflows[keyOrId]) {
       delete workflows[keyOrId];
       this.#hiddenWorkflowKeys.delete(keyOrId);
+      this.#durableWorkflowKeys.delete(keyOrId);
       return true;
     }
 
@@ -4769,6 +4779,7 @@ export class Mastra<
     if (key) {
       delete workflows[key];
       this.#hiddenWorkflowKeys.delete(key);
+      this.#durableWorkflowKeys.delete(key);
       return true;
     }
 

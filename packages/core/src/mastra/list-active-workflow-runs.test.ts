@@ -3,6 +3,8 @@ import { z } from 'zod/v4';
 import type { WorkflowRuns } from '../storage';
 import { MockStore } from '../storage/mock';
 import { createEmptyWorkflowSnapshot } from '../storage/workflow-snapshot';
+import { Agent } from '../agent';
+import { createDurableAgent } from '../agent/durable/create-durable-agent';
 import { createWorkflow } from '../workflows';
 import type { WorkflowRunStatus } from '../workflows';
 import { Mastra } from './index';
@@ -35,6 +37,15 @@ function createWorkflowRun(
     createdAt: new Date(),
     updatedAt: new Date(),
   };
+}
+
+function makeAgent(id: string) {
+  return new Agent({
+    id,
+    name: id,
+    instructions: 'x',
+    model: 'openai/gpt-4o',
+  });
 }
 
 describe('Mastra listActiveWorkflowRuns', () => {
@@ -112,5 +123,52 @@ describe('Mastra listActiveWorkflowRuns', () => {
       runs: [...firstRunning.runs, ...firstWaiting.runs, ...secondRunning.runs, ...secondWaiting.runs],
       total: 4,
     });
+  });
+
+  it('skips durable-agent-owned workflows during generic boot recovery discovery', async () => {
+    const firstDurableAgent = createDurableAgent({ agent: makeAgent('durable-agent-a') });
+    const secondDurableAgent = createDurableAgent({ agent: makeAgent('durable-agent-b') });
+    const firstDurableWorkflow = firstDurableAgent.getWorkflow();
+    const secondDurableWorkflow = secondDurableAgent.getWorkflow();
+    const firstDurableSpy = vi.spyOn(firstDurableWorkflow, 'listWorkflowRuns').mockImplementation(() => {
+      throw new Error('durable-agent-owned workflows must not be enumerated by generic recovery');
+    });
+    const secondDurableSpy = vi.spyOn(secondDurableWorkflow, 'listWorkflowRuns').mockImplementation(() => {
+      throw new Error('durable-agent-owned workflows must not be enumerated by generic recovery');
+    });
+
+    const plainWorkflow = createWorkflow({
+      id: 'plain-workflow',
+      inputSchema: z.object({}),
+      outputSchema: z.object({}),
+    }).commit();
+    vi.spyOn(plainWorkflow, 'listWorkflowRuns').mockImplementation(({ status }) => {
+      if (status === 'running') {
+        return Promise.resolve({
+          runs: [createWorkflowRun('plain-workflow', 'plain-running', 'running')],
+          total: 1,
+        });
+      }
+
+      return Promise.resolve({ runs: [], total: 0 });
+    });
+
+    const mastra = new Mastra({
+      logger: false,
+      storage: new MockStore(),
+      agents: {
+        durableA: firstDurableAgent as any,
+        durableB: secondDurableAgent as any,
+      },
+      workflows: { plainWorkflow } as any,
+    });
+
+    await expect(mastra.listActiveWorkflowRuns()).resolves.toEqual({
+      runs: [createWorkflowRun('plain-workflow', 'plain-running', 'running')],
+      total: 1,
+    });
+
+    expect(firstDurableSpy).not.toHaveBeenCalled();
+    expect(secondDurableSpy).not.toHaveBeenCalled();
   });
 });
