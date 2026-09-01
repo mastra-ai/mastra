@@ -179,7 +179,7 @@ export const mainNav: NavSection[] = [
       },
       signalsNavItem,
       {
-        // Experimental Pulse page — UNCOMMITTED demo prototype.
+        // Experimental Pulse page — prototype (demo ClickHouse data path).
         name: 'Pulse',
         url: '/pulse',
         activePaths: ['/pulse'],

@@ -389,7 +389,7 @@ export const routes: RouteObject[] = [
         ]),
       },
       // Experimental Pulse page (event-first observability, hard split) —
-      // UNCOMMITTED prototype; reads ClickHouse directly (no server routes).
+      // Prototype; reads ClickHouse directly (no server routes) — demo data path.
       { path: '/pulse', element: <Pulse />, handle: navHandle('/pulse') },
       { path: '/traces', element: <Traces />, handle: navHandle('/traces') },
       {

@@ -77,6 +77,8 @@ export interface FlowRow {
   thread_id: string;
   entity_name: string;
   root_name: string;
+  /** Parent run id when this flow was started by another run (sub-agent). */
+  delegated_from: string;
 }
 
 /**
@@ -86,7 +88,7 @@ export interface FlowRow {
  */
 export async function listFlows(): Promise<FlowRow[]> {
   const terminal = `endsWith(action, '_completed') OR endsWith(action, '_failed') OR endsWith(action, '_aborted')`;
-  const rootTerm = `argMaxIf(action, (timestamp, seq), parent_span_id = '' AND (${terminal}))`;
+  const rootTerm = `argMaxIf(action, (timestamp, seq), parent_span_id = '' AND surface = 'agent' AND (${terminal}))`;
   const flows = await q<FlowRow>(`
     WITH exact_aborts AS (
       SELECT DISTINCT run_id FROM (SELECT * FROM pulses LIMIT 1 BY id)
@@ -104,7 +106,9 @@ export async function listFlows(): Promise<FlowRow[]> {
            count() AS pulse_count,
            anyIf(thread_id, thread_id != '') AS thread_id,
            anyIf(JSONExtractString(metadata, 'entityName'), JSONExtractString(metadata, 'entityName') != '') AS entity_name,
-           anyIf(text, text != '' AND parent_span_id = '') AS root_name
+           anyIf(text, text != '' AND parent_span_id = '' AND surface = 'agent') AS root_name,
+           anyIf(JSONExtractString(attributes, 'delegatedFromRunId'),
+                 JSONExtractString(attributes, 'delegatedFromRunId') != '') AS delegated_from
     FROM (SELECT * FROM pulses LIMIT 1 BY id)
     WHERE source IN ('span','native') AND trace_id != ''
     GROUP BY trace_id

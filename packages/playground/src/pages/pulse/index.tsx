@@ -201,6 +201,48 @@ export default function Pulse() {
             <div style={{ color: 'var(--neutral3)', fontSize: 10, marginTop: 2 }}>
               {timeAgo(f.started_at)} · {f.pulse_count} pulses{f.cost_usd ? ` · $${Number(f.cost_usd).toFixed(6)}` : ''}
             </div>
+            {/* Sub-agent family: both directions clickable (delegates_to lane). */}
+            {f.delegated_from && (
+              <div
+                onClick={e => {
+                  e.stopPropagation();
+                  setSelected(f.delegated_from);
+                  setInspect(null);
+                  void refreshGraph(f.delegated_from);
+                }}
+                title={`delegated from run ${f.delegated_from} — click to open the parent flow`}
+                style={{ color: 'var(--accent1, #7c8cf8)', fontSize: 10, marginTop: 2, cursor: 'pointer' }}
+              >
+                ↳ sub-agent of{' '}
+                {(() => {
+                  const p = flows.find(x => x.flow_id === f.delegated_from);
+                  return p
+                    ? p.entity_name || p.root_name || f.delegated_from.slice(0, 8)
+                    : f.delegated_from.slice(0, 8);
+                })()}
+              </div>
+            )}
+            {flows.some(x => x.delegated_from === f.flow_id) && (
+              <div style={{ fontSize: 10, marginTop: 2, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                {flows
+                  .filter(x => x.delegated_from === f.flow_id)
+                  .map(child => (
+                    <span
+                      key={child.flow_id}
+                      onClick={e => {
+                        e.stopPropagation();
+                        setSelected(child.flow_id);
+                        setInspect(null);
+                        void refreshGraph(child.flow_id);
+                      }}
+                      title={`this run delegated to flow ${child.flow_id} — click to open it`}
+                      style={{ color: 'var(--accent1, #7c8cf8)', cursor: 'pointer' }}
+                    >
+                      ⤷ delegated to {child.entity_name || child.root_name || child.flow_id.slice(0, 8)}
+                    </span>
+                  ))}
+              </div>
+            )}
           </div>
         ))}
         <div style={{ padding: 12, fontSize: 10, color: 'var(--neutral3)' }}>
