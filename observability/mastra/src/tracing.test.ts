@@ -1925,6 +1925,32 @@ describe('Tracing', () => {
       span.end();
     });
 
+    it('contains metadata whose ownKeys reflection throws instead of failing span creation', () => {
+      const observability = new DefaultObservabilityInstance({
+        serviceName: 'test-service',
+        name: 'test',
+        exporters: [testExporter],
+      });
+
+      const hostileMetadata = new Proxy(
+        { tenantId: 'tenant-1' },
+        {
+          ownKeys() {
+            throw new Error('ownKeys failed');
+          },
+        },
+      );
+
+      expect(() =>
+        observability.startSpan({
+          type: SpanType.AGENT_RUN,
+          name: 'test-agent',
+          attributes: { agentId: 'agent-1' },
+          metadata: hostileMetadata as Record<string, any>,
+        }),
+      ).not.toThrow();
+    });
+
     it('should preserve tags across span lifecycle', () => {
       const observability = new DefaultObservabilityInstance({
         serviceName: 'test-service',
