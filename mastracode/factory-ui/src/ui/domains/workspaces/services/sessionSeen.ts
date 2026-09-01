@@ -1,32 +1,24 @@
+import { readStoredStringRecord } from '../../../lib/storedStringRecord';
+
 /**
- * The viewer's half of the attention derivation: when they last absorbed each
- * session's run ends. The server's `lastRunEndedAt` is the other half — a mark
- * shows exactly while the stamp is newer than this store, so marks survive
- * reloads and dismiss across tabs without any stored mark state.
+ * The viewer's half of the attention derivation: the latest run end they have
+ * absorbed per session, held as the server's own `lastRunEndedAt` stamp so the
+ * viewer's clock never enters the comparison. A mark shows exactly while the
+ * stamp is newer than this store, so marks survive reloads and dismiss across
+ * tabs without any stored mark state.
  */
 
 const SEEN_KEY = 'mastracode.sessionSeen.v1';
 const MAX_SEEN_SESSIONS = 500;
 
+/** Session id → the absorbed `lastRunEndedAt`; `''` for a session seen before it ever ran. */
 type SeenBySessionId = Record<string, string>;
 
 let snapshot: SeenBySessionId | undefined;
 const listeners = new Set<() => void>();
 
-function readStore(): SeenBySessionId {
-  try {
-    const value: unknown = JSON.parse(localStorage.getItem(SEEN_KEY) ?? '{}');
-    if (typeof value !== 'object' || value === null || Array.isArray(value)) return {};
-    return Object.fromEntries(
-      Object.entries(value).filter((entry): entry is [string, string] => typeof entry[1] === 'string'),
-    );
-  } catch {
-    return {};
-  }
-}
-
 export function seenSnapshot(): SeenBySessionId {
-  snapshot ??= readStore();
+  snapshot ??= readStoredStringRecord(SEEN_KEY);
   return snapshot;
 }
 
@@ -47,12 +39,15 @@ function write(next: SeenBySessionId): void {
   notify();
 }
 
-/** Advance the seen time for these sessions; entries already at or past `at` keep their later value. */
-export function markSessionsSeen(sessionIds: readonly string[], at: string): void {
+/** Absorb each session's run ends up to its stamp; an entry never moves backwards. */
+export function markSessionsSeen(seenUpTo: Readonly<SeenBySessionId>): void {
   const current = seenSnapshot();
-  const advancing = sessionIds.filter(sessionId => (current[sessionId] ?? '') < at);
+  const advancing = Object.entries(seenUpTo).filter(([sessionId, at]) => {
+    const absorbed = current[sessionId];
+    return absorbed === undefined || absorbed < at;
+  });
   if (advancing.length === 0) return;
-  write({ ...current, ...Object.fromEntries(advancing.map(sessionId => [sessionId, at])) });
+  write({ ...current, ...Object.fromEntries(advancing) });
 }
 
 export function subscribeSeen(listener: () => void): () => void {

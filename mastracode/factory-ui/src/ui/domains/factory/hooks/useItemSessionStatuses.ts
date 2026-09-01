@@ -1,6 +1,6 @@
 import { useActiveRunResources } from '../../../../hooks/useActiveRunResources';
 import { useSessionAttentionMarks } from '../../../../hooks/useWorkspaceAttention';
-import { useWorkspacesQuery } from '../../../../hooks/useWorkspaces';
+import { allSessionRows, useWorkspacesQuery } from '../../../../hooks/useWorkspaces';
 import { AGENT_CONTROLLER_ID } from '../../chat/services/constants';
 import { sessionRowStatus } from '../../workspaces/services/sessionStatus';
 import type { SessionRowStatus } from '../../workspaces/services/sessionStatus';
@@ -24,7 +24,7 @@ export function useItemSessionStatuses({
     resourceIds: boundSessionIds,
   });
   const workspaces = useWorkspacesQuery(projectRepositoryId);
-  const allSessions = [...(workspaces.data?.workspaces ?? []), ...(workspaces.data?.userSessions ?? [])];
+  const allSessions = allSessionRows(workspaces.data);
   const attentionByPath = useSessionAttentionMarks(allSessions);
   const materializingSessionIds = new Set(
     allSessions.filter(session => !session.materializedAt).map(session => session.sessionId),

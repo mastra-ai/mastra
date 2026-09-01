@@ -37,11 +37,10 @@ export function resetRunObserverForTests(): void {
 }
 
 /**
- * The write side of the derivation: baseline unknown sessions, absorb run
- * ends the viewer is watching happen (the open session never advertises a
- * mark — the reader is already there), and ring once per run end across every
- * open tab. The done sound still plays for the open session, calling back a
- * backgrounded tab.
+ * The write side of the derivation: baseline unknown sessions at their current
+ * stamp, absorb the open session's run ends as they land (the reader is already
+ * there, so it never advertises a mark), and ring once per run end across every
+ * open tab — the open session included, calling back a backgrounded tab.
  */
 export function useSessionRunObserver({
   sessions,
@@ -54,29 +53,16 @@ export function useSessionRunObserver({
 }): void {
   useEffect(() => {
     if (!ready) return;
-    const now = new Date().toISOString();
     const seen = seenSnapshot();
-
-    const unknown = sessions.filter(session => seen[session.sessionId] === undefined).map(session => session.sessionId);
-    if (unknown.length > 0) markSessionsSeen(unknown, now);
-
-    for (const session of sessions) {
-      const endedAt = session.lastRunEndedAt;
-      if (!endedAt) continue;
-      const previous = lastObservedRunEnd.get(session.sessionId);
-      lastObservedRunEnd.set(session.sessionId, endedAt);
+    const absorbed: Record<string, string> = {};
+    for (const { sessionId, lastRunEndedAt } of sessions) {
+      const endedAt = lastRunEndedAt ?? '';
+      if (seen[sessionId] === undefined || sessionId === openSessionId) absorbed[sessionId] = endedAt;
+      const previous = lastObservedRunEnd.get(sessionId);
+      lastObservedRunEnd.set(sessionId, endedAt);
       // Ring only for an end this tab watched land; a reload replays history silently.
-      if (previous !== undefined && previous < endedAt) {
-        void playAttentionSoundOnce(`run:${session.sessionId}`, endedAt);
-      }
+      if (previous !== undefined && previous < endedAt) void playAttentionSoundOnce(`run:${sessionId}`, endedAt);
     }
-
-    if (openSessionId) {
-      const openStamp = sessions.find(session => session.sessionId === openSessionId)?.lastRunEndedAt;
-      // Absorb to the stamp, and only when a new end needs it: an
-      // unconditional write would re-notify subscribers every render and
-      // never converge.
-      if (openStamp && (seen[openSessionId] ?? '') < openStamp) markSessionsSeen([openSessionId], openStamp);
-    }
+    markSessionsSeen(absorbed);
   }, [sessions, openSessionId, ready]);
 }

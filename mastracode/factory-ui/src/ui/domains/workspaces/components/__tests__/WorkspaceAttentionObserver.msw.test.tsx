@@ -7,7 +7,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { queryKeys } from '../../../../../api/keys';
 import { resetRunObserverForTests, useSessionAttentionMarks } from '../../../../../hooks/useWorkspaceAttention';
-import { useWorkspacesQuery } from '../../../../../hooks/useWorkspaces';
+import { allSessionRows, useWorkspacesQuery } from '../../../../../hooks/useWorkspaces';
 import { server } from '../../../../../../e2e/ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '../../../../../../e2e/ui/render';
 import { playAttentionSoundOnce } from '../../../factory/services/attentionSound';
@@ -58,10 +58,7 @@ function stubSessions(rows: () => FactoryUserSession[]) {
 
 function MarksProbe() {
   const sessions = useWorkspacesQuery(REPOSITORY_ID);
-  const marks = useSessionAttentionMarks([
-    ...(sessions.data?.workspaces ?? []),
-    ...(sessions.data?.userSessions ?? []),
-  ]);
+  const marks = useSessionAttentionMarks(allSessionRows(sessions.data));
   return <output aria-label="Attention">{Object.keys(marks).join(' ') || 'none'}</output>;
 }
 
@@ -74,9 +71,9 @@ function OpenSessionButton({ to }: { to: string }) {
   );
 }
 
-/** A stamp later than the observer's baseline, like a run ending after mount. */
+/** A stamp newer than the historical one: a run ending after mount. */
 function freshRunEnd(): string {
-  return new Date(Date.now() + 60_000).toISOString();
+  return new Date().toISOString();
 }
 
 async function refetchSessions(client: QueryClient) {
@@ -112,6 +109,41 @@ describe('WorkspaceAttentionObserver', () => {
     await refetchSessions(client);
     await waitForMutationsIdle(client);
     expect(playAttentionSoundOnce).toHaveBeenCalledTimes(1);
+  });
+
+  it('marks a run end stamped by a server clock running behind the viewer', async () => {
+    let lastRunEndedAt: string | null = HISTORICAL_END;
+    stubSessions(() => [{ ...session, lastRunEndedAt }]);
+    const { client } = renderWithProviders(
+      <MemoryRouter initialEntries={['/factories/factory-1/work']}>
+        <WorkspaceAttentionObserver projectRepositoryId={REPOSITORY_ID} />
+        <MarksProbe />
+      </MemoryRouter>,
+    );
+    await waitForMutationsIdle(client);
+
+    // Newer than the stamp the viewer was baselined at, older than the viewer's own clock.
+    lastRunEndedAt = new Date(Date.now() - 5 * 60_000).toISOString();
+    await refetchSessions(client);
+    await waitFor(() => expect(screen.getByRole('status', { name: 'Attention' })).toHaveTextContent(SESSION_ID));
+  });
+
+  it('marks and rings the first run of a session that had never run', async () => {
+    let lastRunEndedAt: string | null = null;
+    stubSessions(() => [{ ...session, lastRunEndedAt }]);
+    const { client } = renderWithProviders(
+      <MemoryRouter initialEntries={['/factories/factory-1/work']}>
+        <WorkspaceAttentionObserver projectRepositoryId={REPOSITORY_ID} />
+        <MarksProbe />
+      </MemoryRouter>,
+    );
+    await waitForMutationsIdle(client);
+    expect(screen.getByRole('status', { name: 'Attention' })).toHaveTextContent('none');
+
+    lastRunEndedAt = freshRunEnd();
+    await refetchSessions(client);
+    await waitFor(() => expect(screen.getByRole('status', { name: 'Attention' })).toHaveTextContent(SESSION_ID));
+    expect(playAttentionSoundOnce).toHaveBeenCalledExactlyOnceWith(`run:${SESSION_ID}`, lastRunEndedAt);
   });
 
   it('never marks a run that ended before this viewer first saw the list', async () => {
@@ -190,16 +222,14 @@ describe('WorkspaceAttentionObserver', () => {
     await waitForMutationsIdle(client);
     lastRunEndedAt = freshRunEnd();
     await refetchSessions(client);
-    await waitFor(() =>
-      expect(screen.getByRole('status', { name: 'Attention' })).toHaveTextContent('session-scratch'),
-    );
+    await waitFor(() => expect(screen.getByRole('status', { name: 'Attention' })).toHaveTextContent('session-scratch'));
 
     await user.click(screen.getByRole('button', { name: 'Open session' }));
 
     await waitFor(() => expect(screen.getByRole('status', { name: 'Attention' })).toHaveTextContent('none'));
   });
 
-  it("clears a mark when another tab absorbs it, through the storage event", async () => {
+  it('clears a mark when another tab absorbs it, through the storage event', async () => {
     let lastRunEndedAt: string | null = HISTORICAL_END;
     stubSessions(() => [{ ...session, lastRunEndedAt }]);
     const { client } = renderWithProviders(

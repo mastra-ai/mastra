@@ -1,7 +1,7 @@
 import { useMatch } from 'react-router';
 
 import { useSessionRunObserver } from '../../../../hooks/useWorkspaceAttention';
-import { useWorkspacesQuery } from '../../../../hooks/useWorkspaces';
+import { allSessionRows, useWorkspacesQuery } from '../../../../hooks/useWorkspaces';
 
 export function WorkspaceAttentionObserver({ projectRepositoryId }: { projectRepositoryId: string | undefined }) {
   // `useParams` above the thread routes can't see their params, so match them
@@ -12,7 +12,7 @@ export function WorkspaceAttentionObserver({ projectRepositoryId }: { projectRep
   const openSessionId = workspaceMatch?.params.sessionId ?? userThreadMatch?.params.threadId;
   const sessions = useWorkspacesQuery(projectRepositoryId);
   useSessionRunObserver({
-    sessions: [...(sessions.data?.workspaces ?? []), ...(sessions.data?.userSessions ?? [])],
+    sessions: allSessionRows(sessions.data),
     openSessionId,
     ready: sessions.isSuccess,
   });

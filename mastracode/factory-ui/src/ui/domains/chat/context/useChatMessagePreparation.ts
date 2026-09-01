@@ -21,9 +21,7 @@ export function useChatMessagePreparation(): ChatMessagePreparation {
   // messages query is the only loading fact there is.
   const transcript = useContext(ChatTranscriptContext);
   const { sessionError, sandboxPreparing } = useChatSessionContext();
-  const initializing = transcript
-    ? transcript.initializing
-    : sandboxPreparing || (Boolean(messages.threadId) && messages.isPending);
+  const initializing = transcript ? transcript.initializing : sandboxPreparing || messages.isPending;
   return {
     historyInitializing: transcript?.historyInitializing ?? false,
     preparing: !sessionError && initializing,
