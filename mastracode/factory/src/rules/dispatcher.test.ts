@@ -1403,7 +1403,7 @@ describe('FactoryDecisionDispatcher', () => {
       await vi.advanceTimersByTimeAsync(0);
       expect(session.sendSignal).toHaveBeenCalledTimes(1);
 
-      await vi.advanceTimersByTimeAsync(FACTORY_DISPATCH_CONSTANTS.skillCompletionObservationTimeoutMs);
+      await vi.advanceTimersByTimeAsync(FACTORY_DISPATCH_CONSTANTS.runRegistryHeartbeatMs);
       await dispatch;
 
       // An unobserved run end is the silent-stall failure mode: the decision
@@ -1466,8 +1466,8 @@ describe('FactoryDecisionDispatcher', () => {
       await vi.advanceTimersByTimeAsync(0);
       expect(session.sendSignal).toHaveBeenCalledTimes(1);
 
-      // Two full observation windows elapse; the run is slow, not stalled.
-      await vi.advanceTimersByTimeAsync(FACTORY_DISPATCH_CONSTANTS.skillCompletionObservationTimeoutMs * 2);
+      // Two heartbeats elapse; the run is slow, not stalled.
+      await vi.advanceTimersByTimeAsync(FACTORY_DISPATCH_CONSTANTS.runRegistryHeartbeatMs * 2);
       expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]).toMatchObject({ status: 'leased' });
 
       controller.listActiveThreadRuns.mockReturnValue([]);
@@ -1486,7 +1486,7 @@ describe('FactoryDecisionDispatcher', () => {
     }
   });
 
-  it('fails a run terminally once it outlives the observation ceiling, without a duplicate kickoff', async () => {
+  it('fails a run terminally once it outlives the observation timeout, without a duplicate kickoff', async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2030-01-01T00:00:00Z'));
     try {
@@ -1521,21 +1521,21 @@ describe('FactoryDecisionDispatcher', () => {
         signalAccepted: Promise.resolve({ accepted: true, action: 'wake' }),
       });
       controller.listActiveThreadRuns.mockReturnValue([{ runId: 'run-1', threadId: 'thread-1' }]);
-      const window = FACTORY_DISPATCH_CONSTANTS.skillCompletionObservationTimeoutMs;
+      const heartbeat = FACTORY_DISPATCH_CONSTANTS.runRegistryHeartbeatMs;
       const dispatcher = new FactoryDecisionDispatcher({
         controller: controller as never,
         isAutoRunEnabled: async () => true,
         transitionService,
         storage,
         ownerId: 'worker-1',
-        runObservationCeilingMs: window * 3,
+        skillCompletionObservationTimeoutMs: heartbeat * 3,
       });
 
       const dispatch = dispatcher.runOnce();
       await vi.advanceTimersByTimeAsync(0);
       expect(session.sendSignal).toHaveBeenCalledTimes(1);
 
-      await vi.advanceTimersByTimeAsync(window * 3);
+      await vi.advanceTimersByTimeAsync(heartbeat * 3);
       await dispatch;
 
       // Terminal: a hung run must not be retried into the same busy session,
