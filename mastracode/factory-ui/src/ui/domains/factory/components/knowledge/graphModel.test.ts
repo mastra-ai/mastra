@@ -8,6 +8,7 @@ import type {
 } from '../../services/knowledge';
 import {
   BOUNDARY_NODE_SIZE,
+  countUnrenderedBoundaries,
   degreeMap,
   deriveRecordElements,
   egoGraph,
@@ -15,7 +16,6 @@ import {
   graphNodesWithBoundaries,
   graphRecordsWithBoundaries,
   graphTraversalEdges,
-  knowledgeEdgeHoverText,
   RECORD_DOT_SIZE,
   RECORD_JUNCTION_SIZE,
   RECORD_PIN_SIZE,
@@ -36,8 +36,6 @@ function node(id: string, overrides: Partial<KnowledgeGraphNode> = {}): Knowledg
     id,
     name: `Knowledge node ${id}`,
     kind: 'concept',
-    scope: ['org:o', 'resource:r'],
-    rung: 'resource',
     pinned: false,
     recordCount: 1,
     createdAt: '2026-08-13T00:00:00.000Z',
@@ -75,6 +73,7 @@ describe('bounded graph endpoints', () => {
         recordCount: 0,
       },
     ]);
+    expect(countUnrenderedBoundaries([boundary], graphNodes)).toBe(0);
     expect(connected[0]?.nodeIds).toEqual(['owner', 'outside']);
     const pairEdges = recordPairEdges(connected);
     expect(pairEdges).toEqual([expect.objectContaining({ source: 'owner', target: 'outside', recordId: 'record' })]);
@@ -88,6 +87,28 @@ describe('bounded graph endpoints', () => {
         focusable: false,
       }),
     );
+  });
+
+  it('counts only out-of-window targets that are not rendered', () => {
+    const rendered: KnowledgeBoundaryNode = {
+      id: 'rendered',
+      name: 'Rendered',
+      scope: ['org:o', 'resource:r'],
+      rung: 'resource',
+    };
+    const missing: KnowledgeBoundaryNode = {
+      id: 'missing',
+      name: 'Missing',
+      scope: ['org:o', 'resource:r'],
+      rung: 'resource',
+    };
+    const connected = graphRecordsWithBoundaries(
+      [{ id: 'record', nodeIds: ['owner'], pinned: false, text: 'See [[Rendered]].' }],
+      [rendered, missing],
+    );
+    const graphNodes = graphNodesWithBoundaries([node('owner')], [rendered, missing], connected);
+
+    expect(countUnrenderedBoundaries([rendered, missing], graphNodes)).toBe(1);
   });
 });
 
@@ -134,46 +155,31 @@ describe('degreeMap', () => {
 });
 
 describe('filterGraph', () => {
-  const nodes = [node('org-1', { rung: 'org', scope: ['org:o'] }), node('res-1'), node('res-pinned', { pinned: true })];
+  const nodes = [node('org-1'), node('res-1'), node('res-pinned', { pinned: true })];
   const edges = [edge('org-1', 'res-1'), edge('res-1', 'res-pinned')];
 
   it('shows everything with no filters', () => {
-    const result = filterGraph(nodes, edges, { rungs: new Set(), pinnedOnly: false });
+    const result = filterGraph(nodes, edges, { pinnedOnly: false });
     expect(result.nodes).toHaveLength(3);
     expect(result.edges).toHaveLength(2);
   });
 
-  it('filters by rung and drops edges to hidden nodes', () => {
-    const result = filterGraph(nodes, edges, { rungs: new Set(['resource'] as const), pinnedOnly: false });
-    expect(result.nodes.map(node => node.id)).toEqual(['res-1', 'res-pinned']);
-    expect(result.edges.map(e => e.id)).toEqual(['wikilink:res-1:res-pinned']);
-  });
-
-  it('keeps structural scope nodes when filtering identity rungs', () => {
-    const structural = node('scope-1', { isScope: true, rung: null, scope: null });
-    const result = filterGraph([...nodes, structural], edges, {
-      rungs: new Set(['resource'] as const),
-      pinnedOnly: false,
-    });
-    expect(result.nodes.map(node => node.id)).toEqual(['res-1', 'res-pinned', 'scope-1']);
-  });
-
   it('pin filter keeps only accented nodes', () => {
-    const result = filterGraph(nodes, edges, { rungs: new Set(), pinnedOnly: true });
+    const result = filterGraph(nodes, edges, { pinnedOnly: true });
     expect(result.nodes.map(node => node.id)).toEqual(['res-pinned']);
     expect(result.edges).toHaveLength(0);
   });
 
   it('pin filter keeps the endpoints of a pinned edge (A9: pins mark relationships)', () => {
     const pinnedEdge: KnowledgeGraphEdge = { ...edge('org-1', 'res-1'), pinned: true };
-    const result = filterGraph(nodes, [pinnedEdge], { rungs: new Set(), pinnedOnly: true });
+    const result = filterGraph(nodes, [pinnedEdge], { pinnedOnly: true });
     expect(result.nodes.map(node => node.id).sort()).toEqual(['org-1', 'res-1', 'res-pinned']);
     expect(result.edges).toEqual([pinnedEdge]);
   });
 
   it('pin filter keeps nodes touched by pinned records via pair edges (A11)', () => {
     const pairs = recordPairEdges([{ id: 'm1', nodeIds: ['org-1', 'res-1'], pinned: true, text: 'pinned link' }]);
-    const result = filterGraph(nodes, pairs, { rungs: new Set(), pinnedOnly: true });
+    const result = filterGraph(nodes, pairs, { pinnedOnly: true });
     expect(result.nodes.map(node => node.id).sort()).toEqual(['org-1', 'res-1', 'res-pinned']);
   });
 
@@ -295,17 +301,6 @@ describe('structural lens edge composition', () => {
     const recordFlow = toFlowGraph([node('a'), node('b')], recordPairEdges(records));
     const rendered = renderedGraphEdges(nodeFlow.edges, recordFlow.edges, true);
     expect(rendered.map(edge => edge.data?.linkType)).toEqual(['contains', 'wikilink']);
-  });
-
-  it('describes containment separately from knowledge-record mentions', () => {
-    const [contains, wikilink] = toFlowGraph(
-      [node('scope'), node('a'), node('b')],
-      [{ id: 'contains:scope:a', source: 'scope', target: 'a', type: 'contains' }, edge('a', 'b')],
-    ).edges;
-    if (!contains || !wikilink) throw new Error('Expected both graph edges');
-
-    expect(knowledgeEdgeHoverText(contains)).toBe('Direct member of this scope');
-    expect(knowledgeEdgeHoverText(wikilink)).toBe('Mentioned in a knowledge record');
   });
 });
 

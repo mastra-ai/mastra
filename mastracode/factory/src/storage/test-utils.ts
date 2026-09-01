@@ -42,9 +42,12 @@ export interface FactoryStorageTestSeed {
 /**
  * Create a fresh libsql `:memory:` `FactoryStorage` with every built-in domain
  * registered. Call per test (state is per-instance). The backend closes
- * automatically when the current test finishes.
+ * automatically when the current test finishes unless cleanup is disabled for
+ * a non-Vitest harness.
  */
-export async function createFactoryStorageForTests(): Promise<FactoryStorageTestSeed> {
+export async function createFactoryStorageForTests(
+  options: { autoClose?: boolean } = {},
+): Promise<FactoryStorageTestSeed> {
   const storage = new LibSQLFactoryStorage({ id: 'factory-test', url: ':memory:' });
   const intake = storage.registerDomain(new IntakeStorage());
   const audit = storage.registerDomain(new AuditStorage());
@@ -62,7 +65,7 @@ export async function createFactoryStorageForTests(): Promise<FactoryStorageTest
   const channelIdentity = storage.registerDomain(new ChannelIdentityStorage());
   const comments = storage.registerDomain(new WorkItemCommentsStorage());
   await storage.init();
-  onTestFinished(() => storage.close());
+  if (options.autoClose !== false) onTestFinished(() => storage.close());
   return {
     storage,
     intake,

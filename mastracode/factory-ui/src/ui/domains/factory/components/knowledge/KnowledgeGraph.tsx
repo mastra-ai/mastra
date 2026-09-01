@@ -6,7 +6,6 @@
  * shows a summary card. Dragging a node re-pins it (the layout keeps it put).
  */
 
-import { Badge } from '@mastra/playground-ui/components/Badge';
 import {
   Background,
   BackgroundVariant,
@@ -23,19 +22,19 @@ import {
 } from '@xyflow/react';
 import type { EdgeProps, NodeProps } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
-import { Boxes, Globe, Pin } from 'lucide-react';
+import { Pin } from 'lucide-react';
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
-import type { KnowledgeGraphNode, KnowledgeGraphPayload, KnowledgeRung } from '../../services/knowledge';
+import type { KnowledgeGraphNode, KnowledgeGraphPayload } from '../../services/knowledge';
 import type { NodeFlowNode, KnowledgeFlowEdge, KnowledgeGraphFilters, RecordFlowNode } from './graphModel';
 import {
+  countUnrenderedBoundaries,
   deriveRecordElements,
   egoGraph,
   filterGraph,
   graphNodesWithBoundaries,
   graphRecordsWithBoundaries,
   graphTraversalEdges,
-  knowledgeEdgeHoverText,
   NO_FILTERS,
   renderedGraphEdges,
   shouldShowLabel,
@@ -44,14 +43,6 @@ import {
 } from './graphModel';
 import type { Arrivals } from './graphDiff';
 import { runLayout } from './layout';
-
-const RUNG_LABELS: Record<KnowledgeRung, string> = { org: 'Org', resource: 'Project', thread: 'Session' };
-
-const RUNG_RING: Record<KnowledgeRung, string> = {
-  org: 'border-purple-300/70',
-  resource: 'border-purple-500/60',
-  thread: 'border-cyan-400/60',
-};
 
 function NodeNodeComponent({ data, selected }: NodeProps<NodeFlowNode>) {
   const { node, size, degree, focused } = data;
@@ -81,7 +72,7 @@ function NodeNodeComponent({ data, selected }: NodeProps<NodeFlowNode>) {
       data-testid="knowledge-node"
       data-node-id={node.id}
       data-node-type={node.isBoundary ? 'boundary' : node.isScope ? 'scope' : 'content'}
-      className={node.isBoundary ? 'relative' : 'relative cursor-pointer'}
+      className="relative"
       style={{ width: size, height: size }}
     >
       {/* A11: nodes never carry pin visuals — pins belong to their record
@@ -117,19 +108,6 @@ function NodeNodeComponent({ data, selected }: NodeProps<NodeFlowNode>) {
           </span>
         ) : null}
       </div>
-      {node.isScope && !focused && !selected && node.memberCount !== undefined && node.memberCount > 0 ? (
-        <div className="absolute -top-1 -right-1 z-10">
-          <Badge
-            variant="neutral"
-            size="xs"
-            className="bg-surface1 text-badge-neutral-fg"
-            aria-label={`${node.memberCount}${node.memberCountTruncated ? '+' : ''} direct members`}
-          >
-            {node.memberCount}
-            {node.memberCountTruncated ? '+' : ''}
-          </Badge>
-        </div>
-      ) : null}
       <Handle type="target" position={Position.Top} className="!invisible" />
       <Handle type="source" position={Position.Bottom} className="!invisible" />
     </div>
@@ -223,7 +201,7 @@ function RecordNodeComponent({ data }: NodeProps<RecordFlowNode>) {
       data-record-id={record.id}
       data-focused={focused || undefined}
       className={[
-        'flex cursor-pointer items-center justify-center rounded-full border transition-shadow',
+        'flex items-center justify-center rounded-full border transition-shadow',
         // White markers mimic the Mastra logo's nodes-and-edges M — records
         // read as knowledge points, distinct from nodes (purple) and pins
         // (amber).
@@ -280,9 +258,10 @@ export interface KnowledgeGraphProps {
   labelAll?: boolean;
 }
 
-function TruncationBanner({ payload }: { payload: KnowledgeGraphPayload }) {
+function TruncationBanner({ payload, outOfWindowCount }: { payload: KnowledgeGraphPayload; outOfWindowCount: number }) {
   const parts: string[] = [];
   if (payload.truncated) parts.push(`showing the newest ${payload.nodes.length} nodes`);
+  if (outOfWindowCount > 0) parts.push(`${outOfWindowCount} linked nodes outside the window`);
   if (payload.unresolvedCapped.count > 0) parts.push(`${payload.unresolvedCapped.count} links unresolved (capped)`);
   if (parts.length === 0) return null;
   return (
@@ -390,13 +369,14 @@ function KnowledgeGraphInner({
     return () => cancelAnimationFrame(frame);
   }, [focusedId, reactFlow]);
 
-  const { nodes, edges } = useMemo(() => {
+  const { nodes, edges, outOfWindowCount } = useMemo(() => {
     // A11: records are the connection source of truth when the payload
     // carries them; logical owner→target pairs drive filters/ego/sizing.
     // Authorized boundary summaries become muted endpoints, and matching
     // record wikilinks attach them to the same record element as their owner.
     const records = graphRecordsWithBoundaries(payload.records ?? [], payload.outOfWindow);
     const graphNodes = graphNodesWithBoundaries(payload.nodes, payload.outOfWindow, records);
+    const outOfWindowCount = countUnrenderedBoundaries(payload.outOfWindow, graphNodes);
     // Position capture policy: new data re-simulates WARM (nodes start
     // from their settled spots — new inbound edges change node sizes, so the
     // layout must re-settle); unchanged data freezes positions hard so
@@ -429,8 +409,7 @@ function KnowledgeGraphInner({
     // project view, so the cluster expands out of its current shape.
     const warmStart = (id: string) => centers.get(id) ?? lastCenters.current.get(id);
     const pairEdges = graphTraversalEdges(payload.edges, records);
-    const effectiveFilters = labelAll ? { ...filters, rungs: NO_FILTERS.rungs } : filters;
-    let filtered = filterGraph(graphNodes, pairEdges, effectiveFilters);
+    let filtered = filterGraph(graphNodes, pairEdges, filters);
     if (focusedId) {
       const focused = egoGraph(filtered.nodes, filtered.edges, focusedId, records);
       // A stale focus id (filtered away or gone from the payload) falls back
@@ -496,11 +475,12 @@ function KnowledgeGraphInner({
     // scratch cache, so the project layout survives the visit untouched.
     for (const [id, center] of positions) centers.set(id, center);
     const nodeFlow = toFlowGraph(filtered.nodes, filtered.edges, positions, focusedId, labelAll);
-    if (records.length === 0) return nodeFlow; // pre-A11 payload fallback
+    if (records.length === 0) return { ...nodeFlow, outOfWindowCount }; // pre-A11 payload fallback
     const recordFlow = toRecordFlow(recordNodes, recordEdges, positions);
     return {
       nodes: [...nodeFlow.nodes, ...recordFlow.nodes],
       edges: renderedGraphEdges(nodeFlow.edges, recordFlow.edges, true),
+      outOfWindowCount,
     };
     // dragVersion re-runs the layout after a drag pin.
   }, [payload, filters, focusedId, dragVersion, arrivals, labelAll]);
@@ -540,13 +520,12 @@ function KnowledgeGraphInner({
   }, []);
 
   const availableRungs = useMemo(() => {
-    if (labelAll) return [];
     const present = new Set<KnowledgeRung>();
     for (const node of payload.nodes) {
       if (node.rung) present.add(node.rung);
     }
     return (['org', 'resource', 'thread'] as const).filter(rung => present.has(rung));
-  }, [labelAll, payload.nodes]);
+  }, [payload.nodes]);
 
   return (
     <div
@@ -569,18 +548,8 @@ function KnowledgeGraphInner({
           stroke: rgba(196, 181, 253, 0.9) !important;
         }
       `}</style>
-      <TruncationBanner payload={payload} />
+      <TruncationBanner payload={payload} outOfWindowCount={outOfWindowCount} />
       <div className="absolute top-3 left-3 z-10 flex items-center gap-2">
-        {!labelAll &&
-          availableRungs.map(rung => (
-            <FilterChip
-              key={rung}
-              label={RUNG_LABELS[rung]}
-              icon={rung === 'org' ? <Globe size={13} /> : <Boxes size={13} />}
-              active={filters.rungs.size === 0 || filters.rungs.has(rung)}
-              onClick={() => toggleRung(rung)}
-            />
-          ))}
         <FilterChip
           label="Pinned"
           accent
@@ -695,16 +664,7 @@ function GraphHoverCard({ hover, nodesById }: { hover: HoverCard; nodesById: Map
           {node.isScope ? (
             <>
               <dt>Type</dt>
-              <dd>{node.kind === 'scope' ? 'scope' : node.kind}</dd>
-              <dt>Content nodes</dt>
-              <dd>{node.contentNodeCount ?? '—'}</dd>
-              <dt>Child scopes</dt>
-              <dd>{node.childScopeCount ?? '—'}</dd>
-              <dt>Direct members</dt>
-              <dd>
-                {node.memberCount ?? '—'}
-                {node.memberCountTruncated ? '+' : ''}
-              </dd>
+              <dd>{node.kind === 'scope' ? 'Structural scope' : node.kind}</dd>
             </>
           ) : (
             <>
@@ -714,12 +674,12 @@ function GraphHoverCard({ hover, nodesById }: { hover: HoverCard; nodesById: Map
               <dd>{node.rung ? RUNG_LABELS[node.rung] : '—'}</dd>
               <dt>Knowledge records</dt>
               <dd>{node.recordCount}</dd>
-              <dt>Connections</dt>
-              <dd>
-                {degree.incoming} in · {degree.outgoing} out
-              </dd>
             </>
           )}
+          <dt>Connections</dt>
+          <dd>
+            {degree.incoming} in · {degree.outgoing} out
+          </dd>
           <dt>Updated</dt>
           <dd>{node.updatedAt ? new Date(node.updatedAt).toLocaleString() : '—'}</dd>
         </dl>
@@ -753,7 +713,9 @@ function GraphHoverCard({ hover, nodesById }: { hover: HoverCard; nodesById: Map
         style={style}
       >
         <div className="text-icon6">{source && target ? `${source} → ${target}` : 'Record'}</div>
-        <div className="text-icon4 mt-0.5 leading-relaxed">{knowledgeEdgeHoverText(hover.edge)}</div>
+        <div className="text-icon4 mt-0.5 leading-relaxed">
+          {hover.edge.data?.text ?? 'Mentioned in a knowledge record'}
+        </div>
       </div>
     );
   }
