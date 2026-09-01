@@ -109,13 +109,15 @@ export function createRepoTemplate(options: PlatformRepoTemplateOptions): Platfo
     });
     if (!access?.cloneUrl) {
       console.warn('[platform-workspace] repo template skipped: repository access unavailable', {
-        error: accessError instanceof Error ? accessError.message : accessError,
+        error: redactSecrets(accessError),
       });
       return undefined;
     }
     const cloneUrl = normalizeCloneUrl(access.cloneUrl);
     if (!isValidCloneUrl(cloneUrl)) {
-      console.warn('[platform-workspace] repo template skipped: clone URL failed validation', { cloneUrl });
+      console.warn('[platform-workspace] repo template skipped: clone URL failed validation', {
+        cloneUrl: redactSecrets(cloneUrl),
+      });
       return undefined;
     }
 
@@ -129,7 +131,7 @@ export function createRepoTemplate(options: PlatformRepoTemplateOptions): Platfo
       console.warn('[platform-workspace] repo template skipped: could not resolve default-branch head', {
         cloneUrl,
         sha,
-        error: headError instanceof Error ? headError.message : headError,
+        error: redactSecrets(headError),
       });
       return undefined;
     }
@@ -232,6 +234,19 @@ function assertWorkingDirectory(dir: string): string {
     );
   }
   return dir;
+}
+
+/**
+ * Render a caught value for a warning without leaking credentials: URL
+ * userinfo, HTTP authorization values, and GitHub token shapes are masked.
+ */
+export function redactSecrets(value: unknown): string | undefined {
+  if (value === undefined || value === null) return undefined;
+  const text = value instanceof Error ? value.message : typeof value === 'string' ? value : String(value);
+  return text
+    .replace(/\/\/[^/@\s]+@/g, '//***@')
+    .replace(/\b(bearer|basic)\s+[^\s"']+/gi, '$1 ***')
+    .replace(/\b(gh[pousr]_|github_pat_)[A-Za-z0-9_]+/g, '$1***');
 }
 
 function gitAuthFlag(): string {

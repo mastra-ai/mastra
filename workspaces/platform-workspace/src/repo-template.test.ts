@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { createRepoTemplate, resolveDefaultBranchHead } from './repo-template.js';
+import { createRepoTemplate, redactSecrets, resolveDefaultBranchHead } from './repo-template.js';
 import { getSandboxTemplateBuildEnvs, serializeSandboxTemplate } from './template.js';
 
 const SHA_1 = '0123456789abcdef0123456789abcdef01234567';
@@ -230,6 +230,40 @@ describe('createRepoTemplate', () => {
       resolveHead: headOf(SHA_1),
     })!;
     await expect(empty()).resolves.toBeUndefined();
+  });
+
+  it('redacts credentials from the bail warnings', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    let logged: string;
+    try {
+      await createRepoTemplate({
+        getRepositoryAccess: vi.fn(async () => {
+          throw new Error('401 for https://x-access-token:ghs_abc123@github.com/acme/widgets (Bearer ghp_zzz)');
+        }),
+        resolveHead: headOf(SHA_1),
+      })!();
+      await createRepoTemplate({
+        getRepositoryAccess: async () => ({ cloneUrl: 'https://ghs_leak@github.com/acme/widgets.git' }),
+        resolveHead: headOf(SHA_1),
+      })!();
+      logged = JSON.stringify(warn.mock.calls);
+    } finally {
+      warn.mockRestore();
+    }
+
+    expect(logged).not.toContain('ghs_abc123');
+    expect(logged).not.toContain('ghp_zzz');
+    expect(logged).not.toContain('ghs_leak');
+    expect(logged).toContain('https://***@github.com/acme/widgets');
+    expect(logged).toContain('401 for');
+  });
+
+  it('redactSecrets masks userinfo, authorization values, and token shapes', () => {
+    expect(redactSecrets(new Error('https://user:pw@host/x Basic abc== github_pat_11AB_cd ghp_1234'))).toBe(
+      'https://***@host/x Basic *** github_pat_*** ghp_***',
+    );
+    expect(redactSecrets(undefined)).toBeUndefined();
+    expect(redactSecrets({ code: 1 })).toBe('[object Object]');
   });
 
   it('keeps the repository token out of git process arguments while resolving the default branch', async () => {
