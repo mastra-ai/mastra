@@ -36,7 +36,7 @@ const responseBody = JSON.stringify(
 
 export const Populated: Story = {
   render: () => (
-    <div className="h-[34rem] w-160">
+    <div className="h-136 w-160">
       <DataDetailsPanel>
         <DataDetailsPanel.Header>
           <DataDetailsPanel.Heading>

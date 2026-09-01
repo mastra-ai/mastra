@@ -1,6 +1,8 @@
 import { useState } from 'react';
 
 import { useWorkspaceChanges, useWorkspaceFile, useWorkspaceFiles } from '../../../../hooks/use-fs';
+import { WorkItemFeedPanel } from '../../factory/components/feed/WorkItemFeedPanel';
+import type { WorkItem } from '../../factory/services/workItems';
 import { WorkspaceChangesPanel } from './WorkspaceChangesPanel';
 import { WorkspaceFileBrowser } from './WorkspaceFileBrowser';
 import { WorkspaceFileViewer } from './WorkspaceFileViewer';
@@ -12,19 +14,24 @@ interface WorkspaceViewerPanelProps {
   threadId: string;
   onExpandedChange?: (expanded: boolean) => void;
   visible?: boolean;
+  workItem?: WorkItem;
+  factoryProjectId?: string;
 }
 
 type WorkspacePanelView =
   | { type: 'overview' }
   | { type: 'files'; selectedPath?: string }
   | { type: 'file'; path: string }
-  | { type: 'changes' };
+  | { type: 'changes' }
+  | { type: 'feed' };
 
 export function WorkspaceViewerPanel({
   workspacePath,
   threadId,
   onExpandedChange,
   visible = true,
+  workItem,
+  factoryProjectId,
 }: WorkspaceViewerPanelProps) {
   const [view, setView] = useState<WorkspacePanelView>({ type: 'overview' });
   const [openFolders, setOpenFolders] = useState<Record<string, boolean>>({});
@@ -40,10 +47,16 @@ export function WorkspaceViewerPanel({
     setView({ type: 'overview' });
     onExpandedChange?.(false);
   };
-  const showView = (type: 'files' | 'changes') => {
+  const showView = (type: 'files' | 'changes' | 'feed') => {
     setView({ type });
     onExpandedChange?.(true);
   };
+
+  if (view.type === 'feed' && workItem) {
+    return (
+      <WorkItemFeedPanel item={workItem} factoryProjectId={factoryProjectId} visible={visible} onBack={showOverview} />
+    );
+  }
 
   if (view.type === 'changes') {
     return (
@@ -101,6 +114,8 @@ export function WorkspaceViewerPanel({
       changesError={changes.error ?? undefined}
       onShowFiles={() => showView('files')}
       onShowChanges={() => showView('changes')}
+      commentCount={workItem?.commentCount}
+      onShowComments={workItem ? () => showView('feed') : undefined}
     />
   );
 }

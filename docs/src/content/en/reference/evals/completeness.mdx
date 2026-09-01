@@ -1,6 +1,6 @@
 ---
 title: "Reference: Completeness scorer | Evals"
-description: Documentation for the Completeness Scorer in Mastra, which evaluates how thoroughly LLM outputs cover key elements present in the input.
+description: "The createCompletenessScorer() function evaluates how thoroughly an LLM's output covers the key elements present in the input."
 packages:
   - "@mastra/core"
   - "@mastra/evals"
@@ -41,7 +41,7 @@ This function returns an instance of the MastraScorer class. See the [MastraScor
 
 The `.run()` method returns a result in the following shape:
 
-```typescript prettier:false
+```typescript oxfmt:false
 {
   runId: string,
   extractStepResult: {

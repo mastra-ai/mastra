@@ -68,6 +68,7 @@ export interface StartFactoryRunInput {
   threadTitle: string;
   threadTags?: Record<string, string>;
   invocation?: FactoryRunInvocation;
+  preapprovePlans?: boolean;
   workItem?: StartFactoryRunWorkItem;
 }
 
@@ -90,7 +91,14 @@ export function useStartFactoryRun() {
 
   const mutation = useMutation({
     mutationKey: factoryRunMutationKey(repository?.projectRepositoryId ?? '', factoryId),
-    mutationFn: async ({ branch, threadTitle, threadTags, invocation, workItem }: StartFactoryRunInput) => {
+    mutationFn: async ({
+      branch,
+      threadTitle,
+      threadTags,
+      invocation,
+      preapprovePlans,
+      workItem,
+    }: StartFactoryRunInput) => {
       if (!factoryId || !workItem) throw new Error('Factory run requires a board work item');
       if (!repository) throw new Error('Select a repository before starting a Factory run');
       const phaseKey = runPhaseKey({ id: workItem.id, sourceKey: workItem.sourceKey, role: workItem.role });
@@ -115,6 +123,7 @@ export function useStartFactoryRun() {
                 arguments: `${invocation.arguments.trim()}\n\nPrepared workspace context:\n- Session: ${sessionId}\n- Branch: ${userSession.branch}`,
               }
             : invocation,
+        preapprovePlans,
         destinationStage: desiredStage,
         workItem: {
           id: workItem.id,

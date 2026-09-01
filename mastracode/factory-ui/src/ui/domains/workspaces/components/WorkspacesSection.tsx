@@ -24,7 +24,7 @@ import type { FactoryUserSession } from '../services/user-sessions';
 import { getFactorySessionKind, getSessionOwnerDetails } from '../services/sessionPresentation';
 import type { SessionViewerProfile } from '../services/sessionPresentation';
 import { SessionNavRow } from './SessionNavRow';
-import type { SessionRowStatus } from './SessionNavRow';
+import { sessionRowStatus } from '../services/sessionStatus';
 import type { SessionPreviewDetails } from './SessionPreviewCard';
 
 const COLLAPSED_ROW_COUNT = 5;
@@ -58,15 +58,6 @@ const bySessionPriority = (a: FactoryWorkspaceRow, b: FactoryWorkspaceRow) =>
   b.createdAt.localeCompare(a.createdAt) ||
   b.workspace.sessionId.localeCompare(a.workspace.sessionId);
 
-function workspaceStatus(row: FactoryWorkspaceRow): SessionRowStatus | undefined {
-  // An active thread means work is happening even if the workspace record has
-  // not yet been stamped materialized — surface the more informative state.
-  if (row.running) return 'working';
-  if (row.initializing) return 'initializing';
-  if (row.attention) return 'ready';
-  return undefined;
-}
-
 export function WorkspacesSection() {
   const { factoryId, sessionId } = useParams<{ factoryId: string; sessionId: string }>();
   const { baseUrl, resourceId, sessionEnabled, factorySessionState } = useChatSessionContext();
@@ -87,7 +78,7 @@ export function WorkspacesSection() {
     agentControllerId: AGENT_CONTROLLER_ID,
     resourceIds: workspaceIds,
   });
-  const { attentionByPath, clearAttention } = useWorkspaceAttentionState({
+  const { attentionByPath } = useWorkspaceAttentionState({
     projectRepositoryId,
     sessionKind: 'factory',
   });
@@ -173,7 +164,6 @@ export function WorkspacesSection() {
   const pending = deleteWorkspace.isPending;
 
   const openWorkspaceThread = (workspace: FactoryUserSession) => {
-    clearAttention(workspace.sessionId);
     // A workspace's thread id is its own session id (FactoryStartCoordinator
     // seeds the session with threadId = sessionId), so navigate straight there
     // instead of blocking on a session create + thread listing round-trip. The
@@ -324,7 +314,7 @@ function WorkspaceGroup({
             active={row.active}
             disabled={pending}
             merged={mergedByPath[row.workspace.sessionId] ?? row.knownMerged}
-            status={workspaceStatus(row)}
+            status={sessionRowStatus(row)}
             pinned={row.pinned}
             preview={{
               kind,

@@ -9,7 +9,7 @@
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 
-import { FACTORY_SKILL_NAMES, FACTORY_SKILLS_SOURCE_PATH } from '../workspace.js';
+import { BUNDLED_FACTORY_SKILLS_PATH, FACTORY_SKILL_NAMES, resolveLocalFactorySkillsPath } from '../workspace.js';
 
 export interface FactorySkillInfo {
   name: string;
@@ -30,16 +30,26 @@ function parseSkillMarkdown(name: string, raw: string): FactorySkillInfo {
   return { name, description, content: content.trim() };
 }
 
-/** List the bundled Factory skills, skipping any missing from the bundle. */
+/**
+ * List the Factory skills, preferring repo-local versions over bundled ones and
+ * skipping any skill missing from both roots.
+ */
 export async function listFactorySkills(): Promise<FactorySkillInfo[]> {
   const skills: FactorySkillInfo[] = [];
+  const localRoot = resolveLocalFactorySkillsPath();
+  const roots = localRoot ? [localRoot, BUNDLED_FACTORY_SKILLS_PATH] : [BUNDLED_FACTORY_SKILLS_PATH];
   for (const name of [...FACTORY_SKILL_NAMES].sort()) {
-    let raw: string;
-    try {
-      raw = await readFile(join(FACTORY_SKILLS_SOURCE_PATH, name, 'SKILL.md'), 'utf8');
-    } catch {
-      continue;
+    let raw: string | undefined;
+    // Repo-local skills override the bundled versions, matching runtime resolution.
+    for (const root of roots) {
+      try {
+        raw = await readFile(join(root, name, 'SKILL.md'), 'utf8');
+        break;
+      } catch {
+        continue;
+      }
     }
+    if (raw === undefined) continue;
     skills.push(parseSkillMarkdown(name, raw));
   }
   return skills;

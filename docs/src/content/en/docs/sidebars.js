@@ -546,7 +546,7 @@ const sidebars = {
             {
               type: 'doc',
               id: 'observability/tracing/overview',
-              label: 'Traces',
+              label: 'Usage',
             },
             {
               type: 'doc',
@@ -610,6 +610,11 @@ const sidebars = {
               type: 'doc',
               id: 'evals/running-in-ci',
               label: 'Running in CI',
+            },
+            {
+              type: 'doc',
+              id: 'evals/vitest-integration',
+              label: 'Vitest Integration',
             },
             {
               type: 'doc',
@@ -704,9 +709,6 @@ const sidebars = {
       type: 'doc',
       id: 'mastra-platform/regions',
       label: 'Regions',
-      customProps: {
-        tags: ['new'],
-      },
     },
     {
       type: 'doc',
@@ -745,9 +747,6 @@ const sidebars = {
       type: 'doc',
       id: 'mastra-platform/workspaces',
       label: 'Workspaces',
-      customProps: {
-        tags: ['new'],
-      },
     },
     {
       type: 'doc',

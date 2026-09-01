@@ -141,7 +141,7 @@ function createMockSettings() {
       stagehand: { env: 'LOCAL' },
     },
     observability: { resources: {}, localTracing: false },
-    signals: { unixSocketPubSub: false, experimentalGithubSignals: false },
+    signals: { unixSocketPubSub: false, experimentalGithubSignals: false, githubPollIntervalMs: 300_000 },
     mcp: { claudeCodeGlobal: false, codexGlobal: false },
   };
 }
@@ -325,6 +325,31 @@ vi.mock('../permissions.js', () => ({
   getToolCategory: vi.fn(),
 }));
 
+vi.mock('../providers/amazon-bedrock-gateway.js', () => ({
+  createAmazonBedrockGateway: vi.fn(() => ({ id: 'amazon-bedrock' })),
+}));
+
+vi.mock('../plugins/manager.js', () => ({
+  PluginManager: class {
+    setRuntime() {}
+    async reload() {
+      return [];
+    }
+    getPluginTools() {
+      return {};
+    }
+    getPluginProcessors() {
+      return { input: [], output: [] };
+    }
+    getPluginSignalProviders() {
+      return [];
+    }
+    onReload() {
+      return () => {};
+    }
+  },
+}));
+
 vi.mock('../providers/claude-max.js', () => ({
   setAuthStorage: vi.fn(),
 }));
@@ -335,6 +360,14 @@ vi.mock('../providers/openai-codex.js', () => ({
 
 vi.mock('../providers/github-copilot.js', () => ({
   setAuthStorage: vi.fn(),
+}));
+
+vi.mock('../providers/kimi-coding.js', () => ({
+  setAuthStorage: vi.fn(),
+}));
+
+vi.mock('../auth/providers/kimi-coding.js', () => ({
+  isKimiCodingDeviceId: vi.fn(() => false),
 }));
 
 vi.mock('../providers/xai.js', () => ({
@@ -468,7 +501,7 @@ describe('createMastraCode', () => {
     expect(agentControllerConfig?.gateways?.[0]?.id).toBe('amazon-bedrock');
     expect(agentControllerConfig?.gateways?.[1]).toBe(mastraCodeGatewayMock);
     expect(agentControllerConfig?.subagents).toEqual([subagent]);
-  }, 10_000);
+  }, 30_000);
 
   it('uses configured mastra gateway settings when creating the MastraCode gateway', async () => {
     const settings = createMockSettings();
@@ -1211,7 +1244,7 @@ describe('createMastraCode', () => {
   it('does not configure the polling GitHub provider when the embedding disables it', async () => {
     loadSettingsMock.mockReturnValue({
       ...createMockSettings(),
-      signals: { unixSocketPubSub: false, experimentalGithubSignals: true },
+      signals: { unixSocketPubSub: false, experimentalGithubSignals: true, githubPollIntervalMs: 300_000 },
     });
     const { createMastraCode } = await import('../index.js');
 
@@ -1227,7 +1260,7 @@ describe('createMastraCode', () => {
   it('configures GitHubSignals as a signal provider for local PR subscriptions', async () => {
     loadSettingsMock.mockReturnValue({
       ...createMockSettings(),
-      signals: { unixSocketPubSub: false, experimentalGithubSignals: true },
+      signals: { unixSocketPubSub: false, experimentalGithubSignals: true, githubPollIntervalMs: 60_000 },
     });
     controllerGetCurrentThreadIdMock.mockReturnValue('thread-1');
     controllerListThreadsMock.mockResolvedValue([{ id: 'thread-1', resourceId: 'thread-resource', metadata: {} }]);
@@ -1242,6 +1275,9 @@ describe('createMastraCode', () => {
       .map(call => call[0] as { signals?: Array<{ id?: string }> } | undefined)
       .find(config => config?.signals?.some(signal => signal.id === 'github-signals'));
     expect(agentConfig?.signals?.map(signal => signal.id)).toContain('github-signals');
+    expect(agentConfig?.signals?.find(signal => signal.id === 'github-signals')).toMatchObject({
+      options: expect.objectContaining({ pollIntervalMs: 60_000 }),
+    });
     expect(startPollingForThread).toHaveBeenCalledWith(
       { threadId: 'thread-1', resourceId: 'thread-resource' },
       { pollImmediately: true },

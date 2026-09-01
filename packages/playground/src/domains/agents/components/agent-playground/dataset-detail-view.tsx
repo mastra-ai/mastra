@@ -1,5 +1,6 @@
+import { Badge } from '@mastra/playground-ui/components/Badge';
+import type { BadgeVariant } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
-import { Chip } from '@mastra/playground-ui/components/Chip';
 import { Combobox } from '@mastra/playground-ui/components/Combobox';
 import { CopyButton } from '@mastra/playground-ui/components/CopyButton';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogBody } from '@mastra/playground-ui/components/Dialog';
@@ -58,14 +59,23 @@ function getExpectedTrajectoryLabel(expectedTrajectory: unknown): string {
   return steps > 0 ? `${steps} expected steps` : 'trajectory';
 }
 
-// Deterministic tag color from string
-const TAG_COLORS = ['blue', 'green', 'purple', 'orange', 'cyan', 'pink', 'red', 'yellow'] as const;
-function getTagColor(tag: string): (typeof TAG_COLORS)[number] {
+const TAG_BADGE_VARIANTS = [
+  'blue',
+  'green',
+  'purple',
+  'orange',
+  'cyan',
+  'pink',
+  'red',
+  'yellow',
+] as const satisfies readonly BadgeVariant[];
+
+function getTagBadgeVariant(tag: string): (typeof TAG_BADGE_VARIANTS)[number] {
   let hash = 0;
   for (let i = 0; i < tag.length; i++) {
     hash = ((hash << 5) - hash + tag.charCodeAt(i)) | 0;
   }
-  return TAG_COLORS[Math.abs(hash) % TAG_COLORS.length];
+  return TAG_BADGE_VARIANTS[Math.abs(hash) % TAG_BADGE_VARIANTS.length];
 }
 
 export function DatasetDetailView({
@@ -231,9 +241,9 @@ export function DatasetDetailView({
             {datasetTags.length > 0 && (
               <div className="mt-1.5 flex flex-wrap gap-1">
                 {datasetTags.map(tag => (
-                  <Chip key={tag} color={getTagColor(tag)} size="small">
+                  <Badge key={tag} variant={getTagBadgeVariant(tag)} size="xs">
                     {tag}
-                  </Chip>
+                  </Badge>
                 ))}
               </div>
             )}
@@ -430,9 +440,9 @@ export function DatasetDetailView({
                               {truncateValue(item.input)}
                             </Txt>
                             {item.expectedTrajectory != null && (
-                              <Chip size="small" color="purple">
+                              <Badge size="xs" variant="purple">
                                 {getExpectedTrajectoryLabel(item.expectedTrajectory)}
-                              </Chip>
+                              </Badge>
                             )}
                           </div>
                         </button>
@@ -489,7 +499,8 @@ export function DatasetDetailView({
                           {exp.startedAt ? formatTimestamp(exp.startedAt) : 'Unknown'}
                         </Txt>
                         <Txt variant="ui-xs" className="text-neutral3">
-                          {exp.succeededCount}/{exp.totalItems} passed
+                          {exp.totalItems} items
+                          {exp.failedCount > 0 && ` · ${exp.failedCount} errored`}
                           {exp.datasetVersion != null && ` · ${formatVersionLabel('Dataset', exp.datasetVersion)}`}
                           {exp.agentVersion &&
                             (() => {

@@ -198,7 +198,6 @@ function renderSection() {
           resourceReady: true,
           sandboxReady: true,
           sandboxPreparing: false,
-          sandboxProgress: undefined,
           resourceEnabled: true,
           factorySessionState: { factoryProjectId, projectRepositoryId },
           baseUrl: TEST_BASE_URL,
@@ -232,7 +231,7 @@ const newestPullRequestCases: Array<{
 ];
 
 describe('Workspace sidebar statuses', () => {
-  it('shows the running status dot instead of a merged icon while the agent is active', async () => {
+  it('shows the running status belt instead of a merged icon while the agent is active', async () => {
     stubWorkspaceStatuses({
       items: baseItems(true),
       activeSessionIds: [workSession.sessionId],

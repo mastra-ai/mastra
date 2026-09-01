@@ -46,7 +46,6 @@ import type {
   ReviewComment,
   VersionControl,
 } from '../../capabilities/version-control.js';
-import { withBaseCheckpointWebhookTrigger } from '../../sandbox/base-checkpoint-triggers.js';
 import type { FactoryIntegration, IntegrationContext, IntegrationTools } from '../base.js';
 import { attachGithubIssueReconciler } from './issue-reconciler.js';
 import { GithubReconcileWorker } from './reconcile-worker.js';
@@ -1140,14 +1139,12 @@ export class GithubIntegration implements FactoryIntegration {
    */
   routes(ctx: IntegrationContext): ApiRoute[] {
     this.#storage = ctx.storage;
-    // Every parsed webhook also feeds the base-checkpoint triggers (merged
-    // PRs / pushes to the default branch rebuild the repo's warm checkpoint).
-    const ingestFactoryEvent = withBaseCheckpointWebhookTrigger(attachGithubRules(this, ctx), ctx.baseCheckpoints);
+    const ingestFactoryEvent = attachGithubRules(this, ctx);
     return buildGithubRoutes({
       github: this,
       auth: ctx.auth,
+      sandbox: ctx.sandbox,
       ...(ctx.users ? { users: ctx.users } : {}),
-      fleet: ctx.fleet,
       storage: ctx.factoryStorage,
       stateSigner: ctx.stateSigner,
       baseUrl: ctx.baseUrl,
@@ -1193,7 +1190,6 @@ export class GithubIntegration implements FactoryIntegration {
         ...(reconcile ? { reconcile } : {}),
         ...(issues ? { reconcileIssues: issues } : {}),
         sourceControl: ctx.storage.sourceControl,
-        ...(ctx.baseCheckpoints ? { sweepBaseCheckpoints: () => ctx.baseCheckpoints!.sweep() } : {}),
         ...(intervalMs ? { intervalMs } : {}),
         ...(issueIntervalMs ? { issueIntervalMs } : {}),
       }),

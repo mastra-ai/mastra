@@ -150,7 +150,7 @@ describe.sequential.for([['pnpm'] as const])(`%s monorepo`, ([pkgManager]) => {
   describe.sequential('dev', async () => {
     const buildReservation = reserveBuildQueue();
     let port = await getPort();
-    let proc: ReturnType<typeof execaNode> | undefined;
+    let proc: ReturnType<typeof execa> | undefined;
     const controller = new AbortController();
     const cancelSignal = controller.signal;
 
@@ -187,8 +187,9 @@ export const environmentRoute = registerApiRoute('/environment', {
 `,
           ),
         ]);
-        proc = execaNode(join(inputFile, 'node_modules', 'mastra', 'dist', 'index.js'), ['dev'], {
+        proc = execa('mastra', ['dev'], {
           cwd: inputFile,
+          preferLocal: true,
           cancelSignal,
           gracefulCancel: true,
           env: {
@@ -230,12 +231,12 @@ export const environmentRoute = registerApiRoute('/environment', {
       try {
         if (proc) {
           try {
-            proc.kill('SIGKILL');
+            controller.abort();
             await Promise.race([proc.catch(() => {}), new Promise(resolve => setTimeout(resolve, 5_000))]);
           } catch (err) {
             // @ts-expect-error - isCanceled is not typed
-            if (!err.killed) {
-              console.log('failed to kill build proc', err);
+            if (!err.isCanceled) {
+              console.log('failed to kill dev proc', err);
             }
           }
         }
@@ -400,7 +401,7 @@ export const environmentRoute = registerApiRoute('/environment', {
 
       expect(outputFiles).not.toContain('nodemailer.mjs');
       expect(output).not.toContain('nodemailer/lib');
-      expect(packageJson.dependencies?.nodemailer).toBe('^7.0.0');
+      expect(packageJson.dependencies?.nodemailer).toBe('^9.0.1');
     });
 
     // This stays in the monorepo E2E suite because it builds the generated fixture and validates its output manifest.

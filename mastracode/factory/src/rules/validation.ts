@@ -325,10 +325,17 @@ export function validateFactoryRuleDecision(value: unknown, causalDepth = 0): Fa
       if (value.prepareBinding !== undefined && typeof value.prepareBinding !== 'boolean') {
         throw new FactoryRuleValidationError('Factory message prepareBinding must be a boolean.');
       }
+      if (value.prepareBinding === true && value.role === undefined) {
+        throw new FactoryRuleValidationError('Factory message prepareBinding requires a role.');
+      }
+      const role =
+        value.role === undefined
+          ? undefined
+          : boundedString(value.role, 'Factory message role', MAX_ROLE_LENGTH, IDENTIFIER_RE);
       return {
         type,
         ...commonCommitFields(value),
-        role: boundedString(value.role, 'Factory message role', MAX_ROLE_LENGTH, IDENTIFIER_RE),
+        ...(role ? { role } : {}),
         message: boundedString(value.message, 'Factory message', MAX_MESSAGE_LENGTH),
         ...(priority ? { priority } : {}),
         ...(idleBehavior ? { idleBehavior } : {}),

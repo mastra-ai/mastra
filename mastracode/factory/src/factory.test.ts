@@ -23,7 +23,6 @@ import type { MemorySettingsStorage } from './storage/domains/memory-settings/ba
 import type { FactoryProjectsStorage } from './storage/domains/projects/base.js';
 import type { SourceControlStorage } from './storage/domains/source-control/base.js';
 import type { WorkItemsStorage } from './storage/domains/work-items/base.js';
-import { getFactoryWorkspace } from './workspace.js';
 /** A real in-memory FactoryStorage with init spied for boot-order assertions. */
 function fakeStorage(): LibSQLFactoryStorage {
   const storage = new LibSQLFactoryStorage({ url: ':memory:', id: 'factory-test-storage' });
@@ -316,11 +315,10 @@ describe('MastraFactory.prepare', () => {
     expect(session.om.reflector.switchModel).toHaveBeenCalledWith({ modelId: 'anthropic/claude-haiku-4-5' });
   });
 
-  it('constructs an enabled sandbox fleet from the configured machine', async () => {
-    const sandbox = new LocalSandbox({ workingDirectory: '/tmp/mc-factory-test' });
-    const ctx = await prepareIntegrationContext({ storage: fakeStorage(), sandbox: { machine: sandbox } });
-    expect(ctx.fleet.enabled).toBe(true);
-    expect(ctx.fleet.provider).toBe('local');
+  it('passes the sandbox callback through to integrations', async () => {
+    const create = () => ({ id: 'sb-cb' }) as never;
+    const ctx = await prepareIntegrationContext({ storage: fakeStorage(), sandbox: create });
+    expect(ctx.sandbox).toBe(create);
   });
 
   it('hands the terminal-stage cleanup to the transition service', async () => {
@@ -392,70 +390,55 @@ describe('MastraFactory.prepare', () => {
       'filesystem',
       'source-control',
       'channel-identity',
+      'work-item-comments',
     ]);
     expect(storage.domainNames().every(name => storage.isDomainReady(name))).toBe(true);
   });
 
-  it('disables the sandbox fleet when the slot is omitted', async () => {
+  it('passes no sandbox callback when the slot is omitted', async () => {
     const ctx = await prepareIntegrationContext({ storage: fakeStorage() });
-    expect(ctx.fleet.enabled).toBe(false);
-    expect(ctx.fleet.provider).toBe('none');
+    expect(ctx.sandbox).toBeUndefined();
   });
 
-  it('rejects a sandbox that does not implement clone()', async () => {
-    const uncloneable = {
-      id: 'sb-1',
-      name: 'Uncloneable',
-      provider: 'custom',
-    } as unknown as WorkspaceSandbox;
-    const factory = new MastraFactory({ secretEncryption, storage: fakeStorage(), sandbox: { machine: uncloneable } });
-    await expect(factory.prepare()).rejects.toThrow(/does not implement clone\(\)/);
+  it('boots with a sandbox callback without provisioning anything', async () => {
+    const create = vi.fn(() => new LocalSandbox({ workingDirectory: '/tmp/mc-factory-test' }));
+    const factory = new MastraFactory({ secretEncryption, storage: fakeStorage(), sandbox: create });
+    await factory.prepare();
+    // Boot validation is shape-only — the callback must never be probed.
+    expect(create).not.toHaveBeenCalled();
   });
 
-  it("defaults the workdir base to the machine's workingDirectory, else /workspace", async () => {
-    const local = await prepareIntegrationContext({
+  it('tells an old options-object sandbox config what to write instead', async () => {
+    const factory = new MastraFactory({
+      secretEncryption,
       storage: fakeStorage(),
-      sandbox: { machine: new LocalSandbox({ workingDirectory: '/srv/checkouts/' }) },
+      // The pre-callback shape (MastraFactorySandboxConfig): a template
+      // machine the fleet cloned per repo, plus checkout base and pool cap.
+      sandbox: { machine: {}, workdir: '/workspace', maxSandboxes: 4 } as unknown as () => never,
     });
-    expect(local.fleet.computeWorkdir('acme/api')).toBe('/srv/checkouts/acme/api');
-
-    prepareMock.mockClear();
-
-    const remote = {
-      id: 'sb-2',
-      name: 'Remote',
-      provider: 'railway',
-      clone: () => remote,
-    } as unknown as WorkspaceSandbox;
-    const ctx = await prepareIntegrationContext({ storage: fakeStorage(), sandbox: { machine: remote } });
-    expect(ctx.fleet.computeWorkdir('acme/api')).toBe('/workspace/acme/api');
+    const error = await factory.prepare().catch((e: unknown) => e as Error);
+    expect(error).toBeInstanceOf(Error);
+    // Names the new shape and shows the replacement, so an existing host can
+    // fix its config from the message alone.
+    expect(error.message).toMatch(/'sandbox' is now a callback/);
+    expect(error.message).toMatch(/FactorySandboxContext/);
+    expect(error.message).toMatch(/sandbox: ctx => new E2BSandbox\(\{ id: ctx\.sessionId \}\)/);
+    // The old options had three different fates, and a host reading this
+    // message needs all three: none of them is "pass it to the provider"
+    // unchanged.
+    expect(error.message).toMatch(/'machine' becomes the provider instance/);
+    expect(error.message).toMatch(/'workdir' is gone/);
+    expect(error.message).toMatch(/'maxSandboxes' is gone with the sandbox fleet/);
+    expect(error.message).toMatch(/Omit 'sandbox' entirely to disable/);
   });
 
-  it("keeps LocalSandbox checkouts under its host root even when workdir is '/workspace'", async () => {
-    const ctx = await prepareIntegrationContext({
+  it('rejects a sandbox config that is neither a callback nor an object', async () => {
+    const factory = new MastraFactory({
+      secretEncryption,
       storage: fakeStorage(),
-      sandbox: {
-        machine: new LocalSandbox({ workingDirectory: '/tmp/mc-factory-test' }),
-        workdir: '/workspace',
-        maxSandboxes: 5,
-      },
+      sandbox: 'e2b' as unknown as () => never,
     });
-    expect(ctx.fleet.computeWorkdir('acme/api')).toBe('/tmp/mc-factory-test/acme/api');
-    expect(ctx.fleet.maxSandboxes).toBe(5);
-  });
-
-  it('honors an explicit workdir override for remote sandboxes', async () => {
-    const remote = {
-      id: 'sb-3',
-      name: 'Remote',
-      provider: 'railway',
-      clone: () => remote,
-    } as unknown as WorkspaceSandbox;
-    const ctx = await prepareIntegrationContext({
-      storage: fakeStorage(),
-      sandbox: { machine: remote, workdir: '/custom/base/' },
-    });
-    expect(ctx.fleet.computeWorkdir('acme/api')).toBe('/custom/base/acme/api');
+    await expect(factory.prepare()).rejects.toThrow(/'sandbox' must be a function/);
   });
 
   it("forwards the backend's Mastra store and the vector instance to the SDK mount", async () => {
@@ -482,14 +465,13 @@ describe('MastraFactory.prepare', () => {
     // On the controller, not per session — `createSession` clones
     // `initialState` on every path, webhook recreation included.
     const config = await prepareFactory({ storage: fakeStorage() });
-    expect(config.initialState).toMatchObject({ skipGlobalInstructions: true });
+    expect(config.initialState).toMatchObject({ skipGlobalInstructions: true, factoryOrgUnresolved: true });
     expect(config.disableSettingsOmSeed).toBe(true);
   });
 
-  it('installs a Web Factory session workspace resolver instead of changing the SDK default', async () => {
+  it('installs a Web Factory session workspace resolver', async () => {
     const config = await prepareFactory({ storage: fakeStorage() });
     expect(config.workspace).toEqual(expect.any(Function));
-    expect(config.workspace).not.toBe(getFactoryWorkspace);
   });
 
   it('omits vector when no instance is configured', async () => {

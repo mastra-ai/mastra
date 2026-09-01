@@ -1,6 +1,7 @@
 import type { InMemoryDB } from '../inmemory-db';
 import {
   assertKnowledgeCeilingRaised,
+  assertKnowledgeDescriptionWithinBound,
   assertKnowledgeScopeWithinCeiling,
   canonicalizeKnowledgeScope,
   createKnowledgeUlid,
@@ -99,6 +100,7 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
   }
 
   #createNode(input: CreateKnowledgeNodeInput): KnowledgeNode {
+    assertKnowledgeDescriptionWithinBound(input.description);
     const scope = canonicalizeKnowledgeScope(input.scope);
     const key = recordKey(input.name, scope);
     const existingId = this.#db.knowledgeNodeKeys.get(key);
@@ -117,6 +119,7 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
       name: input.name.trim(),
       kind: input.kind,
       content: input.content,
+      description: input.description,
       scope,
       version: 1,
       createdAt: now,
@@ -198,6 +201,7 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
   }
 
   #updateNode(input: UpdateKnowledgeNodeInput): KnowledgeNode {
+    assertKnowledgeDescriptionWithinBound(input.description);
     const existing = this.#db.knowledgeNodes.get(input.id);
     if (!existing) throw new KnowledgeNotFoundError('node', input.id);
     if (existing.version !== input.version) throw new KnowledgeConflictError(input.id);
@@ -215,6 +219,7 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
       name,
       kind: input.kind ?? existing.kind,
       content: input.content ?? existing.content,
+      description: input.description ?? existing.description,
       scope,
       version: existing.version + 1,
       updatedAt: new Date(),
@@ -291,10 +296,26 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
       updatedAt: new Date(),
     };
     this.#db.knowledgeNodes.set(source.id, updatedSource);
+    // Merge matrix: a target that NEVER had a description (undefined — '' is an explicit curator
+    // clear and wins) adopts the source's; otherwise the target's state is preserved.
+    let mergedTarget = target;
+    // No version predicate is needed here: the whole merge runs inside #runAtomicMutation, so `target`
+    // cannot change between the read above and this write. The persistent adapters guard the same
+    // adoption with an explicit version + description predicate, where that window is real.
+    if (target.description === undefined && source.description) {
+      mergedTarget = {
+        ...target,
+        description: source.description,
+        version: target.version + 1,
+        updatedAt: new Date(),
+      };
+      this.#db.knowledgeNodes.set(target.id, mergedTarget);
+      this.#recordActivity('node-updated', 'node', target.id, target.scope);
+    }
     this.#recordActivity('node-merged', 'node', source.id, source.scope);
     this.#enqueue('node', source.id, 'delete', updatedSource.version, source.scope);
-    this.#enqueue('node', target.id, 'upsert', createKnowledgeUlid(), target.scope);
-    return cloneNode(target);
+    this.#enqueue('node', target.id, 'upsert', createKnowledgeUlid(), mergedTarget.scope);
+    return cloneNode(mergedTarget);
   }
 
   async appendKnowledge(input: AppendKnowledgeInput): Promise<KnowledgeRecord> {
@@ -434,14 +455,21 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
       if (
         node.name.toLocaleLowerCase().includes(query) ||
         node.kind.toLocaleLowerCase().includes(query) ||
-        node.content?.toLocaleLowerCase().includes(query)
+        node.content?.toLocaleLowerCase().includes(query) ||
+        node.description?.toLocaleLowerCase().includes(query)
       ) {
+        // Description joins the snippet only when present so description-less results stay byte-identical.
+        const parts = [
+          node.name,
+          ...(node.description ? [node.description] : []),
+          ...(node.content ? [node.content] : []),
+        ];
         results.push({
           type: 'node',
           id: node.id,
           recordId: node.id,
           name: node.name,
-          text: node.content ? `${node.name}\n${node.content}` : node.name,
+          text: parts.join('\n'),
           scope: [...node.scope],
         });
       }

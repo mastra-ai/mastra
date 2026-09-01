@@ -366,11 +366,7 @@ function ModelPicker({
                       {m.provider}
                     </Txt>
                   </span>
-                  {m.id === currentModelId ? (
-                    <Check size={14} />
-                  ) : m.hasApiKey ? null : (
-                    <Badge variant="default">no key</Badge>
-                  )}
+                  {m.id === currentModelId ? <Check size={14} /> : m.hasApiKey ? null : <Badge>no key</Badge>}
                 </button>
               </li>
             ))}

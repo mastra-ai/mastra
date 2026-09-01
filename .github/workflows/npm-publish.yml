@@ -214,6 +214,61 @@ jobs:
           fetch-tags: true
           persist-credentials: true
 
+      - name: Fetch enough history for Changesets
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          DEEPEN_BY=500
+
+          while true; do
+            missing=()
+
+            for f in .changeset/*.md; do
+              [ -e "$f" ] || continue
+
+              # Not an actual changeset
+              [[ "$f" == ".changeset/README.md" ]] && continue
+
+              result=$(
+                git log \
+                  --diff-filter=A \
+                  --follow \
+                  --max-count=1 \
+                  --pretty=format:'%H:%p' \
+                  -- "$f"
+              )
+
+              if [ -z "$result" ]; then
+                missing+=("$f")
+                continue
+              fi
+
+              commit="${result%%:*}"
+              parents="${result#*:}"
+
+              if [ -n "$commit" ] && [ -z "$parents" ]; then
+                missing+=("$f")
+              fi
+            done
+
+            if [ "${#missing[@]}" -eq 0 ]; then
+              echo "Enough history fetched for all changesets."
+              break
+            fi
+
+            echo "Need more history for ${#missing[@]} changeset(s):"
+            printf '  %s\n' "${missing[@]}"
+
+            if [ "$(git rev-parse --is-shallow-repository)" = "false" ]; then
+              echo "Repository is fully unshallow but some changesets still cannot be resolved."
+              exit 1
+            fi
+
+            echo "Deepening by $DEEPEN_BY commits..."
+            git fetch --deepen="$DEEPEN_BY"
+          done
+
       - name: Check for pre.json file existence
         id: check_files
         shell: bash
