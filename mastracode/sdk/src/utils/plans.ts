@@ -10,46 +10,18 @@ export function getPlansDir(): string {
 
 export interface LocalPlansOptions {
   factoryProjectId?: string | null;
-  /**
-   * The repo checkout's subdir under the workspace root, when file tools root
-   * at the repo's parent (`workspaceRoot !== projectPath`). Prefixes the
-   * workspace-relative plans dir spelling so relative writes land inside the
-   * repo (where the plans dir actually lives) instead of beside it.
-   */
-  repoSubdir?: string | null;
-  /**
-   * The root the agent's file tools resolve relative paths against. When set,
-   * plan-path checks resolve relatives there instead of at `projectPath` —
-   * matching what the write tool will actually do.
-   */
+  /** Root the agent's file tools resolve relative paths against. */
   workspaceRoot?: string | null;
-}
-
-/**
- * The repo checkout's subdir relative to the workspace root — the prefix for
- * repo-relative spellings under a split root. Undefined when the roots are
- * coupled (equal) or the project is not nested under the workspace root.
- */
-export function repoSubdirForRoots(projectPath?: string | null, workspaceRoot?: string | null): string | undefined {
-  if (!projectPath || !workspaceRoot) return undefined;
-  const rel = path.relative(path.resolve(workspaceRoot), path.resolve(projectPath));
-  if (!rel || rel.startsWith('..') || path.isAbsolute(rel)) return undefined;
-  return rel;
 }
 
 /** Workspace-relative directory the agent writes plan files into. */
 export function getLocalPlansRelativeDir(options: LocalPlansOptions = {}): string {
-  const base = options.factoryProjectId ? path.join('.artifacts', 'plans') : path.join(DEFAULT_CONFIG_DIR, 'plans');
-  return options.repoSubdir ? path.join(options.repoSubdir, base) : base;
+  return options.factoryProjectId ? path.join('.artifacts', 'plans') : path.join(DEFAULT_CONFIG_DIR, 'plans');
 }
 
-/**
- * Local (project-scoped) plans directory where the agent writes named plan
- * files. `projectPath` already IS the repo, so the repoSubdir prefix (a
- * workspace-relative spelling concern) never applies here.
- */
+/** Local plans directory where the agent writes named plan files. */
 export function getLocalPlansDir(projectPath: string, options: LocalPlansOptions = {}): string {
-  return path.join(projectPath, getLocalPlansRelativeDir({ factoryProjectId: options.factoryProjectId }));
+  return path.join(options.workspaceRoot ?? projectPath, getLocalPlansRelativeDir(options));
 }
 
 function slugify(str: string): string {

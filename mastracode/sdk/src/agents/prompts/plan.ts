@@ -1,7 +1,7 @@
 /**
  * Plan mode prompt — read-only exploration and planning.
  */
-import { getLocalPlansRelativeDir, repoSubdirForRoots } from '../../utils/plans.js';
+import { getLocalPlansRelativeDir } from '../../utils/plans.js';
 
 interface PlanPromptContext {
   state?: Record<string, unknown>;
@@ -11,12 +11,7 @@ interface PlanPromptContext {
 
 export function planModePrompt(ctx: PlanPromptContext): string {
   const factoryProjectId = typeof ctx.state?.factoryProjectId === 'string' ? ctx.state.factoryProjectId : undefined;
-  // Spell the plans dir the way relative writes resolve: repo-prefixed when
-  // file tools root at the repo's parent (workspaceRoot !== workingDir).
-  const plansDir = getLocalPlansRelativeDir({
-    factoryProjectId,
-    repoSubdir: repoSubdirForRoots(ctx.workingDir, ctx.workspaceRoot),
-  });
+  const plansDir = getLocalPlansRelativeDir({ factoryProjectId });
   const examplePath = `${plansDir}/add-dark-mode.md`;
 
   return `

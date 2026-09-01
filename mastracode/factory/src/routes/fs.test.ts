@@ -209,7 +209,8 @@ describe('readWorkspaceFile', () => {
 
 // ── Session-backed (sandbox) workspace access ────────────────────────────────
 
-const REPO_DIR = '/workspaces/acme/repo';
+const WORKSPACE_ROOT = '/workspaces/acme';
+const REPO_DIR = `${WORKSPACE_ROOT}/repo`;
 
 function makeSession(overrides: Partial<SourceControlSession> = {}): SourceControlSession {
   return {
@@ -358,14 +359,15 @@ describe('persisted session workspace files routes', () => {
 });
 
 describe('listSessionRenderedPath', () => {
-  it('lists rendered entries from the session sandbox in one command', async () => {
+  it('lists rendered artifacts from the session workspace root in one command', async () => {
     const { executeCommand } = seedSessionSandbox(script => {
-      expect(script).toContain(`'${REPO_DIR}/.artifacts'`);
+      expect(script).toContain(`'${WORKSPACE_ROOT}/.artifacts'`);
       return {
         exitCode: 0,
         stdout: [
-          `d\t0\t1700000000.0\t${REPO_DIR}/.artifacts/understand-pr`,
-          `f\t5\t1700000100.5\t${REPO_DIR}/.artifacts/understand-pr/HISTORY.md`,
+          `R\t0\t0\t${WORKSPACE_ROOT}/.artifacts`,
+          `d\t0\t1700000000.0\t${WORKSPACE_ROOT}/.artifacts/understand-pr`,
+          `f\t5\t1700000100.5\t${WORKSPACE_ROOT}/.artifacts/understand-pr/HISTORY.md`,
           '',
         ].join('\n'),
       };
@@ -376,12 +378,32 @@ describe('listSessionRenderedPath', () => {
 
     expect(listing.workspacePath).toBe(session.sessionId);
     expect(listing.root).toBe('.artifacts');
-    expect(listing.rootPath).toBe(`${REPO_DIR}/.artifacts`);
+    expect(listing.rootPath).toBe(`${WORKSPACE_ROOT}/.artifacts`);
     expect(listing.entries).toEqual([
       expect.objectContaining({ name: 'understand-pr', path: 'understand-pr', type: 'directory', size: 0 }),
       expect.objectContaining({ name: 'HISTORY.md', path: 'understand-pr/HISTORY.md', type: 'file', size: 5 }),
     ]);
     expect(executeCommand).toHaveBeenCalledTimes(1);
+  });
+
+  it('falls back to repo-local artifacts for historical sessions', async () => {
+    seedSessionSandbox(script => {
+      expect(script).toContain(`'${WORKSPACE_ROOT}/.artifacts'`);
+      expect(script).toContain(`'${REPO_DIR}/.artifacts'`);
+      return {
+        exitCode: 0,
+        stdout: [`R\t0\t0\t${REPO_DIR}/.artifacts`, `f\t5\t1700000100.5\t${REPO_DIR}/.artifacts/legacy.md`, ''].join(
+          '\n',
+        ),
+      };
+    });
+
+    const listing = await listSessionRenderedPath(makeSession(), '.artifacts');
+
+    expect(listing.rootPath).toBe(`${REPO_DIR}/.artifacts`);
+    expect(listing.entries).toEqual([
+      expect.objectContaining({ name: 'legacy.md', path: 'legacy.md', type: 'file', size: 5 }),
+    ]);
   });
 
   it('returns an empty listing when this process holds no sandbox for the session', async () => {
@@ -422,17 +444,17 @@ describe('listSessionRenderedPath', () => {
 });
 
 describe('readSessionWorkspaceFile', () => {
-  function respondForFile(content: string) {
-    const abs = `${REPO_DIR}/.artifacts/understand-pr/HISTORY.md`;
+  function respondForFile(content: string, root = WORKSPACE_ROOT) {
+    const abs = `${root}/.artifacts/understand-pr/HISTORY.md`;
     return (script: string) => {
-      if (script.includes(`p='${abs}'`)) return { exitCode: 0, stdout: `${REPO_DIR}\n${abs}` };
+      if (script.includes(`p='${abs}'`)) return { exitCode: 0, stdout: `${root}\n${abs}` };
       if (script.startsWith('stat -c')) return { exitCode: 0, stdout: `regular file|${content.length}|1700000000|0\n` };
       if (script.includes('base64 <')) return { exitCode: 0, stdout: Buffer.from(content, 'utf8').toString('base64') };
       return { exitCode: 1, stdout: '', stderr: `unexpected script: ${script}` };
     };
   }
 
-  it('reads text content through the session sandbox', async () => {
+  it('reads text content from workspace-root artifacts through the session sandbox', async () => {
     seedSessionSandbox(respondForFile('# History'));
 
     const session = makeSession();
@@ -448,6 +470,20 @@ describe('readSessionWorkspaceFile', () => {
         truncated: false,
       }),
     );
+  });
+
+  it('falls back to repo-local artifacts when the workspace-root file is absent', async () => {
+    const legacy = respondForFile('# Legacy', REPO_DIR);
+    seedSessionSandbox(script => {
+      if (script.includes(`${WORKSPACE_ROOT}/.artifacts/understand-pr/HISTORY.md`)) {
+        return { exitCode: 20, stdout: '' };
+      }
+      return legacy(script);
+    });
+
+    const file = await readSessionWorkspaceFile(makeSession(), '.artifacts/understand-pr/HISTORY.md');
+
+    expect(file).toEqual(expect.objectContaining({ content: '# Legacy', path: '.artifacts/understand-pr/HISTORY.md' }));
   });
 
   it('rejects reads outside approved rendered roots', async () => {
@@ -467,8 +503,8 @@ describe('readSessionWorkspaceFile', () => {
 
   it('rejects directories', async () => {
     seedSessionSandbox(script => {
-      if (script.includes(`p='${REPO_DIR}/.artifacts'`)) {
-        return { exitCode: 0, stdout: `${REPO_DIR}\n${REPO_DIR}/.artifacts` };
+      if (script.includes(`p='${WORKSPACE_ROOT}/.artifacts'`)) {
+        return { exitCode: 0, stdout: `${WORKSPACE_ROOT}\n${WORKSPACE_ROOT}/.artifacts` };
       }
       if (script.startsWith('stat -c')) return { exitCode: 0, stdout: `directory|0|1700000000|0\n` };
       return { exitCode: 1, stdout: '' };

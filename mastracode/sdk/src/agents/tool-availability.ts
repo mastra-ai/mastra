@@ -1,7 +1,7 @@
 import { WORKSPACE_TOOLS } from '@mastra/core/workspace';
 import type { WorkspaceToolHookContext, WorkspaceToolsConfig } from '@mastra/core/workspace';
 import { MC_TOOLS, TOOL_NAME_OVERRIDES } from '../tool-names.js';
-import { getLocalPlansRelativeDir, isPlanFilePath, repoSubdirForRoots } from '../utils/plans.js';
+import { getLocalPlansRelativeDir, isPlanFilePath } from '../utils/plans.js';
 
 const PLAN_MODE_WRITE_TOOL_NAMES = new Set<string>([
   WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE,
@@ -73,12 +73,7 @@ export function guardPlanModePlanFileWrites({ workspaceToolName, input, context 
   const factoryProjectId = getHarnessFactoryProjectId(harness);
   const projectPath = getHarnessProjectPath(harness);
   const workspaceRoot = getHarnessWorkspaceRoot(harness);
-  // Advertise the plans dir the way relative writes actually resolve: with
-  // the repo subdir prefix when file tools root at the repo's parent.
-  const planDirHint = `${getLocalPlansRelativeDir({
-    factoryProjectId,
-    repoSubdir: repoSubdirForRoots(projectPath, workspaceRoot),
-  })}/`;
+  const planDirHint = `${getLocalPlansRelativeDir({ factoryProjectId })}/`;
   const inputPath = getToolInputPath(input);
   if (!projectPath || !inputPath) {
     return {

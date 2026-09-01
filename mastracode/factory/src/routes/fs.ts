@@ -6,6 +6,7 @@ import { SandboxFilesystem } from '@mastra/code-sdk/agents/sandbox-filesystem';
 import { detectProject, getResourceIdOverride } from '@mastra/code-sdk/utils/project';
 import { registerApiRoute } from '@mastra/core/server';
 import type { ApiRoute } from '@mastra/core/server';
+import { FileNotFoundError } from '@mastra/core/workspace';
 import type { Context } from 'hono';
 
 import { requireExec } from '../sandbox/materialization.js';
@@ -475,12 +476,14 @@ export async function listSessionFilesystemFiles(
 interface SessionSandboxHandle {
   sandbox: ExecutableSandbox;
   filesystem: SandboxFilesystem;
+  workspaceFilesystem: SandboxFilesystem;
   repoDir: string;
+  workspaceRoot: string;
 }
 
 /**
- * Resolve the session's sandbox from the per-process memo and wrap its
- * repoDir in a `SandboxFilesystem`. Returns `null` when the session has no
+ * Resolve the session's sandbox from the per-process memo and create repo-rooted
+ * and workspace-rooted filesystem views. Returns `null` when the session has no
  * sandbox in this process (never opened here, or evicted by retirement).
  * This is a passive read path, so it never constructs or provisions: the
  * session's files come back the next time the workspace is actually opened
@@ -492,10 +495,13 @@ async function sessionSandbox(session: SourceControlSession): Promise<SessionSan
   // nothing is materialized, so there are no files to browse.
   if (!entry?.repoDir) return null;
   const sandbox = requireExec(entry.sandbox);
+  const workspaceRoot = entry.workspaceRoot ?? posixPath.dirname(entry.repoDir);
   return {
     sandbox,
     filesystem: new SandboxFilesystem({ sandbox, workdir: entry.repoDir }),
+    workspaceFilesystem: new SandboxFilesystem({ sandbox, workdir: workspaceRoot }),
     repoDir: entry.repoDir,
+    workspaceRoot,
   };
 }
 
@@ -506,28 +512,40 @@ export async function listSessionRenderedPath(
 ): Promise<WorkspaceRenderedListing> {
   const safeRoot = assertApprovedRenderedRoot(renderedRoot);
   const handle = await sessionSandbox(session);
-  const rootPath = posixPath.join(handle?.repoDir ?? '', safeRoot);
-  const empty: WorkspaceRenderedListing = { workspacePath: session.sessionId, root: safeRoot, rootPath, entries: [] };
+  const workspaceRootPath = posixPath.join(handle?.workspaceRoot ?? '', safeRoot);
+  const empty: WorkspaceRenderedListing = {
+    workspacePath: session.sessionId,
+    root: safeRoot,
+    rootPath: workspaceRootPath,
+    entries: [],
+  };
   if (!handle) return empty;
 
-  // One round trip: emit "type\tsize\tmtime\tpath" per entry. `safeRoot` comes
-  // from a fixed allowlist so interpolating it (quoted) is safe.
-  const quotedRoot = `'${rootPath.replace(/'/g, `'\\''`)}'`;
+  // Generated artifacts live at the workspace root. Fall back to the old
+  // repo-local location so persisted plan cards from existing sessions remain readable.
+  const repoRootPath = posixPath.join(handle.repoDir, safeRoot);
+  const quotedWorkspaceRoot = `'${workspaceRootPath.replace(/'/g, `'\\''`)}'`;
+  const quotedRepoRoot = `'${repoRootPath.replace(/'/g, `'\\''`)}'`;
   const result = await handle.sandbox.executeCommand(
     'sh',
     [
       '-c',
-      `test -d ${quotedRoot} && find ${quotedRoot} -mindepth 1 -printf '%y\\t%s\\t%T@\\t%p\\n' 2>/dev/null || true`,
+      `root=${quotedWorkspaceRoot}; if [ ! -d "$root" ]; then root=${quotedRepoRoot}; fi; printf 'R\\t0\\t0\\t%s\\n' "$root"; test -d "$root" && find "$root" -mindepth 1 -printf '%y\\t%s\\t%T@\\t%p\\n' 2>/dev/null || true`,
     ],
     { timeout: 30_000 },
   );
   if (result.exitCode !== 0) return empty;
 
+  let rootPath = workspaceRootPath;
   const entries: WorkspaceRenderedEntry[] = [];
   for (const line of result.stdout.split('\n')) {
     if (!line) continue;
     const [type, sizeStr, mtimeStr, ...pathParts] = line.split('\t');
     const fullPath = pathParts.join('\t');
+    if (type === 'R' && fullPath) {
+      rootPath = fullPath;
+      continue;
+    }
     if (!fullPath || !fullPath.startsWith(`${rootPath}/`)) continue;
     const relativePath = fullPath.slice(rootPath.length + 1);
     entries.push({
@@ -554,25 +572,36 @@ export async function readSessionWorkspaceFile(
 
   const handle = await sessionSandbox(session);
   if (!handle) throw new Error('Session workspace is not available');
-  const { filesystem } = handle;
-  const info = await filesystem.stat(safePath);
-  if (info.type === 'directory') throw new Error('Path is a directory');
 
-  const buffer = (await filesystem.readFile(safePath)) as Buffer;
-  const truncated = buffer.length > MAX_TEXT_FILE_BYTES;
-  const base = {
-    workspacePath: session.sessionId,
-    path: safePath,
-    name: posixPath.basename(safePath),
-    size: buffer.length,
-    updatedAt: info.modifiedAt.toISOString(),
-  };
-  try {
-    const content = TEXT_DECODER.decode(truncated ? buffer.subarray(0, MAX_TEXT_FILE_BYTES) : buffer);
-    return { ...base, contentType: 'text', content, truncated };
-  } catch {
-    return { ...base, contentType: 'unsupported' };
+  const isArtifactPath = safePath === '.artifacts' || safePath.startsWith('.artifacts/');
+  const filesystems = isArtifactPath ? [handle.workspaceFilesystem, handle.filesystem] : [handle.filesystem];
+  for (const [index, filesystem] of filesystems.entries()) {
+    try {
+      const info = await filesystem.stat(safePath);
+      if (info.type === 'directory') throw new Error('Path is a directory');
+
+      const buffer = (await filesystem.readFile(safePath)) as Buffer;
+      const truncated = buffer.length > MAX_TEXT_FILE_BYTES;
+      const base = {
+        workspacePath: session.sessionId,
+        path: safePath,
+        name: posixPath.basename(safePath),
+        size: buffer.length,
+        updatedAt: info.modifiedAt.toISOString(),
+      };
+      try {
+        const content = TEXT_DECODER.decode(truncated ? buffer.subarray(0, MAX_TEXT_FILE_BYTES) : buffer);
+        return { ...base, contentType: 'text', content, truncated };
+      } catch {
+        return { ...base, contentType: 'unsupported' };
+      }
+    } catch (error) {
+      if (error instanceof FileNotFoundError && index < filesystems.length - 1) continue;
+      throw error;
+    }
   }
+
+  throw new FileNotFoundError(safePath);
 }
 
 function changeStatus(code: string): WorkspaceChangeStatus {

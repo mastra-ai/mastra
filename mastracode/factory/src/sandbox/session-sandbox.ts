@@ -77,7 +77,7 @@ export type SessionSetupRun = (sandbox: WorkspaceSandbox, repoDir: string) => Pr
  * fleet was also per-replica).
  */
 interface SessionSandboxEntry {
-  sandbox: WorkspaceSandbox;
+  sandbox: MastraSandbox;
   /**
    * The session's repo checkout root, recorded for passive readers (fs
    * routes, capture, authz). Local sandboxes derive it at construction;
@@ -106,7 +106,7 @@ const sessionSandboxes = new Map<string, SessionSandboxEntry>();
 export function getSessionSandbox(
   sessionId: string,
   repoFullName: string,
-  construct: () => WorkspaceSandbox,
+  construct: () => MastraSandbox,
 ): SessionSandboxEntry {
   const existing = sessionSandboxes.get(sessionId);
   if (existing) return existing;
@@ -156,7 +156,7 @@ export async function resolveSessionRepoDir(
  */
 export async function resolveSessionWorkspaceRoot(
   sessionId: string,
-  sandbox: WorkspaceSandbox,
+  sandbox: MastraSandbox,
   repoFullName: string,
 ): Promise<string> {
   const entry = sessionSandboxes.get(sessionId);

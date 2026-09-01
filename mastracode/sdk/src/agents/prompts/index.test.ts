@@ -161,8 +161,7 @@ describe('buildFullPrompt workspace-root split', () => {
     expect(prompt).toContain('REPO-SCOPED: project instruction marker');
   });
 
-  it('advertises the repo-prefixed plans dir for factory sessions under a split root', () => {
-    // Real factory layout: the repo checkout is nested under the workspace root.
+  it('advertises workspace-root .artifacts for factory sessions under a split root', () => {
     const repoSubdir = projectDir.split('/').pop()!;
     const workspaceRoot = projectDir.slice(0, -(repoSubdir.length + 1));
     const prompt = buildFullPrompt({
@@ -172,10 +171,9 @@ describe('buildFullPrompt workspace-root split', () => {
       workspaceRoot,
       state: { permissionRules: { tools: {} }, factoryProjectId: 'factory-123' },
     });
-    // Plan-mode guidance must name the plans dir where relative writes
-    // actually land: inside the repo checkout under the workspace root.
-    expect(prompt).toContain(`${repoSubdir}/.artifacts/plans`);
-    expect(prompt).not.toMatch(/[^/\w]\.artifacts\/plans/);
+
+    expect(prompt).toContain('.artifacts/plans');
+    expect(prompt).not.toContain(`${repoSubdir}/.artifacts/plans`);
   });
 
   it('behaves exactly as today when no distinct workspaceRoot is set', () => {

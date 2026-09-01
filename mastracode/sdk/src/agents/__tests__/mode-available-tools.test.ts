@@ -99,12 +99,7 @@ describe('mode availableTools configuration', () => {
       });
     });
 
-    it('resolves plan paths against the workspace root when file tools root at the repo parent', () => {
-      // Factory split: file tools root at the workspace root; the repo is a
-      // plain subdir. The write tool resolves relative paths against the
-      // workspace root, so the guard must accept the repo-prefixed spelling
-      // (which lands in <repo>/.artifacts/plans) and refuse the bare one
-      // (which would land OUTSIDE the repo, invisible to the artifacts browser).
+    it('keeps Factory plan writes in workspace-root .artifacts when the repo is a subdir', () => {
       const workspaceRoot = '/tmp/mastracode-split-guard';
       const projectPath = `${workspaceRoot}/hello`;
       const context = {
@@ -118,39 +113,35 @@ describe('mode availableTools configuration', () => {
         },
       };
 
-      // Repo-prefixed relative path → resolves to <repo>/.artifacts/plans → allowed.
       expect(
         guardPlanModePlanFileWrites({
           toolName: MC_TOOLS.WRITE_FILE,
           workspaceToolName: WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE,
-          input: { path: 'hello/.artifacts/plans/add-dark-mode.md' },
+          input: { path: '.artifacts/plans/add-dark-mode.md' },
           context,
         }),
       ).toBeUndefined();
 
-      // Absolute path into the repo plans dir → allowed.
       expect(
         guardPlanModePlanFileWrites({
           toolName: MC_TOOLS.STRING_REPLACE_LSP,
           workspaceToolName: WORKSPACE_TOOLS.FILESYSTEM.EDIT_FILE,
-          input: { path: `${projectPath}/.artifacts/plans/another-plan.md` },
+          input: { path: `${workspaceRoot}/.artifacts/plans/another-plan.md` },
           context,
         }),
       ).toBeUndefined();
 
-      // Bare `.artifacts/plans/...` now resolves OUTSIDE the repo — refused,
-      // and the hint names the repo-prefixed spelling.
       expect(
         guardPlanModePlanFileWrites({
           toolName: MC_TOOLS.WRITE_FILE,
           workspaceToolName: WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE,
-          input: { path: '.artifacts/plans/escapee.md' },
+          input: { path: 'hello/.artifacts/plans/wrong-root.md' },
           context,
         }),
       ).toMatchObject({
         proceed: false,
         output:
-          'Plan mode can only write plan files inside hello/.artifacts/plans/. Refusing to edit .artifacts/plans/escapee.md.',
+          'Plan mode can only write plan files inside .artifacts/plans/. Refusing to edit hello/.artifacts/plans/wrong-root.md.',
       });
     });
 

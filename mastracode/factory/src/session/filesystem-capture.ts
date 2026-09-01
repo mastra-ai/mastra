@@ -1,3 +1,4 @@
+import { posix as posixPath } from 'node:path';
 import type { AgentControllerEvent, SessionBeforeAgentEndListener } from '@mastra/core/agent-controller';
 import type { WorkspaceSandbox } from '@mastra/core/workspace';
 import { peekSessionSandbox } from '../sandbox/session-sandbox.js';
@@ -7,7 +8,8 @@ import type { SourceControlStorageHandle } from '../storage/domains/source-contr
 import { isMeaningfulToolName } from './first-exec-capture.js';
 
 const GIT_STATUS_ARGS = ['status', '--porcelain=v1', '-z', '--untracked-files=all'];
-const ARTIFACTS_LIST_COMMAND = 'cd "$1" && test -d .artifacts && find .artifacts -type f -print0 || true';
+const ARTIFACTS_LIST_COMMAND =
+  'if [ -d "$1/.artifacts" ]; then cd "$1"; else cd "$2"; fi && test -d .artifacts && find .artifacts -type f -print0 || true';
 
 export interface FilesystemCaptureSession {
   readonly identity: { getResourceId(): string };
@@ -74,6 +76,7 @@ export async function captureSessionFilesystem(
     // repoDir), but capture is best-effort — skip rather than guess.
     const repoDir = entry.repoDir;
     if (!repoDir) return;
+    const workspaceRoot = entry.workspaceRoot ?? posixPath.dirname(repoDir);
 
     const result = await sandbox.executeCommand('git', ['-C', repoDir, ...GIT_STATUS_ARGS], {
       timeout: 30_000,
@@ -83,7 +86,7 @@ export async function captureSessionFilesystem(
       return;
     }
 
-    const artifacts = await sandbox.executeCommand('sh', ['-c', ARTIFACTS_LIST_COMMAND, 'sh', repoDir], {
+    const artifacts = await sandbox.executeCommand('sh', ['-c', ARTIFACTS_LIST_COMMAND, 'sh', workspaceRoot, repoDir], {
       timeout: 30_000,
     });
     if (artifacts.exitCode !== 0) {

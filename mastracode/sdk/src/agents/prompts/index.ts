@@ -12,7 +12,7 @@ import type { PromptContext as BasePromptContext } from '@mastra/core/coding-age
 import { loadSettings, resolveLspSetting } from '../../onboarding/settings.js';
 import { MC_TOOLS } from '../../tool-names.js';
 import { hasParallelKey, hasTavilyKey } from '../../tools/index.js';
-import { getLocalPlansRelativeDir, repoSubdirForRoots } from '../../utils/plans.js';
+import { getLocalPlansRelativeDir } from '../../utils/plans.js';
 import {
   loadAgentInstructions,
   formatInstructionSource,
@@ -116,16 +116,13 @@ export function buildFullPromptSections(ctx: PromptContext): PromptSection[] {
   const workspaceRoot =
     ctx.workspaceRoot && ctx.workingDir && ctx.workspaceRoot !== ctx.workingDir ? ctx.workspaceRoot : undefined;
 
-  // Build mode-aware tool guidance. The advertised plans dir must be spelled
-  // the way relative writes resolve — repo-prefixed under a split root.
+  // Build mode-aware tool guidance. Factory artifacts are workspace-relative,
+  // so their stable `.artifacts/...` spelling works for writes and submit_plan.
   const factoryProjectId = typeof ctx.state?.factoryProjectId === 'string' ? ctx.state.factoryProjectId : undefined;
   const toolGuidance = buildToolGuidance(ctx.modeId, {
     hasWebSearch,
     deniedTools,
-    plansDir: getLocalPlansRelativeDir({
-      factoryProjectId,
-      repoSubdir: repoSubdirForRoots(ctx.workingDir, workspaceRoot),
-    }),
+    plansDir: getLocalPlansRelativeDir({ factoryProjectId }),
   });
 
   // Map new context to base context

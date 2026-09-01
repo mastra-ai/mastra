@@ -175,7 +175,13 @@ describe('captureSessionFilesystem', () => {
     expect(executeCommand).toHaveBeenNthCalledWith(
       2,
       'sh',
-      ['-c', 'cd "$1" && test -d .artifacts && find .artifacts -type f -print0 || true', 'sh', '/sessions/s1/worktree'],
+      [
+        '-c',
+        'if [ -d "$1/.artifacts" ]; then cd "$1"; else cd "$2"; fi && test -d .artifacts && find .artifacts -type f -print0 || true',
+        'sh',
+        '/sessions/s1',
+        '/sessions/s1/worktree',
+      ],
       { timeout: 30_000 },
     );
     expect(dependencies.filesystem.replaceFiles).toHaveBeenCalledWith({

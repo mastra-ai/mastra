@@ -1,7 +1,7 @@
 import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import type { WorkspaceSandbox } from '@mastra/core/workspace';
+import type { MastraSandbox } from '@mastra/core/workspace';
 import { LocalSandbox } from '@mastra/core/workspace';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
@@ -19,7 +19,7 @@ afterEach(() => {
 });
 
 describe('session sandbox memo', () => {
-  const construct = (id: string) => ({ id, provider: 'test' }) as unknown as WorkspaceSandbox;
+  const construct = (id: string) => ({ id, provider: 'test' }) as unknown as MastraSandbox;
 
   it('constructs once per session id and returns the memoized entry', () => {
     const factory = vi.fn(() => construct('sb-1'));
@@ -46,7 +46,7 @@ describe('session sandbox memo', () => {
 
   it('resolves a remote repoDir from the live VM home and memoizes it on the entry', async () => {
     const executeCommand = vi.fn(async () => ({ exitCode: 0, stdout: '/home/user\n', stderr: '' }));
-    const sandbox = { id: 'sb-1', provider: 'e2b', executeCommand } as unknown as WorkspaceSandbox;
+    const sandbox = { id: 'sb-1', provider: 'e2b', executeCommand } as unknown as MastraSandbox;
     const entry = getSessionSandbox('sess-1', 'acme/api', () => sandbox);
     expect(entry.repoDir).toBeUndefined();
 
@@ -66,7 +66,7 @@ describe('session sandbox memo', () => {
       provider: 'e2b',
       workingDirectory: '/workspace',
       executeCommand,
-    } as unknown as WorkspaceSandbox;
+    } as unknown as MastraSandbox;
     getSessionSandbox('sess-1', 'acme/api', () => sandbox);
 
     await expect(resolveSessionRepoDir('sess-1', sandbox, 'acme/api')).resolves.toBe('/workspace/api');
@@ -80,7 +80,7 @@ describe('session sandbox memo', () => {
       provider: 'e2b',
       workingDirectory: '~/repos',
       executeCommand,
-    } as unknown as WorkspaceSandbox;
+    } as unknown as MastraSandbox;
     getSessionSandbox('sess-1', 'acme/api', () => sandbox);
 
     await expect(resolveSessionRepoDir('sess-1', sandbox, 'acme/api')).resolves.toBe('/home/user/api');
@@ -92,7 +92,7 @@ describe('session sandbox memo', () => {
       .fn()
       .mockResolvedValueOnce({ exitCode: 1, stdout: '', stderr: 'no shell' })
       .mockResolvedValue({ exitCode: 0, stdout: '/home/user\n', stderr: '' });
-    const sandbox = { id: 'sb-1', provider: 'e2b', executeCommand } as unknown as WorkspaceSandbox;
+    const sandbox = { id: 'sb-1', provider: 'e2b', executeCommand } as unknown as MastraSandbox;
     getSessionSandbox('sess-1', 'acme/api', () => sandbox);
 
     await expect(resolveSessionRepoDir('sess-1', sandbox, 'acme/api')).rejects.toThrow(/default cwd probe failed/);
@@ -101,7 +101,7 @@ describe('session sandbox memo', () => {
   });
 
   it('resolves a local repoDir synchronously at construction', async () => {
-    const local = { id: 'sb-l', provider: 'local', workingDirectory: '/srv/sess-1' } as unknown as WorkspaceSandbox;
+    const local = { id: 'sb-l', provider: 'local', workingDirectory: '/srv/sess-1' } as unknown as MastraSandbox;
     const entry = getSessionSandbox('sess-l', 'acme/api', () => local);
     expect(entry.repoDir).toBe(path.resolve('/srv/sess-1', 'api'));
     // Resolution answers from the memo without any probe.
@@ -131,7 +131,7 @@ describe('session sandbox memo', () => {
       provider: 'e2b',
       workingDirectory: '/workspace',
       executeCommand,
-    } as unknown as WorkspaceSandbox;
+    } as unknown as MastraSandbox;
     getSessionSandbox('sess-1', 'acme/api', () => sandbox);
 
     await expect(resolveSessionWorkspaceRoot('sess-1', sandbox, 'acme/api')).resolves.toBe('/workspace');
@@ -140,7 +140,7 @@ describe('session sandbox memo', () => {
 
   it('degrades the workspace root to the parent of the probed repoDir when nothing is declared', async () => {
     const executeCommand = vi.fn(async () => ({ exitCode: 0, stdout: '/home/user\n', stderr: '' }));
-    const sandbox = { id: 'sb-1', provider: 'e2b', executeCommand } as unknown as WorkspaceSandbox;
+    const sandbox = { id: 'sb-1', provider: 'e2b', executeCommand } as unknown as MastraSandbox;
     getSessionSandbox('sess-1', 'acme/api', () => sandbox);
 
     await expect(resolveSessionWorkspaceRoot('sess-1', sandbox, 'acme/api')).resolves.toBe('/home/user');
@@ -154,7 +154,7 @@ describe('session sandbox memo', () => {
   });
 
   it('roots the workspace at the local sandbox workingDirectory — the parent of the local repoDir', async () => {
-    const local = { id: 'sb-l', provider: 'local', workingDirectory: '/srv/sess-1' } as unknown as WorkspaceSandbox;
+    const local = { id: 'sb-l', provider: 'local', workingDirectory: '/srv/sess-1' } as unknown as MastraSandbox;
     const entry = getSessionSandbox('sess-l', 'acme/api', () => local);
     // Local handles carry both fields synchronously at construction.
     expect(entry.workspaceRoot).toBe('/srv/sess-1');
