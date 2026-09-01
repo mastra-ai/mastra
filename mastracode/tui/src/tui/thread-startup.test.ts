@@ -14,7 +14,10 @@ function createThread(id: string, title: string, updatedAt: string) {
 
 describe('resumeThreadOnStartup', () => {
   it('resumes the requested thread instead of the latest thread', async () => {
-    const requested = { ...createThread('thread-requested', 'Requested', '2026-08-28T10:00:00Z'), resourceId: 'resource-2' };
+    const requested = {
+      ...createThread('thread-requested', 'Requested', '2026-08-28T10:00:00Z'),
+      resourceId: 'resource-2',
+    };
     const latest = createThread('thread-latest', 'Latest', '2026-08-28T11:00:00Z');
     const setResourceId = vi.fn().mockResolvedValue(undefined);
     const switchThread = vi.fn().mockResolvedValue(undefined);

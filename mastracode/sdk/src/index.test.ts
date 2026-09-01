@@ -46,12 +46,7 @@ vi.mock('@mastra/core/agent-controller', () => ({
       return undefined;
     }
 
-    async createSession(args?: {
-      id?: string;
-      ownerId?: string;
-      resourceId?: string;
-      createInitialThread?: boolean;
-    }) {
+    async createSession(args?: { id?: string; ownerId?: string; resourceId?: string; createInitialThread?: boolean }) {
       createSessionCalls.push({
         id: args?.id,
         ownerId: args?.ownerId,

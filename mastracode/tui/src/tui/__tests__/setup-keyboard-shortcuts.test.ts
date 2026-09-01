@@ -59,12 +59,7 @@ vi.mock('../status-line.js', () => ({
 
 import { showError, showInfo } from '../display.js';
 import { GOAL_JUDGE_INPUT_LOCK_MESSAGE } from '../goal-input-lock.js';
-import {
-  refreshSkillsAutocomplete,
-  setupAutocomplete,
-  setupKeyHandlers,
-  setupKeyboardShortcuts,
-} from '../setup.js';
+import { refreshSkillsAutocomplete, setupAutocomplete, setupKeyHandlers, setupKeyboardShortcuts } from '../setup.js';
 import { createMockState } from './agent-controller-mock.js';
 
 const originalPlatform = process.platform;

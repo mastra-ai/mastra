@@ -181,7 +181,10 @@ describe('AgentController.createSession — cross-session isolation', () => {
   it('still resumes a matching thread when initial thread creation is deferred', async () => {
     const storage = new InMemoryStore();
     const projectPath = '/tmp/mastra-project';
-    const firstController = createController(storage, { resourceId: 'current-resource', initialState: { projectPath } });
+    const firstController = createController(storage, {
+      resourceId: 'current-resource',
+      initialState: { projectPath },
+    });
     await firstController.init();
     const first = await firstController.createSession();
 
