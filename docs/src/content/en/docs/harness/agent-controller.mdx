@@ -435,19 +435,12 @@ import { MastraClient } from '@mastra/client-js'
 const client = new MastraClient({ baseUrl: 'http://localhost:4111' })
 const session = client.getAgentController('coding-controller').session('user-123')
 
-const { threadId } = await session.create()
-
-async function hydrate() {
-  const [state, messages] = await Promise.all([session.state(), session.listMessages(threadId)])
-  render(state, messages)
-}
-
-await hydrate()
+await session.create()
 
 const subscription = await session.subscribe({
-  onEvent: event => apply(event),
+  onEvent: event => render(event),
   onError: error => showDisconnected(error),
-  onReconnect: hydrate,
+  onReconnect: async () => hydrate(await session.state()),
   reconnect: true,
 })
 
@@ -457,9 +450,24 @@ subscription.unsubscribe()
 
 `subscribe()` takes an options object and is async, unlike the in-process listener. Its promise resolves once the stream is established and rejects when it can't connect, so a rejected call leaves nothing running in the background. `reconnect: true` re-establishes a stream that drops after it was established, with exponential backoff.
 
-`create()` returns the bound `threadId`, and a resumed session already has messages the subscription won't replay, so hydrate from `session.state()` and `session.listMessages(threadId)` before subscribing. The server doesn't replay events missed while the stream was down either, so run the same hydration from `onReconnect` before applying further events. `session.displayState.get()` isn't part of the client surface.
+The server doesn't replay events missed while the stream was down, so `onReconnect` has to re-sync. Call `session.state()` for the current mode, model, and thread, and `session.listMessages(threadId)` when the UI also needs the messages it missed. `session.displayState.get()` isn't part of the client surface.
 
 Send work with `session.sendMessage(content)`, or `session.sendMessage({ content, files })` to attach base64-encoded files. The reply arrives as `message_*` events on the subscription, not as the return value of the call. Answer a `tool_approval_required` event with `session.approveTool(toolCallId, approved)`, and a `tool_suspended` event with `session.respondToToolSuspension(toolCallId, resumeData)`.
+
+`onEvent` receives every event the session emits, discriminated by `event.type`:
+
+| Group | Events |
+| - | - |
+| Run | `agent_start`, `agent_end`, `usage_update`, `goal_evaluation`, `follow_up_queued` |
+| Messages | `message_start`, `message_update`, `message_end` |
+| Tools | `tool_input_start`, `tool_input_delta`, `tool_input_end`, `tool_start`, `tool_update`, `tool_end`, `shell_output`, `command_exit`, `tool_approval_required`, `tool_suspended`, `tool_suspension_cancelled`, `task_updated` |
+| Session | `state_changed`, `display_state_changed`, `mode_changed`, `model_changed`, `thread_changed`, `thread_created`, `thread_deleted`, `thread_title_updated` |
+| Subagents | `subagent_start`, `subagent_text_delta`, `subagent_tool_start`, `subagent_tool_end`, `subagent_end`, `subagent_model_changed` |
+| Memory | `om_observation_start`, `om_observation_end`, `om_observation_failed`, `om_reflection_start`, `om_reflection_end`, `om_reflection_failed`, `om_buffering_start`, `om_buffering_end`, `om_buffering_failed`, `om_model_changed`, `om_activation`, `om_status`, `om_thread_title_updated` |
+| Workspace | `workspace_ready`, `workspace_error`, `workspace_status_changed` |
+| Notification | `notification`, `notification_summary`, `info`, `error` |
+
+A controller can also emit events the SDK doesn't type, so comparing `event.type` to a literal doesn't narrow the union. Narrow with `isKnownAgentControllerEvent(event)` to get a typed payload.
 
 ## Related
 
