@@ -105,13 +105,6 @@ OM performs thresholding with fast local token estimation. Text uses `tokenx`, a
     defaultValue: 'false',
   },
   {
-    name: 'experimental_subconscious',
-    type: 'Subconscious',
-    description:
-      'Experimental durable-knowledge agents. `new Subconscious()` defaults to observation-time `remind` and `curate`: reminders retrieve relevant knowledge, while the curator receives each newly committed observation and reconciles durable records through constrained tools. Subconscious agents do not run during reflection. Curator failures are reported but are not automatically replayed.',
-    isOptional: true,
-  },
-  {
     name: 'hooks',
     type: 'ObserveHooks',
     description:
