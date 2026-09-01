@@ -1,5 +1,6 @@
 {
   "attachment": [
+    "glm-5.3-flash",
     "kimi-k2.6",
     "kimi-k2.7-code",
     "kimi-k3",
@@ -21,6 +22,8 @@
     "glm-5",
     "glm-5.1",
     "glm-5.2",
+    "glm-5.3",
+    "glm-5.3-flash",
     "gpt-oss-120b",
     "kimi-k2.6",
     "llama-3.3-70b-instruct",
@@ -47,6 +50,8 @@
     "gemma-4-26b-a4b-it",
     "glm-5.1",
     "glm-5.2",
+    "glm-5.3",
+    "glm-5.3-flash",
     "gpt-oss-120b",
     "kimi-k2.5",
     "kimi-k2.6",

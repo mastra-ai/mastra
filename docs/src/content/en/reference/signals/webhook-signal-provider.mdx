@@ -1,6 +1,6 @@
 ---
 title: "Reference: WebhookSignalProvider | Signals"
-description: "API reference for WebhookSignalProvider, a push-based signal provider that routes incoming webhook payloads to subscribed agent threads."
+description: "Use WebhookSignalProvider for push-based signals that route incoming webhook payloads to subscribed agent threads and pending signal handlers."
 packages:
   - "@mastra/core"
 ---
@@ -102,7 +102,7 @@ const result = await webhookProvider.handleWebhook({
 
 Subscribe a thread to receive webhook events for a specific external resource.
 
-```typescript prettier:false
+```typescript
 webhookProvider.subscribeThread(
   { threadId: 'thread-1', resourceId: 'user-1' },
   'mastra-ai/mastra',
@@ -137,7 +137,7 @@ Returns: `SignalSubscription`
 
 Unsubscribe a thread from a specific external resource.
 
-```typescript prettier:false
+```typescript
 const removed = webhookProvider.unsubscribeThread(
   { threadId: 'thread-1', resourceId: 'user-1' },
   'mastra-ai/mastra',
@@ -152,7 +152,7 @@ Returns: `boolean`
 
 Process an incoming webhook request. Extracts the resource ID from the payload and finds matching subscriptions. It builds a notification for each subscription and calls `notify()`.
 
-```typescript prettier:false
+```typescript
 const result = await webhookProvider.handleWebhook({
   body: { repository: { full_name: 'mastra-ai/mastra' }, action: 'push' },
   headers: { 'x-github-event': 'push' },
@@ -196,7 +196,7 @@ Returns `{ status: 200, body: { matched: N } }` where `N` is the number of subsc
 
 Create a reactive signal input that subscribes the current thread to an external resource.
 
-```typescript prettier:false
+```typescript
 const signal = WebhookSignalProvider.signals.subscribe('mastra-ai/mastra')
 ```
 
@@ -206,7 +206,7 @@ Returns: `{ type: 'reactive'; tagName: string; contents: string; attributes: { r
 
 Create a reactive signal input that unsubscribes the current thread from an external resource.
 
-```typescript prettier:false
+```typescript
 const signal = WebhookSignalProvider.signals.unsubscribe('mastra-ai/mastra')
 ```
 

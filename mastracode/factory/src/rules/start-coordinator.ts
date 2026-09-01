@@ -4,6 +4,8 @@ import { RequestContext } from '@mastra/core/request-context';
 import { formatSkillActivation } from '@mastra/core/workspace';
 
 import { hydrateFactorySession } from '../session/factory-session.js';
+import { withWorkItemFeed } from '../storage/domains/comments/feed-context.js';
+import type { FactoryFeedReader } from '../storage/domains/comments/feed-context.js';
 import type { MemorySettingsStorage } from '../storage/domains/memory-settings/base.js';
 import type { SourceControlSession, SourceControlStorageHandle } from '../storage/domains/source-control/base.js';
 import type { CreateWorkItemInput, WorkItemsStorage } from '../storage/domains/work-items/base.js';
@@ -29,6 +31,8 @@ export interface FactoryStartRequest {
   requestContext?: RequestContext;
   /** Arm the item's autonomy in the same transaction that prepares the run. */
   armAutonomy?: boolean;
+  /** The person chose a hands-off run: the item's parked plans get approved for them. */
+  preapprovePlans?: boolean;
 }
 
 export class FactoryStartTransitionError extends Error {
@@ -112,6 +116,7 @@ export class FactoryStartCoordinator {
   readonly #transitionService?: Pick<FactoryTransitionService, 'transition'>;
   readonly #sourceControl?: SourceControlStorageHandle;
   readonly #memorySettings?: MemorySettingsStorage;
+  readonly #feedReader?: FactoryFeedReader;
 
   constructor(
     controller: FactoryController,
@@ -119,12 +124,14 @@ export class FactoryStartCoordinator {
     transitionService?: Pick<FactoryTransitionService, 'transition'>,
     sourceControl?: SourceControlStorageHandle,
     memorySettings?: MemorySettingsStorage,
+    feedReader?: FactoryFeedReader,
   ) {
     this.#controller = controller;
     this.#storage = storage;
     this.#transitionService = transitionService;
     this.#sourceControl = sourceControl;
     this.#memorySettings = memorySettings;
+    this.#feedReader = feedReader;
   }
 
   async prepare(request: FactoryStartRequest): Promise<FactoryStartPreparedResult> {
@@ -197,8 +204,20 @@ export class FactoryStartCoordinator {
       defaultModelId: request.defaultModelId,
       memorySettings: this.#memorySettings,
     });
+    // The tool is `requireApproval`, and that prompt parks the run whether or not
+    // someone pressed Start — a person is reading the plan, not an approval queue.
+    // Starting the run was already the say-so; the rules engine still governs.
+    await session.permissions.setForTool({ toolName: 'factory_transition_work_item', policy: 'allow' });
     const threadId = await configureThread(session, request);
-    const kickoffMessage = await resolveKickoffMessage(session, request.invocation);
+    let kickoffMessage = await resolveKickoffMessage(session, request.invocation);
+    // A null kickoff is a deliberate no-send branch and must stay null.
+    if (kickoffMessage !== null) {
+      kickoffMessage = await withWorkItemFeed(
+        this.#feedReader,
+        { orgId: request.orgId, factoryProjectId: request.factoryProjectId, workItemId: request.workItem.id },
+        kickoffMessage,
+      );
+    }
     const prepared = await storage.prepareRunStart({
       orgId: request.orgId,
       userId: request.userId,
@@ -210,6 +229,7 @@ export class FactoryStartCoordinator {
       kickoffKey: request.kickoffKey,
       kickoffMessage,
       armAutonomy: request.armAutonomy === true,
+      preapprovePlans: request.preapprovePlans === true,
     });
     await session.thread.setSetting({ key: 'factoryWorkItemId', value: prepared.item.id });
 

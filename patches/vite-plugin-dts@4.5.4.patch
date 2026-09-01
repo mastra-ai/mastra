@@ -1,0 +1,54 @@
+diff --git a/dist/index.cjs b/dist/index.cjs
+index 6c4d9394e50849282da6ed4a1e31b9001584a644..3438143e1b492ef13705c7286873a4482696ab1c 100644
+--- a/dist/index.cjs
++++ b/dist/index.cjs
+@@ -8,7 +8,7 @@ const promises = require('node:fs/promises');
+ const node_os = require('node:os');
+ const languageCore = require('@vue/language-core');
+ const typescript = require('@volar/typescript');
+-const ts = require('typescript');
++const ts = require('typescript-classic');
+ const node_module = require('node:module');
+ const localPkg = require('local-pkg');
+ const pluginutils = require('@rollup/pluginutils');
+@@ -152,7 +152,7 @@ function getTsConfig(tsConfigPath, readFileSync) {
+   return tsConfig;
+ }
+ function getTsLibFolder() {
+-  const libFolder = tryGetPackageInfo("typescript")?.rootPath;
++  const libFolder = tryGetPackageInfo("typescript-classic")?.rootPath;
+   return libFolder && normalizePath(libFolder);
+ }
+ const BASE64_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/".split("");
+diff --git a/dist/index.d.ts b/dist/index.d.ts
+index 9afd51cc0865b3bf40d8e9604321c3020e4683c1..7c751b07535dd651971537460e64c388d34b0aa3 100644
+--- a/dist/index.d.ts
++++ b/dist/index.d.ts
+@@ -1,4 +1,4 @@
+ import * as vite from 'vite';
+ import { LogLevel } from 'vite';
+-import ts from 'typescript';
++import ts from 'typescript-classic';
+ import { IExtractorInvokeOptions, ExtractorResult, IExtractorConfigPrepareOptions } from '@microsoft/api-extractor';
+diff --git a/dist/index.mjs b/dist/index.mjs
+index 3cd57486b16f8946b4740f16ff431e4e744e3351..d381b06e48b12b25df26dc06c0d92fae27fc25f2 100644
+--- a/dist/index.mjs
++++ b/dist/index.mjs
+@@ -11,7 +11,7 @@ import { readFile, mkdir, writeFile, unlink } from 'node:fs/promises';
+ import { cpus } from 'node:os';
+ import { createParsedCommandLine, resolveVueCompilerOptions, createVueLanguagePlugin } from '@vue/language-core';
+ import { proxyCreateProgram } from '@volar/typescript';
+-import ts from 'typescript';
++import ts from 'typescript-classic';
+ import { createRequire } from 'node:module';
+ import { getPackageInfoSync, resolveModule } from 'local-pkg';
+ import { createFilter } from '@rollup/pluginutils';
+@@ -148,7 +148,7 @@ function getTsConfig(tsConfigPath, readFileSync) {
+   return tsConfig;
+ }
+ function getTsLibFolder() {
+-  const libFolder = tryGetPackageInfo("typescript")?.rootPath;
++  const libFolder = tryGetPackageInfo("typescript-classic")?.rootPath;
+   return libFolder && normalizePath(libFolder);
+ }
+ const BASE64_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/".split("");

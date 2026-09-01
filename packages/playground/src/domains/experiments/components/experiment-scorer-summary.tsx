@@ -1,7 +1,7 @@
 import type { ClientScoreRowData } from '@mastra/client-js';
 import type { ExperimentStatus } from '@mastra/core/storage';
-import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { MetricsKpiCard } from '@mastra/playground-ui/components/MetricsKpiCard';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { ScorersIcon } from '@mastra/playground-ui/icons/ScorersIcon';
 import { ExternalLinkIcon, GaugeIcon } from 'lucide-react';
 import { useMemo } from 'react';
@@ -20,25 +20,22 @@ export function ExperimentScorerSummary({ scoresByItemId, experimentStatus }: Ex
   const scorerSummaries = useMemo(() => {
     if (!scoresByItemId) return [];
 
-    const scorerTotals: Record<string, { sum: number; count: number; failed: number }> = {};
+    const scorerTotals: Record<string, { sum: number; count: number }> = {};
 
     for (const scores of Object.values(scoresByItemId)) {
       for (const score of scores) {
         if (!scorerTotals[score.scorerId]) {
-          scorerTotals[score.scorerId] = { sum: 0, count: 0, failed: 0 };
+          scorerTotals[score.scorerId] = { sum: 0, count: 0 };
         }
         scorerTotals[score.scorerId].sum += score.score;
         scorerTotals[score.scorerId].count++;
-        if (score.score < 1) scorerTotals[score.scorerId].failed++;
       }
     }
 
     return Object.entries(scorerTotals)
-      .map(([scorerId, { sum, count, failed }]) => ({
+      .map(([scorerId, { sum, count }]) => ({
         scorerId,
         avg: sum / count,
-        count,
-        failed,
       }))
       .sort((a, b) => a.scorerId.localeCompare(b.scorerId));
   }, [scoresByItemId]);
@@ -62,41 +59,38 @@ export function ExperimentScorerSummary({ scoresByItemId, experimentStatus }: Ex
     }
 
     return (
-      <div className="flex h-full items-center justify-center py-12">
-        <EmptyState
-          iconSlot={<GaugeIcon className="text-neutral3 h-8 w-8" />}
-          titleSlot={title}
-          descriptionSlot={description}
-        />
+      <div className="text-ui-sm text-neutral3 flex items-center gap-2">
+        <GaugeIcon className="text-neutral3 size-4 shrink-0" />
+        <span className="text-neutral4">{title}</span>
+        <span className="truncate">{description}</span>
       </div>
     );
   }
 
   return (
-    <div className="flex flex-wrap content-start gap-3">
-      {scorerSummaries.map(({ scorerId, avg, count, failed }) => {
+    <div className="flex items-stretch gap-2 overflow-x-auto pb-1">
+      {scorerSummaries.map(({ scorerId, avg }) => {
         const scorerName = scorers?.[scorerId]?.scorer?.config?.name ?? scorerId;
 
         return (
-          <MetricsKpiCard key={scorerId} className="max-w-96">
+          <MetricsKpiCard key={scorerId} className="w-52 min-w-0 flex-none p-3">
             <LinkComponent
               href={paths.scorerLink(scorerId)}
               target="_blank"
               rel="noopener noreferrer"
-              className="text-ui-md text-neutral3 [&>svg]:text-neutral3 flex min-w-0 items-center gap-1.5 leading-relaxed hover:underline [&>svg]:size-3.5 [&>svg]:shrink-0"
+              className="text-ui-sm text-neutral3 [&>svg]:text-neutral3 flex min-w-0 items-center gap-1.5 hover:underline [&>svg]:size-3 [&>svg]:shrink-0"
             >
-              <ScorersIcon />
+              <Tooltip>
+                <TooltipTrigger render={<ScorersIcon role="img" aria-label="Scorer" />} />
+                <TooltipContent>Scorer</TooltipContent>
+              </Tooltip>
               <span className="truncate">{scorerName}</span>
               <ExternalLinkIcon />
             </LinkComponent>
-            <strong className="text-header-lg text-neutral4 font-semibold">
-              <span className={failed === 0 ? 'text-accent1' : 'text-error'}>{failed}</span>
-              <span className="text-neutral3">/{count}</span>
-              <span className="text-ui-md text-neutral3 ml-1.5 font-normal">failed</span>
+            <strong className="text-ui-lg text-neutral4 font-semibold">
+              {avg.toFixed(3)}
+              <span className="text-ui-sm text-neutral3 ml-1.5 font-normal">avg score</span>
             </strong>
-            <MetricsKpiCard.Label className="text-ui-sm text-neutral2">
-              {`Avg score ${avg.toFixed(3)}`}
-            </MetricsKpiCard.Label>
           </MetricsKpiCard>
         );
       })}

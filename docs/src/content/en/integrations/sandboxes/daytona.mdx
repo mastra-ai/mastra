@@ -1,6 +1,6 @@
 ---
 title: "Daytona | Sandbox"
-description: "Documentation for the DaytonaSandbox provider for isolated cloud code execution."
+description: "Run Mastra workspace commands in Daytona cloud sandboxes with custom images, resources, volumes, snapshots, streaming output, and lifecycle controls."
 packages:
   - "@mastra/daytona"
 ---
@@ -388,6 +388,13 @@ For Daytona-specific desktop APIs (regions, compressed screenshots, screen recor
     description: 'Environment variables to set in the sandbox.',
     isOptional: true,
     defaultValue: '{}',
+  },
+  {
+    name: 'workingDirectory',
+    type: 'string',
+    description:
+      'Default directory for command execution when no per-command `cwd` is given. A per-command `cwd` always wins. When set, the sandbox skips its automatic working-directory probe; when omitted, the probe fills the `workingDirectory` getter after start.',
+    isOptional: true,
   },
   {
     name: 'labels',

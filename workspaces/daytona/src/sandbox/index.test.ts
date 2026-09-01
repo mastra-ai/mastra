@@ -736,6 +736,61 @@ describe('DaytonaSandbox', () => {
     });
   });
 
+  describe('workingDirectory option', () => {
+    it('commands cd into the configured workingDirectory when no cwd is given', async () => {
+      const sandbox = new DaytonaSandbox({ workingDirectory: '/srv/app' });
+      await sandbox._start();
+      await sandbox.executeCommand('echo', ['hello']);
+
+      const cmd: string = mockSandbox.process.executeSessionCommand.mock.calls[0]![1].command;
+      expect(cmd).toContain('cd /srv/app');
+      expect(sandbox.workingDirectory).toBe('/srv/app');
+    });
+
+    it('per-command cwd wins over the configured workingDirectory', async () => {
+      const sandbox = new DaytonaSandbox({ workingDirectory: '/srv/app' });
+      await sandbox._start();
+      await sandbox.executeCommand('echo', ['hello'], { cwd: '/tmp' });
+
+      const cmd: string = mockSandbox.process.executeSessionCommand.mock.calls[0]![1].command;
+      expect(cmd).toContain('cd /tmp');
+      expect(cmd).not.toContain('/srv/app');
+    });
+
+    it('an explicit workingDirectory wins over the first mount path', async () => {
+      const sandbox = new DaytonaSandbox({ workingDirectory: '/srv/app' });
+      await sandbox._start();
+      sandbox.mounts.entries.set('/data/gcs-mount', { state: 'mounted' });
+
+      await sandbox.executeCommand('echo', ['hello']);
+
+      const cmd: string = mockSandbox.process.executeSessionCommand.mock.calls[0]![1].command;
+      expect(cmd).toContain('cd /srv/app');
+      expect(cmd).not.toContain('gcs-mount');
+    });
+
+    it('skips the pwd probe when workingDirectory is configured', async () => {
+      const sandbox = new DaytonaSandbox({ workingDirectory: '/srv/app' });
+      await sandbox._start();
+
+      const probed = mockSandbox.process.executeCommand.mock.calls.some(call => call[0] === 'pwd');
+      expect(probed).toBe(false);
+      expect(sandbox.workingDirectory).toBe('/srv/app');
+    });
+
+    it('probes pwd and fills the getter when workingDirectory is not configured', async () => {
+      mockSandbox.process.executeCommand.mockImplementation(async (command: string) =>
+        command === 'pwd' ? { exitCode: 0, result: '/home/daytona\n' } : { exitCode: 0, result: '' },
+      );
+      const sandbox = new DaytonaSandbox();
+      await sandbox._start();
+
+      const probed = mockSandbox.process.executeCommand.mock.calls.some(call => call[0] === 'pwd');
+      expect(probed).toBe(true);
+      expect(sandbox.workingDirectory).toBe('/home/daytona');
+    });
+  });
+
   describe('Default cwd from mounts', () => {
     it('no mounts and no cwd — command has no cd prefix', async () => {
       const sandbox = new DaytonaSandbox();
@@ -1631,7 +1686,7 @@ describe('DaytonaSandbox', () => {
 
     it('includes working directory when detected', () => {
       const sandbox = new DaytonaSandbox();
-      (sandbox as any)._workingDir = '/home/daytona';
+      (sandbox as any).setWorkingDirectory('/home/daytona');
       expect(sandbox.getInstructions()).toContain('Default working directory: /home/daytona');
     });
 

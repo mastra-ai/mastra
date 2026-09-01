@@ -61,7 +61,7 @@ describe('TracesListView columns', () => {
 
       const grid = container.querySelector<HTMLElement>('[style*="grid-template-columns"]');
       assert(grid);
-      expect(grid.style.gridTemplateColumns).toBe('6rem 9rem 14rem minmax(8rem,1fr) 14rem 6rem');
+      expect(grid.style.gridTemplateColumns).toBe('11rem 14rem minmax(8rem,1fr) 14rem 6rem');
     });
   });
 
@@ -88,9 +88,7 @@ describe('TracesListView columns', () => {
 
       const grid = container.querySelector<HTMLElement>('[style*="grid-template-columns"]');
       assert(grid);
-      expect(grid.style.gridTemplateColumns).toBe(
-        '6rem 9rem minmax(14rem,1fr) 6rem 7rem 8rem 8rem 8rem minmax(8rem,14rem)',
-      );
+      expect(grid.style.gridTemplateColumns).toBe('11rem minmax(8rem,1fr) 6rem 7rem 8rem 8rem 8rem minmax(8rem,14rem)');
     });
   });
 });

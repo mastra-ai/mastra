@@ -125,6 +125,16 @@ describe('experiment item sub-route', () => {
       expect(await screen.findByRole('button', { name: 'Flag 1 to review' })).toBeDefined();
       expect(screen.queryByText('1 selected')).toBeNull();
     });
+
+    it('only shows the selection actions once something is selected', async () => {
+      renderExperimentRoute();
+
+      await openResultsTab();
+      // Selecting is what reveals the actions, so no bulk-selection affordance is needed beforehand.
+      expect(await screen.findByRole('checkbox', { name: 'Select result item-1' })).toBeDefined();
+      expect(screen.queryByRole('button', { name: /Flag \d+ to review/ })).toBeNull();
+      expect(screen.queryByRole('button', { name: 'Clear' })).toBeNull();
+    });
   });
 
   describe('when visiting the item URL directly', () => {

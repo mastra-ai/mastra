@@ -74,6 +74,7 @@ import type { Schedule, ScheduleUpdate, SchedulesStorage } from '../storage/doma
 import { WorkflowsInMemory } from '../storage/domains/workflows/inmemory';
 import { augmentWithInit } from '../storage/storageWithInit';
 import type { StorageResolvedPromptBlockType } from '../storage/types';
+import { trackFeatureUsage } from '../telemetry/feature-telemetry';
 import type { ToolLoopAgentLike } from '../tool-loop-agent';
 import { isToolLoopAgentLike, toolLoopAgentToMastraAgent } from '../tool-loop-agent';
 import type { ToolAction, ToolPayloadTransformPolicy } from '../tools';
@@ -561,8 +562,9 @@ export interface Config<
    * so they can be filtered by environment without passing
    * `tracingOptions.metadata.environment` on every call.
    *
-   * If unset, falls back to `process.env.NODE_ENV`. If neither is set the field
-   * is left undefined rather than guessed.
+   * If unset, resolves to `'development'` for `mastra dev` runs (detected via
+   * `MASTRA_DEV`), then falls back to `process.env.NODE_ENV`. If none of these
+   * are set the field is left undefined rather than guessed.
    *
    * Per-call `tracingOptions.metadata.environment` always takes precedence.
    *
@@ -755,6 +757,8 @@ export class Mastra<
    * batch of agents after startup triggers one sweep rather than one per agent.
    */
   #fsScheduleSyncPending = false;
+  /** Set once file-based agent usage has been reported for this Mastra instance. */
+  #fsAgentUsageTracked = false;
   /**
    * Set when an agent registers while a sweep is already in flight. That sweep
    * may have read the agent map before the agent landed, so it runs one more
@@ -1108,9 +1112,10 @@ export class Mastra<
   }
 
   /**
-   * Returns the deployment environment name configured on this Mastra instance,
-   * falling back to `process.env.NODE_ENV` when unset, or `undefined` if neither
-   * is provided.
+   * Returns the deployment environment name configured on this Mastra instance.
+   * When unset, resolves to `'development'` for `mastra dev` runs (detected via
+   * `MASTRA_DEV`), then falls back to `process.env.NODE_ENV`, or `undefined` if
+   * none are provided.
    *
    * Observability automatically reads this and attaches it to all signals so
    * consumers can filter by environment without passing
@@ -1336,9 +1341,13 @@ export class Mastra<
     // Store global version overrides
     this.#versions = config?.versions;
 
-    // Resolve deployment environment: explicit config wins, else fall back to
-    // NODE_ENV. Leave undefined if neither is set rather than guessing.
-    this.#environment = config?.environment ?? process.env.NODE_ENV;
+    // Resolve deployment environment: explicit config wins. `mastra dev` spawns
+    // its server with NODE_ENV=production so dependencies run in production
+    // mode, but flags the run with MASTRA_DEV — treat that as development so
+    // Studio telemetry isn't tagged as production. Otherwise fall back to
+    // NODE_ENV, leaving undefined if unset rather than guessing.
+    this.#environment =
+      config?.environment ?? (process.env.MASTRA_DEV === 'true' ? 'development' : process.env.NODE_ENV);
     this.#toolPayloadTransform = normalizeToolPayloadTransformPolicy(
       config?.transform ?? (config as any)?.toolPayloadProjection,
     );
@@ -2788,6 +2797,7 @@ export class Mastra<
     }
 
     const agents = this.#agents as Record<string, Agent<any>>;
+    let registeredCount = 0;
     for (const [key, agent] of Object.entries(fsAgents)) {
       if (agent == null) {
         continue;
@@ -2799,6 +2809,12 @@ export class Mastra<
         continue;
       }
       this.addAgent(agent, key, { source: 'fs' });
+      registeredCount++;
+    }
+
+    if (registeredCount > 0 && !this.#fsAgentUsageTracked) {
+      this.#fsAgentUsageTracked = true;
+      trackFeatureUsage('file_based_agents', { fs_agent_count: registeredCount });
     }
   }
 

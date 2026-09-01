@@ -4,8 +4,9 @@ import { cn } from '@mastra/playground-ui/utils/cn';
 import { ArrowUpRight, EllipsisVertical, Minimize2 } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useId } from 'react';
-import { Link, useParams } from 'react-router';
+import { Link, useParams, useSearchParams } from 'react-router';
 
+import { useFactoryAuth } from '../../../../hooks/useFactoryAuth';
 import type { BoardCardStatus } from '../boardCardStatus';
 import { externalLinkLabel, metadataLabels, pullRequestStatusForItem, workItemMeta } from '../boardItems';
 import { itemStageLabel } from '../boardStages';
@@ -13,12 +14,14 @@ import type { CardPrimaryAction } from '../cardPrimaryAction';
 import type { CardMorph } from '../hooks/useCardMorph';
 import type { AuditEventPage } from '../services/audit';
 import type { WorkItem, WorkItemSessionRef } from '../services/workItems';
+import type { SessionCardStatus } from '../../workspaces/services/sessionStatus';
 import type { BoardStageId } from '../stages';
 import { workItemActivity } from '../workItemActivity';
 import { CardSourceDescription } from './BoardCardDetails';
-import { CardLabels, CardStatus } from './BoardCardParts';
+import { CardLabels, CardStatus, SessionLivenessDot } from './BoardCardParts';
 import { SourceIcon } from './BoardIcons';
 import { CardDetailsBody, CardDetailsPanel } from './CardDetailsPanel';
+import { CommentsSection } from './feed/CommentsSection';
 import { PullRequestStatusIcon } from './PullRequestStatusIcon';
 import { WorkItemActivity } from './WorkItemActivity';
 
@@ -31,6 +34,7 @@ export function WorkItemDetailsPanel({
   morph,
   relatedLinks,
   threadSession,
+  sessionStatus,
   status,
   retryingDecisionId,
   onRetryDecision,
@@ -46,6 +50,7 @@ export function WorkItemDetailsPanel({
   morph: CardMorph;
   relatedLinks: ReactNode;
   threadSession?: WorkItemSessionRef;
+  sessionStatus: SessionCardStatus;
   status: BoardCardStatus;
   retryingDecisionId?: string;
   onRetryDecision: (decisionId: string) => void;
@@ -56,6 +61,10 @@ export function WorkItemDetailsPanel({
 }) {
   const { factoryId = '' } = useParams<{ factoryId: string }>();
   const titleId = useId();
+  const auth = useFactoryAuth();
+  const [searchParams] = useSearchParams();
+  const highlightCommentId =
+    searchParams.get('item') === item.id ? (searchParams.get('comment') ?? undefined) : undefined;
 
   const labels = metadataLabels(item.metadata);
   const otherStages = item.stages.filter(stage => stage !== columnStage);
@@ -74,7 +83,7 @@ export function WorkItemDetailsPanel({
           <div className="flex min-w-0 items-center gap-1.5">
             <div className="flex min-w-0 flex-1 items-center gap-1.5">
               <span className="text-ui-xs text-icon2 min-w-0 truncate">{workItemMeta(item)}</span>
-              {threadSession !== undefined && <span aria-hidden className="bg-accent1 size-2 shrink-0 rounded-full" />}
+              {threadSession !== undefined && <SessionLivenessDot status={sessionStatus} />}
               {relatedLinks}
             </div>
             {item.url !== null && (
@@ -152,31 +161,40 @@ export function WorkItemDetailsPanel({
           factoryProjectId={factoryId || undefined}
         />
       </CardDetailsBody>
-      <div className="flex flex-col gap-2 px-3 py-2.5" data-card-morph="reveal">
-        {threadSession !== undefined && (
-          <Link
-            to={`/factories/${factoryId}/workspaces/${threadSession.sessionId}/threads/${threadSession.threadId}`}
-            className={cn(
-              buttonVariants({ variant: primaryAction === undefined ? 'primary' : 'outline', size: 'sm' }),
-              'w-full',
-            )}
-          >
-            Open session
-          </Link>
-        )}
-        {primaryAction !== undefined && (
-          <Button
-            type="button"
-            variant="primary"
-            size="sm"
-            className="w-full"
-            disabled={runDisabled || runPending}
-            onClick={startPrimary}
-          >
-            {runPending ? 'Starting…' : primaryAction.label}
-          </Button>
-        )}
-      </div>
+      <CommentsSection
+        item={item}
+        factoryId={factoryId}
+        enabled={morph.open}
+        currentUser={auth.data?.user}
+        highlightCommentId={highlightCommentId}
+      />
+      {(threadSession !== undefined || primaryAction !== undefined) && (
+        <div className="flex flex-col gap-2 px-3 py-2.5" data-card-morph="reveal">
+          {threadSession !== undefined && (
+            <Link
+              to={`/factories/${factoryId}/workspaces/${threadSession.sessionId}/threads/${threadSession.threadId}`}
+              className={cn(
+                buttonVariants({ variant: primaryAction === undefined ? 'primary' : 'outline', size: 'sm' }),
+                'w-full',
+              )}
+            >
+              Open session
+            </Link>
+          )}
+          {primaryAction !== undefined && (
+            <Button
+              type="button"
+              variant="primary"
+              size="sm"
+              className="w-full"
+              disabled={runDisabled || runPending}
+              onClick={startPrimary}
+            >
+              {runPending ? 'Starting…' : primaryAction.label}
+            </Button>
+          )}
+        </div>
+      )}
     </CardDetailsPanel>
   );
 }

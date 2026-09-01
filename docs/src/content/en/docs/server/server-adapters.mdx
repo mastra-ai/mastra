@@ -1,6 +1,6 @@
 ---
 title: "Server Adapters | Server"
-description: "Manually configure a Mastra server using Elysia, Express, Hono, Fastify, Koa, or NestJS adapters."
+description: "Run Mastra with Elysia, Express, Fastify, Hono, Koa, or NestJS server adapters and control initialization, middleware, routes, prefixes, and OpenAPI."
 packages:
   - "@mastra/elysia"
   - "@mastra/express"
@@ -92,7 +92,7 @@ Install the adapter for the framework of your choice.
 
 ## Configuration
 
-Initialize your app as usual, then create a `MastraServer` by passing in the `app` and your main `mastra` instance from `src/mastra/index.ts`. Calling `init()` automatically registers Mastra middleware and all available endpoints. You can continue adding your own routes as normal, either before or after `init()`, and they’ll run alongside Mastra’s endpoints.
+Initialize your app as usual, then create a `MastraServer` by passing in the `app` and your main `mastra` instance from `src/mastra/index.ts`. Calling `init()` automatically registers Mastra middleware and all available endpoints. Continue adding your own routes either before or after `init()`. They run alongside Mastra’s endpoints.
 
 <Tabs>
   <TabItem value="elysia" label="Elysia">
@@ -268,7 +268,7 @@ Calling `init()` runs four steps in order. Understanding this flow helps when yo
 
 For custom middleware ordering, call each method separately instead of `init()`. This is useful when you need middleware that runs before Mastra's context is set up, or when you need to insert logic between the initialization steps.
 
-```typescript title="server.ts" prettier:false
+```typescript title="server.ts" oxfmt:false
 const server = new MastraServer({ app, mastra });
 
 // Your middleware first

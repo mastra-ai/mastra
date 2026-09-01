@@ -3,6 +3,7 @@ import { Navigate, Outlet, useParams } from 'react-router';
 
 import { useFactoriesQuery } from '../../../../hooks/useFactories';
 import { AuthPendingSkeleton } from '../../auth/components/RootGuards';
+import { FeedEventsProvider } from '../../factory/context/FeedEventsProvider';
 import { GitHubAppCallbackHandler } from './GitHubAppCallbackHandler';
 import { WorkspaceAttentionObserver } from './WorkspaceAttentionObserver';
 
@@ -42,7 +43,9 @@ export function FactoryLayout() {
         />
       ))}
       <GitHubAppCallbackHandler />
-      <Outlet />
+      <FeedEventsProvider factoryProjectId={factory.id}>
+        <Outlet />
+      </FeedEventsProvider>
     </>
   );
 }
