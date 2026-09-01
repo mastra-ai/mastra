@@ -34,6 +34,22 @@ function findForeachEntry(steps: any[]): any {
   return undefined;
 }
 
+function findMappingEntry(steps: any[], id: string): any {
+  for (const entry of steps ?? []) {
+    if (entry.type === 'mapping' && entry.id === id) return entry;
+    const inner = entry.step?.executionGraph ? entry.step : entry.step?.step;
+    if (inner?.executionGraph) {
+      const nested = findMappingEntry(inner.executionGraph.steps, id);
+      if (nested) return nested;
+    }
+    if (entry.steps) {
+      const nested = findMappingEntry(entry.steps, id);
+      if (nested) return nested;
+    }
+  }
+  return undefined;
+}
+
 describe('createInngestDurableAgenticWorkflow tool-call concurrency', () => {
   const inngest = new Inngest({ id: 'inngest-agentic-workflow-concurrency-tests' });
   const workflow = createInngestDurableAgenticWorkflow({ inngest });
@@ -96,5 +112,43 @@ describe('createInngestDurableAgenticWorkflow tool-call concurrency', () => {
         ],
       }),
     ).toBe(1);
+  });
+});
+
+describe('createInngestDurableAgenticWorkflow iteration state', () => {
+  const inngest = new Inngest({ id: 'inngest-agentic-workflow-iteration-state-tests' });
+  const workflow = createInngestDurableAgenticWorkflow({ inngest });
+  const updateIterationState = findMappingEntry((workflow as any).executionGraph.steps, 'update-iteration-state');
+
+  it('keeps large tool results in message history without duplicating them in step records', async () => {
+    const largeToolResult = { value: 'x'.repeat(512 * 1024) };
+    const update = await updateIterationState.mapConfig({
+      inputData: {
+        messageListState: { messages: [{ content: largeToolResult }] },
+        messageId: 'message-1',
+        stepResult: { reason: 'tool-calls', isContinued: true },
+        toolResults: [largeToolResult],
+        output: {
+          text: '',
+          toolCalls: [{ toolCallId: 'call-1', toolName: 'large-tool', args: {} }],
+          usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+          steps: [],
+        },
+        state: {},
+      },
+      getInitData: () => ({
+        runId: 'run-1',
+        agentId: 'agent-1',
+        agentName: 'Agent',
+        iterationCount: 0,
+        accumulatedSteps: [],
+        accumulatedUsage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
+        stepIndex: 0,
+      }),
+    });
+
+    expect(update.accumulatedSteps[0]).not.toHaveProperty('toolResults');
+    expect(update.messageListState).toEqual({ messages: [{ content: largeToolResult }] });
+    expect(JSON.stringify(update)).not.toContain('"toolResults"');
   });
 });

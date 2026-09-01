@@ -9,6 +9,8 @@ export interface IterationStateUpdateInput {
   currentState: BaseIterationState;
   /** Output from the current iteration's execution */
   executionOutput: DurableAgenticExecutionOutput;
+  /** Whether to duplicate tool results in the accumulated step record. */
+  includeToolResultsInStepRecord?: boolean;
 }
 
 /**
@@ -39,11 +41,11 @@ export function calculateAccumulatedUsage(
 /**
  * Build a step record from execution output.
  */
-export function buildStepRecord(executionOutput: DurableAgenticExecutionOutput): StepRecord {
+export function buildStepRecord(executionOutput: DurableAgenticExecutionOutput, includeToolResults = true): StepRecord {
   return {
     text: executionOutput.output.text,
     toolCalls: executionOutput.output.toolCalls,
-    toolResults: executionOutput.toolResults,
+    ...(includeToolResults ? { toolResults: executionOutput.toolResults } : {}),
     usage: executionOutput.output.usage,
     finishReason: executionOutput.stepResult.reason,
   };
@@ -75,10 +77,10 @@ export function buildStepRecord(executionOutput: DurableAgenticExecutionOutput):
  * ```
  */
 export function createBaseIterationStateUpdate(input: IterationStateUpdateInput): BaseIterationState {
-  const { currentState, executionOutput } = input;
+  const { currentState, executionOutput, includeToolResultsInStepRecord = true } = input;
 
   const newUsage = calculateAccumulatedUsage(currentState.accumulatedUsage, executionOutput.output.usage);
-  const stepRecord = buildStepRecord(executionOutput);
+  const stepRecord = buildStepRecord(executionOutput, includeToolResultsInStepRecord);
 
   return {
     runId: currentState.runId,

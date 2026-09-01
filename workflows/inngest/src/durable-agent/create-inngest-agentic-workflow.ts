@@ -302,6 +302,7 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
         const baseUpdate = createBaseIterationStateUpdate({
           currentState: initData,
           executionOutput,
+          includeToolResultsInStepRecord: false,
         });
 
         // Extend with Inngest-specific observability fields
