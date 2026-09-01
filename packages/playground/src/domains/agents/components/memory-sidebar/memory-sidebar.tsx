@@ -244,10 +244,10 @@ export function MemorySidebarBody({ agentId, threadId, threads, onDelete, thread
             className={cn(
               'memory-sidebar-overlay absolute inset-x-0 bottom-0 z-10 box-border flex min-h-0 flex-col overflow-hidden border',
               showMemory
-                ? 'm-0 rounded-none border-transparent bg-surface3 shadow-none'
+                ? 'top-1 m-1 rounded-xl border-border1/40 bg-surface3 shadow-none'
                 : 'm-1 rounded-xl border-border1/40 bg-surface4 hover:bg-surface5 active:bg-surface4',
             )}
-            style={{ height: showMemory ? '100%' : collapsedCardSize.height || undefined }}
+            style={{ height: showMemory ? undefined : collapsedCardSize.height || undefined }}
           >
             <button
               ref={memoryCardButtonRef}
