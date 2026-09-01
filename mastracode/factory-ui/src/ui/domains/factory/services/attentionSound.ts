@@ -1,4 +1,3 @@
-import { readStoredStringRecord } from '../../../lib/storedStringRecord';
 import { playDoneSound } from '../../settings/services/doneSound';
 
 const NOTIFIED_KEY = 'mastracode.attentionNotified.v2';
@@ -17,8 +16,20 @@ function claimInMemory(scope: string, key: string): boolean {
   return true;
 }
 
+function notifiedByScope(): Record<string, string> {
+  try {
+    const value: unknown = JSON.parse(localStorage.getItem(NOTIFIED_KEY) ?? '{}');
+    if (typeof value !== 'object' || value === null || Array.isArray(value)) return {};
+    return Object.fromEntries(
+      Object.entries(value).filter((entry): entry is [string, string] => typeof entry[1] === 'string'),
+    );
+  } catch {
+    return {};
+  }
+}
+
 function claimWithLocalStorage(scope: string, key: string): boolean {
-  const notified = readStoredStringRecord(NOTIFIED_KEY);
+  const notified = notifiedByScope();
   if (notified[scope] === key) return false;
   const entries = Object.entries(notified).filter(([existingScope]) => existingScope !== scope);
   entries.push([scope, key]);

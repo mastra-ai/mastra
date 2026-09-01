@@ -5,7 +5,7 @@
  * read the same active-run registry as factory workspaces. This suite pins down
  * the three-state indicator (initializing / working / idle) for those rows.
  */
-import { screen } from '@testing-library/react';
+import { screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { MemoryRouter, Route, Routes } from 'react-router';
 import { describe, expect, it } from 'vitest';
@@ -16,7 +16,6 @@ import { TEST_BASE_URL, renderWithProviders, waitForMutationsIdle } from '../../
 import { AGENT_CONTROLLER_ID } from '../../../chat/services/constants';
 import type { FactoryUserSession } from '../../services/user-sessions';
 import { UserSessionsSection } from '../UserSessionsSection';
-import { WorkspaceAttentionObserver } from '../WorkspaceAttentionObserver';
 
 const factoryId = 'fp-1';
 const projectRepositoryId = 'ghp-1';
@@ -87,15 +86,7 @@ function renderSection() {
   return renderWithProviders(
     <MemoryRouter initialEntries={[`/factories/${factoryId}`]}>
       <Routes>
-        <Route
-          path="/factories/:factoryId"
-          element={
-            <>
-              <WorkspaceAttentionObserver projectRepositoryId={projectRepositoryId} />
-              <UserSessionsSection />
-            </>
-          }
-        />
+        <Route path="/factories/:factoryId" element={<UserSessionsSection />} />
       </Routes>
     </MemoryRouter>,
   );
@@ -127,8 +118,8 @@ describe('User sessions sidebar activity', () => {
     const active = new Set(['sess-4']);
     stubProjectAndSessions([]);
     // Serve a mutable session row so the refetch on the run's feed frames
-    // observes the stamped `materializedAt` and `lastRunEndedAt` (registered
-    // after the base stub — the most recent handler wins).
+    // observes the stamped `materializedAt` (registered after the base stub —
+    // the most recent handler wins).
     server.use(
       http.get(`${TEST_BASE_URL}/web/github/projects/${projectRepositoryId}/sessions`, () =>
         HttpResponse.json({
@@ -137,7 +128,6 @@ describe('User sessions sidebar activity', () => {
               sessionId: 'sess-4',
               branch: 'user/feature-d',
               materializedAt: settled ? '2026-07-20T00:00:00.000Z' : null,
-              ...(settled ? { lastRunEndedAt: new Date(Date.now() + 60_000).toISOString() } : {}),
             }),
           ],
         }),
@@ -149,8 +139,8 @@ describe('User sessions sidebar activity', () => {
     await waitForMutationsIdle(client);
     await screen.findByRole('status', { name: 'Agent working in feature-d' });
 
-    // The run finishes: the server stamps materializedAt and lastRunEndedAt,
-    // and its feed frames invalidate the registry and the sessions list.
+    // The run finishes: the server stamps materializedAt, and its feed frames
+    // invalidate the registry and the sessions list.
     settled = true;
     active.delete('sess-4');
     await client.invalidateQueries({
@@ -159,9 +149,9 @@ describe('User sessions sidebar activity', () => {
     await client.invalidateQueries({ queryKey: queryKeys.sessions(projectRepositoryId) });
     await waitForMutationsIdle(client);
 
-    // The belt lands on solid attention, not back on (or stuck at) initializing.
-    await screen.findByRole('status', { name: 'feature-d ready — open to dismiss' });
-    expect(screen.queryByRole('status', { name: 'Initializing feature-d' })).not.toBeInTheDocument();
+    // The belt goes dark on an idle session, not back on (or stuck at) initializing.
+    const row = screen.getByRole('button', { name: 'feature-d' }).closest('li');
+    await waitFor(() => expect(row?.querySelector('[role="status"]')).toBeNull());
   });
 
   it('leaves an idle materialized session without a status belt', async () => {

@@ -27,6 +27,18 @@ export interface BoardCardStatusInput {
   sessionStatus?: SessionRowStatus;
 }
 
+/**
+ * The sidebar's reading of a card's `waiting` and `error` kinds: a run parked
+ * for approval, or an effect that failed for good. A retry the server still
+ * owns is not a person's turn.
+ */
+export function itemAwaitsPerson(
+  proposal: FactoryDecisionSummary | undefined,
+  effect: FactoryDecisionSummary | undefined,
+): boolean {
+  return proposal !== undefined || effect?.status === 'failed';
+}
+
 /** Human phrasing for a rule effect, by decision type. `underway` speaks for a leased decision. */
 function automationCopy(type: string): { busy: string; underway: string; failed: string } {
   switch (type) {

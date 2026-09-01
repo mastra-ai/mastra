@@ -217,19 +217,10 @@ describe('Board card session liveness', () => {
     await waitFor(() => expect(card.querySelector('[data-live-session-indicator="working"]')).not.toBeNull());
   });
 
-  it('walks idle → working → ready as a run starts and finishes unseen', async () => {
+  it('walks idle → working → idle as a run starts and finishes', async () => {
     stubFactoryWithBoundSession();
     const active = new Set<string>();
-    let runEnded = false;
     server.use(
-      // On run end the server stamps the row; the session frame re-reads it.
-      http.get(`${TEST_BASE_URL}/web/github/projects/${REPO_ID}/sessions`, () =>
-        HttpResponse.json({
-          sessions: [
-            { ...boundSession, ...(runEnded ? { lastRunEndedAt: new Date(Date.now() + 60_000).toISOString() } : {}) },
-          ],
-        }),
-      ),
       http.get('*/api/agent-controller/:controllerId/active-runs', () =>
         HttpResponse.json({
           runs: [...active].map(resourceId => ({ runId: `run-${resourceId}`, resourceId, threadId: resourceId })),
@@ -250,14 +241,10 @@ describe('Board card session liveness', () => {
     expect(screen.queryByRole('link', { name: 'Open session' })).toBeNull();
 
     active.delete(SESSION_ID);
-    runEnded = true;
-    // The session frame invalidates both truths: the run registry and the row
-    // now carrying the `lastRunEndedAt` stamp.
     await client.invalidateQueries({ queryKey: activityKey });
-    await client.invalidateQueries({ queryKey: queryKeys.sessions(REPO_ID) });
-    // The finish was never opened, so the card holds the same "your turn" mark
-    // the sidebar row shows, instead of sliding silently back to idle.
-    await waitFor(() => expect(card.querySelector('[data-live-session-indicator="ready"]')).not.toBeNull());
+    // A finished run is an idle session: the wick goes dark and the button returns.
+    await waitFor(() => expect(card.querySelector('[data-live-session-indicator]')).toBeNull());
+    expect(await screen.findByRole('link', { name: 'Open session' })).toBeInTheDocument();
   });
 
   it('drops the session indicator as soon as its session is deleted from the sidebar', async () => {

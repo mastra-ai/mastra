@@ -1486,6 +1486,72 @@ describe('FactoryDecisionDispatcher', () => {
     }
   });
 
+  it('fails a run terminally once it outlives the observation ceiling, without a duplicate kickoff', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2030-01-01T00:00:00Z'));
+    try {
+      const storage = (await createFactoryStorageForTests()).workItems;
+      const { item, transitionService } = await queueDecision(storage, {
+        type: 'invokeSkill',
+        role: 'work',
+        skillName: 'understand-issue',
+        idempotencyKey: 'long-run-overdue',
+      });
+      await storage.prepareRunStart({
+        orgId: 'org-1',
+        userId: 'user-1',
+        factoryProjectId: PROJECT_ID,
+        workItem: {
+          id: item.id,
+          input: {
+            externalSource: { integrationId: 'github', type: 'issue', externalId: 'github-issue:1' },
+            title: 'Fix issue',
+            stages: ['execute'],
+            sessions: {},
+            metadata: {},
+          },
+        },
+        role: 'work',
+        session: { sessionId: 'session-1', branch: 'factory/issue-1', threadId: 'thread-1' },
+        resourceId: PROJECT_ID,
+        kickoffKey: 'kickoff-null',
+        kickoffMessage: null,
+      });
+      const { controller, session, getAgentEndListenerCount } = createSession(undefined, {
+        signalAccepted: Promise.resolve({ accepted: true, action: 'wake' }),
+      });
+      controller.listActiveThreadRuns.mockReturnValue([{ runId: 'run-1', threadId: 'thread-1' }]);
+      const window = FACTORY_DISPATCH_CONSTANTS.skillCompletionObservationTimeoutMs;
+      const dispatcher = new FactoryDecisionDispatcher({
+        controller: controller as never,
+        isAutoRunEnabled: async () => true,
+        transitionService,
+        storage,
+        ownerId: 'worker-1',
+        runObservationCeilingMs: window * 3,
+      });
+
+      const dispatch = dispatcher.runOnce();
+      await vi.advanceTimersByTimeAsync(0);
+      expect(session.sendSignal).toHaveBeenCalledTimes(1);
+
+      await vi.advanceTimersByTimeAsync(window * 3);
+      await dispatch;
+
+      // Terminal: a hung run must not be retried into the same busy session,
+      // and the lease and in-flight slot must come back.
+      expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]).toMatchObject({
+        status: 'failed',
+        failureCode: 'run_overdue',
+        lastError: expect.stringContaining('still in flight'),
+      });
+      expect(session.sendSignal).toHaveBeenCalledTimes(1);
+      expect(getAgentEndListenerCount()).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('does not miss agent end emitted synchronously during the wake signal', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const { item, transitionService } = await queueDecision(storage, {

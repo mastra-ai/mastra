@@ -35,6 +35,9 @@ const MAX_PLAN_APPROVALS = 3;
 const MAX_ERROR_LENGTH = 512;
 const MAX_BACKOFF_MS = 60_000;
 const SKILL_COMPLETION_OBSERVATION_TIMEOUT_MS = 10 * 60_000;
+// Past this, a run the registry still shows in flight is a hang, not a slow
+// run: fail terminally so the lease and the in-flight slot come back.
+const RUN_OBSERVATION_CEILING_MS = 6 * 60 * 60_000;
 // Dispatches can legitimately run for minutes. Woken skill invocations hold
 // capacity until their agent run reaches a terminal state; binding preparation
 // also runs detached from the poll loop under this concurrency cap.
@@ -70,6 +73,7 @@ function watchRun(
     onParkedRun,
     label,
     runStillActive,
+    ceilingMs,
   }: {
     timeoutMs: number;
     approvePlans: boolean;
@@ -77,6 +81,7 @@ function watchRun(
     label: string;
     /** Level-triggered check against the run registry, consulted when the edge-triggered wait times out. */
     runStillActive: () => boolean;
+    ceilingMs: number;
   },
 ) {
   let resolveAgentEnd!: () => void;
@@ -109,10 +114,19 @@ function watchRun(
   // The timeout is a fallback for a run that never started or whose end was
   // missed, never a verdict on a slow one: while the registry still shows the
   // run in flight, failing here would both lie on the card and schedule a
-  // duplicate kickoff into a busy session, so keep waiting.
+  // duplicate kickoff into a busy session, so keep waiting — up to the ceiling.
   const wait = async () => {
+    const deadline = Date.now() + ceilingMs;
     let ended = await waitForAgentEndOrTimeout(agentEnd, timeoutMs);
-    while (!ended && runStillActive()) ended = await waitForAgentEndOrTimeout(agentEnd, timeoutMs);
+    while (!ended && runStillActive()) {
+      if (Date.now() >= deadline) {
+        throw new FactoryDispatchError(
+          'run_overdue',
+          `${label} is still in flight after ${Math.round(ceilingMs / 3_600_000)} hours and needs a person.`,
+        );
+      }
+      ended = await waitForAgentEndOrTimeout(agentEnd, timeoutMs);
+    }
     return ended;
   };
 
@@ -244,6 +258,8 @@ export interface FactoryDecisionDispatcherOptions {
   reconcileIntervalMs?: number;
   /** How long to wait for a run's terminal event before failing for retry. Defaults to 10 minutes. */
   skillCompletionObservationTimeoutMs?: number;
+  /** How long a run the registry still shows in flight is observed before it is failed as overdue. Defaults to 6 hours. */
+  runObservationCeilingMs?: number;
 }
 
 function positiveMs(value: number | undefined, fallback: number): number {
@@ -367,6 +383,7 @@ export class FactoryDecisionDispatcher {
   #lastStaleBindingSweepAt?: Date;
   readonly #reconcileIntervalMs: number;
   readonly #skillCompletionObservationTimeoutMs: number;
+  readonly #runObservationCeilingMs: number;
   #lastReconcileAt?: Date;
   #reconcileInFlight?: Promise<void>;
   #timer?: ReturnType<typeof setInterval>;
@@ -397,6 +414,7 @@ export class FactoryDecisionDispatcher {
       options.skillCompletionObservationTimeoutMs,
       SKILL_COMPLETION_OBSERVATION_TIMEOUT_MS,
     );
+    this.#runObservationCeilingMs = positiveMs(options.runObservationCeilingMs, RUN_OBSERVATION_CEILING_MS);
   }
 
   start(): void {
@@ -727,6 +745,7 @@ export class FactoryDecisionDispatcher {
           label: 'Factory skill run',
           runStillActive: () =>
             this.#controller.listActiveThreadRuns().some(active => active.threadId === binding.threadId),
+          ceilingMs: this.#runObservationCeilingMs,
         });
 
         const sendKickoff = async () => {
@@ -1073,6 +1092,7 @@ export class FactoryDecisionDispatcher {
             label: 'Factory kickoff run',
             runStillActive: () =>
               this.#controller.listActiveThreadRuns().some(active => active.threadId === binding.threadId),
+            ceilingMs: this.#runObservationCeilingMs,
           });
           const sendKickoff = (dedupeKey: string) =>
             awaitNotification(
@@ -1141,6 +1161,7 @@ export const FACTORY_DISPATCH_CONSTANTS = {
   maxErrorLength: MAX_ERROR_LENGTH,
   maxBackoffMs: MAX_BACKOFF_MS,
   skillCompletionObservationTimeoutMs: SKILL_COMPLETION_OBSERVATION_TIMEOUT_MS,
+  runObservationCeilingMs: RUN_OBSERVATION_CEILING_MS,
   maxInFlight: MAX_IN_FLIGHT,
   stages: FACTORY_RULE_STAGES,
 } as const;

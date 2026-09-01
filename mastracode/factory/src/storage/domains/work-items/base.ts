@@ -159,6 +159,7 @@ const FACTORY_DISPATCH_FAILURE_CODES = [
   'notification_delivery_failed',
   'plan_awaiting_approval',
   'run_awaiting_input',
+  'run_overdue',
   'repository_git_missing',
   'repository_egress_blocked',
   'repository_clone_failed',
@@ -1980,7 +1981,8 @@ export class WorkItemsStorage extends FactoryStorageDomain {
 
   async claimDeferredDecisions(input: FactoryLeaseClaimInput): Promise<FactoryDeferredDecisionRecord[]> {
     const claimed = await this.#claimLeases('factory_deferred_decisions', input, toDeferredDecision);
-    for (const record of claimed) this.#announceFeedTouch(record);
+    const byProject = new Map(claimed.map(record => [`${record.orgId}:${record.factoryProjectId}`, record]));
+    for (const scope of byProject.values()) this.#announceFeedTouch(scope);
     return claimed;
   }
 

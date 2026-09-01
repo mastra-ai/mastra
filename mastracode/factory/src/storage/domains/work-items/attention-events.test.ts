@@ -31,11 +31,7 @@ async function seedWorkItem(storage: WorkItemsStorage): Promise<string> {
   return created.item.id;
 }
 
-async function claimDecision(
-  storage: WorkItemsStorage,
-  workItemId: string,
-  key: string,
-): Promise<FactoryDeferredDecisionRecord> {
+async function queueDecision(storage: WorkItemsStorage, workItemId: string, key: string): Promise<void> {
   const workItem = await storage.get({ orgId: SCOPE.orgId, id: workItemId });
   if (!workItem) throw new Error('Expected the seeded work item');
   await storage.commitRuleEvaluation({
@@ -50,6 +46,14 @@ async function claimDecision(
     causalChain: [],
     now: NOW,
   });
+}
+
+async function claimDecision(
+  storage: WorkItemsStorage,
+  workItemId: string,
+  key: string,
+): Promise<FactoryDeferredDecisionRecord> {
+  await queueDecision(storage, workItemId, key);
   const [claimed] = await storage.claimDeferredDecisions(LEASE);
   if (!claimed) throw new Error('Expected a claimed decision');
   return claimed;
@@ -93,6 +97,18 @@ describe('attention announcements', () => {
     if (!reclaimed) throw new Error('Expected the decision back on the queue');
     await storage.failDeferredDecision({ ...leaseOf(reclaimed), ...failure, terminal: true });
     expect(announced).toEqual([SCOPE, SCOPE, SCOPE, SCOPE]);
+  });
+
+  it('announces a claimed batch once per project, not once per decision', async () => {
+    const { storage, announced } = await makeStorage();
+    const workItemId = await seedWorkItem(storage);
+    await queueDecision(storage, workItemId, 'batch-a');
+    await queueDecision(storage, workItemId, 'batch-b');
+    announced.length = 0;
+
+    const claimed = await storage.claimDeferredDecisions({ ...LEASE, limit: 2 });
+    expect(claimed).toHaveLength(2);
+    expect(announced).toEqual([SCOPE]);
   });
 
   it('announces a completed decision', async () => {

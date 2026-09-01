@@ -14,7 +14,6 @@ import { queryKeys } from '../../../../api/keys';
 import { useFactoryAuth } from '../../../../hooks/useFactoryAuth';
 import { useFactoryQuery } from '../../../../hooks/useFactories';
 import { useActiveRunResources } from '../../../../hooks/useActiveRunResources';
-import { useSessionAttentionMarks } from '../../../../hooks/useWorkspaceAttention';
 import { AGENT_CONTROLLER_ID } from '../../chat/services/constants';
 import { removeCachedSession, useWorkspacesQuery } from '../../../../hooks/useWorkspaces';
 import { usePinnedSessions } from '../hooks/usePinnedSessions';
@@ -51,7 +50,6 @@ export function UserSessionsSection() {
     agentControllerId: AGENT_CONTROLLER_ID,
     resourceIds: sessions.map(session => session.sessionId),
   });
-  const attentionBySessionId = useSessionAttentionMarks(sessions);
   const invalidate = () => {
     void queryClient.invalidateQueries({ queryKey: queryKeys.sessions(repository?.projectRepositoryId) });
   };
@@ -130,7 +128,6 @@ export function UserSessionsSection() {
             const status = sessionRowStatus({
               running: runningBySessionId[session.sessionId] === true,
               initializing: !session.materializedAt,
-              attention: attentionBySessionId[session.sessionId] === true,
             });
             return (
               <SessionNavRow
