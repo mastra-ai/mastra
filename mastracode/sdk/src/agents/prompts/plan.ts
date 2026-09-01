@@ -5,6 +5,8 @@ import { getLocalPlansRelativeDir } from '../../utils/plans.js';
 
 interface PlanPromptContext {
   state?: Record<string, unknown>;
+  workingDir?: string;
+  workingDirectory?: string;
 }
 
 export function planModePrompt(ctx: PlanPromptContext): string {

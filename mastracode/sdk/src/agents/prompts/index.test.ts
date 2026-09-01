@@ -121,6 +121,70 @@ describe('buildFullPrompt untrusted checkout', () => {
   });
 });
 
+describe('buildFullPrompt workspace-root split', () => {
+  // Embedders (factory) root file tools/exec at the parent directory the repo
+  // is checked out into. The prompt must advertise THAT root as the working
+  // directory and name the repo subdir — while AGENTS.md keeps loading from
+  // the repo-scoped workingDir (the regression the split exists to avoid).
+  const projectDir = mkdtempSync(join(tmpdir(), 'prompt-split-repo-'));
+  writeFileSync(join(projectDir, 'AGENTS.md'), 'REPO-SCOPED: project instruction marker');
+
+  afterAll(() => {
+    rmSync(projectDir, { recursive: true, force: true });
+  });
+
+  const baseCtx = {
+    projectPath: projectDir,
+    projectName: 'test-project',
+    gitBranch: 'main',
+    platform: 'darwin' as const,
+    date: '2026-03-23',
+    mode: 'build',
+    activePlan: null,
+    modeId: 'build',
+    currentDate: '2026-03-23',
+    workingDir: projectDir,
+    state: { permissionRules: { tools: {} } },
+  };
+
+  it('advertises the working directory and names the repo subdir when roots differ', () => {
+    const prompt = buildFullPrompt({ ...baseCtx, workingDirectory: '/workspace' });
+    expect(prompt).toContain('Working directory: /workspace');
+    expect(prompt).not.toContain(`Working directory: ${projectDir}`);
+    const repoSubdir = projectDir.split('/').pop()!;
+    expect(prompt).toContain('# Workspace Layout');
+    expect(prompt).toContain(`\`${repoSubdir}/\``);
+  });
+
+  it('still loads AGENTS.md from the repo-scoped workingDir when roots differ', () => {
+    const prompt = buildFullPrompt({ ...baseCtx, workingDirectory: '/workspace' });
+    expect(prompt).toContain('REPO-SCOPED: project instruction marker');
+  });
+
+  it('advertises workspace-root .artifacts for factory sessions under a split root', () => {
+    const repoSubdir = projectDir.split('/').pop()!;
+    const workingDirectory = projectDir.slice(0, -(repoSubdir.length + 1));
+    const prompt = buildFullPrompt({
+      ...baseCtx,
+      modeId: 'plan',
+      mode: 'plan',
+      workingDirectory,
+      state: { permissionRules: { tools: {} }, factoryProjectId: 'factory-123' },
+    });
+
+    expect(prompt).toContain('.artifacts/plans');
+    expect(prompt).not.toContain(`${repoSubdir}/.artifacts/plans`);
+  });
+
+  it('behaves exactly as today when no distinct workingDirectory is set', () => {
+    const withoutRoot = buildFullPrompt({ ...baseCtx });
+    const withEqualRoot = buildFullPrompt({ ...baseCtx, workingDirectory: projectDir });
+    expect(withoutRoot).toContain(`Working directory: ${projectDir}`);
+    expect(withoutRoot).not.toContain('# Workspace Layout');
+    expect(withEqualRoot).toBe(withoutRoot);
+  });
+});
+
 describe('buildFullPrompt untrusted checkout with base ref', () => {
   // When the session carries a trusted base ref (the PR's base branch), the
   // project instructions are served from that ref via `git show` — the

@@ -180,6 +180,29 @@ describe('local plan directories', () => {
   });
 });
 
+describe('local plan directories under a split working directory', () => {
+  it('keeps Factory plans at the workspace-root .artifacts path', () => {
+    const workingDirectory = path.dirname(tmpProjectPath);
+    const options = { factoryProjectId: 'factory-123', workingDirectory };
+
+    expect(getLocalPlansRelativeDir(options)).toBe('.artifacts/plans');
+    expect(getSuggestedPlanRelativePath('Add dark mode', options)).toBe('.artifacts/plans/add-dark-mode.md');
+    expect(getLocalPlansDir(tmpProjectPath, options)).toBe(path.join(workingDirectory, '.artifacts', 'plans'));
+  });
+
+  it('resolves relative plan paths against the working directory and contains them there', () => {
+    const workingDirectory = path.dirname(tmpProjectPath);
+    const repoSubdir = path.basename(tmpProjectPath);
+    const options = { factoryProjectId: 'factory-123', workingDirectory };
+
+    expect(isPlanFilePath(tmpProjectPath, '.artifacts/plans/x.md', options)).toBe(true);
+    expect(isPlanFilePath(tmpProjectPath, `${repoSubdir}/.artifacts/plans/x.md`, options)).toBe(false);
+    expect(isPlanFilePath(tmpProjectPath, path.join(workingDirectory, '.artifacts', 'plans', 'x.md'), options)).toBe(
+      true,
+    );
+  });
+});
+
 describe('isPlanFilePath', () => {
   it('accepts a .md file directly inside .mastracode/plans/', () => {
     expect(isPlanFilePath(tmpProjectPath, '.mastracode/plans/add-dark-mode.md')).toBe(true);

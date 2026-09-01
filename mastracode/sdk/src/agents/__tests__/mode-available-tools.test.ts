@@ -99,6 +99,52 @@ describe('mode availableTools configuration', () => {
       });
     });
 
+    it('keeps Factory plan writes in workspace-root .artifacts when the repo is a subdir', () => {
+      const workingDirectory = '/tmp/mastracode-split-guard';
+      const projectPath = `${workingDirectory}/hello`;
+      const context = {
+        requestContext: {
+          harness: {
+            session: {
+              modeId: 'plan',
+              state: { get: () => ({ projectPath, workingDirectory, factoryProjectId: 'factory-123' }) },
+            },
+          },
+        },
+      };
+
+      expect(
+        guardPlanModePlanFileWrites({
+          toolName: MC_TOOLS.WRITE_FILE,
+          workspaceToolName: WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE,
+          input: { path: '.artifacts/plans/add-dark-mode.md' },
+          context,
+        }),
+      ).toBeUndefined();
+
+      expect(
+        guardPlanModePlanFileWrites({
+          toolName: MC_TOOLS.STRING_REPLACE_LSP,
+          workspaceToolName: WORKSPACE_TOOLS.FILESYSTEM.EDIT_FILE,
+          input: { path: `${workingDirectory}/.artifacts/plans/another-plan.md` },
+          context,
+        }),
+      ).toBeUndefined();
+
+      expect(
+        guardPlanModePlanFileWrites({
+          toolName: MC_TOOLS.WRITE_FILE,
+          workspaceToolName: WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE,
+          input: { path: 'hello/.artifacts/plans/wrong-root.md' },
+          context,
+        }),
+      ).toMatchObject({
+        proceed: false,
+        output:
+          'Plan mode can only write plan files inside .artifacts/plans/. Refusing to edit hello/.artifacts/plans/wrong-root.md.',
+      });
+    });
+
     it('allows Factory plan files only inside .artifacts/plans/', () => {
       const projectPath = '/tmp/mastracode-factory-plan-guard';
       const context = {

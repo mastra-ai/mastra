@@ -198,6 +198,10 @@ export async function getDynamicWorkspace({
   }
 
   const projectPath = path.resolve(rawProjectPath);
+  // File tools and exec root at the working directory; skills, LSP detection,
+  // and the workspace identity stay project-scoped. Absent state defaults
+  // the root to the project path, today's coupled behavior.
+  const workingDirectory = state?.workingDirectory ? path.resolve(state.workingDirectory) : projectPath;
   const configDir = state?.configDir ?? DEFAULT_CONFIG_DIR;
   const projectSkillPaths = buildSkillPaths(projectPath, configDir, state?.homeDir, state?.pluginSkillPaths ?? []);
   const skillPaths = [...(skillExtension?.paths ?? []), ...projectSkillPaths];
@@ -245,7 +249,7 @@ export async function getDynamicWorkspace({
 
   // First call for this project — create the workspace
   const filesystem = new LocalFilesystem({
-    basePath: projectPath,
+    basePath: workingDirectory,
     allowedPaths,
   });
   return new Workspace({
@@ -253,7 +257,7 @@ export async function getDynamicWorkspace({
     name: 'Mastra Code Workspace',
     filesystem,
     sandbox: new LocalSandbox({
-      workingDirectory: projectPath,
+      workingDirectory: workingDirectory,
       env: buildSandboxEnv(),
     }),
     tools: workspaceTools,

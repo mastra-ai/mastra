@@ -10,6 +10,8 @@ export function getPlansDir(): string {
 
 export interface LocalPlansOptions {
   factoryProjectId?: string | null;
+  /** Root the agent's file tools resolve relative paths against. */
+  workingDirectory?: string | null;
 }
 
 /** Workspace-relative directory the agent writes plan files into. */
@@ -17,9 +19,9 @@ export function getLocalPlansRelativeDir(options: LocalPlansOptions = {}): strin
   return options.factoryProjectId ? path.join('.artifacts', 'plans') : path.join(DEFAULT_CONFIG_DIR, 'plans');
 }
 
-/** Local (project-scoped) plans directory where the agent writes named plan files. */
+/** Local plans directory where the agent writes named plan files. */
 export function getLocalPlansDir(projectPath: string, options: LocalPlansOptions = {}): string {
-  return path.join(projectPath, getLocalPlansRelativeDir(options));
+  return path.join(options.workingDirectory ?? projectPath, getLocalPlansRelativeDir(options));
 }
 
 function slugify(str: string): string {
@@ -60,7 +62,10 @@ export function resolvePlanPath(projectPath: string, submittedPath: string): str
  * outside that directory.
  */
 export function isPlanFilePath(projectPath: string, targetPath: string, options: LocalPlansOptions = {}): boolean {
-  const abs = resolvePlanPath(projectPath, targetPath);
+  // Relative paths resolve where the agent's file tools resolve them: the
+  // working directory when the embedder split it from the project path.
+  const resolutionRoot = options.workingDirectory ? path.resolve(options.workingDirectory) : projectPath;
+  const abs = resolvePlanPath(resolutionRoot, targetPath);
   if (!abs) return false;
   if (path.extname(abs).toLowerCase() !== '.md') return false;
 
