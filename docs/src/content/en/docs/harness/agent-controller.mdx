@@ -425,7 +425,7 @@ unsubscribe()
 
 Subscriptions are isolated by Session. Events from another Session on the same controller aren't delivered to this listener. Read the [Building a coding agent](https://mastra.ai/blog/building-a-coding-agent) guide for a complete TUI example.
 
-### Subscribe over the network
+### Subscribe from a browser or React app
 
 `client.getAgentController(id).session(resourceId, scope?)` returns a session client bound to one resource. Sessions are get-or-create on the server, so `create()` resumes an existing conversation instead of forking it. Pass `scope` when one resource needs independent sessions, such as one per git worktree:
 
