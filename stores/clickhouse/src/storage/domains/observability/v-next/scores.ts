@@ -5,6 +5,7 @@ import type {
   AggregationType,
   BatchCreateScoresArgs,
   CreateScoreArgs,
+  CreateScoreRecord,
   ListScoresArgs,
   ListScoresResponse,
   ScoreRecord,
@@ -117,6 +118,15 @@ function toWhereClause(filter: FilterResult): string {
   return filter.conditions.length ? `WHERE ${filter.conditions.join(' AND ')}` : '';
 }
 
+function currentScores(): string {
+  return `(
+    SELECT *
+    FROM ${TABLE_SCORE_EVENTS}
+    ORDER BY scoreId, ingestionVersion DESC
+    LIMIT 1 BY scoreId
+  )`;
+}
+
 function buildScoreIdentityFilter(args: Pick<GetScoreAggregateArgs, 'scorerId' | 'scoreSource'>): FilterResult {
   const conditions: string[] = ['scorerId = {olapScorerId:String}'];
   const params: Record<string, unknown> = { olapScorerId: args.scorerId };
@@ -159,6 +169,12 @@ async function queryJson<T>(client: ClickHouseClient, query: string, params: Rec
 // Write
 // ============================================================================
 
+function collapseScoreBatch(scores: CreateScoreRecord[]): CreateScoreRecord[] {
+  const current = new Map<string, CreateScoreRecord>();
+  for (const score of scores) current.set(score.scoreId!, score);
+  return [...current.values()];
+}
+
 export async function createScore(client: ClickHouseClient, args: CreateScoreArgs): Promise<void> {
   await batchCreateScores(client, { scores: [args.score] });
 }
@@ -168,7 +184,7 @@ export async function batchCreateScores(client: ClickHouseClient, args: BatchCre
 
   await client.insert({
     table: TABLE_SCORE_EVENTS,
-    values: args.scores.map(scoreRecordToRow),
+    values: collapseScoreBatch(args.scores).map(scoreRecordToRow),
     format: 'JSONEachRow',
     clickhouse_settings: CH_INSERT_SETTINGS,
   });
@@ -217,13 +233,13 @@ export async function listScores(
   const currentDeltaCursor = deltaCursorEnabled ? await getDeltaCursor(client, whereClause, filter.params) : undefined;
   const countResult = await queryJson<{ total?: number }>(
     client,
-    `SELECT count() AS total FROM ${TABLE_SCORE_EVENTS} AS s ${whereClause}`,
+    `SELECT count() AS total FROM ${currentScores()} AS s ${whereClause}`,
     filter.params,
   );
 
   const rows = await queryJson<Record<string, any>>(
     client,
-    `SELECT * FROM ${TABLE_SCORE_EVENTS} AS s ${whereClause} ORDER BY ${orderBy} LIMIT {limit:UInt32} OFFSET {offset:UInt32}`,
+    `SELECT * FROM ${currentScores()} AS s ${whereClause} ORDER BY ${orderBy} LIMIT {limit:UInt32} OFFSET {offset:UInt32}`,
     { ...filter.params, limit: pagination.limit, offset: pagination.offset },
   );
 
@@ -264,12 +280,18 @@ async function queryScoresAfterCursor(
         s.timestamp AS timestamp,
         s.scoreId AS scoreId,
         toString(d.cursorId) AS cursorId
-      FROM ${TABLE_SCORE_EVENTS_DELTA} d
-      INNER JOIN ${TABLE_SCORE_EVENTS} s
+      FROM (
+        SELECT *
+        FROM ${TABLE_SCORE_EVENTS_DELTA}
+        WHERE cursorId > {afterCursor:UInt64}
+        ORDER BY scoreId, cursorId DESC
+        LIMIT 1 BY scoreId
+      ) d
+      INNER JOIN ${currentScores()} s
         ON ((s.traceId = d.traceId) OR (s.traceId IS NULL AND d.traceId IS NULL))
        AND s.timestamp = d.timestamp
        AND s.scoreId = d.scoreId
-      ${whereClause ? `${whereClause} AND d.cursorId > {afterCursor:UInt64}` : 'WHERE d.cursorId > {afterCursor:UInt64}'}
+      ${whereClause}
       ORDER BY d.cursorId ASC
       LIMIT {fetchLimit:UInt32}
     `,
@@ -287,7 +309,7 @@ async function getDeltaCursor(
     `
       SELECT toString(max(d.cursorId)) AS cursorId
       FROM ${TABLE_SCORE_EVENTS_DELTA} d
-      INNER JOIN ${TABLE_SCORE_EVENTS} s
+      INNER JOIN ${currentScores()} s
         ON ((s.traceId = d.traceId) OR (s.traceId IS NULL AND d.traceId IS NULL))
        AND s.timestamp = d.timestamp
        AND s.scoreId = d.scoreId
@@ -327,7 +349,7 @@ function buildScoresCursor(row: ScoreDeltaRow): string {
 export async function getScoreById(client: ClickHouseClient, scoreId: string): Promise<ScoreRecord | null> {
   const rows = await queryJson<Record<string, any>>(
     client,
-    `SELECT * FROM ${TABLE_SCORE_EVENTS} WHERE scoreId = {scoreId:String} LIMIT 1`,
+    `SELECT * FROM ${TABLE_SCORE_EVENTS} WHERE scoreId = {scoreId:String} ORDER BY ingestionVersion DESC LIMIT 1`,
     { scoreId },
   );
 
@@ -348,7 +370,7 @@ export async function getScoreAggregate(
   const combined = mergeFilters(identity, signalFilter);
   const whereClause = toWhereClause(combined);
 
-  const sql = `SELECT ${aggSql} AS value FROM ${TABLE_SCORE_EVENTS} ${whereClause}`;
+  const sql = `SELECT ${aggSql} AS value FROM ${currentScores()} ${whereClause}`;
   const result = await queryJson<Record<string, unknown>>(client, sql, combined.params);
   const value = result[0]?.value == null ? null : Number(result[0]?.value);
 
@@ -387,7 +409,7 @@ export async function getScoreAggregate(
 
       const prevResult = await queryJson<Record<string, unknown>>(
         client,
-        `SELECT ${aggSql} AS value FROM ${TABLE_SCORE_EVENTS} ${prevWhereClause}`,
+        `SELECT ${aggSql} AS value FROM ${currentScores()} ${prevWhereClause}`,
         prevCombined.params,
       );
       const previousValue = prevResult[0]?.value == null ? null : Number(prevResult[0]?.value);
@@ -415,7 +437,7 @@ export async function getScoreBreakdown(
   const whereClause = toWhereClause(combined);
   const resolved = resolveScoreGroupBy(args.groupBy);
 
-  const sql = `SELECT ${resolved.map(e => e.selectSql).join(', ')}, ${aggSql} AS value FROM ${TABLE_SCORE_EVENTS} ${whereClause} GROUP BY ${resolved.map(e => e.groupSql).join(', ')} ORDER BY value DESC`;
+  const sql = `SELECT ${resolved.map(e => e.selectSql).join(', ')}, ${aggSql} AS value FROM ${currentScores()} ${whereClause} GROUP BY ${resolved.map(e => e.groupSql).join(', ')} ORDER BY value DESC`;
   const rows = await queryJson<Record<string, unknown>>(client, sql, combined.params);
 
   return {
@@ -448,7 +470,7 @@ export async function getScoreTimeSeries(
       SELECT toStartOfInterval(timestamp, ${intervalSql}) AS bucket,
              ${resolved.map(e => e.selectSql).join(', ')},
              ${aggSql} AS value
-      FROM ${TABLE_SCORE_EVENTS} ${whereClause}
+      FROM ${currentScores()} ${whereClause}
       GROUP BY bucket, ${resolved.map(e => e.groupSql).join(', ')}
       ORDER BY bucket
     `;
@@ -473,7 +495,7 @@ export async function getScoreTimeSeries(
   const sql = `
     SELECT toStartOfInterval(timestamp, ${intervalSql}) AS bucket,
            ${aggSql} AS value
-    FROM ${TABLE_SCORE_EVENTS} ${whereClause}
+    FROM ${currentScores()} ${whereClause}
     GROUP BY bucket
     ORDER BY bucket
   `;
@@ -514,7 +536,7 @@ export async function getScorePercentiles(
     const sql = `
       SELECT toStartOfInterval(timestamp, ${intervalSql}) AS bucket,
              quantile(${p})(score) AS pvalue
-      FROM ${TABLE_SCORE_EVENTS}
+      FROM ${currentScores()}
       ${whereClause}
       GROUP BY bucket
       ORDER BY bucket

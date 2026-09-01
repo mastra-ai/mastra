@@ -6,6 +6,8 @@
  * - ClickHouse query settings
  */
 
+import { randomUUID } from 'node:crypto';
+
 import type {
   LightSpanRecord,
   SpanRecord,
@@ -38,6 +40,17 @@ export const CH_INSERT_SETTINGS = {
   use_client_time_zone: 1,
   output_format_json_quote_64bit_integers: 0,
 } as const;
+
+const INGESTION_RANDOM_BITS = 80n;
+const INGESTION_RANDOM_MASK = (1n << INGESTION_RANDOM_BITS) - 1n;
+let lastIngestionVersion = 0n;
+
+export function nextIngestionVersion(): string {
+  const random = BigInt(`0x${randomUUID().replaceAll('-', '')}`) & INGESTION_RANDOM_MASK;
+  const candidate = (BigInt(Date.now()) << INGESTION_RANDOM_BITS) | random;
+  lastIngestionVersion = candidate > lastIngestionVersion ? candidate : lastIngestionVersion + 1n;
+  return lastIngestionVersion.toString();
+}
 
 const PROMOTED_KEYS = new Set([
   'experimentId',
@@ -236,6 +249,7 @@ export function spanRecordToRow(span: CreateSpanRecord): Record<string, unknown>
 
   return {
     dedupeKey: buildDedupeKey(span.traceId, span.spanId),
+    ingestionVersion: nextIngestionVersion(),
     traceId: span.traceId,
     spanId: span.spanId,
     parentSpanId: span.parentSpanId ?? null,
@@ -265,6 +279,7 @@ export function spanRecordToRow(span: CreateSpanRecord): Record<string, unknown>
     name: span.name,
     spanType: span.spanType,
     isEvent: span.isEvent,
+    isPending: !span.isEvent && span.endedAt == null,
     startedAt: toISOString(span.startedAt),
     endedAt: toISOString(endedAt),
     tags: normalizeTags(span.tags),
@@ -489,6 +504,7 @@ export function scoreRecordToRow(score: CreateScoreRecord): Record<string, unkno
   const scoreSource = score.scoreSource ?? score.source ?? null;
 
   return {
+    ingestionVersion: nextIngestionVersion(),
     scoreId: score.scoreId,
     timestamp: toISOString(score.timestamp),
     traceId: score.traceId ?? null,

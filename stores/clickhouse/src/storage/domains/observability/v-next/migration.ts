@@ -9,6 +9,8 @@ import {
   TABLE_SCORE_EVENTS,
   TABLE_FEEDBACK_EVENTS,
   TABLE_SPAN_EVENTS,
+  TABLE_TRACE_BRANCHES,
+  TABLE_TRACE_ROOTS,
   METRIC_EVENTS_DDL,
   LOG_EVENTS_DDL,
   SCORE_EVENTS_DDL,
@@ -38,6 +40,9 @@ export interface SignalMigrationStatus {
 }
 
 const SIGNAL_MIGRATIONS: SignalMigration[] = [
+  { table: TABLE_SPAN_EVENTS, createDDL: SPAN_EVENTS_DDL, idColumn: 'dedupeKey' },
+  { table: TABLE_TRACE_ROOTS, createDDL: TRACE_ROOTS_DDL, idColumn: 'dedupeKey' },
+  { table: TABLE_TRACE_BRANCHES, createDDL: TRACE_BRANCHES_DDL, idColumn: 'dedupeKey' },
   { table: TABLE_METRIC_EVENTS, createDDL: METRIC_EVENTS_DDL, idColumn: 'metricId' },
   { table: TABLE_LOG_EVENTS, createDDL: LOG_EVENTS_DDL, idColumn: 'logId' },
   { table: TABLE_SCORE_EVENTS, createDDL: SCORE_EVENTS_DDL, idColumn: 'scoreId' },
@@ -59,6 +64,20 @@ async function getTableEngine(client: ClickHouseClient, table: string): Promise<
   });
   const rows = (await result.json()) as Array<{ engine: string }>;
   return rows[0]?.engine ?? null;
+}
+
+async function getTableEngineFull(client: ClickHouseClient, table: string): Promise<string | null> {
+  const result = await client.query({
+    query: `SELECT engine_full FROM system.tables WHERE database = currentDatabase() AND name = {table:String}`,
+    query_params: { table },
+    format: 'JSONEachRow',
+  });
+  const rows = (await result.json()) as Array<{ engine_full: string }>;
+  return rows[0]?.engine_full ?? null;
+}
+
+function usesIngestionVersion(engineFull: string | null): boolean {
+  return engineFull?.includes('ingestionVersion') ?? false;
 }
 
 async function getTableColumns(client: ClickHouseClient, table: string): Promise<string[]> {
@@ -100,11 +119,18 @@ export async function checkSignalTablesMigrationStatus(client: ClickHouseClient)
 
   for (const { table, idColumn } of SIGNAL_MIGRATIONS) {
     const engine = await getTableEngine(client, table);
-    if (!engine || isReplacingMergeTreeEngine(engine)) {
-      continue;
-    }
+    if (!engine) continue;
 
-    tables.push({ table, engine, idColumn });
+    const engineFull = await getTableEngineFull(client, table);
+    const needsIngestionVersion = [
+      TABLE_SPAN_EVENTS,
+      TABLE_TRACE_ROOTS,
+      TABLE_TRACE_BRANCHES,
+      TABLE_SCORE_EVENTS,
+    ].includes(table);
+    if (isReplacingMergeTreeEngine(engine) && (!needsIngestionVersion || usesIngestionVersion(engineFull))) continue;
+
+    tables.push({ table, engine: engineFull ?? engine, idColumn });
   }
 
   return {
@@ -191,6 +217,7 @@ export async function checkLegacySpanMigrationStatus(client: ClickHouseClient): 
 // VNext target columns in DDL order, used for INSERT column list.
 const VNEXT_SPAN_COLUMNS = [
   'dedupeKey',
+  'ingestionVersion',
   'traceId',
   'spanId',
   'parentSpanId',
@@ -263,6 +290,7 @@ function buildLegacySpanSelectExprs(legacyColumnTypes: Map<string, string>): str
 
   const exprs: Record<(typeof VNEXT_SPAN_COLUMNS)[number], string> = {
     dedupeKey: `concat("traceId", ':', "spanId")`,
+    ingestionVersion: `bitOr(bitShiftLeft(toUInt128(toUnixTimestamp64Milli("createdAt")), 64), toUInt128(cityHash64(concat("traceId", ':', "spanId"))))`,
     traceId: `"traceId"`,
     spanId: `"spanId"`,
     // Legacy stores '' for root spans; VNext MV filters on IS NULL.
@@ -404,9 +432,18 @@ export async function migrateLegacySpans(
 export async function migrateSignalTables(client: ClickHouseClient, logger?: IMastraLogger): Promise<void> {
   for (const { table, createDDL, idColumn } of SIGNAL_MIGRATIONS) {
     const engine = await getTableEngine(client, table);
-    if (!engine || isReplacingMergeTreeEngine(engine)) continue;
+    if (!engine) continue;
 
-    logger?.info?.(`Migrating ${table} from ${engine} to ReplacingMergeTree with ${idColumn} column`);
+    const engineFull = await getTableEngineFull(client, table);
+    const needsIngestionVersion = [
+      TABLE_SPAN_EVENTS,
+      TABLE_TRACE_ROOTS,
+      TABLE_TRACE_BRANCHES,
+      TABLE_SCORE_EVENTS,
+    ].includes(table);
+    if (isReplacingMergeTreeEngine(engine) && (!needsIngestionVersion || usesIngestionVersion(engineFull))) continue;
+
+    logger?.info?.(`Migrating ${table} from ${engineFull ?? engine} to the current ReplacingMergeTree schema`);
 
     const temp = `${table}_migrating_${Date.now()}`;
 
@@ -419,6 +456,11 @@ export async function migrateSignalTables(client: ClickHouseClient, logger?: IMa
       const columnList = newColumns.map(c => `"${c}"`).join(', ');
       const selectExprs = newColumns
         .map(c => {
+          if (c === 'ingestionVersion') {
+            return currentColumns.has(c)
+              ? `"${c}"`
+              : `bitOr(bitShiftLeft(toUInt128(_block_number), 64), toUInt128(_part_offset)) AS "${c}"`;
+          }
           if (c === idColumn) {
             return currentColumns.has(c)
               ? `COALESCE(nullIf("${c}", ''), toString(generateUUIDv4())) AS "${c}"`

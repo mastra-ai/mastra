@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { coreFeatures } from '@mastra/core/features';
 import { SpanType } from '@mastra/core/observability';
-import { TraceStatus } from '@mastra/core/storage';
+import { parseTraceQueryRequest, planTraceQuery, TraceQueryExecutionError, TraceStatus } from '@mastra/core/storage';
 import { Pool } from 'pg';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -9,10 +9,18 @@ import type { DbClient, QueryValues } from '../../../client';
 import { PoolAdapter } from '../../../client';
 import { PostgresStoreVNext } from '../../../index';
 import { connectionString, TEST_CONFIG } from '../../../test-utils';
-import { ALL_SIGNAL_TABLES, qualifiedTable, TABLE_DISCOVERY, TABLE_LOG_EVENTS, TABLE_SPAN_EVENTS } from './ddl';
+import {
+  ALL_SIGNAL_TABLES,
+  qualifiedTable,
+  TABLE_DISCOVERY,
+  TABLE_LOG_EVENTS,
+  TABLE_SCORE_EVENTS,
+  TABLE_SPAN_EVENTS,
+} from './ddl';
 import * as discoveryOps from './discovery';
 import { ensurePartmanHypertables } from './partitioning';
 import { decodeDeltaCursor } from './polling';
+import { compilePostgresTraceQuery, runWithPostgresTraceQueryTimeout } from './trace-query';
 import { ObservabilityStoragePostgresVNext } from './index';
 
 vi.setConfig({ testTimeout: 60_000, hookTimeout: 60_000 });
@@ -75,6 +83,22 @@ function dayAt(dayOffset: number, hour = 12, minute = 0, second = 0): Date {
   return new Date(
     Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + dayOffset, hour, minute, second),
   );
+}
+
+interface ExplainPlanNode {
+  'Node Type'?: string;
+  'Relation Name'?: string;
+  Alias?: string;
+  'Index Name'?: string;
+  'Actual Rows'?: number;
+  'Actual Loops'?: number;
+  Plans?: ExplainPlanNode[];
+}
+
+function collectPlanNodes(node: ExplainPlanNode, result: ExplainPlanNode[] = []): ExplainPlanNode[] {
+  result.push(node);
+  for (const child of node.Plans ?? []) collectPlanNodes(child, result);
+  return result;
 }
 
 function yyyymmdd(date: Date): string {
@@ -341,6 +365,151 @@ async function insertAllSignals(harness: DomainHarness): Promise<void> {
 
 describe('ObservabilityStoragePostgresVNext — integration', () => {
   describe.skipIf(!integrationEnabled)('init() — TimescaleDB path', () => {
+    it('cancels timed-out work and does not leak statement_timeout through the pool', async () => {
+      const harness = await createHarness({
+        connection: parseConnectionString(TIMESCALE_URL),
+        schemaPrefix: 'timeout',
+      });
+
+      try {
+        await expect(
+          runWithPostgresTraceQueryTimeout(harness.client, 10, transaction =>
+            transaction.query('SELECT pg_sleep(0.1)'),
+          ),
+        ).rejects.toBeInstanceOf(TraceQueryExecutionError);
+
+        const setting = await harness.client.one<{ statement_timeout: string }>('SHOW statement_timeout');
+        expect(setting.statement_timeout).toBe('0');
+        expect(await harness.client.one<{ value: number }>('SELECT 1 AS value')).toEqual({ value: 1 });
+      } finally {
+        await harness.close();
+      }
+    });
+
+    it('uses root indexes and bounds related scans to candidate trace IDs', async () => {
+      const harness = await createHarness({
+        connection: parseConnectionString(TIMESCALE_URL),
+        schemaPrefix: 'trace_query_plan',
+      });
+      const startedAt = new Date('2026-08-25T10:00:00.000Z');
+      const root = makeSpan({
+        traceId: 'candidate-trace',
+        spanId: 'candidate-root',
+        parentSpanId: null,
+        startedAt,
+        endedAt: new Date(startedAt.getTime() + 1_000),
+      });
+      const child = makeSpan({
+        traceId: 'candidate-trace',
+        spanId: 'candidate-child',
+        parentSpanId: 'candidate-root',
+        spanType: SpanType.TOOL_CALL,
+        startedAt,
+        endedAt: new Date(startedAt.getTime() + 500),
+      });
+      const irrelevantSpans = Array.from({ length: 1_000 }, (_, index) =>
+        makeSpan({
+          traceId: `irrelevant-${String(index).padStart(4, '0')}`,
+          spanId: `irrelevant-span-${index}`,
+          parentSpanId: 'irrelevant-root',
+          startedAt,
+          endedAt: new Date(startedAt.getTime() + 500),
+        }),
+      );
+      const irrelevantScores = Array.from({ length: 1_000 }, (_, index) =>
+        makeScore({
+          scoreId: `irrelevant-score-${index}`,
+          traceId: `irrelevant-${String(index).padStart(4, '0')}`,
+          timestamp: startedAt,
+        }),
+      );
+
+      try {
+        await harness.domain.batchCreateSpans({ records: [root, child, ...irrelevantSpans] });
+        await harness.domain.batchCreateScores({
+          scores: [
+            makeScore({ scoreId: 'candidate-score', traceId: 'candidate-trace', timestamp: startedAt }),
+            ...irrelevantScores,
+          ],
+        });
+        await harness.client.none(`ANALYZE ${qualifiedTable(harness.schema, TABLE_SPAN_EVENTS)}`);
+        await harness.client.none(`ANALYZE ${qualifiedTable(harness.schema, TABLE_SCORE_EVENTS)}`);
+
+        const explain = async (request: Record<string, unknown>) => {
+          const plan = planTraceQuery(
+            parseTraceQueryRequest({
+              timeRange: {
+                from: new Date(startedAt.getTime() - 1_000).toISOString(),
+                to: new Date(startedAt.getTime() + 2_000).toISOString(),
+              },
+              ...request,
+            }),
+          );
+          const compiled = compilePostgresTraceQuery(harness.schema, plan);
+          const row = await harness.client.one<{ 'QUERY PLAN': Array<{ Plan: ExplainPlanNode }> }>(
+            `EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON) ${compiled.text}`,
+            compiled.values,
+          );
+          return collectPlanNodes(row['QUERY PLAN'][0]!.Plan);
+        };
+
+        const spanNodes = await explain({
+          where: {
+            spans: { some: { op: 'eq', left: { path: 'spanType' }, right: { literal: SpanType.TOOL_CALL } } },
+          },
+        });
+        const scoreNodes = await explain({
+          where: { scores: { some: { op: 'lt', left: { path: 'score' }, right: { literal: 0.6 } } } },
+        });
+        const repeatedSpanNodes = await explain({
+          where: {
+            op: 'and',
+            args: [
+              { spans: { some: { op: 'eq', left: { path: 'spanType' }, right: { literal: SpanType.TOOL_CALL } } } },
+              { spans: { none: { op: 'exists', path: 'error' } } },
+            ],
+          },
+        });
+        const repeatedScoreNodes = await explain({
+          where: {
+            op: 'and',
+            args: [
+              { scores: { some: { op: 'lt', left: { path: 'score' }, right: { literal: 0.6 } } } },
+              { scores: { some: { op: 'eq', left: { path: 'scorerId' }, right: { literal: 'quality' } } } },
+            ],
+          },
+        });
+        const mixedNodes = await explain({
+          where: {
+            op: 'and',
+            args: [
+              { spans: { some: { op: 'eq', left: { path: 'spanType' }, right: { literal: SpanType.TOOL_CALL } } } },
+              { scores: { some: { op: 'lt', left: { path: 'score' }, right: { literal: 0.6 } } } },
+            ],
+          },
+        });
+        const groupedNodes = await explain({ group: { by: ['threadId'] } });
+
+        for (const nodes of [spanNodes, scoreNodes, repeatedSpanNodes, repeatedScoreNodes, mixedNodes, groupedNodes]) {
+          expect(nodes.some(node => node['Index Name']?.includes('mastra_span_events_root_'))).toBe(true);
+        }
+        expect(groupedNodes.some(node => node['Relation Name'] === TABLE_SCORE_EVENTS)).toBe(false);
+        expect(
+          groupedNodes
+            .filter(node => node.Alias?.startsWith('r'))
+            .reduce((sum, node) => sum + (node['Actual Rows'] ?? 0) * (node['Actual Loops'] ?? 0), 0),
+        ).toBeLessThan(10);
+        const relatedRows = [spanNodes, scoreNodes, repeatedSpanNodes, repeatedScoreNodes, mixedNodes].map(nodes =>
+          nodes
+            .filter(node => node.Alias === 's')
+            .reduce((sum, node) => sum + (node['Actual Rows'] ?? 0) * (node['Actual Loops'] ?? 0), 0),
+        );
+        expect(Math.max(...relatedRows)).toBeLessThan(20);
+      } finally {
+        await harness.close();
+      }
+    });
+
     it('detects timescaledb and reports partitionMode === "timescale"', async () => {
       const harness = await createHarness({
         connection: parseConnectionString(TIMESCALE_URL),

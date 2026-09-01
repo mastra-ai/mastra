@@ -16,6 +16,7 @@ import type {
   BatchCreateSpansArgs,
   BatchDeleteTracesArgs,
   CreateSpanArgs,
+  CreateSpanRecord,
   GetSpanArgs,
   GetSpanResponse,
   GetSpansArgs,
@@ -40,6 +41,20 @@ const BRANCH_SPAN_TYPE_SQL_LIST = BRANCH_SPAN_TYPES.map(t => `'${t}'`).join(', '
 // Write operations
 // ---------------------------------------------------------------------------
 
+function collapseSpanBatch(records: CreateSpanRecord[]): CreateSpanRecord[] {
+  const current = new Map<string, CreateSpanRecord>();
+  for (const record of records) {
+    const key = `${record.traceId}\u0000${record.spanId}`;
+    const existing = current.get(key);
+    const existingPending = existing ? !existing.isEvent && existing.endedAt == null : false;
+    const recordPending = !record.isEvent && record.endedAt == null;
+    if (!existing || (existingPending && !recordPending) || existingPending === recordPending) {
+      current.set(key, record);
+    }
+  }
+  return [...current.values()];
+}
+
 /** Insert a single completed span. */
 export async function createSpan(client: ClickHouseClient, args: CreateSpanArgs): Promise<void> {
   const row = spanRecordToRow(args.span);
@@ -55,7 +70,7 @@ export async function createSpan(client: ClickHouseClient, args: CreateSpanArgs)
 export async function batchCreateSpans(client: ClickHouseClient, args: BatchCreateSpansArgs): Promise<void> {
   if (args.records.length === 0) return;
 
-  const rows = args.records.map(spanRecordToRow);
+  const rows = collapseSpanBatch(args.records).map(spanRecordToRow);
   await client.insert({
     table: TABLE_SPAN_EVENTS,
     values: rows,
@@ -89,7 +104,7 @@ export async function getSpans(client: ClickHouseClient, args: GetSpansArgs): Pr
         FROM ${TABLE_SPAN_EVENTS}
         WHERE traceId = {traceId:String}
           AND spanId IN {spanIds:Array(String)}
-        ORDER BY dedupeKey, endedAt DESC
+        ORDER BY dedupeKey, isPending ASC, ingestionVersion DESC
         LIMIT 1 BY dedupeKey
       )
     `,
@@ -137,7 +152,7 @@ export async function getTrace(client: ClickHouseClient, args: GetTraceArgs): Pr
         SELECT *
         FROM ${TABLE_SPAN_EVENTS}
         WHERE traceId = {traceId:String}
-        ORDER BY dedupeKey, endedAt DESC
+        ORDER BY dedupeKey, isPending ASC, ingestionVersion DESC
         LIMIT 1 BY dedupeKey
       )
       ORDER BY startedAt ASC
@@ -171,7 +186,7 @@ export async function getTraceLight(
         SELECT *
         FROM ${TABLE_SPAN_EVENTS}
         WHERE traceId = {traceId:String}
-        ORDER BY dedupeKey, endedAt DESC
+        ORDER BY dedupeKey, isPending ASC, ingestionVersion DESC
         LIMIT 1 BY dedupeKey
       )
       ORDER BY startedAt ASC

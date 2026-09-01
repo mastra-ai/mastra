@@ -2,9 +2,11 @@ export * from './trace-query';
 
 import { coreFeatures } from '@mastra/core/features';
 import { EntityType, SpanType } from '@mastra/core/observability';
+import { parseTraceQueryRequest, planTraceQuery } from '@mastra/core/storage';
 import type { CreateSpanRecord, ObservabilityStorage } from '@mastra/core/storage';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { VNEXT_BASE_DATE, makeSpan } from './data';
+import { normalizeTraceQueryResponse, TRACE_QUERY_CONFORMANCE_CASES, TRACE_QUERY_FIXTURE_DATA } from './trace-query';
 
 export interface ObservabilityVNextCapabilities {
   /**
@@ -18,6 +20,8 @@ export interface ObservabilityVNextCapabilities {
    * tests live in adapter test files until they are lifted into this suite.
    */
   preferredStrategy: 'event-sourced' | 'insert-only' | 'batch-with-updates';
+  /** Whether this adapter implements the advanced trusted trace-query plan. */
+  traceQuery?: boolean;
 }
 
 export interface CreateObservabilityVNextTestsOptions {
@@ -105,6 +109,72 @@ export function createObservabilityVNextTests(options: CreateObservabilityVNextT
     it('reports observability strategy preference', () => {
       expect(storage.observabilityStrategy?.preferred).toBe(capabilities.preferredStrategy);
     });
+
+    if (capabilities.traceQuery) {
+      it('matches the shared advanced trace-query conformance cases without merge assistance', async () => {
+        const records: CreateSpanRecord[] = TRACE_QUERY_FIXTURE_DATA.spans
+          .filter(span => span.traceId !== null)
+          .map(span => ({
+            traceId: span.traceId!,
+            spanId: span.spanId,
+            parentSpanId: span.parentSpanId,
+            name: span.spanId,
+            spanType: span.spanType as SpanType,
+            isEvent: false,
+            startedAt: new Date(span.startedAt),
+            endedAt: span.endedAt ? new Date(span.endedAt) : null,
+            threadId: span.threadId,
+            resourceId: span.resourceId,
+            entityName: span.entityName,
+            entityType: span.entityType as EntityType,
+            environment: span.environment,
+            error: span.error as CreateSpanRecord['error'],
+          }));
+        for (const span of records) await storage.createSpan({ span });
+
+        const scores = TRACE_QUERY_FIXTURE_DATA.scores
+          .filter(score => score.traceId !== null && score.score !== null)
+          .map(score => {
+            const timestamp = score.timestamp
+              ? new Date(score.timestamp)
+              : new Date(Date.UTC(2026, 7, 1, 0, 0, 0, score.cursorId));
+            return {
+              id: score.scoreId,
+              scoreId: score.scoreId,
+              traceId: score.traceId!,
+              scorerId: score.scorerId,
+              score: score.score!,
+              timestamp,
+              createdAt: timestamp,
+              updatedAt: null,
+            };
+          });
+        for (const score of scores) await storage.createScore({ score });
+
+        for (const testCase of TRACE_QUERY_CONFORMANCE_CASES) {
+          const plan = planTraceQuery(parseTraceQueryRequest(testCase.request));
+          const response = await storage.queryTraces(plan);
+          expect(normalizeTraceQueryResponse(response), testCase.name).toEqual(testCase.expected);
+        }
+
+        const pagedTraceIds: string[] = [];
+        let after: string | undefined;
+        do {
+          const pagePlan = planTraceQuery(
+            parseTraceQueryRequest({
+              timeRange: { from: '2026-08-01T00:00:00Z', to: '2026-09-01T00:00:00Z' },
+              page: { limit: 2, ...(after ? { after } : {}) },
+            }),
+          );
+          const response = await storage.queryTraces(pagePlan);
+          if (!('traces' in response)) throw new Error('Expected trace results');
+          pagedTraceIds.push(...response.traces.map(trace => trace.traceId));
+          after = response.page.next ?? undefined;
+        } while (after);
+        expect(pagedTraceIds).toEqual(['trace-d', 'trace-c', 'trace-a', 'trace-b']);
+        expect(new Set(pagedTraceIds).size).toBe(pagedTraceIds.length);
+      });
+    }
 
     it('gets a score by ID without paginating through list results', async () => {
       const now = new Date('2026-01-02T00:00:00.000Z');

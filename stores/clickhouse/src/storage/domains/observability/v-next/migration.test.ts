@@ -16,11 +16,13 @@ import {
   MV_TRACE_ROOTS_DELTA,
   TABLE_LOG_EVENTS,
   TABLE_METRIC_EVENTS,
+  TABLE_SCORE_EVENTS,
   TABLE_SPAN_EVENTS,
   TABLE_TRACE_ROOTS,
 } from './ddl';
 import {
   checkLegacySpanMigrationStatus,
+  checkSignalTablesMigrationStatus,
   isReplacingMergeTreeEngine,
   migrateLegacySpans,
   migrateSignalTables,
@@ -137,6 +139,16 @@ async function getEngine(client: ClickHouseClient, table: string): Promise<strin
   return rows[0]?.engine ?? null;
 }
 
+async function getEngineFull(client: ClickHouseClient, table: string): Promise<string | null> {
+  const result = await client.query({
+    query: `SELECT engine_full FROM system.tables WHERE database = currentDatabase() AND name = {table:String}`,
+    query_params: { table },
+    format: 'JSONEachRow',
+  });
+  const rows = (await result.json()) as Array<{ engine_full: string }>;
+  return rows[0]?.engine_full ?? null;
+}
+
 describe('migrateSignalTables (ClickHouse v-next)', () => {
   let client: ClickHouseClient;
 
@@ -160,6 +172,51 @@ describe('migrateSignalTables (ClickHouse v-next)', () => {
   it('is a no-op when signal tables do not exist', async () => {
     await expect(migrateSignalTables(client)).resolves.not.toThrow();
     expect(await getEngine(client, TABLE_LOG_EVENTS)).toBeNull();
+  });
+
+  it('migrates unversioned replacement tables and preserves a stable ingestion version', async () => {
+    await client.command({
+      query: `CREATE TABLE ${TABLE_SCORE_EVENTS} (
+        timestamp DateTime64(3, 'UTC'),
+        scoreId String,
+        traceId Nullable(String),
+        scorerId LowCardinality(String),
+        score Float64,
+        tags Array(LowCardinality(String)) DEFAULT []
+      ) ENGINE = ReplacingMergeTree
+      PARTITION BY toDate(timestamp)
+      ORDER BY (traceId, timestamp, scoreId)
+      SETTINGS allow_nullable_key = 1`,
+    });
+    await client.insert({
+      table: TABLE_SCORE_EVENTS,
+      values: [
+        {
+          timestamp: '2026-01-01 00:00:00.000',
+          scoreId: 'score-1',
+          traceId: 'trace-1',
+          scorerId: 'quality',
+          score: 0.5,
+        },
+      ],
+      format: 'JSONEachRow',
+    });
+
+    expect((await checkSignalTablesMigrationStatus(client)).tables.map(table => table.table)).toContain(
+      TABLE_SCORE_EVENTS,
+    );
+
+    await migrateSignalTables(client);
+
+    expect(await getEngineFull(client, TABLE_SCORE_EVENTS)).toContain('ingestionVersion');
+    const result = await client.query({
+      query: `SELECT toString(ingestionVersion) AS ingestionVersion, scoreId FROM ${TABLE_SCORE_EVENTS}`,
+      format: 'JSONEachRow',
+    });
+    const rows = (await result.json()) as Array<{ ingestionVersion: string; scoreId: string }>;
+    expect(rows).toEqual([{ ingestionVersion: expect.not.stringMatching(/^0$/), scoreId: 'score-1' }]);
+    await expect(migrateSignalTables(client)).resolves.not.toThrow();
+    expect((await checkSignalTablesMigrationStatus(client)).needsMigration).toBe(false);
   });
 
   it('migrates a legacy MergeTree log_events table, preserving rows and generating logIds', async () => {

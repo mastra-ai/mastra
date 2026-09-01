@@ -10,6 +10,7 @@
 import type { ClickHouseClient } from '@clickhouse/client';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type { IMastraLogger } from '@mastra/core/logger';
+import * as coreStorage from '@mastra/core/storage';
 import { createStorageErrorId, ObservabilityStorage } from '@mastra/core/storage';
 import type {
   ObservabilityStorageStrategy,
@@ -87,6 +88,8 @@ import type {
   GetEnvironmentsResponse,
   GetTagsArgs,
   GetTagsResponse,
+  TraceQueryResponse,
+  TrustedTraceQueryPlan,
 } from '@mastra/core/storage';
 
 import { resolveClickhouseConfig } from '../../../db';
@@ -113,15 +116,40 @@ import {
   MV_DISCOVERY_PAIRS,
   TABLE_DISCOVERY_VALUES,
   TABLE_DISCOVERY_PAIRS,
+  TABLE_SPAN_EVENTS,
+  TABLE_TRACE_ROOTS,
+  TABLE_TRACE_ROOTS_BACKFILL,
   buildRetentionEntries,
   parseTtlExpression,
 } from './ddl';
 import type { MigrationEntry, RetentionEntry, RetentionConfig } from './ddl';
 export type { RetentionConfig } from './ddl';
 
+export async function backfillTraceRoots(client: ClickHouseClient): Promise<void> {
+  const markerResult = await client.query({
+    query: `SELECT count() AS count FROM ${TABLE_TRACE_ROOTS_BACKFILL} WHERE id = 1`,
+    format: 'JSONEachRow',
+  });
+  const [marker] = await markerResult.json<{ count: number }>();
+  if (Number(marker?.count) > 0) return;
+
+  await client.command({
+    query: `INSERT INTO ${TABLE_TRACE_ROOTS}
+SELECT s.*
+FROM ${TABLE_SPAN_EVENTS} s
+LEFT ANTI JOIN ${TABLE_TRACE_ROOTS} existing
+  ON existing.dedupeKey = s.dedupeKey
+  AND existing.ingestionVersion = s.ingestionVersion
+WHERE s.parentSpanId IS NULL`,
+  });
+  await client.command({ query: `INSERT INTO ${TABLE_TRACE_ROOTS_BACKFILL} VALUES (1, now64(3))` });
+}
+
 /** Extended config for v-next observability, adding per-signal retention. */
 export type VNextObservabilityConfig = ClickhouseDomainConfig & {
   retention?: RetentionConfig;
+  /** Maximum execution time for one advanced trace query. Default 15 seconds. */
+  traceQueryTimeoutMs?: number;
   /** @internal Test-only override for the ClickHouse delta cursor strategy. */
   deltaCursorStrategy?: ClickHouseDeltaCursorStrategy;
 };
@@ -139,6 +167,7 @@ import {
 import type { ClickHouseDeltaCursorStrategy } from './polling';
 import { deltaPollingSupported } from './polling';
 import * as scoresOps from './scores';
+import * as traceQueryOps from './trace-query';
 import * as traceRootsOps from './trace-roots';
 import * as tracingOps from './tracing';
 
@@ -151,7 +180,7 @@ function buildSignalMigrationRequiredMessage(args: {
   return (
     `\n` +
     `===========================================================================\n` +
-    `MIGRATION REQUIRED: ${args.store} observability signal tables need signal IDs\n` +
+    `MIGRATION REQUIRED: ${args.store} observability tables need the current replacement schema\n` +
     `===========================================================================\n` +
     `\n` +
     `The following signal tables still use the legacy schema and must be migrated\n` +
@@ -164,8 +193,8 @@ function buildSignalMigrationRequiredMessage(args: {
     `  npx mastra migrate\n` +
     `\n` +
     `This command will:\n` +
-    `  1. Create replacement signal tables with signal-ID dedupe keys\n` +
-    `  2. Backfill missing signal IDs for legacy rows\n` +
+    `  1. Create replacement tables with current signal IDs and ingestion versions\n` +
+    `  2. Backfill missing identifiers and deterministic legacy versions\n` +
     `  3. Swap the migrated tables into place\n` +
     `\n` +
     `WARNING: This migration recreates the signal tables and may take significant\n` +
@@ -446,6 +475,7 @@ export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
   readonly #retention?: RetentionConfig;
   readonly #replication?: ClickhouseReplicationConfig;
   readonly #deltaCursorStrategyOverride?: ClickHouseDeltaCursorStrategy;
+  readonly #traceQueryTimeoutMs: number;
   #deltaCursorStrategy: ClickHouseDeltaCursorStrategy | null = 'fallback';
 
   constructor(config: VNextObservabilityConfig) {
@@ -455,6 +485,7 @@ export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
     this.#replication = replication;
     this.#retention = config.retention;
     this.#deltaCursorStrategyOverride = config.deltaCursorStrategy;
+    this.#traceQueryTimeoutMs = coreStorage.resolveTraceQueryTimeoutMs(config.traceQueryTimeoutMs);
   }
 
   // -------------------------------------------------------------------------
@@ -528,6 +559,10 @@ export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
       for (const migration of pendingMigrations) {
         await this.#client.command({ query: addOnClusterToDDL(migration.sql, this.#replication) });
       }
+
+      // Materialized views only process new inserts. Reconcile roots that predate
+      // the trace_roots table or its view before trace queries use it.
+      await backfillTraceRoots(this.#client);
 
       // Apply retention TTL if configured (per design doc: per-signal, day increments).
       // Skip statements whose current TTL already matches: `MODIFY TTL` bumps the
@@ -677,10 +712,10 @@ export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
 
   override getFeatures() {
     if (!deltaPollingSupported(this.#deltaCursorStrategy)) {
-      return ['metrics', 'logs'] as const;
+      return ['metrics', 'logs', 'trace-query'] as const;
     }
 
-    return ['metrics', 'logs', 'delta-polling'] as const;
+    return ['metrics', 'logs', 'delta-polling', 'trace-query'] as const;
   }
 
   // -------------------------------------------------------------------------
@@ -818,6 +853,22 @@ export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
       throw new MastraError(
         {
           id: createStorageErrorId('CLICKHOUSE', 'LIST_TRACES', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+        },
+        error,
+      );
+    }
+  }
+
+  override async queryTraces(plan: TrustedTraceQueryPlan): Promise<TraceQueryResponse> {
+    try {
+      return await traceQueryOps.queryTraces(this.#client, plan, this.#traceQueryTimeoutMs);
+    } catch (error) {
+      if (error instanceof MastraError || error instanceof coreStorage.TraceQueryExecutionError) throw error;
+      throw new MastraError(
+        {
+          id: createStorageErrorId('CLICKHOUSE', 'QUERY_TRACES', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
         },

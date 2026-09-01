@@ -38,6 +38,7 @@ export async function getRootSpan(
       SELECT *
       FROM ${TABLE_TRACE_ROOTS}
       WHERE traceId = {traceId:String}
+      ORDER BY ingestionVersion DESC
       LIMIT 1
     `,
     query_params: { traceId: args.traceId },
@@ -92,7 +93,7 @@ const FULL_PROJECTION: TraceRootProjection = {
 
 const LIGHT_PROJECTION: TraceRootProjection = {
   // `LIMIT 1 BY dedupeKey` runs after projection, so the inner select must keep dedupeKey.
-  innerSelect: ['dedupeKey', ...LIGHT_TRACE_ROOT_FIELDS].join(', '),
+  innerSelect: ['dedupeKey', 'ingestionVersion', ...LIGHT_TRACE_ROOT_FIELDS].join(', '),
   outerSelect: LIGHT_TRACE_ROOT_FIELDS.join(', '),
   // startedAt/traceId are re-selected by the delta join itself.
   deltaSelect: LIGHT_TRACE_ROOT_FIELDS.filter(field => field !== 'startedAt' && field !== 'traceId')
@@ -182,7 +183,7 @@ async function listTraceRows<TSpan>(
         SELECT dedupeKey
         FROM ${TABLE_TRACE_ROOTS} r
         ${whereClause}
-        ORDER BY dedupeKey
+        ORDER BY dedupeKey, ingestionVersion DESC
         LIMIT 1 BY dedupeKey
       )
     `,
@@ -208,7 +209,7 @@ async function listTraceRows<TSpan>(
         SELECT ${projection.innerSelect}
         FROM ${TABLE_TRACE_ROOTS} r
         ${whereClause}
-        ORDER BY dedupeKey
+        ORDER BY dedupeKey, ingestionVersion DESC
         LIMIT 1 BY dedupeKey
       )
       ORDER BY ${orderClause}

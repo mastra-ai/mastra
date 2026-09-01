@@ -10,11 +10,18 @@
  * Requires a running ClickHouse instance. Use `docker compose up -d` in the
  * clickhouse store directory, or set CLICKHOUSE_URL/CLICKHOUSE_USERNAME/CLICKHOUSE_PASSWORD.
  */
+import { randomUUID } from 'node:crypto';
 import { createClient } from '@clickhouse/client';
-import { createObservabilityVNextTests } from '@internal/storage-test-utils';
+import {
+  createObservabilityVNextTests,
+  normalizeTraceQueryResponse,
+  TRACE_QUERY_TIED_TIMESTAMP_CASES,
+  TRACE_QUERY_TIED_TIMESTAMP_FIXTURE_DATA,
+} from '@internal/storage-test-utils';
 import { coreFeatures } from '@mastra/core/features';
 import { EntityType, SpanType } from '@mastra/core/observability';
-import type { ObservabilityStorage } from '@mastra/core/storage';
+import { parseTraceQueryRequest, planTraceQuery, TraceQueryExecutionError } from '@mastra/core/storage';
+import type { CreateSpanRecord, ObservabilityStorage } from '@mastra/core/storage';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   ALL_MIGRATIONS,
@@ -24,13 +31,18 @@ import {
   buildRetentionEntries,
   MV_DISCOVERY_PAIRS,
   MV_DISCOVERY_VALUES,
+  MV_TRACE_ROOTS,
   parseTtlExpression,
   TABLE_DISCOVERY_PAIRS,
   TABLE_DISCOVERY_VALUES,
+  TABLE_SCORE_EVENTS,
   TABLE_SPAN_EVENTS,
+  TABLE_TRACE_ROOTS,
+  TRACE_ROOTS_MV_DDL,
 } from './ddl';
 import { isReplacingMergeTreeEngine } from './migration';
-import { ObservabilityStorageClickhouseVNext } from '.';
+import { compileClickHouseTraceQuery, runWithClickHouseTraceQueryTimeout } from './trace-query';
+import { backfillTraceRoots, ObservabilityStorageClickhouseVNext } from '.';
 
 vi.setConfig({ testTimeout: 60_000, hookTimeout: 60_000 });
 
@@ -44,6 +56,7 @@ createObservabilityVNextTests({
   capabilities: {
     label: 'ClickHouse vNext',
     preferredStrategy: 'insert-only',
+    traceQuery: true,
   },
   getStorage: async () => {
     if (!sharedSuiteStorage) {
@@ -122,6 +135,395 @@ describe('ObservabilityStorageClickhouseVNext', () => {
   // Strategy
   // ==========================================================================
 
+  it('cancels timed-out trace-query work without affecting the next query', async () => {
+    const client = createClient({
+      url: process.env.CLICKHOUSE_URL || 'http://localhost:8123',
+      username: process.env.CLICKHOUSE_USERNAME || 'default',
+      password: process.env.CLICKHOUSE_PASSWORD || 'password',
+    });
+
+    try {
+      await expect(
+        runWithClickHouseTraceQueryTimeout(client, 10, {
+          query: 'SELECT sleep(0.1)',
+          query_params: {},
+        }),
+      ).rejects.toBeInstanceOf(TraceQueryExecutionError);
+
+      const result = await client.query({ query: 'SELECT 1 AS value', format: 'JSONEachRow' });
+      expect(await result.json<{ value: number }>()).toEqual([{ value: 1 }]);
+    } finally {
+      await client.close();
+    }
+  });
+
+  it('backfills historical roots before trace queries switch to trace_roots', async () => {
+    const client = createClient({
+      url: process.env.CLICKHOUSE_URL || 'http://localhost:8123',
+      username: process.env.CLICKHOUSE_USERNAME || 'default',
+      password: process.env.CLICKHOUSE_PASSWORD || 'password',
+    });
+    const startedAt = new Date('2026-08-25T10:00:00.000Z');
+
+    await client.command({ query: `DROP VIEW IF EXISTS ${MV_TRACE_ROOTS}` });
+    try {
+      await storage.createSpan({
+        span: {
+          traceId: 'historical-root-trace',
+          spanId: 'historical-root-span',
+          parentSpanId: null,
+          name: 'historical root',
+          spanType: SpanType.AGENT_RUN,
+          isEvent: false,
+          startedAt,
+          endedAt: new Date(startedAt.getTime() + 1_000),
+        },
+      });
+
+      await backfillTraceRoots(client);
+      await backfillTraceRoots(client);
+
+      const countResult = await client.query({
+        query: `SELECT count() AS count FROM ${TABLE_TRACE_ROOTS} WHERE traceId = {traceId:String}`,
+        query_params: { traceId: 'historical-root-trace' },
+        format: 'JSONEachRow',
+      });
+      expect(await countResult.json<{ count: number }>()).toEqual([{ count: 1 }]);
+
+      const response = await storage.queryTraces(
+        planTraceQuery(
+          parseTraceQueryRequest({
+            timeRange: {
+              from: new Date(startedAt.getTime() - 1_000).toISOString(),
+              to: new Date(startedAt.getTime() + 2_000).toISOString(),
+            },
+          }),
+        ),
+      );
+      expect(normalizeTraceQueryResponse(response)).toMatchObject([{ traceId: 'historical-root-trace' }]);
+    } finally {
+      await client.command({ query: TRACE_ROOTS_MV_DDL });
+      await client.close();
+    }
+  });
+
+  it('pushes candidate trace IDs into related-table reads', async () => {
+    const client = createClient({
+      url: process.env.CLICKHOUSE_URL || 'http://localhost:8123',
+      username: process.env.CLICKHOUSE_USERNAME || 'default',
+      password: process.env.CLICKHOUSE_PASSWORD || 'password',
+    });
+    const startedAt = new Date('2026-08-26T10:00:00.000Z');
+    const fixtureSize = 20_000;
+    const unrelatedSpans = Array.from({ length: fixtureSize }, (_, index) => ({
+      traceId: `irrelevant-${String(index).padStart(5, '0')}`,
+      spanId: `irrelevant-span-${index}`,
+      parentSpanId: 'irrelevant-root',
+      name: 'irrelevant child',
+      spanType: SpanType.AGENT_RUN,
+      isEvent: false,
+      startedAt,
+      endedAt: new Date(startedAt.getTime() + 500),
+    }));
+    const unrelatedScores = Array.from({ length: fixtureSize }, (_, index) => ({
+      id: `irrelevant-score-${index}`,
+      scoreId: `irrelevant-score-${index}`,
+      traceId: `irrelevant-${String(index).padStart(5, '0')}`,
+      scorerId: 'quality',
+      score: 0.5,
+      timestamp: startedAt,
+      createdAt: startedAt,
+      updatedAt: null,
+    }));
+
+    try {
+      await storage.batchCreateSpans({
+        records: [
+          {
+            traceId: 'candidate-trace',
+            spanId: 'candidate-root',
+            parentSpanId: null,
+            name: 'candidate root',
+            spanType: SpanType.AGENT_RUN,
+            isEvent: false,
+            startedAt,
+            endedAt: new Date(startedAt.getTime() + 1_000),
+          },
+          {
+            traceId: 'candidate-trace',
+            spanId: 'candidate-child',
+            parentSpanId: 'candidate-root',
+            name: 'candidate child',
+            spanType: SpanType.TOOL_CALL,
+            isEvent: false,
+            startedAt,
+            endedAt: new Date(startedAt.getTime() + 500),
+          },
+          ...unrelatedSpans,
+        ],
+      });
+      await storage.batchCreateScores({
+        scores: [
+          {
+            id: 'candidate-score',
+            scoreId: 'candidate-score',
+            traceId: 'candidate-trace',
+            scorerId: 'quality',
+            score: 0.5,
+            timestamp: startedAt,
+            createdAt: startedAt,
+            updatedAt: null,
+          },
+          ...unrelatedScores,
+        ],
+      });
+
+      const executeAndReadRows = async (
+        request: Record<string, unknown>,
+        expectedTable: string,
+        expectPrimaryKey = true,
+      ) => {
+        const plan = planTraceQuery(
+          parseTraceQueryRequest({
+            timeRange: {
+              from: new Date(startedAt.getTime() - 1_000).toISOString(),
+              to: new Date(startedAt.getTime() + 2_000).toISOString(),
+            },
+            ...request,
+          }),
+        );
+        const compiled = compileClickHouseTraceQuery(plan);
+        const explainResult = await client.query({
+          query: `EXPLAIN indexes = 1 ${compiled.query}`,
+          query_params: compiled.query_params,
+          format: 'TabSeparatedRaw',
+        });
+        const explain = await explainResult.text();
+        expect(explain).toContain(expectedTable);
+        if (expectPrimaryKey) expect(explain).toContain('PrimaryKey');
+
+        const queryId = `trace-query-perf-${randomUUID()}`;
+        await runWithClickHouseTraceQueryTimeout(client, 15_000, compiled, queryId);
+        await client.command({ query: 'SYSTEM FLUSH LOGS' });
+        const logResult = await client.query({
+          query: `SELECT read_rows AS readRows, read_bytes AS readBytes
+FROM system.query_log
+WHERE query_id = {queryId:String} AND type = 'QueryFinish'
+ORDER BY event_time_microseconds DESC
+LIMIT 1`,
+          query_params: { queryId },
+          format: 'JSONEachRow',
+        });
+        const [log] = await logResult.json<{ readRows: number; readBytes: number }>();
+        expect(Number(log?.readBytes)).toBeGreaterThan(0);
+        return Number(log?.readRows);
+      };
+
+      const spanReadRows = await executeAndReadRows(
+        {
+          where: {
+            spans: { some: { op: 'eq', left: { path: 'spanType' }, right: { literal: SpanType.TOOL_CALL } } },
+          },
+        },
+        TABLE_SPAN_EVENTS,
+      );
+      const scoreReadRows = await executeAndReadRows(
+        { where: { scores: { some: { op: 'lt', left: { path: 'score' }, right: { literal: 0.6 } } } } },
+        TABLE_SCORE_EVENTS,
+      );
+      const repeatedSpanReadRows = await executeAndReadRows(
+        {
+          where: {
+            op: 'and',
+            args: [
+              { spans: { some: { op: 'eq', left: { path: 'spanType' }, right: { literal: SpanType.TOOL_CALL } } } },
+              { spans: { none: { op: 'exists', path: 'error' } } },
+            ],
+          },
+        },
+        TABLE_SPAN_EVENTS,
+      );
+      const repeatedScoreReadRows = await executeAndReadRows(
+        {
+          where: {
+            op: 'and',
+            args: [
+              { scores: { some: { op: 'lt', left: { path: 'score' }, right: { literal: 0.6 } } } },
+              { scores: { some: { op: 'eq', left: { path: 'scorerId' }, right: { literal: 'quality' } } } },
+            ],
+          },
+        },
+        TABLE_SCORE_EVENTS,
+      );
+      const mixedReadRows = await executeAndReadRows(
+        {
+          where: {
+            op: 'and',
+            args: [
+              { spans: { some: { op: 'eq', left: { path: 'spanType' }, right: { literal: SpanType.TOOL_CALL } } } },
+              { scores: { some: { op: 'lt', left: { path: 'score' }, right: { literal: 0.6 } } } },
+            ],
+          },
+        },
+        TABLE_SPAN_EVENTS,
+      );
+      const groupedReadRows = await executeAndReadRows({ group: { by: ['threadId'] } }, TABLE_TRACE_ROOTS, false);
+
+      for (const readRows of [
+        spanReadRows,
+        scoreReadRows,
+        repeatedSpanReadRows,
+        repeatedScoreReadRows,
+        mixedReadRows,
+      ]) {
+        expect(readRows).toBeLessThan(fixtureSize);
+      }
+      expect(groupedReadRows).toBeLessThan(10);
+    } finally {
+      await client.close();
+    }
+  });
+
+  it('uses replacement order when trace-query domain timestamps tie', async () => {
+    for (const span of TRACE_QUERY_TIED_TIMESTAMP_FIXTURE_DATA.spans) {
+      if (span.traceId === null) continue;
+      await storage.createSpan({
+        span: {
+          traceId: span.traceId,
+          spanId: span.spanId,
+          parentSpanId: span.parentSpanId,
+          name: span.spanId,
+          spanType: span.spanType as SpanType,
+          isEvent: false,
+          startedAt: new Date(span.startedAt),
+          endedAt: span.endedAt ? new Date(span.endedAt) : null,
+          threadId: span.threadId,
+          resourceId: span.resourceId,
+          entityName: span.entityName,
+          entityType: span.entityType as EntityType,
+          environment: span.environment,
+          error: span.error as CreateSpanRecord['error'],
+        },
+      });
+    }
+
+    for (const score of TRACE_QUERY_TIED_TIMESTAMP_FIXTURE_DATA.scores) {
+      if (score.traceId === null || score.score === null || !score.timestamp) continue;
+      const timestamp = new Date(score.timestamp);
+      await storage.createScore({
+        score: {
+          id: score.scoreId,
+          scoreId: score.scoreId,
+          traceId: score.traceId,
+          scorerId: score.scorerId,
+          score: score.score,
+          timestamp,
+          createdAt: timestamp,
+          updatedAt: null,
+        },
+      });
+    }
+
+    const assertCases = async () => {
+      for (const testCase of TRACE_QUERY_TIED_TIMESTAMP_CASES) {
+        const plan = planTraceQuery(parseTraceQueryRequest(testCase.request));
+        const response = await storage.queryTraces(plan);
+        expect(normalizeTraceQueryResponse(response), testCase.name).toEqual(testCase.expected);
+      }
+    };
+
+    await assertCases();
+
+    const client = createClient({
+      url: process.env.CLICKHOUSE_URL || 'http://localhost:8123',
+      username: process.env.CLICKHOUSE_USERNAME || 'default',
+      password: process.env.CLICKHOUSE_PASSWORD || 'password',
+    });
+    try {
+      for (const table of [TABLE_SPAN_EVENTS, TABLE_TRACE_ROOTS, TABLE_SCORE_EVENTS]) {
+        await client.command({ query: `OPTIMIZE TABLE ${table} FINAL` });
+      }
+    } finally {
+      await client.close();
+    }
+
+    await assertCases();
+  });
+
+  it('collapses duplicate logical replacements within one batch in input order', async () => {
+    const startedAt = new Date('2026-08-20T12:00:00.000Z');
+    const endedAt = new Date('2026-08-20T12:00:01.000Z');
+    await storage.batchCreateSpans({
+      records: [
+        {
+          traceId: 'trace-batch',
+          spanId: 'span-batch',
+          name: 'span-batch',
+          spanType: SpanType.TOOL_CALL,
+          isEvent: false,
+          startedAt,
+          endedAt,
+        },
+        {
+          traceId: 'trace-batch',
+          spanId: 'span-batch',
+          name: 'span-batch',
+          spanType: SpanType.TOOL_CALL,
+          isEvent: false,
+          startedAt,
+          endedAt,
+          error: { message: 'later batch replacement' },
+        },
+      ],
+    });
+
+    const timestamp = new Date('2026-08-20T12:00:02.000Z');
+    await storage.batchCreateScores({
+      scores: [
+        {
+          id: 'score-batch',
+          scoreId: 'score-batch',
+          scorerId: 'quality',
+          score: 0.9,
+          timestamp,
+          createdAt: timestamp,
+          updatedAt: null,
+        },
+        {
+          id: 'score-batch',
+          scoreId: 'score-batch',
+          scorerId: 'quality',
+          score: 0.2,
+          timestamp,
+          createdAt: timestamp,
+          updatedAt: null,
+        },
+      ],
+    });
+
+    const client = createClient({
+      url: process.env.CLICKHOUSE_URL || 'http://localhost:8123',
+      username: process.env.CLICKHOUSE_USERNAME || 'default',
+      password: process.env.CLICKHOUSE_PASSWORD || 'password',
+    });
+    try {
+      const result = await client.query({
+        query: `SELECT
+          (SELECT count() FROM ${TABLE_SPAN_EVENTS} WHERE traceId = 'trace-batch' AND spanId = 'span-batch') AS spans,
+          (SELECT count() FROM ${TABLE_SCORE_EVENTS} WHERE scoreId = 'score-batch') AS scores`,
+        format: 'JSONEachRow',
+      });
+      expect(await result.json()).toEqual([{ spans: 1, scores: 1 }]);
+    } finally {
+      await client.close();
+    }
+
+    expect((await storage.getSpan({ traceId: 'trace-batch', spanId: 'span-batch' }))?.span.error).toEqual({
+      message: 'later batch replacement',
+    });
+    expect((await storage.getScoreById('score-batch'))?.score).toBe(0.2);
+  });
+
   it('reports insert-only as preferred strategy', () => {
     expect(storage.observabilityStrategy).toEqual({
       preferred: 'insert-only',
@@ -183,15 +585,15 @@ describe('ObservabilityStorageClickhouseVNext', () => {
       }
     }
 
-    it('advertises metrics, logs, and delta polling when the feature is enabled', () => {
-      expect(storage.getFeatures()).toEqual(['metrics', 'logs', 'delta-polling']);
+    it('advertises metrics, logs, delta polling, and trace queries when the feature is enabled', () => {
+      expect(storage.getFeatures()).toEqual(['metrics', 'logs', 'delta-polling', 'trace-query']);
     });
 
-    it('advertises metrics and logs when delta polling is disabled', () => {
+    it('continues advertising trace queries when delta polling is disabled', () => {
       coreFeatures.delete('observability-delta-polling');
 
       try {
-        expect(storage.getFeatures()).toEqual(['metrics', 'logs']);
+        expect(storage.getFeatures()).toEqual(['metrics', 'logs', 'trace-query']);
       } finally {
         coreFeatures.add('observability-delta-polling');
       }

@@ -28,6 +28,7 @@ import type { ClickHouseDeltaCursorStrategy } from './polling';
 
 export const TABLE_SPAN_EVENTS = 'mastra_span_events';
 export const TABLE_TRACE_ROOTS = 'mastra_trace_roots';
+export const TABLE_TRACE_ROOTS_BACKFILL = 'mastra_trace_roots_backfill';
 export const TABLE_TRACE_BRANCHES = 'mastra_trace_branches';
 export const TABLE_TRACE_ROOTS_DELTA = 'mastra_trace_roots_delta';
 export const TABLE_TRACE_BRANCHES_DELTA = 'mastra_trace_branches_delta';
@@ -123,6 +124,7 @@ export const SPAN_EVENTS_DDL = `
 CREATE TABLE IF NOT EXISTS ${TABLE_SPAN_EVENTS} (
   -- Identity
   dedupeKey          String,
+  ingestionVersion   UInt128,
 
   -- IDs
   traceId            String,
@@ -164,6 +166,7 @@ CREATE TABLE IF NOT EXISTS ${TABLE_SPAN_EVENTS} (
   name               String,
   spanType           LowCardinality(String),
   isEvent            Bool DEFAULT false,
+  isPending          Bool DEFAULT false,
   startedAt          DateTime64(3, 'UTC'),
   endedAt            DateTime64(3, 'UTC'),
 
@@ -181,9 +184,9 @@ CREATE TABLE IF NOT EXISTS ${TABLE_SPAN_EVENTS} (
   metadataRaw        Nullable(String),
   requestContext     Nullable(String)
 )
-ENGINE = ReplacingMergeTree
+ENGINE = ReplacingMergeTree(ingestionVersion)
 PARTITION BY toDate(endedAt)
-ORDER BY (traceId, endedAt, spanId, dedupeKey)
+ORDER BY (traceId, endedAt, spanId, dedupeKey, ingestionVersion)
 `;
 
 // ---------------------------------------------------------------------------
@@ -194,6 +197,7 @@ export const TRACE_ROOTS_DDL = `
 CREATE TABLE IF NOT EXISTS ${TABLE_TRACE_ROOTS} (
   -- Identity
   dedupeKey          String,
+  ingestionVersion   UInt128,
 
   -- IDs
   traceId            String,
@@ -235,6 +239,7 @@ CREATE TABLE IF NOT EXISTS ${TABLE_TRACE_ROOTS} (
   name               String,
   spanType           LowCardinality(String),
   isEvent            Bool DEFAULT false,
+  isPending          Bool DEFAULT false,
   startedAt          DateTime64(3, 'UTC'),
   endedAt            DateTime64(3, 'UTC'),
 
@@ -252,9 +257,18 @@ CREATE TABLE IF NOT EXISTS ${TABLE_TRACE_ROOTS} (
   metadataRaw        Nullable(String),
   requestContext     Nullable(String)
 )
-ENGINE = ReplacingMergeTree
+ENGINE = ReplacingMergeTree(ingestionVersion)
 PARTITION BY toDate(endedAt)
-ORDER BY (startedAt, traceId, dedupeKey)
+ORDER BY (startedAt, traceId, dedupeKey, ingestionVersion)
+`;
+
+export const TRACE_ROOTS_BACKFILL_DDL = `
+CREATE TABLE IF NOT EXISTS ${TABLE_TRACE_ROOTS_BACKFILL} (
+  id          UInt8,
+  completedAt DateTime64(3, 'UTC')
+)
+ENGINE = ReplacingMergeTree(completedAt)
+ORDER BY id
 `;
 
 // ---------------------------------------------------------------------------
@@ -286,6 +300,7 @@ export const TRACE_BRANCHES_DDL = `
 CREATE TABLE IF NOT EXISTS ${TABLE_TRACE_BRANCHES} (
   -- Identity
   dedupeKey          String,
+  ingestionVersion   UInt128,
 
   -- IDs
   traceId            String,
@@ -327,6 +342,7 @@ CREATE TABLE IF NOT EXISTS ${TABLE_TRACE_BRANCHES} (
   name               String,
   spanType           LowCardinality(String),
   isEvent            Bool DEFAULT false,
+  isPending          Bool DEFAULT false,
   startedAt          DateTime64(3, 'UTC'),
   endedAt            DateTime64(3, 'UTC'),
 
@@ -344,9 +360,9 @@ CREATE TABLE IF NOT EXISTS ${TABLE_TRACE_BRANCHES} (
   metadataRaw        Nullable(String),
   requestContext     Nullable(String)
 )
-ENGINE = ReplacingMergeTree
+ENGINE = ReplacingMergeTree(ingestionVersion)
 PARTITION BY toDate(endedAt)
-ORDER BY (spanType, startedAt, traceId, dedupeKey)
+ORDER BY (spanType, startedAt, traceId, dedupeKey, ingestionVersion)
 `;
 
 // ---------------------------------------------------------------------------
@@ -662,6 +678,9 @@ FROM (
 
 export const SCORE_EVENTS_DDL = `
 CREATE TABLE IF NOT EXISTS ${TABLE_SCORE_EVENTS} (
+  -- Ingestion order
+  ingestionVersion   UInt128,
+
   -- Timestamp
   timestamp          DateTime64(3, 'UTC'),
 
@@ -716,9 +735,9 @@ CREATE TABLE IF NOT EXISTS ${TABLE_SCORE_EVENTS} (
   metadata           Nullable(String),
   scope              Nullable(String)
 )
-ENGINE = ReplacingMergeTree
+ENGINE = ReplacingMergeTree(ingestionVersion)
 PARTITION BY toDate(timestamp)
-ORDER BY (traceId, timestamp, scoreId)
+ORDER BY (traceId, timestamp, scoreId, ingestionVersion)
 SETTINGS allow_nullable_key = 1
 `;
 
@@ -1041,6 +1060,7 @@ SELECT DISTINCT kind, key1, key2, value FROM (
 export const BASE_TABLE_DDL = [
   SPAN_EVENTS_DDL,
   TRACE_ROOTS_DDL,
+  TRACE_ROOTS_BACKFILL_DDL,
   TRACE_BRANCHES_DDL,
   METRIC_EVENTS_DDL,
   LOG_EVENTS_DDL,
@@ -1115,13 +1135,20 @@ const addBloomIndex = (table: string, name: string, column: string): MigrationEn
 
 export const ALL_MIGRATIONS: readonly MigrationEntry[] = [
   // Span events
+  addColumn(TABLE_SPAN_EVENTS, 'ingestionVersion', 'UInt128 DEFAULT 0'),
   addColumn(TABLE_SPAN_EVENTS, 'entityVersionId', 'Nullable(String)'),
   addColumn(TABLE_SPAN_EVENTS, 'parentEntityVersionId', 'Nullable(String)'),
   addColumn(TABLE_SPAN_EVENTS, 'rootEntityVersionId', 'Nullable(String)'),
+  addColumn(TABLE_SPAN_EVENTS, 'isPending', 'Bool DEFAULT false'),
   // Trace roots
+  addColumn(TABLE_TRACE_ROOTS, 'ingestionVersion', 'UInt128 DEFAULT 0'),
   addColumn(TABLE_TRACE_ROOTS, 'entityVersionId', 'Nullable(String)'),
   addColumn(TABLE_TRACE_ROOTS, 'parentEntityVersionId', 'Nullable(String)'),
   addColumn(TABLE_TRACE_ROOTS, 'rootEntityVersionId', 'Nullable(String)'),
+  addColumn(TABLE_TRACE_ROOTS, 'isPending', 'Bool DEFAULT false'),
+  // Trace branches
+  addColumn(TABLE_TRACE_BRANCHES, 'ingestionVersion', 'UInt128 DEFAULT 0'),
+  addColumn(TABLE_TRACE_BRANCHES, 'isPending', 'Bool DEFAULT false'),
   // Metrics
   addColumn(TABLE_METRIC_EVENTS, 'entityVersionId', 'Nullable(String)'),
   addColumn(TABLE_METRIC_EVENTS, 'parentEntityVersionId', 'Nullable(String)'),
@@ -1131,6 +1158,7 @@ export const ALL_MIGRATIONS: readonly MigrationEntry[] = [
   addColumn(TABLE_LOG_EVENTS, 'parentEntityVersionId', 'Nullable(String)'),
   addColumn(TABLE_LOG_EVENTS, 'rootEntityVersionId', 'Nullable(String)'),
   // Scores
+  addColumn(TABLE_SCORE_EVENTS, 'ingestionVersion', 'UInt128 DEFAULT 0'),
   addColumn(TABLE_SCORE_EVENTS, 'entityVersionId', 'Nullable(String)'),
   addColumn(TABLE_SCORE_EVENTS, 'parentEntityVersionId', 'Nullable(String)'),
   addColumn(TABLE_SCORE_EVENTS, 'rootEntityVersionId', 'Nullable(String)'),
@@ -1178,6 +1206,7 @@ export function buildAllDDL(strategy: ClickHouseDeltaCursorStrategy): string[] {
 export const ALL_TABLE_NAMES = [
   TABLE_SPAN_EVENTS,
   TABLE_TRACE_ROOTS,
+  TABLE_TRACE_ROOTS_BACKFILL,
   TABLE_TRACE_BRANCHES,
   TABLE_TRACE_ROOTS_DELTA,
   TABLE_TRACE_BRANCHES_DELTA,
