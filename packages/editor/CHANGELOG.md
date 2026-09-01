@@ -1,5 +1,54 @@
 # @mastra/editor
 
+## 0.14.3-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [[`d94e242`](https://github.com/mastra-ai/mastra/commit/d94e2423909cfc859eaf39827e83c832439e6b6d), [`8571a42`](https://github.com/mastra-ai/mastra/commit/8571a42c8039e938564e5c5fb0a6b75377c4fe67)]:
+  - @mastra/memory@1.28.2-alpha.0
+
+## 0.14.3-alpha.0
+
+### Patch Changes
+
+- Preserved tool schemas when applying stored descriptions. ([#22459](https://github.com/mastra-ai/mastra/pull/22459))
+
+- Updated dependencies [[`3910c77`](https://github.com/mastra-ai/mastra/commit/3910c77413a3058ab270c6dbc74a59bc3cdf67ea)]:
+  - @mastra/core@1.63.3-alpha.0
+
+## 0.14.2
+
+### Patch Changes
+
+- Fixed Studio instruction edits dropping `providerOptions` from code-defined agents. When code defines instructions as a structured system message — for example with an Anthropic prompt-cache breakpoint — editing and publishing the instructions in Studio replaced them with a plain string, silently removing the provider options. Every request then paid full uncached input cost until the override was removed. ([#22493](https://github.com/mastra-ai/mastra/pull/22493))
+
+  Studio now owns only the wording: the published text is wrapped back in the code-defined message envelope when the override is applied, so provider options survive edits. This applies retroactively — existing published overrides pick up the code envelope on upgrade, with no migration needed.
+
+  ```ts
+  const agent = new Agent({
+    id: 'voice-agent',
+    name: 'Voice Agent',
+    instructions: {
+      role: 'system',
+      content: 'You are a helpful voice assistant.',
+      providerOptions: { anthropic: { cacheControl: { type: 'ephemeral' } } },
+    },
+    model: 'anthropic/claude-sonnet-4-6',
+  });
+
+  // Before: after publishing an instructions edit in Studio, the agent ran with a
+  // plain string — the cacheControl breakpoint was gone until the override was deleted.
+  // After: the edited text is published inside the same system message, and
+  // providerOptions.anthropic.cacheControl keeps working.
+  ```
+
+  Instructions delegated entirely to Studio (`editor: { instructions: true }`) have no code-defined envelope and are unaffected. Fixes https://github.com/mastra-ai/mastra/issues/10980
+
+- Updated dependencies [[`bae1502`](https://github.com/mastra-ai/mastra/commit/bae150254b06a4da6964d7c137af97f336362359), [`0885364`](https://github.com/mastra-ai/mastra/commit/0885364c2fc7fa31febcfc444fc1ba5231ac1257), [`295e506`](https://github.com/mastra-ai/mastra/commit/295e506b9e6cec99e7181c5f712648888cd9486f), [`b8cb683`](https://github.com/mastra-ai/mastra/commit/b8cb683ba66499df254ddd1f7edd8cae3f89d2e7), [`8c3be07`](https://github.com/mastra-ai/mastra/commit/8c3be0761a862c5c035ed6e5d633de87cbba20e7), [`078affd`](https://github.com/mastra-ai/mastra/commit/078affdaea57ac5e95a77e9e7b197d1878190684), [`9e3403e`](https://github.com/mastra-ai/mastra/commit/9e3403e9868240cb18841898e84cf008ebd7a87e), [`791bf5e`](https://github.com/mastra-ai/mastra/commit/791bf5e81cd27e2e1cff66122f1380ab8a3dda41)]:
+  - @mastra/core@1.63.1
+  - @mastra/memory@1.28.1
+  - @mastra/mcp@1.17.2
+
 ## 0.14.2-alpha.1
 
 ### Patch Changes

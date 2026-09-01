@@ -25,6 +25,7 @@ import { SearchFieldBlock } from '@/ds/components/FormFieldBlocks';
 import { Notice } from '@/ds/components/Notice';
 import { Tab, TabContent, TabList, Tabs } from '@/ds/components/Tabs';
 import type { LinkComponent } from '@/ds/types/link-component';
+import { useScrollToFirstHighlight } from '@/hooks/use-scroll-to-first-highlight';
 import { useTextHighlight } from '@/hooks/use-text-highlight';
 import { truncateString } from '@/lib/truncate-string';
 
@@ -46,7 +47,7 @@ export interface TraceDataPanelViewProps {
   onClose: () => void;
   onSpanSelect?: (spanId: string | undefined) => void;
   onEvaluateTrace?: () => void;
-  /** When set, a "Save as Dataset Item" button appears; the consumer owns the dialog. */
+  /** When set, an "Add full trace to dataset" button appears; the consumer owns the dialog. */
   onSaveAsDatasetItem?: (args: { traceId: string; rootSpanId: string | undefined }) => void;
   /** When set, an "Add tool mocks to item" button appears; the consumer owns the dialog. */
   onAddTraceMocksToItem?: (args: { traceId: string }) => void;
@@ -163,9 +164,18 @@ export function TraceDataPanelView({
   }, [initialSpanId, spans, isLoading]);
 
   const searchFieldName = useId();
-  const { query, setQuery, results } = useTraceSearch(spans ?? []);
+  const { query, setQuery, results, payloadOnlyMatchIds } = useTraceSearch(spans ?? []);
 
-  const hierarchicalSpans = useMemo(() => formatHierarchicalSpans(results, anchorSpanId), [results, anchorSpanId]);
+  const hierarchicalSpans = useMemo(
+    () =>
+      formatHierarchicalSpans(
+        // Carried on the span rather than drilled as a prop: the tree is rebuilt here and
+        // rendered several components deeper.
+        results.map(span => ({ ...span, matchedInPayloadOnly: payloadOnlyMatchIds.has(span.spanId) })),
+        anchorSpanId,
+      ),
+    [results, payloadOnlyMatchIds, anchorSpanId],
+  );
 
   const [expandedSpanIds, setExpandedSpanIds] = useState<string[]>([]);
 
@@ -234,8 +244,8 @@ export function TraceDataPanelView({
               {onSaveAsDatasetItem && (
                 <Button
                   size="md"
-                  tooltip="Save as Dataset Item"
-                  aria-label="Save as Dataset Item"
+                  tooltip="Add full trace to dataset"
+                  aria-label="Add full trace to dataset"
                   onClick={() => onSaveAsDatasetItem({ traceId, rootSpanId: rootSpan?.spanId })}
                 >
                   <SaveIcon />
@@ -278,7 +288,7 @@ export function TraceDataPanelView({
       </DataPanel.Header>
 
       {!collapsed && (
-        <SplitWithSpanPanel spanPanelSlot={spanPanelSlot} highlightQuery={query}>
+        <SplitWithSpanPanel spanPanelSlot={spanPanelSlot} highlightQuery={query} spanPanelKey={selectedSpanId}>
           {isLoading ? (
             <DataPanel.LoadingData>Loading trace...</DataPanel.LoadingData>
           ) : !spans?.length ? (
@@ -390,15 +400,23 @@ export function TraceDataPanelView({
 function SplitWithSpanPanel({
   spanPanelSlot,
   highlightQuery,
+  spanPanelKey,
   children,
 }: {
   spanPanelSlot?: ReactNode;
   highlightQuery: string;
+  /** Identity of the span shown in the panel; changing it re-triggers the match scroll. */
+  spanPanelKey?: string;
   children: ReactNode;
 }) {
   // A single hook call on the common ancestor covers both the timeline tree and
   // the span detail, so span names and payload values highlight together.
   const { ref: highlightRef } = useTextHighlight<HTMLDivElement>(highlightQuery);
+
+  // Scoped to the span-panel column only: a match deep in a large payload sits below
+  // the fold, so the first painted match is brought into view when the panel opens.
+  // The timeline column must never be scrolled by this.
+  const { ref: scrollToMatchRef } = useScrollToFirstHighlight<HTMLDivElement>(highlightQuery, spanPanelKey);
 
   if (!spanPanelSlot) {
     return (
@@ -413,6 +431,7 @@ function SplitWithSpanPanel({
       <div className="flex min-h-0 flex-col overflow-hidden">{children}</div>
       {/* Searchable: the span detail is where a match hides inside a large payload. */}
       <div
+        ref={scrollToMatchRef}
         data-highlight
         className="animate-in border-border1 fade-in-0 flex min-h-0 flex-col overflow-hidden border-l duration-300"
       >

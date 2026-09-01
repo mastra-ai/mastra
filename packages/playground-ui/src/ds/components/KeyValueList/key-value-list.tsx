@@ -14,7 +14,8 @@ export type KeyValueListItemValue = {
 
 export type KeyValueListItemData = {
   key: string;
-  label: string;
+  /** Plain text in most cases; a node when the label itself is interactive (e.g. a link). */
+  label: React.ReactNode;
   value: Value;
   icon?: React.ReactNode;
   separator?: React.ReactNode;
@@ -40,11 +41,11 @@ export function KeyValueList({ data, className, labelsAreHidden, isLoading, Link
 
   return (
     <dl className={cn('grid grid-cols-[auto_1fr] content-start items-start gap-x-4', className)}>
-      {data.map(({ label, value, icon, separator }, index) => {
+      {data.map(({ key, label, value, icon, separator }, index) => {
         const isValueItemArray = Array.isArray(value);
 
         return (
-          <React.Fragment key={label + index}>
+          <React.Fragment key={key ?? index}>
             <dt className={cn('flex min-h-9 items-center justify-between gap-8 text-ui-md text-neutral3')}>
               <span
                 className={cn(

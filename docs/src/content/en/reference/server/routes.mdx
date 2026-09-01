@@ -1,6 +1,6 @@
 ---
 title: "Reference: Server routes | Server"
-description: "API reference for HTTP routes registered by Mastra server adapters."
+description: "Server adapters register these routes when you call server.init(). All routes are prefixed with the prefix option if configured."
 packages:
   - "@mastra/server"
 ---
@@ -48,7 +48,7 @@ GET /api/agents/my-agent?versionId=abc123
 
 ### Generate request body
 
-```typescript prettier:false
+```typescript oxfmt:false
 {
   messages: CoreMessage[] | string;       // Required
   instructions?: string;                   // System instructions
@@ -68,7 +68,7 @@ GET /api/agents/my-agent?versionId=abc123
 
 ### Generate response
 
-```typescript prettier:false
+```typescript oxfmt:false
 {
   text: string;
   toolCalls?: ToolCall[];
@@ -86,7 +86,7 @@ Use `POST /api/agents/:agentId/send-message` to send a user message to the activ
 
 Both routes accept the same request body:
 
-```typescript prettier:false
+```typescript oxfmt:false
 {
   message: string | Array<TextPart | FilePart> | {
     contents: string | Array<TextPart | FilePart>;
@@ -140,7 +140,7 @@ curl -X POST http://localhost:4111/api/agents/supportAgent/queue-message \
 
 Both routes return:
 
-```typescript prettier:false
+```typescript oxfmt:false
 {
   accepted: true;
   runId: string;
@@ -154,7 +154,7 @@ Use `POST /api/agents/:agentId/send-tool-approval` when the client already has a
 
 The route accepts this request body:
 
-```typescript prettier:false
+```typescript oxfmt:false
 {
   resourceId: string;
   threadId: string;
@@ -166,7 +166,7 @@ The route accepts this request body:
 
 The route returns:
 
-```typescript prettier:false
+```typescript oxfmt:false
 {
   accepted: true;
   runId: string;
@@ -193,7 +193,7 @@ The route returns:
 
 The `/api/workflows/run-counts` endpoint returns counts of `running` and [`suspended`](/docs/workflows/suspend-and-resume) runs for every registered workflow. The record is keyed by the workflow's registry key from the Mastra config, and the server may cache the response for a few seconds:
 
-```typescript prettier:false
+```typescript oxfmt:false
 {
   [workflowRegistryKey: string]: {
     running: number;
@@ -217,7 +217,7 @@ On authenticated servers, the read routes require the `stored-workflows:read` pe
 
 ### Create run request body
 
-```typescript prettier:false
+```typescript oxfmt:false
 {
   resourceId?: string;     // Associate run with a resource (e.g., user ID)
   disableScorers?: boolean; // Disable scorers for this run
@@ -226,7 +226,7 @@ On authenticated servers, the read routes require the `stored-workflows:read` pe
 
 ### Request body for `/start-async`
 
-```typescript prettier:false
+```typescript oxfmt:false
 {
   resourceId?: string;     // Associate run with a resource (e.g., user ID)
   inputData?: unknown;
@@ -241,7 +241,7 @@ On authenticated servers, the read routes require the `stored-workflows:read` pe
 
 ### Stream workflow request body
 
-```typescript prettier:false
+```typescript oxfmt:false
 {
   resourceId?: string;     // Associate run with a resource (e.g., user ID)
   inputData?: unknown;
@@ -253,7 +253,7 @@ On authenticated servers, the read routes require the `stored-workflows:read` pe
 
 ### Resume request body
 
-```typescript prettier:false
+```typescript oxfmt:false
 {
   step?: string | string[];
   resumeData?: unknown;
@@ -271,7 +271,7 @@ On authenticated servers, the read routes require the `stored-workflows:read` pe
 
 ### Execute tool request body
 
-```typescript prettier:false
+```typescript oxfmt:false
 {
   data: unknown;  // Tool input data
   requestContext?: Record<string, unknown>;
@@ -292,7 +292,7 @@ On authenticated servers, the read routes require the `stored-workflows:read` pe
 
 ### Create thread request body
 
-```typescript prettier:false
+```typescript oxfmt:false
 {
   resourceId: string;
   title?: string;
@@ -302,7 +302,7 @@ On authenticated servers, the read routes require the `stored-workflows:read` pe
 
 ### Clone thread request body
 
-```typescript prettier:false
+```typescript oxfmt:false
 {
   newThreadId?: string;           // Custom ID for cloned thread
   resourceId?: string;            // Override resource ID
@@ -321,7 +321,7 @@ On authenticated servers, the read routes require the `stored-workflows:read` pe
 
 ### Clone thread response
 
-```typescript prettier:false
+```typescript oxfmt:false
 {
   thread: {
     id: string;
@@ -364,7 +364,7 @@ On authenticated servers, the read routes require the `stored-workflows:read` pe
 
 ### Query request body
 
-```typescript prettier:false
+```typescript oxfmt:false
 {
   vector: number[];
   topK?: number;
@@ -402,7 +402,7 @@ Use these routes when your own orchestrator (for example a Temporal workflow) ow
 
 Post to `/api/datasets/:datasetId/experiments` with `start: false` to create the experiment without running it. Include `targetType` and `targetId` when Mastra should execute items via the run-item route. Omit both for pure ingestion via the results route.
 
-```typescript prettier:false
+```typescript oxfmt:false
 {
   start?: boolean;              // false creates the experiment without running it. Defaults to true.
   id?: string;                  // Caller-supplied experiment id (e.g. a workflow run id) for idempotent creates
@@ -434,7 +434,7 @@ Returns `{ experimentId, status, totalItems, datasetVersion }` when `start` is `
 
 `POST /api/datasets/:datasetId/experiments/:experimentId/items/:itemId/run` executes the experiment's target against one item and runs the resolved scorers, then upserts the result. Requires an experiment created with a target.
 
-```typescript prettier:false
+```typescript oxfmt:false
 {
   attempt?: number;             // Zero-based repetition index. Defaults to 0.
   requestContext?: Record<string, unknown>; // Merged with the item's own request context (item wins)
@@ -445,7 +445,7 @@ Returns `{ result, scores }` with the persisted result row and the scores produc
 
 #### Submit experiment result request body
 
-```typescript prettier:false
+```typescript oxfmt:false
 {
   itemId: string;               // Dataset item this result belongs to
   attempt?: number;             // Zero-based repetition index. Defaults to 0.
@@ -523,7 +523,7 @@ For the full request and response contract, see the [Conversations API reference
 
 ### Query parameters
 
-```typescript prettier:false
+```typescript oxfmt:false
 {
   page?: number;
   perPage?: number;
@@ -545,7 +545,7 @@ For the full request and response contract, see the [Conversations API reference
 
 Most list endpoints support:
 
-```typescript prettier:false
+```typescript oxfmt:false
 {
   page?: number;   // Page number (0-indexed)
   perPage?: number; // Items per page (default: 10)
@@ -556,7 +556,7 @@ Most list endpoints support:
 
 Workflow runs support:
 
-```typescript prettier:false
+```typescript oxfmt:false
 {
   fromDate?: string;  // ISO date string
   toDate?: string;    // ISO date string
@@ -569,7 +569,7 @@ Workflow runs support:
 
 All routes return errors in this format:
 
-```typescript prettier:false
+```typescript oxfmt:false
 {
   error: string;      // Error message
   details?: unknown;  // Additional details

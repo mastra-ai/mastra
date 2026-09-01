@@ -1,6 +1,6 @@
 ---
 title: "Reference: MCPServer | Tools and MCP"
-description: API Reference for MCPServer - A class for exposing Mastra tools and capabilities as a Model Context Protocol server.
+description: "The MCPServer class provides the functionality to expose your existing Mastra tools and Agents as a Model Context Protocol (MCP) server."
 packages:
   - "@mastra/core"
   - "@mastra/mcp"
@@ -357,7 +357,7 @@ These are the functions you can call on an `MCPServer` instance to control its b
 
 Use this method to start the server so it communicates using standard input and output (stdio). This is typical when running the server as a command-line program.
 
-```typescript prettier:false
+```typescript oxfmt:false
 async startStdio(): Promise<void>
 ```
 
@@ -381,7 +381,7 @@ The HTTP+SSE transport is deprecated in the MCP specification. Use `startHTTP()`
 
 This method helps you integrate the MCP server with an existing web server to use Server-Sent Events (SSE) for communication. You'll call this from your web server's code when it receives a request for the SSE or message paths.
 
-```typescript prettier:false
+```typescript oxfmt:false
 async startSSE({
   url,
   ssePath,
@@ -457,7 +457,7 @@ The HTTP+SSE transport is deprecated in the MCP specification. Use `startHTTP()`
 
 This method helps you integrate the MCP server with an existing web server to use Server-Sent Events (SSE) for communication. You'll call this from your web server's code when it receives a request for the SSE or message paths.
 
-```typescript prettier:false
+```typescript oxfmt:false
 async startHonoSSE({
   url,
   ssePath,
@@ -529,7 +529,7 @@ Here are the details for the values needed by the `startHonoSSE` method:
 
 This method helps you integrate the MCP server with an existing web server to use streamable HTTP for communication. You'll call this from your web server's code when it receives HTTP requests.
 
-```typescript prettier:false
+```typescript oxfmt:false
 async startHTTP({
   url,
   httpPath,
@@ -756,7 +756,7 @@ The `StreamableHTTPServerTransportOptions` object allows you to customize the be
 
 This method closes the server and releases all resources.
 
-```typescript prettier:false
+```typescript oxfmt:false
 async close(): Promise<void>
 ```
 
@@ -764,7 +764,7 @@ async close(): Promise<void>
 
 The method returns the server's basic information.
 
-```typescript prettier:false
+```typescript oxfmt:false
 getServerInfo(): ServerInfo
 ```
 
@@ -772,7 +772,7 @@ getServerInfo(): ServerInfo
 
 The method returns details about the server's information.
 
-```typescript prettier:false
+```typescript oxfmt:false
 getServerDetail(): ServerDetail
 ```
 
@@ -780,7 +780,7 @@ getServerDetail(): ServerDetail
 
 The method returns the tools that were set up when you created the server. It's a read-only list, useful for debugging purposes.
 
-```typescript prettier:false
+```typescript oxfmt:false
 getToolListInfo(): ToolListInfo
 ```
 
@@ -788,7 +788,7 @@ getToolListInfo(): ToolListInfo
 
 The method returns details about a specific tool.
 
-```typescript prettier:false
+```typescript oxfmt:false
 getToolInfo(toolName: string): ToolInfo
 ```
 
@@ -796,7 +796,7 @@ getToolInfo(toolName: string): ToolInfo
 
 This method executes a specific tool and returns the result.
 
-```typescript prettier:false
+```typescript oxfmt:false
 executeTool(toolName: string, input: any): Promise<any>
 ```
 
@@ -804,7 +804,7 @@ executeTool(toolName: string, input: any): Promise<any>
 
 If you started the server with `startStdio()`, you can use this to get the object that manages the stdio communication. This is mostly for checking things internally or for testing.
 
-```typescript prettier:false
+```typescript oxfmt:false
 getStdioTransport(): StdioServerTransport | undefined
 ```
 
@@ -812,7 +812,7 @@ getStdioTransport(): StdioServerTransport | undefined
 
 If you started the server with `startSSE()`, you can use this to get the object that manages the SSE communication. Like `getStdioTransport`, this is mainly for internal checks or testing.
 
-```typescript prettier:false
+```typescript oxfmt:false
 getSseTransport(): SSEServerTransport | undefined
 ```
 
@@ -820,7 +820,7 @@ getSseTransport(): SSEServerTransport | undefined
 
 If you started the server with `startHonoSSE()`, you can use this to get the object that manages the SSE communication. Like `getSseTransport`, this is mainly for internal checks or testing.
 
-```typescript prettier:false
+```typescript oxfmt:false
 getSseHonoTransport(): SSETransport | undefined
 ```
 
@@ -828,7 +828,7 @@ getSseHonoTransport(): SSETransport | undefined
 
 If you started the server with `startHTTP()`, you can use this to get the object that manages the HTTP communication. Like `getSseTransport`, this is mainly for internal checks or testing.
 
-```typescript prettier:false
+```typescript oxfmt:false
 getStreamableHTTPTransport(): StreamableHTTPServerTransport | undefined
 ```
 
@@ -836,7 +836,7 @@ getStreamableHTTPTransport(): StreamableHTTPServerTransport | undefined
 
 Executes a specific tool provided by this MCP server.
 
-```typescript prettier:false
+```typescript oxfmt:false
 async executeTool(
   toolId: string,
   args: any,
@@ -964,7 +964,7 @@ If the available resources or their content change, your server can notify conne
 
 Call this method when the content of a specific resource (identified by its `uri`) has been updated. If any clients are subscribed to this URI, they will receive a `notifications/resources/updated` message.
 
-```typescript prettier:false
+```typescript oxfmt:false
 async server.resources.notifyUpdated({ uri: string }): Promise<void>
 ```
 
@@ -979,7 +979,7 @@ await serverWithResources.resources.notifyUpdated({ uri: 'file://data.txt' })
 
 Call this method when the list of available resources has changed (e.g., a resource was added or removed). This will send a `notifications/resources/list_changed` message to clients, prompting them to re-fetch the list of resources.
 
-```typescript prettier:false
+```typescript oxfmt:false
 async server.resources.notifyListChanged(): Promise<void>
 ```
 
@@ -1117,7 +1117,7 @@ The property is `toolActions` because `tools()` is the method that returns the r
 
 Registers new tools on the running server and notifies connected clients. Tools are keyed by their record key, the same as tools passed to the constructor. Adding a tool under an existing key replaces it.
 
-```typescript prettier:false
+```typescript oxfmt:false
 async server.toolActions.add(tools: ToolsInput): Promise<void>
 ```
 
@@ -1141,7 +1141,7 @@ await server.toolActions.add({ searchTool })
 
 Removes tools from the running server by tool ID and notifies connected clients. Unknown tool IDs are ignored. A notification is sent only when at least one tool is removed.
 
-```typescript prettier:false
+```typescript oxfmt:false
 async server.toolActions.remove(toolIds: string[]): Promise<void>
 ```
 
@@ -1155,7 +1155,7 @@ await server.toolActions.remove(['searchTool'])
 
 Sends a `notifications/tools/list_changed` message to connected clients without modifying the tool registry. Call this when tool availability changes through other means (for example, authorization changes).
 
-```typescript prettier:false
+```typescript oxfmt:false
 async server.toolActions.notifyListChanged(): Promise<void>
 ```
 
@@ -1171,7 +1171,7 @@ MCP servers can send structured log messages to clients using `notifications/mes
 
 Sends a log notification to all connected clients, honoring each client's minimum logging level.
 
-```typescript prettier:false
+```typescript oxfmt:false
 async server.sendLoggingMessage(params: {
   level: LoggingLevel;
   data: unknown;
@@ -1192,7 +1192,7 @@ await server.sendLoggingMessage({
 
 Inside a tool's `execute` function, use `context.mcp.log()` to send a log message to the client that called the tool.
 
-```typescript prettier:false
+```typescript oxfmt:false
 async context.mcp.log(
   level: LoggingLevel,
   message: string,
@@ -1217,7 +1217,7 @@ Long-running tools can report progress to the calling client with `notifications
 
 ### `context.mcp.progress()`
 
-```typescript prettier:false
+```typescript oxfmt:false
 async context.mcp.progress(params: {
   progress: number;
   total?: number;
@@ -1378,7 +1378,7 @@ The `requestedSchema` must be a flat object with primitive properties only. Supp
 
 Example schema:
 
-```typescript prettier:false
+```typescript oxfmt:false
 {
   type: 'object',
   properties: {
@@ -1428,7 +1428,7 @@ Tools should handle all three response types appropriately.
 
 The elicitation functionality is available through the `options` parameter in tool execution:
 
-```typescript prettier:false
+```typescript oxfmt:false
 // Within a tool's execute function
 execute: async (inputData, context) => {
   // Use elicitation for user input

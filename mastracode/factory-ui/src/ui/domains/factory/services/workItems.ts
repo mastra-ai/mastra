@@ -42,6 +42,9 @@ export interface WorkItem {
   stageHistory: WorkItemStageEntry[];
   sessions: Record<string, WorkItemSessionRef>;
   metadata: Record<string, unknown>;
+  commentCount: number;
+  /** Bumped server-side on every feed mutation; clients refetch comments when it moves. */
+  feedActivityAt: string | null;
   revision: number;
   createdAt: string;
   updatedAt: string;
@@ -72,10 +75,15 @@ interface ExternalWorkItemSource {
   url?: string;
 }
 
-interface WireWorkItem extends Omit<WorkItem, 'githubProjectId' | 'source' | 'sourceKey' | 'url' | 'metadata'> {
+interface WireWorkItem extends Omit<
+  WorkItem,
+  'githubProjectId' | 'source' | 'sourceKey' | 'url' | 'metadata' | 'commentCount' | 'feedActivityAt'
+> {
   factoryProjectId: string;
   externalSource: ExternalWorkItemSource | null;
   metadata: Record<string, unknown> | null;
+  commentCount?: number;
+  feedActivityAt?: string | null;
 }
 
 interface WireCreateWorkItemInput extends Omit<CreateWorkItemInput, 'source' | 'sourceKey' | 'url'> {
@@ -123,7 +131,7 @@ function toWireCreateInput(input: CreateWorkItemInput): WireCreateWorkItemInput 
 }
 
 function fromWireWorkItem(item: WireWorkItem): WorkItem {
-  const { factoryProjectId, externalSource, metadata, ...rest } = item;
+  const { factoryProjectId, externalSource, metadata, commentCount, feedActivityAt, ...rest } = item;
   return {
     ...rest,
     githubProjectId: factoryProjectId,
@@ -131,6 +139,8 @@ function fromWireWorkItem(item: WireWorkItem): WorkItem {
     sourceKey: externalSource?.externalId ?? null,
     url: externalSource?.url ?? null,
     metadata: metadata ?? {},
+    commentCount: commentCount ?? 0,
+    feedActivityAt: feedActivityAt ?? null,
   };
 }
 
@@ -225,6 +235,8 @@ export interface StartFactoryRunRequest {
   threadTags?: Record<string, string>;
   kickoffKey: string;
   invocation?: { type: 'prompt'; prompt: string } | { type: 'skill'; skillName: string; arguments: string };
+  /** Hands-off run: the dispatcher approves this item's parked plans on the starter's behalf. */
+  preapprovePlans?: boolean;
   destinationStage: FactoryRuleStage;
   workItem: {
     id?: string;

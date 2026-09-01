@@ -1,7 +1,10 @@
+import { FACTORY_ROLE_STAGES, knownExternalAuthor } from '@mastra/factory/rules/types';
+import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { EllipsisVertical } from 'lucide-react';
+import { EllipsisVertical, MessageSquare } from 'lucide-react';
 import type { ReactElement } from 'react';
 import { useParams } from 'react-router';
 
@@ -12,7 +15,7 @@ import { itemThreadSession, metadataLabels, pullRequestStatusForItem, workItemMe
 import { itemRunSpec } from '../boardRunSpecs';
 import type { ItemRunSpec, RunAction } from '../boardRunSpecs';
 import { itemStageLabel } from '../boardStages';
-import { cardPrimaryAction } from '../cardPrimaryAction';
+import { cardPrimaryAction, resumeTarget } from '../cardPrimaryAction';
 import { useCardMorph } from '../hooks/useCardMorph';
 import type { AuditEventPage } from '../services/audit';
 import type { FactoryDecisionSummary } from '../services/decisions';
@@ -20,12 +23,14 @@ import { relationshipPath } from '../services/relationships';
 import type { WorkItem } from '../services/workItems';
 import type { BoardStageId } from '../stages';
 import { workItemActivity } from '../workItemActivity';
+import type { SessionCardStatus } from '../../workspaces/services/sessionStatus';
 import {
   CardDetailsHint,
   CardLabels,
   CardStatus,
   CardTitleTooltip,
   REVEAL_ON_CARD_HOVER,
+  SessionLivenessDot,
   SourceTitle,
 } from './BoardCardParts';
 import { SourceIcon } from './BoardIcons';
@@ -39,6 +44,7 @@ import { WorkItemMenuItems } from './WorkItemMenuItems';
 export function WorkItemCard({
   item,
   deepLinkRef,
+  deepLinkCommentId,
   highlighted,
   columnStage,
   relatedItems,
@@ -56,6 +62,7 @@ export function WorkItemCard({
   onDismissProposal,
   onRetryDecision,
   pendingRunRoles,
+  sessionStatus = 'idle',
   onCreateSession,
   onStartRun,
   onRestartRun,
@@ -65,6 +72,8 @@ export function WorkItemCard({
   item: WorkItem;
   // Hands the card's own control to the board, which scrolls to it and focuses it when the card is deeplinked.
   deepLinkRef: (element: HTMLElement | null) => void;
+  /** Comment deep link (`?item&comment`): holds the details popover open so the feed is reachable. */
+  deepLinkCommentId?: string;
   highlighted: boolean;
   columnStage: BoardStageId;
   /** Cards linked to this one, resolved once for the whole board. */
@@ -87,15 +96,17 @@ export function WorkItemCard({
   onDismissProposal: (decisionId: string) => void;
   onRetryDecision: (decisionId: string) => void;
   pendingRunRoles: ReadonlyMap<string, FactoryRunPhase | undefined>;
+  /** Live status of the card's bound sessions, resolved once for the whole board. */
+  sessionStatus?: SessionCardStatus;
   /** Detail-panel fallback when the item has no run spec: open an empty session (no run). */
   onCreateSession: (spec: { branch: string; threadTitle: string }) => void;
-  onStartRun: (spec: ItemRunSpec, action: RunAction) => void;
-  onRestartRun: (spec: ItemRunSpec, action: RunAction) => void;
+  onStartRun: (spec: ItemRunSpec, action: RunAction, options?: { preapprovePlans?: boolean }) => void;
+  onRestartRun: (spec: ItemRunSpec, action: RunAction, options?: { preapprovePlans?: boolean }) => void;
   onMove: (toStage: string) => void;
   onRemove: () => void;
 }) {
   const { factoryId = '' } = useParams<{ factoryId: string }>();
-  const morph = useCardMorph();
+  const morph = useCardMorph({ openFor: deepLinkCommentId });
 
   const evaluating = evaluatingStage !== undefined;
   const busyLabel = proposal !== undefined && approvingDecisionId === proposal.id ? 'Starting…' : preparing;
@@ -122,18 +133,21 @@ export function WorkItemCard({
   // run from the menu so the card is never a dead end.
   const laneAction =
     runSpec !== undefined && reReviewAction === undefined
-      ? runSpec.actions.find(action => action.stage === columnStage && action.role in sessions)
+      ? runSpec.actions.find(action => FACTORY_ROLE_STAGES[action.role] === columnStage && action.role in sessions)
       : undefined;
   const threadSession = itemThreadSession(sessions);
   const primaryAction = cardPrimaryAction({
     item,
     runSpec,
     runAction: defaultRunAction,
+    resume: resumeTarget(columnStage, runSpec, sessions),
     proposal,
     hasSession: threadSession !== undefined,
     onApproveProposal,
     onStartRun,
+    onRestartRun,
     onCreateSession,
+    onMove,
   });
   const proposedRunLabel =
     proposal === undefined
@@ -187,13 +201,13 @@ export function WorkItemCard({
   // Dismissing a suggested run is the one entry that leaves it open.
   const panelMenu: WorkItemMenuProps = {
     ...menu,
-    onStartRun: (spec, action) => {
+    onStartRun: (spec, action, options) => {
       morph.closeDetails();
-      onStartRun(spec, action);
+      onStartRun(spec, action, options);
     },
-    onRestartRun: (spec, action) => {
+    onRestartRun: (spec, action, options) => {
       morph.closeDetails();
-      onRestartRun(spec, action);
+      onRestartRun(spec, action, options);
     },
     onApproveProposal: decisionId => {
       morph.closeDetails();
@@ -288,10 +302,17 @@ export function WorkItemCard({
           <div className="flex min-w-0 flex-col gap-1.5">
             <div className="flex min-w-0 items-center gap-1.5 pr-8">
               <span className="text-ui-xs text-icon2 min-w-0 truncate">{workItemMeta(item)}</span>
-              {threadSession !== undefined && (
-                <span data-live-session-indicator aria-hidden className="bg-accent1 size-2 shrink-0 rounded-full" />
-              )}
+              {threadSession !== undefined && <SessionLivenessDot status={sessionStatus} />}
               {relatedItems.map(relatedLink)}
+              {item.commentCount > 0 && (
+                <span
+                  className="text-ui-xs text-icon2 flex shrink-0 items-center gap-1"
+                  aria-label={`${item.commentCount} ${item.commentCount === 1 ? 'comment' : 'comments'}`}
+                >
+                  <MessageSquare size={11} aria-hidden />
+                  {item.commentCount}
+                </span>
+              )}
             </div>
             <div className="flex min-w-0 items-center gap-1.5 tracking-tight">
               {item.source === 'github-pr' ? (
@@ -317,9 +338,23 @@ export function WorkItemCard({
           {status.kind === 'idle' && (
             <CardDetailsHint className="pointer-events-none pointer-fine:absolute pointer-fine:right-3 pointer-fine:bottom-3 pointer-fine:z-20 pointer-fine:ml-0" />
           )}
-          {(activity.lastWorker !== undefined || status.kind !== 'idle') && (
+          {(activity.lastWorker !== undefined || status.kind !== 'idle' || knownExternalAuthor(item)) && (
             <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5">
               <WorkItemActivity activity={activity} actors={activityPage?.actors ?? {}} />
+              {knownExternalAuthor(item) && (
+                <Tooltip>
+                  <TooltipTrigger
+                    render={
+                      <Badge size="xs" tabIndex={0} className="relative z-10">
+                        External
+                      </Badge>
+                    }
+                  />
+                  <TooltipContent side="bottom" className="max-w-64">
+                    From someone without write access — never starts a run on its own, even with auto-start runs on.
+                  </TooltipContent>
+                </Tooltip>
+              )}
               <CardStatus
                 status={status}
                 onApprove={
@@ -342,6 +377,7 @@ export function WorkItemCard({
         morph={morph}
         relatedLinks={relatedItems.map(relatedLink)}
         threadSession={threadSession}
+        sessionStatus={sessionStatus}
         status={status}
         retryingDecisionId={retryingDecisionId}
         onRetryDecision={onRetryDecision}
