@@ -189,8 +189,33 @@ Each server in the `servers` map is configured using the `MastraMCPServerDefinit
     description:
       'Validator used for MCP tool schemas and structured results. The default supports JSON Schema 2020-12. Provide a compatible validator such as CfWorkerJsonSchemaValidator in runtimes that disallow dynamic code generation.',
   },
+  {
+    name: 'traceContext',
+    type: '() => MCPTraceContext | undefined',
+    isOptional: true,
+    description:
+      'Returns W3C traceparent, tracestate, and baggage values for each outgoing MCP request. The provider is called at request time so concurrent and reused clients do not share stale context.',
+  },
 ]}
 />
+
+## Trace context
+
+Use `traceContext` to add the W3C `traceparent`, `tracestate`, and `baggage` fields to MCP request `_meta`. The provider runs for each protocol request, including requests sent by live and cached tools, so read from your existing request-scoped trace carrier rather than storing a trace globally.
+
+```typescript
+const mcp = new MCPClient({
+  id: 'my-client',
+  servers: {
+    reports: {
+      url: new URL('https://mcp.example.com/mcp'),
+      traceContext: () => currentRequestTrace.getStore(),
+    },
+  },
+})
+```
+
+Explicit `_meta` supplied for a tool call takes precedence over provider values with the same key. Other caller metadata is preserved. Mastra passes the values through without creating spans or validating W3C formats. Treat inbound `baggage` as untrusted observability data. Don't use it for authentication or authorization.
 
 ## Tool approval
 

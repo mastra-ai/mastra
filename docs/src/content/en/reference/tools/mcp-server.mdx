@@ -1592,6 +1592,27 @@ const customMiddleware = createOAuthMiddleware({
 ]}
 />
 
+## W3C trace context
+
+MCP clients can send W3C `traceparent`, `tracestate`, and `baggage` fields in request `_meta`. Tools receive these values through the existing MCP request context on every transport:
+
+```typescript
+const tracedTool = createTool({
+  id: 'traced-tool',
+  inputSchema: z.object({}),
+  execute: async (_input, context) => {
+    const traceparent = context?.mcp?.extra?._meta?.traceparent
+    const tracestate = context?.mcp?.extra?._meta?.tracestate
+    const baggage = context?.mcp?.extra?._meta?.baggage
+
+    // Forward these values to your existing tracing system.
+    return { traceparent, tracestate, baggage }
+  },
+})
+```
+
+Mastra exposes the strings without creating spans or accepting them as credentials. Validate them before passing them to a trace processor, and never use `baggage` for authentication, authorization, or FGA decisions. Request metadata isn't stored in tool definitions or serialized tool catalogs.
+
 ## Authentication context
 
 Tools can access request metadata via `context.mcp.extra` when using HTTP-based transports. You can pass authentication info and user context, as well as custom data from your HTTP middleware to your MCP tools.
