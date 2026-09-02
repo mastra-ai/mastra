@@ -123,6 +123,12 @@ const sidebars = {
           label: 'SvelteKit',
           customProps: { icon: 'https://cdn.simpleicons.org/svelte?viewbox=auto&size=28' },
         },
+        {
+          type: 'doc',
+          id: 'frameworks/tanstack-start',
+          label: 'TanStack Start',
+          customProps: { icon: 'https://cdn.simpleicons.org/tanstack?viewbox=auto&size=28' },
+        },
       ],
     },
     {

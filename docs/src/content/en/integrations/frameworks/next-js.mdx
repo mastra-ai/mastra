@@ -286,6 +286,43 @@ It renders the response text using the [`<MessageResponse>`](https://ai-sdk.dev/
 1. Open the chat at [http://localhost:3000/chat](http://localhost:3000/chat)
 1. Try asking about the weather. If your API key is set up correctly, you'll get a response
 
+## Add a server adapter
+
+The chat route above uses `handleChatStream` from `@mastra/ai-sdk` to stream AI SDK UI responses from a custom `/api/chat` endpoint. To expose Mastra's full HTTP API for agents, tools, workflows, memory, custom API routes, MCP, and A2A through the same Next.js deployment, mount the `@mastra/next` [server adapter](/docs/server/server-adapters) on a catch-all route.
+
+Install the adapter and its Hono peer dependency:
+
+```bash npm2yarn
+npm install @mastra/next@latest hono
+```
+
+Create the catch-all route and export its HTTP method handlers:
+
+```typescript title="src/app/api/[...mastra]/route.ts"
+import { mastra } from '@/mastra'
+import { createNextRouteHandler } from '@mastra/next'
+
+export const { GET, POST, PUT, DELETE, PATCH, OPTIONS, HEAD } = createNextRouteHandler({
+  mastra,
+})
+```
+
+The `prefix` option defaults to `/api` and must match the catch-all route's mount path. For example, when mounting the adapter at `src/app/api/mastra/[...mastra]/route.ts`, use `createNextRouteHandler({ mastra, prefix: '/api/mastra' })`.
+
+Start the app:
+
+```bash npm2yarn
+npm run dev
+```
+
+In a separate terminal, verify the adapter by asking the weather agent a question:
+
+```bash
+curl -X POST http://localhost:3000/api/agents/weather-agent/generate -H "Content-Type: application/json" -d "{\"messages\":[{\"role\":\"user\",\"content\":\"What is the weather like in Seoul?\"}]}"
+```
+
+The endpoint returns a streamed JSON response from the agent. Keep the AI SDK UI route for the streaming chat interface, and use the catch-all route to expose the full Mastra API.
+
 ## Next steps
 
 Congratulations on building your Mastra agent with Next.js! 🎉
