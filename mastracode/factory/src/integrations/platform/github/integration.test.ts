@@ -1174,6 +1174,28 @@ describe('PlatformGithubIntegration', () => {
     expect(fetchImpl).toHaveBeenCalledTimes(3);
   });
 
+  it('re-requests a collaborator permission once the cache entry expires', async () => {
+    vi.useFakeTimers();
+    try {
+      const fetchImpl = vi
+        .fn<typeof fetch>()
+        .mockResolvedValueOnce(json({ permission: 'write', roleName: 'write', user: actor }))
+        .mockResolvedValueOnce(json({ permission: 'read', roleName: 'read', user: actor }));
+      const integration = createIntegration(fetchImpl);
+
+      await expect(integration.getRepositoryCollaboratorPermission(7, 'acme/app', 'grace')).resolves.toBe('write');
+      vi.advanceTimersByTime(29 * 60_000);
+      await expect(integration.getRepositoryCollaboratorPermission(7, 'acme/app', 'grace')).resolves.toBe('write');
+      expect(fetchImpl).toHaveBeenCalledTimes(1);
+
+      vi.advanceTimersByTime(2 * 60_000);
+      await expect(integration.getRepositoryCollaboratorPermission(7, 'acme/app', 'grace')).resolves.toBe('read');
+      expect(fetchImpl).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('keeps the reconciliation worker alive when polling is disabled', async () => {
     vi.stubEnv('MASTRA_PLATFORM_GITHUB_POLLING_ENABLED', 'false');
     const seed = await createPlatformStorageForTests();

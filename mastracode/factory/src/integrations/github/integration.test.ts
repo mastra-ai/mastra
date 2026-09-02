@@ -127,9 +127,20 @@ describe('GithubIntegration collaborator permission', () => {
     await expect(github.getRepositoryCollaboratorPermission(7, 'acme/app', 'hank')).resolves.toBe('read');
     expect(getCollaboratorPermissionLevel).toHaveBeenCalledTimes(3);
 
+    // The entry expires: a lookup after the TTL goes back to GitHub.
+    vi.useFakeTimers();
+    try {
+      vi.advanceTimersByTime(31 * 60_000);
+      getCollaboratorPermissionLevel.mockResolvedValueOnce({ data: { permission: 'none' } });
+      await expect(github.getRepositoryCollaboratorPermission(7, 'acme/app', 'grace')).resolves.toBe('none');
+      expect(getCollaboratorPermissionLevel).toHaveBeenCalledTimes(4);
+    } finally {
+      vi.useRealTimers();
+    }
+
     // A different installation is a different token and a different answer.
     await github.getRepositoryCollaboratorPermission(8, 'acme/app', 'grace');
-    expect(getCollaboratorPermissionLevel).toHaveBeenCalledTimes(4);
+    expect(getCollaboratorPermissionLevel).toHaveBeenCalledTimes(5);
   });
 });
 
