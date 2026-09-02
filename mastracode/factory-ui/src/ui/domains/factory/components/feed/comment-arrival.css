@@ -1,0 +1,37 @@
+/* A comment lands rising from the composer instead of fading in place, on the
+ * same two clocks as the chat composer: the ink settles early while the travel
+ * keeps a decelerating tail.
+ *
+ * `backwards`, not `both`: a settled transform would leave the row a containing
+ * block for the actions it hangs over its own top edge. */
+.comment-arriving {
+  animation:
+    comment-rise 420ms cubic-bezier(0.16, 1, 0.3, 1) backwards,
+    comment-fade 200ms linear backwards;
+}
+
+@keyframes comment-rise {
+  from {
+    transform: translateY(0.75rem);
+  }
+
+  to {
+    transform: translateY(0);
+  }
+}
+
+@keyframes comment-fade {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .comment-arriving {
+    animation: none;
+  }
+}

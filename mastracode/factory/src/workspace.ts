@@ -40,6 +40,7 @@ import {
   recordFailedSetupCommand,
   resolveSessionWorkdir,
 } from './sandbox/session-sandbox.js';
+import type { SessionSetupGate } from './sandbox/session-sandbox.js';
 
 import type { WorkItemsStorage } from './storage/domains/work-items/base.js';
 
@@ -348,9 +349,14 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
     // VM's own home so it resolves lazily at first start.
     // `runSetupOn` references `runSessionSetup`, defined below — it is only
     // invoked during start, long after this closure fully initializes.
-    const runSetupOn = (target: unknown, workdir: string) =>
-      runSessionSetup(requireExec(target as WorkspaceSandbox), workdir);
-    const guardedSetup = createSessionSetupHook(runSetupOn, session.id, repoFullName);
+    const runSetupOn = (target: unknown, workdir: string, gate: SessionSetupGate) =>
+      runSessionSetup(requireExec(target as WorkspaceSandbox), workdir, gate);
+    const guardedSetup = createSessionSetupHook(
+      runSetupOn,
+      session.id,
+      repoFullName,
+      projectRepository.setupCommand ?? undefined,
+    );
     // Composed start hook: marker-guarded repo setup, then per-start
     // credential install. It runs inside the provider's start lifecycle on
     // EVERY start (create or reconnect) — providers own lazy start
@@ -586,7 +592,7 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
     // check out the session branch, run the configured setup command. Minted
     // tokens are fetched inside the run so a replacement VM healed mid-session
     // gets fresh credentials, not ones captured at workspace construction.
-    const runSessionSetup = async (target: SessionSandbox, workdir: string): Promise<void> => {
+    const runSessionSetup = async (target: SessionSandbox, workdir: string, gate: SessionSetupGate): Promise<void> => {
       const token = await getRepositoryToken();
       // The configured setup command may shell out to `gh`/https fetches, so
       // GH_TOKEN must exist before setup runs — and it must be the same
@@ -609,7 +615,7 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
         token,
         repoFullName: repoFullName,
       });
-      if (projectRepository.setupCommand) {
+      if (projectRepository.setupCommand && !gate.setupDone) {
         // A setup command that already failed this session is skipped rather
         // than failing every start: the first failure surfaced loudly in the
         // tool result that triggered it, and a permanently failing onStart
@@ -626,6 +632,7 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
         }
         try {
           await runSetupCommand(target, workdir, projectRepository.setupCommand);
+          await gate.markSetupDone();
         } catch (setupError) {
           if (projectRepository.teardownCommand) {
             try {

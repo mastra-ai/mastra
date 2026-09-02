@@ -1,5 +1,5 @@
 import type { LanguageModelV2Prompt } from '@ai-sdk/provider-v5';
-import type { AgentBackgroundConfig, BackgroundTaskManager } from '../../background-tasks';
+import type { AgentBackgroundConfig, BackgroundTaskManager, BackgroundPromptTool } from '../../background-tasks';
 import { generateBackgroundTaskSystemPrompt } from '../../background-tasks';
 
 export interface InjectBackgroundTaskPromptOptions {
@@ -11,7 +11,7 @@ export interface InjectBackgroundTaskPromptOptions {
    */
   backgroundTaskManager?: BackgroundTaskManager;
   /** Tools available on the current step. Required for prompt generation. */
-  tools?: Record<string, { background?: any; description?: string }>;
+  tools?: Record<string, BackgroundPromptTool>;
   /** Agent-level background-task configuration. */
   agentBackgroundConfig?: AgentBackgroundConfig;
 }

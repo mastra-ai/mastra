@@ -80,7 +80,7 @@ describe('CommentList', () => {
     );
     renderList();
 
-    const log = await screen.findByRole('log', { name: 'Comments' });
+    const log = await screen.findByRole('log', { name: 'Activity' });
     const first = await within(log).findByText('first words');
     const second = within(log).getByText('second words');
     expect(first.compareDocumentPosition(second) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
@@ -177,6 +177,31 @@ describe('CommentList', () => {
 
     await waitFor(() => expect(patches).toHaveLength(1));
     expect(patches[0]).toEqual({ body: 'better', expectedRevision: 1, mentions: [] });
+  });
+
+  it('saves an edit on Enter and keeps Shift+Enter for a new line', async () => {
+    const patches: unknown[] = [];
+    server.use(
+      http.get(COMMENTS_URL, () => HttpResponse.json({ comments: [comment('c1', 'original')] })),
+      http.patch(`${COMMENTS_URL}/c1`, async ({ request }) => {
+        patches.push(await request.json());
+        return HttpResponse.json({ comment: comment('c1', 'first\nsecond') });
+      }),
+    );
+    const user = userEvent.setup();
+    renderList();
+
+    await user.click(await screen.findByRole('button', { name: 'Edit comment' }));
+    const editor = screen.getByRole('textbox', { name: 'Edit comment' });
+    await user.clear(editor);
+    await user.type(editor, 'first{Shift>}{Enter}{/Shift}second');
+    expect(editor).toHaveValue('first\nsecond');
+    expect(patches).toHaveLength(0);
+
+    await user.type(editor, '{Enter}');
+
+    await waitFor(() => expect(patches).toHaveLength(1));
+    expect(patches[0]).toMatchObject({ body: 'first\nsecond' });
   });
 
   it('refuses an emptied edit instead of closing on it', async () => {

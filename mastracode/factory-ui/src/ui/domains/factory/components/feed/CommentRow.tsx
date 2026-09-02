@@ -2,9 +2,9 @@ import { Avatar } from '@mastra/playground-ui/components/Avatar';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { MarkdownRenderer } from '@mastra/playground-ui/components/MarkdownRenderer';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { Check, Link2, Pencil, Quote, Trash2, X } from 'lucide-react';
+import { Link2, Pencil, Quote, Trash2 } from 'lucide-react';
 import { useRef, useState } from 'react';
-import type { Ref } from 'react';
+import type { KeyboardEvent, Ref } from 'react';
 
 import { relativeTime } from '../../../../../lib/date/relativeTime';
 import type { WorkItemComment } from '../../services/commentsWire';
@@ -17,7 +17,7 @@ import type { CommentQuoteDraft } from './CommentQuote';
 const MAX_SELECTION_QUOTE_CHARS = 280;
 const MAX_BODY_QUOTE_CHARS = 500;
 
-export function commentAuthorName(comment: Pick<WorkItemComment, 'author'>): string {
+function commentAuthorName(comment: Pick<WorkItemComment, 'author'>): string {
   return comment.author.displayName ?? comment.author.id;
 }
 
@@ -102,30 +102,41 @@ function CommentEditor({
     }
   };
 
+  const onKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
+    // An IME commit fires Enter mid-composition; acting on it would save half a word.
+    if (event.nativeEvent.isComposing) return;
+    if (event.key === 'Enter' && !event.shiftKey) {
+      event.preventDefault();
+      void save();
+    }
+  };
+
   return (
     <div className="mt-1 flex flex-col gap-1.5">
-      <textarea
-        value={draft}
-        onChange={event => setDraft(event.target.value)}
-        aria-label="Edit comment"
-        rows={3}
-        className="border-border1 bg-surface2 text-ui-sm text-icon6 focus:border-border2 w-full resize-y rounded-lg border px-2 py-1.5 outline-none"
-      />
+      <div className="relative">
+        <textarea
+          value={draft}
+          onChange={event => setDraft(event.target.value)}
+          onKeyDown={onKeyDown}
+          aria-label="Edit comment"
+          rows={2}
+          className="border-border1 bg-surface2 text-ui-sm text-icon6 focus:border-border2 block field-sizing-content max-h-40 w-full resize-none overflow-y-auto rounded-lg border px-2 pt-1.5 pb-9 outline-none"
+        />
+        {/* Opaque, so a scrolled line passes behind the actions instead of under them. */}
+        <div className="bg-surface2 absolute inset-x-px bottom-px flex items-center justify-end gap-1 rounded-b-lg px-1.5 pt-1 pb-1.5">
+          <Button type="button" variant="ghost" size="xs" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button type="button" variant="outline" size="xs" disabled={saving} onClick={() => void save()}>
+            {saving ? 'Saving…' : 'Save'}
+          </Button>
+        </div>
+      </div>
       {error ? (
         <p role="alert" className="text-ui-xs text-error m-0">
           {error}
         </p>
       ) : null}
-      <div className="flex items-center gap-1">
-        <Button type="button" variant="outline" size="sm" disabled={saving} onClick={() => void save()}>
-          <Check aria-hidden />
-          {saving ? 'Saving…' : 'Save'}
-        </Button>
-        <Button type="button" variant="ghost" size="sm" onClick={onClose}>
-          <X aria-hidden />
-          Cancel
-        </Button>
-      </div>
     </div>
   );
 }
@@ -172,9 +183,8 @@ export function CommentRow({
       ref={ref}
       aria-busy={pending || undefined}
       className={cn(
-        'group hover:bg-surface3/60 relative flex gap-2 rounded-lg px-2 transition-opacity duration-300',
+        'group hover:bg-surface3/60 relative flex gap-2 rounded-lg px-2',
         showHeader ? 'py-1.5' : 'py-0.5',
-        pending && 'opacity-60',
         highlighted && 'bg-accent1/10',
       )}
     >

@@ -83,7 +83,7 @@ export function AgentPlaygroundTestChat({
           key={`session-${agentId}-${testThreadId}`}
           agentId={agentId}
           threadId={testThreadId}
-          enabled={Boolean(agent?.browserTools?.length)}
+          enabled={Boolean(agent?.hasBrowser ?? agent?.browserTools?.length)}
         >
           <ThreadInputProvider>
             <ActivatedSkillsProvider key={testThreadId}>

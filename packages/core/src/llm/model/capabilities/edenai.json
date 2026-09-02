@@ -2,6 +2,7 @@
   "attachment": [
     "amazon/moonshotai.kimi-k2.5",
     "anthropic/claude-fable-5",
+    "anthropic/claude-fable-5-1",
     "anthropic/claude-fable-latest",
     "anthropic/claude-opus-4-5",
     "anthropic/claude-opus-4-5-20251101",
@@ -163,6 +164,8 @@
     "cohere/command-r-08-2024",
     "cohere/command-r-plus-08-2024",
     "cohere/command-r7b-12-2024",
+    "databricks/databricks-deepseek-v4-flash-0731",
+    "databricks/databricks-deepseek-v4-pro-0813",
     "databricks/databricks-gpt-oss-120b",
     "databricks/databricks-gpt-oss-120b@eu",
     "databricks/databricks-gpt-oss-20b",
@@ -347,6 +350,7 @@
   ],
   "structuredOutput": [
     "anthropic/claude-fable-5",
+    "anthropic/claude-fable-5-1",
     "anthropic/claude-fable-latest",
     "anthropic/claude-opus-4-5",
     "anthropic/claude-opus-4-5-20251101",
