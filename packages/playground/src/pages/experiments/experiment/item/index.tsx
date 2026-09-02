@@ -1,12 +1,14 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
+import { toast } from '@mastra/playground-ui/utils/toast';
 import { PlayCircle } from 'lucide-react';
 import { useCallback, useMemo, useState } from 'react';
 import { useParams } from 'react-router';
 
 import { RouteItemOverlay } from '@/components/route-item-overlay';
 import { useScoresByExperimentId } from '@/domains/datasets/hooks/use-dataset-experiments';
+import { useDatasetMutations } from '@/domains/datasets/hooks/use-dataset-mutations';
 import { ExperimentResultPanel } from '@/domains/experiments/components/experiment-result-panel';
 import { ExperimentScorePanel } from '@/domains/experiments/components/experiment-score-panel';
 import { useExperimentItemPanel } from '@/domains/experiments/context/experiment-item-panel-context';
@@ -32,6 +34,7 @@ function ExperimentItemPage() {
 function ExperimentItemPageContent({ itemId }: { itemId: string }) {
   const {
     experimentId,
+    datasetId,
     experimentStatus,
     results,
     isLoadingResults,
@@ -45,6 +48,19 @@ function ExperimentItemPageContent({ itemId }: { itemId: string }) {
   const result = useMemo(() => results.find(r => r.itemId === itemId) ?? null, [results, itemId]);
 
   const { data: scoresByItemId } = useScoresByExperimentId(experimentId, experimentStatus);
+  const { updateExperimentResult } = useDatasetMutations();
+
+  const flagForReview = useCallback(
+    async (resultId: string) => {
+      try {
+        await updateExperimentResult.mutateAsync({ datasetId, experimentId, resultId, status: 'needs-review' });
+        toast('Result flagged for review');
+      } catch {
+        toast.error('Failed to flag result for review');
+      }
+    },
+    [datasetId, experimentId, updateExperimentResult],
+  );
   const resultScores = result ? scoresByItemId?.[result.itemId] : undefined;
 
   const [featuredTraceId, setFeaturedTraceId] = useState<string | null>(null);
@@ -132,6 +148,7 @@ function ExperimentItemPageContent({ itemId }: { itemId: string }) {
               setTraceCollapsed(false);
             }}
             onOpenInReview={() => openInReview(result.id)}
+            onFlagForReview={() => void flagForReview(result.id)}
             collapsed={resultCollapsed}
             scorePanelSlot={
               featuredScore ? (
