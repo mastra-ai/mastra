@@ -57,21 +57,29 @@ describe('Subconscious LibSQL integration', () => {
           {
             type: 'text-delta',
             id: 'observe-text',
-            delta: '<observations>Maya Chen owns Project Atlas. The staging region is cobalt.</observations>',
+            delta: '<observations>\n- Maya Chen owns Project Atlas. The staging region is cobalt.\n</observations>',
           },
           { type: 'text-end', id: 'observe-text' },
           { type: 'finish', finishReason: 'stop', usage: { inputTokens: 50, outputTokens: 10, totalTokens: 60 } },
         ]),
       }),
     });
+    // Barrier: the curator's first model call parks here so we can inspect durable state while
+    // curation is still pending, then prove `memory.settled()` is what joins it.
+    let releaseCurator!: () => void;
+    const curatorGate = new Promise<void>(resolve => (releaseCurator = resolve));
     let curatorCall = 0;
-    const curatorStream = vi.fn(async () => {
+    const curatorGenerate = vi.fn(async () => {
       curatorCall += 1;
+      const usage = { inputTokens: 20, outputTokens: 10, totalTokens: 30 };
       if (curatorCall === 1) {
+        await curatorGate;
         return {
-          stream: convertArrayToReadableStream([
-            { type: 'stream-start' as const, warnings: [] },
-            { type: 'response-metadata' as const, id: 'curate-tools', modelId: 'aimock', timestamp: new Date() },
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'tool-calls' as const,
+          usage,
+          warnings: [],
+          content: [
             {
               type: 'tool-call' as const,
               toolCallId: 'create-atlas',
@@ -96,34 +104,18 @@ describe('Subconscious LibSQL integration', () => {
                 scope: 'thread',
               }),
             },
-            {
-              type: 'finish' as const,
-              finishReason: 'tool-calls' as const,
-              usage: { inputTokens: 20, outputTokens: 10, totalTokens: 30 },
-            },
-          ]),
-          rawCall: { rawPrompt: null, rawSettings: {} },
-          warnings: [],
+          ],
         };
       }
       return {
-        stream: convertArrayToReadableStream([
-          { type: 'stream-start' as const, warnings: [] },
-          { type: 'response-metadata' as const, id: 'curate-done', modelId: 'aimock', timestamp: new Date() },
-          { type: 'text-start' as const, id: 'curate-text' },
-          { type: 'text-delta' as const, id: 'curate-text', delta: 'Curated.' },
-          { type: 'text-end' as const, id: 'curate-text' },
-          {
-            type: 'finish' as const,
-            finishReason: 'stop' as const,
-            usage: { inputTokens: 20, outputTokens: 10, totalTokens: 30 },
-          },
-        ]),
         rawCall: { rawPrompt: null, rawSettings: {} },
+        finishReason: 'stop' as const,
+        usage,
         warnings: [],
+        content: [{ type: 'text' as const, text: 'Curated.' }],
       };
     });
-    const curatorModel = new MockLanguageModelV2({ doStream: curatorStream });
+    const curatorModel = new MockLanguageModelV2({ doGenerate: curatorGenerate });
     const memory = new Memory({
       storage,
       vector,
@@ -151,10 +143,27 @@ describe('Subconscious LibSQL integration', () => {
       sendStateSignal: vi.fn(async () => ({ skipped: false }) as any),
     });
     expect(result.observed).toBe(true);
-    expect(curatorStream).toHaveBeenCalledTimes(2);
 
+    // `observe()` returned while the curator is still parked on its first model call: the
+    // observation is already durable in LibSQL, and no knowledge exists yet.
     const knowledge = (await storage.getStore('knowledge'))!;
     const scope = ['org:acme', `resource:${resourceId}`, `thread:${threadId}`];
+    await vi.waitFor(() => expect(curatorGenerate).toHaveBeenCalledTimes(1));
+    const persisted = await (await storage.getStore('memory'))!.getObservationalMemory(threadId, resourceId);
+    expect(persisted?.activeObservations).toContain('Maya Chen owns Project Atlas');
+    expect(await knowledge.resolveNode({ name: 'Project Atlas', scope })).toBeNull();
+
+    // Settlement is the join point: it must not resolve until the curator is released.
+    let settledResolved = false;
+    const settledPromise = memory.settled().then(() => (settledResolved = true));
+    await new Promise(resolve => setTimeout(resolve, 50));
+    expect(settledResolved).toBe(false);
+    expect(curatorGenerate).toHaveBeenCalledTimes(1);
+    releaseCurator();
+    await settledPromise;
+    expect(settledResolved).toBe(true);
+    expect(curatorGenerate).toHaveBeenCalledTimes(2);
+
     const atlas = await knowledge.resolveNode({ name: 'Project Atlas', scope });
     expect(atlas).toMatchObject({ kind: 'project', scope: scope.slice(0, 2) });
     expect((await knowledge.listKnowledgeAbout({ node: atlas!.id, scope })).records).toHaveLength(1);
@@ -288,7 +297,7 @@ describe('Subconscious LibSQL integration', () => {
           { type: 'stream-start', warnings: [] },
           { type: 'response-metadata', id: 'resource-observation', modelId: 'aimock', timestamp: new Date() },
           { type: 'text-start', id: 'resource-text' },
-          { type: 'text-delta', id: 'resource-text', delta: `<observations>${observations}</observations>` },
+          { type: 'text-delta', id: 'resource-text', delta: `<observations>\n${observations}\n</observations>` },
           { type: 'text-end', id: 'resource-text' },
           { type: 'finish', finishReason: 'stop', usage: { inputTokens: 20, outputTokens: 10, totalTokens: 30 } },
         ]),
