@@ -45,4 +45,11 @@ describe('workItemMeta', () => {
   it('falls back to the factory import time when the source date is unknown', () => {
     expect(workItemMeta(workItem())).toBe('#22765 · LekoArts · just now');
   });
+
+  it('falls back to the factory import time when the source date is not a valid timestamp', () => {
+    const item = workItem({
+      metadata: { githubPullRequestNumber: 22765, author: 'LekoArts', sourceCreatedAt: 'not-a-date' },
+    });
+    expect(workItemMeta(item)).toBe('#22765 · LekoArts · just now');
+  });
 });
