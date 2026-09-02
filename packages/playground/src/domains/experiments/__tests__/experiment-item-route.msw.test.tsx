@@ -18,6 +18,7 @@ import {
   experimentTraceSpans,
   experimentsResponse,
   noAgents,
+  noProcessors,
   noScorers,
   noWorkflows,
   resultsResponse,
@@ -73,6 +74,7 @@ const renderExperimentRoute = (initialPath = `/experiments/${EXPERIMENT_ID}`) =>
 beforeEach(() => {
   server.use(
     http.get(`${TEST_BASE_URL}/api/agents`, () => HttpResponse.json(noAgents)),
+    http.get(`${TEST_BASE_URL}/api/processors`, () => HttpResponse.json(noProcessors)),
     http.get(`${TEST_BASE_URL}/api/workflows`, () => HttpResponse.json(noWorkflows)),
     http.get(`${TEST_BASE_URL}/api/scores/scorers`, () => HttpResponse.json(noScorers)),
     http.get(`${TEST_BASE_URL}/api/experiments`, () => HttpResponse.json(experimentsResponse)),

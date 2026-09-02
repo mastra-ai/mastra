@@ -1,5 +1,16 @@
 # @mastra/libsql
 
+## 1.22.3-alpha.3
+
+### Patch Changes
+
+- Update README to include accurate, up-to-date information ([#22858](https://github.com/mastra-ai/mastra/pull/22858))
+
+- Fix the LibSQL vector filter's `$size` operator emitting invalid SQL: the builder misused the filter value as a parameter index, producing named references (`$2`, `$5`, …) that never matched the positional bindings. `$size` now binds through a standard `?` placeholder like every other operator, and the shared vector filter tests (`supportsSize`) are enabled for LibSQL accordingly. ([#22752](https://github.com/mastra-ai/mastra/pull/22752))
+
+- Updated dependencies [[`e983f74`](https://github.com/mastra-ai/mastra/commit/e983f749873189f767f509eb33d1a3596c0f1c74), [`cedc25d`](https://github.com/mastra-ai/mastra/commit/cedc25d8c2dec005d8b10b6ce2d36feef1162ff0), [`9fdb3bc`](https://github.com/mastra-ai/mastra/commit/9fdb3bc0f9bfab5269b4f3045595e62323da5d3a)]:
+  - @mastra/core@1.64.0-alpha.7
+
 ## 1.22.3-alpha.2
 
 ### Patch Changes

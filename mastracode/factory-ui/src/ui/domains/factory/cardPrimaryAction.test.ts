@@ -70,6 +70,7 @@ function proposalSummary(): FactoryDecisionSummary {
     status: 'proposed',
     attempts: 0,
     failureOccurrence: 0,
+    source: null,
     failureCode: null,
     canRetry: false,
     lastError: null,

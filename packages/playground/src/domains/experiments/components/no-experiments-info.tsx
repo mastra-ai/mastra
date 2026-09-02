@@ -24,7 +24,7 @@ export const NoExperimentsInfo = ({ onRunExperiment }: { onRunExperiment?: () =>
           <Button
             variant="ghost"
             as="a"
-            href="https://mastra.ai/en/docs/datasets/running-experiments"
+            href="https://mastra.ai/docs/evals/experiments"
             target="_blank"
             rel="noopener noreferrer"
           >
