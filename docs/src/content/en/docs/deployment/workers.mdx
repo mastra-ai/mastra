@@ -54,6 +54,8 @@ Polls storage for due cron schedules and publishes `workflow.start` events. It's
 
 The scheduler reads declarative `schedule` fields from your workflow definitions automatically. See [Scheduled workflows](/docs/workflows/scheduled-workflows) for how to declare schedules.
 
+The scheduler only polls storage once a schedule exists. A process that has no declared schedules and finds no schedule rows at boot doesn't start the poll loop, so idle deployments issue no scheduler queries and can scale to zero. When a schedule is created at runtime, Mastra publishes a wake event on the PubSub backend, and any process running the default worker set starts its scheduler in response. A standalone worker therefore discovers schedules created by the API process as long as both share the same PubSub backend. If they don't, set `scheduler: { enabled: true }` on the worker, or run it with `MASTRA_WORKERS=scheduler`, so it polls from startup.
+
 **Don't run more than one scheduler instance.** Multiple schedulers polling the same storage would fire duplicate events for the same schedule.
 
 ### Background task worker
