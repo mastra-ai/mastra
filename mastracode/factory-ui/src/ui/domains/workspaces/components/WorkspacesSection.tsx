@@ -9,13 +9,14 @@ import { useLocation, useNavigate, useParams } from 'react-router';
 
 import { useFactoryAuth } from '../../../../hooks/useFactoryAuth';
 import { useActiveRunResources } from '../../../../hooks/useActiveRunResources';
-import { useWorkspaceAttentionState } from '../../../../hooks/useWorkspaceAttention';
 import { useWorkItemsQuery } from '../../../../hooks/useWorkItems';
 import { useWorkspacePullRequestMerges } from '../../../../hooks/useWorkspacePullRequestMerges';
 import { useDeleteWorkspaceMutation, useWorkspacesQuery } from '../../../../hooks/useWorkspaces';
 import { useChatSessionContext } from '../../chat/context/useChatSessionContext';
 import { AGENT_CONTROLLER_ID } from '../../chat/services/constants';
+import { itemAwaitsPerson } from '../../factory/boardCardStatus';
 import { githubNumberForItem, pullRequestStatusForItem } from '../../factory/boardItems';
+import { useItemDecisions } from '../../factory/hooks/useBoardDecisions';
 import { relatedWorkItemIndex, relationshipLabel } from '../../factory/services/relationships';
 import type { WorkItem } from '../../factory/services/workItems';
 import { isTerminalStage } from '../../factory/stages';
@@ -24,7 +25,7 @@ import type { FactoryUserSession } from '../services/user-sessions';
 import { getFactorySessionKind, getSessionOwnerDetails } from '../services/sessionPresentation';
 import type { SessionViewerProfile } from '../services/sessionPresentation';
 import { SessionNavRow } from './SessionNavRow';
-import type { SessionRowStatus } from './SessionNavRow';
+import { sessionRowStatus } from '../services/sessionStatus';
 import type { SessionPreviewDetails } from './SessionPreviewCard';
 
 const COLLAPSED_ROW_COUNT = 5;
@@ -37,7 +38,7 @@ function isSettled(item: WorkItem | undefined, pullRequest: WorkItem | undefined
   return status === 'merged' || status === 'closed';
 }
 
-/** Unread or moving, then open, then finished — a card the agent is still in is never finished. */
+/** Waiting on a person or moving, then open, then finished — a card the agent is still in is never finished. */
 function watchRank(row: FactoryWorkspaceRow): number {
   if (row.initializing || row.running || row.attention) return 0;
   return row.settled ? 2 : 1;
@@ -57,15 +58,6 @@ const bySessionPriority = (a: FactoryWorkspaceRow, b: FactoryWorkspaceRow) =>
   watchRank(a) - watchRank(b) ||
   b.createdAt.localeCompare(a.createdAt) ||
   b.workspace.sessionId.localeCompare(a.workspace.sessionId);
-
-function workspaceStatus(row: FactoryWorkspaceRow): SessionRowStatus | undefined {
-  // An active thread means work is happening even if the workspace record has
-  // not yet been stamped materialized — surface the more informative state.
-  if (row.running) return 'working';
-  if (row.initializing) return 'initializing';
-  if (row.attention) return 'ready';
-  return undefined;
-}
 
 export function WorkspacesSection() {
   const { factoryId, sessionId } = useParams<{ factoryId: string; sessionId: string }>();
@@ -87,10 +79,7 @@ export function WorkspacesSection() {
     agentControllerId: AGENT_CONTROLLER_ID,
     resourceIds: workspaceIds,
   });
-  const { attentionByPath, clearAttention } = useWorkspaceAttentionState({
-    projectRepositoryId,
-    sessionKind: 'factory',
-  });
+  const { proposalByItem, effectByItem } = useItemDecisions(factoryId);
 
   const allWorkItems = workItems.data ?? [];
   const workItemByPath = new Map(
@@ -126,7 +115,7 @@ export function WorkspacesSection() {
         active,
         initializing,
         running,
-        attention: attentionByPath[workspace.sessionId] === true,
+        attention: item !== undefined && itemAwaitsPerson(proposalByItem.get(item.id), effectByItem.get(item.id)),
         review: getFactorySessionKind(workspace, item) === 'review',
         itemLabel: item && item.source !== 'manual' ? relationshipLabel(item) : undefined,
         itemTitle: item?.title,
@@ -173,7 +162,6 @@ export function WorkspacesSection() {
   const pending = deleteWorkspace.isPending;
 
   const openWorkspaceThread = (workspace: FactoryUserSession) => {
-    clearAttention(workspace.sessionId);
     // A workspace's thread id is its own session id (FactoryStartCoordinator
     // seeds the session with threadId = sessionId), so navigate straight there
     // instead of blocking on a session create + thread listing round-trip. The
@@ -324,7 +312,7 @@ function WorkspaceGroup({
             active={row.active}
             disabled={pending}
             merged={mergedByPath[row.workspace.sessionId] ?? row.knownMerged}
-            status={workspaceStatus(row)}
+            status={sessionRowStatus(row)}
             pinned={row.pinned}
             preview={{
               kind,

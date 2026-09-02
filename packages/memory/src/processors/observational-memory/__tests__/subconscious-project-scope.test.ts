@@ -1,51 +1,35 @@
+import { Agent } from '@mastra/core/agent';
 import type { ComputeStateSignalArgs } from '@mastra/core/processors';
 import { RequestContext } from '@mastra/core/request-context';
 import { InMemoryStore } from '@mastra/core/storage';
 import type { MastraEmbeddingModel, MastraVector } from '@mastra/core/vector';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { Memory } from '../../../index';
-import { createPinnedTools, PinnedStateProcessor, Subconscious, SubconsciousCaptureExtractor } from '../subconscious';
-import { createCuratorHandler } from '../subconscious/curate';
-import { createLearnerHandler } from '../subconscious/learn';
+import { createPinnedTools, PinnedStateProcessor, Subconscious } from '../subconscious';
+import { SubconsciousCurateExtractor } from '../subconscious/curate';
 import { SubconsciousRemindExtractor } from '../subconscious/remind';
 
 const PROJECT_SCOPE = ['org:acme', 'resource:project-1'];
+const semanticInfrastructure = {
+  vector: {
+    indexSeparator: '_',
+    listIndexes: vi.fn(async () => ['knowledge_documents_dimension_2']),
+    createIndex: vi.fn(async () => undefined),
+    upsert: vi.fn(async () => []),
+    deleteVectors: vi.fn(async () => undefined),
+    query: vi.fn(async () => []),
+  } as unknown as MastraVector,
+  embedder: {
+    doEmbed: vi.fn(async ({ values }: { values: string[] }) => ({ embeddings: values.map(() => [0.1, 0.2]) })),
+  } as unknown as MastraEmbeddingModel<string>,
+};
 
 function requestContextWith(overrides: Record<string, unknown> = {}) {
   const requestContext = new RequestContext();
   requestContext.set('organizationId', 'acme');
   for (const [key, value] of Object.entries(overrides)) requestContext.set(key, value);
   return requestContext;
-}
-
-function captureContext(memory: Memory, requestContext: RequestContext, resourceId = 'session-a') {
-  return {
-    source: 'observer' as const,
-    threadId: 'thread-a',
-    resourceId,
-    memory,
-    requestContext,
-    current: {
-      nodes: [{ name: 'Shared Node', kind: 'note', records: [{ text: 'The rollout region is cobalt.' }] }],
-    },
-  };
-}
-
-function createSemanticDependencies() {
-  const indexes = new Set<string>();
-  const vector = {
-    indexSeparator: '_',
-    listIndexes: vi.fn(async () => [...indexes]),
-    createIndex: vi.fn(async ({ indexName }: { indexName: string }) => void indexes.add(indexName)),
-    upsert: vi.fn(async ({ ids }: any) => ids),
-    deleteVectors: vi.fn(async () => undefined),
-    query: vi.fn(async () => []),
-  } as unknown as MastraVector;
-  const embedder = {
-    doEmbed: vi.fn(async ({ values }: { values: string[] }) => ({ embeddings: values.map(() => [0.1, 0.2, 0.3]) })),
-  } as unknown as MastraEmbeddingModel<string>;
-  return { vector, embedder };
 }
 
 function makeSignalArgs(
@@ -65,86 +49,9 @@ function makeSignalArgs(
   } as unknown as ComputeStateSignalArgs;
 }
 
+afterEach(() => vi.restoreAllMocks());
+
 describe('Subconscious project scope override', () => {
-  it('capture writes nodes and records under knowledgeResourceId instead of the run resourceId', async () => {
-    const memory = new Memory({ storage: new InMemoryStore() });
-    const extractor = new SubconsciousCaptureExtractor({
-      defaultScope: 'resource',
-      maxScope: 'resource',
-      learnedGuidance: false,
-    });
-    const requestContext = requestContextWith({ knowledgeResourceId: 'project-1' });
-
-    await extractor.onExtracted?.({ ...captureContext(memory, requestContext), extractor } as any);
-
-    const store = (await memory.storage.getStore('knowledge'))!;
-    const shared = await store.getNodeByName({ name: 'Shared Node', scope: PROJECT_SCOPE });
-    expect(shared).toMatchObject({ scope: PROJECT_SCOPE });
-    expect(await store.getNodeByName({ name: 'Shared Node', scope: ['org:acme', 'resource:session-a'] })).toBeNull();
-
-    const records = await store.listKnowledgeAbout({ node: shared!, scope: [...PROJECT_SCOPE, 'thread:thread-a'] });
-    expect(records.records).toHaveLength(1);
-    // Unscoped captured records land at thread level; the resource rung is the project.
-    expect(records.records[0]!.scope).toEqual([...PROJECT_SCOPE, 'thread:thread-a']);
-  });
-
-  it('capture falls back to the run resourceId when no override is present', async () => {
-    const memory = new Memory({ storage: new InMemoryStore() });
-    const extractor = new SubconsciousCaptureExtractor({
-      defaultScope: 'resource',
-      maxScope: 'resource',
-      learnedGuidance: false,
-    });
-
-    await extractor.onExtracted?.({ ...captureContext(memory, requestContextWith()), extractor } as any);
-
-    const store = (await memory.storage.getStore('knowledge'))!;
-    expect(await store.getNodeByName({ name: 'Shared Node', scope: ['org:acme', 'resource:session-a'] })).toMatchObject(
-      { scope: ['org:acme', 'resource:session-a'] },
-    );
-    expect(await store.getNodeByName({ name: 'Shared Node', scope: PROJECT_SCOPE })).toBeNull();
-  });
-
-  it('knowledge read tools from a different run resourceId see project-scoped knowledge under the override', async () => {
-    const { vector, embedder } = createSemanticDependencies();
-    const memory = new Memory({
-      storage: new InMemoryStore(),
-      vector,
-      embedder,
-      options: {
-        observationalMemory: {
-          model: 'google/gemini-2.5-flash',
-          experimental_subconscious: new Subconscious({ tools: true }),
-        },
-      },
-    });
-    // Session A captures under the override.
-    const extractor = new SubconsciousCaptureExtractor({
-      defaultScope: 'resource',
-      maxScope: 'resource',
-      learnedGuidance: false,
-    });
-    await extractor.onExtracted?.({
-      ...captureContext(memory, requestContextWith({ knowledgeResourceId: 'project-1' })),
-      extractor,
-    } as any);
-
-    const tools = memory.listTools();
-    // Session B, different run resourceId, same override: the node is visible.
-    const sharedRead = await tools.knowledge_read!.execute?.({ name: 'Shared Node' }, {
-      agent: { threadId: 'thread-b', resourceId: 'session-b' },
-      requestContext: requestContextWith({ knowledgeResourceId: 'project-1' }),
-    } as any);
-    expect(sharedRead).toMatchObject({ found: true, node: { name: 'Shared Node' } });
-
-    // Session B without the override: siloed, nothing found.
-    const siloedRead = await tools.knowledge_read!.execute?.({ name: 'Shared Node' }, {
-      agent: { threadId: 'thread-b', resourceId: 'session-b' },
-      requestContext: requestContextWith(),
-    } as any);
-    expect(siloedRead).toEqual({ found: false });
-  });
-
   it('the pinned state processor surfaces a pin written under the project scope to a different session', async () => {
     const storage = new InMemoryStore();
     const memory = { storage } as unknown as Parameters<typeof createPinnedTools>[0];
@@ -200,41 +107,40 @@ describe('Subconscious project scope override', () => {
     expect(second).toBeUndefined();
   });
 
-  it('curate, learn, and remind resolve the worklist and search scope from the override', async () => {
-    const memory = new Memory({ storage: new InMemoryStore() });
+  it('curate and remind resolve search scope from the override', async () => {
+    const memory = new Memory({ storage: new InMemoryStore(), ...semanticInfrastructure });
     const store = (await memory.storage.getStore('knowledge'))!;
-    const knowledgeBySource = vi.spyOn(store, 'knowledgeBySource');
     const search = vi.spyOn(store, 'search');
-
-    const resolved = {
-      observation: [],
-      reflection: [
-        { name: 'curate', maxSteps: 5, builtIn: true },
-        { name: 'learn', maxSteps: 5, builtIn: true },
-      ],
+    const subconscious = new Subconscious({
+      observation: [{ name: 'curate', model: 'mock/model', maxSteps: 5 }],
       defaultScope: 'resource',
       maxScope: 'resource',
-      learnedGuidance: true,
-      tools: true,
-      activity: { recentUpdates: 10 },
-      pins: false,
-    } as any;
-    const reflectionContext = () =>
-      ({
-        parentThreadId: 'thread-a',
-        resourceId: 'session-a',
-        observations: '',
-        requestContext: requestContextWith({ knowledgeResourceId: 'project-1' }),
-        mainAgent: { getModel: vi.fn(async () => 'mock/model') },
-      }) as any;
+    });
+    let curatorAgent: Agent | undefined;
+    vi.spyOn(Agent.prototype, 'sendMessage').mockImplementation(function (this: Agent) {
+      curatorAgent = this;
+      return { accepted: new Promise(() => {}), signal: {} } as any;
+    });
+    const curatorConfig = subconscious.resolved.observation.find(agent => agent.name === 'curate')!;
+    const curate = new SubconsciousCurateExtractor(curatorConfig, subconscious.resolved, () => memory, 'mock/model');
 
-    await createCuratorHandler(memory, resolved)(reflectionContext());
-    await createLearnerHandler(memory, resolved)(reflectionContext());
-    for (const call of knowledgeBySource.mock.calls) {
+    await curate.onExtracted?.({
+      source: 'observer',
+      extractor: curate,
+      threadId: 'thread-a',
+      resourceId: 'session-a',
+      current: 'Project Atlas launches soon.',
+      rawObservations: 'Project Atlas launches soon.',
+      memory,
+      requestContext: requestContextWith({ knowledgeResourceId: 'project-1' }),
+    });
+    const tools = await curatorAgent!.listTools();
+    await (tools.knowledge_search as any).execute({ query: 'Project Atlas' }, {});
+    expect(search).toHaveBeenCalled();
+    for (const call of search.mock.calls) {
       expect(call[0]!.scope).toContain('resource:project-1');
       expect(call[0]!.scope).not.toContain('resource:session-a');
     }
-    expect(knowledgeBySource).toHaveBeenCalled();
 
     const remind = new SubconsciousRemindExtractor({ name: 'remind', maxSteps: 3, builtIn: true } as any);
     await Promise.resolve(

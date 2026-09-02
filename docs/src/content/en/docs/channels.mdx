@@ -55,7 +55,7 @@ Channel adapters require provider-specific environment variables for credentials
 
 :::
 
-We recommend configuring [storage](/docs/storage) for channels. Storage lets Mastra persist channel state, thread subscriptions, tool approvals, and memory across restarts:
+We recommend configuring [storage](/docs/storage) for channels. Storage preserves channel and memory state across restarts, including thread subscriptions and tool approvals:
 
 ```typescript title="src/mastra/index.ts"
 import { Mastra } from '@mastra/core'
@@ -228,7 +228,7 @@ channels: {
 },
 ```
 
-Platform retries also mean the same event can arrive more than once. Adapters deduplicate redelivered events using channel state, so configure [storage](/docs/storage) to keep deduplication reliable across restarts. Deduplication is best effort, so keep side effects in custom handlers idempotent so a duplicate that slips through doesn't repeat work like creating a ticket.
+Platform retries sometimes deliver an event more than once. Adapters use channel state for deduplication, which [storage](/docs/storage) can preserve across restarts. Because this protection is best effort, custom-handler side effects should be idempotent so duplicate delivery can't repeat work such as ticket creation.
 
 ## Multimodal content
 

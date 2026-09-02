@@ -2,6 +2,7 @@ import { ReadableStream } from 'node:stream/web';
 import type { PubSub } from '../../events/pubsub';
 import type { Event } from '../../events/types';
 import type { IMastraLogger } from '../../logger';
+import type { TracingContext } from '../../observability';
 import type { OutputProcessorOrWorkflow } from '../../processors';
 import type { RequestContext } from '../../request-context';
 import { safeClose, safeEnqueue } from '../../stream/base';
@@ -123,6 +124,8 @@ export interface DurableAgentStreamOptions<OUTPUT = undefined> {
   returnScorerData?: boolean;
   /** Run context passed to output processors for every streamed chunk. */
   requestContext?: RequestContext;
+  /** Tracing context whose current span is the run's AGENT_RUN span; parents per-chunk processor spans. */
+  tracingContext?: TracingContext;
   /** Experimental transforms applied whenever the returned full stream is consumed. */
   experimentalTransform?: MastraStreamTransformOptions<OUTPUT>;
   /**
@@ -179,6 +182,7 @@ export function createDurableAgentStream<OUTPUT = undefined>(
     outputProcessors,
     returnScorerData,
     requestContext,
+    tracingContext,
     experimentalTransform,
     messageList: externalMessageList,
   } = options;
@@ -634,6 +638,7 @@ export function createDurableAgentStream<OUTPUT = undefined>(
       outputProcessors,
       returnScorerData,
       requestContext,
+      tracingContext,
       experimentalTransform,
     },
   });

@@ -77,8 +77,6 @@ export const queryKeys = {
   sessions: (projectRepositoryId: string | undefined) => ['sessions', projectRepositoryId ?? null] as const,
   workspaces: (projectRepositoryId: string | undefined) => ['sessions', projectRepositoryId ?? null] as const,
   userSession: (sessionId: string | undefined) => ['user-session', sessionId ?? null] as const,
-  workspaceAttention: (projectRepositoryId: string | undefined, sessionKind: 'factory' | 'user') =>
-    ['workspace-attention', projectRepositoryId ?? null, sessionKind] as const,
   providers: () => ['providers'] as const,
   availableModels: () => ['available-models'] as const,
   customProviders: () => ['custom-providers'] as const,

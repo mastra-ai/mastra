@@ -485,6 +485,8 @@ The tool still returns the full `execute` result to your application, while the 
 - `type: 'json'`
 - `type: 'content'` with parts like `text`, `image-url`, `image-data`, `file-url`, `file-data`, `file-id`, `image-file-id`, or `custom`
 
+`toModelOutput` also applies to tools without an `execute` function that run on the client. When the client sends the tool result back on the next request, the server applies the tool definition's `toModelOutput` to it before the model sees it.
+
 ## Example with `transform`
 
 Use `transform` when the tool should keep raw inputs or outputs for runtime behavior, but display streams or transcript messages should receive a smaller or safer shape.

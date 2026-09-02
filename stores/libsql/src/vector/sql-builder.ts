@@ -246,13 +246,17 @@ const FILTER_OPERATORS: Record<OperatorType, OperatorFn> = {
     sql: `NOT (${key})`,
     needsValue: false,
   }),
-  $size: (key: string, paramIndex: number) => {
+  $size: (key: string, value: number) => {
     const jsonPath = getJsonPath(key);
     return {
+      // Anonymous placeholder like every other operator: the previous
+      // `$${paramIndex}` form misused the filter value as a parameter index,
+      // emitting named references ($2, $5, ...) that never matched the
+      // positional bindings collected by processOperator.
       sql: `(
     CASE
-      WHEN json_type(json_extract(metadata, ${jsonPath})) = 'array' THEN 
-        json_array_length(json_extract(metadata, ${jsonPath})) = $${paramIndex}
+      WHEN json_type(json_extract(metadata, ${jsonPath})) = 'array' THEN
+        json_array_length(json_extract(metadata, ${jsonPath})) = ?
       ELSE FALSE
     END
   )`,

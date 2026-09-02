@@ -1,3 +1,4 @@
+import { SETUP_MARKER_PATH, setupMarkerContent } from '@internal/workspace';
 import { Template } from 'e2b';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -5,20 +6,29 @@ import { createRepoTemplate, refreshRepoTemplate, repoTemplateRef } from './repo
 import type { RepoTemplateOptions } from './repo-template';
 import type { NamedTemplateSpec } from './template';
 
-// The head sha is always resolved live, through `git ls-remote`. Driving it
-// by mocking git exercises the real resolution path instead of stepping
-// around it.
+// The head sha is always resolved live: github.com through the REST API,
+// other hosts through `git ls-remote`. Driving both by mocking their
+// transports exercises the real resolution path instead of stepping around it.
 const { execFileMock } = vi.hoisted(() => ({ execFileMock: vi.fn() }));
 vi.mock('node:child_process', () => ({
   execFile: (...args: unknown[]) => execFileMock(...args),
 }));
+const fetchMock = vi.fn();
+vi.stubGlobal('fetch', fetchMock);
 
 const CLONE_URL = 'https://github.com/octocat/hello.git';
 const SHA = 'a'.repeat(40);
 const SETUP = 'pnpm install';
 
-/** Make `git ls-remote` report `sha`, or fail when it is undefined. */
+/** Make the GitHub API report `sha`, or fail when it is undefined. */
 function mockHead(sha: string | undefined): void {
+  fetchMock.mockImplementation(async () =>
+    sha === undefined ? new Response('not found', { status: 404 }) : new Response(`${sha}\n`, { status: 200 }),
+  );
+}
+
+/** Make `git ls-remote` report `sha`, or fail when it is undefined. */
+function mockGitHead(sha: string | undefined): void {
   execFileMock.mockImplementation((_cmd: string, _args: string[], _opts: unknown, cb: unknown) => {
     const done = cb as (err: Error | null, out?: { stdout: string; stderr: string }) => void;
     if (sha === undefined) done(new Error('ls-remote failed'));
@@ -35,6 +45,8 @@ const BASE: RepoTemplateOptions = {
 };
 
 beforeEach(() => {
+  fetchMock.mockReset();
+  execFileMock.mockReset();
   mockHead(SHA);
 });
 
@@ -131,12 +143,79 @@ describe('createRepoTemplate', () => {
     expect((await resolve(BASE)).ref).toBe(repoTemplateRef(IDENTITY));
   });
 
-  it('clones into $HOME, pins the sha, and runs the setup command in the workdir', async () => {
+  it('clones relative to the build cwd, pins the sha, and runs the setup command in the checkout', async () => {
     const steps = await serializedSteps(await resolve(BASE));
     // Serialized as JSON, so the shell double quotes appear escaped.
-    expect(steps).toContain('git clone https://github.com/octocat/hello \\"$HOME/hello\\"');
+    expect(steps).toContain('git clone https://github.com/octocat/hello \\"hello\\"');
     expect(steps).toContain(`checkout ${SHA}`);
-    expect(steps).toContain('cd \\"$HOME/hello\\" && pnpm install');
+    expect(steps).toContain('cd \\"hello\\" && pnpm install');
+  });
+
+  it('runs each setupCommand array entry as its own build step with its own cd prefix', async () => {
+    const serialized = await serializedSteps(await resolve({ ...BASE, setupCommand: ['pnpm i', 'pnpm build'] }));
+    const definition = JSON.parse(serialized) as { steps: { type: string; args: string[] }[] };
+    const runSteps = definition.steps.filter(step => step.type === 'RUN').map(step => step.args.join(' '));
+    expect(runSteps).toContain('cd "hello" && pnpm i');
+    expect(runSteps).toContain('cd "hello" && pnpm build');
+    // The git commands are individual steps too, not one combined chain.
+    expect(runSteps.some(step => step.includes('git clone') && !step.includes('pnpm'))).toBe(true);
+  });
+
+  it('drops blank setup entries instead of emitting broken cd-prefixed steps', async () => {
+    const serialized = await serializedSteps(await resolve({ ...BASE, setupCommand: ['pnpm i', '', '   '] }));
+    const definition = JSON.parse(serialized) as { steps: { type: string; args: string[] }[] };
+    const setupSteps = definition.steps.filter(step => step.type === 'RUN' && step.args.join(' ').includes('cd '));
+    expect(setupSteps).toHaveLength(1);
+    expect(setupSteps[0]!.args.join(' ')).toBe('cd "hello" && pnpm i');
+  });
+
+  it('treats an all-blank setupCommand as absent, including for identity', async () => {
+    const blank = await resolve({ ...BASE, setupCommand: [''] });
+    const none = await resolve({ ...BASE, setupCommand: undefined });
+    expect(blank.ref).toBe(none.ref);
+    expect(await serializedSteps(blank)).not.toContain('cd \\"hello\\" && ');
+  });
+
+  it('creates an explicit workingDirectory and sets it as the cwd before cloning', async () => {
+    const serialized = await serializedSteps(await resolve({ ...BASE, workingDirectory: '/workspace/' }));
+    const definition = JSON.parse(serialized) as { steps: { type: string; args: string[] }[] };
+    // mkdir runs as the build user, then WORKDIR makes the directory the cwd
+    // for every later step and the runtime default. Steps stay relative so
+    // the checkout lands at `<cwd>/hello` exactly as in the unset case.
+    const ordered = definition.steps
+      .filter(step => step.type === 'RUN' || step.type === 'WORKDIR')
+      .map(step => `${step.type} ${step.args.join(' ')}`);
+    const start = ordered.indexOf('RUN mkdir -p "/workspace"');
+    expect(start).toBeGreaterThan(-1);
+    expect(ordered.slice(start, start + 3)).toEqual([
+      'RUN mkdir -p "/workspace"',
+      'WORKDIR /workspace',
+      'RUN git clone https://github.com/octocat/hello "hello"',
+    ]);
+    expect(ordered).toContain('RUN cd "hello" && pnpm install');
+  });
+
+  it('emits no WORKDIR when workingDirectory is omitted, so the image cwd applies', async () => {
+    const serialized = await serializedSteps(await resolve(BASE));
+    const definition = JSON.parse(serialized) as { steps: { type: string; args: string[] }[] };
+    expect(definition.steps.map(step => step.type)).not.toContain('WORKDIR');
+  });
+
+  it('hashes workingDirectory into the template name without disturbing default names', async () => {
+    const defaulted = await resolve(BASE);
+    const custom = await resolve({ ...BASE, workingDirectory: '/workspace' });
+    expect(custom.ref).not.toBe(defaulted.ref);
+    // Absent stays absent: pre-option templates keep their names.
+    expect(defaulted.ref).toBe(repoTemplateRef(IDENTITY));
+    // One layout, one name: a trailing slash is not a different directory.
+    const slashed = await resolve({ ...BASE, workingDirectory: '/workspace/' });
+    expect(slashed.ref).toBe(custom.ref);
+  });
+
+  it('rejects a workingDirectory that is not a plain absolute path', async () => {
+    for (const bad of ['~/repos', '$HOME/repos', 'relative/path', '/tmp/../etc', '/has space', '/quo"te']) {
+      await expect(resolve({ ...BASE, workingDirectory: bad })).rejects.toThrow(/absolute path/);
+    }
   });
 
   it('pins whatever head the repository reports, so a moved branch retags', async () => {
@@ -147,12 +226,47 @@ describe('createRepoTemplate', () => {
     expect(await serializedSteps(resolved)).toContain(`checkout ${head}`);
   });
 
-  it('looks the head up against the clone URL without cloning', async () => {
+  it('always writes the setup marker beside the checkout as the last build step', async () => {
+    const resolved = await resolve(BASE);
+    const steps = await serializedSteps(resolved);
+    const content = setupMarkerContent([SETUP]);
+    expect(content).toMatch(/^sha256:[0-9a-f]{64}$/);
+    const markerStep = `mkdir -p \\"$(dirname \\"${SETUP_MARKER_PATH}\\")\\" && printf '%s' '${content}' > \\"${SETUP_MARKER_PATH}\\"`;
+    expect(steps).toContain(markerStep);
+    expect(steps.lastIndexOf(markerStep)).toBeGreaterThan(steps.lastIndexOf(SETUP));
+    // The digest covers exactly the commands the image ran, in order.
+    expect(setupMarkerContent(['a', 'b'])).not.toBe(setupMarkerContent(['b', 'a']));
+    expect(setupMarkerContent([])).toMatch(/^sha256:/);
+  });
+
+  it('looks a github.com head up through the REST API, without git or a clone', async () => {
     await resolve(BASE);
+    expect(execFileMock).not.toHaveBeenCalled();
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe('https://api.github.com/repos/octocat/hello/commits/HEAD');
+    expect(init.headers).toMatchObject({ Accept: 'application/vnd.github.sha' });
+    expect(init.headers).not.toHaveProperty('Authorization');
+  });
+
+  it('sends the repository credential as a bearer token to the GitHub API', async () => {
+    await resolve({
+      ...BASE,
+      getRepositoryAccess: async () => ({ cloneUrl: CLONE_URL, authorization: { scheme: 'bearer', token: 'ghs_t' } }),
+    });
+    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(init.headers).toMatchObject({ Authorization: 'Bearer ghs_t' });
+  });
+
+  it('looks a non-GitHub head up with git ls-remote against the clone URL', async () => {
+    const other = 'https://gitlab.com/octocat/hello.git';
+    mockGitHead(SHA);
+    const resolved = await resolve({ ...BASE, getRepositoryAccess: async () => ({ cloneUrl: other }) });
+    expect(fetchMock).not.toHaveBeenCalled();
     const [command, args] = execFileMock.mock.calls[0] as [string, string[]];
     expect(command).toBe('git');
     expect(args).toContain('ls-remote');
-    expect(args).toContain(CLONE_URL);
+    expect(args).toContain(other);
+    expect(resolved.ref).toBe(repoTemplateRef({ cloneUrl: other, setupCommand: SETUP, sha: SHA }));
   });
 
   it('degrades to the sha-less name when head resolution fails', async () => {
@@ -262,7 +376,7 @@ describe('createRepoTemplate', () => {
     expect(serialized).toContain('PIP_INDEX_URL');
   });
 
-  it('needs no root prep — the clone lands in the build user home', async () => {
+  it('needs no root prep when workingDirectory is omitted', async () => {
     const steps = await serializedSteps(await resolve(BASE));
     expect(steps).not.toContain('chown');
     expect(steps).not.toContain('mkdir -p /workspace');
@@ -285,8 +399,8 @@ describe('createRepoTemplate', () => {
     );
     // The repository name keeps its real spelling in the clone URL; only
     // the derived checkout path is sanitized.
-    expect(steps).toContain('\\"$HOME/evil\\"');
-    expect(steps).not.toContain('$HOME/..');
+    expect(steps).toContain('\\"evil\\"');
+    expect(steps).not.toContain('\\"..evil\\"');
   });
 
   it('rejects clone URLs that could reach the build shell as anything but a URL', async () => {
