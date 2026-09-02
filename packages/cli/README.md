@@ -18,6 +18,12 @@ If you prefer not to install packages globally, run it through `npx`:
 npx mastra --help
 ```
 
+You can also install the CLI locally in a project:
+
+```bash
+npm install mastra
+```
+
 ## Usage
 
 Run commands from a Mastra project:

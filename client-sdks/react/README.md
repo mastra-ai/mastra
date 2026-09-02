@@ -5,7 +5,7 @@
 ## Installation
 
 ```bash
-npm install @mastra/react react react-dom
+npm install @mastra/react
 ```
 
 ## Usage

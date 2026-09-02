@@ -29,7 +29,7 @@ A host application calls `MastraFactory.prepare()`, constructs its `Mastra` inst
 
 `prepare()` initializes the Factory-owned resources needed before Mastra is constructed. `finalize()` connects those resources to the completed host, including Factory routes, integrations, storage-backed behavior, and agent-controller features. Consumers should keep frontend concerns in `factory-ui` and host-specific environment or deployment wiring in `web` rather than adding them to this package.
 
-## Development
+### Development
 
 Run focused package checks from the repository root:
 

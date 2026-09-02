@@ -93,7 +93,7 @@ npx @mastra/codemod --print v1/mastra-core-imports src/mastra.ts
 npx @mastra/codemod --verbose v1/runtime-context src/
 ```
 
-## Contributing
+### Contributing
 
 Create new codemods in `src/codemods/<version>`, add input and output fixtures under `src/test/__fixtures__/`, and add the corresponding tests in `src/test/`. The package includes a scaffold command for generating the boilerplate:
 
@@ -102,7 +102,7 @@ cd packages/codemod
 pnpm scaffold
 ```
 
-## Testing
+### Testing
 
 Run tests from `packages/codemod`:
 
