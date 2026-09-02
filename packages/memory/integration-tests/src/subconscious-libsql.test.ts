@@ -49,14 +49,14 @@ async function createScopeIds(memory: Memory, store: any, resourceId: string, th
     const resource = await knowledge.materializeScope({
       address: resourceAddress,
       parentAddresses: ['org:acme'],
-      contextualScopeAddress: 'org:acme',
+      contextualScopeAddress: resourceAddress,
       parameters: { orgId: 'acme', resourceId },
     });
     const threadAddress = `${resourceAddress}:thread:${threadId}`;
     const thread = await knowledge.materializeScope({
       address: threadAddress,
       parentAddresses: [resourceAddress],
-      contextualScopeAddress: resourceAddress,
+      contextualScopeAddress: threadAddress,
       parameters: { orgId: 'acme', resourceId, threadId },
     });
     const resourceCompanionAddress = `${resourceAddress}:uncurated`;
@@ -213,6 +213,12 @@ describe('Subconscious LibSQL integration', () => {
     expect(atlas).toMatchObject({ kind: 'project' });
     expect(await knowledge.getNodeScopeIds(atlas!.id)).toEqual([scopeIds[4]]);
     expect((await knowledge.listRecords({ node: atlas!.id, scopeIds })).records).toHaveLength(2);
+    const sharedStatus = await knowledge.createNode({ name: 'Shared Status', scopeIds: [scopeIds[3]!] });
+    await knowledge.createRecord({
+      node: sharedStatus,
+      text: 'The resource status is available to every thread.',
+      scopeIds: [scopeIds[3]!],
+    });
 
     const betaThreadId = randomUUID();
     await memory.createThread({ threadId: betaThreadId, resourceId, title: 'Sibling thread' });
@@ -263,14 +269,29 @@ describe('Subconscious LibSQL integration', () => {
       resolutionScopeIds: scopeIds,
       metadata: { sourceThreadId: threadId },
     });
+    await knowledge.createRecord({
+      node: sharedStatus,
+      text: 'Review [[Alpha Secret]] before launch.',
+      scopeIds: [scopeIds[3]!],
+      source: threadId,
+      resolutionScopeIds: scopeIds,
+      metadata: { sourceThreadId: threadId },
+    });
     await memory.drainKnowledgeSemanticIndex(scopeIds);
 
     const tools = memory.listTools();
     const toolContext = { agent: { threadId: betaThreadId, resourceId }, requestContext } as any;
     const search = await tools.knowledge_search!.execute?.({ query: 'cobalt' }, toolContext);
-    expect((search as any).results.map((result: any) => result.name)).not.toContain('Alpha Secret');
     expect((search as any).results).toEqual(
-      expect.arrayContaining([expect.objectContaining({ type: 'record', name: '(private node)' })]),
+      expect.arrayContaining([expect.objectContaining({ type: 'record', name: 'Shared Status' })]),
+    );
+    expect((search as any).results.map((result: any) => result.name)).not.toContain('Alpha Secret');
+    expect((search as any).results.map((result: any) => result.name)).not.toContain('Project Atlas');
+    expect((search as any).results.map((result: any) => result.text)).not.toContain(
+      'Only the alpha thread may see this.',
+    );
+    expect((search as any).results.map((result: any) => result.text)).not.toContain(
+      'Review [[Alpha Secret]] before launch.',
     );
     const read = await tools.knowledge_read!.execute?.({ name: 'Project Atlas' }, toolContext);
     expect(read).toEqual({ found: false });
@@ -521,9 +542,10 @@ describe('Subconscious LibSQL integration', () => {
       content: [{ type: 'text' as const, text: `<curation-complete through="${completionItemId}" />` }],
     }));
     const curatorModel = new MockLanguageModelV2({ doGenerate: curateGenerate as never });
+    const knowledgeInstance = new Knowledge({ id: 'default', storage });
     const memory = new Memory({
       storage,
-      knowledge: new Knowledge({ id: 'default', storage }),
+      knowledge: knowledgeInstance,
       vector,
       embedder,
       options: {
@@ -532,7 +554,7 @@ describe('Subconscious LibSQL integration', () => {
           model,
           experimental_subconscious: new Subconscious({
             observation: [],
-            reflection: [{ name: 'curate', model: curatorModel }],
+            reflection: [{ name: 'curate', model: curatorModel, curatorProfile: 'subconscious' }],
           }),
           observation: { messageTokens: 1, bufferTokens: false, previousObserverTokens: 1_000 },
           reflection: { observationTokens: 1, bufferActivation: 0 },
@@ -542,11 +564,24 @@ describe('Subconscious LibSQL integration', () => {
     await memory.createThread({ threadId, resourceId, title: 'Curator lifecycle' });
     const knowledge = (await storage.getStore('knowledge'))!;
     const scopeIds = await createScopeIds(memory, knowledge, resourceId, threadId);
-    const node = await knowledge.createNode({ name: 'Project Atlas', kind: 'project', scopeIds: [scopeIds[2]!] });
+    await knowledgeInstance.registerCuratorProfile({
+      id: 'subconscious',
+      identityScope: {
+        address: 'curator:subconscious',
+        name: 'Subconscious curator',
+        contextualScopeAddress: 'curator:subconscious',
+      },
+      grants: [
+        { scopeAddress: `resource:${resourceId}:thread:${threadId}:uncurated`, role: 'owner' },
+        { scopeAddress: `resource:${resourceId}`, role: 'owner' },
+        { scopeAddress: `resource:${resourceId}:thread:${threadId}`, role: 'owner' },
+      ],
+    });
+    const node = await knowledge.createNode({ name: 'Project Atlas', kind: 'project', scopeIds: [scopeIds[4]!] });
     const record = await knowledge.createRecord({
       node,
       text: '[[Project Atlas]] launches soon.',
-      scopeIds: [scopeIds[2]!],
+      scopeIds: [scopeIds[4]!],
       source: threadId,
       resolutionScopeIds: scopeIds,
       metadata: { sourceThreadId: threadId },
@@ -580,7 +615,7 @@ describe('Subconscious LibSQL integration', () => {
 
     expect(result.observed).toBe(true);
     expect(curateGenerate).toHaveBeenCalledOnce();
-    expect(await knowledge.getCurationCursorInternal({ sourceThreadId: threadId, agent: 'curate' })).toMatchObject({
+    expect(await knowledge.getCurationCursor({ sourceThreadId: threadId, agent: 'curate' })).toMatchObject({
       lastKnowledgeId: record.id,
     });
     await expect(knowledge.updateNode({ id: node.id, version: node.version + 1, name: 'Stale Atlas' })).rejects.toThrow(
@@ -592,8 +627,14 @@ describe('Subconscious LibSQL integration', () => {
       version: record.version,
       deletedBy: 'subconscious:curate',
     });
-    expect(await knowledge.getRecordInternal({ id: record.id })).toBeNull();
+    expect(await knowledge.getRecord({ id: record.id })).toBeNull();
     await memory.drainKnowledgeSemanticIndex(scopeIds);
+    await expect(
+      Promise.all([
+        knowledge.listSemanticOutbox({ status: 'pending', scopeIds, limit: 100 }),
+        knowledge.listSemanticOutbox({ status: 'processing', scopeIds, limit: 100 }),
+      ]),
+    ).resolves.toEqual([[], []]);
     const indexName = (await vector.listIndexes()).find(name => name.startsWith('knowledge_documents_dimension'))!;
     const queryVector = (await embedder.doEmbed({ values: ['Project Atlas launch'] })).embeddings[0]!;
     expect((await vector.query({ indexName, queryVector, topK: 20 })).some(match => match.id.endsWith(record.id))).toBe(
@@ -602,7 +643,13 @@ describe('Subconscious LibSQL integration', () => {
 
     await knowledge.restoreRecord({ id: record.id, version: deleted.version });
     await memory.drainKnowledgeSemanticIndex(scopeIds);
-    expect(await knowledge.getRecordInternal({ id: record.id })).toMatchObject({
+    await expect(
+      Promise.all([
+        knowledge.listSemanticOutbox({ status: 'pending', scopeIds, limit: 100 }),
+        knowledge.listSemanticOutbox({ status: 'processing', scopeIds, limit: 100 }),
+      ]),
+    ).resolves.toEqual([[], []]);
+    expect(await knowledge.getRecord({ id: record.id })).toMatchObject({
       deletedAt: undefined,
       deletedBy: undefined,
     });
@@ -700,7 +747,7 @@ describe('Subconscious LibSQL integration', () => {
     const evidence = await knowledge.listRecords({ node: skills[0]!.id, scopeIds });
     expect(evidence.records).toHaveLength(4);
     expect(new Set(evidence.records.map(record => record.id)).size).toBe(4);
-    expect(await knowledge.getCurationCursorInternal({ sourceThreadId: threadId, agent: 'learn' })).toMatchObject({
+    expect(await knowledge.getCurationCursor({ sourceThreadId: threadId, agent: 'learn' })).toMatchObject({
       lastKnowledgeId: fourth.id,
     });
   });

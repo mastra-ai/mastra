@@ -126,13 +126,13 @@ async function materializeCaptureScopes(
   const resource = await knowledge.materializeScope({
     address: resourceAddress,
     parentAddresses: [organizationAddress],
-    contextualScopeAddress: organizationAddress,
+    contextualScopeAddress: resourceAddress,
     parameters: { orgId: organizationId, resourceId },
   });
   const thread = await knowledge.materializeScope({
     address: threadAddress,
     parentAddresses: [resourceAddress],
-    contextualScopeAddress: resourceAddress,
+    contextualScopeAddress: threadAddress,
     parameters: { orgId: organizationId, resourceId, threadId },
   });
   const baseScopeIds = [

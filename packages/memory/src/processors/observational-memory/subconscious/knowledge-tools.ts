@@ -58,37 +58,51 @@ export async function resolveKnowledgeScopeIds(
   const orgAddress = `org:${organizationId}`;
   const resourceAddress = `resource:${resourceId}`;
   const threadAddress = `resource:${resourceId}:thread:${threadId}`;
-  const org = await knowledge.materializeScope({
-    address: orgAddress,
-    contextualScopeAddress: orgAddress,
-    parameters: { orgId: organizationId },
-  });
-  const resource = await knowledge.materializeScope({
-    address: resourceAddress,
-    parentAddresses: [orgAddress],
-    contextualScopeAddress: orgAddress,
-    parameters: { orgId: organizationId, resourceId },
-  });
-  const thread = await knowledge.materializeScope({
-    address: threadAddress,
-    parentAddresses: [resourceAddress],
-    contextualScopeAddress: resourceAddress,
-    parameters: { orgId: organizationId, resourceId, threadId },
-  });
-  const scopeIds = [org.scopes[orgAddress]!, resource.scopes[resourceAddress]!, thread.scopes[threadAddress]!];
-  for (const [level, parentAddress] of [
-    ['resource', resourceAddress],
-    ['thread', threadAddress],
-  ] as const) {
+  const store = await getKnowledgeStore(memory);
+  const orgId =
+    (await store.getScopeAddress(orgAddress))?.scopeNodeId ??
+    (
+      await knowledge.materializeScope({
+        address: orgAddress,
+        contextualScopeAddress: orgAddress,
+        parameters: { orgId: organizationId },
+      })
+    ).scopes[orgAddress]!;
+  const resourceIdValue =
+    (await store.getScopeAddress(resourceAddress))?.scopeNodeId ??
+    (
+      await knowledge.materializeScope({
+        address: resourceAddress,
+        parentAddresses: [orgAddress],
+        contextualScopeAddress: resourceAddress,
+        parameters: { orgId: organizationId, resourceId },
+      })
+    ).scopes[resourceAddress]!;
+  const threadIdValue =
+    (await store.getScopeAddress(threadAddress))?.scopeNodeId ??
+    (
+      await knowledge.materializeScope({
+        address: threadAddress,
+        parentAddresses: [resourceAddress],
+        contextualScopeAddress: threadAddress,
+        parameters: { orgId: organizationId, resourceId, threadId },
+      })
+    ).scopes[threadAddress]!;
+  const scopeIds = [orgId, resourceIdValue, threadIdValue];
+  for (const parentAddress of [resourceAddress, threadAddress]) {
     const address = `${parentAddress}:uncurated`;
-    const companion = await knowledge.materializeScope({
-      address,
-      name: 'uncurated',
-      parentAddresses: [parentAddress],
-      contextualScopeAddress: parentAddress,
-      parameters: { orgId: organizationId, resourceId, threadId },
-    });
-    scopeIds.push(companion.scopes[address]!);
+    const companionId =
+      (await store.getScopeAddress(address))?.scopeNodeId ??
+      (
+        await knowledge.materializeScope({
+          address,
+          name: 'uncurated',
+          parentAddresses: [parentAddress],
+          contextualScopeAddress: parentAddress,
+          parameters: { orgId: organizationId, resourceId, threadId },
+        })
+      ).scopes[address]!;
+    scopeIds.push(companionId);
   }
   return scopeIds;
 }
@@ -355,4 +369,117 @@ export function createKnowledgeTools(
     },
   });
   return { knowledge_search: knowledgeSearch, knowledge_read: knowledgeRead, knowledge_browse: knowledgeBrowse };
+}
+
+export interface KnowledgeCurationToolsOptions {
+  profileId: string;
+  companionScopeId: string;
+  contextScopeId: string;
+  destinationScopeIds: KnowledgeScopeIds;
+}
+
+export function createKnowledgeCurationTools(
+  memory: KnowledgeStoreMemory,
+  options: KnowledgeCurationToolsOptions,
+): Record<string, ToolAction<any, any, any>> {
+  const knowledge = memory.getKnowledgeInstance?.();
+  if (!knowledge) throw new Error('Knowledge curation tools require a configured Knowledge instance.');
+  const curator = knowledge.createCurator({
+    profileId: options.profileId,
+    companionScopeId: options.companionScopeId,
+    contextScopeId: options.contextScopeId,
+  });
+  const destinationScopeSchema: JSONSchema7 = {
+    type: 'string',
+    enum: [...new Set(options.destinationScopeIds)],
+  };
+
+  return {
+    knowledge_curation_list: createTool({
+      id: 'knowledge_curation_list',
+      description: 'List the next bounded page of visible nodes in the host-configured uncurated worklist.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          cursor: { type: 'string' },
+          limit: { type: 'integer', minimum: 1, maximum: 100 },
+        },
+        additionalProperties: false,
+      } satisfies JSONSchema7,
+      execute: input => curator.listWorklist(input as { cursor?: string; limit?: number }),
+    }),
+    knowledge_curation_refine: createTool({
+      id: 'knowledge_curation_refine',
+      description: 'Refine a provisional node through a governed direct mutation or review proposal.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          nodeId: { type: 'string', minLength: 1 },
+          version: { type: 'integer', minimum: 1 },
+          name: { type: 'string', minLength: 1 },
+          kind: { type: 'string', minLength: 1 },
+          metadata: { type: 'object' },
+          reason: { type: 'string' },
+        },
+        required: ['nodeId', 'version'],
+        additionalProperties: false,
+      } satisfies JSONSchema7,
+      execute: input => curator.refine(input as any),
+    }),
+    knowledge_curation_promote: createTool({
+      id: 'knowledge_curation_promote',
+      description: 'Promote verified provisional knowledge to a host-allowed curated scope.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          nodeId: { type: 'string', minLength: 1 },
+          version: { type: 'integer', minimum: 1 },
+          destinationScopeId: destinationScopeSchema,
+        },
+        required: ['nodeId', 'version', 'destinationScopeId'],
+        additionalProperties: false,
+      } satisfies JSONSchema7,
+      execute: input => curator.promote(input as any),
+    }),
+    knowledge_curation_merge: createTool({
+      id: 'knowledge_curation_merge',
+      description: 'Merge a provisional duplicate node into a visible canonical target using numeric CAS.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          sourceId: { type: 'string', minLength: 1 },
+          targetId: { type: 'string', minLength: 1 },
+          sourceVersion: { type: 'integer', minimum: 1 },
+        },
+        required: ['sourceId', 'targetId', 'sourceVersion'],
+        additionalProperties: false,
+      } satisfies JSONSchema7,
+      execute: input => curator.merge(input as any),
+    }),
+    knowledge_curation_discard: createTool({
+      id: 'knowledge_curation_discard',
+      description: 'Soft-delete a provisional node through ordinary governed deletion.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          nodeId: { type: 'string', minLength: 1 },
+          version: { type: 'integer', minimum: 1 },
+        },
+        required: ['nodeId', 'version'],
+        additionalProperties: false,
+      } satisfies JSONSchema7,
+      execute: input => curator.discard(input as any),
+    }),
+    knowledge_curation_retain: createTool({
+      id: 'knowledge_curation_retain',
+      description: 'Intentionally leave a provisional node in the worklist for a later pass.',
+      inputSchema: {
+        type: 'object',
+        properties: { nodeId: { type: 'string', minLength: 1 } },
+        required: ['nodeId'],
+        additionalProperties: false,
+      } satisfies JSONSchema7,
+      execute: input => curator.retain((input as { nodeId: string }).nodeId),
+    }),
+  };
 }

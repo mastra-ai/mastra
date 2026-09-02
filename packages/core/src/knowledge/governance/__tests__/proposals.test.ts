@@ -35,6 +35,12 @@ async function createFixture() {
     scopeIds => knowledge.evaluateAccess(scopeIds),
     input => knowledge.getNode(input),
     input => knowledge.getRecord(input),
+    async input => {
+      const frontier = await knowledge.evaluateAccess(input.scopeIds);
+      if (!frontier.scopes[input.id]?.read) return null;
+      const scope = await storage.getNode(input.id);
+      return scope?.isScope && !scope.deletedAt ? scope : null;
+    },
   );
   const node = await storage.createNode({ name: 'Draft', scopeIds: [structure.scopes['scope:source']!] });
   return { knowledge, storage, lifecycle, node, ids: structure.scopes };

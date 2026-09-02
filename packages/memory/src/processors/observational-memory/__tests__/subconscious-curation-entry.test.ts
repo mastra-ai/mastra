@@ -27,7 +27,9 @@ function createMemory(options?: { omModel?: ObservationalMemoryModel | false }) 
     options: {
       observationalMemory: {
         ...(options?.omModel === false ? {} : { model: options?.omModel ?? 'openai/om-model' }),
-        experimental_subconscious: new Subconscious(),
+        experimental_subconscious: new Subconscious({
+          reflection: [{ name: 'curate', curatorProfile: 'subconscious' }, 'learn'],
+        }),
       },
     },
   });
@@ -39,12 +41,30 @@ function requestContext() {
   return context;
 }
 
-async function seedItem(memory: Memory, text = 'Atlas launches soon.') {
-  const store = await memory.getKnowledgeStore();
+async function registerCurator(memory: Memory) {
   const scopeIds = await resolveKnowledgeScopeIds(memory, {
     agent: { threadId: 'alpha', resourceId: 'user-42' },
     requestContext: requestContext(),
   });
+  await memory.getKnowledgeInstance()!.registerCuratorProfile({
+    id: 'subconscious',
+    identityScope: {
+      address: 'curator:subconscious',
+      name: 'Subconscious curator',
+      contextualScopeAddress: 'curator:subconscious',
+    },
+    grants: [
+      { scopeAddress: 'resource:user-42:thread:alpha:uncurated', role: 'owner' },
+      { scopeAddress: 'resource:user-42', role: 'owner' },
+      { scopeAddress: 'resource:user-42:thread:alpha', role: 'owner' },
+    ],
+  });
+  return scopeIds;
+}
+
+async function seedItem(memory: Memory, text = 'Atlas launches soon.') {
+  const store = await memory.getKnowledgeStore();
+  const scopeIds = await registerCurator(memory);
   const node = await store.createNode({ name: 'Project Atlas', kind: 'project', scopeIds: [scopeIds[1]!] });
   return store.createRecord({
     node,
@@ -81,12 +101,14 @@ describe('Memory.runCuration', () => {
     });
   });
 
-  it('writes and refines entity content through the curator tool path', async () => {
+  it('refines provisional knowledge through the governed curator tool path', async () => {
     let generateCall = 0;
     let currentRecordId = '';
-    const description = 'Project Atlas is the current launch project.\n\nLinks: https://github.com/mastra-ai/mastra';
-    const refinedDescription =
-      'Project Atlas is the current launch project, now expanding its knowledge system.\n\nLinks: https://github.com/mastra-ai/mastra';
+    let nodeId = '';
+    const descriptions = [
+      'Project Atlas is the current launch project.',
+      'Project Atlas is expanding its knowledge system.',
+    ];
     const memory = createMemory({
       omModel: new MockLanguageModelV2({
         doGenerate: async (): Promise<any> => {
@@ -99,13 +121,12 @@ describe('Memory.runCuration', () => {
               content: [
                 {
                   type: 'tool-call' as const,
-                  toolCallId: `write-${generateCall}`,
-                  toolName: 'knowledge_write_node_content',
+                  toolCallId: `refine-${generateCall}`,
+                  toolName: 'knowledge_curation_refine',
                   input: JSON.stringify({
-                    name: 'Project Atlas',
-                    content: generateCall === 1 ? description : refinedDescription,
-                    scope: 'thread',
-                    expectedVersion: generateCall === 1 ? 1 : 2,
+                    nodeId,
+                    version: generateCall === 1 ? 1 : 2,
+                    metadata: { description: descriptions[generateCall === 1 ? 0 : 1] },
                   }),
                 },
               ],
@@ -123,10 +144,17 @@ describe('Memory.runCuration', () => {
       }),
     });
     const store = (await memory.storage.getStore('knowledge'))!;
-    const firstRecord = await seedItem(
-      memory,
-      'Project Atlas launches soon. Repository: https://github.com/mastra-ai/mastra',
-    );
+    const scopeIds = await registerCurator(memory);
+    const grantsBefore = await store.listScopeGrants();
+    const node = await store.createNode({ name: 'Project Atlas', kind: 'project', scopeIds: [scopeIds[4]!] });
+    nodeId = node.id;
+    const firstRecord = await store.createRecord({
+      node,
+      text: 'Project Atlas launches soon.',
+      scopeIds: [scopeIds[4]!],
+      source: 'alpha',
+      metadata: { sourceThreadId: 'alpha' },
+    });
     currentRecordId = firstRecord.id;
 
     await memory.runCuration({
@@ -135,21 +163,17 @@ describe('Memory.runCuration', () => {
       requestContext: requestContext(),
     });
 
-    const scopeIds = await resolveKnowledgeScopeIds(memory, {
-      agent: { threadId: 'alpha', resourceId: 'user-42' },
-      requestContext: requestContext(),
+    expect(await store.getNode(node.id)).toMatchObject({
+      version: 2,
+      metadata: { description: descriptions[0] },
     });
-    const written = await store.resolveNode({ name: 'Project Atlas', scopeIds });
-    expect(written).toMatchObject({ version: 2 });
-    expect((await store.listRecordsBySource({ source: 'subconscious:curate', scopeIds })).records).toEqual(
-      expect.arrayContaining([expect.objectContaining({ text: description })]),
-    );
 
     const secondRecord = await store.createRecord({
-      node: written!,
-      text: '[[Mastra]] is expanding its knowledge system.',
-      scopeIds: [scopeIds[2]!],
+      node: (await store.getNode(node.id))!,
+      text: 'Project Atlas is expanding its knowledge system.',
+      scopeIds: [scopeIds[4]!],
       source: 'alpha',
+      metadata: { sourceThreadId: 'alpha' },
     });
     currentRecordId = secondRecord.id;
 
@@ -159,10 +183,38 @@ describe('Memory.runCuration', () => {
       requestContext: requestContext(),
     });
 
-    expect(await store.resolveNode({ name: 'Project Atlas', scopeIds })).toMatchObject({ version: 3 });
-    expect((await store.listRecordsBySource({ source: 'subconscious:curate', scopeIds })).records).toEqual(
-      expect.arrayContaining([expect.objectContaining({ text: refinedDescription })]),
-    );
+    expect(await store.getNode(node.id)).toMatchObject({
+      version: 3,
+      metadata: { description: descriptions[1] },
+    });
+    expect(await store.listScopeGrants()).toEqual(grantsBefore);
+  });
+
+  it('fails closed without a host-registered curator profile and does not create grants', async () => {
+    const memory = createMemory();
+    const store = await memory.getKnowledgeStore();
+    const scopeIds = await resolveKnowledgeScopeIds(memory, {
+      agent: { threadId: 'alpha', resourceId: 'user-42' },
+      requestContext: requestContext(),
+    });
+    const node = await store.createNode({ name: 'Unregistered work', scopeIds: [scopeIds[4]!] });
+    await store.createRecord({
+      node,
+      text: 'Do not self-authorize.',
+      source: 'alpha',
+      scopeIds: [scopeIds[4]!],
+    });
+    const grantsBefore = await store.listScopeGrants();
+
+    await expect(
+      memory.runCuration({
+        threadId: 'alpha',
+        resourceId: 'user-42',
+        requestContext: requestContext(),
+      }),
+    ).rejects.toThrow('Knowledge curator profile is not registered: subconscious');
+    expect(await store.getNode(node.id)).toMatchObject({ version: node.version });
+    expect(await store.listScopeGrants()).toEqual(grantsBefore);
   });
 
   it('reports no-op when the worklist and prompt are both empty', async () => {
@@ -182,6 +234,7 @@ describe('Memory.runCuration', () => {
 
   it('threads the phase prompt into the curator run even with an empty worklist', async () => {
     const memory = createMemory();
+    await registerCurator(memory);
     const generate = vi.spyOn(Agent.prototype, 'generate').mockResolvedValue({ text: 'Nothing to keep.' } as any);
     generate.mockClear();
 
