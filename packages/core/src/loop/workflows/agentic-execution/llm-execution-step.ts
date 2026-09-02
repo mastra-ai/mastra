@@ -5,7 +5,6 @@ import { APICallError } from '@internal/ai-sdk-v5';
 import type { CallSettings, StepResult, ToolChoice, ToolSet } from '@internal/ai-sdk-v5';
 import type { StructuredOutputOptions } from '../../../agent';
 import type { MessageList } from '../../../agent/message-list';
-import { ensureUserFirstPrompt } from '../../../agent/message-list/utils/provider-compat';
 import { TripWire } from '../../../agent/trip-wire';
 import { isSupportedLanguageModel, supportedLanguageModelSpecifications } from '../../../agent/utils';
 import { ErrorCategory, ErrorDomain, MastraError } from '../../../error';
@@ -33,7 +32,7 @@ import type {
 } from '../../../processors/index';
 import { isProcessorWorkflow } from '../../../processors/index';
 import { PrepareStepProcessor } from '../../../processors/processors/prepare-step';
-import { isMaybeAnthropicWithoutAssistantPrefill, isMaybeGoogle } from '../../../processors/provider-history-compat';
+import { isMaybeAnthropicWithoutAssistantPrefill } from '../../../processors/provider-history-compat';
 import type { ProcessorState } from '../../../processors/runner';
 import { ProcessorRunner } from '../../../processors/runner';
 import { RequestContext } from '../../../request-context';
@@ -1599,12 +1598,6 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
               ? messageList.get.all.aiV6.llmPrompt
               : messageList.get.all.aiV5.llmPrompt;
         let inputMessages = await llmPromptForModel(messageListPromptArgs);
-
-        // Gemini rejects prompts whose first non-system turn is from the
-        // assistant; other providers accept them, so only inject for Gemini.
-        if (isMaybeGoogle(currentStep.model)) {
-          inputMessages = ensureUserFirstPrompt(inputMessages, logger);
-        }
 
         inputMessages = applyAutoResumeSystemMessage({
           autoResume: autoResumeSuspendedTools,

@@ -1569,6 +1569,9 @@ describe('createLLMExecutionStep gateway provider tools', () => {
           },
         ],
         tools: {},
+        // The Agent wires ProviderHistoryCompat in by default; this step-level
+        // harness has no Agent, so pass it the same way the Agent does.
+        llmRequestInputProcessors: [new ProviderHistoryCompat()],
         streamState: {
           serialize: vi.fn(),
           deserialize: vi.fn(),

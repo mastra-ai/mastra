@@ -7,6 +7,8 @@ import {
   anthropicStripForeignReasoningContent,
   azureSystemReminderTransform,
   cerebrasStripReasoningContent,
+  DEFAULT_COMPAT_RULES,
+  googleEnsureUserFirstTurn,
   isMaybeAnthropic,
   isMaybeAnthropicWithoutAssistantPrefill,
   isMaybeAzure,
@@ -811,6 +813,47 @@ describe('azureSystemReminderTransform', () => {
         prompt: [{ role: 'user', content: [{ type: 'text', text: 'Hello' }] }],
         model: 'azure/gpt-4o',
       }),
+    ).toBeUndefined();
+  });
+});
+
+describe('googleEnsureUserFirstTurn', () => {
+  const system = { role: 'system', content: 'You are helpful' } as const;
+  const assistant = { role: 'assistant', content: [{ type: 'text', text: 'Hi, how can I help?' }] } as const;
+  const user = { role: 'user', content: [{ type: 'text', text: 'and now?' }] } as const;
+  const google = { provider: 'google.generative-ai', modelId: 'gemini-2.5-pro' };
+
+  it('is part of the default rule set', () => {
+    expect(DEFAULT_COMPAT_RULES).toContain(googleEnsureUserFirstTurn);
+  });
+
+  it('inserts a synthetic user turn before an assistant-first prompt for Google models', () => {
+    const prompt: LanguageModelV2Prompt = [system, assistant, user];
+    const result = googleEnsureUserFirstTurn.applyToPrompt!({ prompt, model: google });
+
+    expect(result).toEqual([system, { role: 'user', content: [{ type: 'text', text: '.' }] }, assistant, user]);
+    expect(prompt).toHaveLength(3);
+  });
+
+  it('also applies to Vertex models', () => {
+    const prompt: LanguageModelV2Prompt = [assistant];
+    const result = googleEnsureUserFirstTurn.applyToPrompt!({ prompt, model: 'vertex/gemini-2.5-pro' });
+    expect(result?.map(m => m.role)).toEqual(['user', 'assistant']);
+  });
+
+  it('leaves user-first, system-only, and empty prompts unchanged', () => {
+    expect(
+      googleEnsureUserFirstTurn.applyToPrompt!({ prompt: [system, user, assistant], model: google }),
+    ).toBeUndefined();
+    expect(googleEnsureUserFirstTurn.applyToPrompt!({ prompt: [system], model: google })).toBeUndefined();
+    expect(googleEnsureUserFirstTurn.applyToPrompt!({ prompt: [], model: google })).toBeUndefined();
+  });
+
+  it('does not touch assistant-first prompts for non-Google models', () => {
+    const prompt: LanguageModelV2Prompt = [system, assistant, user];
+    expect(googleEnsureUserFirstTurn.applyToPrompt!({ prompt, model: 'openai/gpt-4o' })).toBeUndefined();
+    expect(
+      googleEnsureUserFirstTurn.applyToPrompt!({ prompt, model: { provider: 'anthropic.messages', modelId: 'x' } }),
     ).toBeUndefined();
   });
 });

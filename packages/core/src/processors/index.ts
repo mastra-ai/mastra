@@ -898,7 +898,12 @@ export { isProcessorWorkflow } from './is-processor-workflow';
 
 export * from './processors';
 export { PrefillErrorHandler } from './prefill-error-handler';
-export { ProviderHistoryCompat, anthropicToolIdFormat, cerebrasStripReasoningContent } from './provider-history-compat';
+export {
+  ProviderHistoryCompat,
+  anthropicToolIdFormat,
+  cerebrasStripReasoningContent,
+  googleEnsureUserFirstTurn,
+} from './provider-history-compat';
 export {
   isBadRequestError,
   isRetryableOpenAIResponsesStreamError,

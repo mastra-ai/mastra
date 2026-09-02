@@ -575,6 +575,26 @@ export const azureSystemReminderTransform: CompatRule = {
  * All built-in compat rules. Extend by passing additional rules to the
  * `ProviderHistoryCompat` constructor.
  */
+/**
+ * Gemini rejects prompts whose first non-system turn is from the assistant.
+ * Insert a minimal synthetic user turn ahead of it, but only for Google /
+ * Vertex models — other providers accept assistant-first prompts and should
+ * see the conversation unchanged.
+ *
+ * @see https://github.com/mastra-ai/mastra/issues/22874
+ */
+export const googleEnsureUserFirstTurn: CompatRule = {
+  name: 'google-ensure-user-first-turn',
+  applyToPrompt({ prompt, model }) {
+    if (!isMaybeGoogle(model)) return undefined;
+    const firstNonSystemIndex = prompt.findIndex(m => m.role !== 'system');
+    if (firstNonSystemIndex === -1 || prompt[firstNonSystemIndex]?.role !== 'assistant') return undefined;
+    const result = [...prompt];
+    result.splice(firstNonSystemIndex, 0, { role: 'user', content: [{ type: 'text', text: '.' }] });
+    return result;
+  },
+};
+
 export const DEFAULT_COMPAT_RULES: CompatRule[] = [
   stripForeignProviderExecutedTools,
   anthropicToolIdFormat,
@@ -582,6 +602,7 @@ export const DEFAULT_COMPAT_RULES: CompatRule[] = [
   anthropicStripEmptySignedReasoningContent,
   anthropicStripForeignReasoningContent,
   azureSystemReminderTransform,
+  googleEnsureUserFirstTurn,
 ];
 
 // ---------------------------------------------------------------------------
@@ -612,6 +633,9 @@ export const DEFAULT_COMPAT_RULES: CompatRule[] = [
  * - **anthropic-strip-foreign-reasoning-content** — strips non-Anthropic
  *   `reasoning` parts from assistant messages in the outbound prompt when the
  *   resolved model is Anthropic. Anthropic-native reasoning parts are kept.
+ * - **google-ensure-user-first-turn** — inserts a synthetic user turn when
+ *   the first non-system message is from the assistant and the resolved model
+ *   is Google/Vertex, which Gemini requires. Preemptive; nothing is persisted.
  *
  * To add custom rules, pass them to the constructor:
  * ```ts

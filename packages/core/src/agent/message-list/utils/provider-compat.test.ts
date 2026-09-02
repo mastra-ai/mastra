@@ -1,8 +1,6 @@
-import type { LanguageModelV2Prompt } from '@ai-sdk/provider-v5';
 import type { ModelMessage } from '@internal/ai-sdk-v5';
-import { describe, expect, it, vi } from 'vitest';
-import type { IMastraLogger } from '../../../logger';
-import { ensureUserFirstPrompt, pairOrphanedToolCalls, sanitizeOrphanedToolPairs } from './provider-compat';
+import { describe, expect, it } from 'vitest';
+import { pairOrphanedToolCalls, sanitizeOrphanedToolPairs } from './provider-compat';
 
 const assistantWithToolCalls = (...callIds: string[]): ModelMessage => ({
   role: 'assistant',
@@ -266,42 +264,5 @@ describe('pairOrphanedToolCalls', () => {
 
     expect(callIds).toEqual(['A', 'B', 'C']);
     expect(resultIds.sort()).toEqual(['A', 'B', 'C']);
-  });
-});
-
-describe('ensureUserFirstPrompt', () => {
-  const assistant = { role: 'assistant', content: [{ type: 'text', text: 'Hi, how can I help?' }] } as const;
-  const user = { role: 'user', content: [{ type: 'text', text: 'and now?' }] } as const;
-  const system = { role: 'system', content: 'You are helpful' } as const;
-
-  it('injects a synthetic user turn before an assistant-first prompt and logs at debug', () => {
-    const logger = { debug: vi.fn() } as unknown as IMastraLogger;
-    const prompt: LanguageModelV2Prompt = [system, assistant, user];
-
-    const result = ensureUserFirstPrompt(prompt, logger);
-
-    expect(result).toEqual([system, { role: 'user', content: [{ type: 'text', text: '.' }] }, assistant, user]);
-    expect(prompt).toHaveLength(3);
-    expect(logger.debug).toHaveBeenCalledOnce();
-  });
-
-  it('returns the prompt unchanged when the first non-system message is a user turn', () => {
-    const logger = { debug: vi.fn() } as unknown as IMastraLogger;
-    const prompt: LanguageModelV2Prompt = [system, user, assistant];
-
-    expect(ensureUserFirstPrompt(prompt, logger)).toBe(prompt);
-    expect(logger.debug).not.toHaveBeenCalled();
-  });
-
-  it('returns system-only and empty prompts unchanged, warning only for system-only', () => {
-    const logger = { debug: vi.fn(), warn: vi.fn() } as unknown as IMastraLogger;
-    const systemOnly: LanguageModelV2Prompt = [system];
-    const empty: LanguageModelV2Prompt = [];
-
-    expect(ensureUserFirstPrompt(systemOnly, logger)).toBe(systemOnly);
-    expect(logger.warn).toHaveBeenCalledOnce();
-    expect(ensureUserFirstPrompt(empty, logger)).toBe(empty);
-    expect(logger.warn).toHaveBeenCalledOnce();
-    expect(logger.debug).not.toHaveBeenCalled();
   });
 });

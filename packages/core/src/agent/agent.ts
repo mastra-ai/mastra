@@ -95,6 +95,7 @@ import type {
 import { ProcessorStepSchema, isProcessorWorkflow } from '../processors/index';
 import { SkillsProcessor } from '../processors/processors/skills';
 import { WorkspaceInstructionsProcessor } from '../processors/processors/workspace-instructions';
+import { ProviderHistoryCompat } from '../processors/provider-history-compat';
 import type { ProcessorState } from '../processors/runner';
 import { ProcessorRunner } from '../processors/runner';
 import {
@@ -1902,12 +1903,21 @@ export class Agent<
     // Get browser context processors (with deduplication)
     const browserProcessors = this.#browser ? this.#browser.getInputProcessors(configuredProcessors) : [];
 
+    // Provider history compat is on by default so provider-specific prompt
+    // fixups (e.g. Gemini's user-first requirement) apply to every agent.
+    // Users can replace it by configuring their own instance.
+    const hasProviderCompat = configuredProcessors.some(
+      p => !isProcessorWorkflow(p) && 'id' in p && p.id === 'provider-history-compat',
+    );
+    const providerCompatProcessors = hasProviderCompat ? [] : [new ProviderHistoryCompat()];
+
     // Memory processors should run first (to fetch history, semantic recall, working memory)
     // Workspace instructions run after memory
     // Skills processors run after workspace
     // Channel processors run after skills (context injection for platform awareness)
     // Browser processors run after channel processors to inject browser context
     // User-configured processors run after auto-derived layers to allow customization
+    // Provider compat runs last so it sees the final outbound prompt
     return [
       ...memoryProcessors,
       ...workspaceProcessors,
@@ -1915,6 +1925,7 @@ export class Agent<
       ...channelProcessors,
       ...browserProcessors,
       ...configuredProcessors,
+      ...providerCompatProcessors,
     ];
   }
 
