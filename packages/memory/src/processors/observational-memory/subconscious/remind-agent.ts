@@ -175,7 +175,7 @@ export function createReminderAgent(options: {
         },
       };
       try {
-        if (options.parentAgent) {
+        if (typeof options.parentAgent?.sendSignal === 'function') {
           const persisted = options.parentAgent.sendSignal(signal, {
             resourceId: options.resourceId,
             threadId: options.parentThreadId,
@@ -228,8 +228,8 @@ export function createReminderAgent(options: {
     instructions: [DEFAULT_INSTRUCTIONS, options.instructions?.trim()].filter(Boolean).join('\n\n'),
     model: options.model,
     memory: options.memory,
-    mastra: options.parentAgent?.getMastraInstance(),
-    pubsub: options.parentAgent?.getPubSub(),
+    mastra: options.parentAgent?.getMastraInstance?.(),
+    pubsub: options.parentAgent?.getPubSub?.(),
     tools: {
       ...createKnowledgeTools(options.memory, options.scope),
       ...options.additionalTools,
