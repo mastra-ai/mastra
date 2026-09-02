@@ -482,6 +482,7 @@ export async function runEvals(config: RunEvalsAnyConfig): Promise<RunEvalsResul
       result.gateResults = [];
       for (const gate of gates) {
         const scores = gateScoresByGateId[gate.id]!;
+        if (scores.length === 0) continue;
         const avgScore = average(scores);
         const passed = avgScore >= 1.0;
         if (!passed) allGatesPassed = false;
@@ -495,6 +496,7 @@ export async function runEvals(config: RunEvalsAnyConfig): Promise<RunEvalsResul
       result.thresholdResults = [];
       for (const [scorerId, threshold] of thresholdMap) {
         const scores = thresholdScoresByScorerID[scorerId]!;
+        if (scores.length === 0) continue;
         const averageScore = average(scores);
         const passed = checkThresholdPassed(averageScore, threshold);
         if (!passed) allThresholdsPassed = false;
@@ -602,6 +604,7 @@ async function scoreTurn(
           targetTraceId: record.traceId,
           targetSpanId: record.spanId,
         });
+        if (gateScore.notScorable) continue;
         score = gateScore.score as number;
         rawResults[gate.id] = gateScore;
       } catch (error) {
@@ -626,10 +629,10 @@ async function scoreTurn(
         targetTraceId: record.traceId,
         targetSpanId: record.spanId,
       });
-      rawResults[scorer.id] = scoreResult;
       if (scoreResult.notScorable) {
         continue;
       }
+      rawResults[scorer.id] = scoreResult;
       const score = scoreResult.score as number;
       scores.push({ id: scorer.id, score });
       const threshold = thresholdMap.get(scorer.id);

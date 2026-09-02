@@ -12,6 +12,7 @@ describe('ScoreAccumulator', () => {
     accumulator.addScores({
       relevancy: { notScorable: { reason: 'tool never called' } },
       completeness: { score: 1 },
+      refund: { notScorable: {} },
     });
 
     expect(accumulator.getAverageScores()).toEqual({ relevancy: 1, completeness: 0.75 });

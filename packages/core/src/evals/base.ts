@@ -42,7 +42,7 @@ import { selectFields } from '../utils';
 import { createWorkflow } from '../workflows/create';
 import { createStep } from '../workflows/workflow';
 import { isNotScorable } from './not-scorable';
-import type { NotScorableOutcome } from './not-scorable';
+import type { NotScorableOutcome, NotScorableResult } from './not-scorable';
 import type { ScoringFilter } from './predicate';
 import type {
   ScoringSamplingConfig,
@@ -354,15 +354,12 @@ export interface ScorerJudgeStepResult {
 
 export type ScorerJudgeResults = Partial<Record<ScorerJudgeStepName, ScorerJudgeStepResult>>;
 
-export type ScorerRunResult<
+type ScorerRunResultBase<
   TAccumulatedResults extends Record<string, any> = Record<string, any>,
   TInput = any,
   TRunOutput = any,
 > = ScorerRun<TInput, TRunOutput> & {
   scoreTraceId?: string;
-  score: TAccumulatedResults extends Record<'generateScoreStepResult', infer TScore> ? TScore : never;
-  /** Set when a step returned `notScorable()`: no score, remaining steps skipped. */
-  notScorable?: NotScorableOutcome;
   reason?: TAccumulatedResults extends Record<'generateReasonStepResult', infer TReason> ? TReason : undefined;
 
   // Prompts
@@ -379,6 +376,23 @@ export type ScorerRunResult<
 
   judge?: ScorerJudgeResults;
 } & { runId: string };
+
+export type ScorerRunResult<
+  TAccumulatedResults extends Record<string, any> = Record<string, any>,
+  TInput = any,
+  TRunOutput = any,
+> = ScorerRunResultBase<TAccumulatedResults, TInput, TRunOutput> &
+  (
+    | {
+        score: TAccumulatedResults extends Record<'generateScoreStepResult', infer TScore> ? TScore : never;
+        notScorable?: undefined;
+      }
+    | {
+        /** Set when a step returned `notScorable()`: no score, remaining steps skipped. */
+        notScorable: NotScorableOutcome;
+        score?: undefined;
+      }
+  );
 
 export type ScorerRunResultSnapshot<TResult extends ScorerRunResult = ScorerRunResult> = Omit<TResult, 'score'> &
   Partial<Pick<TResult, 'score'>>;
@@ -660,8 +674,8 @@ type GenerateReasonFunctionStep<TAccumulated extends Record<string, any>, TInput
   | ((context: GenerateReasonContext<TAccumulated, TInput, TRunOutput>) => Promise<any>);
 
 type GenerateScoreFunctionStep<TAccumulated extends Record<string, any>, TInput, TRunOutput> =
-  | ((context: StepContext<TAccumulated, TInput, TRunOutput>) => number)
-  | ((context: StepContext<TAccumulated, TInput, TRunOutput>) => Promise<number>);
+  | ((context: StepContext<TAccumulated, TInput, TRunOutput>) => number | NotScorableResult)
+  | ((context: StepContext<TAccumulated, TInput, TRunOutput>) => Promise<number | NotScorableResult>);
 
 // Special prompt object type for generateScore that always returns a number
 interface GenerateScorePromptObject<TAccumulated extends Record<string, any>, TInput, TRunOutput> {
