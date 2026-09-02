@@ -1112,15 +1112,19 @@ await mcpClient.elicitation.onRequest('interactiveServer', async request => {
 
 ## OAuth authentication
 
-For connecting to MCP servers that require OAuth authentication per the [MCP Auth Specification](https://modelcontextprotocol.io/specification/2025-06-18/basic/authorization), use the `MCPOAuthClientProvider`:
+For connecting to MCP servers that require OAuth authentication per the [MCP 2026-07-28 authorization specification](https://modelcontextprotocol.io/specification/2026-07-28/basic/authorization), use the `MCPOAuthClientProvider`. For clients without a pre-existing relationship with the authorization server, host a [Client ID Metadata Document](https://modelcontextprotocol.io/specification/2026-07-28/basic/authorization/client-registration#client-id-metadata-documents) at an HTTPS URL and provide that URL as `clientMetadataUrl`:
 
 ```typescript
 import { MCPClient, MCPOAuthClientProvider } from '@mastra/mcp'
 
 // Create an OAuth provider
+const clientMetadataUrl = 'https://app.example.com/oauth/client-metadata.json'
+
 const oauthProvider = new MCPOAuthClientProvider({
   redirectUrl: 'http://localhost:3000/oauth/callback',
+  clientMetadataUrl,
   clientMetadata: {
+    client_id: clientMetadataUrl,
     redirect_uris: ['http://localhost:3000/oauth/callback'],
     client_name: 'My MCP Client',
     grant_types: ['authorization_code', 'refresh_token'],
@@ -1143,18 +1147,26 @@ const client = new MCPClient({
 })
 ```
 
+The document served at `clientMetadataUrl` must contain the same `client_id`, `client_name`, and `redirect_uris`. For loopback callbacks, include every fallback URL returned by `getCallbackUrlCandidates()` in the hosted document. When authorization-server metadata advertises `client_id_metadata_document_supported: true`, the provider uses this URL as the client ID and does not call the registration endpoint. Pre-registered `clientInformation` still takes priority. If the authorization server does not advertise metadata-document support, the SDK falls back to Dynamic Client Registration when available. DCR is deprecated in MCP 2026-07-28 and remains only for compatibility with older authorization servers.
+
+Client information and tokens saved by `MCPOAuthClientProvider` are bound to the authorization server's validated `issuer`. The loopback callback also forwards the RFC 9207 `iss` parameter to the SDK and rejects a mismatch before exchanging the authorization code.
+
 Give each server its own `MCPOAuthClientProvider` instance. A provider holds per-server session and credential state during authorization, so sharing one instance across multiple servers lets their flows overwrite each other. When configuring several protected servers, construct a separate provider for each.
 
 ### Interactive browser authentication
 
-When a server rejects a connection because authorization is required, the client records a `'needs-auth'` state instead of failing outright. Calling `authenticate()` completes the flow. It starts a one-shot callback server on the provider's loopback redirect URL, falling back to the next sequential ports when it's in use. The SDK then performs discovery and client registration at runtime. `onRedirectToAuthorization` receives the authorization URL so your application can open it in the user's browser. The token exchange finishes after the browser returns the authorization code:
+When a server rejects a connection because authorization is required, the client records a `'needs-auth'` state instead of failing outright. Calling `authenticate()` completes the flow. It starts a one-shot callback server on the provider's loopback redirect URL, falling back to the next sequential ports when it's in use. The SDK then performs discovery and selects pre-registration, a Client ID Metadata Document, or deprecated Dynamic Client Registration in that order. `onRedirectToAuthorization` receives the authorization URL so your application can open it in the user's browser. The token exchange finishes after the browser returns the authorization code:
 
 ```typescript
 import { MCPClient, MCPOAuthClientProvider } from '@mastra/mcp'
 
+const clientMetadataUrl = 'https://app.example.com/oauth/client-metadata.json'
+
 const oauthProvider = new MCPOAuthClientProvider({
   redirectUrl: 'http://127.0.0.1:5533/oauth/callback',
+  clientMetadataUrl,
   clientMetadata: {
+    client_id: clientMetadataUrl,
     redirect_uris: ['http://127.0.0.1:5533/oauth/callback'],
     client_name: 'My MCP Client',
     grant_types: ['authorization_code', 'refresh_token'],
