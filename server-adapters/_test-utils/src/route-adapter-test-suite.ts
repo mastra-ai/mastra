@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { SERVER_ROUTES, type ServerRoute } from '@mastra/server/server-adapter';
+import { HTTPException, SERVER_ROUTES, type ServerRoute } from '@mastra/server/server-adapter';
 
 import {
   AdapterTestContext,
@@ -601,6 +601,105 @@ export function createRouteAdapterTestSuite(config: AdapterTestSuiteConfig) {
             }
           }
         });
+      });
+    });
+
+    describe('Custom HTTPException responses', () => {
+      async function setupCustomErrorRoutes() {
+        let handlerCalls = 0;
+        const routes: ServerRoute<any, any, any>[] = [
+          {
+            method: 'GET',
+            path: '/custom/http-error-json',
+            responseType: 'json',
+            handler: async () => {
+              handlerCalls++;
+              throw new HTTPException(409, {
+                res: Response.json(
+                  { code: 'TRACE_QUERY_CURSOR_CONFLICT', message: 'The cursor does not match the query' },
+                  { headers: { 'X-Trace-Error': 'cursor' } },
+                ),
+              });
+            },
+          },
+          {
+            method: 'GET',
+            path: '/custom/http-error-text',
+            responseType: 'json',
+            handler: async () => {
+              handlerCalls++;
+              throw new HTTPException(418, {
+                res: new Response('custom text', {
+                  headers: { 'Content-Type': 'text/custom', 'X-Custom-Error': 'true' },
+                }),
+              });
+            },
+          },
+          {
+            method: 'GET',
+            path: '/custom/http-error-fallback',
+            responseType: 'json',
+            handler: async () => {
+              handlerCalls++;
+              throw new HTTPException(404, { message: 'Legacy fallback' });
+            },
+          },
+        ];
+        const mutableServerRoutes = SERVER_ROUTES as ServerRoute[];
+        const originalLength = mutableServerRoutes.length;
+        mutableServerRoutes.push(...routes);
+        try {
+          const setup = await setupAdapter(await createDefaultTestContext());
+          return { app: setup.app, getHandlerCalls: () => handlerCalls };
+        } finally {
+          mutableServerRoutes.splice(originalLength);
+        }
+      }
+
+      it('preserves an attached JSON response and headers', async () => {
+        const custom = await setupCustomErrorRoutes();
+
+        const response = await executeHttpRequest(custom.app, {
+          method: 'GET',
+          path: '/api/custom/http-error-json',
+        });
+
+        expect(response.status).toBe(409);
+        expect(response.headers['content-type']).toContain('application/json');
+        expect(response.headers['x-trace-error']).toBe('cursor');
+        expect(response.data).toEqual({
+          code: 'TRACE_QUERY_CURSOR_CONFLICT',
+          message: 'The cursor does not match the query',
+        });
+        expect(custom.getHandlerCalls()).toBe(1);
+      });
+
+      it('preserves an attached text response without JSON wrapping', async () => {
+        const custom = await setupCustomErrorRoutes();
+
+        const response = await executeHttpRequest(custom.app, {
+          method: 'GET',
+          path: '/api/custom/http-error-text',
+        });
+
+        expect(response.status).toBe(418);
+        expect(response.headers['content-type']).toContain('text/custom');
+        expect(response.headers['x-custom-error']).toBe('true');
+        expect(response.data).toBe('custom text');
+        expect(custom.getHandlerCalls()).toBe(1);
+      });
+
+      it('retains the JSON fallback for message-only HTTP exceptions', async () => {
+        const custom = await setupCustomErrorRoutes();
+
+        const response = await executeHttpRequest(custom.app, {
+          method: 'GET',
+          path: '/api/custom/http-error-fallback',
+        });
+
+        expect(response.status).toBe(404);
+        expect(response.data).toEqual({ error: 'Legacy fallback' });
+        expect(custom.getHandlerCalls()).toBe(1);
       });
     });
 

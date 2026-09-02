@@ -48,6 +48,7 @@ export {
 export type { MastraAuthMode } from '../constants';
 
 export { WorkflowRegistry, normalizeRoutePath } from '../utils';
+export { HTTPException };
 
 export function getCustomHTTPExceptionResponse(error: unknown): Response | undefined {
   if (!(error instanceof HTTPException) || !error.res) {

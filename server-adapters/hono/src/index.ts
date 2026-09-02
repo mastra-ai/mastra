@@ -10,6 +10,7 @@ import {
   MastraServer as MastraServerBase,
   applyMcpRequestAuth,
   checkRouteFGA,
+  getCustomHTTPExceptionResponse,
   isZodError,
   normalizeQueryParams,
   redactStreamChunk,
@@ -661,6 +662,11 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
               method: route.method,
             });
           }
+          const customResponse = getCustomHTTPExceptionResponse(error);
+          if (customResponse) {
+            return customResponse;
+          }
+
           // Check if it's an HTTPException or MastraError with a status code
           if (error && typeof error === 'object') {
             // Check for direct status property (HTTPException)

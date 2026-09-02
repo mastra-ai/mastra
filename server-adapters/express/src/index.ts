@@ -9,6 +9,7 @@ import type { ParsedRequestParams, ServerRoute } from '@mastra/server/server-ada
 import {
   MastraServer as MastraServerBase,
   checkRouteFGA,
+  getCustomHTTPExceptionResponse,
   isZodError,
   normalizeQueryParams,
   redactStreamChunk,
@@ -599,6 +600,13 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
               method: route.method,
             });
           }
+          const customResponse = getCustomHTTPExceptionResponse(error);
+          if (customResponse) {
+            customResponse.headers.forEach((value, name) => res.setHeader(name, value));
+            res.status(customResponse.status).end(Buffer.from(await customResponse.arrayBuffer()));
+            return;
+          }
+
           // Check if it's an HTTPException or MastraError with a status code
           let status = 500;
           if (error && typeof error === 'object') {

@@ -8,6 +8,7 @@ import type { ParsedRequestParams, ServerRoute } from '@mastra/server/server-ada
 import {
   MastraServer as MastraServerBase,
   checkRouteFGA,
+  getCustomHTTPExceptionResponse,
   isZodError,
   normalizeQueryParams,
   redactStreamChunk,
@@ -742,6 +743,11 @@ export class MastraServer extends MastraServerBase<Elysia, Request, Response> {
           path: route.path,
           method: route.method,
         });
+
+        const customResponse = getCustomHTTPExceptionResponse(error);
+        if (customResponse) {
+          return customResponse;
+        }
 
         // Check if it's an error with a status code
         if (error && typeof error === 'object') {
