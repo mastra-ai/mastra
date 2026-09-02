@@ -47,6 +47,13 @@ const makeTools = () => ({
     inputSchema: z.object({}),
     execute: async (_inputData, options) => options?.mcp?.extra?.authInfo?.clientId ?? 'missing',
   }),
+  nullTool: createTool({
+    id: 'nullTool',
+    description: 'Returns a null structured result',
+    inputSchema: z.object({}),
+    outputSchema: z.null(),
+    execute: async () => null,
+  }),
 });
 
 const authInfo: AuthInfo = {
@@ -169,6 +176,24 @@ describe('MCPServer with protocolVersion 2026-07-28 (dual-era HTTP)', () => {
 
       const result = await client.callTool({ name: 'echoTool', arguments: { text: 'hi' } });
       expect((result as any).content[0].text).toBe('echo: hi');
+    } finally {
+      await client.close();
+    }
+  });
+
+  it('preserves null structuredContent as a valid modern tool result', async () => {
+    const client = new Client(
+      { name: 'null-result-client', version: '1.0.0' },
+      { versionNegotiation: { mode: { pin: '2026-07-28' } } },
+    );
+    await client.connect(new StreamableHTTPClientTransport(baseUrl));
+    try {
+      await client.listTools();
+      const result = await client.callTool({ name: 'nullTool', arguments: {} });
+
+      expect(result.isError).not.toBe(true);
+      expect(result.structuredContent).toBeNull();
+      expect(result.content).toEqual([{ type: 'text', text: 'null' }]);
     } finally {
       await client.close();
     }

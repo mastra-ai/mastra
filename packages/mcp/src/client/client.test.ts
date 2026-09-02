@@ -545,6 +545,45 @@ describe('MastraMCPClient - outputSchema without structuredContent', () => {
     expect(storedSchema.$defs?.node?.properties?.children?.items?.$ref).toBe('#/$defs/node');
   });
 
+  it('preserves JSON Schema 2020-12 identity, composition, and boolean subschemas', async () => {
+    const sdkClient = (client as any).client as Client;
+    const schema2020 = {
+      $schema: 'https://json-schema.org/draft/2020-12/schema',
+      $id: 'https://example.test/schemas/tree',
+      type: 'object' as const,
+      $defs: {
+        leaf: {
+          type: 'array' as const,
+          prefixItems: [{ type: 'string' as const }, { type: 'integer' as const }],
+          items: false,
+          minItems: 2,
+          maxItems: 2,
+        },
+      },
+      properties: {
+        value: {
+          anyOf: [{ $ref: '#/$defs/leaf' }, { type: 'null' as const }],
+        },
+      },
+      required: ['value'],
+      unevaluatedProperties: false,
+    };
+
+    vi.spyOn(sdkClient, 'listTools').mockResolvedValue({
+      tools: [
+        {
+          name: 'schema_2020',
+          inputSchema: schema2020,
+          outputSchema: schema2020,
+        },
+      ],
+    });
+
+    const tool = (await client.tools()).schema_2020;
+    expect(tool.inputSchema?.['~standard'].jsonSchema.input({ target: 'draft-2020-12' })).toEqual(schema2020);
+    expect(tool.outputSchema?.['~standard'].jsonSchema.output({ target: 'draft-2020-12' })).toEqual(schema2020);
+  });
+
   it('exposes output JSON schema for documentation while Mastra validation always succeeds', async () => {
     const sdkClient = (client as any).client as Client;
     const outputSchema = {
@@ -1264,6 +1303,63 @@ describe('MastraMCPClient - outputSchema with structuredContent', () => {
       type: 'text',
       value: JSON.stringify(fullResult),
     });
+  });
+
+  it.each([
+    ['object', { value: 1 }],
+    ['array', [1, 'two', null]],
+    ['string', 'hello'],
+    ['number', 0],
+    ['boolean', false],
+    ['null', null],
+  ] as const)('preserves %s structuredContent without wrapping it', async (_kind, structuredContent) => {
+    const sdkClient = (client as any).client as Client;
+    vi.spyOn(sdkClient, 'listTools').mockResolvedValue({
+      tools: [
+        {
+          name: 'json_value_tool',
+          inputSchema: { type: 'object' as const, properties: {} },
+          outputSchema: {},
+        },
+      ],
+    });
+    vi.spyOn(sdkClient, 'callTool').mockResolvedValue({
+      structuredContent,
+      content: [{ type: 'text', text: 'summary' }],
+      _meta: { trace: 'value' },
+      isError: false,
+    });
+
+    const tool = (await client.tools()).json_value_tool;
+    const result = await tool.execute?.({});
+
+    expect(result).toBe(structuredContent);
+    expect(result).toEqual(structuredContent);
+    if (structuredContent === null || typeof structuredContent !== 'object') {
+      expect(getMcpCallToolContent(result)).toBeUndefined();
+      expect(getMcpCallToolMeta(result)).toBeUndefined();
+    }
+  });
+
+  it('rejects invalid structuredContent on the live discovery path', async () => {
+    const sdkClient = (client as any).client as Client;
+    vi.spyOn(sdkClient, 'listTools').mockResolvedValue({
+      tools: [
+        {
+          name: 'validated_tool',
+          inputSchema: { type: 'object' as const, properties: {} },
+          outputSchema: { type: 'string' as const },
+        },
+      ],
+    });
+    vi.spyOn(sdkClient, 'callTool').mockResolvedValue({
+      structuredContent: 42,
+      content: [{ type: 'text', text: '42' }],
+      isError: false,
+    });
+
+    const tool = (await client.tools()).validated_tool;
+    await expect(tool.execute?.({})).rejects.toThrow(/structured content does not match/i);
   });
 
   it('should use scalar structuredContent as JSON model output', async () => {
