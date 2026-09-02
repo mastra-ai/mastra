@@ -276,6 +276,7 @@ describe('provider key routes with a tenant', () => {
         controller,
         authStorage,
         modelCredentials: seed.credentials,
+        memorySettings: seed.memorySettings,
       }).routes(),
     );
     return app;
@@ -310,6 +311,19 @@ describe('provider key routes with a tenant', () => {
       key: 'sk-mine',
     });
     expect(await seed.credentials.resolveCredential('org1', 'user-b', 'anthropic')).toBeUndefined();
+  });
+
+  it("seeds the caller's unset OM models from the provider of a user-scoped key", async () => {
+    await putKey(buildApp(userA), { key: 'sk-mine' });
+    expect(await seed.memorySettings.get({ orgId: 'org1', userId: 'user-a' })).toMatchObject({
+      observerModelId: 'anthropic/claude-haiku-4-5',
+      reflectorModelId: 'anthropic/claude-haiku-4-5',
+    });
+  });
+
+  it('does not seed OM models for an org-scoped key', async () => {
+    await putKey(buildApp(userA), { key: 'sk-shared', scope: 'org' });
+    expect(await seed.memorySettings.get({ orgId: 'org1', userId: 'user-a' })).toBeNull();
   });
 
   it('stores an org-scoped key that all members inherit when the caller is an admin', async () => {
