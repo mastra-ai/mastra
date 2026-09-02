@@ -20,6 +20,26 @@
  *
  * Keep them local. Re-importing either from core silently raises this package's
  * minimum core version again.
+ *
+ * TODO(mastra-v2): delete this file and import both helpers from
+ * `@mastra/core/observability` again.
+ *
+ * The duplication exists only because a peer floor cannot be raised inside a
+ * major version without breaking consumers pinned to an older core. A v2
+ * release resets that floor anyway, so importing from core stops being a
+ * compatibility hazard at that point. On v2:
+ *
+ *   1. Set the `@mastra/core` peer range to the v2 line.
+ *   2. Re-point the four import sites -- `generateSignalId` in
+ *      `context/logger.ts`, `context/metrics.ts` and `recorded.ts`, and
+ *      `resolveExportedSpanId` in `instances/base.ts`.
+ *   3. Delete this file.
+ *
+ * Do not undo it before then: both helpers are still missing from cores inside
+ * this package's currently declared range (`generateSignalId` landed in core
+ * 1.26.0, `resolveExportedSpanId` in 1.63.0, floor is 1.16.0).
+ *
+ * Context: https://github.com/mastra-ai/mastra/issues/22885
  */
 
 /** Generate a unique id for an observability signal (log, metric, score, feedback). */
