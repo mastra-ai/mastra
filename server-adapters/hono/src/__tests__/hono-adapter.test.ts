@@ -1616,5 +1616,16 @@ describe('Hono Server Adapter', () => {
       );
       return { status: response.status };
     },
+
+    executeRequestWithoutContentLength: async (app, method, url, options = {}) => {
+      const request = new Request(url, {
+        method,
+        headers: options.headers,
+        ...(options.body ? { body: options.body } : {}),
+      });
+      expect(request.headers.has('content-length')).toBe(false);
+      const response = await app.request(request);
+      return { status: response.status };
+    },
   });
 });

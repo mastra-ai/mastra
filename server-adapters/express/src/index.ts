@@ -429,6 +429,8 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
     if (isBodyMethod && maxSize !== undefined) {
       const bodyLimitMiddleware = (req: Request, res: Response, next: NextFunction) => {
         const contentLength = req.headers['content-length'];
+        // A host-level parser may run before this route middleware, so this is a
+        // post-parse safeguard when Content-Length is unavailable.
         const parsedLength =
           contentLength === undefined && req.body !== undefined
             ? Buffer.byteLength(JSON.stringify(req.body), 'utf8')

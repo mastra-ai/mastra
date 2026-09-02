@@ -99,6 +99,8 @@ The planner rejects a query before storage execution when it exceeds any of thes
 
 Each comparison literal counts as one literal. Each member of an `in` or `notIn` set also counts as one literal, even when the set is within its per-set limit.
 
+Hono and Fastify enforce the request-body limit before JSON parsing. Express and Elysia reject an oversized body before the route handler or storage runs, but the host framework may already have parsed a request without a reliable `Content-Length` header. Configure the host application's JSON parser or body limit when you need a hard pre-parse memory ceiling.
+
 ## Fields and operators
 
 | Predicate context | Fields | Operators |

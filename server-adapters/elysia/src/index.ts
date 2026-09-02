@@ -552,6 +552,8 @@ export class MastraServer extends MastraServerBase<Elysia, Request, Response> {
         const contentType = ctx.request.headers.get('content-type') || '';
         const exceedsDeclaredLimit =
           maxSize !== undefined && contentLength !== null && parseInt(contentLength, 10) > maxSize;
+        // Elysia may populate ctx.body before this handler, so this is a
+        // post-parse safeguard when Content-Length is unavailable.
         const exceedsStreamedJsonLimit =
           maxSize !== undefined &&
           contentLength === null &&

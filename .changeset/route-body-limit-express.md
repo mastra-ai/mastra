@@ -2,4 +2,4 @@
 '@mastra/express': patch
 ---
 
-Fixed route-specific request-body limits when global body-limit options are not configured.
+Fixed route-specific oversized-request rejection before handler execution and preserved explicitly attached HTTP exception responses. When a host parser has already consumed a request without `Content-Length`, the route limit remains a post-parse safeguard.
