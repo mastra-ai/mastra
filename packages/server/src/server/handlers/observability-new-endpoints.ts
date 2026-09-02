@@ -280,7 +280,7 @@ export const CREATE_FEEDBACK = createNewRoute(NEW_ROUTE_DEFS.CREATE_FEEDBACK, {
         ...feedback,
         feedbackId: feedback.feedbackId ?? generateSignalId(),
         timestamp: new Date(),
-        reviewStatus: 'needs-review',
+        reviewStatus: feedback.reviewStatus ?? 'needs-review',
       },
     });
     return { success: true };

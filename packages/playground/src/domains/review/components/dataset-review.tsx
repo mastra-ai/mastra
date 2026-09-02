@@ -210,6 +210,7 @@ export function DatasetReview({
               feedbackSource: 'studio',
               feedbackType: 'rating',
               value: rating === 'positive' ? 1 : -1,
+              reviewStatus: 'reviewed',
               experimentId: item.experimentId ?? undefined,
               sourceId: item.id,
             },

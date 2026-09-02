@@ -1816,6 +1816,38 @@ describe('Observability Handlers', () => {
       });
     });
 
+    it('should default reviewStatus to needs-review', async () => {
+      (mockObservabilityStore.createFeedback as ReturnType<typeof vi.fn>).mockResolvedValue(undefined);
+
+      await NEW_ROUTES.CREATE_FEEDBACK.handler({
+        ...createTestServerContext({ mastra: mockMastra }),
+        feedback: { traceId: 'trace-123', source: 'user', feedbackType: 'comment', value: 'hi' },
+      });
+
+      expect(mockObservabilityStore.createFeedback).toHaveBeenCalledWith({
+        feedback: expect.objectContaining({ reviewStatus: 'needs-review' }),
+      });
+    });
+
+    it('should preserve a caller-supplied reviewStatus', async () => {
+      (mockObservabilityStore.createFeedback as ReturnType<typeof vi.fn>).mockResolvedValue(undefined);
+
+      await NEW_ROUTES.CREATE_FEEDBACK.handler({
+        ...createTestServerContext({ mastra: mockMastra }),
+        feedback: {
+          traceId: 'trace-123',
+          source: 'studio',
+          feedbackType: 'rating',
+          value: 1,
+          reviewStatus: 'reviewed',
+        },
+      });
+
+      expect(mockObservabilityStore.createFeedback).toHaveBeenCalledWith({
+        feedback: expect.objectContaining({ reviewStatus: 'reviewed' }),
+      });
+    });
+
     it('should throw 500 when storage is not available', async () => {
       const mastraWithoutStorage = createMockMastra(undefined);
 

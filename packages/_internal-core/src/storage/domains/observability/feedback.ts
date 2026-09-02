@@ -161,7 +161,9 @@ export type CreateFeedbackArgs = z.infer<typeof createFeedbackArgsSchema>;
 /** Schema for createFeedback operation body in client/server */
 export const createFeedbackBodySchema = z
   .object({
-    feedback: feedbackRecordObjectSchema.omit({ timestamp: true, reviewStatus: true }),
+    feedback: feedbackRecordObjectSchema
+      .omit({ timestamp: true, reviewStatus: true })
+      .extend({ reviewStatus: feedbackReviewStatusSchema.optional() }),
   })
   .describe('Arguments for creating feedback');
 
