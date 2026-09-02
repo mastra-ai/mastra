@@ -44,7 +44,7 @@ describe('Knowledge importer state and runs', () => {
     const knowledge = createKnowledge();
 
     await expect(
-      knowledge.createImportRun({
+      knowledge.createImportRunInternal({
         importerId: 'calendar',
         binding,
         importKind: 'static',
@@ -69,7 +69,7 @@ describe('Knowledge importer state and runs', () => {
       importKind: 'static',
       triggerKind: 'programmatic',
     });
-    const visible = await knowledge.createImportRun({
+    const visible = await knowledge.createImportRunInternal({
       id: 'a-visible',
       importerId: 'calendar',
       binding,
@@ -90,7 +90,7 @@ describe('Knowledge importer state and runs', () => {
       access: { 'resource:$resourceId': 'edit' },
       handler: async () => {},
     });
-    const oldRun = await knowledge.createImportRun({
+    const oldRun = await knowledge.createImportRunInternal({
       id: 'z-old',
       importerId: 'calendar',
       binding,
@@ -98,7 +98,7 @@ describe('Knowledge importer state and runs', () => {
       triggerKind: 'programmatic',
       queuedAt: new Date('2026-08-28T12:00:00.000Z'),
     });
-    const newRun = await knowledge.createImportRun({
+    const newRun = await knowledge.createImportRunInternal({
       id: 'a-new',
       importerId: 'issues',
       binding,
@@ -117,14 +117,14 @@ describe('Knowledge importer state and runs', () => {
 
   it('sanitizes terminal failures and preserves trace references', async () => {
     const knowledge = createKnowledge();
-    const run = await knowledge.createImportRun({
+    const run = await knowledge.createImportRunInternal({
       importerId: 'calendar',
       binding,
       importKind: 'static',
       triggerKind: 'programmatic',
     });
-    await knowledge.updateImportRun({ id: run.id, status: 'running' });
-    const failed = await knowledge.updateImportRun({
+    await knowledge.updateImportRunInternal({ id: run.id, status: 'running' });
+    const failed = await knowledge.updateImportRunInternal({
       id: run.id,
       status: 'failed',
       error: new Error(`secret\n${'x'.repeat(2_000)}`),

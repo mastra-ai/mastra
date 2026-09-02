@@ -196,12 +196,26 @@ export class KnowledgeProposalLifecycle {
     });
     if (!proposal || proposal.status !== 'conflicted') throw new KnowledgeNotFoundError('proposal', input.id);
     const mutation = await this.#refreshMutation(decodeMutation(proposal));
-    return this.propose({
-      mutation,
-      proposerContextScopeId: input.reviewerContextScopeId,
-      vouchedScopeIds: input.vouchedScopeIds,
-      reason: input.reason ?? proposal.reason,
-    });
+    const targets = await this.#proposalTargets(mutation);
+    for (const target of targets) {
+      assertKnowledgeScopeCapabilities({
+        frontier,
+        scopeIds: target.scopeIds,
+        capability: target.approvalCapability,
+        targetType: `${target.type} ${target.id}`,
+      });
+    }
+    return this.#redactAttribution(
+      await this.storage.createProposal({
+        targets,
+        operation: mutation.kind,
+        payload: mutation,
+        reason: input.reason ?? proposal.reason,
+        proposerContextScopeId: input.reviewerContextScopeId,
+        expectedAccessEpoch: frontier.accessEpoch,
+      }),
+      frontier,
+    );
   }
 
   async #proposalTargets(mutation: KnowledgeProposalMutation): Promise<KnowledgeProposalTarget[]> {
@@ -384,7 +398,7 @@ export class KnowledgeProposalLifecycle {
   ): Promise<KnowledgeProposalTarget | undefined> {
     for (const target of proposal.targets) {
       const isPrimaryTarget = target.id === proposal.targetId;
-      const entity =
+      let entity =
         isPrimaryTarget && !target.expectedDeleted
           ? target.type === 'node'
             ? await this.resolveNode({ id: target.id, scopeIds: vouchedScopeIds })
@@ -392,6 +406,10 @@ export class KnowledgeProposalLifecycle {
           : target.type === 'node'
             ? await this.storage.getNodeIncludingDeleted(target.id)
             : await this.storage.getRecord({ id: target.id, includeDeleted: true });
+      if (!entity && target.type === 'node' && frontier.scopes[target.id]?.read) {
+        const scopeTarget = await this.storage.getNode(target.id);
+        if (scopeTarget?.isScope) entity = scopeTarget;
+      }
       if (!entity) throw new KnowledgeNotFoundError(target.type, target.id);
       const currentScopeIds =
         target.type === 'node'

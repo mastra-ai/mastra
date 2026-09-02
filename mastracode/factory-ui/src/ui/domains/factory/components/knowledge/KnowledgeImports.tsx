@@ -55,18 +55,21 @@ function ImportRunDetail({
   factoryProjectId,
   importerId,
   runId,
+  threadId,
   onClose,
 }: {
   factoryProjectId: string;
   importerId: string;
   runId: string;
+  threadId?: string;
   onClose: () => void;
 }) {
-  const detail = useKnowledgeImportRun(factoryProjectId, importerId, runId);
+  const detail = useKnowledgeImportRun(factoryProjectId, importerId, runId, threadId);
   if (detail.isPending) return <SkeletonRows label="Loading import run" rows={5} />;
   if (detail.isError) return <Notice variant="destructive">{detail.error.message}</Notice>;
 
-  const { run, activity } = detail.data;
+  const run = detail.data.pages[0]!.run;
+  const activity = detail.data.pages.flatMap(page => page.activity);
   return (
     <section
       aria-label="Import run detail"
@@ -111,6 +114,18 @@ function ImportRunDetail({
                 </time>
               </li>
             ))}
+            {detail.hasNextPage ? (
+              <li className="flex justify-center py-2">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  disabled={detail.isFetchingNextPage}
+                  onClick={() => void detail.fetchNextPage()}
+                >
+                  {detail.isFetchingNextPage ? 'Loading activity…' : 'Load more activity'}
+                </Button>
+              </li>
+            ) : null}
           </ol>
         )}
       </div>
@@ -151,10 +166,12 @@ function ImportRunDetail({
 function ImportRuns({
   factoryProjectId,
   importer,
+  threadId,
   initialRunId,
 }: {
   factoryProjectId: string;
   importer: KnowledgeImporterSummary;
+  threadId?: string;
   initialRunId?: string;
 }) {
   const [binding, setBinding] = useState<string>();
@@ -163,13 +180,18 @@ function ImportRuns({
   const [from, setFrom] = useState('');
   const [to, setTo] = useState('');
   const [selectedRunId, setSelectedRunId] = useState<string | undefined>(initialRunId);
-  const runs = useKnowledgeImportRuns(factoryProjectId, importer.id, {
-    binding,
-    status,
-    trigger,
-    from: from ? new Date(`${from}T00:00:00`).toISOString() : undefined,
-    to: to ? new Date(`${to}T23:59:59.999`).toISOString() : undefined,
-  });
+  const runs = useKnowledgeImportRuns(
+    factoryProjectId,
+    importer.id,
+    {
+      binding,
+      status,
+      trigger,
+      from: from ? new Date(`${from}T00:00:00`).toISOString() : undefined,
+      to: to ? new Date(`${to}T23:59:59.999`).toISOString() : undefined,
+    },
+    threadId,
+  );
   const items = runs.data?.pages.flatMap(page => page.runs) ?? [];
 
   if (selectedRunId) {
@@ -178,6 +200,7 @@ function ImportRuns({
         factoryProjectId={factoryProjectId}
         importerId={importer.id}
         runId={selectedRunId}
+        threadId={threadId}
         onClose={() => setSelectedRunId(undefined)}
       />
     );
@@ -243,7 +266,7 @@ function ImportRuns({
               <button
                 type="button"
                 className="hover:bg-surface3 flex w-full items-start justify-between gap-4 px-2 py-3 text-left"
-                onClick={() => setSelectedRunId(run.id)}
+                onClick={() => setSelectedRunId(run.reference)}
               >
                 <div className="min-w-0">
                   <div className="flex items-center gap-2">
@@ -274,14 +297,16 @@ function ImportRuns({
 
 export function KnowledgeImports({
   factoryProjectId,
+  threadId,
   initialImporterId,
   initialRunId,
 }: {
   factoryProjectId: string | undefined;
+  threadId?: string;
   initialImporterId?: string;
   initialRunId?: string;
 }) {
-  const importers = useKnowledgeImporters(factoryProjectId);
+  const importers = useKnowledgeImporters(factoryProjectId, threadId);
   const [requestedImporterId, setRequestedImporterId] = useState<string | undefined>(initialImporterId);
   if (!factoryProjectId) return null;
   if (importers.isPending) return <SkeletonRows label="Loading knowledge importers" rows={5} />;
@@ -318,6 +343,7 @@ export function KnowledgeImports({
         key={importer.id}
         factoryProjectId={factoryProjectId}
         importer={importer}
+        threadId={threadId}
         initialRunId={importer.id === initialImporterId ? initialRunId : undefined}
       />
     </section>

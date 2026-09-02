@@ -266,7 +266,10 @@ describe('Knowledge proposal lifecycle', () => {
       vouchedScopeIds: [ids['principal:owner']!],
     });
     expect(replacement.targets[0]).toMatchObject({ scopeIds: [ids['scope:destination']] });
-    expect(replacement.payload).toMatchObject({ originalScopeIds: [ids['scope:destination']] });
+    expect(replacement.payload).toMatchObject({
+      kind: 'update-node',
+      mutation: { id: node.id, version: node.version + 1 },
+    });
     await expect(
       lifecycle.approve({
         id: replacement.id,
@@ -274,6 +277,7 @@ describe('Knowledge proposal lifecycle', () => {
         vouchedScopeIds: [ids['principal:owner']!],
       }),
     ).resolves.toMatchObject({ status: 'approved' });
+  });
 
   it('hides conflicted proposals from target-only readers on list and single-id surfaces', async () => {
     const { knowledge, lifecycle, node, ids } = await createFixture();

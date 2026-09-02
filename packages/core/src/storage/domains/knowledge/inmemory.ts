@@ -1390,6 +1390,8 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
       input.importRunId,
       input.details,
     );
+  }
+
   async createProposal(input: CreateKnowledgeProposalInput): Promise<KnowledgeProposal> {
     this.#assertExpectedAccessEpoch(input.expectedAccessEpoch);
     const [primaryTarget] = input.targets;
@@ -1426,7 +1428,7 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
     approvalScopeIds?: KnowledgeProposalApprovalScopeIds;
   }): Promise<KnowledgeProposal | null> {
     const proposal = this.#db.knowledgeProposals.get(input.id);
-    return proposal && this.#isProposalVisible(proposal, input) ? cloneProposal(proposal) : null;
+    return proposal && (await this.#isProposalVisible(proposal, input)) ? cloneProposal(proposal) : null;
   }
 
   async listProposals(input: ListKnowledgeProposalsInput): Promise<ListKnowledgeProposalsOutput> {
@@ -1434,11 +1436,11 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
     const cursor = input.cursor ? this.#db.knowledgeProposals.get(input.cursor) : undefined;
     if (
       input.cursor &&
-      (!cursor || (input.status && cursor.status !== input.status) || !this.#isProposalVisible(cursor, input))
+      (!cursor || (input.status && cursor.status !== input.status) || !(await this.#isProposalVisible(cursor, input)))
     ) {
       return { proposals: [] };
     }
-    const proposals = [...this.#db.knowledgeProposals.values()]
+    const candidates = [...this.#db.knowledgeProposals.values()]
       .filter(proposal => !input.status || proposal.status === input.status)
       .filter(
         proposal =>
@@ -1446,8 +1448,11 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
           proposal.createdAt < cursor.createdAt ||
           (proposal.createdAt.getTime() === cursor.createdAt.getTime() && proposal.id < cursor.id),
       )
-      .filter(proposal => this.#isProposalVisible(proposal, input))
       .sort((left, right) => right.createdAt.getTime() - left.createdAt.getTime() || right.id.localeCompare(left.id));
+    const proposals: KnowledgeProposal[] = [];
+    for (const proposal of candidates) {
+      if (await this.#isProposalVisible(proposal, input)) proposals.push(proposal);
+    }
     const page = proposals.slice(0, limit);
     return {
       proposals: page.map(cloneProposal),
@@ -1691,9 +1696,14 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
     const membershipScope = input.membershipScopeIds
       ? canonicalizeKnowledgeScopeIds(input.membershipScopeIds)
       : undefined;
+    const visibleProposalIds = new Set<string>();
+    for (const proposal of this.#db.knowledgeProposals.values()) {
+      if (await this.#isProposalVisible(proposal, { scopeIds: queryScope })) visibleProposalIds.add(proposal.id);
+    }
     return this.#db.knowledgeActivity
-      .filter(event => !input.contextScopeId || event.contextScopeId === input.contextScopeId)
       .filter(event => {
+        const proposalId = typeof event.details?.proposalId === 'string' ? event.details.proposalId : undefined;
+        if (proposalId && !visibleProposalIds.has(proposalId)) return false;
         const retainedScopeIds = activityVisibilityScopeIds(event.details);
         const visibleDeletion = event.action === 'delete' && isKnowledgeScopeVisible(retainedScopeIds, queryScope);
         if (event.targetType === 'node') {
@@ -1993,24 +2003,22 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
   }
 
   /**
-   * Full proposal visibility disjunction: (proposer-context read AND every
-   * target readable) OR direct write authority — the caller can satisfy every
-   * target's approval capability on at least one of that target's scopes.
+   * Full proposal visibility: every target must be live, and the caller must
+   * satisfy (proposer-context read AND every target's CURRENT scopes
+   * readable) OR direct write authority over every target's current scopes.
    */
-  #isProposalVisible(
+  async #isProposalVisible(
     proposal: KnowledgeProposal,
     input: { scopeIds: KnowledgeScopeIds; approvalScopeIds?: KnowledgeProposalApprovalScopeIds },
-  ): boolean {
+  ): Promise<boolean> {
     const readable = canonicalizeKnowledgeScopeIds(input.scopeIds);
     const proposerContextScopeId = proposal.proposerContextScopeId;
-    if (
+    const readBranch =
       proposerContextScopeId !== undefined &&
       (readable.includes(proposerContextScopeId) ||
         isKnowledgeScopeVisible(this.#nodeScopeIds(proposerContextScopeId), readable)) &&
-      proposal.targets.every(target => this.#isProposalTargetVisible(target, readable))
-    ) {
-      return true;
-    }
+      proposal.targets.every(target => this.#isProposalTargetVisible(target, readable));
+    if (readBranch) return true;
     return proposal.targets.every(target => {
       const authorizedScopeIds = input.approvalScopeIds?.[target.approvalCapability];
       const currentScopeIds = this.#proposalTargetScopeIds(target);
