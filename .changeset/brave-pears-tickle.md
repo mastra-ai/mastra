@@ -2,6 +2,6 @@
 '@mastra/clickhouse': minor
 ---
 
-Added portable advanced trace-query execution with merge-independent ClickHouse plans and current-row conformance.
+Added schema-neutral advanced trace-query execution over ClickHouse's existing completion-only observability tables.
 
-ClickHouse observability now persists an ingestion version for spans, trace roots, trace branches, and scores so replacement selection remains stable before and after background merges, including when domain timestamps tie. Existing unversioned replacement tables require `npx mastra migrate` before initialization; additive `isPending` columns remain automatic. Trace queries use the historical-complete root table, reconstruct each referenced relation once within the bounded root scope, and enforce a configurable 15-second execution timeout.
+Trace queries read from the historical-complete root table, deduplicate completed deliveries by the existing `dedupeKey`, reconstruct each referenced relation once within the bounded root scope, fail closed on unsupported order fields, and enforce a configurable 15-second execution timeout. This feature requires no schema, table-engine, or data migration.
