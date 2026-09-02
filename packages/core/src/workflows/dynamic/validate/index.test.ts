@@ -89,6 +89,20 @@ describe('validateDynamicWorkflow', () => {
       );
     });
 
+    it('flags the container id when the sleep comes first in the graph', () => {
+      const issues = validateDynamicWorkflow(
+        def({
+          graph: [
+            { type: 'sleep', id: 'same', duration: 5 },
+            { type: 'parallel', id: 'same', steps: [{ type: 'tool', id: 'left', toolId: 'a' }] },
+          ],
+        }),
+      );
+      expect(issues).toEqual(
+        expect.arrayContaining([expect.objectContaining({ code: 'duplicate-step-id', path: 'graph.1.id' })]),
+      );
+    });
+
     it('still accepts pre-existing sleep-to-sleep duplicate ids (backward compatibility)', () => {
       const issues = validateDynamicWorkflow(
         def({

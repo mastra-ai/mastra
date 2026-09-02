@@ -2561,11 +2561,14 @@ export class Workflow<
       type: 'foreach',
       ...entryOptionFields,
       step: toSingleStepEntry(foreachStep),
-      // Keep the caller's options object BY REFERENCE: the agentic execution
-      // workflow mutates `concurrency` on it between build and execution
-      // (see createAgenticExecutionWorkflow's map-tool-calls step). Snapshotting
-      // here would freeze tool-call parallelism at its conservative initial value.
-      opts: (opts as ForeachOptions | undefined) ?? { concurrency: 1 },
+      // Keep the caller's options object BY REFERENCE when it carries a
+      // concurrency: the agentic execution workflow mutates `concurrency` on it
+      // between build and execution (see createAgenticExecutionWorkflow's
+      // map-tool-calls step), and snapshotting would freeze tool-call
+      // parallelism at its conservative initial value. `.foreach(step, { id })`
+      // has no concurrency to mutate, so give that live entry the engine
+      // default instead of an opts object that lies about the type.
+      opts: opts?.concurrency === undefined ? { ...opts, concurrency: 1 } : (opts as ForeachOptions),
     });
     this.serializedStepFlow.push({
       type: 'foreach',

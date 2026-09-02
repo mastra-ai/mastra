@@ -1910,6 +1910,10 @@ describe('control-flow entry identity and display metadata', () => {
       .foreach(plusOneStep, { id: 'annotated-foreach', metadata: { title: 'Annotated foreach' } })
       .commit();
 
+    // The live entry gets the engine default so its opts match the declared
+    // `ForeachOptions` shape, and the caller's object is left untouched.
+    expect(wf.stepGraph[0]).toMatchObject({ type: 'foreach', opts: { concurrency: 1 } });
+
     const stored = JSON.parse(JSON.stringify(toStorableGraph(wf.stepGraph)));
     expect(stored[0]).toMatchObject({
       type: 'foreach',
