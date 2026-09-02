@@ -36,18 +36,20 @@ export interface KnowledgeGraphNode {
   kind: string;
   description?: string;
   /** Scope rung the node sits on (drives the ring color + rung filters). */
-  rung: KnowledgeRung | null;
+  rung?: KnowledgeRung | null;
   isScope?: boolean;
   isBoundary?: boolean;
   /** A pinned record's wikilinks reference this node (the pin accent). */
   pinned: boolean;
-  /** Knowledge records owned by this node inside the snapshot window (not a total). */
+  /** Knowledge records owned by this node inside the current lens page (not a total). */
   recordCount: number;
   /** Viewer-visible direct members. Present only for structural scope nodes. */
   memberCount?: number;
   memberCountTruncated?: boolean;
   contentNodeCount?: number;
   childScopeCount?: number;
+  /** Present only for an authorized node one mention hop outside the selected scope. */
+  boundary?: { scope: KnowledgeScopeTreeNode };
   createdAt?: string;
   updatedAt?: string;
 }
@@ -58,6 +60,8 @@ export interface KnowledgeGraphEdge {
   target: string;
   type: 'wikilink' | 'contains';
   recordId?: string;
+  /** True only for an authorized one-hop edge leaving the selected scope. */
+  boundary?: boolean;
   /** Derived from a PINNED record — the pin marks the relationship (A9). */
   pinned?: boolean;
 }
@@ -80,10 +84,10 @@ export interface KnowledgeScopeTreeNode {
   name: string;
   kind: string;
   description?: string;
-  memberCount: number;
-  memberCountTruncated: boolean;
-  contentNodeCount: number;
-  childScopeCount: number;
+  memberCount?: number;
+  memberCountTruncated?: boolean;
+  contentNodeCount?: number;
+  childScopeCount?: number;
   needsCuration?: boolean;
 }
 
@@ -120,16 +124,26 @@ export interface KnowledgeBoundaryNode {
 
 export interface KnowledgeGraphPayload {
   view: 'project' | 'thread';
-  scopeId: string;
-  threadId?: string;
+  scope: KnowledgeScopeTreeNode;
   nodes: KnowledgeGraphNode[];
   edges: KnowledgeGraphEdge[];
   records: KnowledgeGraphRecord[];
-  truncated: boolean;
-  outOfWindow: KnowledgeBoundaryNode[];
-  unresolvedCapped: { count: number; names: string[] };
-  pinCensus: { resource: number; thread: number | null };
-  version: string | null;
+  truncated?: boolean;
+  outOfWindow?: KnowledgeBoundaryNode[];
+  unresolvedCapped?: { count: number; names: string[] };
+  pinCensus?: { resource: number; thread: number | null };
+  page: {
+    nextCursor?: string;
+    truncated: boolean;
+    incomplete: boolean;
+  };
+  limits: {
+    maxNodes: number;
+    maxEdges: number;
+    maxBoundaryNodes: number;
+    boundaryHops: 1;
+  };
+  version?: string | null;
 }
 
 export interface KnowledgeNodeRecord {
@@ -281,6 +295,7 @@ function knowledgeQuery(input: {
   threadId?: string;
   scopeId?: string;
   cursor?: string;
+  limit?: number;
   query?: string;
   action?: string;
   sourceType?: 'importer' | 'system';
@@ -291,6 +306,7 @@ function knowledgeQuery(input: {
   if (input.threadId) params.set('threadId', input.threadId);
   if (input.scopeId) params.set('scopeId', input.scopeId);
   if (input.cursor) params.set('cursor', input.cursor);
+  if (input.limit !== undefined) params.set('limit', String(input.limit));
   if (input.query) params.set('query', input.query);
   if (input.action) params.set('action', input.action);
   if (input.sourceType) params.set('sourceType', input.sourceType);
@@ -333,11 +349,12 @@ export async function fetchKnowledgeGraph(
   baseUrl: string,
   factoryProjectId: string,
   scopeId: string,
+  cursor?: string,
   threadId?: string,
   signal?: AbortSignal,
 ): Promise<KnowledgeGraphPayload> {
   return requestJson<KnowledgeGraphPayload>(
-    `${knowledgeBase(baseUrl, factoryProjectId)}/subgraph${knowledgeQuery({ threadId, scopeId })}`,
+    `${knowledgeBase(baseUrl, factoryProjectId)}/subgraph${knowledgeQuery({ threadId, scopeId, cursor })}`,
     { signal },
   );
 }

@@ -184,9 +184,11 @@ function KnowledgeLinkComponent({ id, source, target, data }: EdgeProps<Knowledg
               }
             : pinned
               ? { stroke: 'rgba(251,191,36,0.75)', strokeWidth: 2 }
-              : source.startsWith('record:') || target.startsWith('record:')
-                ? { stroke: 'rgba(255,255,255,0.45)', strokeWidth: 1.2 }
-                : { stroke: 'rgba(139,92,246,0.4)', strokeWidth: 1.4 }
+              : data?.boundary
+                ? { stroke: 'rgba(167,139,250,0.7)', strokeWidth: 1.5, strokeDasharray: '6 5' }
+                : source.startsWith('record:') || target.startsWith('record:')
+                  ? { stroke: 'rgba(255,255,255,0.45)', strokeWidth: 1.2 }
+                  : { stroke: 'rgba(139,92,246,0.4)', strokeWidth: 1.4 }
         }
       />
       {pinned && !source.startsWith('record:') && !target.startsWith('record:') ? (
@@ -284,14 +286,15 @@ function TruncationBanner({ payload, outOfWindowCount }: { payload: KnowledgeGra
   const parts: string[] = [];
   if (payload.truncated) parts.push(`showing the newest ${payload.nodes.length} nodes`);
   if (outOfWindowCount > 0) parts.push(`${outOfWindowCount} linked nodes outside the window`);
-  if (payload.unresolvedCapped.count > 0) parts.push(`${payload.unresolvedCapped.count} links unresolved (capped)`);
+  if ((payload.unresolvedCapped?.count ?? 0) > 0)
+    parts.push(`${payload.unresolvedCapped?.count ?? 0} links unresolved (capped)`);
   if (parts.length === 0) return null;
   return (
     <div
       data-testid="knowledge-truncation-banner"
       className="border-surface5 bg-surface3/90 text-icon4 pointer-events-none absolute top-2 left-1/2 z-10 -translate-x-1/2 rounded-md border px-3 py-1 text-xs"
     >
-      Partial view — {parts.join(' · ')}
+      Bounded lens — showing {payload.nodes.length} nodes and {payload.edges.length} edges
     </div>
   );
 }
@@ -396,9 +399,10 @@ function KnowledgeGraphInner({
     // carries them; logical owner→target pairs drive filters/ego/sizing.
     // Authorized boundary summaries become muted endpoints, and matching
     // record wikilinks attach them to the same record element as their owner.
-    const records = graphRecordsWithBoundaries(payload.records ?? [], payload.outOfWindow);
-    const graphNodes = graphNodesWithBoundaries(payload.nodes, payload.outOfWindow, records);
-    const outOfWindowCount = countUnrenderedBoundaries(payload.outOfWindow, graphNodes);
+    const boundaries = payload.outOfWindow ?? [];
+    const records = graphRecordsWithBoundaries(payload.records ?? [], boundaries);
+    const graphNodes = graphNodesWithBoundaries(payload.nodes, boundaries, records);
+    const outOfWindowCount = countUnrenderedBoundaries(boundaries, graphNodes);
     // Position capture policy: new data re-simulates WARM (nodes start
     // from their settled spots — new inbound edges change node sizes, so the
     // layout must re-settle); unchanged data freezes positions hard so
