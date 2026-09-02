@@ -6283,7 +6283,17 @@ export class Mastra<
     // Subscribe before probing so a schedule committed during boot cannot fall
     // between the probe and subscription.
     if (!name && schedulerSelected && this.#storage && !this.#findSchedulerWorker()?.isRunning) {
-      await this.#wireSchedulerWakeSubscription();
+      try {
+        await this.#wireSchedulerWakeSubscription();
+      } catch (err) {
+        // The wake subscription is a cross-process hint; the boot probe and
+        // `scheduler.enabled` remain the durable paths. Don't let a pubsub
+        // failure on this one topic keep every other worker from starting.
+        this.#logger?.warn?.(
+          'Failed to subscribe to scheduler wake events; scheduler will not wake on demand',
+          err as any,
+        );
+      }
     }
 
     if (!name && schedulerSelected && !this.#schedulerRequested && !schedulerForcedByFilter) {

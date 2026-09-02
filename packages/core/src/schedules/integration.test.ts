@@ -265,6 +265,45 @@ describe('Agent schedules — scheduler integration', () => {
       expect(wakeCalls(unsubscribe)).toHaveLength(2);
     }, 10_000);
 
+    it('still boots the other workers and the boot probe when the wake subscribe fails', async () => {
+      const pubsub = new EventEmitterPubSub();
+      const originalSubscribe = pubsub.subscribe.bind(pubsub);
+      vi.spyOn(pubsub, 'subscribe').mockImplementation(async (topic, cb, options) => {
+        if (topic === SCHEDULER_WAKE_TOPIC) throw new Error('broker unavailable');
+        return originalSubscribe(topic, cb, options);
+      });
+      const storage = new MockStore();
+      const schedulesStore = (await storage.getStore('schedules'))!;
+      await schedulesStore.createSchedule({
+        id: 'schedule_pre-existing',
+        target: { type: 'workflow', workflowId: 'some-wf' },
+        cron: '0 0 1 1 *',
+        status: 'active',
+        nextFireAt: Date.now() + 3_600_000,
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      });
+      const mastra = track(
+        new Mastra({
+          logger: false,
+          storage,
+          pubsub,
+          agents: { 'beat-nosub': makeAgent('beat-nosub') },
+          notifications: { dispatch: { enabled: false } },
+          scheduler: { tickIntervalMs: 50 },
+        }),
+      );
+
+      // The wake subscription is a hint, not a dependency: a failure must not
+      // keep orchestration (or anything else) from starting.
+      await expect(mastra.startWorkers()).resolves.toBeUndefined();
+      expect(mastra.workers.find(w => w.name === 'orchestration')?.isRunning).toBe(true);
+
+      // The durable path still works: the boot probe found the row.
+      await waitForScheduler(mastra);
+      expect(mastra.scheduler).toBeDefined();
+    });
+
     it('does not leave a scheduler running when wake-triggered startup races stopWorkers()', async () => {
       const pubsub = new EventEmitterPubSub();
       const mastra = track(
