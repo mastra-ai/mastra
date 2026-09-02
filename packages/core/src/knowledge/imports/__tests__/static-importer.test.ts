@@ -28,13 +28,13 @@ async function createFixture(role: 'append' | 'edit' | 'owner' = 'edit') {
   const scopes = (await knowledge.reconcile()).scopes;
   const orgScopeId = scopes['org:acme']!;
   const projectScopeId = scopes[scopeAddress]!;
-  const queuedRun = await knowledge.createImportRun({
+  const queuedRun = await knowledge.createImportRunInternal({
     importerId: 'calendar',
     binding,
     importKind: 'static',
     triggerKind: 'programmatic',
   });
-  const run = await knowledge.updateImportRun({ id: queuedRun.id, status: 'running' });
+  const run = await knowledge.updateImportRunInternal({ id: queuedRun.id, status: 'running' });
   const operations = await createStaticKnowledgeImporterOperations({
     knowledge,
     importerId: 'calendar',
@@ -198,7 +198,7 @@ describe('static Knowledge importer operations', () => {
     const record = await node.appendRecord({ text: 'Imported details' });
 
     await expect(node.removeRecord(record.id)).rejects.toThrow('owner authority');
-    await knowledge.updateImportRun({ id: run.id, status: 'succeeded' });
+    await knowledge.updateImportRunInternal({ id: run.id, status: 'succeeded' });
     await expect(operations.getNode('event:42')).rejects.toThrow('is not active');
     await expect(operations.listNodes()).rejects.toThrow('is not active');
     await expect(node.listRecords()).rejects.toThrow('is not active');

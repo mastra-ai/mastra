@@ -23,10 +23,9 @@ import { runLayout } from './layout';
 function node(id: string, overrides: Partial<KnowledgeGraphNode> = {}): KnowledgeGraphNode {
   return {
     id,
+    reference: `reference-${id}`,
     name: `Knowledge node ${id}`,
     kind: 'concept',
-    scopeIds: ['org:o', 'resource:r'],
-    rung: 'resource',
     pinned: false,
     recordCount: 1,
     createdAt: '2026-08-13T00:00:00.000Z',
@@ -82,41 +81,31 @@ describe('degreeMap', () => {
 });
 
 describe('filterGraph', () => {
-  const nodes = [
-    node('org-1', { rung: 'org', scopeIds: ['org:o'] }),
-    node('res-1'),
-    node('res-pinned', { pinned: true }),
-  ];
+  const nodes = [node('org-1'), node('res-1'), node('res-pinned', { pinned: true })];
   const edges = [edge('org-1', 'res-1'), edge('res-1', 'res-pinned')];
 
   it('shows everything with no filters', () => {
-    const result = filterGraph(nodes, edges, { rungs: new Set(), pinnedOnly: false });
+    const result = filterGraph(nodes, edges, { pinnedOnly: false });
     expect(result.nodes).toHaveLength(3);
     expect(result.edges).toHaveLength(2);
   });
 
-  it('filters by rung and drops edges to hidden nodes', () => {
-    const result = filterGraph(nodes, edges, { rungs: new Set(['resource'] as const), pinnedOnly: false });
-    expect(result.nodes.map(node => node.id)).toEqual(['res-1', 'res-pinned']);
-    expect(result.edges.map(e => e.id)).toEqual(['wikilink:res-1:res-pinned']);
-  });
-
   it('pin filter keeps only accented nodes', () => {
-    const result = filterGraph(nodes, edges, { rungs: new Set(), pinnedOnly: true });
+    const result = filterGraph(nodes, edges, { pinnedOnly: true });
     expect(result.nodes.map(node => node.id)).toEqual(['res-pinned']);
     expect(result.edges).toHaveLength(0);
   });
 
   it('pin filter keeps the endpoints of a pinned edge (A9: pins mark relationships)', () => {
     const pinnedEdge: KnowledgeGraphEdge = { ...edge('org-1', 'res-1'), pinned: true };
-    const result = filterGraph(nodes, [pinnedEdge], { rungs: new Set(), pinnedOnly: true });
+    const result = filterGraph(nodes, [pinnedEdge], { pinnedOnly: true });
     expect(result.nodes.map(node => node.id).sort()).toEqual(['org-1', 'res-1', 'res-pinned']);
     expect(result.edges).toEqual([pinnedEdge]);
   });
 
   it('pin filter keeps nodes touched by pinned records via pair edges (A11)', () => {
     const pairs = recordPairEdges([{ id: 'm1', nodeIds: ['org-1', 'res-1'], pinned: true, text: 'pinned link' }]);
-    const result = filterGraph(nodes, pairs, { rungs: new Set(), pinnedOnly: true });
+    const result = filterGraph(nodes, pairs, { pinnedOnly: true });
     expect(result.nodes.map(node => node.id).sort()).toEqual(['org-1', 'res-1', 'res-pinned']);
   });
 

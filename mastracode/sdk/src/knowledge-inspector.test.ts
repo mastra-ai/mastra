@@ -74,6 +74,8 @@ async function createHarness() {
             schedule: '0 * * * *',
             bindings: [
               { source: 'calendar:primary', scope: 'resource:project-1' },
+              { source: 'calendar:thread-1', scope: 'resource:project-1:thread:thread-1' },
+              { source: 'calendar:thread-2', scope: 'resource:project-1:thread:thread-2' },
               { source: 'calendar:foreign', scope: 'resource:other-project' },
             ],
           },
@@ -295,7 +297,7 @@ describe('KnowledgeInspector', () => {
 
     const detail = await harness.inspector.getNode({ handle: atlas.handle });
     expect(detail.records).toEqual([
-      expect.objectContaining({ text: 'Atlas deploys through [[Related]].', sourceThreadId: 'thread-1' }),
+      expect.objectContaining({ text: 'Atlas deploys through [[Related]].', createdAt: expect.any(String) }),
     ]);
     expect(detail.outgoingTargets).toEqual({
       nodes: [expect.objectContaining({ name: 'Related' })],
@@ -451,21 +453,21 @@ describe('KnowledgeInspector', () => {
       source: 'calendar:uncurated',
       scope: 'resource:project-1:uncurated',
     });
-    const visible = await harness.runtime.createImportRun({
+    const visible = await harness.runtime.createImportRunInternal({
       id: 'visible-run',
       importerId: 'calendar',
       binding: visibleBinding,
       importKind: 'static',
       triggerKind: 'cron',
     });
-    const foreign = await harness.runtime.createImportRun({
+    const foreign = await harness.runtime.createImportRunInternal({
       id: 'foreign-run',
       importerId: 'calendar',
       binding: foreignBinding,
       importKind: 'static',
       triggerKind: 'cron',
     });
-    const unsupportedDescendant = await harness.runtime.createImportRun({
+    const unsupportedDescendant = await harness.runtime.createImportRunInternal({
       id: 'unsupported-descendant-run',
       importerId: 'calendar',
       binding: unsupportedDescendantBinding,
@@ -473,26 +475,64 @@ describe('KnowledgeInspector', () => {
       triggerKind: 'cron',
     });
 
-    await expect(harness.inspector.listImporters()).resolves.toEqual([
+    const importers = await harness.inspector.listImporters();
+    expect(importers).toMatchObject([
       {
         id: 'calendar',
         importKind: 'static',
-        bindings: [{ source: 'calendar:primary', scope: 'resource:project-1' }],
+        bindings: [{ source: 'calendar:primary' }, { source: 'calendar:thread-1' }],
       },
     ]);
+    const bindingHandle = importers[0]!.bindings[0]!.handle;
+    expect(bindingHandle).not.toContain('resource:project-1');
+    const runs = await harness.inspector.listImportRuns({ importerId: 'calendar', binding: bindingHandle });
+    expect(runs.runs).toHaveLength(1);
+    expect(runs.runs[0]!.id).not.toBe(visible.id);
     await expect(
-      harness.inspector.listImportRuns({ importerId: 'calendar', binding: visibleBinding }),
-    ).resolves.toMatchObject({ runs: [{ id: visible.id }] });
-    await expect(harness.inspector.getImportRun({ importerId: 'calendar', runId: visible.id })).resolves.toMatchObject({
-      run: { id: visible.id },
-      activity: [],
-    });
+      harness.inspector.getImportRun({ importerId: 'calendar', runId: runs.runs[0]!.id }),
+    ).resolves.toMatchObject({ activity: [] });
     await expect(harness.inspector.getImportRun({ importerId: 'calendar', runId: foreign.id })).rejects.toMatchObject({
-      code: 'not-visible',
+      code: 'invalid-handle',
     });
     await expect(
       harness.inspector.getImportRun({ importerId: 'calendar', runId: unsupportedDescendant.id }),
-    ).rejects.toMatchObject({ code: 'not-visible' });
+    ).rejects.toMatchObject({ code: 'invalid-handle' });
+  });
+
+  it('lists and opens only the active session thread importer runs', async () => {
+    harness.session.setThreadId('thread-1');
+    const threadBinding = knowledgeImporterBindingKey({
+      source: 'calendar:thread-1',
+      scope: 'resource:project-1:thread:thread-1',
+    });
+    const siblingBinding = knowledgeImporterBindingKey({
+      source: 'calendar:thread-2',
+      scope: 'resource:project-1:thread:thread-2',
+    });
+    await harness.runtime.createImportRunInternal({
+      id: 'thread-run',
+      importerId: 'calendar',
+      binding: threadBinding,
+      importKind: 'static',
+      triggerKind: 'cron',
+    });
+    await harness.runtime.createImportRunInternal({
+      id: 'sibling-thread-run',
+      importerId: 'calendar',
+      binding: siblingBinding,
+      importKind: 'static',
+      triggerKind: 'cron',
+    });
+
+    const importers = await harness.inspector.listImporters();
+    const threadHandle = importers[0]!.bindings.find(binding => binding.source === 'calendar:thread-1')!.handle;
+    expect(importers[0]!.bindings.some(binding => binding.source === 'calendar:thread-2')).toBe(false);
+
+    const runs = await harness.inspector.listImportRuns({ importerId: 'calendar', binding: threadHandle });
+    expect(runs.runs).toHaveLength(1);
+    await expect(
+      harness.inspector.getImportRun({ importerId: 'calendar', runId: runs.runs[0]!.id }),
+    ).resolves.toMatchObject({ activity: [] });
   });
 
   it('uses the selected keyed Knowledge runtime instead of the legacy composite domain', async () => {

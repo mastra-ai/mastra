@@ -773,7 +773,9 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
     const nodes: KnowledgeNode[] = [];
     for (const row of result.rows) {
       const node = parseNode(row);
-      if (!isKnowledgeNodeVisible(node, await this.#getNodeScopeIds(this.#client, node.id), scopeIds)) continue;
+      const nodeScopeIds = await this.#getNodeScopeIds(this.#client, node.id);
+      if (!isKnowledgeNodeVisible(node, nodeScopeIds, scopeIds)) continue;
+      if (input.membershipScopeIds && !isKnowledgeScopeVisible(nodeScopeIds, input.membershipScopeIds)) continue;
       if (input.namePrefix && !node.name.toLocaleLowerCase().startsWith(input.namePrefix.toLocaleLowerCase())) continue;
       if (input.kind && node.kind !== input.kind) continue;
       if (input.isScope !== undefined && node.isScope !== input.isScope) continue;
@@ -1906,21 +1908,16 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
       );
       args.push(input.cursor, input.cursor, input.cursor);
     }
-    const scopePlaceholders = scopeIds.map(() => '?').join(',');
-    clauses.push(`NOT EXISTS (
-      SELECT 1 FROM json_each(json_extract(changes, '$.targets')) AS target
-      WHERE NOT EXISTS (
-        SELECT 1 FROM json_each(json_extract(target.value, '$.scopeIds')) AS targetScope
-        WHERE targetScope.value IN (${scopePlaceholders})
-      )
-    )`);
-    args.push(...scopeIds);
-    args.push(limit + 1);
     const result = await this.#client.execute({
-      sql: `SELECT * FROM "${TABLE_KNOWLEDGE_PROPOSALS}" WHERE ${clauses.join(' AND ')} ORDER BY createdAt DESC,id DESC LIMIT ?`,
+      sql: `SELECT * FROM "${TABLE_KNOWLEDGE_PROPOSALS}"${clauses.length ? ` WHERE ${clauses.join(' AND ')}` : ''} ORDER BY createdAt DESC,id DESC`,
       args,
     });
-    const proposals = result.rows.map(parseProposal);
+    const proposals: KnowledgeProposal[] = [];
+    for (const row of result.rows) {
+      const proposal = parseProposal(row);
+      if (await this.#isProposalVisible(this.#client, proposal, scopeIds)) proposals.push(proposal);
+      if (proposals.length > limit) break;
+    }
     return {
       proposals: proposals.slice(0, limit),
       nextCursor: proposals.length > limit ? proposals[limit - 1]?.id : undefined,
@@ -2033,7 +2030,13 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
 
   async listActivity(input: {
     scopeIds: KnowledgeScopeIds;
+    membershipScopeIds?: KnowledgeScopeIds;
+    contextScopeId?: string;
     importRunId?: string;
+    action?: KnowledgeActivityAction;
+    sourceType?: 'importer' | 'system';
+    from?: Date;
+    to?: Date;
     after?: string;
     limit?: number;
   }): Promise<KnowledgeActivityEvent[]> {
@@ -2042,6 +2045,20 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
     if (input.importRunId) {
       clauses.push('importRunId=?');
       args.push(input.importRunId);
+    }
+    if (input.action) {
+      clauses.push('action=?');
+      args.push(input.action);
+    }
+    if (input.sourceType)
+      clauses.push(input.sourceType === 'importer' ? 'importRunId IS NOT NULL' : 'importRunId IS NULL');
+    if (input.from) {
+      clauses.push('createdAt>=?');
+      args.push(input.from.toISOString());
+    }
+    if (input.to) {
+      clauses.push('createdAt<=?');
+      args.push(input.to.toISOString());
     }
     if (input.after) {
       clauses.push('id < ?');
@@ -2052,28 +2069,28 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
       args,
     });
     const scopeIds = canonicalizeKnowledgeScopeIds(input.scopeIds);
-    const visible = new Set(scopeIds);
+    const membershipScopeIds = input.membershipScopeIds
+      ? canonicalizeKnowledgeScopeIds(input.membershipScopeIds)
+      : undefined;
     const events: KnowledgeActivityEvent[] = [];
     for (const row of result.rows) {
-      if (row.contextScopeId != null && !visible.has(String(row.contextScopeId))) continue;
       const action = String(row.action) as KnowledgeActivityAction;
       const details = row.detailsJson == null ? undefined : parseJson<Record<string, unknown>>(row.detailsJson);
+      const proposalId = typeof details?.proposalId === 'string' ? details.proposalId : undefined;
+      if (proposalId && !(await this.getVisibleProposal({ id: proposalId, scopeIds }))) continue;
+      const retainedScopeIds = activityVisibilityScopeIds(details);
       const targetType = String(row.targetType) as KnowledgeSemanticDocumentType;
-      const visibleDeletion =
-        action === 'delete' &&
-        (targetType === 'record'
-          ? isKnowledgeScopeVisible(activityVisibilityScopeIds(details), scopeIds)
-          : row.contextScopeId != null || isKnowledgeScopeVisible(activityVisibilityScopeIds(details), scopeIds));
+      const visibleDeletion = action === 'delete' && isKnowledgeScopeVisible(retainedScopeIds, scopeIds);
       const targetId = String(row.targetId);
       if (targetType === 'node') {
         const node = await this.#getNodeIncludingDeleted(this.#client, targetId);
-        if (
-          !visibleDeletion &&
-          (!node || !isKnowledgeScopeVisible(await this.#getNodeScopeIds(this.#client, targetId), scopeIds))
-        )
-          continue;
+        const targetScopeIds = node ? await this.#getNodeScopeIds(this.#client, targetId) : retainedScopeIds;
+        if (membershipScopeIds && !isKnowledgeScopeVisible(targetScopeIds, membershipScopeIds)) continue;
+        if (!visibleDeletion && (!node || !isKnowledgeScopeVisible(targetScopeIds, scopeIds))) continue;
       } else {
         const record = await this.#getRecord(this.#client, targetId, true);
+        const targetScopeIds = record ? await this.getRecordScopeIds(targetId) : retainedScopeIds;
+        if (membershipScopeIds && !isKnowledgeScopeVisible(targetScopeIds, membershipScopeIds)) continue;
         if (record ? !(await this.#isRecordVisible(this.#client, record, scopeIds)) : !visibleDeletion) continue;
       }
       events.push({
@@ -2490,11 +2507,23 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
   }
 
   async #isProposalVisible(
-    _executor: Executor,
+    executor: Executor,
     proposal: KnowledgeProposal,
     visibleScopeIds: KnowledgeScopeIds,
   ): Promise<boolean> {
-    return proposal.targets.every(target => isKnowledgeScopeVisible(target.scopeIds, visibleScopeIds));
+    for (const target of proposal.targets) {
+      if (target.type === 'node') {
+        const node = await this.#getNodeIncludingDeleted(executor, target.id);
+        if (!node || node.deletedAt) return false;
+        const scopeIds = node.isScope ? [node.id] : await this.#getNodeScopeIds(executor, node.id);
+        if (!isKnowledgeScopeVisible(scopeIds, visibleScopeIds)) return false;
+      } else {
+        const record = await this.#getRecord(executor, target.id, true);
+        if (!record || record.deletedAt || !(await this.#isRecordVisible(executor, record, visibleScopeIds)))
+          return false;
+      }
+    }
+    return true;
   }
 
   async #isSemanticOutboxEntryVisible(

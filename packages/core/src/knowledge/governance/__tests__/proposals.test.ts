@@ -30,7 +30,12 @@ async function createFixture() {
       },
     ],
   });
-  const lifecycle = new KnowledgeProposalLifecycle(storage, scopeIds => knowledge.evaluateAccess(scopeIds));
+  const lifecycle = new KnowledgeProposalLifecycle(
+    storage,
+    scopeIds => knowledge.evaluateAccess(scopeIds),
+    input => knowledge.getNode(input),
+    input => knowledge.getRecord(input),
+  );
   const node = await storage.createNode({ name: 'Draft', scopeIds: [structure.scopes['scope:source']!] });
   return { knowledge, storage, lifecycle, node, ids: structure.scopes };
 }
@@ -146,7 +151,7 @@ describe('Knowledge proposal lifecycle', () => {
     const replacement = await lifecycle.reReview({
       id: proposal.id,
       reviewerContextScopeId: ids['principal:owner']!,
-      vouchedScopeIds: [ids['principal:owner']!, ids['principal:suggest']!],
+      vouchedScopeIds: [ids['principal:owner']!],
     });
     expect(replacement).toMatchObject({ status: 'pending', targetId: node.id, expectedVersion: node.version + 1 });
     expect(replacement.id).not.toBe(proposal.id);
@@ -162,6 +167,60 @@ describe('Knowledge proposal lifecycle', () => {
       name: 'Proposed title',
       version: node.version + 2,
     });
+  });
+
+  it('denies re-review when a conflicted target moved outside the reviewer frontier', async () => {
+    const { knowledge, storage, lifecycle, node, ids } = await createFixture();
+    const sourceOwner = await storage.createNode({ name: 'Source owner', isScope: true, scopeIds: [] });
+    await storage.upsertScopeGrant({
+      scopeNodeId: ids['scope:source']!,
+      scopeRefId: sourceOwner.id,
+      role: 'owner',
+      canSuggest: true,
+    });
+    const proposal = await lifecycle.proposeNodeUpdate({
+      mutation: { id: node.id, version: node.version, name: 'Stale source edit' },
+      proposerContextScopeId: sourceOwner.id,
+      vouchedScopeIds: [sourceOwner.id],
+    });
+
+    await knowledge.updateNode({
+      id: node.id,
+      version: node.version,
+      scopeIds: [ids['scope:destination']!],
+      vouchedScopeIds: [ids['principal:owner']!],
+    });
+    await expect(
+      lifecycle.approve({
+        id: proposal.id,
+        reviewerContextScopeId: ids['principal:owner']!,
+        vouchedScopeIds: [ids['principal:owner']!],
+      }),
+    ).rejects.toBeInstanceOf(KnowledgeConflictError);
+    await expect(storage.getProposal(proposal.id)).resolves.toMatchObject({ status: 'conflicted' });
+
+    await expect(
+      lifecycle.reReview({
+        id: proposal.id,
+        reviewerContextScopeId: sourceOwner.id,
+        vouchedScopeIds: [sourceOwner.id],
+      }),
+    ).rejects.toBeInstanceOf(KnowledgeNotFoundError);
+
+    const replacement = await lifecycle.reReview({
+      id: proposal.id,
+      reviewerContextScopeId: ids['principal:owner']!,
+      vouchedScopeIds: [ids['principal:owner']!],
+    });
+    expect(replacement.targets[0]).toMatchObject({ scopeIds: [ids['scope:destination']] });
+    expect(replacement.payload).toMatchObject({ originalScopeIds: [ids['scope:destination']] });
+    await expect(
+      lifecycle.approve({
+        id: replacement.id,
+        reviewerContextScopeId: ids['principal:owner']!,
+        vouchedScopeIds: [ids['principal:owner']!],
+      }),
+    ).resolves.toMatchObject({ status: 'approved' });
   });
 
   it('atomically conflicts a proposal when the target changes after approval preflight', async () => {

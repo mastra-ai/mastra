@@ -7,14 +7,13 @@ const output = process.env.KNOWLEDGE_PROOF_OUTPUT ? path.resolve(process.env.KNO
 
 const graph = {
   view: 'project',
+  scopeId: 'scope-project',
   nodes: [
     {
       id: 'payments',
       name: 'Payments Service',
       kind: 'service',
       description: 'Handles charging flows through [[Deploy Runbook]].',
-      scope: ['org:proof', `resource:${projectId}`],
-      rung: 'resource',
       pinned: true,
       recordCount: 1,
       createdAt: '2026-08-28T10:00:00.000Z',
@@ -24,8 +23,6 @@ const graph = {
       id: 'runbook',
       name: 'Deploy Runbook',
       kind: 'doc',
-      scope: ['org:proof', `resource:${projectId}`],
-      rung: 'resource',
       pinned: false,
       recordCount: 1,
       createdAt: '2026-08-28T10:00:00.000Z',
@@ -66,6 +63,14 @@ test('explores scoped knowledge and activity', async ({ context, page }) => {
     if (url.pathname.endsWith('/attention')) return route.fulfill({ json: { items: [] } });
     if (url.pathname.endsWith('/work-records')) return route.fulfill({ json: { workRecords: [] } });
     if (url.pathname.endsWith('/web/github/subscriptions')) return route.fulfill({ json: { subscriptions: [] } });
+    if (url.pathname.endsWith('/knowledge/scopes')) {
+      return route.fulfill({
+        json: {
+          scope: { id: 'scope-project', name: 'Proof Factory', kind: 'project' },
+          children: [],
+        },
+      });
+    }
     if (url.pathname.endsWith('/knowledge/subgraph')) return route.fulfill({ json: graph });
     if (url.pathname.endsWith('/knowledge/activity')) {
       return route.fulfill({
@@ -73,9 +78,10 @@ test('explores scoped knowledge and activity', async ({ context, page }) => {
           events: [
             {
               id: 'activity-1',
-              action: 'knowledge-appended',
-              recordType: 'record',
-              scope: ['org:proof', `resource:${projectId}`],
+              action: 'create',
+              targetType: 'record',
+              scopeId: 'scope-project',
+              sourceType: 'system',
               createdAt: '2026-08-28T10:00:00.000Z',
             },
           ],
@@ -89,12 +95,10 @@ test('explores scoped knowledge and activity', async ({ context, page }) => {
           records: [
             {
               id: 'record-1',
-              node: 'payments',
+              nodeId: 'payments',
               relation: 'owned',
               text: 'Payments uses [[Deploy Runbook]].',
-              scope: ['org:proof', `resource:${projectId}`],
-              rung: 'resource',
-              capturedAt: '2026-08-28T10:00:00.000Z',
+              createdAt: '2026-08-28T10:00:00.000Z',
               pinned: true,
             },
           ],
@@ -113,7 +117,7 @@ test('explores scoped knowledge and activity', async ({ context, page }) => {
   await expect(page.getByText(/Payments uses/)).toBeVisible();
 
   await page.getByRole('tab', { name: 'activity' }).click();
-  await expect(page.getByText('knowledge-appended')).toBeVisible();
+  await expect(page.getByText('create', { exact: true })).toBeVisible();
 
   if (output) {
     fs.mkdirSync(output, { recursive: true });

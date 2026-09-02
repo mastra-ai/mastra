@@ -1071,7 +1071,7 @@ export function createKnowledgeStorageTests(createStore: () => Promise<Knowledge
       });
 
       await expect(store.listProposals({ scopeIds: [PROJECT_SCOPE_ID], limit: 1 })).resolves.toEqual({
-        proposals: [expect.objectContaining({ id: visible.id, status: 'pending', reason: 'Correct the title' })],
+        proposals: [],
         nextCursor: undefined,
       });
       await expect(
@@ -1082,8 +1082,13 @@ export function createKnowledgeStorageTests(createStore: () => Promise<Knowledge
         nextCursor: undefined,
       });
       await expect(store.listProposals({ scopeIds: [ORG_SCOPE_ID], limit: 10 })).resolves.toEqual({
-        proposals: [],
+        proposals: [expect.objectContaining({ id: visible.id })],
+        nextCursor: undefined,
       });
+      await expect(store.listActivity({ scopeIds: [PROJECT_SCOPE_ID], action: 'propose' })).resolves.toEqual([]);
+      await expect(store.listActivity({ scopeIds: [ORG_SCOPE_ID], action: 'propose' })).resolves.toEqual([
+        expect.objectContaining({ targetId: visibleNode.id, details: { proposalId: visible.id } }),
+      ]);
 
       const accessEpoch = await store.getAccessEpoch();
       const rejected = await store.reviewProposal({

@@ -8,10 +8,10 @@ const output = process.env.KNOWLEDGE_PROOF_OUTPUT ? path.resolve(process.env.KNO
 
 const queuedRun = {
   id: 'run-proof',
+  reference: 'run-proof-reference',
   importerId: 'github',
-  binding: JSON.stringify(['repo:mastra', `resource:${projectId}`]),
+  binding: 'kh_binding',
   source: 'repo:mastra',
-  scope: `resource:${projectId}`,
   importKind: 'agentic',
   triggerKind: 'programmatic',
   status: 'queued',
@@ -23,10 +23,9 @@ const completedRun = {
   status: 'succeeded',
   startedAt: '2026-08-30T09:00:01.000Z',
   completedAt: '2026-08-30T09:00:02.000Z',
-  transcriptThreadId: 'knowledge-import-run:run-proof',
 };
 
-test('observes an agentic import from queue through transcript', async ({ context, page }) => {
+test('observes an agentic import from queue through filtered activity', async ({ context, page }) => {
   let completed = false;
   await context.route('**/*', async route => {
     const url = new URL(route.request().url());
@@ -79,32 +78,20 @@ test('observes an agentic import from queue through transcript', async ({ contex
               id: 'github',
               importKind: 'agentic',
               triggers: ['programmatic'],
-              bindings: [{ source: 'repo:mastra', scope: `resource:${projectId}` }],
+              bindings: [{ source: 'repo:mastra', binding: 'kh_binding' }],
               lastRun: completed ? completedRun : queuedRun,
             },
           ],
         },
       });
     }
-    if (url.pathname.endsWith('/knowledge/importers/github/runs/run-proof')) {
+    if (url.pathname.includes('/knowledge/importers/github/runs/') && !url.pathname.endsWith('/runs')) {
       return route.fulfill({
         json: {
           run: completedRun,
           activity: [
             { id: 'activity-proof', action: 'create', targetType: 'record', createdAt: completedRun.completedAt },
           ],
-          transcript: {
-            threadId: completedRun.transcriptThreadId,
-            available: true,
-            messages: [
-              {
-                id: 'message-proof',
-                role: 'assistant',
-                content: 'Integrated the merged pull request into feature history.',
-                createdAt: completedRun.completedAt,
-              },
-            ],
-          },
         },
       });
     }
@@ -126,17 +113,15 @@ test('observes an agentic import from queue through transcript', async ({ contex
 
   await page.getByText('repo:mastra').click();
   await expect(page.getByRole('heading', { name: 'Knowledge activity' })).toBeVisible();
-  await expect(page.getByRole('heading', { name: 'Agent transcript' })).toBeVisible();
-  await expect(page.getByText('Integrated the merged pull request into feature history.')).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Agent transcript' })).toHaveCount(0);
 
   if (output) {
     fs.mkdirSync(output, { recursive: true });
     await page.screenshot({ path: path.join(output, 'imports-completed.png'), fullPage: true });
-    await page.screenshot({ path: path.join(output, 'explore.png'), fullPage: true });
     fs.writeFileSync(
       path.join(output, 'results.json'),
       JSON.stringify(
-        { tests: [{ title: 'observes an agentic import from queue through transcript', status: 'passed' }] },
+        { tests: [{ title: 'observes an agentic import from queue through filtered activity', status: 'passed' }] },
         null,
         2,
       ),

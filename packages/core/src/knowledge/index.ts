@@ -17,6 +17,7 @@ import type {
   CreateKnowledgeImportRunInput,
   KnowledgeImportRunStatus,
   KnowledgeProposalStatus,
+  KnowledgeActivityAction,
   KnowledgeScopeIds,
   KnowledgeSemanticOutboxEntry,
   KnowledgeStructurePlan,
@@ -221,6 +222,10 @@ export class Knowledge extends MastraBase {
     return (await this.#getProposalLifecycle()).list(input);
   }
 
+  async getProposal(input: { id: string; vouchedScopeIds: KnowledgeScopeIds }) {
+    return (await this.#getProposalLifecycle()).get(input);
+  }
+
   async approveProposal(input: ReviewKnowledgeProposalDecisionInput) {
     return (await this.#getProposalLifecycle()).approve(input);
   }
@@ -235,7 +240,12 @@ export class Knowledge extends MastraBase {
 
   async #getProposalLifecycle(): Promise<KnowledgeProposalLifecycle> {
     const storage = await this.#getStorage();
-    this.#proposalLifecycle ??= new KnowledgeProposalLifecycle(storage, scopeIds => this.evaluateAccess(scopeIds));
+    this.#proposalLifecycle ??= new KnowledgeProposalLifecycle(
+      storage,
+      scopeIds => this.evaluateAccess(scopeIds),
+      input => this.getNode(input),
+      input => this.getRecord(input),
+    );
     return this.#proposalLifecycle;
   }
 
@@ -305,12 +315,22 @@ export class Knowledge extends MastraBase {
     nodeId: string;
     capability: 'edit' | 'delete' | 'manageAccess';
   }) {
+    const [nodeScopeIds, recordScopeIds] = await Promise.all([
+      input.storage.getNodeScopeIds(input.nodeId),
+      input.storage.getRecordScopeIds(input.recordId),
+    ]);
     assertKnowledgeTargetCapability({
       frontier: input.frontier,
-      scopeIds: await input.storage.getNodeScopeIds(input.nodeId),
+      scopeIds: nodeScopeIds,
       capability: input.capability,
       targetType: 'record',
       targetId: input.recordId,
+    });
+    assertKnowledgeScopeCapabilities({
+      frontier: input.frontier,
+      scopeIds: recordScopeIds,
+      capability: input.capability,
+      targetType: 'scope',
     });
   }
 
@@ -436,7 +456,8 @@ export class Knowledge extends MastraBase {
     return (await this.#getStorage()).setImportState(input);
   }
 
-  async createImportRun(input: CreateKnowledgeImportRunInput) {
+  /** @internal */
+  async createImportRunInternal(input: CreateKnowledgeImportRunInput) {
     const importer = this.#assertImporter(input.importerId);
     if (input.triggerKind === 'cron' && !importer.triggers.cron) {
       throw new Error(`Knowledge importer ${input.importerId} does not have a cron trigger`);
@@ -488,7 +509,8 @@ export class Knowledge extends MastraBase {
     return (await this.#getStorage()).listImportRuns({ ...input, importerIds });
   }
 
-  async updateImportRun(input: Omit<UpdateKnowledgeImportRunInput, 'error'> & { error?: unknown }) {
+  /** @internal */
+  async updateImportRunInternal(input: Omit<UpdateKnowledgeImportRunInput, 'error'> & { error?: unknown }) {
     const storage = await this.#getStorage();
     const run = await storage.getImportRun(input.id);
     if (run) this.#assertImporter(run.importerId);
@@ -531,13 +553,16 @@ export class Knowledge extends MastraBase {
     return storage.createNode({ ...mutation, expectedAccessEpoch: frontier.accessEpoch });
   }
 
-  async getNode(input: { id: string; scopeIds: KnowledgeScopeIds }) {
+  async getNode(input: { id: string; scopeIds: KnowledgeScopeIds; membershipScopeIds?: KnowledgeScopeIds }) {
     const storage = await this.#getStorage();
     const scopeIds = await this.#resolveReadScopeIds(input.scopeIds);
     const node = await storage.getNode(input.id);
     if (!node || node.deletedAt) return null;
     const nodeScopeIds = await storage.getNodeScopeIds(node.id);
-    return isKnowledgeReadVisible(nodeScopeIds, scopeIds) ? node : null;
+    if (!isKnowledgeReadVisible(nodeScopeIds, scopeIds)) return null;
+    if (input.membershipScopeIds && !input.membershipScopeIds.some(scopeId => nodeScopeIds.includes(scopeId)))
+      return null;
+    return node;
   }
 
   /** @internal */
@@ -762,15 +787,30 @@ export class Knowledge extends MastraBase {
     return (await this.#getStorage()).advanceCurationCursor(input);
   }
 
-  async listActivity(input: { scopeIds: KnowledgeScopeIds; importRunId?: string; after?: string; limit?: number }) {
+  async listActivity(input: {
+    scopeIds: KnowledgeScopeIds;
+    membershipScopeIds?: KnowledgeScopeIds;
+    contextScopeId?: string;
+    importRunId?: string;
+    action?: KnowledgeActivityAction;
+    sourceType?: 'importer' | 'system';
+    from?: Date;
+    to?: Date;
+    after?: string;
+    limit?: number;
+  }) {
     const storage = await this.#getStorage();
     const scopeIds = await this.#resolveReadScopeIds(input.scopeIds);
+    const membershipScopeIds = input.membershipScopeIds
+      ? input.membershipScopeIds.filter(scopeId => scopeIds.includes(scopeId))
+      : undefined;
+    if (input.membershipScopeIds && membershipScopeIds?.length === 0) return [];
     if (input.importRunId) {
       const run = await storage.getImportRun(input.importRunId);
       if (!run || !this.#importers.get(run.importerId)) return [];
       if (!(await this.#isImportBindingVisible(storage, run.binding, scopeIds))) return [];
     }
-    return storage.listActivity({ ...input, scopeIds });
+    return storage.listActivity({ ...input, scopeIds, membershipScopeIds });
   }
 
   async listSemanticOutbox(input: {

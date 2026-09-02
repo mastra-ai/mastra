@@ -49,17 +49,45 @@ export const queryKeys = {
     ['factory', 'knowledge-scopes', factoryProjectId ?? null, scopeId ?? null, threadId ?? null] as const,
   knowledgeSubgraph: (factoryProjectId: string | undefined, scopeId: string | undefined, threadId?: string) =>
     ['factory', 'knowledge-subgraph', factoryProjectId ?? null, scopeId ?? null, threadId ?? null] as const,
-  knowledgeActivity: (factoryProjectId: string | undefined, scopeId?: string, threadId?: string) =>
-    ['factory', 'knowledge-activity', factoryProjectId ?? null, scopeId ?? null, threadId ?? null] as const,
-  knowledgeImporters: (factoryProjectId: string | undefined) =>
-    ['factory', 'knowledge-importers', factoryProjectId ?? null] as const,
-  knowledgeImportRuns: (factoryProjectId: string | undefined, importerId: string | undefined, filtersKey: string) =>
-    ['factory', 'knowledge-import-runs', factoryProjectId ?? null, importerId ?? null, filtersKey] as const,
+  knowledgeActivity: (
+    factoryProjectId: string | undefined,
+    scopeId: string | undefined,
+    threadId: string | undefined,
+    filtersKey: string,
+  ) =>
+    ['factory', 'knowledge-activity', factoryProjectId ?? null, scopeId ?? null, threadId ?? null, filtersKey] as const,
+  knowledgeProposals: (factoryProjectId: string | undefined, status?: string) =>
+    ['factory', 'knowledge-proposals', factoryProjectId ?? null, status ?? null] as const,
+  knowledgeImporters: (factoryProjectId: string | undefined, threadId?: string) =>
+    ['factory', 'knowledge-importers', factoryProjectId ?? null, threadId ?? null] as const,
+  knowledgeImportRuns: (
+    factoryProjectId: string | undefined,
+    importerId: string | undefined,
+    threadId: string | undefined,
+    filtersKey: string,
+  ) =>
+    [
+      'factory',
+      'knowledge-import-runs',
+      factoryProjectId ?? null,
+      importerId ?? null,
+      threadId ?? null,
+      filtersKey,
+    ] as const,
   knowledgeImportRun: (
     factoryProjectId: string | undefined,
     importerId: string | undefined,
     runId: string | undefined,
-  ) => ['factory', 'knowledge-import-run', factoryProjectId ?? null, importerId ?? null, runId ?? null] as const,
+    threadId?: string,
+  ) =>
+    [
+      'factory',
+      'knowledge-import-run',
+      factoryProjectId ?? null,
+      importerId ?? null,
+      runId ?? null,
+      threadId ?? null,
+    ] as const,
   knowledgeNode: (
     factoryProjectId: string | undefined,
     nodeId: string | undefined,
