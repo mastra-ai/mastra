@@ -229,6 +229,38 @@ describe('DockerSandbox', () => {
       expect(sandbox.status).toBe('running');
     });
 
+    it('uses workingDirectory as the container WorkingDir', async () => {
+      const sandbox = new DockerSandbox({ workingDirectory: '/srv/app' });
+      await sandbox._start();
+
+      expect(mockDocker.createContainer).toHaveBeenCalledWith(expect.objectContaining({ WorkingDir: '/srv/app' }));
+      expect(sandbox.workingDirectory).toBe('/srv/app');
+    });
+
+    it('workingDirectory wins over the deprecated workingDir alias', async () => {
+      const sandbox = new DockerSandbox({ workingDirectory: '/srv/app', workingDir: '/legacy' });
+      await sandbox._start();
+
+      expect(mockDocker.createContainer).toHaveBeenCalledWith(expect.objectContaining({ WorkingDir: '/srv/app' }));
+      expect(sandbox.workingDirectory).toBe('/srv/app');
+    });
+
+    it('the deprecated workingDir alias still applies', async () => {
+      const sandbox = new DockerSandbox({ workingDir: '/legacy' });
+      await sandbox._start();
+
+      expect(mockDocker.createContainer).toHaveBeenCalledWith(expect.objectContaining({ WorkingDir: '/legacy' }));
+      expect(sandbox.workingDirectory).toBe('/legacy');
+    });
+
+    it('defaults to /workspace when neither option is set', async () => {
+      const sandbox = new DockerSandbox();
+      await sandbox._start();
+
+      expect(mockDocker.createContainer).toHaveBeenCalledWith(expect.objectContaining({ WorkingDir: '/workspace' }));
+      expect(sandbox.workingDirectory).toBe('/workspace');
+    });
+
     it('should include environment variables', async () => {
       const sandbox = new DockerSandbox({
         env: { NODE_ENV: 'test', API_KEY: 'secret' },

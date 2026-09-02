@@ -70,7 +70,11 @@ om-debug.log
 om-reflector-fixture.json
 .notion
 .dev/lima
+
+# Mastra Code local plans and proof artifacts must never be committed.
 .mastracode/*
+!.mastracode/plans/
+.mastracode/plans/**
 !.mastracode/commands/
 !.mastracode/commands/gh-triage.md
 !.mastracode/commands/gh-bulk-issues.md

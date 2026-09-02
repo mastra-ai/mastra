@@ -1,12 +1,14 @@
 import { createContext } from 'react';
 
+import type { WorkspacePanelSize } from '../layout';
+
 export interface WorkspacePanelApi {
   open: boolean;
   setOpen: (open: boolean) => void;
   workspacePath?: string;
   threadId?: string;
-  expanded: boolean;
-  setExpanded: (expanded: boolean) => void;
+  size: WorkspacePanelSize;
+  setSize: (size: WorkspacePanelSize) => void;
   canDock: boolean;
 }
 

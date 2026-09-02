@@ -8,7 +8,6 @@
     "qwen3.8-max"
   ],
   "temperature": [
-    "LongCat-2.0",
     "MiniMax-M3",
     "deepseek-v4-flash",
     "deepseek-v4-flash-vision-exp",
@@ -16,7 +15,6 @@
     "glm-5.3",
     "glm-5.3-flash",
     "hy4-preview",
-    "mimo-v2.5-pro",
     "qwen3.8-max"
   ],
   "structuredOutput": [

@@ -173,11 +173,18 @@ const agent = new Agent({
     isOptional: true,
   },
   {
-    name: 'workingDir',
+    name: 'workingDirectory',
     type: 'string',
-    description: 'Working directory inside the container.',
+    description:
+      'Working directory inside the container, used as the default for command execution when no per-command `cwd` is given. A per-command `cwd` always wins.',
     isOptional: true,
     defaultValue: "'/workspace'",
+  },
+  {
+    name: 'workingDir',
+    type: 'string',
+    description: 'Deprecated alias for `workingDirectory`. When both are set, `workingDirectory` wins.',
+    isOptional: true,
   },
   {
     name: 'labels',

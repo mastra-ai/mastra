@@ -112,7 +112,7 @@ lsp: {
 },
 ```
 
-`binaryOverrides` maps a built-in server ID to its full startup command. `searchPaths` adds package roots whose `node_modules` may contain binaries or required modules. You can also set `packageRunner`, such as `pnpm dlx`, as a last-resort fallback. Package-runner fallback is disabled by default because it may install software or hang in some project layouts.
+`binaryOverrides` maps a built-in server ID to its full startup command. `searchPaths` adds package roots whose `node_modules` may contain required modules or binaries. As a last-resort fallback, you can set a `packageRunner` such as `pnpm dlx`. Package-runner fallback is disabled by default because it may install software or hang in some project layouts.
 
 `diagnosticTimeout` controls how long the direct `getDiagnostics()` and `getDiagnosticsMulti()` APIs wait for diagnostics. The agent inspection tool currently waits up to five seconds.
 

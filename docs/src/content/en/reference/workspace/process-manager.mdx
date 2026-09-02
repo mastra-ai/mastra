@@ -86,7 +86,8 @@ const handle = await sandbox.processes.spawn('npm run dev', {
           {
             name: 'cwd',
             type: 'string',
-            description: 'Working directory for the process.',
+            description:
+              "Working directory for the process. Defaults to the sandbox's configured `workingDirectory`, then the provider default.",
             isOptional: true,
           },
           {

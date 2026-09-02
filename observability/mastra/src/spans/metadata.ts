@@ -26,6 +26,36 @@ export function isPlainRecord(value: unknown): value is Record<string, unknown> 
 }
 
 /**
+ * Returns `metadata` without own data properties whose value is `undefined`,
+ * so callers can merge it without erasing keys another source provides.
+ * Accessor properties are kept without invoking their getters. Non-plain
+ * values are returned as-is; when nothing is stripped (or reflection on the
+ * value throws) the original reference is returned.
+ */
+export function stripUndefined(metadata: Record<string, any> | undefined): Record<string, any> | undefined {
+  if (!metadata || !isPlainRecord(metadata)) {
+    return metadata;
+  }
+
+  try {
+    const result: Record<string, any> = {};
+    let stripped = false;
+    for (const key of Reflect.ownKeys(metadata)) {
+      const descriptor = Object.getOwnPropertyDescriptor(metadata, key)!;
+      if ('value' in descriptor && descriptor.value === undefined) {
+        stripped = true;
+        continue;
+      }
+      Object.defineProperty(result, key, descriptor);
+    }
+
+    return stripped ? result : metadata;
+  } catch {
+    return metadata;
+  }
+}
+
+/**
  * Merges two metadata values while preserving property descriptors (so getters
  * are copied as accessors rather than eagerly invoked). Only plain records are
  * merged; if either side is non-plain the second argument is returned as-is,
