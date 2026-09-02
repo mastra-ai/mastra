@@ -31,18 +31,16 @@ import {
   buildRetentionEntries,
   MV_DISCOVERY_PAIRS,
   MV_DISCOVERY_VALUES,
-  MV_TRACE_ROOTS,
   parseTtlExpression,
   TABLE_DISCOVERY_PAIRS,
   TABLE_DISCOVERY_VALUES,
   TABLE_SCORE_EVENTS,
   TABLE_SPAN_EVENTS,
   TABLE_TRACE_ROOTS,
-  TRACE_ROOTS_MV_DDL,
 } from './ddl';
 import { isReplacingMergeTreeEngine } from './migration';
 import { compileClickHouseTraceQuery, runWithClickHouseTraceQueryTimeout } from './trace-query';
-import { backfillTraceRoots, ObservabilityStorageClickhouseVNext } from '.';
+import { ObservabilityStorageClickhouseVNext } from '.';
 
 vi.setConfig({ testTimeout: 60_000, hookTimeout: 60_000 });
 
@@ -153,56 +151,6 @@ describe('ObservabilityStorageClickhouseVNext', () => {
       const result = await client.query({ query: 'SELECT 1 AS value', format: 'JSONEachRow' });
       expect(await result.json<{ value: number }>()).toEqual([{ value: 1 }]);
     } finally {
-      await client.close();
-    }
-  });
-
-  it('backfills historical roots before trace queries switch to trace_roots', async () => {
-    const client = createClient({
-      url: process.env.CLICKHOUSE_URL || 'http://localhost:8123',
-      username: process.env.CLICKHOUSE_USERNAME || 'default',
-      password: process.env.CLICKHOUSE_PASSWORD || 'password',
-    });
-    const startedAt = new Date('2026-08-25T10:00:00.000Z');
-
-    await client.command({ query: `DROP VIEW IF EXISTS ${MV_TRACE_ROOTS}` });
-    try {
-      await storage.createSpan({
-        span: {
-          traceId: 'historical-root-trace',
-          spanId: 'historical-root-span',
-          parentSpanId: null,
-          name: 'historical root',
-          spanType: SpanType.AGENT_RUN,
-          isEvent: false,
-          startedAt,
-          endedAt: new Date(startedAt.getTime() + 1_000),
-        },
-      });
-
-      await backfillTraceRoots(client);
-      await backfillTraceRoots(client);
-
-      const countResult = await client.query({
-        query: `SELECT count() AS count FROM ${TABLE_TRACE_ROOTS} WHERE traceId = {traceId:String}`,
-        query_params: { traceId: 'historical-root-trace' },
-        format: 'JSONEachRow',
-      });
-      expect(await countResult.json<{ count: number }>()).toEqual([{ count: 1 }]);
-
-      const response = await storage.queryTraces(
-        planTraceQuery(
-          parseTraceQueryRequest({
-            timeRange: {
-              from: new Date(startedAt.getTime() - 1_000).toISOString(),
-              to: new Date(startedAt.getTime() + 2_000).toISOString(),
-            },
-          }),
-        ),
-      );
-      expect(normalizeTraceQueryResponse(response)).toMatchObject([{ traceId: 'historical-root-trace' }]);
-    } finally {
-      await client.command({ query: TRACE_ROOTS_MV_DDL });
       await client.close();
     }
   });

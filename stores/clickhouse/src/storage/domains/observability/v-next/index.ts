@@ -116,34 +116,11 @@ import {
   MV_DISCOVERY_PAIRS,
   TABLE_DISCOVERY_VALUES,
   TABLE_DISCOVERY_PAIRS,
-  TABLE_SPAN_EVENTS,
-  TABLE_TRACE_ROOTS,
-  TABLE_TRACE_ROOTS_BACKFILL,
   buildRetentionEntries,
   parseTtlExpression,
 } from './ddl';
 import type { MigrationEntry, RetentionEntry, RetentionConfig } from './ddl';
 export type { RetentionConfig } from './ddl';
-
-export async function backfillTraceRoots(client: ClickHouseClient): Promise<void> {
-  const markerResult = await client.query({
-    query: `SELECT count() AS count FROM ${TABLE_TRACE_ROOTS_BACKFILL} WHERE id = 1`,
-    format: 'JSONEachRow',
-  });
-  const [marker] = await markerResult.json<{ count: number }>();
-  if (Number(marker?.count) > 0) return;
-
-  await client.command({
-    query: `INSERT INTO ${TABLE_TRACE_ROOTS}
-SELECT s.*
-FROM ${TABLE_SPAN_EVENTS} s
-LEFT ANTI JOIN ${TABLE_TRACE_ROOTS} existing
-  ON existing.dedupeKey = s.dedupeKey
-  AND existing.ingestionVersion = s.ingestionVersion
-WHERE s.parentSpanId IS NULL`,
-  });
-  await client.command({ query: `INSERT INTO ${TABLE_TRACE_ROOTS_BACKFILL} VALUES (1, now64(3))` });
-}
 
 /** Extended config for v-next observability, adding per-signal retention. */
 export type VNextObservabilityConfig = ClickhouseDomainConfig & {
@@ -180,7 +157,7 @@ function buildSignalMigrationRequiredMessage(args: {
   return (
     `\n` +
     `===========================================================================\n` +
-    `MIGRATION REQUIRED: ${args.store} observability tables need the current replacement schema\n` +
+    `MIGRATION REQUIRED: ${args.store} observability signal tables need signal IDs\n` +
     `===========================================================================\n` +
     `\n` +
     `The following signal tables still use the legacy schema and must be migrated\n` +
@@ -193,8 +170,8 @@ function buildSignalMigrationRequiredMessage(args: {
     `  npx mastra migrate\n` +
     `\n` +
     `This command will:\n` +
-    `  1. Create replacement tables with current signal IDs and ingestion versions\n` +
-    `  2. Backfill missing identifiers and deterministic legacy versions\n` +
+    `  1. Create replacement signal tables with signal-ID dedupe keys\n` +
+    `  2. Backfill missing signal IDs for legacy rows\n` +
     `  3. Swap the migrated tables into place\n` +
     `\n` +
     `WARNING: This migration recreates the signal tables and may take significant\n` +
@@ -559,10 +536,6 @@ export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
       for (const migration of pendingMigrations) {
         await this.#client.command({ query: addOnClusterToDDL(migration.sql, this.#replication) });
       }
-
-      // Materialized views only process new inserts. Reconcile roots that predate
-      // the trace_roots table or its view before trace queries use it.
-      await backfillTraceRoots(this.#client);
 
       // Apply retention TTL if configured (per design doc: per-signal, day increments).
       // Skip statements whose current TTL already matches: `MODIFY TTL` bumps the

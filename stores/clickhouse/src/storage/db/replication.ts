@@ -180,39 +180,27 @@ export function addOnClusterToDDL(sql: string, replication?: ClickhouseReplicati
 }
 
 function rewriteEngineClauses(sql: string, replication: ClickhouseReplicationConfig): string {
-  const pattern = /ENGINE\s*=\s*(\w+)\s*/gi;
-  let rewritten = '';
-  let consumed = 0;
-
-  for (const match of sql.matchAll(pattern)) {
-    const matchIndex = match.index;
-    const engineName = match[1];
-    if (matchIndex === undefined || !engineName) continue;
-
-    let end = matchIndex + match[0].length;
-    if (sql[end] === '(') {
-      let depth = 0;
-      for (let i = end; i < sql.length; i++) {
-        const char = sql[i];
-        if (char === '(') depth++;
-        else if (char === ')') {
-          depth--;
-          if (depth === 0) {
-            end = i + 1;
-            break;
-          }
-        }
-      }
-      if (depth !== 0) continue;
+  return sql.replace(/ENGINE\s*=\s*(\w+)\s*/gi, (match, engineName: string, offset: number, source: string) => {
+    const argsStart = offset + match.length;
+    if (source[argsStart] !== '(') {
+      return `ENGINE = ${buildReplicatedTableEngine(engineName, replication)}`;
     }
 
-    const engine = sql.slice(matchIndex + match[0].indexOf(engineName), end).trim();
-    rewritten += sql.slice(consumed, matchIndex);
-    rewritten += `ENGINE = ${buildReplicatedTableEngine(engine, replication)}`;
-    consumed = end;
-  }
+    let depth = 0;
+    for (let i = argsStart; i < source.length; i++) {
+      const char = source[i];
+      if (char === '(') depth++;
+      else if (char === ')') {
+        depth--;
+        if (depth === 0) {
+          const engine = `${engineName}${source.slice(argsStart, i + 1)}`;
+          return `ENGINE = ${buildReplicatedTableEngine(engine, replication)}`;
+        }
+      }
+    }
 
-  return rewritten + sql.slice(consumed);
+    return match;
+  });
 }
 
 export function applyReplicationToDDL(sql: string, replication?: ClickhouseReplicationConfig): string {
