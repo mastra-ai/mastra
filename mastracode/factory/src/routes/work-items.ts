@@ -20,7 +20,7 @@ import type {
 import { FactoryStartTransitionError } from '../rules/start-coordinator.js';
 import { roleForStage } from '../rules/transition-service.js';
 import type { FactoryTransitionRequest, FactoryTransitionService } from '../rules/transition-service.js';
-import type { FactoryRuleBoard } from '../rules/types.js';
+import type { FactoryRuleBoard, WorkItemSource } from '../rules/types.js';
 import { FACTORY_RULE_BOARDS, isFactoryRuleStage } from '../rules/types.js';
 import type { LiveSessions } from '../session/live-sessions.js';
 import type { AuditEmitter } from '../storage/domains/audit/domain.js';
@@ -410,6 +410,15 @@ function summaryRole(decision: Record<string, unknown>): string | null {
   return roleForStage(board, stage);
 }
 
+/** A linked-card decision names where the card is synced from, so the UI can say "GitHub" rather than "a linked card". */
+function summarySource(decision: Record<string, unknown>): WorkItemSource | null {
+  if (decision.type !== 'upsertLinkedWorkItem') return null;
+  const source = decision.source;
+  return source === 'github-issue' || source === 'github-pr' || source === 'linear-issue' || source === 'manual'
+    ? source
+    : null;
+}
+
 function decisionSummary(decision: FactoryDeferredDecisionRecord) {
   return {
     id: decision.id,
@@ -417,6 +426,7 @@ function decisionSummary(decision: FactoryDeferredDecisionRecord) {
     workItemId: decision.workItemId,
     type: factoryDecisionType(decision),
     role: summaryRole(decision.decision),
+    source: summarySource(decision.decision),
     status: decision.status,
     attempts: decision.attempts,
     failureOccurrence: decision.failureOccurrence,
