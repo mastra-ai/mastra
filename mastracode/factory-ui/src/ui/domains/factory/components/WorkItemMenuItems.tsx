@@ -81,9 +81,12 @@ export function WorkItemMenuItems({
   onMove,
   onRemove,
 }: WorkItemMenuProps): ReactElement {
-  // A held card leads with the maintainer's decision; its runs would only
-  // advance it as a side effect, so they wait until the card is accepted.
+  // A held card leads with the maintainer's decision. Nothing that starts,
+  // restarts, or releases a run is offered until the card is accepted: every
+  // one of those would advance it as a side effect. Dismissing a stale
+  // suggestion stays, since that starts nothing.
   const decision = awaitsTriageDecision(item, columnStage);
+  const runsOffered = runSpec !== undefined && !decision;
   return (
     <>
       {decision &&
@@ -93,20 +96,19 @@ export function WorkItemMenuItems({
             <span>{choice.label}</span>
           </DropdownMenu.Item>
         ))}
-      {runSpec !== undefined &&
-        !decision &&
+      {runsOffered &&
         runActions.flatMap(action =>
           runItemPair(runSpec, action, action.label, onStartRun, { runDisabled, pendingRunRoles }),
         )}
-      {runSpec !== undefined &&
+      {runsOffered &&
         reReviewAction !== undefined &&
         runItemPair(runSpec, reReviewAction, 'Re-review', onRestartRun, { runDisabled, pendingRunRoles })}
-      {runSpec !== undefined &&
+      {runsOffered &&
         laneAction !== undefined &&
         runItemPair(runSpec, laneAction, laneAction.label, onRestartRun, { runDisabled, pendingRunRoles })}
       {/* Once the card has a live session its surface opens details, so the
           menus stay the only place left to release a proposed run. */}
-      {proposal !== undefined && (
+      {proposal !== undefined && !decision && (
         <DropdownMenu.Item
           disabled={runDisabled || approvingDecisionId === proposal.id}
           onClick={() => onApproveProposal(proposal.id)}

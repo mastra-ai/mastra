@@ -178,6 +178,10 @@ describe('boardCardStatus', () => {
       kind: 'held',
       label: 'Feature request · needs your approval',
     });
+    // A suggested run cannot start until the card is accepted, so the hold is the live question.
+    expect(
+      boardCardStatus({ heldAs: 'feature request', proposal: { label: 'Build', decisionId: 'decision-9' } }),
+    ).toEqual({ kind: 'held', label: 'Feature request · needs your approval' });
     // Anything the server is doing outranks the standing hold.
     expect(boardCardStatus({ heldAs: 'feature request', preparing: 'Starting…' })).toEqual({
       kind: 'busy',

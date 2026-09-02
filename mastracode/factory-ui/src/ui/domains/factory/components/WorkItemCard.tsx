@@ -248,9 +248,11 @@ export function WorkItemCard({
     );
   };
 
+  // A held card's decision, like a parked suggestion, is the person's to
+  // release, so it stays on the card beside a finished triage session.
   const actions = cardActions({
     running: wickStatus !== undefined,
-    waiting: status.kind === 'waiting',
+    waiting: status.kind === 'waiting' || status.kind === 'held',
     attention: wickStatus === 'ready',
     session: sessionLink(sessionHref),
     retry: retryButton({ decisionId: retryDecisionId, retryingDecisionId, onRetry: onRetryDecision }),

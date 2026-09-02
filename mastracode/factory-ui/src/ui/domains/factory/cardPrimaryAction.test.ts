@@ -173,6 +173,30 @@ describe('cardPrimaryAction', () => {
     expect(onStartRun).not.toHaveBeenCalled();
   });
 
+  it('keeps the maintainer decision ahead of a suggested run on a held card', () => {
+    const onMove = vi.fn();
+    const onApproveProposal = vi.fn();
+    const held = { ...item({ triage: sessionRef('triage') }), triageType: 'feature request' as const };
+    const action = cardPrimaryAction({
+      item: held,
+      columnStage: 'triage',
+      runSpec: spec(investigateTriage, build),
+      runAction: build,
+      proposal: proposalSummary(),
+      hasSession: true,
+      onApproveProposal,
+      onStartRun: vi.fn(),
+      onRestartRun: vi.fn(),
+      onCreateSession: vi.fn(),
+      onMove,
+    });
+
+    expect(action?.label).toBe('Accept');
+    action?.start();
+    expect(onMove).toHaveBeenCalledWith('planning');
+    expect(onApproveProposal).not.toHaveBeenCalled();
+  });
+
   it('offers the lane run again once the card is accepted, and never holds bugs', () => {
     const base = { ...item({ triage: sessionRef('triage') }), triageType: 'feature request' as const };
     const startArgs = {

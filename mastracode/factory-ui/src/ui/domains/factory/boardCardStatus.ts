@@ -150,12 +150,14 @@ export function boardCardStatus(input: BoardCardStatusInput): BoardCardStatus {
     const label = decision.type === 'invokeSkill' ? leasedInvokeSkillLabel(input.sessionStatus, copy) : copy.underway;
     return { kind: 'busy', label };
   }
-  // Nothing is moving on its own, so a parked run is the card's live question.
-  if (input.proposal) {
-    return { kind: 'waiting', label: input.proposal.label, decisionId: input.proposal.decisionId };
-  }
+  // Nothing is moving on its own. A held card's live question is the
+  // maintainer's decision, even when a run has been suggested for it: the
+  // card cannot start that run until it is accepted.
   if (input.heldAs !== undefined) {
     return { kind: 'held', label: `${capitalize(input.heldAs)} · needs your approval` };
+  }
+  if (input.proposal) {
+    return { kind: 'waiting', label: input.proposal.label, decisionId: input.proposal.decisionId };
   }
   return { kind: 'idle' };
 }
