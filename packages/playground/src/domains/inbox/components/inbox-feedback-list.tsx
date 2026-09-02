@@ -2,6 +2,7 @@ import type { FeedbackRecord } from '@mastra/core/storage';
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { DataList, DataListSkeleton, useDataListKeyboard } from '@mastra/playground-ui/components/DataList';
+import { ErrorState } from '@mastra/playground-ui/components/ErrorState';
 import { ListSearch } from '@mastra/playground-ui/components/ListSearch';
 import { useInView } from '@mastra/playground-ui/hooks/use-in-view';
 import { format } from 'date-fns';
@@ -13,6 +14,7 @@ import { feedbackDisplayValue } from '@/domains/inbox/utils/feedback-display-val
 export interface InboxFeedbackListProps {
   items: FeedbackRecord[];
   isLoading: boolean;
+  error?: Error;
   hasNextPage: boolean;
   isFetchingNextPage: boolean;
   fetchNextPage: () => void;
@@ -26,6 +28,7 @@ export interface InboxFeedbackListProps {
 export function InboxFeedbackList({
   items,
   isLoading,
+  error,
   hasNextPage,
   isFetchingNextPage,
   fetchNextPage,
@@ -59,10 +62,18 @@ export function InboxFeedbackList({
     return <DataListSkeleton columns={COLUMNS} />;
   }
 
+  if (error) {
+    return <ErrorState title="Failed to load feedback" message={error.message} />;
+  }
+
   return (
     <div className="grid h-full min-h-0 grid-rows-[auto_1fr] gap-4">
       <div className="max-w-120">
-        <ListSearch onSearch={setSearch} label="Filter feedback" placeholder="Filter by text, trace or source" />
+        <ListSearch
+          onSearch={setSearch}
+          label="Filter feedback"
+          placeholder="Filter loaded feedback by text, trace or source"
+        />
       </div>
 
       <div className="min-h-0 overflow-hidden">
@@ -82,7 +93,7 @@ export function InboxFeedbackList({
               const feedbackId = feedback.feedbackId;
 
               return (
-                <DataList.RowWrapper key={feedbackId ?? `${feedback.timestamp.toISOString()}-${feedback.traceId}`}>
+                <DataList.RowWrapper key={feedbackId ?? `${String(feedback.timestamp)}-${feedback.traceId}`}>
                   <DataList.RowButton
                     colEnd={-2}
                     disabled={!feedback.traceId}

@@ -182,7 +182,7 @@ export const NEW_ROUTE_DEFS = {
     path: '/observability/feedback/:feedbackId/review-status',
     summary: 'Update feedback review status',
     description: "Updates a feedback record's review workflow status",
-    requiresPermission: 'observability:read',
+    requiresPermission: 'observability:write',
   },
 
   GET_FEEDBACK_AGGREGATE: {

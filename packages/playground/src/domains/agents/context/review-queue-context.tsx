@@ -219,6 +219,7 @@ export function ReviewQueueProvider({ children }: { children: ReactNode }) {
               feedbackType: 'comment',
               value: comment,
               comment,
+              reviewStatus: 'reviewed',
               experimentId: item.experimentId ?? undefined,
               sourceId: item.id, // experiment result ID
             },

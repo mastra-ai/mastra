@@ -29,7 +29,7 @@ import {
   extendWhereClause,
   validateCursorId,
 } from './polling';
-import { parseUpdateFeedbackReviewStatusArgs } from './review-status';
+import { coerceFeedbackReviewStatus, parseUpdateFeedbackReviewStatusArgs } from './review-status';
 
 type LegacyFeedbackRecord = CreateFeedbackArgs['feedback'] & {
   source?: string | null;
@@ -205,7 +205,7 @@ function rowToFeedbackRecord(row: Record<string, unknown>): FeedbackRecord {
     serviceName: (row.serviceName as string) ?? null,
     feedbackUserId: (row.feedbackUserId as string) ?? null,
     sourceId: (row.sourceId as string) ?? null,
-    reviewStatus: row.reviewStatus ?? 'needs-review',
+    reviewStatus: coerceFeedbackReviewStatus(row.reviewStatus),
     source: row.feedbackSource as string,
     feedbackSource: row.feedbackSource as string,
     feedbackType: row.feedbackType as string,

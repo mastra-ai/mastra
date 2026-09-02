@@ -4,6 +4,6 @@ import type { FeedbackRecord } from '@mastra/core/storage';
 export function feedbackDisplayValue(feedback: Pick<FeedbackRecord, 'comment' | 'value' | 'feedbackType'>) {
   if (feedback.comment) return feedback.comment;
   if (typeof feedback.value === 'string') return feedback.value;
-  if (feedback.feedbackType === 'thumbs') return feedback.value ? 'Thumbs up' : 'Thumbs down';
+  if (feedback.feedbackType === 'thumbs') return feedback.value === 1 ? 'Thumbs up' : 'Thumbs down';
   return JSON.stringify(feedback.value) ?? String(feedback.value);
 }

@@ -1,6 +1,7 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { DataList, DataListSkeleton, useDataListKeyboard } from '@mastra/playground-ui/components/DataList';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
+import { ErrorState } from '@mastra/playground-ui/components/ErrorState';
 import { ListSearch } from '@mastra/playground-ui/components/ListSearch';
 import { Inbox } from 'lucide-react';
 import { useState } from 'react';
@@ -12,9 +13,10 @@ const COLUMNS = 'minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr) aut
 export interface InboxDatasetReviewListProps {
   items: InboxDatasetReviewItem[];
   isLoading: boolean;
+  error?: Error;
 }
 
-export function InboxDatasetReviewList({ items, isLoading }: InboxDatasetReviewListProps) {
+export function InboxDatasetReviewList({ items, isLoading, error }: InboxDatasetReviewListProps) {
   const navigate = useNavigate();
   const [search, setSearch] = useState('');
   const term = search.trim().toLowerCase();
@@ -30,6 +32,10 @@ export function InboxDatasetReviewList({ items, isLoading }: InboxDatasetReviewL
 
   if (isLoading) {
     return <DataListSkeleton columns={COLUMNS} />;
+  }
+
+  if (error) {
+    return <ErrorState title="Failed to load dataset items" message={error.message} />;
   }
 
   if (items.length === 0) {

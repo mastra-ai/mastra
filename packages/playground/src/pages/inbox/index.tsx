@@ -139,6 +139,7 @@ export default function InboxPage() {
               <InboxFeedbackList
                 items={feedbackQuery.items}
                 isLoading={feedbackQuery.isLoading}
+                error={feedbackQuery.error ?? undefined}
                 hasNextPage={feedbackQuery.hasNextPage}
                 isFetchingNextPage={feedbackQuery.isFetchingNextPage}
                 fetchNextPage={feedbackQuery.fetchNextPage}
@@ -150,7 +151,11 @@ export default function InboxPage() {
             </TabContent>
 
             <TabContent value="dataset" className="h-full min-h-0 pt-4">
-              <InboxDatasetReviewList items={datasetItems} isLoading={datasetReviewQuery.isLoading} />
+              <InboxDatasetReviewList
+                items={datasetItems}
+                isLoading={datasetReviewQuery.isLoading}
+                error={datasetReviewQuery.error ?? undefined}
+              />
             </TabContent>
           </Tabs>
         </PageLayout.MainArea>

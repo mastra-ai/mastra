@@ -26,6 +26,9 @@ export function parseUpdateFeedbackReviewStatusArgs(
       category: ErrorCategory.USER,
       text,
     });
+  if (typeof args !== 'object' || args === null) {
+    throw invalid('args must be an object');
+  }
   if (typeof args.feedbackId !== 'string' || args.feedbackId.length === 0) {
     throw invalid('feedbackId is required');
   }

@@ -78,15 +78,17 @@ const seedHandlers = () => {
       return HttpResponse.json({ ...makeFeedback(0, 'reviewed'), feedbackId });
     }),
     http.get(`${TEST_BASE_URL}/api/observability/traces/:traceId`, () => HttpResponse.json(traceASpans)),
-    http.get(`${TEST_BASE_URL}/api/experiments`, () =>
-      HttpResponse.json({
-        experiments: [{ id: 'experiment-1', datasetId: 'dataset-1' }],
-        pagination: { total: 1, page: 0, perPage: 100, hasMore: false },
-      }),
-    ),
-    http.get(`${TEST_BASE_URL}/api/datasets/dataset-1/experiments/experiment-1/results`, () =>
-      HttpResponse.json({
-        results: [
+    http.get(`${TEST_BASE_URL}/api/experiments`, ({ request }) => {
+      const page = Number(new URL(request.url).searchParams.get('page') ?? '0');
+      return HttpResponse.json({
+        experiments: page === 0 ? [{ id: 'experiment-1', datasetId: 'dataset-1' }] : [],
+        pagination: { total: 1, page, perPage: 100, hasMore: page === 0 },
+      });
+    }),
+    http.get(`${TEST_BASE_URL}/api/datasets/dataset-1/experiments/experiment-1/results`, ({ request }) => {
+      const page = Number(new URL(request.url).searchParams.get('page') ?? '0');
+      const pages = [
+        [
           {
             id: 'result-1',
             itemId: 'item-1',
@@ -94,12 +96,15 @@ const seedHandlers = () => {
             status: 'needs-review',
             traceId: 'trace-a',
           },
-          { id: 'result-2', itemId: 'item-2', experimentId: 'experiment-1', status: 'needs-review' },
           { id: 'result-3', itemId: 'item-3', experimentId: 'experiment-1', status: 'complete' },
         ],
-        pagination: { total: 3, page: 0, perPage: 100, hasMore: false },
-      }),
-    ),
+        [{ id: 'result-2', itemId: 'item-2', experimentId: 'experiment-1', status: 'needs-review' }],
+      ];
+      return HttpResponse.json({
+        results: pages[page] ?? [],
+        pagination: { total: 3, page, perPage: 100, hasMore: page < pages.length - 1 },
+      });
+    }),
   );
 
   return { feedbackRequests, reviewRequests };

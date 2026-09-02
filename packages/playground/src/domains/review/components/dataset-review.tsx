@@ -243,6 +243,7 @@ export function DatasetReview({
               feedbackType: 'comment',
               value: comment,
               comment,
+              reviewStatus: 'reviewed',
               experimentId: item.experimentId ?? undefined,
               sourceId: item.id,
             },
