@@ -177,10 +177,11 @@ Each server in the `servers` map is configured using the `MastraMCPServerDefinit
   },
   {
     name: 'protocolVersion',
-    type: "'auto' | '2026-07-28'",
+    type: "'auto' | '2025-11-25' | '2026-07-28'",
     isOptional: true,
+    defaultValue: "'auto'",
     description:
-      "Opt-in MCP protocol version negotiation. Omitted keeps the legacy (2025-era) connect sequence unchanged. 'auto' probes the server at connect time and uses the stateless '2026-07-28' revision when the server supports it, with a safe fallback to the legacy handshake. '2026-07-28' pins that revision exactly and fails with a typed error when the server does not offer it. Elicitation handlers work on both eras: on a '2026-07-28' connection, embedded elicitation requests from input_required results are dispatched through the same registered handler and the originating call retries automatically.",
+      "MCP protocol version negotiation. Omitted or 'auto' probes the server at connect time and uses the stateless '2026-07-28' revision when available, with a fallback to the legacy handshake. '2025-11-25' selects the legacy connect sequence without probing. '2026-07-28' pins that revision exactly and fails with a typed error when the server does not offer it. Elicitation handlers work on both eras. On a '2026-07-28' connection, embedded elicitation requests from input_required results are dispatched through the same registered handler and the originating call retries automatically.",
   },
   {
     name: 'jsonSchemaValidator',
@@ -198,6 +199,8 @@ Each server in the `servers` map is configured using the `MastraMCPServerDefinit
   },
 ]}
 />
+
+Omitted `protocolVersion` uses automatic negotiation in `@mastra/mcp` v2. Set `protocolVersion: '2025-11-25'` for integrations that must keep the v1 handshake without a `server/discover` probe. See [Migrate to `@mastra/mcp` v2](/docs/connections/mcp-v2-migration) for session, notification, elicitation, OAuth, and schema changes.
 
 ## Trace context
 
