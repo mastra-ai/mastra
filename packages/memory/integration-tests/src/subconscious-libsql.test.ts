@@ -49,14 +49,14 @@ async function createScopeIds(memory: Memory, store: any, resourceId: string, th
     const resource = await knowledge.materializeScope({
       address: resourceAddress,
       parentAddresses: ['org:acme'],
-      contextualScopeAddress: 'org:acme',
+      contextualScopeAddress: resourceAddress,
       parameters: { orgId: 'acme', resourceId },
     });
     const threadAddress = `${resourceAddress}:thread:${threadId}`;
     const thread = await knowledge.materializeScope({
       address: threadAddress,
       parentAddresses: [resourceAddress],
-      contextualScopeAddress: resourceAddress,
+      contextualScopeAddress: threadAddress,
       parameters: { orgId: 'acme', resourceId, threadId },
     });
     const resourceCompanionAddress = `${resourceAddress}:uncurated`;
@@ -213,6 +213,12 @@ describe('Subconscious LibSQL integration', () => {
     expect(atlas).toMatchObject({ kind: 'project' });
     expect(await knowledge.getNodeScopeIds(atlas!.id)).toEqual([scopeIds[4]]);
     expect((await knowledge.listRecords({ node: atlas!.id, scopeIds })).records).toHaveLength(2);
+    const sharedStatus = await knowledge.createNode({ name: 'Shared Status', scopeIds: [scopeIds[3]!] });
+    await knowledge.createRecord({
+      node: sharedStatus,
+      text: 'The resource status is available to every thread.',
+      scopeIds: [scopeIds[3]!],
+    });
 
     const betaThreadId = randomUUID();
     await memory.createThread({ threadId: betaThreadId, resourceId, title: 'Sibling thread' });
@@ -263,14 +269,29 @@ describe('Subconscious LibSQL integration', () => {
       resolutionScopeIds: scopeIds,
       metadata: { sourceThreadId: threadId },
     });
+    await knowledge.createRecord({
+      node: sharedStatus,
+      text: 'Review [[Alpha Secret]] before launch.',
+      scopeIds: [scopeIds[3]!],
+      source: threadId,
+      resolutionScopeIds: scopeIds,
+      metadata: { sourceThreadId: threadId },
+    });
     await memory.drainKnowledgeSemanticIndex(scopeIds);
 
     const tools = memory.listTools();
     const toolContext = { agent: { threadId: betaThreadId, resourceId }, requestContext } as any;
     const search = await tools.knowledge_search!.execute?.({ query: 'cobalt' }, toolContext);
-    expect((search as any).results.map((result: any) => result.name)).not.toContain('Alpha Secret');
     expect((search as any).results).toEqual(
-      expect.arrayContaining([expect.objectContaining({ type: 'record', name: '(private node)' })]),
+      expect.arrayContaining([expect.objectContaining({ type: 'record', name: 'Shared Status' })]),
+    );
+    expect((search as any).results.map((result: any) => result.name)).not.toContain('Alpha Secret');
+    expect((search as any).results.map((result: any) => result.name)).not.toContain('Project Atlas');
+    expect((search as any).results.map((result: any) => result.text)).not.toContain(
+      'Only the alpha thread may see this.',
+    );
+    expect((search as any).results.map((result: any) => result.text)).not.toContain(
+      'Review [[Alpha Secret]] before launch.',
     );
     const read = await tools.knowledge_read!.execute?.({ name: 'Project Atlas' }, toolContext);
     expect(read).toEqual({ found: false });
@@ -608,6 +629,12 @@ describe('Subconscious LibSQL integration', () => {
     });
     expect(await knowledge.getRecord({ id: record.id })).toBeNull();
     await memory.drainKnowledgeSemanticIndex(scopeIds);
+    await expect(
+      Promise.all([
+        knowledge.listSemanticOutbox({ status: 'pending', scopeIds, limit: 100 }),
+        knowledge.listSemanticOutbox({ status: 'processing', scopeIds, limit: 100 }),
+      ]),
+    ).resolves.toEqual([[], []]);
     const indexName = (await vector.listIndexes()).find(name => name.startsWith('knowledge_documents_dimension'))!;
     const queryVector = (await embedder.doEmbed({ values: ['Project Atlas launch'] })).embeddings[0]!;
     expect((await vector.query({ indexName, queryVector, topK: 20 })).some(match => match.id.endsWith(record.id))).toBe(
@@ -616,6 +643,12 @@ describe('Subconscious LibSQL integration', () => {
 
     await knowledge.restoreRecord({ id: record.id, version: deleted.version });
     await memory.drainKnowledgeSemanticIndex(scopeIds);
+    await expect(
+      Promise.all([
+        knowledge.listSemanticOutbox({ status: 'pending', scopeIds, limit: 100 }),
+        knowledge.listSemanticOutbox({ status: 'processing', scopeIds, limit: 100 }),
+      ]),
+    ).resolves.toEqual([[], []]);
     expect(await knowledge.getRecord({ id: record.id })).toMatchObject({
       deletedAt: undefined,
       deletedBy: undefined,
