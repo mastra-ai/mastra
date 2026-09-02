@@ -49,8 +49,7 @@ export type { DatasetVersionsProps } from './components/dataset-versions';
 // Dataset detail components
 export { DatasetHeader } from './components/dataset-detail/dataset-header';
 export type { DatasetHeaderProps } from './components/dataset-detail/dataset-header';
-export { DatasetPageTabs } from './components/dataset-detail/dataset-page-tabs';
-export type { TabValue as DatasetTabValue } from './components/dataset-detail/dataset-page-tabs';
+export { DatasetItemsView } from './components/dataset-detail/dataset-items-view';
 export { DatasetItemsList } from './components/items/dataset-items-list';
 export { DatasetExperiments } from './components/experiments/dataset-experiments';
 export { ActionsMenu } from './components/dataset-detail/items-list-actions';

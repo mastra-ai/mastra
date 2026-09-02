@@ -3,8 +3,8 @@ import { NoDataPageLayout, PageLayout } from '@mastra/playground-ui/components/P
 import { PermissionDenied } from '@mastra/playground-ui/components/PermissionDenied';
 import { SessionExpired } from '@mastra/playground-ui/components/SessionExpired';
 import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
-import { useMemo, useState } from 'react';
-import { useNavigate } from 'react-router';
+import { useCallback, useMemo, useState } from 'react';
+import { useNavigate, useSearchParams } from 'react-router';
 import { ExperimentTriggerDialog } from '@/domains/datasets/components/experiment-trigger/experiment-trigger-dialog';
 import { useDatasets } from '@/domains/datasets/hooks/use-datasets';
 import { useExperiments } from '@/domains/datasets/hooks/use-experiments';
@@ -20,9 +20,28 @@ import { buildReviewByExperimentMap } from '@/domains/review/review-maps';
 export default function Experiments() {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
-  const [datasetFilter, setDatasetFilter] = useState('all');
   const [runDialogOpen, setRunDialogOpen] = useState(false);
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  const datasetFilter = searchParams.get('dataset') ?? 'all';
+  const setDatasetFilter = useCallback(
+    (value: string) => {
+      setSearchParams(
+        prev => {
+          const next = new URLSearchParams(prev);
+          if (value === 'all') {
+            next.delete('dataset');
+          } else {
+            next.set('dataset', value);
+          }
+          return next;
+        },
+        { replace: true },
+      );
+    },
+    [setSearchParams],
+  );
 
   const { data: datasetsData, isLoading: isLoadingDatasets, error: errorDatasets } = useDatasets();
   const { data: experimentsData, isLoading: isLoadingExperiments, error: errorExperiments } = useExperiments();
