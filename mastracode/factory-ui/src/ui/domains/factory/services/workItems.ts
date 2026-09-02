@@ -6,7 +6,7 @@
  * org-wide, so every member of the org reads and moves the same cards.
  */
 
-import type { FactoryRuleStage } from '@mastra/factory/rules/types';
+import type { FactoryRuleStage, FactoryTriageType } from '@mastra/factory/rules/types';
 
 import { requestJson } from './request';
 
@@ -42,6 +42,10 @@ export interface WorkItem {
   stageHistory: WorkItemStageEntry[];
   sessions: Record<string, WorkItemSessionRef>;
   metadata: Record<string, unknown>;
+  /** Classification the triage run recorded; non-bug kinds wait for a person before agents advance them. */
+  triageType: FactoryTriageType | null;
+  /** When a person first moved the card into Planning/Build, which is the approval agents then honor. */
+  acceptedAt: string | null;
   commentCount: number;
   /** Bumped server-side on every feed mutation; clients refetch comments when it moves. */
   feedActivityAt: string | null;

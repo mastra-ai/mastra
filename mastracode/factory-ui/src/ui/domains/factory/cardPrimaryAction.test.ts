@@ -52,6 +52,8 @@ function item(sessions: Record<string, WorkItemSessionRef>): WorkItem {
     stageHistory: [],
     sessions,
     metadata: {},
+    triageType: null,
+    acceptedAt: null,
     commentCount: 0,
     feedActivityAt: null,
     revision: 1,
@@ -145,6 +147,49 @@ describe('cardPrimaryAction', () => {
     expect(action?.label).toBe('Resume');
     action?.start();
     expect(onMove).toHaveBeenCalledWith('planning');
+  });
+
+  it('asks for the maintainer decision on a held non-bug card instead of offering Build', () => {
+    const onMove = vi.fn();
+    const onStartRun = vi.fn();
+    const held = { ...item({ triage: sessionRef('triage') }), triageType: 'feature request' as const };
+    const action = cardPrimaryAction({
+      item: held,
+      columnStage: 'triage',
+      runSpec: spec(investigateTriage, build),
+      runAction: build,
+      hasSession: true,
+      onApproveProposal: vi.fn(),
+      onStartRun,
+      onRestartRun: vi.fn(),
+      onCreateSession: vi.fn(),
+      onMove,
+    });
+
+    expect(action?.label).toBe('Accept and plan');
+    action?.start();
+    expect(onMove).toHaveBeenCalledWith('planning');
+    expect(onStartRun).not.toHaveBeenCalled();
+  });
+
+  it('offers the lane run again once the card is accepted, and never holds bugs', () => {
+    const base = { ...item({ triage: sessionRef('triage') }), triageType: 'feature request' as const };
+    const startArgs = {
+      columnStage: 'triage' as const,
+      runSpec: spec(investigateTriage, build),
+      runAction: build,
+      hasSession: true,
+      onApproveProposal: vi.fn(),
+      onStartRun: vi.fn(),
+      onRestartRun: vi.fn(),
+      onCreateSession: vi.fn(),
+      onMove: vi.fn(),
+    };
+    expect(cardPrimaryAction({ ...startArgs, item: { ...base, acceptedAt: '2026-08-30T00:00:00.000Z' } })?.label).toBe(
+      'Build',
+    );
+    expect(cardPrimaryAction({ ...startArgs, item: { ...base, triageType: 'bug' } })?.label).toBe('Build');
+    expect(cardPrimaryAction({ ...startArgs, item: base, columnStage: 'planning' })?.label).toBe('Build');
   });
 
   it('still releases a proposed run first: the suggestion beats resuming beside it', () => {

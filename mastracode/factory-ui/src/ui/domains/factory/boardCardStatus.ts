@@ -7,6 +7,8 @@ import type { FactoryDecisionSummary } from './services/decisions';
 export type BoardCardStatus =
   | { kind: 'idle' }
   | { kind: 'waiting'; label: string; decisionId: string }
+  /** Triage classed the card as non-bug work, so it waits on a maintainer's call. */
+  | { kind: 'held'; label: string }
   | { kind: 'busy'; label: string }
   | { kind: 'error'; label: string; detail?: string; retryDecisionId?: string };
 
@@ -25,6 +27,8 @@ export interface BoardCardStatusInput {
   transitionReason?: string;
   /** What the run registry and workspace records say about the card's bound sessions. */
   sessionStatus?: SessionRowStatus;
+  /** Triage classification a person still has to act on, e.g. `feature request`. */
+  heldAs?: string;
 }
 
 /**
@@ -150,5 +154,12 @@ export function boardCardStatus(input: BoardCardStatusInput): BoardCardStatus {
   if (input.proposal) {
     return { kind: 'waiting', label: input.proposal.label, decisionId: input.proposal.decisionId };
   }
+  if (input.heldAs !== undefined) {
+    return { kind: 'held', label: `${capitalize(input.heldAs)} — needs a maintainer's decision` };
+  }
   return { kind: 'idle' };
+}
+
+function capitalize(text: string): string {
+  return text.charAt(0).toUpperCase() + text.slice(1);
 }

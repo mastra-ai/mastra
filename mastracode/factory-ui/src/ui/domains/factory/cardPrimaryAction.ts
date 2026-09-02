@@ -36,9 +36,36 @@ export function resumeTarget(
   return action !== undefined ? { kind: 'run', action } : { kind: 'move', stage: FACTORY_ROLE_STAGES[deepest] };
 }
 
+/**
+ * Triage classified the card as something other than a bug, so the rules hold
+ * it until a person moves it forward. The card then asks for that decision
+ * instead of offering a run that would only advance it as a side effect.
+ */
+export function awaitsTriageDecision(item: Pick<WorkItem, 'triageType' | 'acceptedAt'>, columnStage: BoardStageId) {
+  return (
+    (columnStage === 'intake' || columnStage === 'triage') &&
+    item.triageType !== null &&
+    item.triageType !== 'bug' &&
+    item.acceptedAt === null
+  );
+}
+
+export interface TriageDecision {
+  label: string;
+  stage: 'planning' | 'execute' | 'canceled';
+}
+
+/** The maintainer's choices for a held card, the likeliest first. */
+export const TRIAGE_DECISIONS: readonly TriageDecision[] = [
+  { label: 'Accept and plan', stage: 'planning' },
+  { label: 'Accept and build', stage: 'execute' },
+  { label: 'Close', stage: 'canceled' },
+];
+
 /** A proposed run wins the primary slot: releasing it beats starting a rival run beside it. Resuming parked work comes next, for the same reason. */
 export function cardPrimaryAction({
   item,
+  columnStage,
   runSpec,
   runAction,
   resume,
@@ -51,6 +78,7 @@ export function cardPrimaryAction({
   onMove,
 }: {
   item: WorkItem;
+  columnStage?: BoardStageId;
   runSpec?: ItemRunSpec;
   runAction?: RunAction;
   resume?: ResumeTarget;
@@ -70,6 +98,10 @@ export function cardPrimaryAction({
   if (resume?.kind === 'move') {
     const stage = resume.stage;
     return { label: 'Resume', start: () => onMove(stage) };
+  }
+  if (columnStage !== undefined && awaitsTriageDecision(item, columnStage)) {
+    const [accept] = TRIAGE_DECISIONS;
+    return { label: accept.label, start: () => onMove(accept.stage) };
   }
   if (resume?.kind === 'run' && runSpec !== undefined) {
     const action = resume.action;
