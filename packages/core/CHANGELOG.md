@@ -1,5 +1,39 @@
 # @mastra/core
 
+## 1.64.0-alpha.7
+
+### Minor Changes
+
+- Added support for server-defined `toModelOutput` on client-side tools. When a tool without an `execute` function runs in the browser and sends its result back, the server tool definition's `toModelOutput` now transforms that result before the model sees it — matching AI SDK behavior. This lets a client tool return a compact payload (like an uploaded file id or base64 image) and have the server map it into real model content: ([#22437](https://github.com/mastra-ai/mastra/pull/22437))
+
+  ```ts
+  import { createTool } from '@mastra/core/tools';
+  import { z } from 'zod';
+
+  // No execute: the browser runs this tool and returns { fileId, dataUrl }
+  const takeScreenshot = createTool({
+    id: 'takeScreenshot',
+    description: 'Captures the screen',
+    inputSchema: z.object({}),
+    outputSchema: z.object({ fileId: z.string(), dataUrl: z.string() }),
+    toModelOutput: output => ({
+      type: 'content',
+      value: [{ type: 'image-url', url: output.dataUrl }],
+    }),
+  });
+  ```
+
+  Previously the model only ever saw the raw JSON tool result and transforming it required a custom input processor.
+
+### Patch Changes
+
+- Update README to include accurate, up-to-date information ([#22858](https://github.com/mastra-ai/mastra/pull/22858))
+
+- Fixed onDelegationComplete reporting successful sub-agent runs when the finish reason is error. ([#22483](https://github.com/mastra-ai/mastra/pull/22483))
+
+- Updated dependencies [[`e983f74`](https://github.com/mastra-ai/mastra/commit/e983f749873189f767f509eb33d1a3596c0f1c74)]:
+  - @mastra/schema-compat@1.3.8-alpha.1
+
 ## 1.64.0-alpha.6
 
 ### Patch Changes
