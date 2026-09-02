@@ -1,13 +1,13 @@
 ---
 title: "Control flow | Workflows"
-description: "Control flow in Mastra workflows allows you to manage branching, merging, and conditions to construct workflows that meet your logic requirements."
+description: "Control Mastra workflow execution with sequential steps, parallel branches, conditional logic, loops, nested workflows, mapping, and output merging."
 packages:
   - "@mastra/core"
 ---
 
 # Control flow
 
-Workflows run a sequence of predefined tasks, and you can control how that flow is executed. Tasks are divided into **steps**, which can be executed in different ways depending on your requirements. They can run sequentially or in parallel, or alternatively follow different paths based on conditions.
+Workflows give you control over predefined tasks by dividing each task into **steps**. Those steps can run sequentially or in parallel, and they can follow conditional paths.
 
 Each step connects to the next in the workflow through defined schemas that keep data controlled and consistent.
 
@@ -239,9 +239,21 @@ Visit [Choosing the right pattern](#choosing-the-right-pattern) to understand wh
 
 Use `.branch()` to choose which step to run based on a condition. All steps in a branch need the same `inputSchema` and `outputSchema` because branching requires consistent schemas so workflows can follow different paths.
 
-![Conditional branching with .branch()](/img/workflows/workflows-control-flow-branch.jpg)
+```mermaid
+flowchart LR
+  accTitle: Choosing a workflow step with conditional branching
+  accDescr: The workflow runs step1, then follows either branch A or branch B before committing and ending.
 
-```typescript {30-33} title="src/mastra/workflows/test-workflow.ts" prettier:false
+  start(( start )) -- ".then(step1)" --> step1([step1])
+  step1 -- out --> branchCall@{ shape: text, label: ".branch([A, B])" }
+  branchCall --> stepA([A])
+  branchCall accent1@--> stepB([B])
+  stepB accent2@-- "out<br/>.commit()" --> stop(( end ))
+
+  class stepB,stop accent
+```
+
+```typescript {30-33} title="src/mastra/workflows/test-workflow.ts" oxfmt:false
 const step1 = createStep({...})
 
 const stepA = createStep({
@@ -363,7 +375,7 @@ When using `.then()`, `.parallel()`, or `.branch()`, it's sometimes necessary to
 
 ![Mapping with .map()](/img/workflows/workflows-data-mapping-map.jpg)
 
-```typescript {9} title="src/mastra/workflows/test-workflow.ts" prettier:false
+```typescript {9} title="src/mastra/workflows/test-workflow.ts" oxfmt:false
 const step1 = createStep({...});
 const step2 = createStep({...});
 
@@ -389,40 +401,76 @@ The `.map()` method provides additional helper functions for more complex mappin
 
 ### Parallel and Branch outputs
 
-When working with `.parallel()` or `.branch()` outputs, you can use `.map()` to transform the data structure before passing it to the next step. This is especially useful when you need to flatten or restructure the output.
+Both `.parallel()` and `.branch()` return an object keyed by child step `id`. Use `.map()` to reshape that output for the next operation. This example maps two parallel results into the shared input required by `.branch()`:
 
-```typescript prettier:false title="src/mastra/workflows/test-workflow.ts"
-export const testWorkflow = createWorkflow({...})
-  .parallel([step1, step2])
-  .map(async ({ inputData }) => {
-    // Transform the parallel output structure
-    return {
-      combined: `${inputData["step1"].value} - ${inputData["step2"].value}`
-    };
-  })
-  .then(nextStep)
-  .commit();
-```
+```typescript title="src/mastra/workflows/order-routing-workflow.ts"
+import { createStep, createWorkflow } from '@mastra/core/workflows'
+import { z } from 'zod'
 
-You can also use the helper functions provided by `.map()`:
+const orderSchema = z.object({ amount: z.number(), inventory: z.number() })
+const routingSchema = z.object({ riskScore: z.number(), inStock: z.boolean() })
+const decisionSchema = z.object({ action: z.enum(['review', 'approve']) })
 
-```typescript prettier:false title="src/mastra/workflows/test-workflow.ts"
-export const testWorkflow = createWorkflow({...})
+const scoreRisk = createStep({
+  id: 'score-risk',
+  inputSchema: orderSchema,
+  outputSchema: z.object({ riskScore: z.number() }),
+  execute: async ({ inputData }) => ({
+    riskScore: inputData.amount >= 1_000 ? 80 : 20,
+  }),
+})
+
+const checkInventory = createStep({
+  id: 'check-inventory',
+  inputSchema: orderSchema,
+  outputSchema: z.object({ inStock: z.boolean() }),
+  execute: async ({ inputData }) => ({ inStock: inputData.inventory > 0 }),
+})
+
+const manualReview = createStep({
+  id: 'manual-review',
+  inputSchema: routingSchema,
+  outputSchema: decisionSchema,
+  execute: async () => ({ action: 'review' as const }),
+})
+
+const autoApprove = createStep({
+  id: 'auto-approve',
+  inputSchema: routingSchema,
+  outputSchema: decisionSchema,
+  execute: async () => ({ action: 'approve' as const }),
+})
+
+export const orderRoutingWorkflow = createWorkflow({
+  id: 'order-routing',
+  inputSchema: orderSchema,
+  outputSchema: z.object({
+    'manual-review': decisionSchema.optional(),
+    'auto-approve': decisionSchema.optional(),
+  }),
+})
+  .parallel([scoreRisk, checkInventory])
+  .map(async ({ inputData }) => ({
+    riskScore: inputData['score-risk'].riskScore,
+    inStock: inputData['check-inventory'].inStock,
+  }))
   .branch([
-    [condition1, stepA],
-    [condition2, stepB]
+    [async ({ inputData }) => inputData.riskScore >= 70 || !inputData.inStock, manualReview],
+    [async ({ inputData }) => inputData.riskScore < 70 && inputData.inStock, autoApprove],
   ])
-  .map(async ({ inputData, getStepResult }) => {
-    // Access specific step results
-    const stepAResult = getStepResult("stepA");
-    const stepBResult = getStepResult("stepB");
-    
-    // Return the result from whichever branch executed
-    return stepAResult || stepBResult;
-  })
-  .then(nextStep)
-  .commit();
+  .commit()
 ```
+
+The parallel output has this shape before `.map()`:
+
+```typescript oxfmt:false
+{
+  'score-risk': { riskScore: 80 },
+  'check-inventory': { inStock: true },
+}
+```
+
+The mapped `{ riskScore, inStock }` object is passed to every branch condition and branch step, so their `inputSchema` values must match `routingSchema`. A `.map()` placed after `.branch()` works the same way. Read branch output with `inputData['manual-review']` or `getStepResult(manualReview)`.
 
 ## Looping steps
 
@@ -434,7 +482,7 @@ Use `.dountil()` to run a step repeatedly until a condition becomes true.
 
 ![Repeating with .dountil()](/img/workflows/workflows-control-flow-dountil.jpg)
 
-```typescript prettier:false {14} title="src/mastra/workflows/test-workflow.ts"
+```typescript oxfmt:false {14} title="src/mastra/workflows/test-workflow.ts"
 const step1 = createStep({...});
 
 const step2 = createStep({
@@ -458,7 +506,7 @@ Use `.dowhile()` to run a step repeatedly while a condition remains true.
 
 ![Repeating with .dowhile()](/img/workflows/workflows-control-flow-dowhile.jpg)
 
-```typescript prettier:false {14} title="src/mastra/workflows/test-workflow.ts"
+```typescript oxfmt:false {14} title="src/mastra/workflows/test-workflow.ts"
 const step1 = createStep({...});
 
 const step2 = createStep({
@@ -482,7 +530,7 @@ Use `.foreach()` to run the same step for each item in an array. The input must 
 
 ![Repeating with .foreach()](/img/workflows/workflows-control-flow-foreach.jpg)
 
-```typescript prettier:false {15} title="src/mastra/workflows/test-workflow.ts"
+```typescript oxfmt:false {15} title="src/mastra/workflows/test-workflow.ts"
 const step1 = createStep({
   inputSchema: z.string(),
   outputSchema: z.string(),
@@ -532,7 +580,7 @@ export const testWorkflow = createWorkflow({
 
 Use `concurrency` to control the number of array items processed. The default is `1`, which runs steps sequentially. Increasing the value allows `.foreach()` to process multiple items simultaneously.
 
-```typescript prettier:false title="src/mastra/workflows/test-workflow.ts"
+```typescript oxfmt:false title="src/mastra/workflows/test-workflow.ts"
 const step1 = createStep({...})
 
 export const testWorkflow = createWorkflow({...})
@@ -581,7 +629,7 @@ export const testWorkflow = createWorkflow({
 
 You can also use `.map()` to transform the array output:
 
-```typescript prettier:false title="src/mastra/workflows/test-workflow.ts"
+```typescript oxfmt:false title="src/mastra/workflows/test-workflow.ts"
 export const testWorkflow = createWorkflow({...})
   .foreach(processItemStep)
   .map(async ({ inputData }) => ({
@@ -635,7 +683,7 @@ For processing multiple documents where each produces multiple chunks, you have 
 
 **Option 1: Process all documents in a single step with batching control**
 
-```typescript prettier:false title="src/mastra/workflows/test-workflow.ts"
+```typescript oxfmt:false title="src/mastra/workflows/test-workflow.ts"
 const downloadAndChunkStep = createStep({
   id: "download-and-chunk",
   inputSchema: z.array(z.string()),  // Array of URLs
@@ -790,7 +838,7 @@ workflow.foreach(downloadStep, { concurrency: 5 }).then(aggregateStep)
 
 **Inside `.foreach()`** - when each array item needs multiple sequential steps:
 
-```typescript prettier:false
+```typescript oxfmt:false
 // Each document goes through a full pipeline
 const processDocWorkflow = createWorkflow({...})
   .then(downloadStep)
@@ -805,7 +853,7 @@ The single `.foreach()` keeps the result flat. Chaining `.foreach().foreach()` c
 
 **Inside `.parallel()`** - when a parallel branch needs its own multi-step pipeline:
 
-```typescript prettier:false
+```typescript oxfmt:false
 const pipelineA = createWorkflow({...}).then(step1).then(step2).commit();
 const pipelineB = createWorkflow({...}).then(step3).then(step4).commit();
 
@@ -870,7 +918,7 @@ Common patterns check values returned in `inputData` and set a maximum number of
 
 Use `iterationCount` to limit how many times a loop runs. If the count exceeds your threshold, throw an error to fail the step and stop the workflow.
 
-```typescript prettier:false title="src/mastra/workflows/test-workflow.ts"
+```typescript oxfmt:false title="src/mastra/workflows/test-workflow.ts"
 const step1 = createStep({...});
 
 export const testWorkflow = createWorkflow({...})

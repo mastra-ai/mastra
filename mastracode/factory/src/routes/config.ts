@@ -14,6 +14,7 @@ import type { ApiRoute } from '@mastra/core/server';
 import { registerApiRoute } from '@mastra/core/server';
 
 import type { Context } from 'hono';
+import { peekSessionSandbox } from '../sandbox/session-sandbox.js';
 import {
   applyStoredMemorySettings,
   DEFAULT_OBSERVATION_THRESHOLD,
@@ -36,6 +37,7 @@ import type {
 import type { ModelPackRecord, ModelPacksStorage } from '../storage/domains/model-packs/base.js';
 import type { FactoryProjectsStorage } from '../storage/domains/projects/base.js';
 import type { SourceControlStorageHandle } from '../storage/domains/source-control/base.js';
+import { seedPersonalOmDefaults } from './om-seed.js';
 import {
   getAuthProviderId,
   listTenantCredentialsForRequest,
@@ -439,11 +441,16 @@ async function authorizePackSession({
   if (!sessions) return c.json({ error: 'session_authorization_unavailable' }, 503);
 
   const sourceSession = await sessions.getBySessionId(resourceId);
+  // Scope matches against the live memoized workdir ONLY (the deterministic
+  // truth). The persisted column is observability, never an authorization
+  // input — a row written under a previous provider could authorize a stale
+  // scope. No live memo entry means no scoped grant (fail closed).
+  const liveWorkdir = peekSessionSandbox(sourceSession?.id ?? '')?.workdir;
   if (
     !sourceSession ||
     sourceSession.orgId !== packContext.orgId ||
     sourceSession.userId !== packContext.userId ||
-    (scope !== undefined && sourceSession.sandboxWorkdir !== scope)
+    (scope !== undefined && scope !== liveWorkdir)
   ) {
     return c.json({ error: `No session for resourceId "${resourceId}"` }, 404);
   }
@@ -765,6 +772,7 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
               // per-request, never written into process.env.
               await ctx.storage.setCredential(tenant, getAuthProviderId(provider), { type: 'api_key', key });
               onCredentialsChanged(tenant);
+              await seedPersonalOmDefaults({ memorySettings: options.memorySettings, tenant, provider });
               const records = await ctx.storage.listCredentials(ctx.orgId, ctx.userId);
               const providers = await listProviders({ controller, tenantCredentials: records });
               return c.json({ ok: true, provider: providers.find(p => p.provider === provider) });

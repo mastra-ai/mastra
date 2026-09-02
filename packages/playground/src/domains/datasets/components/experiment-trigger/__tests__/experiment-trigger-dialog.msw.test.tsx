@@ -138,6 +138,8 @@ describe('ExperimentTriggerDialog', () => {
 
       const datasetCombobox = await screen.findByRole('combobox', { name: 'Select a dataset...' });
       expect((datasetCombobox as HTMLSelectElement).value).toBe('');
+      expect(screen.getByText('Scorers (Optional)')).toBeDefined();
+      expect(screen.getByRole('combobox', { name: 'Select scorers...' })).toBeDefined();
       expect((runButton() as HTMLButtonElement).disabled).toBe(true);
     });
 
@@ -195,6 +197,53 @@ describe('ExperimentTriggerDialog', () => {
       await waitFor(() => expect(triggerCalls).toHaveLength(1));
       expect(triggerCalls[0].datasetId).toBe('dataset-2');
       expect(triggerCalls[0].body.version).toBeUndefined();
+    });
+  });
+
+  describe('when opened with initial scorer ids', () => {
+    it('sends the initial scorers with the run request', async () => {
+      const { triggerCalls } = setupHandlers();
+      renderDialog({ initialScorerIds: ['answer-relevancy'] });
+
+      await screen.findByRole('combobox', { name: 'Select a dataset...' });
+      await waitFor(() => expect(screen.getByRole('option', { name: 'Dataset 1' })).toBeDefined());
+      selectOption('Select a dataset...', 'dataset-1');
+      await pickAgentTarget();
+
+      fireEvent.click(runButton());
+
+      await waitFor(() => expect(triggerCalls).toHaveLength(1));
+      expect(triggerCalls[0].body.scorerIds).toEqual(['answer-relevancy']);
+    });
+  });
+
+  describe('when opened with an initial target (rerun)', () => {
+    it('pre-fills the target and sends it with the run request', async () => {
+      const { triggerCalls } = setupHandlers();
+      renderDialog({
+        initialDatasetId: 'dataset-1',
+        initialDatasetVersion: 11,
+        initialTargetType: 'agent',
+        initialTargetId: 'agent-1',
+        initialScorerIds: ['answer-relevancy'],
+      });
+
+      await screen.findByRole('combobox', { name: 'Select a dataset...' });
+      await waitFor(() => expect(screen.getByRole('option', { name: 'Agent One' })).toBeDefined());
+      expect((screen.getByRole('combobox', { name: 'Select target type' }) as HTMLSelectElement).value).toBe('agent');
+      expect((screen.getByRole('combobox', { name: 'Select agent' }) as HTMLSelectElement).value).toBe('agent-1');
+
+      await waitFor(() => expect(runButton().hasAttribute('disabled')).toBe(false));
+      fireEvent.click(runButton());
+
+      await waitFor(() => expect(triggerCalls).toHaveLength(1));
+      expect(triggerCalls[0].datasetId).toBe('dataset-1');
+      expect(triggerCalls[0].body).toMatchObject({
+        targetType: 'agent',
+        targetId: 'agent-1',
+        version: 11,
+        scorerIds: ['answer-relevancy'],
+      });
     });
   });
 

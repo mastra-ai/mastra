@@ -1,6 +1,6 @@
 ---
 title: "Workflows"
-description: "Workflows in Mastra help you orchestrate complex sequences of tasks with features like branching, parallel execution, resource suspension, and more."
+description: "Build deterministic Mastra workflows with typed steps, agents, tools, branching, parallel execution, loops, suspension, state, and Studio visualization."
 packages:
   - "@mastra/core"
 ---
@@ -10,7 +10,7 @@ import TabItem from "@theme/TabItem";
 
 # Workflows
 
-Workflows let you define complex sequences of tasks using clear, structured steps rather than relying on the reasoning of a single agent. They give you full control over how tasks are broken down and how data moves between them, plus what gets executed when. Workflows run using the built-in execution engine by default, or can be deployed to [workflow runners](/docs/deployment/workflow-runners) like Inngest for managed infrastructure.
+Workflows let you define complex task sequences with clear, structured steps instead of relying on one agent to reason through the entire process. You control the task breakdown along with the flow and timing of data. Workflows use the built-in execution engine by default, while managed infrastructure is available through [workflow runners](/docs/deployment/workflow-runners) such as Inngest.
 
 <Inject>
   **For AI agents:** Run `npx mastra api workflow run start test-workflow '{"inputData":{"message":"Hello, world!"}}'` to start this workflow directly instead of writing a temporary script. The command requires a running Mastra server; start the local server with `npx mastra dev`, or pass the reachable server's base URL with `--url`. Run `npx mastra api workflow run start --schema` before constructing different input. Install Mastra's skill with `npx skills add mastra-ai/skills --skill mastra` for complete API CLI discovery, targeting, schema, authentication, and error-handling guidance.
@@ -125,7 +125,7 @@ Create a workflow using `createWorkflow()` with `inputSchema` and `outputSchema`
 
 <Tabs>
   <TabItem value="zod" label="Zod">
-    ```typescript {9,12,15,16} title="src/mastra/workflows/test-workflow.ts" prettier:false
+    ```typescript {9,12,15,16} title="src/mastra/workflows/test-workflow.ts" oxfmt:false
     import { createWorkflow, createStep } from "@mastra/core/workflows";
     import { z } from "zod";
 
@@ -146,7 +146,7 @@ Create a workflow using `createWorkflow()` with `inputSchema` and `outputSchema`
   </TabItem>
 
   <TabItem value="valibot" label="Valibot">
-    ```typescript {10,13,16,17} title="src/mastra/workflows/test-workflow.ts" prettier:false
+    ```typescript {10,13,16,17} title="src/mastra/workflows/test-workflow.ts" oxfmt:false
     import { createWorkflow, createStep } from "@mastra/core/workflows";
     import * as v from "valibot";
     import { toStandardJsonSchema } from "@valibot/to-json-schema";
@@ -168,7 +168,7 @@ Create a workflow using `createWorkflow()` with `inputSchema` and `outputSchema`
   </TabItem>
 
   <TabItem value="arktype" label="ArkType">
-    ```typescript {9,12,15,16} title="src/mastra/workflows/test-workflow.ts" prettier:false
+    ```typescript {9,12,15,16} title="src/mastra/workflows/test-workflow.ts" oxfmt:false
     import { createWorkflow, createStep } from "@mastra/core/workflows";
     import { type } from "arktype";
 
@@ -232,7 +232,7 @@ Visit [Workflow State](/docs/workflows/workflow-state) for complete documentatio
 
 Use a workflow as a step to reuse its logic within a larger composition. Input and output follow the same schema rules described in [Core principles](/docs/workflows/control-flow).
 
-```typescript {26} title="src/mastra/workflows/test-workflow.ts" prettier:false
+```typescript {26} title="src/mastra/workflows/test-workflow.ts" oxfmt:false
 const step1 = createStep({...});
 const step2 = createStep({...});
 
@@ -266,7 +266,7 @@ export const testWorkflow = createWorkflow({
 
 Clone a workflow using `cloneWorkflow()` when you want to reuse its logic but track it separately under a new ID. Each clone runs independently and shows up as a distinct workflow in logs and observability tools.
 
-```typescript prettier:false {6} title="src/mastra/workflows/test-workflow.ts"
+```typescript oxfmt:false {6} title="src/mastra/workflows/test-workflow.ts"
 import { cloneWorkflow } from "@mastra/core/workflows";
 
 const step1 = createStep({...});

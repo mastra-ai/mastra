@@ -1,6 +1,6 @@
 {
   "name": "@mastra/elysia",
-  "version": "0.1.0-alpha.0",
+  "version": "0.1.4-alpha.7",
   "description": "Mastra Elysia adapter for the server",
   "type": "module",
   "main": "dist/index.js",
@@ -61,8 +61,7 @@
     "node": ">=22.13.0"
   },
   "files": [
-    "dist",
-    "CHANGELOG.md"
+    "dist"
   ],
   "homepage": "https://mastra.ai",
   "repository": {

@@ -6,6 +6,7 @@ import { describe, expect, it } from 'vitest';
 import { server } from '../../../../../../e2e/ui/msw-server';
 import { TEST_BASE_URL, renderWithProviders, waitForMutationsIdle } from '../../../../../../e2e/ui/render';
 import { ChatSessionContext } from '../../../chat/context/ChatSessionContext';
+import type { FactoryDecisionStatus, FactoryDecisionSummary } from '../../../factory/services/decisions';
 import type { PullRequestSubscription } from '../../../factory/services/githubSubscriptions';
 import type { WorkItemSessionRef } from '../../../factory/services/workItems';
 import type { FactoryUserSession } from '../../services/user-sessions';
@@ -128,16 +129,40 @@ function pullRequestSubscription(
   };
 }
 
+function decision(workItemId: string, status: FactoryDecisionStatus): FactoryDecisionSummary {
+  return {
+    id: `decision-${workItemId}-${status}`,
+    evaluationId: 'evaluation-1',
+    workItemId,
+    type: 'invokeSkill',
+    role: 'work',
+    status,
+    attempts: status === 'proposed' ? 0 : 1,
+    failureOccurrence: 0,
+    failureCode: null,
+    canRetry: false,
+    lastError: status === 'proposed' ? null : 'boom',
+    createdAt: '2026-07-20T00:00:00.000Z',
+    updatedAt: '2026-07-20T00:00:00.000Z',
+    completedAt: null,
+  };
+}
+
 function stubWorkspaceStatuses({
   items,
   activeSessionIds,
   subscriptionsBySession,
+  decisions = [],
 }: {
   items: WireWorkItemFixture[];
   activeSessionIds: string[];
   subscriptionsBySession: Record<string, PullRequestSubscription[]>;
+  decisions?: FactoryDecisionSummary[];
 }) {
   server.use(
+    http.get(`${TEST_BASE_URL}/web/factory/projects/${factoryProjectId}/decisions`, () =>
+      HttpResponse.json({ decisions }),
+    ),
     http.get(`${TEST_BASE_URL}/web/github/projects/${projectRepositoryId}/sessions`, () =>
       HttpResponse.json({ sessions: [workSession, reviewSession] }),
     ),
@@ -198,7 +223,6 @@ function renderSection() {
           resourceReady: true,
           sandboxReady: true,
           sandboxPreparing: false,
-          sandboxProgress: undefined,
           resourceEnabled: true,
           factorySessionState: { factoryProjectId, projectRepositoryId },
           baseUrl: TEST_BASE_URL,
@@ -232,7 +256,51 @@ const newestPullRequestCases: Array<{
 ];
 
 describe('Workspace sidebar statuses', () => {
-  it('shows the running status dot instead of a merged icon while the agent is active', async () => {
+  it('lights the waiting belt on a workspace whose card holds a run parked for approval', async () => {
+    stubWorkspaceStatuses({
+      items: baseItems(false),
+      activeSessionIds: [],
+      subscriptionsBySession: {},
+      decisions: [decision('issue-24', 'proposed')],
+    });
+
+    const { client } = renderSection();
+    await waitForMutationsIdle(client);
+
+    await screen.findByRole('status', { name: 'Implement loader waiting on you' });
+  });
+
+  it('lights the waiting belt on a workspace whose automation failed for good', async () => {
+    stubWorkspaceStatuses({
+      items: baseItems(false),
+      activeSessionIds: [],
+      subscriptionsBySession: {},
+      decisions: [decision('issue-24', 'failed')],
+    });
+
+    const { client } = renderSection();
+    await waitForMutationsIdle(client);
+
+    await screen.findByRole('status', { name: 'Implement loader waiting on you' });
+  });
+
+  it('leaves the belt dark while the server still retries a failed automation on its own', async () => {
+    stubWorkspaceStatuses({
+      items: baseItems(false),
+      activeSessionIds: [],
+      subscriptionsBySession: {},
+      decisions: [decision('issue-24', 'retry')],
+    });
+
+    const { client } = renderSection();
+    await waitForMutationsIdle(client);
+
+    const row = (await screen.findByRole('button', { name: 'Implement loader' })).closest('li');
+    expect(row).not.toBeNull();
+    expect(row?.querySelector('[role="status"]')).toBeNull();
+  });
+
+  it('shows the running status belt instead of a merged icon while the agent is active', async () => {
     stubWorkspaceStatuses({
       items: baseItems(true),
       activeSessionIds: [workSession.sessionId],

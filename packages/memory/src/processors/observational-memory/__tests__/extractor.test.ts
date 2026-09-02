@@ -1,4 +1,3 @@
-import { MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import { Agent } from '@mastra/core/agent';
 import { coreFeatures } from '@mastra/core/features';
 import { describe, expect, it, vi } from 'vitest';
@@ -349,16 +348,9 @@ describe('Extractor', () => {
       instructions: 'Extract profile.',
       schema: z.object({ tier: z.string() }),
     });
-    const agent = new Agent({
-      id: 'structured-extraction-failure-test',
-      name: 'Structured Extraction Failure Test',
-      instructions: 'Extract values.',
-      model: new MockLanguageModelV2({
-        doGenerate: async () => {
-          throw new Error('structured call failed');
-        },
-      }),
-    });
+    const agent = {
+      stream: vi.fn().mockRejectedValue(new Error('structured call failed')),
+    } as unknown as Agent<any, any, any, any>;
 
     const result = await extractStructuredValues({
       agent,
@@ -373,41 +365,58 @@ describe('Extractor', () => {
     ]);
   });
 
-  it('retries structured extraction with inline json prompt injection when native output throws', async () => {
+  it('retries streamed structured extraction with inline json prompt injection when native output throws', async () => {
     const priority = new Extractor({ name: 'Priority', instructions: 'Extract priority.', schema: z.string() });
-    const generate = vi
+    const stream = vi
       .fn()
       .mockRejectedValueOnce(new Error('native failed'))
-      .mockResolvedValueOnce({ object: { priority: 'high' } });
+      .mockResolvedValueOnce({ object: Promise.resolve({ priority: 'high' }) });
 
     const result = await extractStructuredValues({
-      agent: { generate } as unknown as Agent<any, any, any, any>,
+      agent: { stream } as unknown as Agent<any, any, any, any>,
       source: 'observer',
       extractors: [priority],
     });
 
     expect(result.values).toEqual({ priority: 'high' });
-    expect(generate).toHaveBeenCalledTimes(2);
-    expect(generate.mock.calls[0][1].structuredOutput.jsonPromptInjection).toBeUndefined();
-    expect(generate.mock.calls[1][1].structuredOutput.jsonPromptInjection).toBe('inline');
+    expect(stream).toHaveBeenCalledTimes(2);
+    expect(stream.mock.calls[0][1].structuredOutput.jsonPromptInjection).toBeUndefined();
+    expect(stream.mock.calls[1][1].structuredOutput.jsonPromptInjection).toBe('inline');
+  });
+
+  it('uses streaming for structured extraction', async () => {
+    const priority = new Extractor({ name: 'Priority', instructions: 'Extract priority.', schema: z.string() });
+    const generate = vi.fn();
+    const stream = vi.fn().mockResolvedValueOnce({ object: Promise.resolve({ priority: 'high' }) });
+
+    const result = await extractStructuredValues({
+      agent: { generate, stream } as unknown as Agent<any, any, any, any>,
+      source: 'observer',
+      extractors: [priority],
+    });
+
+    expect(result).toEqual({ values: { priority: 'high' }, failures: [] });
+    expect(generate).not.toHaveBeenCalled();
+    expect(stream).toHaveBeenCalledTimes(1);
+    expect(stream.mock.calls[0][1].structuredOutput.jsonPromptInjection).toBeUndefined();
   });
 
   it('retries structured extraction with inline json prompt injection when native output has no object', async () => {
     const priority = new Extractor({ name: 'Priority', instructions: 'Extract priority.', schema: z.string() });
-    const generate = vi
+    const stream = vi
       .fn()
-      .mockResolvedValueOnce({ object: undefined })
-      .mockResolvedValueOnce({ object: { priority: 'medium' } });
+      .mockResolvedValueOnce({ object: Promise.resolve(undefined) })
+      .mockResolvedValueOnce({ object: Promise.resolve({ priority: 'medium' }) });
 
     const result = await extractStructuredValues({
-      agent: { generate } as unknown as Agent<any, any, any, any>,
+      agent: { stream } as unknown as Agent<any, any, any, any>,
       source: 'observer',
       extractors: [priority],
     });
 
     expect(result.values).toEqual({ priority: 'medium' });
-    expect(generate).toHaveBeenCalledTimes(2);
-    expect(generate.mock.calls[1][1].structuredOutput.jsonPromptInjection).toBe('inline');
+    expect(stream).toHaveBeenCalledTimes(2);
+    expect(stream.mock.calls[1][1].structuredOutput.jsonPromptInjection).toBe('inline');
   });
 
   it('retries schema working-memory extraction when native output is an empty object', async () => {
@@ -423,41 +432,43 @@ describe('Extractor', () => {
       resourceId: 'resource-1',
       memory,
     });
-    const generate = vi
+    const stream = vi
       .fn()
-      .mockResolvedValueOnce({ object: {} })
-      .mockResolvedValueOnce({ object: { 'working-memory': { preferences: { responseStyle: 'concise' } } } });
+      .mockResolvedValueOnce({ object: Promise.resolve({}) })
+      .mockResolvedValueOnce({
+        object: Promise.resolve({ 'working-memory': { preferences: { responseStyle: 'concise' } } }),
+      });
 
     const result = await extractStructuredValues({
-      agent: { generate } as unknown as Agent<any, any, any, any>,
+      agent: { stream } as unknown as Agent<any, any, any, any>,
       source: 'observer',
       extractors: [resolved!],
     });
 
     expect(result.values).toEqual({ 'working-memory': { preferences: { responseStyle: 'concise' } } });
     expect(result.failures).toEqual([]);
-    expect(generate).toHaveBeenCalledTimes(2);
-    expect(generate.mock.calls[0][1].structuredOutput.jsonPromptInjection).toBeUndefined();
-    expect(generate.mock.calls[1][1].structuredOutput.jsonPromptInjection).toBe('inline');
+    expect(stream).toHaveBeenCalledTimes(2);
+    expect(stream.mock.calls[0][1].structuredOutput.jsonPromptInjection).toBeUndefined();
+    expect(stream.mock.calls[1][1].structuredOutput.jsonPromptInjection).toBe('inline');
   });
 
   it('falls back to system json prompt injection when inline support is not advertised', async () => {
     const priority = new Extractor({ name: 'Priority', instructions: 'Extract priority.', schema: z.string() });
-    const generate = vi
+    const stream = vi
       .fn()
       .mockRejectedValueOnce(new Error('native failed'))
-      .mockResolvedValueOnce({ object: { priority: 'low' } });
+      .mockResolvedValueOnce({ object: Promise.resolve({ priority: 'low' }) });
 
     coreFeatures.delete('json-prompt-injection:inline');
     try {
       const result = await extractStructuredValues({
-        agent: { generate } as unknown as Agent<any, any, any, any>,
+        agent: { stream } as unknown as Agent<any, any, any, any>,
         source: 'observer',
         extractors: [priority],
       });
 
       expect(result.values).toEqual({ priority: 'low' });
-      expect(generate.mock.calls[1][1].structuredOutput.jsonPromptInjection).toBe(true);
+      expect(stream.mock.calls[1][1].structuredOutput.jsonPromptInjection).toBe(true);
     } finally {
       coreFeatures.add('json-prompt-injection:inline');
     }
@@ -466,40 +477,29 @@ describe('Extractor', () => {
   it('rethrows abort errors without retrying structured extraction', async () => {
     const priority = new Extractor({ name: 'Priority', instructions: 'Extract priority.', schema: z.string() });
     const abortSignal = AbortSignal.abort();
-    const generate = vi.fn().mockRejectedValueOnce(new DOMException('aborted', 'AbortError'));
+    const stream = vi.fn().mockRejectedValueOnce(new DOMException('aborted', 'AbortError'));
 
     await expect(
       extractStructuredValues({
-        agent: { generate } as unknown as Agent<any, any, any, any>,
+        agent: { stream } as unknown as Agent<any, any, any, any>,
         source: 'observer',
         extractors: [priority],
         abortSignal,
       }),
     ).rejects.toThrow(/aborted/);
 
-    expect(generate).toHaveBeenCalledTimes(1);
+    expect(stream).toHaveBeenCalledTimes(1);
   });
 
   it('uses a direct extraction-only prompt for structured observer follow-up calls', async () => {
     const priority = new Extractor({ name: 'Priority', instructions: 'Extract priority.', schema: z.string() });
     let prompt = '';
-    const agent = new Agent({
-      id: 'structured-extraction-memory-test',
-      name: 'Structured Extraction Memory Test',
-      instructions: 'Extract values.',
-      model: new MockLanguageModelV2({
-        doGenerate: async ({ prompt: modelPrompt }) => {
-          prompt = JSON.stringify(modelPrompt);
-          return {
-            rawCall: { rawPrompt: null, rawSettings: {} },
-            finishReason: 'stop',
-            usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
-            content: [{ type: 'text', text: '{"priority":"high"}' }],
-            warnings: [],
-          };
-        },
+    const agent = {
+      stream: vi.fn(async (streamPrompt: string) => {
+        prompt = streamPrompt;
+        return { object: Promise.resolve({ priority: 'high' }) };
       }),
-    });
+    } as unknown as Agent<any, any, any, any>;
 
     const result = await extractStructuredValues({
       agent,
@@ -520,23 +520,12 @@ describe('Extractor', () => {
   it('uses direct reflection wording for structured reflector follow-up calls', async () => {
     const priority = new Extractor({ name: 'Priority', instructions: 'Extract priority.', schema: z.string() });
     let prompt = '';
-    const agent = new Agent({
-      id: 'structured-reflection-extraction-test',
-      name: 'Structured Reflection Extraction Test',
-      instructions: 'Extract values.',
-      model: new MockLanguageModelV2({
-        doGenerate: async ({ prompt: modelPrompt }) => {
-          prompt = JSON.stringify(modelPrompt);
-          return {
-            rawCall: { rawPrompt: null, rawSettings: {} },
-            finishReason: 'stop',
-            usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
-            content: [{ type: 'text', text: '{"priority":"high"}' }],
-            warnings: [],
-          };
-        },
+    const agent = {
+      stream: vi.fn(async (streamPrompt: string) => {
+        prompt = streamPrompt;
+        return { object: Promise.resolve({ priority: 'high' }) };
       }),
-    });
+    } as unknown as Agent<any, any, any, any>;
 
     const result = await extractStructuredValues({
       agent,

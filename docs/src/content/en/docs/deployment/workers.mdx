@@ -1,6 +1,6 @@
 ---
 title: "Workers | Deploy"
-description: "Separate background processing from the API layer by running workflow execution, cron schedules, and background tasks in dedicated worker processes."
+description: "Run Mastra workflow orchestration, schedules, and long-running background tasks in dedicated workers to keep API processes responsive under load."
 packages:
   - "@mastra/core"
   - "@mastra/redis-streams"
@@ -42,7 +42,7 @@ Mastra has three built-in worker types. Each handles a specific kind of backgrou
 
 ### Orchestration worker
 
-Subscribes to workflow events on the [PubSub](/docs/server/pubsub) bus and executes workflow steps. Every `workflow.start`, step transition, and lifecycle event flows through this worker.
+This worker subscribes to workflow events on the [PubSub](/docs/server/pubsub) bus and executes workflow steps. It handles each `workflow.start` and lifecycle event together with every step transition.
 
 In a split deployment, the orchestration worker pulls events from a distributed PubSub backend and delegates step execution back to the API over HTTP. In-process, it runs steps directly.
 
@@ -378,6 +378,10 @@ kubectl scale deployment/background-task-worker --replicas=2
 
 Run exactly one scheduler worker. Multiple schedulers polling the same storage can publish duplicate events for a schedule.
 
+### Health checks
+
+Worker build artifacts expose `GET /health` on `PORT`, or port `4111` when `PORT` isn't set. The endpoint returns `503` while `startWorkers()` is initializing and `200` after every selected worker starts successfully. Use this endpoint for deployment readiness checks. If you also use it for liveness checks, configure a startup probe or an initial delay that allows worker initialization to finish.
+
 ### Crash recovery
 
 A distributed PubSub backend persists unacknowledged events, which lets orchestration and background task workers resume after a restart. When the API is unavailable, a failed step-execution request causes the event to be delivered again. Because an event can be processed more than once, handlers should be idempotent when possible.
@@ -389,9 +393,8 @@ If the API crashes while a step is executing, that work can be lost and the work
 ## Known limitations
 
 - **No dead-letter queue**: Failed events are nacked and retried, but there's no DLQ for events that fail after all retries.
-- **No built-in health endpoint**: Workers don't expose an HTTP health check. Use container-level liveness probes or process monitoring.
 - **Scheduler is single-instance**: Running multiple scheduler processes causes duplicate schedule fires.
-- **Runs stuck in "running" after API crash**: If the API process crashes while executing a workflow step, the run remains in `running` status with no automatic retry. For [durable agents](/docs/harness/durable-agents), set `recovery.durableAgents` to `'auto'` in the Mastra config to automatically re-drive orphaned runs on server restart. See [Crash recovery](/docs/harness/durable-agents#crash-recovery) for details.
+- **Runs stuck in "running" after API crash**: A crash during workflow-step execution leaves the run in `running` status without an automatic retry. For [durable agents](/docs/harness/durable-agents), configure `recovery.durableAgents: 'auto'` so a server restart automatically re-drives orphaned runs. See [Crash recovery](/docs/harness/durable-agents#crash-recovery) for details.
 
 ## Related
 

@@ -1,28 +1,12 @@
 # @mastra/platform-workspace
 
-Mastra Platform workspace provider. Gives agents environment-scoped sandbox execution and bucket-backed filesystem access through the Mastra Platform workspace proxy.
+Mastra Platform workspace provider. It gives agents environment-scoped sandbox execution and bucket-backed filesystem access through the Mastra Platform workspace proxy.
 
 ## Installation
 
 ```bash
 npm install @mastra/platform-workspace
 ```
-
-## Configuration
-
-All options can be passed to the constructor or read from environment variables:
-
-| Option          | Env var                        | Required         |
-| --------------- | ------------------------------ | ---------------- |
-| `accessToken`   | `MASTRA_PLATFORM_ACCESS_TOKEN` | Yes              |
-| `projectId`     | `MASTRA_PROJECT_ID`            | Yes              |
-| `environmentId` | `MASTRA_ENVIRONMENT_ID`        | Yes (sandbox)    |
-| `actingUserId`  | —                              | No (sandbox)     |
-| `bucketName`    | `MASTRA_PLATFORM_BUCKET_NAME`  | Yes (filesystem) |
-
-The proxy URL defaults to `https://workspaces.mastra.ai` and can be overridden with the `MASTRA_WORKSPACE_PROXY_URL` env var (useful for staging).
-
-Requests to the proxy are authenticated with `Authorization: Bearer <accessToken>`. For sandbox requests authenticated with a project access token, set `actingUserId` to the stable opaque user subject from your authentication system. It is sent as `x-acting-user-id` for token partitioning and attribution; it is not an authorization claim.
 
 ## Usage
 
@@ -32,11 +16,8 @@ import { Workspace } from '@mastra/core/workspace';
 import { PlatformFilesystem, PlatformSandbox } from '@mastra/platform-workspace';
 
 const workspace = new Workspace({
-  filesystem: new PlatformFilesystem({
-    // accessToken, projectId, bucketName all fall back to env
-  }),
+  filesystem: new PlatformFilesystem({}),
   sandbox: new PlatformSandbox({
-    // accessToken, projectId, environmentId all fall back to env
     idleTimeoutMinutes: 30,
     networkIsolation: 'ISOLATED',
   }),
@@ -49,68 +30,24 @@ const agent = new Agent({
 });
 ```
 
-## Filesystem
+## Documentation
 
-`PlatformFilesystem` implements the Mastra filesystem interface against a workspace bucket. Object keys are percent-encoded per segment, so filenames with `?`, `#`, `%`, `&`, `+`, or spaces are preserved end-to-end.
+Both providers authenticate through the workspace proxy with `MASTRA_PLATFORM_ACCESS_TOKEN` and `MASTRA_PROJECT_ID`. `PlatformSandbox` also requires `MASTRA_ENVIRONMENT_ID`; `PlatformFilesystem` requires `MASTRA_PLATFORM_BUCKET_NAME`. Constructor values override environment variables, and `MASTRA_WORKSPACE_PROXY_URL` can point requests at a non-production proxy.
 
-```typescript
-const fs = new PlatformFilesystem({ bucketName: 'reports' });
+`PlatformFilesystem` implements the Mastra filesystem interface against a Platform bucket. It supports reading, writing, listing, moving, and deleting files, preserves reserved characters in object names, and can be mounted with `readOnly: true` to reject mutations.
 
-await fs.writeFile('/analyses/repo.md', markdown);
-const content = await fs.readFile('/analyses/repo.md');
-const entries = await fs.readdir('/analyses');
-await fs.moveFile('/analyses/repo.md', '/analyses/repo-final.md');
-```
+`PlatformSandbox` starts or reconnects to an environment-scoped provider sandbox and implements command execution, lifecycle, and networking operations. The provider defaults to E2B and can be changed to Railway through `sandboxProvider` or `SANDBOX_PROVIDER`. Pass an existing `sandboxId` to reattach to a live sandbox, and `actingUserId` to partition and attribute project-token requests to a stable application user.
 
-Pass `readOnly: true` to mount the bucket read-only. Mutating calls will throw `WorkspaceReadOnlyError`.
+The exported `Template()` builder creates reusable sandbox images from commands, packages, environment values, repository checkouts, CPU, memory, and working-directory settings. Platform derives a content identity from the serialized template so matching definitions can reuse previous builds. Ephemeral environment values are excluded from that identity and are not persisted into the runtime image.
 
-## Sandbox
+Proxy failures throw `PlatformApiError`, which includes the HTTP status, parsed machine-readable error code, proxy message, and raw response body. Use these fields to distinguish missing resources, authentication failures, and provider errors.
 
-`PlatformSandbox` executes commands inside a Railway-backed sandbox tied to a Platform environment. Sessions boot from a pre-built recipe checkpoint (Python 3, Node 22, TypeScript/tsx, common build tooling).
+- [Mastra Platform workspaces](https://mastra.ai/docs/mastra-platform/workspaces)
 
-```typescript
-const sandbox = new PlatformSandbox({ environmentId: 'env_abc' });
+## Changelog
 
-const result = await sandbox.executeCommand('python', ['analyze.py'], {
-  timeout: 30_000,
-  env: { INPUT: 'repo' },
-});
+See the [package changelog](https://github.com/mastra-ai/mastra/blob/main/workspaces/platform-workspace/CHANGELOG.md) for version history and release notes.
 
-console.log(result.stdout);
-```
+## Support
 
-Pass an existing `sandboxId` to reattach to a live sandbox instead of creating a new one.
-
-## Errors
-
-Failures from the proxy raise `PlatformApiError`. Structured `{ error: { message, type } }` payloads from the proxy are parsed into `.code` (machine kind) and `.proxyMessage` (human string); the raw response body stays available on `.body`:
-
-```typescript
-import { PlatformApiError } from '@mastra/platform-workspace';
-
-try {
-  await fs.readFile('/missing.txt');
-} catch (err) {
-  if (err instanceof PlatformApiError) {
-    if (err.code === 'not_found') {
-      // handle missing file
-    } else if (err.code === 'authentication_error') {
-      // refresh token
-    }
-    console.error(err.status, err.code, err.proxyMessage, err.body);
-  }
-}
-```
-
-`code` / `proxyMessage` are `undefined` when the proxy returns a non-JSON body (e.g. an HTML 502 from a load balancer).
-
-Filesystem-specific errors (`FileNotFoundError`, `FileExistsError`, `WorkspaceReadOnlyError`) are re-exported from `@mastra/core`.
-
-### Sandbox exec errors
-
-`PlatformSandbox.executeCommand` runs over the direct-exec data plane (a WebSocket straight to the Railway tcp-proxy) and can throw two typed errors on unrecoverable failure:
-
-- `SandboxDestroyedError` — the platform returned 410 for `/exec-lease`, meaning the sandbox has been destroyed. The cached sandbox id and lease are cleared, so a reused `PlatformSandbox` instance will re-provision on the next call. Fleet-level code that owns a binding store should catch this, clear the stale sandbox id, and reprovision + replay.
-- `SandboxExecTransportError` — both the initial WebSocket attempt and the built-in retry closed without an `exit` frame against a live sandbox. Carries `{ opened, closeCode, closeReason, wsEndpoint }` diagnostics plus `sandboxId`, `command`, and `attempts` so upstream logs / alerts can distinguish "the Railway data plane is broken" from "your command failed".
-
-`PlatformApiError` (with status 404 / 500 / 501 on `/exec-lease`) can also bubble up from `executeCommand` — those are configuration or platform errors, not "reprovision me" signals, and are propagated as-is.
+We have an [open community Discord](https://discord.gg/mastra-ai). Come and say hello and let us know if you have any questions or need any help getting things running.

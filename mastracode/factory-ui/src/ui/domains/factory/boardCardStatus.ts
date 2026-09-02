@@ -1,4 +1,5 @@
 import type { FactoryRunPhase } from '../../../hooks/useStartFactoryRun';
+import type { SessionRowStatus } from '../workspaces/services/sessionStatus';
 import { RUN_PHASE_LABELS } from './boardRunSpecs';
 import type { FactoryDecisionSummary } from './services/decisions';
 
@@ -22,23 +23,64 @@ export interface BoardCardStatusInput {
   decision?: FactoryDecisionSummary;
   /** Why the server refused the last move. */
   transitionReason?: string;
+  /** What the run registry and workspace records say about the card's bound sessions. */
+  sessionStatus?: SessionRowStatus;
 }
 
-/** Human phrasing for a rule effect, by decision type. */
-function automationCopy(type: string): { busy: string; failed: string } {
+/**
+ * The sidebar's reading of a card's `waiting` and `error` kinds: a run parked
+ * for approval, or an effect that failed for good. A retry the server still
+ * owns is not a person's turn, and neither is a proposal that an effect in
+ * flight already outranks on the card.
+ */
+export function itemAwaitsPerson(
+  proposal: FactoryDecisionSummary | undefined,
+  effect: FactoryDecisionSummary | undefined,
+): boolean {
+  if (effect) return effect.status === 'failed';
+  return proposal !== undefined;
+}
+
+/** Human phrasing for a rule effect, by decision type. `underway` speaks for a leased decision. */
+function automationCopy(type: string): { busy: string; underway: string; failed: string } {
   switch (type) {
     case 'invokeSkill':
-      return { busy: 'Starting an automated run…', failed: 'Automated run could not start' };
-    case 'transition':
-      return { busy: 'Moving this card automatically…', failed: 'Automatic move failed' };
-    case 'upsertLinkedWorkItem':
-      return { busy: 'Filing a linked card…', failed: 'Linked card could not be filed' };
+      return {
+        busy: 'Starting an automated run…',
+        underway: 'Automated run in progress…',
+        failed: 'Automated run could not start',
+      };
+    case 'transition': {
+      const busy = 'Moving this card automatically…';
+      return { busy, underway: busy, failed: 'Automatic move failed' };
+    }
+    case 'upsertLinkedWorkItem': {
+      const busy = 'Filing a linked card…';
+      return { busy, underway: busy, failed: 'Linked card could not be filed' };
+    }
     case 'sendMessage':
-    case 'notify':
-      return { busy: 'Notifying the session…', failed: 'Session could not be notified' };
-    default:
-      return { busy: 'Automation is working on this card…', failed: 'Automation failed' };
+    case 'notify': {
+      const busy = 'Notifying the session…';
+      return { busy, underway: busy, failed: 'Session could not be notified' };
+    }
+    default: {
+      const busy = 'Automation is working on this card…';
+      return { busy, underway: busy, failed: 'Automation failed' };
+    }
   }
+}
+
+/**
+ * A leased `invokeSkill` decision also brackets workspace materialization and
+ * kickoff, so `underway` may claim a run only while the run registry agrees.
+ */
+function leasedInvokeSkillLabel(
+  sessionStatus: SessionRowStatus | undefined,
+  copy: { busy: string; underway: string },
+): string {
+  if (sessionStatus === 'working') return copy.underway;
+  if (sessionStatus === 'initializing') return 'Preparing workspace…';
+  return copy.busy;
 }
 
 /**
@@ -78,7 +120,12 @@ export function boardCardStatus(input: BoardCardStatusInput): BoardCardStatus {
       detail: decision.lastError ?? undefined,
     };
   }
-  if (decision) return { kind: 'busy', label: automationCopy(decision.type).busy };
+  if (decision) {
+    const copy = automationCopy(decision.type);
+    if (decision.status !== 'leased') return { kind: 'busy', label: copy.busy };
+    const label = decision.type === 'invokeSkill' ? leasedInvokeSkillLabel(input.sessionStatus, copy) : copy.underway;
+    return { kind: 'busy', label };
+  }
   // Nothing is moving on its own, so a parked run is the card's live question.
   if (input.proposal) {
     return { kind: 'waiting', label: input.proposal.label, decisionId: input.proposal.decisionId };

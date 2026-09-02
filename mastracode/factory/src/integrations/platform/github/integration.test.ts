@@ -745,7 +745,7 @@ describe('PlatformGithubIntegration', () => {
     const integration = createIntegration();
     const context = {
       auth: fakeAuth(),
-      fleet: { enabled: true },
+      sandbox: { enabled: true, provider: 'stub' },
       storage: {
         generic: seed.integrations.forIntegration('github'),
         sourceControl: seed.sourceControl.forIntegration('github'),
@@ -883,7 +883,8 @@ describe('PlatformGithubIntegration', () => {
     const onEvent = vi.fn();
     const context = {
       auth: fakeAuth(),
-      fleet: { enabled: false },
+      // Only presence is read here; the callback is never invoked.
+      sandbox: (() => ({})) as never,
       storage: {
         generic: seed.integrations.forIntegration('github'),
         sourceControl,
@@ -953,7 +954,7 @@ describe('PlatformGithubIntegration', () => {
     const integration = createIntegration(fetchImpl);
     const context = {
       auth: fakeAuth(),
-      fleet: { enabled: true },
+      sandbox: { enabled: true, provider: 'stub' },
       storage: {
         generic: seed.integrations.forIntegration('github'),
         sourceControl: seed.sourceControl.forIntegration('github'),
@@ -1031,7 +1032,7 @@ describe('PlatformGithubIntegration', () => {
     const integration = createIntegration(fetchImpl);
     const context = {
       auth: fakeAuth(),
-      fleet: { enabled: true },
+      sandbox: { enabled: true, provider: 'stub' },
       storage: {
         generic: seed.integrations.forIntegration('github'),
         sourceControl: seed.sourceControl.forIntegration('github'),
@@ -1079,7 +1080,7 @@ describe('PlatformGithubIntegration', () => {
     const integration = createIntegration(fetchImpl);
     const context = {
       auth: fakeAuth(),
-      fleet: { enabled: true },
+      sandbox: { enabled: true, provider: 'stub' },
       storage: {
         generic: seed.integrations.forIntegration('github'),
         sourceControl: seed.sourceControl.forIntegration('github'),
@@ -1153,6 +1154,77 @@ describe('PlatformGithubIntegration', () => {
         issues: { enabled: false },
       },
     });
+  });
+
+  it('reuses a resolved collaborator permission instead of re-requesting it per card and event', async () => {
+    const fetchImpl = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(json({ permission: 'write', roleName: 'write', user: actor }))
+      .mockResolvedValueOnce(json({ error: 'rate limited' }, 403))
+      .mockResolvedValueOnce(json({ permission: 'read', roleName: 'read', user: actor }));
+    const integration = createIntegration(fetchImpl);
+
+    await expect(integration.getRepositoryCollaboratorPermission(7, 'acme/app', 'Grace')).resolves.toBe('write');
+    await expect(integration.getRepositoryCollaboratorPermission(7, 'acme/app', 'grace')).resolves.toBe('write');
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+
+    // A failed lookup is not cached: the next call for that login retries.
+    await expect(integration.getRepositoryCollaboratorPermission(7, 'acme/app', 'hank')).resolves.toBeUndefined();
+    await expect(integration.getRepositoryCollaboratorPermission(7, 'acme/app', 'hank')).resolves.toBe('read');
+    expect(fetchImpl).toHaveBeenCalledTimes(3);
+  });
+
+  it('shares one in-flight request between overlapping lookups for the same login', async () => {
+    let release!: (value: Response) => void;
+    const fetchImpl = vi.fn<typeof fetch>(() => new Promise<Response>(resolve => (release = resolve)));
+    const integration = createIntegration(fetchImpl);
+
+    const first = integration.getRepositoryCollaboratorPermission(7, 'acme/app', 'grace');
+    const second = integration.getRepositoryCollaboratorPermission(7, 'acme/app', 'GRACE');
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    release(json({ permission: 'write', roleName: 'write', user: actor }));
+    await expect(Promise.all([first, second])).resolves.toEqual(['write', 'write']);
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps a coalesced lookup alive for other callers when one caller's signal aborts", async () => {
+    let release!: (value: Response) => void;
+    const fetchImpl = vi.fn<typeof fetch>(() => new Promise<Response>(resolve => (release = resolve)));
+    const integration = createIntegration(fetchImpl);
+    const aborter = new AbortController();
+
+    const aborted = integration.getRepositoryCollaboratorPermission(7, 'acme/app', 'grace', aborter.signal);
+    const patient = integration.getRepositoryCollaboratorPermission(7, 'acme/app', 'grace');
+    aborter.abort();
+    await expect(aborted).resolves.toBeUndefined();
+
+    release(json({ permission: 'write', roleName: 'write', user: actor }));
+    await expect(patient).resolves.toBe('write');
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    // The shared request never carried the caller's signal.
+    expect((fetchImpl.mock.calls[0]?.[1] as RequestInit).signal?.aborted).toBe(false);
+  });
+
+  it('re-requests a collaborator permission once the cache entry expires', async () => {
+    vi.useFakeTimers();
+    try {
+      const fetchImpl = vi
+        .fn<typeof fetch>()
+        .mockResolvedValueOnce(json({ permission: 'write', roleName: 'write', user: actor }))
+        .mockResolvedValueOnce(json({ permission: 'read', roleName: 'read', user: actor }));
+      const integration = createIntegration(fetchImpl);
+
+      await expect(integration.getRepositoryCollaboratorPermission(7, 'acme/app', 'grace')).resolves.toBe('write');
+      vi.advanceTimersByTime(29 * 60_000);
+      await expect(integration.getRepositoryCollaboratorPermission(7, 'acme/app', 'grace')).resolves.toBe('write');
+      expect(fetchImpl).toHaveBeenCalledTimes(1);
+
+      vi.advanceTimersByTime(2 * 60_000);
+      await expect(integration.getRepositoryCollaboratorPermission(7, 'acme/app', 'grace')).resolves.toBe('read');
+      expect(fetchImpl).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('keeps the reconciliation worker alive when polling is disabled', async () => {

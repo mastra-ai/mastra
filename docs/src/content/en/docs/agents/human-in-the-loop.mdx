@@ -1,6 +1,6 @@
 ---
 title: "Human-in-the-loop | Agents"
-description: Learn how to require approvals and suspend tool execution, plus automatically resume suspended tools while keeping humans in control of agent workflows.
+description: "Add human-in-the-loop controls to Mastra agents with tool approval and suspended execution, so people can provide input before a run resumes or stops."
 packages:
   - "@mastra/core"
   - "@mastra/libsql"
@@ -527,7 +527,7 @@ if (run && toolCall) {
 
 Each returned run includes the suspended tool calls (`toolCallId`, `toolName`, `args`, and `requiresApproval`). Approval suspensions (`requiresApproval: true`) are answered with `approveToolCall()` / `declineToolCall()`, while `suspend()`-based suspensions carry their `suspendPayload` and expect `resumeStream()` with resume data, so you can rebuild the right UI for either flow without keeping any state in memory.
 
-`sendToolApproval()` uses the same storage-backed discovery automatically: when no active run is found in memory for the thread, it looks up the suspended run in storage before failing. If several suspended runs match the thread, pass a `toolCallId` to disambiguate.
+`sendToolApproval()` automatically uses the same storage-backed discovery. If memory contains no active run for the thread, it searches storage for a suspended run before failing. Pass a `toolCallId` when several suspended runs match the thread.
 
 The same discovery is available over HTTP as `GET /agents/:agentId/suspended-runs` and in the client SDK as [`agent.listSuspendedRuns()`](/reference/client-js/agents#listsuspendedruns), so browser-based approval UIs can rediscover pending runs directly.
 

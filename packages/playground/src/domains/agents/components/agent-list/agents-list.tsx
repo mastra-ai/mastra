@@ -83,16 +83,16 @@ export function AgentsList({ agents, isLoading, hasSearch }: AgentsListProps) {
                 </span>
               </EntityList.Cell>
             </EntityList.RowLink>
-            <EntityList.Cell className="justify-center overflow-visible py-0">
+            <EntityList.Cell className="justify-center overflow-visible">
               <AgentProviderDetails agentName={agent.name} provider={agent.provider} modelId={agent.modelId} />
             </EntityList.Cell>
-            <EntityList.Cell className="justify-center overflow-visible py-0">
+            <EntityList.Cell className="justify-center overflow-visible">
               <AgentWorkflowDetails agentName={agent.name} workflows={agent.workflows} />
             </EntityList.Cell>
-            <EntityList.Cell className="justify-center overflow-visible py-0">
+            <EntityList.Cell className="justify-center overflow-visible">
               <AgentSubagentDetails agentName={agent.name} agents={agent.agents} />
             </EntityList.Cell>
-            <EntityList.Cell className="justify-center overflow-visible py-0">
+            <EntityList.Cell className="justify-center overflow-visible">
               <AgentToolsDetails agentName={agent.name} tools={agent.tools} />
             </EntityList.Cell>
           </EntityList.RowWrapper>

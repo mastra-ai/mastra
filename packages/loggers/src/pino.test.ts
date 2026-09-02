@@ -1,5 +1,5 @@
 import { LogLevel, LoggerTransport, MultiLogger } from '@mastra/core/logger';
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 
 import { PinoLogger } from './pino';
 
@@ -31,6 +31,13 @@ class MemoryStream extends LoggerTransport {
   }
 }
 
+// Deterministic wait for the pino transport to flush (no fixed sleeps).
+async function waitForLogs(stream: MemoryStream, count = 1) {
+  await vi.waitFor(async () => {
+    expect((await stream.listLogs()).length).toBeGreaterThanOrEqual(count);
+  });
+}
+
 describe('Logger', () => {
   let memoryStream: MemoryStream;
 
@@ -53,7 +60,7 @@ describe('Logger', () => {
       logger.info('test info message');
 
       // Wait for async logging
-      await new Promise(resolve => setTimeout(resolve, 100));
+      await waitForLogs(memoryStream);
 
       const logs = await memoryStream.listLogs();
 
@@ -84,7 +91,8 @@ describe('MultiLogger', () => {
 
     multiLogger.info(testMessage);
 
-    await new Promise(resolve => setTimeout(resolve, 100));
+    await waitForLogs(memoryStream1);
+    await waitForLogs(memoryStream2);
 
     const logs1 = await memoryStream1.listLogs();
     const logs2 = await memoryStream2.listLogs();
@@ -123,8 +131,7 @@ describe('createLogger', () => {
 
     logger.debug('test message');
 
-    // Increase wait time to ensure logs are processed
-    await new Promise(resolve => setTimeout(resolve, 1000));
+    await waitForLogs(customStream);
 
     const logs = await customStream.listLogs();
 
@@ -155,7 +162,7 @@ describe('PinoLogger mixin option', () => {
 
     logger.info('hello', { userId: 'u1' });
 
-    await new Promise(resolve => setTimeout(resolve, 100));
+    await waitForLogs(memoryStream);
 
     const logs = await memoryStream.listLogs();
 
@@ -180,7 +187,7 @@ describe('PinoLogger mixin option', () => {
     const child = logger.child({ requestId: 'req-9' });
     child.info('handled');
 
-    await new Promise(resolve => setTimeout(resolve, 100));
+    await waitForLogs(memoryStream);
 
     const logs = await memoryStream.listLogs();
 
@@ -189,6 +196,256 @@ describe('PinoLogger mixin option', () => {
       traceId: 'parent-trace',
       requestId: 'req-9',
     });
+  });
+});
+
+describe('PinoLogger observability adapter (__attachObservability)', () => {
+  const TRACE_FIELDS = { trace_id: '0af7651916cd43dd8448eb211c80319c', span_id: 'b7ad6b7169203331' };
+  let memoryStream: MemoryStream;
+
+  beforeEach(() => {
+    memoryStream = new MemoryStream();
+  });
+
+  function makeSink() {
+    const calls: Array<{ level: string; message: string; data?: Record<string, unknown> }> = [];
+    const make = (level: string) => (message: string, data?: Record<string, unknown>) =>
+      calls.push({ level, message, data });
+    return { calls, debug: make('debug'), info: make('info'), warn: make('warn'), error: make('error') };
+  }
+
+  function makeCtx(overrides: Partial<Parameters<PinoLogger['__attachObservability']>[0]> = {}) {
+    const sink = makeSink();
+    return {
+      sink,
+      ctx: {
+        resolveTraceFields: () => TRACE_FIELDS,
+        getLogSink: () => sink,
+        options: { correlation: true, export: true },
+        ...overrides,
+      },
+    };
+  }
+
+  it('injects trace fields into the native record for all destinations', async () => {
+    const logger = new PinoLogger({ transports: { memory: memoryStream } });
+    const { ctx } = makeCtx();
+    logger.__attachObservability(ctx);
+
+    logger.info('traced', { userId: 'u1' });
+    await waitForLogs(memoryStream);
+
+    expect((await memoryStream.listLogs())[0]).toMatchObject({
+      msg: 'traced',
+      userId: 'u1',
+      ...TRACE_FIELDS,
+    });
+  });
+
+  it('omits trace fields when no span is active', async () => {
+    const logger = new PinoLogger({ transports: { memory: memoryStream } });
+    const { ctx } = makeCtx({ resolveTraceFields: () => undefined });
+    logger.__attachObservability(ctx);
+
+    logger.info('untraced');
+    await waitForLogs(memoryStream);
+
+    const record = (await memoryStream.listLogs())[0];
+    expect(record.msg).toBe('untraced');
+    expect(record.trace_id).toBeUndefined();
+    expect(record.span_id).toBeUndefined();
+  });
+
+  it('does not inject trace fields when correlation is disabled', async () => {
+    const logger = new PinoLogger({ transports: { memory: memoryStream } });
+    const { ctx } = makeCtx({ options: { correlation: false, export: true } });
+    logger.__attachObservability(ctx);
+
+    logger.info('uncorrelated');
+    await waitForLogs(memoryStream);
+
+    expect((await memoryStream.listLogs())[0].trace_id).toBeUndefined();
+  });
+
+  it('correlates natively when observability is attached to a pre-bound child logger', async () => {
+    // Common pattern: a module-level base logger, with a bound child handed
+    // to Mastra. The child's pino inherits the root's mixin, so attachment
+    // must flow through the shared context ref to correlate stdout.
+    const base = new PinoLogger({ transports: { memory: memoryStream } });
+    const child = base.child({ service: 'api' });
+    const { ctx } = makeCtx();
+    child.__attachObservability(ctx);
+
+    child.info('from child');
+    await waitForLogs(memoryStream);
+
+    expect((await memoryStream.listLogs())[0]).toMatchObject({
+      msg: 'from child',
+      service: 'api',
+      ...TRACE_FIELDS,
+    });
+  });
+
+  it('preserves user mixin fields; trace fields win on conflict', async () => {
+    const logger = new PinoLogger({
+      transports: { memory: memoryStream },
+      mixin() {
+        return { service: 'api', trace_id: 'user-supplied' };
+      },
+    });
+    const { ctx } = makeCtx();
+    logger.__attachObservability(ctx);
+
+    logger.info('mixed');
+    await waitForLogs(memoryStream);
+
+    expect((await memoryStream.listLogs())[0]).toMatchObject({
+      msg: 'mixed',
+      service: 'api',
+      ...TRACE_FIELDS,
+    });
+  });
+
+  it('exports a LogEvent derived from the same native call', async () => {
+    const logger = new PinoLogger({ transports: { memory: memoryStream } });
+    const { ctx, sink } = makeCtx();
+    logger.__attachObservability(ctx);
+
+    logger.warn('watch out', { code: 42 });
+
+    // Trace identity travels on ExportedLog.traceId/spanId via the
+    // span-correlated sink; data carries only the user payload.
+    expect(sink.calls).toEqual([{ level: 'warn', message: 'watch out', data: { code: 42 } }]);
+  });
+
+  it('keeps user data intact on export — trace identity is not spread into the payload', () => {
+    const { ctx, sink } = makeCtx();
+    const logger = new PinoLogger({ transports: { memory: memoryStream } });
+    logger.__attachObservability(ctx);
+    logger.info('user fields preserved', { trace_id: 'user-supplied' });
+    expect(sink.calls[0]?.data).toEqual({ trace_id: 'user-supplied' });
+  });
+
+  it('does not export when export is disabled but still correlates', async () => {
+    const logger = new PinoLogger({ transports: { memory: memoryStream } });
+    const { ctx, sink } = makeCtx({ options: { correlation: true, export: false } });
+    logger.__attachObservability(ctx);
+
+    logger.info('stdout only');
+    await waitForLogs(memoryStream);
+
+    expect(sink.calls).toEqual([]);
+    expect((await memoryStream.listLogs())[0]).toMatchObject(TRACE_FIELDS);
+  });
+
+  it('never lets a throwing sink break the native log call', async () => {
+    const logger = new PinoLogger({ transports: { memory: memoryStream } });
+    const sink = {
+      debug: () => {},
+      info: () => {
+        throw new Error('sink boom');
+      },
+      warn: () => {},
+      error: () => {},
+    };
+    logger.__attachObservability({
+      resolveTraceFields: () => TRACE_FIELDS,
+      getLogSink: () => sink,
+      options: { correlation: true, export: true },
+    });
+
+    expect(() => logger.info('resilient')).not.toThrow();
+    await waitForLogs(memoryStream);
+    expect((await memoryStream.listLogs())[0]).toMatchObject({ msg: 'resilient' });
+  });
+
+  it('exports an Error passed as the log payload', () => {
+    const logger = new PinoLogger({ transports: { memory: memoryStream } });
+    const { ctx, sink } = makeCtx();
+    logger.__attachObservability(ctx);
+
+    const err = new Error('boom');
+    logger.error('failed', err as any);
+
+    expect(sink.calls).toEqual([
+      {
+        level: 'error',
+        message: 'failed',
+        data: { error: { name: 'Error', message: 'boom', stack: err.stack } },
+      },
+    ]);
+  });
+
+  it('exports tracked exceptions through the sink', () => {
+    const logger = new PinoLogger({ transports: { memory: memoryStream } });
+    const { ctx, sink } = makeCtx();
+    logger.__attachObservability(ctx);
+
+    const err = Object.assign(new Error('tracked boom'), { id: 'ERR_1', domain: 'AGENT', category: 'USER' });
+    logger.trackException(err, { runId: 'r1' });
+
+    expect(sink.calls).toEqual([
+      {
+        level: 'error',
+        message: 'tracked boom',
+        data: { errorId: 'ERR_1', domain: 'AGENT', category: 'USER', runId: 'r1' },
+      },
+    ]);
+  });
+
+  it('forwards details and serializes the Error cause on tracked exceptions', () => {
+    const logger = new PinoLogger({ transports: { memory: memoryStream } });
+    const { ctx, sink } = makeCtx();
+    logger.__attachObservability(ctx);
+
+    const err = Object.assign(new Error('tracked boom', { cause: new Error('root cause') }), {
+      id: 'ERR_1',
+      domain: 'AGENT',
+      category: 'USER',
+      details: { step: 'generate' },
+    });
+    logger.trackException(err);
+
+    expect(sink.calls).toEqual([
+      {
+        level: 'error',
+        message: 'tracked boom',
+        data: {
+          errorId: 'ERR_1',
+          domain: 'AGENT',
+          category: 'USER',
+          details: { step: 'generate' },
+          cause: 'root cause',
+        },
+      },
+    ]);
+  });
+
+  it('does not export tracked exceptions when export is disabled', () => {
+    const logger = new PinoLogger({ transports: { memory: memoryStream } });
+    const { ctx, sink } = makeCtx({ options: { correlation: true, export: false } });
+    logger.__attachObservability(ctx);
+
+    logger.trackException(new Error('silent'));
+
+    expect(sink.calls).toEqual([]);
+  });
+
+  it('propagates correlation and export to child loggers', async () => {
+    const logger = new PinoLogger({ transports: { memory: memoryStream } });
+    const { ctx, sink } = makeCtx();
+    logger.__attachObservability(ctx);
+
+    const child = logger.child({ requestId: 'req-1' });
+    child.info('from child');
+    await waitForLogs(memoryStream);
+
+    expect((await memoryStream.listLogs())[0]).toMatchObject({
+      msg: 'from child',
+      requestId: 'req-1',
+      ...TRACE_FIELDS,
+    });
+    expect(sink.calls).toEqual([{ level: 'info', message: 'from child', data: undefined }]);
   });
 });
 
@@ -217,7 +474,7 @@ describe('PinoLogger customLevels option', () => {
 
     logger.audit('access granted', { resource: '/admin' });
 
-    await new Promise(resolve => setTimeout(resolve, 100));
+    await waitForLogs(memoryStream);
 
     const logs = await memoryStream.listLogs();
 
@@ -252,7 +509,7 @@ describe('PinoLogger redact option', () => {
       token: 'abc-xyz-123',
     });
 
-    await new Promise(resolve => setTimeout(resolve, 100));
+    await waitForLogs(memoryStream);
 
     const logs = await memoryStream.listLogs();
 
@@ -282,7 +539,7 @@ describe('PinoLogger redact option', () => {
       apiKey: 'sk-12345',
     });
 
-    await new Promise(resolve => setTimeout(resolve, 100));
+    await waitForLogs(memoryStream);
 
     const logs = await memoryStream.listLogs();
 
@@ -311,7 +568,7 @@ describe('PinoLogger redact option', () => {
       },
     });
 
-    await new Promise(resolve => setTimeout(resolve, 100));
+    await waitForLogs(memoryStream);
 
     const logs = await memoryStream.listLogs();
 
@@ -344,7 +601,7 @@ describe('PinoLogger.child()', () => {
     serviceLogger.info('User created', { userId: '123' });
 
     // Wait for async logging
-    await new Promise(resolve => setTimeout(resolve, 100));
+    await waitForLogs(memoryStream);
 
     const logs = await memoryStream.listLogs();
 
@@ -386,7 +643,7 @@ describe('PinoLogger.child()', () => {
     requestLogger.info('Processing request', { action: 'create' });
 
     // Wait for async logging
-    await new Promise(resolve => setTimeout(resolve, 100));
+    await waitForLogs(memoryStream);
 
     const logs = await memoryStream.listLogs();
 
@@ -416,7 +673,7 @@ describe('PinoLogger.child()', () => {
     childLogger.error('Error message');
 
     // Wait for async logging
-    await new Promise(resolve => setTimeout(resolve, 100));
+    await waitForLogs(memoryStream);
 
     const logs = await memoryStream.listLogs();
 

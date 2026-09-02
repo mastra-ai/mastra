@@ -1,6 +1,6 @@
 {
   "name": "mastra",
-  "version": "1.26.1-alpha.11",
+  "version": "1.27.3-alpha.8",
   "license": "Apache-2.0",
   "description": "cli for mastra",
   "type": "module",
@@ -19,8 +19,7 @@
     ]
   },
   "files": [
-    "dist",
-    "CHANGELOG.md"
+    "dist"
   ],
   "scripts": {
     "generate:api-manifest": "pnpm --filter @mastra/server generate:api-cli-route-metadata",

@@ -1,11 +1,10 @@
 {
   "name": "@mastra/deployer",
-  "version": "1.62.0-alpha.10",
+  "version": "1.64.0-alpha.7",
   "description": "",
   "type": "module",
   "files": [
-    "dist",
-    "CHANGELOG.md"
+    "dist"
   ],
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -145,7 +144,7 @@
     "tsdown": "0.22.9",
     "tsx": "catalog:",
     "type-fest": "^5.4.4",
-    "typescript": "catalog:",
+    "typescript": "catalog:ts6",
     "vitest": "catalog:",
     "zod": "catalog:"
   },

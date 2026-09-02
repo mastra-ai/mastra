@@ -1,13 +1,12 @@
 {
   "name": "@mastra/otel-exporter",
-  "version": "1.3.10-alpha.2",
+  "version": "1.3.13-alpha.1",
   "description": "OpenTelemetry observability exporter for Mastra - supports OTLP traces and logs with multiple cloud providers",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "files": [
-    "dist",
-    "CHANGELOG.md"
+    "dist"
   ],
   "exports": {
     ".": {

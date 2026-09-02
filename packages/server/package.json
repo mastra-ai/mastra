@@ -1,11 +1,10 @@
 {
   "name": "@mastra/server",
-  "version": "1.62.0-alpha.10",
+  "version": "1.64.0-alpha.7",
   "description": "",
   "type": "module",
   "files": [
     "dist",
-    "CHANGELOG.md",
     "./**/*.d.ts"
   ],
   "main": "dist/index.js",
@@ -103,7 +102,6 @@
     "generate:api-cli-route-metadata": "tsx scripts/generate-api-cli-route-metadata.ts",
     "generate:route-types": "tsx scripts/generate-route-types.ts",
     "check:permissions": "tsx scripts/check-permissions.ts",
-    "check:core-imports": "tsx scripts/check-core-imports.ts",
     "test": "vitest run",
     "lint": "oxlint . && eslint .",
     "lint:fix": "oxlint --fix . && eslint --fix ."
@@ -137,6 +135,7 @@
     "tsdown": "0.22.9",
     "tsx": "catalog:",
     "typescript": "catalog:",
+    "typescript-classic": "npm:typescript@^6.0.3",
     "vitest": "catalog:",
     "zod": "catalog:",
     "zod-to-ts": "^2.1.0"

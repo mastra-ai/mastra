@@ -1,6 +1,6 @@
 ---
 title: "Reference: Mastra class | Core"
-description: "Documentation for the `Mastra` class in Mastra, the core entry point for managing agents, workflows, MCP servers, and server endpoints."
+description: "The Mastra class is the central orchestrator in any Mastra application, managing agents, workflows, storage, logging, observability, and more."
 packages:
   - "@mastra/core"
   - "@mastra/libsql"
@@ -96,6 +96,14 @@ Visit the [Configuration reference](/reference/configuration) for detailed docum
     defaultValue: 'Console logger with INFO level',
   },
   {
+    name: 'loggerOptions',
+    type: '{ correlation?: boolean; export?: boolean }',
+    description:
+      'Controls logger observability behavior. `correlation` injects trace_id/span_id into native log output during traced operations; `export` forwards log records to observability storage.',
+    isOptional: true,
+    defaultValue: '{ correlation: true, export: true }',
+  },
+  {
     name: 'idGenerator',
     type: '(context?: IdGeneratorContext) => string',
     description:
@@ -127,7 +135,7 @@ Visit the [Configuration reference](/reference/configuration) for detailed docum
     type: 'string',
     isOptional: true,
     description:
-      'Deployment environment name (e.g. `production`, `staging`, `development`). When set, automatically attached to all observability signals so they can be filtered by environment without passing `tracingOptions.metadata.environment` on each call. Falls back to `process.env.NODE_ENV` when unset; left undefined if neither is set. Per-call `tracingOptions.metadata.environment` always takes precedence.',
+      'Deployment environment name (e.g. `production`, `staging`, `development`). When set, automatically attached to all observability signals so they can be filtered by environment without passing `tracingOptions.metadata.environment` on each call. When unset, resolves to `development` for `mastra dev` runs, then falls back to `process.env.NODE_ENV`; left undefined if none are set. Per-call `tracingOptions.metadata.environment` always takes precedence.',
   },
   {
     name: 'deployer',

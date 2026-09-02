@@ -1,14 +1,13 @@
 {
   "name": "@mastra/code-sdk",
-  "version": "1.5.0-alpha.10",
+  "version": "1.6.0-alpha.9",
   "description": "Mastra Code SDK: the agent core behind Mastra Code (everything except the TUI) — build your own UIs and surfaces on top of it",
   "type": "module",
   "publishConfig": {
     "access": "public"
   },
   "files": [
-    "dist",
-    "CHANGELOG.md"
+    "dist"
   ],
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -88,7 +87,7 @@
     "eslint": "^10.7.0",
     "tsdown": "0.22.9",
     "tsx": "catalog:",
-    "typescript": "catalog:",
+    "typescript": "catalog:ts6",
     "typescript-eslint": "^8.57.0",
     "vitest": "catalog:"
   },

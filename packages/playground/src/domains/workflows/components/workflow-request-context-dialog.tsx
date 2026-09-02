@@ -46,7 +46,11 @@ export const WorkflowRequestContextDialog = ({ requestContextSchema }: WorkflowR
             <DialogDescription>Set request context values for this workflow run</DialogDescription>
           </DialogHeader>
           <DialogBody>
-            <RequestContextSchemaForm requestContextSchema={requestContextSchema} />
+            {/* The dialog is a React child of the outer workflow form; without this guard,
+                the inner form's Save submit bubbles through the portal and runs the workflow. */}
+            <div onSubmit={e => e.stopPropagation()}>
+              <RequestContextSchemaForm requestContextSchema={requestContextSchema} />
+            </div>
           </DialogBody>
         </DialogContent>
       </Dialog>

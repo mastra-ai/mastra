@@ -1,4 +1,3 @@
-import { v4 as uuid } from '@lukeed/uuid';
 import { coreFeatures } from '@mastra/core/features';
 import { MastraReactProvider } from '@mastra/react';
 import { CalendarClockIcon } from 'lucide-react';
@@ -12,7 +11,15 @@ import { DatasetCrumb } from './domains/datasets/dataset-crumb';
 import { WorkflowLayout } from './domains/workflows/workflow-layout';
 import SignalsOverviewPage from './ee/signals';
 import { SignalsEntityCrumb } from './ee/signals/signals-entity-crumb';
+import { SignalsEntityDetailPage } from './ee/signals/signals-entity-detail-page';
 import { PostHogProvider } from './lib/analytics';
+import {
+  agentIndexLoader,
+  agentThreadsIndexLoader,
+  legacyAgentChatLoader,
+  legacyAgentSettingsLoader,
+  paths,
+} from './lib/app-routing';
 import { Link } from './lib/link';
 import { StudioIndexRedirect } from './lib/studio-index-redirect';
 import { AgentBuilderRoot } from './pages/agent-builder';
@@ -30,6 +37,7 @@ import AgentBuilderSkillsView from './pages/agent-builder/skills/view';
 import Agents from './pages/agents';
 import Agent from './pages/agents/agent';
 import AgentSession from './pages/agents/agent/session';
+import AgentThread from './pages/agents/agent/thread';
 import AgentEvaluate from './pages/agents/agent-evaluate';
 import AgentPlayground from './pages/agents/agent-playground';
 import AgentReview from './pages/agents/agent-review';
@@ -52,7 +60,6 @@ import CmsScorersEditPage from './pages/cms/scorers/edit';
 import Datasets from './pages/datasets';
 import DatasetPage from './pages/datasets/dataset';
 import EditDatasetPage from './pages/datasets/dataset/edit';
-import CompareDatasetExperimentsPage from './pages/datasets/dataset/experiments';
 import DatasetItemPage from './pages/datasets/dataset/item';
 import DatasetItemsComparePage from './pages/datasets/dataset/item/compare';
 import DatasetItemVersionsComparePage from './pages/datasets/dataset/item/versions';
@@ -60,6 +67,7 @@ import DatasetCompareDatasetVersions from './pages/datasets/dataset/versions';
 import CreateDatasetPage from './pages/datasets/new';
 import Evaluation from './pages/evaluation';
 import Experiments from './pages/experiments';
+import CompareExperimentsPage from './pages/experiments/compare';
 import ExperimentPage from './pages/experiments/experiment';
 import ExperimentItemPage from './pages/experiments/experiment/item';
 import IntegrationsPage from './pages/integrations';
@@ -105,7 +113,6 @@ import { StoredScorerCrumb, ScorerCrumb } from '@/domains/scores/scorer-crumb';
 import { ToolCrumb } from '@/domains/tools/tool-crumb';
 import { WorkflowCrumb, WorkflowRunCrumb } from '@/domains/workflows/workflow-crumbs';
 import { LinkComponentProvider } from '@/lib/framework';
-import type { LinkComponentProviderProps } from '@/lib/framework';
 import { navCrumb, navHandle, navHandleWithChildren } from '@/lib/nav';
 import type { CrumbDef, RouteHeaderHandle } from '@/lib/route-header';
 import { PlaygroundQueryClient } from '@/lib/tanstack-query';
@@ -136,56 +143,6 @@ declare global {
     MASTRA_PLATFORM_OBSERVABILITY_ENDPOINT?: string;
   }
 }
-
-const paths: LinkComponentProviderProps['paths'] = {
-  agentLink: (agentId: string) => `/agents/${agentId}/chat/new`,
-  agentToolLink: (agentId: string, toolId: string) => `/agents/${agentId}/tools/${toolId}`,
-  agentSkillLink: (agentId: string, skillName: string, skillPath?: string, workspaceId?: string) =>
-    workspaceId
-      ? `/workspaces/${workspaceId}/skills/${encodeURIComponent(skillName)}?agentId=${encodeURIComponent(agentId)}${skillPath ? `&path=${encodeURIComponent(skillPath)}` : ''}`
-      : `/workspaces`,
-  agentsLink: () => `/agents`,
-  agentNewThreadLink: (agentId: string) => `/agents/${agentId}/chat/new`,
-  agentThreadLink: (agentId: string, threadId: string, messageId?: string) =>
-    messageId ? `/agents/${agentId}/chat/${threadId}?messageId=${messageId}` : `/agents/${agentId}/chat/${threadId}`,
-  workflowsLink: () => `/workflows`,
-  workflowLink: (workflowId: string) => `/workflows/${workflowId}`,
-  schedulesLink: () => `/workflows/schedules`,
-  scheduleLink: (scheduleId: string) => `/workflows/schedules/${encodeURIComponent(scheduleId)}`,
-  networkLink: (networkId: string) => `/networks/v-next/${networkId}/chat`,
-  networkNewThreadLink: (networkId: string) => `/networks/v-next/${networkId}/chat/${uuid()}`,
-  networkThreadLink: (networkId: string, threadId: string) => `/networks/v-next/${networkId}/chat/${threadId}`,
-  scorerLink: (scorerId: string) => `/scorers/${scorerId}`,
-  cmsScorersCreateLink: () => '/cms/scorers/create',
-  cmsScorerEditLink: (scorerId: string) => `/cms/scorers/${scorerId}/edit`,
-  cmsAgentCreateLink: () => '/cms/agents/create',
-  cmsAgentEditLink: (agentId: string) => `/cms/agents/${agentId}/edit`,
-  promptBlockLink: (promptBlockId: string) => `/prompts/${promptBlockId}`,
-  promptBlocksLink: () => '/prompts',
-  cmsPromptBlockCreateLink: () => '/cms/prompts/create',
-  cmsPromptBlockEditLink: (promptBlockId: string) => `/cms/prompts/${promptBlockId}/edit`,
-  toolLink: (toolId: string) => `/tools/${toolId}`,
-  skillLink: (skillName: string, skillPath?: string, workspaceId?: string) =>
-    workspaceId
-      ? `/workspaces/${workspaceId}/skills/${encodeURIComponent(skillName)}${skillPath ? `?path=${encodeURIComponent(skillPath)}` : ''}`
-      : `/workspaces`,
-  workspaceLink: (workspaceId?: string) => (workspaceId ? `/workspaces/${workspaceId}` : `/workspaces`),
-  workspaceSkillLink: (skillName: string, skillPath?: string, workspaceId?: string) =>
-    workspaceId
-      ? `/workspaces/${workspaceId}/skills/${encodeURIComponent(skillName)}${skillPath ? `?path=${encodeURIComponent(skillPath)}` : ''}`
-      : `/workspaces`,
-  workspacesLink: () => `/workspaces`,
-  processorsLink: () => `/processors`,
-  processorLink: (processorId: string) => `/processors/${processorId}`,
-  mcpServerLink: (serverId: string) => `/mcps/${serverId}`,
-  mcpServerToolLink: (serverId: string, toolId: string) => `/mcps/${serverId}/tools/${toolId}`,
-  workflowRunLink: (workflowId: string, runId: string) => `/workflows/${workflowId}/graph/${runId}`,
-  datasetLink: (datasetId: string) => `/datasets/${datasetId}`,
-  datasetItemLink: (datasetId: string, itemId: string) => `/datasets/${datasetId}/items/${itemId}`,
-  datasetItemCompareLink: (datasetId: string, itemId: string, secondItemId: string) =>
-    `/datasets/${datasetId}/items/${itemId}/compare/${secondItemId}`,
-  experimentLink: (experimentId: string) => `/experiments/${experimentId}`,
-};
 
 const RootLayout = () => {
   const navigate = useNavigate();
@@ -349,6 +306,8 @@ export const routes: RouteObject[] = [
     children: [
       { path: '/agents/:agentId/session', element: <AgentSession /> },
       { path: '/agents/:agentId/session/:threadId', element: <AgentSession /> },
+      { path: '/agents/:agentId/threads', loader: agentThreadsIndexLoader },
+      { path: '/agents/:agentId/threads/:threadId', element: <AgentThread /> },
     ],
   },
   {
@@ -388,8 +347,13 @@ export const routes: RouteObject[] = [
       {
         path: '/intelligence',
         element: <SignalsOverviewPage />,
+        handle: navHandle('/intelligence'),
+      },
+      {
+        path: '/intelligence/entities/:entityType/:entityId',
+        element: <SignalsEntityDetailPage />,
         handle: navHandleWithChildren('/intelligence', [
-          { id: 'signals-agent', Component: SignalsEntityCrumb, heading: 'Agent' },
+          { id: 'signals-entity', Component: SignalsEntityCrumb, heading: 'Entity' },
         ]),
       },
       { path: '/traces', element: <Traces />, handle: navHandle('/traces') },
@@ -461,11 +425,12 @@ export const routes: RouteObject[] = [
         children: [
           {
             index: true,
-            loader: ({ params }: LoaderFunctionArgs) => redirect(`/agents/${params.agentId}/chat`),
+            loader: agentIndexLoader,
           },
-          { path: 'chat', element: <Agent /> },
-          { path: 'chat/:threadId', element: <Agent /> },
-          { path: 'settings', element: <Agent view="settings" /> },
+          { path: 'chat', loader: legacyAgentChatLoader },
+          { path: 'chat/:threadId', loader: legacyAgentChatLoader },
+          { path: 'overview', element: <Agent /> },
+          { path: 'settings', loader: legacyAgentSettingsLoader },
           ...(isExperimentalFeatures
             ? [
                 { path: 'editor', element: <AgentPlayground /> },
@@ -478,7 +443,7 @@ export const routes: RouteObject[] = [
             // Channels is configuration, not a tool tab: it now lives in the
             // agent settings view. Keep old links working.
             path: 'channels',
-            loader: ({ params }: LoaderFunctionArgs) => redirect(`/agents/${params.agentId}/settings?tab=channels`),
+            loader: ({ params }: LoaderFunctionArgs) => redirect(`/agents/${params.agentId}/overview?tab=channels`),
           },
         ],
       },
@@ -654,6 +619,13 @@ export const routes: RouteObject[] = [
             },
             { path: '/experiments', element: <Experiments />, handle: navHandle('/experiments') },
             {
+              path: '/experiments/compare',
+              element: <CompareExperimentsPage />,
+              handle: {
+                crumbs: () => [navCrumb('/experiments'), { id: 'experiments-compare', label: 'Compare' }],
+              },
+            },
+            {
               path: '/experiments/:experimentId',
               element: <ExperimentPage />,
               handle: {
@@ -680,17 +652,6 @@ export const routes: RouteObject[] = [
                   } satisfies RouteHeaderHandle,
                 },
               ],
-            },
-            {
-              path: '/datasets/:datasetId/experiments',
-              element: <CompareDatasetExperimentsPage />,
-              handle: {
-                crumbs: () => [
-                  navCrumb('/datasets'),
-                  { id: 'dataset', Component: DatasetCrumb, heading: 'Dataset' },
-                  { id: 'dataset-experiments', label: 'Experiments' },
-                ],
-              },
             },
             {
               path: '/datasets/:datasetId/items/:itemId/compare/:secondItemId',

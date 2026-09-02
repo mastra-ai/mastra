@@ -1,6 +1,6 @@
 ---
 title: "Request context | Server"
-description: Learn how to use Mastra's RequestContext to provide runtime, request-specific configuration to agents.
+description: "Pass request-specific runtime values through Mastra RequestContext to configure agents, workflows, tools, models, storage, and instructions for each request."
 packages:
   - "@mastra/core"
 ---
@@ -159,7 +159,7 @@ You can also use `requestContext` with other options like `agents`, `workflows`,
 
 ### Dynamic instructions
 
-Agent instructions can be provided as an async function, enabling you to resolve prompts at runtime. Combined with `requestContext`, this enables patterns like:
+Provide agent instructions through an async function to resolve prompts at runtime. Together with `requestContext`, this supports patterns like:
 
 - **Personalization**: Tailor instructions based on user attributes, preferences, or tier
 - **Localization**: Adjust tone, language, or behavior based on locale
@@ -270,14 +270,14 @@ Mastra reserves special context keys for security purposes. When set, these keys
 
 The easiest way to set `MASTRA_RESOURCE_ID_KEY` is via the `mapUserToResourceId` callback in auth config:
 
-```typescript prettier:false
+```typescript oxfmt:false
 auth: {
   authenticateToken: async token => verifyToken(token),
   mapUserToResourceId: user => user.id,
 }
 ```
 
-When the resource ID is derived this way, clients can omit `memory.resource` from agent generate and stream request bodies, the server-derived value is used instead (and always takes precedence over any client-provided value). If a request uses memory and neither the body nor the request context provides a resource ID, the server responds with a 400 error.
+When the resource ID is derived this way, clients can omit `memory.resource` from agent generate and stream request bodies. The server-derived value is used instead and always takes precedence over a client-provided value. If a request uses memory and neither the body nor the request context provides a resource ID, the server responds with a 400 error.
 
 You can also set these keys manually in middleware:
 

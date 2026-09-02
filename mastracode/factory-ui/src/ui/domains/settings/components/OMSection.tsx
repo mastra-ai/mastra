@@ -2,6 +2,7 @@ import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
 import { Input } from '@mastra/playground-ui/components/Input';
+import { SettingsRow } from '@mastra/playground-ui/components/SettingsRow';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useState } from 'react';
 
@@ -27,22 +28,6 @@ function choiceToAttachment(choice: AttachmentChoice): 'auto' | boolean {
   if (choice === 'on') return true;
   if (choice === 'off') return false;
   return 'auto';
-}
-
-function Field({ label, hint, children }: { label: string; hint: string; children: React.ReactNode }) {
-  return (
-    <div className="flex flex-col gap-1.5">
-      <div className="flex flex-col">
-        <Txt as="span" variant="ui-sm" className="text-icon5">
-          {label}
-        </Txt>
-        <Txt as="span" variant="ui-xs" className="text-icon3">
-          {hint}
-        </Txt>
-      </div>
-      {children}
-    </div>
-  );
 }
 
 function ThresholdInput({
@@ -130,7 +115,11 @@ export function OMSection({
   };
 
   if (loading) {
-    return <SkeletonRows label="Loading observational-memory settings" rows={4} rowClassName="h-10 w-full" />;
+    return (
+      <div className="px-4 py-3">
+        <SkeletonRows label="Loading observational-memory settings" rows={4} rowClassName="h-10 w-full" />
+      </div>
+    );
   }
 
   const attachmentChoice = attachmentToChoice(config?.observeAttachments ?? 'auto');
@@ -141,16 +130,16 @@ export function OMSection({
   ];
 
   return (
-    <div className="flex flex-col gap-4">
+    <>
       {error && (
-        <Txt as="p" variant="ui-sm" className="text-notice-destructive-fg">
+        <Txt as="p" variant="ui-sm" className="text-notice-destructive-fg px-4 py-3">
           {error}
         </Txt>
       )}
 
       {config && !modelsAvailable && (
-        <div className="flex items-center gap-2">
-          <Badge size="md" variant="warning">
+        <div className="flex items-center gap-2 px-4 py-3">
+          <Badge size="md" variant="yellow">
             Model credentials required
           </Badge>
           <Txt as="p" variant="ui-xs" className="text-icon3">
@@ -159,53 +148,77 @@ export function OMSection({
         </div>
       )}
 
-      <Field label="Observer model" hint="Summarizes the conversation into observations">
-        <ModelCombobox
-          models={models}
-          value={config?.observerModelId ?? ''}
-          placeholder="Select observer model…"
-          disabled={busy}
-          onValueChange={modelId => switchModel('observer', modelId)}
-        />
-      </Field>
-
-      <Field label="Reflector model" hint="Distills observations into longer-term memory">
-        <ModelCombobox
-          models={models}
-          value={config?.reflectorModelId ?? ''}
-          placeholder="Select reflector model…"
-          disabled={busy}
-          onValueChange={modelId => switchModel('reflector', modelId)}
-        />
-      </Field>
-
-      <Field label="Messages before observation" hint="Message tokens processed before the observer runs.">
-        {config && (
-          <ThresholdInput
-            key={config.observationThreshold}
-            value={config.observationThreshold}
+      <SettingsRow variant="factory" label="Observer model" description="Summarizes the conversation into observations">
+        <div className="w-full max-w-72">
+          <ModelCombobox
+            models={models}
+            value={config?.observerModelId ?? ''}
+            placeholder="Select observer model…"
             disabled={busy}
-            onCommit={observationThreshold => {
-              thresholdsMutation.mutate({ observationThreshold });
-            }}
+            onValueChange={modelId => switchModel('observer', modelId)}
           />
-        )}
-      </Field>
+        </div>
+      </SettingsRow>
 
-      <Field label="Observations before reflection" hint="Observation tokens accumulated before the reflector runs.">
-        {config && (
-          <ThresholdInput
-            key={config.reflectionThreshold}
-            value={config.reflectionThreshold}
+      <SettingsRow
+        variant="factory"
+        label="Reflector model"
+        description="Distills observations into longer-term memory"
+      >
+        <div className="w-full max-w-72">
+          <ModelCombobox
+            models={models}
+            value={config?.reflectorModelId ?? ''}
+            placeholder="Select reflector model…"
             disabled={busy}
-            onCommit={reflectionThreshold => {
-              thresholdsMutation.mutate({ reflectionThreshold });
-            }}
+            onValueChange={modelId => switchModel('reflector', modelId)}
           />
-        )}
-      </Field>
+        </div>
+      </SettingsRow>
 
-      <Field label="Observe attachments" hint="Whether attached files are included in observations">
+      <SettingsRow
+        variant="factory"
+        label="Messages before observation"
+        description="Message tokens processed before the observer runs."
+      >
+        {config && (
+          <div className="w-full max-w-40">
+            <ThresholdInput
+              key={config.observationThreshold}
+              value={config.observationThreshold}
+              disabled={busy}
+              onCommit={observationThreshold => {
+                thresholdsMutation.mutate({ observationThreshold });
+              }}
+            />
+          </div>
+        )}
+      </SettingsRow>
+
+      <SettingsRow
+        variant="factory"
+        label="Observations before reflection"
+        description="Observation tokens accumulated before the reflector runs."
+      >
+        {config && (
+          <div className="w-full max-w-40">
+            <ThresholdInput
+              key={config.reflectionThreshold}
+              value={config.reflectionThreshold}
+              disabled={busy}
+              onCommit={reflectionThreshold => {
+                thresholdsMutation.mutate({ reflectionThreshold });
+              }}
+            />
+          </div>
+        )}
+      </SettingsRow>
+
+      <SettingsRow
+        variant="factory"
+        label="Observe attachments"
+        description="Whether attached files are included in observations"
+      >
         <ButtonsGroup spacing="close" role="group" aria-label="Observe attachments">
           {attachmentOptions.map(option => (
             <Button
@@ -220,7 +233,7 @@ export function OMSection({
             </Button>
           ))}
         </ButtonsGroup>
-      </Field>
-    </div>
+      </SettingsRow>
+    </>
   );
 }

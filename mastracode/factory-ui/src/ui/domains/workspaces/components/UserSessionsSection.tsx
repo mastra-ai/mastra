@@ -3,8 +3,9 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@mastra/playgr
 import { MainSidebar } from '@mastra/playground-ui/components/MainSidebar';
 import { toast } from '@mastra/playground-ui/components/Toaster';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { SidebarSectionHeading } from '../../../SidebarSectionHeading';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { Plus } from 'lucide-react';
+import { MessageSquare, Plus } from 'lucide-react';
 import { useState } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router';
 
@@ -13,35 +14,14 @@ import { queryKeys } from '../../../../api/keys';
 import { useFactoryAuth } from '../../../../hooks/useFactoryAuth';
 import { useFactoryQuery } from '../../../../hooks/useFactories';
 import { useActiveRunResources } from '../../../../hooks/useActiveRunResources';
-import { useWorkspaceAttentionState } from '../../../../hooks/useWorkspaceAttention';
 import { AGENT_CONTROLLER_ID } from '../../chat/services/constants';
 import { removeCachedSession, useWorkspacesQuery } from '../../../../hooks/useWorkspaces';
 import { usePinnedSessions } from '../hooks/usePinnedSessions';
 import { deleteUserSession, regenerateSessionTitle } from '../services/user-sessions';
 import type { FactoryUserSession } from '../services/user-sessions';
-import { getUserSessionLabel, getUserSessionTooltip } from '../services/sessionPresentation';
+import { getSessionOwnerDetails, getUserSessionLabel } from '../services/sessionPresentation';
 import { SessionNavRow } from './SessionNavRow';
-import type { SessionRowStatus } from './SessionNavRow';
-
-function userSessionStatus({
-  session,
-  running,
-  attention,
-}: {
-  session: FactoryUserSession;
-  running: boolean;
-  attention: boolean;
-}): SessionRowStatus | undefined {
-  if (running) return 'working';
-  if (!session.materializedAt) return 'initializing';
-  if (attention) return 'ready';
-  return undefined;
-}
-
-/** WorkOS user ids are long and opaque; keep enough to tell owners apart. */
-function truncateOwnerId(userId: string): string {
-  return userId.length > 13 ? `${userId.slice(0, 13)}…` : userId;
-}
+import { sessionRowStatus } from '../services/sessionStatus';
 
 export function UserSessionsSection() {
   const { baseUrl } = useApiConfig();
@@ -69,10 +49,6 @@ export function UserSessionsSection() {
   const runningBySessionId = useActiveRunResources({
     agentControllerId: AGENT_CONTROLLER_ID,
     resourceIds: sessions.map(session => session.sessionId),
-  });
-  const { attentionByPath: attentionBySessionId, clearAttention } = useWorkspaceAttentionState({
-    projectRepositoryId: repository?.projectRepositoryId,
-    sessionKind: 'user',
   });
   const invalidate = () => {
     void queryClient.invalidateQueries({ queryKey: queryKeys.sessions(repository?.projectRepositoryId) });
@@ -124,21 +100,23 @@ export function UserSessionsSection() {
   const pending = deleteSession.isPending;
 
   return (
-    <section className="flex flex-col gap-2" aria-label="User sessions">
-      <div className="flex items-center justify-between px-1">
-        <Txt as="span" variant="ui-xs" className="text-icon3 tracking-wide uppercase">
-          User Sessions
-        </Txt>
-        <Button
-          variant="ghost"
-          size="icon-sm"
-          aria-label="New user session"
-          onClick={() => void navigate(`/factories/${factoryId}/user/new/${crypto.randomUUID()}`)}
-          disabled={pending}
-        >
-          <Plus size={15} />
-        </Button>
-      </div>
+    <section className="flex flex-col gap-1" aria-label="User sessions">
+      <SidebarSectionHeading
+        icon={<MessageSquare />}
+        action={
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            aria-label="New user session"
+            onClick={() => void navigate(`/factories/${factoryId}/user/new/${crypto.randomUUID()}`)}
+            disabled={pending}
+          >
+            <Plus size={15} />
+          </Button>
+        }
+      >
+        User Sessions
+      </SidebarSectionHeading>
 
       <div className="flex flex-col gap-1">
         <MainSidebar.NavList>
@@ -147,28 +125,27 @@ export function UserSessionsSection() {
             const url = `/factories/${factoryId}/user/threads/${session.sessionId}`;
             const active = location.pathname === url;
 
-            const status = userSessionStatus({
-              session,
+            const status = sessionRowStatus({
               running: runningBySessionId[session.sessionId] === true,
-              attention: attentionBySessionId[session.sessionId] === true,
+              initializing: !session.materializedAt,
             });
             return (
               <SessionNavRow
                 key={session.sessionId}
                 name={name}
-                title={getUserSessionTooltip(session)}
-                // No org-member display-name lookup exists in factory-ui yet, so
-                // non-owned sessions show a truncated owner id.
-                owner={viewerUserId && !isOwn(session) ? truncateOwnerId(session.userId) : undefined}
+                preview={{
+                  kind: 'User session',
+                  owner: getSessionOwnerDetails(session, auth.data?.user),
+                  branch: session.branch,
+                  baseBranch: session.baseBranch,
+                  updatedAt: session.updatedAt,
+                }}
                 url={url}
                 active={active}
                 disabled={pending}
                 status={status}
                 pinned={pinnedSessions.has(session.sessionId)}
-                onSelect={() => {
-                  clearAttention(session.sessionId);
-                  void navigate(url);
-                }}
+                onSelect={() => void navigate(url)}
                 onPinChange={pinned => setPinned(session.sessionId, pinned)}
                 // The DELETE route is owner-only and 404s for non-owners, which
                 // deleteUserSession treats as an idempotent success; offering

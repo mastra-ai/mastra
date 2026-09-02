@@ -3127,6 +3127,134 @@ Premium instructions.
 
       warnSpy.mockRestore();
     });
+
+    it('should rethrow a coded TypeError (ERR_INVALID_ARG_TYPE) from source.exists instead of warning', async () => {
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+      const inner = createMockFilesystem({});
+      const source: SkillSource = {
+        ...inner,
+        exists: vi.fn(async () => {
+          // Shape Node's fs/path helpers throw when handed a non-string path.
+          throw Object.assign(new TypeError('The "path" argument must be of type string. Received function workdir'), {
+            code: 'ERR_INVALID_ARG_TYPE',
+          });
+        }),
+      };
+
+      const skills = new WorkspaceSkillsImpl({ skills: ['.mastracode/skills'], source });
+
+      await expect(skills.list()).rejects.toThrow(/must be of type string/);
+      expect(warnSpy).not.toHaveBeenCalledWith(expect.stringContaining('Cannot access skills path'));
+
+      warnSpy.mockRestore();
+    });
+
+    it('should warn and continue for a bare TypeError (e.g. fetch network failure) from source.exists', async () => {
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+      const inner = createMockFilesystem({});
+      const source: SkillSource = {
+        ...inner,
+        exists: vi.fn(async () => {
+          // `fetch` rejects network failures with a code-less TypeError.
+          throw new TypeError('fetch failed');
+        }),
+      };
+
+      const skills = new WorkspaceSkillsImpl({ skills: ['.mastracode/skills'], source });
+
+      await expect(skills.list()).resolves.toEqual([]);
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('Cannot access skills path ".mastracode/skills"'));
+
+      warnSpy.mockRestore();
+    });
+
+    it('should rethrow ERR_INVALID_ARG_TYPE errors from source.exists instead of warning', async () => {
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+      const inner = createMockFilesystem({});
+      const source: SkillSource = {
+        ...inner,
+        exists: vi.fn(async () => {
+          throw Object.assign(new Error('bad argument'), { code: 'ERR_INVALID_ARG_TYPE' });
+        }),
+      };
+
+      const skills = new WorkspaceSkillsImpl({ skills: ['.mastracode/skills'], source });
+
+      await expect(skills.list()).rejects.toThrow('bad argument');
+      expect(warnSpy).not.toHaveBeenCalledWith(expect.stringContaining('Cannot access skills path'));
+
+      warnSpy.mockRestore();
+    });
+
+    it('should rethrow ERR_INVALID_ARG_TYPE from a child SKILL.md probe during directory scan', async () => {
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+      const inner = createMockFilesystem({
+        '/skills/one/SKILL.md': '---\nname: one\ndescription: One\n---\n# One',
+      });
+      const source: SkillSource = {
+        ...inner,
+        exists: vi.fn(async (path: string) => {
+          if (path === '/skills/one/SKILL.md') {
+            throw Object.assign(new TypeError('bad child path'), { code: 'ERR_INVALID_ARG_TYPE' });
+          }
+          return inner.exists(path);
+        }),
+      };
+
+      const skills = new WorkspaceSkillsImpl({ skills: ['/skills'], source });
+
+      await expect(skills.list()).rejects.toThrow('bad child path');
+      expect(errorSpy).not.toHaveBeenCalledWith(expect.stringContaining('Failed to load skill'), expect.anything());
+
+      errorSpy.mockRestore();
+    });
+
+    it('should rethrow ERR_INVALID_ARG_TYPE surfaced from a glob-resolved entry', async () => {
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+      const inner = createMockFilesystem({
+        '/packages/a/skills/one/SKILL.md': '---\nname: one\ndescription: One\n---\n# One',
+      });
+      const source: SkillSource = {
+        ...inner,
+        exists: vi.fn(async (path: string) => {
+          if (path === '/packages/a/skills') {
+            throw Object.assign(new TypeError('bad glob entry'), { code: 'ERR_INVALID_ARG_TYPE' });
+          }
+          return inner.exists(path);
+        }),
+      };
+
+      const skills = new WorkspaceSkillsImpl({ skills: ['/packages/*/skills'], source });
+
+      await expect(skills.list()).rejects.toThrow('bad glob entry');
+      expect(errorSpy).not.toHaveBeenCalledWith(expect.stringContaining('Failed to load skill'), expect.anything());
+
+      errorSpy.mockRestore();
+    });
+
+    it('should still warn and continue for access errors from source.exists', async () => {
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+      const inner = createMockFilesystem({});
+      const source: SkillSource = {
+        ...inner,
+        exists: vi.fn(async () => {
+          throw Object.assign(new Error('EACCES: permission denied'), { code: 'EACCES' });
+        }),
+      };
+
+      const skills = new WorkspaceSkillsImpl({ skills: ['.mastracode/skills'], source });
+
+      await expect(skills.list()).resolves.toEqual([]);
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('Cannot access skills path ".mastracode/skills"'));
+
+      warnSpy.mockRestore();
+    });
   });
 
   // ===========================================================================

@@ -1,11 +1,10 @@
 {
   "name": "@mastra/evals",
-  "version": "1.9.0",
+  "version": "1.10.0-alpha.1",
   "description": "",
   "type": "module",
   "files": [
-    "dist",
-    "CHANGELOG.md"
+    "dist"
   ],
   "homepage": "https://mastra.ai",
   "repository": {
@@ -59,6 +58,26 @@
         "default": "./dist/checks.cjs"
       }
     },
+    "./vitest": {
+      "import": {
+        "types": "./dist/vitest/index.d.ts",
+        "default": "./dist/vitest/index.js"
+      },
+      "require": {
+        "types": "./dist/vitest/index.d.ts",
+        "default": "./dist/vitest/index.cjs"
+      }
+    },
+    "./vitest/setup": {
+      "import": {
+        "types": "./dist/vitest/setup.d.ts",
+        "default": "./dist/vitest/setup.js"
+      },
+      "require": {
+        "types": "./dist/vitest/setup.d.ts",
+        "default": "./dist/vitest/setup.cjs"
+      }
+    },
     "./package.json": "./package.json"
   },
   "scripts": {
@@ -80,7 +99,13 @@
     "string-similarity": "^4.0.4"
   },
   "peerDependencies": {
-    "@mastra/core": ">=1.0.0-0 <2.0.0-0"
+    "@mastra/core": ">=1.0.0-0 <2.0.0-0",
+    "vitest": ">=3.0.0 <5.0.0"
+  },
+  "peerDependenciesMeta": {
+    "vitest": {
+      "optional": true
+    }
   },
   "devDependencies": {
     "@ai-sdk/openai": "^1.3.24",

@@ -929,6 +929,66 @@ describe('PlatformGithubEventWorker', () => {
     expect(reconcileIssuesFactoryState).toHaveBeenCalledTimes(4);
   });
 
+  it('sweeps once on the first tick and then hourly by default', async () => {
+    const settings = createSettingsStorage();
+    const fetchImpl = vi.fn<typeof fetch>(async input => {
+      const url = new URL(String(input));
+      if (url.pathname.endsWith('/installations')) {
+        return json({ installations: [{ installationId: 7, usable: true, suspendedAt: null }] });
+      }
+      if (url.pathname.endsWith('/installations/7/repositories')) {
+        return json({ repositories: [{ id: 101, fullName: 'acme/repo' }] });
+      }
+      throw new Error(`Unexpected request: ${url}`);
+    });
+    let clock = 1_000_000;
+    const reconcileFactoryState = vi.fn<GithubPullRequestReconciler>(async () => ({
+      repositories: 1,
+      checked: 1,
+      merged: 0,
+      closed: 0,
+      failed: 0,
+      errors: [],
+    }));
+    const reconcileIssuesFactoryState = vi.fn<GithubIssueReconciler>(async () => ({
+      repositories: 1,
+      checked: 1,
+      updated: 0,
+      closed: 0,
+      failed: 0,
+      errors: [],
+    }));
+    const worker = createWorker({
+      fetchImpl,
+      storage: settings.storage,
+      now: () => clock,
+      reconcileFactoryState,
+      reconcileIssuesFactoryState,
+      intervalMs: 5 * 60_000,
+      pollEventsEnabled: false,
+    });
+
+    await worker.init(createDeps());
+    await worker.start();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(reconcileFactoryState).toHaveBeenCalledTimes(1);
+    expect(reconcileIssuesFactoryState).toHaveBeenCalledTimes(1);
+
+    // Eleven more five-minute ticks stay inside the hour: no second sweep.
+    for (let tick = 0; tick < 11; tick += 1) {
+      clock += 5 * 60_000;
+      await vi.advanceTimersByTimeAsync(5 * 60_000);
+    }
+    expect(reconcileFactoryState).toHaveBeenCalledTimes(1);
+    expect(reconcileIssuesFactoryState).toHaveBeenCalledTimes(1);
+
+    clock += 5 * 60_000;
+    await vi.advanceTimersByTimeAsync(5 * 60_000);
+    await worker.stop();
+    expect(reconcileFactoryState).toHaveBeenCalledTimes(2);
+    expect(reconcileIssuesFactoryState).toHaveBeenCalledTimes(2);
+  });
+
   it('reconciles without tailing events when event polling is disabled', async () => {
     const settings = createSettingsStorage();
     const dispatch = vi.fn<typeof dispatchGithubWebhook>();

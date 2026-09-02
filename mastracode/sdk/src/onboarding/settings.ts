@@ -227,11 +227,13 @@ export interface GlobalSettings {
      * Active model pack ID. Built-in packs use their id directly ("anthropic",
      * "openai"). Custom packs use "custom:<name>".
      * When set, models are resolved from the pack at startup so pack updates
-     * (e.g. new model versions) apply automatically.
-     * Cleared when the user manually overrides via /models (falls back to modeDefaults).
+     * (e.g. new model versions) apply automatically. Built-in packs may layer
+     * explicit modePackOverrides over these defaults.
      */
     activeModelPackId: string | null;
-    /** Explicit per-mode overrides — used when no activeModelPackId is set. */
+    /** Per-mode overrides keyed by built-in pack ID. */
+    modePackOverrides: Record<string, Record<string, string>>;
+    /** Explicit per-mode defaults — used when no activeModelPackId is set. */
     modeDefaults: Record<string, string>;
     /**
      * Per-mode reasoning-effort defaults (e.g. { build: "high", plan: "xhigh" }).
@@ -345,6 +347,8 @@ export interface SignalSettings {
   unixSocketPubSub: boolean;
   /** Experimental: enable GitHub PR subscription signals backed by gitcrawl. */
   experimentalGithubSignals: boolean;
+  /** Poll interval for GitHub PR subscriptions. */
+  githubPollIntervalMs: number;
 }
 
 export interface ObservabilityResourceConfig {
@@ -363,6 +367,10 @@ export interface ObservabilitySettings {
 
 /** Auth key prefix for observability tokens stored per-resource in auth.json */
 export const OBSERVABILITY_AUTH_PREFIX = 'observability:';
+
+export const GITHUB_POLL_INTERVAL_DEFAULT_MS = 300_000;
+export const GITHUB_POLL_INTERVAL_MIN_MS = 10_000;
+export const GITHUB_POLL_INTERVAL_MAX_MS = 2_147_483_647;
 
 export const STORAGE_DEFAULTS: StorageSettings = {
   backend: 'libsql',
@@ -386,6 +394,7 @@ const DEFAULTS: GlobalSettings = {
   },
   models: {
     activeModelPackId: null,
+    modePackOverrides: {},
     modeDefaults: {},
     modeThinkingDefaults: {},
     activeOmPackId: null,
@@ -424,7 +433,11 @@ const DEFAULTS: GlobalSettings = {
   },
   shellPassthrough: { mode: 'default' },
   voice: { enabled: false, engine: defaultVoiceEngine(), provider: DEFAULT_STT_PROVIDER },
-  signals: { unixSocketPubSub: false, experimentalGithubSignals: false },
+  signals: {
+    unixSocketPubSub: false,
+    experimentalGithubSignals: false,
+    githubPollIntervalMs: GITHUB_POLL_INTERVAL_DEFAULT_MS,
+  },
   mcp: { claudeCodeGlobal: false, codexGlobal: false },
   observability: { resources: {}, localTracing: false },
 };
@@ -445,7 +458,8 @@ function rememberLoadedSettings(settings: GlobalSettings): GlobalSettings {
 function signalSettingsEqual(left: SignalSettings, right: SignalSettings): boolean {
   return (
     left.unixSocketPubSub === right.unixSocketPubSub &&
-    left.experimentalGithubSignals === right.experimentalGithubSignals
+    left.experimentalGithubSignals === right.experimentalGithubSignals &&
+    left.githubPollIntervalMs === right.githubPollIntervalMs
   );
 }
 
@@ -470,6 +484,21 @@ function parseModeThinkingDefaults(value: unknown): Record<string, ThinkingLevel
   return result;
 }
 
+function parseModePackOverrides(value: unknown): Record<string, Record<string, string>> {
+  if (!value || typeof value !== 'object') return {};
+  const result: Record<string, Record<string, string>> = {};
+  for (const [packId, overrides] of Object.entries(value as Record<string, unknown>)) {
+    if (!overrides || typeof overrides !== 'object') continue;
+    const parsedOverrides = Object.fromEntries(
+      Object.entries(overrides as Record<string, unknown>).filter(
+        (entry): entry is [string, string] => typeof entry[1] === 'string' && entry[1].length > 0,
+      ),
+    );
+    if (Object.keys(parsedOverrides).length > 0) result[packId] = parsedOverrides;
+  }
+  return result;
+}
+
 function parseQuietModeMaxToolPreviewLines(value: unknown): number {
   const rawValue =
     typeof value === 'number' && Number.isFinite(value) ? value : DEFAULTS.preferences.quietModeMaxToolPreviewLines;
@@ -488,6 +517,13 @@ function parsePreferences(rawPreferences: unknown): GlobalSettings['preferences'
   };
 }
 
+function parseGithubPollIntervalMs(value: unknown): number {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return DEFAULTS.signals.githubPollIntervalMs;
+  const intervalMs = Math.floor(value);
+  if (intervalMs < GITHUB_POLL_INTERVAL_MIN_MS) return DEFAULTS.signals.githubPollIntervalMs;
+  return Math.min(intervalMs, GITHUB_POLL_INTERVAL_MAX_MS);
+}
+
 function parseSignalSettings(rawSignals: unknown): SignalSettings {
   const raw = rawSignals && typeof rawSignals === 'object' ? (rawSignals as Record<string, unknown>) : {};
   return {
@@ -497,6 +533,7 @@ function parseSignalSettings(rawSignals: unknown): SignalSettings {
       typeof raw.experimentalGithubSignals === 'boolean'
         ? raw.experimentalGithubSignals
         : DEFAULTS.signals.experimentalGithubSignals,
+    githubPollIntervalMs: parseGithubPollIntervalMs(raw.githubPollIntervalMs),
   };
 }
 
@@ -811,7 +848,12 @@ function migrateFromAuth(settingsPath: string): boolean {
       const raw = JSON.parse(readFileSync(settingsPath, 'utf-8'));
       settings = {
         onboarding: { ...DEFAULTS.onboarding, ...raw.onboarding },
-        models: { ...DEFAULTS.models, ...raw.models },
+        models: {
+          ...DEFAULTS.models,
+          ...raw.models,
+          modePackOverrides: parseModePackOverrides(raw.models?.modePackOverrides),
+          modeThinkingDefaults: parseModeThinkingDefaults(raw.models?.modeThinkingDefaults),
+        },
         preferences: parsePreferences(raw.preferences),
         storage: {
           ...STORAGE_DEFAULTS,
@@ -938,6 +980,7 @@ export function loadSettings(filePath: string = getSettingsPath()): GlobalSettin
       models: {
         ...DEFAULTS.models,
         ...raw.models,
+        modePackOverrides: parseModePackOverrides(raw.models?.modePackOverrides),
         modeThinkingDefaults: parseModeThinkingDefaults(raw.models?.modeThinkingDefaults),
       },
       preferences: parsePreferences(raw.preferences),
@@ -1069,6 +1112,14 @@ export function resolveThreadActiveModelPackId(
  * @param builtinPacks  Built-in packs for the current provider access
  *                      (from `getAvailableModePacks`). Pass `[]` if unavailable.
  */
+export function resolveModePackModels(
+  settings: GlobalSettings,
+  pack: { id: string; models: Record<string, string> },
+): Record<string, string> {
+  if (pack.id.startsWith('custom:') || pack.id === 'custom') return pack.models;
+  return { ...pack.models, ...settings.models.modePackOverrides?.[pack.id] };
+}
+
 export function resolveModelDefaults(
   settings: GlobalSettings,
   builtinPacks: Array<{ id: string; models: Record<string, string> }>,
@@ -1087,7 +1138,7 @@ export function resolveModelDefaults(
 
   // Built-in pack
   const builtin = builtinPacks.find(p => p.id === activeModelPackId);
-  if (builtin) return builtin.models;
+  if (builtin) return resolveModePackModels(settings, builtin);
 
   // Unknown pack id — fall through
   return modeDefaults;

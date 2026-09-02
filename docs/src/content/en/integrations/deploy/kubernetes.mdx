@@ -1,6 +1,6 @@
 ---
 title: "Kubernetes | Deploy"
-description: "Deploy a Mastra application across multiple pods on Kubernetes with shared pub/sub and storage."
+description: "Deploy and scale Mastra across multiple Kubernetes pods with shared storage, durable agents, external coordination, health checks, and ingress."
 ---
 
 import Steps from "@site/src/components/Steps";
@@ -11,7 +11,7 @@ import StepItem from "@site/src/components/StepItem";
 Run a Mastra application across multiple pods on [Kubernetes](https://kubernetes.io/), so it scales horizontally behind a load balancer. Because each pod is a separate process, the pods must share a pub/sub backend and a database, otherwise work started on one pod is invisible to the others.
 
 :::note
-This guide covers deploying the [Mastra server](/docs/server/overview). If you're using a [server adapter](/docs/server/server-adapters) or [web framework](/docs/deployment/web-framework), deploy the way you normally would for that framework.
+This guide covers deploying the [Mastra server](/docs/server/overview) with hand-written manifests. To deploy Mastra Server and Studio with a managed chart instead, see [Kubernetes (Helm)](/integrations/deploy/kubernetes-helm). If you're using a [server adapter](/docs/server/server-adapters) or [web framework](/docs/deployment/web-framework), deploy the way you normally would for that framework.
 :::
 
 :::beta

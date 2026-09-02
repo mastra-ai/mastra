@@ -1,7 +1,7 @@
 import { format } from 'date-fns';
 import { BanIcon, ClockIcon } from 'lucide-react';
-import { Chip } from '../Chip';
-import { Tooltip, TooltipContent, TooltipTrigger } from '../Tooltip';
+import { Badge } from '../Badge/Badge';
+import { ITEM_LIST_VERSION_STATUS_LABELS } from './helpers';
 import { ItemListCell } from './item-list-cell';
 import { cn } from '@/lib/utils';
 
@@ -21,31 +21,21 @@ export function ItemListVersionCell({ version, date, isLatest, isDeleted }: Item
         })}
       >
         <strong className="font-normal">v. {version}</strong>
-        <em className="text-ui-sm text-neutral2 font-normal">
+        <em className={cn('text-ui-sm', 'font-normal', 'text-neutral2')}>
           {date ? format(new Date(date), 'MMM d, yyyy HH:mm') : null}
         </em>
       </div>
       {(isLatest || isDeleted) && (
         <div className="flex items-center gap-1">
           {isLatest && (
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Chip color="blue">
-                  <ClockIcon />
-                </Chip>
-              </TooltipTrigger>
-              <TooltipContent>Latest version</TooltipContent>
-            </Tooltip>
+            <span className="inline-flex" role="img" aria-label={ITEM_LIST_VERSION_STATUS_LABELS.latest}>
+              <Badge variant="blue" size="sm" icon={<ClockIcon />} />
+            </span>
           )}
           {isDeleted && (
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Chip color="red">
-                  <BanIcon />
-                </Chip>
-              </TooltipTrigger>
-              <TooltipContent>Deleted in this version</TooltipContent>
-            </Tooltip>
+            <span className="inline-flex" role="img" aria-label={ITEM_LIST_VERSION_STATUS_LABELS.deleted}>
+              <Badge variant="red" size="sm" icon={<BanIcon />} />
+            </span>
           )}
         </div>
       )}

@@ -1,12 +1,16 @@
 import { randomUUID } from 'node:crypto';
 
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import type { SourceControlSession } from '../storage/domains/source-control/base.js';
 import { SourceControlStorageInMemory } from '../storage/domains/source-control/inmemory.js';
 import type { WorkItemRow, WorkItemsStorage } from '../storage/domains/work-items/base.js';
-import type { MaterializationSandbox } from './fleet.js';
 import { SessionRetirementCoordinator } from './session-retirement.js';
+import { __clearSessionSandboxesForTests, getSessionSandbox, peekSessionSandbox } from './session-sandbox.js';
+
+afterEach(() => {
+  __clearSessionSandboxesForTests();
+});
 
 function workItem(sessionId: string): WorkItemRow {
   const session = { sessionId, branch: 'factory/issue-1', threadId: 'thread-1', startedBy: 'user-1' };
@@ -79,7 +83,7 @@ function seedRepositoryLink(storage: SourceControlStorageInMemory, teardownComma
 }
 
 async function seedSession(storage: SourceControlStorageInMemory): Promise<SourceControlSession> {
-  const session = await storage.sessions.create({
+  return storage.sessions.create({
     sessionId: randomUUID(),
     projectRepositoryId: 'repo-link-1',
     orgId: 'org-1',
@@ -87,20 +91,27 @@ async function seedSession(storage: SourceControlStorageInMemory): Promise<Sourc
     branch: 'factory/issue-1',
     baseBranch: 'main',
   });
-  Object.assign(session, {
-    sandboxId: 'sandbox-1',
-    sandboxWorkdir: '/workspace/mastra',
-    materializedAt: new Date(),
-  });
-  return session;
 }
 
-function sandbox(calls: string[], teardownExitCode = 0, teardownStderr = 'teardown stderr'): MaterializationSandbox {
-  return {
-    id: 'sandbox-1',
-    start: async () => {},
-    getInfo: async () => ({ metadata: {} }),
-    executeCommand: async (command, args) => {
+/** Seed a live fake sandbox into the per-process session memo. */
+function seedMemoSandbox(
+  session: SourceControlSession,
+  calls: string[],
+  { teardownExitCode = 0, teardownStderr = 'teardown stderr', failStop = false } = {},
+) {
+  const fake = {
+    id: `sbx-${session.id}`,
+    provider: 'stub',
+    start: vi.fn(async () => {}),
+    stop: vi.fn(async () => {
+      if (failStop) throw new Error('stop failed');
+      calls.push('stop');
+    }),
+    destroy: vi.fn(async () => {
+      if (failStop) throw new Error('destroy failed');
+      calls.push('destroy');
+    }),
+    executeCommand: async (command: string, args?: string[]) => {
       const script = command === 'sh' && args?.[0] === '-c' ? args[1]! : [command, ...(args ?? [])].join(' ');
       calls.push(script);
       if (script.includes('pnpm local teardown')) {
@@ -109,29 +120,21 @@ function sandbox(calls: string[], teardownExitCode = 0, teardownStderr = 'teardo
       return { exitCode: 0, stdout: '', stderr: '' };
     },
   };
+  const entry = getSessionSandbox(session.id, 'acme/mastra', () => fake as never);
+  // Model a sandbox whose first start already resolved the workdir.
+  entry.workdir = '/workspace/mastra';
+  return fake;
 }
 
 describe('SessionRetirementCoordinator', () => {
-  it('runs remote teardown once before scrub, pooling, and workspace invalidation', async () => {
+  it('runs remote teardown before stopping the sandbox, then invalidates', async () => {
     const storage = new SourceControlStorageInMemory();
     seedRepositoryLink(storage);
     const session = await seedSession(storage);
     const calls: string[] = [];
-    const release = storage.sandboxPool.release;
-    storage.sandboxPool.release = async input => {
-      calls.push('pool');
-      await release(input);
-    };
+    const fake = seedMemoSandbox(session, calls);
     const invalidateSession = vi.fn(async () => calls.push('invalidate'));
-    const reattachSandbox = vi.fn(async () => sandbox(calls));
-    const coordinator = new SessionRetirementCoordinator({
-      fleet: {
-        provider: 'railway',
-        reattachSandbox,
-        teardownSandbox: vi.fn(),
-      },
-      invalidateSession,
-    });
+    const coordinator = new SessionRetirementCoordinator({ invalidateSession });
 
     await coordinator.retireWorkItemSessions({
       workItems: workItems(workItem(session.sessionId)),
@@ -140,33 +143,30 @@ describe('SessionRetirementCoordinator', () => {
       workItemId: 'item-1',
     });
 
-    expect(reattachSandbox).toHaveBeenCalledWith('sandbox-1', { actingUserId: 'user-1' });
-    expect(calls.filter(call => call.includes('pnpm local teardown'))).toHaveLength(1);
     const teardownIndex = calls.findIndex(call => call.includes('pnpm local teardown'));
-    const scrubIndex = calls.findIndex(call => call.includes('checkout -f') && call.includes('clean -fdx'));
     expect(teardownIndex).toBeGreaterThanOrEqual(0);
-    expect(scrubIndex).toBeGreaterThan(teardownIndex);
-    expect(calls.indexOf('pool')).toBeGreaterThan(scrubIndex);
-    expect(calls.indexOf('invalidate')).toBeGreaterThan(calls.indexOf('pool'));
-    expect(storage.sandboxPoolRows).toEqual([expect.objectContaining({ sandboxId: 'sandbox-1' })]);
-    expect((await storage.sessions.getBySessionId(session.sessionId))?.sandboxId).toBeNull();
+    expect(calls.filter(call => call.includes('pnpm local teardown'))).toHaveLength(1);
+    // Non-deleted sessions stop (VM can resume later); nothing destroys.
+    expect(calls.indexOf('stop')).toBeGreaterThan(teardownIndex);
+    expect(fake.destroy).not.toHaveBeenCalled();
+    expect(calls.indexOf('invalidate')).toBeGreaterThan(calls.indexOf('stop'));
+    // The memoized instance was dropped so a later open reconstructs.
+    expect(peekSessionSandbox(session.id)).toBeUndefined();
+    // The session row survives (deleteSession: false).
+    expect(await storage.sessions.getBySessionId(session.sessionId)).not.toBeNull();
   });
 
-  it('continues remote cleanup when teardown fails', async () => {
+  it('continues cleanup when the teardown command fails', async () => {
     const storage = new SourceControlStorageInMemory();
     seedRepositoryLink(storage);
     const session = await seedSession(storage);
     const calls: string[] = [];
-    const warn = vi.fn();
-    const coordinator = new SessionRetirementCoordinator({
-      fleet: {
-        provider: 'railway',
-        reattachSandbox: vi.fn(async () => sandbox(calls, 17, `failure-${'x'.repeat(3000)}`)),
-        teardownSandbox: vi.fn(),
-      },
-      invalidateSession: vi.fn(),
-      warn,
+    const fake = seedMemoSandbox(session, calls, {
+      teardownExitCode: 17,
+      teardownStderr: `failure-${'x'.repeat(3000)}`,
     });
+    const warn = vi.fn();
+    const coordinator = new SessionRetirementCoordinator({ invalidateSession: vi.fn(), warn });
 
     await coordinator.retireSession({
       sourceControl: storage,
@@ -176,7 +176,7 @@ describe('SessionRetirementCoordinator', () => {
     });
 
     expect(warn).toHaveBeenCalledWith(
-      'Factory worktree teardown failed',
+      'Factory teardown command failed',
       expect.objectContaining({
         sessionId: session.sessionId,
         projectRepositoryId: 'repo-link-1',
@@ -184,23 +184,17 @@ describe('SessionRetirementCoordinator', () => {
       }),
     );
     expect((warn.mock.calls[0]?.[1] as { error: string }).error.length).toBeLessThanOrEqual(2000);
-    expect(storage.sandboxPoolRows).toHaveLength(1);
-    expect((await storage.sessions.getBySessionId(session.sessionId))?.sandboxId).toBeNull();
+    expect(fake.stop).toHaveBeenCalledTimes(1);
+    expect(peekSessionSandbox(session.id)).toBeUndefined();
   });
 
-  it('runs local teardown before destroying the sandbox and deleting the session', async () => {
+  it('destroys the sandbox and deletes the session on destructive retirement', async () => {
     const storage = new SourceControlStorageInMemory();
     seedRepositoryLink(storage);
     const session = await seedSession(storage);
     const calls: string[] = [];
-    const liveSandbox = sandbox(calls);
-    const teardownSandbox = vi.fn(async () => calls.push('destroy'));
+    const fake = seedMemoSandbox(session, calls);
     const coordinator = new SessionRetirementCoordinator({
-      fleet: {
-        provider: 'local',
-        reattachSandbox: vi.fn(async () => liveSandbox),
-        teardownSandbox,
-      },
       invalidateSession: vi.fn(async () => calls.push('invalidate')),
     });
 
@@ -214,55 +208,84 @@ describe('SessionRetirementCoordinator', () => {
     const teardownIndex = calls.findIndex(call => call.includes('pnpm local teardown'));
     expect(teardownIndex).toBeGreaterThanOrEqual(0);
     expect(calls.indexOf('destroy')).toBeGreaterThan(teardownIndex);
+    expect(fake.stop).not.toHaveBeenCalled();
     expect(calls.indexOf('invalidate')).toBeGreaterThan(teardownIndex);
     expect(await storage.sessions.getBySessionId(session.sessionId)).toBeNull();
-    expect(storage.sandboxPoolRows).toEqual([]);
   });
 
-  it('still pools, clears, and invalidates when the remote sandbox cannot be reattached', async () => {
+  it('clears work-item session references when the session row is deleted, and leaves them when it is not', async () => {
     const storage = new SourceControlStorageInMemory();
     seedRepositoryLink(storage);
     const session = await seedSession(storage);
-    const warn = vi.fn();
-    const invalidateSession = vi.fn();
-    const coordinator = new SessionRetirementCoordinator({
-      fleet: {
-        provider: 'railway',
-        reattachSandbox: vi.fn(async () => Promise.reject(new Error('sandbox not found'))),
-        teardownSandbox: vi.fn(),
-      },
-      invalidateSession,
-      warn,
+    const clearSessionReferences = vi.fn(async () => 1);
+    const coordinator = new SessionRetirementCoordinator({ invalidateSession: vi.fn() });
+
+    await coordinator.retireSession({
+      sourceControl: storage,
+      workItems: { clearSessionReferences },
+      orgId: 'org-1',
+      sessionId: session.sessionId,
+      deleteSession: false,
     });
+    expect(clearSessionReferences).not.toHaveBeenCalled();
+
+    await coordinator.retireSession({
+      sourceControl: storage,
+      workItems: { clearSessionReferences },
+      orgId: 'org-1',
+      sessionId: session.sessionId,
+      deleteSession: true,
+    });
+    expect(clearSessionReferences).toHaveBeenCalledWith({ orgId: 'org-1', sessionId: session.sessionId });
+  });
+
+  it('clears work-item references before the row dies, so a failed delete leaves nothing dangling', async () => {
+    const storage = new SourceControlStorageInMemory();
+    seedRepositoryLink(storage);
+    const session = await seedSession(storage);
+    const clearSessionReferences = vi.fn(async () => 1);
+    vi.spyOn(storage.sessions, 'delete').mockRejectedValueOnce(new Error('db down'));
+    const coordinator = new SessionRetirementCoordinator({ invalidateSession: vi.fn() });
+
+    await expect(
+      coordinator.retireSession({
+        sourceControl: storage,
+        workItems: { clearSessionReferences },
+        orgId: 'org-1',
+        sessionId: session.sessionId,
+        deleteSession: true,
+      }),
+    ).rejects.toThrow('db down');
+
+    expect(clearSessionReferences).toHaveBeenCalledTimes(1);
+    expect(await storage.sessions.getBySessionId(session.sessionId)).not.toBeNull();
+  });
+
+  it('still invalidates and deletes when this process holds no sandbox for the session', async () => {
+    const storage = new SourceControlStorageInMemory();
+    seedRepositoryLink(storage);
+    const session = await seedSession(storage);
+    const invalidateSession = vi.fn();
+    const coordinator = new SessionRetirementCoordinator({ invalidateSession });
 
     await coordinator.retireSession({
       sourceControl: storage,
       orgId: 'org-1',
       sessionId: session.sessionId,
-      deleteSession: false,
+      deleteSession: true,
     });
 
-    expect(warn).toHaveBeenCalledWith(
-      'Factory session sandbox could not be reattached for retirement',
-      expect.objectContaining({ sessionId: session.sessionId, sandboxId: 'sandbox-1' }),
-    );
-    expect(storage.sandboxPoolRows).toEqual([expect.objectContaining({ sandboxId: 'sandbox-1' })]);
-    expect((await storage.sessions.getBySessionId(session.sessionId))?.sandboxId).toBeNull();
     expect(invalidateSession).toHaveBeenCalledWith(session.sessionId);
+    expect(await storage.sessions.getBySessionId(session.sessionId)).toBeNull();
   });
 
-  it('serializes duplicate retirement requests so teardown is at most once per binding', async () => {
+  it('serializes duplicate retirement requests so teardown runs at most once', async () => {
     const storage = new SourceControlStorageInMemory();
     seedRepositoryLink(storage);
     const session = await seedSession(storage);
     const calls: string[] = [];
-    const coordinator = new SessionRetirementCoordinator({
-      fleet: {
-        provider: 'railway',
-        reattachSandbox: vi.fn(async () => sandbox(calls)),
-        teardownSandbox: vi.fn(),
-      },
-    });
+    seedMemoSandbox(session, calls);
+    const coordinator = new SessionRetirementCoordinator();
     const input = {
       sourceControl: storage,
       orgId: 'org-1',
@@ -273,24 +296,17 @@ describe('SessionRetirementCoordinator', () => {
     await Promise.all([coordinator.retireSession(input), coordinator.retireSession(input)]);
 
     expect(calls.filter(call => call.includes('pnpm local teardown'))).toHaveLength(1);
-    expect(storage.sandboxPoolRows).toHaveLength(1);
+    expect(calls.filter(call => call === 'stop')).toHaveLength(1);
   });
 
-  it('invalidates and deletes the session even when local sandbox destruction fails', async () => {
+  it('invalidates and deletes the session even when sandbox destruction fails', async () => {
     const storage = new SourceControlStorageInMemory();
     seedRepositoryLink(storage);
     const session = await seedSession(storage);
     const invalidateSession = vi.fn();
     const warn = vi.fn();
-    const coordinator = new SessionRetirementCoordinator({
-      fleet: {
-        provider: 'local',
-        reattachSandbox: vi.fn(async () => sandbox([])),
-        teardownSandbox: vi.fn(async () => Promise.reject(new Error('stop failed'))),
-      },
-      invalidateSession,
-      warn,
-    });
+    seedMemoSandbox(session, [], { failStop: true });
+    const coordinator = new SessionRetirementCoordinator({ invalidateSession, warn });
 
     await coordinator.retireSession({
       sourceControl: storage,
@@ -300,7 +316,7 @@ describe('SessionRetirementCoordinator', () => {
     });
 
     expect(warn).toHaveBeenCalledWith(
-      'Factory local sandbox destruction failed',
+      'Factory session sandbox release failed',
       expect.objectContaining({ sessionId: session.sessionId }),
     );
     expect(invalidateSession).toHaveBeenCalledWith(session.sessionId);
