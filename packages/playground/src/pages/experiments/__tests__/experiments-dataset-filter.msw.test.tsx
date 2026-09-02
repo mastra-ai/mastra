@@ -19,6 +19,9 @@ const experimentsAcrossDatasets = [
 
 function setupHandlers() {
   server.use(
+    http.get(`${TEST_BASE_URL}/api/agents`, () => HttpResponse.json({})),
+    http.get(`${TEST_BASE_URL}/api/workflows`, () => HttpResponse.json({})),
+    http.get(`${TEST_BASE_URL}/api/scores/scorers`, () => HttpResponse.json({})),
     http.get(`${TEST_BASE_URL}/api/experiments`, () => HttpResponse.json({ experiments: experimentsAcrossDatasets })),
     http.get(`${TEST_BASE_URL}/api/experiments/review-summary`, () => HttpResponse.json({ experiments: [] })),
     http.get(`${TEST_BASE_URL}/api/datasets`, () =>

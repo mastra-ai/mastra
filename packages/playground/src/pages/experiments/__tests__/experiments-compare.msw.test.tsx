@@ -18,6 +18,9 @@ const otherDataset = { ...experiments[2], id: 'exp-c', datasetId: 'dataset-2', n
 
 beforeEach(() => {
   server.use(
+    http.get(`${TEST_BASE_URL}/api/agents`, () => HttpResponse.json({})),
+    http.get(`${TEST_BASE_URL}/api/workflows`, () => HttpResponse.json({})),
+    http.get(`${TEST_BASE_URL}/api/scores/scorers`, () => HttpResponse.json({})),
     http.get(`${TEST_BASE_URL}/api/experiments`, () =>
       HttpResponse.json({ experiments: [sameDatasetA, sameDatasetB, otherDataset] }),
     ),

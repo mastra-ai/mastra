@@ -3,15 +3,14 @@ import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { AgentIcon } from '@mastra/playground-ui/icons/AgentIcon';
 import { DatasetsIcon } from '@mastra/playground-ui/icons/DatasetsIcon';
-import { ProcessorIcon } from '@mastra/playground-ui/icons/ProcessorIcon';
 import { ScorersIcon } from '@mastra/playground-ui/icons/ScorersIcon';
-import { WorkflowIcon } from '@mastra/playground-ui/icons/WorkflowIcon';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { ArrowRightIcon } from 'lucide-react';
 import { type ReactNode, useMemo } from 'react';
 import { useAgents } from '@/domains/agents/hooks/use-agents';
 import { useScoresByExperimentId } from '@/domains/datasets/hooks/use-dataset-experiments';
 import { useDataset } from '@/domains/datasets/hooks/use-datasets';
+import { resolveTargetName, TARGET_ICON, TARGET_LABEL } from '@/domains/experiments/utils/target-name';
 import { useScorers } from '@/domains/scores/hooks/use-scorers';
 import { useWorkflows } from '@/domains/workflows/hooks/use-workflows';
 import { useLinkComponent } from '@/lib/framework';
@@ -20,20 +19,6 @@ export interface ExperimentFlowChainProps {
   experiment: DatasetExperiment;
   className?: string;
 }
-
-const TARGET_ICON = {
-  agent: AgentIcon,
-  workflow: WorkflowIcon,
-  scorer: ScorersIcon,
-  processor: ProcessorIcon,
-} as const;
-
-const TARGET_LABEL = {
-  agent: 'Agent',
-  workflow: 'Workflow',
-  scorer: 'Scorer',
-  processor: 'Processor',
-} as const;
 
 /** One step's subject: a typed icon (tooltip names the type) plus its label. */
 function Node({
@@ -102,19 +87,7 @@ export function ExperimentFlowChain({ experiment, className }: ExperimentFlowCha
   const targetType = experiment.targetType;
   const targetId = experiment.targetId;
 
-  const targetName = () => {
-    if (!targetId) return 'External (caller-run)';
-    switch (targetType) {
-      case 'agent':
-        return agents?.[targetId]?.name ?? targetId;
-      case 'workflow':
-        return workflows?.[targetId]?.name ?? targetId;
-      case 'scorer':
-        return scorers?.[targetId]?.scorer?.config?.name ?? targetId;
-      default:
-        return targetId;
-    }
-  };
+  const targetName = () => resolveTargetName(experiment, { agents, workflows, scorers });
 
   const targetHref = () => {
     if (!targetId) return null;
