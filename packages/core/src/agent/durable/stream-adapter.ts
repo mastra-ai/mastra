@@ -119,6 +119,8 @@ export interface DurableAgentStreamOptions<OUTPUT = undefined> {
   structuredOutput?: StructuredOutputOptions<OUTPUT>;
   /** Output processors to run in MastraModelOutput's stream pipeline */
   outputProcessors?: OutputProcessorOrWorkflow[];
+  /** When true, `getFullOutput()` includes `scoringData` assembled from the MessageList. */
+  returnScorerData?: boolean;
   /** Run context passed to output processors for every streamed chunk. */
   requestContext?: RequestContext;
   /** Experimental transforms applied whenever the returned full stream is consumed. */
@@ -175,6 +177,7 @@ export function createDurableAgentStream<OUTPUT = undefined>(
     closeOnSuspend = false,
     structuredOutput,
     outputProcessors,
+    returnScorerData,
     requestContext,
     experimentalTransform,
     messageList: externalMessageList,
@@ -629,6 +632,7 @@ export function createDurableAgentStream<OUTPUT = undefined>(
       isLLMExecutionStep: true,
       resolveFinalPromises: true,
       outputProcessors,
+      returnScorerData,
       requestContext,
       experimentalTransform,
     },

@@ -122,6 +122,8 @@ export interface DurableAgentStreamOptions<OUTPUT = undefined> {
   maxProcessorRetries?: number;
   /** Structured output configuration */
   structuredOutput?: AgentExecutionOptions<OUTPUT>['structuredOutput'];
+  /** Whether to return detailed scoring data in the response */
+  returnScorerData?: boolean;
   /** Version overrides for sub-agent delegation */
   versions?: AgentExecutionOptions<OUTPUT>['versions'];
   /** Callback when chunk is received */
@@ -809,6 +811,7 @@ export class DurableAgent<
         // resume or recovery can pick them up.
         messageList,
         requestContext: registryEntry.requestContext,
+        returnScorerData: workflowInput.options?.returnScorerData,
       });
       streamCleanup = stream.cleanup;
       await this.#raceRecoveryLease(stream.ready, recoveryLease);
@@ -1849,6 +1852,7 @@ export class DurableAgent<
       structuredOutput: registryEntry.structuredOutput as any,
       outputProcessors: registryEntry.outputProcessors,
       requestContext: registryEntry.requestContext,
+      returnScorerData: workflowInput.options.returnScorerData,
       messageList,
     });
 
@@ -2007,6 +2011,9 @@ export class DurableAgent<
         runId,
         requestContext: options?.requestContext ?? snapshotRequestContext,
         memory,
+        // Restore the original run's flag from the persisted snapshot so a
+        // cross-process resume still returns scoringData; caller override wins.
+        returnScorerData: options?.returnScorerData ?? workflowInput.options?.returnScorerData,
       });
       entry = this.#runRegistry.get(runId);
     }
@@ -2166,6 +2173,7 @@ export class DurableAgent<
       structuredOutput: entry.structuredOutput as any,
       outputProcessors: entry.outputProcessors,
       requestContext: resolvedOptions.requestContext,
+      returnScorerData: resolvedOptions.returnScorerData ?? entry.returnScorerData,
       messageList: globalEntry?.messageList ?? this.#runRegistry.getMessageList(runId),
     });
 
@@ -2783,6 +2791,7 @@ export class DurableAgent<
       structuredOutput: registryEntry.structuredOutput as any,
       outputProcessors: registryEntry.outputProcessors,
       requestContext: registryEntry.requestContext,
+      returnScorerData: workflowInput.options.returnScorerData,
       messageList,
     });
 
@@ -3236,6 +3245,7 @@ export class DurableAgent<
       onSuspended: options?.onSuspended,
       structuredOutput: this.#runRegistry.get(runId)?.structuredOutput as any,
       outputProcessors: this.#runRegistry.get(runId)?.outputProcessors,
+      returnScorerData: this.#runRegistry.get(runId)?.returnScorerData,
       messageList: globalRunRegistry.get(runId)?.messageList ?? this.#runRegistry.getMessageList(runId),
     });
     const { output, ready } = stream;
