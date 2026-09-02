@@ -59,7 +59,8 @@ export function AppSidebar() {
     !isPermissionsLoading && hasRoutePermission(getPermissionForRoute('/inbox'), hasPermission, hasAnyPermission);
   const feedbackInboxCountQuery = useFeedbackInboxCount({ enabled: canReadInbox });
   const datasetReviewCountQuery = useInboxDatasetReviewCount({ enabled: canReadInbox });
-  const inboxCount = (feedbackInboxCountQuery.data?.pagination?.total ?? 0) + (datasetReviewCountQuery.data ?? 0);
+  const hasInboxItems =
+    (feedbackInboxCountQuery.data?.pagination?.total ?? 0) > 0 || (datasetReviewCountQuery.data ?? 0) > 0;
 
   const isUserAuthenticated = authCapabilities && isAuthenticated(authCapabilities);
   const cmsOnlyLinks = new Set(['/prompts']);
@@ -213,10 +214,14 @@ export function AppSidebar() {
                     link={toSidebarLink(item)}
                     isActive={getIsLinkActive(item, pathname)}
                   >
-                    {item.url === '/inbox' && inboxCount > 0 && state !== 'collapsed' ? (
-                      <Badge variant="yellow" size="sm" className="ml-auto">
-                        {inboxCount}
-                      </Badge>
+                    {item.url === '/inbox' && hasInboxItems && state !== 'collapsed' ? (
+                      <Badge
+                        variant="yellow"
+                        size="sm"
+                        indicator="dot"
+                        className="ml-auto"
+                        aria-label="Items need review"
+                      />
                     ) : null}
                   </MainSidebar.NavLink>
                 ))}
