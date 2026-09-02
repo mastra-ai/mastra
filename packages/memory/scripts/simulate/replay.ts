@@ -47,6 +47,22 @@ async function loadVector(connectionString: string) {
   return new PgVector({ id: 'simulate-direct-curation-vector', connectionString });
 }
 
+/**
+ * Refuse to replay when `--input` and `--target` name the same local database. `recreateDatabase`
+ * drops the target with FORCE before the input is read, so an equal (or loopback-equivalent) pair
+ * would destroy the recording it is about to replay. Both URLs are already asserted local, so the
+ * only identity that matters is loopback host + port + database name.
+ */
+export function assertDistinctReplayDatabases(inputUrl: string, targetUrl: string): void {
+  const input = new URL(inputUrl);
+  const target = new URL(targetUrl);
+  const port = (url: URL) => url.port || '5432';
+  const database = (url: URL) => decodeURIComponent(url.pathname.replace(/^\//, ''));
+  if (port(input) === port(target) && database(input) === database(target)) {
+    throw new Error('refusing to overwrite the input database: --input and --target resolve to the same database');
+  }
+}
+
 export async function recreateDatabase(connectionString: string): Promise<void> {
   assertLocalTarget(connectionString);
   const url = new URL(connectionString);
@@ -95,6 +111,7 @@ async function run(argv: string[]): Promise<void> {
 
   assertLocalTarget(input);
   assertLocalTarget(target);
+  assertDistinctReplayDatabases(input, target);
   const inputClient = new Client({ connectionString: input });
   await inputClient.connect();
   try {
