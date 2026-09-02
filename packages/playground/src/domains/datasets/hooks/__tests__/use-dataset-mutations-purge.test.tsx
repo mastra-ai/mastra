@@ -6,6 +6,7 @@ import type { PropsWithChildren } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 
 import { useDatasetMutations } from '../use-dataset-mutations';
+import { successfulPurgeDatasetItemResponse } from './fixtures/dataset-mutations';
 import { server } from '@/test/msw-server';
 
 const BASE_URL = 'http://localhost:4111';
@@ -28,7 +29,7 @@ describe('useDatasetMutations purge item', () => {
       server.use(
         http.delete(`${BASE_URL}/api/datasets/dataset-1/items/item-1/purge`, () => {
           capture();
-          return HttpResponse.json({ success: true });
+          return HttpResponse.json(successfulPurgeDatasetItemResponse);
         }),
       );
       const { wrapper } = createTestHarness();
@@ -42,7 +43,7 @@ describe('useDatasetMutations purge item', () => {
     it('invalidates dataset, experiment result, and review caches', async () => {
       server.use(
         http.delete(`${BASE_URL}/api/datasets/dataset-1/items/item-1/purge`, () =>
-          HttpResponse.json({ success: true }),
+          HttpResponse.json(successfulPurgeDatasetItemResponse),
         ),
       );
       const { queryClient, wrapper } = createTestHarness();

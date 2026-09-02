@@ -10,6 +10,9 @@ const poolInstances: Array<{
     release: Mock;
     query: Mock;
     execute: Mock;
+    beginTransaction: Mock;
+    commit: Mock;
+    rollback: Mock;
   };
   pool: {
     getConnection: Mock;
@@ -30,6 +33,9 @@ vi.mock('mysql2/promise', async () => {
         release,
         query: vi.fn().mockResolvedValue([[{ count: 0 }]]),
         execute: vi.fn().mockResolvedValue([[]]),
+        beginTransaction: vi.fn().mockResolvedValue(undefined),
+        commit: vi.fn().mockResolvedValue(undefined),
+        rollback: vi.fn().mockResolvedValue(undefined),
       };
       const pool = {
         getConnection: vi.fn().mockResolvedValue(connection),
@@ -259,6 +265,28 @@ describe('MySQLStore tool mocks rejection', () => {
         toolMockReport: { served: [], unconsumed: [], liveCalls: [] },
       }),
     ).rejects.toThrow(/Tool mock reports are not supported on the MySQL storage adapter/);
+
+    await store.close();
+  });
+
+  it('clears tool mock reports from linked experiment results during purge', async () => {
+    const store = newStore();
+    const datasets = (await store.getStore('datasets')) as any;
+    const { pool, connection } = poolInstances[poolInstances.length - 1];
+    pool.execute.mockResolvedValueOnce([[{ c: 2 }]]);
+    connection.execute
+      .mockResolvedValueOnce([[{ id: 'i1' }]])
+      .mockResolvedValueOnce([[]])
+      .mockResolvedValueOnce([[]]);
+
+    await datasets._doPurgeItem({ id: 'i1', datasetId: 'd1' });
+
+    const resultUpdate = connection.execute.mock.calls.find(([sql]) =>
+      String(sql).includes('UPDATE `mastra_experiment_results`'),
+    );
+    expect(resultUpdate?.[0]).toContain('`toolMockReport` = NULL');
+    expect(resultUpdate?.[1]).toEqual(expect.arrayContaining(['i1', 'd1']));
+    expect(connection.commit).toHaveBeenCalledOnce();
 
     await store.close();
   });

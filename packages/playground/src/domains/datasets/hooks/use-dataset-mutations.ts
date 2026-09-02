@@ -12,6 +12,11 @@ import type {
 import { useMastraClient } from '@mastra/react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 
+type DatasetItemMutationVariables = {
+  datasetId: string;
+  itemId: string;
+};
+
 /**
  * Hook providing mutation functions for datasets, items, and runs
  * All mutations invalidate relevant query caches on success
@@ -64,8 +69,7 @@ export const useDatasetMutations = () => {
   });
 
   const deleteItem = useMutation({
-    mutationFn: ({ datasetId, itemId }: { datasetId: string; itemId: string }) =>
-      client.deleteDatasetItem(datasetId, itemId),
+    mutationFn: ({ datasetId, itemId }: DatasetItemMutationVariables) => client.deleteDatasetItem(datasetId, itemId),
     onSuccess: (_, variables) => {
       void queryClient.invalidateQueries({ queryKey: ['dataset-items', variables.datasetId] });
       void queryClient.invalidateQueries({ queryKey: ['dataset', variables.datasetId] });
@@ -74,8 +78,7 @@ export const useDatasetMutations = () => {
   });
 
   const purgeItem = useMutation({
-    mutationFn: ({ datasetId, itemId }: { datasetId: string; itemId: string }) =>
-      client.purgeDatasetItem(datasetId, itemId),
+    mutationFn: ({ datasetId, itemId }: DatasetItemMutationVariables) => client.purgeDatasetItem(datasetId, itemId),
     onSuccess: (_, variables) => {
       void queryClient.invalidateQueries({ queryKey: ['dataset-items', variables.datasetId] });
       void queryClient.invalidateQueries({ queryKey: ['dataset-item', variables.datasetId, variables.itemId] });
