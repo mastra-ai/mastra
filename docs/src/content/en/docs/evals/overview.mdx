@@ -119,7 +119,7 @@ Sampling is deterministic per trace: the decision is derived from the trace ID, 
 
 When a run has no trace (observability not configured), the decision is derived from the run ID instead. If [trace sampling](../observability/tracing/overview) declined the trace, scorers skip that run entirely, so scores aren't created for traces that were never stored.
 
-**Eligibility filters**: The optional `filter` parameter restricts which runs a scorer is eligible for, using a declarative predicate over the run's context. Filters are evaluated before sampling, so `sampling.rate` applies only to runs that match the filter:
+**Eligibility filters**: The optional `filter` parameter uses a declarative predicate over the run context to restrict scorer eligibility. Because filtering occurs before sampling, `sampling.rate` applies only to matching runs:
 
 ```typescript title="src/mastra/agents/evaluated-agent.ts"
 export const myAgent = new Agent({
@@ -170,7 +170,7 @@ export const mastra = new Mastra({
 })
 ```
 
-The lookup only compares scorer IDs, so a registered instance can be configured differently from the one you evaluate with. Every `checks.calledTool()` instance has the id `check-called-tool`, so registering one covers all of them, whatever tool name you evaluate with.
+The lookup compares only scorer IDs, which allows the registered instance to use different configuration from the evaluated instance. Every `checks.calledTool()` instance uses the ID `check-called-tool`. Registering one therefore covers every tool name you evaluate.
 
 The arguments still shape the `description` stored alongside each score, which comes from the registered instance, not the one you evaluate with. `checks.calledTool('')` is accepted and persists scores fine, but stores `Checks that "" was called`, so pass a representative value.
 

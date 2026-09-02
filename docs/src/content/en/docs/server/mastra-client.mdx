@@ -306,7 +306,7 @@ export const colorAgent = new Agent({
 
 ## Use MastraClient on the server
 
-You can also use `MastraClient` in server-side environments such as API routes, serverless functions, or actions. The usage remains the same, but you may need to recreate the response for your client:
+Server-side API routes and serverless functions, including actions, can also use `MastraClient`. The usage is unchanged, although you may need to recreate the response for your client:
 
 ```typescript {8}
 export async function action() {

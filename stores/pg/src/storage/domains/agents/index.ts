@@ -851,6 +851,29 @@ export class AgentsPG extends AgentsStorage {
     }
   }
 
+  async getVersions(ids: string[]): Promise<AgentVersion[]> {
+    if (ids.length === 0) {
+      return [];
+    }
+    try {
+      const tableName = getTableName({ indexName: TABLE_AGENT_VERSIONS, schemaName: getSchemaName(this.#schema) });
+      const placeholders = ids.map((_, i) => `$${i + 1}`).join(', ');
+      const rows = await this.#db.client.manyOrNone(`SELECT * FROM ${tableName} WHERE id IN (${placeholders})`, ids);
+      return rows.map(row => this.parseVersionRow(row));
+    } catch (error) {
+      if (error instanceof MastraError) throw error;
+      throw new MastraError(
+        {
+          id: createStorageErrorId('PG', 'GET_VERSIONS', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { count: ids.length },
+        },
+        error,
+      );
+    }
+  }
+
   async getVersionByNumber(agentId: string, versionNumber: number): Promise<AgentVersion | null> {
     try {
       const tableName = getTableName({ indexName: TABLE_AGENT_VERSIONS, schemaName: getSchemaName(this.#schema) });

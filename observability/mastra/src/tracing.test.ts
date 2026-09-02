@@ -1897,6 +1897,60 @@ describe('Tracing', () => {
       span.end();
     });
 
+    it('does not let undefined tracingOptions metadata erase span metadata', () => {
+      const observability = new DefaultObservabilityInstance({
+        serviceName: 'test-service',
+        name: 'test',
+        exporters: [testExporter],
+      });
+
+      const span = observability.startSpan({
+        type: SpanType.AGENT_RUN,
+        name: 'test-agent',
+        attributes: { agentId: 'agent-1' },
+        metadata: { threadId: 'thread-explicit', runId: 'run-1' },
+        tracingOptions: {
+          metadata: { threadId: undefined, experiment: 'v2' },
+        },
+      });
+
+      // A key tracingOptions.metadata merely names with undefined must not
+      // erase the span's own value; defined keys still take precedence.
+      expect(span.metadata).toEqual({
+        threadId: 'thread-explicit',
+        runId: 'run-1',
+        experiment: 'v2',
+      });
+
+      span.end();
+    });
+
+    it('contains metadata whose ownKeys reflection throws instead of failing span creation', () => {
+      const observability = new DefaultObservabilityInstance({
+        serviceName: 'test-service',
+        name: 'test',
+        exporters: [testExporter],
+      });
+
+      const hostileMetadata = new Proxy(
+        { tenantId: 'tenant-1' },
+        {
+          ownKeys() {
+            throw new Error('ownKeys failed');
+          },
+        },
+      );
+
+      expect(() =>
+        observability.startSpan({
+          type: SpanType.AGENT_RUN,
+          name: 'test-agent',
+          attributes: { agentId: 'agent-1' },
+          metadata: hostileMetadata as Record<string, any>,
+        }),
+      ).not.toThrow();
+    });
+
     it('should preserve tags across span lifecycle', () => {
       const observability = new DefaultObservabilityInstance({
         serviceName: 'test-service',
@@ -2217,6 +2271,72 @@ describe('Tracing', () => {
       // Should only include userId
       expect(span.metadata).toEqual({
         userId: 'user-123',
+      });
+
+      span.end();
+    });
+
+    it('should fall back to the RequestContext value when explicit metadata sets the key to undefined', () => {
+      const observability = new DefaultObservabilityInstance({
+        serviceName: 'test-service',
+        name: 'test',
+        requestContextKeys: ['threadId', 'userId'],
+        exporters: [testExporter],
+      });
+
+      const requestContext = new RequestContext();
+      requestContext.set('threadId', 'thread-123');
+      requestContext.set('userId', 'user-456');
+
+      // Mirrors the agent run span, which always names threadId in its
+      // metadata even when no thread is resolved.
+      const span = observability.startSpan({
+        type: SpanType.AGENT_RUN,
+        name: 'test-agent',
+        attributes: {
+          agentId: 'agent-1',
+        },
+        metadata: {
+          runId: 'run-789',
+          threadId: undefined,
+        },
+        requestContext,
+      });
+
+      expect(span.metadata).toEqual({
+        threadId: 'thread-123',
+        userId: 'user-456',
+        runId: 'run-789',
+      });
+
+      span.end();
+    });
+
+    it('should keep explicit metadata precedence when the value is defined', () => {
+      const observability = new DefaultObservabilityInstance({
+        serviceName: 'test-service',
+        name: 'test',
+        requestContextKeys: ['threadId'],
+        exporters: [testExporter],
+      });
+
+      const requestContext = new RequestContext();
+      requestContext.set('threadId', 'thread-from-context');
+
+      const span = observability.startSpan({
+        type: SpanType.AGENT_RUN,
+        name: 'test-agent',
+        attributes: {
+          agentId: 'agent-1',
+        },
+        metadata: {
+          threadId: 'thread-explicit',
+        },
+        requestContext,
+      });
+
+      expect(span.metadata).toEqual({
+        threadId: 'thread-explicit',
       });
 
       span.end();

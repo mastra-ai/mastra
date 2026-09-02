@@ -4,7 +4,7 @@ import type { Server as HttpServer } from 'node:http';
 import { NodeStreamableHTTPServerTransport } from '@modelcontextprotocol/node';
 import { McpServer } from '@modelcontextprotocol/server';
 import type { CallToolResult } from '@modelcontextprotocol/server';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { InternalMastraMCPClient } from './client.js';
 import { MCPClient } from './configuration.js';
@@ -155,6 +155,30 @@ describe('serializable MCP tool definitions (issue #20527)', () => {
 
       const result = await hydrated.execute!({ city: 'Berlin' } as any, {});
       expect(result).toMatchObject({ celsius: 21 });
+    });
+
+    it('validates structuredContent against outputSchema on the hydrated (cached-catalog) path (issue #22549)', async () => {
+      const definitions = await client.toolDefinitions();
+      const hydrated = client.toolFromDefinition({ definition: JSON.parse(JSON.stringify(definitions.measure)) });
+
+      // A hydrated tool never calls tools/list, so the MCP SDK's own output-schema cache is
+      // empty and its AJV check cannot fire. Mocking callTool simulates a misbehaving server
+      // returning structuredContent that violates the advertised outputSchema.
+      const sdkClient = (client as any).client;
+      vi.spyOn(sdkClient, 'callTool').mockResolvedValue({
+        content: [{ type: 'text', text: 'bad' }],
+        structuredContent: { celsius: 'warm' },
+        isError: false,
+      });
+
+      const invalid = await hydrated.execute!({ city: 'Berlin' } as any, {});
+      expect(invalid).toMatchObject({ error: true });
+      expect((invalid as any).message).toContain('Tool output validation failed for measure');
+      expect((invalid as any).validationErrors).toBeDefined();
+
+      vi.restoreAllMocks();
+      const valid = await hydrated.execute!({ city: 'Berlin' } as any, {});
+      expect(valid).toMatchObject({ celsius: 21 });
     });
   });
 

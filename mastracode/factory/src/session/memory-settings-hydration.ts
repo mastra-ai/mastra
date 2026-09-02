@@ -93,10 +93,10 @@ export interface MemorySettingsHydrationDependencies {
  * as a blocking session-created listener so the seed lands before the caller can
  * start a run.
  *
- * The org seed matters beyond settings. Subconscious knowledge capture scopes
+ * The org seed matters beyond settings. Subconscious knowledge curation scopes
  * every node and record on `factoryOrgId`; before the SDK refusal guard,
- * missing it made capture substitute the session owner id. For web chat sessions
- * that is the agent controller's own id rather than a tenant, so captured
+ * missing it made curation substitute the session owner id. For web chat sessions
+ * that is the agent controller's own id rather than a tenant, so curated
  * knowledge landed under an org rung no reader ever queries. Same rule as the
  * start coordinator: the org
  * comes from the row the session was created from, never improvised from an
@@ -122,7 +122,7 @@ export async function hydrateSessionMemorySettings(
     const record = await sourceControl.sessions.getBySessionId(session.identity.getResourceId());
     // No row, or a row whose org is blank, leaves the session with no tenant.
     // Mark it rather than returning silently: an unmarked projectless factory
-    // session is indistinguishable from a local one, and capture would file it
+    // session is indistinguishable from a local one, and curation would file it
     // under the local scope — the same bug wearing a different rung.
     await seedSessionOrg(session, record?.orgId);
     if (!record) return;

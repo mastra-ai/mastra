@@ -484,6 +484,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                           workspace: registryEntry?.workspace,
                           requireApproval: (tool as any).requireApproval,
                           backgroundConfig: (tool as any).background,
+                          agentBackgroundConfig: registryEntry?.backgroundTasksConfig,
                           // Emit context.writer.write() / .custom() output through pubsub,
                           // matching how the durable tool-call step builds its writer.
                           outputWriter: pubsub
@@ -616,7 +617,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
             inputMessages = injectBackgroundTaskPrompt({
               inputMessages,
               backgroundTaskManager: registryEntry?.backgroundTaskManager,
-              tools: currentTools as Record<string, { background?: any; description?: string }> | undefined,
+              tools: currentTools,
               agentBackgroundConfig: registryEntry?.backgroundTasksConfig,
             });
 

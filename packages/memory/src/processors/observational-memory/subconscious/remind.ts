@@ -14,7 +14,7 @@ const NO_REMINDER = '<no-reminder />';
 const DEFAULT_INSTRUCTIONS = `Review the current observations and use the knowledge tools to find prior knowledge that is directly relevant now.
 
 Be selective. Treat future-dated records as relevant when their time is imminent or useful to the current task. When the observations show whether an earlier reminder was used, tune your selectivity accordingly without storing hit/miss counters.
-Never remind about knowledge that is already visible in the current observations or recent messages — a reminder is only valuable for knowledge the agent can no longer see. Echoing back what was just said or just captured is noise.
+Never remind about knowledge that is already visible in the current observations or recent messages — a reminder is only valuable for knowledge the agent can no longer see. Echoing back what was just said or just curated is noise.
 If nothing is relevant, respond with exactly ${NO_REMINDER} and nothing else.
 If knowledge is relevant, return one concise reminder that explains why it matters and includes source node or record IDs. Do not invent knowledge and do not expose knowledge outside the tools' scoped results.`;
 
@@ -77,7 +77,7 @@ async function findReminderSources(
 }
 
 /**
- * Drop the current thread's own freshly captured KnowledgeRecords from the candidate list. They match the
+ * Drop the current thread's own freshly curated KnowledgeRecords from the candidate list. They match the
  * current observations almost perfectly (they were just distilled from them), so without this
  * guard the reminder agent mostly echoes the session's own words back at it.
  */
@@ -91,8 +91,8 @@ async function dropFreshOwnRecords(
       if (source.type !== 'record') return true;
       const record = await store.getKnowledge({ id: source.id }).catch(() => null);
       if (!record) return true;
-      // KnowledgeRecords written by the thread's own subconscious sub-agents (curate, learn, capture)
-      // carry a `subconscious:<threadId>:<agent>` source — they are this thread's too.
+      // KnowledgeRecords written by the thread's own subconscious sub-agents carry a
+      // `subconscious:<threadId>:<agent>` source — they are this thread's too.
       const isOwnThread =
         record.sourceThreadId === threadId || record.sourceThreadId.startsWith(`subconscious:${threadId}:`);
       const isFresh = Date.now() - new Date(record.capturedAt).getTime() < FRESH_OWN_RECORD_WINDOW_MS;

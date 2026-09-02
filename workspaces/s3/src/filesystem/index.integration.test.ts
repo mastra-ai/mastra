@@ -156,6 +156,21 @@ describe.skipIf(!hasS3Credentials)('S3Filesystem Integration', () => {
     expect(stat.name).toBe('stats.txt');
     expect(stat.type).toBe('file');
     expect(stat.size).toBeGreaterThan(0);
+    expect(stat.mimeType).toBe('text/plain');
+  });
+
+  it('surfaces Content-Type as mimeType for image uploads', async () => {
+    await fs.init();
+
+    const png = Buffer.from(
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=',
+      'base64',
+    );
+    await fs.writeFile('/pixel.png', png);
+    const stat = await fs.stat('/pixel.png');
+
+    expect(stat.type).toBe('file');
+    expect(stat.mimeType).toBe('image/png');
   });
 });
 
