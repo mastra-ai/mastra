@@ -8,6 +8,7 @@ import { useGithubReposQuery } from '../../../../../hooks/useGithubRepos';
 import { useGithubStatusQuery } from '../../../../../hooks/useGithubStatus';
 import { SkeletonRows } from '../../../../ui/SkeletonRows';
 import type { GithubRepo, GithubStatus } from '../../services/github';
+import { GITHUB_ORG_CHOICE_HINT_SHORT, describeInstallations } from '../githubConnectionCopy';
 import { CreateFactoryPaletteAlert, CreateFactoryPaletteMessage } from './CreateFactoryPalette';
 
 export interface CreateFactoryRepositoryRowsProps {
@@ -27,7 +28,7 @@ function connectionMessage(status: GithubStatus | undefined): string {
     case 'auth_required':
       return 'Sign in again to connect GitHub.';
     default:
-      return 'Browse the repositories your installations can reach.';
+      return GITHUB_ORG_CHOICE_HINT_SHORT;
   }
 }
 
@@ -78,7 +79,10 @@ export function CreateFactoryRepositoryRows({
         <CommandPaletteItem
           icon={<Settings2 />}
           title="Manage GitHub connection"
-          subtitle="Add installations or grant access to more repositories"
+          subtitle={
+            describeInstallations(githubStatus.data?.installations ?? []) ??
+            'Add installations or grant access to more repositories'
+          }
           value="manage-github"
           onSelect={onManageConnection}
         />
