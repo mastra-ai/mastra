@@ -73,10 +73,11 @@ export function InboxDatasetReviewList({ items, isLoading, error }: InboxDataset
             <DataList.NoMatch message="No dataset items match your search" />
           ) : (
             filtered.map((item, index) => {
-              const datasetHref = `/datasets/${encodeURIComponent(item.datasetId)}?tab=review`;
+              // Reviews live on the experiment page; `?review=` features this result on its Reviews tab.
+              const reviewHref = `/experiments/${encodeURIComponent(item.experimentId)}?review=${encodeURIComponent(item.id)}`;
               return (
                 <DataList.RowWrapper key={item.id}>
-                  <DataList.RowButton colEnd={-2} onClick={() => navigate(datasetHref)} {...getRowProps(index)}>
+                  <DataList.RowButton colEnd={-2} onClick={() => navigate(reviewHref)} {...getRowProps(index)}>
                     <DataList.TextCell font="mono">{item.itemId}</DataList.TextCell>
                     <DataList.TextCell font="mono">{item.experimentId}</DataList.TextCell>
                     <DataList.TextCell font="mono">{item.datasetId}</DataList.TextCell>

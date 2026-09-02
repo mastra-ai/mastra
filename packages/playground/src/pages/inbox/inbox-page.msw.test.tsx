@@ -229,4 +229,15 @@ describe('InboxPage', () => {
     expect(screen.getByText('item-2')).toBeTruthy();
     expect(screen.queryByText('item-3')).toBeNull();
   });
+
+  it('opens the experiment Reviews tab featuring the result when a dataset row is clicked', async () => {
+    seedHandlers();
+    renderInbox('/inbox?tab=dataset');
+
+    fireEvent.click(await screen.findByRole('button', { name: /item-1/ }));
+
+    await waitFor(() =>
+      expect(screen.getByTestId('location').textContent).toBe('/experiments/experiment-1?review=result-1'),
+    );
+  });
 });
