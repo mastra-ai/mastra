@@ -15,6 +15,7 @@ import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
 import { MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
+import { MockMemory } from '../../../memory/mock';
 import { Agent } from '../../agent';
 import { createDurableAgent } from '../create-durable-agent';
 
@@ -160,6 +161,80 @@ describe('DurableAgent abort signal', () => {
     }
 
     expect(abortPayload?.text).toBe('Hello');
+
+    cleanup();
+  });
+
+  it('persists already-streamed assistant text to memory after abort (#22593)', async () => {
+    const mockMemory = new MockMemory();
+    const mockModel = new MockLanguageModelV2({
+      doStream: async ({ abortSignal }: { abortSignal?: AbortSignal }) => ({
+        stream: new ReadableStream({
+          start(controller) {
+            controller.enqueue({ type: 'stream-start', warnings: [] });
+            controller.enqueue({
+              type: 'response-metadata',
+              id: 'id-0',
+              modelId: 'mock-model-id',
+              timestamp: new Date(0),
+            });
+            controller.enqueue({ type: 'text-start', id: 'text-1' });
+            controller.enqueue({ type: 'text-delta', id: 'text-1', delta: 'Hello' });
+            abortSignal?.addEventListener(
+              'abort',
+              () => {
+                const err = new Error('Aborted');
+                err.name = 'AbortError';
+                controller.error(err);
+              },
+              { once: true },
+            );
+          },
+        }),
+        rawCall: { rawPrompt: null, rawSettings: {} },
+      }),
+    });
+    const baseAgent = new Agent({
+      id: 'abort-persist-agent',
+      name: 'Abort Persist Agent',
+      instructions: 'Test',
+      model: mockModel as LanguageModelV2,
+      memory: mockMemory,
+    });
+    const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
+
+    const threadId = 'thread-abort-persist';
+    const resourceId = 'resource-abort-persist';
+
+    let abortPayload: { steps: unknown[]; text?: string } | undefined;
+    const { output, abort, cleanup } = await durableAgent.stream('Go', {
+      memory: { thread: threadId, resource: resourceId },
+      onAbort: data => {
+        abortPayload = data;
+      },
+    });
+
+    await new Promise(r => setTimeout(r, 10));
+    abort();
+
+    try {
+      await output.consumeStream();
+    } catch {
+      // The bridge errors the stream after firing onAbort; expected.
+    }
+
+    expect(abortPayload?.text).toBe('Hello');
+
+    // Wait for the finalize-run flush to land in memory.
+    await vi.waitFor(async () => {
+      const recalled = await mockMemory.recall({ threadId, resourceId });
+      expect(recalled.messages.length).toBeGreaterThan(0);
+    });
+
+    const { messages } = await mockMemory.recall({ threadId, resourceId });
+    const assistantMessage = messages.find(message => message.role === 'assistant');
+    expect(assistantMessage, 'partial assistant message was not persisted to memory after abort').toBeDefined();
+    expect(JSON.stringify(assistantMessage?.content)).toContain('Hello');
 
     cleanup();
   });
