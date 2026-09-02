@@ -50,6 +50,14 @@ export const mastra = new Mastra({
         isOptional: true,
         defaultValue: '67108864',
       },
+      {
+        name: 'maxInboundFrameBytes',
+        type: 'number',
+        description:
+          'Maximum size of a single inbound newline-delimited JSON frame, including an incomplete frame that never sends a newline. Connections that exceed this limit are closed without parsing the oversized payload.',
+        isOptional: true,
+        defaultValue: '67108864',
+      },
     ],
   },
 ]}

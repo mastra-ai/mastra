@@ -20,6 +20,7 @@ type ServerFrame = { type: 'event'; topic: string; event: Event } | { type: 'sub
 
 type UnixSocketPubSubOptions = {
   maxRemoteClientQueuedBytes?: number;
+  maxInboundFrameBytes?: number;
 };
 
 type BrokerClient = {
@@ -35,6 +36,7 @@ type SubscribeWaiter = {
 };
 
 const DEFAULT_MAX_REMOTE_CLIENT_QUEUED_BYTES = 64 * 1024 * 1024;
+const DEFAULT_MAX_INBOUND_FRAME_BYTES = 64 * 1024 * 1024;
 
 /**
  * Max number of times a local subscriber callback may be redelivered after a
@@ -124,15 +126,38 @@ function nextTick(): Promise<void> {
   return new Promise(resolve => setImmediate(resolve));
 }
 
-function readFrames(socket: net.Socket, onFrame: (frame: any) => void) {
+function inboundByteLength(value: string): number {
+  return Buffer.byteLength(value, 'utf8');
+}
+
+function readFrames(socket: net.Socket, onFrame: (frame: any) => void, maxInboundFrameBytes: number) {
   let buffer = '';
+  let closedForLimit = false;
   socket.setEncoding('utf8');
+
+  const exceedInboundLimit = () => {
+    if (closedForLimit) return;
+    closedForLimit = true;
+    buffer = '';
+    socket.destroy();
+  };
+
   socket.on('data', chunk => {
+    if (closedForLimit) return;
     buffer += chunk;
     while (true) {
       const newlineIndex = buffer.indexOf('\n');
-      if (newlineIndex === -1) break;
+      if (newlineIndex === -1) {
+        if (inboundByteLength(buffer) > maxInboundFrameBytes) {
+          exceedInboundLimit();
+        }
+        break;
+      }
       const line = buffer.slice(0, newlineIndex);
+      if (inboundByteLength(line) > maxInboundFrameBytes) {
+        exceedInboundLimit();
+        break;
+      }
       buffer = buffer.slice(newlineIndex + 1);
       if (!line.trim()) continue;
       try {
@@ -157,11 +182,13 @@ export class UnixSocketPubSub extends PubSub {
   #pendingWrites = new Set<Promise<void>>();
   #recovering?: Promise<void>;
   #maxRemoteClientQueuedBytes: number;
+  #maxInboundFrameBytes: number;
 
   constructor(socketPath: string, options: UnixSocketPubSubOptions = {}) {
     super();
     this.socketPath = socketPath;
     this.#maxRemoteClientQueuedBytes = options.maxRemoteClientQueuedBytes ?? DEFAULT_MAX_REMOTE_CLIENT_QUEUED_BYTES;
+    this.#maxInboundFrameBytes = options.maxInboundFrameBytes ?? DEFAULT_MAX_INBOUND_FRAME_BYTES;
   }
 
   override get supportedModes(): ReadonlyArray<PubSubDeliveryMode> {
@@ -379,7 +406,7 @@ export class UnixSocketPubSub extends PubSub {
         socket.off('error', onError);
         this.#clientSocket = socket;
         this.#isBroker = false;
-        readFrames(socket, frame => this.#handleServerFrame(frame));
+        readFrames(socket, frame => this.#handleServerFrame(frame), this.#maxInboundFrameBytes);
         // NOTE: keep this exact message in sync with the transient-error
         // classifier in #sendToBroker (search for 'broker connection closed').
         socket.on('close', () =>
@@ -540,17 +567,21 @@ export class UnixSocketPubSub extends PubSub {
       queuedBytes: 0,
     };
     this.#brokerClients.set(socket, client);
-    readFrames(socket, frame => {
-      const clientFrame = frame as ClientFrame;
-      if (clientFrame.type === 'subscribe') {
-        client.subscriptions.add(clientFrame.topic);
-        this.#enqueueBrokerClientWrite(client, { type: 'subscribed', topic: clientFrame.topic });
-      } else if (clientFrame.type === 'unsubscribe') {
-        client.subscriptions.delete(clientFrame.topic);
-      } else if (clientFrame.type === 'publish') {
-        void this.#publishFromBroker(clientFrame.topic, clientFrame.event, client, clientFrame.localOnly);
-      }
-    });
+    readFrames(
+      socket,
+      frame => {
+        const clientFrame = frame as ClientFrame;
+        if (clientFrame.type === 'subscribe') {
+          client.subscriptions.add(clientFrame.topic);
+          this.#enqueueBrokerClientWrite(client, { type: 'subscribed', topic: clientFrame.topic });
+        } else if (clientFrame.type === 'unsubscribe') {
+          client.subscriptions.delete(clientFrame.topic);
+        } else if (clientFrame.type === 'publish') {
+          void this.#publishFromBroker(clientFrame.topic, clientFrame.event, client, clientFrame.localOnly);
+        }
+      },
+      this.#maxInboundFrameBytes,
+    );
     socket.on('close', () => this.#removeBrokerClient(client));
     socket.on('error', () => this.#removeBrokerClient(client));
   }

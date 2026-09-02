@@ -330,6 +330,148 @@ describe('UnixSocketPubSub', () => {
     }
   });
 
+  it('closes a client that sends an incomplete inbound frame larger than the configured limit', async () => {
+    const path = await socketPath();
+    const broker = new UnixSocketPubSub(path, { maxInboundFrameBytes: 64 });
+    const healthy = new UnixSocketPubSub(path, { maxInboundFrameBytes: 64 });
+    pubsubs.push(broker, healthy);
+
+    const brokerCb = vi.fn();
+    const healthyCb = vi.fn();
+    await broker.subscribe('topic-a', brokerCb);
+    await healthy.subscribe('topic-a', healthyCb);
+
+    const oversized = net.createConnection(path);
+    try {
+      await new Promise<void>((resolve, reject) => {
+        oversized.once('connect', resolve);
+        oversized.once('error', reject);
+      });
+      await waitFor(() => {
+        expect(broker.remoteClientCount).toBe(2);
+      });
+
+      await new Promise<void>((resolve, reject) => {
+        oversized.write('x'.repeat(128), (error?: Error | null) => {
+          if (error) reject(error);
+          else resolve();
+        });
+      });
+
+      await waitFor(() => {
+        expect(broker.remoteClientCount).toBe(1);
+      });
+
+      await broker.publish('topic-a', makeEvent({ type: 'after-oversize' }));
+      await waitFor(() => {
+        expect(brokerCb).toHaveBeenCalledTimes(1);
+        expect(healthyCb).toHaveBeenCalledTimes(1);
+      });
+      expect(brokerCb.mock.calls[0]![0].type).toBe('after-oversize');
+    } finally {
+      oversized.destroy();
+    }
+  });
+
+  it('does not parse an oversized complete inbound frame and keeps other clients working', async () => {
+    const path = await socketPath();
+    const broker = new UnixSocketPubSub(path, { maxInboundFrameBytes: 64 });
+    const healthy = new UnixSocketPubSub(path, { maxInboundFrameBytes: 64 });
+    pubsubs.push(broker, healthy);
+
+    const brokerCb = vi.fn();
+    const healthyCb = vi.fn();
+    await broker.subscribe('topic-a', brokerCb);
+    await healthy.subscribe('topic-a', healthyCb);
+
+    const oversized = net.createConnection(path);
+    try {
+      await new Promise<void>((resolve, reject) => {
+        oversized.once('connect', resolve);
+        oversized.once('error', reject);
+      });
+      await waitFor(() => {
+        expect(broker.remoteClientCount).toBe(2);
+      });
+
+      const hugePublish = `${JSON.stringify({
+        type: 'publish',
+        topic: 'topic-a',
+        event: makeEvent({ type: 'should-not-dispatch', data: { payload: 'x'.repeat(256) } }),
+      })}\n`;
+      expect(Buffer.byteLength(hugePublish.slice(0, -1), 'utf8')).toBeGreaterThan(64);
+
+      await new Promise<void>((resolve, reject) => {
+        oversized.write(hugePublish, (error?: Error | null) => {
+          if (error) reject(error);
+          else resolve();
+        });
+      });
+
+      await waitFor(() => {
+        expect(broker.remoteClientCount).toBe(1);
+      });
+      expect(brokerCb).not.toHaveBeenCalled();
+      expect(healthyCb).not.toHaveBeenCalled();
+
+      await healthy.publish('topic-a', makeEvent({ type: 'still-alive' }));
+      await waitFor(() => {
+        expect(brokerCb).toHaveBeenCalledTimes(1);
+        expect(healthyCb).toHaveBeenCalledTimes(1);
+      });
+      expect(brokerCb.mock.calls[0]![0].type).toBe('still-alive');
+    } finally {
+      oversized.destroy();
+    }
+  });
+
+  it('accepts a valid inbound frame that arrives in fragments under the size limit', async () => {
+    const path = await socketPath();
+    const broker = new UnixSocketPubSub(path, { maxInboundFrameBytes: 1024 });
+    pubsubs.push(broker);
+
+    const brokerCb = vi.fn();
+    await broker.subscribe('topic-a', brokerCb);
+
+    const rawClient = net.createConnection(path);
+    try {
+      await new Promise<void>((resolve, reject) => {
+        rawClient.once('connect', resolve);
+        rawClient.once('error', reject);
+      });
+
+      const frame = `${JSON.stringify({
+        type: 'publish',
+        topic: 'topic-a',
+        event: makeEvent({ type: 'fragmented' }),
+      })}\n`;
+      const midpoint = Math.floor(frame.length / 2);
+      await new Promise<void>((resolve, reject) => {
+        rawClient.write(frame.slice(0, midpoint), (error?: Error | null) => {
+          if (error) reject(error);
+          else resolve();
+        });
+      });
+      expect(brokerCb).not.toHaveBeenCalled();
+      expect(broker.remoteClientCount).toBe(1);
+
+      await new Promise<void>((resolve, reject) => {
+        rawClient.write(frame.slice(midpoint), (error?: Error | null) => {
+          if (error) reject(error);
+          else resolve();
+        });
+      });
+
+      await waitFor(() => {
+        expect(brokerCb).toHaveBeenCalledTimes(1);
+      });
+      expect(brokerCb.mock.calls[0]![0].type).toBe('fragmented');
+      expect(broker.remoteClientCount).toBe(1);
+    } finally {
+      rawClient.destroy();
+    }
+  });
+
   it('isolates local subscriber failures from other subscribers', async () => {
     const path = await socketPath();
     const pubsub = new UnixSocketPubSub(path);
