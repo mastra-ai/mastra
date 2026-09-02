@@ -16,6 +16,7 @@ async function fixture(role: 'owner' | 'suggest' = 'owner') {
   const plan = await storage.reconcileStructure({
     scopes: [
       { address: `principal:${role}`, name: `${role} principal` },
+      { address: 'principal:reviewer', name: 'Reviewer principal' },
       {
         address: 'scope:uncurated',
         name: 'Uncurated',
@@ -23,6 +24,7 @@ async function fixture(role: 'owner' | 'suggest' = 'owner') {
           role === 'owner'
             ? { scopeRefAddress: `principal:${role}`, role: 'owner' }
             : { scopeRefAddress: `principal:${role}`, role: 'readonly', canSuggest: true },
+          { scopeRefAddress: 'principal:reviewer', role: 'owner' },
         ],
       },
       {
@@ -32,14 +34,34 @@ async function fixture(role: 'owner' | 'suggest' = 'owner') {
           role === 'owner'
             ? { scopeRefAddress: `principal:${role}`, role: 'owner' }
             : { scopeRefAddress: `principal:${role}`, role: 'readonly', canSuggest: true },
+          { scopeRefAddress: 'principal:reviewer', role: 'owner' },
         ],
       },
       { address: 'scope:hidden', name: 'Hidden' },
     ],
   });
   const ids = plan.scopes;
+  await knowledge.registerCuratorProfile({
+    id: role,
+    identityScope: {
+      address: `principal:${role}`,
+      contextualScopeAddress: `principal:${role}`,
+    },
+    grants: [
+      {
+        scopeAddress: 'scope:uncurated',
+        role: role === 'owner' ? 'owner' : 'readonly',
+        canSuggest: role === 'suggest' ? true : undefined,
+      },
+      {
+        scopeAddress: 'scope:curated',
+        role: role === 'owner' ? 'owner' : 'readonly',
+        canSuggest: role === 'suggest' ? true : undefined,
+      },
+    ],
+  });
   const curator = knowledge.createCurator({
-    vouchedScopeIds: [ids[`principal:${role}`]!],
+    profileId: role,
     companionScopeId: ids['scope:uncurated']!,
     contextScopeId: ids[`principal:${role}`]!,
   });
@@ -100,33 +122,74 @@ describe('Knowledge curator', () => {
     expect(await value.storage.getRecordScopeIds(record.id)).toEqual([value.ids['scope:curated']]);
     expect(await value.storage.getRecord({ id: record.id })).toMatchObject({
       source: 'untrusted-intake',
-      version: record.version + 2,
+      version: record.version + 1,
     });
     await expect(value.curator.listWorklist()).resolves.toEqual({ nodes: [], nextCursor: undefined });
   });
 
-  it('uses review proposals for suggest-only refinements and never turns suggest into direct authority', async () => {
+  it('uses complete review proposals for suggest-only refinements and promotions', async () => {
     const value = await fixture('suggest');
-    const { node } = await provisionalNode(value, 'Draft title');
+    const { node, record } = await provisionalNode(value, 'Draft title');
+    const mixedScopeRecord = await value.storage.createRecord({
+      node,
+      text: 'Visible through the companion while retaining a separate membership',
+      scopeIds: [value.ids['scope:uncurated']!, value.ids['scope:hidden']!],
+    });
 
-    const result = await value.curator.refine({
+    const refinement = await value.curator.refine({
       nodeId: node.id,
       version: node.version,
       name: 'Reviewed title',
       reason: 'Verified against the source',
     });
-
-    expect(result).toMatchObject({ mode: 'proposed', proposal: { status: 'pending', targetId: node.id } });
+    expect(refinement).toMatchObject({ mode: 'proposed', proposal: { status: 'pending', targetId: node.id } });
     await expect(
       value.knowledge.getNode({ id: node.id, scopeIds: [value.ids['principal:suggest']!] }),
     ).resolves.toMatchObject({ name: 'Draft title', version: node.version });
-    await expect(
-      value.curator.promote({
-        nodeId: node.id,
-        version: node.version,
-        destinationScopeId: value.ids['scope:curated']!,
-      }),
-    ).rejects.toBeInstanceOf(KnowledgeNotFoundError);
+
+    const promotion = await value.curator.promote({
+      nodeId: node.id,
+      version: node.version,
+      destinationScopeId: value.ids['scope:curated']!,
+      reason: 'Verified against the source',
+    });
+    expect(promotion).toMatchObject({
+      mode: 'proposed',
+      proposal: { operation: 'promote-node', status: 'pending', targetId: node.id },
+    });
+    if (promotion.mode !== 'proposed') throw new Error('Expected promotion proposal');
+    expect(promotion.proposal.targets).toHaveLength(5);
+    expect(promotion.proposal.targets).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ type: 'node', id: node.id, expectedVersion: node.version }),
+        expect.objectContaining({ type: 'record', id: record.id, expectedVersion: record.version }),
+        expect.objectContaining({
+          type: 'record',
+          id: mixedScopeRecord.id,
+          expectedVersion: mixedScopeRecord.version,
+        }),
+        expect.objectContaining({ type: 'node', id: value.ids['scope:uncurated'] }),
+        expect.objectContaining({ type: 'node', id: value.ids['scope:curated'] }),
+      ]),
+    );
+    expect(await value.storage.getNodeScopeIds(node.id)).toEqual([value.ids['scope:uncurated']]);
+    expect(await value.storage.getRecordScopeIds(record.id)).toEqual([value.ids['scope:uncurated']]);
+
+    await value.knowledge.approveProposal({
+      id: promotion.proposal.id,
+      reviewerContextScopeId: value.ids['principal:reviewer']!,
+      vouchedScopeIds: [value.ids['principal:reviewer']!],
+    });
+    expect(await value.storage.getNodeScopeIds(node.id)).toEqual([value.ids['scope:curated']]);
+    expect(await value.storage.getRecordScopeIds(record.id)).toEqual([value.ids['scope:curated']]);
+    expect(await value.storage.getRecord({ id: record.id })).toMatchObject({ version: record.version + 1 });
+    expect(await value.storage.getRecordScopeIds(mixedScopeRecord.id)).toEqual(
+      [value.ids['scope:curated']!, value.ids['scope:hidden']!].sort(),
+    );
+    expect(await value.storage.getRecord({ id: mixedScopeRecord.id })).toMatchObject({
+      version: mixedScopeRecord.version + 1,
+    });
+
     await expect(
       value.curator.promote({
         nodeId: node.id,
@@ -135,8 +198,7 @@ describe('Knowledge curator', () => {
       }),
     ).rejects.toBeInstanceOf(KnowledgeNotFoundError);
     const proposals = await value.knowledge.listProposals({ vouchedScopeIds: [value.ids['principal:suggest']!] });
-    expect(proposals.proposals).toHaveLength(1);
-    expect(proposals.proposals[0]).toMatchObject({ id: result.proposal.id });
+    expect(proposals.proposals).toHaveLength(2);
   });
 
   it('rolls back promotion before record restamps when node CAS is stale', async () => {
@@ -175,8 +237,16 @@ describe('Knowledge curator', () => {
     const value = await fixture();
     const { node } = await provisionalNode(value, 'Pending verification');
     const restarted = new Knowledge({ id: 'curation-restarted', storage: value.provider });
+    await restarted.registerCuratorProfile({
+      id: 'owner',
+      identityScope: { address: 'principal:owner', contextualScopeAddress: 'principal:owner' },
+      grants: [
+        { scopeAddress: 'scope:uncurated', role: 'owner' },
+        { scopeAddress: 'scope:curated', role: 'owner' },
+      ],
+    });
     const curator = restarted.createCurator({
-      vouchedScopeIds: [value.ids['principal:owner']!],
+      profileId: 'owner',
       companionScopeId: value.ids['scope:uncurated']!,
       contextScopeId: value.ids['principal:owner']!,
     });

@@ -521,9 +521,10 @@ describe('Subconscious LibSQL integration', () => {
       content: [{ type: 'text' as const, text: `<curation-complete through="${completionItemId}" />` }],
     }));
     const curatorModel = new MockLanguageModelV2({ doGenerate: curateGenerate as never });
+    const knowledgeInstance = new Knowledge({ id: 'default', storage });
     const memory = new Memory({
       storage,
-      knowledge: new Knowledge({ id: 'default', storage }),
+      knowledge: knowledgeInstance,
       vector,
       embedder,
       options: {
@@ -532,7 +533,7 @@ describe('Subconscious LibSQL integration', () => {
           model,
           experimental_subconscious: new Subconscious({
             observation: [],
-            reflection: [{ name: 'curate', model: curatorModel }],
+            reflection: [{ name: 'curate', model: curatorModel, curatorProfile: 'subconscious' }],
           }),
           observation: { messageTokens: 1, bufferTokens: false, previousObserverTokens: 1_000 },
           reflection: { observationTokens: 1, bufferActivation: 0 },
@@ -542,11 +543,24 @@ describe('Subconscious LibSQL integration', () => {
     await memory.createThread({ threadId, resourceId, title: 'Curator lifecycle' });
     const knowledge = (await storage.getStore('knowledge'))!;
     const scopeIds = await createScopeIds(memory, knowledge, resourceId, threadId);
-    const node = await knowledge.createNode({ name: 'Project Atlas', kind: 'project', scopeIds: [scopeIds[2]!] });
+    await knowledgeInstance.registerCuratorProfile({
+      id: 'subconscious',
+      identityScope: {
+        address: 'curator:subconscious',
+        name: 'Subconscious curator',
+        contextualScopeAddress: 'curator:subconscious',
+      },
+      grants: [
+        { scopeAddress: `resource:${resourceId}:thread:${threadId}:uncurated`, role: 'owner' },
+        { scopeAddress: `resource:${resourceId}`, role: 'owner' },
+        { scopeAddress: `resource:${resourceId}:thread:${threadId}`, role: 'owner' },
+      ],
+    });
+    const node = await knowledge.createNode({ name: 'Project Atlas', kind: 'project', scopeIds: [scopeIds[4]!] });
     const record = await knowledge.createRecord({
       node,
       text: '[[Project Atlas]] launches soon.',
-      scopeIds: [scopeIds[2]!],
+      scopeIds: [scopeIds[4]!],
       source: threadId,
       resolutionScopeIds: scopeIds,
       metadata: { sourceThreadId: threadId },

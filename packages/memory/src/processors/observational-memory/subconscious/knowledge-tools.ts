@@ -58,37 +58,51 @@ export async function resolveKnowledgeScopeIds(
   const orgAddress = `org:${organizationId}`;
   const resourceAddress = `resource:${resourceId}`;
   const threadAddress = `resource:${resourceId}:thread:${threadId}`;
-  const org = await knowledge.materializeScope({
-    address: orgAddress,
-    contextualScopeAddress: orgAddress,
-    parameters: { orgId: organizationId },
-  });
-  const resource = await knowledge.materializeScope({
-    address: resourceAddress,
-    parentAddresses: [orgAddress],
-    contextualScopeAddress: orgAddress,
-    parameters: { orgId: organizationId, resourceId },
-  });
-  const thread = await knowledge.materializeScope({
-    address: threadAddress,
-    parentAddresses: [resourceAddress],
-    contextualScopeAddress: resourceAddress,
-    parameters: { orgId: organizationId, resourceId, threadId },
-  });
-  const scopeIds = [org.scopes[orgAddress]!, resource.scopes[resourceAddress]!, thread.scopes[threadAddress]!];
-  for (const [level, parentAddress] of [
-    ['resource', resourceAddress],
-    ['thread', threadAddress],
-  ] as const) {
+  const store = await getKnowledgeStore(memory);
+  const orgId =
+    (await store.getScopeAddress(orgAddress))?.scopeNodeId ??
+    (
+      await knowledge.materializeScope({
+        address: orgAddress,
+        contextualScopeAddress: orgAddress,
+        parameters: { orgId: organizationId },
+      })
+    ).scopes[orgAddress]!;
+  const resourceIdValue =
+    (await store.getScopeAddress(resourceAddress))?.scopeNodeId ??
+    (
+      await knowledge.materializeScope({
+        address: resourceAddress,
+        parentAddresses: [orgAddress],
+        contextualScopeAddress: orgAddress,
+        parameters: { orgId: organizationId, resourceId },
+      })
+    ).scopes[resourceAddress]!;
+  const threadIdValue =
+    (await store.getScopeAddress(threadAddress))?.scopeNodeId ??
+    (
+      await knowledge.materializeScope({
+        address: threadAddress,
+        parentAddresses: [resourceAddress],
+        contextualScopeAddress: resourceAddress,
+        parameters: { orgId: organizationId, resourceId, threadId },
+      })
+    ).scopes[threadAddress]!;
+  const scopeIds = [orgId, resourceIdValue, threadIdValue];
+  for (const parentAddress of [resourceAddress, threadAddress]) {
     const address = `${parentAddress}:uncurated`;
-    const companion = await knowledge.materializeScope({
-      address,
-      name: 'uncurated',
-      parentAddresses: [parentAddress],
-      contextualScopeAddress: parentAddress,
-      parameters: { orgId: organizationId, resourceId, threadId },
-    });
-    scopeIds.push(companion.scopes[address]!);
+    const companionId =
+      (await store.getScopeAddress(address))?.scopeNodeId ??
+      (
+        await knowledge.materializeScope({
+          address,
+          name: 'uncurated',
+          parentAddresses: [parentAddress],
+          contextualScopeAddress: parentAddress,
+          parameters: { orgId: organizationId, resourceId, threadId },
+        })
+      ).scopes[address]!;
+    scopeIds.push(companionId);
   }
   return scopeIds;
 }
@@ -358,7 +372,7 @@ export function createKnowledgeTools(
 }
 
 export interface KnowledgeCurationToolsOptions {
-  vouchedScopeIds: KnowledgeScopeIds;
+  profileId: string;
   companionScopeId: string;
   contextScopeId: string;
   destinationScopeIds: KnowledgeScopeIds;
@@ -370,7 +384,11 @@ export function createKnowledgeCurationTools(
 ): Record<string, ToolAction<any, any, any>> {
   const knowledge = memory.getKnowledgeInstance?.();
   if (!knowledge) throw new Error('Knowledge curation tools require a configured Knowledge instance.');
-  const curator = knowledge.createCurator(options);
+  const curator = knowledge.createCurator({
+    profileId: options.profileId,
+    companionScopeId: options.companionScopeId,
+    contextScopeId: options.contextScopeId,
+  });
   const destinationScopeSchema: JSONSchema7 = {
     type: 'string',
     enum: [...new Set(options.destinationScopeIds)],

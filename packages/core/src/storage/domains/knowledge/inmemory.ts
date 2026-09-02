@@ -653,7 +653,7 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
     });
   }
 
-  #updateNode(input: UpdateKnowledgeNodeInput): KnowledgeNode {
+  #updateNode(input: UpdateKnowledgeNodeInput, restampRecords = true): KnowledgeNode {
     const existing = this.#db.knowledgeNodes.get(input.id);
     if (!existing) throw new KnowledgeNotFoundError('node', input.id);
     if (existing.version !== input.version) throw new KnowledgeConflictError(input.id);
@@ -688,47 +688,62 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
     this.#recordActivity('edit', 'node', input.id, input.contextScopeId, input.importRunId);
     const scopeChanged = knowledgeScopeIdsKey(oldScopeIds) !== knowledgeScopeIdsKey(scopeIds);
     if (scopeChanged) this.#enqueue('node', input.id, 'delete', updated.version, oldScopeIds);
-    for (const record of this.#db.knowledgeRecords.values()) {
-      if (record.nodeId !== input.id) continue;
-      const updatedRecord = { ...record, version: record.version + 1, updatedAt: updated.updatedAt };
-      this.#db.knowledgeRecords.set(record.id, updatedRecord);
-      this.#enqueue(
-        'record',
-        record.id,
-        record.deletedAt ? 'delete' : 'upsert',
-        updatedRecord.version,
-        this.#recordScopeIds(record.id),
-      );
+    if (restampRecords) {
+      for (const record of this.#db.knowledgeRecords.values()) {
+        if (record.nodeId !== input.id) continue;
+        const updatedRecord = { ...record, version: record.version + 1, updatedAt: updated.updatedAt };
+        this.#db.knowledgeRecords.set(record.id, updatedRecord);
+        this.#enqueue(
+          'record',
+          record.id,
+          record.deletedAt ? 'delete' : 'upsert',
+          updatedRecord.version,
+          this.#recordScopeIds(record.id),
+        );
+      }
     }
     this.#enqueue('node', input.id, 'upsert', updated.version, scopeIds);
     return cloneNode(updated);
   }
 
   async promoteNode(input: PromoteKnowledgeNodeInput): Promise<KnowledgeNode> {
-    return this.#runAtomicMutation(() => {
-      this.#assertExpectedAccessEpoch(input.expectedAccessEpoch);
-      const node = this.#db.knowledgeNodes.get(input.id);
-      if (!node || node.deletedAt) throw new KnowledgeNotFoundError('node', input.id);
-      if (node.version !== input.version) throw new KnowledgeConflictError(input.id);
-      const nodeScopeIds = this.#nodeScopeIds(node.id);
-      if (!nodeScopeIds.includes(input.sourceScopeId)) throw new KnowledgeNotFoundError('node', input.id);
-      this.#assertScopeNodes([input.destinationScopeId]);
+    return this.#runAtomicMutation(() => this.#promoteNode(input));
+  }
 
-      const now = new Date();
-      for (const record of this.#db.knowledgeRecords.values()) {
-        if (record.nodeId !== node.id || record.deletedAt) continue;
-        const oldScopeIds = this.#recordScopeIds(record.id);
-        if (!oldScopeIds.includes(input.sourceScopeId)) continue;
-        const scopeIds = replaceKnowledgeScopeId(oldScopeIds, input.sourceScopeId, input.destinationScopeId);
-        const updatedRecord = { ...record, version: record.version + 1, updatedAt: now };
-        this.#db.knowledgeRecords.set(record.id, updatedRecord);
-        this.#db.knowledgeRecordScopes.set(record.id, new Set(scopeIds));
-        this.#recordActivity('move', 'record', record.id, input.contextScopeId);
-        this.#enqueue('record', record.id, 'delete', updatedRecord.version, oldScopeIds);
-        this.#enqueue('record', record.id, 'upsert', updatedRecord.version, scopeIds);
-      }
+  #promoteNode(input: PromoteKnowledgeNodeInput, expectedRecordVersions?: ReadonlyMap<string, number>): KnowledgeNode {
+    this.#assertExpectedAccessEpoch(input.expectedAccessEpoch);
+    const node = this.#db.knowledgeNodes.get(input.id);
+    if (!node || node.deletedAt) throw new KnowledgeNotFoundError('node', input.id);
+    if (node.version !== input.version) throw new KnowledgeConflictError(input.id);
+    const nodeScopeIds = this.#nodeScopeIds(node.id);
+    if (!nodeScopeIds.includes(input.sourceScopeId)) throw new KnowledgeNotFoundError('node', input.id);
+    this.#assertScopeNodes([input.destinationScopeId]);
 
-      return this.#updateNode({
+    const affectedRecords = [...this.#db.knowledgeRecords.values()].filter(
+      record =>
+        record.nodeId === node.id && !record.deletedAt && this.#recordScopeIds(record.id).includes(input.sourceScopeId),
+    );
+    if (
+      expectedRecordVersions &&
+      (affectedRecords.length !== expectedRecordVersions.size ||
+        affectedRecords.some(record => expectedRecordVersions.get(record.id) !== record.version))
+    ) {
+      throw new KnowledgeConflictError(input.id);
+    }
+    const now = new Date();
+    for (const record of affectedRecords) {
+      const oldScopeIds = this.#recordScopeIds(record.id);
+      const scopeIds = replaceKnowledgeScopeId(oldScopeIds, input.sourceScopeId, input.destinationScopeId);
+      const updatedRecord = { ...record, version: record.version + 1, updatedAt: now };
+      this.#db.knowledgeRecords.set(record.id, updatedRecord);
+      this.#db.knowledgeRecordScopes.set(record.id, new Set(scopeIds));
+      this.#recordActivity('move', 'record', record.id, input.contextScopeId);
+      this.#enqueue('record', record.id, 'delete', updatedRecord.version, oldScopeIds);
+      this.#enqueue('record', record.id, 'upsert', updatedRecord.version, scopeIds);
+    }
+
+    return this.#updateNode(
+      {
         id: node.id,
         version: node.version,
         scopeIds: replaceKnowledgeScopeId(nodeScopeIds, input.sourceScopeId, input.destinationScopeId),
@@ -739,8 +754,9 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
         },
         contextScopeId: input.contextScopeId,
         expectedAccessEpoch: input.expectedAccessEpoch,
-      });
-    });
+      },
+      false,
+    );
   }
 
   async deleteNode(input: DeleteKnowledgeNodeInput): Promise<KnowledgeNode> {
@@ -1460,16 +1476,33 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
         }
       }
       const payload = proposal.payload as { kind?: unknown; mutation?: unknown };
-      if (payload.kind !== 'update-node' || !payload.mutation || typeof payload.mutation !== 'object') {
+      if (!payload.mutation || typeof payload.mutation !== 'object') {
         throw new Error(`Unsupported immutable payload for knowledge proposal ${proposal.id}`);
       }
       try {
-        this.#updateNode({
-          ...(structuredClone(payload.mutation) as UpdateKnowledgeNodeInput),
-          contextScopeId: input.reviewerContextScopeId,
-          importRunId: undefined,
-          expectedAccessEpoch: input.expectedAccessEpoch,
-        });
+        if (payload.kind === 'update-node') {
+          this.#updateNode({
+            ...(structuredClone(payload.mutation) as UpdateKnowledgeNodeInput),
+            contextScopeId: input.reviewerContextScopeId,
+            importRunId: undefined,
+            expectedAccessEpoch: input.expectedAccessEpoch,
+          });
+        } else if (payload.kind === 'promote-node') {
+          this.#promoteNode(
+            {
+              ...(structuredClone(payload.mutation) as PromoteKnowledgeNodeInput),
+              contextScopeId: input.reviewerContextScopeId,
+              expectedAccessEpoch: input.expectedAccessEpoch,
+            },
+            new Map(
+              proposal.targets
+                .filter(target => target.type === 'record')
+                .map(target => [target.id, target.expectedVersion]),
+            ),
+          );
+        } else {
+          throw new Error(`Unsupported immutable payload for knowledge proposal ${proposal.id}`);
+        }
       } catch (error) {
         if (error instanceof KnowledgeConflictError) {
           return this.#markProposalConflicted(

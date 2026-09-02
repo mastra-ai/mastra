@@ -1621,8 +1621,139 @@ export function createKnowledgeStorageTests(createStore: () => Promise<Knowledge
       expect(await store.getRecord({ id: record.id })).toMatchObject({
         source: record.source,
         text: record.text,
-        version: record.version + 2,
+        version: record.version + 1,
       });
+    });
+
+    it('atomically applies complete promotion proposals', async () => {
+      const node = await store.createNode({ name: 'Suggested promotion', scopeIds: [PROJECT_SCOPE_ID] });
+      const record = await store.createRecord({ node, text: 'Verified evidence', scopeIds: [PROJECT_SCOPE_ID] });
+      const sourceScope = await store.getNode(PROJECT_SCOPE_ID);
+      const destinationScope = await store.getNode(OTHER_SCOPE_ID);
+      expect(sourceScope).not.toBeNull();
+      expect(destinationScope).not.toBeNull();
+      const accessEpoch = await store.getAccessEpoch();
+      const proposal = await store.createProposal({
+        targets: [
+          {
+            type: 'node',
+            id: node.id,
+            expectedVersion: node.version,
+            scopeIds: [PROJECT_SCOPE_ID],
+            approvalCapability: 'manageAccess',
+          },
+          {
+            type: 'record',
+            id: record.id,
+            expectedVersion: record.version,
+            scopeIds: [PROJECT_SCOPE_ID],
+            approvalCapability: 'edit',
+          },
+          {
+            type: 'node',
+            id: PROJECT_SCOPE_ID,
+            expectedVersion: sourceScope!.version,
+            scopeIds: [PROJECT_SCOPE_ID],
+            approvalCapability: 'manageAccess',
+          },
+          {
+            type: 'node',
+            id: OTHER_SCOPE_ID,
+            expectedVersion: destinationScope!.version,
+            scopeIds: [OTHER_SCOPE_ID],
+            approvalCapability: 'manageAccess',
+          },
+        ],
+        operation: 'promote-node',
+        payload: {
+          kind: 'promote-node',
+          mutation: {
+            id: node.id,
+            version: node.version,
+            sourceScopeId: PROJECT_SCOPE_ID,
+            destinationScopeId: OTHER_SCOPE_ID,
+          },
+        },
+        proposerContextScopeId: PROJECT_SCOPE_ID,
+        expectedAccessEpoch: accessEpoch,
+      });
+
+      await expect(
+        store.applyProposal({
+          id: proposal.id,
+          reviewerContextScopeId: PROJECT_SCOPE_ID,
+          expectedAccessEpoch: accessEpoch,
+        }),
+      ).resolves.toMatchObject({ status: 'approved' });
+      expect(await store.getNodeScopeIds(node.id)).toEqual([OTHER_SCOPE_ID]);
+      expect(await store.getRecordScopeIds(record.id)).toEqual([OTHER_SCOPE_ID]);
+      expect(await store.getRecord({ id: record.id })).toMatchObject({ version: record.version + 1 });
+    });
+
+    it('conflicts promotion proposals when the affected record set changes before approval', async () => {
+      const node = await store.createNode({ name: 'Promotion race', scopeIds: [PROJECT_SCOPE_ID] });
+      const initialRecord = await store.createRecord({ node, text: 'Initial evidence', scopeIds: [PROJECT_SCOPE_ID] });
+      const sourceScope = await store.getNode(PROJECT_SCOPE_ID);
+      const destinationScope = await store.getNode(OTHER_SCOPE_ID);
+      expect(sourceScope).not.toBeNull();
+      expect(destinationScope).not.toBeNull();
+      const accessEpoch = await store.getAccessEpoch();
+      const proposal = await store.createProposal({
+        targets: [
+          {
+            type: 'node',
+            id: node.id,
+            expectedVersion: node.version,
+            scopeIds: [PROJECT_SCOPE_ID],
+            approvalCapability: 'manageAccess',
+          },
+          {
+            type: 'record',
+            id: initialRecord.id,
+            expectedVersion: initialRecord.version,
+            scopeIds: [PROJECT_SCOPE_ID],
+            approvalCapability: 'edit',
+          },
+          {
+            type: 'node',
+            id: PROJECT_SCOPE_ID,
+            expectedVersion: sourceScope!.version,
+            scopeIds: [PROJECT_SCOPE_ID],
+            approvalCapability: 'manageAccess',
+          },
+          {
+            type: 'node',
+            id: OTHER_SCOPE_ID,
+            expectedVersion: destinationScope!.version,
+            scopeIds: [OTHER_SCOPE_ID],
+            approvalCapability: 'manageAccess',
+          },
+        ],
+        operation: 'promote-node',
+        payload: {
+          kind: 'promote-node',
+          mutation: {
+            id: node.id,
+            version: node.version,
+            sourceScopeId: PROJECT_SCOPE_ID,
+            destinationScopeId: OTHER_SCOPE_ID,
+          },
+        },
+        proposerContextScopeId: PROJECT_SCOPE_ID,
+        expectedAccessEpoch: accessEpoch,
+      });
+      const lateRecord = await store.createRecord({ node, text: 'Late evidence', scopeIds: [PROJECT_SCOPE_ID] });
+
+      await expect(
+        store.applyProposal({
+          id: proposal.id,
+          reviewerContextScopeId: PROJECT_SCOPE_ID,
+          expectedAccessEpoch: accessEpoch,
+        }),
+      ).resolves.toMatchObject({ status: 'conflicted' });
+      expect(await store.getNodeScopeIds(node.id)).toEqual([PROJECT_SCOPE_ID]);
+      expect(await store.getRecordScopeIds(initialRecord.id)).toEqual([PROJECT_SCOPE_ID]);
+      expect(await store.getRecordScopeIds(lateRecord.id)).toEqual([PROJECT_SCOPE_ID]);
     });
 
     it('clears only canonical Knowledge state', async () => {

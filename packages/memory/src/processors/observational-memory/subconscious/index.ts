@@ -59,7 +59,16 @@ function resolveExtractor(entry: SubconsciousObservationEntry): ResolvedSubconsc
 }
 
 function resolveAgent(
-  entry: string | { name: string; instructions?: string; model?: any; agent?: any; maxSteps?: number },
+  entry:
+    | string
+    | {
+        name: string;
+        instructions?: string;
+        model?: any;
+        agent?: any;
+        maxSteps?: number;
+        curatorProfile?: string;
+      },
   builtIns: Set<string>,
   globalModel: SubconsciousConfig['model'],
   globalMaxSteps: number | undefined,
@@ -73,6 +82,7 @@ function resolveAgent(
     model: config?.model ?? globalModel,
     agent: config?.agent,
     maxSteps: boundedSteps(config, fallbackMaxSteps),
+    ...(config?.curatorProfile ? { curatorProfile: config.curatorProfile } : {}),
     builtIn: builtIns.has(name),
   };
 }
@@ -224,6 +234,11 @@ export class Subconscious {
     }
     if (BUILT_IN_REFLECTION.has(name) && 'agent' in entry && entry.agent) {
       throw new Error(`Built-in Subconscious reflection agent "${name}" cannot be replaced with a custom agent.`);
+    }
+    if ('curatorProfile' in entry) {
+      if (name !== 'curate')
+        throw new Error('Subconscious curatorProfile is only valid for the built-in curate agent.');
+      if (!entry.curatorProfile?.trim()) throw new Error('Subconscious curatorProfile must not be empty.');
     }
     if (!BUILT_IN_REFLECTION.has(name) && !entry.instructions?.trim() && !('agent' in entry && entry.agent)) {
       throw new Error(`Custom Subconscious reflection agent "${name}" requires instructions or agent.`);
