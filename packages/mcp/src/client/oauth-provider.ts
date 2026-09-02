@@ -72,7 +72,10 @@ export class InMemoryOAuthStorage implements OAuthStorage {
  * Options for creating a MCPOAuthClientProvider.
  */
 export interface MCPClientMetadata extends OAuthClientMetadata {
-  /** Required by a Client ID Metadata Document and must match its URL. */
+  /**
+   * Required by a Client ID Metadata Document and must match its URL.
+   * The provider strips this field from Dynamic Client Registration requests.
+   */
   client_id?: string;
 }
 

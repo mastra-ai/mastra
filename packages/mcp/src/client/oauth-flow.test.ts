@@ -411,6 +411,7 @@ describe('MCPClient OAuth authorization flow', () => {
     const mcp = track(createClient(mcpServer.url, provider));
 
     await expect(mcp.authenticate('fixture')).rejects.toThrow(/did not redirect/);
+    await expect(mcp.authenticate('fixture')).rejects.toThrow(/did not redirect/);
 
     expect(authServer.registrations).toHaveLength(0);
     expect(authServer.authorizationCodeGrantCount).toBe(0);
