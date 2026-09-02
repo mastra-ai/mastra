@@ -440,7 +440,9 @@ await session.create()
 const subscription = await session.subscribe({
   onEvent: event => handleEvent(event),
   onError: error => showDisconnected(error),
-  onReconnect: async () => resync(await session.state()),
+  onReconnect: () => {
+    void session.state().then(resync).catch(showDisconnected)
+  },
   reconnect: true,
 })
 

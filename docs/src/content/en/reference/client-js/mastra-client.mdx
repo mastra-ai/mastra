@@ -113,7 +113,7 @@ You can also pass `requestContext` as a `Record<string, any>`.
     name: 'getAgentController(controllerId)',
     type: 'AgentController',
     description:
-      'Retrieves a specific agent controller by ID. Use `.session(resourceId)` to create or resume a session.',
+      'Retrieves a specific agent controller by ID. `.session(resourceId)` returns a session client; call `await session.create()` to create or resume the server session.',
   },
   {
     name: 'listMemoryThreads(params)',
