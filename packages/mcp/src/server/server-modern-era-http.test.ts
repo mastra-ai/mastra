@@ -188,7 +188,10 @@ describe('MCPServer with protocolVersion 2026-07-28 (dual-era HTTP)', () => {
     );
     await client.connect(new StreamableHTTPClientTransport(baseUrl));
     try {
-      await client.listTools();
+      const tools = await client.listTools();
+      expect(tools.tools.find(tool => tool.name === 'nullTool')?.outputSchema?.$schema).toBe(
+        'http://json-schema.org/draft-07/schema#',
+      );
       const result = await client.callTool({ name: 'nullTool', arguments: {} });
 
       expect(result.isError).not.toBe(true);

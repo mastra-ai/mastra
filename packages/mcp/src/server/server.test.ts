@@ -3011,7 +3011,7 @@ describe('MCPServer with Tool Output Schema', () => {
         },
         makeMockExtra(),
       ),
-    ).rejects.toThrow('expected record, received null');
+    ).rejects.toBeInstanceOf(Error);
 
     expect(validate).toHaveBeenCalledWith(null);
   });

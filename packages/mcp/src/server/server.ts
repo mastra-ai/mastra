@@ -2631,11 +2631,12 @@ export class MCPServer extends MCPServerBase {
 
   private convertSchema(schema: any) {
     const jsonSchema = isStandardSchemaWithJSON(schema)
-      ? standardSchemaToJSONSchema(schema)
+      ? standardSchemaToJSONSchema(schema, { target: this.servesModernEra() ? 'draft-2020-12' : 'draft-07' })
       : (schema?.jsonSchema ?? schema);
-    // The MCP 2.0 SDK default validator only supports the JSON Schema 2020-12
-    // dialect and rejects schemas declaring draft-07, so strip the dialect
-    // declaration before advertising the schema to clients.
+    if (this.servesModernEra()) return jsonSchema;
+
+    // Preserve the established legacy wire shape. Modern connections retain the
+    // declaration because their validators dispatch according to the schema dialect.
     if (jsonSchema && typeof jsonSchema === 'object' && '$schema' in jsonSchema) {
       const { $schema: _dialect, ...rest } = jsonSchema;
       return rest;
