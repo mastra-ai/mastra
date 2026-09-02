@@ -22,15 +22,15 @@ Set your E2B API key with the `E2B_API_KEY` environment variable or the `apiKey`
 Add an `E2BDesktopSandbox` to a workspace and assign it to an agent. Because the sandbox supports the [computer capability](/docs/sandbox/computer), the workspace registers the `mastra_workspace_computer_*` tools alongside the shell and process tools:
 
 ```typescript
-import { Agent } from '@mastra/core/agent';
-import { Workspace } from '@mastra/core/workspace';
-import { E2BDesktopSandbox } from '@mastra/e2b-desktop';
+import { Agent } from '@mastra/core/agent'
+import { Workspace } from '@mastra/core/workspace'
+import { E2BDesktopSandbox } from '@mastra/e2b-desktop'
 
 const workspace = new Workspace({
   sandbox: new E2BDesktopSandbox({
     resolution: [1280, 720],
   }),
-});
+})
 
 const agent = new Agent({
   id: 'desktop-agent',
@@ -38,11 +38,11 @@ const agent = new Agent({
   instructions: 'You can control a Linux desktop and run shell commands.',
   model: '__GATEWAY_ANTHROPIC_MODEL_SONNET__',
   workspace,
-});
+})
 
 const response = await agent.generate(
   'Take a screenshot, then create /tmp/hello.txt with the text "hello" and cat it.',
-);
+)
 ```
 
 The agent can mix desktop actions (click, type, screenshot) with shell commands. Both surfaces operate on the same machine.
@@ -52,15 +52,15 @@ The agent can mix desktop actions (click, type, screenshot) with shell commands.
 Use the `computer` capability programmatically without an agent:
 
 ```typescript
-const sandbox = new E2BDesktopSandbox();
-await sandbox.start();
+const sandbox = new E2BDesktopSandbox()
+await sandbox.start()
 
-await sandbox.computer.leftClick(100, 200);
-await sandbox.computer.type('hello');
-const { data } = await sandbox.computer.screenshot(); // PNG bytes
+await sandbox.computer.leftClick(100, 200)
+await sandbox.computer.type('hello')
+const { data } = await sandbox.computer.screenshot() // PNG bytes
 
-const size = await sandbox.computer.getScreenSize();
-console.log(size); // { width: 1024, height: 768 }
+const size = await sandbox.computer.getScreenSize()
+console.log(size) // { width: 1024, height: 768 }
 ```
 
 ### Live desktop view
@@ -68,7 +68,7 @@ console.log(size); // { width: 1024, height: 768 }
 `streamUrl()` starts an authenticated noVNC stream inside the sandbox and returns a viewer URL. Open it in a browser to watch the agent work:
 
 ```typescript
-const url = await sandbox.computer.streamUrl();
+const url = await sandbox.computer.streamUrl()
 // https://6080-<sandbox-id>.e2b.app/vnc.html?...&password=<auth-key>
 ```
 
@@ -77,8 +77,8 @@ const url = await sandbox.computer.streamUrl();
 Desktop-only APIs such as `launch`, `open`, window helpers, and custom stream control are available on the underlying [`@e2b/desktop`](https://github.com/e2b-dev/desktop) sandbox:
 
 ```typescript
-await sandbox.desktop.launch('xfce4-terminal');
-await sandbox.desktop.open('https://mastra.ai');
+await sandbox.desktop.launch('xfce4-terminal')
+await sandbox.desktop.open('https://mastra.ai')
 ```
 
 ## Constructor parameters

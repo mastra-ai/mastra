@@ -27,8 +27,8 @@ Import [`createTool`](/reference/tools/create-tool) from `@mastra/core/tools` an
 This example creates a tool that fetches weather data from an API. `execute` has exactly one signature: `execute(inputData, context)`. The first parameter contains input validated against `inputSchema`. The runtime always provides the second parameter as the execution context, though you may omit it from your function signature when unused. You can destructure the input fields directly in the function signature.
 
 ```typescript title="src/mastra/tools/weather-tool.ts"
-import { createTool } from '@mastra/core/tools';
-import { z } from 'zod';
+import { createTool } from '@mastra/core/tools'
+import { z } from 'zod'
 
 export const weatherTool = createTool({
   id: 'weather-tool',
@@ -44,16 +44,16 @@ export const weatherTool = createTool({
   execute: async ({ location }, { abortSignal }) => {
     const response = await fetch(`https://wttr.in/${location}?format=j1`, {
       signal: abortSignal,
-    });
-    const data = await response.json();
+    })
+    const data = await response.json()
 
     return {
       location,
       temperatureCelsius: Number(data.current_condition[0].temp_C),
       conditions: data.current_condition[0].weatherDesc[0].value,
-    };
+    }
   },
-});
+})
 ```
 
 When creating tools, keep descriptions concise and focused on what the tool does, emphasizing its primary use case. Descriptive schema names can also help guide the agent on how to use the tool. Visit the [`createTool`](/reference/tools/create-tool) reference for more information on available properties, configurations, and examples.
@@ -61,8 +61,8 @@ When creating tools, keep descriptions concise and focused on what the tool does
 To make a tool available to an agent, add it to the `tools` property on the `Agent` class. Mentioning available tools and their general purpose in the agent's system prompt helps the agent decide when to call a tool and when not to.
 
 ```typescript {11} title="src/mastra/agents/weather-agent.ts"
-import { Agent } from '@mastra/core/agent';
-import { weatherTool } from '../tools/weather-tool';
+import { Agent } from '@mastra/core/agent'
+import { weatherTool } from '../tools/weather-tool'
 
 export const weatherAgent = new Agent({
   id: 'weather-agent',
@@ -72,7 +72,7 @@ export const weatherAgent = new Agent({
     Use the weatherTool to fetch current weather data.`,
   model: '__GATEWAY_OPENAI_MODEL__',
   tools: { weatherTool },
-});
+})
 ```
 
 ## Define schemas
@@ -82,8 +82,8 @@ You can define the tool's `inputSchema` and `outputSchema` with any library that
 <Tabs>
   <TabItem value="zod" label="Zod">
     ```typescript title="src/mastra/tools/weather-tool.ts"
-    import { createTool } from '@mastra/core/tools';
-    import { z } from 'zod';
+    import { createTool } from '@mastra/core/tools'
+    import { z } from 'zod'
 
     export const weatherTool = createTool({
       id: 'weather-tool',
@@ -97,17 +97,17 @@ You can define the tool's `inputSchema` and `outputSchema` with any library that
         conditions: z.string(),
       }),
       execute: async ({ location }) => {
-        return { location, temperatureCelsius: 21, conditions: 'sunny' };
+        return { location, temperatureCelsius: 21, conditions: 'sunny' }
       },
-    });
+    })
     ```
   </TabItem>
 
   <TabItem value="valibot" label="Valibot">
     ```typescript title="src/mastra/tools/weather-tool.ts"
-    import { createTool } from '@mastra/core/tools';
-    import * as v from 'valibot';
-    import { toStandardJsonSchema } from '@valibot/to-json-schema';
+    import { createTool } from '@mastra/core/tools'
+    import * as v from 'valibot'
+    import { toStandardJsonSchema } from '@valibot/to-json-schema'
 
     export const weatherTool = createTool({
       id: 'weather-tool',
@@ -125,16 +125,16 @@ You can define the tool's `inputSchema` and `outputSchema` with any library that
         }),
       ),
       execute: async ({ location }) => {
-        return { location, temperatureCelsius: 21, conditions: 'sunny' };
+        return { location, temperatureCelsius: 21, conditions: 'sunny' }
       },
-    });
+    })
     ```
   </TabItem>
 
   <TabItem value="arktype" label="ArkType">
     ```typescript title="src/mastra/tools/weather-tool.ts"
-    import { createTool } from '@mastra/core/tools';
-    import { type } from 'arktype';
+    import { createTool } from '@mastra/core/tools'
+    import { type } from 'arktype'
 
     export const weatherTool = createTool({
       id: 'weather-tool',
@@ -148,9 +148,9 @@ You can define the tool's `inputSchema` and `outputSchema` with any library that
         conditions: 'string',
       }),
       execute: async ({ location }) => {
-        return { location, temperatureCelsius: 21, conditions: 'sunny' };
+        return { location, temperatureCelsius: 21, conditions: 'sunny' }
       },
-    });
+    })
     ```
   </TabItem>
 </Tabs>
@@ -160,9 +160,9 @@ You can define the tool's `inputSchema` and `outputSchema` with any library that
 An agent can use multiple tools to handle more complex tasks by delegating specific parts to individual tools. The agent decides which tools to use based on the user's message and the agent's instructions, plus the tool descriptions and schemas.
 
 ```typescript {13} title="src/mastra/agents/weather-agent.ts"
-import { Agent } from '@mastra/core/agent';
-import { weatherTool } from '../tools/weather-tool';
-import { hazardsTool } from '../tools/hazards-tool';
+import { Agent } from '@mastra/core/agent'
+import { weatherTool } from '../tools/weather-tool'
+import { hazardsTool } from '../tools/hazards-tool'
 
 export const weatherAgent = new Agent({
   id: 'weather-agent',
@@ -173,7 +173,7 @@ export const weatherAgent = new Agent({
     Use the hazardsTool to provide information about potential weather hazards.`,
   model: '__GATEWAY_OPENAI_MODEL__',
   tools: { weatherTool, hazardsTool },
-});
+})
 ```
 
 ## Agents as tools
@@ -181,7 +181,7 @@ export const weatherAgent = new Agent({
 Add subagents through the `agents` configuration to create a [supervisor](/docs/subagents). Mastra converts each subagent to an `agent-<key>` tool. Include a `description` on each subagent so the supervisor knows when to delegate.
 
 ```typescript title="src/mastra/agents/supervisor.ts"
-import { Agent } from '@mastra/core/agent';
+import { Agent } from '@mastra/core/agent'
 
 const writer = new Agent({
   id: 'writer',
@@ -189,7 +189,7 @@ const writer = new Agent({
   description: 'Drafts and edits written content',
   instructions: 'You are a skilled writer.',
   model: '__GATEWAY_OPENAI_MODEL__',
-});
+})
 
 export const supervisor = new Agent({
   id: 'supervisor',
@@ -198,7 +198,7 @@ export const supervisor = new Agent({
   model: '__GATEWAY_OPENAI_MODEL__',
   // highlight-next-line
   agents: { writer },
-});
+})
 ```
 
 ## Workflows as tools
@@ -206,8 +206,8 @@ export const supervisor = new Agent({
 Add workflows through the `workflows` configuration. Mastra converts each workflow to a `workflow-<key>` tool that uses the workflow's `inputSchema` and `outputSchema`. Include a `description` on the workflow so the agent knows when to trigger it.
 
 ```typescript title="src/mastra/agents/research-agent.ts"
-import { Agent } from '@mastra/core/agent';
-import { researchWorkflow } from '../workflows/research-workflow';
+import { Agent } from '@mastra/core/agent'
+import { researchWorkflow } from '../workflows/research-workflow'
 
 export const researchAgent = new Agent({
   id: 'research-agent',
@@ -216,7 +216,7 @@ export const researchAgent = new Agent({
   model: '__GATEWAY_OPENAI_MODEL__',
   // highlight-next-line
   workflows: { researchWorkflow },
-});
+})
 ```
 
 ## Share tools across agents
@@ -224,17 +224,17 @@ export const researchAgent = new Agent({
 Direct imports are the best choice when one tool is used by multiple agents. Each agent imports the tool and adds it to its `tools` record. Dependencies remain explicit and each agent can be used independently.
 
 ```typescript title="src/mastra/tools/weather-tool.ts"
-import { createTool } from '@mastra/core/tools';
+import { createTool } from '@mastra/core/tools'
 
 export const weatherTool = createTool({
   id: 'weather-tool',
   // Rest of the tool definition...
-});
+})
 ```
 
 ```typescript title="src/mastra/agents/weather-agents.ts"
-import { Agent } from '@mastra/core/agent';
-import { weatherTool } from '../tools/weather-tool';
+import { Agent } from '@mastra/core/agent'
+import { weatherTool } from '../tools/weather-tool'
 
 export const weatherAgent = new Agent({
   id: 'weather-agent',
@@ -242,12 +242,12 @@ export const weatherAgent = new Agent({
   instructions: 'Answer questions about current weather.',
   model: '__GATEWAY_OPENAI_MODEL__',
   tools: { weatherTool },
-});
+})
 ```
 
 ```typescript title="src/mastra/agents/travel-agents.ts"
-import { Agent } from '@mastra/core/agent';
-import { weatherTool } from '../tools/weather-tool';
+import { Agent } from '@mastra/core/agent'
+import { weatherTool } from '../tools/weather-tool'
 
 export const travelAgent = new Agent({
   id: 'travel-agent',
@@ -255,7 +255,7 @@ export const travelAgent = new Agent({
   instructions: 'Help users plan trips.',
   model: '__GATEWAY_OPENAI_MODEL__',
   tools: { weatherTool },
-});
+})
 ```
 
 If you need to access tools from the Mastra instance, see [`Mastra.getTool()`](/reference/core/getTool), [`Mastra.getToolById()`](/reference/core/getToolById), [`Mastra.listTools()`](/reference/core/listTools), and the [`Agent` reference](/reference/agents/agent).
@@ -267,8 +267,8 @@ Use `toModelOutput` when your tool returns rich structured data for your applica
 ```typescript title="src/mastra/tools/weather-tool.ts"
 export const weatherTool = createTool({
   execute: async ({ location }) => {
-    const response = await fetch(`https://wttr.in/${location}?format=j1`);
-    const data = await response.json();
+    const response = await fetch(`https://wttr.in/${location}?format=j1`)
+    const data = await response.json()
 
     return {
       location,
@@ -276,7 +276,7 @@ export const weatherTool = createTool({
       conditions: data.current_condition[0].weatherDesc[0].value,
       weatherIconUrl: data.current_condition[0].weatherIconUrl[0].value,
       source: data,
-    };
+    }
   },
   toModelOutput: output => {
     return {
@@ -288,9 +288,9 @@ export const weatherTool = createTool({
         },
         { type: 'image-url', url: output.weatherIconUrl },
       ],
-    };
+    }
   },
-});
+})
 ```
 
 `toModelOutput` also works with client-side tools. For tools passed through `clientTools`, the mapping runs on the client after the tool executes, and the transformed output is sent back to the server alongside the raw result. For tools defined on the server without an `execute` function (the browser runs the tool and sends the result back on the next request), the server definition's `toModelOutput` is applied to the incoming result, so the model receives the transformed content instead of the raw tool result.
@@ -304,8 +304,8 @@ If a transform is configured and it fails, Mastra doesn't fall back to the raw p
 The following example redacts a secret from both targets:
 
 ```typescript title="src/mastra/tools/customer-tool.ts"
-import { createTool } from '@mastra/core/tools';
-import { z } from 'zod';
+import { createTool } from '@mastra/core/tools'
+import { z } from 'zod'
 
 export const customerTool = createTool({
   id: 'lookup-customer',
@@ -321,7 +321,7 @@ export const customerTool = createTool({
     // const { ssn } = await response.json()
     return {
       ssn: '123-45-6789',
-    };
+    }
   },
   // highlight-start
   transform: {
@@ -333,7 +333,7 @@ export const customerTool = createTool({
     },
   },
   // highlight-end
-});
+})
 ```
 
 Your application code still receives the raw `ssn` from the tool. Browser-facing streams get the `display` output, and user-visible transcript messages get the `transcript` output.
@@ -345,7 +345,7 @@ For more phases, including `input`, `inputDelta`, `error`, `approval`, `suspend`
 Use `hooks` to run custom logic before and after every tool call an agent makes. Hooks apply to all tool sources: assigned tools, memory tools, toolsets, client tools, agent and workflow tools, and [workspace tools](/reference/workspace/workspace-class#tool-hooks). Common uses include logging, auditing, input validation, and blocking specific calls.
 
 ```typescript title="src/mastra/agents/support-agent.ts"
-import { Agent } from '@mastra/core/agent';
+import { Agent } from '@mastra/core/agent'
 
 export const supportAgent = new Agent({
   id: 'support-agent',
@@ -355,14 +355,14 @@ export const supportAgent = new Agent({
   // highlight-start
   hooks: {
     beforeToolCall: ({ toolName, input }) => {
-      console.log(`Running ${toolName}`, input);
+      console.log(`Running ${toolName}`, input)
     },
     afterToolCall: ({ toolName, output, error }) => {
-      console.log(`Finished ${toolName}`, { output, error });
+      console.log(`Finished ${toolName}`, { output, error })
     },
   },
   // highlight-end
-});
+})
 ```
 
 `beforeToolCall` runs before the tool executes and receives the tool name, input, and execution context. Return `{ proceed: false, output }` to skip the tool call entirely, the agent receives `output` as the tool result:
@@ -375,13 +375,13 @@ const guardedAgent = new Agent({
   model: '__GATEWAY_OPENAI_MODEL__',
   hooks: {
     beforeToolCall: ({ toolName, input }) => {
-      const command = (input as { command?: string }).command ?? '';
+      const command = (input as { command?: string }).command ?? ''
       if (toolName === 'execute_command' && command.includes('rm -rf')) {
-        return { proceed: false, output: 'Command blocked by policy.' };
+        return { proceed: false, output: 'Command blocked by policy.' }
       }
     },
   },
-});
+})
 ```
 
 `afterToolCall` runs after the tool finishes, whether it succeeded or failed. On success it receives `output`; if the tool threw, it receives `error` instead and the error is re-thrown after the hook runs.
@@ -394,10 +394,10 @@ Pass `hooks` to `.generate()` or `.stream()` to set hooks for a single execution
 await supportAgent.generate('Look up the order status', {
   hooks: {
     beforeToolCall: ({ toolName }) => {
-      console.log(`This run only: ${toolName}`);
+      console.log(`This run only: ${toolName}`)
     },
   },
-});
+})
 ```
 
 Agent-level and per-execution hooks merge per key: passing only `beforeToolCall` at execution time keeps the agent-level `afterToolCall`.
@@ -420,8 +420,8 @@ For detailed documentation on all lifecycle hooks, see the [createTool() referen
 ### Example: Using `onInputAvailable` and `onOutput`
 
 ```typescript
-import { createTool } from '@mastra/core/tools';
-import { z } from 'zod';
+import { createTool } from '@mastra/core/tools'
+import { z } from 'zod'
 
 export const weatherTool = createTool({
   id: 'weather-tool',
@@ -436,17 +436,17 @@ export const weatherTool = createTool({
   }),
   // Called when the complete input is available
   onInputAvailable: ({ input, toolCallId }) => {
-    console.log(`Weather requested for: ${input.location}`);
+    console.log(`Weather requested for: ${input.location}`)
   },
   execute: async ({ location }) => {
-    const weather = await fetchWeather(location);
-    return weather;
+    const weather = await fetchWeather(location)
+    return weather
   },
   // Called after successful execution
   onOutput: ({ output, toolName }) => {
-    console.log(`${toolName} result: ${output.temperatureCelsius}°C, ${output.conditions}`);
+    console.log(`${toolName} result: ${output.temperatureCelsius}°C, ${output.conditions}`)
   },
-});
+})
 ```
 
 ### Streaming tool input in UIs
@@ -463,7 +463,7 @@ Pass `toolChoice` or `activeTools` to `.generate()` or `.stream()` to control wh
 await agent.generate('Check the forecast', {
   toolChoice: 'required',
   activeTools: ['weatherTool'],
-});
+})
 ```
 
 See the [`Agent.generate()` reference](/reference/agents/generate) for all runtime options including `toolsets`, `clientTools`, and `prepareStep`.
@@ -510,7 +510,7 @@ const orchestrator = new Agent({
   workflows: {
     research: researchWorkflow, // toolName: "workflow-research"
   },
-});
+})
 ```
 
 Note that for subagents, you'll see two different identifiers in stream responses:
@@ -540,8 +540,8 @@ Each tool has two names: the export you import, and the tool ID the model sees i
 Import `webSearchTool` from `@mastra/core/tools` when you want the model provider to run its native web search tool. Mastra resolves it at run time from the active model, then passes the provider-managed tool to the model.
 
 ```typescript {2,10} title="src/mastra/agents/research-agent.ts"
-import { Agent } from '@mastra/core/agent';
-import { webSearchTool } from '@mastra/core/tools';
+import { Agent } from '@mastra/core/agent'
+import { webSearchTool } from '@mastra/core/tools'
 
 export const researchAgent = new Agent({
   id: 'research-agent',
@@ -551,7 +551,7 @@ export const researchAgent = new Agent({
   tools: {
     search: webSearchTool,
   },
-});
+})
 ```
 
 `webSearchTool` supports OpenAI, Anthropic, Google Gemini, and xAI models. If Mastra can't infer one of those providers from the active model, the agent run fails with a `MastraError`.
@@ -565,8 +565,8 @@ The `search` key is only the agent-local tool name. Use any key. The `webSearchT
 Import `webFetchTool` from `@mastra/core/tools` when the agent needs to read a specific URL. The tool requests the page over HTTP or HTTPS and returns its text content plus response metadata.
 
 ```typescript {2,10} title="src/mastra/agents/reader-agent.ts"
-import { Agent } from '@mastra/core/agent';
-import { webFetchTool } from '@mastra/core/tools';
+import { Agent } from '@mastra/core/agent'
+import { webFetchTool } from '@mastra/core/tools'
 
 export const readerAgent = new Agent({
   id: 'reader-agent',
@@ -576,7 +576,7 @@ export const readerAgent = new Agent({
   tools: {
     fetch: webFetchTool,
   },
-});
+})
 ```
 
 The tool takes a single `url` input and returns `content`, `truncated`, `status`, `statusText`, `contentType`, `url`, and `ok`. It applies these limits:
@@ -595,8 +595,8 @@ Import [`askUserTool`](/reference/tools/ask-user-tool) and add it to the agent's
 The tool suspends the run and emits a `tool-call-suspended` event with the question. It resumes when you call `resumeStream()` with the user's answer.
 
 ```typescript title="src/mastra/agents/index.ts"
-import { Agent } from '@mastra/core/agent';
-import { askUserTool } from '@mastra/core/tools';
+import { Agent } from '@mastra/core/agent'
+import { askUserTool } from '@mastra/core/tools'
 
 const agent = new Agent({
   id: 'assistant',
@@ -604,21 +604,21 @@ const agent = new Agent({
   instructions: 'Ask the user for clarification when the request is ambiguous.',
   model,
   tools: { askUserTool },
-});
+})
 ```
 
 Stream the agent and watch for `tool-call-suspended` chunks. The `suspendPayload` contains the question and optional structured choices:
 
 ```typescript title="src/run.ts"
-const stream = await agent.stream('Summarize my project');
+const stream = await agent.stream('Summarize my project')
 
 for await (const chunk of stream.fullStream) {
   if (chunk.type === 'tool-call-suspended') {
-    const { question, options } = chunk.payload.suspendPayload;
-    console.log(question);
-    const answer = await getUserAnswer(); // your UI logic
-    const resumed = await agent.resumeStream(answer, { runId: stream.runId });
-    for await (const c of resumed.textStream) process.stdout.write(c);
+    const { question, options } = chunk.payload.suspendPayload
+    console.log(question)
+    const answer = await getUserAnswer() // your UI logic
+    const resumed = await agent.resumeStream(answer, { runId: stream.runId })
+    for await (const c of resumed.textStream) process.stdout.write(c)
   }
 }
 ```
@@ -632,10 +632,10 @@ Import [`submitPlanTool`](/reference/tools/submit-plan-tool) to let the agent wr
 ```typescript title="src/run.ts"
 for await (const chunk of stream.fullStream) {
   if (chunk.type === 'tool-call-suspended' && chunk.payload.toolName === 'submit_plan') {
-    const { path } = chunk.payload.suspendPayload;
+    const { path } = chunk.payload.suspendPayload
     // Read and display the plan file, then resume:
-    const resumed = await agent.resumeStream({ action: 'approved' }, { runId: stream.runId });
-    for await (const c of resumed.textStream) process.stdout.write(c);
+    const resumed = await agent.resumeStream({ action: 'approved' }, { runId: stream.runId })
+    for await (const c of resumed.textStream) process.stdout.write(c)
   }
 }
 ```
@@ -647,9 +647,9 @@ The task tools manage a structured, durable task list for an agent run. They req
 Add task tracking through [`TaskSignalProvider`](/reference/signals/task-signal-provider), which bundles all four tools and the `TaskStateProcessor` in a single registration:
 
 ```typescript title="src/mastra/agents/index.ts"
-import { Agent } from '@mastra/core/agent';
-import { Memory } from '@mastra/memory';
-import { TaskSignalProvider } from '@mastra/core/signals';
+import { Agent } from '@mastra/core/agent'
+import { Memory } from '@mastra/memory'
+import { TaskSignalProvider } from '@mastra/core/signals'
 
 const agent = new Agent({
   id: 'coder',
@@ -658,7 +658,7 @@ const agent = new Agent({
   model,
   memory: new Memory(),
   signals: [new TaskSignalProvider()],
-});
+})
 ```
 
 Only one task can be `in_progress` at a time. The list is stored in the thread-scoped `threadState` storage domain and projected onto the agent's [state-signal](/docs/harness/signals) lane, so it survives observational-memory truncation. See the [Task tools reference](/reference/tools/task-tools) for full schemas.

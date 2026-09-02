@@ -46,7 +46,7 @@ Configure the platform credentials. The access token, project ID, and environmen
       accessToken: 'your-platform-access-token',
       projectId: 'your-project-id',
       environmentId: 'your-environment-id',
-    });
+    })
     ```
   </TabItem>
 </Tabs>
@@ -60,16 +60,16 @@ The sandbox provider resolves from the constructor's `sandboxProvider` option, t
 Add a `PlatformSandbox` to a workspace and assign it to an agent:
 
 ```typescript
-import { Agent } from '@mastra/core/agent';
-import { Workspace } from '@mastra/core/workspace';
-import { PlatformSandbox } from '@mastra/platform-workspace';
+import { Agent } from '@mastra/core/agent'
+import { Workspace } from '@mastra/core/workspace'
+import { PlatformSandbox } from '@mastra/platform-workspace'
 
 const workspace = new Workspace({
   sandbox: new PlatformSandbox({
     // accessToken, projectId, environmentId all fall back to env vars
     idleTimeoutMinutes: 30,
   }),
-});
+})
 
 const agent = new Agent({
   id: 'code-agent',
@@ -77,13 +77,13 @@ const agent = new Agent({
   instructions: 'You are a coding assistant working in this workspace.',
   model: '__GATEWAY_ANTHROPIC_MODEL_SONNET__',
   workspace,
-});
+})
 
 const response = await agent.generate(
   'Print "Hello, world!" and show the current working directory.',
-);
+)
 
-console.log(response.text);
+console.log(response.text)
 ```
 
 ### Private networking
@@ -95,7 +95,7 @@ const workspace = new Workspace({
   sandbox: new PlatformSandbox({
     networkIsolation: 'PRIVATE',
   }),
-});
+})
 ```
 
 The default `ISOLATED` mode allows outbound internet access only, with no private network connectivity.
@@ -107,10 +107,10 @@ Pass an existing `sandboxId` to reattach to a live sandbox instead of creating a
 ```typescript
 const sandbox = new PlatformSandbox({
   sandboxId: 'sbx_abc123',
-});
-await sandbox.start();
+})
+await sandbox.start()
 
-const result = await sandbox.executeCommand('cat', ['/workspace/state.json']);
+const result = await sandbox.executeCommand('cat', ['/workspace/state.json'])
 ```
 
 When `sandboxId` is set, `environmentId` isn't required because the sandbox already exists.
@@ -122,9 +122,9 @@ When `sandboxId` is set, `environmentId` isn't required because the sandbox alre
 Pass a reusable template builder to `PlatformSandbox`. A fresh sandbox start sends the serialized definition to Platform, which content-addresses it and starts or reuses the provider build. Sandbox creation never blocks on a build. When the exact template isn't built yet, Platform boots the sandbox on the best available fallback and rebuilds the requested template in the background. The fallback is a same-lineage stale template with matching resources when one exists, otherwise the provider base template:
 
 ```typescript
-import { PlatformSandbox, Template } from '@mastra/platform-workspace';
+import { PlatformSandbox, Template } from '@mastra/platform-workspace'
 
-const commitSha = process.env.REPOSITORY_COMMIT_SHA!;
+const commitSha = process.env.REPOSITORY_COMMIT_SHA!
 const template = Template()
   .cpuCount(4)
   .memoryMB(8_192)
@@ -133,14 +133,14 @@ const template = Template()
   .aptInstall(['git', 'jq'])
   .runCmd('git clone https://github.com/mastra-ai/mastra.git /workspace/repo')
   .runCmd(`git checkout ${commitSha}`)
-  .runCmd('pnpm install --frozen-lockfile');
+  .runCmd('pnpm install --frozen-lockfile')
 
 const sandbox = new PlatformSandbox({
   environmentId: 'env_abc',
   sandboxProvider: 'e2b',
   template,
-});
-await sandbox.start();
+})
+await sandbox.start()
 ```
 
 `Template()` supports `cpuCount`, `memoryMB`, `runCmd`, `setWorkdir`, `setEnvs`, `aptInstall`, `pipInstall`, and `npmInstall`. Platform serializes the builder internally and computes the content hash. Call `await template.build(options)` to start or reuse that provider build without provisioning a sandbox. It returns `ready`, `pending`, or `failed`, with the template ID and an optional retry hint or error.
@@ -152,7 +152,7 @@ Railway converts the command, working directory, environment, and package operat
 For public GitHub repositories, `createRepoTemplate()` can resolve and build the commit-pinned definition lazily when `start()` needs a fresh sandbox:
 
 ```typescript
-import { createRepoTemplate, PlatformSandbox } from '@mastra/platform-workspace';
+import { createRepoTemplate, PlatformSandbox } from '@mastra/platform-workspace'
 
 const sandbox = new PlatformSandbox({
   environmentId: 'env_abc',
@@ -161,8 +161,8 @@ const sandbox = new PlatformSandbox({
     setupCommand: 'pnpm install --frozen-lockfile',
     memoryMB: 2048,
   }),
-});
-await sandbox.start();
+})
+await sandbox.start()
 ```
 
 `createRepoTemplate()` accepts the same `cpuCount` and `memoryMB` sizing as the `Template()` builder methods, as plain options. They carry the identity and stale-fallback semantics described above. Omit them for the provider defaults.
@@ -180,12 +180,12 @@ Platform stores build state under the definition's server-derived content hash w
 When a sandbox boots on a fallback template (either a resource-matched prior member of the same family or the provider base), the platform response includes a `templatePending` field that `PlatformSandbox` surfaces for observability:
 
 ```typescript
-await sandbox.start();
+await sandbox.start()
 if (sandbox.templatePending) {
   // The sandbox is running on a fallback template.
   // A later start() of a sandbox with the same template definition
   // will pick up the exact template once the background build finishes.
-  console.log('exact template still baking:', sandbox.templatePending.templateId);
+  console.log('exact template still baking:', sandbox.templatePending.templateId)
 }
 ```
 
@@ -209,8 +209,8 @@ Pass a stable `id` to preserve a sandbox's filesystem across sessions or across 
 ```typescript
 const sandbox = new PlatformSandbox({
   id: `project-${projectId}`,
-});
-await sandbox.start(); // Boots from the most recent checkpoint for this id, or fresh if unknown
+})
+await sandbox.start() // Boots from the most recent checkpoint for this id, or fresh if unknown
 ```
 
 Checkpoint recovery is coarser than `sandboxId` reattachment. Reattaching (via `sandboxId`) rejoins the exact live sandbox and its running processes. Checkpoint recovery constructs a brand new sandbox and restores its filesystem from the latest checkpoint the platform captured for the previous sandbox with that `id`. Running processes and any filesystem writes made after the last checkpoint aren't restored.
@@ -218,7 +218,7 @@ Checkpoint recovery is coarser than `sandboxId` reattachment. Reattaching (via `
 Call `snapshot()` after a filesystem update to capture the configured recovery checkpoint immediately. It resolves without capturing when the sandbox has no caller-provided `id` or isn't running.
 
 ```typescript
-await sandbox.snapshot();
+await sandbox.snapshot()
 ```
 
 Each `id` maps to one independent filesystem. Reusing the same `id` across unrelated sandboxes causes the platform to boot them from each other's checkpoint.
@@ -229,7 +229,7 @@ Set `seedCheckpointName` to provide a boot-only fallback when the checkpoint for
 const sandbox = new PlatformSandbox({
   id: `project-session-${sessionId}`,
   seedCheckpointName: 'project-base',
-});
+})
 ```
 
 ### Cloning for a fleet of sandboxes
@@ -240,10 +240,10 @@ const sandbox = new PlatformSandbox({
 const template = new PlatformSandbox({
   networkIsolation: 'PRIVATE',
   idleTimeoutMinutes: 30,
-});
+})
 
-const perProject = template.clone({ id: `project-${projectId}` });
-await perProject.start();
+const perProject = template.clone({ id: `project-${projectId}` })
+await perProject.start()
 ```
 
 Combine `clone()` with a stable `id` per clone to opt each clone into [checkpoint recovery](#checkpoint-recovery) independently.
@@ -257,10 +257,10 @@ const result = await sandbox.executeCommand('python', ['analyze.py'], {
   timeout: 30_000,
   cwd: '/workspace',
   env: { INPUT: 'repo' },
-});
+})
 
-console.log(result.stdout);
-console.log(result.exitCode);
+console.log(result.stdout)
+console.log(result.exitCode)
 ```
 
 :::warning
@@ -476,10 +476,10 @@ The `command` argument is a shell string and is concatenated verbatim into the r
 Platform API failures raise `PlatformApiError`. Structured `{ error: { message, type } }` responses are parsed into `.code` (machine-readable kind) and `.proxyMessage` (human string); the raw response body stays available on `.body`:
 
 ```typescript
-import { PlatformApiError } from '@mastra/platform-workspace';
+import { PlatformApiError } from '@mastra/platform-workspace'
 
 try {
-  await sandbox.executeCommand('cat', ['/missing.txt']);
+  await sandbox.executeCommand('cat', ['/missing.txt'])
 } catch (err) {
   if (err instanceof PlatformApiError) {
     if (err.code === 'not_found') {
@@ -487,7 +487,7 @@ try {
     } else if (err.code === 'authentication_error') {
       // refresh token
     }
-    console.error(err.status, err.code, err.proxyMessage);
+    console.error(err.status, err.code, err.proxyMessage)
   }
 }
 ```
@@ -497,10 +497,10 @@ try {
 `executeCommand` runs over the direct-exec data plane (a WebSocket to the Railway tcp-proxy) and can also throw two typed sandbox errors on unrecoverable failure:
 
 ```typescript
-import { SandboxDestroyedError, SandboxExecTransportError } from '@mastra/platform-workspace';
+import { SandboxDestroyedError, SandboxExecTransportError } from '@mastra/platform-workspace'
 
 try {
-  await sandbox.executeCommand('pytest');
+  await sandbox.executeCommand('pytest')
 } catch (err) {
   if (err instanceof SandboxDestroyedError) {
     // /exec-lease returned 410; the sandbox has been destroyed.
@@ -509,7 +509,7 @@ try {
   } else if (err instanceof SandboxExecTransportError) {
     // Both the initial WebSocket attempt and the built-in retry
     // closed without an exit frame against a live sandbox.
-    console.error(err.closeCode, err.closeReason, err.wsEndpoint);
+    console.error(err.closeCode, err.closeReason, err.wsEndpoint)
   }
 }
 ```

@@ -18,12 +18,12 @@ Use it when several local processes need to share a stream, such as coordinating
 Pass a socket path that every participating process shares.
 
 ```typescript title="src/mastra/index.ts"
-import { Mastra } from '@mastra/core';
-import { UnixSocketPubSub } from '@mastra/core/events';
+import { Mastra } from '@mastra/core'
+import { UnixSocketPubSub } from '@mastra/core/events'
 
 export const mastra = new Mastra({
   pubsub: new UnixSocketPubSub('/tmp/mastra/events.sock'),
-});
+})
 ```
 
 ## Constructor parameters
@@ -99,7 +99,7 @@ export const mastra = new Mastra({
 Closes the socket connection and, when this instance is the broker, releases the broker role. Call this during graceful shutdown.
 
 ```typescript
-await pubsub.close();
+await pubsub.close()
 ```
 
 ## Broker election

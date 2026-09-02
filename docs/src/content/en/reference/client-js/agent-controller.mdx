@@ -12,26 +12,26 @@ The Agent Controller API reaches an [`AgentController`](/reference/agent-control
 ## Usage example
 
 ```typescript
-import { MastraClient } from '@mastra/client-js';
+import { MastraClient } from '@mastra/client-js'
 
-const client = new MastraClient({ baseUrl: 'http://localhost:4111' });
-const session = client.getAgentController('coding-controller').session('user-123');
+const client = new MastraClient({ baseUrl: 'http://localhost:4111' })
+const session = client.getAgentController('coding-controller').session('user-123')
 
-await session.create();
+await session.create()
 
 const subscription = await session.subscribe({
   onEvent: event => handleEvent(event),
   onError: error => showDisconnected(error),
   onReconnect: () => {
-    void session.state().then(resync).catch(showDisconnected);
+    void session.state().then(resync).catch(showDisconnected)
   },
   reconnect: true,
-});
+})
 
-await session.sendMessage('Summarize the open pull requests');
+await session.sendMessage('Summarize the open pull requests')
 
 // Call when the UI disconnects.
-subscription.unsubscribe();
+subscription.unsubscribe()
 ```
 
 ## Listing agent controllers
@@ -39,7 +39,7 @@ subscription.unsubscribe();
 Retrieve the agent controllers hosted on the connected Mastra instance:
 
 ```typescript
-const controllers = await client.listAgentControllers();
+const controllers = await client.listAgentControllers()
 ```
 
 ## Working with a specific agent controller
@@ -47,7 +47,7 @@ const controllers = await client.listAgentControllers();
 Get an instance of an agent controller by the ID it's registered under:
 
 ```typescript
-const controller = client.getAgentController('coding-controller');
+const controller = client.getAgentController('coding-controller')
 ```
 
 ### `listModes()`
@@ -171,11 +171,11 @@ Resumes a suspended interactive tool raised by a `tool_suspended` event. The `re
 
 ```typescript
 interface PlanResume {
-  action: 'approved' | 'rejected';
-  feedback?: string;
-  path?: string;
-  title?: string;
-  plan?: string;
+  action: 'approved' | 'rejected'
+  feedback?: string
+  path?: string
+  title?: string
+  plan?: string
 }
 ```
 
@@ -275,18 +275,18 @@ Returns: `Promise<SendNotificationResult>`
 A controller can also emit events the SDK doesn't type. `AgentControllerEvent` is the union of `KnownAgentControllerEvent` and `OtherAgentControllerEvent`. Because `OtherAgentControllerEvent.type` is `string`, comparing `event.type` to a literal doesn't narrow the union. Narrow with `isKnownAgentControllerEvent(event)` first:
 
 ```typescript
-import { isKnownAgentControllerEvent } from '@mastra/client-js';
+import { isKnownAgentControllerEvent } from '@mastra/client-js'
 
 function handleEvent(event: AgentControllerEvent) {
-  if (!isKnownAgentControllerEvent(event)) return;
+  if (!isKnownAgentControllerEvent(event)) return
 
   switch (event.type) {
     case 'message_update':
-      render(event.message);
-      break;
+      render(event.message)
+      break
     case 'tool_approval_required':
-      showApproval(event.toolCallId);
-      break;
+      showApproval(event.toolCallId)
+      break
   }
 }
 ```

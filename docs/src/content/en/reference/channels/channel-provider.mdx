@@ -12,8 +12,8 @@ packages:
 Register providers on the `Mastra` constructor under `channels`, keyed by an id you choose. Each provider's routes are merged into the server's API routes automatically, and `initialize()` runs during Mastra startup.
 
 ```typescript title="src/mastra/index.ts"
-import { Mastra } from '@mastra/core/mastra';
-import { SlackProvider } from '@mastra/slack';
+import { Mastra } from '@mastra/core/mastra'
+import { SlackProvider } from '@mastra/slack'
 
 export const mastra = new Mastra({
   channels: {
@@ -22,7 +22,7 @@ export const mastra = new Mastra({
       baseUrl: process.env.MASTRA_BASE_URL,
     }),
   },
-});
+})
 ```
 
 The provider's `baseUrl` is the public URL the platform sends webhooks and events to. In production this is your deployed Mastra server URL. For local development, the platform can't reach `http://localhost:4111`, so run a tunnel (such as [cloudflared](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/) or [ngrok](https://ngrok.com/)) and point `baseUrl` at the tunnel URL (for example `https://abc123.trycloudflare.com`) so events reach your local dev process.
@@ -100,16 +100,16 @@ Mastra includes [`SlackProvider`](/reference/channels/slack-provider) and [`Tele
 Access a registered provider through the `channels` getter, keyed by the id you registered it under. The getter is typed from the constructor config, so `mastra.channels.slack` is the concrete provider with its full method surface.
 
 ```typescript
-await mastra.channels.slack.configure({ refreshToken });
+await mastra.channels.slack.configure({ refreshToken })
 ```
 
 When the key is only known at runtime, look the provider up by string id instead. `getChannelProvider` takes the concrete type as a generic, and `getChannelProviders` returns every registered provider keyed by id.
 
 ```typescript
-import type { SlackProvider } from '@mastra/slack';
+import type { SlackProvider } from '@mastra/slack'
 
-const slack = mastra.getChannelProvider<SlackProvider>('slack');
-const all = mastra.getChannelProviders();
+const slack = mastra.getChannelProvider<SlackProvider>('slack')
+const all = mastra.getChannelProviders()
 ```
 
 ## Related

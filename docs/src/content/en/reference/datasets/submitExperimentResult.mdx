@@ -21,7 +21,7 @@ const result = await dataset.submitExperimentResult({
   itemId: 'item-1',
   output: { translation: 'Hola' },
   scores: [{ scorerId: 'accuracy', score: 0.92, reason: 'Faithful translation' }],
-});
+})
 ```
 
 The item must be visible at the experiment's pinned dataset version. Submissions to an experiment that has a target throw `EXPERIMENT_HAS_TARGET`, which prevents two writers from racing on the same rows. Submissions after finalization throw `EXPERIMENT_ALREADY_FINALIZED`.

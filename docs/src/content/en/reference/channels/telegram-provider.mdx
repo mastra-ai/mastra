@@ -16,29 +16,29 @@ Use `TelegramProvider` when you want Mastra to own the bot lifecycle. For the lo
 Create a bot with [BotFather](https://t.me/botfather), set `TELEGRAM_BOT_TOKEN`, and register the provider with a public base URL for webhook delivery:
 
 ```typescript title="src/mastra/index.ts"
-import { Agent } from '@mastra/core/agent';
-import { Mastra } from '@mastra/core/mastra';
-import { TelegramProvider } from '@mastra/telegram';
+import { Agent } from '@mastra/core/agent'
+import { Mastra } from '@mastra/core/mastra'
+import { TelegramProvider } from '@mastra/telegram'
 
 const supportAgent = new Agent({
   id: 'support',
   name: 'Support agent',
   instructions: 'Help users with product questions.',
   model: 'openai/gpt-5-mini',
-});
+})
 
 const telegram = new TelegramProvider({
   baseUrl: 'https://your-app.example.com',
-});
+})
 
 export const mastra = new Mastra({
   agents: { supportAgent },
   channels: { telegram },
-});
+})
 
 await telegram.connect('support', {
   botToken: process.env.TELEGRAM_BOT_TOKEN,
-});
+})
 ```
 
 When `botToken` is omitted, `connect()` creates a pending installation and returns a BotFather deep link instead of activating the bot immediately.
@@ -239,7 +239,7 @@ const result = await telegram.connect('support', {
     { command: 'help', description: 'Show support options' },
     { command: 'status', description: 'Check service status' },
   ],
-});
+})
 ```
 
 `TelegramConnectOptions` fields:
@@ -275,7 +275,7 @@ Returns: `Promise<ChannelConnectResult>`
 Stops the active transport and removes its stored installation. In webhook mode, it also removes the Telegram webhook.
 
 ```typescript
-await telegram.disconnect('support');
+await telegram.disconnect('support')
 ```
 
 Returns: `Promise<void>`
@@ -285,7 +285,7 @@ Returns: `Promise<void>`
 Lists active and pending Telegram installations without exposing bot or webhook secret tokens.
 
 ```typescript
-const installations = await telegram.listInstallations();
+const installations = await telegram.listInstallations()
 ```
 
 Returns: `Promise<ChannelInstallationInfo[]>`
@@ -295,7 +295,7 @@ Returns: `Promise<ChannelInstallationInfo[]>`
 Returns the full installation for an agent, including sensitive bot and webhook tokens, or `null` when no installation exists.
 
 ```typescript
-const installation = await telegram.getInstallation('support');
+const installation = await telegram.getInstallation('support')
 ```
 
 Returns: `Promise<TelegramInstallation | null>`
@@ -310,7 +310,7 @@ Updates the Bot API origin or webhook base URL at runtime. Passing `null` is a n
 await telegram.configure({
   baseUrl: 'https://new-app.example.com',
   apiBaseUrl: 'https://api.telegram.org',
-});
+})
 ```
 
 Returns: `Promise<void>`
@@ -320,7 +320,7 @@ Returns: `Promise<void>`
 Restores active installations from storage and rebuilds their Telegram adapters before reconnecting the registered agents. Mastra calls this during startup.
 
 ```typescript
-await telegram.initialize();
+await telegram.initialize()
 ```
 
 Returns: `Promise<void>`
@@ -330,7 +330,7 @@ Returns: `Promise<void>`
 Returns whether at least one active Telegram installation exists.
 
 ```typescript
-const configured = telegram.isConfigured();
+const configured = telegram.isConfigured()
 ```
 
 #### `getInfo()`
@@ -338,7 +338,7 @@ const configured = telegram.isConfigured();
 Returns channel discovery metadata for the Editor UI, including connection status and the `botToken` and `name` connect-option schema.
 
 ```typescript
-const info = telegram.getInfo();
+const info = telegram.getInfo()
 ```
 
 Returns: `ChannelPlatformInfo`
@@ -348,7 +348,7 @@ Returns: `ChannelPlatformInfo`
 Returns the live `TelegramAdapter` for an active installation.
 
 ```typescript
-const adapter = telegram.getAdapter(installationId);
+const adapter = telegram.getAdapter(installationId)
 ```
 
 Returns: `TelegramAdapter | undefined`
@@ -358,7 +358,7 @@ Returns: `TelegramAdapter | undefined`
 Returns the provider's unauthenticated `POST /telegram/events/:webhookId` route. Mastra registers this route automatically.
 
 ```typescript
-const routes = telegram.getRoutes();
+const routes = telegram.getRoutes()
 ```
 
 Returns: `ApiRoute[]`

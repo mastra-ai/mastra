@@ -39,7 +39,7 @@ The `WorkspaceSandbox` interface defines how workspaces execute commands and man
 Starts the sandbox and is called automatically by `workspace.init()` or the first `executeCommand()` call.
 
 ```typescript
-const result = await sandbox.start();
+const result = await sandbox.start()
 // { outcome: 'created' } — a fresh VM was created
 // { outcome: 'connected' } — reconnected to an existing VM
 // undefined — the provider does not report
@@ -82,14 +82,14 @@ new E2BSandbox({
   onStart: async ({ sandbox, outcome }) => {
     if (outcome === 'created') {
       // Fresh VM: run the full setup.
-      await runSetup(sandbox);
-      return;
+      await runSetup(sandbox)
+      return
     }
     // Reconnected: probe, and self-heal if setup never completed.
-    const probe = await sandbox.executeCommand('test -d ~/repo/.git');
-    if (probe.exitCode !== 0) await runSetup(sandbox);
+    const probe = await sandbox.executeCommand('test -d ~/repo/.git')
+    if (probe.exitCode !== 0) await runSetup(sandbox)
   },
-});
+})
 ```
 
 Semantics:
@@ -108,9 +108,9 @@ The updater receives the hook currently installed, either the `onStart` construc
 
 ```typescript
 sandbox.setOnStart?.(previous => async args => {
-  await previous?.(args); // whatever prepared the sandbox runs first
-  await mySetup(args);
-});
+  await previous?.(args) // whatever prepared the sandbox runs first
+  await mySetup(args)
+})
 ```
 
 Semantics:
@@ -126,9 +126,9 @@ Semantics:
 Sets the default directory for command execution and process spawns. When a command provides no per-command `cwd`, the sandbox runs it from this directory. A per-command `cwd` always wins. When neither is provided, each provider keeps its own default (E2B home, Docker `/workspace`, Vercel serverless `/tmp`, and so on).
 
 ```typescript
-const sandbox = new E2BSandbox({ workingDirectory: '/home/user/my-repo' });
-await sandbox.executeCommand('pwd'); // /home/user/my-repo
-await sandbox.executeCommand('pwd', [], { cwd: '/tmp' }); // /tmp
+const sandbox = new E2BSandbox({ workingDirectory: '/home/user/my-repo' })
+await sandbox.executeCommand('pwd') // /home/user/my-repo
+await sandbox.executeCommand('pwd', [], { cwd: '/tmp' }) // /tmp
 ```
 
 The effective value is readable through the `sandbox.workingDirectory` getter. Providers that compute their value, such as Daytona's automatic probe or Docker's `/workspace` default, report the effective directory through the same getter.
@@ -143,7 +143,7 @@ Semantics:
 Stop the sandbox.
 
 ```typescript
-await sandbox.stop?.();
+await sandbox.stop?.()
 ```
 
 ### `destroy()`
@@ -151,7 +151,7 @@ await sandbox.stop?.();
 Clean up sandbox resources. Called by `workspace.destroy()`.
 
 ```typescript
-await sandbox.destroy();
+await sandbox.destroy()
 ```
 
 ### `snapshot()`
@@ -159,7 +159,7 @@ await sandbox.destroy();
 Persists the sandbox's current state when the provider supports snapshots. Other providers resolve without doing work.
 
 ```typescript
-await sandbox.snapshot();
+await sandbox.snapshot()
 ```
 
 **Returns:** `Promise<void>`
@@ -169,8 +169,8 @@ await sandbox.snapshot();
 Execute a shell command.
 
 ```typescript
-const result = await sandbox.executeCommand('ls', ['-la', '/docs']);
-const result = await sandbox.executeCommand('npm', ['install', 'lodash']);
+const result = await sandbox.executeCommand('ls', ['-la', '/docs'])
+const result = await sandbox.executeCommand('npm', ['install', 'lodash'])
 ```
 
 **Parameters:**
@@ -241,7 +241,7 @@ const result = await sandbox.executeCommand('npm', ['install', 'lodash']);
 Update the sandbox's runtime environment. These values are merged into every command the sandbox runs, including `executeCommand()` and `processes.spawn()`, so credentials installed or rotated after the sandbox was created reach every subsequent command. Optional, so check for support or use optional chaining.
 
 ```typescript
-sandbox.setEnv?.(env => ({ ...env, GH_TOKEN: token }));
+sandbox.setEnv?.(env => ({ ...env, GH_TOKEN: token }))
 ```
 
 The updater receives a copy of the current environment and returns the replacement, so a single call can set, unset, or batch-update variables. Removing a key removes it from the sandbox's runtime environment only, so values the provider supplies on its own still apply. Seed the initial values with the `env` constructor option.
@@ -267,7 +267,7 @@ The runtime environment applies to commands executed through the sandbox rather 
 Returns a copy of the sandbox's current runtime environment; because mutations to the returned object don't change the sandbox, use `setEnv()` for updates.
 
 ```typescript
-const token = sandbox.getEnv().GH_TOKEN;
+const token = sandbox.getEnv().GH_TOKEN
 ```
 
 **Returns:** `Record<string, string | undefined>`
@@ -277,7 +277,7 @@ const token = sandbox.getEnv().GH_TOKEN;
 Get sandbox status and resource information.
 
 ```typescript
-const info = await sandbox.getInfo();
+const info = await sandbox.getInfo()
 // { status: 'running', resources: { memoryMB: 512, cpuPercent: 5 } }
 ```
 
@@ -286,7 +286,7 @@ const info = await sandbox.getInfo();
 Returns a description of how this sandbox works. Injected into the agent's system message when the workspace is assigned to an agent.
 
 ```typescript
-const instructions = sandbox.getInstructions?.();
+const instructions = sandbox.getInstructions?.()
 // 'Local command execution. Working directory: "/workspace".'
 ```
 
@@ -382,10 +382,10 @@ Coordinates are pixels from the top-left corner of the display. Providers normal
 Use the `supportsComputer()` type guard to check for the capability:
 
 ```typescript
-import { supportsComputer } from '@mastra/core/workspace';
+import { supportsComputer } from '@mastra/core/workspace'
 
 if (supportsComputer(sandbox)) {
-  const { data } = await sandbox.computer.screenshot();
+  const { data } = await sandbox.computer.screenshot()
 }
 ```
 

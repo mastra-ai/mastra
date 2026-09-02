@@ -32,8 +32,8 @@ Sandboxes that run a desktop environment can expose screenshot, mouse, and keybo
 Action tools take a screenshot after each action by default. Configure the screenshot behavior for each tool:
 
 ```typescript title="src/mastra/workspaces.ts"
-import { Workspace, WORKSPACE_TOOLS } from '@mastra/core/workspace';
-import { E2BDesktopSandbox } from '@mastra/e2b-desktop';
+import { Workspace, WORKSPACE_TOOLS } from '@mastra/core/workspace'
+import { E2BDesktopSandbox } from '@mastra/e2b-desktop'
 
 const workspace = new Workspace({
   sandbox: new E2BDesktopSandbox(),
@@ -46,7 +46,7 @@ const workspace = new Workspace({
       requireApproval: true,
     },
   },
-});
+})
 ```
 
 Computer tools accept the same per-tool `enabled` and `requireApproval` configuration as other workspace tools.

@@ -18,11 +18,11 @@ Item runs, result submission, and finalization are safe to retry. Creation is sa
 ## Usage example
 
 ```typescript
-import { MastraClient } from '@mastra/client-js';
+import { MastraClient } from '@mastra/client-js'
 
 const client = new MastraClient({
   baseUrl: 'http://localhost:4111',
-});
+})
 
 // 1. Create the experiment. Pass your orchestrator's run ID so a
 //    retried workflow converges on the same experiment.
@@ -32,7 +32,7 @@ const { experimentId, totalItems, datasetVersion } = await client.createDatasetE
   targetType: 'agent',
   targetId: 'triage-agent',
   scorerIds: ['clinical-judge'],
-});
+})
 
 // 2. Run one item per activity. Mastra executes the agent, runs the
 //    scorers, and upserts the result. Retried activities converge on
@@ -41,14 +41,14 @@ const { result, scores } = await client.runExperimentItem({
   datasetId: 'clinical-triage-evals',
   experimentId,
   itemId: 'item-1',
-});
+})
 
 // 3. Finalize. The server computes succeeded/failed/skipped counts
 //    from the persisted rows.
 const experiment = await client.finalizeExperiment({
   datasetId: 'clinical-triage-evals',
   experimentId,
-});
+})
 ```
 
 For pure ingestion, create the experiment without `targetType`/`targetId` and replace step 2 with `submitExperimentResult`.

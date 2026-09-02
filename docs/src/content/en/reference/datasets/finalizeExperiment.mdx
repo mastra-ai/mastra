@@ -24,12 +24,12 @@ Finalization is idempotent: calling it on an already-finalized experiment return
 ## Usage example
 
 ```typescript
-const experiment = await dataset.finalizeExperiment({ experimentId });
+const experiment = await dataset.finalizeExperiment({ experimentId })
 
-console.log(experiment.status); // 'completed'
-console.log(experiment.succeededCount);
-console.log(experiment.failedCount);
-console.log(experiment.skippedCount);
+console.log(experiment.status) // 'completed'
+console.log(experiment.succeededCount)
+console.log(experiment.failedCount)
+console.log(experiment.skippedCount)
 ```
 
 ## Parameters

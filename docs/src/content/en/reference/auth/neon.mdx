@@ -17,10 +17,10 @@ import PropertiesTable from "@site/src/components/PropertiesTable"
 ## Usage
 
 ```typescript title="src/mastra/index.ts"
-import { Mastra } from '@mastra/core/mastra';
-import { MastraAuthNeon, MastraRBACNeon } from '@mastra/auth-neon';
+import { Mastra } from '@mastra/core/mastra'
+import { MastraAuthNeon, MastraRBACNeon } from '@mastra/auth-neon'
 
-const auth = new MastraAuthNeon();
+const auth = new MastraAuthNeon()
 
 const rbac = new MastraRBACNeon({
   roleMapping: {
@@ -28,14 +28,14 @@ const rbac = new MastraRBACNeon({
     member: ['agents:read', 'workflows:read'],
     _default: [],
   },
-});
+})
 
 export const mastra = new Mastra({
   server: {
     auth,
     rbac,
   },
-});
+})
 ```
 
 Set `NEON_AUTH_BASE_URL` to your Neon Auth service URL. You can also pass `baseUrl` directly to both constructors.
@@ -120,7 +120,7 @@ The `MastraAuthNeon` constructor accepts an optional `MastraAuthNeonOptions` obj
 #### `authenticateToken()`
 
 ```typescript
-await auth.authenticateToken(token, request);
+await auth.authenticateToken(token, request)
 ```
 
 Verifies the token as a JWT with the configured JWKS endpoint. If JWT verification fails, the provider validates it as a Neon Auth session token through the session API. Returns the authenticated `NeonAuthUser`, or `null` when neither method succeeds.
@@ -128,7 +128,7 @@ Verifies the token as a JWT with the configured JWKS endpoint. If JWT verificati
 #### `authorizeUser()`
 
 ```typescript
-await auth.authorizeUser(user, request);
+await auth.authorizeUser(user, request)
 ```
 
 Runs the configured custom authorization function when one is provided. Otherwise, it requires a Neon Auth user ID and rejects expired JWT payloads.
@@ -138,7 +138,7 @@ Runs the configured custom authorization function when one is provided. Otherwis
 #### `signIn()`
 
 ```typescript
-const result = await auth.signIn(email, password, request);
+const result = await auth.signIn(email, password, request)
 ```
 
 Authenticates email-and-password credentials through Neon Auth. Returns the authenticated user, optional token, and response cookies.
@@ -146,7 +146,7 @@ Authenticates email-and-password credentials through Neon Auth. Returns the auth
 #### `signUp()`
 
 ```typescript
-const result = await auth.signUp(email, password, name, request);
+const result = await auth.signUp(email, password, name, request)
 ```
 
 Creates a Neon Auth account using email-and-password credentials. `name` is optional; when omitted, the provider derives a display name from the email address. Returns the authenticated user, optional token, and response cookies.
@@ -154,7 +154,7 @@ Creates a Neon Auth account using email-and-password credentials. `name` is opti
 #### `isSignUpEnabled()`
 
 ```typescript
-const enabled = auth.isSignUpEnabled();
+const enabled = auth.isSignUpEnabled()
 ```
 
 Returns the configured `signUpEnabled` value.
@@ -164,7 +164,7 @@ Returns the configured `signUpEnabled` value.
 #### `createSession()`
 
 ```typescript
-const session = await auth.createSession(userId, metadata);
+const session = await auth.createSession(userId, metadata)
 ```
 
 Creates a normalized Mastra session with a generated ID and a seven-day expiration without creating a remote Neon Auth session.
@@ -172,7 +172,7 @@ Creates a normalized Mastra session with a generated ID and a seven-day expirati
 #### `validateSession()`
 
 ```typescript
-const session = await auth.validateSession(sessionId);
+const session = await auth.validateSession(sessionId)
 ```
 
 Validates a Neon Auth session token and returns a normalized Mastra session, or `null` when the session is invalid.
@@ -180,7 +180,7 @@ Validates a Neon Auth session token and returns a normalized Mastra session, or 
 #### `refreshSession()`
 
 ```typescript
-const session = await auth.refreshSession(sessionId);
+const session = await auth.refreshSession(sessionId)
 ```
 
 Validates the session through Neon Auth. Neon Auth refreshes sessions automatically when its configured update interval is reached.
@@ -188,7 +188,7 @@ Validates the session through Neon Auth. Neon Auth refreshes sessions automatica
 #### `destroySession()`
 
 ```typescript
-await auth.destroySession(sessionId);
+await auth.destroySession(sessionId)
 ```
 
 Completes without a remote request. Neon Auth handles session destruction through its sign-out endpoint, while `getClearSessionHeaders()` returns the headers used to clear local session cookies.
@@ -238,7 +238,7 @@ The `MastraRBACNeon` constructor accepts a `MastraRBACNeonOptions` object.
 #### `getRoles()`
 
 ```typescript
-const roles = await rbac.getRoles(user);
+const roles = await rbac.getRoles(user)
 ```
 
 Returns roles from the configured `getUserRoles` function, the user's JWT `role` claim, or Neon Auth organization memberships. When `organizationId` is set, only memberships for that organization are considered.
@@ -246,7 +246,7 @@ Returns roles from the configured `getUserRoles` function, the user's JWT `role`
 #### `hasRole()`
 
 ```typescript
-const allowed = await rbac.hasRole(user, 'admin');
+const allowed = await rbac.hasRole(user, 'admin')
 ```
 
 Checks whether the user has the requested role.
@@ -254,7 +254,7 @@ Checks whether the user has the requested role.
 #### `getPermissions()`
 
 ```typescript
-const permissions = await rbac.getPermissions(user);
+const permissions = await rbac.getPermissions(user)
 ```
 
 Resolves the user's roles through `roleMapping` and returns Mastra permission patterns.
@@ -262,7 +262,7 @@ Resolves the user's roles through `roleMapping` and returns Mastra permission pa
 #### `hasPermission()`
 
 ```typescript
-const allowed = await rbac.hasPermission(user, 'agents:read');
+const allowed = await rbac.hasPermission(user, 'agents:read')
 ```
 
 Checks whether the resolved permissions allow the requested permission.
@@ -270,8 +270,8 @@ Checks whether the resolved permissions allow the requested permission.
 #### `hasAllPermissions()` and `hasAnyPermission()`
 
 ```typescript
-const canReadAndRun = await rbac.hasAllPermissions(user, ['agents:read', 'agents:execute']);
-const canReadAnything = await rbac.hasAnyPermission(user, ['agents:read', 'workflows:read']);
+const canReadAndRun = await rbac.hasAllPermissions(user, ['agents:read', 'agents:execute'])
+const canReadAnything = await rbac.hasAnyPermission(user, ['agents:read', 'workflows:read'])
 ```
 
 Checks whether the user has all or at least one of the requested permissions.
@@ -279,7 +279,7 @@ Checks whether the user has all or at least one of the requested permissions.
 #### `getAvailableRoles()`
 
 ```typescript
-const roles = await rbac.getAvailableRoles();
+const roles = await rbac.getAvailableRoles()
 ```
 
 Returns the configured role names except `_default`.
@@ -287,7 +287,7 @@ Returns the configured role names except `_default`.
 #### `getRolePermissions()`
 
 ```typescript
-const permissions = await rbac.getRolePermissions('member');
+const permissions = await rbac.getRolePermissions('member')
 ```
 
 Resolves the permission patterns configured for a role.
