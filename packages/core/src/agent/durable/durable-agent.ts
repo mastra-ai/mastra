@@ -33,7 +33,12 @@ import { prepareForDurableExecution } from './preparation';
 import { endRunSpansWithError, ExtendedRunRegistry, globalRunRegistry } from './run-registry';
 import { createDurableAgentStream, emitChunkEvent, emitErrorEvent } from './stream-adapter';
 import type { DurableAgentStreamResult as DurableStreamAdapterResult } from './stream-adapter';
-import type { AgentStepFinishEventData, AgentSuspendedEventData, DurableAgenticWorkflowInput } from './types';
+import type {
+  AgentStepFinishEventData,
+  AgentSuspendedEventData,
+  DurableAgenticWorkflowInput,
+  RegistryModelListEntry,
+} from './types';
 import { createDurableAgenticWorkflow } from './workflows';
 
 /**
@@ -957,6 +962,57 @@ export class DurableAgent<
     }
     recoveryLease.assertOwned();
 
+    // Restore the live fallback model list the run was prepared with (#22594).
+    // The persisted (enabled-only, ordered) list is the source of truth for the
+    // run's shape; the live resolution is the only source of real model
+    // instances. Ids regenerate on every resolution (`toFallbackEntry` assigns
+    // `mdl.id ?? randomUUID()`), so live entries must be rebound to the
+    // persisted ids that llm-execution looks models up by.
+    let modelList: RegistryModelListEntry[] | undefined;
+    const persistedModelList = workflowInput.modelList;
+    if (persistedModelList?.length) {
+      try {
+        const liveModelList = await wrapped.getModelList(requestContext);
+        const enabledLive = (liveModelList ?? []).filter(entry => entry.enabled !== false);
+        if (enabledLive.length === persistedModelList.length) {
+          // Same shape as at preparation time: rebind positionally so live
+          // instances keep their persisted ids.
+          modelList = persistedModelList.map((persisted, i) => ({
+            id: persisted.id,
+            model: enabledLive[i]!.model,
+            maxRetries: enabledLive[i]!.maxRetries ?? 0,
+            enabled: true,
+            headers: enabledLive[i]!.headers,
+          }));
+        } else {
+          // Resolver output drifted since preparation: only trust exact id
+          // matches (explicit-id entries); everything else degrades to
+          // config-based resolution in the llm-execution step.
+          const matched = enabledLive.filter(live => persistedModelList.some(p => p.id === live.id));
+          modelList = matched.length
+            ? matched.map(live => ({
+                id: live.id,
+                model: live.model,
+                maxRetries: live.maxRetries ?? 0,
+                enabled: true,
+                headers: live.headers,
+              }))
+            : undefined;
+          this.#mastra
+            ?.getLogger?.()
+            ?.warn?.(
+              `[DurableAgent] recover(${runId}) model list drifted (persisted ${persistedModelList.length} enabled entries, resolved ${enabledLive.length}); ` +
+                `rebound ${matched.length} by id, remaining entries will resolve from serialized config`,
+            );
+        }
+      } catch (error) {
+        this.#mastra
+          ?.getLogger?.()
+          ?.warn?.(`[DurableAgent] Failed to resolve model list during recover(${runId}): ${error}`);
+      }
+    }
+    recoveryLease.assertOwned();
+
     let memory;
     try {
       memory = await wrapped.getMemory({ requestContext });
@@ -1027,6 +1083,7 @@ export class DurableAgent<
       registryEntry: {
         mastra: this.#mastra,
         model,
+        modelList,
         memory,
         saveQueueManager,
         requestContext,
