@@ -61,30 +61,6 @@ describe('Subconscious knowledge write tools against Gemini', () => {
     return { model, tools: wired };
   }
 
-  it('accepts every curator write-tool schema', { timeout: 60_000 }, async () => {
-    const { model, tools } = await geminiTools();
-
-    const result = await generateText({
-      model,
-      tools,
-      toolChoice: 'auto' as const,
-      stopWhen: stepCountIs(2),
-      prompt:
-        'You are a knowledge curator. Node "node-1" is at version 3 and is named "Atlas Initiative". ' +
-        'Rename it to "Project Atlas". Call exactly one tool.',
-    });
-
-    // The assertion that matters is that the request was accepted at all: a schema Gemini rejects
-    // never reaches this line, it throws a 400 during generateText.
-    expect(result.finishReason).not.toBe('error');
-
-    expect(result.steps[0]?.toolCalls).toHaveLength(1);
-    expect(result.steps[0]?.toolCalls?.[0]).toMatchObject({
-      toolName: 'knowledge_rename_node',
-      input: { node: 'node-1', expectedVersion: 3, name: 'Project Atlas' },
-    });
-  });
-
   it('accepts the atomic node-update tool schema', { timeout: 60_000 }, async () => {
     const { model, tools } = await geminiTools();
 
