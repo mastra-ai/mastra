@@ -495,8 +495,8 @@ function isRemoteForRepo(url: string, repoFullName: string): boolean {
     return false;
   }
   if (parsed.protocol !== 'https:' || parsed.hostname.toLowerCase() !== 'github.com') return false;
-  const repoPath = parsed.pathname.replace(/\.git$/, '').replace(/^\/+/, '').toLowerCase();
-  return repoPath === repoFullName.toLowerCase();
+  if (parsed.port !== '' || parsed.search !== '' || parsed.hash !== '') return false;
+  return parsed.pathname.replace(/\.git$/, '').toLowerCase() === `/${repoFullName.toLowerCase()}`;
 }
 
 /** Probed without `git -C` so a missing workdir returns false instead of throwing. */

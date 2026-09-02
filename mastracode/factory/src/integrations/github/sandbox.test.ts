@@ -191,6 +191,10 @@ describe('materializeRepo', () => {
     'https://github.com.evil.example/octocat/hello.git',
     'https://github.com/other/hello.git',
     'https://github.com/octocat/hello-fork.git',
+    'https://github.com:8443/octocat/hello.git',
+    'https://github.com/octocat/hello.git?x=1',
+    'https://github.com//octocat/hello.git',
+    'http://github.com/octocat/hello.git',
   ])('re-clones over a checkout whose origin is %s', async origin => {
     const sandbox = new FakeSandbox(script => {
       if (script.includes('remote get-url origin')) return { exitCode: 0, stdout: `${origin}\n`, stderr: '' };
