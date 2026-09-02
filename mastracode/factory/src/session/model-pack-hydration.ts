@@ -23,8 +23,7 @@ export interface ModelPackHydrationSession extends ModelPackApplicableSession {
 
 export async function applyActiveModelPack(
   session: ModelPackApplicableSession,
-  activePack: Pick<ActiveModelPackRecord, 'packId' | 'models'> &
-    Partial<Pick<ActiveModelPackRecord, 'thinkingLevels'>>,
+  activePack: Pick<ActiveModelPackRecord, 'packId' | 'models'> & Partial<Pick<ActiveModelPackRecord, 'thinkingLevels'>>,
 ): Promise<void> {
   for (const [modeId, modelId] of Object.entries(activePack.models)) {
     await session.thread.setSetting({ key: `modeModelId_${modeId}`, value: modelId });

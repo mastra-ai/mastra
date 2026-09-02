@@ -116,10 +116,9 @@ describe('ModelPacksStorage', () => {
       input: { name: 'Default', models: updatedModels, thinkingLevels: updatedThinkingLevels },
     });
 
-    expect(await seed.modelPacks.getActive({ orgId: 'org-1', userId: 'user-1' })).toMatchObject({
-      models: updatedModels,
-      thinkingLevels: updatedThinkingLevels,
-    });
+    const updatedActivePack = await seed.modelPacks.getActive({ orgId: 'org-1', userId: 'user-1' });
+    expect(updatedActivePack).toMatchObject({ models: updatedModels });
+    expect(updatedActivePack?.thinkingLevels).toEqual(updatedThinkingLevels);
     expect(await seed.modelPacks.clearActive({ orgId: 'org-1', userId: 'user-1' })).toBe(true);
     expect(await seed.modelPacks.getActive({ orgId: 'org-1', userId: 'user-1' })).toBeNull();
     expect(await seed.modelPacks.clearActive({ orgId: 'org-1', userId: 'user-1' })).toBe(false);

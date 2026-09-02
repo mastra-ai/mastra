@@ -709,6 +709,9 @@ describe('model pack routes with a tenant', () => {
     expect(activated.status).toBe(200);
     expect(await activated.json()).toEqual({ ok: true, target: 'session', sessionPackId: pack.id });
     expect(modelSwitch).toHaveBeenCalledExactlyOnceWith({ modelId: packBody.models.build });
+    expect(setSetting).toHaveBeenCalledWith({ key: 'modeThinkingLevel_build', value: 'high' });
+    expect(setSetting).toHaveBeenCalledWith({ key: 'modeThinkingLevel_plan', value: undefined });
+    expect(setSetting).toHaveBeenCalledWith({ key: 'modeThinkingLevel_fast', value: 'low' });
     expect(setSetting).toHaveBeenCalledWith({ key: 'activeModelPackId', value: pack.id });
     expect(await seed.modelPacks.getActive({ orgId: 'org1', userId: 'user-a' })).toBeNull();
 

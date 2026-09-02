@@ -2240,6 +2240,7 @@ export class AgentController<TState = {}> {
   ): Promise<RequestContext> {
     requestContext ??= new RequestContext();
     const modeId = session.mode.get();
+    const modelId = session.model.get();
     const packThinkingLevel = await session.thread.getSetting({ key: modeThinkingLevelKey(modeId) });
     const controllerContext: AgentControllerRequestContext<TState> = {
       controllerId: this.id,
@@ -2255,7 +2256,7 @@ export class AgentController<TState = {}> {
         id: session.identity.getId(),
         ownerId: session.identity.getOwnerId(),
         modeId,
-        modelId: session.model.get(),
+        modelId,
         packThinkingLevel: typeof packThinkingLevel === 'string' ? packThinkingLevel : undefined,
         state: {
           get: () => session.state.get(),

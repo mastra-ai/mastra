@@ -214,7 +214,13 @@ export type AgentControllerStateSchema<T> = T;
  * Identifiers for the built-in controller tools that can be selectively disabled.
  */
 export type BuiltinToolId =
-  'ask_user' | 'submit_plan' | 'task_write' | 'task_update' | 'task_complete' | 'task_check' | 'subagent';
+  | 'ask_user'
+  | 'submit_plan'
+  | 'task_write'
+  | 'task_update'
+  | 'task_complete'
+  | 'task_check'
+  | 'subagent';
 
 /** Process-local listener notified after AgentController materializes a live session. */
 export type AgentControllerSessionCreatedListener<TState = {}> = (session: Session<TState>) => void | Promise<void>;

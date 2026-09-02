@@ -69,7 +69,14 @@ function loose(c: unknown): Context {
  * reports the scoped variants (`oauth-user`/`stored-user`/`stored-org`).
  */
 export type ProviderCredentialSource =
-  'oauth' | 'stored' | 'env' | 'none' | 'oauth-user' | 'oauth-org' | 'stored-user' | 'stored-org';
+  | 'oauth'
+  | 'stored'
+  | 'env'
+  | 'none'
+  | 'oauth-user'
+  | 'oauth-org'
+  | 'stored-user'
+  | 'stored-org';
 
 /** A model provider with the current source of its credentials. */
 export interface ProviderInfo {
@@ -1173,7 +1180,11 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
               return c.json({ ok: true, target, activePackId: pack.id });
             }
             if (session) {
-              await applyActiveModelPack(session, { packId: pack.id, models: pack.models });
+              await applyActiveModelPack(session, {
+                packId: pack.id,
+                models: pack.models,
+                thinkingLevels: pack.thinkingLevels,
+              });
             }
             return c.json({ ok: true, target, sessionPackId: pack.id });
           } catch (error) {

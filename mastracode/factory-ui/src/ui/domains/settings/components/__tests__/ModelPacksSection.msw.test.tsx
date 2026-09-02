@@ -5,7 +5,7 @@ import { delay, http, HttpResponse } from 'msw';
 import { describe, expect, it } from 'vitest';
 
 import { server } from '../../../../../../e2e/ui/msw-server';
-import { TEST_BASE_URL, renderWithProviders } from '../../../../../../e2e/ui/render';
+import { TEST_BASE_URL, renderWithProviders, waitForMutationsIdle } from '../../../../../../e2e/ui/render';
 import type { ModelPackInfo } from '../../../../../api/types';
 import { ModelPacksSection } from '../ModelPacksSection';
 
@@ -173,7 +173,7 @@ describe('ModelPacksSection', () => {
       );
 
       const user = userEvent.setup();
-      renderWithProviders(<ModelPacksSection models={models} />);
+      const { client } = renderWithProviders(<ModelPacksSection models={models} />);
 
       await user.click(await screen.findByRole('button', { name: 'New pack' }));
       await user.type(screen.getByPlaceholderText('e.g. my-pack'), 'My Pack');
@@ -192,6 +192,7 @@ describe('ModelPacksSection', () => {
           thinkingLevels: { build: 'high', fast: 'off' },
         }),
       );
+      await waitForMutationsIdle(client);
       const createdRow = await rowFor('My Pack');
       expect(within(createdRow).getByText(/openai\/gpt-x · high thinking/)).toBeInTheDocument();
       expect(within(createdRow).getByText(/openai\/gpt-x · off thinking/)).toBeInTheDocument();

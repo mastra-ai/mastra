@@ -172,10 +172,13 @@ export interface OAuthStartResponse {
 }
 
 export type OAuthPollResponse =
-  { status: 'pending'; nextPollMs: number } | { status: 'complete' } | { status: 'failed'; error: string };
+  | { status: 'pending'; nextPollMs: number }
+  | { status: 'complete' }
+  | { status: 'failed'; error: string };
 
 export type ActivateModelPackResponse =
-  { ok: true; target: 'default'; activePackId: string } | { ok: true; target: 'session'; sessionPackId: string };
+  | { ok: true; target: 'default'; activePackId: string }
+  | { ok: true; target: 'session'; sessionPackId: string };
 
 export interface ClearDefaultModelPackResponse {
   ok: true;
