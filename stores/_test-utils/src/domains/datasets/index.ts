@@ -993,7 +993,7 @@ export function createDatasetsTests({
           groundTruth: { expected: 'private' },
           metadata: { note: 'private metadata' },
           toolMockReport: supportsToolMocks ? toolMockReport : undefined,
-          error: null,
+          error: { message: 'Failed for patient Alice', stack: 'Patient Alice input caused the failure' },
           startedAt: new Date(),
           completedAt: new Date(),
           retryCount: 0,
@@ -1023,7 +1023,7 @@ export function createDatasetsTests({
           groundTruth: { expected: 'retain' },
           metadata: { note: 'retain metadata' },
           toolMockReport: supportsToolMocks ? toolMockReport : undefined,
-          error: null,
+          error: { message: 'Retain failure for patient Bob', stack: 'Patient Bob input caused the failure' },
           startedAt: new Date(),
           completedAt: new Date(),
           retryCount: 0,
@@ -1042,6 +1042,7 @@ export function createDatasetsTests({
           input: null,
           output: null,
           groundTruth: null,
+          error: null,
           metadata: { __purged: true },
           status: 'needs-review',
           tags: ['retain-me'],
@@ -1066,6 +1067,7 @@ export function createDatasetsTests({
           input: { patient: 'Bob' },
           output: { diagnosis: 'retain' },
           groundTruth: { expected: 'retain' },
+          error: { message: 'Retain failure for patient Bob', stack: 'Patient Bob input caused the failure' },
           metadata: { note: 'retain metadata' },
         });
         if (supportsToolMocks) {

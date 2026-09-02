@@ -284,6 +284,7 @@ describe('MySQLStore tool mocks rejection', () => {
     const resultUpdate = connection.execute.mock.calls.find(([sql]) =>
       String(sql).includes('UPDATE `mastra_experiment_results`'),
     );
+    expect(resultUpdate?.[0]).toContain('`error` = NULL');
     expect(resultUpdate?.[0]).toContain('`toolMockReport` = NULL');
     expect(resultUpdate?.[1]).toEqual(expect.arrayContaining(['i1', 'd1']));
     expect(connection.commit).toHaveBeenCalledOnce();

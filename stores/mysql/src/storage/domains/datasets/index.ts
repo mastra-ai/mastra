@@ -958,7 +958,7 @@ export class DatasetsMySQL extends DatasetsStorage {
 
       if (experimentTablesExist) {
         await connection.execute(
-          `UPDATE ${formatTableName(TABLE_EXPERIMENT_RESULTS)} SET ${quoteIdentifier('input', 'column name')} = ?, ${quoteIdentifier('output', 'column name')} = NULL, ${quoteIdentifier('groundTruth', 'column name')} = NULL, ${quoteIdentifier('toolMockReport', 'column name')} = NULL, ${quoteIdentifier('metadata', 'column name')} = ? WHERE ${quoteIdentifier('itemId', 'column name')} = ? AND ${quoteIdentifier('experimentId', 'column name')} IN (SELECT id FROM ${formatTableName(TABLE_EXPERIMENTS)} WHERE ${quoteIdentifier('datasetId', 'column name')} = ?)`,
+          `UPDATE ${formatTableName(TABLE_EXPERIMENT_RESULTS)} SET ${quoteIdentifier('input', 'column name')} = ?, ${quoteIdentifier('output', 'column name')} = NULL, ${quoteIdentifier('groundTruth', 'column name')} = NULL, ${quoteIdentifier('error', 'column name')} = NULL, ${quoteIdentifier('toolMockReport', 'column name')} = NULL, ${quoteIdentifier('metadata', 'column name')} = ? WHERE ${quoteIdentifier('itemId', 'column name')} = ? AND ${quoteIdentifier('experimentId', 'column name')} IN (SELECT id FROM ${formatTableName(TABLE_EXPERIMENTS)} WHERE ${quoteIdentifier('datasetId', 'column name')} = ?)`,
           ['null', purgedMetadata, id, datasetId],
         );
       }
