@@ -354,7 +354,7 @@ Visit the [Configuration reference](/reference/configuration) for detailed docum
     name: 'scheduler',
     type: 'object',
     description:
-      'Configure the [scheduler worker](/docs/deployment/workers#scheduler-worker) for cron-driven workflow triggers. Auto-enables when any workflow declares a `schedule`. See [Scheduled workflows](/docs/workflows/scheduled-workflows).',
+      'Configure the [scheduler worker](/docs/deployment/workers#scheduler-worker) for cron-driven workflow triggers. Auto-enables when any workflow declares a `schedule`, when schedule rows already exist in storage, or when a schedule is created at runtime. Apps that never schedule anything run one `listSchedules()` check at boot and never poll after that. See [Scheduled workflows](/docs/workflows/scheduled-workflows).',
     isOptional: true,
     properties: [
       {
