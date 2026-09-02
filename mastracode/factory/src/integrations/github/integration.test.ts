@@ -144,6 +144,24 @@ describe('GithubIntegration collaborator permission', () => {
   });
 });
 
+describe('GithubIntegration collaborator permission coalescing', () => {
+  it('shares one in-flight request between overlapping lookups for the same login', async () => {
+    const github = new GithubIntegration(validConfig());
+    let release!: (value: { data: { permission: string } }) => void;
+    const getCollaboratorPermissionLevel = vi.fn(() => new Promise(resolve => (release = resolve)));
+    vi.spyOn(github, 'getInstallationOctokit').mockReturnValue({
+      repos: { getCollaboratorPermissionLevel },
+    } as any);
+
+    const first = github.getRepositoryCollaboratorPermission(7, 'acme/app', 'grace');
+    const second = github.getRepositoryCollaboratorPermission(7, 'acme/app', 'grace');
+    expect(getCollaboratorPermissionLevel).toHaveBeenCalledTimes(1);
+    release({ data: { permission: 'write' } });
+    await expect(Promise.all([first, second])).resolves.toEqual(['write', 'write']);
+    expect(getCollaboratorPermissionLevel).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe('GithubIntegration triage comment upsert', () => {
   it('updates the oldest Factory marker across pages and ignores human marker comments', async () => {
     const github = new GithubIntegration(validConfig());

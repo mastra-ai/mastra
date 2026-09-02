@@ -1174,6 +1174,19 @@ describe('PlatformGithubIntegration', () => {
     expect(fetchImpl).toHaveBeenCalledTimes(3);
   });
 
+  it('shares one in-flight request between overlapping lookups for the same login', async () => {
+    let release!: (value: Response) => void;
+    const fetchImpl = vi.fn<typeof fetch>(() => new Promise<Response>(resolve => (release = resolve)));
+    const integration = createIntegration(fetchImpl);
+
+    const first = integration.getRepositoryCollaboratorPermission(7, 'acme/app', 'grace');
+    const second = integration.getRepositoryCollaboratorPermission(7, 'acme/app', 'GRACE');
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    release(json({ permission: 'write', roleName: 'write', user: actor }));
+    await expect(Promise.all([first, second])).resolves.toEqual(['write', 'write']);
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+  });
+
   it('re-requests a collaborator permission once the cache entry expires', async () => {
     vi.useFakeTimers();
     try {

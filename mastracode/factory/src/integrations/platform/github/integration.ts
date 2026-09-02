@@ -243,6 +243,8 @@ export class PlatformGithubIntegration implements FactoryIntegration {
     string,
     { permission: GithubRepositoryPermission; expiresAt: number }
   >();
+  /** Same key → lookup already in flight, so overlapping callers share one request. */
+  readonly #collaboratorPermissionInFlight = new Map<string, Promise<GithubRepositoryPermission | undefined>>();
 
   readonly intake: Intake = {
     resolveIntakeDispatch: input => this.#resolveIntakeDispatch(input),
@@ -995,23 +997,31 @@ export class PlatformGithubIntegration implements FactoryIntegration {
     const cached = this.#collaboratorPermissionCache.get(cacheKey);
     if (cached && cached.expiresAt > Date.now()) return cached.permission;
     this.#collaboratorPermissionCache.delete(cacheKey);
-    try {
-      const result = await this.#client.request<{ permission: GithubRepositoryPermission }>(
-        'GET',
-        `${API_PREFIX}/github/repos/${encodeURIComponent(repository.owner)}/${encodeURIComponent(repository.repo)}/collaborators/${encodeURIComponent(username)}/permission`,
-        undefined,
-        { signal },
-      );
-      // Failures are not cached: a rate-limited or aborted lookup must retry
-      // on the next call rather than pin the login as unknown.
-      setBounded(this.#collaboratorPermissionCache, cacheKey, {
-        permission: result.permission,
-        expiresAt: Date.now() + COLLABORATOR_PERMISSION_CACHE_TTL_MS,
-      });
-      return result.permission;
-    } catch {
-      return undefined;
-    }
+    const inFlight = this.#collaboratorPermissionInFlight.get(cacheKey);
+    if (inFlight) return inFlight;
+    const lookup = (async () => {
+      try {
+        const result = await this.#client.request<{ permission: GithubRepositoryPermission }>(
+          'GET',
+          `${API_PREFIX}/github/repos/${encodeURIComponent(repository.owner)}/${encodeURIComponent(repository.repo)}/collaborators/${encodeURIComponent(username)}/permission`,
+          undefined,
+          { signal },
+        );
+        // Failures are not cached: a rate-limited or aborted lookup must retry
+        // on the next call rather than pin the login as unknown.
+        setBounded(this.#collaboratorPermissionCache, cacheKey, {
+          permission: result.permission,
+          expiresAt: Date.now() + COLLABORATOR_PERMISSION_CACHE_TTL_MS,
+        });
+        return result.permission;
+      } catch {
+        return undefined;
+      } finally {
+        this.#collaboratorPermissionInFlight.delete(cacheKey);
+      }
+    })();
+    this.#collaboratorPermissionInFlight.set(cacheKey, lookup);
+    return lookup;
   }
 
   async listInstallationRepos(installationId: number): Promise<RepoSummary[]> {

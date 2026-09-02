@@ -358,6 +358,8 @@ export class GithubIntegration implements FactoryIntegration {
     string,
     { permission: GithubRepositoryPermission; expiresAt: number }
   >();
+  /** Same key → lookup already in flight, so overlapping callers share one request. */
+  readonly #collaboratorPermissionInFlight = new Map<string, Promise<GithubRepositoryPermission | undefined>>();
 
   constructor(config: GithubIntegrationConfig) {
     const missing = REQUIRED_FIELDS.filter(field => !config[field]);
@@ -528,27 +530,35 @@ export class GithubIntegration implements FactoryIntegration {
     const cached = this.#collaboratorPermissionCache.get(cacheKey);
     if (cached && cached.expiresAt > Date.now()) return cached.permission;
     this.#collaboratorPermissionCache.delete(cacheKey);
-    try {
-      const { data } = await this.getInstallationOctokit(installationId).repos.getCollaboratorPermissionLevel({
-        ...parts,
-        username,
-        request: { signal },
-      });
-      const permission = data.permission as GithubRepositoryPermission;
-      // Failures are not cached: a rate-limited or aborted lookup must retry
-      // on the next call rather than pin the login as unknown.
-      this.#collaboratorPermissionCache.set(cacheKey, {
-        permission,
-        expiresAt: Date.now() + COLLABORATOR_PERMISSION_CACHE_TTL_MS,
-      });
-      if (this.#collaboratorPermissionCache.size > COLLABORATOR_PERMISSION_CACHE_MAX_ENTRIES) {
-        const oldest = this.#collaboratorPermissionCache.keys().next().value;
-        if (oldest !== undefined) this.#collaboratorPermissionCache.delete(oldest);
+    const inFlight = this.#collaboratorPermissionInFlight.get(cacheKey);
+    if (inFlight) return inFlight;
+    const lookup = (async () => {
+      try {
+        const { data } = await this.getInstallationOctokit(installationId).repos.getCollaboratorPermissionLevel({
+          ...parts,
+          username,
+          request: { signal },
+        });
+        const permission = data.permission as GithubRepositoryPermission;
+        // Failures are not cached: a rate-limited or aborted lookup must retry
+        // on the next call rather than pin the login as unknown.
+        this.#collaboratorPermissionCache.set(cacheKey, {
+          permission,
+          expiresAt: Date.now() + COLLABORATOR_PERMISSION_CACHE_TTL_MS,
+        });
+        if (this.#collaboratorPermissionCache.size > COLLABORATOR_PERMISSION_CACHE_MAX_ENTRIES) {
+          const oldest = this.#collaboratorPermissionCache.keys().next().value;
+          if (oldest !== undefined) this.#collaboratorPermissionCache.delete(oldest);
+        }
+        return permission;
+      } catch {
+        return undefined;
+      } finally {
+        this.#collaboratorPermissionInFlight.delete(cacheKey);
       }
-      return permission;
-    } catch {
-      return undefined;
-    }
+    })();
+    this.#collaboratorPermissionInFlight.set(cacheKey, lookup);
+    return lookup;
   }
 
   /**
