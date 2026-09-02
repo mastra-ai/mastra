@@ -375,7 +375,7 @@ describe('UnixSocketPubSub', () => {
 
   it('does not parse an oversized complete inbound frame and keeps other clients working', async () => {
     const path = await socketPath();
-    const broker = new UnixSocketPubSub(path, { maxInboundFrameBytes: 64 });
+    const broker = new UnixSocketPubSub(path, { maxInboundFrameBytes: 512 });
     const healthy = new UnixSocketPubSub(path);
     pubsubs.push(broker, healthy);
 
@@ -397,9 +397,9 @@ describe('UnixSocketPubSub', () => {
       const hugePublish = `${JSON.stringify({
         type: 'publish',
         topic: 'topic-a',
-        event: makeEvent({ type: 'should-not-dispatch', data: { payload: 'x'.repeat(256) } }),
+        event: makeEvent({ type: 'should-not-dispatch', data: { payload: 'x'.repeat(2048) } }),
       })}\n`;
-      expect(Buffer.byteLength(hugePublish.slice(0, -1), 'utf8')).toBeGreaterThan(64);
+      expect(Buffer.byteLength(hugePublish.slice(0, -1), 'utf8')).toBeGreaterThan(512);
 
       await new Promise<void>((resolve, reject) => {
         oversized.write(hugePublish, (error?: Error | null) => {
