@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { normalizeWorkflowBuilderDefinition } from '@mastra/core/workflows/builder';
 import { describe, expect, it } from 'vitest';
@@ -12,9 +12,15 @@ import {
 } from './workflow-draft-tools';
 import type { WorkflowDraftCandidate, WorkflowDraftToolResult } from './workflow-draft-tools';
 
-const canonicalFixtures = JSON.parse(
-  readFileSync(resolve(process.cwd(), '../../test-fixtures/workflow-builder-canonical/definitions.json'), 'utf8'),
-) as Array<{ name: string; input: unknown; expected: unknown }>;
+const canonicalFixtureFromRoot = resolve(process.cwd(), 'test-fixtures/workflow-builder-canonical/definitions.json');
+const canonicalFixturePath = existsSync(canonicalFixtureFromRoot)
+  ? canonicalFixtureFromRoot
+  : resolve(process.cwd(), '../../test-fixtures/workflow-builder-canonical/definitions.json');
+const canonicalFixtures = JSON.parse(readFileSync(canonicalFixturePath, 'utf8')) as Array<{
+  name: string;
+  input: unknown;
+  expected: unknown;
+}>;
 
 const toolInputSchema = (tool: unknown) => {
   if (!tool || typeof tool !== 'object' || !('inputSchema' in tool)) {
