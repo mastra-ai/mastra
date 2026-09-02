@@ -7,10 +7,11 @@ const output = process.env.KNOWLEDGE_PROOF_OUTPUT ? path.resolve(process.env.KNO
 
 const graph = {
   view: 'project',
-  scopeId: 'scope-project',
+  scopeId: 'kh_scope_project',
   nodes: [
     {
-      id: 'payments',
+      id: 'kh_node_payments',
+      reference: 'kr_node_payments',
       name: 'Payments Service',
       kind: 'service',
       description: 'Handles charging flows through [[Deploy Runbook]].',
@@ -20,7 +21,8 @@ const graph = {
       updatedAt: '2026-08-28T10:00:00.000Z',
     },
     {
-      id: 'runbook',
+      id: 'kh_node_runbook',
+      reference: 'kr_node_runbook',
       name: 'Deploy Runbook',
       kind: 'doc',
       pinned: false,
@@ -30,12 +32,34 @@ const graph = {
     },
   ],
   edges: [
-    { id: 'edge-1', source: 'payments', target: 'runbook', type: 'wikilink', recordId: 'record-1' },
-    { id: 'edge-2', source: 'runbook', target: 'payments', type: 'wikilink', recordId: 'record-2' },
+    {
+      id: 'kh_edge_one',
+      source: 'kh_node_payments',
+      target: 'kh_node_runbook',
+      type: 'wikilink',
+      recordId: 'kh_record_one',
+    },
+    {
+      id: 'kh_edge_two',
+      source: 'kh_node_runbook',
+      target: 'kh_node_payments',
+      type: 'wikilink',
+      recordId: 'kh_record_two',
+    },
   ],
   records: [
-    { id: 'record-1', nodeIds: ['payments', 'runbook'], pinned: true, text: 'Payments uses the runbook.' },
-    { id: 'record-2', nodeIds: ['runbook', 'payments'], pinned: false, text: 'Runbook covers payments.' },
+    {
+      id: 'kh_record_one',
+      nodeIds: ['kh_node_payments', 'kh_node_runbook'],
+      pinned: true,
+      text: 'Payments uses the runbook.',
+    },
+    {
+      id: 'kh_record_two',
+      nodeIds: ['kh_node_runbook', 'kh_node_payments'],
+      pinned: false,
+      text: 'Runbook covers payments.',
+    },
   ],
   truncated: false,
   outOfWindow: [],
@@ -44,7 +68,7 @@ const graph = {
   version: 'proof-version',
 };
 
-test('explores scoped knowledge and activity', async ({ context, page }) => {
+test('renders scoped knowledge and activity from sanitized network fixtures', async ({ context, page }) => {
   await context.route('**/*', async route => {
     const url = new URL(route.request().url());
     if (url.pathname.endsWith('/auth/me')) {
@@ -66,7 +90,7 @@ test('explores scoped knowledge and activity', async ({ context, page }) => {
     if (url.pathname.endsWith('/knowledge/scopes')) {
       return route.fulfill({
         json: {
-          scope: { id: 'scope-project', name: 'Proof Factory', kind: 'project' },
+          scope: { id: 'kh_scope_project', reference: 'kr_scope_project', name: 'Proof Factory', kind: 'project' },
           children: [],
         },
       });
@@ -77,10 +101,8 @@ test('explores scoped knowledge and activity', async ({ context, page }) => {
         json: {
           events: [
             {
-              id: 'activity-1',
               action: 'create',
               targetType: 'record',
-              scopeId: 'scope-project',
               sourceType: 'system',
               createdAt: '2026-08-28T10:00:00.000Z',
             },
@@ -94,8 +116,8 @@ test('explores scoped knowledge and activity', async ({ context, page }) => {
           node: { ...graph.nodes[0], content: 'Handles charging flows through [[Deploy Runbook]].' },
           records: [
             {
-              id: 'record-1',
-              nodeId: 'payments',
+              id: 'kh_record_one',
+              nodeId: 'kh_node_payments',
               relation: 'owned',
               text: 'Payments uses [[Deploy Runbook]].',
               createdAt: '2026-08-28T10:00:00.000Z',
@@ -113,7 +135,7 @@ test('explores scoped knowledge and activity', async ({ context, page }) => {
   await expect(page.getByRole('complementary', { name: 'Knowledge scopes' })).toBeVisible();
   await expect(page.getByText('Payments Service')).toBeVisible();
 
-  await page.locator('.react-flow__node[data-id="payments"]').dispatchEvent('click');
+  await page.locator('.react-flow__node[data-id="kh_node_payments"]').dispatchEvent('click');
   await expect(page.getByText(/Payments uses/)).toBeVisible();
 
   await page.getByRole('tab', { name: 'activity' }).click();
@@ -124,7 +146,13 @@ test('explores scoped knowledge and activity', async ({ context, page }) => {
     await page.screenshot({ path: path.join(output, 'explore.png'), fullPage: true });
     fs.writeFileSync(
       path.join(output, 'results.json'),
-      JSON.stringify({ tests: [{ title: 'explores scoped knowledge and activity', status: 'passed' }] }, null, 2),
+      JSON.stringify(
+        {
+          tests: [{ title: 'renders scoped knowledge and activity from sanitized network fixtures', status: 'passed' }],
+        },
+        null,
+        2,
+      ),
     );
   }
 });
