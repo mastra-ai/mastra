@@ -10,6 +10,7 @@ import { useSearchParams } from 'react-router';
 
 import { useFeedback, useUpdateFeedbackReviewStatus } from '@/domains/feedback/hooks/use-feedback';
 import { InboxDatasetReviewList } from '@/domains/inbox/components/inbox-dataset-review-list';
+import { InboxEmptyState } from '@/domains/inbox/components/inbox-empty-state';
 import { InboxFeedbackList } from '@/domains/inbox/components/inbox-feedback-list';
 import { InboxTracePanel } from '@/domains/inbox/components/inbox-trace-panel';
 import { useInboxDatasetReviewItems } from '@/domains/review/hooks/use-inbox-review-items';
@@ -31,6 +32,16 @@ export default function InboxPage() {
 
   const datasetItems = datasetReviewQuery.data ?? [];
   const feedbackCount = feedbackQuery.total ?? 0;
+
+  // Global empty state only once both lists are known to be empty; loading or
+  // errors fall through to the tabs so each list can report its own state.
+  const isInboxEmpty =
+    !feedbackQuery.isLoading &&
+    !datasetReviewQuery.isLoading &&
+    !feedbackQuery.error &&
+    !datasetReviewQuery.error &&
+    feedbackQuery.items.length === 0 &&
+    datasetItems.length === 0;
 
   // Selected feedback lives in the URL so the side panel survives refresh / back navigation.
   const selectedFeedbackId = searchParams.get('feedbackId') ?? undefined;
@@ -100,64 +111,70 @@ export default function InboxPage() {
         </PageLayout.TopArea>
 
         <PageLayout.MainArea className="min-h-0 overflow-hidden">
-          <Tabs<InboxTab>
-            defaultTab="feedback"
-            value={activeTab}
-            onValueChange={setTab}
-            className="grid h-full min-h-0 grid-rows-[auto_1fr]"
-          >
-            <TabList variant="pill-ghost">
-              <Tab value="feedback" className="px-3 py-2.5">
-                <Icon size="sm">
-                  <MessageSquare />
-                </Icon>
-                <Txt variant="ui-sm" className="text-inherit">
-                  Feedback
-                </Txt>
-                {feedbackCount > 0 && (
-                  <Badge variant="yellow" size="sm">
-                    {feedbackCount}
-                  </Badge>
-                )}
-              </Tab>
-              <Tab value="dataset" className="px-3 py-2.5">
-                <Icon size="sm">
-                  <ClipboardCheck />
-                </Icon>
-                <Txt variant="ui-sm" className="text-inherit">
-                  Dataset items
-                </Txt>
-                {datasetItems.length > 0 && (
-                  <Badge variant="yellow" size="sm">
-                    {datasetItems.length}
-                  </Badge>
-                )}
-              </Tab>
-            </TabList>
+          {isInboxEmpty ? (
+            <InboxEmptyState />
+          ) : (
+            <Tabs<InboxTab>
+              defaultTab="feedback"
+              value={activeTab}
+              onValueChange={setTab}
+              className="grid h-full min-h-0 grid-rows-[auto_1fr]"
+            >
+              <TabList variant="pill-ghost">
+                <Tab value="feedback" className="px-3 py-2.5">
+                  <Icon size="sm">
+                    <MessageSquare />
+                  </Icon>
+                  <Txt variant="ui-sm" className="text-inherit">
+                    Feedback
+                  </Txt>
+                  {feedbackCount > 0 && (
+                    <Badge variant="yellow" size="sm">
+                      {feedbackCount}
+                    </Badge>
+                  )}
+                </Tab>
+                <Tab value="dataset" className="px-3 py-2.5">
+                  <Icon size="sm">
+                    <ClipboardCheck />
+                  </Icon>
+                  <Txt variant="ui-sm" className="text-inherit">
+                    Dataset items
+                  </Txt>
+                  {datasetItems.length > 0 && (
+                    <Badge variant="yellow" size="sm">
+                      {datasetItems.length}
+                    </Badge>
+                  )}
+                </Tab>
+              </TabList>
 
-            <TabContent value="feedback" className="h-full min-h-0 pt-4">
-              <InboxFeedbackList
-                items={feedbackQuery.items}
-                isLoading={feedbackQuery.isLoading}
-                error={feedbackQuery.error ?? undefined}
-                hasNextPage={feedbackQuery.hasNextPage}
-                isFetchingNextPage={feedbackQuery.isFetchingNextPage}
-                fetchNextPage={feedbackQuery.fetchNextPage}
-                onMarkReviewed={markReviewed}
-                pendingFeedbackId={updateReviewStatus.isPending ? updateReviewStatus.variables?.feedbackId : undefined}
-                onSelect={selectFeedback}
-                selectedFeedbackId={selectedFeedbackId}
-              />
-            </TabContent>
+              <TabContent value="feedback" className="h-full min-h-0 pt-4">
+                <InboxFeedbackList
+                  items={feedbackQuery.items}
+                  isLoading={feedbackQuery.isLoading}
+                  error={feedbackQuery.error ?? undefined}
+                  hasNextPage={feedbackQuery.hasNextPage}
+                  isFetchingNextPage={feedbackQuery.isFetchingNextPage}
+                  fetchNextPage={feedbackQuery.fetchNextPage}
+                  onMarkReviewed={markReviewed}
+                  pendingFeedbackId={
+                    updateReviewStatus.isPending ? updateReviewStatus.variables?.feedbackId : undefined
+                  }
+                  onSelect={selectFeedback}
+                  selectedFeedbackId={selectedFeedbackId}
+                />
+              </TabContent>
 
-            <TabContent value="dataset" className="h-full min-h-0 pt-4">
-              <InboxDatasetReviewList
-                items={datasetItems}
-                isLoading={datasetReviewQuery.isLoading}
-                error={datasetReviewQuery.error ?? undefined}
-              />
-            </TabContent>
-          </Tabs>
+              <TabContent value="dataset" className="h-full min-h-0 pt-4">
+                <InboxDatasetReviewList
+                  items={datasetItems}
+                  isLoading={datasetReviewQuery.isLoading}
+                  error={datasetReviewQuery.error ?? undefined}
+                />
+              </TabContent>
+            </Tabs>
+          )}
         </PageLayout.MainArea>
       </PageLayout>
 

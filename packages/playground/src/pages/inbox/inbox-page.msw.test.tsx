@@ -230,6 +230,37 @@ describe('InboxPage', () => {
     expect(screen.queryByText('item-3')).toBeNull();
   });
 
+  it('shows a global empty state with links to experiments and traces when both lists are empty', async () => {
+    seedHandlers();
+    server.use(
+      http.get(FEEDBACK_URL, () =>
+        HttpResponse.json({ feedback: [], pagination: { total: 0, page: 0, perPage: 20, hasMore: false } }),
+      ),
+      http.get(`${TEST_BASE_URL}/api/experiments`, () =>
+        HttpResponse.json({ experiments: [], pagination: { total: 0, page: 0, perPage: 100, hasMore: false } }),
+      ),
+    );
+    renderInbox('/inbox');
+
+    expect(await screen.findByText('Your inbox is empty')).toBeTruthy();
+    expect(screen.getByRole('link', { name: 'Go to experiments' }).getAttribute('href')).toBe('/experiments');
+    expect(screen.getByRole('link', { name: 'Go to traces' }).getAttribute('href')).toBe('/traces');
+    expect(screen.queryByRole('tab', { name: /Feedback/ })).toBeNull();
+  });
+
+  it('keeps the tabs when only one list is empty', async () => {
+    seedHandlers();
+    server.use(
+      http.get(FEEDBACK_URL, () =>
+        HttpResponse.json({ feedback: [], pagination: { total: 0, page: 0, perPage: 20, hasMore: false } }),
+      ),
+    );
+    renderInbox('/inbox?tab=dataset');
+
+    expect(await screen.findByText('item-1')).toBeTruthy();
+    expect(screen.queryByText('Your inbox is empty')).toBeNull();
+  });
+
   it('opens the experiment Reviews tab featuring the result when a dataset row is clicked', async () => {
     seedHandlers();
     renderInbox('/inbox?tab=dataset');
