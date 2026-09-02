@@ -62,6 +62,13 @@ export const mastra = new Mastra({
     description: 'Paths or options for redacting sensitive fields from log output (Pino `redact`).',
   },
   {
+    name: 'serializers',
+    type: "pino.LoggerOptions['serializers']",
+    isOptional: true,
+    description:
+      'Custom Pino serializers keyed by log field, merged over the defaults. By default, `Error` values logged under `err` or `error` are serialized with their type, message, and stack.',
+  },
+  {
     name: 'prettyPrint',
     type: 'boolean',
     isOptional: true,

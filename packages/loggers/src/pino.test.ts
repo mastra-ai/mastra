@@ -70,6 +70,66 @@ describe('Logger', () => {
       });
     });
   });
+
+  describe('Error serialization', () => {
+    it('serializes Error values logged under the error key', async () => {
+      const logger = new PinoLogger({ transports: { memory: memoryStream } });
+      logger.warn('failed', { error: new Error('boom') });
+
+      await waitForLogs(memoryStream);
+      const [log] = await memoryStream.listLogs();
+
+      expect(log.error).toMatchObject({ type: 'Error', message: 'boom' });
+      expect(log.error.stack).toContain('boom');
+    });
+
+    it('serializes Error values logged under the err key', async () => {
+      const logger = new PinoLogger({ transports: { memory: memoryStream } });
+      logger.error('failed', { err: new Error('boom') });
+
+      await waitForLogs(memoryStream);
+      const [log] = await memoryStream.listLogs();
+
+      expect(log.err).toMatchObject({ type: 'Error', message: 'boom' });
+    });
+
+    it('leaves non-Error values under the error key untouched', async () => {
+      const logger = new PinoLogger({ transports: { memory: memoryStream } });
+      logger.warn('failed', { error: { code: 'E_NOPE' } });
+
+      await waitForLogs(memoryStream);
+      const [log] = await memoryStream.listLogs();
+
+      expect(log.error).toEqual({ code: 'E_NOPE' });
+    });
+
+    it('applies custom serializers over the defaults', async () => {
+      const logger = new PinoLogger({
+        transports: { memory: memoryStream },
+        serializers: {
+          secret: () => '[redacted]',
+          error: (e: Error) => ({ onlyMessage: e.message }),
+        },
+      });
+      logger.warn('failed', { secret: 'hunter2', error: new Error('boom') });
+
+      await waitForLogs(memoryStream);
+      const [log] = await memoryStream.listLogs();
+
+      expect(log.secret).toBe('[redacted]');
+      expect(log.error).toEqual({ onlyMessage: 'boom' });
+    });
+
+    it('child loggers inherit the error serializer', async () => {
+      const logger = new PinoLogger({ transports: { memory: memoryStream } });
+      logger.child({ module: 'agent' }).error('failed', { error: new Error('boom') });
+
+      await waitForLogs(memoryStream);
+      const [log] = await memoryStream.listLogs();
+
+      expect(log).toMatchObject({ module: 'agent', error: { type: 'Error', message: 'boom' } });
+    });
+  });
 });
 
 describe('MultiLogger', () => {
