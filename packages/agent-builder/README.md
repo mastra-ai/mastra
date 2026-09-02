@@ -27,7 +27,8 @@ console.log(result.text);
 
 ## Documentation
 
-- [@mastra/agent-builder documentation](https://mastra.ai/docs/studio/editor)
+- [Agent Builder documentation](https://agent-builder.mastra.ai/)
+- [`AgentBuilderOptions` reference](https://agent-builder.mastra.ai/reference/agent-builder-options)
 
 ## Changelog
 

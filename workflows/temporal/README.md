@@ -34,7 +34,7 @@ await worker.run();
 
 ## Documentation
 
-- [@mastra/temporal documentation](https://mastra.ai/docs/workflows/overview)
+- [Temporal deployment and worker guide](https://mastra.ai/integrations/deploy/temporal)
 
 ## Changelog
 

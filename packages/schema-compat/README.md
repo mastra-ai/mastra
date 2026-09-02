@@ -40,7 +40,7 @@ class MyCustomCompat extends SchemaCompatLayer {
 
 ## Documentation
 
-- [@mastra/schema-compat documentation](https://mastra.ai/docs/agents/structured-output)
+This README is the package guide for the compatibility-layer API and provider-specific exports. For the agent feature that consumes compatible schemas, see [Structured output](https://mastra.ai/docs/agents/structured-output).
 
 ## Changelog
 

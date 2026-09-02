@@ -42,7 +42,9 @@ stream.pipe(destination);
 
 ## Documentation
 
-- [@mastra/voice-playai documentation](https://mastra.ai/reference/voice/overview)
+- [`voice.speak()` reference](https://mastra.ai/reference/voice/voice.speak)
+- [`voice.listen()` reference](https://mastra.ai/reference/voice/voice.listen)
+- [`CompositeVoice` with PlayAI](https://mastra.ai/reference/voice/composite-voice)
 
 ## Changelog
 

@@ -24,7 +24,7 @@ for (const registry of verifiedRegistries) {
 
 ## Documentation
 
-- [@mastra/mcp-registry-registry documentation](https://mastra.ai/docs/connections/mcp)
+This README is the package guide. The exported `registryData` catalog includes registry metadata and optional post-processors; the package's MCP server exposes that catalog through the `registryList` and `registryServers` tools.
 
 ## Changelog
 

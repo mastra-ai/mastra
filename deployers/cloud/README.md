@@ -29,7 +29,7 @@ await deployer.bundle(mastraDir, outputDirectory);
 
 ## Documentation
 
-- [@mastra/deployer-cloud documentation](https://mastra.ai/docs/deployment/cloud-providers)
+This README is the package guide. `CloudDeployer` builds Mastra Cloud's server entry point, keeps dependencies external for installation in the deployment output, adds Mastra Cloud logging and storage wiring, and can include Studio assets with `new CloudDeployer({ studio: true })`.
 
 ## Changelog
 

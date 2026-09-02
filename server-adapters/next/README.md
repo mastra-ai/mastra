@@ -19,7 +19,7 @@ export const { GET, POST, PUT, DELETE, PATCH, OPTIONS, HEAD } = createNextRouteH
 
 ## Documentation
 
-- [@mastra/next documentation](https://mastra.ai/docs/server/server-adapters)
+This README is the package guide. Mount the returned method handlers from a catch-all Next.js App Router route; `createNextRouteHandler` also accepts optional `tools` and `prefix` settings when the defaults do not match your application.
 
 ## Changelog
 

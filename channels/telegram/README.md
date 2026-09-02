@@ -38,7 +38,7 @@ await telegram.connect('support', {
 
 ## Documentation
 
-- [@mastra/telegram documentation](https://mastra.ai/reference/channels/channel-provider)
+- [`TelegramProvider` reference](https://mastra.ai/reference/channels/telegram-provider)
 
 ## Changelog
 

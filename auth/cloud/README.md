@@ -29,7 +29,7 @@ export const mastra = new Mastra({
 
 ## Documentation
 
-- [Custom authentication providers](https://mastra.ai/docs/auth/custom-auth-provider)
+This README is the package guide. `MastraCloudAuthProvider` uses Mastra Cloud's PKCE sign-in flow, validates the resulting session cookie, and exposes user, SSO, and session capabilities through Mastra's server auth interface.
 
 ## Changelog
 

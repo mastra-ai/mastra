@@ -26,7 +26,7 @@ const memory = new Memory({
 
 ## Documentation
 
-- [@mastra/fastembed documentation](https://mastra.ai/reference/rag/embeddings)
+- [Use FastEmbed for local semantic recall](https://mastra.ai/docs/memory/semantic-recall#using-fastembed-local)
 
 ## Changelog
 

@@ -30,7 +30,7 @@ const queryResult = await model.doEmbed({ values: ['search query'] });
 
 ## Documentation
 
-- [@mastra/voyageai documentation](https://mastra.ai/reference/rag/embeddings)
+- [VoyageAI embedding models and configuration](https://mastra.ai/models/embeddings#voyageai)
 
 ## Changelog
 

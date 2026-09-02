@@ -1,10 +1,16 @@
-# mastracode
+# Mastra Code
 
-A coding agent that never compacts. Built with [Mastra](https://mastra.ai) and [pi-tui](https://github.com/badlogic/pi-mono).
-
-Learn more in the [documentation](https://code.mastra.ai/) and [announcement post](https://mastra.ai/blog/announcing-mastra-code).
+Mastra Code is a terminal-based AI coding agent distributed as the `mastracode` package. It combines persistent project-scoped conversations, multiple model providers, coding tools, goals, plugins, dynamic workflows, and Observational Memory so long-running work does not depend on context-window compaction.
 
 ## Installation
+
+Mastra Code requires Node.js 22.19.0 or later. Install the CLI globally:
+
+```bash
+npm install -g mastracode
+```
+
+To use the programmatic API or build a custom TUI, install it as a project dependency instead:
 
 ```bash
 npm install mastracode
@@ -12,14 +18,30 @@ npm install mastracode
 
 ## Usage
 
+Start Mastra Code from the project you want it to work in:
+
+```bash
+cd your-project
+mastracode
+```
+
+Or run it without a global installation:
+
 ```bash
 npx mastracode
 ```
 
+On first launch, the onboarding wizard connects a model provider, configures model packs and Observational Memory, and asks whether tool calls should require approval. Run `/setup` to repeat onboarding later.
+
 ## Documentation
 
-- [Mastra Code documentation](https://code.mastra.ai/)
-- [Introducing Mastra Code](https://mastra.ai/blog/announcing-mastra-code)
+- [Get started with Mastra Code](https://code.mastra.ai/)
+- [Configure providers, storage, hooks, MCP servers, and diagnostics](https://code.mastra.ai/configuration)
+- [Use Build, Plan, and Fast modes](https://code.mastra.ai/modes)
+- [Run persistent goals](https://code.mastra.ai/goals)
+- [Use Mastra Code in headless and CI environments](https://code.mastra.ai/headless)
+- [Customize or embed Mastra Code](https://code.mastra.ai/customization)
+- [Mastra Code API reference](https://code.mastra.ai/reference)
 
 ## Changelog
 

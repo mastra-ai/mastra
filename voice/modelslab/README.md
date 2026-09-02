@@ -33,7 +33,7 @@ const speakers = await voice.getSpeakers();
 
 ## Documentation
 
-- [@mastra/voice-modelslab documentation](https://mastra.ai/reference/voice/overview)
+This README is the package guide. `ModelsLabVoice` supports voice IDs `1` through `6`, accepts the OpenAI-style aliases `alloy`, `echo`, `fable`, `onyx`, `nova`, and `shimmer`, and returns downloaded audio as a readable stream after polling asynchronous synthesis jobs.
 
 ## Changelog
 

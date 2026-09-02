@@ -27,7 +27,8 @@ export const mastra = new Mastra({
 
 ## Documentation
 
-- [Custom authentication providers](https://mastra.ai/docs/auth/custom-auth-provider)
+- [Neon Auth reference](https://mastra.ai/reference/auth/neon)
+- [Authentication overview](https://mastra.ai/docs/auth/overview)
 
 ## Changelog
 

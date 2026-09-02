@@ -12,34 +12,18 @@ npm install @mastra/server
 
 ## Usage
 
-The handlers are framework agnostic functions which accept a `Mastra` instance
-and a request context. They are typically mounted under a URL prefix within your
-web framework of choice:
+Import from a documented subpath; the package root intentionally has no exports. Framework adapters consume route definitions such as these and register each route's method, path, schemas, permissions, and handler.
 
 ```typescript
-import { Hono } from 'hono';
-import { handlers } from '@mastra/server';
-import { mastra } from './mastra-instance';
+import { agents, workflows } from '@mastra/server/handlers';
 
-const app = new Hono();
-
-app.get('/mastra/agents', ctx => handlers.agents.listAgentsHandler({ mastra, requestContext: ctx }));
-app.post('/mastra/agents/:id/generate', async ctx => {
-  const body = await ctx.req.json();
-  return handlers.agents.generateHandler({
-    mastra,
-    requestContext: ctx,
-    agentId: ctx.req.param('id'),
-    body,
-  });
-});
-
-// Mount additional handlers as required
+export const routes = [agents.LIST_AGENTS_ROUTE, agents.GENERATE_AGENT_ROUTE, workflows.LIST_WORKFLOWS_ROUTE];
 ```
 
 ## Documentation
 
-- [@mastra/server documentation](https://mastra.ai/docs/server/overview)
+- [`MastraServer` adapter reference](https://mastra.ai/reference/server/mastra-server)
+- [Server adapter guide](https://mastra.ai/docs/server/server-adapters)
 
 ## Changelog
 

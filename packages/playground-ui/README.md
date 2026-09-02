@@ -23,7 +23,7 @@ export function SaveButton() {
 
 ## Documentation
 
-- [@mastra/playground-ui documentation](https://mastra.ai/docs/studio/overview)
+This README is the package guide. Import the global stylesheet once, then use the package's explicit `components/*`, `domains/*`, `hooks/*`, `icons/*`, `primitives/*`, `store/*`, `tokens`, and `utils/*` entry points rather than a package-root import.
 
 ## Changelog
 

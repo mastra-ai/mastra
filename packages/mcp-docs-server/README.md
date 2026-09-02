@@ -18,7 +18,7 @@ npx @mastra/mcp-docs-server
 
 ## Documentation
 
-- [@mastra/mcp-docs-server documentation](https://mastra.ai/docs/connections/mcp)
+- [MCP docs server setup](https://mastra.ai/reference/build-with-ai#mcp-docs-server)
 
 ## Changelog
 

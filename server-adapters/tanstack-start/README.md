@@ -24,7 +24,7 @@ export const Route = createFileRoute('/api/$')({
 
 ## Documentation
 
-- [@mastra/tanstack-start documentation](https://mastra.ai/docs/server/server-adapters)
+This README is the package guide. Register the returned handlers on a catch-all TanStack Start server route; `createStartRouteHandler` also accepts optional `tools` and `prefix` settings when the default `/api` prefix does not match your application.
 
 ## Changelog
 

@@ -10,44 +10,30 @@ npm install @mastra/voice-gladia
 
 ## Usage
 
-```typescript
-import { GladiaVoice } from '@mastra/voice-gladia';
-import { createReadStream } from 'fs';
-import path from 'path';
+Set `GLADIA_API_KEY`, then pass a readable audio stream with its file name and MIME type. Gladia is a speech-to-text provider and does not implement text-to-speech.
 
-const voice = new GladiaVoice({
-  listeningModel: {
-    apiKey: process.env.GLADIA_API_KEY!,
+```typescript
+import { createReadStream } from 'node:fs';
+import { GladiaVoice } from '@mastra/voice-gladia';
+
+const voice = new GladiaVoice();
+const audio = createReadStream('./audio.m4a');
+
+const transcript = await voice.listen(audio, {
+  fileName: 'audio.m4a',
+  mimeType: 'audio/mp4',
+  options: {
+    diarization: true,
+    detect_language: true,
   },
 });
 
-// Create an agent with voice capabilities
-// Note: Gladia only supports STT, so the agent will only be able to listen.
-export const agent = new Agent({
-  id: 'voice-agent',
-  name: 'Voice Agent',
-  instructions: `You are a helpful assistant with STT capabilities.`,
-  model: google('gemini-1.5-pro-latest'),
-  voice: voice,
-});
-
-// Example usage with a local audio file
-const audioStream = createReadStream(path.join(process.cwd(), 'audio.m4a'));
-
-try {
-  const text = await voice.listen(audioStream, {
-    fileName: 'audio.m4a',
-    mimeType: 'audio/mp4',
-  });
-  console.log('Transcription:', text);
-} catch (error) {
-  console.error('Error transcribing audio:', error);
-}
+console.log(transcript);
 ```
 
 ## Documentation
 
-- [@mastra/voice-gladia documentation](https://mastra.ai/reference/voice/overview)
+This README is the package guide. `GladiaVoice.listen()` uploads prerecorded audio, starts a Gladia transcription job, polls until it completes, and supports diarization, translation, language detection, and code-switching options.
 
 ## Changelog
 
