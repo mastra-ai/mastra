@@ -64,21 +64,24 @@ describe('Subconscious observation curator', () => {
     expect(generate).not.toHaveBeenCalled();
   });
 
-  it('reports and rethrows curator failures for lifecycle isolation', async () => {
+  it('rethrows curator failures to the scheduling boundary without touching turn-scoped sinks', async () => {
     const { memory, subconscious, context } = fixture();
+    // Post-commit curation runs after the turn closes, so even if a caller leaks these they must
+    // never be used: the stream writer would be closed and the abort signal belongs to a dead turn.
     const sendStateSignal = vi.fn();
     const writer = { custom: vi.fn() };
-    vi.spyOn(Agent.prototype, 'generate').mockRejectedValue(new Error('curator failed'));
+    const generate = vi.spyOn(Agent.prototype, 'generate').mockRejectedValue(new Error('curator failed'));
 
     await expect(
       createObservationCuratorHandler(memory, subconscious.resolved, memory, { omModel: 'openai/test' })({
         ...context,
         sendStateSignal,
         writer,
+        abortSignal: AbortSignal.abort(),
       }),
     ).rejects.toThrow('curator failed');
-    expect(writer.custom).toHaveBeenCalledWith(
-      expect.objectContaining({ type: 'data-subconscious-error', data: expect.objectContaining({ agent: 'curate' }) }),
-    );
+    expect(writer.custom).not.toHaveBeenCalled();
+    expect(sendStateSignal).not.toHaveBeenCalled();
+    expect((generate.mock.calls[0] as unknown[])[1]).not.toHaveProperty('abortSignal');
   });
 });

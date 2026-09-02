@@ -7,6 +7,7 @@ import type { MastraEmbeddingModel, MastraVector } from '@mastra/core/vector';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { Memory, Subconscious } from '../../../index';
+import { omError } from '../debug';
 import {
   AsyncBufferObservationStrategy,
   ObservationStrategy,
@@ -15,6 +16,11 @@ import {
 } from '../observation-strategies';
 import type { ProcessedObservation } from '../observation-strategies';
 import type { ObservationalMemoryModel } from '../types';
+
+vi.mock('../debug', async importOriginal => {
+  const actual = await importOriginal<typeof import('../debug')>();
+  return { ...actual, omError: vi.fn(actual.omError) };
+});
 
 const semanticInfrastructure = {
   vector: {} as MastraVector,
@@ -100,8 +106,16 @@ function createStrategyHarness(options: {
   cycleObservations: ProcessedObservation['cycleObservations'];
   stale?: boolean;
   observeError?: Error;
+  /** Turn-scoped resources handed to the strategy, to prove they never reach post-commit work. */
+  turn?: {
+    writer?: { custom: ReturnType<typeof vi.fn> };
+    sendStateSignal?: ReturnType<typeof vi.fn>;
+    abortSignal?: AbortSignal;
+  };
+  committedImpl?: (context: { parentThreadId: string }) => Promise<void>;
 }) {
   const events: string[] = [];
+  const backgroundWork: Promise<unknown>[] = [];
   const record = {
     id: 'record-1',
     threadId: options.mode === 'resource' ? null : 'alpha',
@@ -117,8 +131,9 @@ function createStrategyHarness(options: {
     createdAt: new Date(),
     updatedAt: new Date(),
   } as any;
-  const committed = vi.fn(async ({ parentThreadId }: { parentThreadId: string }) => {
-    events.push(`curate:${parentThreadId}`);
+  const committed = vi.fn(async (context: { parentThreadId: string }) => {
+    await options.committedImpl?.(context);
+    events.push(`curate:${context.parentThreadId}`);
   });
   const reflector = {
     maybeReflect: vi.fn(async () => {
@@ -143,6 +158,10 @@ function createStrategyHarness(options: {
     getObscureThreadIds: () => false,
     onIndexObservations: undefined,
     getOnObservationCommitted: () => committed,
+    trackBackgroundWork: (work: Promise<unknown>) => {
+      backgroundWork.push(work);
+      return work;
+    },
     emitDebugEvent: vi.fn(),
   } as any;
   const strategy = ObservationStrategy.create(om, {
@@ -151,6 +170,9 @@ function createStrategyHarness(options: {
     resourceId: 'user-42',
     messages: [],
     ...(options.mode === 'async-buffer' ? { cycleId: 'idle-cycle' } : {}),
+    ...(options.turn?.writer ? { writer: options.turn.writer as any } : {}),
+    ...(options.turn?.sendStateSignal ? { sendStateSignal: options.turn.sendStateSignal as any } : {}),
+    ...(options.turn?.abortSignal ? { abortSignal: options.turn.abortSignal } : {}),
   });
   const processed: ProcessedObservation = {
     observations: 'persisted observations',
@@ -177,11 +199,12 @@ function createStrategyHarness(options: {
     events.push('failed');
   });
 
-  return { strategy, committed, reflector, storage, events };
+  return { strategy, committed, reflector, storage, events, settleBackgroundWork: () => Promise.all(backgroundWork) };
 }
 
 afterEach(() => {
   vi.restoreAllMocks();
+  vi.mocked(omError).mockClear();
 });
 
 describe('direct observation curation', () => {
@@ -204,13 +227,14 @@ describe('direct observation curation', () => {
     });
 
     expect(result.observed).toBe(true);
+    await memory.settled();
     expect(generate).toHaveBeenCalledWith(expect.stringContaining(observation), expect.objectContaining({}));
     expect(worklist).not.toHaveBeenCalled();
     expect(getCursor).not.toHaveBeenCalled();
     expect(advanceCursor).not.toHaveBeenCalled();
   });
 
-  it('awaits curator completion before resolving the observation cycle', async () => {
+  it('resolves the observation cycle before curator completion while settlement waits', async () => {
     const memory = createMemory({ omModel: createMockObserverModel() });
     await seedMessages(memory);
 
@@ -224,18 +248,30 @@ describe('direct observation curation', () => {
     });
 
     const om = (await memory.omEngine)!;
-    let settled = false;
+    let observationResolved = false;
     const observation = om
       .observe({ threadId: 'alpha', resourceId: 'user-42', requestContext: requestContext() })
-      .finally(() => {
-        settled = true;
+      .then(result => {
+        observationResolved = true;
+        return result;
       });
 
+    // The curator is started but still blocked, and the observation cycle must not wait on it.
     await vi.waitFor(() => expect(Agent.prototype.generate).toHaveBeenCalled());
+    await vi.waitFor(() => expect(observationResolved).toBe(true));
+    await expect(observation).resolves.toMatchObject({ observed: true });
+
+    // Settlement, not the agent turn, owns the pending curator promise.
+    let settled = false;
+    const settlement = memory.settled().finally(() => {
+      settled = true;
+    });
+    await new Promise(resolve => setTimeout(resolve, 20));
     expect(settled).toBe(false);
 
     releaseCurator();
-    await expect(observation).resolves.toMatchObject({ observed: true });
+    await settlement;
+    expect(settled).toBe(true);
   });
 
   it('isolates curator failure from a successfully persisted observation', async () => {
@@ -252,7 +288,9 @@ describe('direct observation curation', () => {
 
     expect(result.observed).toBe(true);
     expect(result.record.activeObservations).toContain('Project Atlas launches on 2026-09-15');
+    await memory.settled();
     expect(generate).toHaveBeenCalledTimes(1);
+    expect(omError).toHaveBeenCalledWith(expect.stringContaining('curator unavailable'));
   });
 
   it.each([
@@ -266,13 +304,11 @@ describe('direct observation curation', () => {
 
     expect(harness.strategy).toBeInstanceOf(StrategyClass);
     await expect(harness.strategy.run()).resolves.toMatchObject({ observed: true });
+    expect(harness.events.slice(0, 2)).toEqual(['persist', 'end']);
+
+    await harness.settleBackgroundWork();
     expect(harness.committed).toHaveBeenCalledTimes(1);
-    expect(harness.events.slice(0, 3)).toEqual(['persist', 'end', 'curate:alpha']);
-    if (mode === 'sync') {
-      expect(harness.events).toEqual(['persist', 'end', 'curate:alpha', 'reflect']);
-    } else {
-      expect(harness.events).toEqual(['persist', 'end', 'curate:alpha']);
-    }
+    expect(harness.events.at(-1)).toBe('curate:alpha');
   });
 
   it('delivers separate thread-attributed deltas for a two-thread resource cycle before reflection', async () => {
@@ -286,8 +322,11 @@ describe('direct observation curation', () => {
 
     expect(harness.strategy).toBeInstanceOf(ResourceScopedObservationStrategy);
     await expect(harness.strategy.run()).resolves.toMatchObject({ observed: true });
+    expect(harness.events.slice(0, 2)).toEqual(['persist', 'end']);
+
+    await harness.settleBackgroundWork();
     expect(harness.committed.mock.calls.map(([context]) => context.parentThreadId)).toEqual(['alpha', 'beta']);
-    expect(harness.events).toEqual(['persist', 'end', 'curate:alpha', 'curate:beta', 'reflect']);
+    expect(harness.events).toEqual(['persist', 'end', 'reflect', 'curate:alpha', 'curate:beta']);
   });
 
   it('does not curate stale, failed, or aborted observation cycles', async () => {
@@ -329,8 +368,68 @@ describe('direct observation curation', () => {
     harness.committed.mockRejectedValueOnce(new Error('curator unavailable'));
 
     await expect(harness.strategy.run()).resolves.toMatchObject({ observed: true });
+    expect(harness.events).toEqual(['persist', 'end', 'reflect']);
+
+    await harness.settleBackgroundWork();
     expect(harness.committed).toHaveBeenCalledTimes(1);
     expect(harness.committed).toHaveBeenCalledWith(expect.objectContaining({ parentThreadId: 'beta' }));
     expect(harness.events).toEqual(['persist', 'end', 'reflect']);
+    expect(omError).toHaveBeenCalledTimes(1);
+    expect(omError).toHaveBeenCalledWith(expect.stringContaining('curator unavailable'));
+  });
+
+  it('hands post-commit work memory-owned data only and survives turn abort after persistence', async () => {
+    const turnAbort = new AbortController();
+    const writer = { custom: vi.fn() };
+    const sendStateSignal = vi.fn();
+    let releaseCurator!: () => void;
+    const curatorGate = new Promise<void>(resolve => {
+      releaseCurator = resolve;
+    });
+    const harness = createStrategyHarness({
+      mode: 'sync',
+      cycleObservations: [{ sourceThreadId: 'alpha', observations: 'durable fact' }],
+      turn: { writer, sendStateSignal, abortSignal: turnAbort.signal },
+      committedImpl: () => curatorGate,
+    });
+
+    await expect(harness.strategy.run()).resolves.toMatchObject({ observed: true });
+    expect(harness.events).toEqual(['persist', 'end', 'reflect']);
+    expect(harness.committed).toHaveBeenCalledTimes(1);
+
+    // The turn is over: its stream and abort signal are torn down while curation is still pending.
+    turnAbort.abort(new DOMException('turn closed', 'AbortError'));
+    const [context] = harness.committed.mock.calls[0]!;
+    expect(Object.keys(context).sort()).toEqual(
+      ['mainAgent', 'observations', 'parentThreadId', 'requestContext', 'resourceId'].sort(),
+    );
+    expect(context).not.toHaveProperty('writer');
+    expect(context).not.toHaveProperty('abortSignal');
+    expect(context).not.toHaveProperty('sendStateSignal');
+    expect(context).not.toHaveProperty('sendSignal');
+    expect(context).not.toHaveProperty('observabilityContext');
+
+    releaseCurator();
+    await harness.settleBackgroundWork();
+    expect(harness.events).toEqual(['persist', 'end', 'reflect', 'curate:alpha']);
+    expect(writer.custom).not.toHaveBeenCalled();
+    expect(sendStateSignal).not.toHaveBeenCalled();
+    expect(omError).not.toHaveBeenCalled();
+  });
+
+  it('suppresses scheduling when the turn aborts before persistence', async () => {
+    const turnAbort = new AbortController();
+    turnAbort.abort(new DOMException('turn closed', 'AbortError'));
+    const harness = createStrategyHarness({
+      mode: 'sync',
+      observeError: new DOMException('aborted', 'AbortError'),
+      cycleObservations: [{ sourceThreadId: 'alpha', observations: 'never persisted' }],
+      turn: { abortSignal: turnAbort.signal },
+    });
+
+    await expect(harness.strategy.run()).rejects.toThrow('aborted');
+    await harness.settleBackgroundWork();
+    expect(harness.committed).not.toHaveBeenCalled();
+    expect(harness.events).toEqual(['failed']);
   });
 });

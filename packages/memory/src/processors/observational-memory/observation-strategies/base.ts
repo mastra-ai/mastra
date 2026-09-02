@@ -56,6 +56,7 @@ export interface StrategyDeps {
     observedAt?: Date;
   }) => Promise<void>;
   onObservationCommitted?: (context: ObservationCommittedContext) => Promise<void>;
+  trackBackgroundWork: <T>(work: Promise<T>) => Promise<T>;
   emitDebugEvent: (event: ObservationDebugEvent) => void;
 }
 
@@ -116,31 +117,39 @@ export abstract class ObservationStrategy {
       await this.persist(processed);
       await this.emitEndMarkers(cycleId, processed);
 
+      // The observation is now durable. Post-commit work (Subconscious curation) is scheduled as
+      // tracked background work owned by memory, not by this turn: it never delays reflection or
+      // the observe() result, it is joined by Memory.settled(), and it is intentionally detached
+      // from the turn's writer/signals/span/abort signal because it may outlive all of them. An
+      // abort before persist() above already prevents scheduling; after persist the committed
+      // work is not cancelled by turn teardown.
       if (this.deps.onObservationCommitted) {
+        const onObservationCommitted = this.deps.onObservationCommitted;
         for (const cycleObservation of processed.cycleObservations) {
           if (!cycleObservation.observations.trim()) continue;
+          const committed: ObservationCommittedContext = {
+            parentThreadId: cycleObservation.sourceThreadId,
+            resourceId: record.resourceId,
+            observations: cycleObservation.observations,
+            requestContext,
+            mainAgent: this.opts.agent,
+          };
           const startedAt = Date.now();
-          try {
-            await this.deps.onObservationCommitted({
-              parentThreadId: cycleObservation.sourceThreadId,
-              resourceId: record.resourceId,
-              observations: cycleObservation.observations,
-              requestContext,
-              mainAgent: this.opts.agent,
-              sendSignal: this.opts.sendSignal,
-              sendStateSignal: this.opts.sendStateSignal,
-              writer,
-              abortSignal,
-              observabilityContext: this.opts.observabilityContext,
+          const backgroundWork = Promise.resolve()
+            .then(() => onObservationCommitted(committed))
+            .then(() => {
+              omDebug(
+                `[Subconscious:curate] completed background curation in ${Date.now() - startedAt}ms for thread ${committed.parentThreadId}`,
+              );
+            })
+            .catch(error => {
+              // Consumed here on purpose: the observation already persisted and must not be
+              // retried or rolled back because curation failed. omError is the failure observable.
+              omError(
+                `[Subconscious:curate] background curation failed after ${Date.now() - startedAt}ms for thread ${committed.parentThreadId}: ${error instanceof Error ? error.message : String(error)}`,
+              );
             });
-            omDebug(
-              `[Subconscious:curate] completed observation-time curation in ${Date.now() - startedAt}ms for thread ${cycleObservation.sourceThreadId}`,
-            );
-          } catch (error) {
-            omError(
-              `[Subconscious:curate] observation-time curation failed after ${Date.now() - startedAt}ms for thread ${cycleObservation.sourceThreadId}: ${error instanceof Error ? error.message : String(error)}`,
-            );
-          }
+          void this.deps.trackBackgroundWork(backgroundWork);
         }
       }
 

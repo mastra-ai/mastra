@@ -1,11 +1,10 @@
 import { Agent } from '@mastra/core/agent';
-import type { KnowledgeScope, KnowledgeStorage } from '@mastra/core/storage';
+import type { KnowledgeScope } from '@mastra/core/storage';
 import { canonicalizeKnowledgeScope } from '@mastra/core/storage';
 
 import type { Memory } from '../../..';
 import type { ObservationCommittedContext } from '../observation-strategies/types';
 import type { ObservationalMemoryModel } from '../types';
-import { publishSubconsciousActivity, publishSubconsciousError } from './activity';
 import { createKnowledgeTools } from './knowledge-tools';
 import { createKnowledgeWriteTools } from './knowledge-write-tools';
 import { resolveSubconsciousAgentModel } from './model';
@@ -48,51 +47,34 @@ export function createObservationCuratorHandler(
   return async context => {
     if (!context.observations.trim()) return 'no-op';
 
-    let store: KnowledgeStorage | undefined;
-    let scope: KnowledgeScope | undefined;
-    try {
-      scope = resolveScope(context);
-      store = await memory.storage.getStore('knowledge');
-      if (!store) throw new Error('Subconscious curate requires a configured knowledge storage domain.');
+    // Runs as memory-owned background work after the observation commit, so there is no turn
+    // writer, state-signal sink, or turn abort signal to report through. Failures propagate to the
+    // scheduling boundary, which logs them; the persisted observation is never affected.
+    const scope = resolveScope(context);
+    const store = await memory.storage.getStore('knowledge');
+    if (!store) throw new Error('Subconscious curate requires a configured knowledge storage domain.');
 
-      const agent = await createCuratorAgent(
-        memory,
-        curatorMemory,
-        context,
-        scope,
-        config,
-        subconscious,
-        options?.omModel,
-      );
-      await agent.generate(
-        `Parent thread: ${context.parentThreadId}\nResource: ${context.resourceId}\nCurrent time: ${new Date().toISOString()}\n\nCompleted observations to curate:\n${context.observations}`,
-        {
-          requestContext: context.requestContext,
-          abortSignal: context.abortSignal,
-          maxSteps: config.maxSteps,
-          memory: {
-            thread: `subconscious:${context.parentThreadId}:curate`,
-            resource: context.resourceId,
-          },
+    const agent = await createCuratorAgent(
+      memory,
+      curatorMemory,
+      context,
+      scope,
+      config,
+      subconscious,
+      options?.omModel,
+    );
+    await agent.generate(
+      `Parent thread: ${context.parentThreadId}\nResource: ${context.resourceId}\nCurrent time: ${new Date().toISOString()}\n\nCompleted observations to curate:\n${context.observations}`,
+      {
+        requestContext: context.requestContext,
+        maxSteps: config.maxSteps,
+        memory: {
+          thread: `subconscious:${context.parentThreadId}:curate`,
+          resource: context.resourceId,
         },
-      );
-      return 'ran';
-    } catch (error) {
-      const message = `curate: ${error instanceof Error ? error.message : String(error)}`;
-      await context.writer?.custom({ type: 'data-subconscious-error', data: { agent: 'curate', error: message } });
-      if (store && scope) {
-        await publishSubconsciousActivity({
-          store,
-          scope,
-          recentUpdates: subconscious.activity === false ? 10 : subconscious.activity.recentUpdates,
-          sendStateSignal: context.sendStateSignal,
-          errors: [message],
-        });
-      } else {
-        await publishSubconsciousError({ error: message, sendStateSignal: context.sendStateSignal });
-      }
-      throw error;
-    }
+      },
+    );
+    return 'ran';
   };
 }
 

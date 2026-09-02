@@ -51,17 +51,21 @@ export interface ObserverOutput {
   providerMetadata?: ProviderMetadata;
 }
 
+/**
+ * Input for post-commit observation work (Subconscious curation).
+ *
+ * This is memory-owned data: the callback is scheduled as tracked background work after the
+ * observation has been durably persisted and may finish long after the agent turn that produced
+ * it has closed. It therefore deliberately carries no turn-scoped resources — no stream writer,
+ * signal senders, observability span, or turn abort signal — because those are torn down with
+ * the turn. Completion is joined through `Memory.settled()`, not through the turn.
+ */
 export interface ObservationCommittedContext {
   parentThreadId: string;
   resourceId: string;
   observations: string;
   requestContext?: RequestContext;
   mainAgent?: ProcessorContext['agent'];
-  sendSignal?: ProcessorContext['sendSignal'];
-  sendStateSignal?: ProcessorContext['sendStateSignal'];
-  writer?: ProcessorStreamWriter;
-  abortSignal?: AbortSignal;
-  observabilityContext?: ObservabilityContext;
 }
 
 /** Result returned from ObservationStrategy.run(). */
