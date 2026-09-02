@@ -650,7 +650,7 @@ export class AgentChannels {
                   messageId,
                   actor: event.user,
                 });
-                const requestContext = new RequestContext();
+                const { requestContext } = handlerContext;
                 requestContext.set('channel', channelContext);
 
                 const renderContext = this._buildRenderContext(chatThread, platform);
@@ -702,7 +702,7 @@ export class AgentChannels {
                 messageId,
                 actor: event.user,
               });
-              const requestContext = new RequestContext();
+              const { requestContext } = handlerContext;
               requestContext.set('channel', channelContext);
 
               const renderContext = this._buildRenderContext(chatThread, platform, { toolCallId, messageId });

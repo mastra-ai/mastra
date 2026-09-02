@@ -600,6 +600,39 @@ describe('AgentChannels', () => {
       );
     });
 
+    it('passes values a custom handler stamps on ctx.requestContext through to dispatchApproval', async () => {
+      const adapter = createMockAdapter('discord');
+      const onAction = vi.fn(async (_event: any, defaultHandler: () => Promise<void>, ctx: any) => {
+        ctx.requestContext.set('tenantId', 'tenant-42');
+        await defaultHandler();
+      });
+      const channels = new AgentChannels({ adapters: { discord: adapter }, handlers: { onAction } });
+      channels.__setAgent(mockAgent);
+      channels.__setLogger({ debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() } as any);
+      await channels.initialize(makeMastra());
+
+      (channels as any).findThreadMapping = vi
+        .fn()
+        .mockResolvedValue({ thread: { id: 'mastra-thread-1', resourceId: 'resource-1' } });
+      (channels as any).pendingApprovalCards.set('tool-call-1', {
+        runId: 'run-1',
+        toolName: 'lookup',
+        args: {},
+      });
+      const dispatchApproval = vi.fn().mockResolvedValue(undefined);
+      (channels as any).dispatchApproval = dispatchApproval;
+
+      await (channels.sdk as any).processAction({
+        ...makeActionEvent(adapter, 'tool_approve:tool-call-1'),
+        thread: { id: 'channel-1:thread-1', channelId: 'channel-1', isDM: false },
+      });
+
+      expect(dispatchApproval).toHaveBeenCalledTimes(1);
+      const { requestContext } = dispatchApproval.mock.calls[0]![0];
+      expect(requestContext.get('tenantId')).toBe('tenant-42');
+      expect(requestContext.get('channel')).toBeDefined();
+    });
+
     it('does not register action handling when disabled', async () => {
       const chatMod = await getChatModule();
       const spy = vi.spyOn(chatMod.Chat.prototype as any, 'onAction');
