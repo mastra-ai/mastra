@@ -189,7 +189,7 @@ function ActivityPanel({
     const message = activity.error instanceof Error ? activity.error.message : 'Unable to load knowledge activity.';
     return <Notice variant="destructive">{message}</Notice>;
   }
-  const events = activity.data.events;
+  const events = activity.data.pages.flatMap(page => page.events);
   return (
     <div className="flex flex-col gap-3">
       <div className="flex flex-wrap gap-2" aria-label="Knowledge activity filters">
@@ -253,6 +253,18 @@ function ActivityPanel({
               </time>
             </li>
           ))}
+          {activity.hasNextPage ? (
+            <li className="flex justify-center py-2">
+              <Button
+                variant="ghost"
+                size="sm"
+                disabled={activity.isFetchingNextPage}
+                onClick={() => void activity.fetchNextPage()}
+              >
+                {activity.isFetchingNextPage ? 'Loading activity…' : 'Load more activity'}
+              </Button>
+            </li>
+          ) : null}
         </ol>
       )}
     </div>
@@ -301,7 +313,14 @@ function ActiveKnowledgeView({
     ) : null;
   }
   if (view === 'imports') {
-    return <KnowledgeImports factoryProjectId={factoryProjectId} initialImporterId={importerId} initialRunId={runId} />;
+    return (
+      <KnowledgeImports
+        factoryProjectId={factoryProjectId}
+        threadId={threadId}
+        initialImporterId={importerId}
+        initialRunId={runId}
+      />
+    );
   }
   return explore;
 }

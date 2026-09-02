@@ -42,7 +42,7 @@ export function KnowledgeApprovals({
 
   const listed = proposals.data.pages.flatMap(page => page.proposals);
   const visibleProposals = selectedProposal.data
-    ? [selectedProposal.data, ...listed.filter(proposal => proposal.id !== selectedProposal.data.id)]
+    ? [selectedProposal.data, ...listed.filter(proposal => proposal.reference !== selectedProposal.data.reference)]
     : listed;
 
   return (
@@ -108,8 +108,8 @@ export function KnowledgeApprovals({
                     <Button
                       variant="ghost"
                       size="sm"
-                      aria-current={proposal.id === proposalId ? 'true' : undefined}
-                      onClick={() => onSelectProposal(proposal.id)}
+                      aria-current={proposal.reference === proposalId ? 'true' : undefined}
+                      onClick={() => onSelectProposal(proposal.reference)}
                     >
                       Open proposal
                     </Button>

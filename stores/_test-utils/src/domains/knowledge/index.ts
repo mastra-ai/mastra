@@ -1432,6 +1432,10 @@ export function createKnowledgeStorageTests(
         proposals: [expect.objectContaining({ id: visible.id })],
         nextCursor: undefined,
       });
+      await expect(store.listActivity({ scopeIds: [PROJECT_SCOPE_ID], action: 'propose' })).resolves.toEqual([]);
+      await expect(store.listActivity({ scopeIds: [ORG_SCOPE_ID], action: 'propose' })).resolves.toEqual([
+        expect.objectContaining({ targetId: visibleNode.id, details: { proposalId: visible.id } }),
+      ]);
 
       const accessEpoch = await store.getAccessEpoch();
       const rejected = await store.reviewProposal({
