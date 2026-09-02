@@ -451,7 +451,10 @@ describe('LangfuseExporter', () => {
 
     it('passes string root-span input/output through without re-serializing', async () => {
       exporter = new LangfuseExporter({ publicKey: 'pk-test', secretKey: 'sk-test' });
-      await exportSpan(exporter, makeSpan({ isRootSpan: true, input: 'plain question', output: 'plain answer' } as any));
+      await exportSpan(
+        exporter,
+        makeSpan({ isRootSpan: true, input: 'plain question', output: 'plain answer' } as any),
+      );
 
       const attrs = processedSpans[0].attributes;
       expect(attrs['langfuse.trace.input']).toBe('plain question');
