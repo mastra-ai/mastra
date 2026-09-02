@@ -5,11 +5,11 @@ import { useState } from 'react';
 import { useTraceIntelligence } from '../use-trace-intelligence';
 import { SignalDefinitionFormDialog } from './signal-definition-form-dialog';
 import { useSignalManagementList, useSignalManagementMutations } from './use-signal-management';
+import { Badge } from '@/ds/components/Badge';
 import { Button } from '@/ds/components/Button';
 import { DataDetailsPanel } from '@/ds/components/DataDetailsPanel';
 import { Notice } from '@/ds/components/Notice';
 import { Skeleton } from '@/ds/components/Skeleton';
-import { StatusBadge } from '@/ds/components/StatusBadge';
 import { Switch } from '@/ds/components/Switch';
 
 export function TraceSignalSettingsButton({ open, onClick }: { open: boolean; onClick: () => void }) {
@@ -146,9 +146,9 @@ function TraceSignalSettingsContent() {
                   <p className="text-ui-sm text-neutral4">{signal.label}</p>
                   <p className="text-ui-xs text-neutral3 truncate">{signal.description}</p>
                 </div>
-                <StatusBadge variant="neutral" size="sm">
+                <Badge variant="neutral" size="sm">
                   Read only
-                </StatusBadge>
+                </Badge>
               </div>
             ))}
         </div>
@@ -179,9 +179,9 @@ function TraceSignalSettingsContent() {
               <div className="min-w-0">
                 <div className="flex items-center gap-2">
                   <span className="text-ui-sm text-neutral4 truncate">{definition.displayLabel}</span>
-                  <StatusBadge variant="neutral" size="sm">
+                  <Badge variant="neutral" size="sm">
                     v{definition.version}
-                  </StatusBadge>
+                  </Badge>
                 </div>
                 <p className="text-ui-xs text-neutral3 truncate">{definition.description || definition.name}</p>
               </div>

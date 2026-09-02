@@ -2,9 +2,9 @@ import type { ThemeLearningEntity } from '@mastra/client-js';
 import { useId } from 'react';
 
 import { entityIndexMetadata, entityStatusLabel } from './entity-index-model';
+import { Badge } from '@/ds/components/Badge';
 import { CardContent, CardDescription, CardLink, CardTitle } from '@/ds/components/Card';
 import { ScrollArea } from '@/ds/components/ScrollArea';
-import { StatusBadge } from '@/ds/components/StatusBadge';
 import type { LinkComponent } from '@/ds/types/link-component';
 
 export interface EntityIndexCompactGridProps {
@@ -26,7 +26,7 @@ function EntityIndexCompactCard({
   const detailsId = useId();
   const metadata = entityIndexMetadata(entity);
   const statusLabel = entityStatusLabel(metadata.status);
-  const statusVariant = metadata.status === 'ready' ? 'success' : metadata.status === 'processing' ? 'info' : 'neutral';
+  const statusVariant = metadata.status === 'ready' ? 'green' : metadata.status === 'processing' ? 'blue' : 'neutral';
   return (
     <div className="group/entity relative h-full min-w-0" data-entity-card>
       <CardLink
@@ -45,9 +45,9 @@ function EntityIndexCompactCard({
             </CardTitle>
             <CardDescription>{entity.entityType}</CardDescription>
           </div>
-          <StatusBadge variant={statusVariant} size="sm" withDot={metadata.status !== undefined}>
+          <Badge variant={statusVariant} size="sm" indicator={metadata.status === undefined ? undefined : 'dot'}>
             {statusLabel}
-          </StatusBadge>
+          </Badge>
         </div>
         <dl id={detailsId} className="grid grid-cols-3 gap-3">
           <div>

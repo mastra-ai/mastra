@@ -1,8 +1,8 @@
 import type { ThemeLearningEntity } from '@mastra/client-js';
 
 import { entityIndexMetadata, entityStatusLabel } from './entity-index-model';
+import { Badge } from '@/ds/components/Badge';
 import { DataList } from '@/ds/components/DataList';
-import { StatusBadge } from '@/ds/components/StatusBadge';
 import type { LinkComponent } from '@/ds/types/link-component';
 
 const columns = 'minmax(12rem,1.5fr) minmax(7rem,0.6fr) minmax(8rem,0.7fr) minmax(8rem,0.7fr) minmax(12rem,1fr)';
@@ -16,11 +16,11 @@ export interface EntityIndexListProps {
 
 function Status({ entity }: { entity: ThemeLearningEntity }) {
   const label = entityStatusLabel(entity.status);
-  const variant = entity.status === 'ready' ? 'success' : entity.status === 'processing' ? 'info' : 'neutral';
+  const variant = entity.status === 'ready' ? 'green' : entity.status === 'processing' ? 'blue' : 'neutral';
   return (
-    <StatusBadge variant={variant} size="sm" withDot={entity.status !== undefined}>
+    <Badge variant={variant} size="sm" indicator={entity.status === undefined ? undefined : 'dot'}>
       {label}
-    </StatusBadge>
+    </Badge>
   );
 }
 
