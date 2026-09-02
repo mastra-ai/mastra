@@ -1,5 +1,13 @@
 # @mastra/arthur
 
+## 0.4.13-alpha.2
+
+### Patch Changes
+
+- Updated dependencies [[`ea56b1f`](https://github.com/mastra-ai/mastra/commit/ea56b1fa6e0f99673d2f8a5b7dacc8d351507ff7)]:
+  - @mastra/core@1.64.0-alpha.8
+  - @mastra/otel-exporter@1.3.13-alpha.2
+
 ## 0.4.13-alpha.1
 
 ### Patch Changes
