@@ -5648,7 +5648,7 @@ export class Agent<
                     prompt: effectivePrompt,
                     result,
                     duration: Date.now() - startTime,
-                    success: true,
+                    success: result.finishReason !== 'error',
                     iteration: derivedIteration,
                     runId: runId || randomUUID(),
                     toolCallId,
