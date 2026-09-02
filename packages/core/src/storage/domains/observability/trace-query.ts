@@ -11,6 +11,8 @@ export const TRACE_QUERY_MAX_PATH_BYTES = 128;
 export const TRACE_QUERY_DEFAULT_TIMEOUT_MS = 15_000;
 export const TRACE_QUERY_MAX_TIMEOUT_MS = 300_000;
 
+const PREDICATE_COMPLEXITY_MESSAGE = `Predicates are limited to ${TRACE_QUERY_MAX_NODES} nodes and ${TRACE_QUERY_MAX_DEPTH} levels`;
+
 const hasMaxUtf8Bytes = (value: string, maxBytes: number) => Buffer.byteLength(value, 'utf8') <= maxBytes;
 const literalStringSchema = z
   .string()
@@ -109,7 +111,7 @@ const pageSchema = z
   .strict()
   .default({ limit: 100 });
 
-export const traceQueryRequestSchema = z
+const traceQueryRequestObjectSchema = z
   .object({
     timeRange: timeRangeSchema,
     where: traceQueryPredicateSchema.optional(),
@@ -131,6 +133,15 @@ export const traceQueryRequestSchema = z
     page: pageSchema,
   })
   .strict();
+
+export const traceQueryRequestSchema = z.preprocess((input, context) => {
+  const issuePath = findPredicateComplexityIssue(input);
+  if (issuePath) {
+    context.addIssue({ code: 'custom', path: issuePath, message: PREDICATE_COMPLEXITY_MESSAGE });
+    return z.NEVER;
+  }
+  return input;
+}, traceQueryRequestObjectSchema);
 
 export const traceQueryTraceSchema = z
   .object({
@@ -363,12 +374,63 @@ function addPredicateComplexityIssue(path: Array<string | number>, message: stri
   }
 }
 
+function findPredicateComplexityIssue(input: unknown): Array<string | number> | undefined {
+  if (!input || typeof input !== 'object' || !Object.hasOwn(input, 'where')) return undefined;
+
+  const where = (input as { where?: unknown }).where;
+  if (where === undefined) return undefined;
+
+  const stack: Array<{ predicate: unknown; path: Array<string | number>; depth: number }> = [
+    { predicate: where, path: ['where'], depth: 1 },
+  ];
+  let nodes = 0;
+
+  while (stack.length > 0) {
+    const frame = stack.pop()!;
+    nodes += 1;
+    if (frame.depth > TRACE_QUERY_MAX_DEPTH || nodes > TRACE_QUERY_MAX_NODES) return frame.path;
+    if (!frame.predicate || typeof frame.predicate !== 'object') continue;
+
+    const predicate = frame.predicate as Record<string, unknown>;
+    if ((predicate.op === 'and' || predicate.op === 'or') && Array.isArray(predicate.args)) {
+      for (let index = predicate.args.length - 1; index >= 0; index -= 1) {
+        stack.push({ predicate: predicate.args[index], path: [...frame.path, 'args', index], depth: frame.depth + 1 });
+      }
+      continue;
+    }
+    if (predicate.op === 'not' && Object.hasOwn(predicate, 'arg')) {
+      stack.push({ predicate: predicate.arg, path: [...frame.path, 'arg'], depth: frame.depth + 1 });
+      continue;
+    }
+
+    for (const collection of ['scores', 'spans'] as const) {
+      const clause = predicate[collection];
+      if (!clause || typeof clause !== 'object') continue;
+      for (const quantifier of ['none', 'some'] as const) {
+        if (!Object.hasOwn(clause, quantifier)) continue;
+        stack.push({
+          predicate: (clause as Record<string, unknown>)[quantifier],
+          path: [...frame.path, collection, quantifier],
+          depth: frame.depth + 1,
+        });
+      }
+    }
+  }
+
+  return undefined;
+}
+
 export function formatTraceQuerySchemaIssues(error: z.ZodError): TraceQueryIssue[] {
-  return error.issues.map(issue => ({
-    code: 'invalid_request',
-    path: issue.path.map(part => (typeof part === 'symbol' ? String(part) : part)),
-    message: 'The value does not match the trace-query request contract',
-  }));
+  return error.issues.map(issue => {
+    const predicateTooComplex = issue.code === 'custom' && issue.message === PREDICATE_COMPLEXITY_MESSAGE;
+    return {
+      code: predicateTooComplex ? 'predicate_too_complex' : 'invalid_request',
+      path: issue.path.map(part => (typeof part === 'symbol' ? String(part) : part)),
+      message: predicateTooComplex
+        ? PREDICATE_COMPLEXITY_MESSAGE
+        : 'The value does not match the trace-query request contract',
+    };
+  });
 }
 
 export function parseTraceQueryRequest(input: unknown): NormalizedTraceQueryRequest {
@@ -497,11 +559,7 @@ function planPredicate(
 ): TrustedTraceQueryPredicate | TrustedTraceQueryScalarPredicate | undefined {
   state.nodes += 1;
   if (depth > TRACE_QUERY_MAX_DEPTH || state.nodes > TRACE_QUERY_MAX_NODES) {
-    addPredicateComplexityIssue(
-      path,
-      `Predicates are limited to ${TRACE_QUERY_MAX_NODES} nodes and ${TRACE_QUERY_MAX_DEPTH} levels`,
-      state,
-    );
+    addPredicateComplexityIssue(path, PREDICATE_COMPLEXITY_MESSAGE, state);
     return undefined;
   }
 

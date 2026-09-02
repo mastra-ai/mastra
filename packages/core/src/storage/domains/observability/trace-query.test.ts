@@ -6,6 +6,7 @@ import {
   planTraceQuery,
   TRACE_QUERY_MAX_DEPTH,
   TRACE_QUERY_MAX_LITERAL_UNITS,
+  TRACE_QUERY_MAX_NODES,
   TRACE_QUERY_MAX_PATH_BYTES,
   TRACE_QUERY_MAX_RELATED_CLAUSES,
   TRACE_QUERY_MAX_SET_VALUES,
@@ -426,16 +427,50 @@ describe('planTraceQuery', () => {
     );
   });
 
-  it('bounds recursive predicate complexity', () => {
-    let where: TraceQueryPredicate = {
+  it('accepts predicate complexity limits and rejects limit plus one before planning', () => {
+    const leaf = (): TraceQueryPredicate => ({
       op: 'eq',
       left: { path: 'traceId' },
       right: { literal: 'trace-1' },
-    };
-    for (let index = 0; index < TRACE_QUERY_MAX_DEPTH; index += 1) where = { op: 'not', arg: where };
+    });
 
-    const error = validationError(() => planTraceQuery(parsed({ ...baseRequest, where })));
+    let atDepthLimit = leaf();
+    for (let index = 1; index < TRACE_QUERY_MAX_DEPTH; index += 1) atDepthLimit = { op: 'not', arg: atDepthLimit };
+    expect(planTraceQuery(parsed({ ...baseRequest, where: atDepthLimit })).where).toBeDefined();
+
+    const overDepthLimit: TraceQueryPredicate = { op: 'not', arg: atDepthLimit };
+    const depthError = validationError(() => parsed({ ...baseRequest, where: overDepthLimit }));
+    expect(depthError.issues).toEqual([
+      expect.objectContaining({
+        code: 'predicate_too_complex',
+        path: ['where', ...Array.from({ length: TRACE_QUERY_MAX_DEPTH }, () => 'arg')],
+      }),
+    ]);
+
+    const atNodeLimit: TraceQueryPredicate = {
+      op: 'and',
+      args: Array.from({ length: TRACE_QUERY_MAX_NODES - 1 }, leaf),
+    };
+    expect(planTraceQuery(parsed({ ...baseRequest, where: atNodeLimit })).where).toBeDefined();
+
+    const overNodeLimit: TraceQueryPredicate = { op: 'and', args: [...atNodeLimit.args, leaf()] };
+    const nodeError = validationError(() => parsed({ ...baseRequest, where: overNodeLimit }));
+    expect(nodeError.issues).toEqual([
+      expect.objectContaining({ code: 'predicate_too_complex', path: ['where', 'args', TRACE_QUERY_MAX_NODES - 1] }),
+    ]);
+  });
+
+  it('rejects adversarial recursive predicates without overflowing the parser stack', () => {
+    let where: unknown = { op: 'not' };
+    for (let index = 0; index < 10_000; index += 1) where = { op: 'not', arg: where };
+
+    const error = validationError(() => parsed({ ...baseRequest, where }));
     expect(error.issues[0]).toMatchObject({ code: 'predicate_too_complex' });
+  });
+
+  it('leaves ordinary malformed predicates to structural validation', () => {
+    const error = validationError(() => parsed({ ...baseRequest, where: { op: 'not', arg: { op: 'unknown' } } }));
+    expect(error.issues).toEqual([expect.objectContaining({ code: 'invalid_request' })]);
   });
 
   it('does not echo query literals in semantic issues', () => {
