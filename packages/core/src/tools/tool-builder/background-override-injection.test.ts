@@ -32,11 +32,15 @@ function baseOptions() {
   };
 }
 
-function extractJsonProperties(tool: { inputSchema?: unknown }) {
-  const schema = tool.inputSchema;
+function extractJsonSchema(schema: unknown) {
   expect(schema).toBeDefined();
-  expect(isStandardSchemaWithJSON(schema)).toBe(true);
-  const json = standardSchemaToJSONSchema(schema as any, { io: 'input' });
+  return isStandardSchemaWithJSON(schema)
+    ? standardSchemaToJSONSchema(schema, { io: 'input' })
+    : ((schema as any).jsonSchema ?? schema);
+}
+
+function extractJsonProperties(schema: unknown) {
+  const json = extractJsonSchema(schema);
   expect(json && typeof json === 'object' && (json as any).type === 'object').toBe(true);
   return (json as any).properties as Record<string, any>;
 }
@@ -52,7 +56,7 @@ describe('CoreToolBuilder background override injection', () => {
         execute,
       });
 
-      // Constructing the builder is where the schema is mutated. With the
+      // Constructing the builder used to mutate the source schema. With the
       // pre-fix code, this would silently produce a broken schema and the
       // crash would surface during execute(). We assert both happen cleanly.
       const builder = new CoreToolBuilder({
@@ -79,15 +83,17 @@ describe('CoreToolBuilder background override injection', () => {
         execute: vi.fn(),
       });
 
-      new CoreToolBuilder({
+      const originalSchema = tool.inputSchema;
+      const built = new CoreToolBuilder({
         originalTool: tool,
         options: baseOptions(),
         backgroundTaskEnabled: true,
-      });
+      }).build();
 
-      const properties = extractJsonProperties(tool);
+      const properties = extractJsonProperties(built.parameters);
       expect(properties).toHaveProperty('query');
       expect(properties).toHaveProperty('_background');
+      expect(tool.inputSchema).toBe(originalSchema);
     });
 
     // The JSON Schema fallback used to replace the original Zod v3 schema with
@@ -141,17 +147,21 @@ describe('CoreToolBuilder background override injection', () => {
         execute,
       });
 
-      new CoreToolBuilder({
+      const built = new CoreToolBuilder({
         originalTool: tool,
         options: baseOptions(),
         backgroundTaskEnabled: true,
-      });
+      }).build();
 
-      const schema = tool.inputSchema as any;
-      const result = schema['~standard'].validate({ query: 'ok', _background: { enabled: 'yes' } });
-      const resolved = result && typeof result.then === 'function' ? await result : result;
-      expect(resolved).toHaveProperty('issues');
-      expect((resolved as { issues: readonly unknown[] }).issues.length).toBeGreaterThan(0);
+      const result = await built.execute!(
+        { query: 'ok', _background: { enabled: 'yes' } },
+        { toolCallId: 'call-1', messages: [] },
+      );
+      expect(result).toMatchObject({
+        error: true,
+        message: expect.stringContaining('Tool input validation failed'),
+      });
+      expect(execute).not.toHaveBeenCalled();
     });
   });
 
@@ -175,14 +185,14 @@ describe('CoreToolBuilder background override injection', () => {
         backgroundTaskEnabled: true,
       });
 
-      expect(isStandardSchemaWithJSON(tool.inputSchema)).toBe(true);
-      const json = standardSchemaToJSONSchema(tool.inputSchema as any, { io: 'input' });
+      expect(tool.inputSchema).toBe(wrapped);
+
+      const built = builder.build();
+      const json = extractJsonSchema(built.parameters);
       expect(json.properties).toMatchObject({
         query: expect.anything(),
         _background: expect.anything(),
       });
-
-      const built = builder.build();
       const result = await built.execute!(
         { query: 'docs', _background: { enabled: 'yes' } },
         { toolCallId: 'call-1', messages: [] },
@@ -214,7 +224,7 @@ describe('CoreToolBuilder background override injection', () => {
         ok: true,
       });
 
-      const properties = extractJsonProperties(tool);
+      const properties = extractJsonProperties(built.parameters);
       expect(properties).toHaveProperty('query');
       expect(properties).toHaveProperty('_background');
     });
@@ -245,7 +255,7 @@ describe('CoreToolBuilder background override injection', () => {
         ok: true,
       });
 
-      const properties = extractJsonProperties(tool);
+      const properties = extractJsonProperties(built.parameters);
       expect(properties).toHaveProperty('query');
       expect(properties).toHaveProperty('_background');
     });
@@ -260,13 +270,15 @@ describe('CoreToolBuilder background override injection', () => {
         execute: vi.fn(),
       });
 
-      new CoreToolBuilder({
+      const originalSchema = tool.inputSchema;
+      const built = new CoreToolBuilder({
         originalTool: tool,
         options: baseOptions(),
-      });
+      }).build();
 
-      const properties = extractJsonProperties(tool);
+      const properties = extractJsonProperties(built.parameters);
       expect(properties).toHaveProperty('message');
+      expect(tool.inputSchema).toBe(originalSchema);
       expect(properties).toHaveProperty('suspendedToolRunId');
       expect(properties).toHaveProperty('resumeData');
 
@@ -289,14 +301,46 @@ describe('CoreToolBuilder background override injection', () => {
         execute: vi.fn(),
       });
 
-      new CoreToolBuilder({
+      const originalSchema = tool.inputSchema;
+      const built = new CoreToolBuilder({
         originalTool: tool,
         options: baseOptions(),
-      });
+      }).build();
 
-      const properties = extractJsonProperties(tool);
+      const properties = extractJsonProperties(built.parameters);
       expect(properties).toHaveProperty('suspendedToolRunId');
+      expect(tool.inputSchema).toBe(originalSchema);
       expect(properties).toHaveProperty('resumeData');
+    });
+
+    it.each([
+      ['Zod v3 fallback', z3.object({ message: z3.string() })],
+      ['Zod v4', z4.object({ message: z4.string() })],
+    ])('passes suspendedToolRunId through execute for %s schemas', async (_, inputSchema) => {
+      const execute = vi.fn().mockResolvedValue({ ok: true });
+      const tool = createTool({
+        id: 'agent-resume',
+        description: 'Resumable agent tool',
+        inputSchema: inputSchema as any,
+        execute,
+      });
+      const originalSchema = tool.inputSchema;
+      const built = new CoreToolBuilder({
+        originalTool: tool,
+        options: baseOptions(),
+      }).build();
+
+      await expect(
+        built.execute!(
+          { message: 'continue', suspendedToolRunId: 'suspended-run' },
+          { toolCallId: 'call-1', messages: [] },
+        ),
+      ).resolves.toEqual({ ok: true });
+      expect(execute).toHaveBeenCalledWith(
+        { message: 'continue', suspendedToolRunId: 'suspended-run' },
+        expect.objectContaining({ requestContext: expect.any(RequestContext) }),
+      );
+      expect(tool.inputSchema).toBe(originalSchema);
     });
 
     // Both gates can fire at once: a resumable id AND backgroundTaskEnabled.
@@ -310,17 +354,69 @@ describe('CoreToolBuilder background override injection', () => {
         execute: vi.fn(),
       });
 
-      new CoreToolBuilder({
+      const built = new CoreToolBuilder({
         originalTool: tool,
         options: baseOptions(),
         backgroundTaskEnabled: true,
-      });
+      }).build();
 
-      const properties = extractJsonProperties(tool);
+      const properties = extractJsonProperties(built.parameters);
       expect(properties).toHaveProperty('message');
       expect(properties).toHaveProperty('_background');
       expect(properties).toHaveProperty('suspendedToolRunId');
       expect(properties).toHaveProperty('resumeData');
+    });
+  });
+
+  describe('Shared tool instances (issue #22843)', () => {
+    function makeSharedTool() {
+      return createTool({
+        id: 'shared-tool',
+        description: 'A tool shared by multiple agents',
+        inputSchema: z4.object({ query: z4.string() }),
+        execute: vi.fn(),
+      });
+    }
+
+    function buildSharedTool(tool: ReturnType<typeof makeSharedTool>, backgroundEnabled: boolean) {
+      return new CoreToolBuilder({
+        originalTool: tool,
+        options: {
+          ...baseOptions(),
+          backgroundConfig: backgroundEnabled ? { enabled: true } : undefined,
+        },
+        backgroundTaskEnabled: true,
+      }).build();
+    }
+
+    it.each([
+      ['eligible first', true],
+      ['ineligible first', false],
+    ])('does not leak _background when building the %s', (_, eligibleFirst) => {
+      const tool = makeSharedTool();
+      const originalSchema = tool.inputSchema;
+
+      const first = buildSharedTool(tool, eligibleFirst);
+      const second = buildSharedTool(tool, !eligibleFirst);
+      const eligible = eligibleFirst ? first : second;
+      const ineligible = eligibleFirst ? second : first;
+
+      expect(extractJsonProperties(eligible.parameters)).toHaveProperty('_background');
+      expect(extractJsonProperties(ineligible.parameters)).not.toHaveProperty('_background');
+      expect(extractJsonProperties(eligible.parameters)).toHaveProperty('query');
+      expect(extractJsonProperties(ineligible.parameters)).toHaveProperty('query');
+      expect(tool.inputSchema).toBe(originalSchema);
+    });
+
+    it('does not re-wrap or mutate the source schema across repeated conversions', () => {
+      const tool = makeSharedTool();
+      const originalSchema = tool.inputSchema;
+
+      const first = buildSharedTool(tool, true);
+      const second = buildSharedTool(tool, true);
+
+      expect(extractJsonSchema(first.parameters)).toEqual(extractJsonSchema(second.parameters));
+      expect(tool.inputSchema).toBe(originalSchema);
     });
   });
 
@@ -340,19 +436,19 @@ describe('CoreToolBuilder background override injection', () => {
 
     it('does NOT inject _background when the manager is enabled but the tool has no opt-in', () => {
       const tool = makeTool();
-      new CoreToolBuilder({
+      const built = new CoreToolBuilder({
         originalTool: tool,
         options: { ...baseOptions(), backgroundConfig: undefined },
         backgroundTaskEnabled: true,
-      });
-      const properties = extractJsonProperties(tool);
+      }).build();
+      const properties = extractJsonProperties(built.parameters);
       expect(properties).toHaveProperty('query');
       expect(properties).not.toHaveProperty('_background');
     });
 
     it('injects _background when the agent config whitelists the tool', () => {
       const tool = makeTool();
-      new CoreToolBuilder({
+      const built = new CoreToolBuilder({
         originalTool: tool,
         options: {
           ...baseOptions(),
@@ -360,14 +456,14 @@ describe('CoreToolBuilder background override injection', () => {
           agentBackgroundConfig: { tools: { 'test-tool': true } },
         },
         backgroundTaskEnabled: true,
-      });
-      const properties = extractJsonProperties(tool);
+      }).build();
+      const properties = extractJsonProperties(built.parameters);
       expect(properties).toHaveProperty('_background');
     });
 
     it('resolves agent whitelist entries for agent- prefixed tool names', () => {
       const tool = makeTool('agent-biExecutor');
-      new CoreToolBuilder({
+      const built = new CoreToolBuilder({
         originalTool: tool,
         options: {
           ...baseOptions(),
@@ -376,14 +472,14 @@ describe('CoreToolBuilder background override injection', () => {
           agentBackgroundConfig: { tools: { biExecutor: { enabled: true } } },
         },
         backgroundTaskEnabled: true,
-      });
-      const properties = extractJsonProperties(tool);
+      }).build();
+      const properties = extractJsonProperties(built.parameters);
       expect(properties).toHaveProperty('_background');
     });
 
     it('does NOT inject _background when the agent whitelists other tools only', () => {
       const tool = makeTool();
-      new CoreToolBuilder({
+      const built = new CoreToolBuilder({
         originalTool: tool,
         options: {
           ...baseOptions(),
@@ -391,8 +487,8 @@ describe('CoreToolBuilder background override injection', () => {
           agentBackgroundConfig: { tools: { research: true } },
         },
         backgroundTaskEnabled: true,
-      });
-      const properties = extractJsonProperties(tool);
+      }).build();
+      const properties = extractJsonProperties(built.parameters);
       expect(properties).not.toHaveProperty('_background');
     });
 
