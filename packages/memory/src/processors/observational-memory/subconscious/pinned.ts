@@ -4,6 +4,9 @@ import type { ToolAction } from '@mastra/core/tools';
 import { createTool } from '@mastra/core/tools';
 import type { JSONSchema7 } from 'json-schema';
 
+import { getKnowledgeStore } from './knowledge-tools';
+import type { KnowledgeStoreMemory } from './knowledge-tools';
+
 /** Processor id and state-signal id for the pinned-knowledge lane. */
 export const SUBCONSCIOUS_PINS_STATE_ID = 'subconscious-pins';
 /** Snapshot tag the model sees; the delta tag appends `-update`. */
@@ -25,11 +28,7 @@ export interface PinnedKnowledgeSet {
   pins: KnowledgeRecord[];
 }
 
-type PinnedMemory = {
-  storage: {
-    getStore(name: 'knowledge'): Promise<KnowledgeStorage | undefined>;
-  };
-};
+type PinnedMemory = KnowledgeStoreMemory;
 
 export interface PinnedToolsOptions {
   /** Full visible scope context for the conversation (org + resource + thread entries). */
@@ -163,9 +162,7 @@ export async function writePinnedKnowledge(
 }
 
 async function getStore(memory: PinnedMemory): Promise<KnowledgeStorage> {
-  const store = await memory.storage.getStore('knowledge');
-  if (!store) throw new Error('Pinned knowledge requires a configured knowledge storage domain.');
-  return store;
+  return getKnowledgeStore(memory);
 }
 
 async function requirePin(

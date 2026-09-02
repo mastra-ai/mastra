@@ -159,7 +159,7 @@ describe('PostgreSQL knowledge structured reconciliation', () => {
           {
             address: 'resource:mastra',
             name: 'Mastra',
-            parentAddresses: ['org:acme', 'org:partner'],
+            parentAddresses: ['org:acme'],
             grants: [{ scopeRefAddress: 'org:acme', role: 'readonly' as const }],
           },
         ],
@@ -180,8 +180,23 @@ describe('PostgreSQL knowledge structured reconciliation', () => {
           ])
         ).rows[0],
       ).toMatchObject({ name: 'Acme' });
-      expect((await pool.query(`SELECT * FROM "${schemaName}".mastra_knowledge_node_scopes`)).rows).toHaveLength(2);
+      expect((await pool.query(`SELECT * FROM "${schemaName}".mastra_knowledge_node_scopes`)).rows).toHaveLength(1);
       expect((await pool.query(`SELECT * FROM "${schemaName}".mastra_knowledge_scope_grants`)).rows).toHaveLength(2);
+
+      const enriched = await store.reconcileStructure({
+        scopes: plan.scopes.map(scope =>
+          scope.address === 'resource:mastra'
+            ? {
+                ...scope,
+                parentAddresses: ['org:acme', 'org:partner'],
+                grants: [...(scope.grants ?? []), { scopeRefAddress: 'org:partner', role: 'readonly' as const }],
+              }
+            : scope,
+        ),
+      });
+      expect(enriched).toMatchObject({ changed: true, createdScopeIds: [], accessEpoch: 2 });
+      expect((await pool.query(`SELECT * FROM "${schemaName}".mastra_knowledge_node_scopes`)).rows).toHaveLength(2);
+      expect((await pool.query(`SELECT * FROM "${schemaName}".mastra_knowledge_scope_grants`)).rows).toHaveLength(3);
     } finally {
       await pool.query(`DROP SCHEMA IF EXISTS "${schemaName}" CASCADE`);
     }

@@ -10,7 +10,7 @@ import type { JSONSchema7 } from 'json-schema';
 import type { Memory } from '../../..';
 import type { ObservationalMemoryModel, ReflectionCommittedContext } from '../types';
 import { publishSubconsciousActivity, publishSubconsciousError } from './activity';
-import { createKnowledgeTools } from './knowledge-tools';
+import { createKnowledgeTools, getKnowledgeStore, withCaptureCompanions } from './knowledge-tools';
 import { createKnowledgeWriteTools } from './knowledge-write-tools';
 import { resolveSubconsciousAgentModel } from './model';
 import { resolveKnowledgeResourceId } from './scope';
@@ -164,10 +164,14 @@ export function createLearnerHandler(
     let scope: KnowledgeScope | undefined;
     try {
       scope = resolveScope(context);
-      store = await memory.storage.getStore('knowledge');
-      if (!store) throw new Error('Subconscious learn requires a configured knowledge storage domain.');
+      store = await getKnowledgeStore(memory);
       const cursor = await store.getCurationCursor({ sourceThreadId: context.parentThreadId, agent: LEARN_AGENT });
-      const worklist = await readWorklist(store, context.parentThreadId, scope, cursor?.lastKnowledgeId);
+      const worklist = await readWorklist(
+        store,
+        context.parentThreadId,
+        withCaptureCompanions(scope),
+        cursor?.lastKnowledgeId,
+      );
       if (!worklist.records.length) return;
       const agent = await createLearnerAgent(
         memory,
@@ -233,8 +237,7 @@ async function createLearnerAgent(
     requestContext: context.requestContext,
   });
   if (!model) throw new Error('Subconscious learn requires the main agent to resolve its model.');
-  const store = await memory.storage.getStore('knowledge');
-  if (!store) throw new Error('Subconscious learn requires a configured knowledge storage domain.');
+  const store = await getKnowledgeStore(memory);
   const state: LearnerState = {};
   return new Agent({
     id: `subconscious-learn-${context.parentThreadId}`,
