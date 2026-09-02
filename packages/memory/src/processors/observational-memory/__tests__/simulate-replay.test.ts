@@ -54,15 +54,11 @@ describe('direct Subconscious replay', () => {
     let firstRecordId = '';
     let nodeId = '';
 
-    (vi.spyOn(Agent.prototype, 'generate') as any).mockImplementation(async function (
-      this: Agent,
-      prompt: any,
-      options: any,
-    ) {
-      const text = String(prompt);
+    vi.spyOn(Agent.prototype, 'sendMessage').mockImplementation(function (this: Agent, message: any, options: any) {
+      const text = String(message.contents);
       generatedPrompts.push(text);
-      const tools = (await this.listTools({ requestContext: options?.requestContext })) as any;
-      if (text.includes('Completed observations to curate:')) {
+      const consumeStream = async () => {
+        const tools = (await this.listTools({ requestContext: options?.ifIdle?.streamOptions?.requestContext })) as any;
         if (!nodeId) {
           const created = (await tools.knowledge_create!.execute?.(
             {
@@ -94,8 +90,10 @@ describe('direct Subconscious replay', () => {
             {} as any,
           );
         }
-        return { text: 'Curated.' } as any;
-      }
+      };
+      return { accepted: Promise.resolve({ action: 'wake', output: { consumeStream } }), signal: {} } as any;
+    });
+    (vi.spyOn(Agent.prototype, 'generate') as any).mockImplementation(async () => {
       const reminderRecord = (
         await store.listKnowledgeAbout({
           node: nodeId,

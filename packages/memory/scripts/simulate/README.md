@@ -6,7 +6,7 @@ Replay recorded Observational Memory generations through the production Subconsc
 
 1. **Extract** copies a bounded set of threads, messages, and Observational Memory generations from a Mastra-schema Postgres database into a local input database. The source is opened read-only.
 2. **Reconstruct** rebuilds the recorded observation-cycle boundaries. It does not rerun the observer, so prompt changes cannot silently alter those boundaries.
-3. **Replay** sends each completed observation delta to the same `createObservationCuratorHandler()` used by production direct delivery. Every run uses a fresh target database.
+3. **Replay** sends each completed observation delta through the same curator agent and signal dispatch used by the production Extractor. Every run uses a fresh target database.
 
 Lifecycle ordering across sync, buffered, idle, and resource-scoped observation strategies is covered by the observation-strategy tests. This simulator starts at the already-completed observation boundary.
 
@@ -41,16 +41,7 @@ pnpm simulate:replay \
 
 `--knowledge-resource <id>` anchors resource-scoped knowledge on a shared project identifier, matching production callers that set `knowledgeResourceId`. Use it when the replayed threads shared a project resource in production so the curator can retrieve and reconcile knowledge across source threads.
 
-The target database is local-only, must differ from the input database, and is recreated for the run. Replay prints per-cycle curator outcomes plus machine-readable totals:
-
-- `CYCLES_REPLAYED=`
-- `CURATOR_RAN=`
-- `CURATOR_NOOP=`
-- `CURATOR_FAILED=`
-- `KNOWLEDGE_NODES=`
-- `KNOWLEDGE_RECORDS=`
-- `WORKLIST_OPERATIONS=0`
-- `CURSOR_OPERATIONS=0`
+The target database is local-only, must differ from the input database, and is recreated for the run. Replay prints a `CURATOR` line for each cycle followed by one JSON object per thread. The JSON includes curator outcomes, knowledge totals, reconstruction warnings, and the number of excluded reflection heads. Missing generations, empty chunks, and unparseable dates therefore remain visible to operators.
 
 There is no capture arm, cadence, tail flush, worklist paging, cursor advancement, or A/B comparator. Curator failures are reported and are not replayed.
 

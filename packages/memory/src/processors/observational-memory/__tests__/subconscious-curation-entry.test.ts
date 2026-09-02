@@ -7,13 +7,6 @@ import type { MastraEmbeddingModel, MastraVector } from '@mastra/core/vector';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { Memory, Subconscious } from '../../../index';
-import {
-  AsyncBufferObservationStrategy,
-  ObservationStrategy,
-  ResourceScopedObservationStrategy,
-  SyncObservationStrategy,
-} from '../observation-strategies';
-import type { ProcessedObservation } from '../observation-strategies';
 import type { ObservationalMemoryModel } from '../types';
 
 const semanticInfrastructure = {
@@ -80,7 +73,10 @@ async function seedMessages(memory: Memory, threadId = 'alpha', resourceId = 'us
         threadId,
         resourceId,
         role: 'user',
-        content: { format: 2, parts: [{ type: 'text', text: 'Project Atlas launch details. '.repeat(20) }] },
+        content: {
+          format: 2,
+          parts: [{ type: 'text', text: 'Project Atlas launch details. '.repeat(20), createdAt: now.getTime() }],
+        },
         createdAt: now,
       },
       {
@@ -88,111 +84,24 @@ async function seedMessages(memory: Memory, threadId = 'alpha', resourceId = 'us
         threadId,
         resourceId,
         role: 'assistant',
-        content: { format: 2, parts: [{ type: 'text', text: 'Understood. '.repeat(20) }] },
+        content: {
+          format: 2,
+          parts: [{ type: 'text', text: 'Understood. '.repeat(20), createdAt: now.getTime() + 1 }],
+        },
         createdAt: new Date(now.getTime() + 1),
       },
     ] as MastraDBMessage[],
   });
 }
 
-function createStrategyHarness(options: {
-  mode: 'sync' | 'async-buffer' | 'resource';
-  cycleObservations: ProcessedObservation['cycleObservations'];
-  stale?: boolean;
-  observeError?: Error;
-}) {
-  const events: string[] = [];
-  const record = {
-    id: 'record-1',
-    threadId: options.mode === 'resource' ? null : 'alpha',
-    resourceId: 'user-42',
-    activeObservations: null,
-    observationTokenCount: 0,
-    lastObservedAt: options.stale ? new Date(0) : null,
-    generationCount: 0,
-    bufferedObservationChunks: null,
-    isBufferingObservation: false,
-    lastBufferedAt: null,
-    config: null,
-    createdAt: new Date(),
-    updatedAt: new Date(),
-  } as any;
-  const committed = vi.fn(async ({ parentThreadId }: { parentThreadId: string }) => {
-    events.push(`curate:${parentThreadId}`);
-  });
-  const reflector = {
-    maybeReflect: vi.fn(async () => {
-      events.push('reflect');
-    }),
-  };
-  const storage = {
-    getObservationalMemory: vi.fn(async () => (options.stale ? { ...record, lastObservedAt: new Date(1) } : record)),
-  };
-  const om = {
-    getStorage: () => storage,
-    getMemory: () => undefined,
-    getMessageHistory: () => ({ persistMessages: vi.fn() }),
-    getTokenCounter: () => ({}),
-    getObservationConfig: () => ({ messageTokens: 1, bufferTokens: false }),
-    getReflectionConfig: () => ({ observationTokens: 50_000 }),
-    scope: options.mode === 'resource' ? 'resource' : 'thread',
-    retrieval: false,
-    observer: {},
-    reflector,
-    observedMessageIds: new Set<string>(),
-    getObscureThreadIds: () => false,
-    onIndexObservations: undefined,
-    getOnObservationCommitted: () => committed,
-    emitDebugEvent: vi.fn(),
-  } as any;
-  const strategy = ObservationStrategy.create(om, {
-    record,
-    threadId: 'alpha',
-    resourceId: 'user-42',
-    messages: [],
-    ...(options.mode === 'async-buffer' ? { cycleId: 'idle-cycle' } : {}),
-  });
-  const processed: ProcessedObservation = {
-    observations: 'persisted observations',
-    cycleObservations: options.cycleObservations,
-    observationTokens: 4,
-    cycleObservationTokens: 2,
-    observedMessageIds: [],
-    lastObservedAt: new Date(),
-  };
-  vi.spyOn(strategy, 'prepare').mockResolvedValue({ messages: [], existingObservations: '' });
-  vi.spyOn(strategy, 'observe').mockImplementation(async () => {
-    if (options.observeError) throw options.observeError;
-    return { observations: 'raw observation' };
-  });
-  vi.spyOn(strategy, 'process').mockResolvedValue(processed);
-  vi.spyOn(strategy, 'persist').mockImplementation(async () => {
-    events.push('persist');
-  });
-  vi.spyOn(strategy, 'emitStartMarkers').mockResolvedValue(undefined);
-  vi.spyOn(strategy, 'emitEndMarkers').mockImplementation(async () => {
-    events.push('end');
-  });
-  vi.spyOn(strategy, 'emitFailedMarkers').mockImplementation(async () => {
-    events.push('failed');
-  });
-
-  return { strategy, committed, reflector, storage, events };
-}
-
-afterEach(() => {
-  vi.restoreAllMocks();
-});
+afterEach(() => vi.restoreAllMocks());
 
 describe('direct observation curation', () => {
-  it('directly curates the persisted observation delta without worklist calls', async () => {
+  it('dispatches the raw observation through the configured curate extractor', async () => {
     const observation = 'User confirmed Project Atlas launches on 2026-09-15.';
     const memory = createMemory({ omModel: createMockObserverModel(observation) });
-    const store = (await memory.storage.getStore('knowledge'))!;
-    const worklist = vi.spyOn(store, 'knowledgeBySource');
-    const getCursor = vi.spyOn(store, 'getCurationCursor');
-    const advanceCursor = vi.spyOn(store, 'advanceCurationCursor');
-    const generate = vi.spyOn(Agent.prototype, 'generate').mockResolvedValue({ text: 'Done.' } as any);
+    const accepted = new Promise<any>(() => {});
+    const sendMessage = vi.spyOn(Agent.prototype, 'sendMessage').mockReturnValue({ accepted, signal: {} } as any);
     await seedMessages(memory);
 
     const om = await memory.omEngine;
@@ -204,44 +113,31 @@ describe('direct observation curation', () => {
     });
 
     expect(result.observed).toBe(true);
-    expect(generate).toHaveBeenCalledWith(expect.stringContaining(observation), expect.objectContaining({}));
-    expect(worklist).not.toHaveBeenCalled();
-    expect(getCursor).not.toHaveBeenCalled();
-    expect(advanceCursor).not.toHaveBeenCalled();
+    expect(sendMessage).toHaveBeenCalledWith(
+      { contents: expect.stringContaining(observation) },
+      expect.objectContaining({ threadId: 'subconscious:alpha:curate' }),
+    );
   });
 
-  it('awaits curator completion before resolving the observation cycle', async () => {
+  it('does not wait for the curator run before resolving the observation cycle', async () => {
     const memory = createMemory({ omModel: createMockObserverModel() });
+    const accepted = new Promise<any>(() => {});
+    vi.spyOn(Agent.prototype, 'sendMessage').mockReturnValue({ accepted, signal: {} } as any);
     await seedMessages(memory);
-
-    let releaseCurator!: () => void;
-    const curatorFinished = new Promise<void>(resolve => {
-      releaseCurator = resolve;
-    });
-    vi.spyOn(Agent.prototype, 'generate').mockImplementation(async () => {
-      await curatorFinished;
-      return { text: 'Done.' } as any;
-    });
 
     const om = (await memory.omEngine)!;
-    let settled = false;
-    const observation = om
-      .observe({ threadId: 'alpha', resourceId: 'user-42', requestContext: requestContext() })
-      .finally(() => {
-        settled = true;
-      });
-
-    await vi.waitFor(() => expect(Agent.prototype.generate).toHaveBeenCalled());
-    expect(settled).toBe(false);
-
-    releaseCurator();
-    await expect(observation).resolves.toMatchObject({ observed: true });
+    await expect(
+      om.observe({ threadId: 'alpha', resourceId: 'user-42', requestContext: requestContext() }),
+    ).resolves.toMatchObject({ observed: true });
   });
 
-  it('isolates curator failure from a successfully persisted observation', async () => {
+  it('isolates asynchronous curator failure from observation persistence', async () => {
     const memory = createMemory({ omModel: createMockObserverModel() });
+    vi.spyOn(Agent.prototype, 'sendMessage').mockReturnValue({
+      accepted: Promise.reject(new Error('curator unavailable')),
+      signal: {},
+    } as any);
     await seedMessages(memory);
-    const generate = vi.spyOn(Agent.prototype, 'generate').mockRejectedValue(new Error('curator unavailable'));
 
     const om = (await memory.omEngine)!;
     const result = await om.observe({
@@ -252,85 +148,5 @@ describe('direct observation curation', () => {
 
     expect(result.observed).toBe(true);
     expect(result.record.activeObservations).toContain('Project Atlas launches on 2026-09-15');
-    expect(generate).toHaveBeenCalledTimes(1);
-  });
-
-  it.each([
-    ['sync', SyncObservationStrategy],
-    ['async-buffer idle activation', AsyncBufferObservationStrategy],
-  ] as const)('delivers one committed delta after persistence for the %s path', async (mode, StrategyClass) => {
-    const harness = createStrategyHarness({
-      mode: mode === 'sync' ? 'sync' : 'async-buffer',
-      cycleObservations: [{ sourceThreadId: 'alpha', observations: 'cycle delta' }],
-    });
-
-    expect(harness.strategy).toBeInstanceOf(StrategyClass);
-    await expect(harness.strategy.run()).resolves.toMatchObject({ observed: true });
-    expect(harness.committed).toHaveBeenCalledTimes(1);
-    expect(harness.events.slice(0, 3)).toEqual(['persist', 'end', 'curate:alpha']);
-    if (mode === 'sync') {
-      expect(harness.events).toEqual(['persist', 'end', 'curate:alpha', 'reflect']);
-    } else {
-      expect(harness.events).toEqual(['persist', 'end', 'curate:alpha']);
-    }
-  });
-
-  it('delivers separate thread-attributed deltas for a two-thread resource cycle before reflection', async () => {
-    const harness = createStrategyHarness({
-      mode: 'resource',
-      cycleObservations: [
-        { sourceThreadId: 'alpha', observations: 'Alpha observation' },
-        { sourceThreadId: 'beta', observations: 'Beta observation' },
-      ],
-    });
-
-    expect(harness.strategy).toBeInstanceOf(ResourceScopedObservationStrategy);
-    await expect(harness.strategy.run()).resolves.toMatchObject({ observed: true });
-    expect(harness.committed.mock.calls.map(([context]) => context.parentThreadId)).toEqual(['alpha', 'beta']);
-    expect(harness.events).toEqual(['persist', 'end', 'curate:alpha', 'curate:beta', 'reflect']);
-  });
-
-  it('does not curate stale, failed, or aborted observation cycles', async () => {
-    const stale = createStrategyHarness({
-      mode: 'sync',
-      stale: true,
-      cycleObservations: [{ sourceThreadId: 'alpha', observations: 'stale' }],
-    });
-    await expect(stale.strategy.run()).resolves.toEqual({ observed: false });
-    expect(stale.committed).not.toHaveBeenCalled();
-
-    const failed = createStrategyHarness({
-      mode: 'sync',
-      observeError: new Error('observer failed'),
-      cycleObservations: [{ sourceThreadId: 'alpha', observations: 'failed' }],
-    });
-    await expect(failed.strategy.run()).rejects.toThrow('observer failed');
-    expect(failed.committed).not.toHaveBeenCalled();
-    expect(failed.events).toEqual(['failed']);
-
-    const aborted = createStrategyHarness({
-      mode: 'async-buffer',
-      observeError: new DOMException('aborted', 'AbortError'),
-      cycleObservations: [{ sourceThreadId: 'alpha', observations: 'aborted' }],
-    });
-    await expect(aborted.strategy.run()).resolves.toMatchObject({ observed: false });
-    expect(aborted.committed).not.toHaveBeenCalled();
-    expect(aborted.events).toEqual(['failed']);
-  });
-
-  it('skips blank deltas and never retries a rejected curator callback', async () => {
-    const harness = createStrategyHarness({
-      mode: 'resource',
-      cycleObservations: [
-        { sourceThreadId: 'alpha', observations: '   ' },
-        { sourceThreadId: 'beta', observations: 'durable fact' },
-      ],
-    });
-    harness.committed.mockRejectedValueOnce(new Error('curator unavailable'));
-
-    await expect(harness.strategy.run()).resolves.toMatchObject({ observed: true });
-    expect(harness.committed).toHaveBeenCalledTimes(1);
-    expect(harness.committed).toHaveBeenCalledWith(expect.objectContaining({ parentThreadId: 'beta' }));
-    expect(harness.events).toEqual(['persist', 'end', 'reflect']);
   });
 });

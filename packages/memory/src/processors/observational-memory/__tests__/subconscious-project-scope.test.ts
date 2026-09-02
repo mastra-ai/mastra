@@ -3,11 +3,11 @@ import type { ComputeStateSignalArgs } from '@mastra/core/processors';
 import { RequestContext } from '@mastra/core/request-context';
 import { InMemoryStore } from '@mastra/core/storage';
 import type { MastraEmbeddingModel, MastraVector } from '@mastra/core/vector';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { Memory } from '../../../index';
 import { createPinnedTools, PinnedStateProcessor, Subconscious } from '../subconscious';
-import { createObservationCuratorHandler } from '../subconscious/curate';
+import { SubconsciousCurateExtractor } from '../subconscious/curate';
 import { SubconsciousRemindExtractor } from '../subconscious/remind';
 
 const PROJECT_SCOPE = ['org:acme', 'resource:project-1'];
@@ -48,6 +48,8 @@ function makeSignalArgs(
     ...overrides,
   } as unknown as ComputeStateSignalArgs;
 }
+
+afterEach(() => vi.restoreAllMocks());
 
 describe('Subconscious project scope override', () => {
   it('the pinned state processor surfaces a pin written under the project scope to a different session', async () => {
@@ -114,18 +116,26 @@ describe('Subconscious project scope override', () => {
       defaultScope: 'resource',
       maxScope: 'resource',
     });
-    vi.spyOn(Agent.prototype, 'generate').mockImplementation(async function (this: Agent) {
-      const tools = await this.listTools();
-      await (tools.knowledge_search as any).execute({ query: 'Project Atlas' }, {});
-      return { text: 'Done.' } as any;
+    let curatorAgent: Agent | undefined;
+    vi.spyOn(Agent.prototype, 'sendMessage').mockImplementation(function (this: Agent) {
+      curatorAgent = this;
+      return { accepted: new Promise(() => {}), signal: {} } as any;
     });
+    const curatorConfig = subconscious.resolved.observation.find(agent => agent.name === 'curate')!;
+    const curate = new SubconsciousCurateExtractor(curatorConfig, subconscious.resolved, () => memory, 'mock/model');
 
-    await createObservationCuratorHandler(memory, subconscious.resolved, memory, { omModel: 'mock/model' })({
-      parentThreadId: 'thread-a',
+    await curate.onExtracted?.({
+      source: 'observer',
+      extractor: curate,
+      threadId: 'thread-a',
       resourceId: 'session-a',
-      observations: 'Project Atlas launches soon.',
+      current: 'Project Atlas launches soon.',
+      rawObservations: 'Project Atlas launches soon.',
+      memory,
       requestContext: requestContextWith({ knowledgeResourceId: 'project-1' }),
-    } as any);
+    });
+    const tools = await curatorAgent!.listTools();
+    await (tools.knowledge_search as any).execute({ query: 'Project Atlas' }, {});
     expect(search).toHaveBeenCalled();
     for (const call of search.mock.calls) {
       expect(call[0]!.scope).toContain('resource:project-1');

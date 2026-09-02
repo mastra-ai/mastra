@@ -19,13 +19,7 @@ import type {
   ResolvedReflectionConfig,
 } from '../types';
 
-import type {
-  ObservationCommittedContext,
-  ObservationRunOpts,
-  ObservationRunResult,
-  ObserverOutput,
-  ProcessedObservation,
-} from './types';
+import type { ObservationRunOpts, ObservationRunResult, ObserverOutput, ProcessedObservation } from './types';
 
 /** Module-level xxhash singleton — loaded once, shared across all strategy instances. */
 const hasherPromise = xxhash();
@@ -55,7 +49,6 @@ export interface StrategyDeps {
     resourceId: string;
     observedAt?: Date;
   }) => Promise<void>;
-  onObservationCommitted?: (context: ObservationCommittedContext) => Promise<void>;
   emitDebugEvent: (event: ObservationDebugEvent) => void;
 }
 
@@ -115,34 +108,6 @@ export abstract class ObservationStrategy {
       const processed = await this.process(output, existingObservations);
       await this.persist(processed);
       await this.emitEndMarkers(cycleId, processed);
-
-      if (this.deps.onObservationCommitted) {
-        for (const cycleObservation of processed.cycleObservations) {
-          if (!cycleObservation.observations.trim()) continue;
-          const startedAt = Date.now();
-          try {
-            await this.deps.onObservationCommitted({
-              parentThreadId: cycleObservation.sourceThreadId,
-              resourceId: record.resourceId,
-              observations: cycleObservation.observations,
-              requestContext,
-              mainAgent: this.opts.agent,
-              sendSignal: this.opts.sendSignal,
-              sendStateSignal: this.opts.sendStateSignal,
-              writer,
-              abortSignal,
-              observabilityContext: this.opts.observabilityContext,
-            });
-            omDebug(
-              `[Subconscious:curate] completed observation-time curation in ${Date.now() - startedAt}ms for thread ${cycleObservation.sourceThreadId}`,
-            );
-          } catch (error) {
-            omError(
-              `[Subconscious:curate] observation-time curation failed after ${Date.now() - startedAt}ms for thread ${cycleObservation.sourceThreadId}: ${error instanceof Error ? error.message : String(error)}`,
-            );
-          }
-        }
-      }
 
       if (this.needsReflection) {
         await this.deps.reflector.maybeReflect({

@@ -51,19 +51,6 @@ export interface ObserverOutput {
   providerMetadata?: ProviderMetadata;
 }
 
-export interface ObservationCommittedContext {
-  parentThreadId: string;
-  resourceId: string;
-  observations: string;
-  requestContext?: RequestContext;
-  mainAgent?: ProcessorContext['agent'];
-  sendSignal?: ProcessorContext['sendSignal'];
-  sendStateSignal?: ProcessorContext['sendStateSignal'];
-  writer?: ProcessorStreamWriter;
-  abortSignal?: AbortSignal;
-  observabilityContext?: ObservabilityContext;
-}
-
 /** Result returned from ObservationStrategy.run(). */
 export interface ObservationRunResult {
   observed: boolean;

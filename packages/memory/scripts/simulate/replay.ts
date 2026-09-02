@@ -35,16 +35,28 @@ export function positiveInt(flag: string, value: string | undefined, fallback: n
 const require = createRequire(new URL('../../../../stores/pg/package.json', import.meta.url));
 const { Client } = require('pg');
 
+const pgModulePath = '../../../../stores/pg/dist/index.js';
+
 async function loadStore(connectionString: string) {
-  const { PostgresStore } = await import('../../../../stores/pg/dist/index.js');
+  const { PostgresStore } = await import(pgModulePath);
   const store = new PostgresStore({ id: 'simulate-direct-curation', connectionString });
   await store.init();
   return store;
 }
 
 async function loadVector(connectionString: string) {
-  const { PgVector } = await import('../../../../stores/pg/dist/index.js');
+  const { PgVector } = await import(pgModulePath);
   return new PgVector({ id: 'simulate-direct-curation-vector', connectionString });
+}
+
+export function assertDistinctReplayDatabases(inputUrl: string, targetUrl: string): void {
+  const input = new URL(inputUrl);
+  const target = new URL(targetUrl);
+  const port = (url: URL) => url.port || '5432';
+  const database = (url: URL) => decodeURIComponent(url.pathname.replace(/^\//, ''));
+  if (port(input) === port(target) && database(input) === database(target)) {
+    throw new Error('refusing to overwrite the input database: --input and --target resolve to the same database');
+  }
 }
 
 export async function recreateDatabase(connectionString: string): Promise<void> {
@@ -89,12 +101,14 @@ async function run(argv: string[]): Promise<void> {
   const target = flags.get('target')?.[0];
   const organizationId = flags.get('org')?.[0];
   const model = flags.get('model')?.[0];
+  const knowledgeResourceId = flags.get('knowledge-resource')?.[0];
   if (!input || !target || !organizationId || !model) {
     throw new Error('Required flags: --input, --target, --org, --model');
   }
 
   assertLocalTarget(input);
   assertLocalTarget(target);
+  assertDistinctReplayDatabases(input, target);
   const inputClient = new Client({ connectionString: input });
   await inputClient.connect();
   try {
@@ -106,8 +120,8 @@ async function run(argv: string[]): Promise<void> {
 
   const storage = await loadStore(target);
   const vector = await loadVector(target);
+  const memory = new Memory({ storage, vector });
   try {
-    const memory = new Memory({ storage, vector });
     const subconscious = new Subconscious({
       model,
       observation: ['remind', 'curate'],
@@ -123,19 +137,29 @@ async function run(argv: string[]): Promise<void> {
     const recordsByThread = await readRecordsByThread(input);
 
     for (const [threadId, records] of recordsByThread) {
+      const reconstruction = reconstructCycles(records as any);
       const result = await replayCycles({
-        cycles: reconstructCycles(records as any).cycles,
+        cycles: reconstruction.cycles,
         threadId,
         resourceId: `simulate:${threadId}`,
         organizationId,
         memory,
         subconscious,
         mainAgent,
+        knowledgeResourceId,
         onEvent: console.log,
       });
-      console.log(JSON.stringify({ threadId, ...result }));
+      console.log(
+        JSON.stringify({
+          threadId,
+          reconstructionWarnings: reconstruction.warnings,
+          excludedReflectionHeads: reconstruction.excluded.length,
+          ...result,
+        }),
+      );
     }
   } finally {
+    await memory.settled();
     await storage.close();
     await vector.disconnect();
   }

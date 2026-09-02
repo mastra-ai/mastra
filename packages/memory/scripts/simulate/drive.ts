@@ -2,7 +2,12 @@ import type { Agent } from '@mastra/core/agent';
 import { RequestContext } from '@mastra/core/request-context';
 
 import type { Memory } from '../../src';
-import { createObservationCuratorHandler } from '../../src/processors/observational-memory/subconscious/curate';
+import {
+  CURATION_AGENT,
+  createCuratorAgent,
+  dispatchCuratorObservation,
+  resolveCuratorScope,
+} from '../../src/processors/observational-memory/subconscious/curate';
 import type { ResolvedSubconsciousConfig } from '../../src/processors/observational-memory/subconscious/types';
 import type { ReconstructedCycle } from './reconstruct';
 
@@ -45,37 +50,46 @@ function requestContextWithOrg(organizationId: string, knowledgeResourceId?: str
 
 /**
  * Replay reconstructed, already-completed observation cycles through the same
- * observation-time curator handler used by production. Observation lifecycle
- * ordering is covered by the strategy tests; this driver proves curation quality
- * through the real knowledge read/write boundary.
+ * curator agent and dispatch path used by the production Extractor. Observation
+ * lifecycle ordering is covered by the strategy tests; this driver proves curation
+ * quality through the real knowledge read/write boundary.
  */
 export async function replayCycles(options: ReplayOptions): Promise<ReplayResult> {
   const store = await options.memory.storage.getStore('knowledge');
   if (!store) throw new Error('Replay requires a configured knowledge storage domain.');
-  if (!options.subconscious.observation.some(agent => agent.name === 'curate')) {
-    throw new Error('Replay requires a Subconscious with a "curate" observation agent.');
-  }
+  const config = options.subconscious.observation.find(agent => agent.name === CURATION_AGENT);
+  if (!config) throw new Error(`Replay requires a Subconscious with a "${CURATION_AGENT}" observation agent.`);
 
-  const curate = createObservationCuratorHandler(
-    options.memory,
-    options.subconscious,
-    options.curatorMemory ?? options.memory,
-  );
   const requestContext = requestContextWithOrg(options.organizationId, options.knowledgeResourceId);
+  const context = {
+    threadId: options.threadId,
+    resourceId: options.resourceId,
+    requestContext,
+    mainAgent: options.mainAgent,
+  };
+  const scope = resolveCuratorScope(context);
   const curatorOutcomes: ReplayOutcome[] = [];
   const warnings: string[] = [];
 
   for (const [cycleIndex, cycle] of options.cycles.entries()) {
     try {
-      const outcome = await curate({
-        parentThreadId: options.threadId,
-        resourceId: options.resourceId,
-        observations: cycle.observations,
-        requestContext,
-        mainAgent: options.mainAgent,
-      });
-      curatorOutcomes.push({ cycleIndex, sourceThreadId: options.threadId, outcome });
-      options.onEvent?.(`CURATOR cycle=${cycleIndex} thread=${options.threadId} outcome=${outcome}`);
+      if (!cycle.observations.trim()) {
+        curatorOutcomes.push({ cycleIndex, sourceThreadId: options.threadId, outcome: 'no-op' });
+        options.onEvent?.(`CURATOR cycle=${cycleIndex} thread=${options.threadId} outcome=no-op`);
+        continue;
+      }
+      const agent = await createCuratorAgent(
+        options.memory,
+        options.curatorMemory ?? options.memory,
+        context,
+        scope,
+        config,
+        options.subconscious,
+      );
+      const accepted = await dispatchCuratorObservation(agent, context, config, cycle.observations).accepted;
+      if (accepted.action === 'wake') await accepted.output.consumeStream();
+      curatorOutcomes.push({ cycleIndex, sourceThreadId: options.threadId, outcome: 'ran' });
+      options.onEvent?.(`CURATOR cycle=${cycleIndex} thread=${options.threadId} outcome=ran`);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       curatorOutcomes.push({ cycleIndex, sourceThreadId: options.threadId, outcome: 'failed' });
@@ -83,9 +97,6 @@ export async function replayCycles(options: ReplayOptions): Promise<ReplayResult
       options.onEvent?.(`CURATOR cycle=${cycleIndex} thread=${options.threadId} outcome=failed`);
     }
   }
-
-  const scopeResourceId = options.knowledgeResourceId?.trim() || options.resourceId;
-  const scope = [`org:${options.organizationId}`, `resource:${scopeResourceId}`, `thread:${options.threadId}`];
   const nodes = await store.listNodes({ scope, limit: 1_000 });
   const records = await Promise.all(
     nodes.map(node => store.listKnowledgeAbout({ node: node.id, scope, limit: 1_000 })),

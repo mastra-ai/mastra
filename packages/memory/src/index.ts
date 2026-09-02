@@ -52,7 +52,6 @@ import { LRUCache } from 'lru-cache';
 import xxhash from 'xxhash-wasm';
 import type { ObservationalMemory, ObservationalMemoryConfig } from './processors/observational-memory';
 import { KnowledgeSemanticIndexCoordinator, Subconscious } from './processors/observational-memory/subconscious';
-import { createObservationCuratorHandler } from './processors/observational-memory/subconscious/curate';
 import { createKnowledgeTools } from './processors/observational-memory/subconscious/knowledge-tools';
 import { summarizeConversation, SUMMARIZE_THREAD_DEFAULTS } from './processors/observational-memory/summarize';
 import type {
@@ -377,8 +376,12 @@ export class Memory extends MastraMemory {
     const observation = (omConfig.observation ?? {}) as NonNullable<ObservationalMemoryConfig['observation']>;
     const extract = observation.extract ?? [];
     const existingSlugs = new Set(extract.map(extractor => extractor.slug));
+    let curatorMemory: Memory | undefined;
     const subconsciousExtractors = omConfig.experimental_subconscious
-      .createObservationExtractors(observation.model ?? omConfig.model)
+      .createObservationExtractors(
+        observation.model ?? omConfig.model,
+        () => (curatorMemory ??= new Memory({ storage: this.storage, options: { observationalMemory: false } })),
+      )
       .filter(extractor => !existingSlugs.has(extractor.slug));
 
     return {
@@ -1944,18 +1947,6 @@ ${workingMemory}`;
           }
         : undefined,
     });
-
-    if (omConfig.experimental_subconscious instanceof Subconscious) {
-      const curateObservation = createObservationCuratorHandler(
-        this,
-        omConfig.experimental_subconscious.resolved,
-        new Memory({ storage: this.storage, options: { observationalMemory: false } }),
-        { omModel: omConfig.observation?.model ?? omConfig.model },
-      );
-      observationalMemory.setOnObservationCommitted(async context => {
-        await curateObservation(context);
-      });
-    }
 
     return observationalMemory;
   }

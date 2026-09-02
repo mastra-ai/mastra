@@ -236,7 +236,7 @@ import { ModelByInputTokens } from './model-by-input-tokens';
 import { didProviderChange as hasProviderChanged } from './model-context';
 import { renderObservationGroupsForReflection, wrapInObservationGroup } from './observation-groups';
 import { ObservationStrategy } from './observation-strategies/index';
-import type { ObservationCommittedContext, ObservationRunResult } from './observation-strategies/types';
+import type { ObservationRunResult } from './observation-strategies/types';
 import { ObservationTurn } from './observation-turn/index';
 import type { ObservationTurnHooks } from './observation-turn/types';
 import { optimizeObservationsForContext, formatMessagesForObserver } from './observer-agent';
@@ -351,7 +351,6 @@ export class ObservationalMemory {
   private hasher = xxhash();
   private mastra?: Mastra;
   private memory?: Memory;
-  private onObservationCommitted?: (context: ObservationCommittedContext) => Promise<void>;
 
   /**
    * Track message IDs observed during this instance's lifetime.
@@ -4017,16 +4016,6 @@ ${formattedMessages}
    */
   getMemory(): Memory | undefined {
     return this.memory;
-  }
-
-  /** @internal */
-  setOnObservationCommitted(handler: (context: ObservationCommittedContext) => Promise<void>): void {
-    this.onObservationCommitted = handler;
-  }
-
-  /** @internal */
-  getOnObservationCommitted(): ((context: ObservationCommittedContext) => Promise<void>) | undefined {
-    return this.onObservationCommitted;
   }
 
   /**
