@@ -130,6 +130,15 @@ export type ScoreTraceBatchResult =
       score: ScoreRowData;
     }
   | {
+      /** The scorer declared the target not scorable: no score was persisted. */
+      ok: true;
+      excluded: true;
+      index: number;
+      traceId: string;
+      spanId?: string;
+      datasetItemId?: string;
+    }
+  | {
       ok: false;
       index: number;
       traceId: string;
@@ -256,11 +265,16 @@ export async function scoreTrace({
    * independent of how the trace is resolved. */
   datasetId?: string;
   datasetItemId?: string;
-}): Promise<ScoreRowData> {
+}): Promise<ScoreRowData | null> {
   const { trace, span } = await resolveTraceAndSpan({ storage, target });
   const tenancy = getSpanTenancy(span);
 
   const result = await runScorerForTrace({ scorer, trace, span });
+
+  // A not-scorable run produced no score: nothing to persist or attach.
+  if (result.notScorable) {
+    return null;
+  }
 
   const scorerResult = {
     ...result,
@@ -317,6 +331,7 @@ export async function scoreTraceBatch({
   datasetId?: string;
   scoredCount: number;
   failedCount: number;
+  excludedCount: number;
   results: ScoreTraceBatchResult[];
 }> {
   const results = await pMap(
@@ -331,6 +346,17 @@ export async function scoreTraceBatch({
           datasetId,
           datasetItemId: target.datasetItemId,
         });
+        if (!score) {
+          return {
+            ok: true,
+            excluded: true,
+            index,
+            traceId: target.traceId,
+            ...(target.spanId ? { spanId: target.spanId } : {}),
+            ...(target.datasetItemId ? { datasetItemId: target.datasetItemId } : {}),
+          };
+        }
+
         const spanId = score.spanId ?? target.spanId;
 
         if (!spanId) {
@@ -359,13 +385,15 @@ export async function scoreTraceBatch({
     { concurrency },
   );
 
-  const scoredCount = results.filter(result => result.ok).length;
+  const excludedCount = results.filter(result => result.ok && 'excluded' in result).length;
+  const scoredCount = results.filter(result => result.ok).length - excludedCount;
 
   return {
     ...(batchId ? { batchId } : {}),
     ...(datasetId ? { datasetId } : {}),
     scoredCount,
-    failedCount: results.length - scoredCount,
+    failedCount: results.length - scoredCount - excludedCount,
+    excludedCount,
     results,
   };
 }

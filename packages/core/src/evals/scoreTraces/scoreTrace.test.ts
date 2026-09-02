@@ -345,6 +345,22 @@ describe('scoreTrace', () => {
     });
   });
 
+  describe('not scorable', () => {
+    it('returns null and persists nothing when the scorer declares the target not scorable', async () => {
+      const target = { traceId: 'trace-1' };
+      await testContext.setupSuccessfulScenario(target);
+      testContext.mockScorerRun.mockResolvedValue(
+        createMockScorerResult({ score: undefined, notScorable: { reason: 'nothing to judge' } }),
+      );
+
+      const result = await testContext.scoreTraceTarget(target);
+
+      expect(result).toBeNull();
+      expect(testContext.mockScoresStore.saveScore).not.toHaveBeenCalled();
+      expect(testContext.mockObservabilityStore.updateSpan).not.toHaveBeenCalled();
+    });
+  });
+
   describe('error handling', () => {
     it('throws when the trace cannot be found', async () => {
       const target = { traceId: 'nonexistent-trace' };
@@ -669,6 +685,38 @@ describe('scoreTraceBatch', () => {
       expect(result.results[1].error.message).toContain('Span not found for scoring');
     }
     expect(testContext.mockScoresStore.saveScore).toHaveBeenCalledTimes(2);
+  });
+
+  it('counts not-scorable targets as excluded rather than scored or failed', async () => {
+    const targets: ScoreTraceBatchTarget[] = [
+      { traceId: 'trace-1', datasetItemId: 'dataset-item-1' },
+      { traceId: 'trace-2', datasetItemId: 'dataset-item-2' },
+    ];
+
+    testContext.mockObservabilityStore.getTrace.mockImplementation(async ({ traceId }: { traceId: string }) =>
+      createMockTraceRecord({ traceId }),
+    );
+    testContext.mockScorerRun.mockImplementation(async ({ targetTraceId }: { targetTraceId: string }) =>
+      targetTraceId === 'trace-2'
+        ? createMockScorerResult({ score: undefined, notScorable: { reason: 'nothing to judge' } })
+        : createMockScorerResult({ input: { test: 'input' }, output: { test: 'output' } }),
+    );
+    testContext.setupSaveScorePassthrough();
+    testContext.mockObservabilityStore.updateSpan.mockResolvedValue(undefined);
+
+    const result = await testContext.scoreTraceBatchTargets(targets);
+
+    expect(result.scoredCount).toBe(1);
+    expect(result.excludedCount).toBe(1);
+    expect(result.failedCount).toBe(0);
+    expect(result.results[1]).toEqual({
+      ok: true,
+      excluded: true,
+      index: 1,
+      traceId: 'trace-2',
+      datasetItemId: 'dataset-item-2',
+    });
+    expect(testContext.mockScoresStore.saveScore).toHaveBeenCalledTimes(1);
   });
 
   it('isolates a failed scorer target without retrying or duplicating sibling targets', async () => {

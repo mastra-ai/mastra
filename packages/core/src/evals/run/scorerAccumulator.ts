@@ -27,7 +27,7 @@ export class ScoreAccumulator {
       if (!this.flatScores[scorerName]) {
         this.flatScores[scorerName] = [];
       }
-      this.flatScores[scorerName].push((result as { score: number }).score);
+      this.pushScore(this.flatScores[scorerName], result);
     }
   }
 
@@ -37,7 +37,7 @@ export class ScoreAccumulator {
         if (!this.workflowScores[scorerName]) {
           this.workflowScores[scorerName] = [];
         }
-        this.workflowScores[scorerName].push((result as { score: number }).score);
+        this.pushScore(this.workflowScores[scorerName], result);
       }
     }
 
@@ -50,7 +50,7 @@ export class ScoreAccumulator {
           if (!this.stepScores[stepId][scorerName]) {
             this.stepScores[stepId][scorerName] = [];
           }
-          this.stepScores[stepId][scorerName].push((result as { score: number }).score);
+          this.pushScore(this.stepScores[stepId][scorerName], result);
         }
       }
     }
@@ -61,7 +61,7 @@ export class ScoreAccumulator {
         if (!this.trajectoryScores[scorerName]) {
           this.trajectoryScores[scorerName] = [];
         }
-        this.trajectoryScores[scorerName].push((result as { score: number }).score);
+        this.pushScore(this.trajectoryScores[scorerName], result);
       }
     }
   }
@@ -72,7 +72,7 @@ export class ScoreAccumulator {
         if (!this.agentScores[scorerName]) {
           this.agentScores[scorerName] = [];
         }
-        this.agentScores[scorerName].push((result as { score: number }).score);
+        this.pushScore(this.agentScores[scorerName], result);
       }
     }
 
@@ -81,7 +81,7 @@ export class ScoreAccumulator {
         if (!this.trajectoryScores[scorerName]) {
           this.trajectoryScores[scorerName] = [];
         }
-        this.trajectoryScores[scorerName].push((result as { score: number }).score);
+        this.pushScore(this.trajectoryScores[scorerName], result);
       }
     }
   }
@@ -95,8 +95,15 @@ export class ScoreAccumulator {
         if (!this.stepScores[stepId][scorerName]) {
           this.stepScores[stepId][scorerName] = [];
         }
-        this.stepScores[stepId][scorerName].push((result as { score: number }).score);
+        this.pushScore(this.stepScores[stepId][scorerName], result);
       }
+    }
+  }
+
+  private pushScore(bucket: number[], result: unknown) {
+    const score = (result as { score?: unknown } | null | undefined)?.score;
+    if (typeof score === 'number') {
+      bucket.push(score);
     }
   }
 
