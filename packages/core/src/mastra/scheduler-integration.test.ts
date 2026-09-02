@@ -1075,8 +1075,10 @@ describe('Mastra — workflow scheduler integration', () => {
       // filtered on `ownerType: 'agent'` would miss them and the schedule would
       // never fire after a restart.
       const future = Date.now() + 3_600_000;
+      // `schedule_` is the imperative id prefix; `wf_` is reserved for
+      // declarative rows, which init() would treat as an orphan and delete.
       await schedulesStore.createSchedule({
-        id: 'wf_cold-boot-workflow-sched',
+        id: 'schedule_cold-boot-workflow-sched',
         target: { type: 'workflow', workflowId: 'some-wf' },
         cron: '0 0 1 1 *',
         status: 'active',
@@ -1095,6 +1097,7 @@ describe('Mastra — workflow scheduler integration', () => {
       await mastra.startWorkers();
       await waitForScheduler(mastra);
       expect(mastra.scheduler).toBeDefined();
+      expect(await schedulesStore.getSchedule('schedule_cold-boot-workflow-sched')).toBeTruthy();
 
       await mastra.shutdown();
     });
