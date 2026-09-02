@@ -217,6 +217,7 @@ export function createReminderAgent(options: {
             resourceId: options.resourceId,
             parentThreadId: options.parentThreadId,
             parentAgent: options.parentAgent,
+            memory: options.memory,
             maxSteps: options.maxSteps ?? 50,
             getReminderAgent: () => reminderAgent,
           }),

@@ -3,7 +3,7 @@ import { RequestContext } from '@mastra/core/request-context';
 import { InMemoryStore } from '@mastra/core/storage';
 import { describe, expect, it, vi } from 'vitest';
 
-import { Memory } from '../../..';
+import { Memory, Subconscious } from '../../..';
 import { applyExtractorHooks } from '../extracted-values';
 import { buildExtractorOutputSections, Extractor } from '../extractor';
 import { SubconsciousRemindExtractor } from '../subconscious';
@@ -527,17 +527,32 @@ describe('Subconscious remind', () => {
     }
   });
 
-  it('copies vector and embedding configuration into reconstructed sidekick memory', () => {
+  it('copies observational, vector, and embedding configuration without recursive Subconscious agents', async () => {
     const vector = { id: 'vector' } as any;
     const embedder = { specificationVersion: 'v2', modelId: 'embedder' } as any;
     const embedderOptions = { providerOptions: { test: { dimensions: 16 } } };
-    const memory = new Memory({ storage: new InMemoryStore(), vector, embedder, embedderOptions });
+    const memory = new Memory({
+      storage: new InMemoryStore(),
+      vector,
+      embedder,
+      embedderOptions,
+      options: {
+        observationalMemory: {
+          model: createModel('observed'),
+          experimental_subconscious: new Subconscious({ observation: ['remind'] }),
+        },
+      },
+    });
 
     const sidekick = memory.createSubconsciousMemory();
+    const sidekickConfig = (sidekick as any).threadConfig.observationalMemory;
 
     expect((sidekick as any).vector).toBe(vector);
     expect((sidekick as any).embedder).toBe(embedder);
     expect((sidekick as any).embedderOptions).toBe(embedderOptions);
+    expect(sidekickConfig).toBeTruthy();
+    expect(sidekickConfig.experimental_subconscious).toBeUndefined();
+    await expect(sidekick.omEngine).resolves.not.toBeNull();
   });
 
   it.each([

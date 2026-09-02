@@ -28,7 +28,35 @@ function message(
   };
 }
 
-function createHarness() {
+function signalMessage(
+  id: string,
+  contents: string,
+  metadata:
+    | { type: 'question'; replyId: string; askedAt: number }
+    | { type: 'continuation'; replyIds: string[]; attempt: number },
+): MastraDBMessage {
+  return {
+    id,
+    role: 'signal',
+    threadId: reminderThreadId,
+    resourceId,
+    createdAt: new Date(),
+    content: {
+      format: 2,
+      parts: [],
+      metadata: {
+        signal: {
+          type: 'user',
+          tagName: 'user',
+          contents,
+          metadata: { [REMIND_MESSAGE_METADATA_KEY]: metadata },
+        },
+      },
+    },
+  };
+}
+
+function createHarness(continuationAction: 'wake' | 'deliver' = 'wake') {
   const parentAgent = {
     sendSignal: vi.fn((signal: unknown, options: { ifActive: { behavior: string } }) => {
       const action = options.ifActive.behavior === 'persist' ? 'persist' : 'discard';
@@ -41,7 +69,11 @@ function createHarness() {
   } as any;
   const consumeStream = vi.fn(async () => undefined);
   const sendMessage = vi.fn(() => ({
-    accepted: Promise.resolve({ action: 'wake', runId: 'sidekick-run', output: { consumeStream } }),
+    accepted: Promise.resolve(
+      continuationAction === 'wake'
+        ? { action: 'wake', runId: 'sidekick-run', output: { consumeStream } }
+        : { action: 'deliver', runId: 'sidekick-run' },
+    ),
   }));
   const reminderAgent = { id: 'reminder-agent', sendMessage } as any;
   const processor = new RemindContinuationProcessor({
@@ -49,6 +81,7 @@ function createHarness() {
     resourceId,
     parentThreadId,
     parentAgent,
+    memory: { saveMessages: vi.fn(async () => ({ messages: [] })) } as any,
     maxSteps: 7,
     getReminderAgent: () => reminderAgent,
   });
@@ -67,7 +100,7 @@ function resultArgs(messages: MastraDBMessage[], steps: unknown[] = []) {
 }
 
 describe('Subconscious reminder continuation', () => {
-  it('sends a direct continuation for an unanswered question', async () => {
+  it('dispatches a continuation without making processOutputResult wait for it', async () => {
     const { processor, sendMessage, consumeStream } = createHarness();
     const question = message('question-1', { type: 'question', replyId: 'reply-1', askedAt: Date.now() });
 
@@ -88,7 +121,73 @@ describe('Subconscious reminder continuation', () => {
         ifIdle: expect.objectContaining({ behavior: 'wake' }),
       }),
     );
-    expect(consumeStream).toHaveBeenCalledOnce();
+    await vi.waitFor(() => expect(consumeStream).toHaveBeenCalledOnce());
+  });
+
+  it('returns before continuation acceptance and wake consumption finish', async () => {
+    const { processor, sendMessage, consumeStream } = createHarness();
+    let accept!: (result: unknown) => void;
+    sendMessage.mockReturnValue({ accepted: new Promise(resolve => (accept = resolve)) } as any);
+    const question = message('question-1', { type: 'question', replyId: 'reply-1', askedAt: Date.now() });
+    const args = resultArgs([question]);
+
+    await expect(processor.processOutputResult(args)).resolves.toBe(args.messages);
+    expect(consumeStream).not.toHaveBeenCalled();
+
+    accept({ action: 'wake', runId: 'sidekick-run', output: { consumeStream } });
+    await vi.waitFor(() => expect(consumeStream).toHaveBeenCalledOnce());
+  });
+
+  it('accepts active delivery as a serialized continuation model opportunity', async () => {
+    const { processor, sendMessage, consumeStream } = createHarness('deliver');
+    const question = message('question-1', { type: 'question', replyId: 'reply-1', askedAt: Date.now() });
+
+    await processor.processOutputResult(resultArgs([question]));
+
+    expect(sendMessage).toHaveBeenCalledWith(
+      expect.objectContaining({ contents: expect.stringContaining('(attempt 1): reply-1') }),
+      expect.objectContaining({
+        ifActive: { behavior: 'deliver' },
+        ifIdle: expect.objectContaining({ behavior: 'wake' }),
+      }),
+    );
+    expect(consumeStream).not.toHaveBeenCalled();
+  });
+
+  it('reports detached continuation routing errors without rejecting processOutputResult', async () => {
+    const { processor, sendMessage } = createHarness();
+    sendMessage.mockReturnValue({ accepted: Promise.reject(new Error('routing failed')) });
+    const question = message('question-1', { type: 'question', replyId: 'reply-1', askedAt: Date.now() });
+    const args = resultArgs([question]);
+    args.writer = { custom: vi.fn().mockRejectedValue(new Error('writer failed')) };
+
+    await expect(processor.processOutputResult(args)).resolves.toBe(args.messages);
+
+    await vi.waitFor(() =>
+      expect(args.writer.custom).toHaveBeenCalledWith({
+        type: 'data-subconscious-error',
+        data: { error: 'remind: routing failed', agent: 'remind' },
+      }),
+    );
+  });
+
+  it('continues a question persisted by sendMessage as a user-authored signal row', async () => {
+    const { processor, sendMessage } = createHarness();
+    const replyId = 'reply-signal';
+    const question = signalMessage(`question-${replyId}`, `Memory question ${replyId}\n\nWhat did I decide?`, {
+      type: 'question',
+      replyId,
+      askedAt: Date.now(),
+    });
+
+    await processor.processOutputResult(resultArgs([question]));
+
+    expect(sendMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        contents: `Continue these unanswered memory questions (attempt 1): ${replyId}. Reply to each with reply_to_memory_question.`,
+      }),
+      expect.objectContaining({ threadId: reminderThreadId, resourceId }),
+    );
   });
 
   it('increments continuation attempts from messages already in the MessageList', async () => {
@@ -155,7 +254,7 @@ describe('Subconscious reminder continuation', () => {
 
     await processor.processOutputResult(resultArgs(messages));
 
-    expect(sendMessage).toHaveBeenCalledTimes(2);
+    await vi.waitFor(() => expect(sendMessage).toHaveBeenCalledTimes(2));
     expect(sendMessage.mock.calls.map(call => call[0].metadata[REMIND_MESSAGE_METADATA_KEY])).toEqual(
       expect.arrayContaining([
         { type: 'continuation', replyIds: ['reply-2'], attempt: 1 },
@@ -174,6 +273,7 @@ describe('Subconscious reminder continuation', () => {
 
     const args = resultArgs(messages);
     await processor.processOutputResult(args);
+    await vi.waitFor(() => expect(args.messageList.add).toHaveBeenCalledOnce());
     await processor.processOutputResult(resultArgs(messages));
 
     const terminalMarker = (args.messageList.add as ReturnType<typeof vi.fn>).mock.calls[0]![0] as MastraDBMessage;
