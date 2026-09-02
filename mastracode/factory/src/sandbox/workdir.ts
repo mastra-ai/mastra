@@ -5,12 +5,12 @@ import * as path from 'node:path';
  * storage or client input — the stale-workdir class of production bugs came
  * from reading `session.sandboxWorkdir` written under a different provider.
  *
- * Local sandboxes derive their workdir synchronously from the sandbox's own
- * `workingDirectory` (the per-session directory the deploy's callback chose).
- * Remote sandboxes have no invented path: the repo clones into the VM's own
- * default cwd (its home dir), so the workdir is only knowable once a VM is
- * running — resolved lazily by `resolveSessionWorkdir` via a one-time `pwd`
- * probe and memoized on the session entry.
+ * Local sandboxes and remote sandboxes that declare an absolute
+ * `workingDirectory` derive their workdir synchronously (`<workingDirectory>/<repo>`).
+ * Undeclared remote sandboxes have no invented path: the repo clones into the
+ * VM's own default cwd, so the workdir is only knowable once a VM is running,
+ * resolved lazily by `resolveSessionWorkdir` via a one-time `pwd` probe and
+ * memoized on the session entry.
  */
 
 /** Keep each path piece a single safe segment (no separators or traversal). */
@@ -23,8 +23,8 @@ export function sanitizeSegment(segment: string): string {
  * Synchronously derivable workdir: local sandboxes expose their host
  * `workingDirectory`; the repo checks out as a contained subdirectory so the
  * setup marker sits beside the clone instead of polluting `git status`
- * inside it. Returns undefined for remote providers, whose workdir is a
- * runtime fact of the VM (`<home>/<repo>`).
+ * inside it. Returns undefined for remote providers; see `deriveRemoteRepoDir`
+ * for the declared case and `resolveSessionWorkdir` for the probed one.
  */
 export function deriveLocalWorkdir(
   sandbox: { provider: string; workingDirectory?: unknown },

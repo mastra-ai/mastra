@@ -100,7 +100,7 @@ interface SessionSandboxEntry {
    * routes, capture, authz). Local and declared remote sandboxes derive it
    * at construction; undeclared remote sandboxes clone into the VM's own
    * home, so it is undefined until `resolveSessionWorkdir` probes the first
-   * started VM — passive readers treat an unresolved workdir as "nothing materialized".
+   * started VM; passive readers treat an unresolved workdir as "nothing materialized".
    */
   workdir?: string;
   /**
