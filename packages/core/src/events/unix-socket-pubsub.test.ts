@@ -333,7 +333,7 @@ describe('UnixSocketPubSub', () => {
   it('closes a client that sends an incomplete inbound frame larger than the configured limit', async () => {
     const path = await socketPath();
     const broker = new UnixSocketPubSub(path, { maxInboundFrameBytes: 64 });
-    const healthy = new UnixSocketPubSub(path, { maxInboundFrameBytes: 64 });
+    const healthy = new UnixSocketPubSub(path);
     pubsubs.push(broker, healthy);
 
     const brokerCb = vi.fn();
@@ -376,7 +376,7 @@ describe('UnixSocketPubSub', () => {
   it('does not parse an oversized complete inbound frame and keeps other clients working', async () => {
     const path = await socketPath();
     const broker = new UnixSocketPubSub(path, { maxInboundFrameBytes: 64 });
-    const healthy = new UnixSocketPubSub(path, { maxInboundFrameBytes: 64 });
+    const healthy = new UnixSocketPubSub(path);
     pubsubs.push(broker, healthy);
 
     const brokerCb = vi.fn();
