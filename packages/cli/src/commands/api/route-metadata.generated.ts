@@ -5328,6 +5328,25 @@ export const API_ROUTE_METADATA = {
       "kind": "single"
     }
   },
+  "PATCH /datasets/:datasetId/experiments/:experimentId": {
+    "method": "PATCH",
+    "path": "/datasets/:datasetId/experiments/:experimentId",
+    "pathParams": [
+      "datasetId",
+      "experimentId"
+    ],
+    "queryParams": [],
+    "bodyParams": [
+      "description",
+      "metadata",
+      "name"
+    ],
+    "hasQuery": false,
+    "hasBody": true,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
   "GET /datasets/:datasetId/experiments/:experimentId/results": {
     "method": "GET",
     "path": "/datasets/:datasetId/experiments/:experimentId/results",
