@@ -86,7 +86,10 @@ async function seedMessages(memory: Memory, threadId = 'alpha', resourceId = 'us
         threadId,
         resourceId,
         role: 'user',
-        content: { format: 2, parts: [{ type: 'text', text: 'Project Atlas launch details. '.repeat(20) }] },
+        content: {
+          format: 2,
+          parts: [{ type: 'text', text: 'Project Atlas launch details. '.repeat(20), createdAt: now.getTime() }],
+        },
         createdAt: now,
       },
       {
@@ -94,7 +97,10 @@ async function seedMessages(memory: Memory, threadId = 'alpha', resourceId = 'us
         threadId,
         resourceId,
         role: 'assistant',
-        content: { format: 2, parts: [{ type: 'text', text: 'Understood. '.repeat(20) }] },
+        content: {
+          format: 2,
+          parts: [{ type: 'text', text: 'Understood. '.repeat(20), createdAt: now.getTime() + 1 }],
+        },
         createdAt: new Date(now.getTime() + 1),
       },
     ] as MastraDBMessage[],
