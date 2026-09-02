@@ -218,9 +218,18 @@ const factorySkillExtension: WorkspaceSkillExtension = {
 
 type DynamicWorkspaceContext = Parameters<typeof getDynamicWorkspace>[0];
 
+/**
+ * When a session's sandbox boots: on the agent's first command (`'lazy'`, the
+ * default) or as soon as the session's workspace is first resolved (`'eager'`).
+ * An eager start is fire-and-forget; if it fails, the lazy path still runs.
+ */
+export type FactorySandboxStart = 'lazy' | 'eager';
+
 export interface CreateWorkspaceFactoryOptions {
   /** Factory sandbox runtime config (session sandbox callback). */
   sandbox?: MastraFactorySandboxConfig;
+  /** Defaults to `'lazy'`. */
+  sandboxStart?: FactorySandboxStart;
   /** GitHub integration used to resolve Factory sessions and mint repo tokens. */
   github?: GithubIntegration;
   /** Work-items storage used to resolve the session's run-binding role, so
@@ -271,6 +280,7 @@ export class FactoryWorkspaceRegistry {
 
 export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = {}) {
   const { sandbox: sandboxConfig, github, workItems } = options;
+  const eagerSandboxStart = options.sandboxStart === 'eager';
   const workspaceRegistry = options.workspaceRegistry ?? new FactoryWorkspaceRegistry();
   type GithubTokenRegistration = {
     inject: (token: string) => void;
@@ -433,8 +443,20 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
           await setupHook(args);
           await previous?.(args);
         });
+        // Only a freshly constructed instance starts eagerly; the start itself
+        // waits for this resolver to finish because the start hook reads
+        // bindings declared further down.
+        startEagerly = eagerSandboxStart;
         return sandbox;
       });
+    let startEagerly = false;
+    const fireEagerStart = () => {
+      if (!startEagerly) return;
+      startEagerly = false;
+      sessionEntry.sandbox.start?.().catch(error => {
+        console.warn(`[factory] Eager sandbox start for session ${session.id} failed:`, error);
+      });
+    };
     const sessionEntry = constructSessionEntry();
     const workdir = sessionEntry.workdir;
     const isLocalSandbox = sessionEntry.sandbox.provider === 'local';
@@ -730,10 +752,7 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
       throw new Error(`Factory session ${session.sessionId} was retired during workspace materialization`);
     }
 
-    // Fully lazy: nothing provisions until the first real sandbox operation
-    // (`ensureRunning()` inside the provider). A background warm-up at session
-    // start was considered and dropped — it speculatively created a VM for
-    // every session, including ones whose agent never touches the workspace.
+    fireEagerStart();
     return workspace;
   };
 }
