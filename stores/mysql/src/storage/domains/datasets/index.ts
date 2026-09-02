@@ -964,15 +964,20 @@ export class DatasetsMySQL extends DatasetsStorage {
       }
       await connection.commit();
     } catch (error) {
-      await connection.rollback();
-      if (error instanceof MastraError) throw error;
+      let transactionError = error;
+      try {
+        await connection.rollback();
+      } catch (rollbackError) {
+        transactionError = new AggregateError([error, rollbackError], 'Transaction and rollback both failed');
+      }
+      if (transactionError instanceof MastraError) throw transactionError;
       throw new MastraError(
         {
           id: 'MYSQL_PURGE_ITEM_FAILED',
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
         },
-        error,
+        transactionError,
       );
     } finally {
       connection.release();

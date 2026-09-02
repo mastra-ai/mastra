@@ -825,6 +825,9 @@ export class MongoDBDatasetsStorage extends DatasetsStorage {
       const itemsCollection = await this.getCollection(TABLE_DATASET_ITEMS);
       const experimentsCollection = await this.getCollection(TABLE_EXPERIMENTS);
       const experimentResultsCollection = await this.getCollection(TABLE_EXPERIMENT_RESULTS);
+      const experimentCollectionsExist =
+        (await this.#connector.collectionExists(TABLE_EXPERIMENTS)) &&
+        (await this.#connector.collectionExists(TABLE_EXPERIMENT_RESULTS));
       const purgedAt = new Date().toISOString();
       const metadata = { __purged: true, purgedAt };
 
@@ -849,7 +852,7 @@ export class MongoDBDatasetsStorage extends DatasetsStorage {
           },
           { session },
         );
-        try {
+        if (experimentCollectionsExist) {
           const experimentIds = await experimentsCollection
             .find({ datasetId }, { projection: { id: 1 }, session })
             .map(experiment => experiment.id)
@@ -857,12 +860,10 @@ export class MongoDBDatasetsStorage extends DatasetsStorage {
           if (experimentIds.length > 0) {
             await experimentResultsCollection.updateMany(
               { itemId: id, experimentId: { $in: experimentIds } },
-              { $set: { input: null, output: null, groundTruth: null, metadata } },
+              { $set: { input: null, output: null, groundTruth: null, toolMockReport: null, metadata } },
               { session },
             );
           }
-        } catch (error) {
-          if (!hasErrorCode(error, new Set([26, 'NamespaceNotFound']))) throw error;
         }
       });
     } catch (error) {

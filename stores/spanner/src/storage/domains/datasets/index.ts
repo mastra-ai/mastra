@@ -932,6 +932,7 @@ export class DatasetsSpanner extends DatasetsStorage {
                       ${quoteIdent('input', 'column name')} = JSON 'null',
                       ${quoteIdent('output', 'column name')} = NULL,
                       ${quoteIdent('groundTruth', 'column name')} = NULL,
+                      ${quoteIdent('toolMockReport', 'column name')} = NULL,
                       ${quoteIdent('metadata', 'column name')} = JSON_OBJECT('__purged', TRUE, 'purgedAt', @purgedAt)
                       WHERE ${quoteIdent('itemId', 'column name')} = @id
                         AND ${quoteIdent('experimentId', 'column name')} IN (

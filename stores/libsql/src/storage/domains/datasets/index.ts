@@ -852,13 +852,17 @@ export class DatasetsLibSQL extends DatasetsStorage {
 
           if (experimentTablesExist) {
             await tx.execute({
-              sql: `UPDATE ${TABLE_EXPERIMENT_RESULTS} SET input = jsonb('null'), output = NULL, groundTruth = NULL, metadata = jsonb(?) WHERE itemId = ? AND experimentId IN (SELECT id FROM ${TABLE_EXPERIMENTS} WHERE datasetId = ?)`,
+              sql: `UPDATE ${TABLE_EXPERIMENT_RESULTS} SET input = jsonb('null'), output = NULL, groundTruth = NULL, toolMockReport = NULL, metadata = jsonb(?) WHERE itemId = ? AND experimentId IN (SELECT id FROM ${TABLE_EXPERIMENTS} WHERE datasetId = ?)`,
               args: [purgedMetadata, id, datasetId],
             });
           }
           await tx.commit();
         } catch (error) {
-          await tx.rollback();
+          if (!tx.closed) {
+            await tx.rollback().catch(rollbackError => {
+              throw new AggregateError([error, rollbackError], 'Transaction and rollback both failed');
+            });
+          }
           throw error;
         }
       });

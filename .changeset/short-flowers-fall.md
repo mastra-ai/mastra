@@ -10,4 +10,8 @@
 '@mastra/pg': patch
 ---
 
-Add permanent dataset item purging that scrubs SCD-2 history rows, tombstones, and linked experiment result payloads while preserving version and review metadata.
+Added `dataset.purgeItem()` to permanently redact item content from every stored dataset version and linked experiment results while preserving version and review metadata.
+
+```typescript
+await dataset.purgeItem({ itemId: 'item-123' });
+```

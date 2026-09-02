@@ -979,6 +979,11 @@ export function createDatasetsTests({
           targetId: 'agent-1',
           totalItems: 1,
         });
+        const toolMockReport = {
+          served: [{ mockIndex: 0, toolName: 'lookup', args: { patientId: 'patient-1' } }],
+          unconsumed: [],
+          liveCalls: [],
+        };
         const result = await experimentsStorage!.addExperimentResult({
           experimentId: experiment.id,
           itemId: item.id,
@@ -987,6 +992,7 @@ export function createDatasetsTests({
           output: { diagnosis: 'secret' },
           groundTruth: { expected: 'private' },
           metadata: { note: 'private metadata' },
+          toolMockReport: supportsToolMocks ? toolMockReport : undefined,
           error: null,
           startedAt: new Date(),
           completedAt: new Date(),
@@ -1016,6 +1022,7 @@ export function createDatasetsTests({
           output: { diagnosis: 'retain' },
           groundTruth: { expected: 'retain' },
           metadata: { note: 'retain metadata' },
+          toolMockReport: supportsToolMocks ? toolMockReport : undefined,
           error: null,
           startedAt: new Date(),
           completedAt: new Date(),
@@ -1040,6 +1047,9 @@ export function createDatasetsTests({
           tags: ['retain-me'],
           comment: 'retain this reviewer state',
         });
+        if (supportsToolMocks) {
+          expect(listed.results[0]!.toolMockReport).toBeNull();
+        }
         expect(typeof listed.results[0]!.metadata?.purgedAt).toBe('string');
         const itemHistory = await datasetsStorage.getItemHistory(item.id);
         expect(itemHistory[0]?.metadata?.purgedAt).toBe(listed.results[0]!.metadata?.purgedAt);
@@ -1058,6 +1068,9 @@ export function createDatasetsTests({
           groundTruth: { expected: 'retain' },
           metadata: { note: 'retain metadata' },
         });
+        if (supportsToolMocks) {
+          expect(otherListed.results[0]!.toolMockReport).toEqual(toolMockReport);
+        }
       });
 
       it('deleteItem tombstone inherits tenancy from parent dataset', async () => {

@@ -182,7 +182,7 @@ const v2Items = await dataset.listItems({ version: 2 })
 
 ## Versioning
 
-Every mutation to a dataset's items (add, update, or delete) bumps the dataset version. This lets you pin experiments to a specific snapshot of the data.
+Adding, updating, or deleting dataset items bumps the dataset version. Purging an item's stored content with [`purgeItem()`](/reference/datasets/purgeItem) does not create a new version. This lets you pin experiments to a specific snapshot of the data while erasing sensitive content without changing the version history.
 
 ### Listing versions
 

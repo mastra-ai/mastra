@@ -83,7 +83,7 @@ interface ExperimentResultRow {
   itemDatasetVersion: number | null;
   organizationId: string | null;
   projectId: string | null;
-  input: string;
+  input: string | null;
   output: string | null;
   groundTruth: string | null;
   metadata: string | null;
