@@ -1,13 +1,12 @@
 {
   "name": "@mastra/inngest",
-  "version": "1.8.8-alpha.0",
+  "version": "1.8.9-alpha.1",
   "description": "Mastra Inngest integration",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "files": [
-    "dist",
-    "CHANGELOG.md"
+    "dist"
   ],
   "exports": {
     ".": {

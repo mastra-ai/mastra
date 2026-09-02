@@ -1,5 +1,5 @@
 import type { GetScorerResponse } from '@mastra/client-js';
-import { Chip } from '@mastra/playground-ui/components/Chip';
+import { Badge } from '@mastra/playground-ui/components/Badge';
 import {
   DataList as EntityList,
   DataListSkeleton as EntityListSkeleton,
@@ -87,17 +87,17 @@ export function ScorersList({ scorers, isLoading, search = '', sourceFilter = 'a
               <span className="flex max-w-full min-w-0 items-center gap-1.5">
                 <span className="min-w-0 truncate">{name}</span>
                 {isTrajectory && (
-                  <Chip size="small" color="purple" className="shrink-0">
+                  <Badge size="xs" variant="purple" className="shrink-0">
                     trajectory
-                  </Chip>
+                  </Badge>
                 )}
               </span>
             </EntityList.NameCell>
             <EntityList.DescriptionCell>{description}</EntityList.DescriptionCell>
-            <EntityList.Cell className="py-0">
-              <Chip size="small" color={scorer.source === 'code' ? 'blue' : 'gray'}>
+            <EntityList.Cell>
+              <Badge size="xs" variant={scorer.source === 'code' ? 'blue' : 'neutral'}>
                 {scorer.source}
-              </Chip>
+              </Badge>
             </EntityList.Cell>
             <EntityList.TextCell className="text-center">{agentCount || ''}</EntityList.TextCell>
             <EntityList.TextCell className="text-center">{workflowCount || ''}</EntityList.TextCell>

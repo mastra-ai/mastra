@@ -1,6 +1,6 @@
 {
   "name": "@mastra/auth-auth0",
-  "version": "1.2.2",
+  "version": "1.2.3-alpha.1",
   "description": "Mastra Auth0 Auth integration",
   "type": "module",
   "main": "dist/index.js",
@@ -19,8 +19,7 @@
     "./package.json": "./package.json"
   },
   "files": [
-    "dist",
-    "CHANGELOG.md"
+    "dist"
   ],
   "scripts": {
     "build": "tsdown --silent --config tsdown.config.ts",

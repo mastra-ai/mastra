@@ -1,6 +1,6 @@
 ---
 title: "AI SDK UI | Agentic UI"
-description: "Learn how Mastra leverages the AI SDK UI library and how you can leverage it further with Mastra"
+description: "Connect Mastra agents to AI SDK UI with @mastra/ai-sdk, then build streaming chat, completion, memory, tool output, and workflow interfaces."
 packages:
   - '@mastra/ai-sdk'
 ---
@@ -216,7 +216,7 @@ Whether you created API routes through [Mastra's server](#mastras-server) or use
 
 Assuming you set up a route at `/chat` that uses a weather agent, you can ask it questions as seen below. It's important that you set the correct `api` URL.
 
-```ts {9}
+```ts {9} oxfmt:false
 import { useChat } from '@ai-sdk/react'
 import { useState } from 'react'
 import { DefaultChatTransport } from 'ai'
@@ -291,7 +291,7 @@ The `useCompletion()` hook handles single-turn completions between your frontend
 
 Your frontend could look like this:
 
-```typescript title="app/page.tsx"
+```typescript title="app/page.tsx" oxfmt:false
 import { useCompletion } from '@ai-sdk/react'
 
 export default function Page() {
@@ -474,7 +474,7 @@ Here's an example of rendering a weather tool's output as a custom `WeatherCard`
   <TabItem value="frontend" label="Frontend">
     Check for `tool-{toolKey}` parts in the message and render a custom component based on the tool's state and output.
 
-    ```typescript title="src/components/chat.tsx" {24-35}
+    ```typescript title="src/components/chat.tsx" {24-35} oxfmt:false
     import { useChat } from '@ai-sdk/react'
     import { DefaultChatTransport } from 'ai'
     import { WeatherCard } from './weather-card'
@@ -611,7 +611,7 @@ When using `workflowRoute()` or `handleWorkflowStream()`, Mastra emits `data-wor
   <TabItem value="frontend" label="Frontend">
     Check for `data-workflow` parts to render workflow status snapshots. If you need the full payload for the step that just changed, also read `data-workflow-step` parts.
 
-    ```typescript title="src/components/workflow-chat.tsx" {3,5,6,48-50}
+    ```typescript title="src/components/workflow-chat.tsx" {3,5,6,48-50} oxfmt:false
     import { useChat } from '@ai-sdk/react'
     import { DefaultChatTransport } from 'ai'
     import type { WorkflowDataPart, WorkflowStepDataPart } from '@mastra/ai-sdk'
@@ -731,7 +731,7 @@ When using `networkRoute()` or `handleNetworkStream()`, Mastra emits `data-netwo
   <TabItem value="frontend" label="Frontend">
     Check for `data-network` parts and render each agent's execution step using the `NetworkDataPart` type for type safety.
 
-    ```typescript title="src/components/network-chat.tsx" {3,5,42-44}
+    ```typescript title="src/components/network-chat.tsx" {3,5,42-44} oxfmt:false
     import { useChat } from '@ai-sdk/react'
     import { DefaultChatTransport } from 'ai'
     import type { NetworkDataPart } from '@mastra/ai-sdk'
@@ -873,7 +873,7 @@ You must `await` the `writer.custom()` call, otherwise you may encounter a `Writ
   <TabItem value="frontend" label="Frontend">
     Filter message parts for your custom event type and render a progress indicator that updates as new events arrive.
 
-    ```typescript title="src/components/task-chat.tsx" {31-41,45}
+    ```typescript title="src/components/task-chat.tsx" {31-41,45} oxfmt:false
     import { useChat } from '@ai-sdk/react'
     import { DefaultChatTransport } from 'ai'
     import { useMemo } from 'react'
@@ -974,7 +974,7 @@ When loading messages from Mastra's memory to display in a chat UI, use [`toAISd
 
 Here's an example of the frontend code:
 
-```typescript {15-25}
+```typescript {15-25} oxfmt:false
 import { useChat } from '@ai-sdk/react'
 import { useState } from 'react'
 import { DefaultChatTransport } from 'ai'
@@ -1185,7 +1185,7 @@ The workflow uses:
   <TabItem value="frontend" label="Frontend">
     Detect when the workflow is suspended and send resume data with `runId`, `step`, and `resumeData`.
 
-    ```typescript title="src/components/approval-workflow.tsx"
+    ```typescript title="src/components/approval-workflow.tsx" oxfmt:false
     import { useChat } from '@ai-sdk/react'
     import { DefaultChatTransport } from 'ai'
     import { useMemo, useState } from 'react'
@@ -1355,7 +1355,7 @@ The pattern uses:
   <TabItem value="frontend" label="Frontend">
     Handle `data-tool-agent` parts for the live snapshot and `data-tool-agent-step` parts for the completed nested step payload.
 
-    ```typescript title="src/components/nested-agent-chat.tsx"
+    ```typescript title="src/components/nested-agent-chat.tsx" oxfmt:false
     import { useChat } from '@ai-sdk/react'
     import { DefaultChatTransport } from 'ai'
     import { useState } from 'react'
@@ -1505,7 +1505,7 @@ The pattern uses:
   <TabItem value="frontend" label="Frontend">
     Render both `text` parts (streaming agent output) and `data-workflow` parts (step progress).
 
-    ```typescript title="src/components/weather-workflow.tsx"
+    ```typescript title="src/components/weather-workflow.tsx" oxfmt:false
     import { useChat } from '@ai-sdk/react'
     import { DefaultChatTransport } from 'ai'
     import { useState } from 'react'

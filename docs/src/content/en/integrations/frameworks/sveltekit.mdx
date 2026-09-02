@@ -1,6 +1,6 @@
 ---
 title: "SvelteKit | Frameworks"
-description: "Get started with Mastra and SvelteKit"
+description: "Build a tool-calling Mastra agent in SvelteKit, create server and chat routes, add AI SDK UI, and test the interactive streaming experience."
 packages:
   - '@mastra/core'
 ---
@@ -128,7 +128,7 @@ export const load: PageLoad = async ({ fetch }) => {
 
 Replace `src/routes/+page.svelte` with the following.
 
-```svelte title="src/routes/+page.svelte"
+```svelte title="src/routes/+page.svelte" oxfmt:false
 <script lang="ts">
   import { Chat } from '@ai-sdk/svelte';
   import { DefaultChatTransport, type ToolUIPart } from 'ai';

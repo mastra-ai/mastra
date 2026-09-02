@@ -8,7 +8,6 @@ import { useApiConfig } from '../../../../api/config';
 import { SkeletonRows } from '../../../ui/SkeletonRows';
 import { useAgentControllerThreadMessages } from '../../../../hooks/useAgentControllerThreadMessages';
 import { useFactoryQuery } from '../../../../hooks/useFactories';
-import { useEnsureMaterializedSandbox, useEnsureProgress } from '../../../../hooks/useEnsureMaterializedSandbox';
 import { useUserSessionQuery } from '../../../../hooks/useWorkspaces';
 import type { LinkedRepositoryPayload } from '../../workspaces/services/github';
 import { AGENT_CONTROLLER_ID } from '../services/constants';
@@ -47,18 +46,9 @@ export function ChatSessionConfigProvider({
         (repo: LinkedRepositoryPayload) => repo.projectRepositoryId === storedSession.projectRepositoryId,
       )
     : factory?.repositories[0];
-  // Materializing a sandbox provisions a VM and clones the repo, so it may only
-  // happen when the caller actually enters a session. Every factory route mounts
-  // this provider (the chat shell is the router layout), so an ungated /ensure
-  // here provisioned a sandbox just for visiting the board, metrics or settings.
-  // In-session it runs as a background warm-up only — nothing below blocks on it.
+  // Entering a session provisions nothing: session sandboxes boot lazily at the
+  // first real command. This provider only resolves session metadata.
   const inSession = Boolean(userScoped ? threadId : sessionId);
-  // Warm-up also waits for session metadata: before `storedSession` resolves
-  // the `repository` fallback is the factory's first repository, which in a
-  // multi-repository factory could warm the wrong workspace.
-  const ensureQuery = useEnsureMaterializedSandbox(
-    inSession && storedSession ? repository?.projectRepositoryId : undefined,
-  );
   const resolvingSession = inSession && sessionQuery.isPending;
   // Sessions and their threads are provisioned with the session's own id as the
   // memory resourceId and no scope (see FactoryStartCoordinator.prepare and
@@ -79,22 +69,17 @@ export function ChatSessionConfigProvider({
   const resourceOverride = userScoped
     ? null
     : new URLSearchParams(typeof window === 'undefined' ? '' : window.location.search).get('resourceId');
-  // `sandboxReady` — session metadata resolved; safe to run mutations. It does
-  // NOT wait on `/ensure`: the server materializes sandboxes lazily on first
-  // use (and revives dead ones), so the `/ensure` call above is only a
-  // background warm-up that usually wins the race against the first command.
+  // `sandboxReady` — session metadata resolved; safe to run mutations. The
+  // server materializes sandboxes lazily on first use (and revives dead ones),
+  // so nothing here waits on a sandbox existing.
   const sandboxReady = resourceOverride ? Boolean(resourceOverride) : Boolean(storedSession) && !resolvingSession;
   // A denied or missing session (404 from the session query) is fatal and must
-  // surface the error state, not the eternal preparing loader. A failed warm-up
-  // is surfaced non-fatally (banner + retry) — the run path no longer depends
-  // on `/ensure` — so the two errors are kept apart.
+  // surface the error state, not the eternal preparing loader.
   const sessionError = sessionQuery.error ?? undefined;
-  const warmupError = ensureQuery.error ?? undefined;
   // `resourceReady` — safe to address the agent-controller session by
   // `resourceId` for reads/streaming as soon as server-side session metadata
-  // resolves. Does NOT wait on `/ensure` — the agent-controller endpoints are
-  // keyed by resourceId, not by a live sandbox, so reads and thread lookups
-  // can parallelize with sandbox provisioning.
+  // resolves. The agent-controller endpoints are keyed by resourceId, not by a
+  // live sandbox, so reads and thread lookups never wait on one.
   const resourceReady = userScoped
     ? Boolean(storedSession) && !resolvingSession
     : Boolean(resourceOverride) || (Boolean(storedSession) && !resolvingSession);
@@ -103,10 +88,6 @@ export function ChatSessionConfigProvider({
   // false outside any session. Track the pending query (not `!sandboxReady`)
   // so a denied/missing session cannot keep the preparing loader up forever.
   const sandboxPreparing = resolvingSession && !resourceOverride;
-  const sandboxProgressQuery = useEnsureProgress(inSession ? repository?.projectRepositoryId : undefined);
-  // Warm-up progress is informational only — it never blocks the chat UI.
-  const sandboxWarming = inSession && !resourceOverride && ensureQuery.isPending;
-  const sandboxProgress = sandboxWarming ? sandboxProgressQuery.data : undefined;
   // Outside a session the factory resource is addressable straight away (its id
   // is the factory project id); inside one it becomes addressable as soon as
   // session metadata resolves — same as `resourceReady`.
@@ -123,18 +104,13 @@ export function ChatSessionConfigProvider({
     sandboxReady,
     resourceReady,
     sandboxPreparing,
-    sandboxProgress,
-    sandboxWarming,
     resourceEnabled,
     sessionError,
-    warmupError,
-    retrySession:
-      sessionError || warmupError
-        ? () => {
-            if (ensureQuery.isError) void ensureQuery.refetch();
-            if (sessionQuery.isError) void sessionQuery.refetch();
-          }
-        : undefined,
+    retrySession: sessionError
+      ? () => {
+          if (sessionQuery.isError) void sessionQuery.refetch();
+        }
+      : undefined,
     projectPath,
     sessionThreadId: storedSession?.sessionId,
     workspacePending: storedSession !== undefined && !storedSession.materializedAt,
@@ -144,9 +120,6 @@ export function ChatSessionConfigProvider({
         ? {
             factoryProjectId: factory.id,
             projectRepositoryId: repository.projectRepositoryId,
-            sandboxId: storedSession?.sandboxId ?? ensureQuery.data?.sandboxId,
-            sandboxWorkdir:
-              storedSession?.sandboxWorkdir ?? ensureQuery.data?.sandboxWorkdir ?? repository.sandboxWorkdir,
           }
         : undefined,
     baseUrl,
@@ -225,45 +198,27 @@ export function ChatMessageBoundary({
 }) {
   const value = useContext(ChatThreadMessagesContext);
   if (!value) throw new Error('ChatMessageBoundary must be used within a ChatSessionBoundary');
-  const { sessionError, warmupError } = useChatSessionContext();
+  const { sessionError } = useChatSessionContext();
   const { historyInitializing, preparing } = useChatMessagePreparation();
 
-  if (sessionError) return <ChatMessageFeedback error={sessionError} source="session" />;
-  const warmupBanner = warmupError ? <ChatMessageFeedback error={warmupError} source="warmup" /> : null;
+  if (sessionError) return <ChatMessageFeedback error={sessionError} />;
 
   if (preparing) {
-    return (
-      <>
-        {warmupBanner}
-        {showPreparation && <SessionPrepareSteps historyInitializing={historyInitializing} />}
-      </>
-    );
+    return showPreparation ? <SessionPrepareSteps historyInitializing={historyInitializing} /> : null;
   }
 
   if (value.threadId && value.error) {
-    return (
-      <>
-        {warmupBanner}
-        <ChatMessageFallback {...value} />
-      </>
-    );
+    return <ChatMessageFallback {...value} />;
   }
 
-  return (
-    <>
-      {warmupBanner}
-      {children}
-    </>
-  );
+  return <>{children}</>;
 }
 
-function ChatMessageFeedback({ error, source }: { error: Error; source: 'session' | 'warmup' }) {
+function ChatMessageFeedback({ error }: { error: Error }) {
   const { retrySession } = useChatSessionContext();
   // The server intentionally returns the same 404 for a missing session and a
-  // private one owned by someone else, so the message covers both — but only
-  // for the session lookup itself. A warm-up (`/ensure`) 404 describes a
-  // missing repository or workspace, so it keeps its actual error details.
-  const notFound = source === 'session' && (error as { status?: number }).status === 404;
+  // private one owned by someone else, so the message covers both.
+  const notFound = (error as { status?: number }).status === 404;
   return (
     <div className="flex flex-col items-stretch gap-4">
       <Notice variant="destructive">

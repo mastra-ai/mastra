@@ -28,7 +28,8 @@
     "nvidia/Nemotron-3-Nano-Omni-30B-A3B-Reasoning",
     "stepfun-ai/Step-3.7-Flash",
     "thinkingmachines/Inkling",
-    "thinkingmachines/Inkling-Small"
+    "thinkingmachines/Inkling-Small",
+    "zai-org/GLM-5.3-Flash"
   ],
   "temperature": [
     "ByteDance/Seed-2.0-code",
@@ -85,7 +86,9 @@
     "zai-org/GLM-4.7-Flash",
     "zai-org/GLM-5",
     "zai-org/GLM-5.1",
-    "zai-org/GLM-5.2"
+    "zai-org/GLM-5.2",
+    "zai-org/GLM-5.3",
+    "zai-org/GLM-5.3-Flash"
   ],
   "structuredOutput": [
     "ByteDance/Seed-2.0-code",
@@ -142,6 +145,8 @@
     "zai-org/GLM-4.7-Flash",
     "zai-org/GLM-5",
     "zai-org/GLM-5.1",
-    "zai-org/GLM-5.2"
+    "zai-org/GLM-5.2",
+    "zai-org/GLM-5.3",
+    "zai-org/GLM-5.3-Flash"
   ]
 }

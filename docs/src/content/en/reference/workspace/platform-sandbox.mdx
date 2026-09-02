@@ -1,18 +1,18 @@
 ---
-title: "Reference: PlatformSandbox | Workspace"
-description: "Documentation for the PlatformSandbox provider for executing commands in a Mastra Platform environment."
+title: 'Reference: PlatformSandbox | Workspace'
+description: "Use PlatformSandbox to provision, inspect, execute commands in, and delete isolated sandboxes within a Mastra Platform environment."
 packages:
-  - "@mastra/platform-workspace"
+  - '@mastra/platform-workspace'
 ---
 
-import Tabs from "@theme/Tabs";
-import TabItem from "@theme/TabItem";
+import Tabs from '@theme/Tabs';
+import TabItem from '@theme/TabItem';
 
 # PlatformSandbox
 
 Client for provisioning sandboxes in a Mastra Platform environment. Each `PlatformSandbox` instance owns one remote sandbox: `start()` provisions it, `executeCommand()` runs against it, and `destroy()` tears it down. Construct additional instances to own additional remote sandboxes. Use `clone()` to derive them from a configured template (see [Cloning](#cloning-for-a-fleet-of-sandboxes)).
 
-Sandboxes boot from a pre-built recipe checkpoint with Python 3, Node 22, TypeScript, tsx, and common build tooling already installed. Pass a stable `id` to opt into [checkpoint recovery](#checkpoint-recovery) so a new sandbox boots from the previous one's filesystem.
+Sandboxes boot from a pre-built provider template with Python 3, Node 22, TypeScript, tsx, and common build tooling already installed. You can also build a [reusable template](#reusable-templates) with the portable `Template()` builder. Pass a stable `id` to opt into [checkpoint recovery](#checkpoint-recovery) so a new sandbox boots from the previous one's filesystem.
 
 Related providers: [`RailwaySandbox`](/integrations/sandboxes/railway) for self-hosted Railway sandboxes, [`LocalSandbox`](/reference/workspace/local-sandbox) for local sandboxes.
 
@@ -36,6 +36,7 @@ Configure the platform credentials. The access token, project ID, and environmen
     MASTRA_PLATFORM_ACCESS_TOKEN=your-platform-access-token
     MASTRA_PROJECT_ID=your-project-id
     MASTRA_ENVIRONMENT_ID=your-environment-id
+    SANDBOX_PROVIDER=railway
     ```
   </TabItem>
 
@@ -51,6 +52,8 @@ Configure the platform credentials. The access token, project ID, and environmen
 </Tabs>
 
 On a Mastra Platform deployment, `MASTRA_PLATFORM_ACCESS_TOKEN`, `MASTRA_PROJECT_ID`, and `MASTRA_ENVIRONMENT_ID` are injected automatically, so the constructor can be called with no options. For local development, `MASTRA_PLATFORM_ACCESS_TOKEN` can contain an `sk_` API token from your organization's settings page under **API Tokens**.
+
+The sandbox provider resolves from the constructor's `sandboxProvider` option, then `SANDBOX_PROVIDER`, then defaults to `railway`.
 
 ## Usage
 
@@ -114,6 +117,86 @@ When `sandboxId` is set, `environmentId` isn't required because the sandbox alre
 
 `start()` reports `{ outcome: 'connected' }` on reattach and `{ outcome: 'created' }` on a fresh provision (including a checkpoint-recovered boot, which is a new VM even when its filesystem was restored). See [`start()`](/reference/workspace/sandbox#start) for the shared contract.
 
+### Reusable templates
+
+Pass a reusable template builder to `PlatformSandbox`. A fresh sandbox start sends the serialized definition to Platform, which content-addresses it and starts or reuses the provider build. Sandbox creation never blocks on a build. When the exact template isn't built yet, Platform boots the sandbox on the best available fallback and rebuilds the requested template in the background. The fallback is a same-lineage stale template with matching resources when one exists, otherwise the provider base template:
+
+```typescript
+import { PlatformSandbox, Template } from '@mastra/platform-workspace'
+
+const commitSha = process.env.REPOSITORY_COMMIT_SHA!
+const template = Template()
+  .cpuCount(4)
+  .memoryMB(8_192)
+  .setWorkdir('/workspace/repo')
+  .setEnvs({ BUILD_CONFIG_MARKER: 'template-v1' })
+  .aptInstall(['git', 'jq'])
+  .runCmd('git clone https://github.com/mastra-ai/mastra.git /workspace/repo')
+  .runCmd(`git checkout ${commitSha}`)
+  .runCmd('pnpm install --frozen-lockfile')
+
+const sandbox = new PlatformSandbox({
+  environmentId: 'env_abc',
+  sandboxProvider: 'e2b',
+  template,
+})
+await sandbox.start()
+```
+
+`Template()` supports `cpuCount`, `memoryMB`, `runCmd`, `setWorkdir`, `setEnvs`, `aptInstall`, `pipInstall`, and `npmInstall`. Platform serializes the builder internally and computes the content hash. Call `await template.build(options)` to start or reuse that provider build without provisioning a sandbox. It returns `ready`, `pending`, or `failed`, with the template ID and an optional retry hint or error.
+
+For E2B, `cpuCount()` and `memoryMB()` set the template build resources inherited by sandboxes created from the exact template or a resource-matched stale template. Both methods accept a positive safe integer. They default to 2 CPUs and 1,024 MB. Resource setters use last-value-wins semantics, and their effective values are part of the content identity. Omitting both setters is equivalent to explicitly selecting the defaults. If a pending build falls back to the provider base, that sandbox may use the provider's default resources. Check `templatePending` to detect this case.
+
+Railway converts the command, working directory, environment, and package operations to Railway template instructions. Railway currently ignores `cpuCount()` and `memoryMB()` because its sandbox template API doesn't expose matching resource settings.
+
+For public GitHub repositories, `createRepoTemplate()` can resolve and build the commit-pinned definition lazily when `start()` needs a fresh sandbox:
+
+```typescript
+import { createRepoTemplate, PlatformSandbox } from '@mastra/platform-workspace'
+
+const sandbox = new PlatformSandbox({
+  environmentId: 'env_abc',
+  template: createRepoTemplate({
+    getRepositoryAccess: async () => ({ cloneUrl: 'https://github.com/mastra-ai/mastra.git' }),
+    setupCommand: 'pnpm install --frozen-lockfile',
+    memoryMB: 2048,
+  }),
+})
+await sandbox.start()
+```
+
+`createRepoTemplate()` accepts the same `cpuCount` and `memoryMB` sizing as the `Template()` builder methods, as plain options. They carry the identity and stale-fallback semantics described above. Omit them for the provider defaults.
+
+`setupCommand` also accepts an array. Each entry runs as its own cached build step. `workingDirectory` sets the cwd for the build and the sandbox, and the repository is cloned to `<workingDirectory>/<repo>`. `buildEnv` passes environment variables to the build steps only. They never enter the serialized definition.
+
+`getRepositoryAccess` mirrors the resolver a Factory sandbox context carries, so a host can pass its context straight through; when it's absent, `createRepoTemplate()` returns `undefined` and the sandbox boots the provider default. The resolver skips reattachment to an existing `sandboxId`; on a fresh start, it resolves the repository's default-branch head before Platform starts or reuses the corresponding template build. If the repository head can't be resolved or the provider build fails, sandbox creation continues with the provider's default template so runtime setup can perform a cold checkout. For private repositories, the short-lived authorization token is sent as an ephemeral build environment value that stays out of the serialized definition and the persisted template record. It has no effect on content identity.
+
+`createRepoTemplate()` also attaches a commit-independent `family` key (`repo:<cloneUrl>:<workingDirectory>/<repo>`) to the definition. `family` groups successive builds of the "same thing", so every commit of the same repository belongs to the same family. Platform uses it to find a prior ready build in the same family and boot the new commit on that warm filesystem while the exact commit template builds in the background. For E2B, stale lookup is also partitioned by the effective CPU and memory settings so a fallback can't silently change the requested machine size. Callers using the raw `Template()` builder can attach their own family key with `.withFamily(key)` (any non-empty string up to 200 characters). Omit it to opt out of family fallback. The family key never influences the content-addressed template identity: two definitions that differ only in `family` share the same cache slot.
+
+Platform stores build state under the definition's server-derived content hash within the selected environment and provider.
+
+#### Observing a pending template build
+
+When a sandbox boots on a fallback template (either a resource-matched prior member of the same family or the provider base), the platform response includes a `templatePending` field that `PlatformSandbox` surfaces for observability:
+
+```typescript
+await sandbox.start()
+if (sandbox.templatePending) {
+  // The sandbox is running on a fallback template.
+  // A later start() of a sandbox with the same template definition
+  // will pick up the exact template once the background build finishes.
+  console.log('exact template still baking:', sandbox.templatePending.templateId)
+}
+```
+
+`templatePending` is undefined when the sandbox booted on the exact template. `PlatformSandbox` never re-executes template operations inside a running sandbox. Reconcile any commit-specific filesystem state in your own runtime setup (for example, an `onStart` hook that runs `git fetch && git checkout <sha>`) exactly as you would with a fresh template. Reprovision on a later `start()` to pick up the ready exact template.
+
+:::warning
+
+By default, every template operation is serialized and sent to Platform, which interprets it according to the selected provider's capabilities. Use `setEnvs(values, { ephemeral: true })` for short-lived build credentials: these values are sent separately and excluded from both content identity and persistence. They're unavailable at runtime and take precedence over serialized environment values with the same key. Supply them again on every build or fresh provision that may need to build. On Railway, the provider cache includes the transient build variables. Rotating a value can therefore trigger another provider build even though the Platform template ID stays stable.
+
+:::
+
 ### Checkpoint recovery
 
 The constructor `id` (explicit or auto-generated) is sent to the platform on `POST /sandbox` as an advisory recovery key:
@@ -151,7 +234,7 @@ const sandbox = new PlatformSandbox({
 
 ### Cloning for a fleet of sandboxes
 
-`clone()` returns an independent sibling `PlatformSandbox` that inherits credentials and defaults (access token, project, environment, network isolation, timeout, instructions, env, idle timeout) with per-instance overrides. The returned sandbox is unstarted and provisions on its own `start()`, so `clone()` performs no I/O:
+`clone()` returns an independent sibling `PlatformSandbox` that inherits credentials and defaults (access token, project, environment, provider, template, network isolation, timeout, instructions, env, idle timeout) with per-instance overrides. The returned sandbox is unstarted and provisions on its own `start()`, so `clone()` performs no I/O:
 
 ```typescript
 const template = new PlatformSandbox({
@@ -203,6 +286,12 @@ The `command` argument is a shell string and is concatenated verbatim into the r
     isOptional: true,
   },
   {
+    name: 'sandboxProvider',
+    type: "'railway' | 'e2b'",
+    description: 'Provider used for sandbox and template routes. Falls back to SANDBOX_PROVIDER, then railway.',
+    isOptional: true,
+  },
+  {
     name: 'environmentId',
     type: 'string',
     description:
@@ -224,6 +313,13 @@ The `command` argument is a shell string and is concatenated verbatim into the r
     isOptional: true,
   },
   {
+    name: 'template',
+    type: 'SandboxTemplateBuilder | (() => SandboxTemplateBuilder | undefined | Promise<SandboxTemplateBuilder | undefined>)',
+    description:
+      'Reusable template builder or lazy resolver used during a fresh sandbox provision. Resolver and provider build failures fall back to the selected provider default.',
+    isOptional: true,
+  },
+  {
     name: 'idleTimeoutMinutes',
     type: 'number',
     description: 'How long the sandbox stays alive with no activity before the platform destroys it.',
@@ -241,6 +337,13 @@ The `command` argument is a shell string and is concatenated verbatim into the r
     type: 'Record<string, string>',
     description:
       'Environment variables baked into the sandbox at creation time. Per-command environment variables can also be passed to executeCommand.',
+    isOptional: true,
+  },
+  {
+    name: 'workingDirectory',
+    type: 'string',
+    description:
+      'Default directory for command execution when no per-command `cwd` is given. A per-command `cwd` always wins. Use an absolute path.',
     isOptional: true,
   },
   {
@@ -305,6 +408,12 @@ The `command` argument is a shell string and is concatenated verbatim into the r
     description:
       'Background process manager. See [SandboxProcessManager reference](/reference/workspace/process-manager).',
   },
+  {
+    name: 'templatePending',
+    type: '{ templateId: string; retryAfterMs: number } | undefined',
+    description:
+      'Set when the running sandbox booted from a fallback template (same-lineage stale or provider base) while the exact template continues to build in the background. Undefined when the sandbox booted from the exact template. Observability only — PlatformSandbox does not re-execute template operations; reconcile filesystem state in your own runtime setup.',
+  },
 ]}
 />
 
@@ -339,7 +448,7 @@ The `command` argument is a shell string and is concatenated verbatim into the r
     name: 'clone',
     type: '(options?: SandboxCloneOptions) => PlatformSandbox',
     description:
-      'Construct an unstarted sibling PlatformSandbox that inherits credentials and defaults with per-instance overrides (id, sandboxId, env, idleTimeoutMinutes). Performs no I/O. Use to build a fleet of independent sandboxes from one configured template.',
+      'Construct an unstarted sibling PlatformSandbox that inherits credentials, provider, template, and defaults with per-instance overrides (id, sandboxId, env, idleTimeoutMinutes). Performs no I/O. Use to build a fleet of independent sandboxes from one configured template.',
   },
   {
     name: 'snapshot',

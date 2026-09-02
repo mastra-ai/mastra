@@ -411,6 +411,16 @@ function isAnthropicReasoningPart(part: { providerOptions?: unknown; providerMet
   return false;
 }
 
+function getProtectedAnthropicAssistantIndex(prompt: LanguageModelV2Prompt): number {
+  const index = getProtectedAssistantIndex(prompt);
+  if (index === -1) return -1;
+
+  const message = prompt[index]!;
+  if (message.role !== 'assistant' || !Array.isArray(message.content)) return -1;
+
+  return message.content.some(part => part.type === 'reasoning' && isAnthropicReasoningPart(part)) ? index : -1;
+}
+
 function getProviderMetadataForProvider(metadata: unknown, provider: string): Record<string, unknown> | undefined {
   if (!metadata || typeof metadata !== 'object') return undefined;
   const value = (metadata as Record<string, unknown>)[provider];
@@ -494,7 +504,7 @@ export const anthropicStripForeignReasoningContent: CompatRule = {
     return stripReasoningFromPrompt(
       prompt,
       part => !isAnthropicReasoningPart(part),
-      getProtectedAssistantIndex(prompt),
+      getProtectedAnthropicAssistantIndex(prompt),
     );
   },
 };

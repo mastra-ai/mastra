@@ -385,6 +385,10 @@ export abstract class Bundler extends MastraBundler {
 
   protected pnpmNodeLinker?: 'hoisted';
 
+  protected getAdditionalEntries(): Record<string, string> {
+    return {};
+  }
+
   protected async installDependencies(
     outputDirectory: string,
     rootDir = process.cwd(),
@@ -494,6 +498,7 @@ export abstract class Bundler extends MastraBundler {
     analyzedBundleInfo: Awaited<ReturnType<typeof analyzeBundle>>,
     toolsPaths: (string | string[])[],
     { enableSourcemap, enableMinify, enableEsmShim, externals }: BundlerOptions,
+    additionalEntries: Record<string, string>,
   ) {
     const { workspaceRoot } = await getWorkspaceInformation({ mastraEntryFile });
     const closestPkgJson = pkg.up({ cwd: dirname(mastraEntryFile) });
@@ -515,19 +520,29 @@ export abstract class Bundler extends MastraBundler {
         externalsPreset: externals === true,
       },
     );
-    const isVirtual = serverFile.includes('\n') || !existsSync(serverFile);
     const toolsInputOptions = await this.listToolsInputOptions(toolsPaths);
+    const entryInputs: Record<string, string> = {};
+    const virtualEntries: Record<string, string> = {};
+    const entries = { index: serverFile, ...additionalEntries };
 
-    if (isVirtual) {
-      inputOptions.input = { index: '#entry', ...toolsInputOptions };
-
-      if (Array.isArray(inputOptions.plugins)) {
-        inputOptions.plugins.unshift(virtual({ '#entry': serverFile }));
+    for (const [name, entry] of Object.entries(entries)) {
+      if (entry.includes('\n') || !existsSync(entry)) {
+        const virtualId = name === 'index' ? '#entry' : `#entry-${name}`;
+        entryInputs[name] = virtualId;
+        virtualEntries[virtualId] = entry;
       } else {
-        inputOptions.plugins = [virtual({ '#entry': serverFile })];
+        entryInputs[name] = entry;
       }
-    } else {
-      inputOptions.input = { index: serverFile, ...toolsInputOptions };
+    }
+
+    inputOptions.input = { ...entryInputs, ...toolsInputOptions };
+
+    if (Object.keys(virtualEntries).length > 0) {
+      if (Array.isArray(inputOptions.plugins)) {
+        inputOptions.plugins.unshift(virtual(virtualEntries));
+      } else {
+        inputOptions.plugins = [virtual(virtualEntries)];
+      }
     }
 
     return inputOptions;
@@ -609,6 +624,7 @@ export abstract class Bundler extends MastraBundler {
     bundleLocation: string = join(outputDirectory, this.outputDir),
   ): Promise<void> {
     const analyzeDir = join(outputDirectory, this.analyzeOutputDir);
+    const additionalEntries = this.getAdditionalEntries();
 
     const bundlerOptions = await this.getUserBundlerOptions(mastraEntryFile, outputDirectory);
     const internalBundlerOptions: BundlerOptions = {
@@ -623,7 +639,7 @@ export abstract class Bundler extends MastraBundler {
     try {
       const resolvedToolsPaths = await this.listToolsInputOptions(toolsPaths);
       analyzedBundleInfo = await analyzeBundle(
-        [serverFile, ...Object.values(resolvedToolsPaths)],
+        [serverFile, ...Object.values(additionalEntries), ...Object.values(resolvedToolsPaths)],
         mastraEntryFile,
         {
           outputDir: analyzeDir,
@@ -710,6 +726,7 @@ export abstract class Bundler extends MastraBundler {
         analyzedBundleInfo,
         toolsPaths,
         internalBundlerOptions,
+        additionalEntries,
       );
 
       const bundler = await this.createBundler(

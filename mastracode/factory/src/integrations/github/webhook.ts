@@ -3,6 +3,7 @@ import type { MountedMastraCode } from '@mastra/code-sdk';
 import type { NotificationPriority } from '@mastra/core/notifications';
 import { RequestContext } from '@mastra/core/request-context';
 import type { Context } from 'hono';
+import { hasResolvedOrg, seedSessionOrg } from '../../session/org-seed.js';
 import { GithubAppIdentity } from './app-identity.js';
 import type { GithubIntegration, GithubRepositoryPermission } from './integration.js';
 import { listPullRequestSubscriptionsForWebhook, retirePullRequestSubscription } from './subscriptions.js';
@@ -356,7 +357,6 @@ async function resolveSubscriptionSession(
     const tags = {
       factoryProjectId: resourceId,
       projectRepositoryId: subscription.data.projectRepositoryId,
-      ...(scope ? { worktreePath: scope } : {}),
     };
     // Creating the session resolves its workspace, which authorizes the caller
     // against the Factory session row — no signed-in user, so run as its owner.
@@ -377,6 +377,29 @@ async function resolveSubscriptionSession(
       tags,
       requestContext,
     });
+    await seedSessionOrg(session, sessionRow.orgId);
+  } else if (!hasResolvedOrg(session.state?.get()?.factoryOrgId)) {
+    // A session created before the org seed existed carries the project tag and
+    // no org, so capture would refuse for the rest of its life even though the
+    // org is recoverable. Heal it — but only here, and only when it is missing:
+    // hoisting the row fetch above would make an existing-session delivery throw
+    // on a missing row where it previously succeeded, and fetching it every time
+    // would add a storage read to every delivery. A row that is missing or a
+    // lookup that throws leaves the session marked unresolved, and delivery
+    // continues either way.
+    try {
+      const sessionRow = await github?.sourceControlStorage.sessions.getBySessionId(sessionId);
+      await seedSessionOrg(session, sessionRow?.orgId);
+    } catch (error) {
+      console.warn('[GitHub webhook] Unable to resolve the session organization.', error);
+      await seedSessionOrg(session, undefined);
+    }
+  } else if (session.state?.get()?.factoryOrgUnresolved) {
+    // The org is present, so an earlier failed resolution left a stale marker
+    // behind. Clear it without a storage read — nothing else re-seeds a session
+    // once the start hook has run, so the marker would otherwise outlive its
+    // cause.
+    await seedSessionOrg(session, session.state.get()?.factoryOrgId);
   }
   if (session.thread.getId() !== threadId) {
     await session.thread.switch({ threadId, emitEvent: false });

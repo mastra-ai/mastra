@@ -1,15 +1,14 @@
 {
   "name": "@mastra/codemod",
   "type": "module",
-  "version": "1.1.1",
+  "version": "1.1.2-alpha.1",
   "license": "Apache-2.0",
   "description": "Codemod CLI for Mastra",
   "bin": {
     "codemod": "./dist/index.js"
   },
   "files": [
-    "dist",
-    "CHANGELOG.md"
+    "dist"
   ],
   "scripts": {
     "dev": "tsdown --watch",
@@ -43,7 +42,7 @@
     "@vitest/ui": "catalog:",
     "eslint": "^10.7.0",
     "tsdown": "0.22.9",
-    "typescript": "catalog:",
+    "typescript": "catalog:ts6",
     "vitest": "catalog:"
   },
   "homepage": "https://mastra.ai",

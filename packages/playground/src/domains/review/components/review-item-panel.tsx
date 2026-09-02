@@ -22,6 +22,7 @@ function formatUnknown(value: unknown): string {
 
 export interface ReviewItemPanelProps {
   item: ReviewItem;
+  className?: string;
   isCompleted?: boolean;
   tagVocabulary: string[];
   onRate: (rating: 'positive' | 'negative' | undefined) => void;
@@ -36,6 +37,7 @@ export interface ReviewItemPanelProps {
 
 export function ReviewItemPanel({
   item,
+  className,
   isCompleted,
   tagVocabulary,
   onRate,
@@ -74,7 +76,7 @@ export function ReviewItemPanel({
 
   return (
     <>
-      <DataPanel>
+      <DataPanel className={className}>
         <DataPanel.Header>
           <DataPanel.Heading>Review</DataPanel.Heading>
           <ButtonsGroup className="ml-auto shrink-0">
@@ -123,7 +125,7 @@ export function ReviewItemPanel({
                   </Button>
                 </ButtonsGroup>
                 {item.rating && (
-                  <Badge variant={item.rating === 'positive' ? 'success' : 'error'}>
+                  <Badge variant={item.rating === 'positive' ? 'green' : 'red'}>
                     {item.rating === 'positive' ? 'Good' : 'Bad'}
                   </Badge>
                 )}
@@ -135,7 +137,7 @@ export function ReviewItemPanel({
                 <Txt variant="ui-sm" className="text-neutral3">
                   Rating
                 </Txt>
-                <Badge variant={item.rating === 'positive' ? 'success' : 'error'}>
+                <Badge variant={item.rating === 'positive' ? 'green' : 'red'}>
                   {item.rating === 'positive' ? 'Good' : 'Bad'}
                 </Badge>
               </div>
@@ -149,11 +151,7 @@ export function ReviewItemPanel({
               {isCompleted ? (
                 <div className="flex flex-wrap gap-1">
                   {item.tags.length > 0 ? (
-                    item.tags.map(tag => (
-                      <Badge key={tag} variant="default">
-                        {tag}
-                      </Badge>
-                    ))
+                    item.tags.map(tag => <Badge key={tag}>{tag}</Badge>)
                   ) : (
                     <Txt variant="ui-sm" className="text-neutral2">
                       No tags
@@ -180,7 +178,7 @@ export function ReviewItemPanel({
                       <Txt variant="ui-xs" className="text-neutral4">
                         {name}:
                       </Txt>
-                      <Badge variant={score >= 0.5 ? 'success' : 'error'}>{score.toFixed(3)}</Badge>
+                      <Badge variant={score >= 0.5 ? 'green' : 'red'}>{score.toFixed(3)}</Badge>
                     </div>
                   ))}
                 </div>

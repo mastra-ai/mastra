@@ -93,7 +93,7 @@ describe('Mastra — workflow scheduler integration', () => {
     expect(scheduler!.isRunning).toBe(false);
   });
 
-  it('does not instantiate the scheduler when no schedules are configured', async () => {
+  it('starts the scheduler by default when all workers are started', async () => {
     const storage = new MockStore();
 
     const mastra = new Mastra({
@@ -103,17 +103,15 @@ describe('Mastra — workflow scheduler integration', () => {
     });
 
     await mastra.startWorkers();
-    await flushAsyncInit();
+    await waitForScheduler(mastra);
 
-    // The schedules store may be touched on boot to check for existing
-    // agent-schedule rows (cold-boot rehydration via #detectExistingAgentSchedules).
-    // What matters is that the scheduler itself never spins up.
-    expect(mastra.scheduler).toBeUndefined();
+    expect(mastra.scheduler).toBeDefined();
+    expect(mastra.scheduler!.isRunning).toBe(true);
 
     await mastra.shutdown();
   });
 
-  it('does not instantiate the scheduler when only unscheduled workflows are registered', async () => {
+  it('starts the scheduler when only unscheduled workflows are registered', async () => {
     const storage = new MockStore();
 
     const wf = createDefaultWorkflow({
@@ -138,11 +136,10 @@ describe('Mastra — workflow scheduler integration', () => {
     });
 
     await mastra.startWorkers();
-    await flushAsyncInit();
+    await waitForScheduler(mastra);
 
-    // As above, boot-time cold rehydration may probe the schedules store;
-    // the invariant under test is that no scheduler worker is created.
-    expect(mastra.scheduler).toBeUndefined();
+    expect(mastra.scheduler).toBeDefined();
+    expect(mastra.scheduler!.isRunning).toBe(true);
 
     await mastra.shutdown();
   });
@@ -615,6 +612,91 @@ describe('Mastra — workflow scheduler integration', () => {
       await second.shutdown();
     });
 
+    it('keeps colliding legacy owners separate with injective row ids', async () => {
+      const storage = new MockStore();
+      const makeWorkflow = (id: string, schedule: unknown) => {
+        const workflow = createEventedWorkflow({
+          id,
+          inputSchema: z.object({}),
+          outputSchema: z.object({}),
+          schedule: schedule as any,
+        });
+        workflow
+          .then(
+            createStep({
+              id: 'noop',
+              inputSchema: z.object({}),
+              outputSchema: z.object({}),
+              execute: async () => ({}),
+            }) as any,
+          )
+          .commit();
+        return workflow;
+      };
+      const single = makeWorkflow('foo__bar', { cron: '0 9 * * *' });
+      const array = makeWorkflow('foo', [{ id: 'bar', cron: '0 18 * * *' }]);
+      const mastra = new Mastra({
+        logger: false,
+        ...withoutNotificationDispatch,
+        storage,
+        workflows: { single, array } as any,
+      });
+
+      await mastra.startWorkers();
+      await waitForScheduler(mastra);
+
+      const schedulesStore = (await storage.getStore('schedules'))!;
+      const rows = await schedulesStore.listSchedules();
+      expect(rows.map(row => row.id).sort()).toEqual(['wf_foo%5F%5Fbar', 'wf_foo__bar']);
+      expect(rows.find(row => row.id === 'wf_foo%5F%5Fbar')?.target).toMatchObject({ workflowId: 'foo__bar' });
+      expect(rows.find(row => row.id === 'wf_foo__bar')?.target).toMatchObject({ workflowId: 'foo' });
+      await mastra.shutdown();
+    });
+
+    it('keeps a matching legacy row id and its paused status across redeploy', async () => {
+      const storage = new MockStore();
+      const schedulesStore = (await storage.getStore('schedules'))!;
+      const now = Date.now();
+      await schedulesStore.createSchedule({
+        id: 'wf_legacy_under',
+        target: { type: 'workflow', workflowId: 'legacy_under' },
+        cron: '0 9 * * *',
+        status: 'paused',
+        nextFireAt: now + 60_000,
+        createdAt: now,
+        updatedAt: now,
+      });
+      const workflow = createEventedWorkflow({
+        id: 'legacy_under',
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+        schedule: { cron: '0 9 * * *' },
+      });
+      workflow
+        .then(
+          createStep({
+            id: 'noop',
+            inputSchema: z.object({}),
+            outputSchema: z.object({}),
+            execute: async () => ({}),
+          }) as any,
+        )
+        .commit();
+      const mastra = new Mastra({
+        logger: false,
+        ...withoutNotificationDispatch,
+        storage,
+        workflows: { workflow } as any,
+      });
+
+      await mastra.startWorkers();
+      await waitForScheduler(mastra);
+
+      expect((await schedulesStore.listSchedules()).map(row => row.id)).toEqual(['wf_legacy_under']);
+      expect((await schedulesStore.getSchedule('wf_legacy_under'))?.status).toBe('paused');
+      await mastra.shutdown();
+    });
+
     it('does not delete user-created (non-`wf_`-prefixed) schedule rows', async () => {
       const storage = new MockStore();
       const mastra = await boot(storage, buildMultiScheduledWorkflow([{ id: 'a', cron: '0 9 * * *' }]));
@@ -937,40 +1019,6 @@ describe('Mastra — workflow scheduler integration', () => {
 
       expect(calls).toEqual([]);
       expect(mastra.scheduler).toBeUndefined();
-
-      await mastra.shutdown();
-    });
-
-    it('still detects existing agent schedules when the scheduler is not explicitly disabled', async () => {
-      const storage = new MockStore();
-      const schedulesStore = (await storage.getStore('schedules'))!;
-      const listSchedules = vi.spyOn(schedulesStore, 'listSchedules');
-      // Row persisted by a previous process — the whole point of the boot probe.
-      const future = Date.now() + 3_600_000;
-      await schedulesStore.createSchedule({
-        id: 'cold-boot-agent-sched',
-        target: { type: 'agent', agentId: 'a1', prompt: 'check in' },
-        cron: '0 0 1 1 *',
-        status: 'active',
-        nextFireAt: future,
-        createdAt: Date.now(),
-        updatedAt: Date.now(),
-        ownerType: 'agent',
-        ownerId: 'a1',
-      });
-
-      const mastra = new Mastra({
-        logger: false,
-        ...withoutNotificationDispatch,
-        storage,
-        scheduler: { tickIntervalMs: 600_000 },
-      });
-
-      await mastra.startWorkers();
-      await waitForScheduler(mastra);
-
-      expect(listSchedules).toHaveBeenCalledWith({ ownerType: 'agent' });
-      expect(mastra.scheduler).toBeDefined();
 
       await mastra.shutdown();
     });

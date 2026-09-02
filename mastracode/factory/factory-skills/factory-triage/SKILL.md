@@ -71,7 +71,27 @@ Choose one **effort** and one **impact** level independently from the completed 
 
 When multiple explanations remain plausible, pick the one the evidence best supports, record the ranking and why as an assumption, and list what would discriminate between them. Do not present candidates and wait — decide and move. Always be critical of your findings! If a workaround can be used to fix the issue, we should state that as well. It's better to add no additional code/features if its not actually needed.
 
-For `mastra-ai/mastra`, add `@mastra/core` only when the issue reports broken existing behavior and its primary fix traces to `packages/core` or the published package. A core mention or stack frame is not enough; skip features, adjacent packages, and uncertain ownership.
+For `mastra-ai/mastra`, add **domain labels** from the table. Select where the change would land — a mention or stack frame is not enough; skip uncertain ownership and anything no row clearly covers. Use several labels only when the change genuinely spans domains; between competing candidates, take the most specific. Add `@mastra/core` alongside the domain label for a direct core bug — broken existing behavior only, never features.
+
+| Label                          | Applies when the change lands in          |
+| ------------------------------ | ----------------------------------------- |
+| `@mastra/core`                 | direct `packages/core` bugs               |
+| `Client SDK - JS`              | the client SDK                            |
+| `Agents`                       | agent construction, loop, or execution    |
+| `Tools`                        | tool definition, calling, or providers    |
+| `Memory`                       | `packages/memory` or core memory          |
+| `Workflows`                    | workflow definition, execution, or engine |
+| `Storage`                      | storage adapters or core storage          |
+| `Observability (AI Telemetry)` | tracing, telemetry, logging, or exporters |
+| `Evals`                        | evals and scorers                         |
+| `UI / Studio`                  | Studio / playground UI                    |
+| `CLI`                          | `create-mastra` or the `mastra` CLI       |
+| `Deployment`                   | deployers and platform adapters           |
+| `MCP`                          | MCP client or server                      |
+| `Guardrails & I/O Processing`  | input/output processors                   |
+| `RAG`                          | RAG, chunking, or vector stores           |
+| `Voice`                        | voice providers and TTS/STT               |
+| `Documentation`                | documentation content                     |
 
 ## Output contract
 
@@ -145,13 +165,14 @@ After a GitHub comment is posted or updated, reconcile the labels before the ter
 - Add `status: needs approval` when `Route: Await approval`, or when the recommended next action needs maintainer approval or prep before someone should investigate, implement, close, or reject: `gh issue edit "$ISSUE" --add-label "status: needs approval"`.
 - Add the selected `effort:<level>` and `impact:<level>` labels from the handoff.
 - Remove only conflicting alternatives from these explicit labels: `effort:low`, `effort:medium`, `effort:high`, `impact:low`, `impact:medium`, and `impact:high`. On every initial run and refresh, keep exactly the selected effort label and exactly the selected impact label.
-- For confirmed direct core bugs in `mastra-ai/mastra`, ensure `@mastra/core` exists before adding it; never remove it:
+- Add the domain labels selected in Phase 4 in `mastra-ai/mastra`; never remove one. Create any that does not exist yet, leaving existing labels untouched. Skip when none was selected:
 
   ```bash
-  if ! gh label list --repo mastra-ai/mastra --limit 1000 --json name --jq '.[].name' | grep -Fxq '@mastra/core'; then
-    gh label create '@mastra/core' --repo mastra-ai/mastra --color '1D76DB' --description 'Issues whose primary fix belongs in @mastra/core'
-  fi
-  gh issue edit "$ISSUE" --repo mastra-ai/mastra --add-label '@mastra/core'
+  DOMAIN_LABELS=('<one quoted label selected in Phase 4 per entry>')
+  for LABEL in "${DOMAIN_LABELS[@]}"; do
+    gh label create "$LABEL" --repo mastra-ai/mastra --color '1D76DB' --description "Issues whose primary fix belongs in $LABEL" 2>/dev/null || true
+  done
+  gh issue edit "$ISSUE" --repo mastra-ai/mastra --add-label '<comma-separated labels selected in Phase 4>'
   ```
 
 Apply only these label mutations. Do not remove `status: needs approval` merely because a later refresh has a different route. Do not add, remove, or derive any `trio-*` labels; leave all type, area, ownership, and unrelated labels untouched. For Linear issues, use the same structured handoff without attempting GitHub publication or label mutations.

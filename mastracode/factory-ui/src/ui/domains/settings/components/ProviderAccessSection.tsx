@@ -1,7 +1,8 @@
 import { Badge } from '@mastra/playground-ui/components/Badge';
+import type { BadgeVariant } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
-import { DataList } from '@mastra/playground-ui/components/DataList';
 import { Input } from '@mastra/playground-ui/components/Input';
+import { SettingsRow } from '@mastra/playground-ui/components/SettingsRow';
 import {
   Dialog,
   DialogBody,
@@ -31,6 +32,7 @@ import { SkeletonRows } from '../../../ui/SkeletonRows';
 import { AddApiKeyDialog } from './AddApiKeyDialog';
 import { ProviderOAuthDialog } from './ProviderOAuthDialog';
 import { providerDisplayName } from './provider-display-name';
+import { SettingsCard } from './SettingsCard';
 import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
 
 const SOURCE_LABEL: Record<ProviderInfo['source'], string> = {
@@ -44,24 +46,21 @@ const SOURCE_LABEL: Record<ProviderInfo['source'], string> = {
   none: 'Not set',
 };
 
-const SOURCE_VARIANT: Record<ProviderInfo['source'], 'success' | 'info' | 'default'> = {
-  oauth: 'success',
-  'oauth-user': 'success',
-  'oauth-org': 'info',
-  stored: 'success',
-  'stored-user': 'success',
-  'stored-org': 'info',
-  env: 'info',
-  none: 'default',
+const SOURCE_VARIANT: Record<ProviderInfo['source'], BadgeVariant> = {
+  oauth: 'green',
+  'oauth-user': 'green',
+  'oauth-org': 'blue',
+  stored: 'green',
+  'stored-user': 'green',
+  'stored-org': 'blue',
+  env: 'blue',
+  none: 'neutral',
 };
 
 interface ActiveOAuthSession {
   provider: string;
   session: OAuthStartResponse;
 }
-
-const API_KEY_LIST_MAX_HEIGHT = 280;
-const PROVIDER_LIST_COLUMNS = '1fr auto auto';
 
 function mutationErrorMessage(error: unknown, fallback: string): string {
   return error instanceof Error ? error.message : fallback;
@@ -80,7 +79,7 @@ function SourceBadges({ provider }: { provider: ProviderInfo }) {
         {SOURCE_LABEL[provider.source]}
       </Badge>
       {shadowedOrg && (
-        <Badge size="sm" variant="info">
+        <Badge size="sm" variant="blue">
           {provider.orgCredential === 'oauth' ? 'Org sign-in' : 'Org key'}
         </Badge>
       )}
@@ -295,69 +294,60 @@ export function ProviderAccessSection() {
         </TabList>
 
         <TabContent value="oauth" className="flex flex-col gap-3">
-          {providersQuery.isPending ? (
-            <SkeletonRows label="Loading providers" rows={3} rowClassName="h-9 w-full" />
-          ) : oauthProviders.length === 0 ? (
-            <Txt as="p" variant="ui-sm" className="text-icon3">
-              No providers support sign in.
-            </Txt>
-          ) : (
-            <DataList aria-label="Sign in providers" variant="lined" columns={PROVIDER_LIST_COLUMNS}>
-              {oauthProviders.map(provider => {
+          <SettingsCard>
+            {providersQuery.isPending ? (
+              <div className="px-4 py-3">
+                <SkeletonRows label="Loading providers" rows={3} rowClassName="h-9 w-full" />
+              </div>
+            ) : oauthProviders.length === 0 ? (
+              <Txt as="p" variant="ui-sm" className="text-icon3 px-4 py-3">
+                No providers support sign in.
+              </Txt>
+            ) : (
+              oauthProviders.map(provider => {
                 const displayName = providerDisplayName(provider.provider);
                 const scopes = oauthScopes(provider);
                 const showScopeLabels = scopes.length > 0 && authEnabled;
                 return (
-                  <DataList.RowStatic key={provider.provider}>
-                    <DataList.NameCell>{displayName}</DataList.NameCell>
-                    <DataList.Cell>
+                  <SettingsRow key={provider.provider} variant="factory" label={displayName}>
+                    <span className="flex items-center gap-2">
                       <SourceBadges provider={provider} />
-                    </DataList.Cell>
-                    <DataList.Cell className="justify-end">
-                      <span className="flex items-center gap-2">
-                        {scopes.map(scope => {
-                          // Removing the shared org sign-in is admin-only.
-                          if (scope === 'org' && !canWriteOrgKey) return null;
-                          const label = showScopeLabels
-                            ? scope === 'org'
-                              ? 'Sign out org'
-                              : 'Sign out me'
-                            : 'Sign out';
-                          return (
-                            <Button
-                              key={scope}
-                              variant="outline"
-                              size="sm"
-                              aria-label={
-                                scope === 'org'
-                                  ? `Sign out of ${displayName} for the org`
-                                  : `Sign out of ${displayName}`
-                              }
-                              disabled={isSigningOut(provider)}
-                              onClick={() => signOut(provider, scope)}
-                            >
-                              {isSigningOut(provider) ? 'Signing out…' : label}
-                            </Button>
-                          );
-                        })}
-                        {canSignIn(provider) && (
+                      {scopes.map(scope => {
+                        // Removing the shared org sign-in is admin-only.
+                        if (scope === 'org' && !canWriteOrgKey) return null;
+                        const label = showScopeLabels ? (scope === 'org' ? 'Sign out org' : 'Sign out me') : 'Sign out';
+                        return (
                           <Button
-                            variant={scopes.length === 0 ? 'primary' : 'outline'}
+                            key={scope}
+                            variant="outline"
                             size="sm"
-                            aria-label={`Sign in to ${displayName}`}
-                            disabled={startOAuthMutation.isPending}
-                            onClick={() => requestSignIn(provider)}
+                            aria-label={
+                              scope === 'org' ? `Sign out of ${displayName} for the org` : `Sign out of ${displayName}`
+                            }
+                            disabled={isSigningOut(provider)}
+                            onClick={() => signOut(provider, scope)}
                           >
-                            {startingProvider === provider.provider ? 'Starting…' : 'Sign in'}
+                            {isSigningOut(provider) ? 'Signing out…' : label}
                           </Button>
-                        )}
-                      </span>
-                    </DataList.Cell>
-                  </DataList.RowStatic>
+                        );
+                      })}
+                      {canSignIn(provider) && (
+                        <Button
+                          variant={scopes.length === 0 ? 'primary' : 'outline'}
+                          size="sm"
+                          aria-label={`Sign in to ${displayName}`}
+                          disabled={startOAuthMutation.isPending}
+                          onClick={() => requestSignIn(provider)}
+                        >
+                          {startingProvider === provider.provider ? 'Starting…' : 'Sign in'}
+                        </Button>
+                      )}
+                    </span>
+                  </SettingsRow>
                 );
-              })}
-            </DataList>
-          )}
+              })
+            )}
+          </SettingsCard>
         </TabContent>
 
         <TabContent value="api-key" className="flex flex-col gap-3">
@@ -373,58 +363,49 @@ export function ProviderAccessSection() {
             />
           </div>
 
-          {providersQuery.isPending ? (
-            <SkeletonRows label="Loading providers" rows={3} rowClassName="h-9 w-full" />
-          ) : results.length === 0 ? (
-            <Txt as="p" variant="ui-sm" className="text-icon3">
-              {query ? `No providers match “${search.trim()}”.` : 'No API key providers are available.'}
-            </Txt>
-          ) : (
-            <DataList
-              aria-label="API key providers"
-              variant="lined"
-              columns={PROVIDER_LIST_COLUMNS}
-              maxHeight={`${API_KEY_LIST_MAX_HEIGHT}px`}
-              className="min-h-0"
-            >
-              {results.map(provider => {
+          <SettingsCard className="max-h-[280px] overflow-y-auto">
+            {providersQuery.isPending ? (
+              <div className="px-4 py-3">
+                <SkeletonRows label="Loading providers" rows={3} rowClassName="h-9 w-full" />
+              </div>
+            ) : results.length === 0 ? (
+              <Txt as="p" variant="ui-sm" className="text-icon3 px-4 py-3">
+                {query ? `No providers match “${search.trim()}”.` : 'No API key providers are available.'}
+              </Txt>
+            ) : (
+              results.map(provider => {
                 const displayName = providerDisplayName(provider.provider);
                 const storedKey =
                   provider.source === 'stored' || provider.source === 'stored-user' || provider.source === 'stored-org';
                 return (
-                  <DataList.RowStatic key={provider.provider}>
-                    <DataList.NameCell>{displayName}</DataList.NameCell>
-                    <DataList.Cell>
+                  <SettingsRow key={provider.provider} variant="factory" label={displayName}>
+                    <span className="flex items-center gap-2">
                       <SourceBadges provider={provider} />
-                    </DataList.Cell>
-                    <DataList.Cell className="justify-end">
-                      <span className="flex items-center gap-2">
+                      <Button
+                        size="sm"
+                        aria-label={`${storedKey ? 'Update key' : 'Add API key'} for ${displayName}`}
+                        disabled={isRemoving(provider)}
+                        onClick={() => setKeyDialogProvider(provider)}
+                      >
+                        {storedKey ? 'Update key' : 'Add API key'}
+                      </Button>
+                      {storedKey && (
                         <Button
+                          variant="outline"
                           size="sm"
-                          aria-label={`${storedKey ? 'Update key' : 'Add API key'} for ${displayName}`}
+                          aria-label={`Remove key for ${displayName}`}
                           disabled={isRemoving(provider)}
-                          onClick={() => setKeyDialogProvider(provider)}
+                          onClick={() => removeKey(provider)}
                         >
-                          {storedKey ? 'Update key' : 'Add API key'}
+                          {isRemoving(provider) ? 'Removing…' : 'Remove'}
                         </Button>
-                        {storedKey && (
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            aria-label={`Remove key for ${displayName}`}
-                            disabled={isRemoving(provider)}
-                            onClick={() => removeKey(provider)}
-                          >
-                            {isRemoving(provider) ? 'Removing…' : 'Remove'}
-                          </Button>
-                        )}
-                      </span>
-                    </DataList.Cell>
-                  </DataList.RowStatic>
+                      )}
+                    </span>
+                  </SettingsRow>
                 );
-              })}
-            </DataList>
-          )}
+              })
+            )}
+          </SettingsCard>
         </TabContent>
       </Tabs>
 

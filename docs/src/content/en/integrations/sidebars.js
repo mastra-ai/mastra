@@ -208,6 +208,12 @@ const sidebars = {
           customProps: { icon: '/img/integrations/e2b.svg', customCSS: 'dark:invert' },
         },
         {
+          type: 'doc',
+          id: 'sandboxes/e2b-desktop',
+          label: 'E2B Desktop',
+          customProps: { icon: '/img/integrations/e2b.svg', customCSS: 'dark:invert' },
+        },
+        {
           type: 'link',
           label: 'Mastra',
           href: '/reference/workspace/platform-sandbox',
@@ -524,10 +530,25 @@ const sidebars = {
           customProps: { icon: 'https://cdn.simpleicons.org/kubernetes?viewbox=auto&size=28' },
         },
         {
+          type: 'doc',
+          id: 'deploy/kubernetes-helm',
+          label: 'Kubernetes (Helm)',
+          customProps: {
+            icon: 'https://cdn.simpleicons.org/helm?viewbox=auto&size=28',
+            iconDark: 'https://cdn.simpleicons.org/helm/white?viewbox=auto&size=28',
+          },
+        },
+        {
           type: 'link',
           label: 'Mastra',
           href: '/docs/mastra-platform/deploy',
           customProps: { icon: '/img/integrations/mastra.svg', customCSS: 'dark:invert' },
+        },
+        {
+          type: 'doc',
+          id: 'deploy/neon',
+          label: 'Neon',
+          customProps: { icon: 'https://cdn.simpleicons.org/neon?viewbox=auto&size=28' },
         },
         {
           type: 'doc',

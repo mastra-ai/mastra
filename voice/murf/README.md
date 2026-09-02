@@ -1,19 +1,11 @@
 # @mastra/voice-murf
 
-Murf Voice integration for Mastra, providing Text-to-Speech (TTS) capabilities using Murf's AI voice technology.
+Add Murf text-to-speech to Mastra with configurable voices, languages, styles, audio formats, synthesis options, and speaker discovery.
 
 ## Installation
 
 ```bash
 npm install @mastra/voice-murf
-```
-
-## Configuration
-
-The module requires the following environment variable:
-
-```bash
-MURF_API_KEY=your_api_key
 ```
 
 ## Usage
@@ -52,24 +44,14 @@ try {
 }
 ```
 
-## Features
+## Documentation
 
-- High-quality Text-to-Speech synthesis
-- Multiple voice options
-- Streaming support for both input and output
-- Natural-sounding voice synthesis
-- Voice customization options
-- Default configuration support
+- [Murf](https://mastra.ai/integrations/voice/murf)
 
-## Voice Options
+## Changelog
 
-Murf provides a variety of voices with different accents and styles:
+See the [package changelog](https://github.com/mastra-ai/mastra/blob/main/voice/murf/CHANGELOG.md) for version history and release notes.
 
-- en-US-natalie (Female, American)
-- en-US-marcus (Male, American)
-- en-GB-oliver (Male, British)
-- en-GB-emma (Female, British)
-- en-AU-lucas (Male, Australian)
-- en-AU-sophia (Female, Australian)
+## Support
 
-View the complete list in the `voices.ts` file or [Murf's documentation](https://murf.ai/docs/api).
+We have an [open community Discord](https://discord.gg/mastra-ai). Come and say hello and let us know if you have any questions or need any help getting things running.

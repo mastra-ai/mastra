@@ -1,6 +1,6 @@
 ---
 title: "Reference: WorkspaceSandbox | Workspace"
-description: "Documentation for the WorkspaceSandbox interface that defines command execution operations."
+description: "The WorkspaceSandbox interface defines how workspaces execute commands and manage background processes."
 packages:
   - "@mastra/core"
 ---
@@ -20,6 +20,13 @@ The `WorkspaceSandbox` interface defines how workspaces execute commands and man
     type: 'SandboxProcessManager',
     description:
       "Background process manager. If not implemented, process management tools won't be available. See SandboxProcessManager reference.",
+    isOptional: true,
+  },
+  {
+    name: 'computer',
+    type: 'SandboxComputer',
+    description:
+      "Computer-use (desktop) capability. If not implemented, computer tools won't be available. See [Computer capability](#computer-capability).",
     isOptional: true,
   },
 ]}
@@ -61,7 +68,7 @@ Provider implementations plug into the start lifecycle at one of three rungs; th
 1. **`start()` override returning `SandboxStartResult`**: for providers whose API is a fused get-or-create where decomposition would add round-trips (`PlatformSandbox`, `RailwaySandbox`).
 1. **`start()` override returning `void`**: legacy providers, where the outcome is unknown.
 
-Concurrent `start()` calls on one instance coalesce onto a single in-flight attempt, and joined callers share that attempt's result (all observe `outcome: 'created'` when the shared attempt created the VM). The in-flight slot is cleared when the attempt settles, so a failed start can be retried. While the sandbox is already `running`, `start()` resolves `{ outcome: 'connected' }` without re-invoking the provider.
+Concurrent `start()` calls on one instance coalesce onto a single in-flight attempt, and joined callers share that attempt's result (all observe `outcome: 'created'` when the shared attempt created the VM). The in-flight slot is cleared when the attempt settles, so a failed start can be retried. For a sandbox already in the `running` state, `start()` resolves `{ outcome: 'connected' }` without re-invoking the provider.
 
 The result is also forwarded to the `onStart` lifecycle hook as `{ sandbox, outcome }`.
 
@@ -113,6 +120,23 @@ Semantics:
 - Ignoring `previous` replaces the installed hook. That's supported, and it's how a caller takes over setup a runtime installed.
 - Each call wraps the current hook, so attach once per sandbox instance. Attaching on a path that runs per request stacks duplicate work on every start.
 - Only starts that begin after the call see the new hook.
+
+### `workingDirectory` (constructor option)
+
+Sets the default directory for command execution and process spawns. When a command provides no per-command `cwd`, the sandbox runs it from this directory. A per-command `cwd` always wins. When neither is provided, each provider keeps its own default (E2B home, Docker `/workspace`, Vercel serverless `/tmp`, and so on).
+
+```typescript
+const sandbox = new E2BSandbox({ workingDirectory: '/home/user/my-repo' })
+await sandbox.executeCommand('pwd') // /home/user/my-repo
+await sandbox.executeCommand('pwd', [], { cwd: '/tmp' }) // /tmp
+```
+
+The effective value is readable through the `sandbox.workingDirectory` getter. Providers that compute their value, such as Daytona's automatic probe or Docker's `/workspace` default, report the effective directory through the same getter.
+
+Semantics:
+
+- The value passes to the provider as-is, and the sandbox doesn't create the directory. Absolute paths are recommended: `~`-prefixed paths only work where the provider documents expansion.
+- Some providers keep earlier option names as deprecated aliases feeding the same field: `workingDir` on Docker and Apple container, `workdir` on Modal. When both the alias and `workingDirectory` are set, `workingDirectory` wins.
 
 ### `stop()`
 
@@ -182,7 +206,8 @@ const result = await sandbox.executeCommand('npm', ['install', 'lodash'])
           {
             name: 'cwd',
             type: 'string',
-            description: 'Working directory for the command',
+            description:
+              "Working directory for this command. Defaults to the sandbox's configured `workingDirectory`, then the provider default.",
             isOptional: true,
           },
           {
@@ -239,7 +264,7 @@ The runtime environment applies to commands executed through the sandbox rather 
 
 ### `getEnv()`
 
-Returns a copy of the sandbox's current runtime environment. Mutating the returned object doesn't change the sandbox, so use `setEnv()` for updates.
+Returns a copy of the sandbox's current runtime environment; because mutations to the returned object don't change the sandbox, use `setEnv()` for updates.
 
 ```typescript
 const token = sandbox.getEnv().GH_TOKEN
@@ -279,6 +304,92 @@ const instructions = sandbox.getInstructions?.()
 />
 
 **Returns:** `string`
+
+## Computer capability
+
+Sandboxes with a controllable desktop environment implement the optional `SandboxComputer` interface on the `computer` property. When present on a statically configured sandbox, the workspace tools factory registers the `mastra_workspace_computer_*` tools automatically. See [Computer-use tools](/docs/sandbox/computer#computer-tools).
+
+Coordinates are pixels from the top-left corner of the display. Providers normalize their SDK semantics (key names, scroll units) onto this surface and expose richer native APIs through their own accessors.
+
+<PropertiesTable
+  content={[
+  {
+    name: 'screenshot()',
+    type: '() => Promise<{ data: Uint8Array; mediaType: "image/png" }>',
+    description: 'Capture the current display as a PNG image.',
+  },
+  {
+    name: 'leftClick(x, y)',
+    type: '(x: number, y: number) => Promise<void>',
+    description: 'Left-click at the given coordinates.',
+  },
+  {
+    name: 'rightClick(x, y)',
+    type: '(x: number, y: number) => Promise<void>',
+    description: 'Right-click at the given coordinates.',
+  },
+  {
+    name: 'doubleClick(x, y)',
+    type: '(x: number, y: number) => Promise<void>',
+    description: 'Double-click (left button) at the given coordinates.',
+  },
+  {
+    name: 'moveMouse(x, y)',
+    type: '(x: number, y: number) => Promise<void>',
+    description: 'Move the cursor without clicking.',
+  },
+  {
+    name: 'drag(from, to)',
+    type: '(from: ComputerPosition, to: ComputerPosition) => Promise<void>',
+    description: 'Press the left button at `from`, drag to `to`, and release.',
+  },
+  {
+    name: 'scroll(direction, amount)',
+    type: "(direction: 'up' | 'down', amount: number) => Promise<void>",
+    description: 'Scroll the display by the given amount of ticks.',
+  },
+  {
+    name: 'type(text)',
+    type: '(text: string) => Promise<void>',
+    description: 'Type text into the focused element.',
+  },
+  {
+    name: 'press(key)',
+    type: '(key: string | string[]) => Promise<void>',
+    description:
+      "Press a key or key combination. A string presses one key (for example 'Enter'); an array presses a chord (for example ['ctrl', 's']).",
+  },
+  {
+    name: 'getScreenSize()',
+    type: '() => Promise<{ width: number; height: number }>',
+    description: 'Get the display dimensions.',
+  },
+  {
+    name: 'getCursorPosition()',
+    type: '() => Promise<{ x: number; y: number }>',
+    description: 'Get the current cursor position.',
+  },
+  {
+    name: 'streamUrl()',
+    type: '() => Promise<string | null>',
+    description:
+      'Get a URL for a live view of the desktop, such as noVNC, or null when unavailable. Optional, not all providers expose a viewer.',
+    isOptional: true,
+  },
+]}
+/>
+
+Use the `supportsComputer()` type guard to check for the capability:
+
+```typescript
+import { supportsComputer } from '@mastra/core/workspace'
+
+if (supportsComputer(sandbox)) {
+  const { data } = await sandbox.computer.screenshot()
+}
+```
+
+`DaytonaSandbox` and `E2BDesktopSandbox` implement this capability. See the [Daytona](/integrations/sandboxes/daytona#computer-use-desktop) and [E2B Desktop](/integrations/sandboxes/e2b-desktop) integration pages.
 
 ## Related
 

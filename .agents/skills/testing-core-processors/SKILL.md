@@ -1,3 +1,8 @@
+---
+name: testing-core-processors
+description: Use when writing or debugging integration tests for error processors in packages/core/src/processors/. Covers the MockLanguageModelV2 pattern for simulating API errors and verifying retry behavior, plus the build prerequisites for focused vitest runs.
+---
+
 # Testing Core Error Processors
 
 How to write integration tests for error processors in `packages/core/src/processors/`.

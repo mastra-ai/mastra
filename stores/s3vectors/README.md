@@ -75,85 +75,14 @@ for (const r of results) {
 await vectorStore.disconnect();
 ```
 
-### More operations
+## Documentation
 
-```typescript
-// Update a single vector (merge metadata or replace vector)
-await vectorStore.updateVector({
-  indexName: 'my-index',
-  id: ids[0],
-  update: {
-    // vector: [/* new embedding of length 1536 */],
-    metadata: { tags: ['updated'] },
-  },
-});
+- [@mastra/s3vectors documentation](https://mastra.ai/reference/vectors/s3vectors)
 
-// Delete a single vector
-await vectorStore.deleteVector({
-  indexName: 'my-index',
-  id: ids[1],
-});
+## Changelog
 
-// Describe index (dimension/metric/count)
-const stats = await vectorStore.describeIndex({ indexName: 'my-index' });
+See the [package changelog](https://github.com/mastra-ai/mastra/blob/main/stores/s3vectors/CHANGELOG.md) for version history and release notes.
 
-// List indexes in the bucket
-const indexNames = await vectorStore.listIndexes();
+## Support
 
-// Delete index
-await vectorStore.deleteIndex({ indexName: 'my-index' });
-```
-
-## Configuration
-
-The S3 Vectors store reads configuration from the constructor and standard AWS SDK sources:
-
-- `vectorBucketName` (required): The **vector bucket** name dedicated to S3 Vectors.
-- `clientConfig` (optional): AWS SDK v3 `S3VectorsClientConfig` (e.g., `region`, `credentials`).
-- `nonFilterableMetadataKeys` (optional): Keys that are **stored** but **not filterable** at query time.
-  _These are applied when an index is created._
-
-> **Tip**
-> Index names are normalized by the library: underscores are replaced with hyphens and names are lower-cased.
-
-## Features
-
-- Purpose-built vector storage with S3-grade durability and elasticity
-- Sub-second similarity search (`cosine` / `euclidean`)
-- Rich **metadata filtering** with JSON operators (`$and`, `$or`, `$in`, …)
-- IAM/SCP-based access control in the `s3vectors` namespace
-- Automatic optimization for writes/updates/deletes as data scales
-
-## Methods
-
-- `connect(): Promise<void>` / `disconnect(): Promise<void>` — No-ops for interface parity (disconnect closes the underlying HTTP handler)
-- `createIndex({ indexName, dimension, metric? })` → `Promise<void>`
-  _After creation, index name/dimension/metric/non-filterable keys cannot be changed._
-- `upsert({ indexName, vectors, metadata?, ids? })` → `Promise<string[]>`
-  _Dimensions are validated against the index; Dates in metadata are serialized to epoch millis._
-- `query({ indexName, queryVector, topK?, filter?, includeVector? })` → `Promise<QueryResult[]>`
-  _`score` is derived from distance so that “higher is better”._
-- `updateVector({ indexName, id, update: { vector?, metadata? } })` → `Promise<void>`
-  _Performs Get→merge→Put (Put is full replace)._
-- `deleteVector({ indexName, id })` → `Promise<void>`
-- `listIndexes()` → `Promise<string[]>`
-- `describeIndex({ indexName })` → `Promise<IndexStats>`
-  _Returns `{ dimension, metric, count }`._
-- `deleteIndex({ indexName })` → `Promise<void>`
-
-## Related Links
-
-- Amazon S3 Vectors – Working with vector buckets & indexes:  
-  https://docs.aws.amazon.com/AmazonS3/latest/userguide/s3-vectors.html
-- Limitations and restrictions:  
-  https://docs.aws.amazon.com/AmazonS3/latest/userguide/s3-vectors-limitations.html
-- Vector indexes:  
-  https://docs.aws.amazon.com/AmazonS3/latest/userguide/s3-vectors-indexes.html
-- Metadata filtering:  
-  https://docs.aws.amazon.com/AmazonS3/latest/userguide/s3-vectors-metadata-filtering.html
-- Vector bucket naming rules:  
-  https://docs.aws.amazon.com/AmazonS3/latest/userguide/s3-vectors-buckets-naming.html
-- Managing vector bucket policies:  
-  https://docs.aws.amazon.com/AmazonS3/latest/userguide/s3-vectors-bucket-policy.html
-- Actions, resources, and condition keys for Amazon S3 Vectors:  
-  https://docs.aws.amazon.com/service-authorization/latest/reference/list_amazons3vectors.html
+We have an [open community Discord](https://discord.gg/mastra-ai). Come and say hello and let us know if you have any questions or need any help getting things running.

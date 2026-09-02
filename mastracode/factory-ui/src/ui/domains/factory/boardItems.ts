@@ -1,3 +1,5 @@
+import { isValid } from 'date-fns';
+
 import { relativeTime } from '../../../lib/date/relativeTime';
 import type { WorkItem, WorkItemSessionRef, WorkItemSource } from './services/workItems';
 
@@ -72,7 +74,13 @@ export function externalLinkLabel(source: WorkItemSource): string {
 
 export function workItemMeta(item: WorkItem): string {
   const author = typeof item.metadata.author === 'string' ? item.metadata.author : undefined;
-  const age = relativeTime(item.createdAt);
+  // Prefer when the issue/PR was opened upstream; `item.createdAt` is only
+  // when the factory first saw it, which is "just now" for every backfilled card.
+  const sourceCreatedAt =
+    typeof item.metadata.sourceCreatedAt === 'string' && isValid(new Date(item.metadata.sourceCreatedAt))
+      ? item.metadata.sourceCreatedAt
+      : undefined;
+  const age = relativeTime(sourceCreatedAt ?? item.createdAt);
   const githubNumber = githubNumberForItem(item);
   if (githubNumber !== undefined) return `#${githubNumber}${author ? ` · ${author}` : ''} · ${age}`;
   const linearIdentifier = linearIdentifierForItem(item);
@@ -110,12 +118,4 @@ export function persistedSourceKeys(items: readonly WorkItem[]): ReadonlySet<str
     if (candidateSourceKey) keys.add(candidateSourceKey);
   }
   return keys;
-}
-
-/** Session refs whose worktree was deleted are stale: their thread went with it. */
-export function liveSessions(
-  sessions: Record<string, WorkItemSessionRef>,
-  liveWorktreePaths: ReadonlySet<string>,
-): Record<string, WorkItemSessionRef> {
-  return Object.fromEntries(Object.entries(sessions).filter(([, session]) => liveWorktreePaths.has(session.sessionId)));
 }

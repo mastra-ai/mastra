@@ -1,21 +1,25 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
-import { SpanDataPanelView } from '@mastra/playground-ui/domains/traces/components/span-data-panel-view';
-import { TraceDataPanelView } from '@mastra/playground-ui/domains/traces/components/trace-data-panel-view';
-import { useSpanDetail } from '@mastra/playground-ui/domains/traces/hooks/use-span-detail';
-import { useTraceSpanNavigation } from '@mastra/playground-ui/domains/traces/hooks/use-trace-span-navigation';
+import { toast } from '@mastra/playground-ui/utils/toast';
 import { PlayCircle } from 'lucide-react';
 import { useCallback, useMemo, useState } from 'react';
 import { useParams } from 'react-router';
 
 import { RouteItemOverlay } from '@/components/route-item-overlay';
 import { useScoresByExperimentId } from '@/domains/datasets/hooks/use-dataset-experiments';
+import { useDatasetMutations } from '@/domains/datasets/hooks/use-dataset-mutations';
 import { ExperimentResultPanel } from '@/domains/experiments/components/experiment-result-panel';
 import { ExperimentScorePanel } from '@/domains/experiments/components/experiment-score-panel';
 import { useExperimentItemPanel } from '@/domains/experiments/context/experiment-item-panel-context';
 import { useExperimentTrace } from '@/domains/experiments/hooks/use-experiment-trace';
-import { Link } from '@/lib/link';
+import { useTraceSpanScores } from '@/domains/scores/hooks/use-trace-span-scores';
+import { SpanFeedbackTab } from '@/domains/traces/components/span-feedback-tab';
+import { TraceFeedbackTab } from '@/domains/traces/components/trace-feedback-tab';
+import { TraceScoresTab } from '@/domains/traces/components/trace-scores-tab';
+import { TraceSpanPanel } from '@/domains/traces/components/trace-span-panel';
+import { useSpanFeedback } from '@/domains/traces/hooks/use-span-feedback';
+import { useTraceFeedback } from '@/domains/traces/hooks/use-trace-feedback';
 
 function ExperimentItemPage() {
   const { itemId } = useParams<{ itemId: string }>();
@@ -30,6 +34,7 @@ function ExperimentItemPage() {
 function ExperimentItemPageContent({ itemId }: { itemId: string }) {
   const {
     experimentId,
+    datasetId,
     experimentStatus,
     results,
     isLoadingResults,
@@ -43,6 +48,19 @@ function ExperimentItemPageContent({ itemId }: { itemId: string }) {
   const result = useMemo(() => results.find(r => r.itemId === itemId) ?? null, [results, itemId]);
 
   const { data: scoresByItemId } = useScoresByExperimentId(experimentId, experimentStatus);
+  const { updateExperimentResult } = useDatasetMutations();
+
+  const flagForReview = useCallback(
+    async (resultId: string) => {
+      try {
+        await updateExperimentResult.mutateAsync({ datasetId, experimentId, resultId, status: 'needs-review' });
+        toast('Result flagged for review');
+      } catch {
+        toast.error('Failed to flag result for review');
+      }
+    },
+    [datasetId, experimentId, updateExperimentResult],
+  );
   const resultScores = result ? scoresByItemId?.[result.itemId] : undefined;
 
   const [featuredTraceId, setFeaturedTraceId] = useState<string | null>(null);
@@ -50,7 +68,6 @@ function ExperimentItemPageContent({ itemId }: { itemId: string }) {
   const [featuredScoreId, setFeaturedScoreId] = useState<string | null>(null);
   const [resultCollapsed, setResultCollapsed] = useState(false);
   const [traceCollapsed, setTraceCollapsed] = useState(false);
-  const [scoreCollapsed, setScoreCollapsed] = useState(false);
 
   const featuredScore = resultScores?.find(s => s.id === featuredScoreId) ?? null;
 
@@ -80,30 +97,34 @@ function ExperimentItemPageContent({ itemId }: { itemId: string }) {
 
   const { data: traceData, isLoading: isTraceLoading } = useExperimentTrace(featuredTraceId);
   const traceSpans = traceData?.spans;
+  const anchorSpan = traceSpans?.find(span => !span.parentSpanId);
+  const anchorSpanEntityType =
+    anchorSpan?.entityType === 'agent' ? 'Agent' : anchorSpan?.entityType === 'workflow_run' ? 'Workflow' : undefined;
+  const { data: traceFeedback } = useTraceFeedback({ traceId: featuredTraceId ?? undefined });
+  const { data: spanFeedback } = useSpanFeedback({
+    traceId: featuredTraceId ?? undefined,
+    spanId: featuredSpanId,
+  });
+  const { data: anchorSpanScores } = useTraceSpanScores({
+    traceId: featuredTraceId ?? undefined,
+    spanId: anchorSpan?.spanId,
+    page: 0,
+  });
 
-  const { data: spanDetailData, isLoading: isSpanLoading } = useSpanDetail(featuredTraceId, featuredSpanId);
-  const featuredSpan = spanDetailData?.span;
-
-  const { handlePreviousSpan: toPreviousSpan, handleNextSpan: toNextSpan } = useTraceSpanNavigation(
-    traceSpans,
-    featuredSpanId ?? null,
-    setFeaturedSpanId,
-  );
-
-  // Stack order mirrors the previous inline column: Result → Score → Trace → Span.
+  // Row stack: Result (with score split inside) → shared Trace/Span panel.
   const gridRows = (() => {
     const rows: string[] = [];
-    const showScore = !!featuredScore;
     const showTrace = !!featuredTraceId;
-    rows.push(resultCollapsed ? 'auto' : showScore || showTrace ? '2fr' : '1fr');
-    if (showScore) rows.push(scoreCollapsed ? 'auto' : '3fr');
+    rows.push(resultCollapsed ? 'auto' : showTrace ? '2fr' : '1fr');
     if (showTrace) rows.push(traceCollapsed ? 'auto' : '3fr');
-    if (showTrace && featuredSpanId) rows.push('3fr');
     return rows.join(' ');
   })();
 
   return (
-    <RouteItemOverlay label={`Experiment item ${itemId}`}>
+    <RouteItemOverlay
+      label={`Experiment item ${itemId}`}
+      wide={!!featuredSpanId || (!!featuredScore && !resultCollapsed)}
+    >
       {result ? (
         <div
           className="[&>section]:bg-surface3 grid h-full min-h-0 content-start gap-4 p-3 [&>section]:rounded-lg [&>section]:shadow-lg"
@@ -127,63 +148,72 @@ function ExperimentItemPageContent({ itemId }: { itemId: string }) {
               setTraceCollapsed(false);
             }}
             onOpenInReview={() => openInReview(result.id)}
+            onFlagForReview={() => void flagForReview(result.id)}
             collapsed={resultCollapsed}
-            onCollapsedChange={setResultCollapsed}
+            scorePanelSlot={
+              featuredScore ? (
+                <ExperimentScorePanel
+                  score={featuredScore}
+                  onNext={toNextScore()}
+                  onPrevious={toPreviousScore()}
+                  onClose={() => setFeaturedScoreId(null)}
+                  onShowTrace={() => {
+                    if (!featuredScore.traceId) return;
+                    setFeaturedTraceId(featuredScore.traceId);
+                    setFeaturedSpanId(undefined);
+                    setResultCollapsed(true);
+                    setTraceCollapsed(false);
+                  }}
+                  className="rounded-none border-0 bg-transparent"
+                />
+              ) : null
+            }
           />
 
-          {featuredScore && (
-            <ExperimentScorePanel
-              score={featuredScore}
-              onNext={toNextScore()}
-              onPrevious={toPreviousScore()}
-              onClose={() => setFeaturedScoreId(null)}
-              onShowTrace={() => {
-                if (!featuredScore.traceId) return;
-                setFeaturedTraceId(featuredScore.traceId);
-                setFeaturedSpanId(undefined);
-                setResultCollapsed(true);
-                setScoreCollapsed(true);
-                setTraceCollapsed(false);
-              }}
-              collapsed={scoreCollapsed}
-              onCollapsedChange={setScoreCollapsed}
-            />
-          )}
-
           {featuredTraceId && (
-            <>
-              <TraceDataPanelView
-                traceId={featuredTraceId}
-                spans={traceSpans}
-                isLoading={isTraceLoading}
-                onClose={() => {
-                  setFeaturedTraceId(null);
-                  setFeaturedSpanId(undefined);
-                  setResultCollapsed(false);
-                  setScoreCollapsed(false);
-                }}
-                onSpanSelect={setFeaturedSpanId}
-                initialSpanId={featuredSpanId ?? null}
-                placement="traces-list"
-                showUnavailableFeaturesMsg={false}
-                collapsed={traceCollapsed}
-                onCollapsedChange={setTraceCollapsed}
-                LinkComponent={Link}
-                traceHref={`/traces?traceId=${encodeURIComponent(featuredTraceId)}`}
-              />
-
-              {featuredSpanId && (
-                <SpanDataPanelView
-                  traceId={featuredTraceId}
-                  spanId={featuredSpanId}
-                  span={featuredSpan}
-                  isLoading={isSpanLoading}
-                  onPrevious={toPreviousSpan}
-                  onNext={toNextSpan}
-                  onClose={() => setFeaturedSpanId(undefined)}
-                />
-              )}
-            </>
+            <TraceSpanPanel
+              traceId={featuredTraceId}
+              spans={traceSpans}
+              isLoadingSpans={isTraceLoading}
+              selectedSpanId={featuredSpanId ?? null}
+              onClose={() => {
+                setFeaturedTraceId(null);
+                setFeaturedSpanId(undefined);
+                setResultCollapsed(false);
+              }}
+              onSpanSelect={setFeaturedSpanId}
+              showUnavailableFeaturesMsg={false}
+              collapsed={traceCollapsed}
+              onCollapsedChange={setTraceCollapsed}
+              traceHref={`/traces?traceId=${encodeURIComponent(featuredTraceId)}`}
+              anchorSpanId={anchorSpan?.spanId}
+              feedbackTabBadge={traceFeedback?.pagination?.total ?? undefined}
+              feedbackTabSlot={({ traceId }) => <TraceFeedbackTab traceId={traceId} />}
+              scoresTabBadge={anchorSpanScores?.pagination?.total ?? undefined}
+              scoresTabSlot={({ traceId, rootSpanId }) =>
+                rootSpanId ? (
+                  <TraceScoresTab
+                    traceId={traceId}
+                    spanId={rootSpanId}
+                    isTopLevelSpan={!anchorSpan?.parentSpanId}
+                    entityType={anchorSpanEntityType}
+                    onScoreSelect={scoreId => {
+                      if (resultScores?.some(score => score.id === scoreId)) {
+                        setFeaturedScoreId(scoreId);
+                        setResultCollapsed(false);
+                      }
+                    }}
+                  />
+                ) : null
+              }
+              spanFeedbackTabBadge={spanFeedback?.pagination?.total ?? undefined}
+              spanFeedbackTabSlot={({ traceId, spanId }) =>
+                traceId && spanId ? (
+                  <SpanFeedbackTab key={`${traceId}:${spanId}`} traceId={traceId} spanId={spanId} />
+                ) : null
+              }
+              spanPanelClassName="rounded-none border-0 bg-transparent"
+            />
           )}
         </div>
       ) : isLoadingResults || hasNextPage ? (

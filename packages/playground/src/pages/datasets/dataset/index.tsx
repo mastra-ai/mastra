@@ -9,12 +9,12 @@ import { SessionExpired } from '@mastra/playground-ui/components/SessionExpired'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { is401UnauthorizedError, is403ForbiddenError, is404NotFoundError } from '@mastra/playground-ui/utils/errors';
 import { format } from 'date-fns/format';
-import { ArrowLeft, Copy, DatabaseIcon, MoreVertical, Pencil, Play, Trash2 } from 'lucide-react';
+import { ArrowLeft, Copy, DatabaseIcon, FlaskConical, MoreVertical, Pencil, Play, Trash2 } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useState } from 'react';
 import { Link, Outlet, useParams, useNavigate, useSearchParams } from 'react-router';
 import {
-  DatasetPageTabs,
+  DatasetItemsView,
   DatasetVersions,
   DuplicateDatasetDialog,
   ExperimentTriggerDialog,
@@ -52,7 +52,7 @@ function DatasetPage() {
 
   // Unfiltered items query — used to disable the experiment trigger when the
   // dataset has no items. React Query dedupes this with the same call inside
-  // DatasetPageTabs.
+  // DatasetItemsView.
   const { data: unfilteredItems = [], isLoading: isUnfilteredLoading } = useDatasetItems(
     datasetId,
     undefined,
@@ -60,7 +60,7 @@ function DatasetPage() {
   );
   const disableExperimentTrigger = !isUnfilteredLoading && unfilteredItems.length === 0;
 
-  if (isDatasetLoading) return null; // Let the DatasetPageTabs handle the loading state to avoid layout shift when loading the dataset for the edit dialog
+  if (isDatasetLoading) return null; // Let the DatasetItemsView handle the loading state to avoid layout shift when loading the dataset for the edit dialog
 
   if (error && is401UnauthorizedError(error)) {
     return (
@@ -121,14 +121,20 @@ function DatasetPage() {
       <div className="relative h-full overflow-hidden">
         <PageLayout height="full" className="grid-rows-[1fr] p-0">
           <PageLayout.MainArea>
-            <DatasetPageTabs
+            <DatasetItemsView
               datasetId={datasetId}
               onAddItemClick={() => setAddItemDialogOpen(true)}
+              leftSlot={
+                <span className="text-ui-sm text-neutral3 mr-3 whitespace-nowrap">
+                  {dataset?.createdAt ? `Created ${format(new Date(dataset.createdAt), 'MMM d')}` : ''}
+                </span>
+              }
               rightSlot={
                 <ButtonsGroup>
-                  <span className="text-ui-sm text-neutral3 mr-3 whitespace-nowrap">
-                    {dataset?.createdAt ? `Created ${format(new Date(dataset.createdAt), 'MMM d')}` : ''}
-                  </span>
+                  <Button as={Link} to={`/experiments?dataset=${datasetId}`}>
+                    <FlaskConical />
+                    View experiments
+                  </Button>
                   <DatasetVersions
                     datasetId={datasetId}
                     value={activeVersion}

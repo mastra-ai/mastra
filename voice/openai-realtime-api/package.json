@@ -1,13 +1,12 @@
 {
   "name": "@mastra/voice-openai-realtime",
-  "version": "0.13.7",
+  "version": "0.13.8-alpha.1",
   "description": "Mastra OpenAI Realtime API integration",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "files": [
-    "dist",
-    "CHANGELOG.md"
+    "dist"
   ],
   "exports": {
     ".": {

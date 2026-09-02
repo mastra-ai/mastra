@@ -1,6 +1,6 @@
 ---
 title: "Railway | Sandbox"
-description: "Documentation for the RailwaySandbox provider for isolated cloud code execution."
+description: "Run Mastra workspace commands in Railway cloud sandboxes with private networking, custom images, streaming, checkpoints, forks, and reconnection."
 packages:
   - "@mastra/railway"
 ---
@@ -254,6 +254,13 @@ const result = await sandbox.executeCommand('cat', ['/tmp/state.txt'])
     description: 'Environment variables baked into the sandbox, available to every command.',
     isOptional: true,
     defaultValue: '{}',
+  },
+  {
+    name: 'workingDirectory',
+    type: 'string',
+    description:
+      'Default directory for command execution when no per-command `cwd` is given. A per-command `cwd` always wins. Use an absolute path.',
+    isOptional: true,
   },
   {
     name: 'template',

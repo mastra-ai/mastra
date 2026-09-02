@@ -118,7 +118,7 @@ export function TracesListView({
   }, [isLoading]);
 
   if (isLoading) {
-    return <DataListSkeleton columns={columns} />;
+    return <DataListSkeleton columns={columns} fit="container" />;
   }
 
   const virtualItems = virtualizer.getVirtualItems();
@@ -128,10 +128,9 @@ export function TracesListView({
     virtualItems.length > 0 ? Math.max(0, totalSize - (virtualItems[virtualItems.length - 1]?.end ?? 0)) : 0;
 
   return (
-    <TracesDataList columns={columns} variant="striped" scrollRef={scrollRef} className="min-w-0">
+    <TracesDataList columns={columns} variant="striped" fit="container" scrollRef={scrollRef} className="min-w-0">
       <TracesDataList.Top>
-        <TracesDataList.TopCell>Date</TracesDataList.TopCell>
-        <TracesDataList.TopCell>Time</TracesDataList.TopCell>
+        <TracesDataList.TopCell>Created</TracesDataList.TopCell>
         <TracesDataList.TopCell>Name</TracesDataList.TopCell>
         {hasTraceColumn(columnPreferences, 'input') && <TracesDataList.TopCell>Input</TracesDataList.TopCell>}
         {hasTraceColumn(columnPreferences, 'entity') && <TracesDataList.TopCell>Entity</TracesDataList.TopCell>}
@@ -184,8 +183,7 @@ export function TracesListView({
                 featured={isFeatured}
                 className={cn(isRecentlyAdded && 'animate-row-highlight')}
               >
-                <TracesDataList.DateCell timestamp={displayDate} />
-                <TracesDataList.TimeCell timestamp={displayDate} />
+                <TracesDataList.CreatedCell timestamp={displayDate} />
                 <TracesDataList.NameCell
                   name={trace.name}
                   parentSpanId={trace.parentSpanId}
@@ -218,7 +216,11 @@ export function TracesListView({
                 )}
                 {columnPreferences.metadataKeys.map(key => {
                   const value = formatTraceMetadataValue(trace.metadata, key);
-                  return <DataList.MonoCell key={key}>{value}</DataList.MonoCell>;
+                  return (
+                    <DataList.TextCell font="mono" key={key}>
+                      {value}
+                    </DataList.TextCell>
+                  );
                 })}
               </TracesDataList.RowButton>
             );

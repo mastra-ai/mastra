@@ -1,6 +1,6 @@
 {
   "name": "@internal/types-builder",
-  "version": "0.0.100",
+  "version": "0.0.104",
   "description": "",
   "type": "module",
   "main": "src/index.js",
@@ -33,7 +33,7 @@
     "local-pkg": "^1.1.2",
     "resolve.exports": "^2.0.3",
     "ts-morph": "^27.0.2",
-    "typescript": "catalog:"
+    "typescript": "catalog:ts6"
   },
   "devDependencies": {
     "@vitest/coverage-v8": "catalog:",

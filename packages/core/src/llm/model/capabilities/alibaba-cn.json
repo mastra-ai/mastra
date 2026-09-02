@@ -1,5 +1,13 @@
 {
-  "attachment": ["kimi-k2.6", "qwen3.5-flash", "qwen3.6-flash", "qwen3.7-flash", "qwen3.7-plus", "qwen3.8-max"],
+  "attachment": [
+    "kimi-k2.6",
+    "qwen3.5-flash",
+    "qwen3.6-flash",
+    "qwen3.7-flash",
+    "qwen3.7-plus",
+    "qwen3.8-flash",
+    "qwen3.8-max"
+  ],
   "temperature": [
     "MiniMax-M2.5",
     "MiniMax/MiniMax-M2.7",
@@ -97,6 +105,7 @@
     "qwen3.6-flash",
     "qwen3.6-max-preview",
     "qwen3.7-flash",
+    "qwen3.8-flash",
     "qwen3.8-max",
     "siliconflow/deepseek-r1-0528",
     "siliconflow/deepseek-v3-0324",

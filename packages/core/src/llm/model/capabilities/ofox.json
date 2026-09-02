@@ -59,7 +59,9 @@
     "openai/gpt-5.6-luna",
     "openai/gpt-5.6-sol",
     "openai/gpt-5.6-terra",
+    "volcengine/doubao-seed-1-6-flash",
     "volcengine/doubao-seed-1-6-vision",
+    "volcengine/doubao-seed-1-8",
     "volcengine/doubao-seed-2.0-code",
     "volcengine/doubao-seed-2.0-lite",
     "volcengine/doubao-seed-2.0-mini",
@@ -73,6 +75,7 @@
     "x-ai/grok-4.3",
     "x-ai/grok-4.5",
     "x-ai/grok-4.6",
+    "z-ai/glm-5.3-flash",
     "z-ai/glm-5v-turbo"
   ],
   "temperature": [
@@ -135,6 +138,12 @@
     "openai/gpt-4.1-mini",
     "openai/gpt-4o",
     "openai/gpt-4o-mini",
+    "openai/gpt-5.1",
+    "openai/gpt-5.2",
+    "openai/gpt-5.3-codex",
+    "openai/gpt-5.4",
+    "openai/gpt-5.4-mini",
+    "openai/gpt-5.4-nano",
     "volcengine/doubao-seed-1-6",
     "volcengine/doubao-seed-1-6-flash",
     "volcengine/doubao-seed-1-6-vision",
@@ -160,6 +169,7 @@
     "z-ai/glm-5.1",
     "z-ai/glm-5.2",
     "z-ai/glm-5.3",
+    "z-ai/glm-5.3-flash",
     "z-ai/glm-5v-turbo"
   ],
   "structuredOutput": [
@@ -214,7 +224,18 @@
     "openai/gpt-5.6-luna",
     "openai/gpt-5.6-sol",
     "openai/gpt-5.6-terra",
+    "volcengine/doubao-seed-1-6",
+    "volcengine/doubao-seed-1-6-flash",
+    "volcengine/doubao-seed-1-6-vision",
+    "volcengine/doubao-seed-1-8",
     "volcengine/doubao-seed-2.0-code",
+    "volcengine/doubao-seed-2.0-lite",
+    "volcengine/doubao-seed-2.0-mini",
+    "volcengine/doubao-seed-2.0-pro",
+    "volcengine/doubao-seed-2.1-pro",
+    "volcengine/doubao-seed-2.1-turbo",
+    "volcengine/doubao-seed-character",
+    "volcengine/doubao-seed-evolving",
     "x-ai/grok-4.1-fast",
     "x-ai/grok-4.20",
     "x-ai/grok-4.3",
@@ -223,6 +244,7 @@
     "z-ai/glm-5-turbo",
     "z-ai/glm-5.1",
     "z-ai/glm-5.2",
-    "z-ai/glm-5.3"
+    "z-ai/glm-5.3",
+    "z-ai/glm-5.3-flash"
   ]
 }

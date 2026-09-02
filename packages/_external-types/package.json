@@ -1,12 +1,11 @@
 {
   "name": "@internal/external-types",
-  "version": "0.0.75",
+  "version": "0.0.79",
   "description": "",
   "type": "module",
   "private": true,
   "files": [
-    "dist",
-    "CHANGELOG.md"
+    "dist"
   ],
   "main": "dist/index.js",
   "types": "dist/index.d.ts",

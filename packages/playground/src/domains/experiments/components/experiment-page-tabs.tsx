@@ -2,13 +2,14 @@
 
 import type { DatasetExperimentResult } from '@mastra/client-js';
 import type { ExperimentStatus } from '@mastra/core/storage';
+import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
-import { Chip } from '@mastra/playground-ui/components/Chip';
 import { Tabs, Tab, TabList, TabContent } from '@mastra/playground-ui/components/Tabs';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
+import { cn } from '@mastra/playground-ui/utils/cn';
 import { toast } from '@mastra/playground-ui/utils/toast';
-import { ClipboardCheck } from 'lucide-react';
+import { ClipboardCheck, List } from 'lucide-react';
 import { useState, useMemo, useCallback } from 'react';
 import { useSearchParams } from 'react-router';
 
@@ -67,11 +68,6 @@ export function ExperimentPageTabs({
 
   const clearSelection = useCallback(() => setSelectedIds(new Set()), []);
 
-  const selectLoadedFailed = useCallback(() => {
-    const failedIds = results.filter(r => Boolean(r.error)).map(r => r.id);
-    setSelectedIds(new Set(failedIds));
-  }, [results]);
-
   const flagForReview = useCallback(
     async (resultIds: string[]) => {
       if (isFlagging || resultIds.length === 0) return;
@@ -116,8 +112,8 @@ export function ExperimentPageTabs({
     [results, currentItemId],
   );
 
-  type TabValue = 'summary' | 'results' | 'reviews';
-  const [selectedTab, setSelectedTab] = useState<TabValue>('summary');
+  type TabValue = 'results' | 'reviews';
+  const [selectedTab, setSelectedTab] = useState<TabValue>('results');
   // Result id to auto-feature on the Reviews tab, driven by the `?review=` search
   // param (set when clicking "Review" in the item panel, and deep-linkable).
   const [searchParams, setSearchParams] = useSearchParams();
@@ -175,7 +171,6 @@ export function ExperimentPageTabs({
   const resultsListColumns = useMemo(
     () => [
       { name: 'itemId', label: 'Item ID', size: '7rem' },
-      { name: 'status', label: 'Status', size: '5rem' },
       { name: 'input', label: 'Input', size: 'minmax(15rem,1fr)' },
       ...scorerIds.map(id => ({ name: id, label: id, size: '12rem' })),
     ],
@@ -184,72 +179,78 @@ export function ExperimentPageTabs({
 
   return (
     <Tabs
-      defaultTab="summary"
+      defaultTab="results"
       value={activeTab}
       onValueChange={handleTabChange}
-      className="grid h-full grid-rows-[auto_1fr] overflow-hidden"
+      className="grid h-full grid-rows-[auto_1fr] overflow-visible"
     >
-      <TabList>
-        <Tab value="summary">Summary</Tab>
-        <Tab value="results">Results</Tab>
-        <Tab value="reviews">
-          Reviews
-          {reviewCount > 0 && <Chip color="orange">{reviewCount}</Chip>}
+      <TabList variant="pill-ghost">
+        <Tab value="results" className="px-3 py-2.5">
+          <Icon size="sm">
+            <List />
+          </Icon>
+          <Txt variant="ui-sm" className="text-inherit">
+            Results
+          </Txt>
+        </Tab>
+        <Tab value="reviews" className="px-3 py-2.5">
+          <Icon size="sm">
+            <ClipboardCheck />
+          </Icon>
+          <Txt variant="ui-sm" className="text-inherit">
+            Reviews
+          </Txt>
+          {reviewCount > 0 && <Badge size="xs">{reviewCount}</Badge>}
         </Tab>
       </TabList>
 
-      <TabContent value="summary" className="mt-5 overflow-y-auto">
+      <TabContent value="reviews" className="h-full min-h-0 overflow-visible py-0">
+        <DatasetReview
+          datasetId={datasetId}
+          experimentId={experimentId}
+          featuredItemId={reviewFeaturedItemId}
+          detailPanelVariant="overlay"
+        />
+      </TabContent>
+
+      {/* The action row only exists while something is selected, so it must not reserve a track otherwise. */}
+      <TabContent
+        value="results"
+        className={cn(
+          'grid gap-3 overflow-hidden pt-3',
+          selectedIds.size > 0 ? 'grid-rows-[auto_auto_1fr]' : 'grid-rows-[auto_1fr]',
+        )}
+      >
         <ExperimentScorerSummary scoresByItemId={scoresByExperimentId} experimentStatus={experimentStatus} />
-      </TabContent>
 
-      <TabContent value="reviews" className="mt-2 overflow-auto pb-0">
-        <DatasetReview datasetId={datasetId} experimentId={experimentId} featuredItemId={reviewFeaturedItemId} />
-      </TabContent>
-
-      <TabContent value="results" className="mt-2 grid grid-rows-[auto_1fr] overflow-hidden">
-        <div className="mb-4">
-          {selectedIds.size > 0 && (
-            <div className="bg-surface3 flex items-center gap-2 px-4 py-2">
-              <Txt variant="ui-xs" className="text-neutral5 font-medium">
-                {selectedIds.size} selected
-              </Txt>
-              <div className="flex-1" />
-              <Button variant="outline" size="sm" disabled={isFlagging} onClick={() => flagForReview([...selectedIds])}>
-                <Icon size="sm">
-                  <ClipboardCheck />
-                </Icon>
-                Flag for Review
-              </Button>
-              <Button variant="ghost" size="sm" onClick={clearSelection}>
-                Clear
-              </Button>
-            </div>
-          )}
-          {results.length > 0 && selectedIds.size === 0 && !isLoading && (
-            <div className="flex items-center gap-2 px-4 py-2">
-              <Button variant="ghost" size="sm" onClick={selectLoadedFailed}>
-                Select loaded failures
-              </Button>
-            </div>
-          )}
-        </div>
-        <div className="flex w-full overflow-y-auto">
-          <div className="grid w-full content-start gap-8 overflow-y-auto">
-            <ExperimentResultsList
-              results={results}
-              isLoading={isLoading}
-              featuredResultId={featuredResultId}
-              onResultClick={handleResultClick}
-              columns={resultsListColumns}
-              scoresByItemId={scoresByExperimentId}
-              scorerIds={scorerIds}
-              setEndOfListElement={setEndOfListElement}
-              isFetchingNextPage={isFetchingNextPage}
-              hasNextPage={hasNextPage}
-              selectedIds={selectedIds}
-              onToggleSelect={toggleSelect}
-            />
+        {selectedIds.size > 0 && (
+          <div className="flex items-center gap-2">
+            <Button variant="outline" size="sm" disabled={isFlagging} onClick={() => flagForReview([...selectedIds])}>
+              <Icon size="sm">
+                <ClipboardCheck />
+              </Icon>
+              Flag {selectedIds.size} to review
+            </Button>
+            <Button variant="ghost" size="sm" onClick={clearSelection}>
+              Clear
+            </Button>
           </div>
+        )}
+        <div className="min-h-0 overflow-y-auto">
+          <ExperimentResultsList
+            results={results}
+            isLoading={isLoading}
+            featuredResultId={featuredResultId}
+            onResultClick={handleResultClick}
+            columns={resultsListColumns}
+            scoresByItemId={scoresByExperimentId}
+            scorerIds={scorerIds}
+            setEndOfListElement={setEndOfListElement}
+            isFetchingNextPage={isFetchingNextPage}
+            hasNextPage={hasNextPage}
+            selectedIds={selectedIds}
+            onToggleSelect={toggleSelect}
+          />
         </div>
       </TabContent>
     </Tabs>

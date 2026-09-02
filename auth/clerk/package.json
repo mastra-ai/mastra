@@ -1,6 +1,6 @@
 {
   "name": "@mastra/auth-clerk",
-  "version": "1.2.3",
+  "version": "1.2.4-alpha.1",
   "description": "Mastra Clerk Auth integration",
   "type": "module",
   "main": "dist/index.js",
@@ -43,8 +43,7 @@
     "vitest": "catalog:"
   },
   "files": [
-    "dist",
-    "CHANGELOG.md"
+    "dist"
   ],
   "homepage": "https://mastra.ai",
   "repository": {

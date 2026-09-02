@@ -1,6 +1,6 @@
 ---
 title: "Reference: Workflow.agent() | Workflows"
-description: Documentation for the `Workflow.agent()` method in workflows, which adds an agent as a declarative step.
+description: "Use Workflow.agent() to add a portable agent step with prompt input, text or structured output, runtime agent lookup, retries, scorers, and metadata."
 packages:
   - "@mastra/core"
 ---
@@ -13,11 +13,11 @@ Unlike wrapping an agent with `createStep()`, `.agent()` records a declarative e
 
 ## Usage example
 
-```typescript filename="src/mastra/workflows/test-workflow.ts" prettier:false
+```typescript filename="src/mastra/workflows/test-workflow.ts"
 workflow
-  .map({ prompt: mapVariable({ initData: workflow, path: "topic" }) })
+  .map({ prompt: mapVariable({ initData: workflow, path: 'topic' }) })
   .agent(testAgent)
-  .commit();
+  .commit()
 ```
 
 ## Parameters
@@ -64,7 +64,7 @@ workflow
 
 By default the step's output is `{ text: string }`. Pass `structuredOutput.schema` to make the step return that shape instead. The schema becomes the step's output schema, so later steps chain against it with full type safety:
 
-```typescript filename="src/mastra/workflows/test-workflow.ts" prettier:false
+```typescript filename="src/mastra/workflows/test-workflow.ts"
 workflow
   .agent(testAgent, {
     structuredOutput: {
@@ -73,15 +73,15 @@ workflow
       }),
     },
   })
-  .commit();
+  .commit()
 ```
 
 ## Referencing an agent by ID
 
 Pass a string to reference a registered agent without importing it. The agent must be registered on the Mastra instance when the workflow runs:
 
-```typescript filename="src/mastra/workflows/test-workflow.ts" prettier:false
-workflow.agent("test-agent", { maxSteps: 3 }).commit();
+```typescript filename="src/mastra/workflows/test-workflow.ts"
+workflow.agent('test-agent', { maxSteps: 3 }).commit()
 ```
 
 ## Persisting agent steps

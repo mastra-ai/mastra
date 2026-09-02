@@ -1,11 +1,10 @@
 {
   "name": "@mastra/deployer-vercel",
-  "version": "1.2.19-alpha.1",
+  "version": "1.2.23-alpha.2",
   "description": "",
   "type": "module",
   "files": [
-    "dist",
-    "CHANGELOG.md"
+    "dist"
   ],
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
