@@ -46,6 +46,9 @@
   --border2: oklch(100% 0 0deg / 11%);
   --surface-overlay-soft: oklch(100% 0 0deg / 4%);
   --surface-overlay-strong: oklch(100% 0 0deg / 7%);
+  --surface-header: oklch(15% 0 0deg);
+  --surface-header-hover: oklch(19% 0 0deg);
+  --surface-row-featured: oklch(100% 0 0deg / 12%);
   --shadow-main-frame: 0 14px 48px -36px oklch(0% 0 0deg / 85%);
   --sidebar-nav-hover: oklch(100% 0 0deg / 7%);
   --sidebar-nav-active: oklch(100% 0 0deg / 11%);
@@ -68,6 +71,24 @@
   --notice-note: oklch(0.18 0 0);
   --notice-note-fg: oklch(0.99 0.001 230);
 
+  --badge-neutral-fg: var(--neutral5);
+  --badge-green: oklch(80% 0.105 160deg);
+  --badge-green-fg: oklch(92% 0.05 160deg);
+  --badge-red: oklch(69% 0.24 22deg);
+  --badge-red-fg: oklch(95% 0.014 18deg);
+  --badge-blue: oklch(81% 0.12 230deg);
+  --badge-blue-fg: oklch(97% 0.013 224deg);
+  --badge-yellow: oklch(91% 0.16 105deg);
+  --badge-yellow-fg: oklch(97% 0.025 100deg);
+  --badge-purple: oklch(82% 0.12 303deg);
+  --badge-purple-fg: oklch(93% 0.045 303deg);
+  --badge-orange: oklch(84% 0.13 62deg);
+  --badge-orange-fg: oklch(93% 0.06 62deg);
+  --badge-cyan: oklch(84% 0.1 210deg);
+  --badge-cyan-fg: oklch(93% 0.05 210deg);
+  --badge-pink: oklch(82% 0.12 345deg);
+  --badge-pink-fg: oklch(93% 0.045 345deg);
+
   /* Brand green (dark). Remaps Tailwind green-* via @theme below. */
   --brand-green-50: oklch(99% 0.024 138);
   --brand-green-100: oklch(97.5% 0.055 138);
@@ -89,6 +110,14 @@
   --chart-3: oklch(0.769 0.188 70.08);
   --chart-4: oklch(0.627 0.265 303.9);
   --chart-5: oklch(0.637 0.237 25.331);
+
+  /* Sequential ramp for one measure read at five depths — one hue, lightness carries the
+   * reading. The palette above is categorical: five series, no order between them. */
+  --chart-soft-1: oklch(0.62 0.19 285);
+  --chart-soft-2: oklch(0.7 0.145 285);
+  --chart-soft-3: oklch(0.78 0.1 285);
+  --chart-soft-4: oklch(0.85 0.06 285);
+  --chart-soft-5: oklch(0.9 0.03 285);
 }
 
 html.light {
@@ -130,6 +159,9 @@ html.light {
   --border2: oklch(20.8% 0 0deg / 16%);
   --surface-overlay-soft: oklch(20.8% 0 0deg / 4%);
   --surface-overlay-strong: oklch(20.8% 0 0deg / 7%);
+  --surface-header: oklch(92.6% 0 0deg);
+  --surface-header-hover: oklch(90% 0 0deg);
+  --surface-row-featured: oklch(20.8% 0 0deg / 11%);
   --shadow-main-frame: 0 1px 2px oklch(24% 0 0deg / 4%), 0 18px 48px -34px oklch(24% 0 0deg / 22%);
   --sidebar-nav-hover: oklch(20.8% 0 0deg / 5.5%);
   --sidebar-nav-active: oklch(20.8% 0 0deg / 8.5%);
@@ -152,6 +184,24 @@ html.light {
   --notice-note: oklch(0.97 0 0);
   --notice-note-fg: oklch(0.18 0 0);
 
+  --badge-neutral-fg: var(--neutral3);
+  --badge-green: oklch(40% 0.095 160deg);
+  --badge-green-fg: oklch(35% 0.085 160deg);
+  --badge-red: oklch(55% 0.22 22deg);
+  --badge-red-fg: oklch(36% 0.18 22deg);
+  --badge-blue: oklch(55% 0.15 230deg);
+  --badge-blue-fg: oklch(36% 0.13 225deg);
+  --badge-yellow: oklch(65% 0.16 95deg);
+  --badge-yellow-fg: oklch(36% 0.1 95deg);
+  --badge-purple: oklch(40% 0.18 303deg);
+  --badge-purple-fg: oklch(37% 0.16 303deg);
+  --badge-orange: oklch(42% 0.13 62deg);
+  --badge-orange-fg: oklch(37% 0.12 62deg);
+  --badge-cyan: oklch(40% 0.11 210deg);
+  --badge-cyan-fg: oklch(35% 0.095 210deg);
+  --badge-pink: oklch(42% 0.17 345deg);
+  --badge-pink-fg: oklch(37% 0.15 345deg);
+
   /* Brand green (light). badge + chart inherit :root. */
   --brand-green-50: oklch(97.8% 0.025 140);
   --brand-green-100: oklch(95.5% 0.055 140);
@@ -164,6 +214,13 @@ html.light {
   --brand-green-800: oklch(30% 0.1 145);
   --brand-green-900: oklch(24% 0.075 146);
   --brand-green-950: oklch(17% 0.05 147);
+
+  /* The ramp inverts per theme: it darkens on white, brightens on near-black. */
+  --chart-soft-1: oklch(0.52 0.2 285);
+  --chart-soft-2: oklch(0.64 0.16 285);
+  --chart-soft-3: oklch(0.75 0.11 285);
+  --chart-soft-4: oklch(0.85 0.065 285);
+  --chart-soft-5: oklch(0.92 0.035 285);
 }
 
 @theme {
@@ -328,6 +385,7 @@ html.light {
   --color-border2: var(--border2);
   --color-surface-overlay-soft: var(--surface-overlay-soft);
   --color-surface-overlay-strong: var(--surface-overlay-strong);
+  --color-surface-row-featured: var(--surface-row-featured);
 
   /* Semantic color aliases */
   --color-text1: var(--text1);
@@ -345,6 +403,23 @@ html.light {
   --color-notice-info-fg: var(--notice-info-fg);
   --color-notice-note: var(--notice-note);
   --color-notice-note-fg: var(--notice-note-fg);
+  --color-badge-neutral-fg: var(--badge-neutral-fg);
+  --color-badge-green: var(--badge-green);
+  --color-badge-green-fg: var(--badge-green-fg);
+  --color-badge-red: var(--badge-red);
+  --color-badge-red-fg: var(--badge-red-fg);
+  --color-badge-blue: var(--badge-blue);
+  --color-badge-blue-fg: var(--badge-blue-fg);
+  --color-badge-yellow: var(--badge-yellow);
+  --color-badge-yellow-fg: var(--badge-yellow-fg);
+  --color-badge-purple: var(--badge-purple);
+  --color-badge-purple-fg: var(--badge-purple-fg);
+  --color-badge-orange: var(--badge-orange);
+  --color-badge-orange-fg: var(--badge-orange-fg);
+  --color-badge-cyan: var(--badge-cyan);
+  --color-badge-cyan-fg: var(--badge-cyan-fg);
+  --color-badge-pink: var(--badge-pink);
+  --color-badge-pink-fg: var(--badge-pink-fg);
 
   /* Replace Tailwind green with brand green. initial clears defaults (native v4), then remap. */
   --color-green-*: initial;
@@ -389,6 +464,7 @@ html.light {
   --shadow-card: 0 2px 8px oklch(0 0 0 / 0.4);
   --shadow-elevated: 0 8px 24px oklch(0 0 0 / 0.5);
   --shadow-dialog: 0 1px 2px -1px oklch(0% 0 0deg / 12%), 0 16px 40px -20px oklch(0% 0 0deg / 22%);
+  --shadow-panel: 0 1px 2px -1px oklch(0% 0 0deg / 8%), 0 10px 26px -18px oklch(0% 0 0deg / 16%);
   --shadow-glow-accent1: 0 0 20px oklch(0.723 0.219 149.579 / 0.25);
   --shadow-glow-accent2: 0 0 20px oklch(0.637 0.237 25.331 / 0.25);
   --shadow-focus-ring: 0 0 0 3px oklch(0.723 0.219 149.579 / 0.12);

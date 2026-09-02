@@ -1,6 +1,9 @@
+import { execFile } from 'node:child_process';
+
 import { describe, expect, it, vi } from 'vitest';
 
 import {
+  createOneShotFatalErrorHandler,
   createShutdownCoordinator,
   startTuiProcessMemoryDiagnostics,
 } from '../process-memory-diagnostics-lifecycle.js';
@@ -62,6 +65,72 @@ describe('startTuiProcessMemoryDiagnostics', () => {
 
     expect(warn).toHaveBeenNthCalledWith(1, 'Process memory diagnostics were not started: sample interval is too low');
     expect(warn).toHaveBeenNthCalledWith(2, 'Process memory diagnostics were not started: inspector unavailable');
+  });
+});
+
+describe('createOneShotFatalErrorHandler', () => {
+  it('ignores fatal errors raised while reporting the first fatal error', () => {
+    const firstError = new Error('initial failure');
+    const reportingError = Object.assign(new Error('write EIO'), { code: 'EIO' });
+    const handled: unknown[] = [];
+    let handleFatalError!: (error: unknown) => void;
+
+    handleFatalError = createOneShotFatalErrorHandler(error => {
+      handled.push(error);
+      handleFatalError(reportingError);
+    });
+
+    handleFatalError(firstError);
+    handleFatalError(new Error('later failure'));
+
+    expect(handled).toEqual([firstError]);
+  });
+
+  it('prevents an asynchronous stderr error from recursively starving shutdown', async () => {
+    // Isolate the real process-level error path so the unhandled stream error cannot escape into Vitest.
+    const lifecycleModuleUrl = new URL('../process-memory-diagnostics-lifecycle.ts', import.meta.url).href;
+    const script = `
+      import { EventEmitter } from 'node:events';
+      import { createOneShotFatalErrorHandler } from ${JSON.stringify(lifecycleModuleUrl)};
+
+      const stderr = new EventEmitter();
+      let reports = 0;
+
+      stderr.write = () => {
+        process.nextTick(() => {
+          const error = Object.assign(new Error('write EIO'), { code: 'EIO' });
+          stderr.emit('error', error);
+        });
+      };
+      Object.defineProperty(process, 'stderr', { configurable: true, value: stderr });
+
+      const handleFatalError = createOneShotFatalErrorHandler(error => {
+        reports += 1;
+        process.stderr.write(\`Fatal error: \${error.message}\\n\`);
+        setTimeout(() => {
+          process.stdout.write(String(reports));
+          process.exit(1);
+        }, 20);
+      });
+
+      process.on('uncaughtException', handleFatalError);
+      handleFatalError(new Error('initial failure'));
+    `;
+
+    const result = await new Promise<{ code: number | null; stdout: string; timedOut: boolean }>(resolve => {
+      execFile(
+        process.execPath,
+        ['--import', import.meta.resolve('tsx'), '--input-type=module', '-e', script],
+        { timeout: 1_000 },
+        (error, stdout) => {
+          const code =
+            typeof (error as NodeJS.ErrnoException | null)?.code === 'number' ? error.code : error ? null : 0;
+          resolve({ code, stdout, timedOut: Boolean((error as NodeJS.ErrnoException | null)?.killed) });
+        },
+      );
+    });
+
+    expect(result).toEqual({ code: 1, stdout: '1', timedOut: false });
   });
 });
 

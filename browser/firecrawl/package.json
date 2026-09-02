@@ -1,11 +1,10 @@
 {
   "name": "@mastra/browser-firecrawl",
-  "version": "0.2.1",
+  "version": "0.2.2-alpha.1",
   "description": "Mastra browser automation using Firecrawl Browser Sandbox (hosted CDP + agent-browser tools)",
   "type": "module",
   "files": [
-    "dist",
-    "CHANGELOG.md"
+    "dist"
   ],
   "main": "dist/index.js",
   "types": "dist/index.d.ts",

@@ -1,13 +1,13 @@
 ---
 title: "Suspend and resume | Workflows"
-description: "Suspend and resume in Mastra workflows allows you to pause execution while waiting for external input or resources."
+description: "Suspend Mastra workflows while waiting for external input, resources, or time, then resume saved runs with data and recover interrupted executions."
 packages:
   - "@mastra/core"
 ---
 
 # Suspend and resume
 
-Workflows can be paused at any step to collect additional data or wait for API callbacks. Pauses can also throttle costly operations or request [human-in-the-loop](/docs/workflows/human-in-the-loop) input. When a workflow is suspended, its current execution state is saved as a snapshot. You can later resume the workflow from a [specific step ID](/docs/workflows/snapshots#retrieving-snapshots), restoring the exact state captured in that snapshot. [Snapshots](/docs/workflows/snapshots) are stored in your configured storage provider and persist across deployments and application restarts.
+Pause a workflow at any step to collect additional data, wait for an API callback, throttle a costly operation, or request [human-in-the-loop](/docs/workflows/human-in-the-loop) input. Suspension saves the current execution state as a snapshot. Later, resume from a [specific step ID](/docs/workflows/snapshots#retrieving-snapshots) to restore the exact captured state. [Snapshots](/docs/workflows/snapshots) are stored in your configured storage provider and persist across deployments and application restarts.
 
 ## Pausing a workflow with `suspend()`
 
@@ -75,7 +75,8 @@ Use `resume()` to restart a suspended workflow from the step where it paused. Pa
 flowchart LR
   accTitle: Resuming a workflow from a saved snapshot
   accDescr: Resume restores the saved snapshot and restarts step1. The step then completes the workflow.
-  snapshot@{ shape: cyl, label: "saved snapshot" } pending1@-. resume .-> step1([step1])
+  snapshot@{ shape: cyl, label: "saved snapshot" }
+  snapshot pending1@-. resume .-> step1([step1])
   step1 -- out --> stop(( end ))
 
   class snapshot pending
@@ -124,7 +125,7 @@ const stream = run.resume({
 })
 ```
 
-You can call `resume()` from anywhere in your application, including HTTP endpoints, event handlers, in response to [human input](/docs/workflows/human-in-the-loop), or timers.
+You can call `resume()` from anywhere in your application, such as an HTTP endpoint or event handler. Timers and code responding to [human input](/docs/workflows/human-in-the-loop) can also resume a workflow.
 
 ```typescript
 const midnight = new Date()

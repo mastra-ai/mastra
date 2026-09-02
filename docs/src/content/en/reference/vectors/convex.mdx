@@ -1,6 +1,6 @@
 ---
 title: "Reference: Convex vector store | Vectors"
-description: Documentation for the ConvexVector class in Mastra, which provides vector search using Convex.
+description: "The ConvexVector class provides vector storage and similarity search using Convex. It stores embeddings inside Convex and performs cosine similarity search in the Mastra adapter."
 packages:
   - "@mastra/convex"
 ---
@@ -248,7 +248,7 @@ await vectorStore.createIndex({
 ]}
 />
 
-```typescript prettier:false
+```typescript oxfmt:false
 await vectorStore.upsert({
   indexName: "my_vectors",
   vectors: [[0.1, 0.2, 0.3, ...]],
@@ -294,7 +294,7 @@ await vectorStore.upsert({
 ]}
 />
 
-```typescript prettier:false
+```typescript oxfmt:false
 const results = await vectorStore.query({
   indexName: "my_vectors",
   queryVector: [0.1, 0.2, 0.3, ...],

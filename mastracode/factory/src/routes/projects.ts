@@ -14,6 +14,7 @@ import type {
   SourceControlStorageHandle,
   UpdateProjectRepositoryInput,
 } from '../storage/domains/source-control/base.js';
+import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import type { RouteDependencies } from './route.js';
 import { Route } from './route.js';
 
@@ -79,6 +80,10 @@ function parseUpdateInput(value: unknown): UpdateFactoryProjectInput | null {
   if (input.autoRunEnabled !== undefined) {
     if (typeof input.autoRunEnabled !== 'boolean') return null;
     patch.autoRunEnabled = input.autoRunEnabled;
+  }
+  if (input.autoApprovePlans !== undefined) {
+    if (typeof input.autoApprovePlans !== 'boolean') return null;
+    patch.autoApprovePlans = input.autoApprovePlans;
   }
   return Object.keys(patch).length > 0 ? patch : null;
 }
@@ -191,6 +196,8 @@ export interface ProjectRoutesDeps extends RouteDependencies {
   onProjectRepositoryLinked?: (args: { orgId: string; projectRepository: ProjectRepository }) => void;
   /** Shared lifecycle for retiring sessions before their owning records are deleted. */
   sessionRetirement?: SessionRetirementCoordinator;
+  /** Work-items domain — retired sessions drop the refs work items hold on them. */
+  workItems?: Pick<WorkItemsStorage, 'clearSessionReferences'>;
 }
 
 export class ProjectRoutes extends Route<ProjectRoutesDeps> {
@@ -253,6 +260,7 @@ export class ProjectRoutes extends Route<ProjectRoutesDeps> {
     if (!this.deps.sessionRetirement) return false;
     await this.deps.sessionRetirement.retireProjectRepositorySessions({
       sourceControl: handle,
+      ...(this.deps.workItems ? { workItems: this.deps.workItems } : {}),
       orgId,
       projectRepositoryId,
     });

@@ -12,7 +12,7 @@ import { INTAKE_SOURCES, stageContentCount } from '../domains/factory/boardCandi
 import type { IntakeSource } from '../domains/factory/boardCandidates';
 import { boardLoadingStages, boardStages, itemAppearsInStage } from '../domains/factory/boardStages';
 import type { BoardKind } from '../domains/factory/boardStages';
-import { BoardAutoRunToggle } from '../domains/factory/components/BoardAutoRunToggle';
+import { BoardAutomationSettings } from '../domains/factory/components/BoardAutomationSettings';
 import { BoardTooltipDelay } from '../domains/factory/components/BoardCardParts';
 import { BoardColumn, BoardColumnHeader } from '../domains/factory/components/BoardColumn';
 import { BoardColumnEmptyState } from '../domains/factory/components/BoardColumnEmptyState';
@@ -28,6 +28,7 @@ import { useBoardComposer } from '../domains/factory/hooks/useBoardComposer';
 import { useBoardDeepLink } from '../domains/factory/hooks/useBoardDeepLink';
 import { useBoardDecisions } from '../domains/factory/hooks/useBoardDecisions';
 import { useBoardIntake } from '../domains/factory/hooks/useBoardIntake';
+import { useItemSessionStatuses } from '../domains/factory/hooks/useItemSessionStatuses';
 import { useBoardItems } from '../domains/factory/hooks/useBoardItems';
 import { useBoardRuns } from '../domains/factory/hooks/useBoardRuns';
 import { isTerminalStage } from '../domains/factory/stages';
@@ -100,6 +101,12 @@ function Board({ factory, kind }: { factory: FactoryProject; kind: BoardKind }) 
   return <BoardContent factory={factory} repository={repository} kind={kind} />;
 }
 
+/** The open card and the comment it deep-links to are one selection: clear them together. */
+function clearOpenCard(params: URLSearchParams) {
+  params.delete('item');
+  params.delete('comment');
+}
+
 function BoardContent({
   factory,
   repository,
@@ -114,6 +121,7 @@ function BoardContent({
   const stages = boardStages(kind);
   const [searchParams, setSearchParams] = useSearchParams();
   const targetItemId = searchParams.get('item') || undefined;
+  const targetCommentId = targetItemId !== undefined ? (searchParams.get('comment') ?? undefined) : undefined;
   const selectedParticipantId = searchParams.get('teammate') || undefined;
   const search = searchParams.get('q') ?? '';
   const selectedRelevanceTypes = boardRelevanceFromQuery(searchParams.get('relevance'), kind);
@@ -124,11 +132,14 @@ function BoardContent({
   const intake = useBoardIntake({ factoryProjectId, repository, kind, knownSourceKeys: items.knownSourceKeys });
   const runs = useBoardRuns({
     factoryProjectId,
-    projectRepositoryId: repository.projectRepositoryId,
     workItems: items.all,
     refetchItems: items.refetch,
   });
   const relatedItemsFor = relatedWorkItemIndex(items.all);
+  const sessionStatuses = useItemSessionStatuses({
+    projectRepositoryId: repository.projectRepositoryId,
+    items: items.all,
+  });
   const decisions = useBoardDecisions(factoryProjectId);
   const composer = useBoardComposer(factoryProjectId);
   const activityProfileActorIds = [...new Set(items.all.flatMap(workItemHumanActorIds))];
@@ -152,14 +163,14 @@ function BoardContent({
   );
   const setSearch = (next: string) => {
     const params = new URLSearchParams(searchParams);
-    params.delete('item');
+    clearOpenCard(params);
     if (next.trim()) params.set('q', next);
     else params.delete('q');
     setSearchParams(params, { replace: true });
   };
   const setParticipant = (participantId: string | undefined) => {
     const next = new URLSearchParams(searchParams);
-    next.delete('item');
+    clearOpenCard(next);
     if (participantId) next.set('teammate', participantId);
     else {
       next.delete('teammate');
@@ -172,7 +183,7 @@ function BoardContent({
     if (selected) nextTypes.add(type);
     else nextTypes.delete(type);
     const next = new URLSearchParams(searchParams);
-    next.delete('item');
+    clearOpenCard(next);
     const value = boardRelevanceQueryValue(nextTypes, kind);
     if (value) next.set('relevance', value);
     else next.delete('relevance');
@@ -183,7 +194,7 @@ function BoardContent({
     if (selected) nextLabels.add(label);
     else nextLabels.delete(label);
     const next = new URLSearchParams(searchParams);
-    next.delete('item');
+    clearOpenCard(next);
     next.delete('label');
     for (const value of boardLabelsQueryValues(nextLabels)) next.append('label', value);
     setSearchParams(next, { replace: true });
@@ -194,13 +205,13 @@ function BoardContent({
     next.delete('relevance');
     next.delete('label');
     next.delete('q');
-    next.delete('item');
+    clearOpenCard(next);
     setSearchParams(next, { replace: true });
   };
   const setIntakeSource = (source: IntakeSource) => {
     if (targetItemId) {
       const next = new URLSearchParams(searchParams);
-      next.delete('item');
+      clearOpenCard(next);
       setSearchParams(next, { replace: true });
     }
     intake.select(source);
@@ -283,7 +294,7 @@ function BoardContent({
           </Notice>
         </div>
       )}
-      <div className="[container-type:inline-size] min-h-0 flex-1 overflow-auto overscroll-x-contain lg:overscroll-x-auto">
+      <div className="[container-type:inline-size] min-h-0 flex-1 overflow-auto overscroll-x-contain [scrollbar-gutter:stable] lg:overscroll-x-auto">
         <div className="flex min-h-full w-max min-w-full flex-col gap-3">
           <div className="from-surface2 via-surface2 z-20 flex flex-col gap-3 bg-linear-to-b via-[calc(100%-1rem)] to-transparent pb-4 max-lg:contents lg:sticky lg:top-0">
             <div className="sticky left-0 flex w-[100cqw] flex-col items-stretch gap-3 px-5 pt-5 lg:flex-row lg:flex-wrap lg:items-center lg:justify-between lg:gap-2">
@@ -303,7 +314,11 @@ function BoardContent({
                 onReset={resetFilters}
               />
               <div className="w-full lg:w-auto [&>div]:w-full [&>div]:justify-between lg:[&>div]:w-auto lg:[&>div]:justify-start">
-                <BoardAutoRunToggle factoryProjectId={factoryProjectId} enabled={factory.autoRunEnabled ?? false} />
+                <BoardAutomationSettings
+                  factoryProjectId={factoryProjectId}
+                  autoRunEnabled={factory.autoRunEnabled ?? false}
+                  autoApprovePlans={factory.autoApprovePlans ?? false}
+                />
               </div>
             </div>
             <div className="from-surface2 via-surface2 sticky top-0 z-20 flex items-start gap-2 via-[calc(100%-0.75rem)] to-transparent px-5 max-lg:bg-linear-to-b max-lg:pb-3 lg:gap-3">
@@ -386,13 +401,13 @@ function BoardContent({
                           key={`${item.id}:${stage.id}`}
                           item={item}
                           deepLinkRef={registerDeepLinkedCard(item.id)}
+                          deepLinkCommentId={targetItemId === item.id ? targetCommentId : undefined}
                           highlighted={targetItemId === item.id}
                           columnStage={stage.id}
                           relatedItems={relatedItemsFor(item)}
+                          sessionStatus={sessionStatuses.get(item.id)}
                           projectRepositoryId={repository.projectRepositoryId}
                           activityPage={activityPage}
-                          liveWorktreePaths={runs.liveWorktreePaths}
-                          sessionLivenessResolved={runs.sessionLivenessResolved}
                           runDisabled={runs.disabled}
                           preparing={runs.preparingFor(item.id)}
                           evaluatingStage={items.evaluatingStages.get(item.id)}
@@ -406,8 +421,8 @@ function BoardContent({
                           onRetryDecision={decisions.retry}
                           pendingRunRoles={runs.pendingRolesFor(item.id)}
                           onCreateSession={() => void runs.openOrCreateSession(item, stage.id)}
-                          onStartRun={(_spec, action) => void runs.openOrStartRun(item, action.role)}
-                          onRestartRun={(_spec, action) => void runs.restartRun(item, action.role)}
+                          onStartRun={(_spec, action, options) => void runs.openOrStartRun(item, action.role, options)}
+                          onRestartRun={(_spec, action, options) => void runs.restartRun(item, action.role, options)}
                           onMove={toStage => items.move(item.id, toStage)}
                           onRemove={() => items.remove(item.id)}
                         />

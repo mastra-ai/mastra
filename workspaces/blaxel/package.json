@@ -1,6 +1,6 @@
 {
   "name": "@mastra/blaxel",
-  "version": "0.8.0-alpha.0",
+  "version": "0.9.0-alpha.1",
   "description": "Blaxel cloud sandbox provider for Mastra workspaces",
   "type": "module",
   "main": "dist/index.js",
@@ -53,8 +53,7 @@
     "@mastra/core": ">=1.12.0-0 <2.0.0-0"
   },
   "files": [
-    "dist",
-    "CHANGELOG.md"
+    "dist"
   ],
   "homepage": "https://mastra.ai",
   "repository": {

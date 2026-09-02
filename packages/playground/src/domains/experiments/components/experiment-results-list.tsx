@@ -1,7 +1,9 @@
 import type { ClientScoreRowData, DatasetExperimentResult } from '@mastra/client-js';
 import { DataList, DataListSkeleton, useDataListKeyboard } from '@mastra/playground-ui/components/DataList';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
-import { cn } from '@mastra/playground-ui/utils/cn';
+import { ScorersIcon } from '@mastra/playground-ui/icons/ScorersIcon';
+import { AlertCircleIcon } from 'lucide-react';
+import { useLinkComponent } from '@/lib/framework';
 
 export type ExperimentResultsListProps = {
   results: DatasetExperimentResult[];
@@ -35,11 +37,30 @@ export function ExperimentResultsList({
   selectedIds,
   onToggleSelect,
 }: ExperimentResultsListProps) {
+  const { Link: LinkComponent, paths } = useLinkComponent();
   const hasSelection = Boolean(selectedIds && onToggleSelect);
   const gridColumns = [hasSelection ? 'auto' : '', ...columns.map(c => c.size)].filter(Boolean).join(' ');
   const hasInputColumn = columns.some(col => col.name === 'input');
 
   const { containerRef, getRowProps } = useDataListKeyboard({ count: results.length });
+
+  // Scorer columns get the scorers icon (matching the sidebar nav) plus a
+  // link to the scorer page, so score columns are recognizable even
+  // when the scorer name isn't self-explanatory.
+  const renderTopCell = (col: { name: string; label: string }) =>
+    scorerIds?.includes(col.name) ? (
+      <DataList.TopCell key={col.name}>
+        <LinkComponent
+          href={paths.scorerLink(col.name)}
+          className="flex min-w-0 items-center gap-1.5 hover:underline [&>svg]:size-3.5 [&>svg]:shrink-0"
+        >
+          <ScorersIcon />
+          <span className="min-w-0 truncate">{col.label}</span>
+        </LinkComponent>
+      </DataList.TopCell>
+    ) : (
+      <DataList.TopCell key={col.name}>{col.label}</DataList.TopCell>
+    );
 
   if (isLoading) {
     return <DataListSkeleton columns={gridColumns} />;
@@ -50,13 +71,9 @@ export function ExperimentResultsList({
       <DataList.Top hasLeadingCell={hasSelection}>
         {hasSelection && <DataList.TopCell>&nbsp;</DataList.TopCell>}
         {hasSelection ? (
-          <DataList.TopCells colStart={2}>
-            {columns.map(col => (
-              <DataList.TopCell key={col.name}>{col.label}</DataList.TopCell>
-            ))}
-          </DataList.TopCells>
+          <DataList.TopCells colStart={2}>{columns.map(renderTopCell)}</DataList.TopCells>
         ) : (
-          columns.map(col => <DataList.TopCell key={col.name}>{col.label}</DataList.TopCell>)
+          columns.map(renderTopCell)
         )}
       </DataList.Top>
 
@@ -70,29 +87,27 @@ export function ExperimentResultsList({
 
             const rowCells = (
               <>
-                <DataList.IdCell id={result.itemId} />
-                <DataList.Cell height="compact">
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <div className="relative flex h-full w-10 items-center justify-center bg-transparent">
-                        <div
-                          role="img"
-                          aria-label={hasError ? 'Error' : 'Success'}
-                          className={cn('w-2 h-2 rounded-full', hasError ? 'bg-red-700' : 'bg-green-600')}
-                        />
-                      </div>
-                    </TooltipTrigger>
-                    <TooltipContent>{hasError ? 'Error' : 'Success'}</TooltipContent>
-                  </Tooltip>
+                <DataList.Cell className="text-ui-smd text-neutral3 flex items-center gap-1.5 tracking-wide">
+                  <span>{result.itemId?.slice(0, 8) ?? ''}</span>
+                  {hasError && (
+                    <Tooltip>
+                      <TooltipTrigger
+                        render={<AlertCircleIcon role="img" aria-label="Error" className="text-error size-3.5" />}
+                      />
+                      <TooltipContent>{result.error?.message || 'Error'}</TooltipContent>
+                    </Tooltip>
+                  )}
                 </DataList.Cell>
 
-                {hasInputColumn && <DataList.MonoCell>{truncate(formatValue(result.input), 200)}</DataList.MonoCell>}
+                {hasInputColumn && (
+                  <DataList.TextCell font="mono">{truncate(formatValue(result.input), 200)}</DataList.TextCell>
+                )}
 
                 {scorerIds?.map(scorerId => {
                   const scores = scoresByItemId?.[result.itemId];
                   const score = scores?.find(s => s.scorerId === scorerId);
                   return (
-                    <DataList.Cell key={scorerId} height="compact" className="text-neutral3 text-ui-smd font-mono">
+                    <DataList.Cell key={scorerId} className="text-neutral3 text-ui-smd font-mono">
                       {score != null ? score.score.toFixed(3) : '-'}
                     </DataList.Cell>
                   );
@@ -122,7 +137,6 @@ export function ExperimentResultsList({
                   aria-label={`Select result ${result.itemId}`}
                 />
                 <DataList.RowButton
-                  flushLeft
                   colStart={2}
                   featured={isFeatured}
                   data-selected={isFeatured || undefined}

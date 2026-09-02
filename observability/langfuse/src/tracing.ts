@@ -251,6 +251,21 @@ export class LangfuseExporter extends BaseExporter {
  * This function mutates the attributes object in place.
  * @see https://langfuse.com/integrations/native/opentelemetry#property-mapping
  */
+/**
+ * Serialize a root span's input/output for the trace-level attributes.
+ * Returns undefined (attribute omitted) for absent values and for values that
+ * cannot be JSON-serialized, so a bad payload never fails the span export.
+ */
+function serializeTraceIo(value: unknown): string | undefined {
+  if (value === undefined) return undefined;
+  if (typeof value === 'string') return value;
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return undefined;
+  }
+}
+
 function mapMastraToLangfuseAttributes(
   attributes: Record<string, any>,
   span: AnyExportedSpan,
@@ -355,6 +370,20 @@ function mapMastraToLangfuseAttributes(
   // filters. User-provided traceName (set via mastra.metadata.traceName) takes
   // precedence and is preserved.
   if (span.isRootSpan) {
+    // Trace input/output: mirror the root span's input/output onto the trace.
+    // Without this, Langfuse traces have empty trace-level input/output (the
+    // span data only reaches the root OBSERVATION), which breaks LLM-as-a-judge
+    // evaluators mapped to Trace input/output and leaves the trace view without
+    // the top-level request/response. Serialization failures (circular refs,
+    // bigint) skip the attribute rather than failing the span export.
+    const traceInput = serializeTraceIo(span.input);
+    if (traceInput !== undefined) {
+      attributes['langfuse.trace.input'] = traceInput;
+    }
+    const traceOutput = serializeTraceIo(span.output);
+    if (traceOutput !== undefined) {
+      attributes['langfuse.trace.output'] = traceOutput;
+    }
     if (span.type === SpanType.AGENT_RUN) {
       if (!attributes['langfuse.trace.name'] && (span.entityName || span.entityId)) {
         attributes['langfuse.trace.name'] = span.entityName ?? span.entityId;

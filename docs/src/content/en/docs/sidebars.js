@@ -288,6 +288,11 @@ const sidebars = {
             },
             {
               type: 'doc',
+              id: 'sandbox/computer',
+              label: 'Computer',
+            },
+            {
+              type: 'doc',
               id: 'sandbox/lsp',
               label: 'LSP',
             },
@@ -546,7 +551,7 @@ const sidebars = {
             {
               type: 'doc',
               id: 'observability/tracing/overview',
-              label: 'Traces',
+              label: 'Usage',
             },
             {
               type: 'doc',
@@ -613,25 +618,22 @@ const sidebars = {
             },
             {
               type: 'doc',
+              id: 'evals/vitest-integration',
+              label: 'Vitest Integration',
+            },
+            {
+              type: 'doc',
               id: 'evals/evals-with-memory',
               label: 'Evals with Memory',
             },
-          ],
-        },
-        {
-          type: 'category',
-          label: 'Datasets',
-          link: {
-            type: 'doc',
-            id: 'datasets/overview',
-          },
-          customProps: {
-            contextualSidebar: true,
-          },
-          items: [
             {
               type: 'doc',
-              id: 'datasets/running-experiments',
+              id: 'evals/datasets',
+              label: 'Datasets',
+            },
+            {
+              type: 'doc',
+              id: 'evals/experiments',
               label: 'Experiments',
             },
           ],
@@ -668,6 +670,14 @@ const sidebars = {
             },
             {
               type: 'doc',
+              id: 'guides/authentication-identity',
+              label: 'Authentication',
+              customProps: {
+                tags: ['new'],
+              },
+            },
+            {
+              type: 'doc',
               id: 'guides/streaming',
               label: 'Streaming',
             },
@@ -696,9 +706,6 @@ const sidebars = {
       type: 'doc',
       id: 'mastra-platform/regions',
       label: 'Regions',
-      customProps: {
-        tags: ['new'],
-      },
     },
     {
       type: 'doc',
@@ -737,9 +744,6 @@ const sidebars = {
       type: 'doc',
       id: 'mastra-platform/workspaces',
       label: 'Workspaces',
-      customProps: {
-        tags: ['new'],
-      },
     },
     {
       type: 'doc',

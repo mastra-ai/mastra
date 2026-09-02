@@ -30,7 +30,13 @@ import { emitChunkEvent, emitFinishEvent } from '../stream-adapter';
 
 const RECOVERY_LEASE_RENEW_INTERVAL_MS_FOR_TEST = 10_000;
 
-function makeSnapshot(runId: string, status: WorkflowRunStatus, agentId: string): WorkflowRunState {
+/** Builds the persisted workflow state used to exercise durable recovery paths. */
+function makeSnapshot(
+  runId: string,
+  status: WorkflowRunStatus,
+  agentId: string,
+  requestContextEntries: Record<string, unknown> = { userId: 'u-1' },
+): WorkflowRunState {
   return {
     runId,
     status,
@@ -41,7 +47,7 @@ function makeSnapshot(runId: string, status: WorkflowRunStatus, agentId: string)
         runId,
         agentId,
         messageListState: { memoryInfo: { threadId: 't', resourceId: 'r' } },
-        requestContextEntries: { userId: 'u-1' },
+        requestContextEntries,
         modelConfig: { provider: 'mock', modelId: 'mock-v1' },
         state: { threadId: 't', resourceId: 'r' },
       } as any,
@@ -84,19 +90,26 @@ function createDurableWithStore(agentId: string, store = new InMemoryStore(), pu
   return { agent, store };
 }
 
-async function seed(store: InMemoryStore, runId: string, status: WorkflowRunStatus, agentId: string) {
+/** Persists matching outer and inner workflow snapshots for a recoverable run. */
+async function seed(
+  store: InMemoryStore,
+  runId: string,
+  status: WorkflowRunStatus,
+  agentId: string,
+  requestContextEntries?: Record<string, unknown>,
+) {
   const workflows = (await store.getStore('workflows'))!;
   await workflows.persistWorkflowSnapshot({
     workflowName: DurableStepIds.AGENTIC_LOOP,
     runId,
     resourceId: 'r',
-    snapshot: makeSnapshot(runId, status, agentId),
+    snapshot: makeSnapshot(runId, status, agentId, requestContextEntries),
   });
   await workflows.persistWorkflowSnapshot({
     workflowName: DurableStepIds.AGENTIC_EXECUTION,
     runId,
     resourceId: 'r',
-    snapshot: makeSnapshot(runId, status, agentId),
+    snapshot: makeSnapshot(runId, status, agentId, requestContextEntries),
   });
 }
 
@@ -161,6 +174,62 @@ describe('DurableAgent.recover(runId)', () => {
 
     await entry?.workflowExecution;
     cleanup();
+  });
+
+  it('rehydrates signal draining for signals delivered after recovery', async () => {
+    const runId = 'run-recovered-signal';
+    await seed(store, runId, 'running', 'agent-A');
+    stubWorkflow(agent, 'success');
+
+    const recovered = await agent.recover(runId);
+    const signalResult = agent.sendSignal(
+      { type: 'user-message', contents: 'after restart' },
+      { runId, resourceId: 'r', threadId: 't' },
+    );
+
+    await expect(signalResult.accepted).resolves.toEqual({ action: 'deliver', runId });
+    const drainPendingSignals = globalRunRegistry.get(runId)?.drainPendingSignals;
+    expect(drainPendingSignals).toBeTypeOf('function');
+    expect(drainPendingSignals?.('pending')).toEqual([
+      expect.objectContaining({ type: 'user', contents: 'after restart' }),
+    ]);
+
+    await globalRunRegistry.get(runId)?.workflowExecution;
+    recovered.cleanup();
+  });
+
+  it("replaces a snapshotted parent memory context with the recovered run's persisted context", async () => {
+    const runId = 'run-recovered-context';
+    const recoveredContexts: unknown[] = [];
+    const baseAgent = new Agent({
+      id: 'agent-recovered-context',
+      name: 'Recovered Context Agent',
+      instructions: 'x',
+      model: makeMockModel(),
+      outputProcessors: ({ requestContext }) => {
+        recoveredContexts.push(requestContext.get('MastraMemory'));
+        return [];
+      },
+    });
+    const recoveryStore = new InMemoryStore();
+    const recoveryAgent = createDurableAgent({ agent: baseAgent });
+    new Mastra({ agents: { recoveredContext: recoveryAgent as any }, storage: recoveryStore, logger: false });
+    await seed(recoveryStore, runId, 'running', recoveryAgent.id, {
+      userId: 'u-1',
+      MastraMemory: { thread: { id: 'parent-thread' }, resourceId: 'parent-resource' },
+    });
+
+    stubWorkflow(recoveryAgent, 'success');
+
+    const recovered = await recoveryAgent.recover(runId);
+    await globalRunRegistry.get(runId)?.workflowExecution;
+
+    expect(recoveredContexts).toContainEqual({
+      thread: { id: 't' },
+      resourceId: 'r',
+      memoryConfig: undefined,
+    });
+    recovered.cleanup();
   });
 
   it('re-reads the authoritative snapshot after acquiring recovery ownership', async () => {

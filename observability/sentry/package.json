@@ -1,13 +1,12 @@
 {
   "name": "@mastra/sentry",
-  "version": "1.2.12-alpha.2",
+  "version": "1.2.15-alpha.1",
   "description": "Sentry AI observability exporter for Mastra",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "files": [
-    "dist",
-    "CHANGELOG.md"
+    "dist"
   ],
   "exports": {
     ".": {

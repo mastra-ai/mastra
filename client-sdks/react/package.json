@@ -1,6 +1,6 @@
 {
   "name": "@mastra/react",
-  "version": "1.4.6-alpha.10",
+  "version": "1.4.10-alpha.8",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/mastra-ai/mastra.git",
@@ -51,15 +51,14 @@
     "build-storybook": "storybook build"
   },
   "files": [
-    "dist",
-    "CHANGELOG.md"
+    "dist"
   ],
   "dependencies": {
     "@lukeed/uuid": "^2.0.1",
     "@mastra/client-js": "workspace:*",
     "@radix-ui/react-tooltip": "^1.2.8",
     "hast-util-to-jsx-runtime": "^2.3.6",
-    "lucide-react": "^0.522.0",
+    "lucide-react": "catalog:",
     "shiki": "^1.29.2",
     "tailwind-merge": "^3.5.0"
   },

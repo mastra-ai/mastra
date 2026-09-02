@@ -522,6 +522,12 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
               }
             }
           },
+          flush() {
+            processorRunner.endStreamProcessorSpans(processorStates);
+          },
+          cancel() {
+            processorRunner.endStreamProcessorSpans(processorStates);
+          },
         }),
       );
     }

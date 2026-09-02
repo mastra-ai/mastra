@@ -61,7 +61,7 @@ describe('TracesListView columns', () => {
 
       const grid = container.querySelector<HTMLElement>('[style*="grid-template-columns"]');
       assert(grid);
-      expect(grid.style.gridTemplateColumns).toBe('6rem 9rem 14rem minmax(8rem,1fr) 14rem 6rem');
+      expect(grid.style.gridTemplateColumns).toBe('11rem 14rem minmax(8rem,1fr) 14rem 6rem');
     });
   });
 
@@ -88,9 +88,7 @@ describe('TracesListView columns', () => {
 
       const grid = container.querySelector<HTMLElement>('[style*="grid-template-columns"]');
       assert(grid);
-      expect(grid.style.gridTemplateColumns).toBe(
-        '6rem 9rem minmax(14rem,1fr) 6rem 7rem 8rem 8rem 8rem minmax(8rem,14rem)',
-      );
+      expect(grid.style.gridTemplateColumns).toBe('11rem minmax(8rem,1fr) 6rem 7rem 8rem 8rem 8rem minmax(8rem,14rem)');
     });
   });
 });
@@ -161,8 +159,8 @@ describe('TracesListView — rows', () => {
     );
 
     const rows = screen.getAllByRole('button');
-    expect(rows[0]?.classList.contains('bg-surface4!')).toBe(false);
-    expect(rows[1]?.classList.contains('bg-surface4!')).toBe(true);
+    expect(rows[0]?.classList.contains('bg-surface-row-featured!')).toBe(false);
+    expect(rows[1]?.classList.contains('bg-surface-row-featured!')).toBe(true);
   });
 
   it('needs the span to match too when branch rows share a trace', () => {
@@ -179,8 +177,8 @@ describe('TracesListView — rows', () => {
     );
 
     const rows = screen.getAllByRole('button');
-    expect(rows[0]?.classList.contains('bg-surface4!')).toBe(false);
-    expect(rows[1]?.classList.contains('bg-surface4!')).toBe(true);
+    expect(rows[0]?.classList.contains('bg-surface-row-featured!')).toBe(false);
+    expect(rows[1]?.classList.contains('bg-surface-row-featured!')).toBe(true);
   });
 
   it('tints only the rows that just arrived', () => {
@@ -492,7 +490,7 @@ describe('TracesListView — featuring by trace alone', () => {
     );
 
     const rows = screen.getAllByRole('button');
-    expect(rows[0]?.classList.contains('bg-surface4!')).toBe(true);
-    expect(rows[1]?.classList.contains('bg-surface4!')).toBe(false);
+    expect(rows[0]?.classList.contains('bg-surface-row-featured!')).toBe(true);
+    expect(rows[1]?.classList.contains('bg-surface-row-featured!')).toBe(false);
   });
 });

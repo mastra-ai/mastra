@@ -2,26 +2,30 @@ import { Button } from '@mastra/playground-ui/components/Button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@mastra/playground-ui/components/Dialog';
 import { MainSidebar } from '@mastra/playground-ui/components/MainSidebar';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { GitPullRequest, SquareKanban } from 'lucide-react';
+import { SidebarSectionHeading } from '../../../SidebarSectionHeading';
 import { useState } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router';
 
 import { useFactoryAuth } from '../../../../hooks/useFactoryAuth';
 import { useActiveRunResources } from '../../../../hooks/useActiveRunResources';
-import { useWorkspaceAttentionState } from '../../../../hooks/useWorkspaceAttention';
 import { useWorkItemsQuery } from '../../../../hooks/useWorkItems';
 import { useWorkspacePullRequestMerges } from '../../../../hooks/useWorkspacePullRequestMerges';
 import { useDeleteWorkspaceMutation, useWorkspacesQuery } from '../../../../hooks/useWorkspaces';
 import { useChatSessionContext } from '../../chat/context/useChatSessionContext';
 import { AGENT_CONTROLLER_ID } from '../../chat/services/constants';
+import { itemAwaitsPerson } from '../../factory/boardCardStatus';
 import { githubNumberForItem, pullRequestStatusForItem } from '../../factory/boardItems';
+import { useItemDecisions } from '../../factory/hooks/useBoardDecisions';
 import { relatedWorkItemIndex, relationshipLabel } from '../../factory/services/relationships';
 import type { WorkItem } from '../../factory/services/workItems';
 import { isTerminalStage } from '../../factory/stages';
 import { usePinnedSessions } from '../hooks/usePinnedSessions';
 import type { FactoryUserSession } from '../services/user-sessions';
-import { getFactorySessionKind } from '../services/sessionPresentation';
+import { getFactorySessionKind, getSessionOwnerDetails } from '../services/sessionPresentation';
+import type { SessionViewerProfile } from '../services/sessionPresentation';
 import { SessionNavRow } from './SessionNavRow';
-import type { SessionRowStatus } from './SessionNavRow';
+import { sessionRowStatus } from '../services/sessionStatus';
 import type { SessionPreviewDetails } from './SessionPreviewCard';
 
 const COLLAPSED_ROW_COUNT = 5;
@@ -34,7 +38,7 @@ function isSettled(item: WorkItem | undefined, pullRequest: WorkItem | undefined
   return status === 'merged' || status === 'closed';
 }
 
-/** Unread or moving, then open, then finished — a card the agent is still in is never finished. */
+/** Waiting on a person or moving, then open, then finished — a card the agent is still in is never finished. */
 function watchRank(row: FactoryWorkspaceRow): number {
   if (row.initializing || row.running || row.attention) return 0;
   return row.settled ? 2 : 1;
@@ -44,24 +48,16 @@ function watchRank(row: FactoryWorkspaceRow): number {
  * Explicit intent first, then whatever still has work in it, newest first inside a tier.
  * Sorting on creation rather than activity is what keeps a row still: every card write bumps
  * `updatedAt` and the board polls, so an activity order reshuffles the sidebar under the reader.
+ * Opening a session is that same reshuffle with the reader's own click behind it, so the row
+ * being read holds its place and is kept reachable by `latestRows` instead.
  * Session id closes it into a total order — the sessions endpoint sorts nothing, so anything
  * falling through to its order would still shuffle.
  */
 const bySessionPriority = (a: FactoryWorkspaceRow, b: FactoryWorkspaceRow) =>
   Number(b.pinned) - Number(a.pinned) ||
-  Number(b.active) - Number(a.active) ||
   watchRank(a) - watchRank(b) ||
   b.createdAt.localeCompare(a.createdAt) ||
   b.workspace.sessionId.localeCompare(a.workspace.sessionId);
-
-function workspaceStatus(row: FactoryWorkspaceRow): SessionRowStatus | undefined {
-  // An active thread means work is happening even if the workspace record has
-  // not yet been stamped materialized — surface the more informative state.
-  if (row.running) return 'working';
-  if (row.initializing) return 'initializing';
-  if (row.attention) return 'ready';
-  return undefined;
-}
 
 export function WorkspacesSection() {
   const { factoryId, sessionId } = useParams<{ factoryId: string; sessionId: string }>();
@@ -83,10 +79,7 @@ export function WorkspacesSection() {
     agentControllerId: AGENT_CONTROLLER_ID,
     resourceIds: workspaceIds,
   });
-  const { attentionByPath, clearAttention } = useWorkspaceAttentionState({
-    projectRepositoryId,
-    sessionKind: 'factory',
-  });
+  const { proposalByItem, effectByItem } = useItemDecisions(factoryId);
 
   const allWorkItems = workItems.data ?? [];
   const workItemByPath = new Map(
@@ -122,7 +115,7 @@ export function WorkspacesSection() {
         active,
         initializing,
         running,
-        attention: attentionByPath[workspace.sessionId] === true,
+        attention: item !== undefined && itemAwaitsPerson(proposalByItem.get(item.id), effectByItem.get(item.id)),
         review: getFactorySessionKind(workspace, item) === 'review',
         itemLabel: item && item.source !== 'manual' ? relationshipLabel(item) : undefined,
         itemTitle: item?.title,
@@ -138,7 +131,12 @@ export function WorkspacesSection() {
   });
   const latestRows = (review: boolean) => {
     const all = rows.filter(row => row.review === review).sort(bySessionPriority);
-    return { visible: all.slice(0, COLLAPSED_ROW_COUNT), all };
+    const visible = all.slice(0, COLLAPSED_ROW_COUNT);
+    // Deep links and board handoffs can open a session that sorts below the fold;
+    // show it rather than promote it, so the list never moves under the reader.
+    const open = all.find(row => row.active);
+    if (open && !visible.includes(open)) visible.push(open);
+    return { visible, all };
   };
   const workRows = latestRows(false);
   const reviewRows = latestRows(true);
@@ -164,7 +162,6 @@ export function WorkspacesSection() {
   const pending = deleteWorkspace.isPending;
 
   const openWorkspaceThread = (workspace: FactoryUserSession) => {
-    clearAttention(workspace.sessionId);
     // A workspace's thread id is its own session id (FactoryStartCoordinator
     // seeds the session with threadId = sessionId), so navigate straight there
     // instead of blocking on a session create + thread listing round-trip. The
@@ -194,6 +191,7 @@ export function WorkspacesSection() {
           pending={pending}
           mergedByPath={mergedByPath}
           viewerUserId={viewerUserId}
+          viewerProfile={auth.data?.user}
           onSelect={openWorkspaceThread}
           onPinChange={setPinned}
           onDelete={setConfirmDelete}
@@ -209,6 +207,7 @@ export function WorkspacesSection() {
           pending={pending}
           mergedByPath={mergedByPath}
           viewerUserId={viewerUserId}
+          viewerProfile={auth.data?.user}
           onSelect={openWorkspaceThread}
           onPinChange={setPinned}
           onDelete={setConfirmDelete}
@@ -275,6 +274,7 @@ function WorkspaceGroup({
   pending,
   mergedByPath,
   viewerUserId,
+  viewerProfile,
   onSelect,
   onPinChange,
   onDelete,
@@ -286,6 +286,7 @@ function WorkspaceGroup({
   pending: boolean;
   mergedByPath: Record<string, boolean>;
   viewerUserId: string | undefined;
+  viewerProfile: SessionViewerProfile | undefined;
   onSelect: (workspace: FactoryUserSession) => void;
   onPinChange: (sessionId: string, pinned: boolean) => void;
   onDelete: (workspace: FactoryUserSession) => void;
@@ -294,12 +295,10 @@ function WorkspaceGroup({
   const visibleRows = expanded ? allRows : rows;
   const hiddenCount = allRows.length - rows.length;
   return (
-    <section className="flex flex-col gap-2" aria-label={title}>
-      <div className="flex items-center px-1">
-        <Txt as="span" variant="ui-xs" className="text-icon3 tracking-wide uppercase">
-          {title}
-        </Txt>
-      </div>
+    <section className="flex flex-col gap-1" aria-label={title}>
+      <SidebarSectionHeading icon={kind === 'Review session' ? <GitPullRequest /> : <SquareKanban />}>
+        {title}
+      </SidebarSectionHeading>
       <MainSidebar.NavList>
         {visibleRows.map(row => (
           <SessionNavRow
@@ -313,10 +312,11 @@ function WorkspaceGroup({
             active={row.active}
             disabled={pending}
             merged={mergedByPath[row.workspace.sessionId] ?? row.knownMerged}
-            status={workspaceStatus(row)}
+            status={sessionRowStatus(row)}
             pinned={row.pinned}
             preview={{
               kind,
+              owner: getSessionOwnerDetails(row.workspace, viewerProfile),
               itemLabel: row.itemLabel,
               itemTitle: row.itemTitle,
               branch: row.workspace.branch,
@@ -336,7 +336,7 @@ function WorkspaceGroup({
       {hiddenCount > 0 && (
         <button
           type="button"
-          className="text-icon3 hover:text-icon5 px-1 text-left text-xs"
+          className="text-icon3 hover:text-icon5 pl-3 text-left text-xs"
           onClick={() => setExpanded(value => !value)}
         >
           {expanded ? 'Show less' : `Show ${hiddenCount} more`}

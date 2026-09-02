@@ -262,8 +262,16 @@ export function useChatCommandRegistry(prefillComposer: (draft: string) => void)
       },
     },
     {
-      name: 'login',
+      name: 'connect',
       description: 'Connect a model provider',
+      requiresSession: false,
+      execute: async () => {
+        if (factoryId) void navigate(settingsSectionPath(factoryId, 'models'), { state: { from: location } });
+      },
+    },
+    {
+      name: 'login',
+      description: 'Sign in with a provider account',
       requiresSession: false,
       execute: async () => {
         if (factoryId) void navigate(settingsSectionPath(factoryId, 'models'), { state: { from: location } });

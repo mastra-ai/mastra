@@ -2,7 +2,6 @@ import { createPrivateKey, generateKeyPairSync } from 'node:crypto';
 import { describe, expect, it, vi, afterEach } from 'vitest';
 
 import { fakeRouteAuth } from '../../routes/test-utils.js';
-import { SandboxFleet } from '../../sandbox/fleet.js';
 import { createStateSigner } from '../../state-signing.js';
 import { createFactoryStorageForTests } from '../../storage/test-utils.js';
 import { GithubIntegration, normalizePrivateKey } from './integration.js';
@@ -105,6 +104,85 @@ describe('GithubIntegration constructor', () => {
   it('normalizes an \\n-escaped private key at construction', () => {
     const escaped = pem.replace(/\n/g, '\\n');
     expect(() => new GithubIntegration({ ...validConfig(), privateKey: escaped })).not.toThrow();
+  });
+});
+
+describe('GithubIntegration collaborator permission', () => {
+  it('reuses a resolved permission per installation, repo, and login; failures are retried', async () => {
+    const github = new GithubIntegration(validConfig());
+    const getCollaboratorPermissionLevel = vi
+      .fn()
+      .mockResolvedValueOnce({ data: { permission: 'write' } })
+      .mockRejectedValueOnce(new Error('rate limited'))
+      .mockResolvedValueOnce({ data: { permission: 'read' } });
+    vi.spyOn(github, 'getInstallationOctokit').mockReturnValue({
+      repos: { getCollaboratorPermissionLevel },
+    } as any);
+
+    await expect(github.getRepositoryCollaboratorPermission(7, 'acme/app', 'Grace')).resolves.toBe('write');
+    await expect(github.getRepositoryCollaboratorPermission(7, 'acme/app', 'grace')).resolves.toBe('write');
+    expect(getCollaboratorPermissionLevel).toHaveBeenCalledTimes(1);
+
+    await expect(github.getRepositoryCollaboratorPermission(7, 'acme/app', 'hank')).resolves.toBeUndefined();
+    await expect(github.getRepositoryCollaboratorPermission(7, 'acme/app', 'hank')).resolves.toBe('read');
+    expect(getCollaboratorPermissionLevel).toHaveBeenCalledTimes(3);
+
+    // The entry expires: a lookup after the TTL goes back to GitHub.
+    vi.useFakeTimers();
+    try {
+      vi.advanceTimersByTime(31 * 60_000);
+      getCollaboratorPermissionLevel.mockResolvedValueOnce({ data: { permission: 'none' } });
+      await expect(github.getRepositoryCollaboratorPermission(7, 'acme/app', 'grace')).resolves.toBe('none');
+      expect(getCollaboratorPermissionLevel).toHaveBeenCalledTimes(4);
+    } finally {
+      vi.useRealTimers();
+    }
+
+    // A different installation is a different token and a different answer.
+    await github.getRepositoryCollaboratorPermission(8, 'acme/app', 'grace');
+    expect(getCollaboratorPermissionLevel).toHaveBeenCalledTimes(5);
+  });
+});
+
+describe('GithubIntegration collaborator permission coalescing', () => {
+  it('shares one in-flight request between overlapping lookups for the same login', async () => {
+    const github = new GithubIntegration(validConfig());
+    let release!: (value: { data: { permission: string } }) => void;
+    const getCollaboratorPermissionLevel = vi.fn(() => new Promise(resolve => (release = resolve)));
+    vi.spyOn(github, 'getInstallationOctokit').mockReturnValue({
+      repos: { getCollaboratorPermissionLevel },
+    } as any);
+
+    const first = github.getRepositoryCollaboratorPermission(7, 'acme/app', 'grace');
+    const second = github.getRepositoryCollaboratorPermission(7, 'acme/app', 'grace');
+    expect(getCollaboratorPermissionLevel).toHaveBeenCalledTimes(1);
+    release({ data: { permission: 'write' } });
+    await expect(Promise.all([first, second])).resolves.toEqual(['write', 'write']);
+    expect(getCollaboratorPermissionLevel).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('GithubIntegration collaborator permission cancellation', () => {
+  it("keeps a coalesced lookup alive for other callers when one caller's signal aborts", async () => {
+    const github = new GithubIntegration(validConfig());
+    let release!: (value: { data: { permission: string } }) => void;
+    const getCollaboratorPermissionLevel = vi.fn(() => new Promise(resolve => (release = resolve)));
+    vi.spyOn(github, 'getInstallationOctokit').mockReturnValue({
+      repos: { getCollaboratorPermissionLevel },
+    } as any);
+    const aborter = new AbortController();
+
+    const aborted = github.getRepositoryCollaboratorPermission(7, 'acme/app', 'grace', aborter.signal);
+    const patient = github.getRepositoryCollaboratorPermission(7, 'acme/app', 'grace');
+    aborter.abort();
+    await expect(aborted).resolves.toBeUndefined();
+
+    release({ data: { permission: 'write' } });
+    await expect(patient).resolves.toBe('write');
+    expect(getCollaboratorPermissionLevel).toHaveBeenCalledTimes(1);
+    const [request] = getCollaboratorPermissionLevel.mock.calls[0] as unknown as [{ request: { signal: AbortSignal } }];
+    expect(request.request.signal).not.toBe(aborter.signal);
+    expect(request.request.signal.aborted).toBe(false);
   });
 });
 
@@ -494,7 +572,9 @@ describe('GithubIntegration FactoryIntegration surface', () => {
     const github = new GithubIntegration(validConfig());
     const routes = github.routes({
       auth: fakeRouteAuth(),
-      fleet: new SandboxFleet(),
+      // Only presence is read here (`!!sandbox` gates route mounting); the
+      // callback is never invoked by this test.
+      sandbox: (() => ({})) as never,
       stateSigner: createStateSigner('secret'),
       storage: {
         generic: integrations.forIntegration(github.id),

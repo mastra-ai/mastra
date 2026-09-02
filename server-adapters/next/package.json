@@ -1,6 +1,6 @@
 {
   "name": "@mastra/next",
-  "version": "0.2.18-alpha.10",
+  "version": "0.2.22-alpha.7",
   "description": "Mastra Next.js server adapter — drop your Mastra instance into a Next.js app",
   "type": "module",
   "main": "dist/index.js",
@@ -49,8 +49,7 @@
     "node": ">=22.13.0"
   },
   "files": [
-    "dist",
-    "CHANGELOG.md"
+    "dist"
   ],
   "homepage": "https://mastra.ai",
   "repository": {

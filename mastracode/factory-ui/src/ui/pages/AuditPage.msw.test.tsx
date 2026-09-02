@@ -1,4 +1,4 @@
-import { fireEvent, screen, within } from '@testing-library/react';
+import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { createMemoryRouter, RouterProvider } from 'react-router';
@@ -119,7 +119,7 @@ describe('Audit log', () => {
     const user = userEvent.setup();
     const { client } = renderAudit();
 
-    expect(await screen.findByRole('slider', { name: 'Audit time range' })).toBeInTheDocument();
+    expect(await screen.findByRole('slider', { name: 'Range start' })).toBeInTheDocument();
     expect(await screen.findByText('→ Review')).toBeInTheDocument();
     expect(screen.getByText('Damien Schneider')).toBeInTheDocument();
 
@@ -139,35 +139,44 @@ describe('Audit log', () => {
     expect(olderRow).toHaveAttribute('aria-expanded', 'true');
     expect(recentRow).toHaveAttribute('aria-expanded', 'true');
 
-    const timeline = screen.getByRole('slider', { name: 'Audit time range' });
+    const rangeEnd = screen.getByRole('slider', { name: 'Range end' });
 
-    fireEvent.pointerDown(timeline, { pointerType: 'mouse', button: 2 });
-    fireEvent.pointerUp(timeline, { pointerType: 'mouse', button: 2 });
-    expect(screen.queryByRole('button', { name: 'Reset' })).not.toBeInTheDocument();
-    await user.click(timeline);
-    expect(timeline).toHaveFocus();
-    await user.keyboard('{ArrowUp}');
-    const reset = screen.getByRole('button', { name: 'Reset' });
-    await user.click(reset);
-    expect(screen.queryByRole('button', { name: 'Reset' })).not.toBeInTheDocument();
+    fireEvent.pointerDown(rangeEnd, { pointerType: 'mouse', button: 2 });
+    fireEvent.pointerUp(rangeEnd, { pointerType: 'mouse', button: 2 });
+    expect(screen.getByText('2 loaded')).toBeInTheDocument();
 
-    const startDate = screen.getByRole('button', { name: 'Start date' });
-    expect(startDate).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'End date' })).toBeInTheDocument();
-    await user.click(startDate);
-    expect(await screen.findByTestId('datepicker-calendar')).toBeInTheDocument();
+    await user.click(rangeEnd);
+    expect(rangeEnd).toHaveFocus();
+    await user.keyboard('{ArrowLeft}');
+    expect(await screen.findByText(/1 of 2 loaded$/)).toBeInTheDocument();
     await user.keyboard('{Escape}');
+    expect(await screen.findByText('2 loaded')).toBeInTheDocument();
 
-    await user.click(screen.getByRole('button', { name: 'Runs' }));
-    expect(await screen.findByRole('button', { name: 'Runs' })).toHaveAttribute('aria-pressed', 'true');
-    await user.click(screen.getByRole('button', { name: 'Agent' }));
-    expect(await screen.findByRole('button', { name: 'Runs' })).toHaveAttribute('aria-pressed', 'true');
-    expect(screen.getByRole('button', { name: 'Agent' })).toHaveAttribute('aria-pressed', 'true');
+    // Narrow screens get chips instead of the lens; a preset shorter than the
+    // loaded span is offered, a longer one is not.
+    const presets = within(screen.getByRole('group', { name: 'Audit time range' }));
+    expect(presets.getByRole('button', { name: '24h' })).toHaveAttribute('aria-pressed', 'false');
+    expect(presets.queryByRole('button', { name: '7d' })).not.toBeInTheDocument();
+    await user.click(presets.getByRole('button', { name: '24h' }));
+    expect(presets.getByRole('button', { name: '24h' })).toHaveAttribute('aria-pressed', 'true');
+    await user.click(presets.getByRole('button', { name: 'All' }));
+    expect(await screen.findByText('2 loaded')).toBeInTheDocument();
 
-    await user.click(screen.getByRole('button', { name: 'All' }));
-    expect(await screen.findByRole('button', { name: 'All' })).toHaveAttribute('aria-pressed', 'true');
-    expect(screen.getByRole('button', { name: 'Runs' })).toHaveAttribute('aria-pressed', 'false');
-    expect(screen.getByRole('button', { name: 'Agent' })).toHaveAttribute('aria-pressed', 'false');
+    const categories = within(screen.getByRole('group', { name: 'Audit categories' }));
+    await user.click(categories.getByRole('button', { name: 'Runs' }));
+    await waitFor(() =>
+      expect(categories.getByRole('button', { name: 'Runs' })).toHaveAttribute('aria-pressed', 'true'),
+    );
+    await user.click(categories.getByRole('button', { name: 'Agent' }));
+    expect(categories.getByRole('button', { name: 'Runs' })).toHaveAttribute('aria-pressed', 'true');
+    expect(categories.getByRole('button', { name: 'Agent' })).toHaveAttribute('aria-pressed', 'true');
+
+    await user.click(categories.getByRole('button', { name: 'All' }));
+    await waitFor(() =>
+      expect(categories.getByRole('button', { name: 'All' })).toHaveAttribute('aria-pressed', 'true'),
+    );
+    expect(categories.getByRole('button', { name: 'Runs' })).toHaveAttribute('aria-pressed', 'false');
+    expect(categories.getByRole('button', { name: 'Agent' })).toHaveAttribute('aria-pressed', 'false');
   });
 
   it('keeps category toggles available when the log is empty', async () => {
@@ -183,12 +192,13 @@ describe('Audit log', () => {
 
     expect(await screen.findByRole('heading', { name: 'No audit events yet' })).toBeInTheDocument();
     expect(screen.getByRole('group', { name: 'Audit categories' })).toBeInTheDocument();
-    expect(screen.getByRole('slider', { name: 'Audit time range' })).toBeInTheDocument();
+    // Nothing recorded means no axis to draw a range on, so the ruler stays away.
+    expect(screen.getByText('Nothing recorded yet')).toBeInTheDocument();
+    expect(screen.queryByRole('slider')).not.toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: 'Runs' }));
-    expect(await screen.findByRole('heading', { name: 'No matching audit events' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'No events in these categories' })).toBeInTheDocument();
     expect(screen.getByRole('group', { name: 'Audit categories' })).toBeInTheDocument();
-    expect(screen.getByRole('slider', { name: 'Audit time range' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Runs' })).toHaveAttribute('aria-pressed', 'true');
   });
 });

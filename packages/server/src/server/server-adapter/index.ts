@@ -389,6 +389,15 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
       ) => Promise<Response>)
     | null = null;
 
+  /**
+   * Whether custom (non-schema) API routes were registered. Adapters use this
+   * at request time to decide if they need to preserve a pristine copy of the
+   * request body for the custom-route bridge.
+   */
+  protected get hasCustomRouteHandler(): boolean {
+    return this.customRouteHandler !== null;
+  }
+
   constructor({
     app,
     mastra,

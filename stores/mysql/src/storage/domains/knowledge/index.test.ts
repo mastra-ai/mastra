@@ -20,6 +20,47 @@ const operations = new StoreOperationsMySQL({ pool, database });
 const createStore = () => new KnowledgeMySQL({ pool, operations });
 createKnowledgeStorageTests(createStore);
 
+describe('MySQL knowledge legacy schema upgrade', () => {
+  it('adds the description column to pre-existing tables and reads legacy rows as undefined', async () => {
+    const store = createStore();
+    await store.init();
+    // Recreate the pre-description table shape, then let init() upgrade it.
+    // Mutates the shared table; safe because vitest runs files serially (fileParallelism: false)
+    // and the shared suite's beforeEach re-runs init(), which re-adds the column.
+    await pool.query('ALTER TABLE `mastra_knowledge_nodes` DROP COLUMN description');
+    const legacyId = `legacy-${Date.now()}`;
+    await pool.query(
+      'INSERT INTO `mastra_knowledge_nodes` (id,type,name,canonicalName,kind,content,scope,scopeKey,version,mergedInto,createdAt,updatedAt) VALUES (?,?,?,?,?,?,?,?,?,NULL,?,?)',
+      [
+        legacyId,
+        'node',
+        `Legacy ${legacyId}`,
+        `legacy ${legacyId}`,
+        'task',
+        'legacy body',
+        JSON.stringify(['org:legacy-upgrade']),
+        'org:legacy-upgrade',
+        1,
+        new Date(),
+        new Date(),
+      ],
+    );
+
+    const upgraded = createStore();
+    await upgraded.init();
+
+    const [columns] = await pool.query(
+      "SELECT COLUMN_NAME AS columnName FROM information_schema.columns WHERE table_schema=? AND table_name='mastra_knowledge_nodes'",
+      [database],
+    );
+    expect((columns as Array<{ columnName: string }>).map(row => row.columnName)).toContain('description');
+
+    const legacy = await upgraded.getNode(legacyId);
+    expect(legacy?.description).toBeUndefined();
+    expect(legacy?.content).toBe('legacy body');
+  });
+});
+
 describe('MySQL knowledge concurrency and indexes', () => {
   it('creates required indexes idempotently and exports its schema', async () => {
     const store = createStore();

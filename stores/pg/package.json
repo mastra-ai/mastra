@@ -1,6 +1,6 @@
 {
   "name": "@mastra/pg",
-  "version": "1.22.0-alpha.4",
+  "version": "1.22.3-alpha.3",
   "description": "Postgres provider for Mastra - includes both vector and db storage capabilities",
   "type": "module",
   "main": "dist/index.js",
@@ -64,11 +64,10 @@
     "vitest": "catalog:"
   },
   "peerDependencies": {
-    "@mastra/core": ">=1.53.0-0 <2.0.0-0"
+    "@mastra/core": ">=1.63.1-0 <2.0.0-0"
   },
   "files": [
-    "dist",
-    "CHANGELOG.md"
+    "dist"
   ],
   "homepage": "https://mastra.ai",
   "repository": {

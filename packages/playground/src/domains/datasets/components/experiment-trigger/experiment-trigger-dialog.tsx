@@ -26,6 +26,9 @@ import { jsonSchemaToZodRuntime } from '@/lib/form/json-schema-to-zod-runtime';
 export interface ExperimentTriggerDialogProps {
   initialDatasetId?: string;
   initialDatasetVersion?: number;
+  initialScorerIds?: string[];
+  initialTargetType?: TargetType;
+  initialTargetId?: string;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSuccess?: (experimentId: string) => void;
@@ -66,6 +69,9 @@ function RequestContextForm({
 export function ExperimentTriggerDialog({
   initialDatasetId,
   initialDatasetVersion,
+  initialScorerIds,
+  initialTargetType,
+  initialTargetId,
   open,
   onOpenChange,
   onSuccess,
@@ -73,9 +79,9 @@ export function ExperimentTriggerDialog({
   const contentRef = useRef<HTMLDivElement>(null);
   const [datasetId, setDatasetId] = useState(initialDatasetId ?? '');
   const [version, setVersion] = useState<number | null>(initialDatasetVersion ?? null);
-  const [targetType, setTargetType] = useState<TargetType | ''>('');
-  const [targetId, setTargetId] = useState<string>('');
-  const [selectedScorers, setSelectedScorers] = useState<string[]>([]);
+  const [targetType, setTargetType] = useState<TargetType | ''>(initialTargetType ?? '');
+  const [targetId, setTargetId] = useState<string>(initialTargetId ?? '');
+  const [selectedScorers, setSelectedScorers] = useState<string[]>(initialScorerIds ?? []);
   const [requestContextValues, setRequestContextValues] = useState<Record<string, unknown>>({});
   const [requestContextRaw, setRequestContextRaw] = useState('');
 
@@ -97,9 +103,9 @@ export function ExperimentTriggerDialog({
   const resetState = () => {
     setDatasetId(initialDatasetId ?? '');
     setVersion(initialDatasetVersion ?? null);
-    setTargetType('');
-    setTargetId('');
-    setSelectedScorers([]);
+    setTargetType(initialTargetType ?? '');
+    setTargetId(initialTargetId ?? '');
+    setSelectedScorers(initialScorerIds ?? []);
     setRequestContextValues({});
     setRequestContextRaw('');
   };
@@ -204,15 +210,12 @@ export function ExperimentTriggerDialog({
             container={contentRef}
           />
 
-          {/* Only show scorer selector for agent/workflow targets */}
-          {targetType && targetType !== 'scorer' && (
-            <ScorerSelector
-              selectedScorers={selectedScorers}
-              setSelectedScorers={setSelectedScorers}
-              disabled={isRunning}
-              container={contentRef}
-            />
-          )}
+          <ScorerSelector
+            selectedScorers={selectedScorers}
+            setSelectedScorers={setSelectedScorers}
+            disabled={isRunning}
+            container={contentRef}
+          />
 
           {hasSchema ? (
             <RequestContextForm requestContextSchema={requestContextSchema!} onChange={setRequestContextValues} />

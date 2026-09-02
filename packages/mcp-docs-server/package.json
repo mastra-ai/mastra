@@ -1,6 +1,6 @@
 {
   "name": "@mastra/mcp-docs-server",
-  "version": "1.2.19-alpha.17",
+  "version": "1.2.23-alpha.15",
   "description": "MCP server for accessing Mastra.ai documentation, changelogs, and news.",
   "type": "module",
   "main": "dist/index.js",
@@ -9,8 +9,7 @@
   "files": [
     "dist",
     ".docs",
-    "README.md",
-    "CHANGELOG.md"
+    "README.md"
   ],
   "exports": {
     ".": {

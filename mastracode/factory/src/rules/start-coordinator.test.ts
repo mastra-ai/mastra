@@ -3,6 +3,7 @@ import { RequestContext } from '@mastra/core/request-context';
 import { describe, expect, it, vi } from 'vitest';
 
 import { DEFAULT_OBSERVATION_THRESHOLD, DEFAULT_REFLECTION_THRESHOLD } from '../session/memory-settings-hydration.js';
+import { FactoryFeedReader } from '../storage/domains/comments/feed-context.js';
 import { factoryMemorySettingsUserId } from '../storage/domains/memory-settings/base.js';
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
 import { defaultFactoryRules } from './defaults.js';
@@ -32,6 +33,7 @@ function makeController(sendMessage = vi.fn(async () => {})) {
     },
     getWorkspace: vi.fn(() => ({ skills: undefined })),
     state: { get: vi.fn(() => ({})), set: vi.fn(async () => {}) },
+    permissions: { setForTool: vi.fn(async () => {}) },
     model: { switch: vi.fn(async () => {}) },
     om: {
       observer: { modelId: vi.fn(() => undefined), switchModel: vi.fn(async () => {}) },
@@ -237,6 +239,11 @@ describe('FactoryStartCoordinator', () => {
       replayed: false,
     });
     expect((await storage.listPendingStarts('org-1', PROJECT_ID))[0]?.status).toBe('pending');
+    const session = await vi.mocked(controller.createSession).mock.results[0]?.value;
+    expect(session.permissions.setForTool).toHaveBeenCalledWith({
+      toolName: 'factory_transition_work_item',
+      policy: 'allow',
+    });
     const requestContext = vi.mocked(controller.createSession).mock.calls[0]?.[0].requestContext;
     expect(requestContext?.get('user')).toEqual({
       workosId: 'user-1',
@@ -251,6 +258,27 @@ describe('FactoryStartCoordinator', () => {
       branch: 'factory/issue-1',
       startedBy: 'user-1',
     });
+  });
+
+  it('grants plan preapproval only on a hands-off start, and a later one upgrades the item', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const { controller } = makeController();
+    const coordinator = new FactoryStartCoordinator(
+      controller as never,
+      storage,
+      undefined,
+      makeSourceControl() as never,
+    );
+
+    const plain = await coordinator.prepare(startRequest());
+    expect((await storage.get({ orgId: 'org-1', id: plain.workItemId }))?.plansPreapprovedAt ?? null).toBeNull();
+
+    const handsOff = await coordinator.prepare({
+      ...startRequest({ kickoffKey: 'kickoff-2' }),
+      preapprovePlans: true,
+    });
+    expect(handsOff.workItemId).toBe(plain.workItemId);
+    expect((await storage.get({ orgId: 'org-1', id: handsOff.workItemId }))?.plansPreapprovedAt).toBeInstanceOf(Date);
   });
 
   it('seeds caller identity into an existing request context', async () => {
@@ -704,5 +732,72 @@ describe('FactoryStartCoordinator', () => {
     expect(second.workItemId).not.toBe(first.workItemId);
     expect(await storage.listPendingStarts('org-1', PROJECT_ID)).toHaveLength(1);
     expect(await storage.listPendingStarts('org-2', PROJECT_ID)).toHaveLength(1);
+  });
+
+  describe('feed context injection', () => {
+    async function seedItemWithComment() {
+      const seed = await createFactoryStorageForTests();
+      const item = (
+        await seed.workItems.upsert({
+          orgId: 'org-1',
+          userId: 'user-1',
+          factoryProjectId: PROJECT_ID,
+          input: startRequest().workItem.input,
+        })
+      ).item;
+      await seed.comments.create({
+        orgId: 'org-1',
+        factoryProjectId: PROJECT_ID,
+        workItemId: item.id,
+        author: { kind: 'user', id: 'user-2', displayName: 'Bob' },
+        body: 'ship it behind the flag',
+      });
+      return { seed, item };
+    }
+
+    function coordinatorWith(
+      seed: Awaited<ReturnType<typeof createFactoryStorageForTests>>,
+      reader?: FactoryFeedReader,
+    ) {
+      const { controller } = makeController();
+      return new FactoryStartCoordinator(
+        controller as never,
+        seed.workItems,
+        undefined,
+        makeSourceControl() as never,
+        undefined,
+        reader,
+      );
+    }
+
+    it('appends the feed to the kickoff of an existing item', async () => {
+      const { seed, item } = await seedItemWithComment();
+      const coordinator = coordinatorWith(seed, new FactoryFeedReader(seed.comments));
+
+      await coordinator.prepare(startRequest({ id: item.id }));
+
+      const message = (await seed.workItems.listPendingStarts('org-1', PROJECT_ID))[0]?.message;
+      expect(message).toMatch(/^Start work\n\n<work-item-feed>\n/);
+      expect(message).toContain('ship it behind the flag');
+      expect(message).toContain('[Bob · ');
+    });
+
+    it('leaves a new item kickoff untouched even with a reader injected', async () => {
+      const { seed } = await seedItemWithComment();
+      const coordinator = coordinatorWith(seed, new FactoryFeedReader(seed.comments));
+
+      await coordinator.prepare(startRequest());
+
+      expect((await seed.workItems.listPendingStarts('org-1', PROJECT_ID))[0]?.message).toBe('Start work');
+    });
+
+    it('is byte-identical when no reader is injected', async () => {
+      const { seed, item } = await seedItemWithComment();
+      const coordinator = coordinatorWith(seed);
+
+      await coordinator.prepare(startRequest({ id: item.id }));
+
+      expect((await seed.workItems.listPendingStarts('org-1', PROJECT_ID))[0]?.message).toBe('Start work');
+    });
   });
 });

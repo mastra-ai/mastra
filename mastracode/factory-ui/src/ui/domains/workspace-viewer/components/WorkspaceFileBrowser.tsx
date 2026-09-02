@@ -169,7 +169,7 @@ export function WorkspaceFileBrowser({
   const nodes = buildTree(persistedFiles);
 
   return (
-    <aside className="flex h-full min-h-0 w-full min-w-0 flex-col" aria-label="Workspace files">
+    <aside className="flex min-h-0 w-full min-w-0 grow flex-col" aria-label="Workspace files">
       <div className="flex min-h-10 items-center gap-1.5 px-1.5 py-1">
         <Button size="icon-xs" variant="ghost" onClick={onBack} aria-label="Back to workspace">
           <ArrowLeft />
