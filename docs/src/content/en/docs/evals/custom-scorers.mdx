@@ -164,7 +164,7 @@ const glutenCheckerScorer = createScorer(...)
 
 **Data Flow:** Results are available to subsequent steps as `results.preprocessStepResult`
 
-**Skipping runs with nothing to evaluate:** Return `notScorable()` from any step when the run doesn't contain what the scorer judges. The remaining steps don't run, no judge model call is made, and no score is stored, so the run stays out of the scorer's averages instead of counting as a pass. See [`notScorable()`](/reference/evals/not-scorable).
+**Skipping runs with nothing to evaluate:** Return `notScorable()` from any step when the run doesn't contain what the scorer judges. Mastra ends the pipeline at that step without a judge model call or a stored score, which keeps the run out of the scorer's averages rather than counting it as a pass. See [`notScorable()`](/reference/evals/not-scorable).
 
 ```typescript oxfmt:false
 import { createScorer, notScorable } from '@mastra/core/evals'
