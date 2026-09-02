@@ -2,4 +2,4 @@
 '@mastra/code-sdk': patch
 ---
 
-Improved diagnostics and error guidance when deployed tenant credential resolution fails closed.
+Signed-in Factory accounts now get a clear, actionable error when no usable provider credential is available, instead of a silent failure.

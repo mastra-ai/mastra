@@ -24,6 +24,7 @@ import {
   emptyTraceSpanScores,
   traceUsageBreakdown,
 } from './fixtures/traces';
+import { buildListDatasetsResponse } from '@/domains/datasets/components/__tests__/fixtures/datasets';
 import { TestLinkProvider } from '@/test/link-provider';
 import { server } from '@/test/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '@/test/render';
@@ -49,6 +50,7 @@ const setTracePageHandlers = (systemPackages: GetSystemPackagesResponse) => {
   server.use(
     http.get(`${TEST_BASE_URL}/api/system/packages`, () => HttpResponse.json(systemPackages)),
     http.get(`${TEST_BASE_URL}/api/scores/scorers`, () => HttpResponse.json(emptyScorers)),
+    http.get(`${TEST_BASE_URL}/api/datasets`, () => HttpResponse.json(buildListDatasetsResponse([]))),
     http.get(`${TEST_BASE_URL}/api/observability/traces`, () => HttpResponse.json(traceList)),
     // The list fetches the lightweight projection first; serve the same rows there.
     http.get(`${TEST_BASE_URL}/api/observability/traces/light`, () => HttpResponse.json(traceList)),
@@ -247,10 +249,12 @@ describe('Traces side panel header actions', () => {
     const { queryClient } = renderPage('/traces?traceId=trace-a');
     await waitFor(() => expect(queryClient.isFetching()).toBe(0));
 
-    expect(screen.getByRole('button', { name: 'Evaluate trace' })).not.toBeNull();
-    expect(screen.getByRole('button', { name: 'Add full trace to dataset' })).not.toBeNull();
+    fireEvent.click(await screen.findByRole('button', { name: 'Trace actions' }));
+
+    expect(await screen.findByRole('menuitem', { name: 'Evaluate trace' })).not.toBeNull();
+    expect(screen.getByRole('menuitem', { name: 'Add full trace to dataset' })).not.toBeNull();
     // The parent trace panel is no longer collapsible.
-    expect(screen.queryByRole('button', { name: /collapse panel/i })).toBeNull();
+    expect(screen.queryByRole('menuitem', { name: /collapse panel/i })).toBeNull();
   });
 });
 

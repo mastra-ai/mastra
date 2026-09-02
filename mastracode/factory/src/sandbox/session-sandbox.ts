@@ -1,3 +1,6 @@
+import path from 'node:path';
+import { SETUP_MARKER_PATH, setupMarkerContent } from '@internal/workspace';
+
 import type { MastraSandbox, SandboxStartHook, WorkspaceSandbox } from '@mastra/core/workspace';
 import type { RepositoryAccess } from '../capabilities/version-control.js';
 import { deriveLocalWorkdir, deriveRemoteRepoDir, repoDirUnder } from './workdir.js';
@@ -56,8 +59,23 @@ export interface FactorySandboxContext {
  */
 export type MastraFactorySandboxConfig = (ctx: FactorySandboxContext) => MastraSandbox;
 
-/** The session's setup work, run against a started sandbox. Must be idempotent. */
-export type SessionSetupRun = (sandbox: WorkspaceSandbox, workdir: string) => Promise<void>;
+/**
+ * What the start hook learned about the setup command before running the
+ * session setup, and how to record its completion afterwards.
+ */
+export interface SessionSetupGate {
+  /** True when the sandbox already carries a marker for the current setup command. */
+  setupDone: boolean;
+  /** Write the marker once the setup command succeeded. Best-effort. */
+  markSetupDone: () => Promise<void>;
+}
+
+/**
+ * The session's setup work, run against a started sandbox on EVERY start.
+ * Materialize and checkout are idempotent and must always run (a warm boot
+ * still needs its pull); only the setup command consults `gate`.
+ */
+export type SessionSetupRun = (sandbox: WorkspaceSandbox, workdir: string, gate: SessionSetupGate) => Promise<void>;
 
 /**
  * Per-process session-id → sandbox instance memo.
@@ -186,70 +204,69 @@ export function hasFailedSetupCommand(sessionId: string, command: string): boole
 }
 
 /**
- * Completion marker for the session setup. Factory owns this end-to-end:
- * the `onStart` hook and the post-start fallback guard the exact same path,
- * so setup never double-runs regardless of which layer executed it. It is a
- * skip cache, not a correctness mechanism — the setup work is idempotent by
- * construction (materialize probes the disk, checkout/setup re-run safely).
+ * The setup completion marker is a convention shared with the repo templates
+ * (`@internal/workspace`): `.mastra-sandbox/setup` beside the checkout,
+ * containing a digest of the setup commands. Templates write it as their last
+ * build step, so a sandbox booted from a warm image already carries it; the
+ * start hook writes it after a successful runtime setup. It is a skip cache,
+ * not a correctness mechanism: the setup command is assumed idempotent, and a
+ * missing or mismatched marker only re-runs it.
+ *
+ * The working directory is the parent of the repo dir, which is also the
+ * template's build cwd, so this is the file the template's marker step wrote.
  */
-const SESSION_SETUP_MARKER = '.mastra-factory/bootstrap';
-
-function markerShellPath(sandbox: Pick<WorkspaceSandbox, 'provider'>): string {
-  // Local sandboxes exec with cwd = the session working directory; remote
-  // VMs are one-per-session so $HOME is private to the session.
-  return sandbox.provider === 'local' ? `./${SESSION_SETUP_MARKER}` : `$HOME/${SESSION_SETUP_MARKER}`;
+function markerShellPath(workdir: string): string {
+  return `${path.posix.dirname(workdir)}/${SETUP_MARKER_PATH}`;
 }
 
-async function markerPresent(sandbox: WorkspaceSandbox, workdir: string): Promise<boolean> {
-  // The marker is a skip cache — it sits beside the checkout, not inside it,
-  // so it can outlive a removed checkout (e.g. a wiped local session dir or
-  // a recovered VM). Trust it only when the checkout it describes exists.
-  const probe = await sandbox.executeCommand!(`test -f "${markerShellPath(sandbox)}" && test -d "${workdir}/.git"`);
+async function markerMatches(sandbox: WorkspaceSandbox, workdir: string, content: string): Promise<boolean> {
+  // The marker sits beside the checkout, not inside it, so it can outlive a
+  // removed checkout (a wiped local session dir, a recovered VM). Trust it
+  // only when the checkout it describes exists and it names this command.
+  const marker = markerShellPath(workdir);
+  const probe = await sandbox.executeCommand!(
+    `test -d "${workdir}/.git" && test -f "${marker}" && [ "$(cat "${marker}")" = "${content}" ]`,
+  );
   return probe.exitCode === 0;
 }
 
-async function writeMarker(sandbox: WorkspaceSandbox): Promise<void> {
+async function writeMarker(sandbox: WorkspaceSandbox, workdir: string, content: string): Promise<void> {
   // Best-effort: a missing marker only re-runs the idempotent setup later.
-  const marker = markerShellPath(sandbox);
-  await sandbox.executeCommand!(`mkdir -p "$(dirname "${marker}")" && touch "${marker}"`).catch(() => {});
-}
-
-/**
- * Run the session setup, marker-guarded: skip when the marker exists (unless
- * the VM is known-fresh), otherwise run and write the marker only on
- * success. Setup failures propagate — no marker is written, so the next
- * attempt re-runs.
- */
-async function runGuardedSetup(
-  sandbox: WorkspaceSandbox,
-  run: SessionSetupRun,
-  { skipMarkerProbe, sessionId, repoFullName }: { skipMarkerProbe: boolean; sessionId: string; repoFullName: string },
-): Promise<void> {
-  if (!sandbox.executeCommand) {
-    throw new Error(`Sandbox '${sandbox.id}' cannot run the session setup: no executeCommand implementation`);
-  }
-  // Resolved from the live instance (the hook runs inside `start()`, so the
-  // VM is up) and memoized on the session entry for passive readers.
-  const workdir = await resolveSessionWorkdir(sessionId, sandbox, repoFullName);
-  if (!skipMarkerProbe && (await markerPresent(sandbox, workdir))) return;
-  await run(sandbox, workdir);
-  await writeMarker(sandbox);
+  const marker = markerShellPath(workdir);
+  await sandbox.executeCommand!(`mkdir -p "$(dirname "${marker}")" && printf '%s' '${content}' > "${marker}"`).catch(
+    () => {},
+  );
 }
 
 /**
  * Build the session setup hook, which factory attaches to the constructed
- * sandbox with `setOnStart`. Runs inside the sandbox start
- * lifecycle: a fresh VM (`outcome: 'created'`) runs setup with no probe; a
- * reconnect probes the marker first, which re-runs setup after a failed or
- * crash-interrupted attempt. Throwing fails `start()` loudly — core treats
- * onStart errors as fatal.
+ * sandbox with `setOnStart`. Runs inside the sandbox start lifecycle on
+ * every start, fresh VM or reconnect: materialize and checkout always run,
+ * and the setup command runs unless the sandbox already carries the marker
+ * for it (a warm template image, or an earlier successful start). Throwing
+ * fails `start()` loudly; core treats onStart errors as fatal.
  */
 export function createSessionSetupHook(
   run: SessionSetupRun,
   sessionId: string,
   repoFullName: string,
+  setupCommand: string | undefined,
 ): SandboxStartHook {
-  return async ({ sandbox, outcome }) => {
-    await runGuardedSetup(sandbox, run, { skipMarkerProbe: outcome === 'created', sessionId, repoFullName });
+  // No command, no marker: nothing to gate.
+  const marker = setupCommand?.trim() ? setupMarkerContent(setupCommand) : undefined;
+  return async ({ sandbox }) => {
+    if (!sandbox.executeCommand) {
+      throw new Error(`Sandbox '${sandbox.id}' cannot run the session setup: no executeCommand implementation`);
+    }
+    // Resolved from the live instance (the hook runs inside `start()`, so the
+    // VM is up) and memoized on the session entry for passive readers.
+    const workdir = await resolveSessionWorkdir(sessionId, sandbox, repoFullName);
+    // Probed before materialize so a wiped checkout reads as "not done" even
+    // though materialize is about to restore it.
+    const setupDone = marker ? await markerMatches(sandbox, workdir, marker) : true;
+    await run(sandbox, workdir, {
+      setupDone,
+      markSetupDone: () => (marker ? writeMarker(sandbox, workdir, marker) : Promise.resolve()),
+    });
   };
 }

@@ -1,5 +1,6 @@
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
+import { setupMarkerCommand, setupMarkerContent } from '@internal/workspace';
 
 import { Template, type SandboxTemplateBuilder } from './template.js';
 
@@ -181,6 +182,8 @@ export function createRepoTemplate(options: PlatformRepoTemplateOptions): Platfo
       .runCmd(`git -C "${repoDir}" checkout ${sha}`);
     // Build steps use fresh shells, so each setup command needs its own `cd`.
     for (const command of setupCommands) template = template.runCmd(`cd "${repoDir}" && ${command}`);
+    // Last, so it only exists in images where every step above succeeded.
+    template = template.runCmd(setupMarkerCommand(setupMarkerContent(setupCommands)));
     return template.withFamily(family);
   };
 }

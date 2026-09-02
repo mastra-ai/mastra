@@ -1,3 +1,4 @@
+import { SETUP_MARKER_PATH, setupMarkerContent } from '@internal/workspace';
 import { Template } from 'e2b';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -223,6 +224,19 @@ describe('createRepoTemplate', () => {
     const resolved = await resolve(BASE);
     expect(resolved.ref).toBe(repoTemplateRef({ cloneUrl: CLONE_URL, setupCommand: SETUP, sha: head }));
     expect(await serializedSteps(resolved)).toContain(`checkout ${head}`);
+  });
+
+  it('always writes the setup marker beside the checkout as the last build step', async () => {
+    const resolved = await resolve(BASE);
+    const steps = await serializedSteps(resolved);
+    const content = setupMarkerContent([SETUP]);
+    expect(content).toMatch(/^sha256:[0-9a-f]{64}$/);
+    const markerStep = `mkdir -p \\"$(dirname \\"${SETUP_MARKER_PATH}\\")\\" && printf '%s' '${content}' > \\"${SETUP_MARKER_PATH}\\"`;
+    expect(steps).toContain(markerStep);
+    expect(steps.lastIndexOf(markerStep)).toBeGreaterThan(steps.lastIndexOf(SETUP));
+    // The digest covers exactly the commands the image ran, in order.
+    expect(setupMarkerContent(['a', 'b'])).not.toBe(setupMarkerContent(['b', 'a']));
+    expect(setupMarkerContent([])).toMatch(/^sha256:/);
   });
 
   it('looks a github.com head up through the REST API, without git or a clone', async () => {

@@ -1,5 +1,31 @@
 # @mastra/core
 
+## 1.64.0-alpha.5
+
+### Patch Changes
+
+- Fixed `SlashCommandChannelHandler`, `SlashCommandChannelHandlerConfig`, and `SlashCommandEvent` not being exported from `@mastra/core/channels`. Standalone slash-command handlers can now be typed directly instead of reaching through `ChannelHandlers['onSlashCommand']`. ([#22814](https://github.com/mastra-ai/mastra/pull/22814))
+
+  ```ts
+  import type { SlashCommandChannelHandler } from '@mastra/core/channels';
+
+  const onSlashCommand: SlashCommandChannelHandler = async (event, defaultHandler) => {
+    if (event.command === '/help') {
+      await event.channel.post('Available commands: /help');
+      return;
+    }
+    await defaultHandler();
+  };
+  ```
+
+- Exported the validateToolOutput helper from @mastra/core/tools so integrations can validate tool results against a schema and produce the same structured validation error as createTool. ([#22779](https://github.com/mastra-ai/mastra/pull/22779))
+
+- Fixed signals sent after DurableAgent recovery so they are drained by the resumed run. ([#22781](https://github.com/mastra-ai/mastra/pull/22781))
+
+- Fixed background tasks advertising the `_background` override to every tool. Previously, enabling `backgroundTasks` on the Mastra instance injected the `_background` field into every tool's input schema and listed every tool as background-eligible in the system prompt, even when neither the agent nor the tool opted in. Now only tools that are actually background-eligible — via the agent's `backgroundTasks.tools` config or the tool's own `background: { enabled: true }` — advertise the override, matching the runtime dispatch behavior. This removes roughly 2,000 characters of prompt overhead per ineligible tool and stops the model from being told it can background tools it cannot. Fixes [#22724](https://github.com/mastra-ai/mastra/issues/22724). ([#22777](https://github.com/mastra-ai/mastra/pull/22777))
+
+- Fixed scheduled workflows disappearing from Studio's Schedules tab for dynamically created workflows. Dynamic workflow definitions now persist their schedule configuration, so schedules are re-declared after a restart instead of being deleted as orphans. Schedules of dynamic workflows that fail to load are also kept instead of being swept. Fixes https://github.com/mastra-ai/mastra/issues/22756 ([#22778](https://github.com/mastra-ai/mastra/pull/22778))
+
 ## 1.64.0-alpha.4
 
 ### Patch Changes

@@ -58,6 +58,7 @@ import {
   parseCreatedPullRequest,
   subscribeCurrentSessionToPullRequest,
 } from './session-subscriptions.js';
+import { settleOrAbort } from './settle-or-abort.js';
 import type { GithubSubscriptionStorage } from './subscriptions.js';
 
 type InputOf<TMethod extends keyof VersionControl> = VersionControl[TMethod] extends (input: infer TInput) => unknown
@@ -111,6 +112,18 @@ export interface GithubTriageCommentUpsertResult {
 }
 
 export type GithubRepositoryPermission = 'admin' | 'maintain' | 'write' | 'triage' | 'read' | 'none';
+
+/**
+ * How long a collaborator permission lookup may be reused. The reconcile
+ * sweep re-stamps every open card's author and webhook gating checks every
+ * human sender, so one login can cost dozens of identical requests per cycle
+ * against the installation's REST budget. Revoked access reads as trusted for
+ * at most this long.
+ */
+const COLLABORATOR_PERMISSION_CACHE_TTL_MS = 30 * 60_000;
+const COLLABORATOR_PERMISSION_CACHE_MAX_ENTRIES = 1000;
+/** Bound on the shared upstream lookup; callers race their own signal against it. */
+const COLLABORATOR_PERMISSION_LOOKUP_TIMEOUT_MS = 10_000;
 
 export interface IssueSummary {
   number: number;
@@ -343,6 +356,13 @@ export class GithubIntegration implements FactoryIntegration {
   readonly #authorizedBots: readonly string[];
   #storage: IntegrationContext['storage'] | undefined;
   #sourceControlStorage: IntegrationContext['storage']['sourceControl'] | undefined;
+  /** `installationId:owner/repo:login` → cached collaborator permission (TTL-bounded). */
+  readonly #collaboratorPermissionCache = new Map<
+    string,
+    { permission: GithubRepositoryPermission; expiresAt: number }
+  >();
+  /** Same key → lookup already in flight, so overlapping callers share one request. */
+  readonly #collaboratorPermissionInFlight = new Map<string, Promise<GithubRepositoryPermission | undefined>>();
 
   constructor(config: GithubIntegrationConfig) {
     const missing = REQUIRED_FIELDS.filter(field => !config[field]);
@@ -509,16 +529,39 @@ export class GithubIntegration implements FactoryIntegration {
   ): Promise<GithubRepositoryPermission | undefined> {
     const parts = splitRepoFullName(repoFullName);
     if (!parts) return undefined;
-    try {
-      const { data } = await this.getInstallationOctokit(installationId).repos.getCollaboratorPermissionLevel({
-        ...parts,
-        username,
-        request: { signal },
-      });
-      return data.permission as GithubRepositoryPermission;
-    } catch {
-      return undefined;
-    }
+    const cacheKey = `${installationId}:${parts.owner}/${parts.repo}:${username.toLowerCase()}`;
+    const cached = this.#collaboratorPermissionCache.get(cacheKey);
+    if (cached && cached.expiresAt > Date.now()) return cached.permission;
+    this.#collaboratorPermissionCache.delete(cacheKey);
+    const inFlight = this.#collaboratorPermissionInFlight.get(cacheKey);
+    if (inFlight) return settleOrAbort(inFlight, signal, undefined);
+    const lookup = (async () => {
+      try {
+        const { data } = await this.getInstallationOctokit(installationId).repos.getCollaboratorPermissionLevel({
+          ...parts,
+          username,
+          request: { signal: AbortSignal.timeout(COLLABORATOR_PERMISSION_LOOKUP_TIMEOUT_MS) },
+        });
+        const permission = data.permission as GithubRepositoryPermission;
+        // Failures are not cached: a rate-limited or aborted lookup must retry
+        // on the next call rather than pin the login as unknown.
+        this.#collaboratorPermissionCache.set(cacheKey, {
+          permission,
+          expiresAt: Date.now() + COLLABORATOR_PERMISSION_CACHE_TTL_MS,
+        });
+        if (this.#collaboratorPermissionCache.size > COLLABORATOR_PERMISSION_CACHE_MAX_ENTRIES) {
+          const oldest = this.#collaboratorPermissionCache.keys().next().value;
+          if (oldest !== undefined) this.#collaboratorPermissionCache.delete(oldest);
+        }
+        return permission;
+      } catch {
+        return undefined;
+      } finally {
+        this.#collaboratorPermissionInFlight.delete(cacheKey);
+      }
+    })();
+    this.#collaboratorPermissionInFlight.set(cacheKey, lookup);
+    return settleOrAbort(lookup, signal, undefined);
   }
 
   /**

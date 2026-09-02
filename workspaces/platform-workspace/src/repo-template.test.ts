@@ -1,3 +1,4 @@
+import { SETUP_MARKER_PATH, setupMarkerContent } from '@internal/workspace';
 import { describe, expect, it, vi } from 'vitest';
 
 import { createRepoTemplate, redactSecrets, resolveDefaultBranchHead } from './repo-template.js';
@@ -12,6 +13,15 @@ function accessFor(cloneUrl: string) {
 
 function headOf(sha: string) {
   return vi.fn().mockResolvedValue(sha);
+}
+
+/** The marker step every repo template ends with, for the commands it ran. */
+function markerStep(...setupCommands: string[]) {
+  const content = setupMarkerContent(setupCommands);
+  return {
+    method: 'runCmd',
+    args: [`mkdir -p "$(dirname "${SETUP_MARKER_PATH}")" && printf '%s' '${content}' > "${SETUP_MARKER_PATH}"`],
+  };
 }
 
 describe('createRepoTemplate', () => {
@@ -38,9 +48,23 @@ describe('createRepoTemplate', () => {
         { method: 'runCmd', args: [`git -C "widgets" fetch origin ${SHA_1}`] },
         { method: 'runCmd', args: [`git -C "widgets" checkout ${SHA_1}`] },
         { method: 'runCmd', args: ['cd "widgets" && pnpm install --frozen-lockfile'] },
+        markerStep('pnpm install --frozen-lockfile'),
       ],
       family: 'repo:https://github.com/acme/widgets:/widgets',
     });
+  });
+
+  it('always writes the setup marker beside the checkout as the last build step, digesting the commands it ran', async () => {
+    const template = await createRepoTemplate({
+      getRepositoryAccess: accessFor('https://github.com/acme/widgets.git'),
+      setupCommand: ['pnpm i', '', 'pnpm build'],
+      resolveHead: headOf(SHA_1),
+    })!();
+    const operations = serializeSandboxTemplate(template!).operations;
+    expect(setupMarkerContent(['pnpm i', 'pnpm build'])).toMatch(/^sha256:[0-9a-f]{64}$/);
+    expect(operations.at(-1)).toEqual(markerStep('pnpm i', 'pnpm build'));
+    expect(operations.at(-2)).toEqual({ method: 'runCmd', args: ['cd "widgets" && pnpm build'] });
+    expect(setupMarkerContent(['pnpm i'])).not.toBe(setupMarkerContent(['pnpm i', 'pnpm build']));
   });
 
   it('runs each setupCommand array entry as its own build step with its own cd prefix', async () => {
@@ -51,9 +75,10 @@ describe('createRepoTemplate', () => {
     })!();
 
     const operations = serializeSandboxTemplate(template!).operations;
-    expect(operations.slice(-2)).toEqual([
+    expect(operations.slice(-3)).toEqual([
       { method: 'runCmd', args: ['cd "widgets" && pnpm i'] },
       { method: 'runCmd', args: ['cd "widgets" && pnpm build'] },
+      markerStep('pnpm i', 'pnpm build'),
     ]);
   });
 
@@ -77,7 +102,8 @@ describe('createRepoTemplate', () => {
     })!();
 
     const operations = serializeSandboxTemplate(template!).operations;
-    expect(operations.filter(op => op.method === 'runCmd')).toHaveLength(3);
+    expect(operations.filter(op => op.method === 'runCmd')).toHaveLength(4);
+    expect(operations.at(-1)).toEqual(markerStep());
   });
 
   it('creates an explicit workingDirectory, sets it as the cwd before cloning, and keys the family on it', async () => {
@@ -98,7 +124,8 @@ describe('createRepoTemplate', () => {
       { method: 'runCmd', args: ['git clone https://github.com/acme/widgets "widgets"'] },
     ]);
     const commands = serialized.operations.filter(op => op.method === 'runCmd').map(op => String(op.args[0]));
-    expect(commands.at(-1)).toBe('cd "widgets" && pnpm i');
+    expect(commands.at(-2)).toBe('cd "widgets" && pnpm i');
+    expect(commands.at(-1)).toBe(markerStep('pnpm i').args[0]);
     expect(serialized.family).toBe('repo:https://github.com/acme/widgets:/workspace/widgets');
   });
 
@@ -143,6 +170,7 @@ describe('createRepoTemplate', () => {
       { method: 'runCmd', args: ['git clone https://github.com/acme/widgets "widgets"'] },
       { method: 'runCmd', args: [`git -C "widgets" fetch origin ${SHA_1}`] },
       { method: 'runCmd', args: [`git -C "widgets" checkout ${SHA_1}`] },
+      markerStep(),
     ]);
     // Sizing never leaks into the commit-independent family key; the platform
     // namespaces warm fallbacks by size server-side.
@@ -386,6 +414,7 @@ describe('createRepoTemplate', () => {
       { method: 'runCmd', args: [expect.stringContaining('$MASTRA_REPOSITORY_ACCESS_TOKEN')] },
       { method: 'runCmd', args: [expect.stringContaining('$MASTRA_REPOSITORY_ACCESS_TOKEN')] },
       { method: 'runCmd', args: [`git -C "widgets" checkout ${SHA_1}`] },
+      markerStep(),
     ]);
     expect(JSON.stringify(definition)).not.toContain('ghs_secret_token');
   });

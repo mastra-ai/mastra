@@ -30,6 +30,7 @@
 import { execFile } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { promisify } from 'node:util';
+import { setupMarkerCommand, setupMarkerContent } from '@internal/workspace';
 
 import { Template } from 'e2b';
 import type { ConnectionOpts, TemplateClass } from 'e2b';
@@ -374,6 +375,7 @@ export async function refreshRepoTemplate(
  * so it is checked before it can be interpolated into one. The repoDir is
  * derived from it rather than supplied, so it needs no separate guard.
  */
+
 function assertCloneUrl(cloneUrl: string): void {
   if (!isValidCloneUrl(cloneUrl)) {
     throw new Error(`Invalid cloneUrl '${cloneUrl}': expected an https URL with a plain host and path`);
@@ -428,9 +430,12 @@ function buildRepoTemplateSpec(identity: RepoTemplateIdentity, token?: string): 
       .runCmd(`git -C "${repoDir}" checkout ${sha}`);
   }
   // Build steps use fresh shells, so each setup command needs its own `cd`.
-  for (const command of normalizeSetupCommands(setupCommand)) {
+  const setupCommands = normalizeSetupCommands(setupCommand);
+  for (const command of setupCommands) {
     template = template.runCmd(`cd "${repoDir}" && ${command}`);
   }
+  // Last, so it only exists in images where every step above succeeded.
+  template = template.runCmd(setupMarkerCommand(setupMarkerContent(setupCommands)));
 
   return {
     ref: repoTemplateRef(identity),
