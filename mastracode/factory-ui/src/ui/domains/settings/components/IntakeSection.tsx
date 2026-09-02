@@ -175,22 +175,37 @@ function JiraIntakeSection({
   status,
   projects,
   authError,
+  reauthRequired,
   showPickers,
 }: SourceSectionProps & {
   status: JiraStatus | undefined;
   projects: JiraProject[];
   authError: boolean;
+  reauthRequired: boolean;
   showPickers: boolean;
 }) {
-  const configured = Boolean(status?.enabled);
-  const description = !configured
-    ? 'Jira is not configured on this server. Set JIRA_BASE_URL, JIRA_EMAIL, and JIRA_API_TOKEN to enable it.'
-    : authError
-      ? 'Jira rejected the configured credentials. Ask the operator to check the Jira API token.'
-      : `Connected to ${status?.site ?? 'a Jira site'}`;
+  const configured = Boolean(status?.enabled && status.configured);
+  const platformManaged = status?.connections !== undefined;
+  const description = reauthRequired
+    ? 'A Jira account needs to be reconnected in Mastra Platform.'
+    : !configured
+      ? platformManaged
+        ? 'Connect Jira in Mastra Platform to sync issues from this organization.'
+        : 'Jira is not configured on this server. Set JIRA_BASE_URL, JIRA_EMAIL, and JIRA_API_TOKEN to enable it.'
+      : authError
+        ? platformManaged
+          ? 'Jira rejected a connected account. Reconnect it in Mastra Platform.'
+          : 'Jira rejected the configured credentials. Ask the operator to check the Jira API token.'
+        : 'Active issues from the selected projects.';
+  const sites = status?.sites ?? (status?.site ? [status.site] : []);
+  const action = configured ? (
+    <Txt as="span" variant="ui-sm" className="text-icon3">
+      {sites.length === 1 ? `Connected to ${sites[0]}` : `${sites.length} Jira sites connected`}
+    </Txt>
+  ) : undefined;
 
   return (
-    <SettingsSubsection title="Jira issues" description={description}>
+    <SettingsSubsection title="Jira issues" description={description} action={action}>
       <SettingsCard>
         <SettingsRow variant="factory" label="Sync Jira issues">
           <Switch
@@ -204,12 +219,7 @@ function JiraIntakeSection({
         {showPickers && (
           <SourcePicker
             label="Jira projects"
-            groups={[
-              {
-                id: 'projects',
-                items: projects.map(project => ({ id: project.id, label: `${project.key} · ${project.name}` })),
-              },
-            ]}
+            groups={groupJiraProjectsBySite(projects)}
             selectedIds={config.jira.sourceIds}
             disabled={busy}
             pending={busy}
@@ -238,7 +248,8 @@ export function IntakeSection() {
   const linearProjectsQuery = useLinearProjectsQuery(linearConnected);
   const jiraStatusQuery = useJiraStatusQuery();
   const jiraStatus = jiraStatusQuery.data;
-  const jiraConfigured = Boolean(jiraStatus?.enabled);
+  const jiraConfigured = Boolean(jiraStatus?.enabled && jiraStatus.configured);
+  const jiraReauthRequired = Boolean(jiraStatus?.connections?.some(connection => connection.status === 'needs_reauth'));
   const jiraProjectsQuery = useJiraProjectsQuery(jiraConfigured);
 
   const config = configQuery.data;
@@ -311,6 +322,7 @@ export function IntakeSection() {
         status={jiraStatus}
         projects={jiraProjects}
         authError={jiraAuthError}
+        reauthRequired={jiraReauthRequired}
         showPickers={jiraReady}
       />
       {jiraReady && jiraSourceIds.length > 0 && (
@@ -332,6 +344,19 @@ export function IntakeSection() {
     </div>
   );
 }
+
+/** Group Jira projects by connected site so duplicate project keys stay distinguishable. */
+function groupJiraProjectsBySite(projects: JiraProject[]): SourcePickerGroup[] {
+  const bySite = new Map<string, SourcePickerGroup>();
+  for (const project of projects) {
+    const site = project.site ?? 'Jira';
+    const group = bySite.get(site) ?? { id: project.connectionId ?? site, label: site, items: [] };
+    group.items.push({ id: project.id, label: `${project.key} · ${project.name}` });
+    bySite.set(site, group);
+  }
+  return [...bySite.values()].toSorted((left, right) => (left.label ?? '').localeCompare(right.label ?? ''));
+}
+
 /**
  * Group Linear projects under each team they belong to (shared projects appear
  * in every team), sorted by team name. Team-less projects land in a trailing
