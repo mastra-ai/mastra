@@ -129,10 +129,15 @@ function bearsConsent(actor: FactoryRuleActor): boolean {
 }
 
 // Rides the transition's own revision-checked commit, so a stale or rejected commit flips nothing.
-function consentEffect(request: FactoryTransitionRequest, humanBoardDrag: boolean): TransitionConsentOptions {
+// A move between working lanes flips nothing, but on an armed card it spends the consent the arming gave.
+function consentEffect(
+  request: FactoryTransitionRequest,
+  humanBoardDrag: boolean,
+  armed: boolean,
+): TransitionConsentOptions {
   const autonomy = transitionConsent(request.stage, humanBoardDrag);
-  if (autonomy === undefined) return {};
-  return bearsConsent(request.actor) ? { autonomy, consentedBy: actorId(request.actor) } : { autonomy };
+  if (autonomy === undefined && !armed) return {};
+  return { autonomy, consentedBy: bearsConsent(request.actor) ? actorId(request.actor) : undefined };
 }
 
 type RunStartDecision = Extract<FactoryCommitDecision, { type: 'invokeSkill' | 'sendMessage' }>;
@@ -385,7 +390,7 @@ export class FactoryTransitionService {
       request,
       transitionId,
       evaluation,
-      evaluation.outcome === 'accepted' ? consentEffect(request, humanBoardDrag) : {},
+      evaluation.outcome === 'accepted' ? consentEffect(request, humanBoardDrag, item.autonomyArmedAt !== null) : {},
     );
   }
 
