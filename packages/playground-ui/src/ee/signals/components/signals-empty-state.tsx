@@ -145,7 +145,7 @@ export function PendingSignalProgress({
         {pendingSignals.map(signal => {
           const value = progress?.signals[signal.name] ?? { generated: 0, embedded: 0 };
           return (
-            <li className="border-border1 bg-surface1 rounded-md border px-3 py-2" key={signal.name}>
+            <li className="border-border1 bg-surface3 rounded-md border px-3 py-2 font-sans" key={signal.name}>
               <div className="flex items-center justify-between gap-2">
                 <span className="text-sm font-semibold" style={signalStyle(signal.name)}>
                   {signalLabel(catalog, signal.name)}
