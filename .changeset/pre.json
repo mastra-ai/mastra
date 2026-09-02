@@ -224,6 +224,7 @@
     "external-card-consent-carries",
     "factory-declared-workdir",
     "factory-detached-pull",
+    "factory-eager-sandbox-start",
     "factory-github-reconcile-budget",
     "factory-no-per-turn-snapshot",
     "factory-sandbox-intent",
