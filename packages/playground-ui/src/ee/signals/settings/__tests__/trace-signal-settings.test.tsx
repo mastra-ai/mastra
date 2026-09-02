@@ -104,19 +104,19 @@ describe('TraceSignalSettingsButton', () => {
     expect(screen.queryByRole('button', { name: 'Signal settings' })).toBeNull();
   });
 
-  it('opens an in-page right-side section with scope copy, read-only built-ins, and organization usage', async () => {
+  it('opens a minimal in-page right-side section with custom signal usage', async () => {
     renderSettings(management());
     const settingsButton = screen.getByRole('button', { name: 'Signal settings' });
     expect(settingsButton.getAttribute('aria-expanded')).toBe('false');
     await openSettings();
 
     expect(settingsButton.getAttribute('aria-expanded')).toBe('true');
-    expect(await screen.findByText('Organization signal library')).toBeTruthy();
-    expect(screen.getByText(/definitions, prompts, and versions are shared by every project/i)).toBeTruthy();
-    expect(screen.getByText('Current project')).toBeTruthy();
-    expect(screen.getByText(/enable switches apply only to this project/i)).toBeTruthy();
-    expect(screen.getAllByText('Read only')).toHaveLength(4);
+    expect(await screen.findByText('Custom signals')).toBeTruthy();
     expect(screen.getByText('1 of 7 active organization definitions')).toBeTruthy();
+    expect(screen.queryByText('Organization signal library')).toBeNull();
+    expect(screen.queryByText('Current project')).toBeNull();
+    expect(screen.queryByText('Built-in signals')).toBeNull();
+    expect(screen.queryByText('Read only')).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: 'Close Panel' }));
     await waitFor(() => expect(screen.queryByRole('complementary', { name: 'Trace signal settings' })).toBeNull());
   });

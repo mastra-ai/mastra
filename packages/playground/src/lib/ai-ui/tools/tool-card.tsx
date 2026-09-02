@@ -56,6 +56,8 @@ export interface ToolCardProps {
   metadata?: MessageMetadata;
   /** `data`-typed parts from the parent message, for badges that read live streaming metadata. */
   dataParts?: ReadonlyArray<DataMessagePart>;
+  /** Historical rendering mode: preserve presentation while suppressing executable actions and side effects. */
+  readOnly?: boolean;
 }
 
 const TASK_TOOL_NAMES = new Set(['task_write', 'task_update', 'task_complete', 'task_check']);
@@ -78,7 +80,16 @@ export const ToolCard = (props: ToolCardProps) => {
   );
 };
 
-export const ToolCardInner = ({ toolName, input, output, toolCallId, state, metadata, dataParts }: ToolCardProps) => {
+export const ToolCardInner = ({
+  toolName,
+  input,
+  output,
+  toolCallId,
+  state,
+  metadata,
+  dataParts,
+  readOnly = false,
+}: ToolCardProps) => {
   // All hooks must run unconditionally before any conditional returns.
   const browserCtx = useBrowserToolCallsSafe();
   const isBrowser = isBrowserTool(toolName);
@@ -103,7 +114,7 @@ export const ToolCardInner = ({ toolName, input, output, toolCallId, state, meta
   );
 
   useEffect(() => {
-    if (!isBrowser || !browserCtx) return;
+    if (readOnly || !isBrowser || !browserCtx) return;
 
     let status: 'pending' | 'complete' | 'error' = 'pending';
     if (result !== undefined) {
@@ -136,15 +147,16 @@ export const ToolCardInner = ({ toolName, input, output, toolCallId, state, meta
         return { ...prev, hasSession: true };
       });
     }
-  }, [isBrowser, toolCallId, toolName, args, result, browserCtx, queryClient]);
+  }, [readOnly, isBrowser, toolCallId, toolName, args, result, browserCtx, queryClient]);
 
   // Detect skill activation tool calls.
   useEffect(() => {
+    if (readOnly) return;
     if (toolName !== 'skill') return;
     if (!args?.name) return;
     if (!isComplete) return;
     activateSkill(args.name);
-  }, [toolName, args?.name, isComplete, activateSkill]);
+  }, [readOnly, toolName, args?.name, isComplete, activateSkill]);
 
   useWorkflowStream(result);
 
@@ -196,7 +208,7 @@ export const ToolCardInner = ({ toolName, input, output, toolCallId, state, meta
   }
 
   // ask_user tool renders a dedicated interactive component for answering questions.
-  if (toolName === 'ask_user') {
+  if (toolName === 'ask_user' && !readOnly) {
     return <AskUserTool toolName={toolName} toolCallId={toolCallId} output={output} metadata={metadata} />;
   }
 
@@ -355,6 +367,7 @@ export const ToolCardInner = ({ toolName, input, output, toolCallId, state, meta
           toolArgs={args}
           toolResult={result}
           onSendMessage={handleMcpAppSendMessage}
+          readOnly={readOnly}
         />
       )}
     </>

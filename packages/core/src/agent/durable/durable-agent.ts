@@ -24,7 +24,7 @@ import type { MessageListInput } from '../message-list';
 import { SaveQueueManager } from '../save-queue';
 import { AgentThreadLeaseConflictError, agentThreadStreamRuntime } from '../thread-stream-runtime';
 import type { AgentThreadRunRegistration } from '../thread-stream-runtime';
-import type { AgentSubscribeToThreadOptions, ToolsInput } from '../types';
+import type { AgentModelManagerConfig, AgentSubscribeToThreadOptions, ToolsInput } from '../types';
 
 import { publishAbortRequest } from './abort-transport';
 import { AGENT_STREAM_TOPIC, DurableStepIds } from './constants';
@@ -33,7 +33,13 @@ import { prepareForDurableExecution } from './preparation';
 import { endRunSpansWithError, ExtendedRunRegistry, globalRunRegistry } from './run-registry';
 import { createDurableAgentStream, emitChunkEvent, emitErrorEvent } from './stream-adapter';
 import type { DurableAgentStreamResult as DurableStreamAdapterResult } from './stream-adapter';
-import type { AgentStepFinishEventData, AgentSuspendedEventData, DurableAgenticWorkflowInput } from './types';
+import type {
+  AgentStepFinishEventData,
+  AgentSuspendedEventData,
+  DurableAgenticWorkflowInput,
+  RegistryModelListEntry,
+  SerializableModelListEntry,
+} from './types';
 import { createDurableAgenticWorkflow } from './workflows';
 
 /**
@@ -65,6 +71,74 @@ interface RehydratedRecoveryState {
 }
 
 type RecoveryRaceResult<T> = { kind: 'result'; value: T } | { kind: 'lease-lost'; error: MastraError };
+
+/**
+ * Bind live fallback model instances to the persisted ids that llm-execution
+ * looks them up by (#22594).
+ *
+ * Identity first: explicit ids are stable across resolutions, so an exact-id
+ * match is definitive regardless of resolver ordering. Position is only
+ * trusted among the leftover entries on both sides — regenerated-uuid ids,
+ * which can never match a persisted id — and only when those residues line up
+ * 1:1. Anything still unbound degrades to config-based resolution in the
+ * llm-execution step. (A renamed explicit id is indistinguishable from a
+ * fresh uuid and lands in the positional residue — an inherent limit of the
+ * persisted contract.)
+ */
+interface RebindModelListResult {
+  modelList: RegistryModelListEntry[] | undefined;
+  boundById: number;
+  boundByPosition: number;
+  unbound: number;
+}
+
+function rebindRecoveredModelList(
+  persisted: SerializableModelListEntry[],
+  enabledLive: AgentModelManagerConfig[],
+): RebindModelListResult {
+  // Phase 1: bind by identity. Explicit ids are stable across resolutions, so
+  // an exact match is definitive regardless of resolver order. Each live entry
+  // binds at most once (first unused occurrence wins for duplicate ids).
+  const pool = [...enabledLive];
+  const bound = persisted.map(entry => {
+    const i = pool.findIndex(live => live.id === entry.id);
+    return i === -1 ? undefined : pool.splice(i, 1)[0];
+  });
+  const boundById = bound.filter(Boolean).length;
+
+  // Phase 2: the leftovers on both sides carry regenerated uuids that can
+  // never match, so position is the only signal left. Zip them — but only
+  // when they pair 1:1; anything else risks mis-binding and stays unbound.
+  if (persisted.length - boundById === pool.length) {
+    for (let i = 0; i < bound.length; i++) {
+      bound[i] ??= pool.shift();
+    }
+  }
+
+  // Emit in persisted order: the persisted id wins (llm-execution looks live
+  // models up by it), everything else comes from the bound live entry — same
+  // field mapping as preparation.ts.
+  const modelList: RegistryModelListEntry[] = [];
+  persisted.forEach((entry, i) => {
+    const live = bound[i];
+    if (live) {
+      modelList.push({
+        id: entry.id,
+        model: live.model,
+        maxRetries: live.maxRetries ?? 0,
+        enabled: true,
+        headers: live.headers,
+      });
+    }
+  });
+
+  return {
+    modelList: modelList.length ? modelList : undefined,
+    boundById,
+    boundByPosition: modelList.length - boundById,
+    unbound: persisted.length - modelList.length,
+  };
+}
 
 /**
  * How many candidate `running` rows `listActiveRuns()` fetches from storage
@@ -957,6 +1031,38 @@ export class DurableAgent<
     }
     recoveryLease.assertOwned();
 
+    // Restore the live fallback model list the run was prepared with (#22594).
+    // The persisted (enabled-only, ordered) list is the source of truth for
+    // the run's shape; the live resolution is the only source of real model
+    // instances. Ids regenerate on every resolution (`toFallbackEntry` assigns
+    // `mdl.id ?? randomUUID()`), so live entries must be rebound to the
+    // persisted ids that llm-execution looks models up by — identity first,
+    // position only for the unidentifiable residue (see
+    // rebindRecoveredModelList).
+    let modelList: RegistryModelListEntry[] | undefined;
+    const persistedModelList = workflowInput.modelList;
+    if (persistedModelList?.length) {
+      try {
+        const liveModelList = await wrapped.getModelList(requestContext);
+        const enabledLive = (liveModelList ?? []).filter(entry => entry.enabled !== false);
+        const rebound = rebindRecoveredModelList(persistedModelList, enabledLive);
+        modelList = rebound.modelList;
+        if (rebound.unbound > 0) {
+          this.#mastra
+            ?.getLogger?.()
+            ?.warn?.(
+              `[DurableAgent] recover(${runId}) model list drifted (persisted ${persistedModelList.length} enabled entries, resolved ${enabledLive.length}); ` +
+                `bound ${rebound.boundById} by id, ${rebound.boundByPosition} by position; ${rebound.unbound} will resolve from serialized config`,
+            );
+        }
+      } catch (error) {
+        this.#mastra
+          ?.getLogger?.()
+          ?.warn?.(`[DurableAgent] Failed to resolve model list during recover(${runId}): ${error}`);
+      }
+    }
+    recoveryLease.assertOwned();
+
     let memory;
     try {
       memory = await wrapped.getMemory({ requestContext });
@@ -1027,6 +1133,7 @@ export class DurableAgent<
       registryEntry: {
         mastra: this.#mastra,
         model,
+        modelList,
         memory,
         saveQueueManager,
         requestContext,

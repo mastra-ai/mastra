@@ -207,6 +207,26 @@ describe('Board card details open the default run', () => {
     expect(screen.queryByRole('menuitem', { name: 'Prepare approval hands-off' })).not.toBeInTheDocument();
   });
 
+  it('offers the ordinary runs once a labelled card sits in a working lane, even before acceptance was recorded', async () => {
+    stubBoardEndpoints({
+      workItems: [
+        {
+          ...issueWorkItem,
+          metadata: { number: 7, labels: ['status: needs approval'] },
+          stages: ['planning'],
+          triageType: 'feature request',
+          acceptedAt: null,
+        },
+      ],
+    });
+    renderWorkBoard();
+    const user = userEvent.setup();
+
+    await user.click(await screen.findByRole('button', { name: 'Actions for Fix login bug' }));
+    await screen.findByRole('menuitem', { name: 'Build' });
+    expect(screen.queryByRole('menuitem', { name: 'Prepare approval' })).not.toBeInTheDocument();
+  });
+
   it("shows a Linear card's own description in its details", async () => {
     stubBoardEndpoints({ workItems: [linearWorkItem] });
     renderWorkBoard();

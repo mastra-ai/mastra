@@ -124,7 +124,11 @@ describe('materializeRepo', () => {
     expect(dbUpdates.at(-1)).toHaveProperty('materializedAt');
   });
 
-  it('pulls (not clones) on re-open', async () => {
+  it('leaves an existing checkout of this repo untouched on re-open, whatever it is on', async () => {
+    // A repo template image sits detached at its pinned sha; a resumed session
+    // sits on its branch. Neither gets a fetch or a pull here: the branch
+    // checkout that follows fetches what it needs, and syncing is the
+    // session's business.
     const sandbox = new FakeSandbox(script => {
       if (script.includes('remote get-url origin')) {
         return { exitCode: 0, stdout: 'https://github.com/octocat/hello.git\n', stderr: '' };
@@ -133,11 +137,72 @@ describe('materializeRepo', () => {
     });
     await materializeRepo(makeRow({ materializedAt: new Date() }), makeRepoInfo(), sandbox, 'tok-xyz');
 
-    const joined = sandbox.calls.join('\n');
-    expect(joined).toContain('git -C ');
-    expect(joined).toContain('pull --ff-only');
+    const gitCalls = sandbox.calls.filter(c => c.includes('git ') && !c.includes('git --version'));
+    expect(gitCalls).toEqual([expect.stringContaining('remote get-url origin')]);
+    expect(sandbox.calls.join('\n')).not.toContain('tok-xyz');
+    expect(dbUpdates.at(-1)).toHaveProperty('materializedAt');
+  });
+
+  it('leaves the checkout alone when the DB says first open but the workdir already holds this repo', async () => {
+    const sandbox = new FakeSandbox(script => {
+      if (script.includes('remote get-url origin')) {
+        return { exitCode: 0, stdout: 'https://github.com/octocat/hello.git\n', stderr: '' };
+      }
+      return OK;
+    });
+    await materializeRepo(makeRow({ materializedAt: null }), makeRepoInfo(), sandbox, 'tok-abc');
+
     expect(sandbox.calls.some(c => c.includes('git clone'))).toBe(false);
-    expect(joined).toContain('https://x-access-token:tok-xyz@github.com/octocat/hello.git');
+    expect(dbUpdates.at(-1)).toHaveProperty('materializedAt');
+  });
+
+  it('scrubs a tokenized remote an earlier start left behind, without cloning', async () => {
+    const sandbox = new FakeSandbox(script => {
+      if (script.includes('remote get-url origin')) {
+        return { exitCode: 0, stdout: 'https://x-access-token:stale@github.com/octocat/hello.git\n', stderr: '' };
+      }
+      return OK;
+    });
+    await materializeRepo(makeRow({ materializedAt: null }), makeRepoInfo(), sandbox, 'tok-abc');
+
+    expect(sandbox.calls.some(c => c.includes('git clone'))).toBe(false);
+    const scrub = sandbox.calls.filter(c => c.includes('remote set-url origin')).at(-1);
+    expect(scrub).toContain('https://github.com/octocat/hello.git');
+    expect(scrub).not.toContain('stale');
+  });
+
+  it('surfaces a failed scrub of a stale tokenized remote instead of leaving the token in place', async () => {
+    const sandbox = new FakeSandbox(script => {
+      if (script.includes('remote get-url origin')) {
+        return { exitCode: 0, stdout: 'https://x-access-token:stale@github.com/octocat/hello.git\n', stderr: '' };
+      }
+      if (script.includes('remote set-url origin')) {
+        return { exitCode: 1, stdout: '', stderr: 'error: could not write config' };
+      }
+      return OK;
+    });
+    const err = await materializeRepo(makeRow({ materializedAt: null }), makeRepoInfo(), sandbox, 'tok').catch(e => e);
+    expect(err).toBeInstanceOf(MaterializeError);
+    expect(String(err.message)).toContain('scrub');
+  });
+
+  it.each([
+    'https://evilgithub.com/octocat/hello.git',
+    'https://github.com.evil.example/octocat/hello.git',
+    'https://github.com/other/hello.git',
+    'https://github.com/octocat/hello-fork.git',
+    'https://github.com:8443/octocat/hello.git',
+    'https://github.com/octocat/hello.git?x=1',
+    'https://github.com//octocat/hello.git',
+    'http://github.com/octocat/hello.git',
+  ])('re-clones over a checkout whose origin is %s', async origin => {
+    const sandbox = new FakeSandbox(script => {
+      if (script.includes('remote get-url origin')) return { exitCode: 0, stdout: `${origin}\n`, stderr: '' };
+      return OK;
+    });
+    await materializeRepo(makeRow({ materializedAt: null }), makeRepoInfo(), sandbox, 'tok');
+
+    expect(sandbox.calls.some(c => c.includes('git clone'))).toBe(true);
   });
 
   it('re-clones when the DB says materialized but the sandbox disk was wiped', async () => {
@@ -184,23 +249,6 @@ describe('materializeRepo', () => {
     expect(dbUpdates.at(-1)).toHaveProperty('materializedAt');
   });
 
-  it('pulls (not clones) when the DB says first open but the workdir already holds this repo', async () => {
-    // DB/disk drift: a fresh binding row (materializedAt null) over a workdir
-    // that was already cloned by an earlier flow or before a dev DB reset.
-    const sandbox = new FakeSandbox(script => {
-      if (script.includes('remote get-url origin')) {
-        return { exitCode: 0, stdout: 'https://github.com/octocat/hello.git\n', stderr: '' };
-      }
-      return OK;
-    });
-    await materializeRepo(makeRow({ materializedAt: null }), makeRepoInfo(), sandbox, 'tok-abc');
-
-    const joined = sandbox.calls.join('\n');
-    expect(sandbox.calls.some(c => c.includes('git clone'))).toBe(false);
-    expect(joined).toContain('pull --ff-only');
-    expect(dbUpdates.at(-1)).toHaveProperty('materializedAt');
-  });
-
   it('still clones when the workdir holds a checkout of a different repo', async () => {
     const sandbox = new FakeSandbox(script => {
       if (script.includes('remote get-url origin')) {
@@ -212,24 +260,6 @@ describe('materializeRepo', () => {
 
     expect(sandbox.calls.some(c => c.includes('git clone'))).toBe(true);
     expect(sandbox.calls.some(c => c.includes('pull --ff-only'))).toBe(false);
-  });
-
-  it('detects an existing checkout even when a tokenized remote was left behind', async () => {
-    const sandbox = new FakeSandbox(script => {
-      if (script.includes('remote get-url origin')) {
-        return { exitCode: 0, stdout: 'https://x-access-token:stale@github.com/octocat/hello.git\n', stderr: '' };
-      }
-      return OK;
-    });
-    await materializeRepo(makeRow({ materializedAt: null }), makeRepoInfo(), sandbox, 'tok-abc');
-
-    const joined = sandbox.calls.join('\n');
-    expect(sandbox.calls.some(c => c.includes('git clone'))).toBe(false);
-    expect(joined).toContain('pull --ff-only');
-    // scrub still resets to the tokenless URL
-    const scrub = sandbox.calls.filter(c => c.includes('remote set-url origin')).at(-1);
-    expect(scrub).toContain('https://github.com/octocat/hello.git');
-    expect(scrub).not.toContain('stale');
   });
 
   it('throws git-missing when git is absent', async () => {
@@ -290,46 +320,6 @@ describe('materializeRepo', () => {
     expect(err.message).toMatch(/checkout failed.*Failed to scrub installation token/s);
   });
 
-  it('surfaces a failed scrub over the pull failure once the token reached the remote', async () => {
-    const sandbox = new FakeSandbox(script => {
-      if (script.includes('remote get-url origin')) {
-        return { exitCode: 0, stdout: 'https://github.com/octocat/hello.git\n', stderr: '' };
-      }
-      if (script.includes('pull --ff-only')) {
-        return { exitCode: 128, stdout: '', stderr: 'fatal: unable to access: Could not resolve host: github.com' };
-      }
-      // The scrub resets to the tokenless URL; only the auth set-url carries the token.
-      if (script.includes('remote set-url origin') && !script.includes('x-access-token')) {
-        return { exitCode: 255, stdout: '', stderr: 'error: could not lock config file .git/config' };
-      }
-      return OK;
-    });
-    const err = await materializeRepo(makeRow(), makeRepoInfo(), sandbox, 'tok-secret').catch(e => e);
-    expect(err).toBeInstanceOf(MaterializeError);
-    expect(err.code).toBe('egress-blocked');
-    expect(err.message).toContain('Failed to scrub installation token');
-  });
-
-  it('surfaces a throwing scrub as a token error once the token reached the remote', async () => {
-    const sandbox = new FakeSandbox(script => {
-      if (script.includes('remote get-url origin')) {
-        return { exitCode: 0, stdout: 'https://github.com/octocat/hello.git\n', stderr: '' };
-      }
-      if (script.includes('pull --ff-only')) {
-        return { exitCode: 128, stdout: '', stderr: 'fatal: unable to access: Could not resolve host: github.com' };
-      }
-      if (script.includes('remote set-url origin') && !script.includes('x-access-token')) {
-        throw new Error('sandbox connection lost');
-      }
-      return OK;
-    });
-    const err = await materializeRepo(makeRow(), makeRepoInfo(), sandbox, 'tok-secret').catch(e => e);
-    expect(err).toBeInstanceOf(MaterializeError);
-    expect(err.code).toBe('egress-blocked');
-    expect(err.message).toContain('Failed to scrub installation token');
-    expect(err.message).toContain('sandbox connection lost');
-  });
-
   it('refuses to run git when the default branch is not git-ref-safe', async () => {
     const sandbox = new FakeSandbox();
     const err = await materializeRepo(
@@ -352,263 +342,6 @@ describe('materializeRepo', () => {
     expect(sandbox.calls).toHaveLength(0);
   });
 
-  it('keeps a diverged session branch on re-open instead of failing the pull', async () => {
-    // The shared workdir is routinely left on a session's working branch with
-    // local commits. When its upstream moved, `git pull --ff-only` aborts with
-    // "Not possible to fast-forward" — that is the session's work, not an
-    // error, so materialization must succeed and leave the checkout alone.
-    const sandbox = new FakeSandbox(script => {
-      if (script.includes('remote get-url origin')) {
-        return { exitCode: 0, stdout: 'https://github.com/octocat/hello.git\n', stderr: '' };
-      }
-      if (script.includes('pull --ff-only')) {
-        return {
-          exitCode: 128,
-          stdout: '',
-          stderr:
-            "hint: Diverging branches can't be fast-forwarded, you need to either:\nfatal: Not possible to fast-forward, aborting.\n",
-        };
-      }
-      return OK;
-    });
-
-    await materializeRepo(makeRow({ materializedAt: new Date() }), makeRepoInfo(), sandbox, 'tok-secret');
-
-    // No destructive recovery: never rebase, reset, or re-clone over the work.
-    const joined = sandbox.calls.join('\n');
-    expect(joined).not.toContain('git clone');
-    expect(joined).not.toMatch(/rebase|reset --hard/);
-    // Token scrubbed and the binding marked materialized as on any success.
-    const scrub = sandbox.calls.filter(c => c.includes('remote set-url origin')).at(-1);
-    expect(scrub).toContain('https://github.com/octocat/hello.git');
-    expect(scrub).not.toContain('tok-secret');
-    expect(dbUpdates.at(-1)).toHaveProperty('materializedAt');
-  });
-
-  it('keeps a dirty checkout as-is when local changes block the pull', async () => {
-    // A previous run left uncommitted modifications in the checkout (e.g. a
-    // changeset-version run or build residue); git refuses to merge over
-    // them. The checkout is intact — keep it, never discard the local state.
-    const sandbox = new FakeSandbox(script => {
-      if (script.includes('remote get-url origin')) {
-        return { exitCode: 0, stdout: 'https://github.com/octocat/hello.git\n', stderr: '' };
-      }
-      if (script.includes('pull --ff-only')) {
-        return {
-          exitCode: 1,
-          stdout: '',
-          stderr:
-            'error: Your local changes to the following files would be overwritten by merge:\n\tpackage.json\nPlease commit your changes or stash them before you merge.\nAborting\n',
-        };
-      }
-      return OK;
-    });
-
-    await materializeRepo(makeRow({ materializedAt: new Date() }), makeRepoInfo(), sandbox, 'tok-secret');
-
-    const joined = sandbox.calls.join('\n');
-    expect(joined).not.toContain('git clone');
-    expect(joined).not.toMatch(/rebase|reset --hard|stash|checkout --/);
-    expect(dbUpdates.at(-1)).toHaveProperty('materializedAt');
-  });
-
-  it('keeps a checkout with blocking untracked files as-is on re-open', async () => {
-    const sandbox = new FakeSandbox(script => {
-      if (script.includes('remote get-url origin')) {
-        return { exitCode: 0, stdout: 'https://github.com/octocat/hello.git\n', stderr: '' };
-      }
-      if (script.includes('pull --ff-only')) {
-        return {
-          exitCode: 1,
-          stdout: '',
-          stderr:
-            'error: The following untracked working tree files would be overwritten by merge:\n\t.changeset/new-note.md\nPlease move or remove them before you merge.\nAborting\n',
-        };
-      }
-      return OK;
-    });
-
-    await materializeRepo(makeRow({ materializedAt: new Date() }), makeRepoInfo(), sandbox, 'tok');
-
-    const joined = sandbox.calls.join('\n');
-    expect(joined).not.toContain('git clone');
-    expect(joined).not.toMatch(/rebase|reset --hard|stash|checkout --|clean -/);
-    expect(dbUpdates.at(-1)).toHaveProperty('materializedAt');
-  });
-
-  it('keeps a dirty checkout as-is when pull.rebase turns the refusal into rebase wording', async () => {
-    // Same dirty checkout, different git config: with `pull.rebase` set, git
-    // refuses in rebase's words rather than merge's. It is still the session's
-    // own uncommitted work — keep it, never discard it to force the pull.
-    const sandbox = new FakeSandbox(script => {
-      if (script.includes('remote get-url origin')) {
-        return { exitCode: 0, stdout: 'https://github.com/octocat/hello.git\n', stderr: '' };
-      }
-      if (script.includes('pull --ff-only')) {
-        return {
-          exitCode: 1,
-          stdout: '',
-          stderr:
-            'error: cannot pull with rebase: Your index contains uncommitted changes.\nerror: Please commit or stash them.\n',
-        };
-      }
-      return OK;
-    });
-
-    await materializeRepo(makeRow({ materializedAt: new Date() }), makeRepoInfo(), sandbox, 'tok');
-
-    const joined = sandbox.calls.join('\n');
-    expect(joined).not.toContain('git clone');
-    expect(joined).not.toMatch(/rebase|reset --hard|stash|checkout --|clean -/);
-    expect(dbUpdates.at(-1)).toHaveProperty('materializedAt');
-  });
-
-  it('treats a session branch without an upstream as materialized on re-open', async () => {
-    // Session branches are created from FETCH_HEAD and have no tracking
-    // branch; `git pull` then exits with "no tracking information".
-    const sandbox = new FakeSandbox(script => {
-      if (script.includes('remote get-url origin')) {
-        return { exitCode: 0, stdout: 'https://github.com/octocat/hello.git\n', stderr: '' };
-      }
-      if (script.includes('pull --ff-only')) {
-        return {
-          exitCode: 1,
-          stdout: '',
-          stderr: 'There is no tracking information for the current branch.\n',
-        };
-      }
-      return OK;
-    });
-
-    await materializeRepo(makeRow({ materializedAt: new Date() }), makeRepoInfo(), sandbox, 'tok');
-
-    expect(dbUpdates.at(-1)).toHaveProperty('materializedAt');
-  });
-
-  it('keeps a checkout when the upstream branch was deleted after merge', async () => {
-    // Session branch was auto-deleted on the remote after its PR merged;
-    // `git pull` reports the configured upstream ref is gone. The checkout
-    // is intact (and the work is already integrated) — keep it as-is.
-    const sandbox = new FakeSandbox(script => {
-      if (script.includes('remote get-url origin')) {
-        return { exitCode: 0, stdout: 'https://github.com/octocat/hello.git\n', stderr: '' };
-      }
-      if (script.includes('pull --ff-only')) {
-        return {
-          exitCode: 1,
-          stdout: '',
-          stderr:
-            "Your configuration specifies to merge with the ref 'refs/heads/factory/issue-1'\nfrom the remote, but no such ref was fetched.\n",
-        };
-      }
-      return OK;
-    });
-
-    await materializeRepo(makeRow({ materializedAt: new Date() }), makeRepoInfo(), sandbox, 'tok');
-
-    const joined = sandbox.calls.join('\n');
-    expect(joined).not.toContain('git clone');
-    expect(joined).not.toMatch(/rebase|reset --hard/);
-    expect(dbUpdates.at(-1)).toHaveProperty('materializedAt');
-  });
-
-  it('keeps a checkout when git cannot find the remote ref', async () => {
-    const sandbox = new FakeSandbox(script => {
-      if (script.includes('remote get-url origin')) {
-        return { exitCode: 0, stdout: 'https://github.com/octocat/hello.git\n', stderr: '' };
-      }
-      if (script.includes('pull --ff-only')) {
-        return {
-          exitCode: 1,
-          stdout: '',
-          stderr: "fatal: couldn't find remote ref refs/heads/factory/issue-1\n",
-        };
-      }
-      return OK;
-    });
-
-    await materializeRepo(makeRow({ materializedAt: new Date() }), makeRepoInfo(), sandbox, 'tok');
-
-    const joined = sandbox.calls.join('\n');
-    expect(joined).not.toContain('git clone');
-    expect(joined).not.toMatch(/rebase|reset --hard/);
-    expect(dbUpdates.at(-1)).toHaveProperty('materializedAt');
-  });
-
-  it('scrubs the tokenized remote even when the pull fails on re-open', async () => {
-    const sandbox = new FakeSandbox(script => {
-      if (script === 'git --version') return OK;
-      if (script.includes('remote get-url origin')) {
-        return { exitCode: 0, stdout: 'https://github.com/octocat/hello.git\n', stderr: '' };
-      }
-      if (script.includes('pull --ff-only')) {
-        return { exitCode: 1, stdout: '', stderr: 'fatal: not a fast-forward' };
-      }
-      return OK;
-    });
-
-    const err = await materializeRepo(
-      makeRow({ materializedAt: new Date() }),
-      makeRepoInfo(),
-      sandbox,
-      'tok-secret',
-    ).catch(e => e);
-
-    // The pull failure is surfaced...
-    expect(err).toBeInstanceOf(MaterializeError);
-    expect(err.code).toBe('pull-failed');
-    // ...but the token is still scrubbed back to the tokenless URL afterwards,
-    // and no tokenized remote is left as the final remote state.
-    const scrub = sandbox.calls.filter(c => c.includes('remote set-url origin')).at(-1);
-    expect(scrub).toContain('https://github.com/octocat/hello.git');
-    expect(scrub).not.toContain('tok-secret');
-    // The repo is not marked materialized when the pull failed.
-    expect(dbUpdates.some(u => 'materializedAt' in u)).toBe(false);
-  });
-
-  it('reports the pull failure first and the scrub failure alongside when both fail', async () => {
-    // Regression: the scrub used to throw over the in-flight clone/pull
-    // error, hiding the actionable failure behind "Failed to scrub
-    // installation token". The pull failure keeps the lead — but the token
-    // reached the remote, so the failed scrub is reported too, not swallowed.
-    const sandbox = new FakeSandbox(script => {
-      if (script === 'git --version') return OK;
-      if (script.includes('remote get-url origin')) {
-        return { exitCode: 0, stdout: 'https://github.com/octocat/hello.git\n', stderr: '' };
-      }
-      if (script.includes('pull --ff-only')) {
-        return { exitCode: 1, stdout: '', stderr: 'fatal: not a fast-forward' };
-      }
-      if (script.includes('remote set-url origin') && !script.includes('x-access-token')) {
-        return { exitCode: 1, stdout: '', stderr: 'error: could not write config' };
-      }
-      return OK;
-    });
-
-    const err = await materializeRepo(makeRow({ materializedAt: new Date() }), makeRepoInfo(), sandbox, 'tok').catch(
-      e => e,
-    );
-    expect(err).toBeInstanceOf(MaterializeError);
-    expect(err.code).toBe('pull-failed');
-    expect(String(err.message)).toMatch(/not a fast-forward.*Failed to scrub installation token/s);
-  });
-
-  it('surfaces a scrub failure on the success path when the remote reset fails', async () => {
-    const sandbox = new FakeSandbox(script => {
-      if (script.includes('remote set-url origin') && script.includes('github.com/octocat/hello.git')) {
-        // The final tokenless scrub fails — the token may still be persisted.
-        return { exitCode: 1, stdout: '', stderr: 'error: could not write config' };
-      }
-      return OK;
-    });
-
-    const err = await materializeRepo(makeRow({ materializedAt: new Date() }), makeRepoInfo(), sandbox, 'tok').catch(
-      e => e,
-    );
-    expect(err).toBeInstanceOf(MaterializeError);
-    expect(err.code).toBe('pull-failed');
-    expect(String(err.message)).toContain('scrub');
-  });
 });
 
 describe('checkoutSessionBranch', () => {
@@ -1174,30 +907,6 @@ describe('git transfer retry', () => {
     expect(sandbox.calls.filter(call => call.includes('git clone'))).toHaveLength(1);
   });
 
-  it('retries a pull that lost the connection mid-transfer', async () => {
-    vi.useFakeTimers();
-    try {
-      let pulls = 0;
-      const sandbox = new FakeSandbox(script => {
-        // An origin pointing at this repo sends materialize down the pull path.
-        if (script.includes('remote get-url origin')) {
-          return { exitCode: 0, stdout: 'https://github.com/octocat/hello.git\n', stderr: '' };
-        }
-        if (script.includes('pull --ff-only')) return ++pulls === 1 ? HTTP2_GLITCH : OK;
-        return OK;
-      });
-
-      const pending = materializeRepo(makeRow(), makeRepoInfo(), sandbox, 'tok');
-      await vi.advanceTimersByTimeAsync(2000);
-      await pending;
-
-      expect(pulls).toBe(2);
-      // Nothing to clean up between pull attempts — the checkout is intact.
-      expect(sandbox.calls.some(call => call.startsWith('rm -rf'))).toBe(false);
-    } finally {
-      vi.useRealTimers();
-    }
-  });
 });
 
 describe('createPullRequest', () => {
