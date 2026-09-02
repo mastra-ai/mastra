@@ -333,9 +333,9 @@ Use `createNotificationInboxTool()` to give agents one tool for inbox actions in
 
 ## Cross-agent connections in Mastra Code
 
-Cross-agent communication is experimental and off by default. Enable it in Mastra Code with the `/settings` toggle "Experimental cross-agent communication" and restart. The setting gates thread ownership advertisement, peer discovery, and the agent connection tools; it doesn't affect the pub/sub transport itself.
+Cross-agent communication is experimental and off by default. Enable it in Mastra Code with the `/settings` toggle "Experimental cross-agent communication" and restart. The setting gates thread ownership advertisement, peer discovery, and the agent connection tools. It doesn't affect the pub/sub transport itself.
 
-Mastra Code can use notification signals to communicate between agent threads. A peer is an exact `{ agentId, resourceId, threadId }` endpoint. Discovery is a point-in-time advertisement that the exact endpoint is available now; it isn't a durable connection or a guarantee that delivery will succeed.
+Mastra Code can use notification signals to communicate between agent threads. A peer is an exact `{ agentId, resourceId, threadId }` endpoint. Discovery is a point-in-time advertisement that the exact endpoint is available now. It isn't a durable connection or a guarantee that delivery will succeed.
 
 `agent_connections_list` returns one `peers` collection. Each peer includes:
 
@@ -356,9 +356,9 @@ Use the connection tools for distinct operations:
 
 - `agent_connect` saves a freshly discovered exact peer in the current sender thread.
 - `agent_disconnect` removes a saved peer from the current sender thread. The peer doesn't need to be currently advertised, and repeated disconnects are safe.
-- `agent_signal_send` requires the exact peer to remain saved and freshly advertised at send time. A previously discovered or recently seen peer that is absent from the current discovery pass isn't sendable.
+- `agent_signal_send` requires the exact peer to remain saved and freshly advertised at send time. A previously discovered or recently seen peer that's absent from the current discovery pass isn't sendable.
 
-Saved connections remain in the sender thread until explicitly disconnected. Every send independently refreshes discovery and verifies the exact endpoint before routing begins. A saved connection therefore records collaboration intent; it doesn't indicate current presence.
+Saved connections remain in the sender thread until explicitly disconnected. Every send independently refreshes discovery and verifies the exact endpoint before routing begins. A saved connection therefore records collaboration intent. It doesn't indicate current presence.
 
 After a send attempt reaches Core routing, the routing result is authoritative. The result can be `wake`, `deliver`, `persist`, `blocked`, or `discard`, depending on the target thread and notification policy.
 
