@@ -32,6 +32,8 @@ export interface MessageRowProps extends Omit<React.HTMLAttributes<HTMLDivElemen
   onReadAloud?: (text: string) => void;
   /** Stop the current read-aloud playback. */
   onStopSpeaking?: () => void;
+  /** Render historical tool calls without actions or chat/session side effects. */
+  readOnly?: boolean;
 }
 
 type MessagePart = MastraDBMessage['content']['parts'][number];
@@ -204,7 +206,7 @@ const AssistantActionBar = ({
 );
 
 export const MessageRow = forwardRef<HTMLDivElement, MessageRowProps>(
-  ({ message, hasModelList, isSpeaking, onReadAloud, onStopSpeaking, className, ...rootProps }, ref) => {
+  ({ message, hasModelList, isSpeaking, onReadAloud, onStopSpeaking, readOnly, className, ...rootProps }, ref) => {
     const dbMessage = toDisplayMessage(message);
     const metadata = getMessageMetadata(message);
     const modelMetadata = hasModelList ? getModelMetadata(metadata) : undefined;
@@ -226,16 +228,16 @@ export const MessageRow = forwardRef<HTMLDivElement, MessageRowProps>(
         ),
         ToolInvocation: part => (
           <Arriving>
-            <ToolInvocationPartRenderer part={part} metadata={metadata} dataParts={dataParts} />
+            <ToolInvocationPartRenderer part={part} metadata={metadata} dataParts={dataParts} readOnly={readOnly} />
           </Arriving>
         ),
         DynamicTool: part => (
           <Arriving>
-            <DynamicToolPartRenderer part={part} metadata={metadata} dataParts={dataParts} />
+            <DynamicToolPartRenderer part={part} metadata={metadata} dataParts={dataParts} readOnly={readOnly} />
           </Arriving>
         ),
       }),
-      [metadata, dataParts],
+      [metadata, dataParts, readOnly],
     );
 
     const userRenderers = useMemo<MessageRenderers>(
