@@ -6,6 +6,7 @@
     "amazon/nova-pro-v1",
     "anthropic/claude-3-haiku",
     "anthropic/claude-fable-5",
+    "anthropic/claude-fable-5.1",
     "anthropic/claude-haiku-4.5",
     "anthropic/claude-opus-4",
     "anthropic/claude-opus-4.1",
@@ -216,7 +217,8 @@
     "~moonshotai/kimi-latest",
     "~openai/gpt-latest",
     "~openai/gpt-mini-latest",
-    "~x-ai/grok-latest"
+    "~x-ai/grok-latest",
+    "~z-ai/glm-flash-latest"
   ],
   "temperature": [
     "aion-labs/aion-2.0",
@@ -532,11 +534,13 @@
     "~google/gemini-pro-latest",
     "~moonshotai/kimi-latest",
     "~x-ai/grok-latest",
+    "~z-ai/glm-flash-latest",
     "~z-ai/glm-latest"
   ],
   "structuredOutput": [
     "anthracite-org/magnum-v4-72b",
     "anthropic/claude-fable-5",
+    "anthropic/claude-fable-5.1",
     "anthropic/claude-haiku-4.5",
     "anthropic/claude-opus-4.5",
     "anthropic/claude-opus-4.6",
@@ -802,6 +806,7 @@
     "~openai/gpt-latest",
     "~openai/gpt-mini-latest",
     "~x-ai/grok-latest",
+    "~z-ai/glm-flash-latest",
     "~z-ai/glm-latest"
   ]
 }

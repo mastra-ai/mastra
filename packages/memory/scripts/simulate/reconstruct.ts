@@ -47,7 +47,7 @@ type OrderedCycle = ReconstructedCycle & { splitIndex: number };
  * `activeObservations` starts with the *reflection text*, not new observations
  * (see `createReflectionGeneration`). So the leading chunk is a real cycle for
  * generation 0 and a reflection for every generation above it. Treating them
- * alike would replay reflection prose through capture and repeat every earlier
+ * alike would replay reflection prose through curation and repeat every earlier
  * cycle once per generation.
  */
 export function reconstructCycles(records: ObservationalMemoryRecord[]): ReconstructionResult {
@@ -150,8 +150,8 @@ export function reconstructCycles(records: ObservationalMemoryRecord[]): Reconst
       });
     }
 
-    // Buffered chunks were already observed (and already captured — capture's
-    // onExtracted runs at observe-time), they just had not been activated yet.
+    // Buffered chunks were already observed (and already curated — the curator
+    // Extractor runs at observe-time), they just had not been activated yet.
     // They carry exact per-cycle metadata, so nothing here is inferred.
     for (const chunk of record.bufferedObservationChunks ?? []) {
       const observations = chunk.observations?.trim();
