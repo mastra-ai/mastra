@@ -2,7 +2,14 @@ import type { FactoryDispatchFailureCode } from '@mastra/factory/storage/domains
 
 /** `dismissed` is human rejection; `superseded` means newer Factory state made a proposal obsolete. */
 export type FactoryDecisionStatus =
-  'pending' | 'proposed' | 'dismissed' | 'superseded' | 'leased' | 'retry' | 'succeeded' | 'failed';
+  | 'pending'
+  | 'proposed'
+  | 'dismissed'
+  | 'superseded'
+  | 'leased'
+  | 'retry'
+  | 'succeeded'
+  | 'failed';
 
 /** What a person can do to a queued effect from the board or the Rules page. */
 export type FactoryDecisionAction = 'approve' | 'dismiss' | 'retry';
