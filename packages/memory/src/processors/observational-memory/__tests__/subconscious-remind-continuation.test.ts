@@ -78,7 +78,8 @@ function persistedSignalRow(id: string, contents: string, metadata?: Record<stri
 describe('Subconscious reminder continuation', () => {
   it('finds pending questions in rows persisted by sendMessage (role signal, nested metadata)', async () => {
     const { processor, sendMessage } = createHarness();
-    const question = persistedSignalRow('question-1', 'Memory question reply-1\n\nWhat happened?', {
+    // Text deliberately does not match the fallback parser so only the nested metadata can identify the question.
+    const question = persistedSignalRow('question-1', 'What happened?', {
       [REMIND_MESSAGE_METADATA_KEY]: { type: 'question', replyId: 'reply-1', askedAt: Date.now() },
     });
     expect(question.role).toBe('signal');

@@ -181,7 +181,8 @@ describe('Subconscious reminder questions', () => {
         id: 'reply-1:message',
         type: 'user',
         tagName: 'user',
-        contents: 'Memory question reply-1\n\nWhat did I decide?',
+        // Text deliberately does not match the fallback parser so only the nested metadata can authorize the reply.
+        contents: 'What did I decide?',
         metadata: { [REMIND_MESSAGE_METADATA_KEY]: { type: 'question', replyId: 'reply-1', askedAt: Date.now() } },
       },
       { threadId: `subconscious:${parentThreadId}:remind`, resourceId },
