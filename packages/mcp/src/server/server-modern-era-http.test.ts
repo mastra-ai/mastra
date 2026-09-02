@@ -694,7 +694,8 @@ describe('MCPServer without protocolVersion (modern default)', () => {
       options: { sessionIdGenerator: () => 'legacy-session' },
     });
 
-    expect(response.startError).toThrow(/sessionIdGenerator/);
+    expect(response.startError).toBeInstanceOf(Error);
+    expect((response.startError as Error).message).toMatch(/sessionIdGenerator/);
   });
 
   it('still serves an old 2025 client through the stateless fallback', async () => {

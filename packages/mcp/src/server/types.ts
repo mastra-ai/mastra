@@ -14,10 +14,9 @@ import type {
 /**
  * MCP protocol revisions the server can be pinned to.
  *
- * - `'2025-11-25'` — the legacy (2025) protocol era. This is the default and matches
- *   the server's behavior when the option is omitted: sessionful streamable HTTP,
- *   `initialize` handshake, server→client push notifications.
- * - `'2026-07-28'` — the stateless protocol revision. HTTP and serverless requests are
+ * - `'2025-11-25'` — the explicit legacy (2025) protocol era: sessionful streamable
+ *   HTTP, `initialize` handshake, and server→client push notifications.
+ * - `'2026-07-28'` — the default when configuration is omitted. HTTP requests are
  *   served through the SDK's dual-era handler: modern (per-request envelope) clients are
  *   served natively, and legacy clients are served through the built-in stateless
  *   fallback on the same endpoint. Stdio serves both eras via the `server/discover`

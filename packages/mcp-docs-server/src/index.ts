@@ -19,6 +19,7 @@ let server: MCPServer;
 server = new MCPServer({
   name: 'Mastra Documentation Server',
   version: JSON.parse(await fs.readFile(fromPackageRoot(`package.json`), 'utf8')).version,
+  protocolVersion: '2025-11-25',
   tools: {
     mastraDocs: docsTool,
     mastraMigration: migrationTool,

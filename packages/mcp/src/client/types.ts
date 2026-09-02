@@ -291,6 +291,7 @@ export type BaseServerOptions = {
    * 2. Respond to `roots/list` requests with these roots
    * 3. Send `notifications/roots/list_changed` on legacy connections when roots are updated via `setRoots()`
    *
+   * @deprecated Roots are deprecated in MCP 2026-07-28. Configure them only for legacy servers.
    * @example
    * ```typescript
    * {
@@ -304,13 +305,12 @@ export type BaseServerOptions = {
    */
   roots?: Root[];
   /**
-   * Opt-in MCP protocol version negotiation.
+   * MCP protocol version negotiation.
    *
-   * - Omitted (default): the plain legacy (2025-era) connect sequence,
-   *   byte-identical to a client without this option.
-   * - `'auto'`: probe the server with `server/discover` at connect time and use
-   *   the stateless `2026-07-28` revision when the server supports it, with a
-   *   conservative fallback to the legacy `initialize` handshake.
+   * - Omitted (default) or `'auto'`: probe the server with `server/discover` at
+   *   connect time and use the stateless `2026-07-28` revision when available,
+   *   with a conservative fallback to the legacy `initialize` handshake.
+   * - `'2025-11-25'`: use the legacy connect sequence without probing.
    * - `'2026-07-28'`: pin to that revision exactly. Connecting to a server that
    *   does not offer it fails loudly with a typed error — no fallback.
    *
@@ -331,7 +331,7 @@ export type BaseServerOptions = {
    * });
    * ```
    */
-  protocolVersion?: 'auto' | '2026-07-28';
+  protocolVersion?: 'auto' | '2025-11-25' | '2026-07-28';
 };
 
 /**

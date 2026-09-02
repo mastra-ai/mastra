@@ -33,7 +33,7 @@ describe('InternalMastraMCPClient protocol defaults', () => {
       server: {
         url: new URL('http://localhost:1234/mcp'),
         protocolVersion: '2025-11-25',
-      } as any,
+      },
     });
 
     expect((client as any).client._options.versionNegotiation).toEqual({ mode: 'legacy' });
@@ -4414,7 +4414,7 @@ describe('MastraMCPClient - custom fetch failure modes (auth-token loop)', () =>
 
     client = new InternalMastraMCPClient({
       name: 'fetch-failure-mode-test',
-      server: { url: baseUrl, fetch: userFetch },
+      server: { url: baseUrl, fetch: userFetch, protocolVersion: '2025-11-25' },
     });
 
     await client.connect();
@@ -4428,7 +4428,7 @@ describe('MastraMCPClient - custom fetch failure modes (auth-token loop)', () =>
     // No user fetch override here — measure raw server-side GETs with default fetch.
     client = new InternalMastraMCPClient({
       name: 'baseline-loop',
-      server: { url: baseUrl },
+      server: { url: baseUrl, protocolVersion: '2025-11-25' },
     });
     await client.connect();
     await client.tools();
@@ -4519,7 +4519,7 @@ describe('MastraMCPClient - custom fetch failure modes (auth-token loop)', () =>
 
     client = new InternalMastraMCPClient({
       name: 'recommended-pattern',
-      server: { url: baseUrl, fetch: userFetch },
+      server: { url: baseUrl, fetch: userFetch, protocolVersion: '2025-11-25' },
     });
 
     await client.connect();

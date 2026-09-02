@@ -178,10 +178,9 @@ export class MCPServer extends MCPServerBase {
   private subscriptionsByInstance: WeakMap<Server, Set<string>> = new WeakMap();
   // Minimum logging level per server instance (main + per HTTP session), set via logging/setLevel
   private loggingLevels: WeakMap<Server, LoggingLevel> = new WeakMap();
-  // Protocol revision the server is pinned to. Undefined or '2025-11-25' keeps the
-  // legacy (2025) era behavior exactly; '2026-07-28' routes HTTP/serverless/stdio
-  // through the SDK's dual-era serving entries.
-  private protocolVersion?: MCPServerProtocolVersion;
+  // Effective protocol revision. Omitted configuration defaults to the modern
+  // dual-era serving entries; explicit '2025-11-25' retains legacy behavior.
+  private protocolVersion: MCPServerProtocolVersion;
   // Cache hints advertised on cacheable 2026-07-28 results. Only applied under the flag.
   private cacheHints?: MCPServerCacheHints;
   // Lazily created dual-era HTTP handler (modern era native + stateless legacy fallback).
@@ -404,13 +403,13 @@ export class MCPServer extends MCPServerBase {
        */
       jsonSchemaValidator?: jsonSchemaValidator;
       /**
-       * Opt-in MCP protocol revision.
+       * MCP protocol revision.
        *
-       * Omitted (or `'2025-11-25'`) keeps today's behavior exactly. Set to
-       * `'2026-07-28'` to serve the stateless MCP revision: HTTP and serverless
-       * requests go through the SDK's dual-era handler (modern clients served
-       * natively, legacy clients via the built-in stateless fallback on the same
-       * endpoint), and stdio serves both eras via the `server/discover` probe.
+       * Omitted (default) or `'2026-07-28'` serves the stateless MCP revision:
+       * HTTP requests use the SDK's dual-era handler (modern clients natively,
+       * legacy clients through its stateless fallback on the same endpoint), and
+       * stdio serves both eras via the `server/discover` probe. Set
+       * `'2025-11-25'` to retain the legacy sessionful implementation.
        *
        * @example
        * ```typescript
@@ -444,7 +443,7 @@ export class MCPServer extends MCPServerBase {
     },
   ) {
     super(opts);
-    this.protocolVersion = opts.protocolVersion;
+    this.protocolVersion = opts.protocolVersion ?? '2026-07-28';
     this.cacheHints = opts.cacheHints;
 
     // Merge appResources into the resource system
@@ -558,10 +557,7 @@ export class MCPServer extends MCPServerBase {
     );
   }
 
-  /**
-   * Whether the server is pinned to the `2026-07-28` protocol revision.
-   * When false (the default), all behavior is byte-identical to the legacy era.
-   */
+  /** Whether the effective server revision is `2026-07-28`. */
   private servesModernEra(): boolean {
     return this.protocolVersion === '2026-07-28';
   }
@@ -660,6 +656,7 @@ export class MCPServer extends MCPServerBase {
    * The notification is broadcast to every active server instance, honoring
    * the minimum logging level each client set via `logging/setLevel`.
    *
+   * @deprecated Protocol logging is deprecated in MCP 2026-07-28. Use application observability instead.
    * @param params - Log message parameters
    * @param params.level - Log severity level
    * @param params.data - Arbitrary JSON-serializable data to log
@@ -1815,6 +1812,7 @@ export class MCPServer extends MCPServerBase {
    * @param options.req - Incoming HTTP request object
    * @param options.res - HTTP response object (must support .write/.end)
    *
+   * @deprecated HTTP+SSE is deprecated in MCP 2026-07-28. Use {@link startHTTP} instead.
    * @throws {MastraError} If SSE connection setup fails
    *
    * @example
@@ -1892,6 +1890,7 @@ export class MCPServer extends MCPServerBase {
    * @param options.messagePath - Path for POSTing client messages (e.g., '/message')
    * @param options.context - Hono context object
    *
+   * @deprecated HTTP+SSE is deprecated in MCP 2026-07-28. Use {@link startHTTP} instead.
    * @throws {MastraError} If Hono SSE connection setup fails
    *
    * @example

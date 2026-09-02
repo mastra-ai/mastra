@@ -61,6 +61,7 @@ describe('MCPServer dynamic tools + tools/list_changed', () => {
 
   beforeAll(async () => {
     server = new MCPServer({
+      protocolVersion: '2025-11-25',
       name: 'DynamicToolsTestServer',
       version: '1.0.0',
       tools: { ...initialTools },

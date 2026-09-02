@@ -71,6 +71,7 @@ describe('MCPServer logging and progress emission', () => {
 
   beforeAll(async () => {
     server = new MCPServer({
+      protocolVersion: '2025-11-25',
       name: 'LoggingProgressTestServer',
       version: '1.0.0',
       tools,

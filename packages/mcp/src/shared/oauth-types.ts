@@ -35,7 +35,6 @@ export {
   startAuthorization,
   exchangeAuthorization,
   refreshAuthorization,
-  registerClient,
   extractResourceMetadataUrl,
   selectResourceURL,
   parseErrorResponse,
@@ -43,6 +42,11 @@ export {
   buildDiscoveryUrls,
   validateClientMetadataUrl,
 } from '@modelcontextprotocol/client';
+
+/**
+ * @deprecated Dynamic Client Registration is deprecated in MCP 2026-07-28. Prefer Client ID Metadata Documents.
+ */
+export { registerClient } from '@modelcontextprotocol/client';
 
 // Re-export OAuthClientProvider interface
 export type { OAuthClientProvider, AuthResult } from '@modelcontextprotocol/client';

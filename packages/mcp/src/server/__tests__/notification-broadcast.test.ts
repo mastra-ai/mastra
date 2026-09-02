@@ -49,6 +49,7 @@ describe('Notification broadcast to streamable HTTP sessions', () => {
 
   beforeAll(async () => {
     server = new MCPServer({
+      protocolVersion: '2025-11-25',
       name: 'BroadcastTestServer',
       version: '1.0.0',
       tools: {},
@@ -142,6 +143,7 @@ describe('Per-session resource subscriptions', () => {
 
   beforeAll(async () => {
     server = new MCPServer({
+      protocolVersion: '2025-11-25',
       name: 'SubscriptionIsolationTestServer',
       version: '1.0.0',
       tools: {},
