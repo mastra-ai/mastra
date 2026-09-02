@@ -1,5 +1,46 @@
 # @mastra/playground-ui
 
+## 52.0.0-alpha.11
+
+### Minor Changes
+
+- Add host-injected trace signal management contracts and an OSS-owned Intelligence settings pane for custom signal configuration. Custom signal instructions use one task prompt field without a separate response-rules contract. ([#21758](https://github.com/mastra-ai/mastra/pull/21758))
+
+  ```tsx
+  <TraceIntelligenceProvider signalManagement={signalManagement}>
+    <TraceIntelligenceEntityIndex {...indexProps} />
+  </TraceIntelligenceProvider>
+  ```
+
+- Render server-defined trace signals in catalog order with custom labels, colors, lifecycle progress, and built-in fallbacks. ([#21758](https://github.com/mastra-ai/mastra/pull/21758))
+
+  ```tsx
+  <TraceIntelligenceProvider signalCatalog={entity.signalCatalog}>
+    <TraceIntelligenceEntityDetail entityType={entity.entityType} entityId={entity.entityId} />
+  </TraceIntelligenceProvider>
+  ```
+
+- Added rolling-compatible Trace Intelligence entity index metadata types and an index-first list and compact view with controlled search, sorting, and view state. ([#21758](https://github.com/mastra-ai/mastra/pull/21758))
+
+  ```tsx
+  <TraceIntelligenceEntityIndex
+    search={search}
+    sort={sort}
+    view={view}
+    getEntityHref={entity => `/intelligence/entities/${entity.entityType}/${entity.entityId}`}
+  />
+  ```
+
+### Patch Changes
+
+- Fixed flat and factory section headings to use medium weight. ([#22900](https://github.com/mastra-ai/mastra/pull/22900))
+
+- Updated dependencies [[`ffca9e5`](https://github.com/mastra-ai/mastra/commit/ffca9e5dd061e64da8a766d59d1bbcd667017c9c), [`ffca9e5`](https://github.com/mastra-ai/mastra/commit/ffca9e5dd061e64da8a766d59d1bbcd667017c9c), [`ea56b1f`](https://github.com/mastra-ai/mastra/commit/ea56b1fa6e0f99673d2f8a5b7dacc8d351507ff7), [`ec611c2`](https://github.com/mastra-ai/mastra/commit/ec611c28049b8cf36d5519eae944bf299f6ccd99), [`ffca9e5`](https://github.com/mastra-ai/mastra/commit/ffca9e5dd061e64da8a766d59d1bbcd667017c9c)]:
+  - @mastra/client-js@1.43.0-alpha.8
+  - @mastra/core@1.64.0-alpha.8
+  - @mastra/memory@1.28.2-alpha.3
+  - @mastra/react@1.4.10-alpha.9
+
 ## 51.4.0-alpha.10
 
 ### Patch Changes

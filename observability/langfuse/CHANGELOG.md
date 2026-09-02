@@ -1,5 +1,16 @@
 # @mastra/langfuse
 
+## 1.5.4-alpha.2
+
+### Patch Changes
+
+- Map the root span's input/output to `langfuse.trace.input`/`langfuse.trace.output` so Langfuse traces carry trace-level input and output again. Previously the exporter only mapped input/output onto observations, leaving every trace's top-level input/output empty — which broke LLM-as-a-judge evaluators bound to Trace input/output and removed the request/response summary from the Langfuse trace view. User-facing behavior otherwise unchanged; existing trace name/tags/metadata mappings take the same precedence as before. ([#22696](https://github.com/mastra-ai/mastra/pull/22696))
+
+- Updated dependencies [[`ea56b1f`](https://github.com/mastra-ai/mastra/commit/ea56b1fa6e0f99673d2f8a5b7dacc8d351507ff7), [`4cde9ab`](https://github.com/mastra-ai/mastra/commit/4cde9ab9b3c8dfd91852794018b39fb68c346f28)]:
+  - @mastra/core@1.64.0-alpha.8
+  - @mastra/observability@1.17.5-alpha.2
+  - @mastra/otel-exporter@1.3.13-alpha.2
+
 ## 1.5.4-alpha.1
 
 ### Patch Changes
