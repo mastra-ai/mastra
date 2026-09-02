@@ -725,9 +725,9 @@ export class ProcessorRunner {
         entityId: processor.id,
         entityName: processor.name,
         attributes: {
+          ...resolveProcessorSpanAttributes(processor, 'output'),
           processorExecutor: 'legacy',
           processorIndex: index,
-          ...resolveProcessorSpanAttributes(processor, 'output'),
         },
         input: {
           messages: processableMessages,
@@ -1245,9 +1245,9 @@ export class ProcessorRunner {
         entityId: processor.id,
         entityName: processor.name,
         attributes: {
+          ...resolveProcessorSpanAttributes(processor, 'input'),
           processorExecutor: 'legacy',
           processorIndex: index,
-          ...resolveProcessorSpanAttributes(processor, 'input'),
         },
         input: {
           messages: processableMessages,
@@ -1555,9 +1555,9 @@ export class ProcessorRunner {
         entityId: processor.id,
         entityName: processor.name,
         attributes: {
+          ...resolveProcessorSpanAttributes(processor, 'inputStep'),
           processorExecutor: 'legacy',
           processorIndex: index,
-          ...resolveProcessorSpanAttributes(processor, 'inputStep'),
         },
         input: buildProcessInputStepSpanInput({
           messages: inputData.messages,
@@ -1769,9 +1769,9 @@ export class ProcessorRunner {
         entityId: processor.id,
         entityName: processor.name,
         attributes: {
+          ...resolveProcessorSpanAttributes(processor, 'llmRequest'),
           processorExecutor: 'legacy',
           processorIndex: index,
-          ...resolveProcessorSpanAttributes(processor, 'llmRequest'),
         },
         input: {
           prompt: currentPrompt,
@@ -1894,9 +1894,9 @@ export class ProcessorRunner {
         entityId: processor.id,
         entityName: processor.name,
         attributes: {
+          ...resolveProcessorSpanAttributes(processor, 'llmResponse'),
           processorExecutor: 'legacy',
           processorIndex: index,
-          ...resolveProcessorSpanAttributes(processor, 'llmResponse'),
         },
         input: {
           stepNumber: args.stepNumber,
@@ -2077,9 +2077,9 @@ export class ProcessorRunner {
         entityId: processor.id,
         entityName: processor.name,
         attributes: {
+          ...resolveProcessorSpanAttributes(processor, 'outputStep'),
           processorExecutor: 'legacy',
           processorIndex: index,
-          ...resolveProcessorSpanAttributes(processor, 'outputStep'),
         },
         input: {
           messages: processableMessages,
@@ -2296,9 +2296,9 @@ export class ProcessorRunner {
         entityId: processor.id,
         entityName: processor.name,
         attributes: {
+          ...resolveProcessorSpanAttributes(processor, 'toolResult'),
           processorExecutor: 'legacy',
           processorIndex: index,
-          ...resolveProcessorSpanAttributes(processor, 'toolResult'),
         },
         input: {
           toolName,
@@ -2458,9 +2458,9 @@ export class ProcessorRunner {
         entityId: processor.id,
         entityName: processor.name,
         attributes: {
+          ...resolveProcessorSpanAttributes(processor, 'requestError'),
           processorExecutor: 'legacy',
           processorIndex: index,
-          ...resolveProcessorSpanAttributes(processor, 'requestError'),
         },
         input: {
           messages: processableMessages,

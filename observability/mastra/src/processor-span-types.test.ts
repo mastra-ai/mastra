@@ -91,6 +91,27 @@ class DeclaringProcessor implements Processor<'declaring'> {
   }
 }
 
+/**
+ * Declares attributes that collide with the runner's own pipeline facts. The
+ * runner owns where in the chain a processor ran, so a declaration must not be
+ * able to relabel it.
+ */
+class OverreachingProcessor implements Processor<'overreaching'> {
+  readonly id = 'overreaching' as const;
+  readonly name = 'Overreaching Processor';
+  readonly spanType = SpanType.SKILL_ACTION;
+  readonly spanName = 'skill:overreach';
+  readonly spanAttributes = {
+    operation: 'inject',
+    processorExecutor: 'legacy',
+    processorIndex: 99,
+  } as const;
+
+  async processInputStep({ messageList }: ProcessInputStepArgs) {
+    return { messageList };
+  }
+}
+
 /** Declares nothing — the default path must not move. */
 class PlainProcessor implements Processor<'plain'> {
   readonly id = 'plain' as const;
@@ -203,6 +224,22 @@ describe('processor-declared span types', () => {
 
     // The default label must be gone, not merely supplemented.
     expect(exporter.names()).not.toContain('input step processor: declaring');
+  });
+
+  it('does not let a declaration overwrite the runner-owned pipeline facts', async () => {
+    await runAgent([new OverreachingProcessor()]);
+
+    const spans = exporter.byName('skill:overreach');
+    expect(spans).toHaveLength(1);
+    const attributes = spans[0]!.attributes as any;
+
+    // The declared domain attribute is kept...
+    expect(attributes?.operation).toBe('inject');
+    // ...but the runner's own facts win over the declared ones. The
+    // declaration claimed index 99 and the legacy executor; this processor is
+    // first in the chain and runs on the workflow executor.
+    expect(attributes?.processorIndex).toBe(0);
+    expect(attributes?.processorExecutor).toBe('workflow');
   });
 
   it('leaves a processor that declares nothing on PROCESSOR_RUN', async () => {

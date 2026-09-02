@@ -22,7 +22,11 @@ Skills, workspace instructions, observational memory and agent state signals all
 Any processor can declare how it is traced, and one that declares nothing is unchanged:
 
 ```ts
+import { SpanType } from '@mastra/core/observability';
+import type { Processor, ProcessorSpanPhase } from '@mastra/core/processors';
+
 class MyProcessor implements Processor<'my-processor'> {
+  readonly id = 'my-processor' as const;
   readonly spanType = SpanType.MEMORY_OPERATION;
   readonly spanName = (phase: ProcessorSpanPhase) => `memory: ${phase === 'inputStep' ? 'recall' : 'save'}`;
   readonly spanAttributes = { operationType: 'recall' } as const;

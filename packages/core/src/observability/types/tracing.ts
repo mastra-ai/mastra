@@ -534,7 +534,7 @@ export interface SkillActionAttributes extends AIBaseAttributes, ProcessorPipeli
  *
  * A processor may opt out of the default `PROCESSOR_RUN` span type (see
  * `Processor.spanType`) so its span is labelled with the Mastra subsystem it
- * belongs to — e.g. the skills processor emits `SKILL_RESOLUTION` rather than
+ * belongs to — e.g. the skills processor emits `SKILL_ACTION` rather than
  * an anonymous processor span. The runner still records the pipeline facts
  * below on that span, so retyping never loses the mutation log or the
  * processor's position in the chain. Any attributes interface reachable from a
@@ -903,9 +903,17 @@ export type AnySpanAttributes = SpanTypeMap[keyof SpanTypeMap];
  * Adding a domain span type to this set is therefore a matter of mixing
  * `ProcessorPipelineAttributes` into its attributes interface.
  */
-export type ProcessorSpanType = {
-  [K in keyof SpanTypeMap]: SpanTypeMap[K] extends ProcessorPipelineAttributes ? K : never;
-}[keyof SpanTypeMap];
+export type ProcessorSpanType = Exclude<
+  {
+    [K in keyof SpanTypeMap]: SpanTypeMap[K] extends ProcessorPipelineAttributes ? K : never;
+  }[keyof SpanTypeMap],
+  // `ProcessorPipelineAttributes` is all-optional, so the check above is
+  // structural rather than nominal: a span type satisfies it by not
+  // conflicting with it, not by mixing it in. `AGENT_RUN` passes that way,
+  // and a processor labelling its span as the agent run that contains it
+  // would reparent the trace's own root. Exclude it explicitly.
+  SpanType.AGENT_RUN
+>;
 
 // ============================================================================
 // Span Interfaces

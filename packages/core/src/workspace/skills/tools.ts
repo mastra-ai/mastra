@@ -106,6 +106,7 @@ function createSkillTool(skills: WorkspaceSkills) {
       const span = startSkillSpan(context, {
         operation: 'activate',
         input: { name },
+        attributes: { skillName: name },
       });
 
       try {
@@ -202,7 +203,7 @@ function createSkillReadTool(skills: WorkspaceSkills) {
       const span = startSkillSpan(context, {
         operation: 'read',
         input: { skillName, path, startLine, endLine },
-        attributes: {},
+        attributes: { skillName },
       });
 
       try {

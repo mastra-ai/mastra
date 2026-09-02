@@ -1052,10 +1052,10 @@ function createStepFromProcessor<TProcessorId extends string>(
               entityName: processor.name ?? processor.id,
               input: buildProcessorSpanInput(),
               attributes: {
+                ...resolveProcessorSpanAttributes(processor, toProcessorSpanPhase(phase)),
                 processorExecutor: 'workflow',
                 // Read processorIndex from processor (set in combineProcessorsIntoWorkflow)
                 processorIndex: processor.processorIndex,
-                ...resolveProcessorSpanAttributes(processor, toProcessorSpanPhase(phase)),
               },
             })
           : undefined;
@@ -1345,9 +1345,9 @@ function createStepFromProcessor<TProcessorId extends string>(
                   entityId: processor.id,
                   entityName: processor.name ?? processor.id,
                   attributes: {
+                    ...resolveProcessorSpanAttributes(processor, 'output'),
                     processorExecutor: 'workflow',
                     processorIndex: processor.processorIndex,
-                    ...resolveProcessorSpanAttributes(processor, 'output'),
                   },
                 });
                 mutableState[spanKey] = processorSpan;
