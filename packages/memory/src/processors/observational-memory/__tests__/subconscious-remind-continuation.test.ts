@@ -100,6 +100,7 @@ describe('Subconscious reminder continuation', () => {
 
     await processor.processOutputResult(resultArgs([question]));
 
+    expect(sendMessage).toHaveBeenCalledOnce();
     expect(sendMessage.mock.calls[0]![0].metadata[REMIND_MESSAGE_METADATA_KEY]).toEqual({
       type: 'continuation',
       replyIds: ['reply-1'],
