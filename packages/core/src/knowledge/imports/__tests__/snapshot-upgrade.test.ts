@@ -28,14 +28,14 @@ function calendar(storage: InMemoryStore, handler: () => Promise<void> = async (
 }
 
 async function beginRun(knowledge: Knowledge, id: string) {
-  const queued = await knowledge.createImportRun({
+  const queued = await knowledge.createImportRunInternal({
     id,
     importerId,
     binding,
     importKind: 'static',
     triggerKind: 'programmatic',
   });
-  return knowledge.updateImportRun({ id: queued.id, status: 'running' });
+  return knowledge.updateImportRunInternal({ id: queued.id, status: 'running' });
 }
 
 describe('Knowledge importer snapshot upgrades', () => {
@@ -59,8 +59,8 @@ describe('Knowledge importer snapshot upgrades', () => {
       id: 'calendar-record-architecture-review',
       text: '10:00–11:00',
     });
-    await initial.setImportState({ importerId, binding, key: 'cursor', value: '2026-10-12T11:00:00.000Z' });
-    await initial.updateImportRun({ id: firstRun.id, status: 'succeeded' });
+    await initial.setImportStateInternal({ importerId, binding, key: 'cursor', value: '2026-10-12T11:00:00.000Z' });
+    await initial.updateImportRunInternal({ id: firstRun.id, status: 'succeeded' });
 
     const reconstructed = calendar(storage);
     await expect(reconstructed.getImportRun({ id: firstRun.id, scopeIds: [projectScopeId] })).resolves.toMatchObject({
@@ -93,13 +93,13 @@ describe('Knowledge importer snapshot upgrades', () => {
       id: 'calendar-record-architecture-review',
       text: '10:00–11:00',
     });
-    await reconstructed.setImportState({
+    await reconstructed.setImportStateInternal({
       importerId,
       binding,
       key: 'cursor',
       value: '2026-10-12T12:00:00.000Z',
     });
-    await reconstructed.updateImportRun({ id: replayRun.id, status: 'succeeded' });
+    await reconstructed.updateImportRunInternal({ id: replayRun.id, status: 'succeeded' });
 
     expect(replayRun.id).not.toBe(firstRun.id);
     expect(replayedNode.id).toBe(firstNode.id);
@@ -162,17 +162,17 @@ describe('Knowledge importer snapshot upgrades', () => {
       'not registered',
     );
     await expect(
-      removedImporter.setImportState({ importerId, binding, key: 'cursor', value: 'forbidden' }),
+      removedImporter.setImportStateInternal({ importerId, binding, key: 'cursor', value: 'forbidden' }),
     ).rejects.toThrow('not registered');
     await expect(
-      removedImporter.createImportRun({
+      removedImporter.createImportRunInternal({
         importerId,
         binding,
         importKind: 'static',
         triggerKind: 'programmatic',
       }),
     ).rejects.toThrow('not registered');
-    await expect(removedImporter.updateImportRun({ id: replayRun.id, status: 'failed' })).rejects.toThrow(
+    await expect(removedImporter.updateImportRunInternal({ id: replayRun.id, status: 'failed' })).rejects.toThrow(
       'not registered',
     );
   });
