@@ -1,13 +1,8 @@
+import { SETUP_MARKER_PATH, setupMarkerContent } from '@internal/workspace';
 import { Template } from 'e2b';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import {
-  createRepoTemplate,
-  refreshRepoTemplate,
-  repoTemplateRef,
-  SETUP_MARKER_PATH,
-  setupMarkerContent,
-} from './repo-template';
+import { createRepoTemplate, refreshRepoTemplate, repoTemplateRef } from './repo-template';
 import type { RepoTemplateOptions } from './repo-template';
 import type { NamedTemplateSpec } from './template';
 

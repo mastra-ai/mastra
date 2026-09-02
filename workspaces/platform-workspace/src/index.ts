@@ -35,8 +35,6 @@ export {
   createRepoTemplate,
   type PlatformRepoTemplateOptions,
   type PlatformRepoTemplateResolver,
-  SETUP_MARKER_PATH,
-  setupMarkerContent,
 } from './repo-template.js';
 export { platformFilesystemProvider, platformSandboxProvider } from './provider.js';
 export {

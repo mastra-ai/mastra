@@ -10,10 +10,6 @@ export default defineConfig({
   dts: false,
   treeshake: true,
   sourcemap: true,
-  deps: {
-    alwaysBundle: ['@internal/workspace'],
-    neverBundle: ['@mastra/core'],
-  },
   onSuccess: async () => {
     await generateTypes(process.cwd());
   },

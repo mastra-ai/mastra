@@ -18,8 +18,6 @@ export {
   type RepoTemplateOptions,
   type RepoTemplateIdentity,
   type RepositoryAccess,
-  SETUP_MARKER_PATH,
-  setupMarkerContent,
   type RefreshRepoTemplateResult,
 } from './utils/repo-template';
 export {

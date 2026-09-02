@@ -1,6 +1,6 @@
 import { execFile } from 'node:child_process';
-import { createHash } from 'node:crypto';
 import { promisify } from 'node:util';
+import { setupMarkerCommand, setupMarkerContent } from '@internal/workspace';
 
 import { Template, type SandboxTemplateBuilder } from './template.js';
 
@@ -77,24 +77,6 @@ export interface PlatformRepoTemplateOptions {
   buildEnv?: Record<string, string>;
   /** Test/integration seam for resolving the default-branch head. */
   resolveHead?: (cloneUrl: string, token?: string) => Promise<string | undefined>;
-}
-
-/**
- * Setup completion marker, written beside the checkout as the template's last
- * build step so it only exists in images where every setup command succeeded.
- * The content is a digest of the setup commands, so a sandbox booted from the
- * image can tell whether *this* setup already ran. Path and recipe are a
- * convention shared with `@mastra/factory` (session-sandbox.ts) and
- * `@mastra/e2b`; keep the three in sync.
- */
-export const SETUP_MARKER_PATH = '.mastra-sandbox/setup';
-
-export function setupMarkerContent(setupCommands: readonly string[]): string {
-  return `sha256:${createHash('sha256').update(setupCommands.join('\n')).digest('hex')}`;
-}
-
-function setupMarkerCommand(content: string): string {
-  return `mkdir -p "$(dirname "${SETUP_MARKER_PATH}")" && printf '%s' '${content}' > "${SETUP_MARKER_PATH}"`;
 }
 
 export type PlatformRepoTemplateResolver = () => Promise<SandboxTemplateBuilder | undefined>;

@@ -1,7 +1,7 @@
-import { createHash } from 'node:crypto';
 import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
+import { setupMarkerContent } from '@internal/workspace';
 import type { WorkspaceSandbox } from '@mastra/core/workspace';
 import { LocalSandbox } from '@mastra/core/workspace';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -12,7 +12,6 @@ import {
   getSessionSandbox,
   peekSessionSandbox,
   resolveSessionWorkdir,
-  setupMarkerContent,
 } from './session-sandbox.js';
 import type { SessionSetupGate } from './session-sandbox.js';
 
@@ -130,7 +129,7 @@ describe('session sandbox memo', () => {
 describe('session setup hook', () => {
   let dir: string;
   const SETUP = 'pnpm install';
-  const digest = () => setupMarkerContent(SETUP)!;
+  const digest = () => setupMarkerContent(SETUP);
 
   /** A run that materializes a fake checkout and, when the gate says so, "runs setup". */
   const runWith = (setupTouch: string) => async (sb: WorkspaceSandbox, _workdir: string, gate: SessionSetupGate) => {
@@ -146,16 +145,6 @@ describe('session setup hook', () => {
 
   afterEach(async () => {
     await fs.rm(dir, { recursive: true, force: true });
-  });
-
-  it('digests the setup command the same way the repo templates do, and has no marker for blank commands', () => {
-    expect(setupMarkerContent(SETUP)).toMatch(/^sha256:[0-9a-f]{64}$/);
-    // Same recipe as @mastra/e2b and @mastra/platform-workspace: the raw
-    // command list joined by newlines, so a template's marker matches.
-    expect(setupMarkerContent(SETUP)).toBe(`sha256:${createHash('sha256').update(SETUP).digest('hex')}`);
-    expect(setupMarkerContent('pnpm ci')).not.toBe(setupMarkerContent(SETUP));
-    expect(setupMarkerContent(undefined)).toBeUndefined();
-    expect(setupMarkerContent('   ')).toBeUndefined();
   });
 
   it('runs setup inside start() on a fresh sandbox and writes the digest marker', async () => {
@@ -224,7 +213,7 @@ describe('session setup hook', () => {
     await edited._start();
     await expect(fs.stat(path.join(boot, 'edited-rerun.txt'))).resolves.toBeDefined();
     await expect(fs.readFile(path.join(boot, '.mastra-sandbox/setup'), 'utf8')).resolves.toBe(
-      setupMarkerContent('pnpm ci')!,
+      setupMarkerContent('pnpm ci'),
     );
   });
 

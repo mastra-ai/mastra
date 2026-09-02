@@ -1,5 +1,5 @@
-import { createHash } from 'node:crypto';
 import path from 'node:path';
+import { SETUP_MARKER_PATH, setupMarkerContent } from '@internal/workspace';
 
 import type { MastraSandbox, SandboxStartHook, WorkspaceSandbox } from '@mastra/core/workspace';
 import type { RepositoryAccess } from '../capabilities/version-control.js';
@@ -204,27 +204,14 @@ export function hasFailedSetupCommand(sessionId: string, command: string): boole
 }
 
 /**
- * Setup completion marker, a convention shared with the repo templates in
- * `@mastra/e2b` and `@mastra/platform-workspace` (keep the three in sync):
- * `.mastra-sandbox/setup` beside the checkout, containing a digest of the
- * setup commands. Templates write it as their last build step, so a sandbox
- * booted from a warm image already carries it; the start hook writes it
- * after a successful runtime setup. It is a skip cache, not a correctness
- * mechanism: the setup command is assumed idempotent, and a missing or
- * mismatched marker only re-runs it.
- */
-const SETUP_MARKER_PATH = '.mastra-sandbox/setup';
-
-/**
- * Same recipe as the templates: the non-blank commands joined by newlines.
- * Factory has a single command string, so that is the whole list.
- */
-export function setupMarkerContent(setupCommand: string | undefined): string | undefined {
-  if (setupCommand === undefined || setupCommand.trim() === '') return undefined;
-  return `sha256:${createHash('sha256').update(setupCommand).digest('hex')}`;
-}
-
-/**
+ * The setup completion marker is a convention shared with the repo templates
+ * (`@internal/workspace`): `.mastra-sandbox/setup` beside the checkout,
+ * containing a digest of the setup commands. Templates write it as their last
+ * build step, so a sandbox booted from a warm image already carries it; the
+ * start hook writes it after a successful runtime setup. It is a skip cache,
+ * not a correctness mechanism: the setup command is assumed idempotent, and a
+ * missing or mismatched marker only re-runs it.
+ *
  * The working directory is the parent of the repo dir, which is also the
  * template's build cwd, so this is the file the template's marker step wrote.
  */
@@ -265,7 +252,8 @@ export function createSessionSetupHook(
   repoFullName: string,
   setupCommand: string | undefined,
 ): SandboxStartHook {
-  const marker = setupMarkerContent(setupCommand);
+  // No command, no marker: nothing to gate.
+  const marker = setupCommand?.trim() ? setupMarkerContent(setupCommand) : undefined;
   return async ({ sandbox }) => {
     if (!sandbox.executeCommand) {
       throw new Error(`Sandbox '${sandbox.id}' cannot run the session setup: no executeCommand implementation`);

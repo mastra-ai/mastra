@@ -1,8 +1,12 @@
 {
-  "name": "@mastra/e2b",
-  "version": "0.11.0-alpha.2",
-  "description": "E2B cloud sandbox provider for Mastra workspaces",
+  "name": "@internal/workspace",
+  "version": "0.0.1",
+  "description": "Internal conventions shared by Mastra sandbox providers and their consumers",
+  "private": true,
   "type": "module",
+  "files": [
+    "dist"
+  ],
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "exports": {
@@ -20,48 +24,27 @@
   },
   "scripts": {
     "build": "tsdown --silent --config tsdown.config.ts",
-    "build:lib": "pnpm build",
-    "build:watch": "pnpm build --watch",
-    "test:unit": "vitest run --exclude '**/*.integration.test.ts'",
-    "test:watch": "vitest watch",
-    "test": "vitest run ./src/**/*.integration.test.ts",
-    "test:cloud": "pnpm test",
+    "build:watch": "tsdown --watch --silent --config tsdown.config.ts",
+    "test": "vitest run",
     "lint": "oxlint . && eslint .",
-    "lint:fix": "oxlint --fix . && eslint --fix ."
+    "lint:fix": "oxlint --fix . && eslint --fix .",
+    "typecheck": "tsc --noEmit -p tsconfig.build.json"
   },
   "license": "Apache-2.0",
-  "dependencies": {
-    "e2b": "^2.36.0",
-    "esbuild": "^0.28.0"
-  },
   "devDependencies": {
     "@internal/lint": "workspace:*",
     "@internal/types-builder": "workspace:*",
-    "@internal/workspace": "workspace:*",
-    "@internal/workspace-test-utils": "workspace:*",
-    "@mastra/core": "workspace:*",
-    "@mastra/gcs": "workspace:*",
-    "@mastra/s3": "workspace:*",
     "@types/node": "22.20.1",
-    "@vitest/coverage-v8": "catalog:",
-    "@vitest/ui": "catalog:",
-    "dotenv": "^17.4.2",
     "eslint": "^10.7.0",
     "tsdown": "0.22.9",
     "typescript": "catalog:",
     "vitest": "catalog:"
   },
-  "peerDependencies": {
-    "@mastra/core": ">=1.55.0-0 <2.0.0-0"
-  },
-  "files": [
-    "dist"
-  ],
   "homepage": "https://mastra.ai",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/mastra-ai/mastra.git",
-    "directory": "workspaces/e2b"
+    "directory": "packages/_internals/workspace"
   },
   "bugs": {
     "url": "https://github.com/mastra-ai/mastra/issues"

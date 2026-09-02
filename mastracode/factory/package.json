@@ -69,6 +69,7 @@
     "@mastra/libsql": "workspace:*",
     "@mastra/pg": "workspace:*",
     "@internal/types-builder": "workspace:*",
+    "@internal/workspace": "workspace:*",
     "@types/node": "22.20.1",
     "eslint": "^10.7.0",
     "tsdown": "0.22.9",

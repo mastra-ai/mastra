@@ -1,12 +1,7 @@
+import { SETUP_MARKER_PATH, setupMarkerContent } from '@internal/workspace';
 import { describe, expect, it, vi } from 'vitest';
 
-import {
-  createRepoTemplate,
-  redactSecrets,
-  resolveDefaultBranchHead,
-  SETUP_MARKER_PATH,
-  setupMarkerContent,
-} from './repo-template.js';
+import { createRepoTemplate, redactSecrets, resolveDefaultBranchHead } from './repo-template.js';
 import { getSandboxTemplateBuildEnvs, serializeSandboxTemplate } from './template.js';
 
 const SHA_1 = '0123456789abcdef0123456789abcdef01234567';

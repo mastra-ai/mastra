@@ -34,6 +34,7 @@
   "devDependencies": {
     "@internal/lint": "workspace:*",
     "@internal/types-builder": "workspace:*",
+    "@internal/workspace": "workspace:*",
     "@mastra/core": "workspace:*",
     "@types/node": "22.20.1",
     "@vitest/coverage-v8": "catalog:",
