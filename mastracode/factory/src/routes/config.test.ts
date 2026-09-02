@@ -326,6 +326,22 @@ describe('provider key routes with a tenant', () => {
     expect(await seed.memorySettings.get({ orgId: 'org1', userId: 'user-a' })).toBeNull();
   });
 
+  it('still saves the key and returns 200 when OM seeding fails', async () => {
+    vi.spyOn(seed.memorySettings, 'patch').mockRejectedValueOnce(new Error('memory settings unavailable'));
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    const res = await putKey(buildApp(userA), { key: 'sk-mine' });
+
+    expect(res.status).toBe(200);
+    expect(await seed.credentials.getCredential({ orgId: 'org1', userId: 'user-a' }, 'anthropic')).toMatchObject({
+      type: 'api_key',
+      key: 'sk-mine',
+    });
+    expect(await seed.memorySettings.get({ orgId: 'org1', userId: 'user-a' })).toBeNull();
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('seed personal OM defaults'), expect.anything());
+    warn.mockRestore();
+  });
+
   it('stores an org-scoped key that all members inherit when the caller is an admin', async () => {
     const res = await putKey(buildApp(userA), { key: 'sk-shared', scope: 'org' });
     expect(res.status).toBe(200);

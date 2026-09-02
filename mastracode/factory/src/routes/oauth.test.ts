@@ -386,6 +386,25 @@ describe('personal OM defaults follow login', () => {
     await post(app, '/web/config/providers/github-copilot/oauth/poll', { sessionId: copilotSession });
     expect(await seed.memorySettings.get(TENANT_A)).toBeNull();
   });
+
+  it('still reports login success and releases the session when OM seeding fails', async () => {
+    vi.spyOn(seed.memorySettings, 'patch').mockRejectedValueOnce(new Error('memory settings unavailable'));
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const app = buildApp(userA);
+    const { sessionId } = await (await post(app, '/web/config/providers/anthropic/oauth/start')).json();
+
+    const res = await post(app, '/web/config/providers/anthropic/oauth/complete', { sessionId, code: 'c' });
+
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({ status: 'complete' });
+    expect(await seed.credentials.getCredential(TENANT_A, 'anthropic')).toMatchObject({ type: 'oauth' });
+    expect(await seed.memorySettings.get(TENANT_A)).toBeNull();
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('seed personal OM defaults'), expect.anything());
+    // Session was deleted, not left claimed.
+    const replay = await post(app, '/web/config/providers/anthropic/oauth/complete', { sessionId, code: 'c' });
+    expect(replay.status).toBe(404);
+    warn.mockRestore();
+  });
 });
 
 describe('org-scoped sign-in', () => {
