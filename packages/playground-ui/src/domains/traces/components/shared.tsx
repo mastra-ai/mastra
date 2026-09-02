@@ -25,43 +25,43 @@ export const spanTypePrefixes = [
 const spanTypeToUiElements: Record<string, UISpanStyle> = {
   agent: {
     icon: <AgentIcon />,
-    color: 'var(--chart-4)',
+    color: 'var(--purple-7)',
     label: 'Agent',
     typePrefix: 'agent',
   },
   workflow: {
     icon: <WorkflowIcon />,
-    color: 'var(--chart-3)',
+    color: 'var(--orange-7)',
     label: 'Workflow',
     typePrefix: 'workflow',
   },
   model: {
     icon: <BrainIcon />,
-    color: 'var(--chart-5)',
+    color: 'var(--pink-7)',
     label: 'Model',
     typePrefix: 'model',
   },
   mcp: {
     icon: <McpServerIcon />,
-    color: 'var(--chart-1)',
+    color: 'var(--green-7)',
     label: 'MCP',
     typePrefix: 'mcp',
   },
   tool: {
     icon: <ToolsIcon />,
-    color: 'var(--chart-6)',
+    color: 'var(--yellow-7)',
     label: 'Tool',
     typePrefix: 'tool',
   },
   provider: {
     icon: <ToolsIcon />,
-    color: 'var(--chart-2)',
+    color: 'var(--blue-7)',
     label: 'Provider Tool',
     typePrefix: 'provider',
   },
   memory: {
     icon: <MemoryIcon />,
-    color: 'var(--chart-3)',
+    color: 'var(--orange-7)',
     label: 'Memory',
     typePrefix: 'memory',
   },
@@ -73,20 +73,20 @@ const spanTypeToUiElements: Record<string, UISpanStyle> = {
   },
   skill: {
     icon: <SkillIcon />,
-    color: 'var(--chart-1)',
+    color: 'var(--green-7)',
     label: 'Skill',
     typePrefix: 'skill',
   },
   scorer: {
     icon: <GaugeIcon />,
-    color: 'var(--chart-5)',
+    color: 'var(--pink-7)',
     label: 'Scorer',
     typePrefix: 'scorer',
   },
 };
 
 const otherSpanType: UISpanStyle = {
-  color: 'var(--text-secondary)',
+  color: 'var(--gray-9)',
   label: 'Other',
   typePrefix: 'other',
 };

@@ -29,12 +29,12 @@ describe('ProcessStepListItem', () => {
 
   it('leaves the active step without a card surface in the plain variant', () => {
     render(<ProcessStepListItem step={step} isActive position={2} />);
-    expect(cardOf('Cloning repository')?.classList.contains('bg-surface-raised')).toBe(true);
+    expect(cardOf('Cloning repository')?.classList.contains('bg-gray-1')).toBe(true);
 
     cleanup();
 
     render(<ProcessStepListItem step={step} isActive position={2} variant="plain" />);
-    expect(cardOf('Cloning repository')?.classList.contains('bg-surface-raised')).toBe(false);
+    expect(cardOf('Cloning repository')?.classList.contains('bg-gray-1')).toBe(false);
   });
 
   it('drops the filled disc and its glow from a completed marker in the plain variant', () => {
@@ -62,10 +62,10 @@ describe('ProcessStepListItem', () => {
   });
 
   it.each([
-    ['the active step', { isActive: true, status: 'running' }, 'text-(--text-primary)'],
-    ['a finished step', { isActive: false, status: 'success' }, 'text-(--text-primary)'],
-    ['a step still waiting its turn', { isActive: false, status: 'pending' }, 'text-(--text-secondary)'],
-    ['a step that failed', { isActive: false, status: 'failed' }, 'text-(--text-secondary)'],
+    ['the active step', { isActive: true, status: 'running' }, 'text-gray-10'],
+    ['a finished step', { isActive: false, status: 'success' }, 'text-gray-10'],
+    ['a step still waiting its turn', { isActive: false, status: 'pending' }, 'text-gray-9'],
+    ['a step that failed', { isActive: false, status: 'failed' }, 'text-gray-9'],
   ])('reads %s at the right weight', (_, { isActive, status }, expected) => {
     render(<ProcessStepListItem step={{ ...step, status }} isActive={isActive} position={1} />);
 
@@ -77,7 +77,7 @@ describe('ProcessStepListItem', () => {
   it('leaves an inactive step without the card surface', () => {
     render(<ProcessStepListItem step={step} isActive={false} position={1} />);
 
-    expect(cardOf('Cloning repository')?.classList.contains('bg-surface-raised')).toBe(false);
+    expect(cardOf('Cloning repository')?.classList.contains('bg-gray-1')).toBe(false);
   });
 
   it('draws a dashed ring for a step that has not started', () => {
@@ -140,8 +140,8 @@ describe('ProcessStepListItem', () => {
   });
 
   it.each([
-    ['success', '[&>svg]:text-success'],
-    ['failed', '[&>svg]:text-error'],
+    ['success', '[&>svg]:text-green-9'],
+    ['failed', '[&>svg]:text-red-9'],
   ])('tints a plain %s marker on the icon itself', (status, tint) => {
     render(<ProcessStepListItem step={{ ...step, status }} isActive={false} position={1} variant="plain" />);
     expect(markerOf('Cloning repository')?.classList.contains(tint)).toBe(true);

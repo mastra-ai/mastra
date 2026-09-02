@@ -55,7 +55,7 @@ export function Plan({ children, collapsedHeight = DEFAULT_COLLAPSED_HEIGHT, cla
 
   return (
     <PlanContext.Provider value={contextValue}>
-      <div data-slot="plan" className={cn('w-full overflow-hidden rounded-xl bg-surface-raised', className)} {...props}>
+      <div data-slot="plan" className={cn('w-full overflow-hidden rounded-xl bg-gray-1', className)} {...props}>
         {children}
       </div>
     </PlanContext.Provider>
@@ -84,7 +84,7 @@ export function PlanLabel({ children = 'Plan', className, ...props }: PlanLabelP
       <Icon size="sm" className="text-icon3">
         <ClipboardList />
       </Icon>
-      <Txt as="span" variant="ui-sm" className="text-(--text-primary)">
+      <Txt as="span" variant="ui-sm" className="text-gray-10">
         {children}
       </Txt>
     </div>
@@ -192,7 +192,7 @@ export function PlanPath({ children, className, ...props }: PlanPathProps) {
       variant="ui-xs"
       font="mono"
       title={children}
-      className={cn('max-w-full truncate overflow-hidden text-(--text-secondary)', className)}
+      className={cn('max-w-full truncate overflow-hidden text-gray-9', className)}
     >
       {getFileName(children)}
     </Txt>
@@ -252,7 +252,7 @@ export function PlanContent({ children, className, style, ...props }: PlanConten
         ref={contentRef}
         className="[&_code]:bg-surface-hover [&_h1]:text-header-md [&_h1]:leading-header-md [&_h2]:text-header-sm [&_h2]:leading-header-sm [&_h3]:text-ui-lg [&_h3]:leading-ui-lg [&_p]:text-ui-md [&_p]:leading-6"
       >
-        <MarkdownRenderer className="text-(--text-primary)">{children}</MarkdownRenderer>
+        <MarkdownRenderer className="text-gray-10">{children}</MarkdownRenderer>
       </div>
     </div>
   );
@@ -265,10 +265,10 @@ export interface PlanFileProps extends Omit<ComponentProps<'div'>, 'children'> {
 export function PlanFile({ children, className, ...props }: PlanFileProps) {
   return (
     <div data-slot="plan-file" className={className} {...props}>
-      <Txt as="p" variant="ui-xs" className="mb-2 text-(--text-secondary)">
+      <Txt as="p" variant="ui-xs" className="text-gray-9 mb-2">
         Plan file
       </Txt>
-      <Txt as="p" variant="ui-sm" className="font-mono break-all text-(--text-primary)">
+      <Txt as="p" variant="ui-sm" className="text-gray-10 font-mono break-all">
         {children}
       </Txt>
     </div>

@@ -17,7 +17,7 @@ type Story = StoryObj<typeof ThemeProvider>;
 const Inspector = () => {
   const { theme, resolvedTheme, systemTheme } = useTheme();
   return (
-    <div className="text-icon6 bg-surface-raised grid gap-3 rounded-lg border border-(--border-subtle) p-4 text-sm">
+    <div className="text-icon6 border-gray-alpha-3 bg-gray-1 grid gap-3 rounded-lg border p-4 text-sm">
       <div className="grid grid-cols-[120px_1fr] gap-2">
         <span className="text-icon3">theme</span>
         <span className="font-mono">{theme}</span>

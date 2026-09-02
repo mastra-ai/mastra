@@ -231,7 +231,7 @@ describe('AskUser', () => {
       expect(screen.queryByRole('radio')).toBeNull();
       expect(status.textContent).toContain('User answered: Apple');
       expect(within(status).getByText('Answered').classList.contains('bg-badge-green/20')).toBe(true);
-      expect(status.classList.contains('text-error')).toBe(false);
+      expect(status.classList.contains('text-red-9')).toBe(false);
       expect(container.textContent).not.toContain('Error');
     });
   });
@@ -243,7 +243,7 @@ describe('AskUser', () => {
       const alert = screen.getByRole('alert');
       expect(alert.textContent).toContain('Unable to resume');
       expect(within(alert).getByText('Error').classList.contains('bg-badge-red/20')).toBe(true);
-      expect(alert.classList.contains('text-error')).toBe(true);
+      expect(alert.classList.contains('text-red-9')).toBe(true);
     });
   });
 

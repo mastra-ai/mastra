@@ -132,8 +132,8 @@ describe('Select', () => {
     expect(trigger.classList.contains('text-ui-md')).toBe(true);
     expect(trigger.classList.contains('text-ui-smd')).toBe(false);
     // Focus is the unified neutral border (from `buttonVariants`), not the old
-    // bespoke `focus-visible:border-(--border-default)`.
-    expect(trigger.className).toContain('focus-visible:border-(--border-strong)');
+    // bespoke `focus-visible:border-gray-alpha-5`.
+    expect(trigger.className).toContain('focus-visible:border-gray-6');
   });
 
   it('wires the variant prop through to the button recipe (default = the filled Button default, field-only variants)', () => {
@@ -155,14 +155,14 @@ describe('Select', () => {
 
     // Default trigger == the `default` variant (the Button's filled surface).
     expect(renderWithVariant()).toBe(renderWithVariant('default'));
-    expect(renderWithVariant('default')).toContain('bg-surface-raised');
+    expect(renderWithVariant('default')).toContain('bg-gray-1');
     expect(renderWithVariant('default')).not.toContain('bg-transparent');
     // Legacy `primary` is still accepted for source compatibility, but renders
     // as the field-safe default look.
     expect(renderWithVariant('primary')).toBe(renderWithVariant('default'));
     // `outline` is a transparent bordered field.
     expect(renderWithVariant('outline')).toContain('bg-transparent');
-    expect(renderWithVariant('outline')).toContain('border-(--border-subtle)');
+    expect(renderWithVariant('outline')).toContain('border-gray-alpha-3');
     // `ghost` is borderless.
     expect(renderWithVariant('ghost')).toContain('border-transparent');
   });

@@ -74,9 +74,7 @@ export function LogDetailsView({
 
       {!collapsed && (
         <DataDetailsPanel.Content>
-          <p className="text-ui-md font-mono wrap-break-word whitespace-pre-wrap text-(--text-primary)">
-            {log.message}
-          </p>
+          <p className="text-ui-md text-gray-10 font-mono wrap-break-word whitespace-pre-wrap">{log.message}</p>
 
           {(traceId || spanId) && (
             <div className={cn('my-8 grid gap-2', '[&>button]:justify-between [&>button]:overflow-hidden')}>
@@ -85,7 +83,7 @@ export function LogDetailsView({
                   <Button size="md" className="min-w-0 flex-1 overflow-hidden" onClick={() => onTraceClick?.(traceId)}>
                     <ArrowRightIcon />
                     <span>Trace</span>
-                    <span className="text-ui-sm ml-auto min-w-0 truncate text-(--text-secondary)"># {traceId}</span>
+                    <span className="text-ui-sm text-gray-9 ml-auto min-w-0 truncate"># {traceId}</span>
                   </Button>
                   <CopyButton content={traceId} size="md" tooltip="Copy Trace ID to clipboard" />
                 </ButtonsGroup>
@@ -100,7 +98,7 @@ export function LogDetailsView({
                   >
                     <ArrowRightIcon />
                     <span>Span</span>
-                    <span className="text-ui-sm ml-auto min-w-0 truncate text-(--text-secondary)"># {spanId}</span>
+                    <span className="text-ui-sm text-gray-9 ml-auto min-w-0 truncate"># {spanId}</span>
                   </Button>
                   <CopyButton content={spanId} size="md" tooltip="Copy Span ID to clipboard" />
                 </ButtonsGroup>

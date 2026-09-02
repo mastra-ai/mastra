@@ -5,11 +5,6 @@ export type SectionDividerProps = ComponentProps<'div'>;
 
 export function SectionDivider({ className, ...props }: SectionDividerProps) {
   return (
-    <div
-      role="separator"
-      aria-orientation="horizontal"
-      className={cn('h-px bg-(--border-subtle)', className)}
-      {...props}
-    />
+    <div role="separator" aria-orientation="horizontal" className={cn('h-px bg-gray-alpha-3', className)} {...props} />
   );
 }

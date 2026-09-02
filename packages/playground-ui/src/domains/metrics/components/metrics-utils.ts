@@ -20,15 +20,15 @@ export const METRICS_DATA_LIST_PROPS = {
 } satisfies Pick<DataListRootProps, 'className' | 'mask' | 'stickyHeaderBackground'>;
 
 export const CHART_COLORS = {
-  green: 'var(--chart-1)',
-  orange: 'var(--chart-2)',
-  pink: 'var(--chart-3)',
-  purple: 'var(--chart-5)',
-  blue: 'var(--chart-4)',
+  green: 'var(--green-7)',
+  orange: 'var(--blue-7)',
+  pink: 'var(--orange-7)',
+  purple: 'var(--pink-7)',
+  blue: 'var(--purple-7)',
   blueDark: 'var(--blue-7)',
   blueLight: 'var(--blue-10)',
-  red: 'var(--color-error)',
+  red: 'var(--red-9)',
   greenDark: 'var(--green-7)',
   redDark: 'var(--red-7)',
-  yellow: 'var(--chart-6)',
+  yellow: 'var(--yellow-7)',
 } as const;

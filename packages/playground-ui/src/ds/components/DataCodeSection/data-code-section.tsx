@@ -75,7 +75,7 @@ function buildDarkTheme(): Extension {
       fontSize: '0.75rem',
       lineHighlight: 'transparent',
       gutterBackground: 'transparent',
-      gutterForeground: 'var(--text-secondary)',
+      gutterForeground: 'var(--gray-9)',
       background: 'transparent',
     },
     styles: [{ tag: [t.className, t.propertyName] }],
@@ -86,7 +86,7 @@ function buildLightTheme(): Extension {
   const editorTheme = EditorView.theme({
     '&': {
       backgroundColor: 'transparent',
-      color: 'var(--text-primary)',
+      color: 'var(--gray-10)',
       fontSize: '0.75rem',
     },
     '&.cm-editor .cm-scroller': {
@@ -94,12 +94,12 @@ function buildLightTheme(): Extension {
     },
     '.cm-gutters': {
       backgroundColor: 'transparent',
-      color: 'var(--text-secondary)',
+      color: 'var(--gray-9)',
       borderRight: 'none',
     },
     '.cm-content': {
-      color: 'var(--text-primary)',
-      caretColor: 'var(--text-primary)',
+      color: 'var(--gray-10)',
+      caretColor: 'var(--gray-10)',
     },
     '.cm-activeLine': {
       backgroundColor: 'transparent',
@@ -108,12 +108,12 @@ function buildLightTheme(): Extension {
       backgroundColor: 'transparent',
     },
     '.cm-cursor, .cm-dropCursor': {
-      borderLeftColor: 'var(--text-primary)',
+      borderLeftColor: 'var(--gray-10)',
     },
   });
 
   const highlightStyle = HighlightStyle.define([
-    { tag: [t.comment, t.bracket], color: 'var(--text-secondary)' },
+    { tag: [t.comment, t.bracket], color: 'var(--gray-9)' },
     { tag: [t.string, t.meta, t.regexp], color: 'var(--green-9)' },
     { tag: [t.atom, t.bool, t.special(t.variableName)], color: 'var(--orange-9)' },
     { tag: [t.keyword, t.operator, t.tagName], color: 'var(--red-9)' },
@@ -280,9 +280,9 @@ export function DataCodeSection({
         </div>
       </div>
 
-      <div className="bg-surface-raised text-ui-sm max-h-[30vh] overflow-hidden overflow-y-auto rounded-lg border border-(--border-subtle) p-3 break-all text-(--text-primary)">
+      <div className="border-gray-alpha-3 bg-gray-1 text-ui-sm text-gray-10 max-h-[30vh] overflow-hidden overflow-y-auto rounded-lg border p-3 break-all">
         {usePlainTextView ? (
-          <div className="font-mono break-all text-(--text-primary)">
+          <div className="text-gray-10 font-mono break-all">
             <pre className="text-wrap">{finalCodeStr}</pre>
           </div>
         ) : (
@@ -343,8 +343,8 @@ export function DataCodeSection({
           </DialogHeader>
           <div className="overflow-auto px-6 pb-6">
             {expandedMultiline ? (
-              <div className="bg-surface-raised text-ui-sm overflow-hidden overflow-y-auto rounded-lg border border-(--border-subtle) p-3 break-all text-(--text-primary)">
-                <div className="font-mono break-all text-(--text-primary)">
+              <div className="border-gray-alpha-3 bg-gray-1 text-ui-sm text-gray-10 overflow-hidden overflow-y-auto rounded-lg border p-3 break-all">
+                <div className="text-gray-10 font-mono break-all">
                   <pre className="text-wrap">{expandedFinalCodeStr}</pre>
                 </div>
               </div>

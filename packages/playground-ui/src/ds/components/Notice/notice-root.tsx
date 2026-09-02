@@ -23,7 +23,7 @@ const variantConfig: Record<NoticeVariant, { icon: React.ReactNode; classes: str
   },
   note: {
     icon: <FileTextIcon />,
-    classes: 'bg-notice-note border-(--border-subtle) text-notice-note-fg',
+    classes: 'bg-notice-note border-gray-alpha-3 text-notice-note-fg',
   },
 };
 

@@ -35,7 +35,7 @@ function CommandPaletteExample() {
   const showAgents = scope === 'all' || scope === 'agents';
 
   return (
-    <div className="bg-surface-primary flex min-h-dvh items-center justify-center">
+    <div className="bg-background-1 flex min-h-dvh items-center justify-center">
       <Button onClick={() => setOpen(true)}>Open command palette</Button>
       <CommandPaletteDialog
         open={open}

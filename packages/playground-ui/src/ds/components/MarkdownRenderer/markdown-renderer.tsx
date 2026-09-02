@@ -168,7 +168,7 @@ function MarkdownCodeBlock({
       code={fenced.code}
       lang={fenced.language}
       overflow="scroll"
-      className={cn('my-3 bg-surface-primary', className)}
+      className={cn('my-3 bg-background-1', className)}
       copyMessage="Copied code to clipboard"
     />
   );

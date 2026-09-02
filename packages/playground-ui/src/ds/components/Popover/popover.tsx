@@ -80,7 +80,7 @@ const PopoverContent = React.forwardRef<HTMLDivElement, PopoverContentProps>(
             ref={ref}
             data-slot="popover-content"
             className={cn(
-              'z-50 w-72 origin-[var(--transform-origin)] rounded-xl border border-(--border-subtle) bg-surface-raised text-(--text-primary) shadow-dialog focus-visible:outline-hidden',
+              'z-50 w-72 origin-[var(--transform-origin)] rounded-xl border border-gray-alpha-3 bg-gray-1 text-gray-10 shadow-dialog focus-visible:outline-hidden',
               'data-[closed]:animate-out data-[closed]:fade-out-0 data-[closed]:zoom-out-95 data-[open]:animate-in data-[open]:fade-in-0 data-[open]:zoom-in-95',
               'data-[side=bottom]:slide-in-from-top-1 data-[side=left]:slide-in-from-right-1 data-[side=right]:slide-in-from-left-1 data-[side=top]:slide-in-from-bottom-1',
               classNameString && /\bp[trblxy]?-\S+/.test(classNameString) ? false : `px-3 py-3.5`,

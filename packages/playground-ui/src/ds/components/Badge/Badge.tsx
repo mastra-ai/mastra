@@ -13,7 +13,7 @@ const badgeToneStyles = {
   neutral: {
     default: 'bg-gray-alpha-1 text-badge-neutral-fg',
     muted: 'bg-transparent text-badge-neutral-fg',
-    indicator: 'bg-(--text-disabled)',
+    indicator: 'bg-gray-6',
   },
   green: {
     default: 'bg-badge-green/20 text-badge-green-fg',

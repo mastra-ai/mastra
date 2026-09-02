@@ -46,11 +46,11 @@ export function KeyValueList({ data, className, labelsAreHidden, isLoading, Link
 
         return (
           <React.Fragment key={key ?? index}>
-            <dt className={cn('flex min-h-9 items-center justify-between gap-8 text-ui-md text-(--text-secondary)')}>
+            <dt className={cn('flex min-h-9 items-center justify-between gap-8 text-ui-md text-gray-9')}>
               <span
                 className={cn(
                   'flex items-center gap-2',
-                  '[&>svg]:size-[1.4em] [&>svg]:text-(--text-secondary) [&>svg]:opacity-50',
+                  '[&>svg]:size-[1.4em] [&>svg]:text-gray-9 [&>svg]:opacity-50',
                   {
                     '[&>svg]:opacity-20': isLoading,
                   },
@@ -59,22 +59,20 @@ export function KeyValueList({ data, className, labelsAreHidden, isLoading, Link
                 {icon} <LabelWrapper>{label}</LabelWrapper>
               </span>
               {!labelsAreHidden && (
-                <span className={cn('text-(--text-secondary)', '[&>svg]:size-[1em] [&>svg]:text-(--text-secondary)')}>
-                  {separator}
-                </span>
+                <span className={cn('text-gray-9', '[&>svg]:size-[1em] [&>svg]:text-gray-9')}>{separator}</span>
               )}
             </dt>
             <dd
               className={cn(
-                'flex min-h-9 flex-wrap items-center gap-2 py-1 text-ui-md text-wrap text-(--text-primary)',
-                'truncate [&>a]:flex [&>a]:min-h-7 [&>a]:w-auto [&>a]:max-w-full [&>a]:items-center [&>a]:gap-2 [&>a]:rounded-md [&>a]:bg-surface-hover [&>a]:px-2 [&>a]:py-0.5 [&>a]:text-ui-md [&>a]:leading-none [&>a]:text-(--text-primary) [&>a]:transition-colors',
-                '[&>a:hover]:bg-gray-5 [&>a:hover]:text-(--text-primary)',
-                '[&>a>svg]:ml-[-0.5em] [&>a>svg]:size-[1em] [&>a>svg]:text-(--text-secondary)',
+                'flex min-h-9 flex-wrap items-center gap-2 py-1 text-ui-md text-wrap text-gray-10',
+                'truncate [&>a]:flex [&>a]:min-h-7 [&>a]:w-auto [&>a]:max-w-full [&>a]:items-center [&>a]:gap-2 [&>a]:rounded-md [&>a]:bg-surface-hover [&>a]:px-2 [&>a]:py-0.5 [&>a]:text-ui-md [&>a]:leading-none [&>a]:text-gray-10 [&>a]:transition-colors',
+                '[&>a:hover]:bg-gray-5 [&>a:hover]:text-gray-10',
+                '[&>a>svg]:ml-[-0.5em] [&>a>svg]:size-[1em] [&>a>svg]:text-gray-9',
               )}
             >
               {isLoading ? (
                 <span
-                  className={cn('w-full rounded-e-lg bg-surface-hover')}
+                  className={cn('w-full rounded-e-lg bg-gray-2')}
                   style={{ width: `${Math.floor(Math.random() * (90 - 30 + 1)) + 50}%` }}
                 >
                   &nbsp;
@@ -102,7 +100,7 @@ export function KeyValueList({ data, className, labelsAreHidden, isLoading, Link
                   return <span key={item.id}>{item?.name}</span>;
                 })
               ) : (
-                <>{value ? value : <span className="text-ui-sm text-(--text-secondary)">n/a</span>}</>
+                <>{value ? value : <span className="text-ui-sm text-gray-9">n/a</span>}</>
               )}
             </dd>
           </React.Fragment>

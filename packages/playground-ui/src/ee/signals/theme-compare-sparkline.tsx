@@ -46,7 +46,7 @@ export function ThemeCompareSparkline({
         {polylines.map(points => (
           <polyline
             key={points}
-            className="fill-none stroke-(--text-secondary)"
+            className="stroke-gray-9 fill-none"
             points={points}
             strokeWidth="1"
             vectorEffect="non-scaling-stroke"
@@ -56,7 +56,7 @@ export function ThemeCompareSparkline({
       {markers.map(point => (
         <span
           key={point.index}
-          className="bg-success absolute size-2 -translate-1/2 rounded-full"
+          className="bg-green-9 absolute size-2 -translate-1/2 rounded-full"
           style={{ left: `${positions[point.index]}%`, top: `${pointFor(point).y}px` }}
         />
       ))}

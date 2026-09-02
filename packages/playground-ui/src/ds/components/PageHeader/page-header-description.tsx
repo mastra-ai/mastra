@@ -8,8 +8,8 @@ export type PageHeaderDescriptionProps = {
 export function PageHeaderDescription({ children, isLoading }: PageHeaderDescriptionProps) {
   return (
     <p
-      className={cn('max-w-140 mt-1 flex flex-wrap gap-x-4 gap-y-1 text-sm text-(--text-secondary)', {
-        'bg-surface-hover w-[40rem] max-w-[80%] rounded-md animate-pulse': isLoading,
+      className={cn('max-w-140 mt-1 flex flex-wrap gap-x-4 gap-y-1 text-sm text-gray-9', {
+        'bg-gray-2 w-[40rem] max-w-[80%] rounded-md animate-pulse': isLoading,
       })}
     >
       {isLoading ? <>&nbsp;</> : <>{children}</>}

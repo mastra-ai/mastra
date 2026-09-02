@@ -55,7 +55,7 @@ export const Pulse: Story = {
 
 export const ClassNameColor: Story = {
   args: {
-    className: 'text-(--text-secondary)',
+    className: 'text-gray-9',
   },
 };
 

@@ -2,7 +2,7 @@ import { Skeleton } from '@/ds/components/Skeleton';
 
 function DistributionSkeleton() {
   return (
-    <div className="bg-surface-secondary space-y-3 rounded-lg border border-(--border-subtle) p-4">
+    <div className="border-gray-alpha-3 bg-background-2 space-y-3 rounded-lg border p-4">
       <Skeleton className="h-3 w-20" />
       <Skeleton className="h-2 w-full" />
       <Skeleton className="h-3 w-4/5" />

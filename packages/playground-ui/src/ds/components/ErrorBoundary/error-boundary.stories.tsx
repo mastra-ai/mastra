@@ -7,7 +7,7 @@ function Bomb({ shouldThrow, label }: { shouldThrow: boolean; label?: string }) 
   if (shouldThrow) {
     throw new Error("Cannot read properties of undefined (reading 'skills')");
   }
-  return <p className="text-(--text-primary)">{label ?? 'Component rendered successfully.'}</p>;
+  return <p className="text-gray-10">{label ?? 'Component rendered successfully.'}</p>;
 }
 
 function InteractiveDemo() {
@@ -31,19 +31,17 @@ function InteractiveDemo() {
 
 function ScopedBoundaryDemo() {
   return (
-    <div className="grid h-105 w-180 grid-cols-[200px_1fr] gap-4 rounded-lg border border-(--border-subtle) p-3">
-      <aside className="bg-surface-raised flex flex-col gap-2 rounded-md p-3">
-        <p className="text-ui-sm font-medium text-(--text-primary)">Sidebar</p>
-        <p className="text-ui-xs text-(--text-secondary)">
-          Still interactive — the crash is scoped to the editor panel.
-        </p>
+    <div className="border-gray-alpha-3 grid h-105 w-180 grid-cols-[200px_1fr] gap-4 rounded-lg border p-3">
+      <aside className="bg-gray-1 flex flex-col gap-2 rounded-md p-3">
+        <p className="text-ui-sm text-gray-10 font-medium">Sidebar</p>
+        <p className="text-ui-xs text-gray-9">Still interactive — the crash is scoped to the editor panel.</p>
       </aside>
       <main className="flex flex-col gap-3">
-        <div className="bg-surface-raised rounded-md p-3">
-          <p className="text-ui-sm font-medium text-(--text-primary)">Header</p>
-          <p className="text-ui-xs text-(--text-secondary)">Unaffected by the failing panel below.</p>
+        <div className="bg-gray-1 rounded-md p-3">
+          <p className="text-ui-sm text-gray-10 font-medium">Header</p>
+          <p className="text-ui-xs text-gray-9">Unaffected by the failing panel below.</p>
         </div>
-        <div className="bg-surface-secondary flex-1 overflow-hidden rounded-md border border-(--border-subtle)">
+        <div className="border-gray-alpha-3 bg-background-2 flex-1 overflow-hidden rounded-md border">
           <ErrorBoundary
             title="The agent editor failed to render"
             description="A referenced workspace skill could not be resolved."
@@ -70,7 +68,7 @@ type Story = StoryObj<typeof ErrorBoundary>;
 export const SectionVariantSmallParent: Story = {
   name: 'Section variant — small container',
   render: () => (
-    <div className="h-65 w-95 rounded-lg border border-(--border-subtle)">
+    <div className="border-gray-alpha-3 h-65 w-95 rounded-lg border">
       <ErrorBoundary>
         <Bomb shouldThrow />
       </ErrorBoundary>
@@ -81,7 +79,7 @@ export const SectionVariantSmallParent: Story = {
 export const SectionVariantLargeParent: Story = {
   name: 'Section variant — large container (scales up)',
   render: () => (
-    <div className="h-140 w-220 rounded-lg border border-(--border-subtle)">
+    <div className="border-gray-alpha-3 h-140 w-220 rounded-lg border">
       <ErrorBoundary>
         <Bomb shouldThrow />
       </ErrorBoundary>
@@ -92,7 +90,7 @@ export const SectionVariantLargeParent: Story = {
 export const InlineVariant: Story = {
   name: 'Inline variant — stays compact',
   render: () => (
-    <div className="h-105 w-180 rounded-lg border border-(--border-subtle) p-4">
+    <div className="border-gray-alpha-3 h-105 w-180 rounded-lg border p-4">
       <ErrorBoundary variant="inline">
         <Bomb shouldThrow />
       </ErrorBoundary>
@@ -120,8 +118,8 @@ export const CustomFallback: Story = {
   render: () => (
     <ErrorBoundary
       fallback={({ error, reset }) => (
-        <div className="flex flex-col items-center gap-3 rounded-md border border-(--border-subtle) p-6">
-          <p className="text-ui-md text-(--text-primary)">Custom fallback: {error.message}</p>
+        <div className="border-gray-alpha-3 flex flex-col items-center gap-3 rounded-md border p-6">
+          <p className="text-ui-md text-gray-10">Custom fallback: {error.message}</p>
           <Button onClick={reset}>Retry</Button>
         </div>
       )}

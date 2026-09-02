@@ -16,12 +16,12 @@ export function ItemListVersionCell({ version, date, isLatest, isDeleted }: Item
   return (
     <ItemListCell className={cn('grid grid-cols-[1fr_auto] pl-1')}>
       <div
-        className={cn('grid gap-1 leading-none text-(--text-secondary)', {
-          'text-(--text-primary)': isLatest,
+        className={cn('grid gap-1 leading-none text-gray-9', {
+          'text-gray-10': isLatest,
         })}
       >
         <strong className="font-normal">v. {version}</strong>
-        <em className={cn('text-ui-sm', 'font-normal', 'text-(--text-secondary)')}>
+        <em className={cn('text-ui-sm', 'font-normal', 'text-gray-9')}>
           {date ? format(new Date(date), 'MMM d, yyyy HH:mm') : null}
         </em>
       </div>

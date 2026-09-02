@@ -62,12 +62,12 @@ export function PickMultiPanel({ field, tokens, onChange }: PickMultiPanelProps)
       )}
 
       {field.isLoading ? (
-        <div className="text-ui-sm flex items-center gap-2 px-2 py-1.5 text-(--text-secondary)">
-          <Spinner size="sm" className="size-3 text-(--text-secondary)" />
+        <div className="text-ui-sm text-gray-9 flex items-center gap-2 px-2 py-1.5">
+          <Spinner size="sm" className="text-gray-9 size-3" />
           Loading options…
         </div>
       ) : filteredOptions.length === 0 ? (
-        <div className="text-ui-sm px-2 py-1.5 text-(--text-secondary)">{field.emptyText ?? 'No option found.'}</div>
+        <div className="text-ui-sm text-gray-9 px-2 py-1.5">{field.emptyText ?? 'No option found.'}</div>
       ) : field.multi ? (
         <div className="max-h-[80dvh] overflow-auto">
           {filteredOptions.map(option => {
@@ -76,7 +76,7 @@ export function PickMultiPanel({ field, tokens, onChange }: PickMultiPanelProps)
               <label
                 key={option.value}
                 title={option.label}
-                className="text-ui-md focus-within:bg-surface-hover hover:bg-surface-hover flex min-w-0 cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-(--text-primary) focus-within:text-(--text-primary) hover:text-(--text-primary)"
+                className="text-ui-md text-gray-10 focus-within:bg-surface-hover focus-within:text-gray-10 hover:bg-surface-hover hover:text-gray-10 flex min-w-0 cursor-pointer items-center gap-2 rounded-md px-2 py-1.5"
               >
                 <Checkbox
                   data-pick-multi-item=""
@@ -107,7 +107,7 @@ export function PickMultiPanel({ field, tokens, onChange }: PickMultiPanelProps)
             <label
               key={option.value}
               title={option.label}
-              className="text-ui-md focus-within:bg-surface-hover hover:bg-surface-hover flex min-w-0 cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-(--text-primary) focus-within:text-(--text-primary) hover:text-(--text-primary)"
+              className="text-ui-md text-gray-10 focus-within:bg-surface-hover focus-within:text-gray-10 hover:bg-surface-hover hover:text-gray-10 flex min-w-0 cursor-pointer items-center gap-2 rounded-md px-2 py-1.5"
             >
               <RadioGroupItem data-pick-multi-item="" value={option.value} className="shrink-0" />
               <span className="min-w-0 flex-1 truncate">{option.label}</span>
@@ -116,7 +116,7 @@ export function PickMultiPanel({ field, tokens, onChange }: PickMultiPanelProps)
           {!field.omitAnyOption && (
             <label
               title="Any"
-              className="text-ui-md focus-within:bg-surface-hover hover:bg-surface-hover flex min-w-0 cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-(--text-primary) focus-within:text-(--text-primary) hover:text-(--text-primary)"
+              className="text-ui-md text-gray-10 focus-within:bg-surface-hover focus-within:text-gray-10 hover:bg-surface-hover hover:text-gray-10 flex min-w-0 cursor-pointer items-center gap-2 rounded-md px-2 py-1.5"
             >
               <RadioGroupItem data-pick-multi-item="" value="Any" className="shrink-0" />
               <span className="min-w-0 flex-1 truncate">Any</span>

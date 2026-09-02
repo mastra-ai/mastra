@@ -7,8 +7,6 @@ export interface DataKeysAndValuesHeaderProps {
 
 export function DataKeysAndValuesHeader({ className, children }: DataKeysAndValuesHeaderProps) {
   return (
-    <dt className={cn('col-span-full py-3 text-ui-sm tracking-widest text-(--text-secondary) uppercase', className)}>
-      {children}
-    </dt>
+    <dt className={cn('col-span-full py-3 text-ui-sm tracking-widest text-gray-9 uppercase', className)}>{children}</dt>
   );
 }

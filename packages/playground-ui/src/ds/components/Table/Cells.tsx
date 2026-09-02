@@ -12,7 +12,7 @@ export interface CellProps extends React.TdHTMLAttributes<HTMLTableCellElement> 
 
 export const Cell = ({ className, children, ...props }: CellProps) => {
   return (
-    <td className={cn('text-(--text-primary) first:pl-3 last:pr-3', className)} {...props}>
+    <td className={cn('text-gray-10 first:pl-3 last:pr-3', className)} {...props}>
       <div className={cn('flex size-full shrink-0 items-center')}>{children}</div>
     </td>
   );
@@ -38,7 +38,7 @@ export const DateTimeCell = ({ dateTime, ...props }: DateTimeCellProps) => {
   return (
     <Cell {...props}>
       <div className="shrink-0">
-        <Txt as="span" variant="ui-sm" className="text-(--text-secondary)">
+        <Txt as="span" variant="ui-sm" className="text-gray-9">
           {day}
         </Txt>{' '}
         <Txt as="span" variant="ui-md">
@@ -61,20 +61,20 @@ export const EntryCell = ({ name, description, icon, meta, ...props }: EntryCell
     <Cell {...props}>
       <div className="flex items-center gap-3.5">
         {icon && (
-          <Icon size="lg" className="text-(--text-primary)">
+          <Icon size="lg" className="text-gray-10">
             {icon}
           </Icon>
         )}
 
         <div className="flex flex-col gap-0">
-          <Txt as="span" variant="ui-md" className="!leading-tight text-(--text-primary)">
+          <Txt as="span" variant="ui-md" className="text-gray-10 !leading-tight">
             {name}
           </Txt>
           {description && (
             <Txt
               as="span"
               variant="ui-xs"
-              className="max-w-dropdown-max-height w-full truncate pt-1 !leading-tight text-(--text-secondary)"
+              className="max-w-dropdown-max-height text-gray-9 w-full truncate pt-1 !leading-tight"
             >
               {description}
             </Txt>

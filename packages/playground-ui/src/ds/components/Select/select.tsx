@@ -140,7 +140,7 @@ const SelectTrigger = React.forwardRef<HTMLButtonElement, SelectTriggerProps>(
           'w-full justify-between',
           // Read as "active" while the menu is open, per variant (see map above).
           controlTriggerOpenState[visualVariant],
-          'data-[placeholder]:text-(--text-secondary)',
+          'data-[placeholder]:text-gray-9',
           '[&>span]:truncate',
           className,
         )}
@@ -231,7 +231,7 @@ const SelectContent = React.forwardRef<HTMLDivElement, SelectContentProps>(
           <SelectPrimitive.Popup
             ref={ref}
             className={cn(
-              'relative z-50 max-h-[min(var(--max-height-dropdown-max-height),var(--available-height))] min-w-[max(8rem,var(--anchor-width))] origin-[var(--transform-origin)] overflow-x-hidden overflow-y-auto rounded-xl border border-(--border-subtle) bg-surface-raised p-1 text-(--text-primary) shadow-dialog',
+              'relative z-50 max-h-[min(var(--max-height-dropdown-max-height),var(--available-height))] min-w-[max(8rem,var(--anchor-width))] origin-[var(--transform-origin)] overflow-x-hidden overflow-y-auto rounded-xl border border-gray-alpha-3 bg-gray-1 p-1 text-gray-10 shadow-dialog',
               'data-[closed]:animate-out data-[closed]:fade-out-0 data-[closed]:zoom-out-95 data-[open]:animate-in data-[open]:fade-in-0 data-[open]:zoom-in-95',
               'data-[side=bottom]:slide-in-from-top-1 data-[side=left]:slide-in-from-right-1 data-[side=right]:slide-in-from-left-1 data-[side=top]:slide-in-from-bottom-1',
               className,
@@ -255,13 +255,13 @@ const SelectItem = React.forwardRef<HTMLDivElement, SelectItemProps>(({ classNam
   <SelectPrimitive.Item
     ref={ref}
     className={cn(
-      'relative flex w-full cursor-pointer items-center gap-2.5 rounded-lg py-1.5 pr-8 pl-2 text-ui-smd leading-ui-sm text-(--text-primary) select-none',
+      'relative flex w-full cursor-pointer items-center gap-2.5 rounded-lg py-1.5 pr-8 pl-2 text-ui-smd leading-ui-sm text-gray-10 select-none',
       'outline-none focus:outline-none focus-visible:outline-none',
       transitions.colors,
-      'hover:bg-surface-hover hover:text-(--text-primary)',
-      'focus:bg-surface-hover focus:text-(--text-primary)',
-      'data-[highlighted]:bg-surface-hover data-[highlighted]:text-(--text-primary)',
-      'data-[selected]:text-(--text-primary)',
+      'hover:bg-surface-hover hover:text-gray-10',
+      'focus:bg-surface-hover focus:text-gray-10',
+      'data-[highlighted]:bg-surface-hover data-[highlighted]:text-gray-10',
+      'data-[selected]:text-gray-10',
       'data-disabled:pointer-events-none data-disabled:opacity-50',
       className,
     )}
@@ -269,7 +269,7 @@ const SelectItem = React.forwardRef<HTMLDivElement, SelectItemProps>(({ classNam
   >
     <span className="absolute right-2 flex size-3.5 items-center justify-center">
       <SelectPrimitive.ItemIndicator>
-        <Check className="size-4 text-(--text-primary)" />
+        <Check className="text-gray-10 size-4" />
       </SelectPrimitive.ItemIndicator>
     </span>
     <SelectPrimitive.ItemText>{children}</SelectPrimitive.ItemText>

@@ -10,7 +10,7 @@ export function DataPanelRoot({ collapsed, children, className }: DataPanelProps
   return (
     <section
       className={cn(
-        'flex flex-col overflow-hidden rounded-xl border border-(--border-subtle) bg-surface-secondary',
+        'flex flex-col overflow-hidden rounded-xl border border-gray-alpha-3 bg-background-2',
         collapsed ? 'h-auto' : 'max-h-full',
         className,
       )}

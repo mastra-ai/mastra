@@ -72,7 +72,7 @@ function UserLandControls() {
                 return (
                   <div
                     key={column.id}
-                    className="bg-surface-secondary text-ui-sm rounded-md border border-(--border-subtle) px-2.5 py-1.5 text-(--text-primary)"
+                    className="border-gray-alpha-3 bg-background-2 text-ui-sm text-gray-10 rounded-md border px-2.5 py-1.5"
                   >
                     {checkbox}
                   </div>
@@ -86,13 +86,13 @@ function UserLandControls() {
                     <div
                       ref={dragProvided.innerRef}
                       {...dragProvided.draggableProps}
-                      className="bg-surface-secondary text-ui-sm flex items-center gap-2 rounded-md border border-(--border-subtle) px-2.5 py-1.5 text-(--text-primary)"
+                      className="border-gray-alpha-3 bg-background-2 text-ui-sm text-gray-10 flex items-center gap-2 rounded-md border px-2.5 py-1.5"
                     >
                       {checkbox}
                       <button
                         type="button"
                         {...dragProvided.dragHandleProps}
-                        className="rounded-sm text-(--text-secondary) outline-hidden focus-visible:ring-1 focus-visible:ring-(--border-strong)"
+                        className="text-gray-9 focus-visible:ring-gray-6 rounded-sm outline-hidden focus-visible:ring-1"
                         aria-label={`Reorder ${column.label}`}
                       >
                         <GripVertical className="size-3.5" aria-hidden="true" />
@@ -132,7 +132,7 @@ export const ClickableCurves: Story = {
         <Sankey data={data} columns={columns}>
           <SankeyChart onCurveClick={setSelection} />
         </Sankey>
-        <div className="bg-surface-secondary text-ui-sm rounded-md border border-(--border-subtle) p-3 text-(--text-primary)">
+        <div className="border-gray-alpha-3 bg-background-2 text-ui-sm text-gray-10 rounded-md border p-3">
           {selection
             ? `${selection.source.column.label}: ${selection.source.value} → ${selection.target.column.label}: ${selection.target.value} (${selection.records.length} records)`
             : 'Select a curve to inspect its records.'}
@@ -162,7 +162,7 @@ const signalColumns = [
 export const SignalColumnHeaders: Story = {
   render: () => (
     <div className="w-full p-8">
-      <div className="rounded-lg border border-(--border-subtle)">
+      <div className="border-gray-alpha-3 rounded-lg border">
         <Sankey data={signalData} columns={signalColumns}>
           <SankeyChart height={420} margin={{ top: 64, right: 32, bottom: 24, left: 32 }} />
         </Sankey>

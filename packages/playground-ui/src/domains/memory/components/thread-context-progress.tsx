@@ -55,7 +55,7 @@ export function ThreadContextProgress({
   }
 
   return (
-    <div className="border-b border-(--border-subtle) px-3 py-2">
+    <div className="border-gray-alpha-3 border-b px-3 py-2">
       <div className="flex flex-col gap-2 sm:flex-row">
         {showMessages ? (
           <ProgressBar label="Messages" value={messageTokens} max={messageThreshold} tone="messages" />

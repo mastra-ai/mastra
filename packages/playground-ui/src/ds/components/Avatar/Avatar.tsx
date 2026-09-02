@@ -31,10 +31,10 @@ export const Avatar = ({ src, name, size = 'sm', interactive = false, color, tex
     <div
       className={cn(
         sizeClasses[size],
-        'flex shrink-0 items-center justify-center overflow-hidden rounded-full border border-(--border-subtle)',
-        !showFallbackTint && 'bg-surface-raised',
+        'flex shrink-0 items-center justify-center overflow-hidden rounded-full border border-gray-alpha-3',
+        !showFallbackTint && 'bg-gray-1',
         transitions.all,
-        interactive && 'cursor-pointer hover:scale-105 hover:border-(--border-subtle) hover:shadow-sm',
+        interactive && 'cursor-pointer hover:scale-105 hover:border-gray-alpha-3 hover:shadow-sm',
       )}
       style={showFallbackTint ? { backgroundColor: color } : undefined}
     >
@@ -43,7 +43,7 @@ export const Avatar = ({ src, name, size = 'sm', interactive = false, color, tex
       ) : (
         <Txt
           variant="ui-md"
-          className={cn('text-center', !showFallbackTint && 'text-(--text-primary)')}
+          className={cn('text-center', !showFallbackTint && 'text-gray-10')}
           style={showFallbackTint && textColor ? { color: textColor } : undefined}
         >
           {initial}

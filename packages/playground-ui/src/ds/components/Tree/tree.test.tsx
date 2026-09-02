@@ -152,14 +152,14 @@ describe('Tree', () => {
     const childRow = getFolderRow('child');
 
     fireEvent.focus(root);
-    expect(getClassTokens(rootRow)).toContain('bg-surface-hover');
-    expect(getClassTokens(childRow)).not.toContain('bg-surface-hover');
+    expect(getClassTokens(rootRow)).toContain('bg-gray-2');
+    expect(getClassTokens(childRow)).not.toContain('bg-gray-2');
     expect(childRow.className).not.toContain('group-focus-visible/treeitem:bg-surface-hover');
 
     fireEvent.blur(root, { relatedTarget: child });
     fireEvent.focus(child);
-    expect(getClassTokens(rootRow)).not.toContain('bg-surface-hover');
-    expect(getClassTokens(childRow)).toContain('bg-surface-hover');
+    expect(getClassTokens(rootRow)).not.toContain('bg-gray-2');
+    expect(getClassTokens(childRow)).toContain('bg-gray-2');
   });
 
   it('moves focus through visible items with arrow, home, and end keys', () => {

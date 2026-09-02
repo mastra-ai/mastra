@@ -92,7 +92,7 @@ const HoverCardContent = React.forwardRef<HTMLDivElement, HoverCardContentProps>
           <PreviewCardPrimitive.Popup
             ref={ref}
             className={cn(
-              'max-w-100 w-auto origin-[var(--transform-origin)] rounded-xl border border-(--border-subtle) bg-surface-raised px-3 py-2.5 text-ui-sm text-(--text-primary) shadow-dialog',
+              'max-w-100 w-auto origin-[var(--transform-origin)] rounded-xl border border-gray-alpha-3 bg-gray-1 px-3 py-2.5 text-ui-sm text-gray-10 shadow-dialog',
               'data-[closed]:animate-out data-[closed]:fade-out-0 data-[closed]:zoom-out-95 data-[open]:animate-in data-[open]:fade-in-0 data-[open]:zoom-in-95',
               'data-[side=bottom]:slide-in-from-top-1 data-[side=left]:slide-in-from-right-1 data-[side=right]:slide-in-from-left-1 data-[side=top]:slide-in-from-bottom-1',
               className,
@@ -100,7 +100,7 @@ const HoverCardContent = React.forwardRef<HTMLDivElement, HoverCardContentProps>
             {...props}
           >
             {children}
-            {showArrow && <PreviewCardPrimitive.Arrow className="fill-(--surface-raised)" />}
+            {showArrow && <PreviewCardPrimitive.Arrow className="fill-gray-1" />}
           </PreviewCardPrimitive.Popup>
         </PreviewCardPrimitive.Positioner>
       </PreviewCardPrimitive.Portal>

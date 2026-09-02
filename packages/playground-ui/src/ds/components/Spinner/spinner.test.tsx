@@ -40,11 +40,11 @@ describe('Spinner', () => {
   });
 
   it('merges className overrides without adding color props', () => {
-    render(<Spinner aria-label="Saving" className="size-3 text-(--text-secondary)" />);
+    render(<Spinner aria-label="Saving" className="text-gray-9 size-3" />);
 
     const spinner = screen.getByRole('status', { name: 'Saving' });
     expect(spinner.classList.contains('spinner')).toBe(true);
     expect(spinner.classList.contains('size-3')).toBe(true);
-    expect(spinner.classList.contains('text-(--text-secondary)')).toBe(true);
+    expect(spinner.classList.contains('text-gray-9')).toBe(true);
   });
 });

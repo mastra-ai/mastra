@@ -53,12 +53,12 @@ export type DataListRootProps = Omit<ScrollAreaProps, 'children' | 'orientation'
 
 const stickyHeaderBackgroundValues = {
   tinted: {
-    background: 'var(--surface-header)',
-    hoverBackground: 'var(--surface-header-hover)',
+    background: 'var(--background-2)',
+    hoverBackground: 'var(--gray-1)',
   },
   surface: {
-    background: 'var(--surface-secondary)',
-    hoverBackground: 'color-mix(in oklch, var(--surface-secondary), var(--text-primary) 10%)',
+    background: 'var(--background-2)',
+    hoverBackground: 'color-mix(in oklch, var(--background-2), var(--gray-10) 10%)',
   },
   transparent: {
     background: 'transparent',
@@ -98,8 +98,8 @@ const borderlessTableStyles = [
   // same treatment without revealing scrolled content beneath sticky surfaces.
   '[&_.data-list-top]:bg-[var(--data-list-sticky-header-background)] [&_.data-list-top]:rounded-lg',
   '[&_.data-list-row]:rounded-lg',
-  '[&_.data-list-row]:hover:bg-surface-overlay-strong!',
-  '[&_.data-list-row:focus-within]:bg-surface-overlay-strong!',
+  '[&_.data-list-row]:hover:bg-gray-alpha-2!',
+  '[&_.data-list-row:focus-within]:bg-gray-alpha-2!',
   '[&_.data-list-row>.data-list-sticky-start]:bg-[var(--data-list-sticky-header-background)]',
   '[&_.data-list-row>.data-list-sticky-start]:after:right-0',
   '[&_.data-list-row:hover>.data-list-sticky-start]:bg-[var(--data-list-sticky-header-hover-background)]',
@@ -115,7 +115,7 @@ const dataListFitClasses: Record<DataListFit, string> = {
 const dataListRootVariants = cva(cn('grid content-start', ...borderlessTableStyles), {
   variants: {
     variant: {
-      striped: '[&_.data-list-row]:even:bg-surface-overlay-soft',
+      striped: '[&_.data-list-row]:even:bg-gray-alpha-1',
       plain: '',
     },
   },

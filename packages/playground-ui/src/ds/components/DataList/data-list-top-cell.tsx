@@ -26,7 +26,7 @@ export const DataListTopCell = forwardRef<HTMLSpanElement, DataListTopCellProps>
       <Component
         ref={ref}
         className={cn(
-          'flex h-10 max-w-full min-w-0 items-center overflow-hidden py-1 text-ui-sm font-medium whitespace-nowrap text-(--text-secondary)',
+          'flex h-10 max-w-full min-w-0 items-center overflow-hidden py-1 text-ui-sm font-medium whitespace-nowrap text-gray-9',
           sticky === 'start' && dataListStickyStartStyles,
           sticky === 'start' && '-mr-4 -ml-5 w-auto max-w-none rounded-l-lg pr-4 pl-5',
           sticky === 'start' && 'z-20 bg-[var(--data-list-sticky-header-background)]',

@@ -21,7 +21,7 @@ export const Entity = ({ children, className, onClick }: EntityProps) => {
         }
       }}
       className={cn(
-        'group/entity flex gap-3 rounded-xl border border-(--border-subtle) bg-surface-raised px-4 py-3',
+        'group/entity flex gap-3 rounded-xl border border-gray-alpha-3 bg-gray-1 px-4 py-3',
         onClick && 'cursor-pointer transition-all hover:bg-surface-hover',
         className,
       )}
@@ -34,7 +34,7 @@ export const Entity = ({ children, className, onClick }: EntityProps) => {
 
 export const EntityIcon = ({ children, className, style }: EntityProps) => {
   return (
-    <Icon size="lg" className={cn('mt-1 shrink-0 text-(--text-secondary)', className)} style={style}>
+    <Icon size="lg" className={cn('mt-1 shrink-0 text-gray-9', className)} style={style}>
       {children}
     </Icon>
   );
@@ -42,7 +42,7 @@ export const EntityIcon = ({ children, className, style }: EntityProps) => {
 
 export const EntityName = ({ children, className }: EntityProps) => {
   return (
-    <Txt as="p" variant="ui-lg" className={cn('font-medium text-(--text-primary)', className)}>
+    <Txt as="p" variant="ui-lg" className={cn('font-medium text-gray-10', className)}>
       {children}
     </Txt>
   );
@@ -50,7 +50,7 @@ export const EntityName = ({ children, className }: EntityProps) => {
 
 export const EntityDescription = ({ children, className }: EntityProps) => {
   return (
-    <Txt as="div" variant="ui-sm" className={cn('text-(--text-secondary)', className)}>
+    <Txt as="div" variant="ui-sm" className={cn('text-gray-9', className)}>
       {children}
     </Txt>
   );

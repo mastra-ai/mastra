@@ -21,7 +21,7 @@ export function DataKeysAndValuesValueLink({ className, children, href, as }: Da
   const navigationProps = as ? { href, to: href } : { href };
 
   const linkClassName = cn(
-    'flex items-center gap-2 truncate transition-colors hover:text-(--text-primary)',
+    'flex items-center gap-2 truncate transition-colors hover:text-gray-10',
     '[&:hover>svg]:opacity-100 [&>svg]:size-4 [&>svg]:shrink-0 [&>svg]:opacity-70',
   );
 

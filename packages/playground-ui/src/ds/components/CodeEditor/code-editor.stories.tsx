@@ -143,7 +143,7 @@ export const FocusedEmbeddedInBlock: Story = {
     className: 'min-h-24',
   },
   render: args => (
-    <div className="bg-surface-raised focus-within:border-gray-alpha-5 w-150 rounded-md border border-(--border-subtle) p-3 transition-colors">
+    <div className="border-gray-alpha-3 bg-gray-1 focus-within:border-gray-alpha-5 w-150 rounded-md border p-3 transition-colors">
       <CodeEditor {...args} />
     </div>
   ),

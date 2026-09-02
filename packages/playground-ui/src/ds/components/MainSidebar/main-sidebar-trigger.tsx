@@ -26,13 +26,13 @@ export function MainSidebarTrigger({ className, onClick, ...props }: MainSidebar
               if (!event.defaultPrevented) toggleSidebar();
             }}
             className={cn(
-              'flex items-center justify-center rounded-md text-(--text-secondary)',
+              'flex items-center justify-center rounded-md text-gray-9',
               'size-7',
               isCollapsed ? 'mx-auto' : 'ml-auto',
-              'hover:bg-sidebar-nav-hover hover:text-(--text-primary)',
+              'hover:bg-sidebar-nav-hover hover:text-gray-10',
               'transition-all duration-normal ease-out-custom',
-              'focus-visible:shadow-focus-ring focus-visible:ring-1 focus-visible:ring-focus focus-visible:outline-hidden',
-              '[&_svg]:size-4 [&_svg]:text-(--text-secondary) [&_svg]:transition-transform [&_svg]:duration-normal [&:hover_svg]:text-(--text-primary)',
+              'focus-visible:ring-focus focus-visible:shadow-focus-ring focus-visible:ring-1 focus-visible:outline-hidden',
+              '[&_svg]:size-4 [&_svg]:text-gray-9 [&_svg]:transition-transform [&_svg]:duration-normal [&:hover_svg]:text-gray-10',
               className,
             )}
           >

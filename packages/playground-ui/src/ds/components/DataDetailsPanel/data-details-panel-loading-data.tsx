@@ -7,8 +7,8 @@ export interface DataDetailsPanelLoadingDataProps {
 
 export function DataDetailsPanelLoadingData({ children }: DataDetailsPanelLoadingDataProps) {
   return (
-    <div className="text-ui-sm flex items-center justify-center gap-2 px-4 py-6 text-(--text-secondary)">
-      <Spinner size="sm" variant="pulse" className="text-(--text-secondary)" /> {children ?? 'Loading...'}
+    <div className="text-ui-sm text-gray-9 flex items-center justify-center gap-2 px-4 py-6">
+      <Spinner size="sm" variant="pulse" className="text-gray-9" /> {children ?? 'Loading...'}
     </div>
   );
 }

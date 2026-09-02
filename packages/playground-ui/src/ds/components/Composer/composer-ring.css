@@ -23,7 +23,7 @@
 .composer-ring {
   --composer-ring-color: var(--focus);
 
-  background-color: var(--composer-ring-edge, color-mix(in oklab, var(--border-default) 40%, transparent));
+  background-color: var(--composer-ring-edge, color-mix(in oklab, var(--gray-alpha-5) 40%, transparent));
   background-image: conic-gradient(
     from calc(var(--composer-ring-angle) + var(--composer-ring-spin) - 60deg),
     transparent 0deg,
@@ -41,7 +41,7 @@
 }
 
 .composer-ring:focus-within {
-  background-color: var(--border-default);
+  background-color: var(--gray-alpha-5);
 }
 
 /* The arc tracks the cursor, so it lights on hover only — focus brightens the edge instead. */

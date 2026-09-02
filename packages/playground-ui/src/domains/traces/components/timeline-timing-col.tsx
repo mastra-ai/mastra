@@ -40,14 +40,14 @@ export function TimelineTimingCol({
           '[&:hover>div]:bg-surface-active',
           {
             'opacity-30 [&:hover]:opacity-60': isFaded,
-            'bg-surface-hover': selectedSpanId === span.id,
+            'bg-gray-2': selectedSpanId === span.id,
           },
         )}
       >
-        <div className={cn('w-full rounded-md bg-surface-hover p-1.5 transition-colors duration-1000')}>
+        <div className={cn('w-full rounded-md bg-gray-2 p-1.5 transition-colors duration-1000')}>
           <div className="relative h-1.5 w-full overflow-hidden rounded-sm">
             <div
-              className={cn('absolute top-0 h-1.5 rounded-sm bg-(--text-disabled)')}
+              className={cn('absolute top-0 h-1.5 rounded-sm bg-gray-6')}
               style={{
                 width: percentageSpanLatency ? `${percentageSpanLatency}%` : '2px',
                 left: `${percentageSpanStartTime || 0}%`,
@@ -57,11 +57,9 @@ export function TimelineTimingCol({
           </div>
         </div>
 
-        <div className={cn('flex justify-end text-ui-xs text-(--text-secondary)')}>
-          {(span.latency / 1000).toFixed(3)}&nbsp;s
-        </div>
+        <div className={cn('flex justify-end text-ui-xs text-gray-9')}>{(span.latency / 1000).toFixed(3)}&nbsp;s</div>
       </HoverCardTrigger>
-      <HoverCardContent className="bg-surface-hover pr-6">
+      <HoverCardContent className="bg-gray-2 pr-6">
         <div className={cn('mt-1 mb-2 flex items-center gap-2 text-ui-sm')}>Span Timing</div>
         <DataKeysAndValues>
           <DataKeysAndValues.Key>Latency</DataKeysAndValues.Key>

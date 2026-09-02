@@ -68,7 +68,7 @@ export function DateRangeTrack({
       role="group"
       aria-label="Date range selection area"
       className={cn(
-        'relative h-12 touch-none rounded-lg bg-surface-hover',
+        'relative h-12 touch-none rounded-lg bg-gray-2',
         pointer.interaction?.type === 'selecting' ? 'cursor-col-resize' : 'cursor-crosshair',
       )}
       onPointerDown={pointer.startBrush}

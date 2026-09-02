@@ -3,14 +3,14 @@
    so the single :root declaration computes correctly under `html.light` too. Only the shadow
    needs an explicit per-theme override (light gets a gloss highlight, dark stays elevation-only). */
 :root {
-  --toast-success-bg: color-mix(in srgb, var(--notice-success) 20%, var(--surface-primary));
-  --toast-success-border: color-mix(in srgb, var(--notice-success) 45%, var(--surface-primary));
-  --toast-destructive-bg: color-mix(in srgb, var(--notice-destructive) 20%, var(--surface-primary));
-  --toast-destructive-border: color-mix(in srgb, var(--notice-destructive) 45%, var(--surface-primary));
-  --toast-warning-bg: color-mix(in srgb, var(--notice-warning) 20%, var(--surface-primary));
-  --toast-warning-border: color-mix(in srgb, var(--notice-warning) 45%, var(--surface-primary));
-  --toast-info-bg: color-mix(in srgb, var(--notice-info) 20%, var(--surface-primary));
-  --toast-info-border: color-mix(in srgb, var(--notice-info) 45%, var(--surface-primary));
+  --toast-success-bg: color-mix(in srgb, var(--notice-success) 20%, var(--background-1));
+  --toast-success-border: color-mix(in srgb, var(--notice-success) 45%, var(--background-1));
+  --toast-destructive-bg: color-mix(in srgb, var(--notice-destructive) 20%, var(--background-1));
+  --toast-destructive-border: color-mix(in srgb, var(--notice-destructive) 45%, var(--background-1));
+  --toast-warning-bg: color-mix(in srgb, var(--notice-warning) 20%, var(--background-1));
+  --toast-warning-border: color-mix(in srgb, var(--notice-warning) 45%, var(--background-1));
+  --toast-info-bg: color-mix(in srgb, var(--notice-info) 20%, var(--background-1));
+  --toast-info-border: color-mix(in srgb, var(--notice-info) 45%, var(--background-1));
   --toast-shadow: 0 1px 2px oklch(0 0 0 / 0.4), 0 12px 32px -12px oklch(0 0 0 / 0.55);
 }
 html.light {
@@ -23,9 +23,9 @@ html.light {
    The `[data-sonner-toaster][data-sonner-theme]` prefix matches sonner's own theme rules
    (specificity 0,2,0) and adds our class for (0,3,0) so our notice tokens win without !important. */
 [data-sonner-toaster][data-sonner-theme].mastra-toaster {
-  --normal-bg: var(--surface-raised);
-  --normal-text: var(--text-primary);
-  --normal-border: var(--border-subtle);
+  --normal-bg: var(--gray-1);
+  --normal-text: var(--gray-10);
+  --normal-border: var(--gray-alpha-3);
   --success-bg: var(--toast-success-bg);
   --success-text: var(--notice-success-fg);
   --success-border: var(--toast-success-border);
@@ -69,7 +69,7 @@ html.light {
      --close-bg       → chip surface, equal to the toast's own bg so the chip blends at rest
      --close-border   → chip border, equal to the toast's own border so the chip blends at rest */
 [data-sonner-toaster].mastra-toaster [data-sonner-toast]:not([data-type]) {
-  --close-tint: var(--text-primary);
+  --close-tint: var(--gray-10);
   --close-bg: var(--normal-bg);
   --close-border: var(--normal-border);
 }

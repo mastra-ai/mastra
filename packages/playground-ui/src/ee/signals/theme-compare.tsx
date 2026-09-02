@@ -99,23 +99,23 @@ export function ThemeCompare({
         />
       </div>
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
-        <p className="rounded-md border border-(--border-subtle) px-2 py-1 font-mono text-xs text-(--text-primary) tabular-nums">
+        <p className="border-gray-alpha-3 text-gray-10 rounded-md border px-2 py-1 font-mono text-xs tabular-nums">
           {snapshotSummaryLabel(fromSnapshot, flows[fromIndex])}
         </p>
-        <span aria-hidden="true" className="text-xs text-(--text-secondary)">
+        <span aria-hidden="true" className="text-gray-9 text-xs">
           →
         </span>
-        <p className="rounded-md border border-(--border-subtle) px-2 py-1 font-mono text-xs text-(--text-primary) tabular-nums">
+        <p className="border-gray-alpha-3 text-gray-10 rounded-md border px-2 py-1 font-mono text-xs tabular-nums">
           {snapshotSummaryLabel(toSnapshot, flows[toIndex])}
         </p>
-        <p className="text-xs text-(--text-secondary)">
+        <p className="text-gray-9 text-xs">
           {grabbedPoint === undefined
             ? 'Click a landmark to move the nearest point · click a point to grab it.'
             : 'Point grabbed — click a landmark to place it.'}
         </p>
       </div>
       {fromIndex === toIndex ? (
-        <p className="bg-surface-secondary rounded-lg border border-(--border-subtle) p-6 text-sm text-(--text-secondary)">
+        <p className="border-gray-alpha-3 bg-background-2 text-gray-9 rounded-lg border p-6 text-sm">
           Pick two different landmarks on the timeline to compare them.
         </p>
       ) : !fromFlow || !toFlow ? (

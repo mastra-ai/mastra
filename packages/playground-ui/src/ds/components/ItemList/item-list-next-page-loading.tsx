@@ -18,7 +18,7 @@ export function ItemListNextPageLoading({
   }
 
   return (
-    <div ref={setEndOfListElement} className="text-ui-md mt-8 flex justify-center text-(--text-secondary) opacity-50">
+    <div ref={setEndOfListElement} className="text-ui-md text-gray-9 mt-8 flex justify-center opacity-50">
       {isLoading && loadingText}
       {!hasMore && !isLoading && noMoreDataText}
     </div>

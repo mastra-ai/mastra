@@ -56,8 +56,8 @@ export const Crumb = ({ className, as, isCurrent, action, children, ...props }: 
             'flex min-w-0 items-center gap-2 overflow-hidden rounded-md px-1 py-0.5 text-ui-md leading-ui-md',
             transitions.colors,
             isCurrent
-              ? 'font-medium text-(--text-primary)'
-              : 'cursor-pointer text-(--text-secondary) hover:bg-gray-alpha-1 hover:text-(--text-primary) active:bg-gray-alpha-3',
+              ? 'font-medium text-gray-10'
+              : 'cursor-pointer text-gray-9 hover:bg-gray-alpha-1 hover:text-gray-10 active:bg-gray-alpha-3',
             className,
           )}
           {...props}
@@ -68,7 +68,7 @@ export const Crumb = ({ className, as, isCurrent, action, children, ...props }: 
       </li>
       {!isCurrent && (
         <li role="separator" className="flex h-full items-center">
-          <Icon className={cn('text-(--text-secondary)', transitions.colors)}>
+          <Icon className={cn('text-gray-9', transitions.colors)}>
             <SlashIcon />
           </Icon>
         </li>

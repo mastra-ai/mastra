@@ -13,9 +13,9 @@ export function ItemListRow({ isSelected, children, columns }: ItemListRowProps)
   return (
     <li
       className={cn(
-        'flex overflow-hidden rounded-lg border border-transparent border-t-border1 py-[3px] pb-[2px] text-ui-md text-(--text-primary) first:border-t-transparent',
+        'flex overflow-hidden rounded-lg border border-transparent border-t-border1 py-[3px] pb-[2px] text-ui-md text-gray-10 first:border-t-transparent',
         '[&:last-child>button]:rounded-b-lg',
-        '[&.selected-row]:border [&.selected-row]:border-dashed [&.selected-row]:border-(--border-default) [&.selected-row]:pr-[3px] [&.selected-row]:first:border-t',
+        '[&.selected-row]:border [&.selected-row]:border-dashed [&.selected-row]:border-gray-alpha-5 [&.selected-row]:pr-[3px] [&.selected-row]:first:border-t',
         '[&:has(+.selected-row)]:rounded-b-none [&:has(+.selected-row)]:border-b-transparent',
         '[.selected-row+&]:rounded-t-none',
         transitions.colors,

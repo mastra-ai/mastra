@@ -148,7 +148,7 @@ function DefaultErrorFallback({
       >
         <div
           className={cn(
-            'flex items-center justify-center rounded-full bg-red-7/10 text-error',
+            'flex items-center justify-center rounded-full bg-red-7/10 text-red-9',
             isInline
               ? 'size-10 [&>svg]:size-5'
               : 'size-14 @md:size-16 @lg:size-20 [&>svg]:size-7 @md:[&>svg]:size-8 @lg:[&>svg]:size-10',
@@ -158,18 +158,18 @@ function DefaultErrorFallback({
         </div>
         <h3
           className={cn(
-            'font-medium text-(--text-primary)',
+            'font-medium text-gray-10',
             isInline ? 'text-ui-md' : 'text-ui-lg @md:text-header-md @lg:text-header-lg',
           )}
         >
           {title ?? 'Something went wrong'}
         </h3>
-        <p className={cn('text-(--text-secondary)', isInline ? 'text-ui-sm' : 'text-ui-md @lg:text-ui-lg')}>
+        <p className={cn('text-gray-9', isInline ? 'text-ui-sm' : 'text-ui-md @lg:text-ui-lg')}>
           {description ?? 'An unexpected error occurred while rendering this part of the page.'}
         </p>
         <p
           className={cn(
-            'rounded-md bg-surface-raised px-3 py-2 font-mono break-words text-(--text-primary)',
+            'rounded-md bg-gray-1 px-3 py-2 font-mono break-words text-gray-10',
             isInline ? 'text-ui-xs' : 'text-ui-sm',
           )}
         >
@@ -195,10 +195,8 @@ function DefaultErrorFallback({
         </div>
         {stack ? (
           <details className={cn('w-full text-left', isInline ? 'mt-1' : 'mt-2')}>
-            <summary className="text-ui-sm cursor-pointer text-(--text-secondary) hover:text-(--text-primary)">
-              Show error details
-            </summary>
-            <pre className="bg-surface-raised text-ui-xs mt-2 max-h-64 overflow-auto rounded-md p-3 break-words whitespace-pre-wrap text-(--text-primary)">
+            <summary className="text-ui-sm text-gray-9 hover:text-gray-10 cursor-pointer">Show error details</summary>
+            <pre className="bg-gray-1 text-ui-xs text-gray-10 mt-2 max-h-64 overflow-auto rounded-md p-3 break-words whitespace-pre-wrap">
               {stack}
             </pre>
           </details>

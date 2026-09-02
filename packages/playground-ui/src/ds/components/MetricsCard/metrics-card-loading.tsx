@@ -4,7 +4,7 @@ import { cn } from '@/lib/utils';
 export function MetricsCardLoading({ className }: { className?: string }) {
   return (
     <div className={cn('flex items-center justify-center', className)}>
-      <Spinner size="md" variant="pulse" className="text-(--text-disabled)" />
+      <Spinner size="md" variant="pulse" className="text-gray-6" />
     </div>
   );
 }

@@ -135,20 +135,20 @@ describe('Combobox', () => {
     const { rerender } = render(<Combobox options={options} placeholder="Pick provider" />);
     // Default === the Button `default`: a filled surface.
     const defaultClass = screen.getByRole('combobox').className;
-    expect(defaultClass).toContain('bg-surface-raised');
+    expect(defaultClass).toContain('bg-gray-1');
     expect(defaultClass).not.toContain('bg-transparent');
 
     // Outline === a transparent bordered field.
     rerender(<Combobox options={options} placeholder="Pick provider" variant="outline" />);
     const outlineClass = screen.getByRole('combobox').className;
     expect(outlineClass).toContain('bg-transparent');
-    expect(outlineClass).toContain('border-(--border-subtle)');
+    expect(outlineClass).toContain('border-gray-alpha-3');
 
     // Ghost === borderless: same shape, transparent border instead.
     rerender(<Combobox options={options} placeholder="Pick provider" variant="ghost" />);
     const ghostClass = screen.getByRole('combobox').className;
     expect(ghostClass).toContain('border-transparent');
-    expect(ghostClass).not.toContain('border-(--border-subtle)');
+    expect(ghostClass).not.toContain('border-gray-alpha-3');
 
     // Legacy `link` is still accepted for source compatibility, but renders as
     // the closest field-safe look.
@@ -158,7 +158,7 @@ describe('Combobox', () => {
 
   it('applies the error border when an error is provided', () => {
     render(<Combobox options={options} placeholder="Pick provider" error="Required" />);
-    expect(screen.getByRole('combobox').className).toContain('border-error');
+    expect(screen.getByRole('combobox').className).toContain('border-red-9');
   });
 
   it('says what went wrong under the field, and nothing when nothing did', () => {
@@ -211,12 +211,12 @@ describe('Combobox', () => {
   it('greys out the invitation only while nothing is chosen', () => {
     const { rerender } = render(<Combobox multiple options={options} value={[]} placeholder="Pick providers" />);
     const label = () => screen.getByRole('combobox').firstElementChild as HTMLElement;
-    expect(label().classList.contains('text-(--text-secondary)')).toBe(true);
+    expect(label().classList.contains('text-gray-9')).toBe(true);
 
     rerender(<Combobox multiple options={options} value={['openai']} placeholder="Pick providers" />);
 
     expect(label().textContent).toBe('1 selected');
-    expect(label().classList.contains('text-(--text-secondary)')).toBe(false);
+    expect(label().classList.contains('text-gray-9')).toBe(false);
   });
 
   it('keeps up with a selection that changes from outside', () => {

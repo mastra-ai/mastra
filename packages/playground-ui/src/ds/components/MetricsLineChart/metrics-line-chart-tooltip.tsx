@@ -11,7 +11,7 @@ export function MetricsLineChartTooltip({
 }) {
   if (!active || !payload?.length) return null;
   return (
-    <div className="bg-surface-secondary rounded-md border border-(--border-subtle) px-3 py-2 text-xs shadow-lg">
+    <div className="border-gray-alpha-3 bg-background-2 rounded-md border px-3 py-2 text-xs shadow-lg">
       <p className="text-icon6 mb-1 font-medium">{label}</p>
       {payload.map(entry => (
         <p key={entry.name} className="text-icon2">

@@ -30,26 +30,26 @@ function buildDarkTheme(): Extension {
       fontSize: '0.8rem',
       lineHighlight: 'transparent',
       gutterBackground: 'transparent',
-      gutterForeground: 'var(--text-secondary)',
+      gutterForeground: 'var(--gray-9)',
       background: 'transparent',
-      foreground: 'var(--text-primary)',
-      caret: 'var(--text-primary)',
+      foreground: 'var(--gray-10)',
+      caret: 'var(--gray-10)',
     },
     styles: [
-      { tag: [t.className, t.propertyName], color: 'var(--text-primary)' },
+      { tag: [t.className, t.propertyName], color: 'var(--gray-10)' },
       { tag: t.heading, color: 'var(--blue-9)', fontWeight: 'bold' },
       {
         tag: [t.heading1, t.heading2, t.heading3, t.heading4, t.heading5, t.heading6],
         color: 'var(--blue-9)',
         fontWeight: 'bold',
       },
-      { tag: t.emphasis, fontStyle: 'italic', color: 'var(--text-primary)' },
-      { tag: t.strong, fontWeight: 'bold', color: 'var(--text-primary)' },
+      { tag: t.emphasis, fontStyle: 'italic', color: 'var(--gray-10)' },
+      { tag: t.strong, fontWeight: 'bold', color: 'var(--gray-10)' },
       { tag: t.link, color: 'var(--blue-9)', textDecoration: 'underline' },
       { tag: t.url, color: 'var(--blue-9)' },
-      { tag: t.monospace, color: 'var(--text-primary)' },
+      { tag: t.monospace, color: 'var(--gray-10)' },
       { tag: t.strikethrough, textDecoration: 'line-through' },
-      { tag: t.quote, fontStyle: 'italic', color: 'var(--text-secondary)' },
+      { tag: t.quote, fontStyle: 'italic', color: 'var(--gray-9)' },
     ],
   });
 
@@ -58,24 +58,24 @@ function buildDarkTheme(): Extension {
       backgroundColor: 'transparent',
     },
     '.cm-content': {
-      color: 'var(--text-primary)',
-      caretColor: 'var(--text-primary)',
+      color: 'var(--gray-10)',
+      caretColor: 'var(--gray-10)',
     },
     '.cm-lineNumbers .cm-gutterElement': {
-      color: 'var(--text-secondary)',
+      color: 'var(--gray-9)',
     },
     '.cm-activeLineGutter': {
-      color: 'var(--text-secondary)',
+      color: 'var(--gray-9)',
     },
     '.cm-cursor': {
-      borderLeftColor: 'var(--text-primary)',
+      borderLeftColor: 'var(--gray-10)',
     },
     '.cm-selectionBackground, .cm-content ::selection': {
       backgroundColor: 'color-mix(in srgb, var(--blue-9) 22%, transparent)',
     },
     '.cm-tooltip-autocomplete': {
-      backgroundColor: 'var(--surface-secondary)',
-      border: '1px solid var(--border-subtle)',
+      backgroundColor: 'var(--background-2)',
+      border: '1px solid var(--gray-alpha-3)',
       borderRadius: '6px',
       boxShadow: '0 8px 16px rgba(0, 0, 0, 0.2)',
     },
@@ -83,18 +83,18 @@ function buildDarkTheme(): Extension {
       fontFamily: 'var(--font-mono)',
     },
     '.cm-completionLabel': {
-      color: 'var(--text-primary)',
+      color: 'var(--gray-10)',
     },
     '.cm-completionDetail': {
-      color: 'var(--text-secondary)',
+      color: 'var(--gray-9)',
       fontSize: '0.7rem',
       marginLeft: 'auto',
       paddingLeft: '12px',
     },
     '.cm-completionInfo': {
-      backgroundColor: 'var(--surface-secondary)',
-      border: '1px solid var(--border-subtle)',
-      color: 'var(--text-secondary)',
+      backgroundColor: 'var(--background-2)',
+      border: '1px solid var(--gray-alpha-3)',
+      color: 'var(--gray-9)',
       padding: '8px 12px',
     },
     '.cm-completionIcon': {
@@ -102,7 +102,7 @@ function buildDarkTheme(): Extension {
     },
     'ul.cm-completionList li[aria-selected]': {
       backgroundColor: 'var(--surface-hover)',
-      color: 'var(--text-primary)',
+      color: 'var(--gray-10)',
     },
     '.cm-line .cm-variable-highlight': {
       color: 'var(--orange-9) !important',
@@ -117,7 +117,7 @@ function buildLightTheme(): Extension {
   const editorTheme = EditorView.theme({
     '&': {
       backgroundColor: 'transparent',
-      color: 'var(--text-primary)',
+      color: 'var(--gray-10)',
       fontSize: '0.8rem',
     },
     '&.cm-editor .cm-scroller': {
@@ -125,33 +125,33 @@ function buildLightTheme(): Extension {
     },
     '.cm-gutters': {
       backgroundColor: 'transparent',
-      color: 'var(--text-secondary)',
+      color: 'var(--gray-9)',
       borderRight: 'none',
     },
     '.cm-content': {
-      color: 'var(--text-primary)',
-      caretColor: 'var(--text-primary)',
+      color: 'var(--gray-10)',
+      caretColor: 'var(--gray-10)',
     },
     '.cm-activeLine': {
       backgroundColor: 'transparent',
     },
     '.cm-lineNumbers .cm-gutterElement': {
-      color: 'var(--text-secondary)',
+      color: 'var(--gray-9)',
     },
     '.cm-activeLineGutter': {
       backgroundColor: 'transparent',
-      color: 'var(--text-secondary)',
+      color: 'var(--gray-9)',
     },
     '.cm-cursor, .cm-dropCursor': {
-      borderLeftColor: 'var(--text-primary)',
+      borderLeftColor: 'var(--gray-10)',
     },
     '&.cm-focused .cm-selectionBackground, & .cm-line::selection, & .cm-selectionLayer .cm-selectionBackground, .cm-content ::selection':
       {
         background: 'color-mix(in srgb, var(--blue-9) 22%, transparent) !important',
       },
     '.cm-tooltip-autocomplete': {
-      backgroundColor: 'var(--surface-secondary)',
-      border: '1px solid var(--border-subtle)',
+      backgroundColor: 'var(--background-2)',
+      border: '1px solid var(--gray-alpha-3)',
       borderRadius: '6px',
       boxShadow: '0 8px 16px rgba(0, 0, 0, 0.2)',
     },
@@ -159,18 +159,18 @@ function buildLightTheme(): Extension {
       fontFamily: 'var(--font-mono)',
     },
     '.cm-completionLabel': {
-      color: 'var(--text-primary)',
+      color: 'var(--gray-10)',
     },
     '.cm-completionDetail': {
-      color: 'var(--text-secondary)',
+      color: 'var(--gray-9)',
       fontSize: '0.7rem',
       marginLeft: 'auto',
       paddingLeft: '12px',
     },
     '.cm-completionInfo': {
-      backgroundColor: 'var(--surface-secondary)',
-      border: '1px solid var(--border-subtle)',
-      color: 'var(--text-secondary)',
+      backgroundColor: 'var(--background-2)',
+      border: '1px solid var(--gray-alpha-3)',
+      color: 'var(--gray-9)',
       padding: '8px 12px',
     },
     '.cm-completionIcon': {
@@ -178,7 +178,7 @@ function buildLightTheme(): Extension {
     },
     'ul.cm-completionList li[aria-selected]': {
       backgroundColor: 'var(--surface-hover)',
-      color: 'var(--text-primary)',
+      color: 'var(--gray-10)',
     },
     '.cm-line .cm-variable-highlight': {
       color: 'var(--orange-9) !important',
@@ -187,7 +187,7 @@ function buildLightTheme(): Extension {
   });
 
   const highlightStyle = HighlightStyle.define([
-    { tag: [t.comment, t.bracket], color: 'var(--text-secondary)' },
+    { tag: [t.comment, t.bracket], color: 'var(--gray-9)' },
     { tag: [t.string, t.meta, t.regexp], color: 'var(--green-9)' },
     { tag: [t.atom, t.bool, t.special(t.variableName)], color: 'var(--orange-9)' },
     { tag: [t.keyword, t.operator, t.tagName], color: 'var(--red-9)' },
@@ -204,14 +204,14 @@ function buildLightTheme(): Extension {
       color: 'var(--blue-9)',
       fontWeight: 'bold',
     },
-    { tag: [t.emphasis], fontStyle: 'italic', color: 'var(--text-primary)' },
-    { tag: [t.strong], fontWeight: 'bold', color: 'var(--text-primary)' },
+    { tag: [t.emphasis], fontStyle: 'italic', color: 'var(--gray-10)' },
+    { tag: [t.strong], fontWeight: 'bold', color: 'var(--gray-10)' },
     { tag: t.link, color: 'var(--blue-9)', textDecoration: 'underline' },
     { tag: t.url, color: 'var(--blue-9)' },
-    { tag: t.monospace, color: 'var(--text-primary)' },
+    { tag: t.monospace, color: 'var(--gray-10)' },
     { tag: t.strikethrough, textDecoration: 'line-through' },
     { tag: [t.deleted], color: 'var(--red-9)' },
-    { tag: t.invalid, color: 'var(--error)' },
+    { tag: t.invalid, color: 'var(--red-9)' },
     { tag: [t.standard(t.tagName)], color: 'var(--green-9)' },
   ]);
 
@@ -232,7 +232,7 @@ const codeEditorVariants = cva(
   {
     variants: {
       variant: {
-        default: 'rounded-md border border-(--border-subtle) bg-surface-raised p-1 focus-within:border-gray-alpha-5',
+        default: 'rounded-md border border-gray-alpha-3 bg-gray-1 p-1 focus-within:border-gray-alpha-5',
         embedded: 'rounded-none border-none bg-transparent p-0',
       },
     },

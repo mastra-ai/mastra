@@ -15,7 +15,7 @@ const meta: Meta = {
     docs: {
       description: {
         component:
-          'All design tokens available in `packages/playground-ui`. Sourced from `src/ds/tokens/*.ts` and mirrored in the Tailwind v4 `@theme` block of `src/index.css`. Use these tokens through their Tailwind utility classes (e.g. `text-ui-lg`, `bg-surface-secondary`, `p-4`) rather than raw CSS values.',
+          'All design tokens available in `packages/playground-ui`. Sourced from `src/ds/tokens/*.ts` and mirrored in the Tailwind v4 `@theme` block of `theme.css`. Use foundation tokens through their Tailwind utility classes (e.g. `text-ui-lg`, `bg-gray-1`, `p-4`) rather than raw CSS values.',
       },
     },
   },
@@ -32,14 +32,14 @@ const Row = ({ name, meta, preview }: { name: string; meta: React.ReactNode; pre
       alignItems: 'center',
       gap: '1rem',
       padding: '0.75rem 0',
-      borderBottom: `1px solid var(--border-subtle)`,
+      borderBottom: `1px solid var(--gray-alpha-3)`,
     }}
   >
     <Txt variant="ui-sm" font="mono">
       {name}
     </Txt>
     <Txt variant="ui-sm" font="mono">
-      <span style={{ color: 'var(--text-secondary)' }}>{meta}</span>
+      <span style={{ color: 'var(--gray-9)' }}>{meta}</span>
     </Txt>
     <div>{preview}</div>
   </div>
@@ -52,7 +52,7 @@ const SectionTitle = ({ children, note }: { children: React.ReactNode; note?: Re
     </Txt>
     {note && (
       <Txt variant="ui-sm">
-        <span style={{ color: 'var(--text-secondary)' }}>{note}</span>
+        <span style={{ color: 'var(--gray-9)' }}>{note}</span>
       </Txt>
     )}
   </div>
@@ -95,7 +95,7 @@ const Swatch = ({ token, value }: { token: string; value: string }) => (
         width: '100%',
         height: '56px',
         background: value,
-        border: `1px solid var(--border-subtle)`,
+        border: `1px solid var(--gray-alpha-3)`,
         borderRadius: 'var(--radius-md)',
       }}
     />
@@ -120,42 +120,38 @@ const SwatchGrid = ({ entries }: { entries: [string, string][] }) => (
 );
 
 const compatibilityAliases = {
-  surface1: 'surface-primary',
-  surface2: 'surface-secondary',
-  surface3: 'surface-raised',
+  surface1: 'background-1',
+  surface2: 'background-2',
+  surface3: 'gray-1',
   surface4: 'surface-hover',
   surface5: 'surface-active',
-  neutral1: 'text-disabled',
-  neutral2: 'text-secondary',
-  neutral3: 'text-secondary',
-  neutral4: 'text-primary',
-  neutral5: 'text-primary',
-  neutral6: 'text-primary',
-  border1: 'border-subtle',
-  border2: 'border-default',
+  neutral1: 'gray-6',
+  neutral2: 'gray-9',
+  neutral3: 'gray-9',
+  neutral4: 'gray-10',
+  neutral5: 'gray-10',
+  neutral6: 'gray-10',
+  border1: 'gray-alpha-3',
+  border2: 'gray-alpha-5',
   accent1: 'green-7',
   accent2: 'red-7',
   accent3: 'blue-7',
   accent5: 'blue-8',
   accent6: 'orange-7',
-  positive1: 'color-success',
-  warning1: 'color-warning',
-  negative1: 'color-error',
+  positive1: 'green-9',
+  warning1: 'orange-9',
+  negative1: 'red-9',
 } as const;
 
 export const ColorsStory: Story = {
   name: 'Colors',
   render: () => {
-    const semantic = Object.entries(SemanticColors);
+    const semantic = Object.entries(SemanticColors).filter(([key]) => key !== 'overlay');
     const foundation = Object.entries(FoundationColors);
     const groups: Record<string, [string, string][]> = {
-      Surfaces: semantic.filter(([key]) => key.startsWith('surface-')),
-      Text: semantic.filter(([key]) => key.startsWith('text-')),
-      Borders: semantic.filter(([key]) => key.startsWith('border-') || key === 'outline-image'),
-      Status: semantic.filter(([key]) => key.startsWith('color-') || key.startsWith('fill-')),
-      'Data visualization': semantic.filter(([key]) => key.startsWith('chart-')),
       'Gray foundation': foundation.filter(([key]) => key.startsWith('background-') || key.startsWith('gray-')),
       'Hue foundation': foundation.filter(([key]) => /^(green|orange|red|yellow|blue|pink|purple)-/.test(key)),
+      'Derived interactions': semantic,
       'Component colors': Object.entries(LegacyColors).filter(
         ([key]) => key.startsWith('badge-') || key.startsWith('notice-') || key.startsWith('sidebar-'),
       ),
@@ -163,7 +159,7 @@ export const ColorsStory: Story = {
 
     return (
       <div>
-        <SectionTitle note="Choose semantic roles for component UI. Use foundation ramps for data visualization and component recipes that need several steps from one hue.">
+        <SectionTitle note="Use foundation ramps directly. Derived interaction tokens stay translucent so hover and active feedback adapt to the surface beneath them.">
           Colors
         </SectionTitle>
         {Object.entries(groups).map(([group, entries]) => (
@@ -236,8 +232,8 @@ export const Radius: Story = {
               style={{
                 width: '100%',
                 height: '80px',
-                background: 'var(--surface-raised)',
-                border: `1px solid var(--border-subtle)`,
+                background: 'var(--gray-1)',
+                border: `1px solid var(--gray-alpha-3)`,
                 borderRadius: value,
               }}
             />
@@ -257,8 +253,8 @@ const ShadowBox = ({ token, value }: { token: string; value: string }) => (
       style={{
         width: '100%',
         height: '80px',
-        background: 'var(--surface-secondary)',
-        border: `1px solid var(--border-subtle)`,
+        background: 'var(--background-2)',
+        border: `1px solid var(--gray-alpha-3)`,
         borderRadius: 'var(--radius-md)',
         boxShadow: value,
       }}

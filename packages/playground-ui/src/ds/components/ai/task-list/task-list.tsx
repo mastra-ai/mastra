@@ -10,22 +10,19 @@ import { cn } from '@/lib/utils';
 export type TaskListItem = TaskItem;
 
 export const TaskListContainer = ({ className, ...props }: ComponentProps<'section'>) => (
-  <section
-    className={cn('rounded-2xl border border-(--border-default)/40 bg-surface-raised px-3 py-2.5', className)}
-    {...props}
-  />
+  <section className={cn('rounded-2xl border border-gray-alpha-5/40 bg-gray-1 px-3 py-2.5', className)} {...props} />
 );
 
 export const TaskListHeader = ({ className, ...props }: ComponentProps<typeof CollapsibleTrigger>) => (
   <CollapsibleTrigger
-    className={cn('flex w-full cursor-pointer items-center gap-2 text-left text-(--text-primary)', className)}
+    className={cn('flex w-full cursor-pointer items-center gap-2 text-left text-gray-10', className)}
     {...props}
   />
 );
 
 const barColors: Record<TaskListItem['status'], string> = {
-  completed: 'bg-success',
-  in_progress: 'bg-warning',
+  completed: 'bg-green-9',
+  in_progress: 'bg-orange-9',
   pending: 'bg-gray-5',
 };
 
@@ -67,9 +64,9 @@ export const TaskListProgress = ({ tasks, className, ...props }: TaskListProgres
 };
 
 const icons: Record<TaskListItem['status'], ReactNode> = {
-  completed: <CheckCircle2 className="text-success size-3.5 shrink-0" />,
-  in_progress: <Loader2 className="text-warning size-3.5 shrink-0 motion-safe:animate-spin" />,
-  pending: <Circle className="size-3.5 shrink-0 text-(--text-primary)" />,
+  completed: <CheckCircle2 className="text-green-9 size-3.5 shrink-0" />,
+  in_progress: <Loader2 className="text-orange-9 size-3.5 shrink-0 motion-safe:animate-spin" />,
+  pending: <Circle className="text-gray-10 size-3.5 shrink-0" />,
 };
 
 const statusLabels: Record<TaskListItem['status'], string> = {
@@ -79,9 +76,9 @@ const statusLabels: Record<TaskListItem['status'], string> = {
 };
 
 const textClasses: Record<TaskListItem['status'], string> = {
-  completed: 'text-(--text-primary) line-through',
-  in_progress: 'font-medium text-warning',
-  pending: 'text-(--text-primary)',
+  completed: 'text-gray-10 line-through',
+  in_progress: 'font-medium text-orange-9',
+  pending: 'text-gray-10',
 };
 
 const taskLabel = (task: TaskListItem) => (task.status === 'in_progress' ? task.activeForm : task.content);
@@ -116,8 +113,8 @@ const TaskListSummary = ({ task }: { task: TaskListItem }) => (
 
 const TaskListTitle = ({ title }: { title: ReactNode }) => (
   <span className="flex min-w-0 flex-1 items-center gap-2">
-    <ListChecks className="text-warning size-4 shrink-0" />
-    <span className="text-ui-sm leading-ui-sm truncate font-medium text-(--text-primary)">{title}</span>
+    <ListChecks className="text-orange-9 size-4 shrink-0" />
+    <span className="text-ui-sm leading-ui-sm text-gray-10 truncate font-medium">{title}</span>
   </span>
 );
 

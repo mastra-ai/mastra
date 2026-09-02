@@ -31,16 +31,16 @@ export function DatePicker({ className, classNames, showOutsideDays = true, ...p
         day_range_start: 'day-range-start rounded-l-md',
         day_range_end: 'day-range-end rounded-r-md',
         day_selected: cn(
-          'bg-green-7! text-(--text-on-accent)! hover:bg-green-7/90! focus:bg-green-7/80! focus:text-(--text-on-accent)!',
+          'bg-green-7! text-fixed-black! hover:bg-green-7/90! focus:bg-green-7/80! focus:text-fixed-black!',
           props.mode !== 'range' && 'rounded-md',
         ),
-        day_today: 'bg-gray-alpha-3 text-(--text-primary)',
+        day_today: 'bg-gray-alpha-3 text-gray-10',
         day_outside:
-          'day-outside text-(--text-secondary) opacity-50  aria-selected:bg-surface-active/50 aria-selected:text-(--text-secondary) aria-selected:opacity-30',
-        day_disabled: 'text-(--text-secondary) opacity-50',
-        day_range_middle: 'aria-selected:bg-surface-active aria-selected:text-(--text-primary)',
+          'day-outside text-gray-9 opacity-50  aria-selected:bg-surface-active/50 aria-selected:text-gray-9 aria-selected:opacity-30',
+        day_disabled: 'text-gray-9 opacity-50',
+        day_range_middle: 'aria-selected:bg-surface-active aria-selected:text-gray-10',
         day_hidden: 'invisible',
-        head_cell: 'text-ui-xs text-(--text-secondary)',
+        head_cell: 'text-ui-xs text-gray-9',
         ...classNames,
       }}
       {...props}

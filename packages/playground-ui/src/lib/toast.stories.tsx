@@ -21,7 +21,7 @@ type Story = StoryObj;
 
 const Section = ({ title, children }: { title: string; children: ReactNode }) => (
   <div className="flex flex-col gap-2">
-    <h3 className="text-xs font-medium tracking-wide text-(--text-secondary) uppercase">{title}</h3>
+    <h3 className="text-gray-9 text-xs font-medium tracking-wide uppercase">{title}</h3>
     <div className="flex flex-wrap items-center gap-2">{children}</div>
   </div>
 );

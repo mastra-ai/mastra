@@ -67,14 +67,14 @@ export const ThemeToggle = ({
       onValueChange={handleChange}
       aria-label={ariaLabel}
       className={cn(
-        'relative inline-flex w-fit items-center gap-0.5 rounded-full border border-(--border-subtle) bg-surface-raised p-0.5',
+        'relative inline-flex w-fit items-center gap-0.5 rounded-full border border-gray-alpha-3 bg-gray-1 p-0.5',
         className,
       )}
     >
       <span
         aria-hidden="true"
         className={cn(
-          'pointer-events-none absolute inset-y-0.5 left-0.5 rounded-full bg-surface-active motion-reduce:transition-none',
+          'pointer-events-none absolute inset-y-0.5 left-0.5 rounded-full bg-gray-3 motion-reduce:transition-none',
           transitions.transform,
         )}
         style={{ width: ITEM_WIDTH, transform: `translateX(${indicatorOffset}px)` }}

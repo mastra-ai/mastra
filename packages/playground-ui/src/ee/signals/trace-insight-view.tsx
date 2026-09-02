@@ -24,7 +24,7 @@ export function TraceInsightView({ traceId, onBack }: TraceInsightViewProps) {
         </Button>
       </div>
       {insightQuery.isPending && <p className="text-gray-9 text-sm">Loading trace insight…</p>}
-      {insightQuery.isError && <p className="text-sm text-red-9">Unable to load the trace insight.</p>}
+      {insightQuery.isError && <p className="text-red-9 text-sm">Unable to load the trace insight.</p>}
       {insightQuery.data && <TraceInsightBody insight={insightQuery.data} />}
     </div>
   );
@@ -62,8 +62,8 @@ function parseTraceObservation(observation: string): ParsedObservation {
 
 const OBSERVATION_SEVERITY_CARD: Record<ObservationSeverity, string> = {
   info: 'border-gray-alpha-3 bg-gray-1',
-  success: 'border-green-400/30 bg-green-500/10',
-  problem: 'border-red-400/30 bg-red-500/10',
+  success: 'border-green-7/30 bg-green-7/10',
+  problem: 'border-red-7/30 bg-red-7/10',
 };
 
 function ObservationItem({ observation }: { observation: string }) {
@@ -75,7 +75,7 @@ function ObservationItem({ observation }: { observation: string }) {
         <p className="text-gray-9 font-mono text-[10px] tracking-wider uppercase">
           {severity === 'problem' && (
             <>
-              <span className="text-red-400">problem</span>
+              <span className="text-red-9">problem</span>
               <span aria-hidden="true"> · </span>
             </>
           )}
@@ -106,7 +106,7 @@ function TraceInsightBody({ insight }: { insight: TraceInsightResponse }) {
             </dl>
           )}
           {insight.summary.degenerate === true && (
-            <p className="mt-4 text-sm text-red-9">This trace was flagged as degenerate or looping.</p>
+            <p className="text-red-9 mt-4 text-sm">This trace was flagged as degenerate or looping.</p>
           )}
           {insight.summary.observations.length > 0 && (
             <>

@@ -6,8 +6,8 @@ import { cn } from '@/lib/utils';
 const tabListVariants = cva('relative flex items-center text-ui-lg', {
   variants: {
     variant: {
-      line: 'w-max min-w-full border-b border-(--border-subtle)',
-      pill: 'w-fit gap-1 rounded-full bg-surface-secondary p-1',
+      line: 'w-max min-w-full border-b border-gray-alpha-3',
+      pill: 'w-fit gap-1 rounded-full bg-background-2 p-1',
       'pill-ghost': 'w-fit gap-1 rounded-full p-1',
     },
   },
@@ -50,7 +50,7 @@ export const TabList = ({ children, className, variant, sticky, style }: TabList
   const resolvedVariant = variant ?? 'line';
 
   return (
-    <div className={cn('w-full overflow-x-auto', sticky && 'sticky top-0 z-10 bg-surface-secondary')}>
+    <div className={cn('w-full overflow-x-auto', sticky && 'sticky top-0 z-10 bg-background-2')}>
       <BaseTabs.List
         data-variant={resolvedVariant}
         className={cn('group/tabs-list', tabListVariants({ variant: resolvedVariant }), className)}
@@ -60,7 +60,7 @@ export const TabList = ({ children, className, variant, sticky, style }: TabList
         {resolvedVariant === 'line' && (
           <BaseTabs.Indicator
             className={cn(
-              'absolute bottom-0 left-0 bg-[var(--tab-indicator-color,var(--text-secondary))]',
+              'absolute bottom-0 left-0 bg-[var(--tab-indicator-color,var(--gray-9))]',
               'h-0.5 w-[var(--active-tab-width)]',
               'transition-all duration-200 ease-in-out',
             )}

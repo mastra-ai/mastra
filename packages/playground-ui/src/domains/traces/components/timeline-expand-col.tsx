@@ -56,7 +56,7 @@ export function TimelineExpandCol({
     <div
       className={cn('flex h-full items-center justify-end px-1.5', {
         'opacity-30 [&:hover]:opacity-60': isFaded,
-        'bg-surface-hover': isSelected,
+        'bg-gray-2': isSelected,
       })}
     >
       <div className="grid grid-cols-[1.625rem_1.625rem_1.625rem] gap-1">
@@ -122,7 +122,7 @@ function ExpandButton({ onClick, children, className, tooltip }: ExpandButtonPro
           <div
             className={cn(
               'flex items-center gap-[0.1rem] rounded-md p-1 transition-all',
-              'hover:bg-surface-active',
+              'hover:bg-surface-hover',
               '[&:hover>svg]:opacity-100 [&>svg]:size-4 [&>svg]:shrink-0 [&>svg]:opacity-50 [&>svg]:transition-all',
             )}
           >

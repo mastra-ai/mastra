@@ -39,7 +39,7 @@ export function DateRangeSelection({
       aria-valuenow={value}
       aria-valuetext={valueText}
       className={cn(
-        'absolute inset-y-1 z-10 flex cursor-grab touch-none items-center justify-center overflow-hidden rounded-md bg-gray-alpha-3 text-(--text-primary) outline-hidden select-none focus-visible:ring-2 focus-visible:ring-info active:cursor-grabbing',
+        'absolute inset-y-1 z-10 flex cursor-grab touch-none items-center justify-center overflow-hidden rounded-md bg-gray-alpha-3 text-gray-10 outline-hidden select-none focus-visible:ring-2 focus-visible:ring-blue-9 active:cursor-grabbing',
         active
           ? 'transition-none'
           : 'transition-[left,width,background-color] duration-150 ease-out motion-reduce:transition-none',
@@ -50,7 +50,7 @@ export function DateRangeSelection({
     >
       {showDuration ? (
         // TODO(ds): Txt needs a compact data-label variant.
-        <Txt as="span" variant="ui-sm" font="mono" className="text-(--text-primary) tabular-nums">
+        <Txt as="span" variant="ui-sm" font="mono" className="text-gray-10 tabular-nums">
           {duration}
         </Txt>
       ) : null}

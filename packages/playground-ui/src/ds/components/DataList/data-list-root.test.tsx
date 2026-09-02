@@ -45,12 +45,12 @@ describe('DataListRoot', () => {
       expect(grid?.className).not.toContain('overflow-auto');
       expect(grid?.className).toContain('gap-y-px');
       expect(grid?.className).not.toContain('[&_.data-list-row]:after:');
-      expect(grid?.className).not.toContain('[&_.data-list-row]:even:bg-surface-overlay-soft');
+      expect(grid?.className).not.toContain('[&_.data-list-row]:even:bg-gray-alpha-1');
     });
 
     it.each([
-      ['tinted', 'var(--surface-header)', 'var(--surface-header-hover)'],
-      ['surface', 'var(--surface-secondary)', 'color-mix(in oklch, var(--surface-secondary), var(--text-primary) 10%)'],
+      ['tinted', 'var(--background-2)', 'var(--gray-1)'],
+      ['surface', 'var(--background-2)', 'color-mix(in oklch, var(--background-2), var(--gray-10) 10%)'],
       ['transparent', 'transparent', 'transparent'],
     ])('paints a %s sticky header with its own colour', (background, resting, hover) => {
       const { container } = render(
@@ -72,7 +72,7 @@ describe('DataListRoot', () => {
       );
 
       const grid = container.querySelector<HTMLElement>('[style*="grid-template-columns"]');
-      expect(grid?.style.getPropertyValue('--data-list-sticky-header-background')).toBe('var(--surface-header)');
+      expect(grid?.style.getPropertyValue('--data-list-sticky-header-background')).toBe('var(--background-2)');
     });
 
     it('forwards scrollRef to the scrolling viewport that contains the grid', () => {
@@ -185,7 +185,7 @@ describe('DataListRoot', () => {
     });
 
     it('zebra-tints alternating rows in `striped` only', () => {
-      const zebra = '[&_.data-list-row]:even:bg-surface-overlay-soft';
+      const zebra = '[&_.data-list-row]:even:bg-gray-alpha-1';
       const renderGrid = (variant: 'plain' | 'striped') =>
         render(
           <DataList columns="1fr 1fr" variant={variant}>
@@ -295,7 +295,7 @@ describe('DataListRoot', () => {
 
     it('applies the selection fill as `!important` so it wins over borderless table styling', () => {
       // Borderless table styling uses root descendant rules (higher specificity),
-      // so a plain `bg-surface-hover` would lose. The `!` keeps the selected row
+      // so a plain `bg-gray-2` would lose. The `!` keeps the selected row
       // highlighted regardless of the root variant.
       const { container } = render(
         <DataList columns="1fr" variant="striped">
@@ -305,7 +305,7 @@ describe('DataListRoot', () => {
         </DataList>,
       );
       const row = container.querySelector<HTMLButtonElement>('.data-list-row');
-      expect(row?.className).toContain('bg-surface-row-featured!');
+      expect(row?.className).toContain('bg-gray-alpha-3!');
     });
 
     it('does not leak the variant prop onto the DOM element', () => {

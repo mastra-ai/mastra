@@ -17,7 +17,7 @@ export function FieldBlockLayout({
   return (
     <div
       className={cn(
-        'relative grid gap-2 text-(--text-primary)',
+        'relative grid gap-2 text-gray-10',
         {
           'horizontal-field-block grid-cols-[auto_1fr] items-baseline': layout === 'horizontal',
         },

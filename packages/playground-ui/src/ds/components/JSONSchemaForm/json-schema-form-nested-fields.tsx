@@ -46,7 +46,7 @@ export function NestedFields({ className, children }: JSONSchemaFormNestedFields
 
   return (
     <JSONSchemaFormNestedProvider value={{ parentPath: nestedPath, depth: nestedDepth, fields: nestedFields }}>
-      <div className={cn('mt-2 border-l border-(--border-subtle) pl-4', className)}>{children}</div>
+      <div className={cn('mt-2 border-l border-gray-alpha-3 pl-4', className)}>{children}</div>
     </JSONSchemaFormNestedProvider>
   );
 }

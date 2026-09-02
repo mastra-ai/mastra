@@ -87,14 +87,11 @@ const BooleanValueInput: React.FC<BaseInputProps> = ({ value, onChange, classNam
 
   return (
     <div className={cn('relative', className)}>
-      <Icon
-        size="sm"
-        className="pointer-events-none absolute top-1/2 left-2 z-10 -translate-y-1/2 text-(--text-secondary)"
-      >
+      <Icon size="sm" className="text-gray-9 pointer-events-none absolute top-1/2 left-2 z-10 -translate-y-1/2">
         <ToggleLeft />
       </Icon>
       <Select value={stringValue} onValueChange={handleChange}>
-        <SelectTrigger className="bg-surface-hover min-w-35 pl-7" size="sm">
+        <SelectTrigger className="bg-gray-2 min-w-35 pl-7" size="sm">
           <SelectValue placeholder="Select value" />
         </SelectTrigger>
         <SelectContent>
@@ -127,7 +124,7 @@ const NumberValueInput: React.FC<BaseInputProps> = ({ value, onChange, placehold
 
   return (
     <div className={cn('relative', className)}>
-      <Icon size="sm" className="pointer-events-none absolute top-1/2 left-2 -translate-y-1/2 text-(--text-secondary)">
+      <Icon size="sm" className="text-gray-9 pointer-events-none absolute top-1/2 left-2 -translate-y-1/2">
         <Hash />
       </Icon>
       <Input
@@ -135,7 +132,7 @@ const NumberValueInput: React.FC<BaseInputProps> = ({ value, onChange, placehold
         value={displayValue}
         onChange={handleChange}
         placeholder={placeholder || 'Enter number'}
-        className="bg-surface-hover min-w-35 pl-7"
+        className="bg-gray-2 min-w-35 pl-7"
         size="sm"
       />
     </div>
@@ -157,14 +154,14 @@ const TextValueInput: React.FC<BaseInputProps> = ({ value, onChange, placeholder
 
   return (
     <div className={cn('relative', className)}>
-      <Icon size="sm" className="pointer-events-none absolute top-1/2 left-2 -translate-y-1/2 text-(--text-secondary)">
+      <Icon size="sm" className="text-gray-9 pointer-events-none absolute top-1/2 left-2 -translate-y-1/2">
         <Type />
       </Icon>
       <Input
         value={displayValue}
         onChange={handleChange}
         placeholder={placeholder || 'Enter value'}
-        className="bg-surface-hover min-w-35 pl-7"
+        className="bg-gray-2 min-w-35 pl-7"
         size="sm"
       />
     </div>
@@ -194,7 +191,7 @@ const ArrayValueInput: React.FC<BaseInputProps> = ({ value, onChange, placeholde
       value={displayValue}
       onChange={handleChange}
       placeholder={placeholder || 'Enter values (comma-separated)'}
-      className={cn('min-w-40 bg-surface-hover', className)}
+      className={cn('min-w-40 bg-gray-2', className)}
       size="sm"
     />
   );

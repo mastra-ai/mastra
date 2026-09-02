@@ -1,7 +1,7 @@
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { MetricsLineChartTooltip } from './metrics-line-chart-tooltip';
 
-const LABEL_COLOR = 'var(--text-secondary)';
+const LABEL_COLOR = 'var(--gray-9)';
 
 export type MetricsLineChartSeries = {
   dataKey: string;
@@ -45,13 +45,11 @@ export function MetricsLineChart({
           return (
             <div key={s.dataKey} className="inline-flex items-baseline gap-2">
               <div className="size-2 shrink-0 -translate-y-px rounded-full" style={{ backgroundColor: s.color }} />
-              <span className="text-ui-sm max-w-24 truncate text-(--text-secondary)">{s.label}</span>
+              <span className="text-ui-sm text-gray-9 max-w-24 truncate">{s.label}</span>
               {aggregated && (
-                <span className="text-ui-sm text-(--text-primary)">
+                <span className="text-ui-sm text-gray-10">
                   {aggregated.value}
-                  {aggregated.suffix && (
-                    <span className="text-ui-sm text-(--text-secondary)"> {aggregated.suffix}</span>
-                  )}
+                  {aggregated.suffix && <span className="text-ui-sm text-gray-9"> {aggregated.suffix}</span>}
                 </span>
               )}
             </div>
@@ -61,12 +59,7 @@ export function MetricsLineChart({
       <div style={{ height }}>
         <ResponsiveContainer width="100%" height="100%">
           <LineChart data={data}>
-            <CartesianGrid
-              stroke="currentColor"
-              strokeOpacity={0.08}
-              vertical={false}
-              className="text-(--border-subtle)"
-            />
+            <CartesianGrid stroke="currentColor" strokeOpacity={0.08} vertical={false} className="text-gray-alpha-3" />
             <XAxis
               dataKey="time"
               tick={{ fontSize: 10, fill: LABEL_COLOR, fontFamily: 'var(--font-mono)' }}

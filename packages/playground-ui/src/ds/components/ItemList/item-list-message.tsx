@@ -14,14 +14,14 @@ export function ItemListMessage({ children, message, className, type }: ItemList
   }
 
   return (
-    <div className={cn('grid border-t border-(--border-subtle)', className)}>
+    <div className={cn('grid border-t border-gray-alpha-3', className)}>
       {message ? (
         <p
           className={cn(
-            'grid justify-center justify-items-center gap-2 p-8 text-center text-ui-md text-(--text-secondary)',
+            'grid justify-center justify-items-center gap-2 p-8 text-center text-ui-md text-gray-9',
             '[&>svg]:size-[1.5em] [&>svg]:opacity-75',
             {
-              '[&>svg]:text-error': type === 'error',
+              '[&>svg]:text-red-9': type === 'error',
             },
           )}
         >

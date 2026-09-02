@@ -40,17 +40,17 @@ const nestedExpandedItemClasses = (level: number) => {
 };
 
 const idleSurface = cn(
-  'rounded-lg text-(--text-secondary) [&_svg]:text-(--text-secondary)/70',
-  'hover:bg-sidebar-nav-hover hover:text-(--text-primary) [&:hover_svg]:text-(--text-primary)',
+  'rounded-lg text-gray-9 [&_svg]:text-gray-9/70',
+  'hover:bg-sidebar-nav-hover hover:text-gray-10 [&:hover_svg]:text-gray-10',
 );
 
 const activeSurface =
-  'bg-sidebar-nav-active text-(--text-primary) hover:bg-sidebar-nav-active hover:text-(--text-primary) [&_svg]:text-(--text-primary) [&:hover_svg]:text-(--text-primary)';
+  'bg-sidebar-nav-active text-gray-10 hover:bg-sidebar-nav-active hover:text-gray-10 [&_svg]:text-gray-10 [&:hover_svg]:text-gray-10';
 
 const featuredSurface = cn(
-  'my-2 border border-green-7/30 bg-green-3 text-success hover:bg-green-2 hover:text-success',
-  'dark:border-transparent dark:bg-green-7 dark:text-(--text-on-accent) dark:hover:bg-green-7/90 dark:hover:text-(--text-on-accent)',
-  '[&_svg]:text-success dark:[&_svg]:text-(--text-on-accent)/75 [&:hover_svg]:text-success dark:[&:hover_svg]:text-(--text-on-accent)',
+  'my-2 border border-green-7/30 bg-green-3 text-green-9 hover:bg-green-2 hover:text-green-9',
+  'dark:border-transparent dark:bg-green-7 dark:text-fixed-black dark:hover:bg-green-7/90 dark:hover:text-fixed-black',
+  '[&_svg]:text-green-9 dark:[&_svg]:text-fixed-black/75 [&:hover_svg]:text-green-9 dark:[&:hover_svg]:text-fixed-black',
 );
 
 /**
@@ -67,7 +67,7 @@ export const navItemLayoutClasses = ({ isCollapsed, level = 0, size }: NavItemLa
     navItemVariants({ size }),
     'transition-all duration-normal ease-out-custom motion-reduce:transition-none',
     '[&_svg]:size-4 [&_svg]:shrink-0 [&_svg]:transition-colors [&_svg]:duration-normal motion-reduce:[&_svg]:transition-none',
-    'focus-visible:shadow-focus-ring focus-visible:ring-1 focus-visible:ring-focus focus-visible:outline-hidden',
+    'focus-visible:ring-focus focus-visible:shadow-focus-ring focus-visible:ring-1 focus-visible:outline-hidden',
     !isCollapsed && nestedExpandedItemClasses(level),
     isCollapsed && 'w-full justify-center p-0',
   );
@@ -81,5 +81,5 @@ export const navItemClasses = ({ isActive, isCollapsed, isFeatured, level, size 
   cn(
     navItemLayoutClasses({ isCollapsed, level, size }),
     navRowSurfaceClasses({ isActive, isFeatured }),
-    isCollapsed && !isActive && '[&_svg]:text-(--text-secondary)',
+    isCollapsed && !isActive && '[&_svg]:text-gray-9',
   );

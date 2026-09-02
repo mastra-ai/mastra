@@ -9,7 +9,7 @@ export function MetricsCardError({
 }) {
   return (
     <div className={cn('flex flex-col items-center justify-center gap-3', className)}>
-      <p className="text-ui-sm text-error">{message}</p>
+      <p className="text-ui-sm text-red-9">{message}</p>
     </div>
   );
 }

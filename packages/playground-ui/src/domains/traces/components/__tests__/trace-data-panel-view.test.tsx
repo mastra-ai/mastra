@@ -635,7 +635,7 @@ describe('TraceDataPanelView — what the timeline shows as selected', () => {
   const isMarked = (name: string) => {
     let node: HTMLElement | null = screen.getByText(name);
     while (node) {
-      if (node.classList.contains('bg-surface-hover')) return true;
+      if (node.classList.contains('bg-gray-2')) return true;
       node = node.parentElement;
     }
     return false;
@@ -774,7 +774,7 @@ describe('TraceDataPanelView — following the URL to another span', () => {
   const isMarked = (name: string) => {
     let node: HTMLElement | null = screen.getByText(name);
     while (node) {
-      if (node.classList.contains('bg-surface-hover')) return true;
+      if (node.classList.contains('bg-gray-2')) return true;
       node = node.parentElement;
     }
     return false;

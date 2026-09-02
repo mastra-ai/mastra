@@ -163,7 +163,7 @@ export const VariantSizeMatrix: Story = {
     <div className="flex flex-col gap-3">
       {ALL_VARIANTS.map(variant => (
         <div key={variant} className="flex flex-wrap items-center gap-3">
-          <span className="text-ui-sm w-24 text-(--text-secondary)">{variant}</span>
+          <span className="text-ui-sm text-gray-9 w-24">{variant}</span>
           <Button variant={variant} size="xs">
             xs
           </Button>

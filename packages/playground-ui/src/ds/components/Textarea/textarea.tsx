@@ -13,10 +13,10 @@ import { cn } from '@/lib/utils';
 const textareaVariants = cva(
   cn(
     // Base styles with enhanced transitions
-    'flex w-full border bg-transparent text-(--text-primary)',
+    'flex w-full border bg-transparent text-gray-10',
     'transition-all duration-normal ease-out-custom',
     // Better placeholder styling
-    'placeholder:text-(--text-secondary) placeholder:transition-opacity placeholder:duration-normal',
+    'placeholder:text-gray-9 placeholder:transition-opacity placeholder:duration-normal',
     'focus:placeholder:opacity-70',
     // Textarea specific
     'min-h-20 resize-y',
@@ -57,7 +57,7 @@ const Textarea = React.forwardRef<HTMLTextAreaElement, TextareaProps>(
       <textarea
         className={cn(
           textareaVariants({ variant, size }),
-          error && 'border-error focus-visible:border-error',
+          error && 'border-red-9 focus-visible:border-red-9',
           className,
         )}
         data-testid={testId}

@@ -7,5 +7,5 @@ export function MetricsKpiCardError({
   message?: string;
   className?: string;
 }) {
-  return <span className={cn('text-ui-sm text-error', className)}>{message}</span>;
+  return <span className={cn('text-ui-sm text-red-9', className)}>{message}</span>;
 }

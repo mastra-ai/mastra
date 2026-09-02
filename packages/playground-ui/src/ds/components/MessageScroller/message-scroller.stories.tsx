@@ -74,7 +74,7 @@ function MessageScrollerDemo({ autoScroll = false }: { autoScroll?: boolean }) {
         </Button>
       </div>
       <MessageScrollerProvider autoScroll={autoScroll} defaultScrollPosition="end" preserveScrollOnPrepend>
-        <MessageScroller className="bg-surface-secondary h-96 rounded-xl border border-(--border-subtle)">
+        <MessageScroller className="border-gray-alpha-3 bg-background-2 h-96 rounded-xl border">
           <MessageScrollerViewport aria-label="Conversation messages">
             <MessageScrollerContent className="gap-4 p-4">
               {messages.map(message => (
@@ -82,9 +82,9 @@ function MessageScrollerDemo({ autoScroll = false }: { autoScroll?: boolean }) {
                   key={message.id}
                   messageId={message.id}
                   scrollAnchor={message.role === 'user'}
-                  className={message.role === 'user' ? 'bg-surface-hover ml-12 rounded-xl p-3' : 'mr-12 p-3'}
+                  className={message.role === 'user' ? 'bg-gray-2 ml-12 rounded-xl p-3' : 'mr-12 p-3'}
                 >
-                  <p className="text-ui-sm text-(--text-primary)">{message.text}</p>
+                  <p className="text-ui-sm text-gray-10">{message.text}</p>
                 </MessageScrollerItem>
               ))}
             </MessageScrollerContent>

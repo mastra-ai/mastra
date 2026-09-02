@@ -82,7 +82,7 @@ export function ToolCall({
 export const ToolCallTrigger = ({ className, ...props }: ComponentProps<typeof CollapsibleTrigger>) => (
   <CollapsibleTrigger
     className={cn(
-      'group/row w-full cursor-pointer rounded-md text-left transition-colors hover:bg-gray-alpha-1 focus-visible:ring-1 focus-visible:ring-focus focus-visible:outline-hidden motion-reduce:transition-none',
+      'group/row focus-visible:ring-focus w-full cursor-pointer rounded-md text-left transition-colors hover:bg-gray-alpha-1 focus-visible:ring-1 focus-visible:outline-hidden motion-reduce:transition-none',
       className,
     )}
     {...props}
@@ -136,11 +136,7 @@ export interface ToolCallSpacerProps extends ComponentProps<'span'> {
 export const ToolCallSpacer = ({ rule, className, ...props }: ToolCallSpacerProps) => (
   <span
     aria-hidden
-    className={cn(
-      'min-w-2 flex-1',
-      rule && 'h-px bg-(--border-subtle) mask-r-from-[calc(100%-min(100%,160px))]',
-      className,
-    )}
+    className={cn('min-w-2 flex-1', rule && 'h-px bg-gray-alpha-3 mask-r-from-[calc(100%-min(100%,160px))]', className)}
     {...props}
   />
 );
@@ -192,7 +188,7 @@ export const ToolCallPresentedHeader = ({
           size={14}
           strokeWidth={1.75}
           aria-hidden
-          className={status === 'error' ? 'text-error/80' : 'text-icon2'}
+          className={status === 'error' ? 'text-red-9/80' : 'text-icon2'}
         />
       </ToolCallIcon>
       <ToolCallLabel>{label}</ToolCallLabel>
@@ -200,7 +196,7 @@ export const ToolCallPresentedHeader = ({
       <ToolCallSpacer />
       {status === 'error' && (
         <ToolCallTrailing>
-          <X size={13} role="img" aria-label="Failed" className="text-error shrink-0" />
+          <X size={13} role="img" aria-label="Failed" className="text-red-9 shrink-0" />
         </ToolCallTrailing>
       )}
       {disclosure && <ToolCallDisclosure />}
@@ -212,7 +208,7 @@ export const ToolCallContent = ({ className, children, ...props }: ComponentProp
   <CollapsibleContent className="max-w-full min-w-0" {...props}>
     <div
       className={cn(
-        "relative ml-[14px] flex max-w-full min-w-0 flex-col gap-1.5 py-1.5 pr-1 pl-4 before:absolute before:inset-y-0 before:left-0 before:w-px before:bg-(--border-subtle) before:mask-b-from-[calc(100%-min(40%,80px))] before:content-['']",
+        "relative ml-[14px] flex max-w-full min-w-0 flex-col gap-1.5 py-1.5 pr-1 pl-4 before:absolute before:inset-y-0 before:left-0 before:w-px before:bg-gray-alpha-3 before:mask-b-from-[calc(100%-min(40%,80px))] before:content-['']",
         className,
       )}
     >

@@ -10,7 +10,7 @@ export type KbdProps = {
 
 const themeClasses: Record<NonNullable<KbdProps['theme']>, string> = {
   light: 'bg-kbd-light-background border-kbd-light-border text-kbd-light-text shadow-[0_1px_0_rgba(0,0,0,0.1)]',
-  dark: 'bg-surface-hover border-(--border-subtle) text-(--text-primary) shadow-[0_1px_0_rgba(0,0,0,0.3)]',
+  dark: 'bg-gray-2 border-gray-alpha-3 text-gray-10 shadow-[0_1px_0_rgba(0,0,0,0.3)]',
 };
 
 // Fixed heights, not padding — `font-mono` normal leading varies per glyph set and desyncs the scale

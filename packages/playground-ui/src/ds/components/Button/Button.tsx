@@ -29,17 +29,16 @@ export const buttonVariants = cva(
     variants: {
       variant: {
         default:
-          'border border-(--border-default) bg-surface-raised text-(--text-primary) hover:bg-surface-active hover:text-(--text-primary) active:bg-gray-5',
-        primary:
-          'border border-transparent bg-surface-contrast font-medium text-(--text-on-contrast) hover:bg-gray-9 active:bg-gray-9',
+          'border border-gray-alpha-5 bg-gray-1 text-gray-10 hover:bg-gray-2 hover:text-gray-10 active:bg-gray-3',
+        primary: 'border border-transparent bg-gray-10 font-medium text-background-1 hover:bg-gray-9 active:bg-gray-9',
         destructive:
-          'border border-transparent bg-red-7 font-medium text-(--text-on-accent) hover:bg-red-7/90 active:bg-red-7/80',
+          'border border-transparent bg-red-7 font-medium text-fixed-black hover:bg-red-7/90 active:bg-red-7/80',
         'destructive-ghost':
-          'border border-transparent bg-transparent text-error hover:bg-red-7/10 hover:text-error active:bg-red-7/15',
+          'border border-transparent bg-transparent text-red-9 hover:bg-red-7/10 hover:text-red-9 active:bg-red-7/15',
         ghost:
-          'border border-transparent bg-transparent text-(--text-primary) hover:bg-gray-alpha-1 hover:text-(--text-primary) active:bg-gray-alpha-3',
+          'border border-transparent bg-transparent text-gray-10 hover:bg-gray-alpha-1 hover:text-gray-10 active:bg-gray-alpha-3',
         outline:
-          'border border-(--border-subtle) bg-transparent text-(--text-primary) hover:bg-surface-raised hover:text-(--text-primary) active:bg-surface-hover',
+          'border border-gray-alpha-3 bg-transparent text-gray-10 hover:bg-gray-1 hover:text-gray-10 active:bg-gray-3',
       },
       size: {
         xs: cn(controlSizeClasses.xs, 'px-[.8em]', TEXT_MODE_ADORNMENTS),

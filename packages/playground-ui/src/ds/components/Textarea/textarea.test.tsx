@@ -16,7 +16,7 @@ describe('Textarea', () => {
     const textarea = screen.getByPlaceholderText('Description');
     expect(textarea.className).toContain('bg-transparent');
     expect(textarea.className).toContain('rounded-xl');
-    expect(textarea.className).not.toContain('bg-surface-overlay-soft');
+    expect(textarea.className).not.toContain('bg-gray-alpha-1');
   });
 
   it.each([
@@ -47,13 +47,13 @@ describe('Textarea', () => {
 
     const textarea = screen.getByPlaceholderText('Description');
     expect(textarea.getAttribute('aria-invalid')).toBe('true');
-    expect(textarea.className).toContain('border-error');
+    expect(textarea.className).toContain('border-red-9');
   });
 
   it('carries no error outline when it is valid', () => {
     render(<Textarea placeholder="Description" />);
 
-    expect(screen.getByPlaceholderText('Description').className).not.toContain('border-error');
+    expect(screen.getByPlaceholderText('Description').className).not.toContain('border-red-9');
   });
 
   it('keeps a caller class alongside its own', () => {

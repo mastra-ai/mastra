@@ -55,23 +55,23 @@
 
 @layer utilities {
   .shiki-token {
-    color: var(--shiki-light, var(--text-primary));
+    color: var(--shiki-light, var(--gray-10));
     background-color: var(--shiki-light-bg, transparent);
   }
 
   .dark .shiki-token {
-    color: var(--shiki-dark, var(--text-primary));
+    color: var(--shiki-dark, var(--gray-10));
     background-color: var(--shiki-dark-bg, transparent);
   }
 }
 
 @layer base {
   * {
-    border-color: var(--border-subtle);
+    border-color: var(--gray-alpha-3);
   }
   body {
-    background-color: var(--surface-primary);
-    color: var(--text-primary);
+    background-color: var(--background-1);
+    color: var(--gray-10);
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
   }
@@ -80,7 +80,7 @@
      Applies app-wide so native OS scrollbars no longer clash with DS surfaces. */
   * {
     scrollbar-width: thin;
-    scrollbar-color: color-mix(in oklab, var(--text-primary) 30%, transparent) transparent;
+    scrollbar-color: color-mix(in oklab, var(--gray-10) 30%, transparent) transparent;
   }
   ::-webkit-scrollbar {
     width: 10px;
@@ -90,13 +90,13 @@
     background: transparent;
   }
   ::-webkit-scrollbar-thumb {
-    background-color: color-mix(in oklab, var(--text-primary) 30%, transparent);
+    background-color: color-mix(in oklab, var(--gray-10) 30%, transparent);
     border-radius: 9999px;
     border: 3px solid transparent;
     background-clip: padding-box;
   }
   ::-webkit-scrollbar-thumb:hover {
-    background-color: color-mix(in oklab, var(--text-primary) 55%, transparent);
+    background-color: color-mix(in oklab, var(--gray-10) 55%, transparent);
   }
   ::-webkit-scrollbar-corner {
     background: transparent;
@@ -131,8 +131,8 @@
 }
 
 .react-flow__controls-button {
-  color: var(--text-primary) !important;
-  background-color: var(--surface-raised) !important;
+  color: var(--gray-10) !important;
+  background-color: var(--gray-1) !important;
   border: none !important;
 }
 

@@ -152,6 +152,6 @@ describe('Tab', () => {
 
     const tab = screen.getByRole('tab', { name: 'First' });
     expect(tab.className).toContain('my-own-class');
-    expect(tab.className).toContain('text-(--text-secondary)');
+    expect(tab.className).toContain('text-gray-9');
   });
 });

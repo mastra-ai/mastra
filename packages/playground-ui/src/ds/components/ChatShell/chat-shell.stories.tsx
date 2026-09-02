@@ -16,15 +16,13 @@ const gitRemoteFailure =
   "Failed to prepare the workspace: Failed to set git remote: error: could not lock config file .git/config: File exists fatal: could not set 'remote.origin.url' to 'https://x-access-token:ghs_EXAMPLEtokenaGciOiJFUzI1NiIsInR5cCI6IkpXVCJ9eyJhdWQiOiJhdXRobiIsImRpZ2VzdCI6IlF2QzJWbmNsIjNkbFZtbFBNUXJleDhxdnl2d1RMZ0Z2N2FQbXVlTnJ1TGVn@github.com/mastra-ai/mastra.git'";
 
 const SessionBar = () => (
-  <header className="text-icon5 text-ui-sm flex items-center gap-2 border-b border-(--border-subtle) px-3 py-2 md:px-5">
+  <header className="text-icon5 border-gray-alpha-3 text-ui-sm flex items-center gap-2 border-b px-3 py-2 md:px-5">
     Work / Issue #20383: Testing our webhooks
   </header>
 );
 
 const Composer = () => (
-  <div className="text-icon3 bg-surface-raised rounded-[22px] border border-(--border-default)/40 px-4 py-3">
-    Ask Mastra Code…
-  </div>
+  <div className="text-icon3 border-gray-alpha-5/40 bg-gray-1 rounded-[22px] border px-4 py-3">Ask Mastra Code…</div>
 );
 
 const Turn = ({ children }: { children: React.ReactNode }) => (
@@ -32,7 +30,7 @@ const Turn = ({ children }: { children: React.ReactNode }) => (
 );
 
 const Shell = ({ children }: { children: React.ReactNode }) => (
-  <div className="bg-surface-secondary flex h-dvh flex-col">
+  <div className="bg-background-2 flex h-dvh flex-col">
     <ChatShell className="flex-1 [--chat-column:44rem]" scroller={{ autoScroll: true }}>
       <ChatShell.Bar>
         <SessionBar />

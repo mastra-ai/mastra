@@ -29,8 +29,7 @@ export const controlSizeClasses: Record<ControlSize, string> = {
 export type ControlTriggerVisualVariant = 'default' | 'outline' | 'ghost';
 
 export const controlTriggerOpenState: Record<ControlTriggerVisualVariant, string> = {
-  default: 'data-[popup-open]:bg-surface-active data-[popup-open]:text-(--text-primary)',
-  outline:
-    'data-[popup-open]:bg-surface-raised data-[popup-open]:text-(--text-primary) data-[popup-open]:border-(--border-default)',
-  ghost: 'data-[popup-open]:bg-gray-alpha-1 data-[popup-open]:text-(--text-primary)',
+  default: 'data-[popup-open]:bg-surface-active data-[popup-open]:text-gray-10',
+  outline: 'data-[popup-open]:bg-gray-1 data-[popup-open]:text-gray-10 data-[popup-open]:border-gray-alpha-5',
+  ghost: 'data-[popup-open]:bg-gray-alpha-1 data-[popup-open]:text-gray-10',
 };

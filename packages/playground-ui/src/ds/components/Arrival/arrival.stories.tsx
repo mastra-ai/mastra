@@ -23,7 +23,7 @@ function ArrivalDemo() {
           {items.map(item => (
             <Arriving
               key={item}
-              className="bg-surface-secondary text-ui-sm rounded-lg border border-(--border-subtle) px-4 py-3 text-(--text-primary)"
+              className="border-gray-alpha-3 bg-background-2 text-ui-sm text-gray-10 rounded-lg border px-4 py-3"
             >
               {item}
             </Arriving>

@@ -39,7 +39,7 @@ export function TimelineTrack({
     <div aria-label="Snapshot landmarks" className="relative mx-2 h-12 min-w-40 flex-1" role="group">
       <div
         aria-hidden="true"
-        className="absolute inset-x-0 top-4 h-0.5 -translate-y-1/2 rounded-full bg-(--border-subtle)"
+        className="bg-gray-alpha-3 absolute inset-x-0 top-4 h-0.5 -translate-y-1/2 rounded-full"
       />
       {snapshots.map((snapshot, index) => {
         const marker = markers.get(index);
@@ -51,7 +51,7 @@ export function TimelineTrack({
             aria-label={snapshotTickLabel(snapshot, totalCount)}
             aria-pressed={marker === 'compare-point' ? grabbed : undefined}
             className={`absolute top-4 size-3.5 -translate-1/2 rounded-full border-2 transition-colors ${
-              marker ? MARKER_TICK_CLASSES[marker] : 'bg-surface-hover hover:bg-green-7/60 border-(--border-subtle)'
+              marker ? MARKER_TICK_CLASSES[marker] : 'border-gray-alpha-3 bg-gray-2 hover:bg-green-7/60'
             } ${grabbed ? 'ring-focus/70 ring-2' : ''}`}
             data-marker={marker}
             onClick={() => onTickSelect(index)}
@@ -65,7 +65,7 @@ export function TimelineTrack({
           <span
             key={`day-${snapshot.snapshotId}`}
             aria-hidden="true"
-            className="absolute top-7 -translate-x-1/2 font-mono text-[10px] text-(--text-secondary) tabular-nums"
+            className="text-gray-9 absolute top-7 -translate-x-1/2 font-mono text-[10px] tabular-nums"
             style={{ left: `${positions[index]}%` }}
           >
             {dayLabels[index]}
@@ -134,7 +134,7 @@ export function SnapshotTimeline({
             {isPlaying ? 'Pause' : 'Play'}
           </Button>
         ) : null}
-        <p className="font-mono text-xs text-(--text-primary) tabular-nums" data-testid="snapshot-summary">
+        <p className="text-gray-10 font-mono text-xs tabular-nums" data-testid="snapshot-summary">
           {summary}
         </p>
       </div>

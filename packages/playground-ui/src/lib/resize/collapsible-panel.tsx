@@ -164,7 +164,7 @@ export const CollapsiblePanel = ({
               'absolute top-2 z-10',
               'transition-[color,background-color,opacity] duration-300 starting:opacity-0',
               direction === 'left' ? 'left-2' : 'right-2',
-              'data-[edge-hovered=true]:text-(--text-primary)',
+              'data-[edge-hovered=true]:text-gray-10',
             )}
           >
             <Icon>
@@ -191,7 +191,7 @@ export const CollapsiblePanel = ({
               ref={pillRef}
               style={{ top: 'var(--pill-y)' }}
               className={cn(
-                'absolute flex size-7 -translate-y-1/2 items-center justify-center rounded-full bg-surface-contrast text-(--text-on-contrast) shadow-dialog',
+                'absolute flex size-7 -translate-y-1/2 items-center justify-center rounded-full bg-gray-10 text-background-1 shadow-dialog',
                 'pointer-events-none opacity-0 transition-[opacity,translate,top] duration-150 ease-out-custom motion-reduce:transition-none',
                 direction === 'left' ? 'left-0.5 -translate-x-1' : 'right-0.5 translate-x-1',
                 'group-hover/expand:pointer-events-auto group-hover/expand:translate-x-0 group-hover/expand:opacity-100',

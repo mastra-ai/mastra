@@ -15,7 +15,7 @@ export interface DataDetailsPanelKeyValueListKeyProps {
 }
 
 export function DataDetailsPanelKeyValueListKey({ className, children }: DataDetailsPanelKeyValueListKeyProps) {
-  return <dt className={cn('shrink-0  py-0.5 text-ui-smd text-(--text-secondary)', className)}>{children}</dt>;
+  return <dt className={cn('shrink-0  py-0.5 text-ui-smd text-gray-9', className)}>{children}</dt>;
 }
 
 export interface DataDetailsPanelKeyValueListValueProps {
@@ -24,7 +24,7 @@ export interface DataDetailsPanelKeyValueListValueProps {
 }
 
 export function DataDetailsPanelKeyValueListValue({ className, children }: DataDetailsPanelKeyValueListValueProps) {
-  return <dd className={cn('min-w-0 truncate py-0.5 text-ui-smd text-(--text-secondary)', className)}>{children}</dd>;
+  return <dd className={cn('min-w-0 truncate py-0.5 text-ui-smd text-gray-9', className)}>{children}</dd>;
 }
 
 export interface DataDetailsPanelKeyValueListHeaderProps {
@@ -34,8 +34,6 @@ export interface DataDetailsPanelKeyValueListHeaderProps {
 
 export function DataDetailsPanelKeyValueListHeader({ className, children }: DataDetailsPanelKeyValueListHeaderProps) {
   return (
-    <dt className={cn('col-span-2 py-3 text-ui-sm tracking-widest text-(--text-secondary) uppercase', className)}>
-      {children}
-    </dt>
+    <dt className={cn('col-span-2 py-3 text-ui-sm tracking-widest text-gray-9 uppercase', className)}>{children}</dt>
   );
 }

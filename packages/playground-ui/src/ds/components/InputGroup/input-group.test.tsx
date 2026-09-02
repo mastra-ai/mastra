@@ -26,11 +26,11 @@ const inputGroupVariants = ['default', 'filled', 'outline'] as const;
 const expectOnlyGuardedHoverBorder = (className: string) => {
   const hoverBorderTokens = className
     .split(/\s+/)
-    .filter(token => token.includes('hover') && token.includes('border-(--border-default)'));
+    .filter(token => token.includes('hover') && token.includes('border-gray-alpha-5'));
 
-  expect(hoverBorderTokens).toEqual(['[&:hover:not(:focus-within)]:border-(--border-default)']);
-  expect(className).toContain('focus-within:border-(--border-strong)');
-  expect(className).not.toContain('hover:border-(--border-default)');
+  expect(hoverBorderTokens).toEqual(['[&:hover:not(:focus-within)]:border-gray-alpha-5']);
+  expect(className).toContain('focus-within:border-gray-6');
+  expect(className).not.toContain('hover:border-gray-alpha-5');
 };
 
 describe('InputGroup', () => {
@@ -148,7 +148,7 @@ describe('InputGroup', () => {
       </InputGroup>,
     );
     expect(getInput().getAttribute('aria-invalid')).toBe('true');
-    expect(getWrapper().className).toContain('has-[[aria-invalid=true]]:border-error');
+    expect(getWrapper().className).toContain('has-[[aria-invalid=true]]:border-red-9');
   });
 
   it('supports an outline variant without an initial filled background', () => {
@@ -161,7 +161,7 @@ describe('InputGroup', () => {
     const wrapperClass = getWrapper().className;
     expect(wrapperClass).toContain('bg-transparent');
     expect(wrapperClass).toContain('rounded-full');
-    expect(wrapperClass).not.toContain('bg-surface-overlay-soft');
+    expect(wrapperClass).not.toContain('bg-gray-alpha-1');
   });
 
   it('suppresses both native number spinners (WebKit + Firefox) and the WebKit search clear button', () => {

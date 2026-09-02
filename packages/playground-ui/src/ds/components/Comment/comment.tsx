@@ -11,7 +11,7 @@ const commentVariants = cva('flex flex-col', {
   variants: {
     variant: {
       default: 'gap-2',
-      embed: 'gap-1 rounded-xl border border-(--border-subtle) bg-surface-raised p-3',
+      embed: 'gap-1 rounded-xl border border-gray-alpha-3 bg-gray-1 p-3',
     },
   },
   defaultVariants: {
@@ -84,7 +84,7 @@ export const CommentItemAuthor = forwardRef<HTMLElement, CommentItemAuthorProps>
     as="span"
     variant="ui-md"
     data-slot="comment-item-author"
-    className={cn('font-medium text-(--text-primary)', className)}
+    className={cn('font-medium text-gray-10', className)}
     {...props}
   />
 ));
@@ -97,7 +97,7 @@ export const CommentItemTimestamp = forwardRef<HTMLTimeElement, CommentItemTimes
     <time
       ref={ref}
       data-slot="comment-item-timestamp"
-      className={cn('text-ui-sm leading-ui-sm text-(--text-secondary)', className)}
+      className={cn('text-ui-sm leading-ui-sm text-gray-9', className)}
       {...props}
     />
   ),
@@ -105,7 +105,7 @@ export const CommentItemTimestamp = forwardRef<HTMLTimeElement, CommentItemTimes
 CommentItemTimestamp.displayName = 'CommentItemTimestamp';
 
 const commentItemBodyRule: Record<CommentVariant, string> = {
-  default: 'border-l border-(--border-subtle) pl-3',
+  default: 'border-l border-gray-alpha-3 pl-3',
   embed: '',
 };
 
@@ -119,7 +119,7 @@ export const CommentItemBody = forwardRef<HTMLElement, CommentItemBodyProps>(({ 
       ref={ref}
       variant="ui-md"
       data-slot="comment-item-body"
-      className={cn('whitespace-pre-wrap text-(--text-primary)', commentItemBodyRule[variant], className)}
+      className={cn('whitespace-pre-wrap text-gray-10', commentItemBodyRule[variant], className)}
       {...props}
     />
   );

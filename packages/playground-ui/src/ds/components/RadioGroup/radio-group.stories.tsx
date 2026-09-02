@@ -4,16 +4,16 @@ import { Label } from '../Label';
 import { RadioGroup, RadioGroupItem } from './radio-group';
 
 const SURFACES: { token: string; label: string; className: string }[] = [
-  { token: 'surface1', label: 'surface1 · 0% (studio shell)', className: 'bg-surface-primary' },
-  { token: 'surface2', label: 'surface2 · 16% (main frame)', className: 'bg-surface-secondary' },
-  { token: 'surface3', label: 'surface3 · 18%', className: 'bg-surface-raised' },
-  { token: 'surface4', label: 'surface4 · 22%', className: 'bg-surface-hover' },
+  { token: 'surface1', label: 'surface1 · 0% (studio shell)', className: 'bg-background-1' },
+  { token: 'surface2', label: 'surface2 · 16% (main frame)', className: 'bg-background-2' },
+  { token: 'surface3', label: 'surface3 · 18%', className: 'bg-gray-1' },
+  { token: 'surface4', label: 'surface4 · 22%', className: 'bg-gray-2' },
 ];
 
 function SurfaceFrame({ className, label, children }: { className: string; label: string; children: ReactNode }) {
   return (
-    <div className={`rounded-2xl border border-(--border-subtle) p-5 ${className}`}>
-      <p className="text-ui-xs mb-4 tracking-wide text-(--text-secondary) uppercase">{label}</p>
+    <div className={`border-gray-alpha-3 rounded-2xl border p-5 ${className}`}>
+      <p className="text-ui-xs text-gray-9 mb-4 tracking-wide uppercase">{label}</p>
       {children}
     </div>
   );
@@ -41,7 +41,7 @@ function RadioPreview({
 
 function RadioStateGrid({ idPrefix }: { idPrefix: string }) {
   return (
-    <div className="text-ui-sm grid grid-cols-[5rem_repeat(5,minmax(0,1fr))] items-center gap-x-4 gap-y-3 text-(--text-secondary)">
+    <div className="text-ui-sm text-gray-9 grid grid-cols-[5rem_repeat(5,minmax(0,1fr))] items-center gap-x-4 gap-y-3">
       <span />
       <span>Default</span>
       <span>Selected</span>
@@ -49,14 +49,14 @@ function RadioStateGrid({ idPrefix }: { idPrefix: string }) {
       <span>Disabled</span>
       <span>Disabled on</span>
 
-      <span className="text-(--text-primary)">State</span>
+      <span className="text-gray-10">State</span>
       <RadioPreview id={`${idPrefix}-default`} label={`${idPrefix} default`} />
       <RadioPreview id={`${idPrefix}-selected`} label={`${idPrefix} selected`} checked />
       <RadioPreview
         id={`${idPrefix}-focus`}
         label={`${idPrefix} focus preview`}
         checked
-        className="border-(--border-strong) outline-1 outline-offset-2 outline-(--border-strong) outline-solid"
+        className="border-gray-6 outline-gray-6 outline-1 outline-offset-2 outline-solid"
       />
       <RadioPreview id={`${idPrefix}-disabled`} label={`${idPrefix} disabled`} disabled />
       <RadioPreview id={`${idPrefix}-disabled-selected`} label={`${idPrefix} disabled selected`} checked disabled />
@@ -119,7 +119,7 @@ export const AllStates: Story = {
     layout: 'centered',
   },
   render: () => (
-    <div className="bg-surface-secondary grid min-w-md gap-4 rounded-lg border border-(--border-subtle) p-4">
+    <div className="border-gray-alpha-3 bg-background-2 grid min-w-md gap-4 rounded-lg border p-4">
       <RadioStateGrid idPrefix="all-states" />
     </div>
   ),
@@ -166,21 +166,21 @@ export const WithDescriptions: Story = {
         <RadioGroupItem value="startup" id="startup" className="mt-1" />
         <div className="grid gap-1">
           <Label htmlFor="startup">Startup</Label>
-          <p className="text-xs text-(--text-secondary)">Best for small teams just getting started</p>
+          <p className="text-gray-9 text-xs">Best for small teams just getting started</p>
         </div>
       </div>
       <div className="flex items-start space-x-2">
         <RadioGroupItem value="business" id="business" className="mt-1" />
         <div className="grid gap-1">
           <Label htmlFor="business">Business</Label>
-          <p className="text-xs text-(--text-secondary)">For growing companies with advanced needs</p>
+          <p className="text-gray-9 text-xs">For growing companies with advanced needs</p>
         </div>
       </div>
       <div className="flex items-start space-x-2">
         <RadioGroupItem value="enterprise" id="enterprise" className="mt-1" />
         <div className="grid gap-1">
           <Label htmlFor="enterprise">Enterprise</Label>
-          <p className="text-xs text-(--text-secondary)">For large organizations requiring customization</p>
+          <p className="text-gray-9 text-xs">For large organizations requiring customization</p>
         </div>
       </div>
     </RadioGroup>

@@ -49,11 +49,11 @@ export function HorizontalBars({
           {segments.map(seg => (
             <div key={seg.label} className="flex items-center gap-2">
               <div className="size-2 rounded-full" style={{ backgroundColor: seg.color }} />
-              <span className="text-ui-sm text-(--text-secondary)">{seg.label}</span>
+              <span className="text-ui-sm text-gray-9">{seg.label}</span>
             </div>
           ))}
         </div>
-        <span className="text-ui-sm shrink-0 pr-2 text-(--text-secondary)">Total</span>
+        <span className="text-ui-sm text-gray-9 shrink-0 pr-2">Total</span>
       </div>
       <div className="grid gap-3.5">
         {sorted.map(d => {
@@ -120,11 +120,11 @@ export function HorizontalBars({
                     </div>
                   </TooltipContent>
                 </Tooltip>
-                <span className="text-ui-sm pointer-events-none absolute inset-y-0 left-2.5 z-10 flex items-center truncate text-(--text-primary)">
+                <span className="text-ui-sm text-gray-10 pointer-events-none absolute inset-y-0 left-2.5 z-10 flex items-center truncate">
                   {d.name}
                 </span>
               </div>
-              <span className="text-ui-md shrink-0 pr-3 text-(--text-primary) tabular-nums">{fmt(total)}</span>
+              <span className="text-ui-md text-gray-10 shrink-0 pr-3 tabular-nums">{fmt(total)}</span>
             </>
           );
 
@@ -133,7 +133,7 @@ export function HorizontalBars({
               <LinkComponent
                 key={d.name}
                 href={d.href}
-                className="hover:bg-surface-raised focus-visible:bg-surface-raised flex h-6 cursor-pointer items-center gap-14 rounded transition-colors outline-none"
+                className="hover:bg-gray-1 focus-visible:bg-gray-1 flex h-6 cursor-pointer items-center gap-14 rounded transition-colors outline-none"
               >
                 {rowBody}
               </LinkComponent>

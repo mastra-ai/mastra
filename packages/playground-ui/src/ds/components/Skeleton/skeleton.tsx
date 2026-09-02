@@ -4,7 +4,7 @@ function Skeleton({ className, ...props }: React.HTMLAttributes<HTMLDivElement>)
   return (
     <div
       className={cn(
-        'relative overflow-hidden rounded-md bg-surface-hover',
+        'relative overflow-hidden rounded-md bg-gray-2',
         // Shimmer effect using pseudo-element
         'before:absolute before:inset-0',
         'before:-translate-x-full',

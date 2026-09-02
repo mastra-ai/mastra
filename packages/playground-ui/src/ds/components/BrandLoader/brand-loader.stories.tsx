@@ -49,7 +49,7 @@ export const AllSizes: Story = {
 
 export const OnSurface: Story = {
   render: () => (
-    <div className="bg-surface-secondary flex h-64 w-96 items-center justify-center rounded-lg">
+    <div className="bg-background-2 flex h-64 w-96 items-center justify-center rounded-lg">
       <BrandLoader size="lg" />
     </div>
   ),
@@ -68,7 +68,7 @@ export const SuperposedOnLogo: Story = {
     <div className="flex flex-col items-center gap-10">
       {(['sm', 'md', 'lg'] as const).map(size => (
         <div key={size} className="flex flex-col items-center gap-2">
-          <span className="text-ui-sm text-(--text-secondary)">
+          <span className="text-ui-sm text-gray-9">
             size=&quot;{size}&quot; · {SIZE_PX[size]}px (per-size stroke)
           </span>
           <div className="relative" style={{ width: SIZE_PX[size], aspectRatio: '34 / 21' }}>
@@ -81,7 +81,7 @@ export const SuperposedOnLogo: Story = {
       ))}
       {[240, 400, 640].map(px => (
         <div key={px} className="flex flex-col items-center gap-2">
-          <span className="text-ui-sm text-(--text-secondary)">{px}px (uses lg stroke via className)</span>
+          <span className="text-ui-sm text-gray-9">{px}px (uses lg stroke via className)</span>
           <div className="relative" style={{ width: px, aspectRatio: '34 / 21' }}>
             <LogoWithoutText className="absolute inset-0 size-full text-[#ef4444]/70" aria-hidden />
             <div className="absolute inset-0">
@@ -103,7 +103,7 @@ export const FullHeightPage: Story = {
     layout: 'fullscreen',
   },
   render: () => (
-    <div className="bg-surface-primary flex h-screen w-screen items-center justify-center">
+    <div className="bg-background-1 flex h-screen w-screen items-center justify-center">
       <BrandLoader size="lg" aria-label="Loading app" />
     </div>
   ),

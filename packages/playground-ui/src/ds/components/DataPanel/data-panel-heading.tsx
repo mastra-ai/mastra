@@ -7,12 +7,7 @@ export interface DataPanelHeadingProps {
 
 export function DataPanelHeading({ className, children }: DataPanelHeadingProps) {
   return (
-    <h3
-      className={cn(
-        'flex gap-2 text-ui-md text-(--text-secondary) [&>b]:font-normal [&>b]:text-(--text-secondary)',
-        className,
-      )}
-    >
+    <h3 className={cn('flex gap-2 text-ui-md text-gray-9 [&>b]:font-normal [&>b]:text-gray-9', className)}>
       {children}
     </h3>
   );

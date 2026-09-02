@@ -31,7 +31,7 @@ export default meta;
 type Story = StoryObj<typeof ToolCall>;
 
 const Code = ({ children }: { children: string }) => (
-  <pre className="text-icon4 bg-surface-primary m-0 max-h-60 overflow-auto rounded-md px-3 py-2 font-mono text-xs leading-normal whitespace-pre-wrap">
+  <pre className="text-icon4 bg-background-1 m-0 max-h-60 overflow-auto rounded-md px-3 py-2 font-mono text-xs leading-normal whitespace-pre-wrap">
     {children}
   </pre>
 );
@@ -48,7 +48,7 @@ export const Completed: Story = {
           <ToolCallDetail>src/agent.ts</ToolCallDetail>
           <ToolCallSpacer />
           <ToolCallTrailing>
-            <Check size={13} aria-label="Completed" className="text-success" />
+            <Check size={13} aria-label="Completed" className="text-green-9" />
           </ToolCallTrailing>
           <ToolCallDisclosure />
         </ToolCallHeader>
@@ -86,14 +86,14 @@ export const Failed: Story = {
     <ToolCall status="error" defaultOpen aria-label="Tool: write file">
       <ToolCallTrigger>
         <ToolCallHeader>
-          <ToolCallIcon className="text-error/80">
+          <ToolCallIcon className="text-red-9/80">
             <FileText size={14} strokeWidth={1.75} aria-hidden />
           </ToolCallIcon>
           <ToolCallLabel>Write file</ToolCallLabel>
           <ToolCallDetail>src/config.ts</ToolCallDetail>
           <ToolCallSpacer />
           <ToolCallTrailing>
-            <X size={13} role="img" aria-label="Failed" className="text-error" />
+            <X size={13} role="img" aria-label="Failed" className="text-red-9" />
           </ToolCallTrailing>
           <ToolCallDisclosure />
         </ToolCallHeader>
@@ -120,7 +120,7 @@ function ControlledExample() {
         </ToolCallHeader>
       </ToolCallTrigger>
       <ToolCallContent>
-        <div className="bg-surface-primary rounded-md border border-(--border-subtle) p-3 text-sm">
+        <div className="border-gray-alpha-3 bg-background-1 rounded-md border p-3 text-sm">
           Arbitrary consumer-rendered content
         </div>
       </ToolCallContent>

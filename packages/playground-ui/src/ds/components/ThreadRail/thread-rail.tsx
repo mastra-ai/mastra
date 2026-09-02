@@ -248,7 +248,7 @@ const getRailItemTone = ({
   active,
   inView,
 }: Pick<ThreadRailItemProps, 'distance' | 'active' | 'inView'>): string => {
-  if (distance === 0 || active) return 'bg-surface-contrast';
+  if (distance === 0 || active) return 'bg-gray-10';
   if (inView) return 'bg-gray-9';
   if (distance === 1) return 'bg-gray-8';
   return 'bg-gray-alpha-6';
@@ -286,7 +286,7 @@ function ThreadRailItem({
         className={cn(
           'relative block h-px cursor-pointer rounded-full transition-[width,background-color] duration-normal ease-out',
           "before:absolute before:inset-x-0 before:-inset-y-1 before:content-['']",
-          'focus-visible:ring-2 focus-visible:ring-focus/40 focus-visible:outline-hidden',
+          'focus-visible:ring-focus/40 focus-visible:ring-2 focus-visible:outline-hidden',
           size,
           tone,
         )}
@@ -330,7 +330,7 @@ function ThreadRailPreview({
       data-testid="thread-rail-preview"
       data-visible={containerVisible ? 'true' : undefined}
       className={cn(
-        'pointer-events-none absolute top-0 left-full z-30 ml-3 w-72 overflow-hidden rounded-xl border border-(--border-subtle) bg-surface-raised text-left shadow-dialog transition-[height,translate,opacity] duration-360 ease-out-custom will-change-[height,translate,opacity] motion-reduce:transition-none',
+        'pointer-events-none absolute top-0 left-full z-30 ml-3 w-72 overflow-hidden rounded-xl border border-gray-alpha-3 bg-gray-1 text-left shadow-dialog transition-[height,translate,opacity] duration-360 ease-out-custom will-change-[height,translate,opacity] motion-reduce:transition-none',
         containerVisible ? 'opacity-100' : 'opacity-0',
       )}
       style={{ ...previewHeightStyle, translate: `0 calc(${top}px - 50%)` }}
@@ -370,21 +370,18 @@ function ThreadRailPreviewContent({
 }: React.HTMLAttributes<HTMLDivElement> & { turn: ThreadRailTurn }) {
   return (
     <div className={className} {...props}>
-      <div className="text-ui-md leading-ui-md truncate font-medium text-(--text-primary)">{turn.prompt}</div>
-      {turn.reply && <p className="text-ui-sm leading-ui-sm mt-1.5 line-clamp-3 text-(--text-primary)">{turn.reply}</p>}
+      <div className="text-ui-md leading-ui-md text-gray-10 truncate font-medium">{turn.prompt}</div>
+      {turn.reply && <p className="text-ui-sm leading-ui-sm text-gray-10 mt-1.5 line-clamp-3">{turn.reply}</p>}
       {(turn.files.length > 0 || turn.hiddenFileCount > 0) && (
-        <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-(--border-subtle)/60 pt-2.5">
+        <div className="border-gray-alpha-3/60 mt-3 flex flex-wrap items-center gap-2 border-t pt-2.5">
           {turn.files.map(file => (
-            <span
-              key={file}
-              className="text-ui-sm inline-flex max-w-44 items-center gap-1.5 truncate text-(--text-primary)"
-            >
+            <span key={file} className="text-ui-sm text-gray-10 inline-flex max-w-44 items-center gap-1.5 truncate">
               <FileText className="size-3.5 shrink-0 opacity-70" aria-hidden />
               {file}
             </span>
           ))}
           {turn.hiddenFileCount > 0 && (
-            <span className="text-ui-sm font-medium text-(--text-primary)">+{turn.hiddenFileCount}</span>
+            <span className="text-ui-sm text-gray-10 font-medium">+{turn.hiddenFileCount}</span>
           )}
         </div>
       )}

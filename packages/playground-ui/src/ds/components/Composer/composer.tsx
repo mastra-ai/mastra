@@ -32,7 +32,7 @@ export const ComposerBox = forwardRef<HTMLDivElement, ComposerBoxProps>(
       ref={ref}
       data-slot="composer-box"
       className={cn(
-        '@container relative mx-auto mt-auto w-full max-w-3xl overflow-hidden rounded-[22px] border border-(--border-default)/40 bg-surface-raised transition-colors duration-normal focus-within:border-(--border-default)',
+        '@container relative mx-auto mt-auto w-full max-w-3xl overflow-hidden rounded-[22px] border border-gray-alpha-5/40 bg-gray-1 transition-colors duration-normal focus-within:border-gray-alpha-5',
         className,
       )}
       {...props}
@@ -88,7 +88,7 @@ export const ComposerInput = forwardRef<HTMLTextAreaElement, ComposerInputProps>
         ref={ref}
         data-slot="composer-input"
         className={cn(
-          'min-h-17 field-sizing-content w-full resize-none overflow-hidden bg-transparent px-3 pt-3 pb-2 text-ui-lg leading-ui-lg text-(--text-primary) outline-hidden placeholder:text-(--text-secondary) focus:outline-hidden disabled:cursor-not-allowed disabled:opacity-50',
+          'min-h-17 field-sizing-content w-full resize-none overflow-hidden bg-transparent px-3 pt-3 pb-2 text-ui-lg leading-ui-lg text-gray-10 outline-hidden placeholder:text-gray-9 focus:outline-hidden disabled:cursor-not-allowed disabled:opacity-50',
           className,
         )}
         {...props}

@@ -124,7 +124,7 @@ describe('RadioGroup', () => {
 
     expect(className).toContain('cursor-pointer');
     expect(className).toContain('bg-gray-alpha-3');
-    expect(className).toContain('data-[checked]:bg-surface-contrast');
+    expect(className).toContain('data-[checked]:bg-gray-10');
     expect(className).not.toContain('accent1');
     expect(className).not.toContain('shadow-glow');
   });

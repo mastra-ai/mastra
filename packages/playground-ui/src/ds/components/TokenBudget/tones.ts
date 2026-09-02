@@ -1,7 +1,7 @@
 export const toneClass = {
-  messages: 'text-info',
+  messages: 'text-blue-9',
   memory: 'text-purple-9',
-  warning: 'text-warning',
+  warning: 'text-orange-9',
 } as const;
 
 export type TokenBudgetTone = keyof typeof toneClass;

@@ -8,9 +8,9 @@ export type ItemListTextCellProps = {
 
 export function ItemListTextCell({ children, isLoading, className }: ItemListTextCellProps) {
   return (
-    <div className={cn('truncate  py-[0.6rem] text-ui-md text-(--text-primary)', className)}>
+    <div className={cn('truncate  py-[0.6rem] text-ui-md text-gray-10', className)}>
       {isLoading ? (
-        <div className="bg-surface-hover h-4 animate-pulse rounded-md text-transparent select-none"></div>
+        <div className="bg-gray-2 h-4 animate-pulse rounded-md text-transparent select-none"></div>
       ) : (
         children
       )}

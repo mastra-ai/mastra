@@ -12,12 +12,12 @@ const ContextMenuSub = ContextMenuPrimitive.SubmenuRoot;
 const ContextMenuRadioGroup = ContextMenuPrimitive.RadioGroup;
 
 const itemClass = cn(
-  'relative flex cursor-pointer items-center gap-2.5 rounded-lg px-2 py-1.5 text-ui-smd leading-ui-sm text-(--text-primary) transition-colors outline-none select-none hover:bg-surface-hover hover:text-(--text-primary) focus:bg-surface-hover focus:text-(--text-primary) focus:outline-none focus-visible:ring-0 focus-visible:outline-none data-disabled:cursor-not-allowed data-disabled:opacity-50 data-disabled:hover:bg-transparent data-disabled:hover:text-(--text-primary) data-disabled:focus:bg-transparent data-disabled:focus:text-(--text-primary) data-[highlighted]:bg-surface-hover data-[highlighted]:text-(--text-primary) data-disabled:data-[highlighted]:bg-transparent data-disabled:data-[highlighted]:text-(--text-primary) [&_svg]:size-4 [&_svg]:shrink-0 [&>span]:truncate',
+  'relative flex cursor-pointer items-center gap-2.5 rounded-lg px-2 py-1.5 text-ui-smd leading-ui-sm text-gray-10 transition-colors outline-none select-none hover:bg-surface-hover hover:text-gray-10 focus:bg-surface-hover focus:text-gray-10 focus:outline-none focus-visible:ring-0 focus-visible:outline-none data-disabled:cursor-not-allowed data-disabled:opacity-50 data-disabled:hover:bg-transparent data-disabled:hover:text-gray-10 data-disabled:focus:bg-transparent data-disabled:focus:text-gray-10 data-[highlighted]:bg-surface-hover data-[highlighted]:text-gray-10 data-disabled:data-[highlighted]:bg-transparent data-disabled:data-[highlighted]:text-gray-10 [&_svg]:size-4 [&_svg]:shrink-0 [&>span]:truncate',
   '[&:hover>svg]:opacity-100 [&>svg]:size-[1.1em] [&>svg]:opacity-60',
 );
 
 const popupClass = cn(
-  'z-1000 max-h-[min(20rem,var(--available-height))] min-w-44 origin-[var(--transform-origin)] overflow-x-hidden overflow-y-auto rounded-xl border border-(--border-subtle) bg-surface-raised p-1 text-(--text-primary) shadow-dialog outline-none',
+  'z-1000 max-h-[min(20rem,var(--available-height))] min-w-44 origin-[var(--transform-origin)] overflow-x-hidden overflow-y-auto rounded-xl border border-gray-alpha-3 bg-gray-1 p-1 text-gray-10 shadow-dialog outline-none',
   'data-[closed]:animate-out data-[closed]:fade-out-0 data-[closed]:zoom-out-95 data-[open]:animate-in data-[open]:fade-in-0 data-[open]:zoom-in-95',
   'data-[side=bottom]:slide-in-from-top-1 data-[side=left]:slide-in-from-right-1 data-[side=right]:slide-in-from-left-1 data-[side=top]:slide-in-from-bottom-1',
 );
@@ -103,7 +103,7 @@ const ContextMenuItem = React.forwardRef<HTMLDivElement, ContextMenuItemProps>(
       className={cn(
         itemClass,
         inset && 'pl-8',
-        'data-[variant=destructive]:text-error data-[variant=destructive]:hover:bg-red-7/10 data-[variant=destructive]:hover:text-error data-[variant=destructive]:data-[highlighted]:bg-red-7/10 data-[variant=destructive]:data-[highlighted]:text-error',
+        'data-[variant=destructive]:text-red-9 data-[variant=destructive]:hover:bg-red-7/10 data-[variant=destructive]:hover:text-red-9 data-[variant=destructive]:data-[highlighted]:bg-red-7/10 data-[variant=destructive]:data-[highlighted]:text-red-9',
         className,
       )}
       {...props}
@@ -120,7 +120,7 @@ const ContextMenuCheckboxItem = React.forwardRef<HTMLDivElement, ContextMenuPrim
       className={cn(itemClass, 'w-full', className)}
       {...props}
     >
-      <div className="flex size-4 items-center justify-center rounded-sm border border-(--border-default)">
+      <div className="border-gray-alpha-5 flex size-4 items-center justify-center rounded-sm border">
         <ContextMenuPrimitive.CheckboxItemIndicator>
           <CheckIcon />
         </ContextMenuPrimitive.CheckboxItemIndicator>
@@ -136,7 +136,7 @@ const ContextMenuRadioItem = React.forwardRef<HTMLDivElement, ContextMenuPrimiti
     <ContextMenuPrimitive.RadioItem
       ref={ref}
       className={cn(
-        'relative flex cursor-pointer items-center rounded-lg py-1.5 pr-2 pl-8 text-ui-smd leading-ui-sm text-(--text-primary) transition-colors outline-none select-none hover:bg-surface-hover hover:text-(--text-primary) focus:bg-surface-hover focus:text-(--text-primary) focus:outline-none focus-visible:ring-0 focus-visible:outline-none data-disabled:cursor-not-allowed data-disabled:opacity-50 data-disabled:hover:bg-transparent data-disabled:hover:text-(--text-primary) data-disabled:focus:bg-transparent data-disabled:focus:text-(--text-primary) data-[highlighted]:bg-surface-hover data-[highlighted]:text-(--text-primary) data-disabled:data-[highlighted]:bg-transparent data-disabled:data-[highlighted]:text-(--text-primary)',
+        'relative flex cursor-pointer items-center rounded-lg py-1.5 pr-2 pl-8 text-ui-smd leading-ui-sm text-gray-10 transition-colors outline-none select-none hover:bg-surface-hover hover:text-gray-10 focus:bg-surface-hover focus:text-gray-10 focus:outline-none focus-visible:ring-0 focus-visible:outline-none data-disabled:cursor-not-allowed data-disabled:opacity-50 data-disabled:hover:bg-transparent data-disabled:hover:text-gray-10 data-disabled:focus:bg-transparent data-disabled:focus:text-gray-10 data-[highlighted]:bg-surface-hover data-[highlighted]:text-gray-10 data-disabled:data-[highlighted]:bg-transparent data-disabled:data-[highlighted]:text-gray-10',
         className,
       )}
       {...props}
@@ -159,7 +159,7 @@ const ContextMenuLabel = React.forwardRef<HTMLDivElement, ContextMenuLabelProps>
     <div
       ref={ref}
       className={cn(
-        'px-2 pt-1.5 pb-1 text-ui-xs font-medium tracking-wider text-(--text-secondary) uppercase',
+        'px-2 pt-1.5 pb-1 text-ui-xs font-medium tracking-wider text-gray-9 uppercase',
         inset && 'pl-8',
         className,
       )}
@@ -171,11 +171,7 @@ ContextMenuLabel.displayName = 'ContextMenuLabel';
 
 const ContextMenuSeparator = React.forwardRef<HTMLDivElement, ContextMenuPrimitive.Separator.Props>(
   ({ className, ...props }, ref) => (
-    <ContextMenuPrimitive.Separator
-      ref={ref}
-      className={cn('-mx-1 my-1 h-px bg-(--border-subtle)', className)}
-      {...props}
-    />
+    <ContextMenuPrimitive.Separator ref={ref} className={cn('-mx-1 my-1 h-px bg-gray-alpha-3', className)} {...props} />
   ),
 );
 ContextMenuSeparator.displayName = 'ContextMenuSeparator';
@@ -193,7 +189,7 @@ const ContextMenuSubTrigger = React.forwardRef<HTMLDivElement, ContextMenuSubTri
       ref={ref}
       className={cn(
         itemClass,
-        'data-[popup-open]:bg-surface-hover data-[popup-open]:text-(--text-primary)',
+        'data-[popup-open]:bg-surface-hover data-[popup-open]:text-gray-10',
         inset && 'pl-8',
         className,
       )}

@@ -14,8 +14,8 @@ export function TopicsLayout({ sidebar, children, tracePanel, contentPadding = t
   const hasContent = Boolean(children || tracePanel);
 
   return (
-    <div className="bg-surface-secondary flex h-full min-h-0 text-(--text-primary)">
-      {sidebar ? <aside className="min-h-0 w-88 shrink-0 border-r border-(--border-subtle)">{sidebar}</aside> : null}
+    <div className="bg-background-2 text-gray-10 flex h-full min-h-0">
+      {sidebar ? <aside className="border-gray-alpha-3 min-h-0 w-88 shrink-0 border-r">{sidebar}</aside> : null}
       {hasContent ? (
         <main className={contentPadding ? 'min-w-0 flex-1 p-4' : 'min-w-0 flex-1'}>
           <PanelGroup className="size-full min-h-0 min-w-0" orientation="horizontal">

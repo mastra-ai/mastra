@@ -9,7 +9,7 @@ export type EntryProps = {
 export const Entry = ({ label, children }: EntryProps) => {
   return (
     <div className="space-y-2">
-      <Txt as="p" variant="ui-md" className="text-(--text-secondary)">
+      <Txt as="p" variant="ui-md" className="text-gray-9">
         {label}
       </Txt>
 

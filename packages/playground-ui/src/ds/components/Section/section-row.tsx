@@ -36,7 +36,7 @@ function SectionRowLayout({
   const destructive = tone === 'destructive';
   const labelClassName = cn(
     'text-ui-md leading-ui-md',
-    destructive ? 'text-error' : viewOnly ? 'text-(--text-secondary)' : 'text-(--text-primary)',
+    destructive ? 'text-red-9' : viewOnly ? 'text-gray-9' : 'text-gray-10',
     'group-data-[variant=factory]/section:font-medium group-data-[variant=flat]/section:font-medium',
   );
 
@@ -61,18 +61,13 @@ function SectionRowLayout({
           <p className={labelClassName}>{label}</p>
         )}
         {description != null ? (
-          <p className="text-ui-md leading-ui-md mt-1 max-w-[62ch] text-pretty text-(--text-secondary)">
-            {description}
-          </p>
+          <p className="text-ui-md leading-ui-md text-gray-9 mt-1 max-w-[62ch] text-pretty">{description}</p>
         ) : null}
       </div>
       {children != null ? (
         <div
           data-slot="section-control"
-          className={cn(
-            'min-w-0 sm:justify-self-end',
-            viewOnly && 'flex items-center gap-2 text-ui-md text-(--text-secondary)',
-          )}
+          className={cn('min-w-0 sm:justify-self-end', viewOnly && 'flex items-center gap-2 text-ui-md text-gray-9')}
         >
           {viewOnly ? (
             <>

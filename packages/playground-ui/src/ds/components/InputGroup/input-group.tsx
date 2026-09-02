@@ -20,10 +20,10 @@ const inputGroupBaseClassName = cn(
   // h-form-* (2px taller than the root's content box), so stretch would push its text low
   // / overflow the bottom border, while centring overlaps the (transparent) borders cleanly.
   'group/input-group relative flex w-full flex-1 items-center',
-  'border border-(--border-subtle) text-(--text-primary)',
+  'border border-gray-alpha-3 text-gray-10',
   transitions.all,
   'has-[:disabled]:cursor-not-allowed has-[:disabled]:opacity-50',
-  'has-[[aria-invalid=true]]:border-error',
+  'has-[[aria-invalid=true]]:border-red-9',
   // Height is on the root (border-box) so the group matches a same-size sibling control.
   // Auto height when vertical (block-* addon) or wrapping a textarea.
   'has-[>[data-align=block-start]]:h-auto has-[>[data-align=block-start]]:flex-col',
@@ -48,10 +48,10 @@ const inputGroupRoundedTextareaClassName = cn(
 // the filled treatment; `filled` is an explicit alias). Share the string so they can't
 // drift. Focus brightens the border (inputFocusBorderWithin) for WCAG-visible focus.
 const inputGroupFilledVariant = cn(
-  'rounded-full bg-surface-overlay-soft',
-  'hover:bg-surface-overlay-strong',
+  'rounded-full bg-gray-alpha-1',
+  'hover:bg-gray-alpha-2',
   inputHoverBorderWithin,
-  'outline-hidden focus-within:bg-surface-overlay-strong focus-within:outline-hidden',
+  'outline-hidden focus-within:bg-gray-alpha-2 focus-within:outline-hidden',
   inputFocusBorderWithin,
   inputGroupRoundedTextareaClassName,
 );
@@ -97,7 +97,7 @@ InputGroup.displayName = 'InputGroup';
 
 const inputGroupAddonVariants = cva(
   cn(
-    'flex items-center justify-center gap-2 text-(--text-secondary) select-none',
+    'flex items-center justify-center gap-2 text-gray-9 select-none',
     'group-has-[:disabled]/input-group:opacity-50',
     "[&>svg:not([class*='size-'])]:size-4",
   ),
@@ -106,8 +106,8 @@ const inputGroupAddonVariants = cva(
       align: {
         'inline-start': 'order-first pr-1 pl-3 has-[>button]:pl-1',
         'inline-end': 'order-last pr-3 pl-1 has-[>button]:pr-1',
-        'block-start': 'order-first w-full justify-start border-b border-(--border-subtle) px-3 pt-2 pb-1',
-        'block-end': 'order-last w-full justify-start border-t border-(--border-subtle) px-3 pt-1 pb-2',
+        'block-start': 'order-first w-full justify-start border-b border-gray-alpha-3 px-3 pt-2 pb-1',
+        'block-end': 'order-last w-full justify-start border-t border-gray-alpha-3 px-3 pt-1 pb-2',
       },
     },
     defaultVariants: {
@@ -181,10 +181,10 @@ const InputGroupInput = React.forwardRef<HTMLInputElement, InputGroupInputProps>
         className={cn(
           // Height matches the root box (which is fixed/border-box, so it doesn't grow);
           // this also keeps the control from collapsing in block mode (flex-col).
-          'min-w-0 flex-1 bg-transparent px-3 text-(--text-primary) outline-hidden',
+          'min-w-0 flex-1 bg-transparent px-3 text-gray-10 outline-hidden',
           inputGroupControlHeightBySize,
           inputGroupControlTextBySize,
-          'placeholder:text-(--text-secondary) placeholder:transition-opacity placeholder:duration-normal',
+          'placeholder:text-gray-9 placeholder:transition-opacity placeholder:duration-normal',
           'focus:placeholder:opacity-70',
           'disabled:cursor-not-allowed',
           // Hide native number-spinner arrows so consumers can compose their own
@@ -219,9 +219,9 @@ const InputGroupTextarea = React.forwardRef<HTMLTextAreaElement, InputGroupTexta
         data-testid={testId}
         aria-invalid={error}
         className={cn(
-          'min-h-15 min-w-0 flex-1 resize-y bg-transparent px-3 py-2 text-(--text-primary) outline-hidden',
+          'min-h-15 min-w-0 flex-1 resize-y bg-transparent px-3 py-2 text-gray-10 outline-hidden',
           inputGroupControlTextBySize,
-          'placeholder:text-(--text-secondary) placeholder:transition-opacity placeholder:duration-normal',
+          'placeholder:text-gray-9 placeholder:transition-opacity placeholder:duration-normal',
           'focus:placeholder:opacity-70',
           'disabled:cursor-not-allowed',
           className,
@@ -240,7 +240,7 @@ const InputGroupText = React.forwardRef<HTMLSpanElement, InputGroupTextProps>(({
     <span
       ref={ref}
       className={cn(
-        'flex items-center gap-2 text-ui-sm text-(--text-secondary) [&_svg]:pointer-events-none',
+        'flex items-center gap-2 text-ui-sm text-gray-9 [&_svg]:pointer-events-none',
         "[&_svg:not([class*='size-'])]:size-4",
         className,
       )}

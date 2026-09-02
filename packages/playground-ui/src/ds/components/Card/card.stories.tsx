@@ -34,7 +34,7 @@ export const Default: Story = {
         <CardDescription>Searches trusted sources and returns a cited summary.</CardDescription>
       </CardHeader>
       <CardContent>
-        <p className="text-ui-sm text-(--text-primary)">Last run completed 4 minutes ago with 12 sources.</p>
+        <p className="text-ui-sm text-gray-10">Last run completed 4 minutes ago with 12 sources.</p>
       </CardContent>
       <CardFooter className="gap-2">
         <Button variant="primary">Open agent</Button>
@@ -55,7 +55,7 @@ export const AppearancesAndElevation: Story = {
               <CardDescription>{appearance} appearance</CardDescription>
             </CardHeader>
             <CardContent density="compact">
-              <p className="text-ui-sm text-(--text-primary)">Card content</p>
+              <p className="text-ui-sm text-gray-10">Card content</p>
             </CardContent>
           </Card>
         )),

@@ -275,36 +275,36 @@ export const NumberWithStepper: Story = {
 export const OnDifferentSurfaces: Story = {
   render: () => (
     <div className="flex w-96 flex-col gap-4">
-      <div className="bg-surface-primary rounded-lg border border-(--border-subtle) p-4">
+      <div className="border-gray-alpha-3 bg-background-1 rounded-lg border p-4">
         <InputGroup>
           <InputGroupAddon>
             <SearchIcon />
           </InputGroupAddon>
-          <InputGroupInput placeholder="On bg-surface-primary" />
+          <InputGroupInput placeholder="On bg-background-1" />
         </InputGroup>
       </div>
-      <div className="bg-surface-secondary rounded-lg border border-(--border-subtle) p-4">
+      <div className="border-gray-alpha-3 bg-background-2 rounded-lg border p-4">
         <InputGroup>
           <InputGroupAddon>
             <SearchIcon />
           </InputGroupAddon>
-          <InputGroupInput placeholder="On bg-surface-secondary" />
+          <InputGroupInput placeholder="On bg-background-2" />
         </InputGroup>
       </div>
-      <div className="bg-surface-raised rounded-lg border border-(--border-subtle) p-4">
+      <div className="border-gray-alpha-3 bg-gray-1 rounded-lg border p-4">
         <InputGroup>
           <InputGroupAddon>
             <SearchIcon />
           </InputGroupAddon>
-          <InputGroupInput placeholder="On bg-surface-raised" />
+          <InputGroupInput placeholder="On bg-gray-1" />
         </InputGroup>
       </div>
-      <div className="bg-surface-hover rounded-lg border border-(--border-subtle) p-4">
+      <div className="border-gray-alpha-3 bg-gray-2 rounded-lg border p-4">
         <InputGroup>
           <InputGroupAddon>
             <SearchIcon />
           </InputGroupAddon>
-          <InputGroupInput placeholder="On bg-surface-hover" />
+          <InputGroupInput placeholder="On bg-gray-2" />
         </InputGroup>
       </div>
     </div>

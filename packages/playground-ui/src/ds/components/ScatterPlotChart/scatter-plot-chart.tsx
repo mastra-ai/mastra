@@ -8,7 +8,7 @@ import {
 import { Colors } from '@/ds/tokens';
 import { cn } from '@/lib/utils';
 
-const LABEL_COLOR = 'var(--text-secondary)';
+const LABEL_COLOR = 'var(--gray-9)';
 const DEFAULT_POINT_SIZE = 48;
 const CHART_MARGIN = { top: 16, right: 16, bottom: 16, left: 16 };
 
@@ -58,7 +58,7 @@ export function ScatterPlotChart({
     return (
       <div
         className={cn(
-          'flex items-center justify-center rounded-md border border-(--border-subtle) text-ui-sm text-(--text-secondary)',
+          'flex items-center justify-center rounded-md border border-gray-alpha-3 text-ui-sm text-gray-9',
           className,
         )}
         style={{ height }}

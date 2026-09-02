@@ -108,7 +108,7 @@ export function TraceColumnsMenu({
             </DropdownMenu.CheckboxItem>
           ))}
           {usageDisabledReason && (
-            <p className="text-ui-xs leading-ui-sm px-2 py-1 text-(--text-secondary)" role="note">
+            <p className="text-ui-xs leading-ui-sm text-gray-9 px-2 py-1" role="note">
               {usageDisabledReason}
             </p>
           )}
@@ -159,7 +159,7 @@ export function TraceColumnsMenu({
                 aria-describedby={metadataError ? 'trace-metadata-key-error' : undefined}
               />
               {metadataError && (
-                <p id="trace-metadata-key-error" className="text-ui-xs text-error" role="alert">
+                <p id="trace-metadata-key-error" className="text-ui-xs text-red-9" role="alert">
                   {metadataError}
                 </p>
               )}

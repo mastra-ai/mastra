@@ -9,8 +9,8 @@ export function TimelineStructureSign({ isLastChild }: TimelineStructureSignProp
     <div
       className={cn(
         'relative h-[1.8rem] w-2 shrink-0 opacity-100',
-        'after:absolute after:inset-y-0 after:-left-px after:w-0 after:border-l-[1px] after:border-dashed after:border-(--border-subtle) after:content-[""] ',
-        'before:absolute before:top-[50%] before:left-0 before:h-0 before:w-full before:border-b-[1px] before:border-dashed before:border-(--border-subtle) before:content-[""]',
+        'after:absolute after:inset-y-0 after:-left-px after:w-0 after:border-l-[1px] after:border-dashed after:border-gray-alpha-3 after:content-[""] ',
+        'before:absolute before:top-[50%] before:left-0 before:h-0 before:w-full before:border-b-[1px] before:border-dashed before:border-gray-alpha-3 before:content-[""]',
         {
           'after:bottom-[50%]': isLastChild,
         },

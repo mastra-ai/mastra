@@ -9,9 +9,9 @@ const STATUS_LABELS: Record<TraceStatusValueStatus, string> = {
 };
 
 const STATUS_STYLES: Record<TraceStatusValueStatus, string> = {
-  success: 'text-success',
-  error: 'text-error',
-  running: 'text-(--text-primary)',
+  success: 'text-green-9',
+  error: 'text-red-9',
+  running: 'text-gray-10',
 };
 
 export interface TraceStatusValueProps {

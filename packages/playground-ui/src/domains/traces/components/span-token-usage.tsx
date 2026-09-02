@@ -34,20 +34,20 @@ export function SpanTokenUsage({ usage, className }: SpanTokenUsageProps) {
   return (
     <div
       className={cn(
-        'mt-2 mb-8 grid grid-cols-1 border-b border-(--border-subtle) pb-3 4xl:grid-cols-2 4xl:gap-12',
+        'mt-2 mb-8 grid grid-cols-1 border-b border-gray-alpha-3 pb-3 4xl:grid-cols-2 4xl:gap-12',
         className,
       )}
     >
       {showSplit && (
         <div className="mb-2">
-          <div className="flex items-baseline gap-3 text-(--text-secondary)">
+          <div className="text-gray-9 flex items-baseline gap-3">
             <span className="text-ui-md">Tokens Used</span>
-            <span className="text-ui-md font-semibold text-(--text-primary)">{total.toLocaleString()}</span>
+            <span className="text-ui-md text-gray-10 font-semibold">{total.toLocaleString()}</span>
             <span className="text-ui-sm ml-auto">
               {Math.round(inputPct)}% Input vs {Math.round(outputPct)}% Output
             </span>
           </div>
-          <div className="bg-surface-hover mt-2 rounded-md p-1.5">
+          <div className="bg-gray-2 mt-2 rounded-md p-1.5">
             <div className="relative h-1.5 w-full overflow-hidden rounded-sm">
               <div
                 className="absolute top-0 left-0 h-1.5"
@@ -83,11 +83,11 @@ function UsageColumn({
 }) {
   return (
     <div>
-      <div className="mb-2 flex items-baseline gap-3 text-(--text-secondary)">
+      <div className="text-gray-9 mb-2 flex items-baseline gap-3">
         <span className="text-ui-md">{label}</span>
         {typeof value === 'number' && (
           <span className="flex items-baseline gap-1.5">
-            <span className="text-ui-md font-semibold text-(--text-primary)">{value.toLocaleString()}</span>
+            <span className="text-ui-md text-gray-10 font-semibold">{value.toLocaleString()}</span>
             <span className="size-2 self-center rounded-full" style={{ backgroundColor: color }} />
           </span>
         )}

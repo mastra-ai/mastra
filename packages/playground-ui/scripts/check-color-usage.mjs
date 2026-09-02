@@ -14,9 +14,15 @@ const legacyClassPattern = new RegExp(
   `(?:bg|text|border|ring|outline|fill|stroke|from|via|to|divide)-${legacyName}\\b`,
 );
 const legacyVariablePattern = new RegExp(`var\\(--${legacyName}\\)`);
+const semanticName =
+  '(?:surface-(?:primary|secondary|raised|overlay(?:-soft|-strong)?|contrast)|text-(?:primary|secondary|disabled|on-contrast(?:-secondary)?|on-accent)|border-(?:subtle|default|strong|on-contrast)|outline-image|fill-(?:success|warning|error|info|neutral)|chart-[1-6]|scrim|success|warning|error|info)';
+const semanticClassPattern = new RegExp(`(?:bg|text|border|ring|outline|fill|stroke)-${semanticName}\\b`);
+const semanticVariablePattern = new RegExp(`var\\(--(?:color-)?${semanticName}\\)`);
 const defaultPalettePattern =
   /(?:bg|text|border|ring|outline|fill|stroke|from|via|to|divide)-(?:white|black|slate|gray|zinc|stone|red|orange|amber|yellow|lime|green|emerald|teal|cyan|sky|blue|indigo|violet|purple|fuchsia|pink|rose)(?:-(?:50|[1-9]00|950))?(?:\/[\d[\].]+)?(?![\w-])/;
 const colorLiteralPattern = /#[\da-f]{3,8}\b|rgba?\(|hsla?\(|oklch\(/i;
+const arbitraryThemeColorPattern =
+  /(?:bg|text|border|ring|outline|fill|stroke)-\(--(?:surface|text|border|outline|focus|fill|chart|scrim)-[a-z0-9-]+\)/;
 const shadowOrMaskPattern = /(?:box-?shadow|shadow|mask-image)/i;
 
 const walk = async directory => {
@@ -45,9 +51,11 @@ for (const path of await walk(sourceRoot)) {
     const code = line.replace(/\/\/.*$/, '');
     if (/--[\w-]*shadow\s*:|box-shadow\s*:/i.test(code)) insideShadowValue = true;
     const hasLegacyColor = legacyClassPattern.test(code) || legacyVariablePattern.test(code);
+    const hasSemanticColor = semanticClassPattern.test(code) || semanticVariablePattern.test(code);
     const hasDefaultPalette = defaultPalettePattern.test(code);
     const hasRawColor = colorLiteralPattern.test(code) && !insideShadowValue && !shadowOrMaskPattern.test(code);
-    if (hasLegacyColor || hasDefaultPalette || hasRawColor) {
+    const hasArbitraryThemeColor = arbitraryThemeColorPattern.test(code);
+    if (hasLegacyColor || hasSemanticColor || hasDefaultPalette || hasRawColor || hasArbitraryThemeColor) {
       failures.push(`${sourcePath}:${index + 1}: ${line.trim()}`);
     }
     if (insideShadowValue && code.includes(';')) insideShadowValue = false;

@@ -203,19 +203,19 @@ describe('DataListTextCell', () => {
 describe('DataListNameCell and DataListDescriptionCell', () => {
   it('read at their own weight', () => {
     const name = render(<DataListNameCell>a name</DataListNameCell>);
-    expect(cellOf(name.container).classList.contains('text-(--text-primary)')).toBe(true);
+    expect(cellOf(name.container).classList.contains('text-gray-10')).toBe(true);
 
     cleanup();
 
     const description = render(<DataListDescriptionCell>a description</DataListDescriptionCell>);
-    expect(cellOf(description.container).classList.contains('text-(--text-secondary)')).toBe(true);
+    expect(cellOf(description.container).classList.contains('text-gray-9')).toBe(true);
   });
 
   it('keep a caller class alongside their own', () => {
     const { container } = render(<DataListNameCell className="my-own-class">a name</DataListNameCell>);
 
     expect(cellOf(container).classList.contains('my-own-class')).toBe(true);
-    expect(cellOf(container).classList.contains('text-(--text-primary)')).toBe(true);
+    expect(cellOf(container).classList.contains('text-gray-10')).toBe(true);
   });
 });
 
@@ -246,13 +246,13 @@ describe('DataListNumberCell', () => {
   it('stands out only when highlighted', () => {
     const { container } = render(<DataListNumberCell>1,200</DataListNumberCell>);
     expect(cellOf(container).classList.contains('font-semibold')).toBe(false);
-    expect(cellOf(container).classList.contains('text-(--text-secondary)')).toBe(true);
+    expect(cellOf(container).classList.contains('text-gray-9')).toBe(true);
 
     cleanup();
 
     const highlighted = render(<DataListNumberCell highlight>1,200</DataListNumberCell>);
     expect(cellOf(highlighted.container).classList.contains('font-semibold')).toBe(true);
-    expect(cellOf(highlighted.container).classList.contains('text-(--text-primary)')).toBe(true);
+    expect(cellOf(highlighted.container).classList.contains('text-gray-10')).toBe(true);
   });
 });
 

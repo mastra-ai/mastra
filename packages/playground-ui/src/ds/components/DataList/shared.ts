@@ -43,7 +43,7 @@ export type DataListSticky = 'start';
 
 export const dataListStickyStartStyles = [
   'data-list-sticky-start sticky left-0 z-10 isolate self-stretch overflow-visible',
-  'after:absolute after:-right-4 after:top-1/2 after:-translate-y-1/2 after:h-4 after:w-px after:bg-(--border-default) after:content-[""] after:pointer-events-none',
+  'after:absolute after:-right-4 after:top-1/2 after:-translate-y-1/2 after:h-4 after:w-px after:bg-gray-alpha-5 after:content-[""] after:pointer-events-none',
 ] as const;
 
 /** Tone for a single row. `error` lays a subtle, theme-aware destructive tint

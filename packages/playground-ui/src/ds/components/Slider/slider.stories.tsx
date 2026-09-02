@@ -80,8 +80,8 @@ export const WithLabel: Story = {
     return (
       <div className="flex w-70 flex-col gap-2">
         <div className="flex justify-between">
-          <span className="text-sm text-(--text-primary)">Volume</span>
-          <span className="text-sm text-(--text-secondary) tabular-nums">{value[0]}%</span>
+          <span className="text-gray-10 text-sm">Volume</span>
+          <span className="text-gray-9 text-sm tabular-nums">{value[0]}%</span>
         </div>
         <Slider value={value} max={100} step={1} onValueChange={setValue} />
       </div>
@@ -95,8 +95,8 @@ export const PriceRange: Story = {
     return (
       <div className="flex w-70 flex-col gap-2">
         <div className="flex justify-between">
-          <span className="text-sm text-(--text-primary)">Price range</span>
-          <span className="text-sm text-(--text-secondary) tabular-nums">
+          <span className="text-gray-10 text-sm">Price range</span>
+          <span className="text-gray-9 text-sm tabular-nums">
             ${value[0]} – ${value[1]}
           </span>
         </div>
@@ -120,19 +120,19 @@ export const States: Story = {
   render: () => (
     <div className="flex w-70 flex-col gap-6">
       <div className="flex flex-col gap-2">
-        <span className="text-sm text-(--text-primary)">Default</span>
+        <span className="text-gray-10 text-sm">Default</span>
         <Slider defaultValue={[40]} max={100} step={1} />
       </div>
       <div className="flex flex-col gap-2">
-        <span className="text-sm text-(--text-primary)">Range</span>
+        <span className="text-gray-10 text-sm">Range</span>
         <Slider defaultValue={[20, 80]} max={100} step={1} />
       </div>
       <div className="flex flex-col gap-2">
-        <span className="text-sm text-(--text-primary)">Disabled</span>
+        <span className="text-gray-10 text-sm">Disabled</span>
         <Slider defaultValue={[50]} max={100} step={1} disabled />
       </div>
       <div className="flex flex-col gap-2">
-        <span className="text-sm text-(--text-primary)">Disabled range</span>
+        <span className="text-gray-10 text-sm">Disabled range</span>
         <Slider defaultValue={[20, 80]} max={100} step={1} disabled />
       </div>
     </div>

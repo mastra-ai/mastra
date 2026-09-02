@@ -27,7 +27,7 @@ const meta: Meta<typeof Command> = {
 export default meta;
 type Story = StoryObj<typeof Command>;
 
-const iconClassName = 'shrink-0 text-(--text-secondary)';
+const iconClassName = 'shrink-0 text-gray-9';
 
 const InlineResult = ({
   icon,
@@ -41,19 +41,19 @@ const InlineResult = ({
   value: string;
 }) => (
   <CommandItem value={value} className="h-auto items-start gap-3 px-2.5 py-2">
-    <span className="bg-surface-active mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-md text-(--text-primary)">
+    <span className="bg-gray-3 text-gray-10 mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-md">
       {icon}
     </span>
     <span className="flex min-w-0 flex-col gap-0.5">
-      <span className="text-ui-sm leading-ui-sm truncate font-medium text-(--text-primary)">{title}</span>
-      <span className="text-ui-xs leading-ui-xs truncate text-(--text-secondary)">{subtitle}</span>
+      <span className="text-ui-sm leading-ui-sm text-gray-10 truncate font-medium">{title}</span>
+      <span className="text-ui-xs leading-ui-xs text-gray-9 truncate">{subtitle}</span>
     </span>
   </CommandItem>
 );
 
 export const Default: Story = {
   render: () => (
-    <Command className="shadow-elevated w-100 rounded-lg border border-(--border-subtle)">
+    <Command className="border-gray-alpha-3 shadow-elevated w-100 rounded-lg border">
       <CommandInput placeholder="Type a command or search..." />
       <CommandList>
         <CommandEmpty>No results found.</CommandEmpty>
@@ -96,12 +96,12 @@ export const Default: Story = {
 
 export const InlineVercelStyle: Story = {
   render: () => (
-    <div className="bg-surface-secondary shadow-dialog w-sm overflow-hidden rounded-xl border border-(--border-subtle)">
-      <Command className="bg-surface-secondary rounded-none">
+    <div className="border-gray-alpha-3 bg-background-2 shadow-dialog w-sm overflow-hidden rounded-xl border">
+      <Command className="bg-background-2 rounded-none">
         <CommandInput
           placeholder="Find..."
           rightSlot={
-            <Kbd className="bg-surface-hover min-w-0 rounded border-(--border-subtle) px-1.5 py-0 text-[10px] leading-4 text-(--text-primary)">
+            <Kbd className="border-gray-alpha-3 bg-gray-2 text-gray-10 min-w-0 rounded px-1.5 py-0 text-[10px] leading-4">
               Esc
             </Kbd>
           }
@@ -177,9 +177,9 @@ export const WithDialog: Story = {
 
     return (
       <>
-        <p className="mb-4 text-sm text-(--text-secondary)">
+        <p className="text-gray-9 mb-4 text-sm">
           Press{' '}
-          <kbd className="bg-surface-hover pointer-events-none inline-flex h-5 items-center gap-1 rounded border border-(--border-subtle) px-1.5 font-mono text-[10px] font-medium text-(--text-primary) select-none">
+          <kbd className="border-gray-alpha-3 bg-gray-2 text-gray-10 pointer-events-none inline-flex h-5 items-center gap-1 rounded border px-1.5 font-mono text-[10px] font-medium select-none">
             <span className="text-xs">⌘</span>K
           </kbd>{' '}
           or click the button below
@@ -230,7 +230,7 @@ export const WithDialog: Story = {
 
 export const Empty: Story = {
   render: () => (
-    <Command className="shadow-elevated w-100 rounded-lg border border-(--border-subtle)">
+    <Command className="border-gray-alpha-3 shadow-elevated w-100 rounded-lg border">
       <CommandInput placeholder="Search..." />
       <CommandList>
         <CommandEmpty>No results found.</CommandEmpty>
@@ -241,7 +241,7 @@ export const Empty: Story = {
 
 export const WithShortcuts: Story = {
   render: () => (
-    <Command className="shadow-elevated w-100 rounded-lg border border-(--border-subtle)">
+    <Command className="border-gray-alpha-3 shadow-elevated w-100 rounded-lg border">
       <CommandInput placeholder="Type a command..." />
       <CommandList>
         <CommandEmpty>No results found.</CommandEmpty>
@@ -300,7 +300,7 @@ export const SearchOnly: Story = {
     const filteredItems = items.filter(item => item.toLowerCase().includes(search.toLowerCase()));
 
     return (
-      <Command className="shadow-elevated w-100 rounded-lg border border-(--border-subtle)">
+      <Command className="border-gray-alpha-3 shadow-elevated w-100 rounded-lg border">
         <CommandInput placeholder="Search fruits..." value={search} onValueChange={setSearch} />
         <CommandList>
           <CommandEmpty>No fruits found.</CommandEmpty>

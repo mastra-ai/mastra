@@ -16,7 +16,7 @@ export function TraceIntelligenceExplainer({ signalCatalog }: { signalCatalog: r
     <Tooltip>
       <TooltipTrigger
         aria-label="What is trace intelligence?"
-        className="text-neutral3 hover:text-neutral6 flex cursor-help items-center transition-colors"
+        className="text-gray-9 hover:text-gray-10 flex cursor-help items-center transition-colors"
         type="button"
       >
         <Icon size="sm">
@@ -31,7 +31,7 @@ export function TraceIntelligenceExplainer({ signalCatalog }: { signalCatalog: r
         </p>
         <ul className="space-y-1.5">
           {enabledSignals.map(signalName => (
-            <li key={signalName} className="text-neutral4">
+            <li key={signalName} className="text-gray-10">
               <span
                 className="font-mono text-[10px] font-semibold tracking-widest uppercase"
                 style={{ color: nodeColor(getSignalHue(signalName)) }}
@@ -42,7 +42,7 @@ export function TraceIntelligenceExplainer({ signalCatalog }: { signalCatalog: r
             </li>
           ))}
         </ul>
-        <p className="text-neutral4">
+        <p className="text-gray-10">
           Snapshots capture the themes at points in time, so the views show how they appear, grow, and fade.
         </p>
       </TooltipContent>

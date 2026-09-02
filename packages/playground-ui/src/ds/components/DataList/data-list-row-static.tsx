@@ -25,7 +25,7 @@ export const DataListRowStatic = forwardRef<HTMLDivElement, DataListRowStaticPro
             : dataListRowStaticStyles,
           // `!` so the selection fill wins over borderless table root styling
           // (higher-specificity descendant rules); same color in `default`.
-          featured && 'bg-surface-row-featured!',
+          featured && 'bg-gray-alpha-3!',
           dataListRowVariants({ variant }),
           className,
         )}

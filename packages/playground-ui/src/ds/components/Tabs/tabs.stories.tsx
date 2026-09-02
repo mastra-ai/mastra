@@ -24,13 +24,13 @@ export const Recommended: Story = {
         <Tab value="tab3">Settings</Tab>
       </TabList>
       <TabContent value="tab1">
-        <div className="p-4 text-(--text-primary)">Overview content goes here</div>
+        <div className="text-gray-10 p-4">Overview content goes here</div>
       </TabContent>
       <TabContent value="tab2">
-        <div className="p-4 text-(--text-primary)">Details content goes here</div>
+        <div className="text-gray-10 p-4">Details content goes here</div>
       </TabContent>
       <TabContent value="tab3">
-        <div className="p-4 text-(--text-primary)">Settings content goes here</div>
+        <div className="text-gray-10 p-4">Settings content goes here</div>
       </TabContent>
     </Tabs>
   ),
@@ -45,13 +45,13 @@ export const LegacyLineFallback: Story = {
         <Tab value="tab3">Settings</Tab>
       </TabList>
       <TabContent value="tab1">
-        <div className="p-4 text-(--text-primary)">Line fallback content goes here</div>
+        <div className="text-gray-10 p-4">Line fallback content goes here</div>
       </TabContent>
       <TabContent value="tab2">
-        <div className="p-4 text-(--text-primary)">Details content goes here</div>
+        <div className="text-gray-10 p-4">Details content goes here</div>
       </TabContent>
       <TabContent value="tab3">
-        <div className="p-4 text-(--text-primary)">Settings content goes here</div>
+        <div className="text-gray-10 p-4">Settings content goes here</div>
       </TabContent>
     </Tabs>
   ),
@@ -65,10 +65,10 @@ export const TwoTabs: Story = {
         <Tab value="output">Output</Tab>
       </TabList>
       <TabContent value="input">
-        <div className="p-4 text-(--text-primary)">Input content</div>
+        <div className="text-gray-10 p-4">Input content</div>
       </TabContent>
       <TabContent value="output">
-        <div className="p-4 text-(--text-primary)">Output content</div>
+        <div className="text-gray-10 p-4">Output content</div>
       </TabContent>
     </Tabs>
   ),
@@ -85,19 +85,19 @@ export const ManyTabs: Story = {
         <Tab value="tab5">Advanced Settings</Tab>
       </TabList>
       <TabContent value="tab1">
-        <div className="p-4 text-(--text-primary)">Content 1</div>
+        <div className="text-gray-10 p-4">Content 1</div>
       </TabContent>
       <TabContent value="tab2">
-        <div className="p-4 text-(--text-primary)">Content 2</div>
+        <div className="text-gray-10 p-4">Content 2</div>
       </TabContent>
       <TabContent value="tab3">
-        <div className="p-4 text-(--text-primary)">Content 3</div>
+        <div className="text-gray-10 p-4">Content 3</div>
       </TabContent>
       <TabContent value="tab4">
-        <div className="p-4 text-(--text-primary)">Content 4</div>
+        <div className="text-gray-10 p-4">Content 4</div>
       </TabContent>
       <TabContent value="tab5">
-        <div className="p-4 text-(--text-primary)">Content 5</div>
+        <div className="text-gray-10 p-4">Content 5</div>
       </TabContent>
     </Tabs>
   ),
@@ -112,13 +112,13 @@ export const PillVariant: Story = {
         <Tab value="account">Account</Tab>
       </TabList>
       <TabContent value="overview">
-        <div className="p-4 text-(--text-primary)">Overview content</div>
+        <div className="text-gray-10 p-4">Overview content</div>
       </TabContent>
       <TabContent value="projects">
-        <div className="p-4 text-(--text-primary)">Projects content</div>
+        <div className="text-gray-10 p-4">Projects content</div>
       </TabContent>
       <TabContent value="account">
-        <div className="p-4 text-(--text-primary)">Account content</div>
+        <div className="text-gray-10 p-4">Account content</div>
       </TabContent>
     </Tabs>
   ),
@@ -133,13 +133,13 @@ export const PillGhostVariant: Story = {
         <Tab value="account">Account</Tab>
       </TabList>
       <TabContent value="overview">
-        <div className="p-4 text-(--text-primary)">Overview content</div>
+        <div className="text-gray-10 p-4">Overview content</div>
       </TabContent>
       <TabContent value="projects">
-        <div className="p-4 text-(--text-primary)">Projects content</div>
+        <div className="text-gray-10 p-4">Projects content</div>
       </TabContent>
       <TabContent value="account">
-        <div className="p-4 text-(--text-primary)">Account content</div>
+        <div className="text-gray-10 p-4">Account content</div>
       </TabContent>
     </Tabs>
   ),
@@ -155,13 +155,13 @@ export const CustomIndicatorColor: Story = {
           <Tab value="tab3">Settings</Tab>
         </TabList>
         <TabContent value="tab1">
-          <div className="p-4 text-(--text-primary)">Line variant with accent indicator</div>
+          <div className="text-gray-10 p-4">Line variant with accent indicator</div>
         </TabContent>
         <TabContent value="tab2">
-          <div className="p-4 text-(--text-primary)">Details content</div>
+          <div className="text-gray-10 p-4">Details content</div>
         </TabContent>
         <TabContent value="tab3">
-          <div className="p-4 text-(--text-primary)">Settings content</div>
+          <div className="text-gray-10 p-4">Settings content</div>
         </TabContent>
       </Tabs>
 
@@ -172,13 +172,13 @@ export const CustomIndicatorColor: Story = {
           <Tab value="account">Account</Tab>
         </TabList>
         <TabContent value="overview">
-          <div className="p-4 text-(--text-primary)">Pill variant with accent indicator</div>
+          <div className="text-gray-10 p-4">Pill variant with accent indicator</div>
         </TabContent>
         <TabContent value="projects">
-          <div className="p-4 text-(--text-primary)">Projects content</div>
+          <div className="text-gray-10 p-4">Projects content</div>
         </TabContent>
         <TabContent value="account">
-          <div className="p-4 text-(--text-primary)">Account content</div>
+          <div className="text-gray-10 p-4">Account content</div>
         </TabContent>
       </Tabs>
     </div>
@@ -200,13 +200,13 @@ export const WithClosableTabs: Story = {
         </Tab>
       </TabList>
       <TabContent value="file1">
-        <div className="p-4 text-(--text-primary)">index.ts content</div>
+        <div className="text-gray-10 p-4">index.ts content</div>
       </TabContent>
       <TabContent value="file2">
-        <div className="p-4 text-(--text-primary)">utils.ts content</div>
+        <div className="text-gray-10 p-4">utils.ts content</div>
       </TabContent>
       <TabContent value="file3">
-        <div className="p-4 text-(--text-primary)">types.ts content</div>
+        <div className="text-gray-10 p-4">types.ts content</div>
       </TabContent>
     </Tabs>
   ),

@@ -194,7 +194,7 @@ export function MainSidebarRoot({ children, className }: MainSidebarRootProps) {
       <Drawer side="left" open={openMobile} onOpenChange={setOpenMobile}>
         <DrawerContent
           className={cn(
-            'w-3/4 max-w-(--sidebar-width-mobile) overflow-hidden rounded-none border-0 bg-surface-secondary shadow-xl',
+            'w-3/4 max-w-(--sidebar-width-mobile) overflow-hidden rounded-none border-0 bg-background-2 shadow-xl',
             className,
           )}
         >

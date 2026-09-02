@@ -18,15 +18,15 @@ import { Tab, TabContent, TabList, Tabs } from '@/ds/components/Tabs';
 function buildDialogTitle(sectionTitle: string, icon: ReactNode, span: { spanId: string; traceId: string }) {
   return (
     <>
-      <span className="flex items-center gap-1.5 tracking-widest text-(--text-secondary) uppercase [&>svg]:size-3.5">
+      <span className="text-gray-9 flex items-center gap-1.5 tracking-widest uppercase [&>svg]:size-3.5">
         {icon}
         {sectionTitle}
       </span>
       <span>
-        › Span <b className="text-(--text-secondary)">#{span.spanId}</b>
+        › Span <b className="text-gray-9">#{span.spanId}</b>
       </span>
       <span>
-        › Trace <b className="text-(--text-secondary)">#{span.traceId}</b>
+        › Trace <b className="text-gray-9">#{span.traceId}</b>
       </span>
     </>
   );

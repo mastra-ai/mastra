@@ -34,16 +34,16 @@ export function MainSidebarNavHeader({
         <header
           {...props}
           className={cn('max-w-full min-w-0 truncate pl-3 text-ui-sm font-medium', {
-            'text-(--text-primary)': isActive,
-            'text-(--text-secondary)/70': !isActive,
+            'text-gray-10': isActive,
+            'text-gray-9/70': !isActive,
           })}
         >
           {href ? (
             <Link
               href={href}
               className={cn('block min-w-0 truncate transition-colors duration-normal', {
-                'hover:text-(--text-primary)': !isActive,
-                'text-(--text-primary)': isActive,
+                'hover:text-gray-10': !isActive,
+                'text-gray-10': isActive,
               })}
             >
               {children}
@@ -59,7 +59,7 @@ export function MainSidebarNavHeader({
           <VisuallyHidden asChild>
             <header {...props}>{children}</header>
           </VisuallyHidden>
-          <div aria-hidden="true" className="mx-3 h-px flex-1 bg-(--border-subtle)" />
+          <div aria-hidden="true" className="bg-gray-alpha-3 mx-3 h-px flex-1" />
         </>
       )}
     </div>

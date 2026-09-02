@@ -13,9 +13,9 @@ import { cn } from '@/lib/utils';
 
 const inputVariants = cva(
   cn(
-    'flex w-full border bg-transparent text-(--text-primary)',
+    'flex w-full border bg-transparent text-gray-10',
     'transition-all duration-normal ease-out-custom',
-    'placeholder:text-(--text-secondary) placeholder:transition-opacity placeholder:duration-normal',
+    'placeholder:text-gray-9 placeholder:transition-opacity placeholder:duration-normal',
     'focus:placeholder:opacity-70',
     // type="number": hide native browser spinner arrows (they clip the pill).
     // For incrementable numeric inputs, compose <InputGroup> with +/- buttons
@@ -62,7 +62,7 @@ const Input = React.forwardRef<HTMLInputElement, InputProps>(
     return (
       <input
         type={type}
-        className={cn(inputVariants({ variant, size }), error && 'border-error focus-visible:border-error', className)}
+        className={cn(inputVariants({ variant, size }), error && 'border-red-9 focus-visible:border-red-9', className)}
         data-testid={testId}
         ref={ref}
         aria-invalid={error}

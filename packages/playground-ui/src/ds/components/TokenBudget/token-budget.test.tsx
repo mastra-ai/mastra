@@ -31,9 +31,9 @@ describe('TokenBudget', () => {
   });
 
   it.each([
-    ['messages', 'text-info'],
+    ['messages', 'text-blue-9'],
     ['memory', 'text-purple-9'],
-    ['warning', 'text-warning'],
+    ['warning', 'text-orange-9'],
   ] as const)('colours a %s budget with its own tone', (tone, expected) => {
     render(<TokenBudget label="Message window" threshold={30_000} tokens={1} tone={tone} />);
 
@@ -43,7 +43,7 @@ describe('TokenBudget', () => {
   it('reads as a messages budget unless told otherwise', () => {
     render(<TokenBudget label="Message window" threshold={30_000} tokens={1} />);
 
-    expect(screen.getByRole('meter', { name: 'Message window' }).className).toContain('text-info');
+    expect(screen.getByRole('meter', { name: 'Message window' }).className).toContain('text-blue-9');
   });
 
   it('reports a value the meter can actually hold', () => {

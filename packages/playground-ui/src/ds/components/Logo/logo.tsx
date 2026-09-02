@@ -51,7 +51,7 @@ function Logo({ className, size = 'md', animateOnHover = false, 'aria-label': ar
       onMouseEnter={handleMouseEnter}
       onAnimationEnd={handleAnimationEnd}
       className={cn(
-        'logo inline-block text-(--text-primary)',
+        'logo inline-block text-gray-10',
         sizeClasses[size],
         animateOnHover && playing && 'logo-animate-on-hover',
         className,

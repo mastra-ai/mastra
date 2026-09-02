@@ -169,13 +169,13 @@ export function PropertyFilterCreator({
               <button
                 type="button"
                 aria-label="Back to properties"
-                className="text-(--text-secondary) transition-colors hover:text-(--text-primary)"
+                className="text-gray-9 hover:text-gray-10 transition-colors"
                 onClick={reset}
               >
                 <ArrowLeftIcon className="size-4" />
               </button>
-              <FilterIcon className="size-4 shrink-0 text-(--text-secondary)" />
-              <span className="text-ui-sm text-(--text-secondary)">{`${selectedField.label} · is`}</span>
+              <FilterIcon className="text-gray-9 size-4 shrink-0" />
+              <span className="text-ui-sm text-gray-9">{`${selectedField.label} · is`}</span>
             </div>
           )}
 
@@ -224,10 +224,10 @@ export function PropertyFilterCreator({
                       data-filter-item=""
                       className={cn(
                         'group flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-ui-md transition-colors',
-                        'focus:bg-surface-hover focus:text-(--text-primary) focus:outline-none',
+                        'focus:bg-surface-hover focus:text-gray-10 focus:outline-none',
                         used
-                          ? 'cursor-not-allowed text-(--text-secondary) opacity-70'
-                          : 'text-(--text-primary) hover:bg-surface-hover hover:text-(--text-primary)',
+                          ? 'cursor-not-allowed text-gray-9 opacity-70'
+                          : 'text-gray-10 hover:bg-surface-hover hover:text-gray-10',
                       )}
                       disabled={used}
                       onClick={() => {
@@ -244,15 +244,15 @@ export function PropertyFilterCreator({
                     >
                       <span className="truncate">{f.label}</span>
                       {used ? (
-                        <span className="ml-auto text-(--text-secondary)">In use</span>
+                        <span className="text-gray-9 ml-auto">In use</span>
                       ) : (
-                        <PlusIcon className="ml-auto size-4 text-(--text-secondary) opacity-0 transition-opacity group-hover:opacity-100 group-focus:opacity-100" />
+                        <PlusIcon className="text-gray-9 ml-auto size-4 opacity-0 transition-opacity group-hover:opacity-100 group-focus:opacity-100" />
                       )}
                     </button>
                   );
                 })
               ) : (
-                <div className="text-ui-sm px-2 py-1.5 text-(--text-secondary)">No matching property.</div>
+                <div className="text-ui-sm text-gray-9 px-2 py-1.5">No matching property.</div>
               )}
             </div>
           )}
@@ -273,7 +273,7 @@ export function PropertyFilterCreator({
             />
           )}
 
-          {error && <div className="text-ui-sm text-error">{error}</div>}
+          {error && <div className="text-ui-sm text-red-9">{error}</div>}
 
           {selectedField && (
             <div className="flex items-center justify-end gap-2">
@@ -326,8 +326,8 @@ function PickMultiMenuItem({ field, tokens, onChange, open, onToggle, onClose }:
           role="menuitem"
           data-filter-item=""
           className={cn(
-            'flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-ui-md text-(--text-primary) transition-colors hover:bg-surface-hover hover:text-(--text-primary)',
-            'focus:bg-surface-hover focus:text-(--text-primary) focus:outline-none',
+            'flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-ui-md text-gray-10 transition-colors hover:bg-surface-hover hover:text-gray-10',
+            'focus:bg-surface-hover focus:text-gray-10 focus:outline-none',
           )}
           onKeyDown={e => {
             if (e.key !== 'ArrowRight' && e.key !== 'ArrowLeft') return;
@@ -341,9 +341,9 @@ function PickMultiMenuItem({ field, tokens, onChange, open, onToggle, onClose }:
             });
           }}
         >
-          {open && <ChevronRightIcon className="size-4 shrink-0 text-(--text-secondary)" />}
+          {open && <ChevronRightIcon className="text-gray-9 size-4 shrink-0" />}
           <span className="truncate">{field.label}</span>
-          {!open && <ChevronRightIcon className="ml-auto size-4 shrink-0 text-(--text-secondary)" />}
+          {!open && <ChevronRightIcon className="text-gray-9 ml-auto size-4 shrink-0" />}
         </button>
       </PopoverTrigger>
       <PopoverContent

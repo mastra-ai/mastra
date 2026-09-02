@@ -86,7 +86,7 @@ describe('ToolCall', () => {
     );
 
     const content = document.querySelector<HTMLDivElement>('.body-class');
-    expect(content?.className).toContain('before:bg-(--border-subtle)');
+    expect(content?.className).toContain('before:bg-gray-alpha-3');
     expect(content?.textContent).toBe('Command output');
   });
 
@@ -169,7 +169,7 @@ describe('ToolCall', () => {
 
     expect(screen.getByRole('group', { name: 'Tool: custom' }).getAttribute('data-status')).toBe('idle');
     expect(screen.getByTestId('spacer').className).toContain('min-w-2 flex-1');
-    expect(screen.getByTestId('spacer').className).toContain('bg-(--border-subtle)');
+    expect(screen.getByTestId('spacer').className).toContain('bg-gray-alpha-3');
     expect(screen.getByTestId('custom-disclosure').className).toContain('justify-center');
     expect(screen.getByText('Toggle').className).toContain(
       'text-icon3 flex shrink-0 items-center opacity-0 transition duration-150',

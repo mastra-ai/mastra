@@ -10,10 +10,10 @@ export function MainHeaderTitle({ children, isLoading, size = 'default' }: MainH
   return (
     <h1
       className={cn(
-        'flex items-center gap-2 text-xl font-normal text-(--text-primary)',
+        'flex items-center gap-2 text-xl font-normal text-gray-10',
         '[&>svg]:size-[1.25em] [&>svg]:opacity-50',
         {
-          'bg-surface-hover w-60 max-w-[50%] rounded-md animate-pulse': isLoading,
+          'bg-gray-2 w-60 max-w-[50%] rounded-md animate-pulse': isLoading,
           'text-md': size === 'smaller',
         },
       )}

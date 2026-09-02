@@ -55,7 +55,7 @@ const Slider = ({
         >
           <SliderPrimitive.Indicator
             className={cn(
-              'bg-surface-contrast select-none',
+              'bg-gray-10 select-none',
               'data-[orientation=horizontal]:h-full',
               'data-[orientation=vertical]:w-full',
             )}
@@ -66,7 +66,7 @@ const Slider = ({
             key={index}
             index={index}
             className={cn(
-              'relative block h-5 w-2.5 shrink-0 rounded-full border-2 border-surface-contrast bg-surface-hover outline-hidden select-none',
+              'relative block h-5 w-2.5 shrink-0 rounded-full border-2 border-gray-10 bg-gray-2 outline-hidden select-none',
               'after:absolute after:-inset-2 after:content-[""]',
               'transition-shadow duration-normal',
               'hover:ring-2 hover:ring-gray-alpha-6',

@@ -19,13 +19,13 @@ const diffOverrides = EditorView.theme({
   },
   '&.cm-editor .cm-changedText': {
     backgroundImage: 'none',
-    backgroundColor: 'var(--fill-error)',
+    backgroundColor: 'var(--red-1)',
     padding: '1px 5px',
     display: 'inline-block',
     borderRadius: '4px',
   },
   '&.cm-editor .cm-changedText, &.cm-editor .cm-changedText *': {
-    color: 'var(--color-error)',
+    color: 'var(--red-9)',
   },
   '&.cm-editor .cm-line': {
     lineHeight: '1.5',
@@ -51,7 +51,7 @@ function buildDiffDarkTheme(): Extension {
       fontSize: '0.8125rem',
       lineHighlight: 'transparent',
       gutterBackground: 'transparent',
-      gutterForeground: 'var(--text-secondary)',
+      gutterForeground: 'var(--gray-9)',
       background: 'transparent',
     },
     styles: [{ tag: [t.className, t.propertyName] }],
@@ -62,7 +62,7 @@ function buildDiffLightTheme(): Extension {
   const editorTheme = EditorView.theme({
     '&': {
       backgroundColor: 'transparent',
-      color: 'var(--text-primary)',
+      color: 'var(--gray-10)',
       fontSize: '0.8125rem',
     },
     '&.cm-editor .cm-scroller': {
@@ -70,11 +70,11 @@ function buildDiffLightTheme(): Extension {
     },
     '.cm-gutters': {
       backgroundColor: 'transparent',
-      color: 'var(--text-secondary)',
+      color: 'var(--gray-9)',
       borderRight: 'none',
     },
     '.cm-content': {
-      color: 'var(--text-primary)',
+      color: 'var(--gray-10)',
     },
     '.cm-activeLine': {
       backgroundColor: 'transparent',
@@ -85,7 +85,7 @@ function buildDiffLightTheme(): Extension {
   });
 
   const highlightStyle = HighlightStyle.define([
-    { tag: [t.comment, t.bracket], color: 'var(--text-secondary)' },
+    { tag: [t.comment, t.bracket], color: 'var(--gray-9)' },
     { tag: [t.string, t.meta, t.regexp], color: 'var(--green-9)' },
     { tag: [t.atom, t.bool, t.special(t.variableName)], color: 'var(--orange-9)' },
     { tag: [t.keyword, t.operator, t.tagName], color: 'var(--red-9)' },
@@ -139,8 +139,8 @@ export function CodeDiff({ codeA, codeB }: CodeDiffProps) {
   }, [codeA, codeB, theme]);
 
   return (
-    <div className="bg-surface-raised relative overflow-auto rounded-xl border border-(--border-subtle)">
-      <div className="absolute top-0 left-1/2 z-10 h-full w-px bg-(--border-subtle)" />
+    <div className="border-gray-alpha-3 bg-gray-1 relative overflow-auto rounded-xl border">
+      <div className="bg-gray-alpha-3 absolute top-0 left-1/2 z-10 h-full w-px" />
       <div
         ref={containerRef}
         className="[&_.cm-editor]:bg-transparent [&_.cm-editor]:p-6 [&_.cm-gutters]:bg-transparent [&_.cm-mergeViewEditor]:flex-1"

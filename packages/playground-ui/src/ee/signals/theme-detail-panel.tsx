@@ -94,7 +94,7 @@ export function ThemeDetailPanel({
       variant="floating"
     >
       <DrawerContent>
-        <DrawerHeader className="border-b border-(--border-subtle)">
+        <DrawerHeader className="border-gray-alpha-3 border-b">
           {signalName !== undefined && (
             <span
               className="font-mono text-xs font-semibold tracking-widest"
@@ -123,29 +123,24 @@ export function ThemeDetailPanel({
           )}
           {insightTraceId === undefined && (
             <>
-              {detailQuery.isPending && <p className="text-sm text-(--text-secondary)">Loading theme details…</p>}
-              {detailQuery.isError && <p className="text-error text-sm">Unable to load theme details.</p>}
+              {detailQuery.isPending && <p className="text-gray-9 text-sm">Loading theme details…</p>}
+              {detailQuery.isError && <p className="text-red-9 text-sm">Unable to load theme details.</p>}
               {detailQuery.data && !detailQuery.data.theme && (
                 <section>
-                  <h2 className="text-sm font-semibold text-(--text-primary)">Not present in this snapshot</h2>
-                  <p className="mt-2 text-sm text-(--text-secondary)">
-                    This theme has no data in the selected snapshot.
-                  </p>
+                  <h2 className="text-gray-10 text-sm font-semibold">Not present in this snapshot</h2>
+                  <p className="text-gray-9 mt-2 text-sm">This theme has no data in the selected snapshot.</p>
                 </section>
               )}
               {detailQuery.data?.theme && (
                 <>
                   <section aria-labelledby="theme-summary-heading">
-                    <h2
-                      id="theme-summary-heading"
-                      className="font-mono text-xs tracking-wider text-(--text-secondary) uppercase"
-                    >
+                    <h2 id="theme-summary-heading" className="text-gray-9 font-mono text-xs tracking-wider uppercase">
                       Summary
                     </h2>
-                    <p className="mt-3 text-sm text-(--text-primary)">
+                    <p className="text-gray-10 mt-3 text-sm">
                       {detailQuery.data.theme.description ?? 'No description available.'}
                     </p>
-                    <p className="mt-3 font-mono text-sm text-(--text-primary) tabular-nums">
+                    <p className="text-gray-10 mt-3 font-mono text-sm tabular-nums">
                       {shareSentence(
                         filteredStats?.traceCount ?? detailQuery.data.theme.traceCount,
                         filteredStats?.stageShare ?? detailQuery.data.theme.coverage,
@@ -154,20 +149,15 @@ export function ThemeDetailPanel({
                   </section>
 
                   <section aria-labelledby="theme-examples-heading">
-                    <h2
-                      id="theme-examples-heading"
-                      className="font-mono text-xs tracking-wider text-(--text-secondary) uppercase"
-                    >
+                    <h2 id="theme-examples-heading" className="text-gray-9 font-mono text-xs tracking-wider uppercase">
                       Examples
                     </h2>
-                    {examplesQuery.isPending && (
-                      <p className="mt-3 text-sm text-(--text-secondary)">Loading examples…</p>
-                    )}
-                    {examplesQuery.isError && <p className="text-error mt-3 text-sm">Unable to load examples.</p>}
+                    {examplesQuery.isPending && <p className="text-gray-9 mt-3 text-sm">Loading examples…</p>}
+                    {examplesQuery.isError && <p className="text-red-9 mt-3 text-sm">Unable to load examples.</p>}
                     {examplesQuery.data && (
                       <>
                         {examplesQuery.data.examples.length === 0 ? (
-                          <p className="mt-3 text-sm text-(--text-secondary)">No examples in this snapshot.</p>
+                          <p className="text-gray-9 mt-3 text-sm">No examples in this snapshot.</p>
                         ) : (
                           <ul className="mt-3 space-y-3">
                             {examplesQuery.data.examples.map(example => (
@@ -175,7 +165,7 @@ export function ThemeDetailPanel({
                                 <button
                                   type="button"
                                   aria-label={`View trace insight for ${example.signalText}`}
-                                  className="bg-surface-raised hover:bg-surface-active w-full cursor-pointer rounded-md border border-(--border-subtle) p-3 text-left text-sm text-(--text-primary)"
+                                  className="border-gray-alpha-3 bg-gray-1 text-gray-10 hover:bg-gray-2 w-full cursor-pointer rounded-md border p-3 text-left text-sm"
                                   onClick={() => setInsightTraceId(example.traceId)}
                                 >
                                   {example.signalText}
@@ -195,17 +185,14 @@ export function ThemeDetailPanel({
 
                   {snapshotTotal > 1 && (
                     <section aria-labelledby="theme-trend-heading">
-                      <h2
-                        id="theme-trend-heading"
-                        className="font-mono text-xs tracking-wider text-(--text-secondary) uppercase"
-                      >
+                      <h2 id="theme-trend-heading" className="text-gray-9 font-mono text-xs tracking-wider uppercase">
                         Trend
                       </h2>
-                      {historyQuery.isPending && <p className="mt-3 text-sm text-(--text-secondary)">Loading trend…</p>}
-                      {historyQuery.isError && <p className="text-error mt-3 text-sm">Unable to load the trend.</p>}
+                      {historyQuery.isPending && <p className="text-gray-9 mt-3 text-sm">Loading trend…</p>}
+                      {historyQuery.isError && <p className="text-red-9 mt-3 text-sm">Unable to load the trend.</p>}
                       {oldestHistoryPoint !== undefined && (
                         <>
-                          <p className="mt-3 text-sm text-(--text-primary)">
+                          <p className="text-gray-10 mt-3 text-sm">
                             {/* A nextCursor means older points exist beyond the fetched window,
                                 so the oldest loaded point is a lower bound, not the true origin. */}
                             {historyQuery.data?.nextCursor

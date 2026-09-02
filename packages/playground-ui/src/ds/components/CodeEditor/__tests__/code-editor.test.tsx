@@ -197,14 +197,14 @@ describe('CodeEditor — passing its settings through', () => {
 
   it('takes the frame the caller asks for', () => {
     const { container } = render(<CodeEditor value="x" showCopyButton={false} />);
-    expect((container.firstElementChild as HTMLElement).classList.contains('border-(--border-subtle)')).toBe(true);
+    expect((container.firstElementChild as HTMLElement).classList.contains('border-gray-alpha-3')).toBe(true);
 
     cleanup();
 
     const embedded = render(<CodeEditor value="x" showCopyButton={false} variant="embedded" />);
     const root = embedded.container.firstElementChild as HTMLElement;
     expect(root.classList.contains('border-none')).toBe(true);
-    expect(root.classList.contains('border-(--border-subtle)')).toBe(false);
+    expect(root.classList.contains('border-gray-alpha-3')).toBe(false);
   });
 
   it('rebuilds its extensions when the language changes', () => {

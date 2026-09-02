@@ -23,7 +23,7 @@ const signalStyle = (label: string): CSSProperties => ({
 const PipelineConnector = () => (
   <div aria-hidden="true" className="relative hidden h-full items-center lg:flex">
     <div className="border-gray-alpha-3 w-full border-t border-dashed" />
-    <span className="signals-pipeline-connector bg-positive1 absolute left-1/2 size-2.5 -translate-x-1/2 rounded-full shadow-[0_0_12px_currentColor]" />
+    <span className="signals-pipeline-connector bg-green-9 absolute left-1/2 size-2.5 -translate-x-1/2 rounded-full shadow-[0_0_12px_currentColor]" />
   </div>
 );
 
@@ -73,18 +73,18 @@ function ProgressSummary({ progress }: { progress: TraceIntelligenceProgress }) 
   return (
     <dl className="mt-4 grid gap-2 sm:grid-cols-3">
       <div className="border-gray-alpha-3 bg-gray-1 rounded-md border px-3 py-2">
-        <dt className="text-neutral3 text-xs">Traces analyzed</dt>
-        <dd className="text-neutral6 mt-1 text-lg font-semibold">{formatNumber(progress.traceCount)}</dd>
+        <dt className="text-gray-9 text-xs">Traces analyzed</dt>
+        <dd className="text-gray-10 mt-1 text-lg font-semibold">{formatNumber(progress.traceCount)}</dd>
       </div>
       <div className="border-gray-alpha-3 bg-gray-1 rounded-md border px-3 py-2">
-        <dt className="text-neutral3 text-xs">Trace signal types ready</dt>
-        <dd className="text-neutral6 mt-1 text-lg font-semibold">
+        <dt className="text-gray-9 text-xs">Trace signal types ready</dt>
+        <dd className="text-gray-10 mt-1 text-lg font-semibold">
           {progress.signalCatalog ? readySignalCount : progress.availableSignals.length} of {enabledSignalCount}
         </dd>
       </div>
       <div className="border-gray-alpha-3 bg-gray-1 rounded-md border px-3 py-2">
-        <dt className="text-neutral3 text-xs">Status</dt>
-        <dd className="text-neutral6 mt-1 text-lg font-semibold capitalize">{progress.status}</dd>
+        <dt className="text-gray-9 text-xs">Status</dt>
+        <dd className="text-gray-10 mt-1 text-lg font-semibold capitalize">{progress.status}</dd>
       </div>
     </dl>
   );
@@ -105,14 +105,14 @@ function SignalProgressList({ progress }: { progress?: TraceIntelligenceProgress
         const label = signalLabel(catalog, signalName);
         const isReady = catalogEntry ? catalogEntry.status === 'ready' : progress.availableSignals.includes(signalName);
         return (
-          <li className="border-gray-alpha-3 bg-surface2 rounded-md border px-3 py-2" key={signalName}>
+          <li className="border-gray-alpha-3 bg-background-2 rounded-md border px-3 py-2" key={signalName}>
             <div className="flex items-center justify-between gap-2">
               <span className="text-sm font-semibold" style={signalStyle(signalName)}>
                 {label}
               </span>
-              <span className="text-neutral4 text-xs">{isReady ? 'Themes ready' : 'Processing'}</span>
+              <span className="text-gray-10 text-xs">{isReady ? 'Themes ready' : 'Processing'}</span>
             </div>
-            <p className="text-neutral3 mt-1 text-xs">
+            <p className="text-gray-9 mt-1 text-xs">
               {formatNumber(value.generated)} generated · {formatNumber(value.embedded)} embedded
             </p>
           </li>
@@ -135,13 +135,13 @@ export function PendingSignalProgress({
 
   return (
     <section
-      className="border-gray-alpha-3 bg-surface2 rounded-lg border p-4"
+      className="border-gray-alpha-3 bg-background-2 rounded-lg border p-4"
       aria-labelledby="pending-signals-heading"
     >
-      <h2 id="pending-signals-heading" className="text-neutral6 text-sm font-semibold">
+      <h2 id="pending-signals-heading" className="text-gray-10 text-sm font-semibold">
         Signals building themes
       </h2>
-      <p className="text-neutral3 mt-1 text-xs">
+      <p className="text-gray-9 mt-1 text-xs">
         Themes appear once enough new traces are analyzed, embedded, and clustered.
       </p>
       <ul aria-label="Pending trace signals" className="mt-3 grid gap-2 sm:grid-cols-2">
@@ -153,12 +153,12 @@ export function PendingSignalProgress({
                 <span className="text-sm font-semibold" style={signalStyle(signal.name)}>
                   {signalLabel(catalog, signal.name)}
                 </span>
-                <span className="text-neutral4 text-xs capitalize">{signal.status}</span>
+                <span className="text-gray-10 text-xs capitalize">{signal.status}</span>
               </div>
               {signalDescription(catalog, signal.name) ? (
-                <p className="text-neutral3 mt-1 text-xs">{signalDescription(catalog, signal.name)}</p>
+                <p className="text-gray-9 mt-1 text-xs">{signalDescription(catalog, signal.name)}</p>
               ) : null}
-              <p className="text-neutral3 mt-1 text-xs">
+              <p className="text-gray-9 mt-1 text-xs">
                 {formatNumber(value.generated)} generated · {formatNumber(value.embedded)} embedded
               </p>
             </li>
@@ -189,17 +189,17 @@ export const SignalsEmptyState = ({
   }));
 
   return (
-    <section className="bg-surface1 min-h-full w-full p-6 md:px-10 lg:px-12 xl:px-[4.375rem]">
+    <section className="bg-background-1 min-h-full w-full p-6 md:px-10 lg:px-12 xl:px-[4.375rem]">
       <div className="mx-auto w-full max-w-260">
         <header>
-          <p className="text-neutral4 flex items-center gap-2 font-mono text-xs tracking-wider uppercase">
-            <span aria-hidden="true" className="bg-accent1 size-2 rounded-full" />
+          <p className="text-gray-10 flex items-center gap-2 font-mono text-xs tracking-wider uppercase">
+            <span aria-hidden="true" className="bg-green-7 size-2 rounded-full" />
             Trace Intelligence
           </p>
-          <h1 className="text-header-xl text-neutral6 mt-2 font-medium tracking-tight">
+          <h1 className="text-header-xl text-gray-10 mt-2 font-medium tracking-tight">
             Understand what drives every agent interaction
           </h1>
-          <p className="text-neutral3 mt-2 max-w-180 text-sm leading-5">
+          <p className="text-gray-9 mt-2 max-w-180 text-sm leading-5">
             Trace Intelligence groups recurring goals, outcomes, behaviors, and sentiment across completed traces.
           </p>
         </header>
@@ -210,17 +210,17 @@ export const SignalsEmptyState = ({
           className="mt-14 grid gap-4 lg:grid-cols-[17.5rem_4.5rem_17.5rem_4.5rem_minmax(0,1fr)] lg:gap-0"
         >
           <div role="listitem" className="min-h-50 p-5">
-            <h2 className="text-neutral6 text-lg font-semibold">Traces</h2>
-            <p className="text-neutral3 mt-0.5 text-xs">Every agent interaction</p>
-            <p className="text-neutral3 mt-5 font-mono text-[0.6875rem] tracking-[0.18em] uppercase">Input</p>
+            <h2 className="text-gray-10 text-lg font-semibold">Traces</h2>
+            <p className="text-gray-9 mt-0.5 text-xs">Every agent interaction</p>
+            <p className="text-gray-9 mt-5 font-mono text-[0.6875rem] tracking-[0.18em] uppercase">Input</p>
             <div className="mt-2.5 space-y-2">
               {traceRows.map(([name, duration]) => (
                 <div
                   className="border-gray-alpha-3 bg-gray-1 text-ui-xs flex items-center justify-between rounded border px-3 py-1.5 font-mono"
                   key={name}
                 >
-                  <span className="text-neutral4">{name}</span>
-                  <span className="text-neutral3">{duration}</span>
+                  <span className="text-gray-10">{name}</span>
+                  <span className="text-gray-9">{duration}</span>
                 </div>
               ))}
             </div>
@@ -234,15 +234,15 @@ export const SignalsEmptyState = ({
             className="flex min-h-50 flex-col items-center p-5 text-center"
             elevation="elevated"
           >
-            <h2 className="text-neutral6 text-lg font-semibold">Trace Intelligence</h2>
-            <p className="text-neutral3 mt-0.5 text-xs">Finds recurring themes</p>
+            <h2 className="text-gray-10 text-lg font-semibold">Trace Intelligence</h2>
+            <p className="text-gray-9 mt-0.5 text-xs">Finds recurring themes</p>
             <div aria-hidden="true" className="relative mt-5 flex size-20 items-center justify-center">
-              <span className="signals-engine-pulse border-positive1/15 absolute size-20 rounded-full border" />
-              <span className="border-positive1/25 absolute size-14 rounded-full border" />
-              <span className="border-positive1/40 bg-positive1/5 absolute size-9 rounded-full border shadow-[0_0_24px_var(--color-positive1)]" />
-              <CpuIcon className="text-positive1 relative size-4" />
+              <span className="signals-engine-pulse border-green-9/15 absolute size-20 rounded-full border" />
+              <span className="border-green-9/25 absolute size-14 rounded-full border" />
+              <span className="border-green-9/40 bg-green-9/5 absolute size-9 rounded-full border shadow-[0_0_24px_var(--green-9)]" />
+              <CpuIcon className="text-green-9 relative size-4" />
             </div>
-            <p className="text-ui-xs text-neutral3 mt-3 max-w-40 leading-4">
+            <p className="text-ui-xs text-gray-9 mt-3 max-w-40 leading-4">
               Clusters similar trace signals into themes for each dimension
             </p>
           </Card>
@@ -250,9 +250,9 @@ export const SignalsEmptyState = ({
           <PipelineConnector />
 
           <div role="listitem" className="min-h-50 p-5">
-            <h2 className="text-neutral6 text-lg font-semibold">Theme analysis</h2>
-            <p className="text-neutral3 mt-0.5 text-xs">How recurring patterns connect</p>
-            <p className="text-neutral3 mt-5 font-mono text-[0.6875rem] tracking-[0.18em] uppercase">Output</p>
+            <h2 className="text-gray-10 text-lg font-semibold">Theme analysis</h2>
+            <p className="text-gray-9 mt-0.5 text-xs">How recurring patterns connect</p>
+            <p className="text-gray-9 mt-5 font-mono text-[0.6875rem] tracking-[0.18em] uppercase">Output</p>
             <div className="mt-3 flex flex-wrap gap-2">
               {signalDefinitions.map(signal => (
                 <span
@@ -269,7 +269,7 @@ export const SignalsEmptyState = ({
         </div>
 
         <section className="mt-10" aria-labelledby="signal-definitions-heading">
-          <h2 id="signal-definitions-heading" className="text-neutral6 text-lg font-semibold">
+          <h2 id="signal-definitions-heading" className="text-gray-10 text-lg font-semibold">
             What each trace signal means
           </h2>
           <ul aria-label="Trace signal definitions" className="mt-4 grid gap-3 sm:grid-cols-2">
@@ -279,21 +279,21 @@ export const SignalsEmptyState = ({
                   {signal.label}
                 </h3>
                 {signal.description ? (
-                  <p className="text-neutral3 mt-1.5 text-xs leading-5">{signal.description}</p>
+                  <p className="text-gray-9 mt-1.5 text-xs leading-5">{signal.description}</p>
                 ) : null}
               </li>
             ))}
           </ul>
         </section>
 
-        <aside className="border-gray-alpha-3 bg-surface2 mt-9 rounded-md border px-5 py-4">
+        <aside className="border-gray-alpha-3 bg-background-2 mt-9 rounded-md border px-5 py-4">
           <div className="flex min-w-0 items-start gap-3">
             <span
               aria-hidden="true"
-              className="bg-warning1 mt-1.5 size-2 shrink-0 rounded-full shadow-[0_0_9px_currentColor]"
+              className="bg-orange-9 mt-1.5 size-2 shrink-0 rounded-full shadow-[0_0_9px_currentColor]"
             />
             <div className="min-w-0 flex-1">
-              <p className="text-neutral3 text-xs leading-5">
+              <p className="text-gray-9 text-xs leading-5">
                 <strong className="text-gray-10 font-semibold">{copy.title}</strong> {copy.body}
               </p>
               {progress ? <ProgressSummary progress={progress} /> : null}

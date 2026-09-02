@@ -6,7 +6,7 @@ import { cn } from '@/lib/utils';
 
 import './spinner.css';
 
-const spinnerVariants = cva('spinner inline-block text-(--text-primary)', {
+const spinnerVariants = cva('spinner inline-block text-gray-10', {
   variants: {
     size: {
       sm: 'size-4',

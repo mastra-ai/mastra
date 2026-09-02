@@ -20,7 +20,6 @@ import {
 } from './token-registry.mjs';
 
 const packageRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
-const cssPath = resolve(packageRoot, 'tokens.css');
 const themePath = resolve(packageRoot, 'theme.css');
 const tsPath = resolve(packageRoot, 'src/ds/tokens/color-variables.ts');
 const bordersPath = resolve(packageRoot, 'src/ds/tokens/borders.ts');
@@ -63,26 +62,7 @@ const foundationEntries = [
 ];
 
 const semanticEntries = Object.entries(semanticColors).map(([name, reference]) => [toKebab(name), reference]);
-const stateNames = new Set(['color-success', 'color-warning', 'color-error', 'color-info']);
-const utilityNames = new Set([
-  'surface-primary',
-  'surface-secondary',
-  'surface-raised',
-  'surface-hover',
-  'surface-active',
-  'surface-contrast',
-  'fill-success',
-  'fill-warning',
-  'fill-error',
-  'fill-info',
-  'fill-neutral',
-  'chart-1',
-  'chart-2',
-  'chart-3',
-  'chart-4',
-  'chart-5',
-  'chart-6',
-]);
+const referenceValue = reference => (reference.includes('(') ? reference : `var(--${reference})`);
 
 const rootLines = [
   ...foundationEntries.map(([name, pair]) => `  --${name}: ${cssValue(pair.dark)};`),
@@ -91,9 +71,7 @@ const rootLines = [
     .map(([name, value]) => `  --space-${name}: ${value};`),
 ];
 const lightLines = foundationEntries.map(([name, pair]) => `  --${name}: ${cssValue(pair.light)};`);
-const semanticRootLines = semanticEntries
-  .filter(([name]) => !stateNames.has(name))
-  .map(([name, reference]) => `  --${name}: var(--${reference});`);
+const semanticRootLines = semanticEntries.map(([name, reference]) => `  --${name}: ${referenceValue(reference)};`);
 const themeLines = [
   '  --spacing-*: initial;',
   ...Object.entries(spacing).map(([name, value]) => `  --spacing-${name.replace('.', '_')}: ${value};`),
@@ -102,11 +80,7 @@ const themeLines = [
   ...Object.entries(letterSpacing).map(([name, value]) => `  --tracking-${name}: ${value};`),
   ...Object.entries(radii).map(([name, value]) => `  --radius-${name}: ${value};`),
   ...foundationEntries.map(([name]) => `  --color-${name}: var(--${name});`),
-  ...semanticEntries.filter(([name]) => utilityNames.has(name)).map(([name]) => `  --color-${name}: var(--${name});`),
-  ...semanticEntries
-    .filter(([name]) => stateNames.has(name))
-    .map(([name, reference]) => `  --${name}: var(--${reference});`),
-  '  --color-focus: var(--focus);',
+  ...semanticEntries.map(([name]) => `  --color-${name}: var(--${name});`),
 ];
 
 const css = await format(
@@ -146,7 +120,9 @@ const updateTsExport = (source, exportName, values) => {
 
 const escapePattern = value => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 const currentTheme = await readFile(themePath, 'utf8');
-let theme = currentTheme;
+const themeBodyStart = currentTheme.indexOf('/*\n * Raw design tokens');
+if (themeBodyStart === -1) throw new Error('Missing theme.css body');
+let theme = `${css.trimEnd()}\n\n${currentTheme.slice(themeBodyStart)}`;
 for (const [name, reference] of Object.entries(legacyAliases)) {
   const pattern = new RegExp(`(^\\s*--${escapePattern(name)}:\\s*)[^;]+;`, 'gm');
   theme = theme.replace(pattern, `$1var(--${reference});`);
@@ -167,7 +143,6 @@ const spacings = updateTsExport(spacingsSource, 'Spacings', spacing);
 
 if (check) {
   await Promise.all([
-    verify(cssPath, css),
     verify(tsPath, ts),
     verify(themePath, theme),
     verify(bordersPath, borders),
@@ -176,7 +151,6 @@ if (check) {
   ]);
 } else {
   await Promise.all([
-    writeFile(cssPath, css),
     writeFile(tsPath, ts),
     writeFile(themePath, theme),
     writeFile(bordersPath, borders),

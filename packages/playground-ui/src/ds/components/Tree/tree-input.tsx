@@ -69,13 +69,13 @@ export const TreeInput = React.forwardRef<HTMLLIElement, TreeInputProps>(
         className={cn(
           'group flex h-7 min-w-0 items-center gap-1.5 rounded-sm px-1',
           transitions.colors,
-          'focus-within:bg-surface-hover focus-within:text-(--text-primary) focus-within:outline-hidden',
+          'focus-within:bg-surface-hover focus-within:text-gray-10 focus-within:outline-hidden',
           className,
         )}
         style={{ paddingLeft: depth * 12 + 18 }}
       >
         <span className="flex shrink-0 items-center [&>svg]:size-3.5">
-          <Icon className="text-(--text-secondary)" />
+          <Icon className="text-gray-9" />
         </span>
         <input
           ref={inputRef}
@@ -86,7 +86,7 @@ export const TreeInput = React.forwardRef<HTMLLIElement, TreeInputProps>(
           onKeyDown={handleKeyDown}
           onBlur={handleBlur}
           onFocus={handleFocus}
-          className="min-w-0 flex-1 border-none bg-transparent text-xs text-(--text-primary) outline-hidden placeholder:text-(--text-secondary)"
+          className="text-gray-10 placeholder:text-gray-9 min-w-0 flex-1 border-none bg-transparent text-xs outline-hidden"
         />
       </li>
     );

@@ -40,9 +40,9 @@ const Switch = React.forwardRef<HTMLButtonElement, SwitchProps>(
           'transition-colors duration-normal ease-out-custom motion-reduce:transition-none',
           'hover:bg-gray-alpha-5',
           'active:bg-gray-alpha-5',
-          'focus-visible:outline-1 focus-visible:outline-offset-2 focus-visible:outline-(--border-strong) focus-visible:outline-solid',
-          'data-[checked]:bg-surface-contrast',
-          'data-[checked]:hover:bg-surface-contrast',
+          'focus-visible:outline-1 focus-visible:outline-offset-2 focus-visible:outline-gray-6 focus-visible:outline-solid',
+          'data-[checked]:bg-gray-10',
+          'data-[checked]:hover:bg-gray-10',
           'data-[checked]:active:bg-gray-9',
           'data-[disabled]:cursor-not-allowed data-[disabled]:bg-gray-alpha-4 data-[disabled]:hover:bg-gray-alpha-4',
           'data-[disabled]:data-[checked]:bg-gray-alpha-6 data-[disabled]:data-[checked]:hover:bg-gray-alpha-6',
@@ -55,12 +55,12 @@ const Switch = React.forwardRef<HTMLButtonElement, SwitchProps>(
         <SwitchPrimitive.Thumb
           data-slot="switch-thumb"
           className={cn(
-            'switch-thumb-motion pointer-events-none relative block h-4 w-5 rounded-full bg-surface-contrast',
+            'switch-thumb-motion pointer-events-none relative block h-4 w-5 rounded-full bg-gray-10',
             'transition-[background-color,translate,width,transform] duration-normal ease-out-custom motion-reduce:transition-none',
             'group-active/switch:w-6 group-data-[disabled]/switch:w-5',
-            'data-[checked]:translate-x-3 data-[checked]:bg-surface-primary data-[unchecked]:translate-x-0',
+            'data-[checked]:translate-x-3 data-[checked]:bg-background-1 data-[unchecked]:translate-x-0',
             'group-active/switch:data-[checked]:translate-x-2',
-            'data-[disabled]:data-[checked]:bg-surface-primary/80 data-[disabled]:data-[unchecked]:bg-gray-alpha-7',
+            'data-[disabled]:data-[checked]:bg-background-1/80 data-[disabled]:data-[unchecked]:bg-gray-alpha-7',
           )}
         >
           {shouldRenderIcon ? <SwitchThumbIcon checkedIcon={onIcon} icon={singleIcon} uncheckedIcon={offIcon} /> : null}
@@ -81,7 +81,7 @@ function SwitchThumbIcon({
   uncheckedIcon?: React.ReactNode;
 }) {
   const iconClassName = cn(
-    'absolute inset-0 flex items-center justify-center text-(--text-on-contrast)',
+    'absolute inset-0 flex items-center justify-center text-background-1',
     'transition-[color,opacity] duration-normal ease-out-custom motion-reduce:transition-none',
     '[&_svg]:stroke-2.5 [&_svg]:size-2.5',
   );
@@ -91,7 +91,7 @@ function SwitchThumbIcon({
       <span
         aria-hidden
         data-slot="switch-thumb-icon"
-        className={cn(iconClassName, 'group-data-[checked]/switch:text-(--text-primary)')}
+        className={cn(iconClassName, 'group-data-[checked]/switch:text-gray-10')}
       >
         {icon}
       </span>
@@ -115,7 +115,7 @@ function SwitchThumbIcon({
           aria-hidden
           data-slot="switch-thumb-icon"
           data-switch-icon="checked"
-          className={cn(iconClassName, 'text-(--text-primary) opacity-0 group-data-[checked]/switch:opacity-100')}
+          className={cn(iconClassName, 'text-gray-10 opacity-0 group-data-[checked]/switch:opacity-100')}
         >
           {checkedIcon}
         </span>

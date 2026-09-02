@@ -27,8 +27,8 @@ export function EmptyState({
       )}
     >
       {iconSlot && <div className="mb-4">{iconSlot}</div>}
-      <HeadingTag className="text-ui-md font-medium text-(--text-primary)">{titleSlot}</HeadingTag>
-      {descriptionSlot && <p className="text-ui-sm mt-1.5 max-w-md text-(--text-secondary)">{descriptionSlot}</p>}
+      <HeadingTag className="text-ui-md text-gray-10 font-medium">{titleSlot}</HeadingTag>
+      {descriptionSlot && <p className="text-ui-sm text-gray-9 mt-1.5 max-w-md">{descriptionSlot}</p>}
       {actionSlot && <div className="mt-5">{actionSlot}</div>}
     </div>
   );

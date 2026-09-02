@@ -22,7 +22,7 @@ export const ThreadList = ({ children, 'aria-label': ariaLabel = 'Threads', embe
         aria-label={ariaLabel}
         className={cn(
           'h-full overflow-y-auto p-1',
-          !embedded && 'rounded-studio-panel border border-(--border-subtle)/50 bg-surface-raised',
+          !embedded && 'rounded-studio-panel border border-gray-alpha-3/50 bg-gray-1',
         )}
       >
         {children}
@@ -47,7 +47,7 @@ export const ThreadListNewItem = ({ as, href, to, children }: ThreadListNewItemP
 };
 
 export const ThreadListSeparator = () => (
-  <div role="separator" aria-orientation="horizontal" className="-mx-1 my-1 h-px bg-(--border-subtle)/40" />
+  <div role="separator" aria-orientation="horizontal" className="bg-gray-alpha-3/40 -mx-1 my-1 h-px" />
 );
 
 export interface ThreadListItemsProps {
@@ -94,7 +94,7 @@ export const ThreadListItem = ({
         className={cn(
           'h-auto! min-h-form-md w-full min-w-0 justify-start rounded-xl px-3 py-2 text-left',
           onDelete && 'pr-9',
-          isActive && 'bg-surface-hover text-(--text-primary)',
+          isActive && 'bg-gray-2 text-gray-10',
           className,
         )}
       >
@@ -122,7 +122,7 @@ export interface ThreadListEmptyProps {
 
 export const ThreadListEmpty = ({ children }: ThreadListEmptyProps) => {
   return (
-    <Txt as="p" variant="ui-sm" className="px-5 py-3 text-(--text-secondary)">
+    <Txt as="p" variant="ui-sm" className="text-gray-9 px-5 py-3">
       {children}
     </Txt>
   );

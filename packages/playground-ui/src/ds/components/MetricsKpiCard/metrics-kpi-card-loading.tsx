@@ -4,7 +4,7 @@ import { cn } from '@/lib/utils';
 export function MetricsKpiCardLoading({ className }: { className?: string }) {
   return (
     <span className={cn('text-sm', className)}>
-      <Spinner size="md" variant="pulse" className="text-(--text-disabled)" />
+      <Spinner size="md" variant="pulse" className="text-gray-6" />
     </span>
   );
 }

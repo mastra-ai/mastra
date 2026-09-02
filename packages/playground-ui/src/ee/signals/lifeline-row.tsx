@@ -57,15 +57,15 @@ export function LifelineRow({
   return (
     <li
       aria-label={`${row.label}: present in ${row.points.length} of ${snapshots.length} landmarks`}
-      className={`group hover:bg-surface-raised flex items-center gap-3 rounded-md transition-colors ${isPersistent ? '' : 'opacity-55 hover:opacity-100'}`}
+      className={`group hover:bg-gray-1 flex items-center gap-3 rounded-md transition-colors ${isPersistent ? '' : 'opacity-55 hover:opacity-100'}`}
     >
       <span
-        className="w-52 shrink-0 truncate text-right text-xs text-(--text-primary) group-hover:text-(--text-primary)"
+        className="text-gray-10 group-hover:text-gray-10 w-52 shrink-0 truncate text-right text-xs"
         title={row.label}
       >
         {row.label}
       </span>
-      <div className="relative mx-2 h-7 min-w-0 flex-1 border-b border-(--border-subtle)">
+      <div className="border-gray-alpha-3 relative mx-2 h-7 min-w-0 flex-1 border-b">
         {connectors.length > 0 || segments.length > 0 ? (
           <svg
             aria-hidden="true"
@@ -112,7 +112,7 @@ export function LifelineRow({
           );
         })}
       </div>
-      <span className="w-9 shrink-0 font-mono text-[11px] text-(--text-secondary) tabular-nums">
+      <span className="text-gray-9 w-9 shrink-0 font-mono text-[11px] tabular-nums">
         {row.points.length}/{snapshots.length}
       </span>
     </li>

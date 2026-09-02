@@ -10,8 +10,8 @@ const cardVariants = cva(
   {
     variants: {
       appearance: {
-        outlined: 'border border-(--border-subtle) bg-surface-secondary',
-        surface: 'bg-surface-raised',
+        outlined: 'border border-gray-alpha-3 bg-background-2',
+        surface: 'bg-gray-1',
       },
       elevation: {
         flat: '',
@@ -27,13 +27,13 @@ const cardVariants = cva(
       {
         appearance: 'outlined',
         interactive: true,
-        className: 'hover:border-(--border-default) hover:bg-surface-raised',
+        className: 'hover:border-gray-alpha-5 hover:bg-gray-1',
       },
       {
         appearance: 'surface',
         interactive: true,
         className:
-          'hover:bg-surface-hover focus-visible:bg-surface-hover focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-(--border-default) active:bg-surface-active',
+          'hover:bg-surface-hover focus-visible:bg-surface-hover focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-gray-alpha-5 active:bg-surface-active',
       },
     ],
     defaultVariants: {
@@ -89,7 +89,7 @@ export type CardTitleProps = React.HTMLAttributes<HTMLHeadingElement>;
 export const CardTitle = React.forwardRef<HTMLHeadingElement, CardTitleProps>(({ className, ...props }, ref) => (
   <h3
     ref={ref}
-    className={cn('text-ui-md leading-none font-semibold tracking-tight text-(--text-primary)', className)}
+    className={cn('text-ui-md leading-none font-semibold tracking-tight text-gray-10', className)}
     {...props}
   />
 ));
@@ -99,9 +99,7 @@ CardTitle.displayName = 'CardTitle';
 export type CardDescriptionProps = React.HTMLAttributes<HTMLParagraphElement>;
 
 export const CardDescription = React.forwardRef<HTMLParagraphElement, CardDescriptionProps>(
-  ({ className, ...props }, ref) => (
-    <p ref={ref} className={cn('text-ui-sm text-(--text-secondary)', className)} {...props} />
-  ),
+  ({ className, ...props }, ref) => <p ref={ref} className={cn('text-ui-sm text-gray-9', className)} {...props} />,
 );
 CardDescription.displayName = 'CardDescription';
 

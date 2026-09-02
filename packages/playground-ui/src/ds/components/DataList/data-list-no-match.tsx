@@ -12,10 +12,7 @@ export function DataListNoMatch({
 }: DataListNoMatchProps) {
   return (
     <div
-      className={cn(
-        'col-span-full flex flex-col items-center justify-center gap-2 py-12 text-(--text-secondary)',
-        className,
-      )}
+      className={cn('col-span-full flex flex-col items-center justify-center gap-2 py-12 text-gray-9', className)}
       {...props}
     >
       <p className="text-ui-md">{message}</p>

@@ -7,5 +7,5 @@ export type DataListSubHeadingProps = {
 };
 
 export function DataListSubHeading({ children, className }: DataListSubHeadingProps) {
-  return <span className={cn('text-ui-sm font-normal text-(--text-secondary)', className)}>{children}</span>;
+  return <span className={cn('text-ui-sm font-normal text-gray-9', className)}>{children}</span>;
 }

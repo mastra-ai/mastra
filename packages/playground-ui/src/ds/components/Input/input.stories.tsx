@@ -157,17 +157,17 @@ export const Error: Story = {
 export const OnDifferentSurfaces: Story = {
   render: () => (
     <div className="flex w-96 flex-col gap-4">
-      <div className="bg-surface-primary rounded-lg border border-(--border-subtle) p-4">
-        <Input placeholder="On bg-surface-primary (darkest in dark mode)" />
+      <div className="border-gray-alpha-3 bg-background-1 rounded-lg border p-4">
+        <Input placeholder="On bg-background-1 (darkest in dark mode)" />
       </div>
-      <div className="bg-surface-secondary rounded-lg border border-(--border-subtle) p-4">
-        <Input placeholder="On bg-surface-secondary" />
+      <div className="border-gray-alpha-3 bg-background-2 rounded-lg border p-4">
+        <Input placeholder="On bg-background-2" />
       </div>
-      <div className="bg-surface-raised rounded-lg border border-(--border-subtle) p-4">
-        <Input placeholder="On bg-surface-raised" />
+      <div className="border-gray-alpha-3 bg-gray-1 rounded-lg border p-4">
+        <Input placeholder="On bg-gray-1" />
       </div>
-      <div className="bg-surface-hover rounded-lg border border-(--border-subtle) p-4">
-        <Input placeholder="On bg-surface-hover (lightest)" />
+      <div className="border-gray-alpha-3 bg-gray-2 rounded-lg border p-4">
+        <Input placeholder="On bg-gray-2 (lightest)" />
       </div>
     </div>
   ),

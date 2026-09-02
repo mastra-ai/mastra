@@ -25,18 +25,18 @@ const RadioGroupItem = React.forwardRef<HTMLSpanElement, RadioGroupItemProps>(({
       data-slot="radio-group-item"
       className={cn(
         'flex size-4 shrink-0 cursor-pointer items-center justify-center rounded-full',
-        'border border-gray-alpha-2 bg-gray-alpha-3 text-(--text-on-contrast) outline-hidden',
+        'border border-gray-alpha-2 bg-gray-alpha-3 text-background-1 outline-hidden',
         transitions.all,
         'hover:border-gray-alpha-3 hover:bg-gray-alpha-4',
         'active:scale-95 active:border-gray-alpha-5 active:bg-gray-alpha-5',
-        'focus-visible:border-(--border-strong) focus-visible:outline-1 focus-visible:outline-offset-2 focus-visible:outline-(--border-strong) focus-visible:outline-solid',
+        'focus-visible:border-gray-6 focus-visible:outline-1 focus-visible:outline-offset-2 focus-visible:outline-gray-6 focus-visible:outline-solid',
         // Base UI exposes `data-checked`/`data-unchecked` instead of Radix's `data-state`.
-        'data-[checked]:border-surface-contrast data-[checked]:bg-surface-contrast data-[checked]:text-(--text-on-contrast)',
-        'data-[checked]:hover:border-(--border-strong) data-[checked]:hover:bg-gray-9',
+        'data-[checked]:border-gray-10 data-[checked]:bg-gray-10 data-[checked]:text-background-1',
+        'data-[checked]:hover:border-gray-6 data-[checked]:hover:bg-gray-9',
         'data-[checked]:active:border-gray-8 data-[checked]:active:bg-gray-8',
         // Base UI's Radio.Root is a `<span>`, so `:disabled` never matches; target `data-disabled`.
         'data-[disabled]:cursor-not-allowed data-[disabled]:border-gray-alpha-7 data-[disabled]:bg-gray-alpha-7 data-[disabled]:hover:border-gray-alpha-7 data-[disabled]:hover:bg-gray-alpha-7 data-[disabled]:active:scale-100',
-        'data-[disabled]:data-[checked]:border-gray-alpha-7 data-[disabled]:data-[checked]:bg-gray-alpha-7 data-[disabled]:data-[checked]:text-(--text-primary)',
+        'data-[disabled]:data-[checked]:border-gray-alpha-7 data-[disabled]:data-[checked]:bg-gray-alpha-7 data-[disabled]:data-[checked]:text-gray-10',
         className,
       )}
       {...props}

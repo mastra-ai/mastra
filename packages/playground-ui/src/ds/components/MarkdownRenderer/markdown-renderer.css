@@ -10,7 +10,7 @@
 
 @layer components {
   .mastra-markdown {
-    color: var(--text-primary);
+    color: var(--gray-10);
     font-size: var(--text-ui-md);
     line-height: 1.7;
     overflow-wrap: break-word;
@@ -32,7 +32,7 @@
 
   .mastra-markdown :is(h1, h2, h3, h4, h5, h6) {
     margin: 1.6em 0 0.6em;
-    color: var(--text-primary);
+    color: var(--gray-10);
     font-weight: 600;
     letter-spacing: -0.012em;
     line-height: 1.35;
@@ -55,7 +55,7 @@
   }
 
   .mastra-markdown strong {
-    color: var(--text-primary);
+    color: var(--gray-10);
     font-weight: 600;
   }
 
@@ -64,7 +64,7 @@
   }
 
   .mastra-markdown del {
-    color: var(--text-secondary);
+    color: var(--gray-9);
     text-decoration: line-through;
   }
 
@@ -111,7 +111,7 @@
   }
 
   .mastra-markdown li::marker {
-    color: var(--text-secondary);
+    color: var(--gray-9);
   }
 
   .mastra-markdown li > p {
@@ -130,24 +130,24 @@
 
   .mastra-markdown blockquote {
     margin: 0.9em 0;
-    border-left: 2px solid var(--border-default);
+    border-left: 2px solid var(--gray-alpha-5);
     padding-left: 0.9em;
-    color: var(--text-primary);
+    color: var(--gray-10);
   }
 
   .mastra-markdown hr {
     margin: 1.5em 0;
     border: 0;
-    border-top: 1px solid var(--border-subtle);
+    border-top: 1px solid var(--gray-alpha-3);
   }
 
   /* Fenced blocks render through the design-system CodeBlock, so this only ever
    * matches inline spans. */
   .mastra-markdown :not(pre) > code {
     border-radius: 4px;
-    background: var(--surface-overlay-strong);
+    background: var(--gray-alpha-2);
     padding: 0.1em 0.35em;
-    color: var(--text-primary);
+    color: var(--gray-10);
     font-family: var(--font-mono);
     font-size: 0.875em;
   }
@@ -163,14 +163,14 @@
   }
 
   .mastra-markdown :is(th, td) {
-    border: 1px solid var(--border-subtle);
+    border: 1px solid var(--gray-alpha-3);
     padding: 0.4em 0.7em;
     text-align: left;
   }
 
   .mastra-markdown th {
-    background: var(--surface-overlay-soft);
-    color: var(--text-primary);
+    background: var(--gray-alpha-1);
+    color: var(--gray-10);
     font-weight: 600;
   }
 

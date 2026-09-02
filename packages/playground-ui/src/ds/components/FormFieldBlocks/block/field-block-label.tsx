@@ -13,7 +13,7 @@ export function FieldBlockLabel({ children, name, required, size = 'default', cl
     <label
       htmlFor={`input-${name}`}
       className={cn(
-        'flex items-center justify-between text-ui-smd text-(--text-secondary) ',
+        'flex items-center justify-between text-ui-smd text-gray-9 ',
         'in-[.horizontal-field-block]:grid in-[.horizontal-field-block]:content-start',
         {
           'text-ui-md': size === 'bigger',
@@ -22,7 +22,7 @@ export function FieldBlockLabel({ children, name, required, size = 'default', cl
       )}
     >
       {children}
-      {required && <i className="text-xs text-(--text-secondary)">(required)</i>}
+      {required && <i className="text-gray-9 text-xs">(required)</i>}
     </label>
   );
 }

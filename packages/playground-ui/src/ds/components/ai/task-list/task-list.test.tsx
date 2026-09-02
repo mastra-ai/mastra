@@ -32,8 +32,8 @@ describe('TaskList', () => {
 
       const bars = Array.from(screen.getByRole('progressbar').children).map(bar => bar.className);
       expect(bars).toHaveLength(3);
-      expect(bars[0]).toContain('bg-success');
-      expect(bars[1]).toContain('bg-warning');
+      expect(bars[0]).toContain('bg-green-9');
+      expect(bars[1]).toContain('bg-orange-9');
       expect(bars[2]).toContain('bg-gray-5');
     });
 

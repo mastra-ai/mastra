@@ -434,7 +434,7 @@ function SplitWithSpanPanel({
       <div
         ref={scrollToMatchRef}
         data-highlight
-        className="animate-in fade-in-0 flex min-h-0 flex-col overflow-hidden border-l border-(--border-subtle) duration-300"
+        className="animate-in border-gray-alpha-3 fade-in-0 flex min-h-0 flex-col overflow-hidden border-l duration-300"
       >
         {spanPanelSlot}
       </div>
