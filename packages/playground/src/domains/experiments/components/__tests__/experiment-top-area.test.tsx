@@ -42,6 +42,7 @@ describe('ExperimentTopArea', () => {
       <TestLinkProvider>
         <ExperimentTopArea experiment={namedExperiment} />
       </TestLinkProvider>,
+      { router: true },
     );
 
     // The run is the subject of the page; the dataset it ran on lives in the flow chain.
@@ -55,6 +56,7 @@ describe('ExperimentTopArea', () => {
       <TestLinkProvider>
         <ExperimentTopArea experiment={namedExperiment} />
       </TestLinkProvider>,
+      { router: true },
     );
 
     const datasetLink = await screen.findByRole('link', { name: new RegExp(namedExperiment.datasetId!) });
@@ -76,6 +78,7 @@ describe('ExperimentTopArea', () => {
       <TestLinkProvider>
         <ExperimentTopArea experiment={namedExperiment} />
       </TestLinkProvider>,
+      { router: true },
     );
 
     expect(await screen.findByText(namedExperiment.description!)).toBeDefined();
@@ -88,6 +91,7 @@ describe('ExperimentTopArea', () => {
       <TestLinkProvider>
         <ExperimentTopArea experiment={unnamedExperiment} />
       </TestLinkProvider>,
+      { router: true },
     );
 
     expect(await screen.findByText(`Experiment #${unnamedExperiment.id.slice(0, 8)}`)).toBeDefined();
