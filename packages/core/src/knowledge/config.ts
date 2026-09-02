@@ -1,5 +1,6 @@
 import type { MastraCompositeStore } from '../storage';
 import type { KnowledgeStructurePlan } from '../storage/domains/knowledge';
+import type { KnowledgeCurationConfig } from './curation/types';
 import type { KnowledgeImporterDefinition } from './imports';
 import type { KnowledgeScopeTypesConfig } from './reconcile';
 
@@ -14,5 +15,7 @@ export interface KnowledgeConfig {
   scopes?: KnowledgeScopeTypesConfig;
   /** Registered Knowledge importers. */
   importers?: readonly KnowledgeImporterDefinition[];
+  /** Governed curation instructions. Authority is supplied separately by the host for each run. */
+  curation?: KnowledgeCurationConfig;
   storage?: MastraCompositeStore;
 }

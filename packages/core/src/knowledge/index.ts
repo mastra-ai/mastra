@@ -38,6 +38,10 @@ import { assertKnowledgeScopeCapabilities, assertKnowledgeTargetCapability } fro
 import { getKnowledgeReadableScopeIds, isKnowledgeReadVisible } from './access/read-filter';
 import type { KnowledgeAccessFrontier } from './access/types';
 import type { KnowledgeConfig } from './config';
+import { KnowledgeCurator } from './curation/curator';
+import type { CreateKnowledgeCuratorInput } from './curation/types';
+export * from './curation/curator';
+export * from './curation/types';
 import {
   KnowledgeGapFlags,
   type FileKnowledgeGapFlagInput,
@@ -88,6 +92,7 @@ export class Knowledge extends MastraBase {
   #storagePromise?: Promise<KnowledgeStorage>;
   #structure?: KnowledgeStructurePlan;
   #scopeTypes?: KnowledgeScopeTypesConfig;
+  #curatorInstructions?: string;
   #importers = new KnowledgeImporterRegistry();
   #importerRunner = new KnowledgeImporterRunner(this);
   #accessEvaluator?: KnowledgeAccessEvaluator;
@@ -106,6 +111,7 @@ export class Knowledge extends MastraBase {
     this.description = config.description;
     this.#structure = config.structure ? validateKnowledgeStructurePlan(structuredClone(config.structure)) : undefined;
     this.#scopeTypes = validateKnowledgeScopeTypes(structuredClone(config.scopes));
+    this.#curatorInstructions = config.curation?.instructions?.trim() || undefined;
     for (const importer of config.importers ?? []) {
       this.registerImporter(importer);
     }
@@ -224,6 +230,10 @@ export class Knowledge extends MastraBase {
     }
 
     return storage;
+  }
+
+  createCurator(input: CreateKnowledgeCuratorInput): KnowledgeCurator {
+    return new KnowledgeCurator(this, structuredClone(input), this.#curatorInstructions);
   }
 
   async evaluateAccess(vouchedScopeIds: readonly string[]): Promise<KnowledgeAccessFrontier> {
