@@ -515,6 +515,109 @@ describe('AgentChannels', () => {
     });
   });
 
+  describe('action handling', () => {
+    function makeMastra() {
+      const db = new InMemoryDB();
+      const memoryStore = new InMemoryMemory({ db });
+      return { getStorage: () => ({ getStore: () => memoryStore }), getServer: () => null } as any;
+    }
+
+    function makeActionEvent(adapter: any, actionId: string) {
+      return {
+        actionId,
+        adapter,
+        messageId: 'card-1',
+        threadId: 'channel-1:thread-1',
+        user: { userId: 'clicker-1', userName: 'clicker', fullName: 'Clicker' },
+        raw: {},
+      };
+    }
+
+    it('ignores non-approval action ids by default', async () => {
+      const adapter = createMockAdapter('discord');
+      const channels = new AgentChannels({ adapters: { discord: adapter } });
+      channels.__setAgent(mockAgent);
+      const logger = { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() };
+      channels.__setLogger(logger as any);
+      await channels.initialize(makeMastra());
+
+      await expect((channels.sdk as any).processAction(makeActionEvent(adapter, 'retry'))).resolves.not.toThrow();
+
+      expect(mockAgent.sendMessage).not.toHaveBeenCalled();
+      expect(adapter.editMessage).not.toHaveBeenCalled();
+      expect(logger.warn).not.toHaveBeenCalled();
+    });
+
+    it('passes action events to a custom handler with defaultHandler and context', async () => {
+      const chatMod = await getChatModule();
+      let registeredHandler: ((event: any) => Promise<void>) | undefined;
+      const spy = vi.spyOn(chatMod.Chat.prototype as any, 'onAction').mockImplementation((handler: any) => {
+        registeredHandler = handler;
+      });
+      const customHandler = vi.fn().mockResolvedValue(undefined);
+      const channels = new AgentChannels({
+        adapters: { discord: createMockAdapter('discord') },
+        handlers: { onAction: customHandler },
+      });
+      channels.__setAgent(mockAgent);
+      const mockMastra = makeMastra();
+      const event = { actionId: 'retry' } as any;
+
+      try {
+        await channels.initialize(mockMastra);
+        expect(registeredHandler).toBeDefined();
+        await registeredHandler!(event);
+        expect(customHandler).toHaveBeenCalledWith(
+          event,
+          expect.any(Function),
+          expect.objectContaining({ mastra: mockMastra, requestContext: expect.any(RequestContext) }),
+        );
+        expect(mockAgent.sendMessage).not.toHaveBeenCalled();
+      } finally {
+        spy.mockRestore();
+      }
+    });
+
+    it('runs the built-in approval handling when a custom handler delegates to defaultHandler', async () => {
+      const adapter = createMockAdapter('discord');
+      adapter.channelIdFromThreadId.mockImplementation((id: string) => id.split(':')[0]);
+      const onAction = vi.fn(async (_event: any, defaultHandler: () => Promise<void>) => {
+        await defaultHandler();
+      });
+      const channels = new AgentChannels({ adapters: { discord: adapter }, handlers: { onAction } });
+      channels.__setAgent(mockAgent);
+      const logger = { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() };
+      channels.__setLogger(logger as any);
+      await channels.initialize(makeMastra());
+
+      await (channels.sdk as any).processAction(makeActionEvent(adapter, 'tool_approve:tool-call-1'));
+
+      expect(onAction).toHaveBeenCalledTimes(1);
+      // The approval body ran: it reached the thread-mapping lookup and warned about the missing mapping.
+      expect(logger.warn).toHaveBeenCalledWith(
+        expect.stringContaining('No mapped channel thread found for tool approval action'),
+        expect.anything(),
+      );
+    });
+
+    it('does not register action handling when disabled', async () => {
+      const chatMod = await getChatModule();
+      const spy = vi.spyOn(chatMod.Chat.prototype as any, 'onAction');
+      const channels = new AgentChannels({
+        adapters: { discord: createMockAdapter('discord') },
+        handlers: { onAction: false },
+      });
+      channels.__setAgent(mockAgent);
+
+      try {
+        await channels.initialize(makeMastra());
+        expect(spy).not.toHaveBeenCalled();
+      } finally {
+        spy.mockRestore();
+      }
+    });
+  });
+
   describe('message routing', () => {
     it('routes inbound channel messages through sendMessage with channel metadata', async () => {
       const db = new InMemoryDB();
