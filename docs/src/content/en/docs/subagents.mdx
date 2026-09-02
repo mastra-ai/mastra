@@ -252,6 +252,48 @@ await parentAgent.generate('Research AI trends', {
 })
 ```
 
+## Passing a result to another subagent
+
+Subagents can't see each other's work. The parent forwards its conversation to each subagent, but tool calls and tool results are removed first, and a subagent's response reaches the parent as a tool result. Without help, the only way to give one subagent the findings of another is for the parent model to restate them, which costs output tokens on every delegation and rewords the details.
+
+Set `enableResultReferences` to turn this on. It's off by default, because it adds a `contextFromRefs` field to each subagent tool and a `[ref: <id>]` line to every delegation result, both of which change what the parent model sees.
+
+```typescript title="src/mastra/agents/parent-agent.ts"
+await parentAgent.generate('Fix the expired-session bug', {
+  maxSteps: 10,
+  delegation: {
+    enableResultReferences: true,
+  },
+})
+```
+
+With it on, every delegation result carries a `ref` id, which the parent model sees as a `[ref: <id>]` line after the response text. Pass those ids in `contextFromRefs` on a later delegation, and Mastra inserts the referenced text into that subagent's prompt.
+
+Here the parent delegates twice. The second delegation references the first result instead of repeating it, so the prompt carries only the parent's own instructions:
+
+```json
+{
+  "prompt": "Implement a fix. Use strict TypeScript.",
+  "contextFromRefs": ["researchAgent-1"]
+}
+```
+
+The research agent's full response arrives in the implementing subagent's prompt, inside a block that names its source, so the subagent can tell those findings apart from the parent's instructions.
+
+Each entry accepts a bare id, or an object that adds a label and a caveat:
+
+```json
+{
+  "prompt": "Reconcile the auth and database findings, then implement.",
+  "contextFromRefs": [
+    { "ref": "authAgent-1", "as": "auth findings" },
+    { "ref": "dbAgent-2", "as": "database findings", "note": "ignore section 3" }
+  ]
+}
+```
+
+References resolve only to delegations made during the same parent run. An id from an earlier run, or one a subagent named inside its own response, doesn't resolve. Unresolved references stay visible in the prompt instead of being dropped, so a mistake shows up rather than silently removing context.
+
 ## Iteration monitoring
 
 `onIterationComplete` is called after each iteration of the parent agent's loop. Use it to monitor execution or guide the next iteration. You can also stop execution early.

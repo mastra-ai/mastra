@@ -357,6 +357,18 @@ export interface DelegationConfig {
   includeSubAgentToolResultsInModelContext?: boolean;
 
   /**
+   * Let a delegation reuse an earlier delegation's result instead of the parent
+   * model restating it.
+   *
+   * Off by default. Turning it on changes what the parent model sees: each
+   * subagent tool gains a `contextFromRefs` input field, and every delegation
+   * result gains a trailing `[ref: <id>]` line naming the id it was filed under.
+   * Passing those ids on a later delegation inserts the referenced text into that
+   * subagent's prompt. References resolve only within the current run.
+   */
+  enableResultReferences?: boolean;
+
+  /**
    * Callback that controls which parent messages are passed to each subagent as conversation
    * context. Receives the full parent message history along with delegation metadata, and
    * returns the messages that should be forwarded.

@@ -252,7 +252,7 @@ interface StandaloneDurableWrapper {
   prepare: (...args: any[]) => any;
 }
 
-const createSubAgentInputSchema = () =>
+const createSubAgentInputSchema = ({ withResultRefs = false }: { withResultRefs?: boolean } = {}) =>
   z.object({
     prompt: z.string().describe('The prompt to send to the agent'),
     // Using .nullish() instead of .optional() because OpenAI sends null for unfilled optional fields
@@ -272,11 +272,38 @@ const createSubAgentInputSchema = () =>
       .describe('Maximum number of execution steps for the sub-agent (integer, minimum 3)'),
     // using minimum of 3 to ensure if the agent has a tool call, the llm gets executed again after the tool call step, using the tool call result
     // to return a proper llm response
+    // Only exposed when `delegation.enableResultReferences` is on, so a supervisor
+    // that does not use the feature keeps the tool surface it had before.
+    ...(withResultRefs
+      ? {
+          contextFromRefs: z
+            .array(
+              z.union([
+                z.string(),
+                z.object({
+                  ref: z.string().describe('The reference id of an earlier delegation result'),
+                  as: z.string().nullish().describe('Short label for this block, e.g. "auth findings"'),
+                  note: z.string().nullish().describe('A caveat that applies to this block, e.g. "ignore section 3"'),
+                }),
+              ]),
+            )
+            .nullish()
+            .describe(
+              'Reference ids of earlier delegation results to include, shown as "[ref: <id>]" at the end of a previous result. ' +
+                "Their full output is inserted into this sub-agent's prompt for you, so do not restate it. Reference it here " +
+                'and use the prompt only for your own instructions. Accepts a bare id or {ref, as, note}.',
+            ),
+        }
+      : {}),
   });
 
 const createSubAgentOutputSchema = () =>
   z.object({
     text: z.string().describe('The response from the agent'),
+    ref: z
+      .string()
+      .describe('Id this result was filed under, for a later delegation to pass on via contextFromRefs')
+      .optional(),
     subAgentThreadId: z.string().describe('The thread ID of the agent').optional(),
     subAgentResourceId: z.string().describe('The resource ID of the agent').optional(),
     subAgentToolResults: z
@@ -298,10 +325,103 @@ type SubAgentToolSchemas = {
   outputSchema: StandardSchemaWithJSON<SubAgentToolOutput>;
 };
 
+/** Declared explicitly because `contextFromRefs` is only present on the schema variant that exposes it. */
 type SubAgentToolInput = Omit<z.infer<ReturnType<typeof createSubAgentInputSchema>>, 'maxSteps'> & {
   maxSteps?: number | null;
+  contextFromRefs?: Array<string | { ref: string; as?: string | null; note?: string | null }> | null;
 };
 type SubAgentToolOutput = z.infer<ReturnType<typeof createSubAgentOutputSchema>>;
+
+/**
+ * Run-scoped store of delegation outputs, so a later delegation in the same run
+ * can reference an earlier one by id instead of the supervisor restating it.
+ *
+ * Deliberately not backed by storage. A reference id is model-authored and
+ * therefore untrusted; resolving one through storage would turn it into an
+ * arbitrary read across threads and tenants. Scoping the registry to a single
+ * run rules that out by construction rather than guarding against it.
+ */
+type DelegationRefRegistry = {
+  /**
+   * Frame element name, carrying a per-run nonce. Referenced output is inserted
+   * into a prompt that also carries the supervisor's own instructions, so
+   * content that contained a plain `</delegated-context>` could otherwise break
+   * out of its block and read as instruction. A nonce the content cannot know
+   * makes the closing tag unforgeable.
+   */
+  tag: string;
+  entries: Map<string, { text: string; agentName: string }>;
+  mint: (agentName: string) => string;
+};
+
+function createDelegationRefRegistry(): DelegationRefRegistry {
+  let counter = 0;
+  return {
+    tag: `delegated-context-${randomUUID().slice(0, 8)}`,
+    entries: new Map(),
+    mint: (agentName: string) => `${agentName}-${++counter}`,
+  };
+}
+
+/** What the parent model sees for a delegation: the sub-agent's text, plus the id it was filed under. */
+const renderSubAgentModelText = (output: SubAgentToolOutput): string => {
+  const text = output.text ?? '';
+  return output.ref && text ? `${text}\n\n[ref: ${output.ref}]` : text;
+};
+
+const escapeFrameAttr = (value: string): string =>
+  value.replace(/[<>"&]/g, ch => ({ '<': '&lt;', '>': '&gt;', '"': '&quot;', '&': '&amp;' })[ch] as string);
+
+/**
+ * Prepends referenced outputs to the sub-agent's prompt as labelled blocks.
+ *
+ * The blocks lead so the sub-agent reads the evidence before the instruction
+ * that acts on it, and they are framed rather than concatenated so a peer
+ * agent's findings stay distinguishable from the supervisor's own words.
+ */
+function resolveDelegationRefs({
+  refs,
+  registry,
+  prompt,
+}: {
+  refs: SubAgentToolInput['contextFromRefs'];
+  registry: DelegationRefRegistry;
+  prompt: string;
+}): { prompt: string; resolved: string[]; missing: string[] } {
+  if (!refs?.length) return { prompt, resolved: [], missing: [] };
+
+  const blocks: string[] = [];
+  const resolved: string[] = [];
+  const missing: string[] = [];
+
+  for (const entry of refs) {
+    const ref = typeof entry === 'string' ? entry : entry?.ref;
+    if (!ref) continue;
+    const as = typeof entry === 'string' ? undefined : (entry.as ?? undefined);
+    const note = typeof entry === 'string' ? undefined : (entry.note ?? undefined);
+
+    const hit = registry.entries.get(ref);
+    if (!hit) {
+      // Render the miss rather than dropping it, so a bad reference surfaces in
+      // the sub-agent's prompt instead of silently removing context the
+      // supervisor believed it had passed on.
+      missing.push(ref);
+      blocks.push(`<${registry.tag} ref="${escapeFrameAttr(ref)}" unresolved="true" />`);
+      continue;
+    }
+
+    const attrs = [
+      `ref="${escapeFrameAttr(ref)}"`,
+      `from="${escapeFrameAttr(hit.agentName)}"`,
+      ...(as ? [`as="${escapeFrameAttr(as)}"`] : []),
+      ...(note ? [`note="${escapeFrameAttr(note)}"`] : []),
+    ].join(' ');
+    blocks.push(`<${registry.tag} ${attrs}>\n${hit.text}\n</${registry.tag}>`);
+    resolved.push(ref);
+  }
+
+  return { prompt: `${blocks.join('\n\n')}\n\n${prompt}`, resolved, missing };
+}
 
 type ModelFallbacks = {
   id: string;
@@ -661,7 +781,7 @@ export class Agent<
   #standaloneDurable?: unknown;
   #legacyHandler?: AgentLegacyHandler;
   #config: AgentConfig<TAgentId, TTools, TOutput, TRequestContext, TEditor>;
-  #subAgentToolSchemas?: SubAgentToolSchemas;
+  #subAgentToolSchemas?: Partial<Record<'default' | 'withResultRefs', SubAgentToolSchemas>>;
 
   // This flag is for agent network messages. We should change the agent network formatting and remove this flag after.
   private _agentNetworkAppend = false;
@@ -4834,18 +4954,25 @@ export class Agent<
       .filter((message): message is MastraDBMessage => Boolean(message));
   }
 
-  private getSubAgentToolSchemas(): SubAgentToolSchemas {
-    if (!this.#subAgentToolSchemas) {
-      const inputSchema = createSubAgentInputSchema();
+  /**
+   * Memoized per variant: the input schema differs depending on whether result
+   * references are enabled for the run, so the two cannot share one cache entry.
+   */
+  private getSubAgentToolSchemas({ withResultRefs = false }: { withResultRefs?: boolean } = {}): SubAgentToolSchemas {
+    const variant = withResultRefs ? 'withResultRefs' : 'default';
+    this.#subAgentToolSchemas ??= {};
+
+    if (!this.#subAgentToolSchemas[variant]) {
+      const inputSchema = createSubAgentInputSchema({ withResultRefs });
       const outputSchema = createSubAgentOutputSchema();
 
-      this.#subAgentToolSchemas = {
+      this.#subAgentToolSchemas[variant] = {
         inputSchema: toStandardSchema(inputSchema) as StandardSchemaWithJSON<SubAgentToolInput>,
         outputSchema: toStandardSchema(outputSchema),
       };
     }
 
-    return this.#subAgentToolSchemas;
+    return this.#subAgentToolSchemas[variant];
   }
 
   /**
@@ -4876,9 +5003,20 @@ export class Agent<
     const convertedAgentTools: Record<string, CoreTool> = {};
     const agents = await this.listAgents({ requestContext });
 
+    // Opt-in: leaving this off keeps the tool schema and the parent's model
+    // context exactly as they were before the feature existed.
+    const resultRefsEnabled = delegation?.enableResultReferences === true;
+
+    // Shared by every sub-agent tool built below, so one delegation can reference
+    // an earlier one's output. Built here rather than per-agent because tools are
+    // assembled once per run, which is exactly the scope a reference may span.
+    const refRegistry = resultRefsEnabled ? createDelegationRefRegistry() : undefined;
+
     if (Object.keys(agents).length > 0) {
       for (const [agentName, agent] of Object.entries(agents)) {
-        const { inputSchema: agentInputSchema, outputSchema: agentOutputSchema } = this.getSubAgentToolSchemas();
+        const { inputSchema: agentInputSchema, outputSchema: agentOutputSchema } = this.getSubAgentToolSchemas({
+          withResultRefs: resultRefsEnabled,
+        });
 
         const toModelOutput = delegation?.includeSubAgentToolResultsInModelContext
           ? undefined
@@ -4889,7 +5027,11 @@ export class Agent<
               // task started...") instead of the agentOutputSchema object. Reading `output.text`
               // off that string is undefined, which serializes to a tool message with null content
               // that providers (e.g. Anthropic) reject with a 500. Use the string as-is in that case.
-              value: typeof output === 'string' ? output : (output.text ?? ''),
+              //
+              // The `[ref: id]` line is appended here rather than baked into the result,
+              // so the parent model learns the id it can pass to a later delegation's
+              // `contextFromRefs` while `output.text` stays exactly what the sub-agent said.
+              value: typeof output === 'string' ? output : renderSubAgentModelText(output),
             });
 
         const toolObj = createTool({
@@ -4935,11 +5077,31 @@ export class Agent<
               ),
             );
 
+            // Expand any referenced earlier delegations into the prompt before the
+            // hook runs, so `onDelegationStart` sees — and can still modify — the
+            // resolved prompt, matching the ordering rationale below.
+            const refResolution = refRegistry
+              ? resolveDelegationRefs({
+                  refs: inputData.contextFromRefs,
+                  registry: refRegistry,
+                  prompt: inputData.prompt,
+                })
+              : { prompt: inputData.prompt, resolved: [], missing: [] };
+            if (refResolution.missing.length > 0) {
+              this.logger.warn('Delegation referenced unknown results', {
+                agent: this.name,
+                targetAgent: agentName,
+                missing: refResolution.missing,
+                known: [...(refRegistry?.entries.keys() ?? [])],
+              });
+            }
+            const promptWithRefs = refResolution.prompt;
+
             // Build delegation start context
             const delegationStartContext: DelegationStartContext = {
               primitiveId: agent.id,
               primitiveType: 'agent',
-              prompt: inputData.prompt,
+              prompt: promptWithRefs,
               params: {
                 threadId: inputData.threadId || undefined,
                 resourceId: inputData.resourceId || undefined,
@@ -5102,7 +5264,7 @@ export class Agent<
               }
             }
 
-            let effectivePrompt = inputData.prompt;
+            let effectivePrompt = promptWithRefs;
             let effectiveInstructions = inputData.instructions;
             let effectiveMaxSteps = inputData.maxSteps;
             // Cap the LLM-provided maxSteps at the sub-agent's own configured
@@ -5229,7 +5391,10 @@ export class Agent<
             this.logger.debug('Delegation accepted', {
               agent: this.name,
               targetAgent: agentName,
-              modifiedPrompt: effectivePrompt !== inputData.prompt,
+              // Compared against the ref-resolved prompt so this reports whether the
+              // hook changed it, not whether references were expanded.
+              modifiedPrompt: effectivePrompt !== promptWithRefs,
+              expandedRefs: refResolution.resolved,
               modifiedInstructions: effectiveInstructions !== inputData.instructions,
               modifiedMaxSteps: effectiveMaxSteps !== inputData.maxSteps,
             });
@@ -5717,6 +5882,22 @@ export class Agent<
                   }
                 }
               }
+
+              // Register this result so a later delegation in the same run can
+              // reference it. The id is attached as its own field rather than
+              // spliced into `text`, so application code reading `toolResults`
+              // still sees the sub-agent's response exactly as it was produced;
+              // `toModelOutput` is what surfaces the id to the parent model.
+              //
+              // Registered after `onDelegationComplete` so a hook that replaced the
+              // text via `resultText` stores what the supervisor actually saw,
+              // rather than a version no one read.
+              if (refRegistry && result?.text) {
+                const refId = refRegistry.mint(agentName);
+                refRegistry.entries.set(refId, { text: result.text, agentName });
+                result = { ...result, ref: refId };
+              }
+
               return result;
             } catch (err) {
               let bailed = false;
