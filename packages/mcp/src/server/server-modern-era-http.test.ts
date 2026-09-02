@@ -280,6 +280,62 @@ describe('MCPServer with protocolVersion 2026-07-28 (dual-era HTTP)', () => {
     expect(wireMethods).not.toContain('resources/unsubscribe');
   });
 
+  it('detaches the transport when restoring resource subscriptions fails', async () => {
+    const client = new InternalMastraMCPClient({
+      name: 'resource-listen-restore-failure-client',
+      server: {
+        url: baseUrl,
+        protocolVersion: '2026-07-28',
+      },
+    });
+
+    await client.connect();
+    await client.subscribeResource('test://resource');
+    const sdkClient = (client as unknown as { client: Client }).client;
+    const listenSpy = vi.spyOn(sdkClient, 'listen').mockRejectedValueOnce(new Error('listen restore failed'));
+
+    try {
+      await expect(client.forceReconnect()).rejects.toThrow('listen restore failed');
+      expect(sdkClient.transport).toBeUndefined();
+      expect((client as unknown as { transport?: unknown }).transport).toBeUndefined();
+
+      listenSpy.mockRestore();
+      await client.connect();
+    } finally {
+      listenSpy.mockRestore();
+      await client.disconnect();
+    }
+  });
+
+  it('rejects a resource subscription the server does not honor', async () => {
+    const client = new InternalMastraMCPClient({
+      name: 'resource-listen-declined-client',
+      server: {
+        url: baseUrl,
+        protocolVersion: '2026-07-28',
+      },
+    });
+
+    await client.connect();
+    const sdkClient = (client as unknown as { client: Client }).client;
+    const close = vi.fn().mockResolvedValue(undefined);
+    const listenSpy = vi.spyOn(sdkClient, 'listen').mockResolvedValueOnce({
+      honoredFilter: {},
+      close,
+      closed: new Promise(() => {}),
+    });
+
+    try {
+      await expect(client.subscribeResource('test://declined')).rejects.toThrow(
+        'Server declined resource subscriptions for: test://declined',
+      );
+      expect(close).toHaveBeenCalledOnce();
+    } finally {
+      listenSpy.mockRestore();
+      await client.disconnect();
+    }
+  });
+
   it('does not emit removed roots notifications on the modern leg', async () => {
     const wireMethods: string[] = [];
     const client = new InternalMastraMCPClient({

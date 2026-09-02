@@ -18,15 +18,15 @@ The modern command deliberately runs the official `tools-list` scenario rather t
 
 ## 2026 coverage matrix
 
-| Requirement                                                                                           | Coverage                                                                                                                                 |
-| ----------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
-| `server/discover`, per-request protocol metadata, required `resultType`, and HTTP method/name headers | Official `tools-list` scenario through `startHTTP()` plus `server-modern-era-http.test.ts`                                               |
-| Stateless Streamable HTTP and built-in legacy fallback                                                | `server-modern-era-http.test.ts`; explicit legacy mode in this launcher                                                                  |
-| Modern stdio opening exchange                                                                         | Modern stdio smoke in this launcher and `server-modern-era-stdio.test.ts`                                                                |
-| `subscriptions/listen` acknowledgement, filtering, and closure                                        | `server-modern-era-http.test.ts` and `server-modern-era-stdio.test.ts`; client resource-subscription coverage is added in the next phase |
-| Removed resource subscription and roots-list-changed methods                                          | Client assertions added in the next phase                                                                                                |
-| Progress routing                                                                                      | `server/__tests__/logging-progress-emission.test.ts` and client progress tests                                                           |
-| Cancellation and disconnect cleanup                                                                   | SDK transport behavior plus focused server/client lifecycle tests; no parallel cancellation implementation lives here                    |
-| Explicit 2025 fallback                                                                                | `--mode legacy-interoperability` over HTTP and stdio                                                                                     |
+| Requirement                                                                                           | Coverage                                                                                                              |
+| ----------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| `server/discover`, per-request protocol metadata, required `resultType`, and HTTP method/name headers | Official `tools-list` scenario through `startHTTP()` plus `server-modern-era-http.test.ts`                            |
+| Stateless Streamable HTTP and built-in legacy fallback                                                | `server-modern-era-http.test.ts`; explicit legacy mode in this launcher                                               |
+| Modern stdio opening exchange                                                                         | Modern stdio smoke in this launcher and `server-modern-era-stdio.test.ts`                                             |
+| `subscriptions/listen` acknowledgement, filtering, replacement, reconnect, and closure                | `server-modern-era-http.test.ts` and `server-modern-era-stdio.test.ts`                                                |
+| Removed resource subscription and roots-list-changed methods                                          | Era-scoped wire assertions in `server-modern-era-http.test.ts` and legacy routing assertions in `client.test.ts`      |
+| Progress routing                                                                                      | `server/__tests__/logging-progress-emission.test.ts` and client progress tests                                        |
+| Cancellation and disconnect cleanup                                                                   | SDK transport behavior plus focused server/client lifecycle tests; no parallel cancellation implementation lives here |
+| Explicit 2025 fallback                                                                                | `--mode legacy-interoperability` over HTTP and stdio                                                                  |
 
 `@modelcontextprotocol/conformance` is pinned exactly. A version bump must update this matrix and the exercised scenarios deliberately.

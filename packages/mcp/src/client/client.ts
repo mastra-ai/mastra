@@ -471,10 +471,10 @@ export class InternalMastraMCPClient extends MastraBase {
   }
 
   /**
-   * Update the list of filesystem roots and notify the server.
+   * Update the list of filesystem roots and notify a legacy server.
    *
-   * Per MCP spec, when roots change, the client sends a `notifications/roots/list_changed`
-   * notification to inform the server that it should re-fetch the roots list.
+   * On legacy connections, the client sends `notifications/roots/list_changed` so the
+   * server can re-fetch the roots list. The notification was removed in MCP 2026-07-28.
    *
    * @param roots - New list of filesystem roots
    *
@@ -493,11 +493,10 @@ export class InternalMastraMCPClient extends MastraBase {
   }
 
   /**
-   * Send a roots/list_changed notification to the server.
+   * Send a roots/list_changed notification to a legacy server.
    *
-   * Per MCP spec, clients that support `listChanged` MUST send this notification
-   * when the list of roots changes. The server will then call roots/list to get
-   * the updated list.
+   * Clients that support legacy `listChanged` send this notification when the
+   * roots change. MCP 2026-07-28 removed the notification.
    */
   async sendRootsListChanged(): Promise<void> {
     if (!this.transport) {
@@ -884,6 +883,14 @@ export class InternalMastraMCPClient extends MastraBase {
         this.clientConnectionOnClose = connectionOnClose;
         this.client.onclose = connectionOnClose;
       } catch (e) {
+        const failedTransport = this.transport;
+        this.transport = undefined;
+        this.resourceSubscription = undefined;
+        this.serverInstructions = undefined;
+        if (failedTransport) {
+          this.severClientTransportLink(failedTransport);
+          await failedTransport.close().catch(() => {});
+        }
         this.isConnected = null;
         reject(e);
       }
@@ -1150,6 +1157,15 @@ export class InternalMastraMCPClient extends MastraBase {
           )
         : undefined;
 
+    if (replacement) {
+      const honoredUris = new Set(replacement.honoredFilter.resourceSubscriptions ?? []);
+      const declinedUris = [...nextUris].filter(uri => !honoredUris.has(uri));
+      if (declinedUris.length > 0) {
+        await replacement.close();
+        throw new Error(`Server declined resource subscriptions for: ${declinedUris.join(', ')}`);
+      }
+    }
+
     this.resourceSubscription = replacement;
     this.resourceSubscriptionUris = nextUris;
     if (replacement) {
@@ -1159,6 +1175,7 @@ export class InternalMastraMCPClient extends MastraBase {
         }
       });
     }
+    // Open the replacement before closing the old stream so notifications aren't lost between filters.
     await previous?.close();
   }
 
@@ -1173,7 +1190,7 @@ export class InternalMastraMCPClient extends MastraBase {
     this.log('debug', `Subscribing to resource on MCP server: ${uri}`);
     if (this.isModernConnection()) {
       return await this.enqueueResourceSubscriptionUpdate(async () => {
-        if (this.resourceSubscriptionUris.has(uri)) {
+        if (this.resourceSubscriptionUris.has(uri) && this.resourceSubscription) {
           return {};
         }
         const nextUris = new Set(this.resourceSubscriptionUris);
