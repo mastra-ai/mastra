@@ -28,6 +28,7 @@ describe('Knowledge strict read visibility', () => {
 
     const visibleNode = await storage.createNode({ name: 'Visible result', scopeIds: [visibleScope] });
     const hiddenNode = await storage.createNode({ name: 'Hidden result', scopeIds: [hiddenScope] });
+    const mixedNode = await storage.createNode({ name: 'Mixed membership', scopeIds: [visibleScope, hiddenScope] });
     const secret = await storage.createNode({ name: 'Secret target', scopeIds: [hiddenScope] });
     const visibleRecord = await storage.createRecord({
       node: visibleNode,
@@ -53,8 +54,16 @@ describe('Knowledge strict read visibility', () => {
     await expect(knowledge.getNode({ id: visibleNode.id, scopeIds: [principal] })).resolves.toEqual(currentVisibleNode);
     await expect(knowledge.getNode({ id: hiddenNode.id, scopeIds: [principal] })).resolves.toBeNull();
     await expect(knowledge.getNode({ id: hiddenScope, scopeIds: [hiddenScope] })).resolves.toBeNull();
+    await expect(knowledge.getScope({ id: visibleScope, scopeIds: [principal] })).resolves.toEqual(
+      expect.objectContaining({ id: visibleScope, name: 'Visible scope' }),
+    );
+    await expect(knowledge.getScope({ id: hiddenScope, scopeIds: [principal] })).resolves.toBeNull();
+    await expect(knowledge.getNodeScopes({ id: mixedNode.id, scopeIds: [principal] })).resolves.toEqual([
+      expect.objectContaining({ id: visibleScope, name: 'Visible scope' }),
+    ]);
+    await expect(knowledge.getNodeScopes({ id: hiddenNode.id, scopeIds: [principal] })).resolves.toEqual([]);
 
-    await expect(knowledge.listNodes({ scopeIds: [principal], namePrefix: '', limit: 1 })).resolves.toEqual([
+    await expect(knowledge.listNodes({ scopeIds: [principal], namePrefix: 'Visible', limit: 1 })).resolves.toEqual([
       currentVisibleNode,
     ]);
     await expect(knowledge.search({ query: 'result', scopeIds: [principal], limit: 10 })).resolves.toEqual([
