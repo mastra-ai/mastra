@@ -31,14 +31,6 @@ function normalizeLimit(limit: number | undefined): number {
   return Math.min(Math.max(limit ?? DEFAULT_LIMIT, 1), MAX_LIMIT);
 }
 
-function replaceScope(
-  scopeIds: KnowledgeScopeIds,
-  sourceScopeId: string,
-  destinationScopeId: string,
-): KnowledgeScopeIds {
-  return [...new Set(scopeIds.map(scopeId => (scopeId === sourceScopeId ? destinationScopeId : scopeId)))].sort();
-}
-
 export class KnowledgeCurator {
   readonly instructions: string;
 
@@ -109,59 +101,25 @@ export class KnowledgeCurator {
   }
 
   async promote(input: KnowledgeCuratorPromoteInput): Promise<KnowledgeCuratorMutationResult> {
-    const { node, scopeIds } = await this.#requireWorklistNode(input.nodeId);
-    const destinationScopeIds = replaceScope(scopeIds, this.input.companionScopeId, input.destinationScopeId);
+    const { node } = await this.#requireWorklistNode(input.nodeId);
     const frontier = await this.knowledge.evaluateAccess(this.input.vouchedScopeIds);
-    const sourceCapabilities = getKnowledgeMutationCapabilities(frontier, scopeIds);
+    const sourceCapabilities = getKnowledgeMutationCapabilities(frontier, [this.input.companionScopeId]);
     const destinationCapabilities = getKnowledgeMutationCapabilities(frontier, [input.destinationScopeId]);
 
     if (!sourceCapabilities.manageAccess || !destinationCapabilities.manageAccess) {
-      if (sourceCapabilities.suggest && destinationCapabilities.suggest) {
-        return {
-          mode: 'proposed',
-          proposal: await this.knowledge.proposeNodeUpdate({
-            mutation: {
-              id: node.id,
-              version: input.version,
-              scopeIds: destinationScopeIds,
-              contextScopeId: this.input.contextScopeId,
-            },
-            proposerContextScopeId: this.input.contextScopeId,
-            vouchedScopeIds: this.input.vouchedScopeIds,
-            reason: `Promote verified knowledge from companion scope ${this.input.companionScopeId}`,
-          }),
-        };
-      }
       throw new KnowledgeNotFoundError('node', input.nodeId);
     }
 
-    // Restamp records before moving the node. If a process stops mid-promotion, the node remains in
-    // the companion worklist and a later run can safely finish the remaining idempotent restamps.
-    for (const record of await this.#listNodeRecords(node.id)) {
-      const recordScopeIds = await (await this.knowledge.getStorageInternal()).getRecordScopeIds(record.id);
-      if (!recordScopeIds.includes(this.input.companionScopeId)) continue;
-      await this.knowledge.setRecordScopes({
-        id: record.id,
-        version: record.version,
-        scopeIds: replaceScope(recordScopeIds, this.input.companionScopeId, input.destinationScopeId),
-        contextScopeId: this.input.contextScopeId,
-        vouchedScopeIds: this.input.vouchedScopeIds,
-      });
-    }
-
+    const storage = await this.knowledge.getStorageInternal();
     return {
       mode: 'applied',
-      node: await this.knowledge.updateNode({
+      node: await storage.promoteNode({
         id: node.id,
         version: input.version,
-        scopeIds: destinationScopeIds,
-        metadata: {
-          ...node.metadata,
-          curatedFromScopeId: this.input.companionScopeId,
-          curatedAt: new Date().toISOString(),
-        },
+        sourceScopeId: this.input.companionScopeId,
+        destinationScopeId: input.destinationScopeId,
         contextScopeId: this.input.contextScopeId,
-        vouchedScopeIds: this.input.vouchedScopeIds,
+        expectedAccessEpoch: frontier.accessEpoch,
       }),
     };
   }
