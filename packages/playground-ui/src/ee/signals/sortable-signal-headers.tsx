@@ -11,8 +11,9 @@ import { GripVertical } from 'lucide-react';
 import { useState } from 'react';
 
 import { getSignalHue } from './signal-colors';
-import { formatSignalName, getSignalDescription } from './signal-formatting';
+import { signalDescription, signalLabel } from './signal-formatting';
 import type { TraceSignalName } from './types';
+import { useTraceIntelligence } from './use-trace-intelligence';
 import { nodeColor } from '@/ds/components/SankeyChart';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
 
@@ -66,6 +67,7 @@ export function SortableSignalHeaders({
   reorderDisabled: boolean;
   onOrderChange: (signalNames: TraceSignalName[]) => void;
 }) {
+  const { signalCatalog } = useTraceIntelligence();
   const [dragProjection, setDragProjection] = useState<DragProjection>();
 
   function handleDragStart(start: DragStart) {
@@ -110,7 +112,7 @@ export function SortableSignalHeaders({
               role="group"
             >
               {signalNames.map((signalName, index) => {
-                const label = formatSignalName(signalName);
+                const label = signalLabel(signalCatalog, signalName);
                 const projectedIndex = projectedHeaderIndex(index, dragProjection);
                 const offsetPercent =
                   signalNames.length > 1 ? (projectedIndex / (signalNames.length - 1) - 0.5) * 100 : 0;
@@ -145,7 +147,7 @@ export function SortableSignalHeaders({
                               >
                                 {label.toUpperCase()}
                               </TooltipTrigger>
-                              <TooltipContent>{getSignalDescription(signalName)}</TooltipContent>
+                              <TooltipContent>{signalDescription(signalCatalog, signalName)}</TooltipContent>
                             </Tooltip>
                             <div
                               {...dragProvided.dragHandleProps}

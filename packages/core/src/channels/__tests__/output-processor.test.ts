@@ -1554,6 +1554,89 @@ describe('ChatChannelOutputProcessor', () => {
       expect(JSON.stringify((posts[0] as Extract<Call, { kind: 'post' }>).arg)).toContain('tool_deny:t1');
     });
 
+    // Regression for #22626: the streaming driver handled `tool-call-approval`
+    // inline and never consulted `toolDisplayFn`, so a custom renderer could
+    // not localize/replace the built-in approval card when `streaming: true`.
+    describe('streaming + custom toolDisplay fn receives approval events (#22626)', () => {
+      const approvalChunks = [
+        { type: 'tool-call', payload: { toolCallId: 't1', toolName: 'weather', args: { city: 'NYC' } } },
+        { type: 'tool-call-approval', payload: { toolCallId: 't1', toolName: 'weather', args: { city: 'NYC' } } },
+      ] as any[];
+
+      it('calls the fn with an approval event in streaming mode and posts its message', async () => {
+        const toolDisplay = vi.fn((event: any) =>
+          event.kind === 'approval' ? { kind: 'post', message: 'CUSTOM APPROVAL' } : undefined,
+        );
+        const { channels, calls, chatThread } = makeChannels({ streaming: true, toolDisplay });
+        await drive(channels, approvalChunks, chatThread);
+
+        const approvalCall = toolDisplay.mock.calls.find(([event]) => event.kind === 'approval');
+        expect(approvalCall).toBeDefined();
+        expect(approvalCall![0]).toMatchObject({
+          kind: 'approval',
+          toolCallId: 't1',
+          toolName: 'weather',
+          args: { city: 'NYC' },
+        });
+        expect(approvalCall![1]).toEqual({ mode: 'streaming', platform: 'test' });
+
+        const posts = calls.filter(c => c.kind === 'post');
+        expect(posts).toHaveLength(1);
+        expect((posts[0] as Extract<Call, { kind: 'post' }>).arg).toBe('CUSTOM APPROVAL');
+        expect(JSON.stringify(calls)).not.toContain('tool_approve:t1');
+      });
+
+      it('edits the custom running card in place with the custom approval message', async () => {
+        const toolDisplay = vi.fn((event: any) => {
+          if (event.kind === 'running') return { kind: 'post', message: 'RUNNING' };
+          if (event.kind === 'approval') return { kind: 'post', message: 'CUSTOM APPROVAL' };
+          return undefined;
+        });
+        const { channels, calls, chatThread } = makeChannels({ streaming: true, toolDisplay });
+        await drive(channels, approvalChunks, chatThread);
+
+        const posts = calls.filter(c => c.kind === 'post');
+        const edits = calls.filter(c => c.kind === 'editMessage') as Extract<Call, { kind: 'editMessage' }>[];
+        expect(posts).toHaveLength(1);
+        expect((posts[0] as Extract<Call, { kind: 'post' }>).arg).toBe('RUNNING');
+        expect(edits).toHaveLength(1);
+        expect(edits[0].messageId).toBe('m1');
+        expect(edits[0].content).toBe('CUSTOM APPROVAL');
+      });
+
+      it.each([
+        ['undefined', () => undefined],
+        ['an empty string', () => ({ kind: 'post', message: '' })],
+        ['a whitespace-only string', () => ({ kind: 'post', message: ' \n' })],
+        ['an empty markdown message', () => ({ kind: 'post', message: { markdown: '  ' } })],
+        ['a stream result', () => ({ kind: 'stream', chunk: { type: 'task_update', id: 'approval' } })],
+      ])('falls back to the built-in approval card when the fn returns %s', async (_label, render) => {
+        const toolDisplay = vi.fn((event: any) => (event.kind === 'approval' ? render() : undefined));
+        const { channels, calls, chatThread } = makeChannels({ streaming: true, toolDisplay });
+        await drive(channels, approvalChunks, chatThread);
+
+        expect(toolDisplay.mock.calls.some(([event]) => event.kind === 'approval')).toBe(true);
+        const posts = calls.filter(c => c.kind === 'post');
+        expect(posts).toHaveLength(1);
+        expect(JSON.stringify((posts[0] as Extract<Call, { kind: 'post' }>).arg)).toContain('tool_approve:t1');
+        expect(JSON.stringify((posts[0] as Extract<Call, { kind: 'post' }>).arg)).toContain('tool_deny:t1');
+      });
+
+      it('posts the custom approval message in static mode too (driver parity)', async () => {
+        const toolDisplay = vi.fn((event: any) =>
+          event.kind === 'approval' ? { kind: 'post', message: 'CUSTOM APPROVAL' } : undefined,
+        );
+        const { channels, calls, chatThread } = makeChannels({ streaming: false, toolDisplay });
+        await drive(channels, approvalChunks, chatThread);
+
+        const approvalCall = toolDisplay.mock.calls.find(([event]) => event.kind === 'approval');
+        expect(approvalCall![1]).toEqual({ mode: 'static', platform: 'test' });
+        const posts = calls.filter(c => c.kind === 'post');
+        expect(posts).toHaveLength(1);
+        expect((posts[0] as Extract<Call, { kind: 'post' }>).arg).toBe('CUSTOM APPROVAL');
+      });
+    });
+
     it('posts running card on tool-call and edits it with the result on tool-result', async () => {
       const { channels, calls, chatThread } = makeChannels({ streaming: false });
       await drive(

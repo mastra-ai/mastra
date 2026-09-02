@@ -36,9 +36,8 @@ createVectorTestSuite({
   supportsNotOperator: false,
   // LibSQL-specific: validates and rejects $nor operator
   supportsNorOperator: false,
-  // LibSQL-specific: doesn't support $elemMatch or $size operators
+  // LibSQL-specific: doesn't support $elemMatch
   supportsElemMatch: false,
-  supportsSize: false,
   // LibSQL-specific: silently handles malformed operators (returns empty results instead of throwing)
   supportsStrictOperatorValidation: false,
 });

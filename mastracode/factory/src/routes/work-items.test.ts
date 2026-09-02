@@ -741,6 +741,52 @@ describe('work item relations', () => {
   });
 });
 
+describe('GET /web/factory/projects/:id/decisions', () => {
+  it('names the linked-card source on the summary and leaves it null for other effects', async () => {
+    const now = new Date('2030-01-01T00:00:00.000Z');
+    await seed.workItems.commitRuleEvaluation({
+      orgId: 'org1',
+      factoryProjectId: PROJECT_ID,
+      workItemId: null,
+      ingress: { identity: 'decision-source', triggerType: 'test' },
+      ruleSetVersion: 'rules-v1',
+      expectedRevision: null,
+      actor: { type: 'system', id: 'rules' },
+      outcome: { status: 'accepted' },
+      decisions: [
+        {
+          type: 'upsertLinkedWorkItem',
+          idempotencyKey: 'decision-source-linked',
+          board: 'review',
+          source: 'github-pr',
+          sourceKey: 'github-pr:7',
+          title: 'Fix the login flow',
+          url: null,
+          stage: 'intake',
+          metadata: {},
+        },
+        {
+          type: 'sendMessage',
+          role: 'work',
+          message: 'Notify the session.',
+          idempotencyKey: 'decision-source-message',
+        },
+      ],
+      causalChain: [],
+      now,
+    });
+
+    const body = await (await json('GET', `/web/factory/projects/${PROJECT_ID}/decisions`)).json();
+    expect(body.decisions).toHaveLength(2);
+    expect(body.decisions).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ type: 'upsertLinkedWorkItem', source: 'github-pr' }),
+        expect.objectContaining({ type: 'sendMessage', source: null }),
+      ]),
+    );
+  });
+});
+
 describe('GET /web/factory/projects/:id/attention', () => {
   it('tracks read and archived failure occurrences across retries', async () => {
     const created = await json('POST', `/web/factory/projects/${PROJECT_ID}/work-items`, createBody());

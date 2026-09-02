@@ -27,6 +27,8 @@ export interface ExperimentTriggerDialogProps {
   initialDatasetId?: string;
   initialDatasetVersion?: number;
   initialScorerIds?: string[];
+  initialTargetType?: TargetType;
+  initialTargetId?: string;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSuccess?: (experimentId: string) => void;
@@ -68,6 +70,8 @@ export function ExperimentTriggerDialog({
   initialDatasetId,
   initialDatasetVersion,
   initialScorerIds,
+  initialTargetType,
+  initialTargetId,
   open,
   onOpenChange,
   onSuccess,
@@ -75,8 +79,8 @@ export function ExperimentTriggerDialog({
   const contentRef = useRef<HTMLDivElement>(null);
   const [datasetId, setDatasetId] = useState(initialDatasetId ?? '');
   const [version, setVersion] = useState<number | null>(initialDatasetVersion ?? null);
-  const [targetType, setTargetType] = useState<TargetType | ''>('');
-  const [targetId, setTargetId] = useState<string>('');
+  const [targetType, setTargetType] = useState<TargetType | ''>(initialTargetType ?? '');
+  const [targetId, setTargetId] = useState<string>(initialTargetId ?? '');
   const [selectedScorers, setSelectedScorers] = useState<string[]>(initialScorerIds ?? []);
   const [requestContextValues, setRequestContextValues] = useState<Record<string, unknown>>({});
   const [requestContextRaw, setRequestContextRaw] = useState('');
@@ -99,8 +103,8 @@ export function ExperimentTriggerDialog({
   const resetState = () => {
     setDatasetId(initialDatasetId ?? '');
     setVersion(initialDatasetVersion ?? null);
-    setTargetType('');
-    setTargetId('');
+    setTargetType(initialTargetType ?? '');
+    setTargetId(initialTargetId ?? '');
     setSelectedScorers(initialScorerIds ?? []);
     setRequestContextValues({});
     setRequestContextRaw('');

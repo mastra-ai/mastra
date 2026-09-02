@@ -997,6 +997,26 @@ describe('Observability Methods', () => {
     });
   });
 
+  describe('updateFeedbackReviewStatus()', () => {
+    it('should update feedback review status with the correct PATCH request', async () => {
+      mockSuccessfulResponse();
+
+      await client.updateFeedbackReviewStatus({ feedbackId: 'feedback/123', reviewStatus: 'reviewed' });
+
+      expect(global.fetch).toHaveBeenCalledWith(
+        `${clientOptions.baseUrl}/api/observability/feedback/feedback%2F123/review-status`,
+        expect.objectContaining({
+          method: 'PATCH',
+          headers: expect.objectContaining({
+            ...clientOptions.headers,
+            'content-type': 'application/json',
+          }),
+          body: JSON.stringify({ reviewStatus: 'reviewed' }),
+        }),
+      );
+    });
+  });
+
   describe('createFeedback()', () => {
     it('should create feedback with correct POST request', async () => {
       mockSuccessfulResponse();

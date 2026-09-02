@@ -1,3 +1,4 @@
+import { Badge } from '@mastra/playground-ui/components/Badge';
 import { LogoWithoutText } from '@mastra/playground-ui/components/Logo';
 import { MainSidebar, useMainSidebar } from '@mastra/playground-ui/components/MainSidebar';
 import type { NavLink } from '@mastra/playground-ui/components/MainSidebar';
@@ -14,6 +15,8 @@ import { getPermissionForRoute, hasRoutePermission } from '@/domains/auth/route-
 import { isAuthenticated } from '@/domains/auth/types';
 import { useIsCmsAvailable } from '@/domains/cms/hooks/use-is-cms-available';
 import { MastraVersionFooter } from '@/domains/configuration/components/mastra-version-footer';
+import { useFeedbackInboxCount } from '@/domains/feedback/hooks/use-feedback';
+import { useInboxDatasetReviewCount } from '@/domains/review/hooks/use-inbox-review-items';
 import { useNavigationCommand } from '@/lib/command';
 import { useLinkComponent } from '@/lib/framework';
 import { useMastraPlatform } from '@/lib/mastra-platform/hooks/use-mastra-platform';
@@ -52,6 +55,12 @@ export function AppSidebar() {
   const { data: authCapabilities } = useAuthCapabilities();
   const { isCmsAvailable, isLoading: isCmsLoading } = useIsCmsAvailable();
   const { hasPermission, hasAnyPermission, isLoading: isPermissionsLoading } = usePermissions();
+  const canReadInbox =
+    !isPermissionsLoading && hasRoutePermission(getPermissionForRoute('/inbox'), hasPermission, hasAnyPermission);
+  const feedbackInboxCountQuery = useFeedbackInboxCount({ enabled: canReadInbox });
+  const datasetReviewCountQuery = useInboxDatasetReviewCount({ enabled: canReadInbox });
+  const hasInboxItems =
+    (feedbackInboxCountQuery.data?.pagination?.total ?? 0) > 0 || (datasetReviewCountQuery.data ?? 0) > 0;
 
   const isUserAuthenticated = authCapabilities && isAuthenticated(authCapabilities);
   const cmsOnlyLinks = new Set(['/prompts']);
@@ -204,7 +213,17 @@ export function AppSidebar() {
                     state={state}
                     link={toSidebarLink(item)}
                     isActive={getIsLinkActive(item, pathname)}
-                  />
+                  >
+                    {item.url === '/inbox' && hasInboxItems && state !== 'collapsed' ? (
+                      <Badge
+                        variant="yellow"
+                        size="sm"
+                        indicator="dot"
+                        className="ml-auto"
+                        aria-label="Items need review"
+                      />
+                    ) : null}
+                  </MainSidebar.NavLink>
                 ))}
               </MainSidebar.NavList>
             </MainSidebar.NavSection>

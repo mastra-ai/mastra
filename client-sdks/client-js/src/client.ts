@@ -38,6 +38,8 @@ import type {
   CreateFeedbackResponse,
   DeleteFeedbackArgs,
   DeleteFeedbackResponse,
+  UpdateFeedbackReviewStatusArgs,
+  FeedbackRecord,
   GetFeedbackAggregateArgs,
   GetFeedbackAggregateResponse,
   GetFeedbackBreakdownArgs,
@@ -1196,6 +1198,11 @@ export class MastraClient extends BaseResource {
   /** Deletes feedback records by feedbackId, optionally scoped to a tenant. */
   deleteFeedback(params: DeleteFeedbackArgs): Promise<DeleteFeedbackResponse> {
     return this.observability.deleteFeedback(params);
+  }
+
+  /** Updates a feedback record's review workflow status. */
+  updateFeedbackReviewStatus(params: UpdateFeedbackReviewStatusArgs): Promise<FeedbackRecord> {
+    return this.observability.updateFeedbackReviewStatus(params);
   }
 
   /** Returns an aggregated feedback value with optional period-over-period comparison. */

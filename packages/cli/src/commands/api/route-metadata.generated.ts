@@ -2261,6 +2261,7 @@ export const API_ROUTE_METADATA = {
       "perPage",
       "requestId",
       "resourceId",
+      "reviewStatus",
       "rootEntityName",
       "rootEntityType",
       "rootEntityVersionId",
@@ -2307,6 +2308,22 @@ export const API_ROUTE_METADATA = {
       "feedbackIds",
       "organizationId",
       "resourceId"
+    ],
+    "hasQuery": false,
+    "hasBody": true,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "PATCH /observability/feedback/:feedbackId/review-status": {
+    "method": "PATCH",
+    "path": "/observability/feedback/:feedbackId/review-status",
+    "pathParams": [
+      "feedbackId"
+    ],
+    "queryParams": [],
+    "bodyParams": [
+      "reviewStatus"
     ],
     "hasQuery": false,
     "hasBody": true,

@@ -42,6 +42,8 @@ import type {
   CreateFeedbackResponse,
   DeleteFeedbackArgs,
   DeleteFeedbackResponse,
+  UpdateFeedbackReviewStatusArgs,
+  FeedbackRecord,
   GetFeedbackAggregateArgs,
   GetFeedbackAggregateResponse,
   GetFeedbackBreakdownArgs,
@@ -411,6 +413,14 @@ export class Observability extends BaseResource {
     return this.request(`/observability/feedback`, {
       method: 'POST',
       body: params,
+    });
+  }
+
+  /** Updates a feedback record's review workflow status. */
+  updateFeedbackReviewStatus(params: UpdateFeedbackReviewStatusArgs): Promise<FeedbackRecord> {
+    return this.request(`/observability/feedback/${encodeURIComponent(params.feedbackId)}/review-status`, {
+      method: 'PATCH',
+      body: { reviewStatus: params.reviewStatus },
     });
   }
 

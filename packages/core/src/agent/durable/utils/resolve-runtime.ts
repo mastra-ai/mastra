@@ -104,7 +104,7 @@ export interface ResolveRuntimeOptions {
  * resolution (tenant/user, workspace, dynamic model/memory) working for tools
  * rebuilt on a cross-process worker, including a delegated subagent's.
  */
-function restoreRequestContext(entries?: Record<string, unknown>, runLevel?: RequestContext): RequestContext {
+export function restoreRequestContext(entries?: Record<string, unknown>, runLevel?: RequestContext): RequestContext {
   if (entries) {
     // Drop any persisted token from legacy snapshots written before the token
     // was excluded from persistence — a stale bearer token must never be restored.
@@ -521,7 +521,8 @@ export function resolveTool(toolName: string, mastra?: Mastra): CoreTool | undef
  *    `(toolName, args, ...)`. Throwing defaults to "require approval" (safe).
  *  - Boolean global / tool-level `requireApproval` seed the decision.
  *  - A per-tool `needsApprovalFn` (e.g. skill tools) is authoritative when
- *    present and overrides the seed.
+ *    present and overrides the seed. It receives `{ requestContext, workspace }`
+ *    as its second argument, exactly like the non-durable loop.
  *
  * In durable execution the function form lives on the run registry, not on
  * the serialized workflow input — pass the resolved value from the caller.
@@ -555,7 +556,10 @@ export async function toolRequiresApproval(
   const needsApprovalFn = getNeedsApprovalFn(tool);
   if (needsApprovalFn) {
     try {
-      requires = !!(await needsApprovalFn(args ?? {}));
+      requires = !!(await needsApprovalFn(args ?? {}, {
+        requestContext: approvalContext?.requestContext,
+        workspace: approvalContext?.workspace,
+      }));
     } catch {
       // On error, default to requiring approval (safe default)
       requires = true;

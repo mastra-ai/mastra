@@ -70,7 +70,7 @@ Don't say "Agent did x", say "did x". It will be assumed the agent did what was 
 Drop caveman for: security warnings, irreversible action confirmations, multi-step sequences where fragment order risks misread, user asks to clarify or repeats question, and anything that requires remembering verbatim content. Resume caveman after clear part done`;
 
 /**
- * The organization rung local (TUI/studio) knowledge is captured under. A fixed
+ * The organization rung local (TUI/studio) knowledge is curated under. A fixed
  * literal on purpose: deriving it from a hostname or path would fragment local
  * knowledge per checkout into scopes nothing ever reads.
  */
@@ -99,7 +99,7 @@ function reportOrgUnresolved(
   }
   const session = controller?.session;
   console.error(
-    `[Subconscious] Knowledge capture disabled: no organization resolved for session ${session?.id ?? 'unknown'} (project ${factoryProjectId ?? 'none'}). Knowledge is not written rather than written where it cannot be read.`,
+    `[Subconscious] Knowledge curation disabled: no organization resolved for session ${session?.id ?? 'unknown'} (project ${factoryProjectId ?? 'none'}). Knowledge is not written rather than written where it cannot be read.`,
   );
 }
 
@@ -121,7 +121,7 @@ export function getDynamicMemory(storage: MastraCompositeStore, vector?: MastraV
     const factoryProjectId = state?.factoryProjectId;
     const isFactory = typeof factoryProjectId === 'string' && factoryProjectId.trim().length > 0;
 
-    // A Factory-owned session that could not resolve its org refuses to capture:
+    // A Factory-owned session that could not resolve its org refuses to curate:
     // writing under a substituted identity produces knowledge the fail-closed
     // read path can never see.
     let orgUnresolvedRefusal = false;
@@ -147,7 +147,7 @@ export function getDynamicMemory(storage: MastraCompositeStore, vector?: MastraV
       }
     }
 
-    const captureEnabled = subconsciousEnabled && !orgUnresolvedRefusal;
+    const subconsciousAvailable = subconsciousEnabled && !orgUnresolvedRefusal;
 
     const omScope = state?.omScope ?? getOmScope(state?.projectPath);
 
@@ -159,7 +159,7 @@ export function getDynamicMemory(storage: MastraCompositeStore, vector?: MastraV
     const observeAttachments = state?.observeAttachments;
     // Factory sessions get a factory-only Subconscious config, so the cache key
     // carries a factory presence bit to keep the two configs from cross-serving.
-    const cacheKey = `${obsThreshold}:${refThreshold}:${omScope}:${observerPreviousObservationTokens}:${caveman ? 1 : 0}:${observeAttachments}:${isFactory ? 1 : 0}:${captureEnabled ? 1 : 0}`;
+    const cacheKey = `${obsThreshold}:${refThreshold}:${omScope}:${observerPreviousObservationTokens}:${caveman ? 1 : 0}:${observeAttachments}:${isFactory ? 1 : 0}:${subconsciousAvailable ? 1 : 0}`;
     if (cachedMemory && cachedMemoryKey === cacheKey) {
       return cachedMemory;
     }
@@ -184,19 +184,11 @@ export function getDynamicMemory(storage: MastraCompositeStore, vector?: MastraV
           enabled: true,
           temporalMarkers: true,
           retrieval: vector ? { vector: true } : true,
-          experimental_subconscious: captureEnabled
+          experimental_subconscious: subconsciousAvailable
             ? new Subconscious({
                 defaultScope: 'resource',
                 maxScope: 'resource',
-                // Capture-time pinning is a factory-only opinion; every other
-                // client keeps plain curator-maintained pins.
-                pins: isFactory ? { capturePinning: true } : true,
-                // Factory sessions run the curator every 3 observation runs;
-                // other clients leave the cadence trigger dormant.
-                ...(isFactory ? { curationCadence: 3 } : {}),
-                // Real curation over a factory worklist needs tool room: the
-                // default 5-step budget exhausts mid-batch and the curator never
-                // reaches its cursor acknowledgment (observed live 2026-08-13).
+                pins: true,
                 ...(isFactory ? { maxSteps: 25 } : {}),
               })
             : undefined,

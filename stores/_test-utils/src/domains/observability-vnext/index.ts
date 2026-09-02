@@ -3206,6 +3206,115 @@ export function createObservabilityVNextTests(options: CreateObservabilityVNextT
       });
     });
 
+    describe('feedback (review status)', () => {
+      const baseFeedback = {
+        timestamp: new Date('2026-01-01T00:00:00Z'),
+        spanId: null,
+        feedbackSource: 'user',
+        feedbackType: 'thumbs',
+        value: 1,
+        comment: null,
+        experimentId: null,
+        feedbackUserId: null,
+        sourceId: null,
+        metadata: null,
+      };
+
+      it('defaults reviewStatus to needs-review when omitted', async () => {
+        await storage.createFeedback({
+          feedback: { ...baseFeedback, feedbackId: 'feedback-review-default', traceId: 'trace-review-1' },
+        });
+
+        const result = await storage.listFeedback({ filters: { traceId: 'trace-review-1' } });
+        expect(result.feedback).toHaveLength(1);
+        expect(result.feedback[0]!.reviewStatus).toBe('needs-review');
+      });
+
+      it('persists a caller-supplied reviewStatus', async () => {
+        await storage.createFeedback({
+          feedback: {
+            ...baseFeedback,
+            feedbackId: 'feedback-review-explicit',
+            traceId: 'trace-review-2',
+            reviewStatus: 'reviewed',
+          },
+        });
+
+        const result = await storage.listFeedback({ filters: { traceId: 'trace-review-2' } });
+        expect(result.feedback[0]!.reviewStatus).toBe('reviewed');
+      });
+
+      it('persists reviewStatus on batch create', async () => {
+        await storage.batchCreateFeedback({
+          feedbacks: [
+            { ...baseFeedback, feedbackId: 'feedback-review-batch-1', traceId: 'trace-review-batch' },
+            {
+              ...baseFeedback,
+              feedbackId: 'feedback-review-batch-2',
+              traceId: 'trace-review-batch',
+              reviewStatus: 'reviewed',
+            },
+          ],
+        });
+
+        const result = await storage.listFeedback({ filters: { traceId: 'trace-review-batch' } });
+        const byId = new Map(result.feedback.map(fb => [fb.feedbackId, fb.reviewStatus]));
+        expect(byId.get('feedback-review-batch-1')).toBe('needs-review');
+        expect(byId.get('feedback-review-batch-2')).toBe('reviewed');
+      });
+
+      it('filters by reviewStatus', async () => {
+        await storage.batchCreateFeedback({
+          feedbacks: [
+            { ...baseFeedback, feedbackId: 'feedback-review-filter-1', traceId: 'trace-review-filter' },
+            {
+              ...baseFeedback,
+              feedbackId: 'feedback-review-filter-2',
+              traceId: 'trace-review-filter',
+              reviewStatus: 'reviewed',
+            },
+          ],
+        });
+
+        const needsReview = await storage.listFeedback({
+          filters: { traceId: 'trace-review-filter', reviewStatus: 'needs-review' },
+        });
+        expect(needsReview.feedback.map(fb => fb.feedbackId)).toEqual(['feedback-review-filter-1']);
+        expect(needsReview.pagination?.total).toBe(1);
+
+        const reviewed = await storage.listFeedback({
+          filters: { traceId: 'trace-review-filter', reviewStatus: 'reviewed' },
+        });
+        expect(reviewed.feedback.map(fb => fb.feedbackId)).toEqual(['feedback-review-filter-2']);
+      });
+
+      it('updates reviewStatus and returns the updated record', async () => {
+        await storage.createFeedback({
+          feedback: { ...baseFeedback, feedbackId: 'feedback-review-update', traceId: 'trace-review-update' },
+        });
+
+        const updated = await storage.updateFeedbackReviewStatus({
+          feedbackId: 'feedback-review-update',
+          reviewStatus: 'reviewed',
+        });
+        expect(updated.feedbackId).toBe('feedback-review-update');
+        expect(updated.reviewStatus).toBe('reviewed');
+
+        // Append-only stores (ClickHouse) implement the update as a replacement
+        // row; the read side must still expose a single, latest version.
+        const result = await storage.listFeedback({ filters: { traceId: 'trace-review-update' } });
+        expect(result.feedback).toHaveLength(1);
+        expect(result.pagination?.total).toBe(1);
+        expect(result.feedback[0]!.reviewStatus).toBe('reviewed');
+      });
+
+      it('throws when updating reviewStatus of a missing feedback record', async () => {
+        await expect(
+          storage.updateFeedbackReviewStatus({ feedbackId: 'feedback-does-not-exist', reviewStatus: 'reviewed' }),
+        ).rejects.toThrow();
+      });
+    });
+
     describe('feedback (batch)', () => {
       it('batch creates and lists feedback', async () => {
         await storage.batchCreateFeedback({

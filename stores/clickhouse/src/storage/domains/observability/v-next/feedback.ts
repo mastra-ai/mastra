@@ -1,4 +1,5 @@
 import type { ClickHouseClient } from '@clickhouse/client';
+import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { listFeedbackArgsSchema } from '@mastra/core/storage';
 import type {
   AggregationInterval,
@@ -6,6 +7,8 @@ import type {
   BatchCreateFeedbackArgs,
   CreateFeedbackArgs,
   DeleteFeedbackArgs,
+  FeedbackRecord,
+  UpdateFeedbackReviewStatusArgs,
   ListFeedbackArgs,
   ListFeedbackResponse,
   GetFeedbackAggregateArgs,
@@ -27,6 +30,7 @@ import type { FilterResult } from './filters';
 import { CH_INSERT_SETTINGS, CH_SETTINGS, feedbackRecordToRow, rowToFeedbackRecord } from './helpers';
 import type { ClickHouseDeltaCursorStrategy } from './polling';
 import { assertDeltaPollingSupported, deltaPollingSupported, validateCursorId } from './polling';
+import { parseUpdateFeedbackReviewStatusArgs } from './review-status';
 
 // ============================================================================
 // Helpers
@@ -236,6 +240,47 @@ export async function deleteFeedback(
 }
 
 // ============================================================================
+// Review status
+// ============================================================================
+
+export async function updateFeedbackReviewStatus(
+  client: ClickHouseClient,
+  args: UpdateFeedbackReviewStatusArgs,
+): Promise<FeedbackRecord> {
+  const { feedbackId, reviewStatus } = parseUpdateFeedbackReviewStatusArgs(args);
+
+  const existing = await queryJson<Record<string, any>>(
+    client,
+    `SELECT * FROM ${TABLE_FEEDBACK_EVENTS} FINAL WHERE feedbackId = {feedbackId:String} LIMIT 1`,
+    { feedbackId },
+  );
+  if (!existing[0]) {
+    throw new MastraError({
+      id: 'OBSERVABILITY_UPDATE_FEEDBACK_REVIEW_STATUS_NOT_FOUND',
+      domain: ErrorDomain.MASTRA_OBSERVABILITY,
+      category: ErrorCategory.USER,
+      text: 'Feedback record not found',
+      details: { feedbackId },
+    });
+  }
+
+  // ClickHouse is append-only in practice: never mutate a written row. Instead
+  // insert a replacement row with the same ReplacingMergeTree key
+  // (traceId, timestamp, feedbackId). Background merges collapse the
+  // duplicates keeping the last inserted row, and every read on this table
+  // uses FINAL so the latest version wins before merges happen.
+  const updated = rowToFeedbackRecord({ ...existing[0], reviewStatus });
+  await client.insert({
+    table: TABLE_FEEDBACK_EVENTS,
+    values: [feedbackRecordToRow(updated)],
+    format: 'JSONEachRow',
+    clickhouse_settings: CH_INSERT_SETTINGS,
+  });
+
+  return updated;
+}
+
+// ============================================================================
 // List
 // ============================================================================
 
@@ -279,13 +324,13 @@ export async function listFeedback(
   const currentDeltaCursor = deltaCursorEnabled ? await getDeltaCursor(client, whereClause, filter.params) : undefined;
   const countResult = await queryJson<{ total?: number }>(
     client,
-    `SELECT count() AS total FROM ${TABLE_FEEDBACK_EVENTS} AS f ${whereClause}`,
+    `SELECT count() AS total FROM ${TABLE_FEEDBACK_EVENTS} AS f FINAL ${whereClause}`,
     filter.params,
   );
 
   const rows = await queryJson<Record<string, any>>(
     client,
-    `SELECT * FROM ${TABLE_FEEDBACK_EVENTS} AS f ${whereClause} ORDER BY ${orderBy} LIMIT {limit:UInt32} OFFSET {offset:UInt32}`,
+    `SELECT * FROM ${TABLE_FEEDBACK_EVENTS} AS f FINAL ${whereClause} ORDER BY ${orderBy} LIMIT {limit:UInt32} OFFSET {offset:UInt32}`,
     { ...filter.params, limit: pagination.limit, offset: pagination.offset },
   );
 
@@ -327,7 +372,7 @@ async function queryFeedbackAfterCursor(
         f.feedbackId AS feedbackId,
         toString(d.cursorId) AS cursorId
       FROM ${TABLE_FEEDBACK_EVENTS_DELTA} d
-      INNER JOIN ${TABLE_FEEDBACK_EVENTS} f
+      INNER JOIN ${TABLE_FEEDBACK_EVENTS} f FINAL
         ON ((f.traceId = d.traceId) OR (f.traceId IS NULL AND d.traceId IS NULL))
        AND f.timestamp = d.timestamp
        AND f.feedbackId = d.feedbackId
@@ -349,7 +394,7 @@ async function getDeltaCursor(
     `
       SELECT toString(max(d.cursorId)) AS cursorId
       FROM ${TABLE_FEEDBACK_EVENTS_DELTA} d
-      INNER JOIN ${TABLE_FEEDBACK_EVENTS} f
+      INNER JOIN ${TABLE_FEEDBACK_EVENTS} f FINAL
         ON ((f.traceId = d.traceId) OR (f.traceId IS NULL AND d.traceId IS NULL))
        AND f.timestamp = d.timestamp
        AND f.feedbackId = d.feedbackId
@@ -400,7 +445,7 @@ export async function getFeedbackAggregate(
   const combined = mergeFilters(identity, signalFilter);
   const whereClause = toWhereClause(combined);
 
-  const sql = `SELECT ${aggSql} AS value FROM ${TABLE_FEEDBACK_EVENTS} ${whereClause}`;
+  const sql = `SELECT ${aggSql} AS value FROM ${TABLE_FEEDBACK_EVENTS} FINAL ${whereClause}`;
   const result = await queryJson<Record<string, unknown>>(client, sql, combined.params);
   const value = result[0]?.value == null ? null : Number(result[0]?.value);
 
@@ -439,7 +484,7 @@ export async function getFeedbackAggregate(
 
       const prevResult = await queryJson<Record<string, unknown>>(
         client,
-        `SELECT ${aggSql} AS value FROM ${TABLE_FEEDBACK_EVENTS} ${prevWhereClause}`,
+        `SELECT ${aggSql} AS value FROM ${TABLE_FEEDBACK_EVENTS} FINAL ${prevWhereClause}`,
         prevCombined.params,
       );
       const previousValue = prevResult[0]?.value == null ? null : Number(prevResult[0]?.value);
@@ -467,7 +512,7 @@ export async function getFeedbackBreakdown(
   const whereClause = toWhereClause(combined);
   const resolved = resolveFeedbackGroupBy(args.groupBy);
 
-  const sql = `SELECT ${resolved.map(e => e.selectSql).join(', ')}, ${aggSql} AS value FROM ${TABLE_FEEDBACK_EVENTS} ${whereClause} GROUP BY ${resolved.map(e => e.groupSql).join(', ')} ORDER BY value DESC`;
+  const sql = `SELECT ${resolved.map(e => e.selectSql).join(', ')}, ${aggSql} AS value FROM ${TABLE_FEEDBACK_EVENTS} FINAL ${whereClause} GROUP BY ${resolved.map(e => e.groupSql).join(', ')} ORDER BY value DESC`;
   const rows = await queryJson<Record<string, unknown>>(client, sql, combined.params);
 
   return {
@@ -500,7 +545,7 @@ export async function getFeedbackTimeSeries(
       SELECT toStartOfInterval(timestamp, ${intervalSql}) AS bucket,
              ${resolved.map(e => e.selectSql).join(', ')},
              ${aggSql} AS value
-      FROM ${TABLE_FEEDBACK_EVENTS} ${whereClause}
+      FROM ${TABLE_FEEDBACK_EVENTS} FINAL ${whereClause}
       GROUP BY bucket, ${resolved.map(e => e.groupSql).join(', ')}
       ORDER BY bucket
     `;
@@ -525,7 +570,7 @@ export async function getFeedbackTimeSeries(
   const sql = `
     SELECT toStartOfInterval(timestamp, ${intervalSql}) AS bucket,
            ${aggSql} AS value
-    FROM ${TABLE_FEEDBACK_EVENTS} ${whereClause}
+    FROM ${TABLE_FEEDBACK_EVENTS} FINAL ${whereClause}
     GROUP BY bucket
     ORDER BY bucket
   `;
@@ -566,7 +611,7 @@ export async function getFeedbackPercentiles(
     const sql = `
       SELECT toStartOfInterval(timestamp, ${intervalSql}) AS bucket,
              quantile(${p})(valueNumber) AS pvalue
-      FROM ${TABLE_FEEDBACK_EVENTS}
+      FROM ${TABLE_FEEDBACK_EVENTS} FINAL
       ${whereClause}
       GROUP BY bucket
       ORDER BY bucket

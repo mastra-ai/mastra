@@ -8,11 +8,6 @@ ElasticSearch vector store implementation for Mastra, providing vector similarit
 npm install @mastra/elasticsearch
 ```
 
-## Prerequisites
-
-- ElasticSearch 8.x+ instance
-- Dense vector support enabled (included by default in ES 8.x)
-
 ## Usage
 
 ### Vector Store
@@ -23,27 +18,30 @@ import { ElasticSearchVector } from '@mastra/elasticsearch';
 const vectorDB = new ElasticSearchVector({
   url: 'http://localhost:9200',
   id: 'my-vector-store',
-  auth: { apiKey: 'insert-api-key' }
+  auth: { apiKey: 'insert-api-key' },
 });
 
 // Create a new vector index
 await vectorDB.createIndex({
   indexName: 'my_vectors',
-  dimension: 1536,
+  dimension: 3,
   metric: 'cosine', // or 'euclidean', 'dotproduct'
 });
 
 // Upsert vectors
 const ids = await vectorDB.upsert({
   indexName: 'my_vectors',
-  vectors: [[0.1, 0.2, ...], [0.3, 0.4, ...]],
+  vectors: [
+    [0.1, 0.2, 0.3],
+    [0.3, 0.4, 0.5],
+  ],
   metadata: [{ text: 'doc1' }, { text: 'doc2' }],
 });
 
 // Query vectors
 const results = await vectorDB.query({
   indexName: 'my_vectors',
-  queryVector: [0.1, 0.2, ...],
+  queryVector: [0.1, 0.2, 0.3],
   topK: 10,
   filter: { text: 'doc1' },
   includeVector: false,
@@ -54,7 +52,7 @@ await vectorDB.updateVector({
   indexName: 'my_vectors',
   id: 'vector-id',
   update: {
-    vector: [0.5, 0.6, ...],
+    vector: [0.5, 0.6, 0.7],
     metadata: { text: 'updated' },
   },
 });
@@ -72,75 +70,15 @@ await vectorDB.deleteVectors({
 });
 ```
 
-## Configuration
+## Documentation
 
-The ElasticSearchVector store accepts either connection parameters or a pre-configured client:
+- [Elasticsearch integration guide](https://mastra.ai/integrations/databases/elasticsearch)
+- [Elasticsearch vector reference](https://mastra.ai/reference/vectors/elasticsearch)
 
-### Using connection parameters
+## Changelog
 
-- `id`: A unique identifier for the vector store instance (required)
-- `url`: The ElasticSearch node URL (required)
-- `auth`: The authentication mechanism (optional)
-  - HTTP basic: `{ auth: { username: 'insert-username', password: 'insert-password' } }`
-  - API key: `{ auth: { apiKey: 'insert-api-key' } }`
-  - Bearer token: `{ auth: { bearer: 'insert-token' } }`
+See the [package changelog](https://github.com/mastra-ai/mastra/blob/main/stores/elasticsearch/CHANGELOG.md) for version history and release notes.
 
-### Using a pre-configured client
+## Support
 
-- `id`: A unique identifier for the vector store instance (required)
-- `client`: An existing `@elastic/elasticsearch` `Client` instance (required)
-
-```typescript
-import { Client } from '@elastic/elasticsearch';
-import { ElasticSearchVector } from '@mastra/elasticsearch';
-
-const client = new Client({ node: 'http://localhost:9200' });
-const vectorDB = new ElasticSearchVector({ id: 'my-vector-store', client });
-```
-
-## Features
-
-### Vector Store Features
-
-- **Create Index**: Create vector indexes with specified dimensions and similarity metrics
-- **Upsert**: Insert or update vectors with optional metadata
-- **Query**: Search for similar vectors with optional filtering
-- **Update**: Update vector embeddings and/or metadata by ID or filter
-- **Delete**: Remove vectors by ID or filter
-- **List Indexes**: List all vector indexes
-- **Describe Index**: Get index statistics (dimension, count, metric)
-
-### Supported Similarity Metrics
-
-- `cosine`: Cosine similarity (default)
-- `euclidean`: L2 (Euclidean) distance
-- `dotproduct`: Dot product similarity
-
-### Filter Operators
-
-The following filter operators are supported:
-
-- **Comparison**: `$eq`, `$ne`, `$gt`, `$gte`, `$lt`, `$lte`
-- **Array**: `$in`, `$nin`, `$all`
-- **Logical**: `$and`, `$or`, `$not`, `$nor`
-- **Element**: `$exists`
-- **Regex**: `$regex`
-
-## Development
-
-### Running Tests
-
-```bash
-# Start ElasticSearch container
-docker compose up -d
-
-# Run tests
-pnpm test
-
-# Stop container
-docker compose down -v
-```
-
-## License
-
-MIT
+We have an [open community Discord](https://discord.gg/mastra-ai). Come and say hello and let us know if you have any questions or need any help getting things running.
