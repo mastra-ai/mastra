@@ -4,21 +4,24 @@ import { toast } from '@mastra/playground-ui/components/Toaster';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 
 import { useIntakeBindingsQuery, useSaveIntakeBindingMutation } from '../../../../hooks/useIntakeConfig';
-import type { LinearProject } from '../../factory/services/linear';
 
 const UNROUTED = '__unrouted__';
 
 /**
- * Routing for the selected Linear projects. A Linear project feeds exactly one
- * Factory; until it is routed its issues are not picked up by any board.
+ * Routing for one provider's selected intake sources. A source feeds exactly
+ * one Factory; until it is routed its issues are not picked up by any board.
  */
-export function LinearRouting({
+export function IntakeSourceRouting({
+  integrationId,
+  label,
   sourceIds,
-  projects,
+  sources,
   factories,
 }: {
+  integrationId: string;
+  label: string;
   sourceIds: string[];
-  projects: LinearProject[];
+  sources: { id: string; name: string }[];
   factories: { id: string; name: string }[];
 }) {
   const bindingsQuery = useIntakeBindingsQuery();
@@ -28,10 +31,10 @@ export function LinearRouting({
 
   const route = (sourceId: string, value: string) => {
     saveBinding.mutate(
-      { integrationId: 'linear', sourceId, factoryProjectId: value === UNROUTED ? null : value },
+      { integrationId, sourceId, factoryProjectId: value === UNROUTED ? null : value },
       {
-        onSuccess: () => toast.success('Linear routing updated'),
-        onError: err => toast.error(err instanceof Error ? err.message : 'Failed to save Linear routing'),
+        onSuccess: () => toast.success(`${label} routing updated`),
+        onError: err => toast.error(err instanceof Error ? err.message : `Failed to save ${label} routing`),
       },
     );
   };
@@ -39,11 +42,10 @@ export function LinearRouting({
   return (
     <div className="flex flex-col">
       {sourceIds.map(sourceId => {
-        const name = projects.find(project => project.id === sourceId)?.name ?? sourceId;
+        const name = sources.find(source => source.id === sourceId)?.name ?? sourceId;
         const boundFactoryId = bindings.find(
-          binding => binding.integrationId === 'linear' && binding.sourceId === sourceId,
+          binding => binding.integrationId === integrationId && binding.sourceId === sourceId,
         )?.factoryProjectId;
-        // A binding can outlive the factory it points at; such a project is unrouted again.
         const routedFactory = factories.find(candidate => candidate.id === boundFactoryId);
         return (
           <SettingsRow
