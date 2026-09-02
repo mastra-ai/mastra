@@ -663,6 +663,32 @@ export class SkillsPG extends SkillsStorage {
     }
   }
 
+  async getVersions(ids: string[]): Promise<SkillVersion[]> {
+    if (ids.length === 0) {
+      return [];
+    }
+    try {
+      const tableName = getTableName({
+        indexName: TABLE_SKILL_VERSIONS,
+        schemaName: getSchemaName(this.#schema),
+      });
+      const placeholders = ids.map((_, i) => `$${i + 1}`).join(', ');
+      const rows = await this.#db.client.manyOrNone(`SELECT * FROM ${tableName} WHERE id IN (${placeholders})`, ids);
+      return rows.map(row => this.parseVersionRow(row));
+    } catch (error) {
+      if (error instanceof MastraError) throw error;
+      throw new MastraError(
+        {
+          id: createStorageErrorId('PG', 'GET_SKILL_VERSIONS', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { count: ids.length },
+        },
+        error,
+      );
+    }
+  }
+
   async getVersionByNumber(skillId: string, versionNumber: number): Promise<SkillVersion | null> {
     try {
       const tableName = getTableName({

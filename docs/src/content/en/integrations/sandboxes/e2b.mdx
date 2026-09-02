@@ -3,6 +3,7 @@ title: "E2B | Sandbox"
 description: "Run Mastra workspace commands in isolated E2B cloud sandboxes with background processes, cloud storage mounts, custom templates, and reconnection."
 packages:
   - "@mastra/e2b"
+  - "@mastra/factory"
 ---
 
 # E2B
@@ -75,6 +76,13 @@ const agent = new Agent({
     name: 'env',
     type: 'Record<string, string>',
     description: 'Environment variables to set in the sandbox',
+    isOptional: true,
+  },
+  {
+    name: 'workingDirectory',
+    type: 'string',
+    description:
+      'Default directory for command execution when no per-command `cwd` is given. A per-command `cwd` always wins; when neither is set, commands run from the sandbox home directory. Use an absolute path.',
     isOptional: true,
   },
   {
@@ -373,6 +381,10 @@ fresh sha ref builds in the background on E2B's side (its runtime setup
 `git fetch` fast-forwards the slightly stale checkout — freshness never
 depends on the template). A changed setup command hashes to a new template
 name.
+
+`setupCommand` also accepts an array. Each entry runs as its own cached build
+step. `workingDirectory` sets the cwd for the build and the sandbox, and the
+repository is cloned to `<workingDirectory>/<repo>`.
 
 Templates build at E2B's default machine size (2 vCPU, 1024 MB) unless the
 spec asks for more. Pass `cpuCount` and `memoryMB` to size the machine the

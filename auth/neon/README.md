@@ -1,8 +1,6 @@
 # @mastra/auth-neon
 
-Mastra authentication provider for [Neon Auth](https://neon.com/docs/auth/overview), the managed authentication service built on Better Auth.
-
-Supports JWT bearer token verification via JWKS, session cookie verification, email/password sign-in/sign-up for Studio, full session management, and optional RBAC via Neon Auth's Organization plugin.
+`@mastra/auth-neon` connects Neon Auth, the managed authentication service built on Better Auth, to Mastra. Use it when Neon manages your users and you need JWT, session-cookie, Studio sign-in, or organization-based authorization support.
 
 ## Installation
 
@@ -12,90 +10,30 @@ npm install @mastra/auth-neon
 
 ## Usage
 
+Set `NEON_AUTH_BASE_URL` before starting Mastra.
+
 ```typescript
 import { MastraAuthNeon } from '@mastra/auth-neon';
-import { Mastra } from '@mastra/core';
+import { Mastra } from '@mastra/core/mastra';
 
-const auth = new MastraAuthNeon({
-  baseUrl: process.env.NEON_AUTH_BASE_URL,
-});
-
-const mastra = new Mastra({
-  server: {
-    auth,
-  },
-});
-```
-
-### With RBAC
-
-Neon Auth uses Better Auth's Organization plugin which provides `owner`, `admin`, and `member` roles. `MastraRBACNeon` maps these to Mastra permissions:
-
-```typescript
-import { MastraAuthNeon, MastraRBACNeon } from '@mastra/auth-neon';
-import { Mastra } from '@mastra/core';
-
-const mastra = new Mastra({
+export const mastra = new Mastra({
   server: {
     auth: new MastraAuthNeon({
       baseUrl: process.env.NEON_AUTH_BASE_URL,
     }),
-    rbac: new MastraRBACNeon({
-      roleMapping: {
-        owner: ['*'],
-        admin: ['*'],
-        member: ['agents:read', 'workflows:*'],
-        _default: [],
-      },
-    }),
   },
 });
 ```
 
-## Configuration
+## Documentation
 
-### Auth Provider
+- [Neon Auth reference](https://mastra.ai/reference/auth/neon)
+- [Authentication overview](https://mastra.ai/docs/auth/overview)
 
-| Option              | Environment Variable | Description                                                 |
-| ------------------- | -------------------- | ----------------------------------------------------------- |
-| `baseUrl`           | `NEON_AUTH_BASE_URL` | Neon Auth base URL (e.g., `https://your-project.neon.tech`) |
-| `jwksUrl`           | `NEON_AUTH_JWKS_URL` | Explicit JWKS URL (overrides `baseUrl`-derived URL)         |
-| `sessionCookieName` | —                    | Session cookie name (default: `neonauth.session_token`)     |
-| `signUpEnabled`     | —                    | Whether sign-up is allowed (default: `true`)                |
+## Changelog
 
-### RBAC Provider
+See the [package changelog](https://github.com/mastra-ai/mastra/blob/main/auth/neon/CHANGELOG.md) for version history and release notes.
 
-| Option           | Description                                                                         |
-| ---------------- | ----------------------------------------------------------------------------------- |
-| `baseUrl`        | Neon Auth base URL (falls back to `NEON_AUTH_BASE_URL` env var)                     |
-| `roleMapping`    | Map of role slugs to Mastra permission patterns (use `_default` for unmapped roles) |
-| `organizationId` | Scope role lookups to a specific organization                                       |
-| `cache.ttlMs`    | Role cache TTL in ms (default: 60000)                                               |
-| `cache.maxSize`  | Max cached entries (default: 1000)                                                  |
-| `getUserRoles`   | Custom function to extract roles from user (bypasses API calls)                     |
+## Support
 
-## Authentication flow
-
-The adapter verifies tokens in two stages:
-
-1. **JWT verification** — Bearer JWT tokens (e.g., Neon Auth `access_token`) are verified against the JWKS endpoint at `{baseUrl}/auth/jwks`.
-2. **Session verification** — If JWT verification fails, the token is treated as a session cookie and verified via the Neon Auth REST API (`GET {baseUrl}/auth/get-session`).
-
-## Implemented Interfaces
-
-- `MastraAuthProvider` — Token authentication and authorization
-- `IUserProvider` — User awareness for Studio (getCurrentUser, getUser)
-- `ICredentialsProvider` — Email/password sign-in and sign-up for Studio
-- `ISessionProvider` — Session management (validate, refresh, destroy, cookie handling)
-- `IRBACProvider` (via `MastraRBACNeon`) — Role-based access control with permission mapping
-
-## Custom Authorization
-
-```typescript
-const auth = new MastraAuthNeon({
-  baseUrl: process.env.NEON_AUTH_BASE_URL,
-  authorizeUser: async user => {
-    return user.jwt?.role === 'authenticated';
-  },
-});
-```
+We have an [open community Discord](https://discord.gg/mastra-ai). Come and say hello and let us know if you have any questions or need any help getting things running.

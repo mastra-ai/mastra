@@ -73,7 +73,7 @@ function externalAssigneeProfile(item: WorkItem): AuditActorProfile | undefined 
   return { id: `linear:${assignee}`, name: assignee };
 }
 
-const CREATED_ACTION = 'factory.work_item.created';
+export const CREATED_ACTION = 'factory.work_item.created';
 const ASSIGNED_ACTION = 'factory.work_item.assigned';
 
 /**
@@ -191,4 +191,9 @@ export function workItemActivity(item: WorkItem, page: AuditEventPage | undefine
   // the current assignee ("who owns this now") over the reporter/opener.
   const externalFallback = assignee ?? creator;
   return { events, extraActors, ...(externalFallback ? { lastWorker: externalFallback } : {}) };
+}
+
+/** Comments render as themselves; the audit row each one also writes would show it twice. */
+export function timelineEvents(activity: WorkItemActivity): AuditEvent[] {
+  return activity.events.filter(event => !event.action.includes('.comment_'));
 }

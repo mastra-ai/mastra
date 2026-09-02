@@ -11,36 +11,6 @@ npm install @mastra/agentfs
 ## Usage
 
 ```typescript
-import { Agent } from '@mastra/core/agent';
-import { Workspace } from '@mastra/core/workspace';
-import { AgentFSFilesystem } from '@mastra/agentfs';
-
-const workspace = new Workspace({
-  filesystem: new AgentFSFilesystem({
-    agentId: 'my-agent', // stores at .agentfs/my-agent.db
-  }),
-});
-
-const agent = new Agent({
-  name: 'my-agent',
-  model: 'anthropic/claude-opus-4-5',
-  workspace,
-});
-```
-
-### Using an explicit database path
-
-```typescript
-const workspace = new Workspace({
-  filesystem: new AgentFSFilesystem({
-    path: '/data/my-agent.db',
-  }),
-});
-```
-
-### Using a pre-opened AgentFS instance
-
-```typescript
 import { AgentFS } from 'agentfs-sdk';
 import { AgentFSFilesystem } from '@mastra/agentfs';
 
@@ -55,4 +25,13 @@ const workspace = new Workspace({
 
 ## Documentation
 
-For more information, see the [Mastra Workspaces documentation](https://mastra.ai/docs/workspace/overview).
+- [AgentFS integration guide](https://mastra.ai/integrations/file-storage/agentfs)
+- [Workspace documentation](https://mastra.ai/docs/mastra-platform/workspaces)
+
+## Changelog
+
+See the [package changelog](https://github.com/mastra-ai/mastra/blob/main/workspaces/agentfs/CHANGELOG.md) for version history and release notes.
+
+## Support
+
+We have an [open community Discord](https://discord.gg/mastra-ai). Come and say hello and let us know if you have any questions or need any help getting things running.

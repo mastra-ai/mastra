@@ -1,5 +1,51 @@
 # create-factory
 
+## 0.1.15-alpha.7
+
+### Patch Changes
+
+- Updated dependencies [[`1b2d3ee`](https://github.com/mastra-ai/mastra/commit/1b2d3eeb41587a4356a0a84abece7a72950314b1)]:
+  - mastra@1.27.3-alpha.7
+
+## 0.1.15-alpha.6
+
+### Patch Changes
+
+- Updated dependencies [[`b114e78`](https://github.com/mastra-ai/mastra/commit/b114e787e8438732286611397f77fdcb6e6633b9)]:
+  - mastra@1.27.3-alpha.6
+
+## 0.1.15-alpha.5
+
+### Patch Changes
+
+- Updated dependencies:
+  - mastra@1.27.3-alpha.5
+
+## 0.1.15-alpha.4
+
+### Patch Changes
+
+- Updated dependencies:
+  - mastra@1.27.3-alpha.4
+
+## 0.1.15-alpha.3
+
+### Patch Changes
+
+- Fixed generated Factory projects so the optional E2B sandbox dependency is installed. ([#22785](https://github.com/mastra-ai/mastra/pull/22785))
+
+- Updated dependencies:
+  - mastra@1.27.3-alpha.3
+
+## 0.1.15-alpha.2
+
+### Patch Changes
+
+- Remove `CHANGELOG.md` from distributed npm files resulting in reduced package size ([#22737](https://github.com/mastra-ai/mastra/pull/22737))
+
+- Updated dependencies [[`28ce924`](https://github.com/mastra-ai/mastra/commit/28ce924276eeca492e6a360e5482ed20c2785ef6)]:
+  - mastra@1.27.3-alpha.2
+
 ## 0.1.15-alpha.1
 
 ### Patch Changes
