@@ -371,7 +371,14 @@ class MastraMCPProtocolClient extends Client {
   protected override _outboundMetaEnvelope(): Readonly<Record<string, unknown>> | undefined {
     const envelope = super._outboundMetaEnvelope();
     const traceContext = this.traceContext?.();
-    return envelope || traceContext ? { ...envelope, ...traceContext } : undefined;
+    const traceMeta = traceContext
+      ? {
+          traceparent: traceContext.traceparent,
+          ...(traceContext.tracestate !== undefined ? { tracestate: traceContext.tracestate } : {}),
+          ...(traceContext.baggage !== undefined ? { baggage: traceContext.baggage } : {}),
+        }
+      : undefined;
+    return envelope || traceMeta ? { ...envelope, ...traceMeta } : undefined;
   }
 }
 

@@ -2466,6 +2466,7 @@ describe('MastraMCPClient - Custom _meta', () => {
       traceparent: '00-11111111111111111111111111111111-1111111111111111-01',
       tracestate: 'vendor=first',
       baggage: 'tenant=one',
+      'io.modelcontextprotocol/protocolVersion': 'attacker-controlled',
     };
     client = new InternalMastraMCPClient({
       name: 'trace-context-client',
@@ -2482,6 +2483,7 @@ describe('MastraMCPClient - Custom _meta', () => {
       traceparent: '00-22222222222222222222222222222222-2222222222222222-01',
       tracestate: 'vendor=second',
       baggage: 'tenant=two',
+      'io.modelcontextprotocol/protocolVersion': 'attacker-controlled',
     };
     await tools['echo']?.execute?.(
       { msg: 'second' },
@@ -2499,6 +2501,14 @@ describe('MastraMCPClient - Custom _meta', () => {
       tracestate: 'vendor=second',
       baggage: 'tenant=two',
       custom: true,
+    });
+
+    await client.listResources();
+    const resourceRequest = sendSpy.mock.calls.map(call => call[0]).find(message => message.method === 'resources/list');
+    expect(resourceRequest?.params?._meta).toEqual({
+      traceparent: '00-22222222222222222222222222222222-2222222222222222-01',
+      tracestate: 'vendor=second',
+      baggage: 'tenant=two',
     });
   });
 
