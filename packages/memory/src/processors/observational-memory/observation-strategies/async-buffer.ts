@@ -60,9 +60,11 @@ export class AsyncBufferObservationStrategy extends ObservationStrategy {
     this.priorExtractedValues = getPriorExtractedValues(omMeta, this.observationConfig.extractors);
 
     const result = await this.deps.observer.call(existingObservations, messages, undefined, {
-      skipContinuationHints: true,
       requestContext: this.opts.requestContext,
       observabilityContext: this.opts.observabilityContext,
+      priorCurrentTask: omMeta?.currentTask,
+      priorSuggestedResponse: omMeta?.suggestedResponse,
+      priorThreadTitle: omMeta?.threadTitle,
       priorExtractedValues: this.priorExtractedValues,
       resourceId: this.opts.resourceId,
       mainAgent: this.opts.agent,

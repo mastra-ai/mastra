@@ -10287,6 +10287,7 @@ describe('Full Async Buffering Flow', () => {
     messageCount?: number;
     /** Optional fixed observer responses in call order */
     observerResponses?: string[];
+    observationContinuationHints?: { currentTask?: boolean; suggestedResponse?: boolean };
   }) {
     const { MessageList } = await import('@mastra/core/agent');
     const { RequestContext } = await import('@mastra/core/di');
@@ -10361,6 +10362,7 @@ describe('Full Async Buffering Flow', () => {
         bufferTokens: opts.bufferTokens,
         bufferActivation: opts.bufferActivation,
         blockAfter: opts.blockAfter,
+        continuationHints: opts.observationContinuationHints,
       },
       reflection: {
         observationTokens: opts.reflectionObservationTokens,
@@ -10867,32 +10869,37 @@ describe('Full Async Buffering Flow', () => {
     }
   });
 
-  it('should preserve continuation hints only for sync observation, not async buffering', async () => {
-    const { step, waitForAsyncOps, observerCalls } = await setupAsyncBufferingScenario({
+  it('should preserve continuation hints during async buffering', async () => {
+    const { storage, threadId, resourceId, step, waitForAsyncOps } = await setupAsyncBufferingScenario({
       messageTokens: 10000,
       bufferTokens: 500,
       bufferActivation: 0.7,
       reflectionObservationTokens: 50000,
       messageCount: 10,
+      observationContinuationHints: { currentTask: true, suggestedResponse: true },
+      observerResponses: [
+        '<observations>\n- 🔴 Initial observation\n</observations>\n<current-task>\nFinish the async task\n</current-task>\n<suggested-response>\nI will continue the async task.\n</suggested-response>',
+      ],
     });
 
-    // Step 0: triggers async buffering
     await step(0);
     await waitForAsyncOps();
 
-    // Observer should have been called for async buffering
-    expect(observerCalls.length).toBeGreaterThan(0);
+    const record = await storage.getObservationalMemory(threadId, resourceId);
+    const chunks =
+      typeof record?.bufferedObservationChunks === 'string'
+        ? JSON.parse(record.bufferedObservationChunks)
+        : (record?.bufferedObservationChunks ?? []);
 
-    // The mock captures `input: JSON.stringify(prompt).slice(0, 200)`.
-    // buildObserverPrompt appends skipContinuationHints guidance near the end of the prompt.
-    // Since the mock only captures 200 chars of the serialized prompt, we can't reliably
-    // check the end of the prompt here. The important thing: the observer was called
-    // (buffering happened), and the skipContinuationHints logic is unit-tested in
-    // buildObserverPrompt's own tests. For this integration test, we verify the async
-    // buffering path was exercised.
-    const lastCall = observerCalls[observerCalls.length - 1];
-    expect(lastCall).toBeDefined();
-    expect(lastCall.input.length).toBeGreaterThan(0);
+    expect(chunks).toHaveLength(1);
+    expect(chunks[0].currentTask).toBe('Finish the async task');
+    expect(chunks[0].suggestedContinuation).toBe('I will continue the async task.');
+
+    await step(0, { freshState: true });
+    const thread = await storage.getThreadById({ threadId });
+    const metadata = (thread?.metadata as any)?.mastra?.om;
+    expect(metadata.currentTask).toBe('Finish the async task');
+    expect(metadata.suggestedResponse).toBe('I will continue the async task.');
   });
 
   // TODO: This full-flow integration test needs rework — it was written for the old
