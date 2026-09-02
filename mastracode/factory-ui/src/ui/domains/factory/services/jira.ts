@@ -2,19 +2,27 @@
  * Browser-side helpers for the Jira intake source.
  *
  * All requests go to the server's `/web/jira/*` routes, which sit behind the
- * WorkOS auth gate and are scoped to the caller's organization. Jira
- * credentials are deployment-global (`JIRA_*` env vars on the server) — there
- * is no OAuth connect flow and the API token never reaches the browser.
+ * WorkOS auth gate and are scoped to the caller's organization. The server
+ * discovers the organization's Jira connections through Mastra Platform and
+ * sends provider requests through the integrations v2 proxy.
  */
 
-export type JiraStatusReason = 'missing_config' | 'auth_required' | 'organization_required' | 'ready';
+export type JiraStatusReason = 'missing_config' | 'auth_required' | 'organization_required' | 'not_connected' | 'ready';
 
 export interface JiraStatus {
   enabled: boolean;
-  /** True when the server has the full `JIRA_*` env group. */
+  /** True when the organization has at least one active Jira connection. */
   configured: boolean;
-  /** Jira Cloud site host, e.g. `acme.atlassian.net`. */
+  /** First connected Jira Cloud site host, retained for older consumers. */
   site?: string | null;
+  /** All connected Jira Cloud site hosts. */
+  sites?: string[];
+  connections?: Array<{
+    id: string;
+    integrationId: string;
+    status: 'active' | 'needs_reauth';
+    accountLabel: string | null;
+  }>;
   reason?: JiraStatusReason;
 }
 
@@ -48,12 +56,14 @@ export interface JiraProject {
   /** Short project key, e.g. `ENG`. */
   key: string;
   name: string;
+  connectionId?: string | null;
+  site?: string | null;
 }
 
 /**
  * Read Jira feature status. Degrades to a disabled status on 404 (server
- * without the Jira env group mounts no Jira routes), a network error, or when
- * the feature is off — same contract as `fetchLinearStatus`, so consumers read
+ * without Platform integration support), a network error, or when the feature
+ * is off — same contract as `fetchLinearStatus`, so consumers read
  * `data`, never `error`.
  */
 export async function fetchJiraStatus(baseUrl: string): Promise<JiraStatus> {
@@ -97,9 +107,8 @@ async function getJiraResource<T>(baseUrl: string, path: string): Promise<T> {
 }
 
 /**
- * True when Jira rejected the deployment's configured credentials (401/403
- * from the Jira API). Unlike Linear there is no reconnect flow — the operator
- * must fix the `JIRA_*` env group.
+ * True when a connected Jira account rejected the proxied request. The user
+ * can reconnect that account in Mastra Platform.
  */
 export function isJiraAuthError(err: unknown): boolean {
   return (err as { code?: string } | null)?.code === 'jira_auth_failed';
