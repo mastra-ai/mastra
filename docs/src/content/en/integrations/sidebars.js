@@ -425,6 +425,12 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'databases/mysql',
+          label: 'MySQL',
+          customProps: { icon: 'https://cdn.simpleicons.org/mysql?viewbox=auto&size=28' },
+        },
+        {
+          type: 'doc',
           id: 'databases/mssql',
           label: 'MSSQL',
           customProps: { icon: 'https://svgl.app/library/microsoft.svg' },
