@@ -218,9 +218,9 @@ async function queueDecision(
     board: 'work',
     stage: 'execute',
     expectedRevision: item.revision,
-    actor: { type: 'human', id: 'user-1' },
-    ingress: { type: 'human', identity: options?.ingress ?? 'move-1' },
-    cause: 'test',
+    actor: { type: 'system', id: 'factory-rule-dispatcher' },
+    ingress: { type: 'rule', identity: options?.ingress ?? 'move-1' },
+    cause: 'rule_decision',
   });
   expect(result.status).toBe('accepted');
   return { item, transitionService };
@@ -1944,8 +1944,6 @@ describe('FactoryDecisionDispatcher', () => {
   });
 
   it("runs the plan an agent's move queues on an externally authored card a person started", async () => {
-    // The person's Start armed the card; the triage agent carrying it to
-    // Planning is that same request continuing, not a new run to consent to.
     const storage = (await createFactoryStorageForTests()).workItems;
     const item = (
       await storage.upsert({

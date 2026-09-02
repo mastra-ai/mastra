@@ -438,30 +438,7 @@ describe('FactoryTransitionService', () => {
     expect((await storage.get({ orgId: 'org-1', id: item.id }))?.autonomyArmedAt).toBeNull();
   });
 
-  it("pre-approves the run an agent's working-lane move queues on an armed card, naming the agent", async () => {
-    const storage = (await createFactoryStorageForTests()).workItems;
-    const item = await createItem(storage, { stages: ['triage'], metadata: { authorTrusted: false } });
-    await storage.armAutonomy({ orgId: 'org-1', id: item.id, now: new Date('2030-01-01T00:00:00Z') });
-    const armed = await storage.get({ orgId: 'org-1', id: item.id });
-    const service = new FactoryTransitionService({
-      rules: defaultFactoryRules({ version: 'rules-v1' }),
-      storage,
-    });
-
-    const result = await service.transition({
-      ...request(item, { stage: 'planning', expectedRevision: armed?.revision }),
-      actor: { type: 'agent', bindingId: 'binding-1', role: 'triage' },
-      ingress: { type: 'agent', identity: 'triage-verdict' },
-      triageType: 'bug',
-    });
-
-    expect(result.status).toBe('accepted');
-    const [plan] = await storage.listDeferredDecisions('org-1', PROJECT_ID);
-    expect(plan).toMatchObject({ decision: { type: 'invokeSkill', role: 'plan' }, approvedBy: 'agent:binding-1' });
-    expect(plan?.approvedAt).not.toBeNull();
-  });
-
-  it("leaves the run an agent's working-lane move queues unapproved when nobody armed the card", async () => {
+  it("pre-approves the run an agent's working-lane move queues, naming the agent", async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const item = await createItem(storage, { stages: ['triage'], metadata: { authorTrusted: false } });
     const service = new FactoryTransitionService({
@@ -478,7 +455,8 @@ describe('FactoryTransitionService', () => {
 
     expect(result.status).toBe('accepted');
     const [plan] = await storage.listDeferredDecisions('org-1', PROJECT_ID);
-    expect(plan).toMatchObject({ decision: { type: 'invokeSkill', role: 'plan' }, approvedBy: null, approvedAt: null });
+    expect(plan).toMatchObject({ decision: { type: 'invokeSkill', role: 'plan' }, approvedBy: 'agent:binding-1' });
+    expect(plan?.approvedAt).not.toBeNull();
   });
 
   it('leaves autonomy unarmed when the mover is not a person', async () => {
