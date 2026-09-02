@@ -432,11 +432,11 @@ When called without options, the method omits only `durations`; `definitions`, `
 
 Rebuilds a single executable tool from a cached definition. No connection is opened here. The client connects lazily, the first time the tool is executed.
 
-The returned tool behaves exactly like one from `listTools()`, with the same strict-mode metadata, approval policy, structured content handling, tool error handling, and reconnect behavior. Successful structured results are validated against the advertised `outputSchema` on both paths. Invalid results reject the tool call; MCP error results skip output validation.
+The returned tool behaves exactly like one from `listTools()`, with the same strict-mode metadata, approval policy, structured content handling, tool error handling, and reconnect behavior. Successful structured results are validated against the advertised `outputSchema` on both paths. Invalid results reject the tool call. MCP error results skip output validation.
 
 MCP schemas without a `$schema` declaration use JSON Schema 2020-12. Local `$ref` and `$defs` references, composition keywords, and boolean subschemas are supported. To bound validation work from untrusted tool catalogs, input and output schemas are limited to 128 nested subschema levels and 10,000 subschema nodes.
 
-`structuredContent` can be any JSON value, including strings, numbers, booleans, and `null`. Object and array results also expose the MCP content and `_meta` envelopes through non-enumerable Mastra metadata properties. Scalar and `null` results cannot carry those properties and remain unchanged rather than being wrapped.
+`structuredContent` can be any JSON value, including strings, numbers, booleans, and `null`. Object and array results also expose the MCP content and `_meta` envelopes through non-enumerable Mastra metadata properties. Scalar and `null` results can't carry those properties and remain unchanged rather than being wrapped.
 
 ```typescript
 const definitions = JSON.parse(await cache.get('mcp-tools'))
