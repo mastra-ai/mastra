@@ -3874,6 +3874,9 @@ describe('ObservabilityStorageClickhouseVNext', () => {
 
   describe('deletion requests', () => {
     it('records score and feedback predicates before hiding rows', async () => {
+      const scoreDeltaBootstrap = await storage.listScores({ mode: 'delta' });
+      const feedbackDeltaBootstrap = await storage.listFeedback({ mode: 'delta' });
+
       await storage.createScore({
         score: {
           scoreId: 'request-score-1',
@@ -3919,6 +3922,24 @@ describe('ObservabilityStorageClickhouseVNext', () => {
 
       expect((await storage.listScores({})).scores).toEqual([]);
       expect((await storage.listFeedback({})).feedback).toEqual([]);
+      expect(
+        (
+          await storage.listScores({
+            mode: 'delta',
+            after: scoreDeltaBootstrap.deltaCursor!,
+            filters: { scorerId: 'request-scorer' } as any,
+          })
+        ).scores,
+      ).toEqual([]);
+      expect(
+        (
+          await storage.listFeedback({
+            mode: 'delta',
+            after: feedbackDeltaBootstrap.deltaCursor!,
+            filters: { traceId: 'request-trace-1' },
+          })
+        ).feedback,
+      ).toEqual([]);
 
       const client = createClient({
         url: process.env.CLICKHOUSE_URL || 'http://localhost:8123',

@@ -160,7 +160,7 @@ await mastraClient.deleteFeedback({
 ]}
 />
 
-On ClickHouse, deletion uses lightweight deletes on the main feedback events table to remove rows from reads, including OLAP queries, without guaranteeing immediate physical removal, so open source deployments must configure an [observability retention period](/reference/storage/retention) to physically purge them. ClickHouse keeps each deletion request for 45 days as audit and replay bookkeeping, but this retention doesn't guarantee physical purge. Short-lived delta rows aren't touched and expire within two days.
+On ClickHouse, deletion uses lightweight deletes on the main feedback events table to remove rows from reads, including OLAP queries, without guaranteeing immediate physical removal, so open source deployments must configure an [observability retention period](/reference/storage/retention) to physically purge them. ClickHouse keeps each deletion request for 45 days as audit and replay bookkeeping, but this retention doesn't guarantee physical purge. Delete APIs intentionally leave cursor-only delta rows untouched. These rows contain identifiers rather than feedback payloads and expire within two days.
 
 ## List feedback
 
