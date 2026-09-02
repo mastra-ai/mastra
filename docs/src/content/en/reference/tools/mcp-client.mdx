@@ -182,6 +182,13 @@ Each server in the `servers` map is configured using the `MastraMCPServerDefinit
     description:
       "Opt-in MCP protocol version negotiation. Omitted keeps the legacy (2025-era) connect sequence unchanged. 'auto' probes the server at connect time and uses the stateless '2026-07-28' revision when the server supports it, with a safe fallback to the legacy handshake. '2026-07-28' pins that revision exactly and fails with a typed error when the server does not offer it. Elicitation handlers work on both eras: on a '2026-07-28' connection, embedded elicitation requests from input_required results are dispatched through the same registered handler and the originating call retries automatically.",
   },
+  {
+    name: 'jsonSchemaValidator',
+    type: 'JsonSchemaValidator',
+    isOptional: true,
+    description:
+      'Validator used for MCP tool schemas and structured results. The default supports JSON Schema 2020-12. Provide a compatible validator such as CfWorkerJsonSchemaValidator in runtimes that disallow dynamic code generation.',
+  },
 ]}
 />
 
@@ -425,7 +432,11 @@ When called without options, the method omits only `durations`; `definitions`, `
 
 Rebuilds a single executable tool from a cached definition. No connection is opened here. The client connects lazily, the first time the tool is executed.
 
-The returned tool behaves exactly like one from `listTools()`, with the same strict-mode metadata, approval policy, structured content handling, tool error handling, and reconnect behavior.
+The returned tool behaves exactly like one from `listTools()`, with the same strict-mode metadata, approval policy, structured content handling, tool error handling, and reconnect behavior. Successful structured results are validated against the advertised `outputSchema` on both paths. Invalid results reject the tool call; MCP error results skip output validation.
+
+MCP schemas without a `$schema` declaration use JSON Schema 2020-12. Local `$ref` and `$defs` references, composition keywords, and boolean subschemas are supported. To bound validation work from untrusted tool catalogs, output schemas are limited to 128 nested subschema levels and 10,000 subschema nodes.
+
+`structuredContent` can be any JSON value, including strings, numbers, booleans, and `null`. Object and array results also expose the MCP content and `_meta` envelopes through non-enumerable Mastra metadata properties. Scalar and `null` results cannot carry those properties and remain unchanged rather than being wrapped.
 
 ```typescript
 const definitions = JSON.parse(await cache.get('mcp-tools'))
