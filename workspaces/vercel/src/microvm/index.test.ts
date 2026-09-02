@@ -319,6 +319,47 @@ describe('VercelSandbox', () => {
       expect(runArgs.env).toEqual({ BASE: '1', EXTRA: '2' });
     });
 
+    it('defaults cwd to the configured workingDirectory', async () => {
+      const fake = makeFakeSandbox({
+        runCommand: vi.fn().mockResolvedValue(makeFinished(0, '')),
+      });
+      createMock.mockResolvedValue(fake);
+
+      const sandbox = new VercelSandbox({ workingDirectory: '/srv/app' });
+      await sandbox.executeCommand('pwd');
+
+      const runArgs = (fake.runCommand as ReturnType<typeof vi.fn>).mock.calls[0]![0];
+      expect(runArgs.cwd).toBe('/srv/app');
+      expect(sandbox.workingDirectory).toBe('/srv/app');
+    });
+
+    it('per-command cwd wins over the configured workingDirectory', async () => {
+      const fake = makeFakeSandbox({
+        runCommand: vi.fn().mockResolvedValue(makeFinished(0, '')),
+      });
+      createMock.mockResolvedValue(fake);
+
+      const sandbox = new VercelSandbox({ workingDirectory: '/srv/app' });
+      await sandbox.executeCommand('pwd', [], { cwd: '/app' });
+
+      const runArgs = (fake.runCommand as ReturnType<typeof vi.fn>).mock.calls[0]![0];
+      expect(runArgs.cwd).toBe('/app');
+    });
+
+    it('omits cwd when neither cwd nor workingDirectory is set', async () => {
+      const fake = makeFakeSandbox({
+        runCommand: vi.fn().mockResolvedValue(makeFinished(0, '')),
+      });
+      createMock.mockResolvedValue(fake);
+
+      const sandbox = new VercelSandbox();
+      await sandbox.executeCommand('pwd');
+
+      const runArgs = (fake.runCommand as ReturnType<typeof vi.fn>).mock.calls[0]![0];
+      expect(runArgs).not.toHaveProperty('cwd');
+      expect(sandbox.workingDirectory).toBeUndefined();
+    });
+
     it('setEnv after construction reaches subsequent commands', async () => {
       const fake = makeFakeSandbox({
         runCommand: vi.fn().mockResolvedValue(makeFinished(0, '')),

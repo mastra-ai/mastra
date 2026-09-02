@@ -7,7 +7,7 @@ import { seedSessionOrg } from './org-seed.js';
 /**
  * Wire regression for the org-classification fail-open (PR #21823 review):
  * a projectless Factory-hosted session whose org-state write REJECTS must
- * refuse knowledge capture, never fall through to the `local` org.
+ * refuse knowledge curation, never fall through to the `local` org.
  *
  * The chain under test is real end to end: the Factory controller's actual
  * `initialState` (captured off the mocked SDK mount) -> session state built
@@ -16,7 +16,7 @@ import { seedSessionOrg } from './org-seed.js';
  * import; the bare-specifier mock below does not touch it). `@mastra/memory`
  * is NOT mocked — the sdk dist resolves its own (externalized) copy, so the
  * refusal is asserted through its two real observables: the deduped
- * "Knowledge capture disabled" error (fired iff capture is refused) and the
+ * "Knowledge curation disabled" error (fired iff curation is refused) and the
  * request context never being classified.
  *
  * Without `factoryOrgUnresolved: true` in the controller's `initialState`,
@@ -49,7 +49,7 @@ describe('org-classification fail-open (projectless factory session, rejecting o
     else process.env.MASTRACODE_EXPERIMENTAL_SUBCONSCIOUS = envBefore;
   });
 
-  it('refuses capture and never classifies as local when the org seed write rejects', async () => {
+  it('refuses curation and never classifies as local when the org seed write rejects', async () => {
     // 1. The controller's REAL initialState, captured off the factory mount.
     const storage = new LibSQLFactoryStorage({ url: ':memory:', id: 'org-seed-fail-open-test' });
     const factory = new MastraFactory({ storage });
@@ -100,11 +100,10 @@ describe('org-classification fail-open (projectless factory session, rejecting o
         { vector: true } as never,
       )({ requestContext: requestContext as never });
 
-      // Capture refused: the fail-closed refusal is the ONLY path that emits
-      // this error, and it is exactly the path where capture stays disabled
-      // (`captureEnabled = subconsciousEnabled && !orgUnresolvedRefusal`).
+      // Curation refused: the fail-closed refusal is the ONLY path that emits
+      // this error, and it is exactly the path where Subconscious stays disabled.
       expect(errorSpy).toHaveBeenCalledTimes(1);
-      expect(String(errorSpy.mock.calls[0]?.[0])).toContain('Knowledge capture disabled');
+      expect(String(errorSpy.mock.calls[0]?.[0])).toContain('Knowledge curation disabled');
       // And the session was never classified — in particular never as 'local'.
       expect(requestContext.set).not.toHaveBeenCalledWith('organizationId', expect.anything());
       expect(requestContext.get('organizationId')).toBeUndefined();

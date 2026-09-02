@@ -43,6 +43,8 @@ export type {
   ResolveResourceIdContext,
   ResolveThreadId,
   ResolveThreadIdContext,
+  SlashCommandChannelHandler,
+  SlashCommandChannelHandlerConfig,
   StaticToolDisplay,
   StreamingConfig,
   StreamingOnlyToolDisplay,
@@ -55,4 +57,4 @@ export type {
 } from './types';
 
 // Re-export Chat SDK types for convenience
-export type { ChatConfig } from 'chat';
+export type { ChatConfig, SlashCommandEvent } from 'chat';
