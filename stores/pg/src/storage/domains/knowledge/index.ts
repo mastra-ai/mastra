@@ -2672,10 +2672,6 @@ export class KnowledgePG extends KnowledgeStorage {
   }): Promise<KnowledgeActivityEvent[]> {
     const clauses: string[] = [];
     const args: QueryValues = [];
-    if (input.contextScopeId) {
-      clauses.push('contextScopeId=?');
-      args.push(input.contextScopeId);
-    }
     if (input.importRunId) {
       clauses.push('importRunId=?');
       args.push(input.importRunId);
@@ -2710,6 +2706,8 @@ export class KnowledgePG extends KnowledgeStorage {
     for (const row of result.rows) {
       const action = String(row.action) as KnowledgeActivityAction;
       const details = row.details == null ? undefined : parseJson<Record<string, unknown>>(row.details);
+      const proposalId = typeof details?.proposalId === 'string' ? details.proposalId : undefined;
+      if (proposalId && !(await this.getVisibleProposal({ id: proposalId, scopeIds }))) continue;
       const retainedScopeIds = activityVisibilityScopeIds(details);
       const targetType = String(row.targetType) as KnowledgeSemanticDocumentType;
       const visibleDeletion = action === 'delete' && isKnowledgeScopeVisible(retainedScopeIds, scopeIds);

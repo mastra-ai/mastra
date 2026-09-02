@@ -74,14 +74,14 @@ describe('Knowledge strict read visibility', () => {
     knowledge.registerImporter({ id: 'reader-importer', handler: async () => {} });
     const visibleBinding = knowledgeImporterBindingKey({ source: 'source:visible', scope: 'scope:visible' });
     const hiddenBinding = knowledgeImporterBindingKey({ source: 'source:hidden', scope: 'scope:hidden' });
-    const visibleRun = await knowledge.createImportRun({
+    const visibleRun = await knowledge.createImportRunInternal({
       id: 'visible-run',
       importerId: 'reader-importer',
       binding: visibleBinding,
       importKind: 'static',
       triggerKind: 'programmatic',
     });
-    await knowledge.createImportRun({
+    await knowledge.createImportRunInternal({
       id: 'hidden-run',
       importerId: 'reader-importer',
       binding: hiddenBinding,
