@@ -107,6 +107,10 @@ export type KnowledgeProposalMutation =
   | { kind: 'restore-node'; mutation: RestoreKnowledgeNodeInput }
   | { kind: 'restore-scope'; mutation: RestoreKnowledgeNodeInput }
   | { kind: 'promote-node'; mutation: UpdateKnowledgeNodeInput & { isScope: true } }
+  | {
+      kind: 'curate-node';
+      mutation: Omit<PromoteKnowledgeNodeInput, 'contextScopeId' | 'expectedAccessEpoch'>;
+    }
   | { kind: 'restore-record'; mutation: { id: string; version: number } }
   | {
       kind: 'add-record-scope' | 'remove-record-scope';

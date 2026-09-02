@@ -27,7 +27,9 @@ function createMemory(options?: { omModel?: ObservationalMemoryModel | false }) 
     options: {
       observationalMemory: {
         ...(options?.omModel === false ? {} : { model: options?.omModel ?? 'openai/om-model' }),
-        experimental_subconscious: new Subconscious(),
+        experimental_subconscious: new Subconscious({
+          reflection: [{ name: 'curate', curatorProfile: 'subconscious' }, 'learn'],
+        }),
       },
     },
   });
@@ -39,12 +41,30 @@ function requestContext() {
   return context;
 }
 
-async function seedItem(memory: Memory, text = 'Atlas launches soon.') {
-  const store = await memory.getKnowledgeStore();
+async function registerCurator(memory: Memory) {
   const scopeIds = await resolveKnowledgeScopeIds(memory, {
     agent: { threadId: 'alpha', resourceId: 'user-42' },
     requestContext: requestContext(),
   });
+  await memory.getKnowledgeInstance()!.registerCuratorProfile({
+    id: 'subconscious',
+    identityScope: {
+      address: 'curator:subconscious',
+      name: 'Subconscious curator',
+      contextualScopeAddress: 'curator:subconscious',
+    },
+    grants: [
+      { scopeAddress: 'resource:user-42:thread:alpha:uncurated', role: 'owner' },
+      { scopeAddress: 'resource:user-42', role: 'owner' },
+      { scopeAddress: 'resource:user-42:thread:alpha', role: 'owner' },
+    ],
+  });
+  return scopeIds;
+}
+
+async function seedItem(memory: Memory, text = 'Atlas launches soon.') {
+  const store = await memory.getKnowledgeStore();
+  const scopeIds = await registerCurator(memory);
   const node = await store.createNode({ name: 'Project Atlas', kind: 'project', scopeIds: [scopeIds[1]!] });
   return store.createRecord({
     node,
@@ -124,10 +144,8 @@ describe('Memory.runCuration', () => {
       }),
     });
     const store = (await memory.storage.getStore('knowledge'))!;
-    const scopeIds = await resolveKnowledgeScopeIds(memory, {
-      agent: { threadId: 'alpha', resourceId: 'user-42' },
-      requestContext: requestContext(),
-    });
+    const scopeIds = await registerCurator(memory);
+    const grantsBefore = await store.listScopeGrants();
     const node = await store.createNode({ name: 'Project Atlas', kind: 'project', scopeIds: [scopeIds[4]!] });
     nodeId = node.id;
     const firstRecord = await store.createRecord({
@@ -169,6 +187,34 @@ describe('Memory.runCuration', () => {
       version: 3,
       metadata: { description: descriptions[1] },
     });
+    expect(await store.listScopeGrants()).toEqual(grantsBefore);
+  });
+
+  it('fails closed without a host-registered curator profile and does not create grants', async () => {
+    const memory = createMemory();
+    const store = await memory.getKnowledgeStore();
+    const scopeIds = await resolveKnowledgeScopeIds(memory, {
+      agent: { threadId: 'alpha', resourceId: 'user-42' },
+      requestContext: requestContext(),
+    });
+    const node = await store.createNode({ name: 'Unregistered work', scopeIds: [scopeIds[4]!] });
+    await store.createRecord({
+      node,
+      text: 'Do not self-authorize.',
+      source: 'alpha',
+      scopeIds: [scopeIds[4]!],
+    });
+    const grantsBefore = await store.listScopeGrants();
+
+    await expect(
+      memory.runCuration({
+        threadId: 'alpha',
+        resourceId: 'user-42',
+        requestContext: requestContext(),
+      }),
+    ).rejects.toThrow('Knowledge curator profile is not registered: subconscious');
+    expect(await store.getNode(node.id)).toMatchObject({ version: node.version });
+    expect(await store.listScopeGrants()).toEqual(grantsBefore);
   });
 
   it('reports no-op when the worklist and prompt are both empty', async () => {
@@ -188,6 +234,7 @@ describe('Memory.runCuration', () => {
 
   it('threads the phase prompt into the curator run even with an empty worklist', async () => {
     const memory = createMemory();
+    await registerCurator(memory);
     const generate = vi.spyOn(Agent.prototype, 'generate').mockResolvedValue({ text: 'Nothing to keep.' } as any);
     generate.mockClear();
 
