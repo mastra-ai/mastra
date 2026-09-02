@@ -958,6 +958,7 @@ export abstract class KnowledgeStorage extends StorageDomain {
     sourceId: string;
     targetId: string;
     sourceVersion: number;
+    targetVersion: number;
     importRunId?: string;
     contextScopeId?: string;
     expectedAccessEpoch?: number;

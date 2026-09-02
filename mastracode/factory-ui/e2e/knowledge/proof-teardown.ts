@@ -14,19 +14,18 @@ export default function verifyKnowledgeProof() {
   if (!configured) return;
   const output = path.resolve(configured);
   const artifacts = path.join(output, 'artifacts');
-  const required = [
-    'results.json',
-    'explore.png',
-    'imports-completed.png',
-    'reader.png',
-    'suggester.png',
-    'reviewer.png',
-  ].map(file => path.join(output, file));
+  const curationProof = ['curation-owner.png', 'curation-suggest.png'].some(file =>
+    fs.existsSync(path.join(output, file)),
+  );
+  const screenshots = curationProof
+    ? ['curation-owner.png', 'curation-suggest.png']
+    : ['explore.png', 'imports-completed.png', 'reader.png', 'suggester.png', 'reviewer.png'];
+  const required = ['results.json', ...screenshots].map(file => path.join(output, file));
   if (required.some(file => !fs.existsSync(file))) throw new Error('Knowledge proof output is incomplete.');
-  if (find(artifacts, file => file.endsWith('trace.zip')).length < 5) {
+  if (find(artifacts, file => file.endsWith('trace.zip')).length < screenshots.length) {
     throw new Error('Knowledge proof must include a Playwright trace for every journey.');
   }
-  if (find(artifacts, file => file.endsWith('.webm')).length < 5) {
+  if (find(artifacts, file => file.endsWith('.webm')).length < screenshots.length) {
     throw new Error('Knowledge proof must include a Playwright video for every journey.');
   }
 }
