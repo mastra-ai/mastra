@@ -252,6 +252,31 @@ await parentAgent.generate('Research AI trends', {
 })
 ```
 
+### Reusing an earlier subagent result
+
+By default, subagent results reach the parent agent as tool results, which are stripped from the context forwarded to later subagents. The parent agent must restate an earlier result in the next delegation prompt, which costs tokens and loses detail.
+
+Set `enableResultReferences` to let a later delegation reuse an earlier result verbatim:
+
+```typescript title="src/mastra/agents/parent-agent.ts"
+await parentAgent.generate('Find and fix the token refresh bug', {
+  delegation: {
+    enableResultReferences: true,
+  },
+})
+```
+
+When enabled:
+
+- Each successful, non-empty subagent result gets a reference ID such as `explorer-1`. The parent agent's model sees it as a `[ref: explorer-1]` line after the subagent's text.
+- The delegation tools gain a `contextFromRefs` input. The parent agent can pass earlier IDs, either as strings (`["explorer-1"]`) or as objects with an optional label and note (`[{ ref: "explorer-1", as: "investigation", note: "bug location" }]`).
+- The referenced text is inserted before the delegation prompt, each result in its own labeled block, exactly as the earlier subagent produced it. `onDelegationStart` and `messageFilter` receive the expanded prompt.
+- If `onDelegationComplete` returns `resultText`, the replaced text is what later delegations receive.
+
+References are held in memory for a single parent agent run and aren't persisted. Rejected, failed, empty, and background-task delegations don't receive a reference ID. Unknown IDs are skipped with a warning and the delegation continues.
+
+Referenced text is output from another agent. Each block uses a fresh, unpredictable tag and tells the receiving subagent to treat the contents as data, but if subagents handle untrusted input, add your own checks in `onDelegationStart` or through processors.
+
 ## Iteration monitoring
 
 `onIterationComplete` is called after each iteration of the parent agent's loop. Use it to monitor execution or guide the next iteration. You can also stop execution early.

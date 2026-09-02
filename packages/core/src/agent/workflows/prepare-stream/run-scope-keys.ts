@@ -3,6 +3,7 @@ import type { ModelLoopStreamArgs } from '../../../llm/model/model.loop.types';
 import { createRunScopeKey } from '../../../mastra/run-scope';
 import type { MemoryRunState } from '../../../memory/run-state';
 import type { ProcessorState } from '../../../processors/runner';
+import type { DelegationRefRegistry } from '../../delegation-refs';
 import type { MessageList } from '../../message-list';
 import type { CreatedAgentSignal } from '../../signals';
 
@@ -30,6 +31,15 @@ export const PROCESSOR_STATES_KEY = createRunScopeKey<Map<string, ProcessorState
 export const INITIAL_SIGNAL_ECHOES_KEY = createRunScopeKey<CreatedAgentSignal[]>('prepare-stream.initialSignalEchoes');
 
 export const MEMORY_RUN_STATE_KEY = createRunScopeKey<MemoryRunState>('prepare-stream.memoryRunState');
+
+/**
+ * Subagent result registry for `delegation.enableResultReferences`. Kept on the
+ * run scope so the registry survives a rebuild of the delegation tools within
+ * the same run.
+ */
+export const DELEGATION_REF_REGISTRY_KEY = createRunScopeKey<DelegationRefRegistry>(
+  'prepare-stream.delegationRefRegistry',
+);
 
 /**
  * Loop options carry the per-call `OUTPUT` generic. We expose a single shared
