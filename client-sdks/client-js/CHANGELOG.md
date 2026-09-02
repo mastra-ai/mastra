@@ -1,5 +1,43 @@
 # @mastra/client-js
 
+## 1.43.0-alpha.8
+
+### Minor Changes
+
+- Add host-injected trace signal management contracts and an OSS-owned Intelligence settings pane for custom signal configuration. Custom signal instructions use one task prompt field without a separate response-rules contract. ([#21758](https://github.com/mastra-ai/mastra/pull/21758))
+
+  ```tsx
+  <TraceIntelligenceProvider signalManagement={signalManagement}>
+    <TraceIntelligenceEntityIndex {...indexProps} />
+  </TraceIntelligenceProvider>
+  ```
+
+- Added custom trace signal names and server-provided signal catalog types to Trace Intelligence responses. ([#21758](https://github.com/mastra-ai/mastra/pull/21758))
+
+  ```ts
+  import type { ThemeEntitiesResponse } from '@mastra/client-js';
+
+  function signalLabels(response: ThemeEntitiesResponse) {
+    return response.entities[0]?.signalCatalog?.map(signal => signal.label) ?? [];
+  }
+  ```
+
+- Added rolling-compatible Trace Intelligence entity index metadata types and an index-first list and compact view with controlled search, sorting, and view state. ([#21758](https://github.com/mastra-ai/mastra/pull/21758))
+
+  ```tsx
+  <TraceIntelligenceEntityIndex
+    search={search}
+    sort={sort}
+    view={view}
+    getEntityHref={entity => `/intelligence/entities/${entity.entityType}/${entity.entityId}`}
+  />
+  ```
+
+### Patch Changes
+
+- Updated dependencies [[`ea56b1f`](https://github.com/mastra-ai/mastra/commit/ea56b1fa6e0f99673d2f8a5b7dacc8d351507ff7)]:
+  - @mastra/core@1.64.0-alpha.8
+
 ## 1.42.5-alpha.7
 
 ### Patch Changes

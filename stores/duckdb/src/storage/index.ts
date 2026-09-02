@@ -425,6 +425,13 @@ export class ObservabilityStorageDuckDB extends CoreObservabilityStorage {
     return delegate.listFeedback(...args);
   }
 
+  async updateFeedbackReviewStatus(
+    ...args: Parameters<ObservabilityStoreImpl['updateFeedbackReviewStatus']>
+  ): ReturnType<ObservabilityStoreImpl['updateFeedbackReviewStatus']> {
+    const delegate = await this.requireDelegate();
+    return delegate.updateFeedbackReviewStatus(...args);
+  }
+
   async getFeedbackAggregate(
     ...args: Parameters<ObservabilityStoreImpl['getFeedbackAggregate']>
   ): ReturnType<ObservabilityStoreImpl['getFeedbackAggregate']> {

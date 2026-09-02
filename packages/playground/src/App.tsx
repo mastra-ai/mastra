@@ -11,6 +11,7 @@ import { DatasetCrumb } from './domains/datasets/dataset-crumb';
 import { WorkflowLayout } from './domains/workflows/workflow-layout';
 import SignalsOverviewPage from './ee/signals';
 import { SignalsEntityCrumb } from './ee/signals/signals-entity-crumb';
+import { SignalsEntityDetailPage } from './ee/signals/signals-entity-detail-page';
 import { PostHogProvider } from './lib/analytics';
 import {
   agentIndexLoader,
@@ -69,6 +70,7 @@ import Experiments from './pages/experiments';
 import CompareExperimentsPage from './pages/experiments/compare';
 import ExperimentPage from './pages/experiments/experiment';
 import ExperimentItemPage from './pages/experiments/experiment/item';
+import InboxPage from './pages/inbox';
 import IntegrationsPage from './pages/integrations';
 import { Login } from './pages/login';
 import Logs from './pages/logs';
@@ -346,11 +348,17 @@ export const routes: RouteObject[] = [
       {
         path: '/intelligence',
         element: <SignalsOverviewPage />,
+        handle: navHandle('/intelligence'),
+      },
+      {
+        path: '/intelligence/entities/:entityType/:entityId',
+        element: <SignalsEntityDetailPage />,
         handle: navHandleWithChildren('/intelligence', [
-          { id: 'signals-agent', Component: SignalsEntityCrumb, heading: 'Agent' },
+          { id: 'signals-entity', Component: SignalsEntityCrumb, heading: 'Entity' },
         ]),
       },
       { path: '/traces', element: <Traces />, handle: navHandle('/traces') },
+      { path: '/inbox', element: <InboxPage />, handle: navHandle('/inbox') },
       {
         path: '/traces/:traceId',
         loader: ({ params, request }: LoaderFunctionArgs) => {

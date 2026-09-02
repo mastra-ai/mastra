@@ -1,12 +1,17 @@
+import type { SignalCatalogEntry } from '@mastra/client-js';
 import { Info } from 'lucide-react';
 import { getSignalHue } from './signal-colors';
-import { SIGNAL_DESCRIPTIONS, SIGNAL_PROCESSING_ORDER } from './signal-formatting';
+import { orderedSignals, signalDescription, signalLabel } from './signal-formatting';
 import { nodeColor } from '@/ds/components/SankeyChart';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
 import { Icon } from '@/ds/icons/Icon';
 
 /** Info tooltip for first-time viewers: signals → themes → snapshots. */
-export function TraceIntelligenceExplainer() {
+export function TraceIntelligenceExplainer({ signalCatalog }: { signalCatalog: readonly SignalCatalogEntry[] }) {
+  const enabledSignals = orderedSignals(
+    signalCatalog,
+    signalCatalog.filter(signal => signal.enabled).map(signal => signal.name),
+  );
   return (
     <Tooltip>
       <TooltipTrigger
@@ -20,19 +25,20 @@ export function TraceIntelligenceExplainer() {
       </TooltipTrigger>
       <TooltipContent className="max-w-sm space-y-3 p-4 text-xs">
         <p className="text-neutral5">
-          Every trace from this agent is analyzed for four signals, and traces with similar signals are clustered into
-          named themes.
+          Every trace from this agent is analyzed for {enabledSignals.length === 4 ? 'four' : enabledSignals.length}{' '}
+          {enabledSignals.length === 1 ? 'signal' : 'signals'}, and traces with similar signals are clustered into named
+          themes.
         </p>
         <ul className="space-y-1.5">
-          {SIGNAL_PROCESSING_ORDER.map(signalName => (
+          {enabledSignals.map(signalName => (
             <li key={signalName} className="text-neutral4">
               <span
                 className="font-mono text-[10px] font-semibold tracking-widest uppercase"
                 style={{ color: nodeColor(getSignalHue(signalName)) }}
               >
-                {signalName}
+                {signalLabel(signalCatalog, signalName)}
               </span>{' '}
-              — {SIGNAL_DESCRIPTIONS[signalName]}
+              — {signalDescription(signalCatalog, signalName)}
             </li>
           ))}
         </ul>
