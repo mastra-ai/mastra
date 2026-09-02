@@ -38,6 +38,8 @@ function rowToDefinition(row: Record<string, unknown>): WorkflowDefinition {
   if (requestContextSchema !== undefined && requestContextSchema !== null) {
     def.requestContextSchema = requestContextSchema;
   }
+  const schedule = parseJsonResilient(row.schedule);
+  if (schedule !== undefined && schedule !== null) def.schedule = schedule as WorkflowDefinition['schedule'];
   if (row.authorId != null) def.authorId = String(row.authorId);
   return def;
 }
@@ -110,6 +112,11 @@ export class WorkflowDefinitionsPG extends WorkflowDefinitionsStorage {
       tableName: TABLE_WORKFLOW_DEFINITIONS,
       schema: TABLE_SCHEMAS[TABLE_WORKFLOW_DEFINITIONS],
     });
+    await this.#db.alterTable({
+      tableName: TABLE_WORKFLOW_DEFINITIONS,
+      schema: TABLE_SCHEMAS[TABLE_WORKFLOW_DEFINITIONS],
+      ifNotExists: ['schedule'],
+    });
     await this.createDefaultIndexes();
     await this.createCustomIndexes();
   }
@@ -139,6 +146,7 @@ export class WorkflowDefinitionsPG extends WorkflowDefinitionsStorage {
         stateSchema: input.stateSchema ?? null,
         requestContextSchema: input.requestContextSchema ?? null,
         graph: input.graph,
+        schedule: 'schedule' in input ? (input.schedule ?? null) : null,
         status: 'active',
         source: 'storage',
         authorId: 'authorId' in input ? (input.authorId ?? null) : null,
@@ -174,6 +182,7 @@ export class WorkflowDefinitionsPG extends WorkflowDefinitionsStorage {
     if ('requestContextSchema' in input && input.requestContextSchema !== undefined)
       data.requestContextSchema = input.requestContextSchema;
     if ('graph' in input && input.graph !== undefined) data.graph = input.graph;
+    if ('schedule' in input && input.schedule !== undefined) data.schedule = input.schedule;
     if ('status' in input && input.status !== undefined) data.status = input.status;
     if ('authorId' in input && input.authorId !== undefined) data.authorId = input.authorId;
 

@@ -168,12 +168,14 @@ describe('Board card session liveness', () => {
     renderWorkBoard();
 
     const card = await screen.findByTestId('work-item-card');
-    // Bound but idle: the dot rests muted — `ready` is reserved for a finished
-    // run awaiting its reader, same as the sidebar rows.
-    await waitFor(() => expect(card.querySelector('[data-live-session-indicator="idle"]')).not.toBeNull());
-
-    await user.click(screen.getByRole('button', { name: 'Details for Fix login bug' }));
+    // Bound but idle: no marker runs — the Open session button on the card is
+    // the advertisement, and only session-bound cards carry one.
     expect(await screen.findByRole('link', { name: 'Open session' })).toBeInTheDocument();
+    expect(card.querySelector('[data-live-session-indicator]')).toBeNull();
+
+    // The details panel keeps its own way in beside the card's.
+    await user.click(screen.getByRole('button', { name: 'Details for Fix login bug' }));
+    await waitFor(() => expect(screen.getAllByRole('link', { name: 'Open session' })).toHaveLength(2));
   });
 
   it('shows the initializing dot while a bound session is still materializing', async () => {
@@ -215,14 +217,11 @@ describe('Board card session liveness', () => {
     await waitFor(() => expect(card.querySelector('[data-live-session-indicator="working"]')).not.toBeNull());
   });
 
-  it('walks idle → working → ready as a run starts and finishes unseen', async () => {
-    stubFactoryWithBoundSession();
+  it('walks idle → working → idle as a run starts and finishes', async () => {
+    const { refetchGate } = stubFactoryWithBoundSession();
+    refetchGate.resolve();
     const active = new Set<string>();
     server.use(
-      // Ungated sessions list: the attention pass refetches it on run end.
-      http.get(`${TEST_BASE_URL}/web/github/projects/${REPO_ID}/sessions`, () =>
-        HttpResponse.json({ sessions: [boundSession] }),
-      ),
       http.get('*/api/agent-controller/:controllerId/active-runs', () =>
         HttpResponse.json({
           runs: [...active].map(resourceId => ({ runId: `run-${resourceId}`, resourceId, threadId: resourceId })),
@@ -233,17 +232,20 @@ describe('Board card session liveness', () => {
     const activityKey = queryKeys.agentControllerActivity(AGENT_CONTROLLER_ID, TEST_BASE_URL);
 
     const card = await screen.findByTestId('work-item-card');
-    await waitFor(() => expect(card.querySelector('[data-live-session-indicator="idle"]')).not.toBeNull());
+    expect(await screen.findByRole('link', { name: 'Open session' })).toBeInTheDocument();
+    expect(card.querySelector('[data-live-session-indicator]')).toBeNull();
 
     active.add(SESSION_ID);
     await client.invalidateQueries({ queryKey: activityKey });
     await waitFor(() => expect(card.querySelector('[data-live-session-indicator="working"]')).not.toBeNull());
+    // A running card's one button is the way into its session; the wick is its marker, so the pill stays quiet.
+    expect(screen.getByRole('link', { name: 'Open session' })).toHaveAttribute('data-variant', 'default');
 
     active.delete(SESSION_ID);
     await client.invalidateQueries({ queryKey: activityKey });
-    // The finish was never opened, so the card holds the same "your turn" mark
-    // the sidebar row shows, instead of sliding silently back to idle.
-    await waitFor(() => expect(card.querySelector('[data-live-session-indicator="ready"]')).not.toBeNull());
+    // A finished run is an idle session: the wick goes dark and the button returns, unlit.
+    await waitFor(() => expect(card.querySelector('[data-live-session-indicator]')).toBeNull());
+    expect(await screen.findByRole('link', { name: 'Open session' })).toHaveAttribute('data-variant', 'default');
   });
 
   it('drops the session indicator as soon as its session is deleted from the sidebar', async () => {
@@ -251,8 +253,8 @@ describe('Board card session liveness', () => {
     const user = userEvent.setup();
     renderWorkBoard();
 
-    const card = await screen.findByTestId('work-item-card');
-    await waitFor(() => expect(card.querySelector('[data-live-session-indicator]')).not.toBeNull());
+    await screen.findByTestId('work-item-card');
+    expect(await screen.findByRole('link', { name: 'Open session' })).toBeInTheDocument();
 
     await user.click(await screen.findByRole('button', { name: 'Session actions for factory/issue-1' }));
     await user.click(await screen.findByRole('menuitem', { name: 'Delete' }));
@@ -262,13 +264,9 @@ describe('Board card session liveness', () => {
 
     // The reconciling refetch is still in flight. The card must already have
     // stopped advertising a thread it can no longer open.
-    await waitFor(() =>
-      expect(screen.getByTestId('work-item-card').querySelector('[data-live-session-indicator]')).toBeNull(),
-    );
+    await waitFor(() => expect(screen.queryByRole('link', { name: 'Open session' })).toBeNull());
 
     refetchGate.resolve();
-    await waitFor(() =>
-      expect(screen.getByTestId('work-item-card').querySelector('[data-live-session-indicator]')).toBeNull(),
-    );
+    await waitFor(() => expect(screen.queryByRole('link', { name: 'Open session' })).toBeNull());
   });
 });

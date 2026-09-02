@@ -18,6 +18,10 @@ import { CoreToolBuilder } from './builder';
 function baseOptions() {
   return {
     name: 'test-tool',
+    // Opt the tool in at the tool level: since issue #22724, `_background` is
+    // only injected for tools that are actually background-eligible, not for
+    // every tool whenever the manager is enabled.
+    backgroundConfig: { enabled: true },
     logger: {
       debug: vi.fn(),
       warn: vi.fn(),
@@ -317,6 +321,89 @@ describe('CoreToolBuilder background override injection', () => {
       expect(properties).toHaveProperty('_background');
       expect(properties).toHaveProperty('suspendedToolRunId');
       expect(properties).toHaveProperty('resumeData');
+    });
+  });
+
+  // Regression coverage for https://github.com/mastra-ai/mastra/issues/22724:
+  // `backgroundTaskEnabled` (the manager-level flag) must not inject
+  // `_background` into every tool — only tools opted in at the agent or tool
+  // layer are advertised, matching `resolveBackgroundConfig`'s dispatch logic.
+  describe('Per-tool eligibility (issue #22724)', () => {
+    function makeTool(id = 'plain-tool') {
+      return createTool({
+        id,
+        description: 'A plain tool',
+        inputSchema: z4.object({ query: z4.string() }),
+        execute: vi.fn(),
+      });
+    }
+
+    it('does NOT inject _background when the manager is enabled but the tool has no opt-in', () => {
+      const tool = makeTool();
+      new CoreToolBuilder({
+        originalTool: tool,
+        options: { ...baseOptions(), backgroundConfig: undefined },
+        backgroundTaskEnabled: true,
+      });
+      const properties = extractJsonProperties(tool);
+      expect(properties).toHaveProperty('query');
+      expect(properties).not.toHaveProperty('_background');
+    });
+
+    it('injects _background when the agent config whitelists the tool', () => {
+      const tool = makeTool();
+      new CoreToolBuilder({
+        originalTool: tool,
+        options: {
+          ...baseOptions(),
+          backgroundConfig: undefined,
+          agentBackgroundConfig: { tools: { 'test-tool': true } },
+        },
+        backgroundTaskEnabled: true,
+      });
+      const properties = extractJsonProperties(tool);
+      expect(properties).toHaveProperty('_background');
+    });
+
+    it('resolves agent whitelist entries for agent- prefixed tool names', () => {
+      const tool = makeTool('agent-biExecutor');
+      new CoreToolBuilder({
+        originalTool: tool,
+        options: {
+          ...baseOptions(),
+          name: 'agent-biExecutor',
+          backgroundConfig: undefined,
+          agentBackgroundConfig: { tools: { biExecutor: { enabled: true } } },
+        },
+        backgroundTaskEnabled: true,
+      });
+      const properties = extractJsonProperties(tool);
+      expect(properties).toHaveProperty('_background');
+    });
+
+    it('does NOT inject _background when the agent whitelists other tools only', () => {
+      const tool = makeTool();
+      new CoreToolBuilder({
+        originalTool: tool,
+        options: {
+          ...baseOptions(),
+          backgroundConfig: undefined,
+          agentBackgroundConfig: { tools: { research: true } },
+        },
+        backgroundTaskEnabled: true,
+      });
+      const properties = extractJsonProperties(tool);
+      expect(properties).not.toHaveProperty('_background');
+    });
+
+    it('does NOT inject _background when the tool opted in but the manager is disabled', () => {
+      const tool = makeTool();
+      const originalSchema = tool.inputSchema;
+      new CoreToolBuilder({
+        originalTool: tool,
+        options: baseOptions(),
+      });
+      expect(tool.inputSchema).toBe(originalSchema);
     });
   });
 

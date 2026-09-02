@@ -708,9 +708,10 @@ export class RailwaySandbox extends MastraSandbox {
         )
       : undefined;
     const startedAt = Date.now();
+    const cwd = options.cwd ?? this.workingDirectory;
     const result = await this.railway.exec(fullCommand, {
       ...(timeout !== undefined && { timeoutSec: Math.ceil(timeout / 1000) }),
-      ...(options.cwd !== undefined && { cwd: options.cwd }),
+      ...(cwd !== undefined && { cwd }),
       ...(env !== undefined && { env }),
     });
     const exitCode = result.exitCode ?? -1;

@@ -706,6 +706,7 @@ export type ProviderModelsMap = {
     'anthracite-org/magnum-v2-72b',
     'anthracite-org/magnum-v4-72b',
     'anthropic/claude-fable-5',
+    'anthropic/claude-fable-5.1',
     'anthropic/claude-fable-latest',
     'anthropic/claude-haiku-latest',
     'anthropic/claude-opus-4.6',
@@ -903,6 +904,7 @@ export type ProviderModelsMap = {
     'huihui-ai/Qwen2.5-32B-Instruct-abliterated',
     'ibm-granite/granite-4.1-8b',
     'ibm-granite/granite-4.2-8b',
+    'inception/mercury-2.5-preview',
     'inclusionai/ling-3.0-flash',
     'inclusionai/ling-3.0-flash:thinking',
     'inflatebot/MN-12B-Mag-Mell-R1',
@@ -1706,6 +1708,7 @@ export type ProviderModelsMap = {
     'anthracite-org/magnum-v4-72b',
     'anthropic/claude-3-haiku',
     'anthropic/claude-fable-5',
+    'anthropic/claude-fable-5.1',
     'anthropic/claude-haiku-4.5',
     'anthropic/claude-opus-4',
     'anthropic/claude-opus-4.1',
@@ -1783,6 +1786,7 @@ export type ProviderModelsMap = {
     'ibm-granite/granite-4.1-8b',
     'ibm-granite/granite-4.2-8b',
     'inception/mercury-2',
+    'inception/mercury-2.5-preview',
     'inclusionai/ling-3.0-flash',
     'inclusionai/ling-3.0-flash-fin:free',
     'kwaipilot/kat-coder-pro-v2',
@@ -2044,6 +2048,7 @@ export type ProviderModelsMap = {
     '~openai/gpt-latest',
     '~openai/gpt-mini-latest',
     '~x-ai/grok-latest',
+    '~z-ai/glm-flash-latest',
     '~z-ai/glm-latest',
   ];
   readonly poolside: readonly ['poolside/laguna-m.1', 'poolside/laguna-s-2.1', 'poolside/laguna-xs-2.1'];
@@ -2130,6 +2135,7 @@ export type ProviderModelsMap = {
   ];
   readonly crossmodel: readonly [
     'anthropic/claude-fable-5',
+    'anthropic/claude-fable-5-1',
     'anthropic/claude-haiku-4-5',
     'anthropic/claude-opus-4-7',
     'anthropic/claude-opus-4-8',
@@ -2290,6 +2296,7 @@ export type ProviderModelsMap = {
   ];
   readonly anthropic: readonly [
     'claude-fable-5',
+    'claude-fable-5-1',
     'claude-haiku-4-5',
     'claude-haiku-4-5-20251001',
     'claude-opus-4-5',
@@ -2708,6 +2715,7 @@ export type ProviderModelsMap = {
     'alibaba/qwen3.8-max',
     'alibaba/qwen35-397b-a17b',
     'anthropic/claude-fable-5',
+    'anthropic/claude-fable-5-1',
     'anthropic/claude-haiku-4-5',
     'anthropic/claude-haiku-4-5-20251001',
     'anthropic/claude-opus-4-5-20251101',
@@ -2807,6 +2815,7 @@ export type ProviderModelsMap = {
     'cerebras/llama-3.3-70b-instruct',
     'cerebras/qwen3-235b-a22b-instruct-2507',
     'consensusprotocol/deepseek-v4-flash',
+    'consensusprotocol/gpt-oss-20b',
     'deepinfra/deepseek-v3.2',
     'deepinfra/deepseek-v4-flash',
     'deepinfra/deepseek-v4-pro',
@@ -3227,6 +3236,7 @@ export type ProviderModelsMap = {
   readonly 'merge-gateway': readonly [
     'anthropic/claude-3-7-sonnet-20250219',
     'anthropic/claude-fable-5',
+    'anthropic/claude-fable-5-1',
     'anthropic/claude-haiku-4-5-20251001',
     'anthropic/claude-opus-4-1-20250805',
     'anthropic/claude-opus-4-20250514',
@@ -3469,6 +3479,7 @@ export type ProviderModelsMap = {
     'anthropic-claude-4.6-sonnet',
     'anthropic-claude-5-sonnet',
     'anthropic-claude-fable-5',
+    'anthropic-claude-fable-5.1',
     'anthropic-claude-haiku-4.5',
     'anthropic-claude-opus-4',
     'anthropic-claude-opus-4.5',
@@ -4496,6 +4507,7 @@ export type ProviderModelsMap = {
     'big-pickle',
     'claude-3-5-haiku',
     'claude-fable-5',
+    'claude-fable-5-1',
     'claude-haiku-4-5',
     'claude-opus-4-1',
     'claude-opus-4-5',
@@ -4620,7 +4632,9 @@ export type ProviderModelsMap = {
     'devstral-latest',
     'devstral-latest@eu',
     'fugu-ultra',
+    'gemini-2.5-flash-lite@eu',
     'gemini-2.5-flash@eu',
+    'gemini-2.5-pro@eu',
     'gemini-3-pro-image',
     'gemini-3.1-flash-image',
     'gemini-3.1-flash-lite',
@@ -5342,6 +5356,7 @@ export type ProviderModelsMap = {
     'amazon/titan-embed-text-v2',
     'anthropic/claude-3-haiku',
     'anthropic/claude-fable-5',
+    'anthropic/claude-fable-5.1',
     'anthropic/claude-haiku-4.5',
     'anthropic/claude-opus-4',
     'anthropic/claude-opus-4.5',
@@ -5386,7 +5401,6 @@ export type ProviderModelsMap = {
     'cohere/rerank-v4-fast',
     'cohere/rerank-v4-pro',
     'deepseek/deepseek-r1',
-    'deepseek/deepseek-v3',
     'deepseek/deepseek-v3.1',
     'deepseek/deepseek-v3.1-terminus',
     'deepseek/deepseek-v3.2',
@@ -5662,6 +5676,7 @@ export type ProviderModelsMap = {
     'amazon/zai.glm-4.7-flash',
     'amazon/zai.glm-4.7-flash@us',
     'anthropic/claude-fable-5',
+    'anthropic/claude-fable-5-1',
     'anthropic/claude-fable-latest',
     'anthropic/claude-opus-4-5',
     'anthropic/claude-opus-4-5-20251101',
@@ -5690,6 +5705,8 @@ export type ProviderModelsMap = {
     'cohere/command-r-08-2024',
     'cohere/command-r-plus-08-2024',
     'cohere/command-r7b-12-2024',
+    'databricks/databricks-deepseek-v4-flash-0731',
+    'databricks/databricks-deepseek-v4-pro-0813',
     'databricks/databricks-gpt-oss-120b',
     'databricks/databricks-gpt-oss-120b@eu',
     'databricks/databricks-gpt-oss-20b',
@@ -6011,6 +6028,7 @@ export type ProviderModelsMap = {
   readonly llmgateway: readonly [
     'auto',
     'claude-fable-5',
+    'claude-fable-5-1',
     'claude-haiku-4-5',
     'claude-haiku-4-5-20251001',
     'claude-opus-4-1-20250805',
@@ -6355,6 +6373,7 @@ export type ProviderModelsMap = {
     'anthracite-org/magnum-v4-72b',
     'anthropic/claude-3-haiku',
     'anthropic/claude-fable-5',
+    'anthropic/claude-fable-5.1',
     'anthropic/claude-haiku-4.5',
     'anthropic/claude-opus-4',
     'anthropic/claude-opus-4.1',
@@ -6430,6 +6449,7 @@ export type ProviderModelsMap = {
     'ibm-granite/granite-4.1-8b',
     'ibm-granite/granite-4.2-8b',
     'inception/mercury-2',
+    'inception/mercury-2.5-preview',
     'inclusionai/ling-3.0-flash',
     'inclusionai/ling-3.0-flash-fin:free',
     'kilo-auto/balanced',
@@ -6702,6 +6722,7 @@ export type ProviderModelsMap = {
     '~openai/gpt-latest',
     '~openai/gpt-mini-latest',
     '~x-ai/grok-latest',
+    '~z-ai/glm-flash-latest',
     '~z-ai/glm-latest',
   ];
   readonly pioneer: readonly [
@@ -7003,6 +7024,7 @@ export type ProviderModelsMap = {
   ];
   readonly netlify: readonly [
     'anthropic/claude-fable-5',
+    'anthropic/claude-fable-5-1',
     'anthropic/claude-haiku-4-5',
     'anthropic/claude-haiku-4-5-20251001',
     'anthropic/claude-opus-4-5',
@@ -7236,6 +7258,7 @@ export type ProviderModelsMap = {
     'openrouter/~deepseek/deepseek-v4-flash-latest',
     'openrouter/~moonshotai/kimi-latest',
     'openrouter/~x-ai/grok-latest',
+    'openrouter/~z-ai/glm-flash-latest',
     'openrouter/~z-ai/glm-latest',
   ];
 };
