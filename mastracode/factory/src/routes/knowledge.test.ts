@@ -255,6 +255,32 @@ describe('KnowledgeRoutes', () => {
     expect(nested.children).toEqual([]);
   });
 
+  it('continues scope pagination when the selected scope consumes an over-fetched slot', async () => {
+    const h = await createHarness({ limits: { maxNodes: 1 } });
+    const projectScopeId = h.projectScope.at(-1)!;
+    const selected = await h.knowledge.getNode(projectScopeId);
+    const firstChild = await h.knowledge.createNode({
+      name: 'First child',
+      isScope: true,
+      scopeIds: [projectScopeId],
+    });
+    const secondChild = await h.knowledge.createNode({
+      name: 'Second child',
+      isScope: true,
+      scopeIds: [projectScopeId],
+    });
+    vi.spyOn(h.runtime, 'listNodes').mockImplementationOnce(async input =>
+      [selected!, firstChild, secondChild].slice(0, input.limit),
+    );
+
+    const response = await h.app.request(`/web/factory/projects/${h.projectId}/knowledge/scopes`);
+    const body = (await response.json()) as KnowledgeScopeTreePayload;
+
+    expect(response.status).toBe(200);
+    expect(body.children).toHaveLength(1);
+    expect(body.nextCursor).toMatch(/^kh_/);
+  });
+
   // 1
   it('returns entities and wikilink edges (owner entity → mentioned entity) from seeded facts', async () => {
     const h = await createHarness();

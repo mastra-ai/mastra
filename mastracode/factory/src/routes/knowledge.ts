@@ -1250,7 +1250,7 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
             membershipScopeIds: [selected.id],
             isScope: true,
             ...(cursor ? { cursor } : {}),
-            limit: this.#limits.maxNodes + 1,
+            limit: this.#limits.maxNodes + 2,
           });
           const eligible = fetched.filter(node => node.id !== selected.id);
           const page = eligible.slice(0, this.#limits.maxNodes);
