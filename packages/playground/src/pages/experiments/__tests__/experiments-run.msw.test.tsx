@@ -4,6 +4,16 @@ import { describe, expect, it, vi } from 'vitest';
 import ExperimentsPage from '..';
 import { datasetVersionsResponse } from '@/domains/datasets/components/__tests__/fixtures/dataset-versions';
 import { buildDataset, buildListDatasetsResponse } from '@/domains/datasets/components/__tests__/fixtures/datasets';
+import {
+  buildListExperimentsResponse,
+  emptyReviewSummary,
+} from '@/domains/experiments/components/__tests__/fixtures/experiments';
+import {
+  agent,
+  noProcessors,
+  noScorers,
+  noWorkflows,
+} from '@/domains/experiments/components/__tests__/fixtures/target-registries';
 import { server } from '@/test/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '@/test/render';
 
@@ -52,16 +62,15 @@ function setupHandlers() {
   const dataset = buildDataset();
 
   server.use(
-    http.get(`${TEST_BASE_URL}/api/experiments`, () => HttpResponse.json({ experiments: [] })),
-    http.get(`${TEST_BASE_URL}/api/experiments/review-summary`, () => HttpResponse.json({ experiments: [] })),
+    http.get(`${TEST_BASE_URL}/api/experiments`, () => HttpResponse.json(buildListExperimentsResponse([]))),
+    http.get(`${TEST_BASE_URL}/api/experiments/review-summary`, () => HttpResponse.json(emptyReviewSummary)),
     http.get(`${TEST_BASE_URL}/api/datasets`, () => HttpResponse.json(buildListDatasetsResponse([dataset]))),
     http.get(`${TEST_BASE_URL}/api/datasets/:datasetId`, () => HttpResponse.json(dataset)),
     http.get(`${TEST_BASE_URL}/api/datasets/:datasetId/versions`, () => HttpResponse.json(datasetVersionsResponse)),
-    http.get(`${TEST_BASE_URL}/api/agents`, () =>
-      HttpResponse.json({ 'agent-1': { name: 'Agent One', instructions: '', tools: {}, workflows: {} } }),
-    ),
-    http.get(`${TEST_BASE_URL}/api/workflows`, () => HttpResponse.json({})),
-    http.get(`${TEST_BASE_URL}/api/scores/scorers`, () => HttpResponse.json({})),
+    http.get(`${TEST_BASE_URL}/api/agents`, () => HttpResponse.json({ 'agent-1': agent('agent-1', 'Agent One') })),
+    http.get(`${TEST_BASE_URL}/api/workflows`, () => HttpResponse.json(noWorkflows)),
+    http.get(`${TEST_BASE_URL}/api/processors`, () => HttpResponse.json(noProcessors)),
+    http.get(`${TEST_BASE_URL}/api/scores/scorers`, () => HttpResponse.json(noScorers)),
     http.post(`${TEST_BASE_URL}/api/datasets/:datasetId/experiments`, async ({ params, request }) => {
       triggerCalls.push({
         datasetId: String(params.datasetId),

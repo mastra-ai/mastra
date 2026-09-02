@@ -1,5 +1,4 @@
 import { ScorersIcon } from '@mastra/playground-ui/icons/ScorersIcon';
-import { ExternalLinkIcon } from 'lucide-react';
 import { ScoreDelta } from './score-delta';
 import { useLinkComponent } from '@/lib/framework';
 
@@ -23,14 +22,11 @@ export function ComparisonScoreRow({ scorerId, value, delta, reason }: Compariso
       <div className="flex items-center justify-between gap-4">
         <Link
           href={paths.scorerLink(scorerId)}
-          target="_blank"
-          rel="noopener noreferrer"
           aria-label={`Open ${scorerId}`}
           className="text-neutral5 flex min-w-0 items-center gap-1.5 text-sm font-medium hover:underline [&>svg]:size-3.5 [&>svg]:shrink-0"
         >
           <ScorersIcon />
           <span className="min-w-0 truncate">{scorerId}</span>
-          <ExternalLinkIcon />
         </Link>
         <div className="flex items-center gap-3">
           <span className="text-neutral3 font-mono text-sm">{value != null ? value.toFixed(2) : '-'}</span>

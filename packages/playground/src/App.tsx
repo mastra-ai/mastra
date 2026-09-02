@@ -59,7 +59,6 @@ import CmsScorersEditPage from './pages/cms/scorers/edit';
 import Datasets from './pages/datasets';
 import DatasetPage from './pages/datasets/dataset';
 import EditDatasetPage from './pages/datasets/dataset/edit';
-import CompareDatasetExperimentsPage from './pages/datasets/dataset/experiments';
 import DatasetItemPage from './pages/datasets/dataset/item';
 import DatasetItemsComparePage from './pages/datasets/dataset/item/compare';
 import DatasetItemVersionsComparePage from './pages/datasets/dataset/item/versions';
@@ -67,6 +66,7 @@ import DatasetCompareDatasetVersions from './pages/datasets/dataset/versions';
 import CreateDatasetPage from './pages/datasets/new';
 import Evaluation from './pages/evaluation';
 import Experiments from './pages/experiments';
+import CompareExperimentsPage from './pages/experiments/compare';
 import ExperimentPage from './pages/experiments/experiment';
 import ExperimentItemPage from './pages/experiments/experiment/item';
 import IntegrationsPage from './pages/integrations';
@@ -613,6 +613,13 @@ export const routes: RouteObject[] = [
             },
             { path: '/experiments', element: <Experiments />, handle: navHandle('/experiments') },
             {
+              path: '/experiments/compare',
+              element: <CompareExperimentsPage />,
+              handle: {
+                crumbs: () => [navCrumb('/experiments'), { id: 'experiments-compare', label: 'Compare' }],
+              },
+            },
+            {
               path: '/experiments/:experimentId',
               element: <ExperimentPage />,
               handle: {
@@ -639,17 +646,6 @@ export const routes: RouteObject[] = [
                   } satisfies RouteHeaderHandle,
                 },
               ],
-            },
-            {
-              path: '/datasets/:datasetId/experiments',
-              element: <CompareDatasetExperimentsPage />,
-              handle: {
-                crumbs: () => [
-                  navCrumb('/datasets'),
-                  { id: 'dataset', Component: DatasetCrumb, heading: 'Dataset' },
-                  { id: 'dataset-experiments', label: 'Experiments' },
-                ],
-              },
             },
             {
               path: '/datasets/:datasetId/items/:itemId/compare/:secondItemId',
