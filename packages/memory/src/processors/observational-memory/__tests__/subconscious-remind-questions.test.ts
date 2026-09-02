@@ -2,7 +2,7 @@ import { Agent } from '@mastra/core/agent';
 import type { MastraDBMessage } from '@mastra/core/agent';
 import { RequestContext } from '@mastra/core/request-context';
 import { InMemoryStore } from '@mastra/core/storage';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { Memory } from '../../..';
 import { Subconscious } from '../subconscious';
@@ -63,6 +63,10 @@ function questionMessage(replyId: string): MastraDBMessage {
 }
 
 describe('Subconscious reminder questions', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
   it('exposes ask_memory only when Subconscious tools are enabled', () => {
     const memory = new Memory({ storage: new InMemoryStore() });
 
@@ -117,13 +121,12 @@ describe('Subconscious reminder questions', () => {
         ifIdle: expect.objectContaining({ behavior: 'wake' }),
       }),
     );
-    sendMessage.mockRestore();
   });
 
   it('rejects a question when native sidekick routing does not accept it', async () => {
     const memory = new Memory({ storage: new InMemoryStore() });
     const parentAgent = createParentAgent();
-    const sendMessage = vi.spyOn(Agent.prototype, 'sendMessage').mockImplementation((() => ({
+    vi.spyOn(Agent.prototype, 'sendMessage').mockImplementation((() => ({
       accepted: Promise.resolve({ action: 'discard' }),
     })) as any);
     const tool = createAskMemoryTool({
@@ -135,7 +138,6 @@ describe('Subconscious reminder questions', () => {
     const result = await tool.execute?.({ question: 'What did I decide?' }, toolContext());
 
     expect(result).toMatchObject({ accepted: false, status: 'rejected', error: expect.stringContaining('discard') });
-    sendMessage.mockRestore();
   });
 
   it('rejects replies that are not tied to a question in the current MessageList', async () => {
@@ -192,31 +194,24 @@ describe('Subconscious reminder questions', () => {
     expect(firstId).toMatch(/^reply-1:partial:[a-f0-9]{12}:signal$/);
   });
 
-  it('rejects a terminal reply reconstructed from MessageList tool history', async () => {
+  it('rejects a terminal reply reconstructed from provider-shaped MessageList tool history', async () => {
     const parentAgent = createParentAgent();
     const tool = createReplyToMemoryQuestionTool({ parentAgent, parentThreadId, resourceId });
     const toolResult = {
-      id: 'tool-result-1',
       role: 'tool',
-      threadId: `subconscious:${parentThreadId}:remind`,
-      resourceId,
-      createdAt: new Date(),
-      content: {
-        format: 2,
-        parts: [
-          {
-            type: 'tool-invocation',
-            toolInvocation: {
-              state: 'result',
-              toolCallId: 'call-1',
-              toolName: 'reply_to_memory_question',
-              args: {},
-              result: { delivered: true, replyId: 'reply-1', moreComing: false },
-            },
+      content: [
+        {
+          type: 'tool-invocation',
+          toolInvocation: {
+            state: 'result',
+            toolCallId: 'call-1',
+            toolName: 'reply_to_memory_question',
+            args: {},
+            result: { delivered: true, replyId: 'reply-1', moreComing: false },
           },
-        ],
-      },
-    } as MastraDBMessage;
+        },
+      ],
+    } as unknown as MastraDBMessage;
 
     const result = await tool.execute?.(
       { replyId: 'reply-1', answer: 'Duplicate answer.', moreComing: false },

@@ -879,10 +879,10 @@ export class Memory extends MastraMemory {
     const remindThreadId = getRemindThreadId(threadId);
     const remindThread = thread?.resourceId ? await memoryStore.getThreadById({ threadId: remindThreadId }) : null;
 
-    await this.deleteStoredThread(memoryStore, threadId, thread?.resourceId);
     if (thread?.resourceId && isOwnedRemindThread(remindThread, threadId, thread.resourceId)) {
       await this.deleteStoredThread(memoryStore, remindThreadId, remindThread.resourceId);
     }
+    await this.deleteStoredThread(memoryStore, threadId, thread?.resourceId);
   }
 
   private async deleteStoredThread(memoryStore: MemoryStorage, threadId: string, resourceId?: string): Promise<void> {
@@ -2578,7 +2578,7 @@ Notes:
         tools.ask_memory = createAskMemoryTool({
           memory: this,
           config: remind,
-          omModel: omConfig.model,
+          omModel: omConfig.observation?.model ?? omConfig.model,
           getParentAgent: agentId => this._mastraInstance?.getAgentById(agentId),
         });
       }

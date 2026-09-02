@@ -606,6 +606,29 @@ describe('Subconscious remind', () => {
     await expect(store.listMessagesById({ messageIds: ['sidekick-message'] })).resolves.toMatchObject({ messages: [] });
   });
 
+  it('keeps the parent thread available when owned reminder-sidekick deletion fails', async () => {
+    const memory = new Memory({ storage: new InMemoryStore() });
+    await memory.createThread({ threadId: 'parent', resourceId: 'resource' });
+    const sidekickId = getRemindThreadId('parent');
+    await memory.createThread({
+      threadId: sidekickId,
+      resourceId: 'resource',
+      metadata: { [REMIND_PARENT_THREAD_METADATA_KEY]: 'parent' },
+    });
+    const store = await memory.storage.getStore('memory');
+    const deleteThread = vi.spyOn(store, 'deleteThread').mockRejectedValueOnce(new Error('sidekick deletion failed'));
+
+    await expect(memory.deleteThread('parent')).rejects.toThrow('sidekick deletion failed');
+
+    expect(deleteThread).toHaveBeenCalledWith({ threadId: sidekickId });
+    expect(await memory.getThreadById({ threadId: 'parent' })).not.toBeNull();
+    deleteThread.mockRestore();
+
+    await memory.deleteThread('parent');
+    expect(await memory.getThreadById({ threadId: 'parent' })).toBeNull();
+    expect(await memory.getThreadById({ threadId: sidekickId })).toBeNull();
+  });
+
   it.each([
     ['missing parent', false, 'resource', 'parent'],
     ['unmarked collision', true, 'resource', undefined],

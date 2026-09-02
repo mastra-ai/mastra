@@ -130,19 +130,19 @@ export class RemindContinuationProcessor implements Processor<'remind-continuati
     const oldest = Math.min(...pending.map(question => timers.get(question.replyId) ?? question.askedAt));
     if (Date.now() - oldest < NUDGE_AFTER_MS) return args.messages;
 
-    if (args.sendSignal) {
-      await args.sendSignal({
-        id: `subconscious:remind:nudge:${args.stepNumber}:${args.retryCount}`,
-        type: 'reactive',
-        tagName: 'remind-continuation',
-        contents: `Before stopping, answer these memory questions with reply_to_memory_question: ${pending
-          .map(question => question.replyId)
-          .join(', ')}.`,
-        attributes: { replyIds: pending.map(question => question.replyId).join(',') },
-        metadata: { origin: 'subconscious' },
-      });
-    }
     if (args.retryCount === 0) {
+      if (args.sendSignal) {
+        await args.sendSignal({
+          id: `subconscious:remind:nudge:${args.stepNumber}:${args.retryCount}`,
+          type: 'reactive',
+          tagName: 'remind-continuation',
+          contents: `Before stopping, answer these memory questions with reply_to_memory_question: ${pending
+            .map(question => question.replyId)
+            .join(', ')}.`,
+          attributes: { replyIds: pending.map(question => question.replyId).join(',') },
+          metadata: { origin: 'subconscious' },
+        });
+      }
       args.abort('Outstanding memory questions require a reply before this run stops.', {
         retry: true,
         metadata: { replyIds: pending.map(question => question.replyId) },

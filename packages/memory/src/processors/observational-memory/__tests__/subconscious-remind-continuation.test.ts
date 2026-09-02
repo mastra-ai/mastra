@@ -271,10 +271,16 @@ describe('Subconscious reminder continuation', () => {
     } as any;
 
     await processor.processOutputStep(args);
+    await processor.processOutputStep({ ...args, retryCount: 1 });
 
+    expect(args.sendSignal).toHaveBeenCalledOnce();
     expect(args.sendSignal).toHaveBeenCalledWith(
       expect.objectContaining({ tagName: 'remind-continuation', attributes: { replyIds: 'reply-1' } }),
     );
+    expect(args.state['remind-question-timers'].get('reply-1')).toBe(
+      question.content.metadata![REMIND_MESSAGE_METADATA_KEY].askedAt,
+    );
+    expect(args.abort).toHaveBeenCalledOnce();
     expect(args.abort).toHaveBeenCalledWith(
       'Outstanding memory questions require a reply before this run stops.',
       expect.objectContaining({ retry: true }),

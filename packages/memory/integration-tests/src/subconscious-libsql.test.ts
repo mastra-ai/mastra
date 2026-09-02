@@ -11,7 +11,6 @@ import { Memory, Subconscious } from '@mastra/memory';
 import type { EmbeddingModel } from 'ai';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { createLearnerHandler } from '../../src/processors/observational-memory/subconscious/learn';
 import { RemindContinuationProcessor } from '../../src/processors/observational-memory/subconscious/remind-continuation';
 import {
   ensureOwnedRemindThread,
@@ -19,9 +18,7 @@ import {
   getRemindThreadId,
 } from '../../src/processors/observational-memory/subconscious/remind-protocol';
 import { createAskMemoryTool } from '../../src/processors/observational-memory/subconscious/remind-questions';
-import type { ResolvedSubconsciousConfig } from '../../src/processors/observational-memory/subconscious/types';
 
->>>>>>> 77975f3c6eb (test(memory): cover reminder sidekick persistence)
 function message(threadId: string, resourceId: string, text = 'Maya Chen owns Project Atlas.'): MastraDBMessage {
   return {
     id: randomUUID(),
@@ -294,10 +291,12 @@ describe('Subconscious LibSQL integration', () => {
     requestContext.set('organizationId', 'acme');
     const sendSignal = vi.fn(async () => undefined) as any;
     const mainAgent = new Agent({ id: 'main-agent', name: 'Main Agent', instructions: 'Help the user.', model });
-    const parentSendSignal = vi.spyOn(mainAgent, 'sendSignal').mockImplementation((signal => ({
-      signal,
-      accepted: Promise.resolve({ action: 'deliver', runId: 'parent-run' }),
-    })) as any);
+    const parentSendSignal = vi
+      .spyOn(mainAgent, 'sendSignal')
+      .mockImplementation(((signal: unknown, options: { ifActive?: { behavior?: string } }) =>
+        options.ifActive?.behavior === 'persist'
+          ? { signal, accepted: Promise.resolve({ action: 'persist' }), persisted: Promise.resolve() }
+          : { signal, accepted: Promise.resolve({ action: 'deliver', runId: 'parent-run' }) }) as any);
     const getModel = vi.spyOn(mainAgent, 'getModel');
 
     const result = await (await memory.omEngine)!.observe({
@@ -311,10 +310,16 @@ describe('Subconscious LibSQL integration', () => {
     expect(result.observed).toBe(true);
     expect(getModel).not.toHaveBeenCalled();
     expect(streamCall).toBe(3);
-    expect(parentSendSignal).toHaveBeenCalledOnce();
-    expect(parentSendSignal).toHaveBeenCalledWith(
+    expect(parentSendSignal).toHaveBeenCalledTimes(2);
+    expect(parentSendSignal).toHaveBeenNthCalledWith(
+      1,
       expect.objectContaining({ type: 'reactive', tagName: 'remembered', contents: expect.stringContaining(reminder) }),
-      expect.objectContaining({ threadId, resourceId }),
+      expect.objectContaining({ threadId, resourceId, ifActive: { behavior: 'persist' } }),
+    );
+    expect(parentSendSignal).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({ type: 'reactive', tagName: 'remembered', contents: expect.stringContaining(reminder) }),
+      expect.objectContaining({ threadId, resourceId, ifActive: { behavior: 'deliver' } }),
     );
 
     const reconstructed = new Memory({
@@ -340,7 +345,7 @@ describe('Subconscious LibSQL integration', () => {
     });
 
     expect(second.observed).toBe(true);
-    expect(parentSendSignal).toHaveBeenCalledOnce();
+    expect(parentSendSignal).toHaveBeenCalledTimes(2);
     const reminderHistory = await (await storage.getStore('memory'))!.listMessages({
       threadId: getRemindThreadId(threadId),
       resourceId,
@@ -877,98 +882,4 @@ describe('Subconscious LibSQL integration', () => {
     );
   });
 
-  it('learns and updates one skill with idempotent LibSQL evidence', async () => {
-    const directory = await mkdtemp(join(tmpdir(), 'subconscious-learn-libsql-'));
-    directories.push(directory);
-    const storage = new LibSQLStore({ id: randomUUID(), url: `file:${join(directory, 'knowledge.db')}` });
-    await storage.init();
-    const memory = new Memory({ storage });
-    const knowledge = (await storage.getStore('knowledge'))!;
-    const threadId = randomUUID();
-    const resourceId = randomUUID();
-    const scope = ['org:acme', `resource:${resourceId}`, `thread:${threadId}`];
-    const project = await knowledge.createNode({ name: 'Project Atlas', kind: 'project', scope });
-    const appendSource = (text: string) =>
-      knowledge.appendKnowledge({
-        node: project.id,
-        text,
-        scope,
-        sourceThreadId: threadId,
-        resolutionScope: scope,
-        defaultScope: scope,
-      });
-    const first = await appendSource('Deploy Atlas by validating then publishing.');
-    const second = await appendSource('Another deploy validated, published, then checked health.');
-    let pendingIds = [first.id, second.id];
-    let modelStep = 0;
-    const learnGenerate = async () => {
-      modelStep++;
-      if (modelStep % 2 === 1) {
-        return {
-          rawCall: { rawPrompt: null, rawSettings: {} },
-          finishReason: 'tool-calls' as const,
-          usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
-          warnings: [],
-          content: [
-            {
-              type: 'tool-call' as const,
-              toolCallId: `learn-${modelStep}`,
-              toolName: 'knowledge_record_skill',
-              input: JSON.stringify({
-                name: 'deploy-atlas-safely',
-                procedure: 'Validate, publish, then verify the health check.',
-                sourceRecordIds: pendingIds,
-              }),
-            },
-          ],
-        };
-      }
-      return {
-        rawCall: { rawPrompt: null, rawSettings: {} },
-        finishReason: 'stop' as const,
-        usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
-        warnings: [],
-        content: [{ type: 'text' as const, text: `<learning-complete through="${pendingIds.at(-1)}" />` }],
-      };
-    };
-    const learnerModel = new MockLanguageModelV2({ doGenerate: learnGenerate as never });
-    const config: ResolvedSubconsciousConfig = {
-      observation: [],
-      reflection: [{ name: 'learn', maxSteps: 5, builtIn: true }],
-      defaultScope: 'resource',
-      learnedGuidance: true,
-      tools: true,
-      activity: { recentUpdates: 10 },
-    };
-    const requestContext = new RequestContext();
-    requestContext.set('organizationId', 'acme');
-    const handler = createLearnerHandler(
-      memory as any,
-      config,
-      new Memory({ storage, options: { observationalMemory: false } }) as any,
-    );
-    const run = () =>
-      handler({
-        parentThreadId: threadId,
-        resourceId,
-        observations: 'Full raw observations preserve the repeated deploy sequence.',
-        requestContext,
-        mainAgent: { getModel: vi.fn(async () => learnerModel) } as any,
-      });
-
-    await run();
-    const third = await appendSource('A third deploy repeated validation and publish.');
-    const fourth = await appendSource('Recovery again finished with a health check.');
-    pendingIds = [third.id, fourth.id];
-    await run();
-
-    const skills = await knowledge.listNodes({ scope, kind: 'skill' });
-    expect(skills).toHaveLength(1);
-    const evidence = await knowledge.listKnowledgeAbout({ node: skills[0]!.id, scope });
-    expect(evidence.records).toHaveLength(4);
-    expect(new Set(evidence.records.map(record => record.id)).size).toBe(4);
-    expect(await knowledge.getCurationCursor({ sourceThreadId: threadId, agent: 'learn' })).toMatchObject({
-      lastKnowledgeId: fourth.id,
-    });
-  });
 });

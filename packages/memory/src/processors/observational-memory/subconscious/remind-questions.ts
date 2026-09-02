@@ -70,14 +70,28 @@ function messageText(message: unknown): string {
     .join('\n');
 }
 
+function inScopeMessage(message: unknown, threadId: string, resourceId: string): MastraDBMessage | undefined {
+  if (!message || typeof message !== 'object') return undefined;
+  const dbMessage = message as MastraDBMessage;
+  const content = (message as { content?: unknown }).content;
+  const isStoredMessage = !!content && typeof content === 'object' && !Array.isArray(content) && 'format' in content;
+  if (isStoredMessage && (dbMessage.threadId !== threadId || dbMessage.resourceId !== resourceId)) return undefined;
+  return dbMessage;
+}
+
+function messageParts(message: MastraDBMessage): MastraDBMessage['content']['parts'] {
+  const content = message.content as unknown;
+  if (Array.isArray(content)) return content as MastraDBMessage['content']['parts'];
+  return Array.isArray((content as { parts?: unknown } | undefined)?.parts)
+    ? (content as MastraDBMessage['content']).parts
+    : [];
+}
+
 function trustedQuestion(messages: unknown, replyId: string, threadId: string, resourceId: string): boolean {
   if (!Array.isArray(messages)) return false;
   return messages.some(message => {
-    if (!message || typeof message !== 'object') return false;
-    const dbMessage = message as MastraDBMessage;
-    const content = (message as { content?: unknown }).content;
-    const isStoredMessage = !!content && typeof content === 'object' && !Array.isArray(content) && 'format' in content;
-    if (isStoredMessage && (dbMessage.threadId !== threadId || dbMessage.resourceId !== resourceId)) return false;
+    const dbMessage = inScopeMessage(message, threadId, resourceId);
+    if (!dbMessage) return false;
     const metadata = getRemindMessageMetadata(dbMessage);
     if (metadata?.type === 'question' && metadata.replyId === replyId) return true;
     return dbMessage.role === 'user' && messageText(message).startsWith(`Memory question ${replyId}\n`);
@@ -87,15 +101,9 @@ function trustedQuestion(messages: unknown, replyId: string, threadId: string, r
 function hasTerminalReply(messages: unknown, replyId: string, threadId: string, resourceId: string): boolean {
   if (!Array.isArray(messages)) return false;
   return messages.some(message => {
-    if (!message || typeof message !== 'object') return false;
-    const dbMessage = message as MastraDBMessage;
-    const content = (message as { content?: unknown }).content;
-    const isStoredMessage = !!content && typeof content === 'object' && !Array.isArray(content) && 'format' in content;
-    if (isStoredMessage && (dbMessage.threadId !== threadId || dbMessage.resourceId !== resourceId)) return false;
-    const parts = Array.isArray((content as { parts?: unknown } | undefined)?.parts)
-      ? (content as MastraDBMessage['content']).parts
-      : [];
-    return parts.some(part => {
+    const dbMessage = inScopeMessage(message, threadId, resourceId);
+    if (!dbMessage) return false;
+    return messageParts(dbMessage).some(part => {
       if (part.type !== 'tool-invocation') return false;
       const invocation = part.toolInvocation;
       if (invocation.toolName !== 'reply_to_memory_question' || invocation.state !== 'result') return false;
