@@ -4,7 +4,7 @@
  * `FactoryStorage` and returns the typed domain handles.
  */
 
-import { LibSQLFactoryStorage } from '@mastra/libsql';
+import { LibSQLFactoryStorage, LibSQLStore } from '@mastra/libsql';
 import { onTestFinished } from 'vitest';
 
 import { AuditStorage } from './domains/audit/base.js';
@@ -19,6 +19,8 @@ import { FactoryProjectsStorage } from './domains/projects/base.js';
 import { QueueHealthStorage } from './domains/queue-health/base.js';
 import { SourceControlStorage } from './domains/source-control/base.js';
 import { WorkItemsStorage } from './domains/work-items/base.js';
+
+export { LibSQLStore };
 
 export interface FactoryStorageTestSeed {
   storage: LibSQLFactoryStorage;

@@ -2,6 +2,14 @@ import type { Reporter, TestCase, TestResult } from '@playwright/test/reporter';
 import fs from 'node:fs';
 import path from 'node:path';
 
+const expectedProofTests = [
+  'knowledge/explore.spec.ts > renders scoped knowledge and activity from sanitized network fixtures',
+  'knowledge/governance.spec.ts > Knowledge governance perspectives > when the host vouches only readonly access > shows proposals without mutation actions',
+  'knowledge/governance.spec.ts > Knowledge governance perspectives > when the host vouches suggest access without edit authority > keeps review actions unavailable',
+  'knowledge/governance.spec.ts > Knowledge governance perspectives > when the host vouches owner authority > persists rejection and conflict re-review through Factory routes',
+  'knowledge/imports.spec.ts > renders an agentic import journey from sanitized network fixtures',
+];
+
 export default class KnowledgeProofReporter implements Reporter {
   readonly #output: string;
   readonly #results: Array<{ title: string; status: string; artifacts: string[] }> = [];
@@ -23,12 +31,31 @@ export default class KnowledgeProofReporter implements Reporter {
     fs.writeFileSync(path.join(this.#output, 'results.json'), JSON.stringify({ tests: this.#results }, null, 2));
 
     if (process.env.KNOWLEDGE_PROOF_OUTPUT) {
-      const artifacts = this.#results.flatMap(result => result.artifacts);
-      if (!artifacts.some(file => file.endsWith('trace.zip')) || !artifacts.some(file => file.endsWith('.webm'))) {
-        throw new Error('Knowledge proof must include a Playwright trace and video.');
+      if (this.#results.length !== expectedProofTests.length) {
+        throw new Error(`Knowledge proof must run exactly ${expectedProofTests.length} tests.`);
       }
-      if (!fs.existsSync(path.join(this.#output, 'explore.png'))) {
-        throw new Error('Knowledge proof must include explore.png.');
+      for (const expected of expectedProofTests) {
+        const result = this.#results.find(candidate => candidate.title.includes(expected));
+        if (!result || result.status !== 'passed') {
+          throw new Error(`Knowledge proof test did not pass: ${expected}`);
+        }
+        if (!result.artifacts.some(file => file.endsWith('trace.zip'))) {
+          throw new Error(`Knowledge proof test is missing a trace: ${expected}`);
+        }
+        if (!result.artifacts.some(file => file.endsWith('.webm'))) {
+          throw new Error(`Knowledge proof test is missing a video: ${expected}`);
+        }
+      }
+      for (const screenshot of [
+        'explore.png',
+        'imports-completed.png',
+        'reader.png',
+        'suggester.png',
+        'reviewer.png',
+      ]) {
+        if (!fs.existsSync(path.join(this.#output, screenshot))) {
+          throw new Error(`Knowledge proof is missing ${screenshot}.`);
+        }
       }
     }
   }
