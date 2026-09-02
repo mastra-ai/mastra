@@ -1897,12 +1897,27 @@ describe('GitHub session workspace preparation', () => {
         setState: (u: Record<string, unknown>) => Promise<void>;
       };
       const pinned = controller.setState;
+      let releasePin!: () => void;
+      let pinEntered!: () => void;
+      const pinEnteredPromise = new Promise<void>(resolve => {
+        pinEntered = resolve;
+      });
       controller.setState = async updates => {
-        await new Promise(resolve => setTimeout(resolve, 30));
+        pinEntered();
+        await new Promise<void>(resolve => {
+          releasePin = resolve;
+        });
         await pinned(updates);
       };
 
-      const workspace = await resolver({ requestContext });
+      const resolving = resolver({ requestContext });
+      await pinEnteredPromise;
+      await settle();
+      // The sandbox is constructed by now, but must not have started.
+      expect(constructedSandbox().start).not.toHaveBeenCalled();
+
+      releasePin();
+      const workspace = await resolving;
 
       expect(workspace?.id).toContain('project-1-session-1');
       await vi.waitFor(() => expect(constructedSandbox().start).toHaveBeenCalledTimes(1));
