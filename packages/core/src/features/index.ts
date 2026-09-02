@@ -30,7 +30,11 @@ export const coreFeatures = new Set<string>([
   // Processors can declare the span type they are traced as, and the built-in
   // subsystems declare theirs: SKILL_ACTION, AGENT_SIGNAL, and the memory and
   // workspace types for skills, state signals, memory and workspace
-  // instructions. Dependents that reference the new SpanType members check this
-  // before assuming they exist.
+  // instructions.
+  //
+  // A dependent that only needs to know whether one SpanType member exists
+  // should test that member for `undefined` instead of importing this set:
+  // `@mastra/core/features` is itself a recent subpath, so importing it raises
+  // the oldest core the dependent can load against.
   'processor-span-types',
 ]);

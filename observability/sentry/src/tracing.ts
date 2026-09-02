@@ -8,7 +8,6 @@
  * MODEL_STEP and MODEL_CHUNK spans are skipped to simplify the trace hierarchy.
  */
 
-import { coreFeatures } from '@mastra/core/features';
 import type {
   TracingEvent,
   AnyExportedSpan,
@@ -46,9 +45,6 @@ export function buildSpanTypeConfig(
   ) as Partial<Record<SpanType, SentrySpanOp>>;
 }
 
-/** Whether the paired core declares the processor span types. */
-const hasProcessorSpanTypes = coreFeatures.has('processor-span-types');
-
 const SPAN_TYPE_CONFIG: Partial<Record<SpanType, SentrySpanOp>> = buildSpanTypeConfig([
   [SpanType.AGENT_RUN, { opType: 'gen_ai.invoke_agent', opName: 'invoke_agent' }],
   [SpanType.MODEL_GENERATION, { opType: 'gen_ai.chat', opName: 'chat' }],
@@ -76,15 +72,11 @@ const SPAN_TYPE_CONFIG: Partial<Record<SpanType, SentrySpanOp>> = buildSpanTypeC
   // MEMORY_OPERATION already does. Without an entry they fall back to the
   // catch-all 'ai.span'.
   //
-  // WORKSPACE_ACTION predates the processor span types, so it is mapped for any
-  // supported core. SKILL_ACTION arrived with them, so it is mapped only when
-  // the paired core declares the feature.
+  // Both arrived after this package's oldest supported core, so against an
+  // older one they read as `undefined`. `buildSpanTypeConfig` drops those
+  // entries rather than keying the map under an `undefined` member.
   [SpanType.WORKSPACE_ACTION, { opType: 'ai.workspace', opName: 'workspace' }],
-  ...(hasProcessorSpanTypes
-    ? ([[SpanType.SKILL_ACTION, { opType: 'ai.skill', opName: 'skill' }]] as Array<
-        [SpanType | undefined, SentrySpanOp]
-      >)
-    : []),
+  [SpanType.SKILL_ACTION, { opType: 'ai.skill', opName: 'skill' }],
 ]);
 
 const ATTRIBUTE_KEYS = {
