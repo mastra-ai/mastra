@@ -1,6 +1,6 @@
 import type { DatasetExperiment } from '@mastra/client-js';
 import { Button } from '@mastra/playground-ui/components/Button';
-import { RotateCw } from 'lucide-react';
+import { Play } from 'lucide-react';
 import { useState } from 'react';
 import { useNavigate } from 'react-router';
 import { ExperimentTriggerDialog } from '@/domains/datasets/components/experiment-trigger/experiment-trigger-dialog';
@@ -29,8 +29,12 @@ export function RerunExperimentButton({ experiment }: RerunExperimentButtonProps
 
   return (
     <>
-      <Button onClick={() => setOpen(true)} tooltip="Run this experiment again with the same configuration">
-        <RotateCw />
+      <Button
+        variant="primary"
+        onClick={() => setOpen(true)}
+        tooltip="Run this experiment again with the same configuration"
+      >
+        <Play />
         Rerun
       </Button>
       <ExperimentTriggerDialog
