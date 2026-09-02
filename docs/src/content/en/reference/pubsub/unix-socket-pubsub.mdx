@@ -54,7 +54,7 @@ export const mastra = new Mastra({
         name: 'maxInboundFrameBytes',
         type: 'number',
         description:
-          'Maximum size in bytes of a single incoming frame. A connection that sends a larger frame, or an unterminated partial frame beyond this size, is disconnected so one peer cannot exhaust process memory.',
+          'Maximum size in bytes of a single incoming frame. Must be a positive finite number. A connection that sends a larger frame, or an unterminated partial frame beyond this size, is disconnected so one peer cannot exhaust process memory.',
         isOptional: true,
         defaultValue: '67108864',
       },

@@ -136,8 +136,25 @@ function nextTick(): Promise<void> {
 function readFrames(socket: net.Socket, onFrame: (frame: any) => void, maxFrameBytes: number) {
   // Accumulate raw bytes and only decode complete lines so byte accounting is
   // exact and multi-byte UTF-8 sequences split across chunks stay intact.
-  let pending: Buffer[] = [];
+  //
+  // Partial frames are copied into a single growable buffer rather than kept as
+  // a list of chunk slices: each retained slice pins its whole underlying slab
+  // plus per-object overhead, so a peer sending an unterminated frame in many
+  // tiny writes could otherwise consume far more memory than `maxFrameBytes`.
+  let pending: Buffer | null = null;
   let pendingBytes = 0;
+
+  const appendPending = (bytes: Buffer) => {
+    const needed = pendingBytes + bytes.length;
+    if (!pending || pending.length < needed) {
+      const capacity = Math.min(maxFrameBytes, Math.max(needed, pending ? pending.length * 2 : 4096));
+      const grown = Buffer.allocUnsafe(capacity);
+      if (pending) pending.copy(grown, 0, 0, pendingBytes);
+      pending = grown;
+    }
+    bytes.copy(pending, pendingBytes);
+    pendingBytes = needed;
+  };
 
   socket.on('data', (chunk: Buffer) => {
     if (socket.destroyed) return;
@@ -148,14 +165,13 @@ function readFrames(socket: net.Socket, onFrame: (frame: any) => void, maxFrameB
       const newlineIndex = chunk.indexOf(NEWLINE_BYTE, offset);
       if (newlineIndex === -1) {
         const rest = chunk.subarray(offset);
-        pendingBytes += rest.length;
-        if (pendingBytes > maxFrameBytes) {
-          pending = [];
+        if (pendingBytes + rest.length > maxFrameBytes) {
+          pending = null;
           pendingBytes = 0;
           socket.destroy();
           return;
         }
-        pending.push(rest);
+        appendPending(rest);
         return;
       }
 
@@ -163,14 +179,14 @@ function readFrames(socket: net.Socket, onFrame: (frame: any) => void, maxFrameB
       offset = newlineIndex + 1;
       const lineBytes = pendingBytes + tail.length;
       if (lineBytes > maxFrameBytes) {
-        pending = [];
+        pending = null;
         pendingBytes = 0;
         socket.destroy();
         return;
       }
 
-      const line = pending.length === 0 ? tail : Buffer.concat([...pending, tail], lineBytes);
-      pending = [];
+      const line = pending ? Buffer.concat([pending.subarray(0, pendingBytes), tail], lineBytes) : tail;
+      pending = null;
       pendingBytes = 0;
 
       const text = line.toString('utf8');
