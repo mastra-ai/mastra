@@ -294,6 +294,57 @@ describe('InMemoryKnowledgeStorage canonical model', () => {
     ]);
   });
 
+  it('atomically replaces grants owned by one scope reference', async () => {
+    const plan = await store.reconcileStructure({
+      scopes: [
+        { address: 'principal:curator', name: 'Curator' },
+        { address: 'principal:host', name: 'Host' },
+        { address: 'scope:a', name: 'A' },
+        { address: 'scope:b', name: 'B' },
+      ],
+    });
+    const curatorId = plan.scopes['principal:curator']!;
+    await store.upsertScopeGrant({
+      scopeNodeId: plan.scopes['scope:a']!,
+      scopeRefId: plan.scopes['principal:host']!,
+      role: 'owner',
+    });
+    await store.reconcileScopeReferenceGrants({
+      scopeRefId: curatorId,
+      grants: [{ scopeNodeId: plan.scopes['scope:a']!, scopeRefId: curatorId, role: 'owner' }],
+    });
+    const epoch = await store.getAccessEpoch();
+
+    await expect(
+      store.reconcileScopeReferenceGrants({
+        scopeRefId: curatorId,
+        grants: [{ scopeNodeId: 'missing', scopeRefId: curatorId, role: 'owner' }],
+      }),
+    ).rejects.toThrow('Knowledge scope not found');
+    expect(await store.getAccessEpoch()).toBe(epoch);
+
+    await store.reconcileScopeReferenceGrants({
+      scopeRefId: curatorId,
+      grants: [{ scopeNodeId: plan.scopes['scope:b']!, scopeRefId: curatorId, role: 'edit' }],
+    });
+    expect(await store.listScopeGrants()).toEqual(
+      expect.arrayContaining([
+        {
+          scopeNodeId: plan.scopes['scope:a'],
+          scopeRefId: plan.scopes['principal:host'],
+          role: 'owner',
+          canSuggest: undefined,
+        },
+        {
+          scopeNodeId: plan.scopes['scope:b'],
+          scopeRefId: curatorId,
+          role: 'edit',
+          canSuggest: undefined,
+        },
+      ]),
+    );
+  });
+
   it('rolls back failed structure reconciliation without advancing the access epoch', async () => {
     const epoch = await store.getAccessEpoch();
     await expect(
@@ -311,6 +362,29 @@ describe('InMemoryKnowledgeStorage canonical model', () => {
     expect(await store.getAccessEpoch()).toBe(epoch);
     const retry = await store.reconcileStructure({ scopes: [{ address: 'repo:broken', name: 'Broken' }] });
     expect(retry.createdScopeIds).toHaveLength(1);
+  });
+
+  it('drains scoped record deletion after compacting its invisible pending upsert', async () => {
+    const node = await store.createNode({ name: 'Semantic lifecycle owner', scopeIds: [PROJECT_SCOPE_ID] });
+    const record = await store.createRecord({ node, text: 'Semantic lifecycle record', scopeIds: [PROJECT_SCOPE_ID] });
+    const deleted = await store.deleteRecord({ id: record.id, version: record.version, deletedBy: 'test' });
+    const documentId = `knowledge:record:${record.id}`;
+
+    const deletion = await store.claimSemanticOutbox({
+      workerId: 'lifecycle-worker',
+      scopeIds: [PROJECT_SCOPE_ID],
+      limit: 100,
+    });
+    expect(deletion.filter(entry => entry.documentId === documentId)).toMatchObject([{ operation: 'delete' }]);
+    await store.completeSemanticOutbox({ ids: deletion.map(entry => entry.id), workerId: 'lifecycle-worker' });
+
+    await store.restoreRecord({ id: record.id, version: deleted.version });
+    const restoration = await store.claimSemanticOutbox({
+      workerId: 'lifecycle-worker',
+      scopeIds: [PROJECT_SCOPE_ID],
+      limit: 100,
+    });
+    expect(restoration.filter(entry => entry.documentId === documentId)).toMatchObject([{ operation: 'upsert' }]);
   });
 
   it('clears only canonical Knowledge state', async () => {

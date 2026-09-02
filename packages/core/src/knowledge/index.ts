@@ -211,11 +211,9 @@ export class Knowledge extends MastraBase {
     const registration = structuredClone(input);
     if (!registration.id.trim()) throw new Error('Knowledge curator profile id must not be empty.');
     const existing = this.#curatorProfiles.get(registration.id);
-    if (existing) {
-      if (!isDeepStrictEqual(existing.registration, registration)) {
-        throw new Error(`Knowledge curator profile ${registration.id} is already registered with different authority`);
-      }
-      return;
+    if (existing && isDeepStrictEqual(existing.registration, registration)) return;
+    if (existing && existing.registration.identityScope.address !== registration.identityScope.address) {
+      throw new Error(`Knowledge curator profile ${registration.id} is already registered with a different identity`);
     }
 
     const storage = await this.#getStorage();
@@ -232,14 +230,15 @@ export class Knowledge extends MastraBase {
         return { grant, target };
       }),
     );
-    for (const { grant, target } of grants) {
-      await storage.upsertScopeGrant({
+    await storage.reconcileScopeReferenceGrants({
+      scopeRefId: identityScope.scopeNodeId,
+      grants: grants.map(({ grant, target }) => ({
         scopeNodeId: target.scopeNodeId,
         scopeRefId: identityScope.scopeNodeId,
         role: grant.role,
         canSuggest: grant.canSuggest,
-      });
-    }
+      })),
+    });
     this.#curatorProfiles.set(registration.id, { registration, identityScopeId: identityScope.scopeNodeId });
   }
 

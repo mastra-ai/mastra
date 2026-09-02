@@ -39,6 +39,96 @@ describe('KnowledgeLibSQL schema completion marker', () => {
 });
 
 describe('KnowledgeLibSQL shared access epochs', () => {
+  it('reconciles one identity scope authority across restart without touching other principals', async () => {
+    const path = join(tmpdir(), `mastra-knowledge-curator-profile-${randomUUID()}.db`);
+    const url = `file:${path}`;
+    const firstClient = createClient({ url });
+    try {
+      const first = new KnowledgeLibSQL({ client: firstClient, storageIsolationKey: url });
+      await first.init();
+      const plan = await first.reconcileStructure({
+        scopes: [
+          { address: 'principal:curator', name: 'Curator' },
+          { address: 'principal:host', name: 'Host' },
+          { address: 'scope:a', name: 'A' },
+          { address: 'scope:b', name: 'B' },
+        ],
+      });
+      await first.reconcileScopeReferenceGrants({
+        scopeRefId: plan.scopes['principal:curator']!,
+        grants: [
+          {
+            scopeNodeId: plan.scopes['scope:a']!,
+            scopeRefId: plan.scopes['principal:curator']!,
+            role: 'owner',
+          },
+        ],
+      });
+      await first.upsertScopeGrant({
+        scopeNodeId: plan.scopes['scope:a']!,
+        scopeRefId: plan.scopes['principal:host']!,
+        role: 'owner',
+      });
+      firstClient.close();
+
+      const restartedClient = createClient({ url });
+      try {
+        const restarted = new KnowledgeLibSQL({ client: restartedClient, storageIsolationKey: url });
+        await restarted.init();
+        const changed = await restarted.reconcileScopeReferenceGrants({
+          scopeRefId: plan.scopes['principal:curator']!,
+          grants: [
+            {
+              scopeNodeId: plan.scopes['scope:b']!,
+              scopeRefId: plan.scopes['principal:curator']!,
+              role: 'owner',
+            },
+          ],
+        });
+        expect(changed.changed).toBe(true);
+        expect(await restarted.listScopeGrants()).toEqual(
+          expect.arrayContaining([
+            {
+              scopeNodeId: plan.scopes['scope:a'],
+              scopeRefId: plan.scopes['principal:host'],
+              role: 'owner',
+              canSuggest: undefined,
+            },
+            {
+              scopeNodeId: plan.scopes['scope:b'],
+              scopeRefId: plan.scopes['principal:curator'],
+              role: 'owner',
+              canSuggest: undefined,
+            },
+          ]),
+        );
+
+        const epoch = await restarted.getAccessEpoch();
+        await expect(
+          restarted.reconcileScopeReferenceGrants({
+            scopeRefId: plan.scopes['principal:curator']!,
+            grants: [
+              {
+                scopeNodeId: randomUUID(),
+                scopeRefId: plan.scopes['principal:curator']!,
+                role: 'owner',
+              },
+            ],
+          }),
+        ).rejects.toBeDefined();
+        expect(await restarted.getAccessEpoch()).toBe(epoch);
+        expect(
+          (await restarted.listScopeGrants()).find(grant => grant.scopeRefId === plan.scopes['principal:curator']),
+        ).toMatchObject({ scopeNodeId: plan.scopes['scope:b'], role: 'owner' });
+      } finally {
+        restartedClient.close();
+      }
+    } finally {
+      firstClient.close();
+      await rm(path, { force: true });
+    }
+  });
+
   it('serializes concurrent grant reconciliation across clients', async () => {
     const path = join(tmpdir(), `mastra-knowledge-access-${randomUUID()}.db`);
     const url = `file:${path}`;

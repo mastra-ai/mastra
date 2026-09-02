@@ -186,6 +186,48 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
       );
   }
 
+  override async reconcileScopeReferenceGrants(input: {
+    scopeRefId: string;
+    grants: KnowledgeScopeGrant[];
+    expectedAccessEpoch?: number;
+  }): Promise<{ changed: boolean; accessEpoch: number }> {
+    return this.#runAtomicMutation(() => {
+      this.#assertExpectedAccessEpoch(input.expectedAccessEpoch);
+      const scopeRef = this.#db.knowledgeNodes.get(input.scopeRefId);
+      if (!scopeRef || scopeRef.deletedAt || !scopeRef.isScope) {
+        throw new KnowledgeNotFoundError('scope', input.scopeRefId);
+      }
+      const desired = new Map<string, KnowledgeScopeGrant>();
+      for (const grant of input.grants) {
+        if (grant.scopeRefId !== input.scopeRefId || desired.has(grant.scopeNodeId)) {
+          throw new KnowledgeConflictError('Knowledge scope-reference grant set is invalid');
+        }
+        const target = this.#db.knowledgeNodes.get(grant.scopeNodeId);
+        if (!target || target.deletedAt || !target.isScope) {
+          throw new KnowledgeNotFoundError('scope', grant.scopeNodeId);
+        }
+        desired.set(grant.scopeNodeId, grant);
+      }
+      const current = [...this.#db.knowledgeScopeGrants.entries()].filter(
+        ([, grant]) => grant.scopeRefId === input.scopeRefId,
+      );
+      const unchanged =
+        current.length === desired.size &&
+        current.every(([, grant]) => {
+          const next = desired.get(grant.scopeNodeId);
+          return next?.role === grant.role && next.canSuggest === grant.canSuggest;
+        });
+      if (unchanged) return { changed: false, accessEpoch: this.#db.knowledgeAccessEpoch };
+
+      for (const [key] of current) this.#db.knowledgeScopeGrants.delete(key);
+      for (const grant of desired.values()) {
+        this.#db.knowledgeScopeGrants.set(JSON.stringify([grant.scopeNodeId, grant.scopeRefId]), { ...grant });
+      }
+      this.#db.knowledgeAccessEpoch += 1;
+      return { changed: true, accessEpoch: this.#db.knowledgeAccessEpoch };
+    });
+  }
+
   override async upsertScopeGrant(
     grant: KnowledgeScopeGrant,
     fence: { expectedAccessEpoch?: number } = {},
@@ -1597,9 +1639,45 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
     const timeout = input.claimTimeoutMs ?? 60_000;
     const queryScope = input.scopeIds ? canonicalizeKnowledgeScopeIds(input.scopeIds) : undefined;
     const limit = Math.min(Math.max(input.limit ?? 100, 1), 100);
+    const allEntries = [...this.#db.knowledgeSemanticOutbox.values()].sort(
+      (a, b) => a.createdAt.getTime() - b.createdAt.getTime() || a.id.localeCompare(b.id),
+    );
+    if (queryScope) {
+      for (const successor of allEntries) {
+        const eligibleSuccessor =
+          (successor.status === 'pending' ||
+            (successor.status === 'processing' &&
+              successor.claimedAt &&
+              now.getTime() - successor.claimedAt.getTime() >= timeout)) &&
+          successor.availableAt <= now &&
+          this.#isSemanticOutboxEntryVisible(successor, queryScope);
+        if (!eligibleSuccessor) continue;
+        for (const predecessor of allEntries) {
+          if (
+            predecessor.documentId !== successor.documentId ||
+            predecessor.status === 'completed' ||
+            predecessor.createdAt > successor.createdAt ||
+            (predecessor.createdAt.getTime() === successor.createdAt.getTime() && predecessor.id >= successor.id)
+          ) {
+            continue;
+          }
+          if (successor.operation !== 'delete' && this.#isSemanticOutboxEntryVisible(predecessor, queryScope)) {
+            continue;
+          }
+          const staleProcessingPredecessor =
+            predecessor.status === 'processing' &&
+            predecessor.claimedAt &&
+            now.getTime() - predecessor.claimedAt.getTime() >= timeout;
+          if (predecessor.status === 'pending' || staleProcessingPredecessor) {
+            predecessor.status = 'completed';
+            predecessor.completedAt = now;
+          }
+        }
+      }
+    }
     const ordered: KnowledgeSemanticOutboxEntry[] = [];
     const blockedDocuments = new Set<string>();
-    for (const entry of this.#db.knowledgeSemanticOutbox.values()) {
+    for (const entry of allEntries) {
       if (entry.status === 'completed') continue;
       const eligible =
         (entry.status === 'pending' ||

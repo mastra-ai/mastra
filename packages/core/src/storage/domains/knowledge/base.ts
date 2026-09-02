@@ -22,6 +22,10 @@ export interface KnowledgeScopeGrant {
   role: KnowledgeGrantRole;
   canSuggest?: boolean;
 }
+export interface ReconcileKnowledgeScopeReferenceGrantsInput extends KnowledgeMutationFence {
+  scopeRefId: string;
+  grants: KnowledgeScopeGrant[];
+}
 export interface KnowledgeNodeScope {
   nodeId: string;
   scopeNodeId: string;
@@ -662,6 +666,11 @@ export abstract class KnowledgeStorage extends StorageDomain {
     throw new KnowledgeUnsupportedError();
   }
   async listScopeGrants(_input: { includeDeleted?: boolean } = {}): Promise<KnowledgeScopeGrant[]> {
+    throw new KnowledgeUnsupportedError();
+  }
+  async reconcileScopeReferenceGrants(
+    _input: ReconcileKnowledgeScopeReferenceGrantsInput,
+  ): Promise<{ changed: boolean; accessEpoch: number }> {
     throw new KnowledgeUnsupportedError();
   }
   async upsertScopeGrant(

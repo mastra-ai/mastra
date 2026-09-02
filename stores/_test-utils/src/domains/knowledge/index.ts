@@ -1756,6 +1756,132 @@ export function createKnowledgeStorageTests(createStore: () => Promise<Knowledge
       expect(await store.getRecordScopeIds(lateRecord.id)).toEqual([PROJECT_SCOPE_ID]);
     });
 
+    it('compacts an obsolete scoped upsert so delete and restore operations can drain', async () => {
+      for (;;) {
+        const existing = await store.claimSemanticOutbox({
+          workerId: 'lifecycle-worker',
+          scopeIds: [PROJECT_SCOPE_ID],
+          limit: 100,
+        });
+        if (!existing.length) break;
+        await store.completeSemanticOutbox({ ids: existing.map(entry => entry.id), workerId: 'lifecycle-worker' });
+      }
+      const node = await store.createNode({ name: 'Semantic lifecycle owner', scopeIds: [PROJECT_SCOPE_ID] });
+      const record = await store.createRecord({
+        node,
+        text: 'Semantic lifecycle record',
+        scopeIds: [PROJECT_SCOPE_ID],
+      });
+      const documentId = knowledgeSemanticDocumentId('record', record.id);
+      const deleted = await store.deleteRecord({ id: record.id, version: record.version, deletedBy: 'test' });
+
+      const deleteClaim = await store.claimSemanticOutbox({
+        workerId: 'lifecycle-worker',
+        scopeIds: [PROJECT_SCOPE_ID],
+        limit: 100,
+      });
+      expect(deleteClaim.filter(entry => entry.documentId === documentId)).toMatchObject([{ operation: 'delete' }]);
+      await store.completeSemanticOutbox({ ids: deleteClaim.map(entry => entry.id), workerId: 'lifecycle-worker' });
+      expect(
+        (await store.listSemanticOutbox({ scopeIds: [PROJECT_SCOPE_ID], limit: 100 })).filter(
+          entry => entry.documentId === documentId && entry.status !== 'completed',
+        ),
+      ).toEqual([]);
+
+      await store.restoreRecord({ id: record.id, version: deleted.version });
+      const restoreClaim = await store.claimSemanticOutbox({
+        workerId: 'lifecycle-worker',
+        scopeIds: [PROJECT_SCOPE_ID],
+        limit: 100,
+      });
+      expect(restoreClaim.filter(entry => entry.documentId === documentId)).toMatchObject([{ operation: 'upsert' }]);
+      await store.completeSemanticOutbox({ ids: restoreClaim.map(entry => entry.id), workerId: 'lifecycle-worker' });
+      expect(
+        (await store.listSemanticOutbox({ scopeIds: [PROJECT_SCOPE_ID], limit: 100 })).filter(
+          entry => entry.documentId === documentId && entry.status !== 'completed',
+        ),
+      ).toEqual([]);
+    });
+
+    it('compacts an invisible predecessor when a later operation becomes visible', async () => {
+      for (;;) {
+        const existing = await store.claimSemanticOutbox({
+          workerId: 'rescope-worker',
+          scopeIds: [PROJECT_SCOPE_ID, OTHER_SCOPE_ID],
+          limit: 100,
+        });
+        if (!existing.length) break;
+        await store.completeSemanticOutbox({ ids: existing.map(entry => entry.id), workerId: 'rescope-worker' });
+      }
+      const node = await store.createNode({ name: 'Rescoped semantic owner', scopeIds: [OTHER_SCOPE_ID] });
+      const record = await store.createRecord({
+        node,
+        text: 'Rescoped semantic record',
+        scopeIds: [PROJECT_SCOPE_ID],
+      });
+      const documentId = knowledgeSemanticDocumentId('record', record.id);
+      await store.setRecordScopes({ id: record.id, version: record.version, scopeIds: [OTHER_SCOPE_ID] });
+
+      const claim = await store.claimSemanticOutbox({
+        workerId: 'rescope-worker',
+        scopeIds: [OTHER_SCOPE_ID],
+        limit: 100,
+      });
+      expect(claim.filter(entry => entry.documentId === documentId)).toMatchObject([{ operation: 'upsert' }]);
+      await store.completeSemanticOutbox({ ids: claim.map(entry => entry.id), workerId: 'rescope-worker' });
+      expect(
+        (await store.listSemanticOutbox({ scopeIds: [OTHER_SCOPE_ID], limit: 100 })).filter(
+          entry => entry.documentId === documentId && entry.status !== 'completed',
+        ),
+      ).toEqual([]);
+    });
+
+    it('compacts a stale processing predecessor so a scoped delete can drain', async () => {
+      for (;;) {
+        const existing = await store.claimSemanticOutbox({
+          workerId: 'stale-lifecycle-worker',
+          scopeIds: [PROJECT_SCOPE_ID],
+          limit: 100,
+        });
+        if (!existing.length) break;
+        await store.completeSemanticOutbox({
+          ids: existing.map(entry => entry.id),
+          workerId: 'stale-lifecycle-worker',
+        });
+      }
+      const node = await store.createNode({ name: 'Stale semantic lifecycle owner', scopeIds: [PROJECT_SCOPE_ID] });
+      const record = await store.createRecord({
+        node,
+        text: 'Stale semantic lifecycle record',
+        scopeIds: [PROJECT_SCOPE_ID],
+      });
+      const documentId = knowledgeSemanticDocumentId('record', record.id);
+      const claimedAt = new Date();
+      const initialClaim = await store.claimSemanticOutbox({
+        workerId: 'abandoned-worker',
+        scopeIds: [PROJECT_SCOPE_ID],
+        limit: 100,
+        now: claimedAt,
+      });
+      expect(initialClaim.filter(entry => entry.documentId === documentId)).toMatchObject([{ operation: 'upsert' }]);
+
+      await store.deleteRecord({ id: record.id, version: record.version, deletedBy: 'test' });
+      const deleteClaim = await store.claimSemanticOutbox({
+        workerId: 'recovery-worker',
+        scopeIds: [PROJECT_SCOPE_ID],
+        limit: 100,
+        now: new Date(claimedAt.getTime() + 60_001),
+        claimTimeoutMs: 60_000,
+      });
+      expect(deleteClaim.filter(entry => entry.documentId === documentId)).toMatchObject([{ operation: 'delete' }]);
+      await store.completeSemanticOutbox({ ids: deleteClaim.map(entry => entry.id), workerId: 'recovery-worker' });
+      expect(
+        (await store.listSemanticOutbox({ scopeIds: [PROJECT_SCOPE_ID], limit: 100 })).filter(
+          entry => entry.documentId === documentId && entry.status !== 'completed',
+        ),
+      ).toEqual([]);
+    });
+
     it('clears only canonical Knowledge state', async () => {
       const run = await store.createImportRun({
         importerId: 'clear-test',

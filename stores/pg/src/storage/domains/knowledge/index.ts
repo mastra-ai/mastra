@@ -693,6 +693,66 @@ export class KnowledgePG extends KnowledgeStorage {
     }));
   }
 
+  override async reconcileScopeReferenceGrants(input: {
+    scopeRefId: string;
+    grants: KnowledgeScopeGrant[];
+    expectedAccessEpoch?: number;
+  }): Promise<{ changed: boolean; accessEpoch: number }> {
+    return this.#transaction(async tx => {
+      await tx.execute({
+        sql: `SELECT pg_advisory_xact_lock(hashtext(?))`,
+        args: [`mastra-knowledge-reconcile:${this.#schemaName}`],
+      });
+      await this.#assertExpectedAccessEpoch(tx, input.expectedAccessEpoch);
+      const desired = new Map<string, KnowledgeScopeGrant>();
+      for (const grant of input.grants) {
+        if (grant.scopeRefId !== input.scopeRefId || desired.has(grant.scopeNodeId)) {
+          throw new KnowledgeConflictError('Knowledge scope-reference grant set is invalid');
+        }
+        desired.set(grant.scopeNodeId, grant);
+      }
+      const scopeIds = [input.scopeRefId, ...desired.keys()];
+      const scopes = await tx.execute({
+        sql: `SELECT id FROM "${TABLE_KNOWLEDGE_NODES}" WHERE id IN (${scopeIds.map(() => '?').join(',')}) AND "isScope"=TRUE AND "deletedAt" IS NULL`,
+        args: scopeIds,
+      });
+      const liveScopeIds = new Set(scopes.rows.map(row => String(row.id)));
+      const missingScopeId = scopeIds.find(scopeId => !liveScopeIds.has(scopeId));
+      if (missingScopeId) throw new KnowledgeNotFoundError('scope', missingScopeId);
+      const existing = await tx.execute({
+        sql: `SELECT "scopeNodeId",role,"canSuggest" FROM "${TABLE_KNOWLEDGE_SCOPE_GRANTS}" WHERE "scopeRefId"=?`,
+        args: [input.scopeRefId],
+      });
+      const unchanged =
+        existing.rows.length === desired.size &&
+        existing.rows.every(row => {
+          const grant = desired.get(String(row.scopeNodeId));
+          return (
+            grant?.role === String(row.role) &&
+            grant.canSuggest === (row.canSuggest === null ? undefined : Boolean(row.canSuggest))
+          );
+        });
+      if (unchanged) {
+        const epoch = await tx.execute(`SELECT epoch FROM "${TABLE_KNOWLEDGE_ACCESS_STATE}" WHERE id='global'`);
+        return { changed: false, accessEpoch: Number(epoch.rows[0]?.epoch ?? 0) };
+      }
+
+      await tx.execute({
+        sql: `DELETE FROM "${TABLE_KNOWLEDGE_SCOPE_GRANTS}" WHERE "scopeRefId"=?`,
+        args: [input.scopeRefId],
+      });
+      for (const grant of desired.values()) {
+        await tx.execute({
+          sql: `INSERT INTO "${TABLE_KNOWLEDGE_SCOPE_GRANTS}" ("scopeNodeId","scopeRefId",role,"canSuggest") VALUES (?,?,?,?)`,
+          args: [grant.scopeNodeId, grant.scopeRefId, grant.role, grant.canSuggest ?? null],
+        });
+      }
+      await tx.execute(`UPDATE "${TABLE_KNOWLEDGE_ACCESS_STATE}" SET epoch=epoch+1 WHERE id='global'`);
+      const epoch = await tx.execute(`SELECT epoch FROM "${TABLE_KNOWLEDGE_ACCESS_STATE}" WHERE id='global'`);
+      return { changed: true, accessEpoch: Number(epoch.rows[0]?.epoch ?? 0) };
+    });
+  }
+
   override async upsertScopeGrant(
     grant: KnowledgeScopeGrant,
     fence: { expectedAccessEpoch?: number } = {},
@@ -2423,6 +2483,32 @@ export class KnowledgePG extends KnowledgeStorage {
       const scopeClause = scopeIds
         ? ` AND EXISTS (SELECT 1 FROM jsonb_array_elements_text(o.scopeIds) AS scope(value) WHERE scope.value IN (${scopeIds.map(() => '?').join(',')}))`
         : '';
+      if (scopeIds) {
+        const successors = await tx.execute({
+          sql: `SELECT o.*,json(o.scopeIds) AS scopeIdsJson FROM "${TABLE_KNOWLEDGE_SEMANTIC_OUTBOX}" o WHERE o.availableAt <= ? AND (o.status='pending' OR (o.status='processing' AND o.claimedAt <= ?))${scopeClause} ORDER BY o.createdAt ASC,o.id ASC LIMIT 1000`,
+          args: [now.toISOString(), stale.toISOString(), ...scopeIds],
+        });
+        for (const row of successors.rows) {
+          const successor = parseOutbox(row);
+          if (!(await this.#isSemanticOutboxEntryVisible(tx, successor, scopeIds))) continue;
+          const invisiblePredecessorClause =
+            successor.operation === 'delete'
+              ? ''
+              : ` AND NOT EXISTS (SELECT 1 FROM jsonb_array_elements_text(scopeIds) AS scope(value) WHERE scope.value IN (${scopeIds.map(() => '?').join(',')}))`;
+          await tx.execute({
+            sql: `UPDATE "${TABLE_KNOWLEDGE_SEMANTIC_OUTBOX}" SET status='completed',completedAt=? WHERE documentId=? AND (status='pending' OR (status='processing' AND claimedAt <= ?)) AND (createdAt < ? OR (createdAt = ? AND id < ?))${invisiblePredecessorClause}`,
+            args: [
+              now.toISOString(),
+              successor.documentId,
+              stale.toISOString(),
+              successor.createdAt.toISOString(),
+              successor.createdAt.toISOString(),
+              successor.id,
+              ...(successor.operation === 'delete' ? [] : scopeIds),
+            ],
+          });
+        }
+      }
       const predecessorClause = ` AND NOT EXISTS (SELECT 1 FROM "${TABLE_KNOWLEDGE_SEMANTIC_OUTBOX}" earlier WHERE earlier.documentId=o.documentId AND earlier.status!='completed' AND (earlier.createdAt < o.createdAt OR (earlier.createdAt = o.createdAt AND earlier.id < o.id)))`;
       const limit = Math.min(Math.max(input.limit ?? 100, 1), 100);
       const batchSize = Math.max(limit, Math.min(100, limit * 2));

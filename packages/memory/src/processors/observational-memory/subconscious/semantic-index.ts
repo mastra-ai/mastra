@@ -101,8 +101,8 @@ export class KnowledgeSemanticIndexCoordinator {
       for (const candidate of candidates) {
         if (checked.has(candidate.id)) continue;
         checked.add(candidate.id);
-        if (!(await this.#isCandidateReadable(candidate, scopeIds))) continue;
-        const { scope_ids: _scopeIds, scope_key: _scopeKey, ...metadata } = candidate.metadata ?? {};
+        const metadata = await this.#readableCandidateMetadata(candidate, scopeIds, readableScopeIds);
+        if (!metadata) continue;
         authorized.set(candidate.id, { ...candidate, metadata });
       }
       if (candidates.length < topK || topK >= MAX_SEARCH_CANDIDATES) break;
@@ -114,27 +114,39 @@ export class KnowledgeSemanticIndexCoordinator {
       .slice(0, requestedLimit);
   }
 
-  async #isCandidateReadable(
+  async #readableCandidateMetadata(
     candidate: { id: string; metadata?: Record<string, unknown> },
     scopeIds: KnowledgeScopeIds,
-  ): Promise<boolean> {
+    readableScopeIds: KnowledgeScopeIds,
+  ): Promise<Record<string, unknown> | null> {
     if (candidate.metadata?.document_type === 'record') {
-      return Boolean(
-        await this.#knowledge.getRecord({
-          id: candidate.id.slice('knowledge:record:'.length),
-          scopeIds,
-        }),
-      );
+      const recordId = candidate.id.slice('knowledge:record:'.length);
+      const record = await this.#knowledge.getRecord({ id: recordId, scopeIds });
+      if (!record) return null;
+      const node = await this.#knowledge.getNode({ id: record.nodeId, scopeIds });
+      if (!node) return null;
+      return {
+        document_type: 'record',
+        record_id: record.id,
+        name: node.name,
+        text: `${node.name}\n${record.text}`,
+      };
     }
     if (candidate.metadata?.document_type === 'node') {
-      return Boolean(
-        await this.#knowledge.getNode({
-          id: candidate.id.slice('knowledge:node:'.length),
-          scopeIds,
-        }),
-      );
+      const node = await this.#knowledge.getNode({
+        id: candidate.id.slice('knowledge:node:'.length),
+        scopeIds,
+      });
+      if (!node) return null;
+      const description = typeof node.metadata?.description === 'string' ? node.metadata.description : undefined;
+      return {
+        document_type: 'node',
+        record_id: node.id,
+        name: node.name,
+        text: description ? `${node.name}\n${description}` : node.name,
+      };
     }
-    return false;
+    return null;
   }
 
   async #drain(scopeIds?: KnowledgeScopeIds): Promise<number> {
