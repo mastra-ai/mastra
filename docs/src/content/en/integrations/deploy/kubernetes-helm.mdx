@@ -330,6 +330,48 @@ Before enabling workers:
 Set `maxmemory-policy` to `noeviction` (or a `volatile-*` policy) on Redis or Valkey. The common default `allkeys-lru` evicts unacknowledged workflow events under memory pressure, and runs then stall with no error on either side. On managed Redis this is a parameter-group setting.
 :::
 
+### Build the worker artifact into your image
+
+Workers run the **same image** as the Server, but a different entrypoint inside it. `mastra build` alone doesn't produce that entrypoint, so add a second build and redirect its output:
+
+```bash
+mastra build --studio
+mastra worker build --output-dir .mastra/worker
+```
+
+`--output-dir` is required. Without it, `mastra worker build` writes to `.mastra/output` and **overwrites the server bundle**, leaving you with a worker-only image.
+
+The two bundles declare different dependencies — the worker pulls in packages such as `bufferutil` and `pg` that the server bundle doesn't list — so each needs its own `npm install`. Node resolves modules upward from the entrypoint, so the worker finds its packages in `.mastra/worker/node_modules`:
+
+```dockerfile title="Dockerfile"
+FROM node:22-slim
+WORKDIR /app
+
+# Server bundle and its dependencies.
+COPY .mastra/output/package.json .mastra/output/package-lock.json* ./
+RUN npm install --force --prefer-offline --no-audit --no-fund
+COPY .mastra/output ./
+
+# Worker bundle and its dependencies, which differ from the server's.
+COPY .mastra/worker/package.json .mastra/worker/package-lock.json* ./.mastra/worker/
+RUN cd .mastra/worker && npm install --force --prefer-offline --no-audit --no-fund
+COPY .mastra/worker ./.mastra/worker
+
+EXPOSE 4111
+CMD ["node", "index.mjs"]
+```
+
+```text title=".dockerignore"
+.mastra/output/node_modules
+.mastra/worker/node_modules
+```
+
+The server still starts with `CMD ["node", "index.mjs"]` and Studio assets stay at `/app/studio`, so nothing about the Server or Studio deployment changes. The worker entrypoint lands at `/app/.mastra/worker/index.mjs`, which is the chart's default `mastra-workers.command`. If you lay your image out differently, override that value to match.
+
+:::warning Use a new tag for each build
+Push each build under its own tag. The chart's default `imagePullPolicy` is `IfNotPresent`, so re-pushing an existing tag leaves nodes running the cached digest and your worker pods keep crashing on the old bundle.
+:::
+
 ### Enable workers
 
 Workers run the **same image** as the Server — `mastra build` emits the worker entrypoint alongside the server entrypoint. Setting `global.image` once keeps every component on the same build:
@@ -452,6 +494,7 @@ Your database and object store are unaffected, because the chart never manages s
 - **Pods crash with `Cannot find module '@libsql/linux-x64-gnu'` (or similar).** The image contains `node_modules` built for a different platform. Install dependencies inside the image and exclude host-built `node_modules` via `.dockerignore`, then rebuild with `--platform` matching your nodes.
 - **Pods crash-loop with a license error.** Production mode requires a valid `MASTRA_EE_LICENSE` in your secret when enterprise features are configured.
 - **Studio shows the server API instead of the UI.** The image was built without Studio assets. Rebuild with `mastra build --studio`.
+- **Worker pods crash-loop with `Cannot find module '/app/.mastra/worker/index.mjs'`.** The image was built without the worker artifact. Run `mastra worker build --output-dir .mastra/worker` and copy it into the image, or override `mastra-workers.command` to match your layout.
 - **Scheduled workflows fire twice.** The API is still running workers in-process alongside the worker Deployments. Set `mastra-server.workers.splitDeployment: true`.
 - **Workflows stall with no error.** The orchestration worker can't reach the API, or Redis evicted unacknowledged events. Check `mastra-workers.server.port` against `mastra-server.service.port`, confirm any restrictive NetworkPolicy admits worker pods, and verify `maxmemory-policy` is `noeviction`.
 - **Worker pods stay in `CreateContainerConfigError`.** They mount the Server's ConfigMap and Secret, so `mastra-workers.server.existingSecret` must match `mastra-server.existingSecret`, and `mastra-workers` can't be installed as a standalone release.
