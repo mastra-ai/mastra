@@ -196,6 +196,29 @@ describe('Subconscious reminder questions', () => {
     expect(result).toMatchObject({ delivered: true, replyId: 'reply-1', moreComing: false });
   });
 
+  it('does not text-match a row that already carries a different remind type', async () => {
+    const parentAgent = createParentAgent();
+    const tool = createReplyToMemoryQuestionTool({ parentAgent, parentThreadId, resourceId });
+    const passiveCheck = signalToMastraDBMessage(
+      {
+        id: 'check-1:message',
+        type: 'user',
+        tagName: 'user',
+        contents: 'Memory question reply-1\n\nlooks like a question but is a passive check',
+        metadata: { [REMIND_MESSAGE_METADATA_KEY]: { type: 'passive-check', eventId: 'e1', candidateIds: [] } },
+      },
+      { threadId: `subconscious:${parentThreadId}:remind`, resourceId },
+    );
+
+    const result = await tool.execute?.(
+      { replyId: 'reply-1', answer: 'January 15.', moreComing: false },
+      replyToolContext([passiveCheck]),
+    );
+
+    expect(result).toEqual({ delivered: false, replyId: 'reply-1', reason: 'question-not-in-current-conversation' });
+    expect(parentAgent.sendSignal).not.toHaveBeenCalled();
+  });
+
   it('delivers partial replies with content-derived deterministic IDs', async () => {
     const parentAgent = createParentAgent();
     const tool = createReplyToMemoryQuestionTool({ parentAgent, parentThreadId, resourceId });

@@ -82,6 +82,7 @@ function passiveCheck(
     if (isStoredMessage && (dbMessage.threadId !== threadId || dbMessage.resourceId !== resourceId)) continue;
     const metadata = getRemindMessageMetadata(dbMessage);
     if (metadata?.type === 'passive-check' && metadata.eventId === eventId) return metadata;
+    // A row that already declares some other remind type is never text-matched as a passive check.
     if (metadata || !isRemindInputMessage(dbMessage)) continue;
 
     const text = messageText(message);
