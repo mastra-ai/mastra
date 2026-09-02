@@ -105,6 +105,42 @@ describe('OpenAISchemaCompatLayer', () => {
       expect(result.value.filter.note).toBeUndefined();
     });
 
+    it('keeps recursive object structure only in the object branch for single-type properties', () => {
+      const result = compat.processToJSONSchema({
+        type: 'object',
+        properties: {
+          filter: {
+            type: 'object',
+            description: 'Nested filter',
+            properties: {
+              field: { type: 'string', description: 'SINGLE_OBJECT_SENTINEL' },
+            },
+            required: ['field'],
+            additionalProperties: false,
+          },
+        },
+        required: [],
+      } as any) as Record<string, any>;
+
+      const filter = result.properties.filter;
+      expect(filter).not.toHaveProperty('properties');
+      expect(filter).not.toHaveProperty('required');
+      expect(filter).not.toHaveProperty('additionalProperties');
+      expect(filter).not.toHaveProperty('x-optional');
+      expect(filter).not.toHaveProperty('type');
+      expect(filter.description).toBe('Nested filter');
+
+      const objectBranch = filter.anyOf.find((b: any) => b.type === 'object');
+      expect(objectBranch.properties.field).toEqual({
+        type: 'string',
+        description: 'SINGLE_OBJECT_SENTINEL',
+      });
+      expect(objectBranch.required).toEqual(['field']);
+      expect(objectBranch.additionalProperties).toBe(false);
+      expect(filter.anyOf.find((b: any) => b.type === 'null')).toEqual({ type: 'null' });
+      expect(JSON.stringify(filter).split('SINGLE_OBJECT_SENTINEL').length - 1).toBe(1);
+    });
+
     it('keeps items only in the array branch for array/string unions', () => {
       const result = compat.processToJSONSchema({
         type: 'object',
@@ -199,6 +235,42 @@ describe('OpenAISchemaCompatLayer', () => {
       expect(validResult).not.toHaveProperty('issues');
       const invalidResult: any = await compatSchema['~standard'].validate({ mode: 'invalid' });
       expect(invalidResult).toHaveProperty('issues');
+    });
+
+    it('grows linearly for nested single-type optional objects', () => {
+      function nested(depth: number): Record<string, any> {
+        if (depth === 0) {
+          return {
+            type: 'object',
+            properties: { sentinel: { type: 'string', description: 'SINGLE_TYPE_SENTINEL' } },
+            required: ['sentinel'],
+            additionalProperties: false,
+          };
+        }
+        return {
+          type: 'object',
+          properties: {
+            filter: {
+              type: 'object',
+              properties: { child: nested(depth - 1) },
+              required: ['child'],
+              additionalProperties: false,
+            },
+          },
+          required: [],
+          additionalProperties: false,
+        };
+      }
+
+      const sizes: number[] = [];
+      for (const depth of [1, 2, 8]) {
+        const json = JSON.stringify(compat.processToJSONSchema(nested(depth) as any));
+        expect(json.split('SINGLE_TYPE_SENTINEL').length - 1).toBe(1);
+        sizes.push(json.length);
+      }
+
+      const perLevel = sizes[1]! - sizes[0]!;
+      expect(sizes[2]!).toBe(sizes[1]! + 6 * perLevel);
     });
 
     it('grows linearly for nested multi-type optional properties', () => {
