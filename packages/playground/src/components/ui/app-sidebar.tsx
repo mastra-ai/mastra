@@ -1,3 +1,4 @@
+import { Badge } from '@mastra/playground-ui/components/Badge';
 import { LogoWithoutText } from '@mastra/playground-ui/components/Logo';
 import { MainSidebar, useMainSidebar } from '@mastra/playground-ui/components/MainSidebar';
 import type { NavLink } from '@mastra/playground-ui/components/MainSidebar';
@@ -213,9 +214,9 @@ export function AppSidebar() {
                     isActive={getIsLinkActive(item, pathname)}
                   >
                     {item.url === '/inbox' && inboxCount > 1 && state !== 'collapsed' ? (
-                      <span className="bg-accent1 text-surface1 ml-auto rounded-full px-1.5 text-[10px] leading-4 font-semibold">
+                      <Badge variant="yellow" size="sm" className="ml-auto">
                         {inboxCount}
-                      </span>
+                      </Badge>
                     ) : null}
                   </MainSidebar.NavLink>
                 ))}

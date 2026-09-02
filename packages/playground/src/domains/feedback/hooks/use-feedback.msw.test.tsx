@@ -43,16 +43,26 @@ afterEach(() => {
 });
 
 describe('feedback inbox hooks', () => {
-  it('lists the requested review status and page', async () => {
+  it('lists the requested review status from the first page and loads the next page on demand', async () => {
     const onRequest = vi.fn<(url: URL) => void>();
     server.use(
       http.get(FEEDBACK_URL, ({ request }) => {
-        onRequest(new URL(request.url));
-        return HttpResponse.json(feedbackResponse);
+        const url = new URL(request.url);
+        onRequest(url);
+        if (url.searchParams.get('page') === '1') {
+          return HttpResponse.json({
+            feedback: [{ ...feedbackResponse.feedback[0], feedbackId: 'feedback-2' }],
+            pagination: { total: 21, page: 1, perPage: 20, hasMore: false },
+          });
+        }
+        return HttpResponse.json({
+          ...feedbackResponse,
+          pagination: { total: 21, page: 0, perPage: 20, hasMore: true },
+        });
       }),
     );
 
-    const { result } = renderHook(() => useFeedback({ page: 1, reviewStatus: 'needs-review' }), {
+    const { result } = renderHook(() => useFeedback({ reviewStatus: 'needs-review' }), {
       wrapper: makeWrapper(),
     });
 
@@ -60,10 +70,20 @@ describe('feedback inbox hooks', () => {
 
     const url = onRequest.mock.calls[0][0];
     expect(url.searchParams.get('reviewStatus')).toBe('needs-review');
-    expect(url.searchParams.get('page')).toBe('1');
+    expect(url.searchParams.get('page')).toBe('0');
     expect(url.searchParams.get('perPage')).toBe('20');
     expect(url.searchParams.get('field')).toBe('timestamp');
     expect(url.searchParams.get('direction')).toBe('DESC');
+    expect(result.current.total).toBe(21);
+    expect(result.current.hasNextPage).toBe(true);
+
+    await act(() => result.current.fetchNextPage());
+
+    await waitFor(() =>
+      expect(result.current.items.map(item => item.feedbackId)).toEqual(['feedback-1', 'feedback-2']),
+    );
+    expect(onRequest.mock.calls[1][0].searchParams.get('page')).toBe('1');
+    expect(result.current.hasNextPage).toBe(false);
   });
 
   it('polls the needs-review count for the sidebar inbox pill', async () => {
@@ -172,7 +192,7 @@ describe('feedback inbox hooks', () => {
 
     const { result } = renderHook(
       () => ({
-        list: useFeedback({ page: 0, reviewStatus: 'needs-review' }),
+        list: useFeedback({ reviewStatus: 'needs-review' }),
         update: useUpdateFeedbackReviewStatus(),
       }),
       { wrapper: makeWrapper() },

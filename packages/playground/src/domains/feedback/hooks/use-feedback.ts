@@ -1,22 +1,30 @@
 import { useMastraClient } from '@mastra/react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 const FEEDBACK_PER_PAGE = 20;
 
-type FeedbackReviewStatus = 'needs-review' | 'reviewed';
+export type FeedbackReviewStatus = 'needs-review' | 'reviewed';
 
-export function useFeedback({ page, reviewStatus }: { page: number; reviewStatus?: FeedbackReviewStatus }) {
+export function useFeedback({ reviewStatus }: { reviewStatus?: FeedbackReviewStatus }) {
   const client = useMastraClient();
 
-  return useQuery({
-    queryKey: ['feedback', page, reviewStatus ?? 'all'],
-    queryFn: () =>
+  const query = useInfiniteQuery({
+    queryKey: ['feedback', 'list', reviewStatus ?? 'all'],
+    queryFn: ({ pageParam }) =>
       client.listFeedback({
         filters: reviewStatus ? { reviewStatus } : undefined,
-        pagination: { page, perPage: FEEDBACK_PER_PAGE },
+        pagination: { page: pageParam, perPage: FEEDBACK_PER_PAGE },
         orderBy: { field: 'timestamp', direction: 'DESC' },
       }),
+    initialPageParam: 0,
+    getNextPageParam: lastPage => (lastPage.pagination.hasMore ? lastPage.pagination.page + 1 : undefined),
   });
+
+  return {
+    ...query,
+    items: query.data?.pages.flatMap(page => page.feedback) ?? [],
+    total: query.data?.pages[0]?.pagination.total,
+  };
 }
 
 export function useFeedbackInboxCount({ enabled }: { enabled: boolean }) {
