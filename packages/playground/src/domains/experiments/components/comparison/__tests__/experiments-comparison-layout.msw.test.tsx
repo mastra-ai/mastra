@@ -3,7 +3,7 @@ import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { beforeEach, describe, expect, it } from 'vitest';
 
-import { DatasetExperimentsComparison } from '../dataset-experiments-comparison';
+import { ExperimentsComparison } from '../experiments-comparison';
 import {
   BASELINE_ID,
   CONTENDER_ID,
@@ -67,7 +67,7 @@ beforeEach(() => {
 const renderComparison = () =>
   renderWithProviders(
     <TestLinkProvider>
-      <DatasetExperimentsComparison datasetId={DATASET_ID} experimentIdA={BASELINE_ID} experimentIdB={CONTENDER_ID} />
+      <ExperimentsComparison datasetId={DATASET_ID} experimentIdA={BASELINE_ID} experimentIdB={CONTENDER_ID} />
     </TestLinkProvider>,
     { router: true },
   );
@@ -95,13 +95,13 @@ describe('experiments comparison table', () => {
       expect(itemRow('item-c')).toBeTruthy();
     });
 
-    it('links each item id to its page in the dataset, in a new tab', async () => {
+    it('links each item id to its page in the dataset', async () => {
       renderComparison();
 
       const link = await within(await findItemRow('item-a')).findByRole('link', { name: 'Open item item-a' });
 
       expect(link.getAttribute('href')).toBe('/datasets/dataset-1/items/item-a');
-      expect(link.getAttribute('target')).toBe('_blank');
+      expect(link.getAttribute('target')).toBeNull();
     });
 
     it('reveals the item input and ground truth without leaving the page', async () => {

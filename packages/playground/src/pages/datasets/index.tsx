@@ -9,8 +9,6 @@ import { DatasetsList, DatasetsToolbar, getDatasetTagOptions } from '@/domains/d
 import { NoDatasetsInfo } from '@/domains/datasets/components/datasets-list/no-datasets-info';
 import { useDatasets } from '@/domains/datasets/hooks/use-datasets';
 import { useExperiments } from '@/domains/datasets/hooks/use-experiments';
-import { useReviewSummary } from '@/domains/review';
-import { buildReviewByDatasetMap } from '@/domains/review/review-maps';
 
 const DATASETS_PER_PAGE = 10;
 
@@ -28,16 +26,11 @@ export default function Datasets() {
     error: errorDatasets,
   } = useDatasets({ page, perPage: DATASETS_PER_PAGE });
   const { data: experimentsData, isLoading: isLoadingExperiments, error: errorExperiments } = useExperiments();
-  const { data: reviewSummary } = useReviewSummary();
 
   const datasets = useMemo(() => datasetsData?.datasets ?? [], [datasetsData?.datasets]);
   const hasMore = datasetsData?.pagination?.hasMore ?? false;
   const experiments = useMemo(() => experimentsData?.experiments ?? [], [experimentsData?.experiments]);
   const datasetTagOptions = useMemo(() => getDatasetTagOptions(datasets), [datasets]);
-  const reviewByDataset = useMemo(
-    () => buildReviewByDatasetMap(reviewSummary, experiments),
-    [reviewSummary, experiments],
-  );
 
   const isLoading = isLoadingDatasets || isLoadingExperiments;
   const error = errorDatasets || errorExperiments;
@@ -128,7 +121,6 @@ export default function Datasets() {
       <DatasetsList
         datasets={datasets}
         experiments={experiments}
-        reviewByDataset={reviewByDataset}
         isLoading={isLoading}
         search={search}
         targetFilter={targetFilter}

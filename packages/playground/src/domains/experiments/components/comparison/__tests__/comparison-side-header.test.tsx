@@ -20,12 +20,12 @@ describe('ComparisonSideHeader', () => {
       expect(link.getAttribute('href')).toBe(`/experiments/${namedExperiment.id}`);
     });
 
-    it('opens the experiment in a new tab, like every other external cue', () => {
+    it('links to the experiment page in the same tab', () => {
       renderColumn(<ComparisonSideHeader side="baseline" experiment={namedExperiment} />);
 
       const link = screen.getByRole('link', { name: 'Open experiment entity-extraction / model-a' });
-      expect(link.getAttribute('target')).toBe('_blank');
-      expect(link.getAttribute('rel')).toContain('noopener');
+      expect(link.getAttribute('target')).toBeNull();
+      expect(link.getAttribute('rel')).toBeNull();
     });
 
     it('keeps the shortened id visible as secondary detail', () => {
@@ -70,7 +70,7 @@ describe('ComparisonSideHeader', () => {
 
       const link = screen.getByRole('link', { name: /example-entity-extraction-agent/ });
       expect(link.getAttribute('href')).toContain('/agents/example-entity-extraction-agent');
-      expect(link.getAttribute('target')).toBe('_blank');
+      expect(link.getAttribute('target')).toBeNull();
       expect(screen.queryByText(/agent \//)).toBeNull();
     });
   });
@@ -97,7 +97,7 @@ describe('ComparisonSideHeader', () => {
 
       const link = screen.getByRole('link', { name: 'Open relevancy' });
       expect(link.getAttribute('href')).toContain('/scorers/relevancy');
-      expect(link.getAttribute('target')).toBe('_blank');
+      expect(link.getAttribute('target')).toBeNull();
     });
 
     it('only renders the delta on the side that carries it', () => {
