@@ -944,4 +944,112 @@ describe('DurableAgent.recover(runId)', () => {
     await entry?.workflowExecution;
     recovered.cleanup();
   });
+
+  it('rebinds reordered explicit-id fallback models by their persisted ids', async () => {
+    const runId = 'run-fallback-reorder';
+
+    // Explicit ids are stable across resolutions, but a resolver may return
+    // the same entries in a different order (Map iteration, Promise.all
+    // races, remote lists). With equal counts, positional binding would swap
+    // the models across the persisted ids; binding must follow identity.
+    let reordered = false;
+    let resolveCount = 0;
+    const baseAgent = new Agent({
+      id: 'agent-fallback-reorder',
+      name: 'Fallback Reorder Agent',
+      instructions: 'x',
+      model: (() => {
+        const call = ++resolveCount;
+        const a = { id: 'exp-a', model: makeMockModel(`model-a-${call}`) };
+        const b = { id: 'exp-b', model: makeMockModel(`model-b-${call}`) };
+        return reordered ? [b, a] : [a, b];
+      }) as any,
+    });
+    const reorderStore = new InMemoryStore();
+    const reorderAgent = createDurableAgent({ agent: baseAgent });
+    new Mastra({ agents: { fallbackReorder: reorderAgent as any }, storage: reorderStore, logger: false });
+
+    const prepared = await baseAgent.getModelList();
+    const persistedModelList = serializeModelList(prepared!);
+    expect(persistedModelList.map(m => m.id)).toEqual(['exp-a', 'exp-b']);
+
+    await seed(reorderStore, runId, 'running', reorderAgent.id, undefined, persistedModelList);
+    stubWorkflow(reorderAgent, 'success');
+
+    reordered = true;
+    const recovered = await reorderAgent.recover(runId);
+    const entry = globalRunRegistry.get(runId);
+
+    expect(entry?.modelList).toBeDefined();
+    expect(entry!.modelList!.map(m => m.id).sort()).toEqual(['exp-a', 'exp-b']);
+
+    // Each persisted id must be bound to *its* model, not whichever model
+    // happens to occupy the same position in the reordered resolver output.
+    const boundA = entry!.modelList!.find(m => m.id === 'exp-a')!;
+    const boundB = entry!.modelList!.find(m => m.id === 'exp-b')!;
+    expect(boundA.model.modelId).toMatch(/^model-a-/);
+    expect(boundB.model.modelId).toMatch(/^model-b-/);
+    // And to recovery-time live instances, not the stale prepare-time ones.
+    expect(boundA.model.modelId).not.toBe('model-a-1');
+    expect(boundB.model.modelId).not.toBe('model-b-1');
+
+    await entry?.workflowExecution;
+    recovered.cleanup();
+  });
+
+  it('binds id-less entries positionally after explicit-id entries match by id', async () => {
+    const runId = 'run-fallback-residue';
+
+    // Mixed list: one id-less entry (uuid regenerates every resolution) and
+    // one explicit-id entry, reordered at recovery. The explicit id must bind
+    // by identity; the persisted uuid entry must then bind to the remaining
+    // id-less live model — not to whatever sits at its original position.
+    let reordered = false;
+    let resolveCount = 0;
+    const baseAgent = new Agent({
+      id: 'agent-fallback-residue',
+      name: 'Fallback Residue Agent',
+      instructions: 'x',
+      model: (() => {
+        const call = ++resolveCount;
+        const idLess = { model: makeMockModel(`idless-${call}`) };
+        const explicit = { id: 'exp-1', model: makeMockModel(`explicit-${call}`) };
+        return reordered ? [explicit, idLess] : [idLess, explicit];
+      }) as any,
+    });
+    const residueStore = new InMemoryStore();
+    const residueAgent = createDurableAgent({ agent: baseAgent });
+    new Mastra({ agents: { fallbackResidue: residueAgent as any }, storage: residueStore, logger: false });
+
+    const prepared = await baseAgent.getModelList();
+    const persistedModelList = serializeModelList(prepared!);
+    expect(persistedModelList).toHaveLength(2);
+    expect(persistedModelList[1]!.id).toBe('exp-1');
+    const persistedUuid = persistedModelList[0]!.id;
+    expect(persistedUuid).not.toBe('exp-1');
+
+    await seed(residueStore, runId, 'running', residueAgent.id, undefined, persistedModelList);
+    stubWorkflow(residueAgent, 'success');
+
+    reordered = true;
+    const recovered = await residueAgent.recover(runId);
+    const entry = globalRunRegistry.get(runId);
+
+    expect(entry?.modelList).toBeDefined();
+    // Persisted order is preserved in the registry entry.
+    expect(entry!.modelList!.map(m => m.id)).toEqual([persistedUuid, 'exp-1']);
+
+    const boundExplicit = entry!.modelList!.find(m => m.id === 'exp-1')!;
+    const boundIdLess = entry!.modelList!.find(m => m.id === persistedUuid)!;
+    // Explicit id binds by identity despite the reorder...
+    expect(boundExplicit.model.modelId).toMatch(/^explicit-/);
+    // ...and the uuid entry binds the residual id-less live model.
+    expect(boundIdLess.model.modelId).toMatch(/^idless-/);
+    // Both are recovery-time instances, not stale prepare-time ones.
+    expect(boundExplicit.model.modelId).not.toBe('explicit-1');
+    expect(boundIdLess.model.modelId).not.toBe('idless-1');
+
+    await entry?.workflowExecution;
+    recovered.cleanup();
+  });
 });
