@@ -25,6 +25,7 @@ import type {
   LoggingLevel,
   ReadResourceResult,
   ClientCapabilities,
+  McpSubscription,
 } from '@modelcontextprotocol/client';
 import { getDefaultEnvironment, StdioClientTransport } from '@modelcontextprotocol/client/stdio';
 import { asyncExitHook, gracefulExit } from 'exit-hook';
@@ -318,6 +319,9 @@ export class InternalMastraMCPClient extends MastraBase {
   private sigHupHandler?: () => void;
   private serverInstructions?: string;
   private _roots: Root[];
+  private resourceSubscriptionUris = new Set<string>();
+  private resourceSubscription?: McpSubscription;
+  private resourceSubscriptionUpdate: Promise<unknown> = Promise.resolve();
   private hasElicitationCapability: boolean;
   private readonly requireToolApproval: RequireToolApproval | undefined;
   private readonly onToolError: 'throw' | 'return';
@@ -498,6 +502,10 @@ export class InternalMastraMCPClient extends MastraBase {
   async sendRootsListChanged(): Promise<void> {
     if (!this.transport) {
       this.log('debug', 'Cannot send roots/list_changed: not connected');
+      return;
+    }
+    if (this.client.getNegotiatedProtocolVersion() === '2026-07-28') {
+      this.log('debug', 'Skipping removed roots/list_changed notification on modern connection');
       return;
     }
     this.log('debug', 'Sending notifications/roots/list_changed');
@@ -836,6 +844,11 @@ export class InternalMastraMCPClient extends MastraBase {
         }
 
         this.refreshServerInstructions();
+        if (this.isModernConnection() && this.resourceSubscriptionUris.size > 0) {
+          await this.enqueueResourceSubscriptionUpdate(async () => {
+            await this.replaceModernResourceSubscription(new Set(this.resourceSubscriptionUris));
+          });
+        }
 
         resolve(true);
 
@@ -854,6 +867,7 @@ export class InternalMastraMCPClient extends MastraBase {
             // synchronously first so a concurrent connect() sees a clean slate.
             const staleTransport = this.transport;
             this.transport = undefined;
+            this.resourceSubscription = undefined;
             if (this.isConnected === connectionPromise) {
               this.isConnected = null;
             }
@@ -969,6 +983,7 @@ export class InternalMastraMCPClient extends MastraBase {
       this.log('debug', 'Disconnect called but no transport was connected.');
       return;
     }
+    await this.closeModernResourceSubscription();
     this.log('debug', `Disconnecting from MCP server`);
     const disconnectedTransport = this.transport;
     try {
@@ -1029,6 +1044,7 @@ export class InternalMastraMCPClient extends MastraBase {
       const disconnectedTransport = this.transport;
       try {
         if (disconnectedTransport) {
+          await this.closeModernResourceSubscription();
           await disconnectedTransport.close();
         }
       } catch (e) {
@@ -1112,8 +1128,60 @@ export class InternalMastraMCPClient extends MastraBase {
     );
   }
 
+  private isModernConnection(): boolean {
+    return this.client.getNegotiatedProtocolVersion() === '2026-07-28';
+  }
+
+  private enqueueResourceSubscriptionUpdate<T>(update: () => Promise<T>): Promise<T> {
+    const operation = this.resourceSubscriptionUpdate.catch(() => {}).then(update);
+    this.resourceSubscriptionUpdate = operation;
+    return operation;
+  }
+
+  private async replaceModernResourceSubscription(nextUris: Set<string>): Promise<void> {
+    const previous = this.resourceSubscription;
+    const replacement =
+      nextUris.size > 0
+        ? await this.client.listen(
+            { resourceSubscriptions: [...nextUris].sort() },
+            {
+              timeout: this.timeout,
+            },
+          )
+        : undefined;
+
+    this.resourceSubscription = replacement;
+    this.resourceSubscriptionUris = nextUris;
+    if (replacement) {
+      void replacement.closed.then(() => {
+        if (this.resourceSubscription === replacement) {
+          this.resourceSubscription = undefined;
+        }
+      });
+    }
+    await previous?.close();
+  }
+
+  private async closeModernResourceSubscription(): Promise<void> {
+    await this.resourceSubscriptionUpdate.catch(() => {});
+    const subscription = this.resourceSubscription;
+    this.resourceSubscription = undefined;
+    await subscription?.close();
+  }
+
   async subscribeResource(uri: string): Promise<EmptyResult> {
     this.log('debug', `Subscribing to resource on MCP server: ${uri}`);
+    if (this.isModernConnection()) {
+      return await this.enqueueResourceSubscriptionUpdate(async () => {
+        if (this.resourceSubscriptionUris.has(uri)) {
+          return {};
+        }
+        const nextUris = new Set(this.resourceSubscriptionUris);
+        nextUris.add(uri);
+        await this.replaceModernResourceSubscription(nextUris);
+        return {};
+      });
+    }
     return await this.client.request(
       { method: 'resources/subscribe', params: { uri } },
       {
@@ -1124,6 +1192,17 @@ export class InternalMastraMCPClient extends MastraBase {
 
   async unsubscribeResource(uri: string): Promise<EmptyResult> {
     this.log('debug', `Unsubscribing from resource on MCP server: ${uri}`);
+    if (this.isModernConnection()) {
+      return await this.enqueueResourceSubscriptionUpdate(async () => {
+        if (!this.resourceSubscriptionUris.has(uri)) {
+          return {};
+        }
+        const nextUris = new Set(this.resourceSubscriptionUris);
+        nextUris.delete(uri);
+        await this.replaceModernResourceSubscription(nextUris);
+        return {};
+      });
+    }
     return await this.client.request(
       { method: 'resources/unsubscribe', params: { uri } },
       {

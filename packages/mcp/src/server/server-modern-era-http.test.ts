@@ -236,6 +236,78 @@ describe('MCPServer with protocolVersion 2026-07-28 (dual-era HTTP)', () => {
     }
   });
 
+  it('manages modern resource subscriptions through one replaceable listen stream', async () => {
+    const wireMethods: string[] = [];
+    const client = new InternalMastraMCPClient({
+      name: 'mastra-resource-listen-client',
+      server: {
+        url: baseUrl,
+        protocolVersion: '2026-07-28',
+        fetch: async (url, init) => {
+          if (typeof init?.body === 'string') {
+            const message = JSON.parse(init.body) as { method?: string };
+            if (message.method) wireMethods.push(message.method);
+          }
+          return fetch(url, init);
+        },
+      },
+    });
+    const updated = new Promise<string>(resolve => {
+      client.setResourceUpdatedNotificationHandler(params => resolve(params.uri));
+    });
+
+    await client.connect();
+    try {
+      await client.subscribeResource('test://resource');
+      await client.subscribeResource('test://resource');
+      expect(wireMethods.filter(method => method === 'subscriptions/listen')).toHaveLength(1);
+
+      await client.subscribeResource('test://second');
+      await client.unsubscribeResource('test://resource');
+      await client.forceReconnect();
+      await server.resources.notifyUpdated({ uri: 'test://second' });
+      await expect(updated).resolves.toBe('test://second');
+
+      await client.unsubscribeResource('test://second');
+      await client.subscribeResource('test://second');
+    } finally {
+      await client.disconnect();
+    }
+
+    expect(wireMethods.filter(method => method === 'subscriptions/listen')).toHaveLength(5);
+    expect(wireMethods.filter(method => method === 'notifications/cancelled')).toHaveLength(5);
+    expect(wireMethods).not.toContain('resources/subscribe');
+    expect(wireMethods).not.toContain('resources/unsubscribe');
+  });
+
+  it('does not emit removed roots notifications on the modern leg', async () => {
+    const wireMethods: string[] = [];
+    const client = new InternalMastraMCPClient({
+      name: 'modern-roots-client',
+      server: {
+        url: baseUrl,
+        protocolVersion: '2026-07-28',
+        roots: [{ uri: 'file:///initial' }],
+        fetch: async (url, init) => {
+          if (typeof init?.body === 'string') {
+            const message = JSON.parse(init.body) as { method?: string };
+            if (message.method) wireMethods.push(message.method);
+          }
+          return fetch(url, init);
+        },
+      },
+    });
+
+    await client.connect();
+    try {
+      await client.setRoots([{ uri: 'file:///updated' }]);
+    } finally {
+      await client.disconnect();
+    }
+
+    expect(wireMethods).not.toContain('notifications/roots/list_changed');
+  });
+
   it('delivers toolsChanged via subscriptions/listen on the modern leg', async () => {
     const client = new Client(
       { name: 'listen-client', version: '1.0.0' },
