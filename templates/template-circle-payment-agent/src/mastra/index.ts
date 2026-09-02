@@ -8,12 +8,23 @@ import {
   SensitiveDataFilter,
 } from '@mastra/observability';
 import { circlePaymentAgent } from './agents/circle-payment-agent';
+import { controlPlaneRoutes } from './control-plane';
 
 export const mastra = new Mastra({
   agents: { circlePaymentAgent },
+  server: {
+    // Terms acceptance and OTP login: the two steps the agent is blocked from
+    // running and a deployed user has no shell to run. Mounted at the root
+    // rather than under the `/api` prefix Mastra's own routes use — so
+    // `/circle/status`, not `/api/circle/status` — and gated on
+    // `CONTROL_PLANE_TOKEN` rather than the wide-open default. See
+    // `./control-plane`.
+    apiRoutes: controlPlaneRoutes,
+  },
   storage: new LibSQLStore({
     id: 'mastra-storage',
-    // stores observability, scores, ... into memory storage, if it needs to persist, change to file:../mastra.db
+    // Observability events and scores live in memory only. Point this at a
+    // hosted LibSQL/Postgres URL if they need to survive a restart.
     url: ':memory:',
   }),
   logger: new PinoLogger({
