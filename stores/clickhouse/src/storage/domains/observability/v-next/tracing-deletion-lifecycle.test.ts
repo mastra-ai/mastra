@@ -1,7 +1,16 @@
 import type { ClickHouseClient } from '@clickhouse/client';
 import { describe, expect, it, vi } from 'vitest';
 
-import { TABLE_DELETION_REQUESTS } from './ddl';
+import {
+  TABLE_DELETION_REQUESTS,
+  TABLE_FEEDBACK_EVENTS,
+  TABLE_LOG_EVENTS,
+  TABLE_METRIC_EVENTS,
+  TABLE_SCORE_EVENTS,
+  TABLE_SPAN_EVENTS,
+  TABLE_TRACE_BRANCHES,
+  TABLE_TRACE_ROOTS,
+} from './ddl';
 import { batchDeleteTraces } from './tracing';
 
 function createClient(options?: { rejectDelete?: boolean }) {
@@ -55,7 +64,17 @@ describe('batchDeleteTraces deletion requests', () => {
           clickhouse_settings: Record<string, unknown>;
         },
     );
-    expect(calls.every(call => call.query.startsWith('DELETE FROM'))).toBe(true);
+    expect(calls.map(call => call.query.match(/^DELETE FROM (\w+)/)?.[1]).sort()).toEqual(
+      [
+        TABLE_SPAN_EVENTS,
+        TABLE_TRACE_ROOTS,
+        TABLE_TRACE_BRANCHES,
+        TABLE_METRIC_EVENTS,
+        TABLE_LOG_EVENTS,
+        TABLE_SCORE_EVENTS,
+        TABLE_FEEDBACK_EVENTS,
+      ].sort(),
+    );
     expect(calls.every(call => call.clickhouse_settings.lightweight_deletes_sync === '2')).toBe(true);
     expect(calls.every(call => call.query.includes('organizationId = {scope_org:String}'))).toBe(true);
     expect(calls.every(call => call.query.includes('resourceId = {scope_res:String}'))).toBe(true);

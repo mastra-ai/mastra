@@ -1827,6 +1827,19 @@ export function createObservabilityVNextTests(options: CreateObservabilityVNextT
             metadata: null,
           },
         });
+        await storage.createScore({
+          score: {
+            scoreId: 'score-keep',
+            timestamp: ts,
+            traceId: 'trace-keep',
+            spanId: null,
+            scorerId: 'q',
+            score: 0.8,
+            reason: null,
+            experimentId: null,
+            metadata: null,
+          },
+        });
         // Trace-less score: must survive the cascade untouched.
         await storage.createScore({
           score: {
@@ -1892,51 +1905,128 @@ export function createObservabilityVNextTests(options: CreateObservabilityVNextT
         expect(logs.logs.map(log => log.logId)).toEqual(['log-keep']);
 
         const scores = await storage.listScores({});
-        expect(scores.scores.map(score => score.scoreId)).toEqual(['score-no-trace']);
+        expect(scores.scores.map(score => score.scoreId).sort()).toEqual(['score-keep', 'score-no-trace']);
 
         const feedback = await storage.listFeedback({});
         expect(feedback.feedback.map(item => item.feedbackId)).toEqual(['feedback-keep']);
       });
 
-      it('batch delete with tenant scope only deletes matching rows', async () => {
+      it('batch delete with tenant scope only deletes matching rows and signals', async () => {
         const ts = new Date('2026-02-03T00:00:00Z');
         await storage.batchCreateSpans({
           records: [
             makeSpan({
               traceId: 'trace-scope',
-              spanId: 'span-scope',
-              name: 'scoped',
+              spanId: 'span-org-a',
+              name: 'org-a',
               startedAt: ts,
               organizationId: 'org-a',
               resourceId: 'res-a',
             }),
+            makeSpan({
+              traceId: 'trace-scope',
+              spanId: 'span-org-b',
+              name: 'org-b',
+              startedAt: ts,
+              organizationId: 'org-b',
+              resourceId: 'res-b',
+            }),
           ],
         });
-        await storage.createScore({
-          score: {
-            scoreId: 'score-scope',
-            timestamp: ts,
-            traceId: 'trace-scope',
-            spanId: null,
-            scorerId: 'q',
-            score: 0.5,
-            reason: null,
-            experimentId: null,
-            metadata: null,
-            organizationId: 'org-a',
-            resourceId: 'res-a',
-          },
+        await storage.batchCreateMetrics({
+          metrics: [
+            {
+              metricId: 'metric-org-a',
+              timestamp: ts,
+              name: 'scope_metric',
+              value: 1,
+              labels: {},
+              traceId: 'trace-scope',
+              organizationId: 'org-a',
+              resourceId: 'res-a',
+            },
+            {
+              metricId: 'metric-org-b',
+              timestamp: ts,
+              name: 'scope_metric',
+              value: 2,
+              labels: {},
+              traceId: 'trace-scope',
+              organizationId: 'org-b',
+              resourceId: 'res-b',
+            },
+          ],
         });
+        await storage.batchCreateLogs({
+          logs: [
+            {
+              logId: 'log-org-a',
+              timestamp: ts,
+              level: 'info',
+              message: 'a',
+              traceId: 'trace-scope',
+              spanId: 'span-org-a',
+              organizationId: 'org-a',
+              resourceId: 'res-a',
+            },
+            {
+              logId: 'log-org-b',
+              timestamp: ts,
+              level: 'info',
+              message: 'b',
+              traceId: 'trace-scope',
+              spanId: 'span-org-b',
+              organizationId: 'org-b',
+              resourceId: 'res-b',
+            },
+          ],
+        });
+        for (const organization of ['a', 'b']) {
+          await storage.createScore({
+            score: {
+              scoreId: `score-org-${organization}`,
+              timestamp: ts,
+              traceId: 'trace-scope',
+              spanId: null,
+              scorerId: 'q',
+              score: 0.5,
+              reason: null,
+              experimentId: null,
+              metadata: null,
+              organizationId: `org-${organization}`,
+              resourceId: `res-${organization}`,
+            },
+          });
+          await storage.createFeedback({
+            feedback: {
+              feedbackId: `feedback-org-${organization}`,
+              timestamp: ts,
+              traceId: 'trace-scope',
+              spanId: null,
+              feedbackSource: 'user',
+              feedbackType: 'thumbs',
+              value: 1,
+              comment: null,
+              experimentId: null,
+              feedbackUserId: null,
+              sourceId: null,
+              metadata: null,
+              organizationId: `org-${organization}`,
+              resourceId: `res-${organization}`,
+            },
+          });
+        }
 
-        // Mismatching scope: no-op.
-        await storage.batchDeleteTraces({ traceIds: ['trace-scope'], organizationId: 'org-b' });
-        expect(await storage.getSpan({ traceId: 'trace-scope', spanId: 'span-scope' })).not.toBeNull();
-        expect((await storage.listScores({})).scores.map(score => score.scoreId)).toEqual(['score-scope']);
-
-        // Matching scope: deletes trace + scoped signals.
         await storage.batchDeleteTraces({ traceIds: ['trace-scope'], organizationId: 'org-a', resourceId: 'res-a' });
-        expect(await storage.getSpan({ traceId: 'trace-scope', spanId: 'span-scope' })).toBeNull();
-        expect((await storage.listScores({})).scores).toEqual([]);
+
+        expect(await storage.getSpan({ traceId: 'trace-scope', spanId: 'span-org-a' })).toBeNull();
+        expect(await storage.getSpan({ traceId: 'trace-scope', spanId: 'span-org-b' })).not.toBeNull();
+        expect(
+          (await storage.listMetrics({ filters: { name: ['scope_metric'] } })).metrics.map(item => item.metricId),
+        ).toEqual(['metric-org-b']);
+        expect((await storage.listLogs({})).logs.map(item => item.logId)).toEqual(['log-org-b']);
+        expect((await storage.listScores({})).scores.map(item => item.scoreId)).toEqual(['score-org-b']);
+        expect((await storage.listFeedback({})).feedback.map(item => item.feedbackId)).toEqual(['feedback-org-b']);
       });
     });
 

@@ -1,5 +1,5 @@
 import { ErrorCategory } from '@mastra/core/error';
-import { TABLE_SPANS, TraceStatus, listTracesArgsSchema, toTraceSpans } from '@mastra/core/storage';
+import { TABLE_SCORERS, TABLE_SPANS, TraceStatus, listTracesArgsSchema, toTraceSpans } from '@mastra/core/storage';
 import type {
   BatchCreateSpansArgs,
   BatchDeleteTracesArgs,
@@ -46,6 +46,7 @@ import {
   logCol,
   logQcol,
   qcol,
+  scoreCol,
   SPAN_COLUMNS,
   SPAN_KEY_COLUMNS,
   SPAN_SCHEMA,
@@ -235,6 +236,11 @@ export async function batchDeleteTraces(
       );
       await client.executeMany(
         `DELETE FROM ${qualifyName(LOG_EVENTS_TABLE, schemaName)} WHERE ${logCol('traceId')} = :traceId`,
+        args.traceIds.map(traceId => ({ traceId })),
+        { bindDefs: { traceId: { type: oracledb.STRING, maxSize: 512 } } },
+      );
+      await client.executeMany(
+        `DELETE FROM ${qualifyName(TABLE_SCORERS, schemaName)} WHERE ${scoreCol('traceId')} = :traceId`,
         args.traceIds.map(traceId => ({ traceId })),
         { bindDefs: { traceId: { type: oracledb.STRING, maxSize: 512 } } },
       );

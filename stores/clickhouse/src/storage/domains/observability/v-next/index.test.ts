@@ -926,7 +926,7 @@ describe('ObservabilityStorageClickhouseVNext', () => {
       });
       try {
         const result = await client.query({
-          query: `SELECT signal, predicateType, predicateValues FROM ${TABLE_DELETION_REQUESTS} WHERE signal = 'traces' ORDER BY requestedAt DESC LIMIT 1`,
+          query: `SELECT signal, predicateType, predicateValues FROM ${TABLE_DELETION_REQUESTS} WHERE signal = 'traces' AND has(predicateValues, 'trace-del') ORDER BY requestedAt DESC LIMIT 1`,
           format: 'JSONEachRow',
         });
         await expect(result.json()).resolves.toEqual([

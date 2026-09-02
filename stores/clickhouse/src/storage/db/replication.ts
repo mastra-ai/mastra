@@ -180,7 +180,7 @@ export function addOnClusterToDDL(sql: string, replication?: ClickhouseReplicati
 }
 
 function rewriteEngineClauses(sql: string, replication: ClickhouseReplicationConfig): string {
-  const enginePattern = /ENGINE\s*=\s*(\w+)\s*/gi;
+  const enginePattern = /ENGINE\s*=\s*(\w+)/gi;
   let result = '';
   let consumedUntil = 0;
 
@@ -189,12 +189,14 @@ function rewriteEngineClauses(sql: string, replication: ClickhouseReplicationCon
     if (!engineName) continue;
 
     let engineEnd = enginePattern.lastIndex;
+    let argsStart = engineEnd;
+    while (/\s/.test(sql[argsStart] ?? '')) argsStart++;
     let engine = engineName;
 
-    if (sql[engineEnd] === '(') {
+    if (sql[argsStart] === '(') {
       let depth = 0;
       let closingParenEnd: number | undefined;
-      for (let i = engineEnd; i < sql.length; i++) {
+      for (let i = argsStart; i < sql.length; i++) {
         const char = sql[i];
         if (char === '(') depth++;
         else if (char === ')') {
@@ -213,7 +215,7 @@ function rewriteEngineClauses(sql: string, replication: ClickhouseReplicationCon
       }
 
       engineEnd = closingParenEnd;
-      engine = `${engineName}${sql.slice(enginePattern.lastIndex, engineEnd)}`;
+      engine = `${engineName}${sql.slice(argsStart, engineEnd)}`;
     }
 
     result += sql.slice(consumedUntil, match.index);

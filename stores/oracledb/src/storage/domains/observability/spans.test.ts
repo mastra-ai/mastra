@@ -2,7 +2,7 @@ import type { BatchUpdateSpansArgs } from '@mastra/core/storage';
 import { describe, expect, it, vi } from 'vitest';
 
 import type { OracleDB, OracleTxClient } from '../../db';
-import { batchUpdateSpans } from './spans';
+import { batchDeleteTraces, batchUpdateSpans } from './spans';
 
 function createFakeDb() {
   const executeManyCalls: Array<{ sql: string; binds: Record<string, unknown>[] }> = [];
@@ -17,6 +17,32 @@ function createFakeDb() {
 
   return { db: db as unknown as OracleDB, executeManyCalls };
 }
+
+describe('batchDeleteTraces', () => {
+  it('deletes spans, logs, and scores for each trace in one transaction', async () => {
+    const { db, executeManyCalls } = createFakeDb();
+
+    await batchDeleteTraces(db, 'TEST_SCHEMA', { traceIds: ['trace-1', 'trace-2'] });
+
+    expect(executeManyCalls).toHaveLength(3);
+    expect(executeManyCalls.map(call => call.sql)).toEqual([
+      'DELETE FROM "TEST_SCHEMA"."MASTRA_AI_SPANS" WHERE "traceId" = :traceId',
+      'DELETE FROM "TEST_SCHEMA"."MASTRA_LOG_EVENTS" WHERE "traceId" = :traceId',
+      'DELETE FROM "TEST_SCHEMA"."MASTRA_SCORERS" WHERE "traceId" = :traceId',
+    ]);
+    for (const call of executeManyCalls) {
+      expect(call.binds).toEqual([{ traceId: 'trace-1' }, { traceId: 'trace-2' }]);
+    }
+  });
+
+  it('does not open a transaction for an empty trace batch', async () => {
+    const { db } = createFakeDb();
+
+    await batchDeleteTraces(db, undefined, { traceIds: [] });
+
+    expect(db.tx).not.toHaveBeenCalled();
+  });
+});
 
 describe('batchUpdateSpans update ordering (CR-10)', () => {
   it('applies the last update for a span even when the column shape alternates mid-batch', async () => {

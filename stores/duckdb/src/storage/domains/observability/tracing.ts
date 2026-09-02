@@ -683,9 +683,12 @@ export async function batchDeleteTraces(db: DuckDBConnection, args: BatchDeleteT
   }
 
   const tables = ['span_events', 'metric_events', 'log_events', 'score_events', 'feedback_events'];
-  for (const table of tables) {
-    await db.execute(`DELETE FROM ${table} WHERE traceId IN (${placeholders})${scopeCondition}`, params);
-  }
+  await db.executeTransaction(
+    tables.map(table => ({
+      sql: `DELETE FROM ${table} WHERE traceId IN (${placeholders})${scopeCondition}`,
+      params,
+    })),
+  );
 }
 
 // ============================================================================

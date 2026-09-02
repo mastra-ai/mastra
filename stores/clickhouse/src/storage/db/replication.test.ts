@@ -135,6 +135,16 @@ ORDER BY id`;
     );
   });
 
+  it('preserves whitespace after non-parameterized table engines', () => {
+    const ddl = `CREATE TABLE IF NOT EXISTS mastra_threads (id String)
+ENGINE = MergeTree
+ORDER BY id`;
+
+    expect(applyReplicationToDDL(ddl, {})).toContain(
+      "ENGINE = ReplicatedMergeTree('/clickhouse/tables/{shard}/{database}/{table}', '{replica}')\nORDER BY id",
+    );
+  });
+
   it('rewrites parameterized table engines without retaining the original arguments', () => {
     const ddl = `CREATE TABLE IF NOT EXISTS mastra_threads (
   id String,
