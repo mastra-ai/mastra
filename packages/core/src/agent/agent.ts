@@ -1906,8 +1906,9 @@ export class Agent<
     // Provider history compat is on by default so provider-specific prompt
     // fixups (e.g. Gemini's user-first requirement) apply to every agent.
     // Users can replace it by configuring their own instance.
-    const hasProviderCompat = configuredProcessors.some(
-      p => !isProcessorWorkflow(p) && 'id' in p && p.id === 'provider-history-compat',
+    const hasProviderCompat = hasConfiguredProcessor(
+      configuredProcessors,
+      processor => processor.id === 'provider-history-compat',
     );
     const providerCompatProcessors = hasProviderCompat ? [] : [new ProviderHistoryCompat()];
 
