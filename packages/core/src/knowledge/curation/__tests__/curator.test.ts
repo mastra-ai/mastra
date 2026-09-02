@@ -124,9 +124,35 @@ describe('Knowledge curator', () => {
       value.curator.promote({
         nodeId: node.id,
         version: node.version,
+        destinationScopeId: value.ids['scope:curated']!,
+      }),
+    ).rejects.toBeInstanceOf(KnowledgeNotFoundError);
+    await expect(
+      value.curator.promote({
+        nodeId: node.id,
+        version: node.version,
         destinationScopeId: value.ids['scope:hidden']!,
       }),
     ).rejects.toBeInstanceOf(KnowledgeNotFoundError);
+    const proposals = await value.knowledge.listProposals({ vouchedScopeIds: [value.ids['principal:suggest']!] });
+    expect(proposals.proposals).toHaveLength(1);
+    expect(proposals.proposals[0]).toMatchObject({ id: result.proposal.id });
+  });
+
+  it('rolls back promotion before record restamps when node CAS is stale', async () => {
+    const value = await fixture();
+    const { node, record } = await provisionalNode(value, 'Concurrent update');
+    await value.storage.updateNode({ id: node.id, version: node.version, name: 'Updated concurrently' });
+
+    await expect(
+      value.curator.promote({
+        nodeId: node.id,
+        version: node.version,
+        destinationScopeId: value.ids['scope:curated']!,
+      }),
+    ).rejects.toBeInstanceOf(KnowledgeConflictError);
+    expect(await value.storage.getNodeScopeIds(node.id)).toEqual([value.ids['scope:uncurated']]);
+    expect(await value.storage.getRecordScopeIds(record.id)).toEqual([value.ids['scope:uncurated']]);
   });
 
   it('fails closed on merge conflicts and soft-deletes discarded worklist nodes', async () => {

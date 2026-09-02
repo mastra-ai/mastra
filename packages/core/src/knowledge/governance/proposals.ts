@@ -76,6 +76,10 @@ export class KnowledgeProposalLifecycle {
       id: string;
       scopeIds: KnowledgeScopeIds;
     }) => Promise<KnowledgeRecord | null>,
+    private readonly resolveScope: (input: {
+      id: string;
+      scopeIds: KnowledgeScopeIds;
+    }) => Promise<KnowledgeNode | null>,
   ) {}
 
   async proposeNodeUpdate(input: ProposeKnowledgeNodeUpdateInput): Promise<KnowledgeProposal> {
@@ -406,9 +410,8 @@ export class KnowledgeProposalLifecycle {
           : target.type === 'node'
             ? await this.storage.getNodeIncludingDeleted(target.id)
             : await this.storage.getRecord({ id: target.id, includeDeleted: true });
-      if (!entity && target.type === 'node' && frontier.scopes[target.id]?.read) {
-        const scopeTarget = await this.storage.getNode(target.id);
-        if (scopeTarget?.isScope) entity = scopeTarget;
+      if (!entity && target.type === 'node' && !target.expectedDeleted) {
+        entity = await this.resolveScope({ id: target.id, scopeIds: vouchedScopeIds });
       }
       if (!entity) throw new KnowledgeNotFoundError(target.type, target.id);
       const currentScopeIds =
