@@ -1,5 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { localKnowledgeOrgId } from '../knowledge-scope.js';
+
 const memoryConstructorMock = vi.fn();
 const getOmScopeMock = vi.fn();
 const resolveModelMock = vi.fn();
@@ -195,7 +197,7 @@ describe('getDynamicMemory', () => {
       maxScope: 'resource',
       pins: true,
     });
-    expect(requestContext.get('organizationId')).toBe('local');
+    expect(requestContext.get('organizationId')).toBe(localKnowledgeOrgId());
     // Outside the factory there is no project id, so the knowledge scope is untouched.
     expect(requestContext.get('knowledgeResourceId')).toBeUndefined();
   });
@@ -215,14 +217,14 @@ describe('getDynamicMemory', () => {
     expect(requestContext.get('organizationId')).toBe('org-real');
   });
 
-  it('curates local (TUI/studio) knowledge under the explicit local scope, never the session owner', async () => {
+  it('curates local (TUI/studio) knowledge under the machine org, never the per-checkout session owner', async () => {
     process.env.MASTRACODE_EXPERIMENTAL_SUBCONSCIOUS = '1';
-    const { getDynamicMemory, LOCAL_KNOWLEDGE_ORG_ID } = await import('./memory.js');
-    expect(LOCAL_KNOWLEDGE_ORG_ID).toBe('local');
+    const { getDynamicMemory } = await import('./memory.js');
 
     const { requestContext } = await createMemoryConfig({ projectPath: '/tmp/project' }, 'thread', { vector: true });
     const org = requestContext.get('organizationId');
-    expect(org).toBe('local');
+    expect(org).toBe(localKnowledgeOrgId());
+    expect(org).toMatch(/^mastracode-[0-9a-f]{12}$/);
     expect(org).not.toBe('mastracode-owner');
     expect(org).not.toBe('mastra-code');
     expect(typeof getDynamicMemory).toBe('function');
