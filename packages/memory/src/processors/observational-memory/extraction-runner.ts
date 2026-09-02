@@ -12,6 +12,19 @@ export interface StructuredExtractionResult {
   failures: Array<{ slug: string; error: string }>;
 }
 
+function requiresStreaming(error: unknown): boolean {
+  if (!(error instanceof Error) || !('responseBody' in error) || typeof error.responseBody !== 'string') {
+    return false;
+  }
+
+  try {
+    const response = JSON.parse(error.responseBody) as { detail?: unknown };
+    return response.detail === 'Stream must be set to true';
+  } catch {
+    return false;
+  }
+}
+
 function isAbortError(error: unknown, abortSignal?: AbortSignal): boolean {
   return (
     abortSignal?.aborted === true ||
@@ -69,19 +82,31 @@ ${extractorInstructions}${priorLines.length > 0 ? `\n\n## Prior Extracted Values
   const failures: Array<{ slug: string; error: string }> = [];
 
   const generateWithStructuredOutput = async (jsonPromptInjection?: boolean | 'system' | 'inline') => {
-    const output = await opts.agent.generate(prompt, {
+    const generateOptions = {
       structuredOutput: { schema, ...(jsonPromptInjection ? { jsonPromptInjection } : {}) },
       ...(opts.memory ? { memory: opts.memory } : {}),
       ...(opts.abortSignal ? { abortSignal: opts.abortSignal } : {}),
       ...(opts.requestContext ? { requestContext: opts.requestContext } : {}),
       ...opts.observabilityContext,
-    });
+    };
 
-    if (output.object === undefined) {
+    let object: Record<string, unknown> | undefined;
+    try {
+      const output = await opts.agent.generate(prompt, generateOptions);
+      object = output.object;
+    } catch (error) {
+      if (!requiresStreaming(error)) {
+        throw error;
+      }
+      const output = await opts.agent.stream(prompt, generateOptions);
+      object = await output.object;
+    }
+
+    if (object === undefined) {
       throw new Error('structuredOutput object is undefined');
     }
 
-    return output.object;
+    return object;
   };
 
   let object: Record<string, unknown>;

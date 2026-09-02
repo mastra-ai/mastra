@@ -392,6 +392,27 @@ describe('Extractor', () => {
     expect(generate.mock.calls[1][1].structuredOutput.jsonPromptInjection).toBe('inline');
   });
 
+  it('retries structured extraction as a stream when the provider requires streaming', async () => {
+    const priority = new Extractor({ name: 'Priority', instructions: 'Extract priority.', schema: z.string() });
+    const generate = vi.fn().mockRejectedValueOnce(
+      Object.assign(new Error('Bad Request'), {
+        responseBody: JSON.stringify({ detail: 'Stream must be set to true' }),
+      }),
+    );
+    const stream = vi.fn().mockResolvedValueOnce({ object: Promise.resolve({ priority: 'high' }) });
+
+    const result = await extractStructuredValues({
+      agent: { generate, stream } as unknown as Agent<any, any, any, any>,
+      source: 'observer',
+      extractors: [priority],
+    });
+
+    expect(result).toEqual({ values: { priority: 'high' }, failures: [] });
+    expect(generate).toHaveBeenCalledTimes(1);
+    expect(stream).toHaveBeenCalledTimes(1);
+    expect(stream.mock.calls[0][1].structuredOutput.jsonPromptInjection).toBeUndefined();
+  });
+
   it('retries structured extraction with inline json prompt injection when native output has no object', async () => {
     const priority = new Extractor({ name: 'Priority', instructions: 'Extract priority.', schema: z.string() });
     const generate = vi
