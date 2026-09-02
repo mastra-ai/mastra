@@ -31,7 +31,7 @@ app.listen({ port: 3000 }, (err, address) => {
 
 ## Documentation
 
-- [@mastra/fastify documentation](https://mastra.ai/docs/server/server-adapters)
+- [Fastify adapter reference](https://mastra.ai/reference/server/fastify-adapter)
 
 ## Changelog
 

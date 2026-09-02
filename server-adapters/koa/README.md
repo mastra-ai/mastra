@@ -30,7 +30,7 @@ app.listen(3000, () => {
 
 ## Documentation
 
-- [@mastra/koa documentation](https://mastra.ai/docs/server/server-adapters)
+- [Koa adapter reference](https://mastra.ai/reference/server/koa-adapter)
 
 ## Changelog
 

@@ -1,6 +1,6 @@
 # @mastra/voice-gladia
 
-Gladia AI Voice integration for Mastra, providing Speech-to-text (STT) capabilities using Gladia's voice technology.
+Gladia speech-to-text integration for Mastra. Use it to transcribe prerecorded audio streams with optional speaker diarization, translation, language detection, and code-switching support.
 
 ## Installation
 
@@ -10,7 +10,7 @@ npm install @mastra/voice-gladia
 
 ## Usage
 
-Set `GLADIA_API_KEY`, then pass a readable audio stream with its file name and MIME type. Gladia is a speech-to-text provider and does not implement text-to-speech.
+Set `GLADIA_API_KEY`, then pass a readable audio stream with its file name and MIME type.
 
 ```typescript
 import { createReadStream } from 'node:fs';
@@ -33,7 +33,11 @@ console.log(transcript);
 
 ## Documentation
 
-This README is the package guide. `GladiaVoice.listen()` uploads prerecorded audio, starts a Gladia transcription job, polls until it completes, and supports diarization, translation, language detection, and code-switching options.
+`GladiaVoice` is a listening-only `MastraVoice` provider. `listen()` buffers and uploads the supplied audio stream, starts a Gladia prerecorded-transcription job, polls until processing finishes, and returns the full transcript. Both `fileName` and `mimeType` are required.
+
+Diarization is enabled by default. Use `diarization_config` to set an exact, minimum, or maximum number of speakers. Translation can be enabled with the base or enhanced model and one or more target languages. The provider also supports automatic language detection and code switching for recordings that contain multiple languages.
+
+The API key can be supplied as `listeningModel.apiKey` or through `GLADIA_API_KEY`. Gladia does not provide text-to-speech through this package; calling `speak()` throws an error.
 
 ## Changelog
 

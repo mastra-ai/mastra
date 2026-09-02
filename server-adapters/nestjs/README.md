@@ -1,8 +1,8 @@
 # @mastra/nestjs
 
-NestJS server adapter for [Mastra](https://mastra.ai). Use it to expose agents, workflows, tools, MCP, and streaming endpoints through NestJS with native guards, interceptors, and DI.
+NestJS server adapter for [Mastra](https://mastra.ai). Use it to expose agents, workflows, tools, MCP, memory, voice, and streaming endpoints through NestJS with native dependency injection, guards, interceptors, and exception handling.
 
-This package supports NestJS running on the Express adapter only. If your app uses Fastify, `MastraModule` now fails fast during bootstrap with a clear error instead of partially initializing.
+The adapter supports NestJS running on the Express platform. If an application uses the Fastify platform, `MastraModule` fails during bootstrap instead of partially initializing.
 
 ## Installation
 
@@ -12,22 +12,43 @@ npm install @mastra/nestjs
 
 ## Usage
 
-```typescript
-import {
-  MastraAuthGuard,
-  MastraThrottleGuard,
-  StreamingInterceptor,
-  RequestTrackingInterceptor,
-  MastraExceptionFilter,
-  RouteHandlerService,
-  RequestContextService,
-  ShutdownService,
-} from '@mastra/nestjs';
+Register `MastraModule` in the application module. Import it after modules with application routes so its catch-all controller does not intercept them first.
+
+```typescript title="src/app.module.ts"
+import { Module } from '@nestjs/common';
+import { MastraModule } from '@mastra/nestjs';
+import { mastra } from './mastra';
+
+@Module({
+  imports: [
+    MastraModule.register({
+      mastra,
+      prefix: '/api/mastra',
+    }),
+  ],
+})
+export class AppModule {}
+```
+
+```typescript title="src/main.ts"
+import { NestFactory } from '@nestjs/core';
+import { AppModule } from './app.module';
+
+async function bootstrap() {
+  const app = await NestFactory.create(AppModule);
+  await app.listen(3000);
+}
+
+bootstrap();
 ```
 
 ## Documentation
 
-- [@mastra/nestjs documentation](https://mastra.ai/docs/server/server-adapters)
+`MastraModule.register()` accepts the Mastra instance and optional settings for the route prefix, rate limits, graceful shutdown, request body limits, stream heartbeat and redaction, tracing, request context parsing, tools, MCP transport, authentication, and per-route auth overrides.
+
+The module registers Mastra routes under `/api` by default. Because it uses a catch-all NestJS controller, either import `MastraModule` last or assign a dedicated prefix such as `/api/mastra`.
+
+- [NestJS adapter reference](https://mastra.ai/reference/server/nestjs-adapter)
 
 ## Changelog
 

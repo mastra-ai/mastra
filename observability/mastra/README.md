@@ -1,6 +1,6 @@
 # @mastra/observability
 
-Monitor Mastra agents, workflows, tools, and model calls in Studio with metrics dashboards, hierarchical traces, and searchable correlated logs.
+Monitor Mastra agents, workflows, tools, and model calls with hierarchical traces, automatically extracted metrics, and structured logs correlated to the active trace.
 
 ## Installation
 
@@ -19,10 +19,7 @@ export const mastra = new Mastra({
     configs: {
       default: {
         serviceName: 'my-app',
-        exporters: [
-          new MastraStorageExporter(), // Persists observability events to Mastra Storage
-          new MastraPlatformExporter(), // Sends observability events to Mastra Platform
-        ],
+        exporters: [new MastraStorageExporter(), new MastraPlatformExporter()],
       },
     },
   }),
@@ -31,7 +28,15 @@ export const mastra = new Mastra({
 
 ## Documentation
 
-- [Observability](https://mastra.ai/docs/studio/observability)
+`Observability` instruments agent runs, model generations, tool and MCP calls, processor execution, workflow runs, and workflow steps. Each configured observability instance has its own service name, exporters, sampling strategy, and span processors.
+
+Exporters receive tracing events through the central observability bus. `MastraStorageExporter` persists them to the configured Mastra storage so Studio can query them, while `MastraPlatformExporter` sends them to Mastra Platform. Additional packages provide exporters for services such as Arize, Braintrust, Langfuse, LangSmith, Sentry, and OpenTelemetry-compatible backends.
+
+A `SensitiveDataFilter` output processor is enabled by default and redacts common secrets before spans reach exporters. Set `sensitiveDataFilter: false` to disable it, or provide filter options to customize its behavior. Sampling can retain every trace, use a ratio, or apply application-specific logic.
+
+The package automatically derives duration, status, model token, and cache token metrics from span lifecycle events. Structured logs inherit trace and span IDs, tags, and entity metadata, while metric labels pass through cardinality filtering to prevent user IDs, trace IDs, and other unbounded values from overwhelming metrics backends.
+
+- [Observability documentation](https://mastra.ai/docs/studio/observability)
 
 ## Changelog
 

@@ -1,16 +1,14 @@
 # @mastra/react
 
-`@mastra/react` provides React context, hooks, and UI helpers for applications that connect to a Mastra server. Wrap your application with `MastraReactProvider` once, then use the package's agent, workflow, voice, and message APIs throughout the component tree.
+`@mastra/react` provides React context, hooks, message utilities, voice helpers, and UI primitives for applications that connect to a Mastra server. Wrap the application once with `MastraReactProvider`, then access the configured client throughout the component tree.
 
 ## Installation
 
 ```bash
-npm install @mastra/react
+npm install @mastra/react react react-dom
 ```
 
 ## Usage
-
-Render the provider near the root of your React application.
 
 ```tsx
 import { MastraReactProvider } from '@mastra/react';
@@ -22,7 +20,13 @@ export function App({ children }: { children: React.ReactNode }) {
 
 ## Documentation
 
-- [@mastra/react documentation](https://mastra.ai/docs/server/mastra-client)
+`MastraReactProvider` constructs and shares the Mastra client. In addition to `baseUrl`, it accepts custom headers, an API prefix, fetch credentials, and a custom `fetch` implementation for applications that need authentication or request instrumentation. Use `useMastraClient()` when a component needs direct access to the underlying client.
+
+The package exports agent hooks such as `useChat` for generated or streamed conversations, including optimistic messages, tool calls, approvals, task signals, aborts, and reconnection to active runs. It also exports workflow hooks and `WorkflowStepFactory` for consuming workflow state and streamed step results.
+
+Voice helpers include browser speech recognition, microphone recording, and Web Audio playback. Message utilities expose Mastra's database message types and accumulation helpers, while the `@mastra/react/ui` entry point provides reusable message, code, icon, button, entity, and tooltip components. Import `@mastra/react/styles.css` when using the packaged UI components.
+
+React 19 or newer is required. The package also expects compatible versions of `@mastra/core` and Zod in the consuming application.
 
 ## Changelog
 

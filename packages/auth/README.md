@@ -1,6 +1,6 @@
 # @mastra/auth
 
-Design secure identity flows for Mastra that protect endpoints and carry trusted user context through agents and tools while enforcing data boundaries.
+Authentication utilities for protecting Mastra server endpoints and carrying trusted user context through agents and tools. The package exports `MastraJwtAuth` for JWT-based authentication; provider-specific integrations are published as separate `@mastra/auth-*` packages.
 
 ## Installation
 
@@ -25,7 +25,7 @@ export const mastra = new Mastra({
 
 ## Documentation
 
-- [Authentication and identity](https://mastra.ai/docs/guides/authentication-identity)
+- [Authentication overview](https://mastra.ai/docs/auth/overview)
 
 ## Changelog
 

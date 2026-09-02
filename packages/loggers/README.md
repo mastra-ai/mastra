@@ -1,6 +1,6 @@
 # @mastra/loggers
 
-`@mastra/loggers` provides production logging implementations for Mastra, including the Pino-based `PinoLogger`. Use it to control structured output, log levels, redaction, custom levels, and destination-specific formatting for a Mastra application.
+Logger and logging transport implementations for Mastra. The package includes a structured Pino logger plus file, HTTP, and Upstash transports that extend `LoggerTransport` from `@mastra/core/logger`.
 
 ## Installation
 
@@ -10,20 +10,66 @@ npm install @mastra/loggers
 
 ## Usage
 
-Create a logger and pass it to your Mastra configuration.
+Create a logger with one or more named transports and pass it to Mastra:
 
 ```typescript
+import { Logger } from '@mastra/core/logger';
 import { Mastra } from '@mastra/core/mastra';
-import { PinoLogger } from '@mastra/loggers';
+import { FileTransport } from '@mastra/loggers/file';
+import { UpstashTransport } from '@mastra/loggers/upstash';
 
-const logger = new PinoLogger({ name: 'mastra', level: 'info' });
+const logger = new Logger({
+  transports: [
+    new FileTransport({ path: '/var/log/my-app.log' }),
+    new UpstashTransport({
+      upstashUrl: process.env.UPSTASH_URL!,
+      upstashToken: process.env.UPSTASH_TOKEN!,
+    }),
+  ],
+});
 
 export const mastra = new Mastra({ logger });
 ```
 
 ## Documentation
 
-- [@mastra/loggers documentation](https://mastra.ai/reference/logging/pino-logger)
+### Logger
+
+`Logger` combines one or more `LoggerTransport` implementations and can be passed directly to the Mastra configuration. It supports standard log levels and sends each structured log record to the configured transports, which can persist, batch, or forward the data to external systems.
+
+### File transport
+
+`FileTransport` appends structured logs to an existing local file. It can list logs, query by run ID, stream records, and clean up the underlying write stream when destroyed.
+
+```typescript
+import { FileTransport } from '@mastra/loggers/file';
+
+const fileTransport = new FileTransport({ path: '/var/log/my-app.log' });
+const runLogs = await fileTransport.listLogsByRunId({ runId: 'run-123' });
+```
+
+### Upstash transport
+
+`UpstashTransport` batches logs into an Upstash Redis list. Configure the instance URL and token, then optionally set the list name, maximum retained list length, batch size, and flush interval. It trims old records, retries failed batches, and performs a final flush during shutdown.
+
+```typescript
+import { UpstashTransport } from '@mastra/loggers/upstash';
+
+const upstashTransport = new UpstashTransport({
+  upstashUrl: process.env.UPSTASH_URL!,
+  upstashToken: process.env.UPSTASH_TOKEN!,
+  listName: 'application-logs',
+  maxListLength: 10_000,
+  batchSize: 100,
+  flushInterval: 10_000,
+});
+```
+
+### HTTP transport
+
+`HttpTransport` sends batches of structured log records to an HTTP endpoint and supports request headers, batching, retry, and flush configuration. Use it for application-specific collectors and hosted logging gateways.
+
+- [`PinoLogger` reference](https://mastra.ai/reference/logging/pino-logger)
 
 ## Changelog
 

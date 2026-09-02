@@ -22,6 +22,7 @@ export const mastra = new Mastra({
       projectId: process.env.MASTRA_PROJECT_ID!,
       cloudBaseUrl: 'https://cloud.mastra.ai',
       callbackUrl: 'https://example.com/auth/callback',
+      isProduction: process.env.NODE_ENV === 'production',
     }),
   },
 });
@@ -29,7 +30,11 @@ export const mastra = new Mastra({
 
 ## Documentation
 
-This README is the package guide. `MastraCloudAuthProvider` uses Mastra Cloud's PKCE sign-in flow, validates the resulting session cookie, and exposes user, SSO, and session capabilities through Mastra's server auth interface.
+`MastraCloudAuthProvider` implements Mastra's user, single sign-on, and session provider interfaces. It sends users through Mastra Cloud's PKCE authorization flow, validates the resulting session cookie, and accepts bearer tokens for API clients that do not use browser cookies.
+
+The constructor requires the Mastra Cloud `projectId`, the `cloudBaseUrl`, and the absolute OAuth `callbackUrl` registered for the application. Set `isProduction` to add the `Secure` attribute to authentication cookies. The provider also accepts the common Mastra auth options for public and protected routes and custom user authorization.
+
+During sign-in, the provider creates a PKCE verifier and challenge, redirects the browser to Mastra Cloud, exchanges the returned authorization code, and stores the session in an HTTP-only cookie. It exposes the login, callback, logout, session validation, and session refresh behavior required by Mastra's server authentication middleware.
 
 ## Changelog
 

@@ -27,7 +27,7 @@ app.listen(3000, () => {
 
 ## Documentation
 
-- [@mastra/express documentation](https://mastra.ai/docs/server/server-adapters)
+- [Express adapter reference](https://mastra.ai/reference/server/express-adapter)
 
 ## Changelog
 

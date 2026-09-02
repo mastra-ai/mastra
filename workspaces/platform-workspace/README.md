@@ -1,6 +1,6 @@
 # @mastra/platform-workspace
 
-Mastra Platform workspace provider. Gives agents environment-scoped sandbox execution and bucket-backed filesystem access through the Mastra Platform workspace proxy.
+Mastra Platform workspace provider. It gives agents environment-scoped sandbox execution and bucket-backed filesystem access through the Mastra Platform workspace proxy.
 
 ## Installation
 
@@ -16,11 +16,8 @@ import { Workspace } from '@mastra/core/workspace';
 import { PlatformFilesystem, PlatformSandbox } from '@mastra/platform-workspace';
 
 const workspace = new Workspace({
-  filesystem: new PlatformFilesystem({
-    // accessToken, projectId, bucketName all fall back to env
-  }),
+  filesystem: new PlatformFilesystem({}),
   sandbox: new PlatformSandbox({
-    // accessToken, projectId, environmentId all fall back to env
     idleTimeoutMinutes: 30,
     networkIsolation: 'ISOLATED',
   }),
@@ -35,7 +32,17 @@ const agent = new Agent({
 
 ## Documentation
 
-- [@mastra/platform-workspace documentation](https://mastra.ai/docs/mastra-platform/workspaces)
+Both providers authenticate through the workspace proxy with `MASTRA_PLATFORM_ACCESS_TOKEN` and `MASTRA_PROJECT_ID`. `PlatformSandbox` also requires `MASTRA_ENVIRONMENT_ID`; `PlatformFilesystem` requires `MASTRA_PLATFORM_BUCKET_NAME`. Constructor values override environment variables, and `MASTRA_WORKSPACE_PROXY_URL` can point requests at a non-production proxy.
+
+`PlatformFilesystem` implements the Mastra filesystem interface against a Platform bucket. It supports reading, writing, listing, moving, and deleting files, preserves reserved characters in object names, and can be mounted with `readOnly: true` to reject mutations.
+
+`PlatformSandbox` starts or reconnects to an environment-scoped provider sandbox and implements command execution, lifecycle, and networking operations. The provider defaults to E2B and can be changed to Railway through `sandboxProvider` or `SANDBOX_PROVIDER`. Pass an existing `sandboxId` to reattach to a live sandbox, and `actingUserId` to partition and attribute project-token requests to a stable application user.
+
+The exported `Template()` builder creates reusable sandbox images from commands, packages, environment values, repository checkouts, CPU, memory, and working-directory settings. Platform derives a content identity from the serialized template so matching definitions can reuse previous builds. Ephemeral environment values are excluded from that identity and are not persisted into the runtime image.
+
+Proxy failures throw `PlatformApiError`, which includes the HTTP status, parsed machine-readable error code, proxy message, and raw response body. Use these fields to distinguish missing resources, authentication failures, and provider errors.
+
+- [Mastra Platform workspaces](https://mastra.ai/docs/mastra-platform/workspaces)
 
 ## Changelog
 

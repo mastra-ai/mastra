@@ -39,22 +39,7 @@ Learn how Mastra Code came to be on [YouTube](https://www.youtube.com/watch?v=Hb
 
 ## Prerequisites
 
-Mastra Code requires Node.js 22.19.0 or later.
-
-The optional `@` file autocomplete uses [`fd`](https://github.com/sharkdp/fd), a file finder that respects `.gitignore`. Install `fd` with your package manager to enable filename suggestions:
-
-```sh
-# macOS
-brew install fd
-
-# Ubuntu or Debian
-sudo apt install fd-find
-
-# Arch Linux
-sudo pacman -S fd
-```
-
-On Ubuntu and Debian, the executable is named `fdfind`. Mastra Code detects both `fd` and `fdfind`.
+Mastra Code requires Node.js 22.19.0 or later. To enable `@` filename suggestions, install the dependency described in [File autocomplete](/configuration#file-autocomplete).
 
 ## Get started
 
@@ -96,35 +81,6 @@ On Ubuntu and Debian, the executable is named `fdfind`. Mastra Code detects both
     Type a message and press Enter. If the agent is already working, Enter queues your next message and sends it automatically after the current run finishes.
   </StepItem>
 </Steps>
-
-## Reference project files
-
-Type `@` followed by part of a filename to search project files and attach a path to your message:
-
-- `@setup` matches files such as `setup.ts` and `setup.py`.
-- `@src/tui` narrows the search to a directory.
-- `@"path with spaces"` handles paths that contain spaces.
-
-Use the arrow keys to select a suggestion, then press Tab to insert it. File suggestions require `fd` or `fdfind`; slash-command autocomplete continues to work without it.
-
-## Dynamic workflows
-
-Describe a workflow in Build mode and ask Mastra Code to build it. Mastra Code discovers the available agents, tools, and workflows, validates the resulting definition, and saves it for later sessions.
-
-Use `/workflows` to manage saved workflows:
-
-```text
-/workflows list
-/workflows show research-summary
-/workflows run research-summary {"topic":"dynamic workflows"}
-/workflows delete research-summary
-```
-
-Run `/workflows help` for the complete command reference.
-
-## Plugins
-
-Use `/plugins` to install and manage trusted local or GitHub plugins. Plugins can add tools, slash commands, skills, signal providers, and system instructions. Plugins execute code inside Mastra Code and can add instructions to the agent prompt, so install them only from sources you trust.
 
 ## Slash commands
 

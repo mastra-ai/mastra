@@ -23,6 +23,31 @@ const mastraCode = await createMastraCode({
 
 This changes the project and global locations used for MCP server configuration, hooks, slash commands, agent instructions, skills, and legacy `database.json` discovery. `configDir` must be a single directory name; absolute paths, `.` and `..`, and names containing `/` or `\` are rejected.
 
+## File autocomplete
+
+Mastra Code can search project files and attach a path to your message when you type `@` followed by part of a filename:
+
+- `@setup` matches files such as `setup.ts` and `setup.py`.
+- `@src/tui` narrows the search to a directory.
+- `@"path with spaces"` handles paths that contain spaces.
+
+Use the arrow keys to select a suggestion, then press Tab to insert it. Slash-command autocomplete continues to work when file autocomplete is unavailable.
+
+File suggestions use [`fd`](https://github.com/sharkdp/fd), a file finder that respects `.gitignore`. Install it with your package manager:
+
+```sh
+# macOS
+brew install fd
+
+# Ubuntu or Debian
+sudo apt install fd-find
+
+# Arch Linux
+sudo pacman -S fd
+```
+
+On Ubuntu and Debian, the executable is named `fdfind`. Mastra Code detects both `fd` and `fdfind`.
+
 ## Authentication
 
 Mastra Code supports two authentication methods: **API keys** (environment variables) and **OAuth** (provider subscriptions). You can use either or both.

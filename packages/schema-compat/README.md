@@ -1,6 +1,6 @@
 # @mastra/schema-compat
 
-Schema compatibility layer for Mastra.ai that provides compatibility fixes for different AI model providers when using Zod schemas with tools.
+Schema compatibility utilities that adapt Zod and JSON schemas to the different subsets and formats supported by AI model providers. Mastra uses these layers when tool inputs or structured outputs contain schema features a provider cannot accept directly.
 
 ## Installation
 
@@ -10,37 +10,39 @@ npm install @mastra/schema-compat
 
 ## Usage
 
-### Basic Usage
-
-The package provides a base `SchemaCompatLayer` class that you can extend to create custom compatibility layers for different AI model providers:
+Apply a provider layer to a Zod schema before passing it to an AI SDK API:
 
 ```typescript
-import { SchemaCompatLayer } from '@mastra/schema-compat';
-import type { LanguageModelV1 } from 'ai';
+import { applyCompatLayer, OpenAISchemaCompatLayer } from '@mastra/schema-compat';
+import { z } from 'zod';
 
-class MyCustomCompat extends SchemaCompatLayer {
-  constructor(model: LanguageModelV1) {
-    super(model);
-  }
+const model = {
+  provider: 'openai.chat',
+  modelId: 'gpt-5.2',
+  supportsStructuredOutputs: true,
+};
 
-  shouldApply(): boolean {
-    return this.getModel().provider === 'my-provider';
-  }
+const schema = z.object({
+  name: z.string().email(),
+  tags: z.array(z.string()).min(1),
+});
 
-  getSchemaTarget() {
-    return 'jsonSchema7';
-  }
-
-  processZodType<T extends z.AnyZodObject>(value: z.ZodTypeAny): ShapeValue<T> {
-    // Your custom processing logic here
-    return value;
-  }
-}
+const compatibleSchema = applyCompatLayer({
+  schema,
+  compatLayers: [new OpenAISchemaCompatLayer(model)],
+  mode: 'aiSdkSchema',
+});
 ```
 
 ## Documentation
 
-This README is the package guide for the compatibility-layer API and provider-specific exports. For the agent feature that consumes compatible schemas, see [Structured output](https://mastra.ai/docs/agents/structured-output).
+The package includes compatibility layers for Anthropic, DeepSeek, Google, Meta, OpenAI, and OpenAI reasoning models. A layer decides whether it applies to the supplied model information, selects the provider's schema target, and rewrites unsupported checks or structures without changing the application's source schema.
+
+`applyCompatLayer()` chooses the first applicable layer and returns either an AI SDK schema or JSON Schema. `convertZodSchemaToAISDKSchema()` converts Zod directly, while `convertSchemaToZod()` converts supported schema inputs back to Zod. Standard Schema helpers are available for extracting schemas, converting them to JSON Schema, and applying OpenAI compatibility transforms to tools.
+
+The package supports both Zod v3 and v4. `SchemaCompatLayerV3` and `SchemaCompatLayerV4` expose version-specific APIs, while `SchemaCompatLayer` dispatches based on the schema version. Utilities such as `prepareJsonSchemaForOpenAIStrictMode()` and `ensureAllPropertiesRequired()` handle strict structured-output requirements.
+
+Provider layers commonly remove unsupported refinements, convert validation rules into descriptions, normalize nullable and union types, and target JSON Schema 7 or OpenAPI-compatible output as required by the provider.
 
 ## Changelog
 

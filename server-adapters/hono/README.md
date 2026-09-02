@@ -25,7 +25,7 @@ export default app;
 
 ## Documentation
 
-- [@mastra/hono documentation](https://mastra.ai/docs/server/server-adapters)
+- [Hono adapter reference](https://mastra.ai/reference/server/hono-adapter)
 
 ## Changelog
 
