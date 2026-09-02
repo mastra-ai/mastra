@@ -114,6 +114,7 @@ const initialScopes = [
   { address: 'principal:reader', name: 'Reader' },
   { address: 'principal:suggester', name: 'Suggester' },
   { address: 'principal:owner', name: 'Owner' },
+  { address: 'principal:admin', name: 'Admin' },
   { address: 'principal:other', name: 'Other' },
   {
     address: 'scope:project',
@@ -121,13 +122,17 @@ const initialScopes = [
     grants: [
       { scopeRefAddress: 'principal:reader', role: 'readonly' as const },
       { scopeRefAddress: 'principal:suggester', role: 'readonly' as const, canSuggest: true },
-      { scopeRefAddress: 'principal:owner', role: 'owner' as const },
+      { scopeRefAddress: 'principal:owner', role: 'owner' as const, canSuggest: true },
+      { scopeRefAddress: 'principal:admin', role: 'owner' as const },
     ],
   },
   {
     address: 'scope:private',
     name: 'Private',
-    grants: [{ scopeRefAddress: 'principal:other', role: 'owner' as const }],
+    grants: [
+      { scopeRefAddress: 'principal:admin', role: 'owner' as const },
+      { scopeRefAddress: 'principal:other', role: 'owner' as const },
+    ],
   },
   {
     address: 'scope:cycle-a',
@@ -153,6 +158,7 @@ const ids = structure.scopes;
 const reader = ids['principal:reader']!;
 const suggester = ids['principal:suggester']!;
 const owner = ids['principal:owner']!;
+const admin = ids['principal:admin']!;
 const project = ids['scope:project']!;
 const privateScope = ids['scope:private']!;
 const cycleB = ids['scope:cycle-b']!;
@@ -185,6 +191,12 @@ await store.createRecord({
 
 const beforeHiddenInsert = await knowledge.listNodes({ scopeIds: [reader], namePrefix: '', limit: 100 });
 const beforeRecords = await knowledge.listRecords({ node: visibleNode, scopeIds: [reader], limit: 1 });
+await store.createRecord({
+  node: visibleNode,
+  text: 'Another private stamp',
+  scopeIds: [privateScope],
+  contextScopeId: privateScope,
+});
 for (let index = 0; index < 25; index += 1) {
   await store.createNode({ name: `Hidden ${index.toString().padStart(2, '0')}`, scopeIds: [privateScope] });
 }
@@ -230,7 +242,8 @@ await store.reconcileStructure({
       name: 'Project',
       grants: [
         { scopeRefAddress: 'principal:reader', role: 'readonly' },
-        { scopeRefAddress: 'principal:owner', role: 'owner' },
+        { scopeRefAddress: 'principal:owner', role: 'owner', canSuggest: true },
+        { scopeRefAddress: 'principal:admin', role: 'owner' },
       ],
     },
   ],
@@ -257,7 +270,8 @@ try {
     reviewerContextScopeId: owner,
     vouchedScopeIds: [owner],
   });
-} catch {
+} catch (error) {
+  invariant(error instanceof Error && error.name === 'KnowledgeConflictError', 'Stale proposal failed unexpectedly');
   conflictObserved = true;
 }
 invariant(conflictObserved, 'Stale proposal approval did not conflict');
@@ -272,6 +286,75 @@ await knowledge.rejectProposal({
   vouchedScopeIds: [owner],
   reason: 'Fresh source contradicts the proposal',
 });
+
+const movedTarget = await store.createNode({ name: 'Movable proposal target', scopeIds: [project] });
+const movedProposal = await knowledge.proposeNodeUpdate({
+  mutation: { id: movedTarget.id, version: movedTarget.version, name: 'Stale source edit' },
+  proposerContextScopeId: owner,
+  vouchedScopeIds: [owner],
+});
+await knowledge.updateNode({
+  id: movedTarget.id,
+  version: movedTarget.version,
+  scopeIds: [privateScope],
+  vouchedScopeIds: [admin],
+});
+let movedConflictObserved = false;
+try {
+  await knowledge.approveProposal({
+    id: movedProposal.id,
+    reviewerContextScopeId: admin,
+    vouchedScopeIds: [admin],
+  });
+} catch (error) {
+  invariant(error instanceof Error && error.name === 'KnowledgeConflictError', 'Moved target failed unexpectedly');
+  movedConflictObserved = true;
+}
+invariant(movedConflictObserved, 'Moved target did not conflict its stale proposal');
+let formerOwnerReReviewDenied = false;
+try {
+  await knowledge.reReviewProposal({
+    id: movedProposal.id,
+    reviewerContextScopeId: owner,
+    vouchedScopeIds: [owner],
+  });
+} catch (error) {
+  invariant(
+    error instanceof Error && error.name === 'KnowledgeNotFoundError',
+    'Former owner re-review failed unexpectedly',
+  );
+  formerOwnerReReviewDenied = true;
+}
+invariant(formerOwnerReReviewDenied, 'Former owner re-reviewed a target after it moved outside their frontier');
+const movedReplacement = await knowledge.reReviewProposal({
+  id: movedProposal.id,
+  reviewerContextScopeId: admin,
+  vouchedScopeIds: [admin],
+});
+let formerOwnerApprovalDenied = false;
+try {
+  await knowledge.approveProposal({
+    id: movedReplacement.id,
+    reviewerContextScopeId: owner,
+    vouchedScopeIds: [owner],
+  });
+} catch (error) {
+  invariant(
+    error instanceof Error && error.name === 'KnowledgeNotFoundError',
+    'Former owner replacement approval failed unexpectedly',
+  );
+  formerOwnerApprovalDenied = true;
+}
+invariant(
+  formerOwnerApprovalDenied,
+  'Former owner approved a replacement after its target moved outside their frontier',
+);
+const movedReplacementApproval = await knowledge.approveProposal({
+  id: movedReplacement.id,
+  reviewerContextScopeId: admin,
+  vouchedScopeIds: [admin],
+});
+invariant(movedReplacementApproval.status === 'approved', 'Current-scope admin could not approve the replacement');
 
 const worker = await readInWorker({ nodeId: visibleNode.id, principalScopeId: reader });
 const warmVisible = await worker.read();
@@ -300,6 +383,10 @@ const result = {
   multiParentAnyVisible: true,
   proposalApprovedAfterProposerRevocation: true,
   staleProposalConflicted: conflictObserved,
+  movedTargetConflicted: movedConflictObserved,
+  formerOwnerReReviewDenied,
+  formerOwnerReplacementApprovalDenied: formerOwnerApprovalDenied,
+  currentScopeAdminApprovedReplacement: movedReplacementApproval.status === 'approved',
   replacementRejected: true,
   warmCacheVisibleBeforeRevocation: warmVisible,
   warmCacheVisibleAfterRevocation: visibleAfterRevocation,
