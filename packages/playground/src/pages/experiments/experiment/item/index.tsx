@@ -92,6 +92,7 @@ function ExperimentItemPageContent({ itemId }: { itemId: string }) {
   const { data: anchorSpanScores } = useTraceSpanScores({
     traceId: featuredTraceId ?? undefined,
     spanId: anchorSpan?.spanId,
+    page: 0,
   });
 
   // Row stack: Result (with score split inside) → shared Trace/Span panel.
