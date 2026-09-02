@@ -268,11 +268,55 @@ function gitAuthFlag(): string {
   return `-c http.extraheader="AUTHORIZATION: basic $(printf 'x-access-token:%s' "$${BUILD_TOKEN_ENV}" | base64 -w0)"`;
 }
 
+/**
+ * `owner/repo` for a github.com clone URL, else undefined. Only the public
+ * host is API-resolvable: GitHub Enterprise and other forges keep the git
+ * path below.
+ */
+function parseGithubRepo(cloneUrl: string): { owner: string; repo: string } | undefined {
+  let url: URL;
+  try {
+    url = new URL(cloneUrl);
+  } catch {
+    return undefined;
+  }
+  if (url.hostname.toLowerCase() !== 'github.com') return undefined;
+  const [owner, repo, ...rest] = url.pathname.split('/').filter(Boolean);
+  if (!owner || !repo || rest.length > 0) return undefined;
+  return { owner, repo: repo.replace(/\.git$/i, '') };
+}
+
+/**
+ * Resolve the default-branch head. github.com repositories go through the
+ * REST API so resolution works wherever the host runs, including deployed
+ * images without a git binary; other hosts shell out to `git ls-remote`.
+ * Throws with a redaction-safe message when the head cannot be resolved.
+ */
 export async function resolveDefaultBranchHead(
   cloneUrl: string,
   token?: string,
   execute: GitExec = execFileAsync as GitExec,
+  fetchImpl: typeof fetch = fetch,
 ): Promise<string | undefined> {
+  const github = parseGithubRepo(cloneUrl);
+  if (github) {
+    const response = await fetchImpl(`https://api.github.com/repos/${github.owner}/${github.repo}/commits/HEAD`, {
+      headers: {
+        Accept: 'application/vnd.github.sha',
+        'X-GitHub-Api-Version': '2022-11-28',
+        'User-Agent': 'mastra-platform-workspace',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      signal: AbortSignal.timeout(10_000),
+    }).catch((error: unknown) => {
+      throw new Error(`GitHub head lookup failed: ${error instanceof Error ? error.message : String(error)}`);
+    });
+    if (!response.ok) {
+      throw new Error(`GitHub head lookup failed: ${response.status} ${response.statusText}`.trim());
+    }
+    const sha = (await response.text()).trim();
+    return SHA_PATTERN.test(sha) ? sha : undefined;
+  }
   try {
     const env: NodeJS.ProcessEnv = { ...process.env, GIT_TERMINAL_PROMPT: '0' };
     if (token) {

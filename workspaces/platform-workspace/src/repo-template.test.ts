@@ -294,7 +294,41 @@ describe('createRepoTemplate', () => {
     expect(redactSecrets({ code: 1 })).toBe('[object Object]');
   });
 
-  it('keeps the repository token out of git process arguments while resolving the default branch', async () => {
+  it('resolves github.com heads through the REST API, so no git binary is needed', async () => {
+    const execute = vi.fn();
+    const fetchImpl = vi.fn(async () => new Response(`${SHA_1}\n`, { status: 200 }));
+
+    await expect(
+      resolveDefaultBranchHead('https://github.com/acme/widgets.git', 'ghs_secret_token', execute, fetchImpl),
+    ).resolves.toBe(SHA_1);
+
+    expect(execute).not.toHaveBeenCalled();
+    const [url, init] = fetchImpl.mock.calls[0] as unknown as [string, RequestInit];
+    expect(url).toBe('https://api.github.com/repos/acme/widgets/commits/HEAD');
+    expect(init.headers).toMatchObject({
+      Accept: 'application/vnd.github.sha',
+      Authorization: 'Bearer ghs_secret_token',
+    });
+  });
+
+  it('sends no Authorization header for public repositories without a token', async () => {
+    const fetchImpl = vi.fn(async () => new Response(SHA_1, { status: 200 }));
+    await expect(
+      resolveDefaultBranchHead('https://github.com/acme/widgets/', undefined, vi.fn(), fetchImpl),
+    ).resolves.toBe(SHA_1);
+    expect(fetchImpl.mock.calls[0]?.[0]).toBe('https://api.github.com/repos/acme/widgets/commits/HEAD');
+    const [, init] = fetchImpl.mock.calls[0] as unknown as [string, RequestInit];
+    expect(init.headers).not.toHaveProperty('Authorization');
+  });
+
+  it('surfaces a non-2xx GitHub API response without leaking the token', async () => {
+    const fetchImpl = vi.fn(async () => new Response('rate limited', { status: 403, statusText: 'Forbidden' }));
+    await expect(
+      resolveDefaultBranchHead('https://github.com/acme/widgets', 'ghs_secret_token', vi.fn(), fetchImpl),
+    ).rejects.toThrow('GitHub head lookup failed: 403 Forbidden');
+  });
+
+  it('keeps the repository token out of git process arguments while resolving a non-GitHub head', async () => {
     const execute = vi.fn(
       async (
         _file: string,
@@ -302,14 +336,16 @@ describe('createRepoTemplate', () => {
         _options: { timeout: number; maxBuffer: number; env: Record<string, string | undefined> },
       ) => ({ stdout: `${SHA_1}\tHEAD\n` }),
     );
+    const fetchImpl = vi.fn();
 
     await expect(
-      resolveDefaultBranchHead('https://github.com/acme/widgets', 'ghs_secret_token', execute),
+      resolveDefaultBranchHead('https://gitlab.com/acme/widgets', 'ghs_secret_token', execute, fetchImpl),
     ).resolves.toBe(SHA_1);
+    expect(fetchImpl).not.toHaveBeenCalled();
 
     const [file, args, options] = execute.mock.calls[0]!;
     expect(file).toBe('git');
-    expect(args).toEqual(['ls-remote', '--', 'https://github.com/acme/widgets', 'HEAD']);
+    expect(args).toEqual(['ls-remote', '--', 'https://gitlab.com/acme/widgets', 'HEAD']);
     expect(JSON.stringify(args)).not.toContain('ghs_secret_token');
     expect(options.env).toMatchObject({
       GIT_CONFIG_COUNT: '1',
@@ -324,7 +360,7 @@ describe('createRepoTemplate', () => {
       throw Object.assign(new Error('Command failed'), { stderr: 'fatal: unable to access: 429 Too Many Requests\n' });
     });
 
-    await expect(resolveDefaultBranchHead('https://github.com/acme/widgets', undefined, execute)).rejects.toThrow(
+    await expect(resolveDefaultBranchHead('https://gitlab.com/acme/widgets', undefined, execute)).rejects.toThrow(
       'git ls-remote failed: fatal: unable to access: 429 Too Many Requests',
     );
   });

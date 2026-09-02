@@ -127,6 +127,29 @@ describe.sequential.for([['pnpm'] as const])(`%s monorepo`, ([pkgManager]) => {
       expect(body).toEqual({ value: 'a -> b -> c', app: 'App value is BEFORE.' });
     });
 
+    it('reports hasBrowser for an agent with a workspace-level CLI browser', async () => {
+      const res = await fetch(`http://localhost:${port}/api/agents/browser-agent`);
+      const body = await res.json();
+      expect(res.status).toBe(200);
+      // CLI providers expose no SDK tools; the capability must come from the workspace browser.
+      expect(body.browserTools).toEqual([]);
+      expect(body.hasBrowser).toBe(true);
+    });
+
+    it('reports hasBrowser false for an agent without a browser', async () => {
+      const res = await fetch(`http://localhost:${port}/api/agents/inner-agent`);
+      const body = await res.json();
+      expect(res.status).toBe(200);
+      expect(body.hasBrowser).toBe(false);
+    });
+
+    it('serves the browser session probe with screencast available', async () => {
+      const res = await fetch(`http://localhost:${port}/api/agents/browser-agent/browser/session`);
+      const body = await res.json();
+      expect(res.status).toBe(200);
+      expect(body).toEqual({ hasSession: false, screencastAvailable: true });
+    });
+
     it('should return tools from the api', async () => {
       const res = await fetch(`http://localhost:${port}/api/tools`);
       const body = await res.json();

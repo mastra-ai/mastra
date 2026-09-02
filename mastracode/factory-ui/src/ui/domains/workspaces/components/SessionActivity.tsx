@@ -10,7 +10,7 @@ const PILLS = [0, 1, 2, 3, 4];
 const STATUS_TITLE: Record<SessionRowStatus, string> = {
   initializing: 'Initializing',
   working: 'Working',
-  ready: 'Ready',
+  ready: 'Waiting on you',
 };
 
 function statusAttributes(status: SessionRowStatus, label: string | undefined) {
