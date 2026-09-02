@@ -43,6 +43,9 @@ export interface TraceSpanPanelProps {
   scoresTabSlot?: TraceDataPanelViewProps['scoresTabSlot'];
   usage?: TraceDataPanelViewProps['usage'];
   traceHref?: string;
+  collapsed?: TraceDataPanelViewProps['collapsed'];
+  onCollapsedChange?: TraceDataPanelViewProps['onCollapsedChange'];
+  showUnavailableFeaturesMsg?: TraceDataPanelViewProps['showUnavailableFeaturesMsg'];
   className?: string;
 
   // Span-panel pass-through.
@@ -78,6 +81,9 @@ export function TraceSpanPanel({
   scoresTabSlot,
   usage,
   traceHref,
+  collapsed,
+  onCollapsedChange,
+  showUnavailableFeaturesMsg,
   className,
   spanActiveTab,
   onSpanTabChange,
@@ -113,6 +119,9 @@ export function TraceSpanPanel({
       placement="traces-list"
       LinkComponent={Link}
       traceHref={traceHref}
+      collapsed={collapsed}
+      onCollapsedChange={onCollapsedChange}
+      showUnavailableFeaturesMsg={showUnavailableFeaturesMsg}
       feedbackTabBadge={feedbackTabBadge}
       feedbackTabSlot={feedbackTabSlot}
       scoresTabBadge={scoresTabBadge}
