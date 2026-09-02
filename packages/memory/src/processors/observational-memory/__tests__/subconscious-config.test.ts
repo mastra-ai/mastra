@@ -73,8 +73,7 @@ describe('Subconscious configuration', () => {
 
   it('validates custom agents, duplicate names, and bounds', () => {
     expect(() => new Subconscious({ observation: ['remind', 'remind'] })).toThrow(/Duplicate/);
-    expect(() => new Subconscious({ observation: ['capture' as 'remind'] })).toThrow(/Unknown/);
-    expect(() => new Subconscious({ observation: ['learn' as 'curate'] })).toThrow(/Unknown/);
+    expect(() => new Subconscious({ observation: ['unknown' as 'remind'] })).toThrow(/Unknown/);
     expect(() => new Subconscious({ observation: [{ name: 'ticket', schema: z.string() } as any] })).toThrow(
       /requires schema and onExtracted/,
     );

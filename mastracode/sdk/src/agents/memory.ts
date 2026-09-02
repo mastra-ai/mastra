@@ -70,7 +70,7 @@ Don't say "Agent did x", say "did x". It will be assumed the agent did what was 
 Drop caveman for: security warnings, irreversible action confirmations, multi-step sequences where fragment order risks misread, user asks to clarify or repeats question, and anything that requires remembering verbatim content. Resume caveman after clear part done`;
 
 /**
- * The organization rung local (TUI/studio) knowledge is captured under. A fixed
+ * The organization rung local (TUI/studio) knowledge is curated under. A fixed
  * literal on purpose: deriving it from a hostname or path would fragment local
  * knowledge per checkout into scopes nothing ever reads.
  */
@@ -99,7 +99,7 @@ function reportOrgUnresolved(
   }
   const session = controller?.session;
   console.error(
-    `[Subconscious] Knowledge capture disabled: no organization resolved for session ${session?.id ?? 'unknown'} (project ${factoryProjectId ?? 'none'}). Knowledge is not written rather than written where it cannot be read.`,
+    `[Subconscious] Knowledge curation disabled: no organization resolved for session ${session?.id ?? 'unknown'} (project ${factoryProjectId ?? 'none'}). Knowledge is not written rather than written where it cannot be read.`,
   );
 }
 
@@ -121,7 +121,7 @@ export function getDynamicMemory(storage: MastraCompositeStore, vector?: MastraV
     const factoryProjectId = state?.factoryProjectId;
     const isFactory = typeof factoryProjectId === 'string' && factoryProjectId.trim().length > 0;
 
-    // A Factory-owned session that could not resolve its org refuses to capture:
+    // A Factory-owned session that could not resolve its org refuses to curate:
     // writing under a substituted identity produces knowledge the fail-closed
     // read path can never see.
     let orgUnresolvedRefusal = false;

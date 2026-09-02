@@ -1,5 +1,5 @@
 #!/usr/bin/env tsx
-/** Replay recorded observation cycles directly through the production curator handler. */
+/** Replay recorded observation cycles directly through the production curator dispatch path. */
 import { createRequire } from 'node:module';
 import { pathToFileURL } from 'node:url';
 

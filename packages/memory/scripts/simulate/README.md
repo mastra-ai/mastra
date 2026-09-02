@@ -1,6 +1,6 @@
 # Conversation simulation
 
-Replay recorded Observational Memory generations through the production Subconscious curator handler and inspect the durable knowledge it writes.
+Replay recorded Observational Memory generations through the production Subconscious curator dispatch path and inspect the durable knowledge it writes.
 
 ## Flow
 
@@ -35,7 +35,7 @@ pnpm simulate:replay \
   --input "postgres://user@127.0.0.1:55432/simulate_input" \
   --target "postgres://user@127.0.0.1:55432/simulate_direct" \
   --org my-org \
-  --model deepseek/deepseek-chat \
+  --model openai/gpt-5-mini \
   --knowledge-resource my-project-id
 ```
 
@@ -43,8 +43,8 @@ pnpm simulate:replay \
 
 The target database is local-only, must differ from the input database, and is recreated for the run. Replay prints a `CURATOR` line for each cycle followed by one JSON object per thread. The JSON includes curator outcomes, knowledge totals, reconstruction warnings, and the number of excluded reflection heads. Missing generations, empty chunks, and unparseable dates therefore remain visible to operators.
 
-There is no capture arm, cadence, tail flush, worklist paging, cursor advancement, or A/B comparator. Curator failures are reported and are not replayed.
+Each reconstructed cycle is dispatched once. Curator failures are reported and are not replayed.
 
 ## Reconstruction boundaries
 
-Generation-zero leading observation text is replayable. Leading text on later generations is a reflection head and is excluded. Duplicate generations are rejected; missing generations, empty chunks, and unparseable dates are reported as warnings. Resource-scoped records remain unsupported by this reconstruction path because their thread sections require a different source format.
+Generation-zero leading observation text is replayable. Leading text on later generations is a reflection head and is excluded. Duplicate generations are rejected; missing generations, empty chunks, and unparseable dates are reported as warnings. Input reconstruction currently supports thread-scoped OM records only; `--knowledge-resource` independently controls the output knowledge scope.

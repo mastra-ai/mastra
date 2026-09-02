@@ -23,29 +23,27 @@ const semanticInfrastructure = {
 afterEach(() => vi.restoreAllMocks());
 
 describe('direct replay isolation', () => {
-  it('keeps separate replay stores independent without cursor state', async () => {
+  it('keeps separate replay stores independent', async () => {
     const memoryA = new Memory({ storage: new InMemoryStore(), ...semanticInfrastructure });
     const memoryB = new Memory({ storage: new InMemoryStore(), ...semanticInfrastructure });
     const subconscious = new Subconscious({ defaultScope: 'resource', maxScope: 'resource' });
 
-    (vi.spyOn(Agent.prototype, 'generate') as any).mockImplementation(async function (
-      this: Agent,
-      prompt: unknown,
-      options: any,
-    ) {
-      const tools = (await this.listTools({ requestContext: options?.requestContext })) as any;
-      const project = String(prompt).includes('Atlas') ? 'Atlas' : 'Beacon';
-      await tools.knowledge_create.execute(
-        {
-          name: `Project ${project}`,
-          kind: 'project',
-          text: `Project ${project} is active.`,
-          nodeScope: 'resource',
-          scope: 'resource',
-        },
-        {},
-      );
-      return { text: 'Curated.' };
+    vi.spyOn(Agent.prototype, 'sendMessage').mockImplementation(function (this: Agent, message: any, options: any) {
+      const consumeStream = async () => {
+        const tools = (await this.listTools({ requestContext: options?.ifIdle?.streamOptions?.requestContext })) as any;
+        const project = String(message.contents).includes('Atlas') ? 'Atlas' : 'Beacon';
+        await tools.knowledge_create.execute(
+          {
+            name: `Project ${project}`,
+            kind: 'project',
+            text: `Project ${project} is active.`,
+            nodeScope: 'resource',
+            scope: 'resource',
+          },
+          {},
+        );
+      };
+      return { accepted: Promise.resolve({ action: 'wake', output: { consumeStream } }), signal: {} } as any;
     });
 
     const common = {
@@ -75,7 +73,5 @@ describe('direct replay isolation', () => {
     const storeB = (await memoryB.storage.getStore('knowledge'))!;
     expect((await storeA.listNodes({ scope, limit: 10 })).map(node => node.name)).toEqual(['Project Atlas']);
     expect((await storeB.listNodes({ scope, limit: 10 })).map(node => node.name)).toEqual(['Project Beacon']);
-    expect(await storeA.getCurationCursor({ sourceThreadId: 'thread-a', agent: 'curate' })).toBeNull();
-    expect(await storeB.getCurationCursor({ sourceThreadId: 'thread-a', agent: 'curate' })).toBeNull();
   });
 });

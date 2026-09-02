@@ -57,7 +57,7 @@ describe('Subconscious LibSQL integration', () => {
           {
             type: 'text-delta',
             id: 'observe-text',
-            delta: '<observations>Maya Chen owns Project Atlas. The staging region is cobalt.</observations>',
+            delta: '<observations>\nMaya Chen owns Project Atlas. The staging region is cobalt.\n</observations>',
           },
           { type: 'text-end', id: 'observe-text' },
           { type: 'finish', finishReason: 'stop', usage: { inputTokens: 50, outputTokens: 10, totalTokens: 60 } },
@@ -65,6 +65,10 @@ describe('Subconscious LibSQL integration', () => {
       }),
     });
     let curatorCall = 0;
+    let resolveCuratorContinuation!: () => void;
+    const curatorContinuation = new Promise<void>(resolve => {
+      resolveCuratorContinuation = resolve;
+    });
     const curatorStream = vi.fn(async () => {
       curatorCall += 1;
       if (curatorCall === 1) {
@@ -106,6 +110,7 @@ describe('Subconscious LibSQL integration', () => {
           warnings: [],
         };
       }
+      resolveCuratorContinuation();
       return {
         stream: convertArrayToReadableStream([
           { type: 'stream-start' as const, warnings: [] },
@@ -131,6 +136,7 @@ describe('Subconscious LibSQL integration', () => {
       options: {
         observationalMemory: {
           enabled: true,
+          scope: 'thread',
           model: observerModel,
           experimental_subconscious: new Subconscious({ observation: [{ name: 'curate', model: curatorModel }] }),
           observation: { messageTokens: 1, bufferTokens: false, previousObserverTokens: 1_000 },
@@ -151,6 +157,7 @@ describe('Subconscious LibSQL integration', () => {
       sendStateSignal: vi.fn(async () => ({ skipped: false }) as any),
     });
     expect(result.observed).toBe(true);
+    await curatorContinuation;
     expect(curatorStream).toHaveBeenCalledTimes(2);
 
     const knowledge = (await storage.getStore('knowledge'))!;

@@ -47,9 +47,6 @@ describe('direct Subconscious replay', () => {
     const memory = new Memory({ storage: new InMemoryStore(), ...semanticInfrastructure });
     const subconscious = new Subconscious({ defaultScope: 'resource', maxScope: 'resource' });
     const store = (await memory.storage.getStore('knowledge'))!;
-    const worklist = vi.spyOn(store, 'knowledgeBySource');
-    const getCursor = vi.spyOn(store, 'getCurationCursor');
-    const advanceCursor = vi.spyOn(store, 'advanceCurationCursor');
     const generatedPrompts: string[] = [];
     let firstRecordId = '';
     let nodeId = '';
@@ -130,8 +127,6 @@ describe('direct Subconscious replay', () => {
       ],
       knowledgeNodes: 1,
       knowledgeRecords: 1,
-      worklistOperations: 0,
-      cursorOperations: 0,
       warnings: [],
     });
     expect(active).toHaveLength(1);
@@ -141,9 +136,6 @@ describe('direct Subconscious replay', () => {
       scope: ['org:acme', 'resource:atlas'],
     });
     expect(generatedPrompts[1]).toContain('Project Atlas launch moved to 2026-10-01');
-    expect(worklist).not.toHaveBeenCalled();
-    expect(getCursor).not.toHaveBeenCalled();
-    expect(advanceCursor).not.toHaveBeenCalled();
 
     const reminder = new SubconsciousRemindExtractor({ name: 'remind', maxSteps: 3, builtIn: true });
     const requestContext = new RequestContext();

@@ -69,7 +69,7 @@ describe('Subconscious knowledge write tools', () => {
     expect(await store.getNode(result.node.id)).toMatchObject({ name: 'Atlas Launch' });
   });
 
-  it('preserves capture node-first partial-write semantics when the first record fails', async () => {
+  it('preserves node-first partial-write semantics when the first record fails', async () => {
     const { store, tools } = await fixture();
     vi.spyOn(store, 'appendKnowledge').mockRejectedValueOnce(new Error('record write failed'));
 
@@ -391,14 +391,8 @@ describe('Subconscious knowledge write tools', () => {
     ).rejects.toThrow('version');
   });
 
-  it('bounds reserved guidance and never exposes restoration', async () => {
+  it('never exposes restoration', async () => {
     const { tools } = await fixture();
-    await expect(
-      tools.knowledge_write_node_content!.execute?.(
-        { name: ' Capture-Guidance ', content: 'x'.repeat(4_001), scope: 'resource' },
-        {} as any,
-      ),
-    ).rejects.toThrow('limited');
     expect(Object.keys(tools)).toEqual([
       'knowledge_create',
       'knowledge_append',

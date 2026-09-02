@@ -22,8 +22,6 @@ export type ReplayResult = {
   curatorOutcomes: ReplayOutcome[];
   knowledgeNodes: number;
   knowledgeRecords: number;
-  worklistOperations: 0;
-  cursorOperations: 0;
   warnings: string[];
 };
 
@@ -108,8 +106,6 @@ export async function replayCycles(options: ReplayOptions): Promise<ReplayResult
     curatorOutcomes,
     knowledgeNodes: nodes.length,
     knowledgeRecords,
-    worklistOperations: 0,
-    cursorOperations: 0,
     warnings,
   };
 }

@@ -5,7 +5,7 @@ import type { MastraEmbeddingModel, MastraVector } from '@mastra/core/vector';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { Memory, Subconscious } from '../../../index';
-import { SubconsciousCurateExtractor } from '../subconscious/curate';
+import { resolveCuratorScope, SubconsciousCurateExtractor } from '../subconscious/curate';
 
 const semanticInfrastructure = {
   vector: {} as MastraVector,
@@ -36,12 +36,18 @@ function fixture() {
 afterEach(() => vi.restoreAllMocks());
 
 describe('Subconscious observation curator', () => {
+  it('uses the thread as the resource scope fallback', () => {
+    const { context } = fixture();
+
+    expect(resolveCuratorScope({ ...context, resourceId: undefined })).toEqual([
+      'org:acme',
+      'resource:alpha',
+      'thread:alpha',
+    ]);
+  });
+
   it('sends observations to the persistent curator thread without awaiting its run', async () => {
-    const { memory, context, extractor } = fixture();
-    const store = (await memory.storage.getStore('knowledge'))!;
-    const worklist = vi.spyOn(store, 'knowledgeBySource');
-    const getCursor = vi.spyOn(store, 'getCurationCursor');
-    const advanceCursor = vi.spyOn(store, 'advanceCurationCursor');
+    const { context, extractor } = fixture();
     const accepted = new Promise<any>(() => {});
     const sendMessage = vi.spyOn(Agent.prototype, 'sendMessage').mockReturnValue({ accepted, signal: {} } as any);
 
@@ -63,9 +69,6 @@ describe('Subconscious observation curator', () => {
       }),
     );
     expect(sendMessage.mock.calls[0]![1]!.ifIdle!.streamOptions).not.toHaveProperty('abortSignal');
-    expect(worklist).not.toHaveBeenCalled();
-    expect(getCursor).not.toHaveBeenCalled();
-    expect(advanceCursor).not.toHaveBeenCalled();
   });
 
   it('treats instruction-like observation text as delimited, untrusted evidence', async () => {
@@ -128,10 +131,9 @@ describe('Subconscious observation curator', () => {
   it('reports asynchronous curator failures without rejecting the extractor hook', async () => {
     const { context, extractor } = fixture();
     const writer = { custom: vi.fn().mockResolvedValue(undefined) };
-    vi.spyOn(Agent.prototype, 'sendMessage').mockReturnValue({
-      accepted: Promise.reject(new Error('curator failed')),
-      signal: {},
-    } as any);
+    vi.spyOn(Agent.prototype, 'sendMessage').mockImplementation(
+      () => ({ accepted: Promise.reject(new Error('curator failed')), signal: {} }) as any,
+    );
 
     await expect(extractor.onExtracted!({ ...context, writer })).resolves.toBeUndefined();
     await vi.waitFor(() =>

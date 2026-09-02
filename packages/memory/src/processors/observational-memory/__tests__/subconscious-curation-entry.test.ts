@@ -133,10 +133,9 @@ describe('direct observation curation', () => {
 
   it('isolates asynchronous curator failure from observation persistence', async () => {
     const memory = createMemory({ omModel: createMockObserverModel() });
-    vi.spyOn(Agent.prototype, 'sendMessage').mockReturnValue({
-      accepted: Promise.reject(new Error('curator unavailable')),
-      signal: {},
-    } as any);
+    vi.spyOn(Agent.prototype, 'sendMessage').mockImplementation(
+      () => ({ accepted: Promise.reject(new Error('curator unavailable')), signal: {} }) as any,
+    );
     await seedMessages(memory);
 
     const om = (await memory.omEngine)!;
