@@ -217,6 +217,36 @@ describe('ExperimentTriggerDialog', () => {
     });
   });
 
+  describe('when opened with an initial target (rerun)', () => {
+    it('pre-fills the target and sends it with the run request', async () => {
+      const { triggerCalls } = setupHandlers();
+      renderDialog({
+        initialDatasetId: 'dataset-1',
+        initialDatasetVersion: 11,
+        initialTargetType: 'agent',
+        initialTargetId: 'agent-1',
+        initialScorerIds: ['answer-relevancy'],
+      });
+
+      await screen.findByRole('combobox', { name: 'Select a dataset...' });
+      await waitFor(() => expect(screen.getByRole('option', { name: 'Agent One' })).toBeDefined());
+      expect((screen.getByRole('combobox', { name: 'Select target type' }) as HTMLSelectElement).value).toBe('agent');
+      expect((screen.getByRole('combobox', { name: 'Select agent' }) as HTMLSelectElement).value).toBe('agent-1');
+
+      await waitFor(() => expect(runButton().hasAttribute('disabled')).toBe(false));
+      fireEvent.click(runButton());
+
+      await waitFor(() => expect(triggerCalls).toHaveLength(1));
+      expect(triggerCalls[0].datasetId).toBe('dataset-1');
+      expect(triggerCalls[0].body).toMatchObject({
+        targetType: 'agent',
+        targetId: 'agent-1',
+        version: 11,
+        scorerIds: ['answer-relevancy'],
+      });
+    });
+  });
+
   describe('request context form', () => {
     it('uses the selected dataset requestContextSchema to drive the form', async () => {
       setupHandlers();

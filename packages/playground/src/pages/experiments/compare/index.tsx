@@ -1,38 +1,43 @@
 import { Button } from '@mastra/playground-ui/components/Button';
+import { ErrorState } from '@mastra/playground-ui/components/ErrorState';
 import { MainContentContent, MainContentLayout } from '@mastra/playground-ui/components/MainContent';
 import { PermissionDenied } from '@mastra/playground-ui/components/PermissionDenied';
 import { SessionExpired } from '@mastra/playground-ui/components/SessionExpired';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
-import { ArrowLeftRightIcon, ExternalLinkIcon } from 'lucide-react';
-import { useParams, useSearchParams, Link } from 'react-router';
-import { DatasetExperimentsComparison } from '@/domains/datasets';
-import { useDataset } from '@/domains/datasets/hooks/use-datasets';
+import { is401UnauthorizedError, is403ForbiddenError, is404NotFoundError } from '@mastra/playground-ui/utils/errors';
+import { ArrowLeftRightIcon } from 'lucide-react';
+import { useSearchParams } from 'react-router';
+import { useDatasetExperiment } from '@/domains/datasets/hooks/use-dataset-experiments';
+import { ExperimentsComparison } from '@/domains/experiments';
+import { useLinkComponent } from '@/lib/framework';
 
-/** Opens an experiment in a new tab so the comparison stays put. */
 function ExperimentIdLink({ experimentId }: { experimentId: string }) {
+  const { Link, paths } = useLinkComponent();
   return (
     <Button
       as={Link}
-      to={`/experiments/${experimentId}`}
-      target="_blank"
-      rel="noopener noreferrer"
+      href={paths.experimentLink(experimentId)}
       size="sm"
       aria-label={`Open experiment ${experimentId}`}
     >
       {experimentId.slice(0, 8)}
-      <ExternalLinkIcon />
     </Button>
   );
 }
 
-function CompareDatasetExperimentsPage() {
-  const { datasetId } = useParams<{ datasetId: string }>();
+function CompareExperimentsPage() {
   const [searchParams, setSearchParams] = useSearchParams();
-  const { error } = useDataset(datasetId ?? '');
+  const datasetId = searchParams.get('dataset') ?? '';
   const experimentIdA = searchParams.get('baseline') ?? '';
   const experimentIdB = searchParams.get('contender') ?? '';
+
+  // Fetch each experiment by id: the global list is paginated and may not contain them.
+  // The server 404s when an experiment does not belong to `datasetId`, which enforces same-dataset comparison.
+  const experimentA = useDatasetExperiment(datasetId, experimentIdA);
+  const experimentB = useDatasetExperiment(datasetId, experimentIdB);
+  const isLoading = experimentA.isLoading || experimentB.isLoading;
+  const error = experimentA.error ?? experimentB.error;
 
   if (error && is401UnauthorizedError(error)) {
     return (
@@ -48,7 +53,7 @@ function CompareDatasetExperimentsPage() {
     return (
       <MainContentLayout>
         <div className="flex h-full items-center justify-center">
-          <PermissionDenied resource="datasets" />
+          <PermissionDenied resource="experiments" />
         </div>
       </MainContentLayout>
     );
@@ -61,8 +66,40 @@ function CompareDatasetExperimentsPage() {
           <div className="text-neutral4 py-8 text-center">
             <p>Select two experiments to compare.</p>
             <p className="mt-2 text-sm">
-              Use the URL format: /datasets/{'{datasetId}'}/experiments?baseline={'{experimentIdA}'}&contender=
+              Use the URL format: /experiments/compare?dataset={'{datasetId}'}&baseline={'{experimentIdA}'}&contender=
               {'{experimentIdB}'}
+            </p>
+          </div>
+        </MainContentContent>
+      </MainContentLayout>
+    );
+  }
+
+  if (isLoading) return null;
+
+  if (error && !is404NotFoundError(error)) {
+    return (
+      <MainContentLayout>
+        <div className="flex h-full items-center justify-center">
+          <ErrorState title="Failed to load experiments" message={error.message} />
+        </div>
+      </MainContentLayout>
+    );
+  }
+
+  // 404 (or no data): the experiment does not exist or belongs to another dataset.
+  if (error || !experimentA.data || !experimentB.data) {
+    return (
+      <MainContentLayout>
+        <MainContentContent>
+          <div className="text-neutral4 py-8 text-center">
+            <p>Experiments must belong to the same dataset ({datasetId}) to be compared.</p>
+            <p className="mt-2 flex items-center justify-center gap-2 text-sm">
+              One of
+              <ExperimentIdLink experimentId={experimentIdA} />
+              and
+              <ExperimentIdLink experimentId={experimentIdB} />
+              was not found in it.
             </p>
           </div>
         </MainContentContent>
@@ -90,7 +127,11 @@ function CompareDatasetExperimentsPage() {
 
             <Tooltip>
               <TooltipTrigger asChild>
-                <Button onClick={() => setSearchParams({ baseline: experimentIdB, contender: experimentIdA })}>
+                <Button
+                  onClick={() =>
+                    setSearchParams({ dataset: datasetId, baseline: experimentIdB, contender: experimentIdA })
+                  }
+                >
                   <ArrowLeftRightIcon />
                   Swap sides
                 </Button>
@@ -99,16 +140,12 @@ function CompareDatasetExperimentsPage() {
             </Tooltip>
           </div>
 
-          <DatasetExperimentsComparison
-            datasetId={datasetId}
-            experimentIdA={experimentIdA}
-            experimentIdB={experimentIdB}
-          />
+          <ExperimentsComparison datasetId={datasetId} experimentIdA={experimentIdA} experimentIdB={experimentIdB} />
         </div>
       </MainContentContent>
     </MainContentLayout>
   );
 }
 
-export { CompareDatasetExperimentsPage };
-export default CompareDatasetExperimentsPage;
+export { CompareExperimentsPage };
+export default CompareExperimentsPage;

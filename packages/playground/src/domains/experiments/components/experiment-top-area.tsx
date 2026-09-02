@@ -5,6 +5,7 @@ import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { ExperimentFlowChain } from '@/domains/experiments/components/experiment-flow-chain';
 import { ExperimentMetaBar } from '@/domains/experiments/components/experiment-meta-bar';
 import { ExperimentStatusIcon } from '@/domains/experiments/components/experiment-stats';
+import { RerunExperimentButton } from '@/domains/experiments/components/rerun-experiment-button';
 import { useLinkComponent } from '@/lib/framework';
 
 export interface ExperimentTopAreaProps {
@@ -40,6 +41,7 @@ export function ExperimentTopArea({ experiment }: ExperimentTopAreaProps) {
           </div>
         </PageLayout.Column>
         <PageLayout.Column className="justify-items-end gap-3">
+          <RerunExperimentButton experiment={experiment} />
           {experiment.agentVersion && (
             <DataKeysAndValues numOfCol={1}>
               <DataKeysAndValues.Key>Version</DataKeysAndValues.Key>

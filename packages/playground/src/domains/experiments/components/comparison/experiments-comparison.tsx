@@ -1,22 +1,21 @@
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { ExternalLinkIcon } from 'lucide-react';
 import { useMemo } from 'react';
-import { useCompareExperiments } from '../../hooks/use-compare-experiments';
-import {
-  useDatasetExperiment,
-  useDatasetExperimentResults,
-  useScoresByExperimentId,
-} from '../../hooks/use-dataset-experiments';
 import { buildComparisonRows } from './build-comparison-rows';
 import { ComparisonItemPayload } from './comparison-item-payload';
 import { ComparisonSideCell } from './comparison-side-cell';
 import { ComparisonSideHeader } from './comparison-side-header';
 import { ScoreDelta } from './score-delta';
+import { useCompareExperiments } from '@/domains/datasets/hooks/use-compare-experiments';
+import {
+  useDatasetExperiment,
+  useDatasetExperimentResults,
+  useScoresByExperimentId,
+} from '@/domains/datasets/hooks/use-dataset-experiments';
 import { useLinkComponent } from '@/lib/framework';
 
-interface DatasetExperimentsComparisonProps {
+interface ExperimentsComparisonProps {
   datasetId: string;
   experimentIdA: string;
   experimentIdB: string;
@@ -28,11 +27,7 @@ const cell = 'min-w-0 px-4 py-3';
  * Three-column comparison table of two dataset experiments. Every item is a
  * row, with the baseline and contender side by side so a change reads as a diff.
  */
-export function DatasetExperimentsComparison({
-  datasetId,
-  experimentIdA,
-  experimentIdB,
-}: DatasetExperimentsComparisonProps) {
+export function ExperimentsComparison({ datasetId, experimentIdA, experimentIdB }: ExperimentsComparisonProps) {
   const { Link, paths } = useLinkComponent();
   const { data: comparison, isLoading, error } = useCompareExperiments(datasetId, experimentIdA, experimentIdB);
 
@@ -165,8 +160,6 @@ export function DatasetExperimentsComparison({
               <div role="cell" className={`${cell} grid content-start gap-1`}>
                 <Link
                   href={paths.datasetItemLink(datasetId, row.itemId)}
-                  target="_blank"
-                  rel="noopener noreferrer"
                   aria-label={`Open item ${row.itemId}`}
                   className={cn(
                     'text-ui-sm flex items-start gap-1.5 font-mono break-all hover:underline [&>svg]:mt-0.5 [&>svg]:size-3.5 [&>svg]:shrink-0',
@@ -174,7 +167,6 @@ export function DatasetExperimentsComparison({
                   )}
                 >
                   <span className="min-w-0">{row.itemId}</span>
-                  <ExternalLinkIcon />
                 </Link>
                 {deltas.length > 0 && (
                   <span className="flex flex-wrap items-center gap-2">

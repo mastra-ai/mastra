@@ -5,9 +5,6 @@ packages:
   - "@mastra/core"
 ---
 
-import Steps from "@site/src/components/Steps";
-import StepItem from "@site/src/components/StepItem";
-
 # Datasets
 
 **Added in:** `@mastra/core@1.4.0`
@@ -59,7 +56,7 @@ Visit the [`DatasetsManager` reference](/reference/datasets/datasets-manager) fo
 
 You can also manage datasets in [Studio](/docs/studio/overview). After opening Studio, select **Datasets** from the sidebar to see all your available datasets or create a new one.
 
-To get started, select **Create Dataset** and set a name, description, and optional schemas. After confirming, you'll see the dataset details page with two tabs: **Items** and [**Experiments**](/docs/datasets/running-experiments#studio).
+To get started, select **Create Dataset** and set a name, description, and optional schemas. After confirming, you'll see the dataset details page with two tabs: **Items** and [**Experiments**](/docs/evals/experiments#run-experiments-in-studio).
 
 In the **Items** view you can add, update, and delete items, and view version history. Select **Add Item** to insert a new item with JSON editors for input and ground truth. From this view you can also import items in bulk from a CSV or JSON file. When importing, map each column to the corresponding dataset field.
 
@@ -208,11 +205,11 @@ Fetch the exact items that existed at a past version:
 const items = await dataset.listItems({ version: 2 })
 ```
 
-You can also pin experiments to a version, see [running experiments](/docs/datasets/running-experiments). Visit the [`Dataset` reference](/reference/datasets/dataset) for the full list of methods and parameters.
+You can also pin experiments to a version, see [running experiments](/docs/evals/experiments). Visit the [`Dataset` reference](/reference/datasets/dataset) for the full list of methods and parameters.
 
 ## Related
 
-- [Running experiments](/docs/datasets/running-experiments)
+- [Experiments](/docs/evals/experiments)
 - [Scorers overview](/docs/evals/overview)
 - [DatasetsManager reference](/reference/datasets/datasets-manager)
 - [Dataset reference](/reference/datasets/dataset)

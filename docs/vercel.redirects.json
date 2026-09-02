@@ -842,12 +842,12 @@
     },
     {
       "source": "/docs/observability/datasets/overview",
-      "destination": "/docs/datasets/overview",
+      "destination": "/docs/evals/datasets",
       "permanent": true
     },
     {
       "source": "/docs/observability/datasets/running-experiments",
-      "destination": "/docs/datasets/running-experiments",
+      "destination": "/docs/evals/experiments",
       "permanent": true
     },
     {
@@ -1203,11 +1203,6 @@
     {
       "source": "/docs/voice/:path*",
       "destination": "/reference/voice/:path*",
-      "permanent": true
-    },
-    {
-      "source": "/docs/evals/datasets/:path*",
-      "destination": "/docs/datasets/:path*",
       "permanent": true
     },
     {
@@ -2193,6 +2188,26 @@
     {
       "source": "/docs/observability/metrics/querying",
       "destination": "/reference/observability/metrics/queries",
+      "permanent": true
+    },
+    {
+      "source": "/docs/datasets/running-experiments",
+      "destination": "/docs/evals/experiments",
+      "permanent": true
+    },
+    {
+      "source": "/docs/datasets/:path*",
+      "destination": "/docs/evals/datasets",
+      "permanent": true
+    },
+    {
+      "source": "/docs/evals/datasets/overview",
+      "destination": "/docs/evals/datasets",
+      "permanent": true
+    },
+    {
+      "source": "/docs/evals/datasets/running-experiments",
+      "destination": "/docs/evals/experiments",
       "permanent": true
     }
   ]
