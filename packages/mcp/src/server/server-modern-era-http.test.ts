@@ -47,6 +47,20 @@ const makeTools = () => ({
     inputSchema: z.object({}),
     execute: async (_inputData, options) => options?.mcp?.extra?.authInfo?.clientId ?? 'missing',
   }),
+  traceContextTool: createTool({
+    id: 'traceContextTool',
+    description: 'Returns request trace metadata and authenticated client ID',
+    inputSchema: z.object({}),
+    execute: async (_inputData, options) => {
+      const meta = options?.mcp?.extra?._meta;
+      return JSON.stringify({
+        traceparent: meta?.traceparent,
+        tracestate: meta?.tracestate,
+        baggage: meta?.baggage,
+        clientId: options?.mcp?.extra?.authInfo?.clientId,
+      });
+    },
+  }),
   nullTool: createTool({
     id: 'nullTool',
     description: 'Returns a null structured result',
@@ -197,6 +211,67 @@ describe('MCPServer with protocolVersion 2026-07-28 (dual-era HTTP)', () => {
       expect(result.isError).not.toBe(true);
       expect(result.structuredContent).toBeNull();
       expect(result.content).toEqual([{ type: 'text', text: 'null' }]);
+    } finally {
+      await client.close();
+    }
+  });
+
+  it('keeps W3C trace metadata request-scoped without using baggage for authorization', async () => {
+    const client = new Client(
+      { name: 'trace-context-http-client', version: '1.0.0' },
+      { versionNegotiation: { mode: { pin: '2026-07-28' } } },
+    );
+    await client.connect(new StreamableHTTPClientTransport(baseUrl));
+    const readTrace = async (_meta?: Record<string, unknown>) => {
+      const result = (await client.callTool({ name: 'traceContextTool', arguments: {}, _meta })) as {
+        content: Array<{ text?: string }>;
+      };
+      return JSON.parse(result.content[0]?.text ?? '{}');
+    };
+
+    try {
+      await expect(
+        readTrace({
+          traceparent: '00-11111111111111111111111111111111-1111111111111111-01',
+          tracestate: 'vendor=first',
+          baggage: 'clientId=attacker,tenant=one',
+        }),
+      ).resolves.toEqual({
+        traceparent: '00-11111111111111111111111111111111-1111111111111111-01',
+        tracestate: 'vendor=first',
+        baggage: 'clientId=attacker,tenant=one',
+        clientId: authInfo.clientId,
+      });
+      await expect(
+        readTrace({ traceparent: '00-22222222222222222222222222222222-2222222222222222-01' }),
+      ).resolves.toEqual({
+        traceparent: '00-22222222222222222222222222222222-2222222222222222-01',
+        clientId: authInfo.clientId,
+      });
+      await expect(readTrace()).resolves.toEqual({ clientId: authInfo.clientId });
+    } finally {
+      await client.close();
+    }
+  });
+
+  it('exposes malformed and oversized W3C values opaquely without crashing tool execution', async () => {
+    const client = new Client(
+      { name: 'trace-context-invalid-http-client', version: '1.0.0' },
+      { versionNegotiation: { mode: { pin: '2026-07-28' } } },
+    );
+    await client.connect(new StreamableHTTPClientTransport(baseUrl));
+    const baggage = `value=${'x'.repeat(9000)}`;
+    try {
+      const result = (await client.callTool({
+        name: 'traceContextTool',
+        arguments: {},
+        _meta: { traceparent: 'not-a-traceparent', baggage },
+      })) as { content: Array<{ text?: string }> };
+      expect(JSON.parse(result.content[0]?.text ?? '{}')).toEqual({
+        traceparent: 'not-a-traceparent',
+        baggage,
+        clientId: authInfo.clientId,
+      });
     } finally {
       await client.close();
     }
