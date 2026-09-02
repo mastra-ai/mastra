@@ -9796,6 +9796,8 @@ export type PostObservabilityFeedback_Body = {
           [key: string]: unknown;
         } | null)
       | undefined;
+    /** Feedback review workflow status */
+    reviewStatus?: ('needs-review' | 'reviewed') | undefined;
   };
 };
 
