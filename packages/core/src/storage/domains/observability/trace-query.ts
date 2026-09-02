@@ -197,8 +197,8 @@ export type TraceQueryPredicate =
   | { spans: { some: TraceQueryScalarPredicate } | { none: TraceQueryScalarPredicate } }
   | { scores: { some: TraceQueryScalarPredicate } | { none: TraceQueryScalarPredicate } };
 
-export type TraceQueryRequest = z.input<typeof traceQueryRequestSchema>;
-export type NormalizedTraceQueryRequest = z.output<typeof traceQueryRequestSchema>;
+export type TraceQueryRequest = z.input<typeof traceQueryRequestObjectSchema>;
+export type NormalizedTraceQueryRequest = z.output<typeof traceQueryRequestObjectSchema>;
 export type TraceQueryTrace = z.infer<typeof traceQueryTraceSchema>;
 export type TraceQueryTraceResponse = z.infer<typeof traceQueryTraceResponseSchema>;
 export type TraceQueryGroupResponse = z.infer<typeof traceQueryGroupResponseSchema>;
