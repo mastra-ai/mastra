@@ -3300,7 +3300,11 @@ export function createObservabilityVNextTests(options: CreateObservabilityVNextT
         expect(updated.feedbackId).toBe('feedback-review-update');
         expect(updated.reviewStatus).toBe('reviewed');
 
+        // Append-only stores (ClickHouse) implement the update as a replacement
+        // row; the read side must still expose a single, latest version.
         const result = await storage.listFeedback({ filters: { traceId: 'trace-review-update' } });
+        expect(result.feedback).toHaveLength(1);
+        expect(result.pagination?.total).toBe(1);
         expect(result.feedback[0]!.reviewStatus).toBe('reviewed');
       });
 
