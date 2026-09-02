@@ -95,6 +95,8 @@ function trustedQuestion(messages: unknown, replyId: string, threadId: string, r
     if (!dbMessage) return false;
     const metadata = getRemindMessageMetadata(dbMessage);
     if (metadata?.type === 'question' && metadata.replyId === replyId) return true;
+    // A row that already declares some other remind type is never text-matched as a question.
+    if (metadata) return false;
     return isRemindInputMessage(dbMessage) && messageText(message).startsWith(`Memory question ${replyId}\n`);
   });
 }

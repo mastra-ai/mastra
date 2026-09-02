@@ -2,4 +2,4 @@
 '@mastra/memory': patch
 ---
 
-Fix reminder sidekick continuation not recognizing persisted questions.
+Fix the reminder sidekick not recognizing its own persisted question and passive-check rows, which blocked continuation nudges and reply authorization.

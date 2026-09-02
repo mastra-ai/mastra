@@ -9,7 +9,7 @@ import type { JSONSchema7 } from 'json-schema';
 import type { Memory } from '../../..';
 import { createKnowledgeTools } from './knowledge-tools';
 import { RemindContinuationProcessor } from './remind-continuation';
-import { getRemindMessageMetadata } from './remind-protocol';
+import { getRemindMessageMetadata, isRemindInputMessage } from './remind-protocol';
 import type { SubconsciousModel } from './types';
 
 const DEFAULT_INSTRUCTIONS = `Review passive reminder checks and memory questions in this conversation. Use the knowledge tools when more context is needed.
@@ -82,7 +82,7 @@ function passiveCheck(
     if (isStoredMessage && (dbMessage.threadId !== threadId || dbMessage.resourceId !== resourceId)) continue;
     const metadata = getRemindMessageMetadata(dbMessage);
     if (metadata?.type === 'passive-check' && metadata.eventId === eventId) return metadata;
-    if (dbMessage.role !== 'user') continue;
+    if (metadata || !isRemindInputMessage(dbMessage)) continue;
 
     const text = messageText(message);
     if (!text.startsWith(`Passive reminder check ${eventId}\n`)) continue;

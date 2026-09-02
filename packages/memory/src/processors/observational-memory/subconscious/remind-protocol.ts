@@ -92,8 +92,8 @@ function parseMetadata(value: unknown): RemindMessageMetadata | undefined {
 
 /**
  * Every message the reminder agent receives arrives through `agent.sendMessage()`, which persists it as a
- * `role: 'signal'` row with the signal's metadata nested under `content.metadata.signal.metadata`. Messages built
- * directly (tests, in-flight model input) carry it at the top level. Check both.
+ * `role: 'signal'` row with the signal's metadata nested under `content.metadata.signal.metadata`. Rows built
+ * directly as `MastraDBMessage` (tests) carry it at the top level. Check both.
  */
 export function getRemindMessageMetadata(message: MastraDBMessage): RemindMessageMetadata | undefined {
   const metadata = message.content.metadata as Record<string, unknown> | undefined;
@@ -104,7 +104,10 @@ export function getRemindMessageMetadata(message: MastraDBMessage): RemindMessag
   return parseMetadata(signalMetadata?.[REMIND_MESSAGE_METADATA_KEY]);
 }
 
-/** True for rows that carry input to the reminder agent: persisted signals and directly built user messages. */
+/**
+ * True for rows that carry input to the reminder agent: persisted signals and directly built user messages.
+ * Callers scope rows to the owned reminder thread first, so any signal row here was addressed to this agent.
+ */
 export function isRemindInputMessage(message: MastraDBMessage): boolean {
   return message.role === 'user' || message.role === 'signal';
 }
