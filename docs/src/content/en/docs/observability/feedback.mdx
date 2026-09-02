@@ -126,7 +126,7 @@ await observability!.listFeedback({
 
 ## Delete feedback
 
-Use `deleteFeedback()` to remove feedback records by id, for example when a comment contains sensitive data that must be purged. Deletion is idempotent, and the optional `organizationId` and `resourceId` fields restrict the delete to a single tenant's records. In Studio, each comment on a trace or span Feedback tab has a delete action.
+Use `deleteFeedback()` to hide feedback records from reads by id. This is useful when a comment contains sensitive data. Deletion is idempotent. The optional `organizationId` and `resourceId` fields restrict the delete to a single tenant's records. In Studio, each comment on a trace or span Feedback tab has a delete action.
 
 ```typescript
 await observability!.deleteFeedback({
@@ -134,7 +134,7 @@ await observability!.deleteFeedback({
 })
 ```
 
-Deleted records also disappear from feedback analytics. On ClickHouse, rows in the short-lived delta table used for incremental polling aren't deleted; they expire via TTL within two days.
+Deleted records also disappear from feedback analytics. ClickHouse uses a lightweight delete to hide rows without guaranteeing immediate physical removal, so open source deployments must configure an [observability retention period](/reference/storage/retention) to physically purge them. ClickHouse keeps each deletion request for 45 days as audit and replay bookkeeping, but this retention doesn't guarantee physical purge. Short-lived delta rows aren't deleted and expire within two days.
 
 ## Query feedback analytics
 

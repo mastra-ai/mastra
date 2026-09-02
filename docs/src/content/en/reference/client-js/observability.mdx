@@ -118,7 +118,7 @@ const response = await mastraClient.createFeedback({
 
 ### Deleting feedback
 
-Delete feedback records by id. Deletion is idempotent — missing ids are ignored — and can optionally be scoped to a tenant with `organizationId` and `resourceId`:
+Delete feedback records by id. Deletion is idempotent, so missing ids are ignored. You can scope the deletion to a tenant with `organizationId` and `resourceId`:
 
 ```typescript
 await mastraClient.deleteFeedback({
