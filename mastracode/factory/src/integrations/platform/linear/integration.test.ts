@@ -18,7 +18,7 @@ vi.mock('./event-worker.js', () => ({
 import { PlatformLinearIntegration } from './integration.js';
 
 const config = {
-  baseUrl: 'https://platform.example.com/v1',
+  baseUrl: 'https://platform.example.com',
   accessToken: 'platform-token',
 };
 const workspace = {

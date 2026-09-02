@@ -24,7 +24,6 @@ The proxy URL defaults to `https://workspaces.mastra.ai`. Set `MASTRA_PLATFORM_R
 
 Requests to the proxy are authenticated with `Authorization: Bearer <accessToken>`. For sandbox requests authenticated with a project access token, set `actingUserId` to the stable opaque user subject from your authentication system. It is sent as `x-acting-user-id` for token partitioning and attribution; it is not an authorization claim.
 
-
 ## Usage
 
 ```typescript

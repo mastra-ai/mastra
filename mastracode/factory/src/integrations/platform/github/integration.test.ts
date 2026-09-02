@@ -10,7 +10,7 @@ import { createPlatformStorageForTests, mountApiRoutes } from '../test-utils.js'
 import { PlatformGithubIntegration } from './integration.js';
 
 const config = {
-  baseUrl: 'https://platform.example.com/v1',
+  baseUrl: 'https://platform.example.com',
   accessToken: 'platform-token',
 };
 
