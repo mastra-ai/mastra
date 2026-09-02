@@ -24,6 +24,8 @@ import { withClientWriteLock } from './write-lock';
  * Base configuration options shared across LibSQL domain configurations
  */
 export type LibSQLDomainBaseConfig = {
+  /** @internal Identifies the physical backend and namespace for keyed Knowledge isolation. */
+  storageIsolationKey?: unknown;
   /**
    * Maximum number of retries for write operations if an SQLITE_BUSY error occurs.
    * @default 5
