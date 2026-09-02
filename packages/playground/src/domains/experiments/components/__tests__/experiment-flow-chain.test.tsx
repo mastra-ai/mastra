@@ -75,6 +75,19 @@ describe('ExperimentFlowChain', () => {
     await waitForMutationsIdle(queryClient);
   });
 
+  it('opens the dataset and target links in the same tab', async () => {
+    const { queryClient } = renderChain(agentExperiment);
+
+    const datasetLink = await screen.findByRole('link', { name: /Entity extraction dataset/ });
+    const targetLink = screen.getByRole('link', { name: /example-entity-extraction-agent/ });
+    for (const link of [datasetLink, targetLink]) {
+      expect(link.getAttribute('target')).toBeNull();
+      expect(link.getAttribute('rel')).toBeNull();
+    }
+
+    await waitForMutationsIdle(queryClient);
+  });
+
   it('pins the dataset version next to the dataset', async () => {
     const { queryClient } = renderChain(agentExperiment);
 

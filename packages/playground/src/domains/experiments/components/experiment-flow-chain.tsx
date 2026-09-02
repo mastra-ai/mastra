@@ -7,7 +7,7 @@ import { ProcessorIcon } from '@mastra/playground-ui/icons/ProcessorIcon';
 import { ScorersIcon } from '@mastra/playground-ui/icons/ScorersIcon';
 import { WorkflowIcon } from '@mastra/playground-ui/icons/WorkflowIcon';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { ArrowRightIcon, ExternalLinkIcon } from 'lucide-react';
+import { ArrowRightIcon } from 'lucide-react';
 import { type ReactNode, useMemo } from 'react';
 import { useAgents } from '@/domains/agents/hooks/use-agents';
 import { useScoresByExperimentId } from '@/domains/datasets/hooks/use-dataset-experiments';
@@ -69,8 +69,7 @@ function Step({ label }: { label: string }) {
   );
 }
 
-const linkClass =
-  'text-neutral5 inline-flex items-center gap-1.5 hover:underline [&>svg]:text-neutral3 [&>svg]:size-3 [&>svg]:shrink-0';
+const linkClass = 'text-neutral5 inline-flex items-center gap-1.5 hover:underline';
 
 /**
  * Reads the experiment as the pipeline it actually is: every dataset item is sent
@@ -139,15 +138,9 @@ export function ExperimentFlowChain({ experiment, className }: ExperimentFlowCha
     <div className={cn('flex items-center gap-3 overflow-x-auto', className)}>
       <Node icon={<DatasetsIcon />} typeLabel="Dataset">
         {experiment.datasetId ? (
-          <LinkComponent
-            href={paths.datasetLink(experiment.datasetId)}
-            target="_blank"
-            rel="noopener noreferrer"
-            className={linkClass}
-          >
+          <LinkComponent href={paths.datasetLink(experiment.datasetId)} className={linkClass}>
             {isDatasetLoading ? <Skeleton className="h-4 w-28" /> : (dataset?.name ?? experiment.datasetId)}
             {experiment.datasetVersion != null && <span className="text-neutral3">(v{experiment.datasetVersion})</span>}
-            <ExternalLinkIcon />
           </LinkComponent>
         ) : (
           <span className="text-neutral3">No dataset</span>
@@ -158,9 +151,8 @@ export function ExperimentFlowChain({ experiment, className }: ExperimentFlowCha
 
       <Node icon={<TargetIcon />} typeLabel={targetTypeLabel}>
         {href ? (
-          <LinkComponent href={href} target="_blank" rel="noopener noreferrer" className={linkClass}>
+          <LinkComponent href={href} className={linkClass}>
             {targetName()}
-            <ExternalLinkIcon />
           </LinkComponent>
         ) : (
           <span className="text-neutral3">{targetName()}</span>
