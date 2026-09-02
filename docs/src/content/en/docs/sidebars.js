@@ -288,6 +288,11 @@ const sidebars = {
             },
             {
               type: 'doc',
+              id: 'sandbox/computer',
+              label: 'Computer',
+            },
+            {
+              type: 'doc',
               id: 'sandbox/lsp',
               label: 'LSP',
             },
