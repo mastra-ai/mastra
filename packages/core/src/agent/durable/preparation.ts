@@ -37,7 +37,10 @@ import type {
   ToolsetsInput,
   ToolsInput,
 } from '../types';
-import { fireClientToolOutputHooks } from '../workflows/prepare-stream/client-tool-output-hooks';
+import {
+  applyClientToolModelOutput,
+  fireClientToolOutputHooks,
+} from '../workflows/prepare-stream/client-tool-output-hooks';
 import type { DurableAgenticWorkflowInput, RunRegistryEntry, SerializableStructuredOutput } from './types';
 import { createWorkflowInput } from './utils/serialize-state';
 import { generateDurableThreadTitle } from './workflows/finalize-run';
@@ -60,6 +63,9 @@ function snapshotRequestContextEntries(
     // workflow input and hand the resumed run an object whose methods are gone; the
     // resumed agent resolves memory from its own config instead.
     if (key === MASTRA_INHERITED_MEMORY_KEY) continue;
+    // Framework-managed per-run memory context is rebuilt from persisted run
+    // state. A caller may carry a parent run's serializable value here.
+    if (key === 'MastraMemory') continue;
     // Never persist the framework-managed bearer token in durable workflow
     // input; a resumed authenticated request supplies its own fresh token.
     if (key === MASTRA_AUTH_TOKEN_KEY) continue;
@@ -523,6 +529,13 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
       messages,
       tools,
       abortSignal: execOptions?.abortSignal,
+      logger,
+    });
+    // Apply server-defined toModelOutput to client-executed results by
+    // enriching the ingested MessageList parts.
+    await applyClientToolModelOutput({
+      messageList,
+      tools,
       logger,
     });
   }

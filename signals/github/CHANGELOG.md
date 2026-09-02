@@ -1,5 +1,42 @@
 # @mastra/github-signals
 
+## 0.4.0-alpha.1
+
+### Patch Changes
+
+- Remove `CHANGELOG.md` from distributed npm files resulting in reduced package size ([#22737](https://github.com/mastra-ai/mastra/pull/22737))
+
+- Updated dependencies [[`cf58c86`](https://github.com/mastra-ai/mastra/commit/cf58c86cb48ccc72677bdaa422e43f102683184c), [`449d112`](https://github.com/mastra-ai/mastra/commit/449d1120cc1f9c43a71308a9fd8b178cfb11355f), [`2a0ca02`](https://github.com/mastra-ai/mastra/commit/2a0ca021d95e23f1d1c0b5fe858b0b56f71fe0ba), [`ff539f6`](https://github.com/mastra-ai/mastra/commit/ff539f6dc21137fbeb3f0867f07069cbce45c15f), [`420052f`](https://github.com/mastra-ai/mastra/commit/420052fcac3fc672be17fe655667dfbdbd35a2cc), [`28ce924`](https://github.com/mastra-ai/mastra/commit/28ce924276eeca492e6a360e5482ed20c2785ef6)]:
+  - @mastra/core@1.64.0-alpha.2
+
+## 0.4.0-alpha.0
+
+### Minor Changes
+
+- Added multi-PR GitHub signal tools and improved notification filtering. ([#22407](https://github.com/mastra-ai/mastra/pull/22407))
+
+  Agents can subscribe to multiple pull requests, unsubscribe from multiple pull requests, and unsubscribe from all tracked pull requests. The tool input shape now uses a `prs` array instead of the old single-PR top-level fields.
+
+  Before:
+
+  ```json
+  { "owner": "mastra-ai", "repo": "mastra", "number": 123 }
+  ```
+
+  After:
+
+  ```json
+  { "prs": [{ "owner": "mastra-ai", "repo": "mastra", "number": 123 }] }
+  ```
+
+  Unsubscribe all:
+
+  ```json
+  { "all": true }
+  ```
+
+  GitHub signal notifications now also filter repeated low-value bot comments such as skipped CodeRabbit reviews and bot status summaries.
+
 ## 0.3.0
 
 ### Minor Changes

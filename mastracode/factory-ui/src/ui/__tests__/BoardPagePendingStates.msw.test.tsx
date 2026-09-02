@@ -190,7 +190,6 @@ function stubBoardEndpoints() {
         ],
       }),
     ),
-    http.post(`${TEST_BASE_URL}/web/github/projects/${REPO_ID}/ensure`, () => HttpResponse.json({ ok: true })),
   );
 
   return { transitionGate, transitionRequests };
@@ -478,8 +477,9 @@ describe('Board card pending states', () => {
     );
     if (!started || !unstarted) throw new Error('Expected both work item cards');
 
-    expect(started.querySelector('[data-live-session-indicator]')).toBeInTheDocument();
-    expect(unstarted.querySelector('[data-live-session-indicator]')).not.toBeInTheDocument();
+    // A bound session with nothing to report runs no marker: the way in is the mark.
+    expect(within(started).getByRole('link', { name: 'Open session' })).toBeInTheDocument();
+    expect(within(unstarted).queryByRole('link', { name: 'Open session' })).toBeNull();
   });
 
   it('acknowledges a session start from the card details while it is still resolving the session', async () => {

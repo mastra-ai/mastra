@@ -1,125 +1,91 @@
-import { Button } from '@mastra/playground-ui/components/Button';
 import { Drawer, DrawerContent } from '@mastra/playground-ui/components/Drawer';
 import { Popover, PopoverContent } from '@mastra/playground-ui/components/Popover';
-import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
 import { useIsMobile } from '@mastra/playground-ui/hooks/use-is-mobile';
-import { useMeasuredAutoHeight } from '@mastra/playground-ui/hooks/use-measured-auto-height';
+import { cn } from '@mastra/playground-ui/utils/cn';
 import type { ReactNode } from 'react';
-import { useState } from 'react';
+import { createPortal } from 'react-dom';
 
 import { cardMorphStyle } from '../hooks/useCardMorph';
 import type { CardMorph } from '../hooks/useCardMorph';
 import './cardMorph.css';
 
-// Both card kinds open this one panel, so the geometry and the motion are decided once.
+// Both card kinds open this one panel: the card's own rows in a box over the
+// card, and a tray beneath them for what the card never carried.
 export function CardDetailsPanel({
   morph,
   labelledBy,
+  header,
   children,
 }: {
   morph: CardMorph;
   labelledBy: string;
+  /** The card's rows, laid out exactly as the card lays them out. */
+  header: ReactNode;
+  /** The tray. */
   children: ReactNode;
 }) {
-  // The content lays out unconstrained and the box follows, so a description arriving late grows the panel.
-  const content = useMeasuredAutoHeight<HTMLDivElement>();
   const isMobile = useIsMobile();
 
-  if (!morph.mounted) return null;
-
   // No room to grow a card into a panel on a phone: the details come up as a sheet instead.
+  // Its root sits in the tree closed, so the first open has a closed frame to transition from.
   if (isMobile) {
     return (
       <Drawer open={morph.open} onOpenChange={open => !open && morph.closeDetails()}>
-        <DrawerContent aria-labelledby={labelledBy} showCloseButton={false} className="max-h-[85dvh]">
-          <div className="flex min-h-0 flex-1 flex-col overflow-y-auto pb-[env(safe-area-inset-bottom)]">
-            {children}
+        <DrawerContent aria-labelledby={labelledBy} showCloseButton={false}>
+          <div className="flex max-h-[85dvh] flex-col pb-[env(safe-area-inset-bottom)]">
+            <div className="relative flex shrink-0 flex-col gap-3 p-3">{header}</div>
+            <div className="border-border1 flex min-h-0 flex-col border-t">{children}</div>
           </div>
         </DrawerContent>
       </Drawer>
     );
   }
 
-  const fromSize = cardMorphStyle(morph.cardRef.current);
+  if (!morph.mounted) return null;
 
   return (
-    <Popover open={morph.open} onOpenChange={open => !open && morph.closeDetails()}>
-      <PopoverContent
-        aria-labelledby={labelledBy}
-        anchor={morph.cardRef}
-        side="bottom"
-        align="start"
-        // Opens over the card it came from, not beside it.
-        sideOffset={({ anchor }) => -anchor.height}
-        collisionPadding={12}
-        collisionAvoidance={{ side: 'shift', align: 'shift', fallbackAxisSide: 'none' }}
-        // Bounded by the page, not by the column that clips at ~20rem.
-        collisionBoundary={document.body}
-        style={content.height === null ? fromSize : { ...fromSize, '--board-panel-h': `${content.height}px` }}
-        // A clipped box scrolls to whatever is focused, and the first tabbable sits at the far corner.
-        initialFocus={morph.panelRef}
-        ref={morph.panelRef}
-        className="board-card-details relative overflow-hidden p-0"
-      >
-        {/* Laid out at the panel's final width and clipped by the growing box,
-            so the header rows hold still instead of reflowing frame by frame.
-            Capped at the panel's own viewport budget: past it the column
-            scrolls, keeping the composer and footer actions reachable. */}
+    <>
+      {/* Dims the board under the open panel and swallows the click that lands on
+          it: closing must never press whatever sat underneath. */}
+      {createPortal(
         <div
-          ref={content.ref}
-          className="absolute top-0 left-0 flex max-h-[calc(100dvh-2rem)] w-[var(--board-panel-w)] flex-col overflow-y-auto"
+          aria-hidden
+          onPointerDown={() => morph.closeDetails()}
+          className={cn(
+            'bg-surface1/60 fixed inset-0 z-40 transition-opacity duration-200',
+            morph.open ? 'opacity-100' : 'pointer-events-none opacity-0',
+          )}
+        />,
+        document.body,
+      )}
+      <Popover open={morph.open} onOpenChange={open => !open && morph.closeDetails()}>
+        <PopoverContent
+          aria-labelledby={labelledBy}
+          anchor={morph.cardRef}
+          side="bottom"
+          align="start"
+          // Opens over the card it came from, not beside it.
+          sideOffset={({ anchor }) => -anchor.height}
+          collisionPadding={12}
+          // No room below: the stage flips above the card, still over it, and the
+          // tray rides on top. Never shifted, the rows would move with it.
+          collisionAvoidance={{ side: 'flip', align: 'none', fallbackAxisSide: 'none' }}
+          // Bounded by the page, not by the column that clips at ~20rem.
+          collisionBoundary={document.body}
+          style={cardMorphStyle(morph.cardRef.current)}
+          // A clipped box scrolls to whatever is focused, and the first tabbable sits at the far corner.
+          initialFocus={morph.panelRef}
+          ref={morph.panelRef}
+          className="board-card-details flex flex-col p-0"
         >
-          {children}
-        </div>
-      </PopoverContent>
-    </Popover>
-  );
-}
-
-const CLAMP_HEIGHT_PX = 128;
-// Only clamp when at least ~2 lines are hidden: clipping a near-fit trades 20px for a click.
-const CLAMP_TRIGGER_PX = 176;
-
-// Caps its own height rather than filling the panel, so a description-less card still opens short.
-// Long content clamps to a glance-sized excerpt behind "Show more".
-export function CardDetailsBody({
-  children,
-  maxHeight = 'min(24rem, 60vh)',
-}: {
-  children: ReactNode;
-  maxHeight?: string;
-}) {
-  const content = useMeasuredAutoHeight<HTMLDivElement>();
-  const [expanded, setExpanded] = useState(false);
-  const clamped = !expanded && content.height !== null && content.height > CLAMP_TRIGGER_PX;
-
-  return (
-    <div className="flex flex-col" data-card-morph="reveal">
-      {expanded ? (
-        <ScrollArea maxHeight={maxHeight} orientation="vertical">
-          <div className="px-3 pb-3">{children}</div>
-        </ScrollArea>
-      ) : (
-        <div className="relative overflow-hidden" style={clamped ? { maxHeight: CLAMP_HEIGHT_PX } : undefined}>
-          <div ref={content.ref} className="px-3 pb-3">
+          <div className="board-card-copy group border-border1 bg-surface3 shadow-dialog relative z-10 flex min-h-36 shrink-0 flex-col gap-3 rounded-3xl border p-2.5">
+            {header}
+          </div>
+          <div className="board-card-tray border-border1 bg-surface3 shadow-dialog relative flex flex-col overflow-hidden rounded-xl border">
             {children}
           </div>
-          {clamped && (
-            <div aria-hidden className="from-surface3 absolute inset-x-0 bottom-0 h-10 bg-linear-to-t to-transparent" />
-          )}
-        </div>
-      )}
-      {(clamped || expanded) && (
-        <Button
-          type="button"
-          variant="ghost"
-          size="xs"
-          className="mx-2 mb-1.5 self-start"
-          onClick={() => setExpanded(current => !current)}
-        >
-          {expanded ? 'Show less' : 'Show more'}
-        </Button>
-      )}
-    </div>
+        </PopoverContent>
+      </Popover>
+    </>
   );
 }

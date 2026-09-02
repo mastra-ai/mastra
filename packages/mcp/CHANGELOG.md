@@ -1,5 +1,25 @@
 # @mastra/mcp
 
+## 1.17.3-alpha.1
+
+### Patch Changes
+
+- Fixed MCP tools not validating structured tool results against the tool's output schema. Tools rebuilt from a cached catalog with toolFromDefinition / toolsFromDefinitions (and live-discovered tools whose result bypasses the SDK check) now validate structuredContent before it reaches the model, and return the same structured validation error that createTool produces on mismatch. Valid results, in-band tool errors, and results without structuredContent are unchanged. Fixes https://github.com/mastra-ai/mastra/issues/22549 ([#22779](https://github.com/mastra-ai/mastra/pull/22779))
+
+- Required @mastra/core 1.64 or newer so MCP can use the tool output validation API added in that release. ([#22817](https://github.com/mastra-ai/mastra/pull/22817))
+
+- Updated dependencies [[`decd47d`](https://github.com/mastra-ai/mastra/commit/decd47d0db2a891a6832e226557145b6658b0b19), [`285ce1c`](https://github.com/mastra-ai/mastra/commit/285ce1c1399341a37e76233aa94dbf9f1a41bd5d), [`5b5e3cc`](https://github.com/mastra-ai/mastra/commit/5b5e3cc006950b0ff9720c5be8396d4c95e8a6ac), [`045c3c7`](https://github.com/mastra-ai/mastra/commit/045c3c78f2129fea5d4467bb26cff2b49788b3d0), [`d53a056`](https://github.com/mastra-ai/mastra/commit/d53a05614893e8d1bbfdab50b42c19435e6bd065)]:
+  - @mastra/core@1.64.0-alpha.5
+
+## 1.17.3-alpha.0
+
+### Patch Changes
+
+- Remove `CHANGELOG.md` from distributed npm files resulting in reduced package size ([#22737](https://github.com/mastra-ai/mastra/pull/22737))
+
+- Updated dependencies [[`cf58c86`](https://github.com/mastra-ai/mastra/commit/cf58c86cb48ccc72677bdaa422e43f102683184c), [`449d112`](https://github.com/mastra-ai/mastra/commit/449d1120cc1f9c43a71308a9fd8b178cfb11355f), [`2a0ca02`](https://github.com/mastra-ai/mastra/commit/2a0ca021d95e23f1d1c0b5fe858b0b56f71fe0ba), [`ff539f6`](https://github.com/mastra-ai/mastra/commit/ff539f6dc21137fbeb3f0867f07069cbce45c15f), [`420052f`](https://github.com/mastra-ai/mastra/commit/420052fcac3fc672be17fe655667dfbdbd35a2cc), [`28ce924`](https://github.com/mastra-ai/mastra/commit/28ce924276eeca492e6a360e5482ed20c2785ef6)]:
+  - @mastra/core@1.64.0-alpha.2
+
 ## 1.17.2
 
 ### Patch Changes

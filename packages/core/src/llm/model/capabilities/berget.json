@@ -3,7 +3,8 @@
     "google/gemma-4-31B-it",
     "mistralai/Mistral-Medium-3.5-128B",
     "moonshotai/Kimi-K2.6",
-    "moonshotai/Kimi-K3"
+    "moonshotai/Kimi-K3",
+    "zai-org/GLM-5.3-Flash"
   ],
   "temperature": [
     "google/gemma-4-31B-it",
@@ -13,7 +14,9 @@
     "moonshotai/Kimi-K2.6",
     "openai/gpt-oss-120b",
     "zai-org/GLM-4.7",
-    "zai-org/GLM-5.2"
+    "zai-org/GLM-5.2",
+    "zai-org/GLM-5.3",
+    "zai-org/GLM-5.3-Flash"
   ],
   "structuredOutput": [
     "google/gemma-4-31B-it",
@@ -24,6 +27,8 @@
     "moonshotai/Kimi-K3",
     "openai/gpt-oss-120b",
     "zai-org/GLM-4.7",
-    "zai-org/GLM-5.2"
+    "zai-org/GLM-5.2",
+    "zai-org/GLM-5.3",
+    "zai-org/GLM-5.3-Flash"
   ]
 }

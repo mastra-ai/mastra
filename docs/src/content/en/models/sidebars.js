@@ -126,6 +126,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/above',
+          label: 'above.dev',
+        },
+        {
+          type: 'doc',
           id: 'providers/agentrouter',
           label: 'AgentRouter',
         },
@@ -248,6 +253,11 @@ const sidebars = {
           type: 'doc',
           id: 'providers/blueclaw',
           label: 'Blue Claw',
+        },
+        {
+          type: 'doc',
+          id: 'providers/bothub',
+          label: 'Bothub',
         },
         {
           type: 'doc',
@@ -516,6 +526,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/klokintegration',
+          label: 'klokintegration.se',
+        },
+        {
+          type: 'doc',
           id: 'providers/kosmik',
           label: 'Kosmik Compute',
         },
@@ -711,6 +726,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/openreason',
+          label: 'OpenReason',
+        },
+        {
+          type: 'doc',
           id: 'providers/opper',
           label: 'Opper',
         },
@@ -821,6 +841,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/sensenova',
+          label: 'SenseNova (China)',
+        },
+        {
+          type: 'doc',
           id: 'providers/siliconflow',
           label: 'SiliconFlow',
         },
@@ -926,6 +951,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/tokenrouter',
+          label: 'TokenRouter',
+        },
+        {
+          type: 'doc',
           id: 'providers/trustedrouter',
           label: 'TrustedRouter',
         },
@@ -951,6 +981,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/vancine',
+          label: 'Vancine',
+        },
+        {
+          type: 'doc',
           id: 'providers/vivgrid',
           label: 'Vivgrid',
         },
@@ -958,6 +993,11 @@ const sidebars = {
           type: 'doc',
           id: 'providers/volcengine',
           label: 'Volcengine Ark',
+        },
+        {
+          type: 'doc',
+          id: 'providers/volcengine-coding-plan',
+          label: 'Volcengine Ark Coding Plan',
         },
         {
           type: 'doc',

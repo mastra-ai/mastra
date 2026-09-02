@@ -1,6 +1,6 @@
 ---
 title: "Background tasks | Long-running agents"
-description: Learn how to dispatch long-running tool calls in the background and keep the stream open until they complete, plus orchestrate subagents asynchronously.
+description: "Run long-lived Mastra tool calls and subagents as background tasks while streams remain open, with configurable LLM behavior and completion events."
 packages:
   - "@mastra/core"
   - "@mastra/memory"
@@ -291,7 +291,7 @@ await mastra.backgroundTaskManager?.resume(taskId, {
 
 ### What happens to the agent loop
 
-When a task suspends mid-`stream()` with `untilIdle`, the wrapper treats it as terminal for the current iteration and closes. To continue the agent immediately when the resume payload is in hand, call `agent.resumeStream(resumeData, { runId, toolCallId, memory, untilIdle: true })`: the resumed bg task runs to completion and adds its result to the message list. The agent then runs a follow-up turn, all on the same SSE connection. If you'd rather drive the resume out-of-band, call `mastra.backgroundTaskManager.resume(taskId, resumeData)` directly and the result still writes into the thread for the next user turn to pick up.
+When a task suspends mid-`stream()` with `untilIdle`, the wrapper treats it as terminal for the current iteration and closes. Once the resume payload is available, call `agent.resumeStream(resumeData, { runId, toolCallId, memory, untilIdle: true })` to continue immediately. The resumed background task completes and adds its result to the message list before the agent runs a follow-up turn on the same SSE connection. To drive the resume out of band, call `mastra.backgroundTaskManager.resume(taskId, resumeData)` directly. Its result is still written into the thread for the next user turn.
 
 ### Re-registering the executor on resume
 
@@ -330,7 +330,7 @@ export const mastra = new Mastra({
 
 Calling `stream()` with no filter returns a stream of every task event in the system. On connection, the stream emits a snapshot of all currently running tasks, then forwards live events as they happen.
 
-```typescript title="src/mastra/run.ts"
+```typescript title="src/mastra/run.ts" oxfmt:false
 const bgManager = mastra.backgroundTaskManager
 if (!bgManager) throw new Error('Background tasks are not enabled')
 

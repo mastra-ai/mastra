@@ -169,7 +169,17 @@ function collectWorkflowScheduleConfigs(workflow: unknown): WorkflowScheduleConf
  * ids are URL-encoded so delimiters in user-supplied ids cannot collide
  * across workflows (e.g. `foo__bar` single vs `foo` array-entry `bar`).
  */
+function encodeDeclarativeScheduleId(id: string): string {
+  return encodeURIComponent(id).replaceAll('_', '%5F');
+}
+
 function declarativeScheduleRowId(workflowId: string, scheduleId?: string): string {
+  const encodedWorkflow = encodeDeclarativeScheduleId(workflowId);
+  if (scheduleId === undefined) return `wf_${encodedWorkflow}`;
+  return `wf_${encodedWorkflow}__${encodeDeclarativeScheduleId(scheduleId)}`;
+}
+
+function legacyDeclarativeScheduleRowId(workflowId: string, scheduleId?: string): string {
   const encodedWorkflow = encodeURIComponent(workflowId);
   if (scheduleId === undefined) return `wf_${encodedWorkflow}`;
   return `wf_${encodedWorkflow}__${encodeURIComponent(scheduleId)}`;
@@ -182,8 +192,8 @@ function declarativeScheduleRowId(workflowId: string, scheduleId?: string): stri
  * `wf_<encoded(workflowId)>__` (array form). Returns undefined when no
  * registered workflow owns the row.
  */
-function ownerWorkflowIdForRow(rowId: string, byWorkflow: Map<string, Set<string>>): string | undefined {
-  for (const workflowId of byWorkflow.keys()) {
+function ownerWorkflowIdForRow(rowId: string, workflowIds: Iterable<string>): string | undefined {
+  for (const workflowId of workflowIds) {
     const prefix = `wf_${encodeURIComponent(workflowId)}`;
     if (rowId === prefix || rowId.startsWith(`${prefix}__`)) {
       return workflowId;
@@ -562,8 +572,9 @@ export interface Config<
    * so they can be filtered by environment without passing
    * `tracingOptions.metadata.environment` on every call.
    *
-   * If unset, falls back to `process.env.NODE_ENV`. If neither is set the field
-   * is left undefined rather than guessed.
+   * If unset, resolves to `'development'` for `mastra dev` runs (detected via
+   * `MASTRA_DEV`), then falls back to `process.env.NODE_ENV`. If none of these
+   * are set the field is left undefined rather than guessed.
    *
    * Per-call `tracingOptions.metadata.environment` always takes precedence.
    *
@@ -751,6 +762,13 @@ export class Mastra<
    * zero cost beyond a boolean check.
    */
   #hasScheduledWorkflow = false;
+  /**
+   * Ids of persisted dynamic workflow definitions that failed to rehydrate at
+   * boot. Their declarative `wf_*` schedule rows are exempt from orphan
+   * deletion — the workflow still exists in storage, so its schedules aren't
+   * orphans; deleting them would silently lose the user's schedules.
+   */
+  #failedDynamicWorkflowIds = new Set<string>();
   /**
    * Set while a file-based agent schedule sync is queued, so registering a
    * batch of agents after startup triggers one sweep rather than one per agent.
@@ -1111,9 +1129,10 @@ export class Mastra<
   }
 
   /**
-   * Returns the deployment environment name configured on this Mastra instance,
-   * falling back to `process.env.NODE_ENV` when unset, or `undefined` if neither
-   * is provided.
+   * Returns the deployment environment name configured on this Mastra instance.
+   * When unset, resolves to `'development'` for `mastra dev` runs (detected via
+   * `MASTRA_DEV`), then falls back to `process.env.NODE_ENV`, or `undefined` if
+   * none are provided.
    *
    * Observability automatically reads this and attaches it to all signals so
    * consumers can filter by environment without passing
@@ -1339,9 +1358,13 @@ export class Mastra<
     // Store global version overrides
     this.#versions = config?.versions;
 
-    // Resolve deployment environment: explicit config wins, else fall back to
-    // NODE_ENV. Leave undefined if neither is set rather than guessing.
-    this.#environment = config?.environment ?? process.env.NODE_ENV;
+    // Resolve deployment environment: explicit config wins. `mastra dev` spawns
+    // its server with NODE_ENV=production so dependencies run in production
+    // mode, but flags the run with MASTRA_DEV — treat that as development so
+    // Studio telemetry isn't tagged as production. Otherwise fall back to
+    // NODE_ENV, leaving undefined if unset rather than guessing.
+    this.#environment =
+      config?.environment ?? (process.env.MASTRA_DEV === 'true' ? 'development' : process.env.NODE_ENV);
     this.#toolPayloadTransform = normalizeToolPayloadTransformPolicy(
       config?.transform ?? (config as any)?.toolPayloadProjection,
     );
@@ -1864,10 +1887,16 @@ export class Mastra<
    */
   #collectDeclarativeSchedules(): Array<{
     scheduleId: string;
+    legacyScheduleId: string;
     workflowId: string;
     cfg: WorkflowScheduleConfig;
   }> {
-    const out: Array<{ scheduleId: string; workflowId: string; cfg: WorkflowScheduleConfig }> = [];
+    const out: Array<{
+      scheduleId: string;
+      legacyScheduleId: string;
+      workflowId: string;
+      cfg: WorkflowScheduleConfig;
+    }> = [];
     const workflows = this.#workflows as Record<string, AnyWorkflow>;
     for (const workflow of Object.values(workflows ?? {})) {
       const configs = collectWorkflowScheduleConfigs(workflow);
@@ -1877,7 +1906,10 @@ export class Mastra<
         const scheduleId = isArrayForm
           ? declarativeScheduleRowId(workflow.id, cfg.id)
           : declarativeScheduleRowId(workflow.id);
-        out.push({ scheduleId, workflowId: workflow.id, cfg });
+        const legacyScheduleId = isArrayForm
+          ? legacyDeclarativeScheduleRowId(workflow.id, cfg.id)
+          : legacyDeclarativeScheduleRowId(workflow.id);
+        out.push({ scheduleId, legacyScheduleId, workflowId: workflow.id, cfg });
       }
     }
     return out;
@@ -1940,7 +1972,19 @@ export class Mastra<
    * @internal — public so SchedulerWorker can call it, not part of the user API.
    */
   async registerDeclarativeSchedules(schedulesStore: SchedulesStorage): Promise<void> {
-    const declared = this.#collectDeclarativeSchedules();
+    const allRows = await schedulesStore.listSchedules();
+    const rowsById = new Map(allRows.map(row => [row.id, row]));
+    const declared = this.#collectDeclarativeSchedules().map(entry => {
+      const legacyRow = rowsById.get(entry.legacyScheduleId);
+      if (
+        entry.legacyScheduleId !== entry.scheduleId &&
+        legacyRow?.target.type === 'workflow' &&
+        legacyRow.target.workflowId === entry.workflowId
+      ) {
+        return { ...entry, scheduleId: entry.legacyScheduleId };
+      }
+      return entry;
+    });
     const declaredIds = new Set(declared.map(d => d.scheduleId));
 
     // Group declared ids by workflow so we can detect orphans (rows that
@@ -1964,7 +2008,7 @@ export class Mastra<
 
     for (const { scheduleId, workflowId, cfg } of declared) {
       try {
-        const existing = await schedulesStore.getSchedule(scheduleId);
+        const existing = rowsById.get(scheduleId);
         const now = Date.now();
         const target: Schedule['target'] = {
           type: 'workflow',
@@ -2031,11 +2075,29 @@ export class Mastra<
     //      loops (see WorkflowEventProcessor#dispatch).
     // User-created schedules (via the schedules API) don't use the `wf_`
     // prefix, so they're untouched.
-    const allRows = await schedulesStore.listSchedules();
     for (const row of allRows) {
       if (declaredIds.has(row.id)) continue;
       if (!row.id.startsWith('wf_')) continue;
-      const ownerWorkflowId = ownerWorkflowIdForRow(row.id, declaredIdsByWorkflow) ?? ownerWorkflowIdFromRowId(row.id);
+      // A dynamic workflow that failed to rehydrate is not deleted — keep its
+      // schedule rows so a later successful boot picks them back up. Match by
+      // generated row-id prefix (not by decoding the row id): workflow ids may
+      // themselves contain `__`, which `encodeURIComponent` doesn't escape, so
+      // decoding the segment before the first `__` can recover the wrong id.
+      const targetWorkflowId = row.target.type === 'workflow' ? row.target.workflowId : undefined;
+      const failedOwnerId =
+        targetWorkflowId && this.#failedDynamicWorkflowIds.has(targetWorkflowId)
+          ? targetWorkflowId
+          : ownerWorkflowIdForRow(row.id, this.#failedDynamicWorkflowIds);
+      if (failedOwnerId !== undefined) {
+        this.#logger?.warn?.(
+          `Keeping declarative schedule "${row.id}": dynamic workflow "${failedOwnerId}" failed to load this boot.`,
+        );
+        continue;
+      }
+      const ownerWorkflowId =
+        targetWorkflowId ??
+        ownerWorkflowIdForRow(row.id, declaredIdsByWorkflow.keys()) ??
+        ownerWorkflowIdFromRowId(row.id);
       if (!ownerWorkflowId) continue;
       try {
         await schedulesStore.deleteSchedule(row.id);
@@ -4873,6 +4935,12 @@ export class Mastra<
     (this.#workflows as Record<string, AnyWorkflow>)[key] = workflow;
     this.#hiddenWorkflowKeys.delete(key);
     this.registerStaticWorkflowScorers(workflow);
+    if (collectWorkflowScheduleConfigs(workflow).length > 0) {
+      this.#hasScheduledWorkflow = true;
+    }
+    // Declarative schedule (re-)registration happens in addDynamicWorkflows()
+    // after definition persistence succeeds, so a persistence failure can't
+    // leave schedule rows reflecting a rolled-back registry.
   }
 
   /**
@@ -4991,6 +5059,7 @@ export class Mastra<
         stateSchema: def.stateSchema,
         requestContextSchema: def.requestContextSchema,
         graph: def.graph,
+        schedule: def.schedule,
       }),
     }));
 
@@ -5070,12 +5139,33 @@ export class Mastra<
             stateSchema: normalized.stateSchema,
             requestContextSchema: normalized.requestContextSchema,
             graph: normalized.graph,
+            schedule: normalized.schedule,
           });
         }
       }
     } catch (error) {
       restoreRegistry();
       throw error;
+    }
+
+    // Synchronize declarative schedules only after every registry replacement
+    // and definition upsert has succeeded. Run for every replacement — a
+    // replacement that dropped its schedules must still sweep the old wf_*
+    // rows. A sync failure is logged, not thrown: the registry and persisted
+    // definitions are already consistent, and the next boot re-syncs.
+    const worker = this.#findSchedulerWorker();
+    if (worker?.scheduler) {
+      try {
+        const schedulesStore = await this.#storage?.getStore('schedules');
+        if (schedulesStore) {
+          await this.registerDeclarativeSchedules(schedulesStore);
+        }
+      } catch (error) {
+        this.#logger?.error('Failed to synchronize declarative schedules after dynamic workflow registration', {
+          workflowIds: ordered.map(({ normalized }) => normalized.id),
+          error,
+        });
+      }
     }
   }
 
@@ -5091,6 +5181,7 @@ export class Mastra<
     if (!store) return;
 
     const { definitions } = await store.list({ status: 'active' });
+    this.#failedDynamicWorkflowIds.clear();
 
     // Code-registered workflows win; storage is additive.
     const pending = definitions.filter(d => !(this.#workflows as Record<string, AnyWorkflow>)[d.id]);
@@ -5126,6 +5217,7 @@ export class Mastra<
               stateSchema: def.stateSchema as Record<string, any> | undefined,
               requestContextSchema: def.requestContextSchema as Record<string, any> | undefined,
               graph: def.graph,
+              schedule: def.schedule,
             },
             this,
             // Lenient at boot (save path is strict): degrade to z.any() + warn.
@@ -5137,11 +5229,13 @@ export class Mastra<
           this.addWorkflow(workflow as AnyWorkflow, def.id);
           loaded.add(def.id);
         } catch (error) {
+          this.#failedDynamicWorkflowIds.add(def.id);
           this.#logger?.error?.(`Failed to load dynamic workflow "${def.id}"`, { error });
         }
       }
     }
     if (remaining.size > 0) {
+      for (const id of remaining.keys()) this.#failedDynamicWorkflowIds.add(id);
       const stuck = Array.from(remaining.keys()).join(', ');
       this.#logger?.error?.(
         `Failed to load dynamic workflows (cycle or unresolved nested-workflow reference): ${stuck}`,

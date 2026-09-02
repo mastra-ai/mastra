@@ -1,6 +1,6 @@
 ---
 title: "Durable agents | Long-running agents"
-description: "Learn how to wrap agents with durable execution so streams survive disconnects, process restarts, and long-running turns."
+description: "Wrap Mastra agents in durable execution so streams and long-running turns survive client disconnects and process restarts across supported runtimes."
 packages:
   - "@mastra/core"
   - "@mastra/inngest"
@@ -78,7 +78,7 @@ A durable agent adds three layers on top of a regular agent:
 
 1. **Workflow execution**: `stream()` serializes the messages and options into a workflow input, then triggers the agentic loop inside a durable workflow. The workflow runs the same loop as `Agent.stream()` but each step can be memoized and replayed.
 
-1. **PubSub streaming**: As the loop runs, chunks are published to a PubSub topic keyed by the run ID. The caller subscribes to this topic and pipes chunks into a `ReadableStream`. If the caller disconnects and reconnects, missed chunks are replayed from the cache.
+1. **PubSub streaming**: The loop publishes chunks to a PubSub topic keyed by the run ID. The caller subscribes to that topic and pipes the chunks into a `ReadableStream`, while the cache replays any chunks missed during a disconnect.
 
 1. **Cache layer**: An optional cache (in-memory by default, Redis or another backend in production) stores published events so that a late subscriber can catch up.
 

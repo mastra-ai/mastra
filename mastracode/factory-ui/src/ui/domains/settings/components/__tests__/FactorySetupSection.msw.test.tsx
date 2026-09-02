@@ -45,7 +45,7 @@ function renderSection(factoryProject: FactoryProject = emptyFactory) {
 describe('FactorySetupSection', () => {
   it('given no github projects, when rendered, then the section is hidden', () => {
     renderSection();
-    expect(screen.queryByText('Worktree commands')).not.toBeInTheDocument();
+    expect(screen.queryByText('Sandbox')).not.toBeInTheDocument();
   });
 
   it('given stored commands, when rendered, then each command has its own row', async () => {
@@ -53,7 +53,7 @@ describe('FactorySetupSection', () => {
 
     renderSection(factory);
 
-    expect(await screen.findByText('Worktree commands')).toBeInTheDocument();
+    expect(await screen.findByText('Sandbox')).toBeInTheDocument();
     await waitFor(() => expect(screen.getByRole('textbox', { name: FIELD })).toHaveValue('pnpm i && pnpm build'));
     expect(screen.getByRole('textbox', { name: TEARDOWN_FIELD })).toHaveValue('pnpm local teardown');
   });
@@ -70,7 +70,7 @@ describe('FactorySetupSection', () => {
     await user.tab();
 
     await waitFor(() => expect(saved).toEqual([{ setupCommand: 'pnpm i && pnpm build', teardownCommand: null }]));
-    expect(await screen.findByText('Worktree commands saved')).toBeInTheDocument();
+    expect(await screen.findByText('Sandbox commands saved')).toBeInTheDocument();
   });
 
   it('given an unchanged field, when it is left, then nothing is saved', async () => {

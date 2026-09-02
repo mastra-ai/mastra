@@ -1,99 +1,28 @@
 /**
  * Repo materialization for GitHub-backed repositories.
  *
- * A GitHub repo is never cloned onto the server host. Instead each project gets
- * its own isolated sandbox (provisioned by the fleet in `../sandbox/fleet`) and
- * the repo is cloned *inside* that sandbox. The agent's file tools and command
- * tools then operate entirely against the remote checkout.
+ * A GitHub repo is never cloned onto the server host. The repo is cloned
+ * *inside* the session's sandbox, so the agent's file tools and command tools
+ * operate entirely against the remote checkout.
  *
- * - `ensureProjectSandbox(row)` / `teardownProjectSandbox(row)` bind the fleet's
- *   provision/reattach/teardown lifecycle to the per-(project,user) sandbox row.
  * - `materializeRepo(row, token)` runs `git clone` (first open) or `git pull`
  *   (re-open) inside the sandbox, using a short-lived installation token that is
  *   scrubbed from the git remote afterwards so it never persists in the VM.
  *
- * This module owns everything git/GitHub: clone/pull, commit/push, worktrees,
- * and `gh pr create`. Sandbox provisioning, budgets, and workdir layout live in
- * the fleet module.
+ * This module owns everything git/GitHub: clone/pull, commit/push, setup/teardown commands,
+ * and `gh pr create`. Workdir layout lives in `../sandbox/workdir`.
  */
 
-import { createHash } from 'node:crypto';
-import { reportProgress } from '../../sandbox/fleet.js';
-import type {
-  MaterializationSandbox,
-  ProgressFn,
-  SandboxBindingStore,
-  SandboxCommandResult,
-  SandboxFleet,
-} from '../../sandbox/fleet.js';
-import type {
-  ProjectRepositorySandbox,
-  SourceControlStorageHandle,
-} from '../../storage/domains/source-control/base.js';
+import type { ExecutableSandbox, SandboxCommandResult } from '../../sandbox/materialization.js';
+import type { SourceControlStorageHandle } from '../../storage/domains/source-control/base.js';
 import { timedPhase } from '../../timing.js';
 
-type SourceControlSandboxStorage = SourceControlStorageHandle['sandboxes'];
-type MaterializationStore = Pick<SourceControlSandboxStorage, 'markMaterialized'>;
+type MaterializationStore = Pick<SourceControlStorageHandle['sessions'], 'markMaterialized'>;
 
 interface RepoMaterializationBinding {
   id: string;
   sandboxWorkdir: string;
   materializedAt: Date | null;
-}
-
-/** Adapt a per-(project,user) sandbox binding row to the fleet's persistence seam. */
-function bindingStore(
-  row: ProjectRepositorySandbox,
-  storage: SourceControlSandboxStorage,
-  seedCheckpointName?: string,
-): SandboxBindingStore {
-  return {
-    sandboxId: row.sandboxId,
-    // Boot-only fallback: fresh provisions seed from the repo base checkpoint
-    // (when the builder has produced one) so materialization pulls instead of
-    // cloning. Snapshots never write here.
-    ...(seedCheckpointName ? { seedCheckpointName } : {}),
-    setSandboxId: id =>
-      id === null ? storage.clearBinding({ id: row.id }) : storage.setSandboxId({ id: row.id, sandboxId: id }),
-    clear: () => storage.clearBinding({ id: row.id }),
-  };
-}
-
-/**
- * Provision a new sandbox (persisting its provider id on first open) or
- * reattach to the stored one. Returns a started, live sandbox.
- */
-export async function ensureProjectSandbox(options: {
-  fleet: SandboxFleet;
-  row: ProjectRepositorySandbox;
-  storage: SourceControlSandboxStorage;
-  token: string;
-  onProgress?: ProgressFn;
-  /** Repo base checkpoint to seed a fresh provision from (boot-only). */
-  seedCheckpointName?: string;
-}): Promise<MaterializationSandbox> {
-  const { fleet, row, storage, token, onProgress, seedCheckpointName } = options;
-  return fleet.ensureSandbox(bindingStore(row, storage, seedCheckpointName), { GH_TOKEN: token }, onProgress, {
-    actingUserId: row.userId,
-  });
-}
-
-/**
- * Tear down a user's sandbox for a project: stop the live VM (best-effort) and
- * clear the persisted `sandboxId`/`materializedAt` on the per-(project,user)
- * binding row so the next open re-provisions cleanly.
- *
- * @param row     the per-(project,user) sandbox binding to tear down
- * @param sandbox an already-reattached live sandbox to stop, when available
- */
-export async function teardownProjectSandbox(options: {
-  fleet: SandboxFleet;
-  row: ProjectRepositorySandbox;
-  storage: SourceControlSandboxStorage;
-  sandbox?: MaterializationSandbox;
-}): Promise<void> {
-  const { fleet, row, storage, sandbox } = options;
-  return fleet.teardownSandbox(bindingStore(row, storage), sandbox);
 }
 
 /**
@@ -149,7 +78,7 @@ const SH_RETRY_DELAY_MS = 2000;
  * command as a whole.
  */
 export async function sh(
-  sandbox: MaterializationSandbox,
+  sandbox: ExecutableSandbox,
   script: string,
   options: ShOptions = {},
 ): Promise<SandboxCommandResult> {
@@ -170,7 +99,7 @@ export async function sh(
 
 /** Single `sh -c` execution attempt, bounded by the hang guard. */
 async function shOnce(
-  sandbox: MaterializationSandbox,
+  sandbox: ExecutableSandbox,
   script: string,
   options: ShOptions,
 ): Promise<SandboxCommandResult> {
@@ -226,7 +155,7 @@ function isTransientGitFailure(result: SandboxCommandResult): boolean {
  * behind — a half-written clone directory blocks the next `git clone` outright.
  */
 async function gitTransfer(
-  sandbox: MaterializationSandbox,
+  sandbox: ExecutableSandbox,
   script: string,
   options: ShOptions & { beforeRetry?: (attempt: number) => Promise<void> } = {},
 ): Promise<SandboxCommandResult> {
@@ -284,38 +213,28 @@ export interface RepoMaterializeInfo {
 
 /** Options for {@link materializeRepo}. */
 export interface MaterializeRepoOptions {
-  /** The per-(project,user) sandbox binding (provisioned via `ensureProjectSandbox`). */
+  /** The per-(project,user) sandbox binding whose workdir this materializes into. */
   row: RepoMaterializationBinding;
   /** Repo metadata from the org-owned project row. */
   repoInfo: RepoMaterializeInfo;
   /** The live sandbox to run git inside. */
-  sandbox: MaterializationSandbox;
+  sandbox: ExecutableSandbox;
   /** A freshly minted, short-lived installation access token. */
   token: string;
   storage: MaterializationStore;
-  onProgress?: ProgressFn;
-  /**
-   * Skip the default-branch `git pull --ff-only` when the workdir already
-   * holds a checkout. Set when the checkout was just seeded from a fresh base
-   * checkpoint (rebuilt on every default-branch push), where the pull is
-   * redundant network cost: session work happens on a branch that
-   * `checkoutSessionBranch` fetches fresh regardless.
-   */
-  skipPullOnExistingCheckout?: boolean;
 }
 
 /**
  * Materialize the repo inside the user's sandbox. Clones on first open, pulls on
  * re-open. Always scrubs the install token from the remote afterwards and sets
  * `materialized_at` on the per-user sandbox binding row.
- *
  */
 export async function materializeRepo(options: MaterializeRepoOptions): Promise<void> {
   return timedPhase('workspace.materialize', () => materializeRepoImpl(options));
 }
 
 async function materializeRepoImpl(options: MaterializeRepoOptions): Promise<void> {
-  const { row: sandboxRow, repoInfo, sandbox, token, storage, onProgress, skipPullOnExistingCheckout } = options;
+  const { row: sandboxRow, repoInfo, sandbox, token, storage } = options;
   const workdir = sandboxRow.sandboxWorkdir;
   const repo = repoInfo.repoFullName;
 
@@ -359,10 +278,6 @@ async function materializeRepoImpl(options: MaterializeRepoOptions): Promise<voi
       // 2a. First open: shallow-clone the default branch into the workdir. A
       // shallow single-branch clone is dramatically faster for large repos; the
       // later re-open uses `git pull --ff-only`, which works on shallow clones.
-      reportProgress(onProgress, {
-        phase: 'cloning',
-        message: `Cloning ${repo} (first open can take a minute)…`,
-      });
       // The workdir holds no usable checkout of this repo, but it may not be
       // empty: a checkpoint seed or a clone that died partway (a crashed or
       // OOM-killed server) leaves a partial tree behind, and `git clone`
@@ -380,11 +295,7 @@ async function materializeRepoImpl(options: MaterializeRepoOptions): Promise<voi
         `git clone --depth=1 --single-branch --branch ${shellQuote(repoInfo.defaultBranch)} ${shellQuote(authUrl)} ${shellQuote(workdir)}`,
         {
           phase: 'repository clone',
-          beforeRetry: async attempt => {
-            reportProgress(onProgress, {
-              phase: 'cloning',
-              message: `Lost the connection to github.com — retrying the clone (attempt ${attempt + 1})…`,
-            });
+          beforeRetry: async () => {
             // A clone that died partway leaves the destination non-empty, which
             // git refuses to clone into. Clear its contents so the retry starts
             // clean without removing LocalSandbox's process cwd.
@@ -403,20 +314,8 @@ async function materializeRepoImpl(options: MaterializeRepoOptions): Promise<voi
         throw classifyGitFailure(clone, 'clone-failed');
       }
       tokenInRemote = true;
-    } else if (skipPullOnExistingCheckout) {
-      // 2b'. Checkpoint-seeded checkout: the base checkpoint is rebuilt on
-      // every default-branch push, so the seeded default branch is already at
-      // (or minutes behind) HEAD. Skip the network pull — the session branch
-      // is fetched fresh by `checkoutSessionBranch` right after — but still
-      // point origin at the token URL so that fetch can authenticate.
-      const setUrl = await sh(sandbox, `git -C ${shellQuote(workdir)} remote set-url origin ${shellQuote(authUrl)}`);
-      if (setUrl.exitCode !== 0) {
-        throw new MaterializeError(`Failed to set git remote: ${setUrl.stderr}`, 'pull-failed');
-      }
-      tokenInRemote = true;
     } else {
       // 2b. Re-open: refresh remote to the token URL and fast-forward pull.
-      reportProgress(onProgress, { phase: 'pulling', message: `Updating ${repo} to the latest changes…` });
       const setUrl = await sh(sandbox, `git -C ${shellQuote(workdir)} remote set-url origin ${shellQuote(authUrl)}`);
       if (setUrl.exitCode !== 0) {
         throw new MaterializeError(`Failed to set git remote: ${setUrl.stderr}`, 'pull-failed');
@@ -424,11 +323,6 @@ async function materializeRepoImpl(options: MaterializeRepoOptions): Promise<voi
       tokenInRemote = true;
       const pull = await gitTransfer(sandbox, `git -C ${shellQuote(workdir)} pull --ff-only`, {
         phase: 'repository pull',
-        beforeRetry: async attempt =>
-          reportProgress(onProgress, {
-            phase: 'pulling',
-            message: `Lost the connection to github.com — retrying the update (attempt ${attempt + 1})…`,
-          }),
       });
       if (pull.exitCode !== 0) {
         if (!isBenignNonFastForward(pull)) {
@@ -440,12 +334,6 @@ async function materializeRepoImpl(options: MaterializeRepoOptions): Promise<voi
         // That checkout still holds usable work — never rebase or reset it
         // here. Leave it as-is and let the session reconcile with the remote
         // itself.
-        reportProgress(onProgress, {
-          phase: 'pulling',
-          message: isDeletedUpstreamRef(pull)
-            ? 'Workspace could not be updated from its remote — keeping the existing checkout as-is.'
-            : 'Workspace has local changes that diverge from the remote — keeping them as-is.',
-        });
       }
     }
   } catch (primary) {
@@ -461,66 +349,12 @@ async function materializeRepoImpl(options: MaterializeRepoOptions): Promise<voi
   await scrubRemote(sandbox, workdir, repo, tokenInRemote);
 
   // 4. Mark materialized.
-  reportProgress(onProgress, { phase: 'finalizing', message: 'Finalizing workspace…' });
   await storage.markMaterialized({ id: sandboxRow.id });
-}
-
-/**
- * Reset a pooled workdir that a new session just claimed: the previous
- * session's branch and dirty state must not leak into the new session, so
- * force-checkout the default branch, drop all local modifications, and delete
- * every other local branch (a surviving branch would otherwise hand the next
- * session for the same branch the previous session's stale tip instead of a
- * fresh fork from the base branch). When the claimed VM was reaped and
- * re-provisioned there is no checkout yet and this is a no-op (the clone path
- * handles it). A wedged checkout falls back to wiping the workdir so
- * `materializeRepo` re-clones inside the same VM instead of permanently
- * failing the session.
- */
-export async function recycleClaimedWorkdir(
-  sandbox: MaterializationSandbox,
-  workdir: string,
-  defaultBranch: string,
-): Promise<void> {
-  if (!/^[A-Za-z0-9_./-]+$/.test(defaultBranch)) {
-    throw new MaterializeError(`Refusing to recycle: invalid default branch '${defaultBranch}'.`, 'clone-failed');
-  }
-  const w = shellQuote(workdir);
-  const inspect = await sh(sandbox, `git -C ${w} rev-parse --is-inside-work-tree`);
-  if (inspect.exitCode !== 0) return;
-  const recycle = await sh(
-    sandbox,
-    // `-x` also drops gitignored files (.env, build caches) so no session
-    // state survives into the next claim.
-    `git -C ${w} checkout -f ${shellQuote(defaultBranch)} && git -C ${w} reset --hard && git -C ${w} clean -fdx`,
-    { phase: 'claimed workdir recycle' },
-  );
-  let failure = recycle;
-  if (recycle.exitCode === 0) {
-    // Ref names cannot contain spaces or shell metacharacters (git rejects
-    // them), so word-splitting the for-each-ref output is safe. `update-ref -d`
-    // instead of `branch -D` so deletion never trips over "not fully merged"
-    // checks; `--no-deref` so a symbolic ref pointing at the default branch
-    // deletes the symref itself rather than following it and deleting the
-    // default branch. Broken loose refs are skipped by for-each-ref and
-    // handled by the collision fallback in `checkoutSessionBranch`.
-    const sweep = await sh(
-      sandbox,
-      `set -e; for ref in $(git -C ${w} for-each-ref --format='%(refname)' refs/heads); do [ "$ref" = ${shellQuote(`refs/heads/${defaultBranch}`)} ] || git -C ${w} update-ref --no-deref -d "$ref"; done`,
-      { phase: 'claimed workdir branch sweep' },
-    );
-    if (sweep.exitCode === 0) return;
-    failure = sweep;
-  }
-  const wipe = await sh(sandbox, `rm -rf ${w}`);
-  if (wipe.exitCode !== 0) {
-    throw new MaterializeError(`Failed to recycle claimed sandbox workdir: ${failure.stderr}`, 'clone-failed');
-  }
 }
 
 /** Check out a session's branch inside its isolated repository clone. */
 export async function checkoutSessionBranch(
-  sandbox: MaterializationSandbox,
+  sandbox: ExecutableSandbox,
   workdir: string,
   options: { branch: string; baseBranch: string; token: string; repoFullName: string },
 ): Promise<void> {
@@ -528,7 +362,7 @@ export async function checkoutSessionBranch(
 }
 
 async function checkoutSessionBranchImpl(
-  sandbox: MaterializationSandbox,
+  sandbox: ExecutableSandbox,
   workdir: string,
   {
     branch,
@@ -638,7 +472,7 @@ function isBlockedByLocalWork(result: SandboxCommandResult): boolean {
  * remote (or no git dir at all) falls back to the clone path.
  */
 export async function hasExistingCheckout(
-  sandbox: MaterializationSandbox,
+  sandbox: ExecutableSandbox,
   workdir: string,
   repoFullName: string,
 ): Promise<boolean> {
@@ -650,7 +484,7 @@ export async function hasExistingCheckout(
 }
 
 /** Probed without `git -C` so a missing workdir returns false instead of throwing. */
-async function hasGitDir(sandbox: MaterializationSandbox, workdir: string): Promise<boolean> {
+async function hasGitDir(sandbox: ExecutableSandbox, workdir: string): Promise<boolean> {
   const probe = await sh(sandbox, `test -d ${shellQuote(`${workdir}/.git`)}`).catch(() => null);
   return probe?.exitCode === 0;
 }
@@ -665,7 +499,7 @@ async function hasGitDir(sandbox: MaterializationSandbox, workdir: string): Prom
  * masks the primary failure.
  */
 async function scrubRemote(
-  sandbox: MaterializationSandbox,
+  sandbox: ExecutableSandbox,
   workdir: string,
   repoFullName: string,
   tokenInRemote: boolean,
@@ -693,7 +527,7 @@ async function scrubRemote(
  * carrying the leaked-token warning in its message.
  */
 async function scrubbedFailure(
-  sandbox: MaterializationSandbox,
+  sandbox: ExecutableSandbox,
   workdir: string,
   repoFullName: string,
   tokenInRemote: boolean,
@@ -816,7 +650,7 @@ export function resolveGitIdentity(identity: GitIdentity): { name: string; email
  * the sandbox so commits are authored correctly. Values are shell-quoted.
  */
 export async function configureGitIdentity(
-  sandbox: MaterializationSandbox,
+  sandbox: ExecutableSandbox,
   workdir: string,
   identity: GitIdentity,
 ): Promise<void> {
@@ -844,7 +678,7 @@ export async function configureGitIdentity(
  * scrub to best-effort.
  */
 export async function withInstallToken<T>(
-  sandbox: MaterializationSandbox,
+  sandbox: ExecutableSandbox,
   workdir: string,
   repoFullName: string,
   token: string,
@@ -883,7 +717,7 @@ export async function withInstallToken<T>(
  * classified into actionable errors.
  */
 export async function pushBranch(
-  sandbox: MaterializationSandbox,
+  sandbox: ExecutableSandbox,
   workdir: string,
   branch: string,
   token: string,
@@ -913,12 +747,12 @@ export interface CommitResult {
  * error, so callers can safely commit-then-push without first diffing.
  *
  * @param sandbox  the live sandbox containing the checkout
- * @param workdir  the worktree (or repo) path to commit in
+ * @param workdir  the session workdir to commit in
  * @param message  the commit message (quoted; arbitrary text is safe)
  * @param identity authorship identity for the commit
  */
 export async function commitAll(
-  sandbox: MaterializationSandbox,
+  sandbox: ExecutableSandbox,
   workdir: string,
   message: string,
   identity: GitIdentity,
@@ -946,142 +780,30 @@ export async function commitAll(
 }
 
 // ---------------------------------------------------------------------------
-// Phase 2 — worktree / branch lifecycle
+// Phase 2 — setup / teardown lifecycle commands
 //
-// Each unit of work gets its own branch + working tree inside the same sandbox
-// as the base checkout. The worktree path is always computed server-side from a
-// sanitized branch name; client input never reaches a filesystem path.
+// The org-configured setup and teardown shell commands run in the session's
+// materialized workdir. The workdir is always resolved server-side from the
+// live sandbox; client input never reaches a filesystem path.
 // ---------------------------------------------------------------------------
 
-/** Error raised when a worktree cannot be created/reused inside the sandbox. */
-export class WorktreeError extends Error {
+/** Error raised when the org's setup or teardown command fails in the sandbox. */
+export class SetupCommandError extends Error {
   constructor(
     message: string,
-    readonly code: 'invalid-branch' | 'worktree-failed' | 'setup-failed' | 'teardown-failed',
+    readonly code: 'setup-failed' | 'teardown-failed',
   ) {
     super(message);
-    this.name = 'WorktreeError';
+    this.name = 'SetupCommandError';
   }
 }
 
 /**
- * Reduce a (already ref-validated) branch name to a filesystem-safe directory
- * segment for the worktree path: slashes/dots/unsafe chars collapsed to `-`.
- * This only affects the *directory name*, never the git branch itself.
- *
- * Sanitization is lossy (e.g. `feat/a` and `feat-a` both reduce to `feat-a`),
- * so an 8-char hash of the original branch is appended whenever the sanitized
- * form differs from the input. That keeps clean names (`main`) readable while
- * guaranteeing distinct branches never share a worktree directory.
- */
-export function safeBranchDir(branch: string): string {
-  const sanitized =
-    branch
-      .replace(/[^A-Za-z0-9._-]+/g, '-')
-      .replace(/\/+/g, '-')
-      .replace(/^[-.]+|[-.]+$/g, '')
-      .slice(0, 100) || 'work';
-  if (sanitized === branch) return sanitized;
-  const hash = createHash('sha256').update(branch).digest('hex').slice(0, 8);
-  return `${sanitized}-${hash}`;
-}
-
-/**
- * Compute the absolute worktree path for a branch, server-side only. Worktrees
- * live alongside the repo checkout under a sibling `worktrees/` directory so the
- * repo's `.git` is shared. Never derived from client-supplied paths.
- */
-export function computeWorktreePath(repoWorkdir: string, branch: string): string {
-  const parent = repoWorkdir.replace(/\/+$/, '').split('/').slice(0, -1).join('/') || '';
-  return `${parent}/worktrees/${safeBranchDir(branch)}`;
-}
-
-export interface EnsureWorktreeResult {
-  worktreePath: string;
-  branch: string;
-  baseBranch: string;
-  /** True when an existing worktree was reused rather than freshly created. */
-  reused: boolean;
-}
-
-/**
- * Create (or reuse) a git worktree + branch inside the sandbox for a unit of
- * work. Idempotent: if a worktree already exists at the computed path it is
- * reused. The branch is created from the freshly fetched `origin/<baseBranch>`
- * — never the sandbox's possibly stale local ref — so new worktrees always
- * start from the latest remote state.
- *
- * @param sandbox       live sandbox containing the base checkout
- * @param repoWorkdir   the base repo checkout path inside the sandbox
- * @param branch        the feature branch (ref-validated server-side)
- * @param baseBranch    the branch to fork from (ref-validated; defaults to the repo's default branch)
- * @param token         short-lived installation token used only for the base-branch fetch
- * @param repoFullName  `owner/repo` used to build the tokenized remote URL
- */
-export async function ensureWorktree(
-  sandbox: MaterializationSandbox,
-  repoWorkdir: string,
-  {
-    branch,
-    baseBranch,
-    token,
-    repoFullName,
-  }: { branch: string; baseBranch: string; token: string; repoFullName: string },
-): Promise<EnsureWorktreeResult> {
-  if (!isValidGitRef(branch)) {
-    throw new WorktreeError(`Invalid branch name '${branch}'.`, 'invalid-branch');
-  }
-  if (!isValidGitRef(baseBranch)) {
-    throw new WorktreeError(`Invalid base branch name '${baseBranch}'.`, 'invalid-branch');
-  }
-
-  const worktreePath = computeWorktreePath(repoWorkdir, branch);
-
-  // Idempotent reuse: a worktree already checked out at this path has a `.git`
-  // file (worktrees use a gitfile, not a directory). Reuse it as-is.
-  const exists = await sh(sandbox, `test -e ${shellQuote(`${worktreePath}/.git`)}`);
-  if (exists.exitCode === 0) {
-    return { worktreePath, branch, baseBranch, reused: true };
-  }
-
-  // Fetch the latest base ref from origin before forking. The explicit refspec
-  // updates `refs/remotes/origin/<base>` even when the checkout was created as
-  // a single-branch clone. The fetch needs the install token (the resting
-  // remote is tokenless), and a failure is a hard error — silently forking a
-  // stale local ref is worse than failing the request.
-  const baseRef = `origin/${baseBranch}`;
-  await withInstallToken(sandbox, repoWorkdir, repoFullName, token, async () => {
-    const fetch = await sh(
-      sandbox,
-      `git -C ${shellQuote(repoWorkdir)} fetch origin ${shellQuote(`+refs/heads/${baseBranch}:refs/remotes/${baseRef}`)}`,
-    );
-    if (fetch.exitCode !== 0) {
-      throw classifyGitFailure(fetch, 'pull-failed');
-    }
-  });
-
-  // Create the worktree. If the branch already exists, check it out into the
-  // worktree; otherwise create it from the fetched base. `git worktree add -B`
-  // creates-or-resets the branch to the base, which keeps this idempotent for a
-  // fresh worktree while still working when the branch already exists remotely.
-  // `--no-track` keeps the feature branch from tracking origin/<base>; pushes
-  // set their own upstream via `push -u`.
-  const add = await sh(
-    sandbox,
-    `git -C ${shellQuote(repoWorkdir)} worktree add --no-track -B ${shellQuote(branch)} ${shellQuote(worktreePath)} ${shellQuote(baseRef)}`,
-  );
-  if (add.exitCode !== 0) {
-    throw new WorktreeError(`git worktree add failed: ${add.stderr.trim() || add.stdout.trim()}`, 'worktree-failed');
-  }
-
-  return { worktreePath, branch, baseBranch, reused: false };
-}
-
-/**
- * Run the project's setup command (e.g. `pnpm i && pnpm build`) inside a
- * freshly created worktree. Called before the worktree is handed to any agent
- * run so the checkout is ready to build/test. A non-zero exit is a hard error —
- * starting agent work in a half-set-up tree is worse than failing the request.
+ * Run the project's setup command (e.g. `pnpm i && pnpm build`) inside the
+ * freshly materialized session workdir. Called before the checkout is handed
+ * to any agent run so it is ready to build/test. A non-zero exit is a hard
+ * error — starting agent work in a half-set-up tree is worse than failing the
+ * request.
  *
  * Security model: the command is intentionally arbitrary shell — that is the
  * feature (install deps, build, seed fixtures). It is only configurable by
@@ -1093,36 +815,36 @@ export async function ensureWorktree(
  * server host, so it grants no privilege beyond what sandbox access already
  * provides.
  *
- * @param sandbox       live sandbox containing the worktree
- * @param worktreePath  the server-computed worktree path the command runs in
- * @param command       the org-configured setup shell command
+ * @param sandbox  live sandbox containing the checkout
+ * @param workdir  the server-resolved session workdir the command runs in
+ * @param command  the org-configured setup shell command
  */
-async function runWorktreeLifecycleCommand(
-  sandbox: MaterializationSandbox,
-  worktreePath: string,
+async function runLifecycleCommand(
+  sandbox: ExecutableSandbox,
+  workdir: string,
   command: string,
   options: { phase: 'setup' | 'teardown'; timeoutMs?: number },
 ): Promise<void> {
-  const result = await sh(sandbox, `cd ${shellQuote(worktreePath)} && { ${command}\n}`, {
-    phase: `worktree ${options.phase}`,
+  const result = await sh(sandbox, `cd ${shellQuote(workdir)} && { ${command}\n}`, {
+    phase: `${options.phase} command`,
     ...(options.timeoutMs !== undefined ? { timeoutMs: options.timeoutMs } : {}),
   });
   if (result.exitCode !== 0) {
     const detail = (result.stderr.trim() || result.stdout.trim()).slice(-1800);
     const label = options.phase === 'setup' ? 'Setup' : 'Teardown';
-    throw new WorktreeError(
+    throw new SetupCommandError(
       `${label} command failed (exit ${result.exitCode}): ${detail}`,
       options.phase === 'setup' ? 'setup-failed' : 'teardown-failed',
     );
   }
 }
 
-export async function runWorktreeSetup(
-  sandbox: MaterializationSandbox,
-  worktreePath: string,
+export async function runSetupCommand(
+  sandbox: ExecutableSandbox,
+  workdir: string,
   command: string,
 ): Promise<void> {
-  return runWorktreeLifecycleCommand(sandbox, worktreePath, command, { phase: 'setup' });
+  return runLifecycleCommand(sandbox, workdir, command, { phase: 'setup' });
 }
 
 /**
@@ -1131,70 +853,17 @@ export async function runWorktreeSetup(
  * so the retirement coordinator can log them while still continuing with
  * scrub, pooling/destruction, cache invalidation, and row deletion.
  */
-export async function runWorktreeTeardown(
-  sandbox: MaterializationSandbox,
-  worktreePath: string,
+export async function runTeardownCommand(
+  sandbox: ExecutableSandbox,
+  workdir: string,
   command: string,
   options: { timeoutMs?: number } = {},
 ): Promise<void> {
-  return runWorktreeLifecycleCommand(sandbox, worktreePath, command, {
+  return runLifecycleCommand(sandbox, workdir, command, {
     phase: 'teardown',
     ...(options.timeoutMs !== undefined ? { timeoutMs: options.timeoutMs } : {}),
   });
 }
-
-/**
- * Remove a worktree (and its local feature branch) from the sandbox. The
- * checkout is removed with `--force` — the caller owns confirming that any
- * uncommitted work in it can be discarded. Idempotent: a worktree whose
- * directory is already gone only has its metadata pruned.
- *
- * @param sandbox       live sandbox containing the base checkout
- * @param repoWorkdir   the base repo checkout path inside the sandbox
- * @param branch        the worktree's feature branch (ref-validated)
- * @param worktreePath  the persisted, server-computed worktree path
- */
-export async function removeWorktree(
-  sandbox: MaterializationSandbox,
-  repoWorkdir: string,
-  { branch, worktreePath }: { branch: string; worktreePath: string },
-): Promise<void> {
-  if (!isValidGitRef(branch)) {
-    throw new WorktreeError(`Invalid branch name '${branch}'.`, 'invalid-branch');
-  }
-
-  const remove = await sh(
-    sandbox,
-    `git -C ${shellQuote(repoWorkdir)} worktree remove --force ${shellQuote(worktreePath)}`,
-  );
-  if (remove.exitCode !== 0) {
-    // Tolerate a checkout that's already gone (e.g. a fresh sandbox after
-    // re-provisioning): prune stale metadata and only fail when the directory
-    // still exists, meaning git genuinely refused to remove it.
-    await sh(sandbox, `git -C ${shellQuote(repoWorkdir)} worktree prune`);
-    const exists = await sh(sandbox, `test -e ${shellQuote(worktreePath)}`);
-    if (exists.exitCode === 0) {
-      throw new WorktreeError(
-        `git worktree remove failed: ${remove.stderr.trim() || remove.stdout.trim()}`,
-        'worktree-failed',
-      );
-    }
-  }
-
-  // Best-effort local branch cleanup; the branch may not exist locally anymore
-  // or may still be pushed remotely — neither should fail the removal.
-  await sh(sandbox, `git -C ${shellQuote(repoWorkdir)} branch -D ${shellQuote(branch)}`);
-}
-
-// ---------------------------------------------------------------------------
-// Phase 3 — `gh` CLI pull-request creation primitive
-//
-// PRs are opened from inside the sandbox with the GitHub CLI. `gh` must be
-// present in the sandbox template (preflighted only on the PR path so clone /
-// open still work when it is absent). The token is passed to `gh` via a
-// per-invocation `GH_TOKEN` env that is scoped to the single `gh` process and
-// never written to git config, a shell rc, or the VM's environment.
-// ---------------------------------------------------------------------------
 
 export interface CreatePullRequestArgs {
   /** Short-lived installation token, injected only into the `gh` process env. */
@@ -1219,7 +888,7 @@ export interface CreatePullRequestResult {
  * a missing `gh` never blocks clone/open. Surfaces an actionable error naming
  * the sandbox template requirement.
  */
-async function assertGhAvailable(sandbox: MaterializationSandbox): Promise<void> {
+async function assertGhAvailable(sandbox: ExecutableSandbox): Promise<void> {
   const version = await sh(sandbox, 'gh --version');
   if (version.exitCode !== 0) {
     throw new MaterializeError(
@@ -1245,7 +914,7 @@ function parsePullRequestUrl(stdout: string): string | undefined {
  * @param workdir the worktree (or repo) path the PR head branch is checked out in
  */
 export async function createPullRequest(
-  sandbox: MaterializationSandbox,
+  sandbox: ExecutableSandbox,
   workdir: string,
   { token, base, head, title, body }: CreatePullRequestArgs,
 ): Promise<CreatePullRequestResult> {

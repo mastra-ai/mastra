@@ -1,6 +1,6 @@
 ---
 title: "Code mode | Agents"
-description: "Let an agent run multi-tool computations in a sandbox and return a single, more accurate response."
+description: "Configure Mastra code mode so agents can run multi-tool computations in isolated local or remote sandboxes and return one accurate, consolidated response."
 packages:
   - "@mastra/core"
 ---
@@ -38,7 +38,7 @@ Each turn adds the full tool response to the agent's context window which can le
 
 With code mode, your tools keep running on the host with full validation, request context, and tracing. Only the model's orchestration code runs in the sandbox. Each `external_*` call is bridged back to the real tool on the host, and the function can reduce or aggregate results before returning one response to the agent.
 
-The function runs in a [Workspace sandbox](/docs/sandbox/overview). A sandbox is required, because code mode runs model-authored code and the execution boundary must be chosen deliberately. Pass one via `sandbox`, or run the agent in a workspace that provides one. To execute on the host machine, pass `new LocalSandbox()` explicitly. This runs the function as a host `node` process with host privileges, so only use it for trusted or local development.
+The function runs in a [Workspace sandbox](/docs/sandbox/overview). Because code mode runs model-authored code, you must choose its execution boundary deliberately by passing `sandbox` or using a workspace that provides one. Pass `new LocalSandbox()` explicitly to execute on the host machine. This runs the function as a host `node` process with host privileges, so only use it for trusted or local development.
 
 Transports that bring their own execution boundary are the exception: with [`IsolatedVmCodeModeTransport`](/reference/tools/isolated-vm-transport) the program runs in an in-process V8 isolate and no sandbox is needed (see [In-process isolation](#in-process-isolation)).
 

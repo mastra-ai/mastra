@@ -1,6 +1,6 @@
 ---
 title: "Middleware | Server"
-description: "Apply custom middleware functions to intercept requests."
+description: "Add Mastra server middleware for authentication, authorization, CORS, request logging, route blocking, and request-specific context injection."
 packages:
   - "@mastra/core"
   - "@mastra/server"
@@ -135,7 +135,7 @@ export const mastra = new Mastra({
 
 ### Authentication
 
-```typescript prettier:false
+```typescript oxfmt:false
 {
   handler: async (c, next) => {
     const authHeader = c.req.header('Authorization');
@@ -255,7 +255,7 @@ This is useful when you want to restrict operations to a specific thread that yo
 
 ### CORS support
 
-```typescript prettier:false
+```typescript oxfmt:false
 {
   handler: async (c, next) => {
     c.header('Access-Control-Allow-Origin', '*');
@@ -279,7 +279,7 @@ This is useful when you want to restrict operations to a specific thread that yo
 
 ### Request logging
 
-```typescript prettier:false
+```typescript oxfmt:false
 {
   handler: async (c, next) => {
     const start = Date.now();

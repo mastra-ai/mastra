@@ -3,10 +3,12 @@ import { http, HttpResponse } from 'msw';
 import { describe, expect, it } from 'vitest';
 
 import { server } from '../../../e2e/ui/msw-server';
-import { renderHookWithProviders, waitForMutationsIdle, TEST_BASE_URL } from '../../../e2e/ui/render';
+import { renderHookWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '../../../e2e/ui/render';
 import { queryKeys } from '../../api/keys';
+import { FeedEventsProvider, useFeedEventsConnected } from '../../ui/domains/factory/context/FeedEventsProvider';
 import type { WorkItemComment, WorkItemCommentPage } from '../../ui/domains/factory/services/commentsWire';
 import {
+  FEED_FALLBACK_POLL_MS,
   useCreateWorkItemCommentMutation,
   useDeleteWorkItemCommentMutation,
   useEditWorkItemCommentMutation,
@@ -19,6 +21,8 @@ const PROJECT_ID = 'project-1';
 const ITEM_ID = 'item-1';
 const COMMENTS_URL = `${TEST_BASE_URL}/web/factory/work-items/${ITEM_ID}/comments`;
 const BOARD_URL = `${TEST_BASE_URL}/web/factory/projects/${PROJECT_ID}/work-items`;
+/** One fallback tick plus room for the request to land. */
+const PAST_ONE_POLL_MS = FEED_FALLBACK_POLL_MS + 2_000;
 
 function wireComment(id: string, body: string): WorkItemComment {
   return {
@@ -60,11 +64,9 @@ function firstPageComments(data: { pages: WorkItemCommentPage[] } | undefined): 
 }
 
 function useFeedFromBoard() {
-  // Production wiring: the board query already flows, the feed only reads the
-  // item's activity stamp off it.
-  const board = useWorkItemsQuery(PROJECT_ID);
-  const item = board.data?.find(candidate => candidate.id === ITEM_ID);
-  return useWorkItemComments({ workItemId: ITEM_ID, feedActivityAt: item?.feedActivityAt });
+  // Production wiring: the board query flows on its own 5s poll alongside the feed.
+  useWorkItemsQuery(PROJECT_ID);
+  return useWorkItemComments({ workItemId: ITEM_ID });
 }
 
 describe('useWorkItemComments', () => {
@@ -118,7 +120,7 @@ describe('useWorkItemComments', () => {
       }),
     );
 
-    const { result } = renderHookWithProviders(() => ({
+    const { result, client } = renderHookWithProviders(() => ({
       panel: useWorkItemComments({ workItemId: ITEM_ID }),
       thread: useWorkItemComments({ workItemId: ITEM_ID }),
     }));
@@ -128,7 +130,7 @@ describe('useWorkItemComments', () => {
     expect(result.current.thread.data).toBe(result.current.panel.data);
   });
 
-  it('refetches exactly once when feedActivityAt moves on the board poll, never when it holds', async () => {
+  it('never refetches off the board poll, whatever feedActivityAt does', async () => {
     let commentRequests = 0;
     let feedActivityAt = '2026-08-26T10:00:00.000Z';
     server.use(
@@ -146,37 +148,80 @@ describe('useWorkItemComments', () => {
     await waitForMutationsIdle(client);
     expect(commentRequests).toBe(1);
 
-    // Poll tick with the same activity value: no comments refetch.
+    feedActivityAt = '2026-08-26T10:00:05.000Z';
     await act(async () => {
       await client.invalidateQueries({ queryKey: queryKeys.workItems(PROJECT_ID) });
     });
     await waitForMutationsIdle(client);
     expect(commentRequests).toBe(1);
+  });
 
-    // Activity moved (someone commented elsewhere): one comments refetch.
-    feedActivityAt = '2026-08-26T10:00:05.000Z';
-    await act(async () => {
-      await client.invalidateQueries({ queryKey: queryKeys.workItems(PROJECT_ID) });
-    });
-    await waitFor(() => expect(commentRequests).toBe(2));
+  it('polls its own fallback interval with no feed stream mounted', async () => {
+    let commentRequests = 0;
+    server.use(
+      http.get(COMMENTS_URL, () => {
+        commentRequests += 1;
+        return HttpResponse.json({ comments: [wireComment('c1', 'hello')] });
+      }),
+    );
+
+    const { result } = renderHookWithProviders(() => useWorkItemComments({ workItemId: ITEM_ID }));
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(commentRequests).toBe(1);
+
+    await waitFor(() => expect(commentRequests).toBeGreaterThan(1), { timeout: PAST_ONE_POLL_MS });
+  });
+
+  it('drops the fallback interval while the feed stream is connected', async () => {
+    let commentRequests = 0;
+    server.use(
+      http.get(COMMENTS_URL, () => {
+        commentRequests += 1;
+        return HttpResponse.json({ comments: [wireComment('c1', 'hello')] });
+      }),
+    );
+
+    const { result, client } = renderHookWithProviders(
+      () => ({
+        comments: useWorkItemComments({ workItemId: ITEM_ID }),
+        connected: useFeedEventsConnected(),
+      }),
+      {
+        inner: ({ children }) => <FeedEventsProvider factoryProjectId={PROJECT_ID}>{children}</FeedEventsProvider>,
+      },
+    );
+    await waitFor(() => expect(result.current.comments.isSuccess).toBe(true));
+    // The interval is gated on connected state, so the quiet window only
+    // starts once the stream reports connected.
+    await waitFor(() => expect(result.current.connected).toBe(true));
     await waitForMutationsIdle(client);
-    expect(commentRequests).toBe(2);
+
+    const settled = commentRequests;
+    await new Promise(resolve => setTimeout(resolve, PAST_ONE_POLL_MS));
+    expect(commentRequests).toBe(settled);
   });
 });
 
 describe('useCreateWorkItemCommentMutation', () => {
-  it('exposes the pending create through mutation state, leaves the cache untouched, then refetches once through the board poll', async () => {
+  it('holds the send in mutation state, then lands the stored row without waiting for the refetch', async () => {
     let releaseResponse!: () => void;
     const responseGate = new Promise<void>(resolve => {
       releaseResponse = resolve;
+    });
+    let releaseRefetch!: () => void;
+    const refetchGate = new Promise<void>(resolve => {
+      releaseRefetch = resolve;
     });
     let commentRequests = 0;
     let boardRequests = 0;
     let feedActivityAt = '2026-08-26T10:00:00.000Z';
     const serverComments: WorkItemComment[] = [wireComment('c1', 'hello')];
     server.use(
-      http.get(COMMENTS_URL, () => {
+      http.get(COMMENTS_URL, async () => {
         commentRequests += 1;
+        // Every read after the send is held open, so a row on screen can only
+        // have come from the create response.
+        if (commentRequests > 1) await refetchGate;
         return HttpResponse.json({ comments: [...serverComments] });
       }),
       http.get(BOARD_URL, () => {
@@ -212,11 +257,16 @@ describe('useCreateWorkItemCommentMutation', () => {
     expect(firstPageComments(result.current.comments.data)).toEqual(['hello']);
 
     releaseResponse();
-    // The settled mutation invalidates only the board; its bumped
-    // feedActivityAt drives the single comments refetch.
+    // The settled create pulls its own row back without waiting on the stream.
     await waitFor(() => expect(firstPageComments(result.current.comments.data)).toEqual(['brand new', 'hello']));
+
+    // The settled mutation invalidates only the board; its bumped
+    // feedActivityAt drives the single comments refetch, which reconciles the
+    // row that is already on screen.
+    releaseRefetch();
     await waitForMutationsIdle(client);
-    expect(commentRequests).toBe(requestsBeforeCreate.comments + 1);
+    await waitFor(() => expect(commentRequests).toBe(requestsBeforeCreate.comments + 1));
+    expect(firstPageComments(result.current.comments.data)).toEqual(['brand new', 'hello']);
     expect(boardRequests).toBe(requestsBeforeCreate.board + 1);
     // The succeeded create still shows as a row source; the list dedups it
     // against the landed server row by clientToken.

@@ -12,20 +12,25 @@ import {
   attentionItemSourceId,
   type FactoryAttentionItem,
   type FactoryAttentionView,
+  type FactoryActivityAttentionItem,
   type FactoryAutomationFailedAttentionItem,
   type FactoryMentionAttentionItem,
 } from '../../services/attention';
 import { playAttentionSoundOnce } from '../../services/attentionSound';
-import { SidebarAttention } from '../SidebarAttention';
+import { ATTENTION_PREVIEW_LIMIT, SidebarAttention } from '../SidebarAttention';
 
 const FACTORY_ID = 'factory-1';
 const DECISION_ID = 'decision-1';
 const SOUND_STORAGE_KEY = 'mastracode.attentionNotified.v2';
 const oscillatorStart = vi.fn();
 
+// The default done sound is the chime, which reaches for the whole node graph —
+// a stub short of one of these throws inside playDoneSound's silent catch and
+// the sound assertions go quiet without saying why.
 class AudioContextStub {
   state = 'running';
   currentTime = 0;
+  sampleRate = 8000;
   destination = {};
 
   resume = vi.fn();
@@ -43,11 +48,29 @@ class AudioContextStub {
   createGain() {
     return {
       gain: {
+        value: 0,
         setValueAtTime: vi.fn(),
         exponentialRampToValueAtTime: vi.fn(),
       },
       connect: vi.fn(),
     };
+  }
+
+  createWaveShaper() {
+    return { curve: null, oversample: 'none', connect: vi.fn() };
+  }
+
+  createBiquadFilter() {
+    return { type: 'lowpass', frequency: { value: 0 }, connect: vi.fn() };
+  }
+
+  createConvolver() {
+    return { normalize: true, buffer: null, connect: vi.fn() };
+  }
+
+  createBuffer(numberOfChannels: number, length: number) {
+    const channels = Array.from({ length: numberOfChannels }, () => new Float32Array(length));
+    return { numberOfChannels, getChannelData: (channel: number) => channels[channel]! };
   }
 }
 
@@ -85,6 +108,24 @@ function mentionItem(): FactoryMentionAttentionItem {
     read: false,
     archived: false,
     target: { kind: 'work-item', workItemId: 'item-1', board: 'work', commentId: 'comment-1' },
+  };
+}
+
+function activityItem(workItemId = 'item-2', title = 'Ship the retry banner'): FactoryActivityAttentionItem {
+  return {
+    key: `factory:${FACTORY_ID}:attention:activity:${workItemId}:3`,
+    kind: 'activity',
+    commentId: 'comment-9',
+    occurrence: 3,
+    workItemId,
+    title,
+    detail: 'Pushed the retry branch.',
+    authorId: 'user-3',
+    authorName: 'Grace',
+    occurredAt: '2026-08-21T10:00:00.000Z',
+    read: false,
+    archived: false,
+    target: { kind: 'work-item', workItemId, board: 'work', commentId: 'comment-9' },
   };
 }
 
@@ -128,17 +169,23 @@ function stubAttention(initialItems: FactoryAttentionItem[], initialApprovalCoun
         if (view === 'unread') return !item.read && !item.archived;
         return !item.archived;
       });
-      const latest = items[0];
+      const unread = (rows: FactoryAttentionItem[]) => rows.filter(row => !row.read && !row.archived).length;
+      const badge = items.filter(item => item.kind !== 'activity');
+      const activity = items.filter(item => item.kind === 'activity');
+      const latest = badge[0];
+      const tierParam = url.searchParams.get('tier');
+      const tiered = tierParam === 'badge' ? visible.filter(item => item.kind !== 'activity') : visible;
       return HttpResponse.json({
-        items: visible.slice(0, limit),
-        openCount: items.filter(item => !item.archived).length + approvalCount,
+        items: tiered.slice(0, limit),
+        openCount: badge.filter(item => !item.archived).length + approvalCount,
         approvalCount,
-        badgeCount: items.filter(item => !item.read && !item.archived).length + approvalCount,
-        unreadCount: items.filter(item => !item.read && !item.archived).length,
+        badgeCount: unread(badge) + approvalCount,
+        unreadCount: unread(badge),
+        activityUnreadCount: unread(activity),
         latestOccurrenceKey: latest?.key ?? null,
         latestOccurrenceAt: latest?.occurredAt ?? null,
         latestOccurrenceUnread: latest !== undefined && !latest.read && !latest.archived,
-        hasMore: visible.length > limit,
+        hasMore: tiered.length > limit,
       });
     }),
     http.post(
@@ -232,8 +279,10 @@ describe('Sidebar attention', () => {
     await waitFor(() => expect(screen.getByRole('button', { name: 'Needs attention' })).toBeInTheDocument());
   });
 
-  it('does not sound when an old item enters the five-row preview', async () => {
-    const items = Array.from({ length: 6 }, (_, index) => {
+  it('does not sound when an old item enters the preview', async () => {
+    const total = ATTENTION_PREVIEW_LIMIT + 1;
+    const beyond = `Failure ${ATTENTION_PREVIEW_LIMIT}`;
+    const items = Array.from({ length: total }, (_, index) => {
       const decisionId = `decision-${index}`;
       return {
         ...attentionItem(),
@@ -246,16 +295,20 @@ describe('Sidebar attention', () => {
     const user = userEvent.setup();
     renderAttention();
 
-    const trigger = await screen.findByRole('button', { name: 'Needs attention, 6 unread, 6 open' });
+    const trigger = await screen.findByRole('button', {
+      name: `Needs attention, ${total} unread, ${total} open`,
+    });
     await user.click(trigger);
     await screen.findByText('Failure 0');
-    expect(screen.queryByText('Failure 5')).not.toBeInTheDocument();
+    expect(screen.queryByText(beyond)).not.toBeInTheDocument();
     expect(oscillatorStart).not.toHaveBeenCalled();
 
     await user.click(screen.getByRole('button', { name: 'Archive Failure 0' }));
 
-    expect(await screen.findByText('Failure 5')).toBeVisible();
-    await screen.findByRole('button', { name: 'Needs attention, 5 unread, 5 open' });
+    expect(await screen.findByText(beyond)).toBeVisible();
+    await screen.findByRole('button', {
+      name: `Needs attention, ${ATTENTION_PREVIEW_LIMIT} unread, ${ATTENTION_PREVIEW_LIMIT} open`,
+    });
     expect(oscillatorStart).not.toHaveBeenCalled();
   });
   it('plays a new failure occurrence only after the initial baseline', async () => {
@@ -306,7 +359,7 @@ describe('Sidebar attention', () => {
 
     await user.click(await screen.findByRole('button', { name: 'Needs attention, 1 unread, 1 open' }));
 
-    expect(await screen.findByText(/Rita mentioned you/)).toBeVisible();
+    expect(await screen.findByText('mention')).toBeVisible();
     expect(screen.queryByRole('button', { name: /Retry/ })).not.toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'View card for Fix the loader' })).toHaveAttribute(
       'href',
@@ -338,9 +391,11 @@ describe('Sidebar attention', () => {
 
     await user.click(await screen.findByRole('button', { name: 'Needs attention, 12 waiting for approval, 12 open' }));
 
-    expect(screen.getByRole('link', { name: /12 items waiting for approval/i })).toHaveAttribute(
+    expect(screen.getByText('waiting for approval')).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /items waiting for approval/i })).not.toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'View all attention' })).toHaveAttribute(
       'href',
-      `/factories/${FACTORY_ID}/rules?group=proposed`,
+      `/factories/${FACTORY_ID}/attention`,
     );
     expect(screen.queryByRole('button', { name: /mark/i })).not.toBeInTheDocument();
   });
@@ -352,5 +407,17 @@ describe('Sidebar attention', () => {
 
     expect(localStorage.getItem(SOUND_STORAGE_KEY)).toContain('failure-1');
     expect(oscillatorStart).toHaveBeenCalledTimes(notesPerPlayback);
+  });
+
+  it('keeps the popover on the badge tier when newer activity fills the page', async () => {
+    const chatter = ['item-2', 'item-3', 'item-4', 'item-5', 'item-6'].map(id => activityItem(id, `Chatter on ${id}`));
+    stubAttention([...chatter, mentionItem()]);
+    const user = userEvent.setup();
+    renderAttention();
+
+    await user.click(await screen.findByRole('button', { name: 'Needs attention, 1 unread, 1 open' }));
+
+    expect(screen.getByText('Fix the loader')).toBeVisible();
+    expect(screen.queryByText(/Chatter on/)).not.toBeInTheDocument();
   });
 });
