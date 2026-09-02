@@ -1,6 +1,6 @@
 ---
 title: "Reference: Versioning | Editor"
-description: "Reference for Editor version lifecycle, selection, sub-agent propagation, source behavior, REST endpoints, and SDK methods."
+description: "Editor versions stored agents and prompt blocks. Database-backed resources use draft and publish operations."
 packages:
   - "@mastra/core"
   - "@mastra/editor"
@@ -15,7 +15,7 @@ See [Editor versioning](/docs/studio/editor#versioning) for release and experime
 
 ## Database lifecycle
 
-The resource record stores an `activeVersionId`. Individual snapshots don't store a lifecycle status.
+The resource record stores an `activeVersionId`, while individual snapshots don't store a lifecycle status.
 
 | Term | Meaning |
 | - | - |

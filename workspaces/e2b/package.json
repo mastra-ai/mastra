@@ -1,6 +1,6 @@
 {
   "name": "@mastra/e2b",
-  "version": "0.10.0-alpha.3",
+  "version": "0.11.0-alpha.5",
   "description": "E2B cloud sandbox provider for Mastra workspaces",
   "type": "module",
   "main": "dist/index.js",
@@ -37,6 +37,7 @@
   "devDependencies": {
     "@internal/lint": "workspace:*",
     "@internal/types-builder": "workspace:*",
+    "@internal/workspace": "workspace:*",
     "@internal/workspace-test-utils": "workspace:*",
     "@mastra/core": "workspace:*",
     "@mastra/gcs": "workspace:*",
@@ -54,8 +55,7 @@
     "@mastra/core": ">=1.55.0-0 <2.0.0-0"
   },
   "files": [
-    "dist",
-    "CHANGELOG.md"
+    "dist"
   ],
   "homepage": "https://mastra.ai",
   "repository": {

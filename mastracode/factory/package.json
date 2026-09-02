@@ -1,6 +1,6 @@
 {
   "name": "@mastra/factory",
-  "version": "0.10.0-alpha.12",
+  "version": "0.12.0-alpha.12",
   "description": "Mastra Software Factory module: the server core behind the Mastra Software Factory — storage domains, integrations, and surfaces for agent-powered software delivery",
   "type": "module",
   "publishConfig": {
@@ -8,8 +8,7 @@
   },
   "files": [
     "dist",
-    "factory-skills",
-    "CHANGELOG.md"
+    "factory-skills"
   ],
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -70,10 +69,11 @@
     "@mastra/libsql": "workspace:*",
     "@mastra/pg": "workspace:*",
     "@internal/types-builder": "workspace:*",
+    "@internal/workspace": "workspace:*",
     "@types/node": "22.20.1",
     "eslint": "^10.7.0",
     "tsdown": "0.22.9",
-    "typescript": "catalog:",
+    "typescript": "catalog:ts6",
     "typescript-eslint": "^8.57.0",
     "vitest": "catalog:"
   },

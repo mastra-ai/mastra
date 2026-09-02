@@ -1,6 +1,6 @@
 ---
 title: "Daytona | Sandbox"
-description: "Documentation for the DaytonaSandbox provider for isolated cloud code execution."
+description: "Run Mastra workspace commands in Daytona cloud sandboxes with custom images, resources, volumes, snapshots, streaming output, and lifecycle controls."
 packages:
   - "@mastra/daytona"
 ---
@@ -288,6 +288,37 @@ const workspace = new Workspace({
 
 Inside the sandbox, the environment variable holds an opaque placeholder. Daytona's egress proxy substitutes the real value into HTTPS request headers toward the Secret's allowed hosts, so the raw credential never enters the sandbox. Secrets are applied at sandbox creation and are preserved by `clone()`.
 
+### Computer use (desktop)
+
+Enable the [computer capability](/docs/sandbox/computer) with `computerUse`. This adds screenshot, mouse, and keyboard control to the sandbox. When the sandbox is used in a workspace, agents automatically get the `mastra_workspace_computer_*` tools.
+
+Computer use is disabled by default. Set `computerUse: true` to start the desktop processes (Xvfb, xfce4, x11vnc, noVNC) lazily on the first computer operation:
+
+```typescript
+const sandbox = new DaytonaSandbox({ computerUse: true })
+await sandbox.start()
+
+await sandbox.computer.leftClick(100, 200)
+await sandbox.computer.type('hello')
+const { data } = await sandbox.computer.screenshot() // PNG bytes
+
+// Live desktop view via the noVNC preview link
+const url = await sandbox.computer.streamUrl()
+```
+
+Pass an options object to configure the capability. For example, disable automatic desktop startup when you manage the Daytona process directly:
+
+```typescript
+const sandbox = new DaytonaSandbox({
+  computerUse: { autoStart: false },
+})
+
+await sandbox.start()
+await sandbox.daytona.computerUse.start()
+```
+
+For Daytona-specific desktop APIs (regions, compressed screenshots, screen recording, accessibility tree), use the [direct SDK access](#direct-sdk-access) escape hatch: `sandbox.daytona.computerUse`.
+
 ## Constructor parameters
 
 <PropertiesTable
@@ -357,6 +388,13 @@ Inside the sandbox, the environment variable holds an opaque placeholder. Dayton
     description: 'Environment variables to set in the sandbox.',
     isOptional: true,
     defaultValue: '{}',
+  },
+  {
+    name: 'workingDirectory',
+    type: 'string',
+    description:
+      'Default directory for command execution when no per-command `cwd` is given. A per-command `cwd` always wins. When set, the sandbox skips its automatic working-directory probe; when omitted, the probe fills the `workingDirectory` getter after start.',
+    isOptional: true,
   },
   {
     name: 'labels',
@@ -447,6 +485,14 @@ Inside the sandbox, the environment variable holds an opaque placeholder. Dayton
       "Daytona Secrets to expose inside the sandbox, mapping environment variable names to Daytona Secret names. The env var holds an opaque placeholder; the real value is substituted into HTTPS request headers at egress toward the Secret's allowed hosts.",
     isOptional: true,
   },
+  {
+    name: 'computerUse',
+    type: 'boolean | { autoStart?: boolean; noVncPort?: number }',
+    description:
+      'Computer-use (desktop) capability configuration. Set to true or provide an options object to enable the capability. Set autoStart to false to manage the desktop processes yourself. noVncPort sets the noVNC viewer port used by computer.streamUrl().',
+    isOptional: true,
+    defaultValue: 'false',
+  },
 ]}
 />
 
@@ -485,6 +531,12 @@ Inside the sandbox, the environment variable holds an opaque placeholder. Dayton
     type: 'DaytonaProcessManager',
     description:
       'Background process manager. See [SandboxProcessManager reference](/reference/workspace/process-manager).',
+  },
+  {
+    name: 'computer',
+    type: 'SandboxComputer | undefined',
+    description:
+      'Computer-use capability: screenshot, mouse, keyboard, and stream URL. Available only when computerUse is explicitly enabled. See [SandboxComputer reference](/reference/workspace/sandbox#computer-capability).',
   },
 ]}
 />

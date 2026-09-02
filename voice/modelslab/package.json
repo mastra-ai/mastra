@@ -1,11 +1,10 @@
 {
   "name": "@mastra/voice-modelslab",
-  "version": "0.2.0",
+  "version": "0.2.1-alpha.1",
   "description": "Mastra ModelsLab voice integration",
   "type": "module",
   "files": [
-    "dist",
-    "CHANGELOG.md"
+    "dist"
   ],
   "main": "dist/index.js",
   "types": "dist/index.d.ts",

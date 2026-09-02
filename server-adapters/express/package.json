@@ -1,6 +1,6 @@
 {
   "name": "@mastra/express",
-  "version": "1.5.4-alpha.10",
+  "version": "1.5.8-alpha.7",
   "description": "Mastra Express adapter for the server",
   "type": "module",
   "main": "dist/index.js",
@@ -64,8 +64,7 @@
     "node": ">=22.13.0"
   },
   "files": [
-    "dist",
-    "CHANGELOG.md"
+    "dist"
   ],
   "homepage": "https://mastra.ai",
   "repository": {

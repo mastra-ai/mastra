@@ -31,7 +31,7 @@ import type { ProviderStatus, SandboxStartOutcome, SandboxStartResult } from '..
 import { SandboxNotReadyError } from './errors';
 import { MountManager } from './mount-manager';
 import type { SandboxProcessManager } from './process-manager';
-import type { SandboxFileInput, SandboxNetworking, WorkspaceSandbox } from './sandbox';
+import type { SandboxComputer, SandboxFileInput, SandboxNetworking, WorkspaceSandbox } from './sandbox';
 import type { CommandResult, ExecuteCommandOptions, SandboxInfo } from './types';
 import { shellQuote } from './utils';
 
@@ -86,6 +86,17 @@ export interface MastraSandboxOptions {
    * overlay themselves. Update at runtime with `setEnv`.
    */
   env?: Record<string, string | undefined>;
+
+  /**
+   * Default directory for command execution and process spawns when a
+   * per-command `cwd` is not provided. A per-command `cwd` always wins.
+   *
+   * The value is passed to the provider as-is — absolute paths are
+   * recommended; `~`-prefixed paths work only where the provider documents
+   * expansion. The sandbox does not create the directory. Providers without
+   * the concept in their runtime fall back to their prior default.
+   */
+  workingDirectory?: string;
 
   /**
    * Process manager for this sandbox.
@@ -173,6 +184,9 @@ export abstract class MastraSandbox<THandle = unknown> extends MastraBase implem
   /** Optional networking capability - implement to expose public port URLs */
   readonly networking?: SandboxNetworking;
 
+  /** Optional computer-use (desktop) capability - implement to enable workspace computer tools */
+  readonly computer?: SandboxComputer;
+
   /**
    * Optional bulk file upload into the sandbox's own filesystem.
    *
@@ -245,6 +259,15 @@ export abstract class MastraSandbox<THandle = unknown> extends MastraBase implem
    */
   #env: Record<string, string | undefined>;
 
+  /**
+   * Effective default working directory, exposed via the
+   * {@link workingDirectory} getter. Protected so providers that compute or
+   * probe their effective value (e.g. a default like `/workspace`, or a
+   * runtime probe) can write it back with {@link setWorkingDirectory} and
+   * keep the getter truthful.
+   */
+  protected _workingDirectory?: string;
+
   constructor(options: { name: string } & MastraSandboxOptions) {
     super({ name: options.name, component: RegisteredLogger.WORKSPACE });
 
@@ -252,6 +275,7 @@ export abstract class MastraSandbox<THandle = unknown> extends MastraBase implem
     this._onStop = options.onStop;
     this._onDestroy = options.onDestroy;
     this.#env = { ...options.env };
+    this._workingDirectory = options.workingDirectory;
 
     // Shadow start() with the lifecycle wrapper (same pattern as
     // SandboxProcessManager) so DIRECT start() calls get the same coalescing,
@@ -350,6 +374,27 @@ export abstract class MastraSandbox<THandle = unknown> extends MastraBase implem
    */
   getEnv(): Record<string, string | undefined> {
     return { ...this.#env };
+  }
+
+  /**
+   * The sandbox's default working directory, when one is configured.
+   *
+   * Commands and process spawns without a per-command `cwd` run here;
+   * per-command `cwd` always wins. `undefined` means the provider's own
+   * default applies (typically the home directory).
+   */
+  get workingDirectory(): string | undefined {
+    return this._workingDirectory;
+  }
+
+  /**
+   * Set the effective working directory after construction. For providers
+   * that resolve the value themselves — a computed default, or a runtime
+   * probe that needs a running VM — so the {@link workingDirectory} getter
+   * stays truthful.
+   */
+  protected setWorkingDirectory(dir: string): void {
+    this._workingDirectory = dir;
   }
 
   /**

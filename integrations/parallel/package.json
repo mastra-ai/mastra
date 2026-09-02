@@ -1,13 +1,12 @@
 {
   "name": "@mastra/parallel",
-  "version": "0.1.0-alpha.0",
+  "version": "0.1.1-alpha.1",
   "description": "Parallel web search and extract tools for Mastra agents",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "files": [
-    "dist",
-    "CHANGELOG.md"
+    "dist"
   ],
   "exports": {
     ".": {

@@ -35,6 +35,9 @@
     "gemini-3.1-pro",
     "mistral-large2",
     "openai-gpt-4.1",
+    "openai-gpt-5.1",
+    "openai-gpt-5.2",
+    "openai-gpt-5.4",
     "snowflake-llama3.3-70b"
   ],
   "structuredOutput": [

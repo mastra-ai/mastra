@@ -46,7 +46,6 @@ import type {
   ReviewComment,
   VersionControl,
 } from '../../capabilities/version-control.js';
-import { withBaseCheckpointWebhookTrigger } from '../../sandbox/base-checkpoint-triggers.js';
 import type { FactoryIntegration, IntegrationContext, IntegrationTools } from '../base.js';
 import { attachGithubIssueReconciler } from './issue-reconciler.js';
 import { GithubReconcileWorker } from './reconcile-worker.js';
@@ -59,6 +58,7 @@ import {
   parseCreatedPullRequest,
   subscribeCurrentSessionToPullRequest,
 } from './session-subscriptions.js';
+import { settleOrAbort } from './settle-or-abort.js';
 import type { GithubSubscriptionStorage } from './subscriptions.js';
 
 type InputOf<TMethod extends keyof VersionControl> = VersionControl[TMethod] extends (input: infer TInput) => unknown
@@ -112,6 +112,18 @@ export interface GithubTriageCommentUpsertResult {
 }
 
 export type GithubRepositoryPermission = 'admin' | 'maintain' | 'write' | 'triage' | 'read' | 'none';
+
+/**
+ * How long a collaborator permission lookup may be reused. The reconcile
+ * sweep re-stamps every open card's author and webhook gating checks every
+ * human sender, so one login can cost dozens of identical requests per cycle
+ * against the installation's REST budget. Revoked access reads as trusted for
+ * at most this long.
+ */
+const COLLABORATOR_PERMISSION_CACHE_TTL_MS = 30 * 60_000;
+const COLLABORATOR_PERMISSION_CACHE_MAX_ENTRIES = 1000;
+/** Bound on the shared upstream lookup; callers race their own signal against it. */
+const COLLABORATOR_PERMISSION_LOOKUP_TIMEOUT_MS = 10_000;
 
 export interface IssueSummary {
   number: number;
@@ -344,6 +356,13 @@ export class GithubIntegration implements FactoryIntegration {
   readonly #authorizedBots: readonly string[];
   #storage: IntegrationContext['storage'] | undefined;
   #sourceControlStorage: IntegrationContext['storage']['sourceControl'] | undefined;
+  /** `installationId:owner/repo:login` → cached collaborator permission (TTL-bounded). */
+  readonly #collaboratorPermissionCache = new Map<
+    string,
+    { permission: GithubRepositoryPermission; expiresAt: number }
+  >();
+  /** Same key → lookup already in flight, so overlapping callers share one request. */
+  readonly #collaboratorPermissionInFlight = new Map<string, Promise<GithubRepositoryPermission | undefined>>();
 
   constructor(config: GithubIntegrationConfig) {
     const missing = REQUIRED_FIELDS.filter(field => !config[field]);
@@ -510,16 +529,39 @@ export class GithubIntegration implements FactoryIntegration {
   ): Promise<GithubRepositoryPermission | undefined> {
     const parts = splitRepoFullName(repoFullName);
     if (!parts) return undefined;
-    try {
-      const { data } = await this.getInstallationOctokit(installationId).repos.getCollaboratorPermissionLevel({
-        ...parts,
-        username,
-        request: { signal },
-      });
-      return data.permission as GithubRepositoryPermission;
-    } catch {
-      return undefined;
-    }
+    const cacheKey = `${installationId}:${parts.owner}/${parts.repo}:${username.toLowerCase()}`;
+    const cached = this.#collaboratorPermissionCache.get(cacheKey);
+    if (cached && cached.expiresAt > Date.now()) return cached.permission;
+    this.#collaboratorPermissionCache.delete(cacheKey);
+    const inFlight = this.#collaboratorPermissionInFlight.get(cacheKey);
+    if (inFlight) return settleOrAbort(inFlight, signal, undefined);
+    const lookup = (async () => {
+      try {
+        const { data } = await this.getInstallationOctokit(installationId).repos.getCollaboratorPermissionLevel({
+          ...parts,
+          username,
+          request: { signal: AbortSignal.timeout(COLLABORATOR_PERMISSION_LOOKUP_TIMEOUT_MS) },
+        });
+        const permission = data.permission as GithubRepositoryPermission;
+        // Failures are not cached: a rate-limited or aborted lookup must retry
+        // on the next call rather than pin the login as unknown.
+        this.#collaboratorPermissionCache.set(cacheKey, {
+          permission,
+          expiresAt: Date.now() + COLLABORATOR_PERMISSION_CACHE_TTL_MS,
+        });
+        if (this.#collaboratorPermissionCache.size > COLLABORATOR_PERMISSION_CACHE_MAX_ENTRIES) {
+          const oldest = this.#collaboratorPermissionCache.keys().next().value;
+          if (oldest !== undefined) this.#collaboratorPermissionCache.delete(oldest);
+        }
+        return permission;
+      } catch {
+        return undefined;
+      } finally {
+        this.#collaboratorPermissionInFlight.delete(cacheKey);
+      }
+    })();
+    this.#collaboratorPermissionInFlight.set(cacheKey, lookup);
+    return settleOrAbort(lookup, signal, undefined);
   }
 
   /**
@@ -1140,13 +1182,12 @@ export class GithubIntegration implements FactoryIntegration {
    */
   routes(ctx: IntegrationContext): ApiRoute[] {
     this.#storage = ctx.storage;
-    // Every parsed webhook also feeds the base-checkpoint triggers (merged
-    // PRs / pushes to the default branch rebuild the repo's warm checkpoint).
-    const ingestFactoryEvent = withBaseCheckpointWebhookTrigger(attachGithubRules(this, ctx), ctx.baseCheckpoints);
+    const ingestFactoryEvent = attachGithubRules(this, ctx);
     return buildGithubRoutes({
       github: this,
       auth: ctx.auth,
-      fleet: ctx.fleet,
+      sandbox: ctx.sandbox,
+      ...(ctx.users ? { users: ctx.users } : {}),
       storage: ctx.factoryStorage,
       stateSigner: ctx.stateSigner,
       baseUrl: ctx.baseUrl,
@@ -1156,6 +1197,7 @@ export class GithubIntegration implements FactoryIntegration {
       projects: ctx.storage.projects,
       ingestFactoryEvent,
       sessionRetirement: ctx.sessionRetirement,
+      ...(ctx.workItems ? { workItems: ctx.workItems } : {}),
     });
   }
 
@@ -1177,18 +1219,20 @@ export class GithubIntegration implements FactoryIntegration {
     const reconcile = pullRequestEnabled
       ? attachGithubReconciler(this, ctx, input => this.fetchPullRequestState(input))
       : undefined;
-    const issues = issueEnabled ? attachGithubIssueReconciler(this, ctx, input => this.fetchIssueState(input)) : undefined;
+    const issues = issueEnabled
+      ? attachGithubIssueReconciler(this, ctx, input => this.fetchIssueState(input))
+      : undefined;
     if (!reconcile && !issues) return [];
 
     const legacyInterval = reconcileInterval(process.env.MASTRACODE_GITHUB_RECONCILE_INTERVAL_MS);
     const intervalMs = reconcileInterval(process.env.MASTRACODE_GITHUB_PR_RECONCILE_INTERVAL_MS) ?? legacyInterval;
-    const issueIntervalMs = reconcileInterval(process.env.MASTRACODE_GITHUB_ISSUE_RECONCILE_INTERVAL_MS) ?? legacyInterval;
+    const issueIntervalMs =
+      reconcileInterval(process.env.MASTRACODE_GITHUB_ISSUE_RECONCILE_INTERVAL_MS) ?? legacyInterval;
     return [
       new GithubReconcileWorker({
         ...(reconcile ? { reconcile } : {}),
         ...(issues ? { reconcileIssues: issues } : {}),
         sourceControl: ctx.storage.sourceControl,
-        ...(ctx.baseCheckpoints ? { sweepBaseCheckpoints: () => ctx.baseCheckpoints!.sweep() } : {}),
         ...(intervalMs ? { intervalMs } : {}),
         ...(issueIntervalMs ? { issueIntervalMs } : {}),
       }),
@@ -1255,9 +1299,7 @@ export class GithubIntegration implements FactoryIntegration {
         url: issue.html_url,
         state: issue.state === 'closed' ? 'closed' : 'open',
         ...(issue.state_reason ? { stateReason: issue.state_reason } : {}),
-        assignees: (issue.assignees ?? [])
-          .map(user => user.login)
-          .filter((login): login is string => Boolean(login)),
+        assignees: (issue.assignees ?? []).map(user => user.login).filter((login): login is string => Boolean(login)),
         labels: (issue.labels ?? [])
           .map(label => (typeof label === 'string' ? label : label.name))
           .filter((name): name is string => Boolean(name)),
@@ -1278,7 +1320,12 @@ export class GithubIntegration implements FactoryIntegration {
     const parts = splitRepoFullName(input.repository);
     if (!parts) throw new Error('GitHub triage comments require an owner/repository source.');
     const octokit = this.getInstallationOctokit(input.installationId);
-    const comments = [] as Array<{ id: number; body?: string | null; user?: { login?: string } | null; html_url: string }>;
+    const comments = [] as Array<{
+      id: number;
+      body?: string | null;
+      user?: { login?: string } | null;
+      html_url: string;
+    }>;
     for (let page = 1; ; page += 1) {
       const response = await octokit.issues.listComments({
         ...parts,
@@ -1290,13 +1337,20 @@ export class GithubIntegration implements FactoryIntegration {
       if (response.data.length < 100) break;
     }
     const existing = comments
-      .filter(comment => comment.body?.includes('<!-- mastra-factory-triage -->') && this.isFactoryCommentAuthor(comment.user?.login))
+      .filter(
+        comment =>
+          comment.body?.includes('<!-- mastra-factory-triage -->') && this.isFactoryCommentAuthor(comment.user?.login),
+      )
       .sort((left, right) => left.id - right.id)[0];
     if (existing) {
       const { data } = await octokit.issues.updateComment({ ...parts, comment_id: existing.id, body: input.body });
       return { action: 'updated', commentId: String(data.id), url: data.html_url };
     }
-    const { data } = await octokit.issues.createComment({ ...parts, issue_number: input.issueNumber, body: input.body });
+    const { data } = await octokit.issues.createComment({
+      ...parts,
+      issue_number: input.issueNumber,
+      body: input.body,
+    });
     return { action: 'created', commentId: String(data.id), url: data.html_url };
   }
 
@@ -1377,9 +1431,7 @@ function parsePullRequest(pr: GithubPullRequestData): PullRequest {
     author: pr.user?.login ?? null,
     assignees: (pr.assignees ?? []).flatMap(assignee => (assignee.login ? [assignee.login] : [])),
     requestedReviewers: (pr.requested_reviewers ?? []).flatMap(reviewer => (reviewer.login ? [reviewer.login] : [])),
-    labels: (pr.labels ?? []).flatMap(label =>
-      typeof label === 'string' ? [label] : label.name ? [label.name] : [],
-    ),
+    labels: (pr.labels ?? []).flatMap(label => (typeof label === 'string' ? [label] : label.name ? [label.name] : [])),
     body: pr.body?.trim() ? pr.body : null,
     state: pr.state === 'closed' ? 'closed' : 'open',
     draft: pr.draft ?? false,

@@ -1,13 +1,12 @@
 {
   "name": "@mastra/opencode",
-  "version": "0.1.19-alpha.10",
+  "version": "0.1.23-alpha.8",
   "description": "OpenCode plugin for Mastra Observational Memory",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "files": [
-    "dist",
-    "CHANGELOG.md"
+    "dist"
   ],
   "exports": {
     ".": {

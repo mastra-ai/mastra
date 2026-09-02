@@ -18,7 +18,8 @@ import { useEffect, useRef, useState } from 'react';
 
 import { DONE_SOUND_OPTIONS, loadDoneSound, playDoneSound, saveDoneSound } from '../services/doneSound';
 import type { DoneSound } from '../services/doneSound';
-import { SettingsCard, SettingsRow } from './SettingsCard';
+import { SettingsRow } from '@mastra/playground-ui/components/SettingsRow';
+import { SettingsCard } from './SettingsCard';
 import { SettingsSubsection } from './SettingsSubsection';
 import { Select, SelectContent, SelectItem, SelectTrigger } from '@mastra/playground-ui/components/Select';
 
@@ -54,28 +55,34 @@ export function GeneralSettings({ theme, onThemeChange }: GeneralSettingsProps) 
     playDoneSound(next);
   };
   return (
-    <SettingsCard>
-      <SettingsRow label="Theme" hint="Color scheme for the interface">
-        <Segmented
-          ariaLabel="Theme"
-          value={theme}
-          options={[
-            { value: 'system', label: 'System' },
-            { value: 'light', label: 'Light' },
-            { value: 'dark', label: 'Dark' },
-          ]}
-          onChange={onThemeChange}
-        />
-      </SettingsRow>
-      <SettingsRow label="Completion sound" hint="Played when an agent run finishes in a workspace">
-        <Segmented
-          ariaLabel="Completion sound"
-          value={doneSound}
-          options={DONE_SOUND_OPTIONS}
-          onChange={changeDoneSound}
-        />
-      </SettingsRow>
-    </SettingsCard>
+    <SettingsSubsection title="General">
+      <SettingsCard>
+        <SettingsRow variant="factory" label="Theme" description="Color scheme for the interface">
+          <Segmented
+            ariaLabel="Theme"
+            value={theme}
+            options={[
+              { value: 'system', label: 'System' },
+              { value: 'light', label: 'Light' },
+              { value: 'dark', label: 'Dark' },
+            ]}
+            onChange={onThemeChange}
+          />
+        </SettingsRow>
+        <SettingsRow
+          variant="factory"
+          label="Completion sound"
+          description="Played when an agent run finishes in a workspace"
+        >
+          <Segmented
+            ariaLabel="Completion sound"
+            value={doneSound}
+            options={DONE_SOUND_OPTIONS}
+            onChange={changeDoneSound}
+          />
+        </SettingsRow>
+      </SettingsCard>
+    </SettingsSubsection>
   );
 }
 
@@ -87,7 +94,7 @@ interface ModelSettingsProps {
 
 export function ModelSettings({ settings, updating, onBehaviorChange }: ModelSettingsProps) {
   return (
-    <SettingsRow label="Thinking level" hint="Extended-reasoning budget for the agent">
+    <SettingsRow variant="factory" label="Thinking level" description="Extended-reasoning budget for the agent">
       <div className="w-full lg:hidden">
         <SegmentedSelect
           ariaLabel="Thinking level"
@@ -130,33 +137,35 @@ export function BehaviorSettings({
   const notificationMode = settings?.notifications ?? 'off';
   return (
     <div className="flex flex-col gap-8">
-      <SettingsCard>
-        <SettingsRow label="Auto-approve tools" hint="Run tool calls without asking (YOLO)">
-          <Toggle
-            ariaLabel="Auto-approve tools"
-            checked={!!settings?.yolo}
-            disabled={!settings || updating}
-            onChange={v => onBehaviorChange({ yolo: v })}
-          />
-        </SettingsRow>
-        <SettingsRow label="Smart editing" hint="Use AST-aware edits when available">
-          <Toggle
-            ariaLabel="Smart editing"
-            checked={!!settings?.smartEditing}
-            disabled={!settings || updating}
-            onChange={v => onBehaviorChange({ smartEditing: v })}
-          />
-        </SettingsRow>
-        <SettingsRow label="Notifications" hint="How completion alerts are delivered">
-          <Segmented
-            ariaLabel="Notifications"
-            value={notificationMode}
-            disabled={!settings || updating}
-            options={NOTIFICATION_MODES}
-            onChange={v => onBehaviorChange({ notifications: v })}
-          />
-        </SettingsRow>
-      </SettingsCard>
+      <SettingsSubsection title="General">
+        <SettingsCard>
+          <SettingsRow variant="factory" label="Auto-approve tools" description="Run tool calls without asking (YOLO)">
+            <Toggle
+              ariaLabel="Auto-approve tools"
+              checked={!!settings?.yolo}
+              disabled={!settings || updating}
+              onChange={v => onBehaviorChange({ yolo: v })}
+            />
+          </SettingsRow>
+          <SettingsRow variant="factory" label="Smart editing" description="Use AST-aware edits when available">
+            <Toggle
+              ariaLabel="Smart editing"
+              checked={!!settings?.smartEditing}
+              disabled={!settings || updating}
+              onChange={v => onBehaviorChange({ smartEditing: v })}
+            />
+          </SettingsRow>
+          <SettingsRow variant="factory" label="Notifications" description="How completion alerts are delivered">
+            <Segmented
+              ariaLabel="Notifications"
+              value={notificationMode}
+              disabled={!settings || updating}
+              options={NOTIFICATION_MODES}
+              onChange={v => onBehaviorChange({ notifications: v })}
+            />
+          </SettingsRow>
+        </SettingsCard>
+      </SettingsSubsection>
       <PermissionsSection
         permissions={permissions}
         pendingPermissionCategory={pendingPermissionCategory}
@@ -195,7 +204,7 @@ function PermissionsSection({
     >
       <SettingsCard>
         {TOOL_CATEGORIES.map(({ value, label, hint }) => (
-          <SettingsRow key={value} label={label} hint={hint}>
+          <SettingsRow variant="factory" key={value} label={label} description={hint}>
             <Segmented
               ariaLabel={`${label} permission`}
               value={permissions?.categories?.[value] ?? 'ask'}
@@ -357,11 +366,7 @@ function ModelPicker({
                       {m.provider}
                     </Txt>
                   </span>
-                  {m.id === currentModelId ? (
-                    <Check size={14} />
-                  ) : m.hasApiKey ? null : (
-                    <Badge variant="default">no key</Badge>
-                  )}
+                  {m.id === currentModelId ? <Check size={14} /> : m.hasApiKey ? null : <Badge>no key</Badge>}
                 </button>
               </li>
             ))}

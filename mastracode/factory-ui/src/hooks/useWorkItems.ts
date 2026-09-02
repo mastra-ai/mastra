@@ -40,13 +40,25 @@ function patchCards(queryClient: QueryClient, listKey: QueryKey, patch: (cards: 
   );
 }
 
+/** Drop every card ref to a deleted session so the board stops advertising it before the next poll. */
+export function stripCachedSessionRefs(queryClient: QueryClient, factoryProjectId: string, sessionId: string) {
+  // an in-flight list fetch still carries the stale refs and would clobber the edit below
+  void queryClient.cancelQueries({ queryKey: queryKeys.workItems(factoryProjectId) });
+  patchCards(queryClient, queryKeys.workItems(factoryProjectId), cards =>
+    cards.map(card => {
+      const kept = Object.entries(card.sessions).filter(([, ref]) => ref.sessionId !== sessionId);
+      return kept.length === Object.keys(card.sessions).length ? card : { ...card, sessions: Object.fromEntries(kept) };
+    }),
+  );
+}
+
 // Module-level so React Query can cache each derived value instead of
 // rebuilding it (and, for the set, breaking referential equality) per render.
 const selectCards = (board: BoardSnapshot) => board.workItems;
 const selectRunningSessions = (board: BoardSnapshot): ReadonlySet<string> => new Set(board.runningSessionIds);
 const NO_RUNNING_SESSIONS: ReadonlySet<string> = new Set();
 
-function boardQueryOptions(baseUrl: string, factoryProjectId: string | undefined) {
+export function boardQueryOptions(baseUrl: string, factoryProjectId: string | undefined) {
   return queryOptions({
     queryKey: queryKeys.workItems(factoryProjectId),
     queryFn: factoryProjectId ? ({ signal }) => listWorkItems(baseUrl, factoryProjectId, signal) : skipToken,

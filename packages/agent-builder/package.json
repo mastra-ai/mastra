@@ -1,6 +1,6 @@
 {
   "name": "@mastra/agent-builder",
-  "version": "1.1.14-alpha.3",
+  "version": "1.1.16-alpha.2",
   "license": "Apache-2.0",
   "type": "module",
   "main": "dist/index.js",
@@ -19,8 +19,7 @@
     "./package.json": "./package.json"
   },
   "files": [
-    "dist",
-    "CHANGELOG.md"
+    "dist"
   ],
   "scripts": {
     "check": "tsc --noEmit",
@@ -57,7 +56,7 @@
     "ai-v5": "npm:ai@5.0.221",
     "eslint": "^10.7.0",
     "tsdown": "0.22.9",
-    "typescript": "catalog:",
+    "typescript": "catalog:ts6",
     "typescript-eslint": "^8.57.0",
     "vitest": "catalog:",
     "zod": "catalog:"

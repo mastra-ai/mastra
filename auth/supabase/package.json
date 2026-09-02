@@ -1,6 +1,6 @@
 {
   "name": "@mastra/auth-supabase",
-  "version": "1.1.3",
+  "version": "1.1.4-alpha.1",
   "description": "Mastra Supabase Auth integration",
   "type": "module",
   "main": "dist/index.js",
@@ -42,8 +42,7 @@
     "vitest": "catalog:"
   },
   "files": [
-    "dist",
-    "CHANGELOG.md"
+    "dist"
   ],
   "homepage": "https://mastra.ai",
   "repository": {

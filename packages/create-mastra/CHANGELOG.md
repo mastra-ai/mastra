@@ -1,5 +1,57 @@
 # create-mastra
 
+## 1.27.3-alpha.8
+
+### Patch Changes
+
+- Update README to include accurate, up-to-date information ([#22858](https://github.com/mastra-ai/mastra/pull/22858))
+
+## 1.27.3-alpha.7
+
+## 1.27.3-alpha.6
+
+## 1.27.3-alpha.5
+
+## 1.27.3-alpha.4
+
+## 1.27.3-alpha.3
+
+## 1.27.3-alpha.2
+
+### Patch Changes
+
+- Remove `CHANGELOG.md` from distributed npm files resulting in reduced package size ([#22737](https://github.com/mastra-ai/mastra/pull/22737))
+
+## 1.27.3-alpha.1
+
+## 1.27.3-alpha.0
+
+## 1.27.2
+
+## 1.27.2-alpha.0
+
+## 1.27.1
+
+## 1.27.1-alpha.3
+
+## 1.27.1-alpha.2
+
+## 1.27.1-alpha.1
+
+## 1.27.1-alpha.0
+
+## 1.27.0
+
+## 1.27.0-alpha.1
+
+## 1.26.2-alpha.0
+
+## 1.26.1
+
+## 1.26.1-alpha.13
+
+## 1.26.1-alpha.12
+
 ## 1.26.1-alpha.11
 
 ## 1.26.1-alpha.10

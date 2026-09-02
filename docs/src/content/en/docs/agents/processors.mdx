@@ -1,6 +1,6 @@
 ---
 title: "Processors | Agents"
-description: "Learn how to use input and output processors to transform, validate, and control messages in Mastra agents."
+description: "Use Mastra input and output processors to transform, validate, filter, and control agent messages at defined points in the execution pipeline."
 packages:
   - "@mastra/core"
 ---
@@ -14,7 +14,7 @@ Processors are configured as:
 - **`inputProcessors`**: Run before messages reach the language model.
 - **`outputProcessors`**: Run after the language model generates a response, but before it's returned to users.
 
-You can use individual [`Processor`](/reference/processors/processor-interface) objects or compose them into workflows using Mastra's workflow primitives. Workflows give you advanced control over processor execution order, parallel processing, and conditional logic.
+Use individual [`Processor`](/reference/processors/processor-interface) objects, or compose them into workflows with Mastra's workflow primitives. Workflows give you advanced control over execution order and support conditional or parallel processing.
 
 Some processors implement both input and output logic and can be used in either array depending on where the transformation should occur.
 
@@ -939,7 +939,7 @@ The callback receives a `ProcessorViolation` object with:
 
 Calling `abort(reason, options)` throws a `TripWire` error that ends processing. On streams, Mastra emits a `tripwire` chunk clients can detect:
 
-```typescript
+```typescript oxfmt:false
 for await (const chunk of stream.fullStream) {
   if (chunk.type === 'tripwire') {
     console.log('Blocked by', chunk.payload.processorId, '-', chunk.payload.reason)

@@ -1,6 +1,6 @@
 ---
 title: "Reference: Workflow.sleep() | Workflows"
-description: Documentation for the `Workflow.sleep()` method in workflows, which pauses execution for a specified number of milliseconds.
+description: "The .sleep() method pauses execution for a specified number of milliseconds. It accepts either a static number or a callback function for runtime-defined delays."
 packages:
   - "@mastra/core"
 ---
@@ -42,7 +42,7 @@ workflow.sleep(5000)
 
 ## Extended usage example
 
-```typescript prettier:false
+```typescript oxfmt:false
 import { createWorkflow, createStep } from "@mastra/core/workflows";
 
 const step1 = createStep({...});

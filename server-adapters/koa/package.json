@@ -1,6 +1,6 @@
 {
   "name": "@mastra/koa",
-  "version": "1.7.4-alpha.10",
+  "version": "1.7.8-alpha.7",
   "description": "Mastra Koa adapter for the server",
   "type": "module",
   "main": "dist/index.js",
@@ -60,8 +60,7 @@
     "node": ">=22.13.0"
   },
   "files": [
-    "dist",
-    "CHANGELOG.md"
+    "dist"
   ],
   "homepage": "https://mastra.ai",
   "repository": {

@@ -1,6 +1,7 @@
 import type { DatasetExperiment, DatasetRecord } from '@mastra/client-js';
+import { Badge } from '@mastra/playground-ui/components/Badge';
+import type { BadgeVariant } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
-import { Chip } from '@mastra/playground-ui/components/Chip';
 import {
   DataList as EntityList,
   DataListSkeleton as EntityListSkeleton,
@@ -18,7 +19,6 @@ import { useLinkComponent } from '@/lib/framework';
 export interface DatasetsListProps {
   datasets: DatasetRecord[];
   experiments: DatasetExperiment[];
-  reviewByDataset?: Map<string, { needsReview: number; complete: number }>;
   isLoading: boolean;
   search?: string;
   targetFilter?: string;
@@ -30,15 +30,12 @@ export interface DatasetsListProps {
   onPrevPage?: () => void;
 }
 
-const COLUMNS = 'auto 1fr auto 5rem 9rem 10rem 7rem 8rem';
+const COLUMNS = 'auto 1fr auto 5rem 9rem 10rem 7rem';
 
-function getDatasetRowLayout(hasExperimentsAction: boolean, hasReviewAction: boolean) {
-  return {
-    rowLinkColEnd: hasExperimentsAction ? -3 : hasReviewAction ? -2 : -1,
-    showExperimentsPlaceholder: !hasExperimentsAction,
-    showReviewPlaceholderInLink: !hasExperimentsAction && !hasReviewAction,
-    showReviewPlaceholderAfterExperiments: hasExperimentsAction && !hasReviewAction,
-  };
+function getExperimentsBadgeVariant(successPct: number | null): BadgeVariant {
+  if (successPct !== null && successPct >= 70) return 'green';
+  if (successPct !== null && successPct >= 40) return 'yellow';
+  return 'red';
 }
 
 function TargetTypeIcon({ type }: { type: DatasetTargetType }) {
@@ -66,7 +63,6 @@ function formatDate(dateStr: string | Date | undefined | null): string {
 export function DatasetsList({
   datasets,
   experiments,
-  reviewByDataset,
   isLoading,
   search = '',
   targetFilter = 'all',
@@ -120,27 +116,17 @@ export function DatasetsList({
         <EntityList.TopCell>Target</EntityList.TopCell>
         <EntityList.TopCell>Last Updated</EntityList.TopCell>
         <EntityList.TopCell>Experiments</EntityList.TopCell>
-        <EntityList.TopCell className="justify-center">Review</EntityList.TopCell>
       </EntityList.Top>
 
       {filteredData.map((ds, index) => {
-        const experimentsChipColor: 'green' | 'yellow' | 'red' =
-          ds.successPct !== null && ds.successPct >= 70
-            ? 'green'
-            : ds.successPct !== null && ds.successPct >= 40
-              ? 'yellow'
-              : 'red';
-
-        const review = reviewByDataset?.get(ds.id);
-        const tags = Array.isArray(ds.tags) ? (ds.tags as string[]) : [];
+        const experimentsBadgeVariant = getExperimentsBadgeVariant(ds.successPct);
+        const tags = Array.isArray(ds.tags) ? ds.tags.filter(tag => typeof tag === 'string') : [];
         const hasExperimentsAction = ds.experimentCount > 0;
-        const rowLayout = getDatasetRowLayout(hasExperimentsAction, Boolean(review));
 
         return (
           <EntityList.RowWrapper key={ds.id}>
             <EntityList.RowLink
-              flushRight
-              colEnd={rowLayout.rowLinkColEnd}
+              colEnd={hasExperimentsAction ? -2 : -1}
               to={paths.datasetLink(ds.id)}
               LinkComponent={Link}
               {...getRowProps(index)}
@@ -151,9 +137,9 @@ export function DatasetsList({
                 {tags.length > 0 ? (
                   <div className="flex max-w-48 items-center gap-1 overflow-hidden" title={tags.join(', ')}>
                     {tags.slice(0, 2).map(tag => (
-                      <Chip key={tag} color="gray" size="small" className="shrink-0">
+                      <Badge key={tag} size="xs" className="shrink-0">
                         {tag}
-                      </Chip>
+                      </Badge>
                     ))}
                     {tags.length > 2 && <span className="text-neutral2 shrink-0 text-[10px]">+{tags.length - 2}</span>}
                   </div>
@@ -177,40 +163,21 @@ export function DatasetsList({
                 )}
               </EntityList.Cell>
               <EntityList.TextCell>{formatDate(ds.updatedAt)}</EntityList.TextCell>
-              {rowLayout.showExperimentsPlaceholder ? <EntityList.Cell className="justify-center" /> : null}
-              {rowLayout.showReviewPlaceholderInLink ? <EntityList.Cell className="justify-center" /> : null}
+              {hasExperimentsAction ? null : <EntityList.Cell className="justify-center" />}
             </EntityList.RowLink>
 
             {hasExperimentsAction ? (
               <Button
                 as={Link}
-                to={`${paths.datasetLink(ds.id)}?tab=experiments`}
+                to={`/experiments?dataset=${ds.id}`}
                 variant="ghost"
                 size="sm"
                 className="h-full w-full rounded-lg p-0!"
               >
-                <Chip color={experimentsChipColor}>
+                <Badge variant={experimentsBadgeVariant} size="sm">
                   {ds.experimentCount} ({ds.successPct ?? 0}%)
-                </Chip>
+                </Badge>
               </Button>
-            ) : null}
-
-            {review ? (
-              <Button
-                as={Link}
-                to={`${paths.datasetLink(ds.id)}?tab=review`}
-                variant="ghost"
-                size="sm"
-                className="h-full w-full rounded-lg p-0!"
-              >
-                {review.needsReview > 0 ? (
-                  <Chip color="yellow">{review.needsReview} pending</Chip>
-                ) : (
-                  <Chip color="green">{review.complete} reviewed</Chip>
-                )}
-              </Button>
-            ) : rowLayout.showReviewPlaceholderAfterExperiments ? (
-              <EntityList.Cell className="justify-center" />
             ) : null}
           </EntityList.RowWrapper>
         );

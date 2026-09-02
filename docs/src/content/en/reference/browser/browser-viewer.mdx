@@ -1,6 +1,6 @@
 ---
 title: "Reference: BrowserViewer | Browser"
-description: "API reference for BrowserViewer, a CLI-based browser provider that launches Chrome via Playwright and exposes a CDP URL for CLI tools."
+description: "The BrowserViewer class provides browser automation for CLI-based tools. It launches Chrome through Playwright and exposes a Chrome DevTools Protocol (CDP) URL."
 packages:
   - "@mastra/browser-viewer"
 ---
@@ -163,7 +163,7 @@ When `cdpUrl` is provided, `BrowserViewer` connects to the existing browser inst
 
 #### `launch(threadId?)`
 
-Launches Chrome. For `'shared'` scope, launches a single shared browser. For `'thread'` scope, launches a browser for the specified thread.
+Launches Chrome with either a single shared browser for `'shared'` scope or a browser for the specified thread when using `'thread'` scope.
 
 ```typescript
 await viewer.launch()

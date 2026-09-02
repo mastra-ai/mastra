@@ -11,6 +11,7 @@ export default defineConfig({
   treeshake: true,
   sourcemap: true,
   deps: {
+    alwaysBundle: ['@internal/workspace'],
     neverBundle: ['@mastra/core', '@e2b/code-interpreter', 'esbuild'],
   },
   onSuccess: async () => {

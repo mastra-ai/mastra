@@ -1,6 +1,6 @@
 {
   "name": "@mastra/redis",
-  "version": "1.4.2",
+  "version": "1.4.3-alpha.1",
   "description": "Redis storage provider for Mastra - provides storage capabilities for direct Redis connections",
   "type": "module",
   "main": "dist/index.js",
@@ -51,11 +51,10 @@
     "vitest": "catalog:"
   },
   "peerDependencies": {
-    "@mastra/core": ">=1.53.0-0 <2.0.0-0"
+    "@mastra/core": ">=1.61.0-0 <2.0.0-0"
   },
   "files": [
-    "dist",
-    "CHANGELOG.md"
+    "dist"
   ],
   "homepage": "https://mastra.ai",
   "repository": {

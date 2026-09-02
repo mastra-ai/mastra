@@ -8,12 +8,19 @@ import { postRepositoryGitOp, readJsonOrThrow } from './http';
 
 export const USER_SESSION_BRANCH_PREFIX = 'user/';
 
+export interface FactoryUserSessionOwner {
+  id: string;
+  name: string;
+  avatarUrl?: string;
+}
+
 export interface FactoryUserSession {
   id: string;
   sessionId: string;
   projectRepositoryId: string;
   orgId: string;
   userId: string;
+  owner?: FactoryUserSessionOwner;
   visibility: 'org' | 'private';
   title?: string;
   branch: string;

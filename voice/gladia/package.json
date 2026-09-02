@@ -1,11 +1,10 @@
 {
   "name": "@mastra/voice-gladia",
-  "version": "0.13.0",
+  "version": "0.13.1-alpha.1",
   "description": "Mastra Gladia AI voice integration",
   "type": "module",
   "files": [
-    "dist",
-    "CHANGELOG.md"
+    "dist"
   ],
   "main": "dist/index.js",
   "types": "dist/index.d.ts",

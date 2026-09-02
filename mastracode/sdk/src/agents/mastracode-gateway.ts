@@ -28,6 +28,7 @@ import {
   promptCacheMiddleware,
 } from '../providers/claude-max.js';
 import { getCopilotModelCatalog, githubCopilotProvider } from '../providers/github-copilot.js';
+import { KIMI_CODING_MODELS, kimiCodingProvider } from '../providers/kimi-coding.js';
 import {
   buildOpenAICodexOAuthFetch,
   createCodexMiddleware,
@@ -168,7 +169,10 @@ function getProviderAuthKey(providerId: string, credentials: CredentialStore = a
   if (storedCred?.type === 'api_key' && storedCred.key.trim().length > 0) {
     return storedCred.key.trim();
   }
-  return credentials.getStoredApiKey(authProviderId)?.trim() || undefined;
+  const dedicatedKey = credentials.getStoredApiKey(authProviderId)?.trim();
+  if (dedicatedKey) return dedicatedKey;
+  if (credentials.allowEnvironmentFallback === false) return undefined;
+  return authProviderId === 'kimi-for-coding' ? process.env.KIMI_API_KEY?.trim() || undefined : undefined;
 }
 
 export function resolveAuth(request: GatewayAuthRequest, mastraGatewayApiKey?: string): GatewayAuthResult | undefined {
@@ -332,7 +336,8 @@ export class MastraCodeGateway extends MastraModelGateway {
       return { apiKey: mastraGatewayApiKey, source: 'gateway' };
     }
 
-    const storedCred = credentials.get(getAuthProviderId(request.providerId));
+    const authProviderId = getAuthProviderId(request.providerId);
+    const storedCred = credentials.get(authProviderId);
     if (storedCred?.type === 'oauth') {
       return { bearerToken: 'oauth', source: 'gateway' };
     }
@@ -397,6 +402,14 @@ export class MastraCodeGateway extends MastraModelGateway {
         models,
       };
     }
+
+    providers['kimi-for-coding'] = {
+      name: 'Kimi For Coding',
+      apiKeyEnvVar: 'KIMI_API_KEY',
+      apiKeyHeader: 'Authorization',
+      gateway: this.id,
+      models: [...KIMI_CODING_MODELS],
+    };
 
     try {
       const copilotModels = await getCopilotModelCatalog({ authStorage });
@@ -502,6 +515,14 @@ export class MastraCodeGateway extends MastraModelGateway {
 
     if (this.#routeThroughMastraGateway) {
       return this.#mastraGateway.resolveLanguageModel(args) as GatewayLanguageModel;
+    }
+
+    if (args.providerId === 'kimi-for-coding') {
+      return kimiCodingProvider(args.modelId, {
+        apiKey: args.apiKey,
+        headers: args.headers,
+        credentialStore: this.#credentials,
+      }) as unknown as GatewayLanguageModel;
     }
 
     return new ModelRouterLanguageModel({

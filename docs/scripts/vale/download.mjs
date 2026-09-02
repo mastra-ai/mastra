@@ -8,7 +8,7 @@ const __filename = fileURLToPath(import.meta.url)
 const __dirname = dirname(__filename)
 
 const isWindows = process.platform === 'win32'
-const VALE_VERSION = '3.17.1'
+const VALE_VERSION = '3.19.0'
 const OUTPUT_PATH = join(__dirname, 'bin')
 const OUTPUT_BIN = join(OUTPUT_PATH, isWindows ? 'vale.exe' : 'vale')
 

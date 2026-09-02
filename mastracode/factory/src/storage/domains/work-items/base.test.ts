@@ -6,7 +6,13 @@
 import { LibSQLFactoryStorage } from '@mastra/libsql';
 import { describe, expect, it, vi } from 'vitest';
 
-import { applyStageTransition, isAgentActor, WorkItemRelationError, WorkItemsStorage } from './base.js';
+import {
+  applyStageTransition,
+  factoryDecisionAttentionIdentity,
+  isAgentActor,
+  WorkItemRelationError,
+  WorkItemsStorage,
+} from './base.js';
 import type { WorkItemStageEntry } from './base.js';
 
 const input = {
@@ -65,6 +71,70 @@ function interceptTransactionOps(backend: any, overridesFor: (ops: any) => Recor
 }
 
 describe('WorkItemsStorage', () => {
+  it('clears every reference to a deleted session without touching other refs, items, or orgs', async () => {
+    const storage = await makeStorage();
+    const ref = (sessionId: string) => ({ sessionId, branch: `factory/${sessionId}`, threadId: `${sessionId}-thread` });
+    const touched = await storage.upsert({
+      orgId: 'org1',
+      userId: 'user1',
+      factoryProjectId: 'project1',
+      input: { ...input, sessions: { work: ref('sess-dead'), review: ref('sess-live') } },
+    });
+    const untouched = await storage.upsert({
+      orgId: 'org1',
+      userId: 'user1',
+      factoryProjectId: 'project1',
+      input: {
+        ...input,
+        externalSource: { ...input.externalSource, externalId: '43' },
+        sessions: { review: ref('sess-live') },
+      },
+    });
+    const otherOrg = await storage.upsert({
+      orgId: 'org2',
+      userId: 'user1',
+      factoryProjectId: 'project2',
+      input: { ...input, sessions: { work: ref('sess-dead') } },
+    });
+
+    const cleared = await storage.clearSessionReferences({ orgId: 'org1', sessionId: 'sess-dead' });
+
+    expect(cleared).toBe(1);
+    const touchedAfter = await storage.get({ orgId: 'org1', id: touched.item.id });
+    expect(Object.keys(touchedAfter!.sessions)).toEqual(['review']);
+    expect(touchedAfter!.revision).toBe(touched.item.revision + 1);
+    const untouchedAfter = await storage.get({ orgId: 'org1', id: untouched.item.id });
+    expect(untouchedAfter!.revision).toBe(untouched.item.revision);
+    const otherOrgAfter = await storage.get({ orgId: 'org2', id: otherOrg.item.id });
+    expect(otherOrgAfter!.sessions.work?.sessionId).toBe('sess-dead');
+  });
+
+  it('persists a triage classification atomically, revisions it once, and replays without changing it', async () => {
+    const storage = await makeStorage();
+    const created = await storage.upsert({ orgId: 'org1', userId: 'user1', factoryProjectId: 'project1', input });
+    const commit = (identity: string, expectedRevision: number, triageType: 'feature request' | 'bug') =>
+      storage.commitTransition({
+        orgId: 'org1',
+        factoryProjectId: 'project1',
+        workItemId: created.item.id,
+        expectedRevision,
+        destinationStage: 'intake',
+        actorId: 'triage-agent',
+        ingress: { identity, triggerType: 'agent', transitionId: identity },
+        ruleSetVersion: 'rules-v1',
+        causalChain: [],
+        evaluation: { outcome: 'accepted', decisions: [] },
+        triageType,
+      });
+
+    const classified = await commit('triage-1', created.item.revision, 'feature request');
+    expect(classified).toMatchObject({ status: 'committed', item: { triageType: 'feature request', revision: 2 } });
+    const replayed = await commit('triage-1', created.item.revision, 'feature request');
+    expect(replayed).toMatchObject({ status: 'replayed', item: { triageType: 'feature request', revision: 2 } });
+    const laterAgent = await commit('triage-2', 2, 'bug');
+    expect(laterAgent).toMatchObject({ status: 'committed', item: { triageType: 'feature request', revision: 2 } });
+  });
+
   it('deduplicates external sources within a Factory project, not across projects', async () => {
     const storage = await makeStorage();
 
@@ -415,8 +485,7 @@ describe('WorkItemsStorage', () => {
     await storage.setAttentionReceipt({
       ...scope,
       userId: 'u',
-      decisionId: failed.id,
-      failureOccurrence: failed.failureOccurrence,
+      identity: factoryDecisionAttentionIdentity(failed.id, failed.failureOccurrence),
       action: 'read',
       now,
     });
@@ -429,8 +498,7 @@ describe('WorkItemsStorage', () => {
       storage.setAttentionReceipt({
         ...scope,
         userId: 'u',
-        decisionId: failed.id,
-        failureOccurrence: failed.failureOccurrence,
+        identity: factoryDecisionAttentionIdentity(failed.id, failed.failureOccurrence),
         action: 'archive',
         now,
       }),
@@ -531,5 +599,62 @@ describe('isAgentActor', () => {
     [undefined, false],
   ] as const)('isAgentActor(%j) → %s', (actor, expected) => {
     expect(isAgentActor(actor)).toBe(expected);
+  });
+});
+
+describe('getBySource', () => {
+  const slackThread = { integrationId: 'slack', type: 'slack-thread', externalId: 'slack:C-1:1700.42' };
+
+  it('resolves the card a platform thread created without knowing its tenant', async () => {
+    const storage = await makeStorage();
+    const created = await storage.upsert({
+      orgId: 'org1',
+      userId: 'u',
+      factoryProjectId: 'p1',
+      input: { ...input, externalSource: slackThread },
+    });
+
+    expect((await storage.getBySource(slackThread))?.id).toBe(created.item.id);
+  });
+
+  it('resolves to nothing for a source no card was born from', async () => {
+    const storage = await makeStorage();
+    await storage.upsert({ orgId: 'org1', userId: 'u', factoryProjectId: 'p1', input });
+
+    expect(await storage.getBySource(slackThread)).toBeNull();
+  });
+
+  it('keeps two workspaces that issued the same thread id apart', async () => {
+    const storage = await makeStorage();
+    const theirs = { ...slackThread, workspaceId: 'T-them' };
+    const ours = { ...slackThread, workspaceId: 'T-us' };
+    await storage.upsert({
+      orgId: 'org1',
+      userId: 'u',
+      factoryProjectId: 'p1',
+      input: { ...input, externalSource: theirs },
+    });
+    const mine = await storage.upsert({
+      orgId: 'org2',
+      userId: 'u',
+      factoryProjectId: 'p2',
+      input: { ...input, externalSource: ours },
+    });
+
+    expect((await storage.getBySource(ours))?.id).toBe(mine.item.id);
+  });
+
+  it('refuses to guess when two projects hold the same source', async () => {
+    const storage = await makeStorage();
+    for (const factoryProjectId of ['p1', 'p2']) {
+      await storage.upsert({
+        orgId: 'org1',
+        userId: 'u',
+        factoryProjectId,
+        input: { ...input, externalSource: slackThread },
+      });
+    }
+
+    expect(await storage.getBySource(slackThread)).toBeNull();
   });
 });

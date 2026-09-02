@@ -20,6 +20,7 @@ export function MetricsLineChart({
   onPointClick,
   xAxisInterval = 5,
   xAxisMinTickGap,
+  showDots = false,
 }: {
   data: Record<string, unknown>[];
   series: MetricsLineChartSeries[];
@@ -31,6 +32,8 @@ export function MetricsLineChart({
   xAxisInterval?: number | 'preserveStart' | 'preserveEnd' | 'preserveStartEnd';
   /** Minimum px gap between rendered ticks; recharts drops labels to honor it. */
   xAxisMinTickGap?: number;
+  /** Render a visible dot on every point (needed for single-point series). */
+  showDots?: boolean;
 }) {
   const isClickable = typeof onPointClick === 'function';
 
@@ -85,7 +88,7 @@ export function MetricsLineChart({
                 dataKey={s.dataKey}
                 stroke={s.color}
                 strokeWidth={2}
-                dot={false}
+                dot={showDots ? { r: 3, fill: s.color, strokeWidth: 0 } : false}
                 activeDot={
                   isClickable
                     ? {
