@@ -7,13 +7,13 @@ import { useCallback, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router';
 import { ExperimentTriggerDialog } from '@/domains/datasets/components/experiment-trigger/experiment-trigger-dialog';
 import { useDatasets } from '@/domains/datasets/hooks/use-datasets';
-import { useExperiments } from '@/domains/datasets/hooks/use-experiments';
 import {
   ExperimentsList,
   ExperimentsToolbar,
   getExperimentDatasetOptions,
   NoExperimentsInfo,
 } from '@/domains/experiments';
+import { useExperimentsForDatasetFilter } from '@/domains/experiments/hooks/use-experiments-for-dataset-filter';
 import { useReviewSummary } from '@/domains/review';
 import { buildReviewByExperimentMap } from '@/domains/review/review-maps';
 
@@ -46,7 +46,11 @@ export default function Experiments() {
   );
 
   const { data: datasetsData, isLoading: isLoadingDatasets, error: errorDatasets } = useDatasets();
-  const { data: experimentsData, isLoading: isLoadingExperiments, error: errorExperiments } = useExperiments();
+  const {
+    data: experimentsData,
+    isLoading: isLoadingExperiments,
+    error: errorExperiments,
+  } = useExperimentsForDatasetFilter(datasetFilter === 'all' ? undefined : datasetFilter);
   const { data: reviewSummary } = useReviewSummary();
 
   const datasets = useMemo(() => datasetsData?.datasets ?? [], [datasetsData?.datasets]);
@@ -72,8 +76,11 @@ export default function Experiments() {
   };
 
   // Ignore ids whose experiment disappeared from the list (e.g. after a refetch).
-  const selectedIds = selectedExperimentIds.filter(id => experiments.some(exp => exp.id === id));
-  const selectedDatasetIds = new Set(selectedIds.map(id => experiments.find(exp => exp.id === id)?.datasetId));
+  const { selectedIds, selectedDatasetIds } = useMemo(() => {
+    const datasetByExperimentId = new Map(experiments.map(exp => [exp.id, exp.datasetId]));
+    const ids = selectedExperimentIds.filter(id => datasetByExperimentId.has(id));
+    return { selectedIds: ids, selectedDatasetIds: new Set(ids.map(id => datasetByExperimentId.get(id))) };
+  }, [experiments, selectedExperimentIds]);
   const compareDisabledReason =
     selectedIds.length === 2 && selectedDatasetIds.size !== 1
       ? 'experiments must belong to the same dataset'
@@ -82,7 +89,10 @@ export default function Experiments() {
   const executeCompare = () => {
     if (selectedIds.length !== 2 || compareDisabledReason) return;
     const [baseline, contender] = selectedIds;
-    void navigate(`/experiments/compare?baseline=${baseline}&contender=${contender}`);
+    const [dataset] = selectedDatasetIds;
+    if (!dataset) return;
+    const query = new URLSearchParams({ dataset, baseline, contender });
+    void navigate(`/experiments/compare?${query.toString()}`);
   };
 
   if (error && is401UnauthorizedError(error)) {
@@ -125,7 +135,8 @@ export default function Experiments() {
     />
   );
 
-  if (experiments.length === 0 && !isLoading) {
+  // With a dataset filter active, keep the toolbar so the user can reset it.
+  if (experiments.length === 0 && !isLoading && datasetFilter === 'all') {
     return (
       <NoDataPageLayout>
         <NoExperimentsInfo onRunExperiment={() => setRunDialogOpen(true)} />

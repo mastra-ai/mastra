@@ -88,7 +88,9 @@ describe('Experiments page — compare mode', () => {
     fireEvent.click(compare);
 
     await waitFor(() =>
-      expect(screen.getByTestId('location').textContent).toBe('/experiments/compare?baseline=exp-a&contender=exp-b'),
+      expect(screen.getByTestId('location').textContent).toBe(
+        '/experiments/compare?dataset=dataset-1&baseline=exp-a&contender=exp-b',
+      ),
     );
   });
 
