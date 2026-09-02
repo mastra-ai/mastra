@@ -44,6 +44,9 @@ export function getKnowledgeEdgeStyle({
     };
   }
   if (data?.pinned) return { '--knowledge-edge-stroke': 'var(--chart-amber)', '--knowledge-edge-width': 2 };
+  if (data?.boundary) {
+    return { '--knowledge-edge-stroke': 'var(--border-strong)', '--knowledge-edge-width': 1.5, strokeDasharray: '6 5' };
+  }
   if (source.startsWith('record:') || target.startsWith('record:')) {
     return {
       '--knowledge-edge-stroke': 'var(--muted-foreground)',
