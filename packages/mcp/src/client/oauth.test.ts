@@ -183,7 +183,8 @@ describe('MCPOAuthClientProvider', () => {
       },
     });
 
-    expect((provider as OAuthClientProvider).clientMetadataUrl).toBe(clientMetadataUrl);
+    expect(provider.clientMetadataUrl).toBe(clientMetadataUrl);
+    expect(provider.clientMetadata).not.toHaveProperty('client_id');
   });
 
   it.each([
@@ -217,7 +218,7 @@ describe('MCPOAuthClientProvider', () => {
             redirect_uris: [],
           },
         }),
-    ).toThrow('require client_id, client_name, and at least one redirect_uri');
+    ).toThrow('require client_name and at least one redirect_uri');
   });
 
   it('keeps persisted client credentials and tokens isolated by authorization-server issuer', async () => {

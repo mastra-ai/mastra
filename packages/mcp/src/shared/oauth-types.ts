@@ -41,6 +41,7 @@ export {
   parseErrorResponse,
   UnauthorizedError,
   buildDiscoveryUrls,
+  validateClientMetadataUrl,
 } from '@modelcontextprotocol/client';
 
 // Re-export OAuthClientProvider interface

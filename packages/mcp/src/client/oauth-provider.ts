@@ -7,8 +7,6 @@
  * @see https://modelcontextprotocol.io/specification/2025-06-18/basic/authorization
  */
 
-import { validateClientMetadataUrl } from '@modelcontextprotocol/client';
-
 import type {
   OAuthClientProvider,
   OAuthClientMetadata,
@@ -19,6 +17,7 @@ import type {
   StoredOAuthTokens,
   OAuthTokens,
 } from '../shared/oauth-types.js';
+import { validateClientMetadataUrl } from '../shared/oauth-types.js';
 
 /**
  * Storage interface for persisting OAuth data.
@@ -89,7 +88,8 @@ export interface MCPOAuthClientProviderOptions {
 
   /**
    * OAuth client metadata published by the client metadata document or used
-   * for dynamic client registration fallback.
+   * for dynamic client registration fallback. `client_id` is validated against
+   * `clientMetadataUrl` and omitted from fallback registration requests.
    */
   clientMetadata: MCPClientMetadata;
 
@@ -175,7 +175,7 @@ export interface MCPOAuthClientProviderOptions {
  */
 export class MCPOAuthClientProvider implements OAuthClientProvider {
   private _redirectUrl: string | URL;
-  private _clientMetadata: MCPClientMetadata;
+  private _clientMetadata: OAuthClientMetadata;
   readonly clientMetadataUrl?: string;
   private readonly storage: OAuthStorage;
   private readonly onRedirect?: (url: URL) => void | Promise<void>;
@@ -192,12 +192,14 @@ export class MCPOAuthClientProvider implements OAuthClientProvider {
         throw new Error('clientMetadataUrl must match clientMetadata.client_id');
       }
       if (!options.clientMetadata.client_name || options.clientMetadata.redirect_uris.length === 0) {
-        throw new Error('Client ID Metadata Documents require client_id, client_name, and at least one redirect_uri');
+        throw new Error('Client ID Metadata Documents require client_name and at least one redirect_uri');
       }
     }
 
+    const registrationMetadata = { ...options.clientMetadata };
+    delete registrationMetadata.client_id;
     this._redirectUrl = options.redirectUrl;
-    this._clientMetadata = options.clientMetadata;
+    this._clientMetadata = registrationMetadata;
     this.clientMetadataUrl = options.clientMetadataUrl;
     this.configuredClientInfo = options.clientInformation;
     this.storage = options.storage ?? new InMemoryOAuthStorage();
@@ -215,7 +217,7 @@ export class MCPOAuthClientProvider implements OAuthClientProvider {
   /**
    * Metadata about this OAuth client.
    */
-  get clientMetadata(): MCPClientMetadata {
+  get clientMetadata(): OAuthClientMetadata {
     return this._clientMetadata;
   }
 

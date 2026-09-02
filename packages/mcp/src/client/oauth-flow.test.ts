@@ -28,6 +28,8 @@ interface FakeAuthorizationServer {
   url: string;
   /** Every dynamic client registration received, in order. */
   registrations: ClientRegistration[];
+  /** Raw metadata sent in each dynamic registration request. */
+  registrationRequests: Array<Record<string, unknown>>;
   /** The client_id of every authorization request received, in order. */
   authorizeClientIds: string[];
   /** The redirect_uri of every authorization request received, in order. */
@@ -74,6 +76,7 @@ async function startFakeAuthorizationServer(
   const state: FakeAuthorizationServer = {
     url,
     registrations: [],
+    registrationRequests: [],
     authorizeClientIds: [],
     authorizeRedirectUris: [],
     addClientMetadataDocument: (clientId, redirectUris) => {
@@ -111,6 +114,7 @@ async function startFakeAuthorizationServer(
 
     if (requestUrl.pathname === '/register' && req.method === 'POST') {
       const metadata = JSON.parse(await readBody(req));
+      state.registrationRequests.push(metadata);
       const registration: ClientRegistration = {
         client_id: `client-${randomUUID()}`,
         redirect_uris: metadata.redirect_uris,
@@ -400,7 +404,7 @@ describe('MCPClient OAuth authorization flow', () => {
     await expect(provider.clientInformation()).resolves.toMatchObject({ client_id: clientMetadataUrl });
   });
 
-  it('fails closed without downgrading to DCR when metadata document validation fails', async () => {
+  it('does not downgrade to DCR after the authorization server rejects an unknown CIMD client', async () => {
     const { authServer, mcpServer, callbackUrl } = await setup({ clientMetadataDocumentSupported: true });
     const clientMetadataUrl = 'https://client.example.com/oauth/malformed.json';
     const provider = createProvider({ clientMetadataUrl, callbackUrl, onRedirectToAuthorization: driveBrowser });
@@ -461,6 +465,7 @@ describe('MCPClient OAuth authorization flow', () => {
 
     expect(mcp.getServerAuthState('fixture')).toBe('authorized');
     expect(authServer.registrations).toHaveLength(1);
+    expect(authServer.registrationRequests[0]).not.toHaveProperty('client_id');
     expect(authServer.authorizeClientIds[0]).toBe(authServer.registrations[0]?.client_id);
   });
 
