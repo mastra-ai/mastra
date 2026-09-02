@@ -575,8 +575,8 @@ export class FactoryDecisionDispatcher {
     // whether it may finish work a person already handed it. Once someone starts
     // an item, the runs that carry it to review are that same request continuing.
     const item = record.workItemId ? await this.#storage.get({ orgId: record.orgId, id: record.workItemId }) : null;
-    // Neither arming nor auto-run is standing consent for code from outside the
-    // write-access circle: only the run a person's own gesture queued is pre-approved.
+    // Neither arming nor auto-run is standing consent for code from outside the write-access
+    // circle: only a run pre-approved by a person's gesture or its own agent's governed move passes.
     if (item && externallyAuthoredWorkItem(item)) return true;
     if (item?.autonomyArmedAt != null) return false;
     return !(await this.#isAutoRunEnabled({ orgId: record.orgId, factoryProjectId: record.factoryProjectId }));

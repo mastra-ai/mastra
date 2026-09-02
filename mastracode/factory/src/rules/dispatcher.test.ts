@@ -218,9 +218,9 @@ async function queueDecision(
     board: 'work',
     stage: 'execute',
     expectedRevision: item.revision,
-    actor: { type: 'human', id: 'user-1' },
-    ingress: { type: 'human', identity: options?.ingress ?? 'move-1' },
-    cause: 'test',
+    actor: { type: 'system', id: 'factory-rule-dispatcher' },
+    ingress: { type: 'rule', identity: options?.ingress ?? 'move-1' },
+    cause: 'rule_decision',
   });
   expect(result.status).toBe('accepted');
   return { item, transitionService };
@@ -1941,6 +1941,73 @@ describe('FactoryDecisionDispatcher', () => {
 
     expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]?.status).toBe('proposed');
     expect(session.sendSignal).not.toHaveBeenCalled();
+  });
+
+  it("runs the plan an agent's move queues on an externally authored card a person started", async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const item = (
+      await storage.upsert({
+        orgId: 'org-1',
+        userId: 'user-1',
+        factoryProjectId: PROJECT_ID,
+        input: {
+          externalSource: { integrationId: 'github', type: 'issue', externalId: 'github-issue:9' },
+          title: 'Outside report',
+          stages: ['triage'],
+          sessions: {},
+          metadata: { authorTrusted: false },
+        },
+      })
+    ).item;
+    await storage.armAutonomy({ orgId: 'org-1', id: item.id, now: new Date('2030-01-01T00:00:00Z') });
+    await bindWorkRun(storage, item.id);
+    const bound = await storage.get({ orgId: 'org-1', id: item.id });
+    const transitionService = new FactoryTransitionService({
+      storage,
+      rules: defaultFactoryRules({
+        version: 'rules-v1',
+        overrides: {
+          work: {
+            planning: {
+              issue: {
+                onEnter: () => ({
+                  type: 'invokeSkill',
+                  role: 'work',
+                  skillName: 'factory-plan',
+                  idempotencyKey: 'plan-1',
+                }),
+              },
+            },
+          },
+        },
+      }),
+    });
+    const planned = await transitionService.transition({
+      orgId: 'org-1',
+      factoryProjectId: PROJECT_ID,
+      workItemId: item.id,
+      board: 'work',
+      stage: 'planning',
+      expectedRevision: bound?.revision ?? item.revision,
+      actor: { type: 'agent', bindingId: 'binding-1', role: 'triage' },
+      ingress: { type: 'agent', identity: 'triage-verdict-1' },
+      cause: 'triage verdict',
+      triageType: 'bug',
+    });
+    expect(planned.status).toBe('accepted');
+    const { controller, session } = createSession();
+    const dispatcher = new FactoryDecisionDispatcher({
+      controller: controller as never,
+      transitionService,
+      storage,
+      ownerId: 'worker-1',
+      isAutoRunEnabled: async () => false,
+    });
+
+    await dispatcher.runOnce(new Date('2030-01-01T00:01:00Z'));
+
+    expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]?.status).toBe('succeeded');
+    expect(session.sendSignal).toHaveBeenCalledTimes(1);
   });
 
   it('fails closed on a GitHub card missing its trust stamp, even armed with auto-run on', async () => {

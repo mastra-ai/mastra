@@ -19,7 +19,6 @@ import { useLinkComponent } from '@/lib/framework';
 export interface DatasetsListProps {
   datasets: DatasetRecord[];
   experiments: DatasetExperiment[];
-  reviewByDataset?: Map<string, { needsReview: number; complete: number }>;
   isLoading: boolean;
   search?: string;
   targetFilter?: string;
@@ -31,21 +30,12 @@ export interface DatasetsListProps {
   onPrevPage?: () => void;
 }
 
-const COLUMNS = 'auto 1fr auto 5rem 9rem 10rem 7rem 8rem';
+const COLUMNS = 'auto 1fr auto 5rem 9rem 10rem 7rem';
 
 function getExperimentsBadgeVariant(successPct: number | null): BadgeVariant {
   if (successPct !== null && successPct >= 70) return 'green';
   if (successPct !== null && successPct >= 40) return 'yellow';
   return 'red';
-}
-
-function getDatasetRowLayout(hasExperimentsAction: boolean, hasReviewAction: boolean) {
-  return {
-    rowLinkColEnd: hasExperimentsAction ? -3 : hasReviewAction ? -2 : -1,
-    showExperimentsPlaceholder: !hasExperimentsAction,
-    showReviewPlaceholderInLink: !hasExperimentsAction && !hasReviewAction,
-    showReviewPlaceholderAfterExperiments: hasExperimentsAction && !hasReviewAction,
-  };
 }
 
 function TargetTypeIcon({ type }: { type: DatasetTargetType }) {
@@ -73,7 +63,6 @@ function formatDate(dateStr: string | Date | undefined | null): string {
 export function DatasetsList({
   datasets,
   experiments,
-  reviewByDataset,
   isLoading,
   search = '',
   targetFilter = 'all',
@@ -127,20 +116,17 @@ export function DatasetsList({
         <EntityList.TopCell>Target</EntityList.TopCell>
         <EntityList.TopCell>Last Updated</EntityList.TopCell>
         <EntityList.TopCell>Experiments</EntityList.TopCell>
-        <EntityList.TopCell className="justify-center">Review</EntityList.TopCell>
       </EntityList.Top>
 
       {filteredData.map((ds, index) => {
         const experimentsBadgeVariant = getExperimentsBadgeVariant(ds.successPct);
-        const review = reviewByDataset?.get(ds.id);
         const tags = Array.isArray(ds.tags) ? ds.tags.filter(tag => typeof tag === 'string') : [];
         const hasExperimentsAction = ds.experimentCount > 0;
-        const rowLayout = getDatasetRowLayout(hasExperimentsAction, Boolean(review));
 
         return (
           <EntityList.RowWrapper key={ds.id}>
             <EntityList.RowLink
-              colEnd={rowLayout.rowLinkColEnd}
+              colEnd={hasExperimentsAction ? -2 : -1}
               to={paths.datasetLink(ds.id)}
               LinkComponent={Link}
               {...getRowProps(index)}
@@ -177,14 +163,13 @@ export function DatasetsList({
                 )}
               </EntityList.Cell>
               <EntityList.TextCell>{formatDate(ds.updatedAt)}</EntityList.TextCell>
-              {rowLayout.showExperimentsPlaceholder ? <EntityList.Cell className="justify-center" /> : null}
-              {rowLayout.showReviewPlaceholderInLink ? <EntityList.Cell className="justify-center" /> : null}
+              {hasExperimentsAction ? null : <EntityList.Cell className="justify-center" />}
             </EntityList.RowLink>
 
             {hasExperimentsAction ? (
               <Button
                 as={Link}
-                to={`${paths.datasetLink(ds.id)}?tab=experiments`}
+                to={`/experiments?dataset=${ds.id}`}
                 variant="ghost"
                 size="sm"
                 className="h-full w-full rounded-lg p-0!"
@@ -193,28 +178,6 @@ export function DatasetsList({
                   {ds.experimentCount} ({ds.successPct ?? 0}%)
                 </Badge>
               </Button>
-            ) : null}
-
-            {review ? (
-              <Button
-                as={Link}
-                to={`${paths.datasetLink(ds.id)}?tab=review`}
-                variant="ghost"
-                size="sm"
-                className="h-full w-full rounded-lg p-0!"
-              >
-                {review.needsReview > 0 ? (
-                  <Badge variant="yellow" size="sm">
-                    {review.needsReview} pending
-                  </Badge>
-                ) : (
-                  <Badge variant="green" size="sm">
-                    {review.complete} reviewed
-                  </Badge>
-                )}
-              </Button>
-            ) : rowLayout.showReviewPlaceholderAfterExperiments ? (
-              <EntityList.Cell className="justify-center" />
             ) : null}
           </EntityList.RowWrapper>
         );

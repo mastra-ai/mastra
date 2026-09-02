@@ -1,9 +1,6 @@
 import type {
   DatasetExperiment,
   DatasetExperimentResult,
-  GetAgentResponse,
-  GetScorerResponse,
-  GetWorkflowResponse,
   ListScoresResponse,
   MastraClient,
   RouteResponse,
@@ -55,9 +52,12 @@ export const experimentSpanDetailById: Record<string, GetSpanResponse> = {
   },
 };
 
-export const noAgents: Record<string, GetAgentResponse> = {};
-export const noWorkflows: Record<string, GetWorkflowResponse> = {};
-export const noScorers: Record<string, GetScorerResponse> = {};
+export {
+  noAgents,
+  noProcessors,
+  noScorers,
+  noWorkflows,
+} from '@/domains/experiments/components/__tests__/fixtures/target-registries';
 
 const pagination = (total: number): PaginationInfo => ({
   total,
