@@ -251,6 +251,8 @@ export class CoreToolBuilder extends MastraBase {
   private originalTool: ToolToConvert;
   private options: ToolOptions;
   private logType?: LogType;
+  /** EXPERIMENT: injected schema kept here instead of written back onto originalTool. */
+  private injectedInputSchema?: StandardSchemaWithJSON;
 
   constructor(input: {
     originalTool: ToolToConvert;
@@ -321,7 +323,7 @@ export class CoreToolBuilder extends MastraBase {
                 .optional(),
             });
           }
-          this.originalTool.inputSchema = toStandardSchema(nextSchema);
+          this.injectedInputSchema = toStandardSchema(nextSchema);
         } else {
           // Normalize to Standard Schema, extract JSON Schema, splice overrides.
           const standardSchema = isStandardSchemaWithJSON(schema) ? schema : toStandardSchema(schema);
@@ -352,11 +354,7 @@ export class CoreToolBuilder extends MastraBase {
             // `.transform()` / `.default()` / `.refine()` etc.) while exposing
             // the spliced JSON Schema for provider serialization. See
             // https://github.com/mastra-ai/mastra/pull/16915#discussion_r3282520408
-            this.originalTool.inputSchema = buildJsonOverrideSchema(
-              schema,
-              { ...jsonSchema, properties },
-              injectedKeys,
-            );
+            this.injectedInputSchema = buildJsonOverrideSchema(schema, { ...jsonSchema, properties }, injectedKeys);
           }
         }
       }
@@ -379,6 +377,10 @@ export class CoreToolBuilder extends MastraBase {
       }
 
       return schema;
+    }
+
+    if (this.injectedInputSchema) {
+      return this.injectedInputSchema;
     }
 
     // For Mastra tools, inputSchema might also be a function
@@ -760,7 +762,7 @@ export class CoreToolBuilder extends MastraBase {
           result = await executeWithContext({
             span: toolSpan,
             fn: async () => {
-              if (inputValidationSchema) {
+              if (inputValidationSchema || this.injectedInputSchema) {
                 markBuilderValidatedInput(toolContext);
               }
               return tool?.execute?.(args, toolContext);

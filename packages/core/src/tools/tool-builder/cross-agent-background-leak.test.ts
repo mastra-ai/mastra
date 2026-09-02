@@ -1,5 +1,5 @@
 /**
- * Reproduction for the cross-agent `_background` leak.
+ * Regression coverage for the cross-agent `_background` leak.
  *
  * `CoreToolBuilder` writes the schema it injects back onto
  * `originalTool.inputSchema` — the caller's own tool object, which is typically
@@ -11,8 +11,14 @@
  * (`isToolBackgroundEligible`), but the object is still shared, so the first
  * agent to convert the tool decides what every other agent's model sees.
  *
- * The second test is the control: reversing the conversion order flips the
- * result, which rules out "the tool is simply always eligible".
+ * The second test is the control: before the fix, reversing the conversion order
+ * flipped the result, which ruled out "the tool is simply always eligible".
+ *
+ * The third guards the coupling that makes the naive fix wrong: the write-back
+ * was also how the framework's own injected keys reached the tool body past
+ * `Tool.execute`'s validation, which strips undeclared keys. Nothing covered
+ * that, so removing the write-back could silently break sub-agent and workflow
+ * resume (`suspendedToolRunId` arrives in args and gates `shouldResumeSubAgent`).
  */
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
@@ -96,5 +102,57 @@ describe('cross-agent `_background` leak', () => {
     }).build();
 
     expect(modelFacingProperties(builtForB)).not.toHaveProperty('_background');
+  });
+  it('still delivers framework-injected keys to the tool body (no compat layer)', async () => {
+    const inner = vi.fn().mockResolvedValue({ ok: true });
+
+    // Mirrors a sub-agent tool: the framework's own schema does not declare
+    // `suspendedToolRunId`; the builder injects it because the id is `agent-`
+    // prefixed. `baseOptions` has no model, so no provider compat layer applies
+    // — the path where `Tool.execute` would otherwise run its own validation.
+    const subAgentTool = createTool({
+      id: 'agent-researcher',
+      description: 'Delegate to the researcher agent',
+      inputSchema: z.object({ prompt: z.string() }),
+      execute: inner,
+    });
+
+    const built = new CoreToolBuilder({
+      originalTool: subAgentTool,
+      options: toolOptions('agent-researcher'),
+    }).build();
+
+    await built.execute!(
+      { prompt: 'go', suspendedToolRunId: 'run_abc' } as any,
+      {
+        toolCallId: 'call-1',
+        messages: [],
+      } as any,
+    );
+
+    expect(inner).toHaveBeenCalledTimes(1);
+    expect(inner.mock.calls[0]![0]).toMatchObject({ prompt: 'go', suspendedToolRunId: 'run_abc' });
+  });
+
+  it('still rejects invalid input for a tool with injected keys', async () => {
+    const inner = vi.fn();
+
+    const subAgentTool = createTool({
+      id: 'agent-researcher',
+      description: 'Delegate to the researcher agent',
+      inputSchema: z.object({ prompt: z.string() }),
+      execute: inner,
+    });
+
+    const built = new CoreToolBuilder({
+      originalTool: subAgentTool,
+      options: toolOptions('agent-researcher'),
+    }).build();
+
+    // Skipping `Tool.execute`'s validation must not mean skipping validation:
+    // the builder validates against the injected schema instead.
+    await built.execute!({ prompt: 12345 } as any, { toolCallId: 'call-1', messages: [] } as any);
+
+    expect(inner).not.toHaveBeenCalled();
   });
 });
