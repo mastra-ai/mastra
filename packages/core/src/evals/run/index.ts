@@ -373,7 +373,10 @@ export async function runEvals(config: RunEvalsAnyConfig): Promise<RunEvalsResul
               targetTraceId: targetResult.traceId,
               targetSpanId: targetResult.spanId,
             });
-            gateScoresByGateId[gate.id]!.push(gateScore.score as number);
+            // Not-scorable gate runs stay out of the gate average
+            if (!gateScore.notScorable) {
+              gateScoresByGateId[gate.id]!.push(gateScore.score as number);
+            }
           } catch (error) {
             // Gate failure = score 0. The contract stays, but the cause is
             // logged so a broken scorer is distinguishable from a real 0.
@@ -623,9 +626,12 @@ async function scoreTurn(
         targetTraceId: record.traceId,
         targetSpanId: record.spanId,
       });
+      rawResults[scorer.id] = scoreResult;
+      if (scoreResult.notScorable) {
+        continue;
+      }
       const score = scoreResult.score as number;
       scores.push({ id: scorer.id, score });
-      rawResults[scorer.id] = scoreResult;
       const threshold = thresholdMap.get(scorer.id);
       if (threshold !== undefined) {
         thresholds.push({ id: scorer.id, score, threshold });

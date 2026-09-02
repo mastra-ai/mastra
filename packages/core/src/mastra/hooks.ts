@@ -76,6 +76,16 @@ export function createOnScorerHook(mastra: Mastra) {
         targetMetadata,
       } as any);
 
+      if (runResult.notScorable) {
+        mastra
+          .getLogger()
+          ?.debug?.(
+            `Scorer ${scorerId} skipped run ${hookData.runId} as not scorable` +
+              (runResult.notScorable.reason ? `: ${runResult.notScorable.reason}` : ''),
+          );
+        return;
+      }
+
       const payload = {
         ...rest,
         ...runResult,

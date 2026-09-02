@@ -1,0 +1,94 @@
+---
+title: 'Reference: notScorable() | Evals'
+description: 'Marks a scorer run as not scorable. Return it from a scorer step to skip the remaining steps and keep the run out of score aggregates.'
+packages:
+  - '@mastra/core'
+---
+
+# notScorable()
+
+Marks the current scorer run as not scorable. Return it from any scorer step when the run doesn't contain what the scorer evaluates, for example a tool-call judge on a run that never called the tool.
+
+When a step returns `notScorable()`:
+
+- The remaining steps are skipped, so no further judge model calls are made.
+- The run result has no `score`. It carries a `notScorable` outcome instead.
+- No score record is stored. Live scorer hooks, `scoreTraces` batches, `runEvals`, and experiments all exclude the run from that scorer's averages rather than counting it as a pass.
+
+Use an [eligibility filter](/docs/evals/overview#live-evaluations) when the decision can be made from the run context before the scorer runs. Use `notScorable()` when the decision needs the run's input or output.
+
+## Usage example
+
+```typescript title="src/mastra/scorers/refund-judge.ts"
+import { createScorer, notScorable } from '@mastra/core/evals'
+import { z } from 'zod'
+
+export const refundJudge = createScorer({
+  id: 'refund-judge',
+  description: 'Judges how well refund requests were handled',
+  type: 'agent',
+  judge: { model: '__GATEWAY_OPENAI_MODEL_MINI__', instructions: 'You judge refund handling.' },
+})
+  .preprocess(({ run }) => {
+    const calledRefund = run.output.some(message =>
+      message.content.parts?.some(
+        part =>
+          part.type === 'tool-invocation' && part.toolInvocation.toolName === 'refundCustomer',
+      ),
+    )
+    if (!calledRefund) {
+      return notScorable('refundCustomer was not called')
+    }
+    return { calledRefund }
+  })
+  .analyze({
+    description: 'Assess the refund handling',
+    outputSchema: z.object({ verdict: z.enum(['good', 'bad']) }),
+    createPrompt: ({ run }) => `Was this refund handled well?\n${JSON.stringify(run.output)}`,
+  })
+  .generateScore(({ results }) => (results.analyzeStepResult.verdict === 'good' ? 1 : 0))
+```
+
+## Parameters
+
+<PropertiesTable
+  content={[
+  {
+    name: 'reason',
+    type: 'string',
+    isOptional: true,
+    description: 'Why the run is not scorable. Surfaced on the run result and the scorer span.',
+  },
+]}
+/>
+
+## Returns
+
+A marker value. Return it directly from a scorer step; don't wrap it in another object.
+
+## Run result
+
+When a step returned `notScorable()`, `scorer.run()` resolves with:
+
+<PropertiesTable
+  content={[
+  {
+    name: 'notScorable',
+    type: '{ reason?: string }',
+    description: 'Present only for not-scorable runs. Carries the reason passed to notScorable().',
+  },
+  {
+    name: 'score',
+    type: 'undefined',
+    description: 'No score is produced for a not-scorable run.',
+  },
+]}
+/>
+
+Step results from steps that ran before `notScorable()` was returned are still included.
+
+## Related
+
+- [`createScorer()`](/reference/evals/create-scorer)
+- [`filterRun()`](/reference/evals/filter-run)
+- [Custom scorers](/docs/evals/custom-scorers)
