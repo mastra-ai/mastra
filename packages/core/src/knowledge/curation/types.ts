@@ -42,9 +42,33 @@ export interface KnowledgeCuratorWorklistInput {
   limit?: number;
 }
 
+export interface KnowledgeCuratorWorklistItem {
+  node: KnowledgeNode;
+  records: KnowledgeRecord[];
+  recordsNextCursor?: string;
+}
+
+export interface KnowledgeCuratorRecordPageInput {
+  nodeId: string;
+  cursor?: string;
+  limit?: number;
+}
+
+export interface KnowledgeCuratorRecordPage {
+  records: KnowledgeRecord[];
+  nextCursor?: string;
+}
+
 export interface KnowledgeCuratorWorklist {
   nodes: KnowledgeNode[];
+  items: KnowledgeCuratorWorklistItem[];
   nextCursor?: string;
+}
+
+export interface KnowledgeCuratorMergeTargetsInput {
+  namePrefix: string;
+  excludeNodeId?: string;
+  limit?: number;
 }
 
 export type KnowledgeCuratorMutationResult =
@@ -71,6 +95,7 @@ export interface KnowledgeCuratorMergeInput {
   sourceId: string;
   targetId: string;
   sourceVersion: number;
+  targetVersion: number;
 }
 
 export interface KnowledgeCuratorDiscardInput {
@@ -82,4 +107,5 @@ export interface KnowledgeCuratorRetainedItem {
   outcome: 'retained';
   node: KnowledgeNode;
   records: KnowledgeRecord[];
+  recordsNextCursor?: string;
 }
