@@ -9,22 +9,11 @@ import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { createMemoryRouter, RouterProvider } from 'react-router';
-import { describe, expect, it, onTestFinished } from 'vitest';
+import { describe, expect, it } from 'vitest';
 
 import { server } from '../../../e2e/ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../../e2e/ui/render';
 import { createAppRoutes } from '../router';
-
-// jsdom lays nothing out, so the measured content reports the height stubbed here.
-const PANEL_CONTENT_HEIGHT = 248;
-
-function stubContentHeight(height: number) {
-  const original = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'scrollHeight');
-  Object.defineProperty(HTMLElement.prototype, 'scrollHeight', { configurable: true, value: height });
-  onTestFinished(() => {
-    if (original) Object.defineProperty(HTMLElement.prototype, 'scrollHeight', original);
-  });
-}
 
 const FACTORY_ID = 'fp-1';
 const REPO_ID = 'repo-1';
@@ -189,6 +178,35 @@ describe('Board card details open the default run', () => {
     });
   });
 
+  it('starts a hands-off run from the card menu, asking the server to preapprove its plans', async () => {
+    const { startRequests } = stubBoardEndpoints();
+    renderWorkBoard();
+    const user = userEvent.setup();
+
+    await user.click(await screen.findByRole('button', { name: 'Actions for Fix login bug' }));
+    await user.click(await screen.findByRole('menuitem', { name: 'Investigate hands-off' }));
+
+    await waitFor(() => expect(startRequests).toHaveLength(1));
+    expect(startRequests[0]).toMatchObject({
+      preapprovePlans: true,
+      workItem: { id: 'item-1', role: 'triage' },
+    });
+  });
+
+  it('offers no hands-off twin for Prepare approval, whose outcome is a maintainer decision', async () => {
+    stubBoardEndpoints({
+      workItems: [
+        { ...issueWorkItem, metadata: { number: 7, labels: ['status: needs approval'] }, stages: ['triage'] },
+      ],
+    });
+    renderWorkBoard();
+    const user = userEvent.setup();
+
+    await user.click(await screen.findByRole('button', { name: 'Actions for Fix login bug' }));
+    await screen.findByRole('menuitem', { name: 'Prepare approval' });
+    expect(screen.queryByRole('menuitem', { name: 'Prepare approval hands-off' })).not.toBeInTheDocument();
+  });
+
   it("shows a Linear card's own description in its details", async () => {
     stubBoardEndpoints({ workItems: [linearWorkItem] });
     renderWorkBoard();
@@ -208,23 +226,10 @@ describe('Board card details open the default run', () => {
     await user.click(await screen.findByRole('button', { name: 'Details for Fix login bug' }));
 
     const dialog = await screen.findByRole('dialog', { name: 'Fix login bug' });
-    expect(within(dialog).getByRole('link', { name: 'Open in GitHub' })).toHaveAttribute(
+    expect(within(dialog).getByRole('link', { name: 'Open in GitHub: #7' })).toHaveAttribute(
       'href',
       'https://github.com/acme/app/issues/7',
     );
-  });
-
-  // The popover renders its content one commit after it opens: measuring from the open flag found nothing and left a 0px line.
-  it('sizes the panel from its content on the first open', async () => {
-    stubContentHeight(PANEL_CONTENT_HEIGHT);
-    stubBoardEndpoints();
-    renderWorkBoard();
-    const user = userEvent.setup();
-
-    await user.click(await screen.findByRole('button', { name: 'Details for Fix login bug' }));
-
-    const dialog = await screen.findByRole('dialog', { name: 'Fix login bug' });
-    await waitFor(() => expect(dialog.style.getPropertyValue('--board-panel-h')).toBe(`${PANEL_CONTENT_HEIGHT}px`));
   });
 
   it('starts a persisted Linear Triage item with the Linear kickoff invocation', async () => {

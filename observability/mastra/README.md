@@ -1,6 +1,6 @@
-# Mastra Observability
+# @mastra/observability
 
-Tracing, metrics, and structured logging for AI operations in Mastra.
+Monitor Mastra agents, workflows, tools, and model calls with hierarchical traces, automatically extracted metrics, and structured logs correlated to the active trace.
 
 ## Installation
 
@@ -8,7 +8,7 @@ Tracing, metrics, and structured logging for AI operations in Mastra.
 npm install @mastra/observability
 ```
 
-## Quick Start
+## Usage
 
 ```typescript
 import { Mastra } from '@mastra/core';
@@ -19,100 +19,29 @@ export const mastra = new Mastra({
     configs: {
       default: {
         serviceName: 'my-app',
-        exporters: [
-          new MastraStorageExporter(), // Persists observability events to Mastra Storage
-          new MastraPlatformExporter(), // Sends observability events to Mastra Platform
-        ],
+        exporters: [new MastraStorageExporter(), new MastraPlatformExporter()],
       },
     },
   }),
 });
 ```
 
-A `SensitiveDataFilter` span output processor is auto-applied to every configured instance by default, redacting secrets (API keys, tokens, passwords, etc.) before they reach exporters. Set `sensitiveDataFilter: false` on the `Observability` config to opt out, or pass a `SensitiveDataFilterOptions` object to customize it.
-
-## Features
-
-- **Auto-instrumentation** - Traces agent runs, LLM calls, tool executions, and workflows
-- **Pluggable Exporters** - Exporters for Studio, plus integrations for Arize, Braintrust, Langfuse, LangSmith, and OpenTelemetry
-- **Sampling Strategies** - Always, ratio-based, or custom sampling
-- **Span Processors** - Transform or filter span data before export
-- **OpenTelemetry Compatible** - Standard trace/span ID formats for integration
-
-## Architecture
-
-### ObservabilityBus
-
-Central event router that dispatches tracing, metric, and log events to registered exporters. All handler promises are tracked for reliable flush and shutdown — no events are silently dropped.
-
-Exporters register via `registerExporter()` and can optionally implement `onLogEvent` and `onMetricEvent` handlers alongside the existing `exportTracingEvent`.
-
-### Auto-extracted metrics
-
-Metrics are automatically extracted from span lifecycle events by `AutoExtractedMetrics`:
-
-- `mastra_agent_duration_ms`
-- `mastra_tool_duration_ms`
-- `mastra_workflow_duration_ms`
-- `mastra_model_duration_ms`
-- `mastra_model_total_input_tokens` / `mastra_model_total_output_tokens`
-- `mastra_model_input_text_tokens` / `mastra_model_input_cache_read_tokens` / `mastra_model_input_cache_write_tokens` / `mastra_model_input_cache_write_5m_tokens` / `mastra_model_input_cache_write_1h_tokens` / `mastra_model_input_audio_tokens` / `mastra_model_input_image_tokens`
-- `mastra_model_output_text_tokens` / `mastra_model_output_reasoning_tokens` / `mastra_model_output_audio_tokens` / `mastra_model_output_image_tokens`
-
-For Anthropic models, the aggregate cache-write metric remains available while the 5-minute and 1-hour metrics preserve the provider's TTL-specific token counts and pricing.
-
-Auto-extracted metrics carry labels: `entity_type`, `entity_name`, `status`, plus `model` and `provider` on model generation spans.
-
-### Structured logging
-
-`LoggerContextImpl` emits log events with automatic trace correlation (traceId, spanId), inherited tags, and entity metadata. Supports minimum log level filtering (debug/info/warn/error/fatal).
-
-### Metrics context
-
-`MetricsContextImpl` provides counter, gauge, and histogram instruments. All labels pass through a `CardinalityFilter` that blocks high-cardinality keys (trace_id, user_id, etc.) to protect metric backends.
-
-## Span Types
-
-- `WORKFLOW_RUN` - Workflow execution
-- `WORKFLOW_STEP` - Individual workflow step
-- `AGENT_RUN` - Agent processing
-- `MODEL_GENERATION` - LLM API calls
-- `TOOL_CALL` - Tool execution
-- `MCP_TOOL_CALL` - MCP tool execution
-- `PROCESSOR_RUN` - Processor execution
-- `GENERIC` - Custom operations
-
-## Metrics Labels
-
-### Auto-extracted metric labels
-
-| Label         | Description                                                          | Cardinality                 |
-| ------------- | -------------------------------------------------------------------- | --------------------------- |
-| `entity_type` | What is being measured (e.g., `agent`, `tool`, `workflow_run`)       | Small enum (~9 values)      |
-| `entity_name` | Name of the entity (e.g., `researcher`, `search`)                    | Bounded by defined entities |
-| `model`       | LLM model ID (only on model generation spans)                        | Bounded by LLM providers    |
-| `provider`    | LLM provider (only on model generation spans)                        | Bounded by LLM providers    |
-| `status`      | Outcome of the operation (`ok` or `error`), on `_ended` metrics only | 2 values                    |
-
-### User-emitted metric labels (via MetricsContext)
-
-User-emitted metrics inherit additional context labels from the active span:
-
-| Label          | Description                                                                 | Cardinality                 |
-| -------------- | --------------------------------------------------------------------------- | --------------------------- |
-| `parent_type`  | Entity type of the nearest parent                                           | Same small enum             |
-| `parent_name`  | Name of the nearest parent entity                                           | Bounded by defined entities |
-| `root_type`    | Entity type of the outermost ancestor (only set when different from parent) | Same small enum             |
-| `root_name`    | Name of the outermost ancestor entity                                       | Bounded by defined entities |
-| `service_name` | Service name from observability config                                      | Single value per deployment |
-
-### Common query patterns
-
-- **Which agent is expensive?** → group by `entity_name` where `entity_type=agent`
-- **Why is this tool slow only sometimes?** → group by `parent_name`
-- **What's the total cost of this user-facing flow?** → group by `root_name`
-- **Which model is cheapest for this agent?** → group by `model` where `entity_name=X`
-
 ## Documentation
 
-For configuration options, exporters, sampling strategies, and more, see the [full documentation](https://mastra.ai/docs/v1/observability/overview).
+`Observability` instruments agent runs, model generations, tool and MCP calls, processor execution, workflow runs, and workflow steps. Each configured observability instance has its own service name, exporters, sampling strategy, and span processors.
+
+Exporters receive tracing events through the central observability bus. `MastraStorageExporter` persists them to the configured Mastra storage so Studio can query them, while `MastraPlatformExporter` sends them to Mastra Platform. Additional packages provide exporters for services such as Arize, Braintrust, Langfuse, LangSmith, Sentry, and OpenTelemetry-compatible backends.
+
+A `SensitiveDataFilter` output processor is enabled by default and redacts common secrets before spans reach exporters. Set `sensitiveDataFilter: false` to disable it, or provide filter options to customize its behavior. Sampling can retain every trace, use a ratio, or apply application-specific logic.
+
+The package automatically derives duration, status, model token, and cache token metrics from span lifecycle events. Structured logs inherit trace and span IDs, tags, and entity metadata, while metric labels pass through cardinality filtering to prevent user IDs, trace IDs, and other unbounded values from overwhelming metrics backends.
+
+- [Observability documentation](https://mastra.ai/docs/studio/observability)
+
+## Changelog
+
+See the [package changelog](https://github.com/mastra-ai/mastra/blob/main/observability/mastra/CHANGELOG.md) for version history and release notes.
+
+## Support
+
+We have an [open community Discord](https://discord.gg/mastra-ai). Come and say hello and let us know if you have any questions or need any help getting things running.

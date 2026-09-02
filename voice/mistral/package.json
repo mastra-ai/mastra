@@ -1,11 +1,10 @@
 {
   "name": "@mastra/voice-mistral",
-  "version": "0.1.0",
+  "version": "0.1.1-alpha.1",
   "description": "Mastra Mistral voice integration",
   "type": "module",
   "files": [
-    "dist",
-    "CHANGELOG.md"
+    "dist"
   ],
   "main": "dist/index.js",
   "types": "dist/index.d.ts",

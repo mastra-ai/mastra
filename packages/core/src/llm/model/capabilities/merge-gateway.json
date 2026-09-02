@@ -2,6 +2,7 @@
   "attachment": [
     "anthropic/claude-3-7-sonnet-20250219",
     "anthropic/claude-fable-5",
+    "anthropic/claude-fable-5-1",
     "anthropic/claude-haiku-4-5-20251001",
     "anthropic/claude-opus-4-1-20250805",
     "anthropic/claude-opus-4-20250514",
@@ -79,7 +80,7 @@
     "qwen/qwen3-vl-235b-a22b-instruct",
     "qwen/qwen3-vl-235b-a22b-thinking",
     "qwen/qwen3-vl-plus",
-    "qwen/qwen3.5-27b",
+    "qwen/qwen3.5-35b-a3b",
     "qwen/qwen3.5-397b-a17b",
     "qwen/qwen3.5-9b",
     "qwen/qwen3.7-plus",
@@ -120,6 +121,7 @@
     "deepseek/deepseek-v3.2",
     "deepseek/deepseek-v4-flash",
     "deepseek/deepseek-v4-flash-0731",
+    "deepseek/deepseek-v4-flash-0731-fast",
     "deepseek/deepseek-v4-pro",
     "deepseek/deepseek-v4-pro-0423",
     "deepseek/deepseek-v4-pro-0813",
@@ -251,6 +253,7 @@
   "structuredOutput": [
     "anthropic/claude-3-7-sonnet-20250219",
     "anthropic/claude-fable-5",
+    "anthropic/claude-fable-5-1",
     "anthropic/claude-haiku-4-5-20251001",
     "anthropic/claude-opus-4-1-20250805",
     "anthropic/claude-opus-4-20250514",

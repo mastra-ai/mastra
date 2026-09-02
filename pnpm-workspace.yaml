@@ -43,6 +43,7 @@ catalog:
   '@vitest/coverage-v8': 4.1.10
   '@vitest/ui': 4.1.10
   date-fns: 4.4.0
+  lucide-react: ^1.37.0
   react: ^19.2.5
   react-dom: ^19.2.5
   typescript: ^7.0.2

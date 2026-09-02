@@ -86,6 +86,16 @@ export const skipIfFrameworkPublic = (handler: MiddlewareHandler): MiddlewareHan
   };
 };
 
+/**
+ * Context key holding a pristine clone of the incoming request, captured by
+ * the context middleware before user middleware runs. The custom-route bridge
+ * reads the body from this clone so user middleware that consumes the request
+ * body (e.g. `await c.req.json()`) does not break custom API routes.
+ */
+const MASTRA_PRISTINE_REQUEST_KEY = '__mastraPristineRequest';
+
+const BODY_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
+
 export type HonoBindings = {};
 
 /**
@@ -112,6 +122,14 @@ export interface HonoApp {
 export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context> {
   createContextMiddleware(): MiddlewareHandler {
     return async (c, next) => {
+      // Preserve a pristine clone of the request before user middleware runs.
+      // `Request.clone()` tees the body stream, so the clone stays readable
+      // even after middleware consumes the original (json/text/formData/raw).
+      // Only taken when custom routes exist — the bridge is the sole consumer.
+      if (this.hasCustomRouteHandler && BODY_METHODS.has(c.req.method) && c.req.raw.body) {
+        c.set(MASTRA_PRISTINE_REQUEST_KEY, c.req.raw.clone());
+      }
+
       // Patch req.json() to prevent "Body is unusable" errors when the body is read multiple times
       // e.g. by middleware and then by an agent.
       const originalJson = c.req.json.bind(c.req);
@@ -741,12 +759,17 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
           }
         }
 
+        // Use the pristine clone captured by the context middleware (before
+        // user middleware ran) so body reads survive middleware that already
+        // consumed `c.req.raw`.
+        const pristineRequest = (c.get(MASTRA_PRISTINE_REQUEST_KEY) as Request | undefined) ?? c.req.raw;
+
         // Check FGA authorization (EE feature)
         let bodyParams: Record<string, unknown> = {};
         const contentType = c.req.header('content-type');
         if (contentType?.includes('application/json')) {
           try {
-            const body = (await c.req.raw.clone().json()) as unknown;
+            const body = (await pristineRequest.clone().json()) as unknown;
             if (body && typeof body === 'object' && !Array.isArray(body)) {
               bodyParams = body as Record<string, unknown>;
             }
@@ -758,7 +781,7 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
           contentType?.includes('multipart/form-data')
         ) {
           try {
-            bodyParams = Object.fromEntries(await c.req.raw.clone().formData());
+            bodyParams = Object.fromEntries(await pristineRequest.clone().formData());
           } catch {
             bodyParams = {};
           }
@@ -790,7 +813,7 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
           c.req.url,
           c.req.method,
           reqHeaders,
-          c.req.raw.body,
+          pristineRequest.body,
           c.get('requestContext'),
           c.req.raw.signal,
           executionCtx,

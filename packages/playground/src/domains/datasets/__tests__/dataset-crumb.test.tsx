@@ -33,9 +33,9 @@ const renderCrumb = () => {
     <MastraReactProvider baseUrl={BASE_URL}>
       <QueryClientProvider client={queryClient}>
         <TestLinkProvider>
-          <MemoryRouter initialEntries={['/datasets/ds-1/experiments']}>
+          <MemoryRouter initialEntries={['/datasets/ds-1/items/item-1']}>
             <Routes>
-              <Route path="/datasets/:datasetId/experiments" element={<DatasetCrumb />} />
+              <Route path="/datasets/:datasetId/items/:itemId" element={<DatasetCrumb />} />
             </Routes>
           </MemoryRouter>
         </TestLinkProvider>

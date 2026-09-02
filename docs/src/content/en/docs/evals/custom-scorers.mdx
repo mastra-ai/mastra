@@ -279,7 +279,7 @@ const glutenCheckerScorer = createScorer({...})
 
 ## Input filtering
 
-Agent conversations can contain hundreds of messages with tool calls and data parts, plus system metadata. Most scorers only need a subset of this data. The `prepareRun` option transforms the run data before the scorer pipeline executes, reducing noise and keeping scorers focused.
+Agent conversations can contain hundreds of messages whose tool calls and data parts are accompanied by system metadata. Most scorers need only a subset. Before the scorer pipeline executes, the `prepareRun` option transforms the run data to reduce noise and keep each scorer focused.
 
 ### Declarative filtering with `filterRun()`
 

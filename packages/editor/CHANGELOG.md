@@ -1,5 +1,36 @@
 # @mastra/editor
 
+## 0.14.3-alpha.3
+
+### Patch Changes
+
+- Update README to include accurate, up-to-date information ([#22858](https://github.com/mastra-ai/mastra/pull/22858))
+
+- Updated dependencies [[`e983f74`](https://github.com/mastra-ai/mastra/commit/e983f749873189f767f509eb33d1a3596c0f1c74), [`b40fa91`](https://github.com/mastra-ai/mastra/commit/b40fa91496d794e060494f9c0d2fe940912f9190), [`cedc25d`](https://github.com/mastra-ai/mastra/commit/cedc25d8c2dec005d8b10b6ce2d36feef1162ff0), [`9fdb3bc`](https://github.com/mastra-ai/mastra/commit/9fdb3bc0f9bfab5269b4f3045595e62323da5d3a)]:
+  - @mastra/schema-compat@1.3.8-alpha.1
+  - @mastra/memory@1.28.2-alpha.2
+  - @mastra/core@1.64.0-alpha.7
+  - @mastra/mcp@1.17.3-alpha.2
+
+## 0.14.3-alpha.2
+
+### Patch Changes
+
+- Remove `CHANGELOG.md` from distributed npm files resulting in reduced package size ([#22737](https://github.com/mastra-ai/mastra/pull/22737))
+
+- Updated dependencies [[`cf58c86`](https://github.com/mastra-ai/mastra/commit/cf58c86cb48ccc72677bdaa422e43f102683184c), [`449d112`](https://github.com/mastra-ai/mastra/commit/449d1120cc1f9c43a71308a9fd8b178cfb11355f), [`2a0ca02`](https://github.com/mastra-ai/mastra/commit/2a0ca021d95e23f1d1c0b5fe858b0b56f71fe0ba), [`ff539f6`](https://github.com/mastra-ai/mastra/commit/ff539f6dc21137fbeb3f0867f07069cbce45c15f), [`420052f`](https://github.com/mastra-ai/mastra/commit/420052fcac3fc672be17fe655667dfbdbd35a2cc), [`28ce924`](https://github.com/mastra-ai/mastra/commit/28ce924276eeca492e6a360e5482ed20c2785ef6)]:
+  - @mastra/core@1.64.0-alpha.2
+  - @mastra/schema-compat@1.3.8-alpha.0
+  - @mastra/memory@1.28.2-alpha.1
+  - @mastra/mcp@1.17.3-alpha.0
+
+## 0.14.3-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [[`d94e242`](https://github.com/mastra-ai/mastra/commit/d94e2423909cfc859eaf39827e83c832439e6b6d), [`8571a42`](https://github.com/mastra-ai/mastra/commit/8571a42c8039e938564e5c5fb0a6b75377c4fe67)]:
+  - @mastra/memory@1.28.2-alpha.0
+
 ## 0.14.3-alpha.0
 
 ### Patch Changes

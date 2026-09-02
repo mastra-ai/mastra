@@ -34,6 +34,8 @@ export const queryKeys = {
     ['github', 'pr', githubProjectId ?? null, number ?? null] as const,
   githubRepositorySettings: (githubProjectId: string | undefined) =>
     ['github', 'repository-settings', githubProjectId ?? null] as const,
+  githubCommits: (projectRepositoryId: string | undefined, limit: number) =>
+    ['github', 'commits', projectRepositoryId ?? null, limit] as const,
   linearStatus: () => ['linear', 'status'] as const,
   linearProjects: () => ['linear', 'projects'] as const,
   linearIssuesAll: () => ['linear', 'issues'] as const,
@@ -60,10 +62,6 @@ export const queryKeys = {
     ['factory', 'knowledge-graph', factoryProjectId ?? null, threadId ?? null] as const,
   knowledgeNode: (factoryProjectId: string | undefined, nodeId: string | undefined, threadId?: string) =>
     ['factory', 'knowledge-node', factoryProjectId ?? null, nodeId ?? null, threadId ?? null] as const,
-  factoryMetrics: (githubProjectId: string | undefined, from: string, to: string) =>
-    ['factory', 'metrics', githubProjectId ?? null, from, to] as const,
-  factoryHealthThresholds: (githubProjectId: string | undefined) =>
-    ['factory', 'health-thresholds', githubProjectId ?? null] as const,
   /** Every decision list for a project, whatever status filter it was fetched with. */
   factoryDecisionsRoot: (githubProjectId: string | undefined) =>
     ['factory', 'decisions', githubProjectId ?? null] as const,
@@ -79,8 +77,6 @@ export const queryKeys = {
   sessions: (projectRepositoryId: string | undefined) => ['sessions', projectRepositoryId ?? null] as const,
   workspaces: (projectRepositoryId: string | undefined) => ['sessions', projectRepositoryId ?? null] as const,
   userSession: (sessionId: string | undefined) => ['user-session', sessionId ?? null] as const,
-  workspaceAttention: (projectRepositoryId: string | undefined, sessionKind: 'factory' | 'user') =>
-    ['workspace-attention', projectRepositoryId ?? null, sessionKind] as const,
   providers: () => ['providers'] as const,
   availableModels: () => ['available-models'] as const,
   customProviders: () => ['custom-providers'] as const,

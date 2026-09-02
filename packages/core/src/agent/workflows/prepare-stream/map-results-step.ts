@@ -15,7 +15,7 @@ import type { SaveQueueManager } from '../../save-queue';
 import { getModelOutputForTripwire } from '../../trip-wire';
 import type { AgentMethodType } from '../../types';
 import { isSupportedLanguageModel } from '../../utils';
-import { fireClientToolOutputHooks } from './client-tool-output-hooks';
+import { applyClientToolModelOutput, fireClientToolOutputHooks } from './client-tool-output-hooks';
 import type { PrepareStreamRunScope } from './run-scope';
 import {
   CONVERTED_TOOLS_KEY,
@@ -182,6 +182,16 @@ export function createMapResultsStep<OUTPUT = undefined>({
       messages: options.messages,
       tools: convertedTools,
       abortSignal: options.abortSignal,
+      logger: capabilities.logger,
+    });
+
+    // Apply server-defined toModelOutput to those same client-executed results.
+    // This enriches the ingested MessageList parts (not options.messages — the
+    // list converted its own copies in prepare-memory) so prompt conversion
+    // restores the mapped output.
+    await applyClientToolModelOutput({
+      messageList,
+      tools: convertedTools,
       logger: capabilities.logger,
     });
 

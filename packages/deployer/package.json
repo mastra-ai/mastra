@@ -1,11 +1,10 @@
 {
   "name": "@mastra/deployer",
-  "version": "1.63.3-alpha.0",
+  "version": "1.64.0-alpha.7",
   "description": "",
   "type": "module",
   "files": [
-    "dist",
-    "CHANGELOG.md"
+    "dist"
   ],
   "main": "dist/index.js",
   "types": "dist/index.d.ts",

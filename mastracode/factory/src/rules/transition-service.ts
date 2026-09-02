@@ -131,7 +131,6 @@ function bearsConsent(actor: FactoryRuleActor): boolean {
 // Rides the transition's own revision-checked commit, so a stale or rejected commit flips nothing.
 function consentEffect(request: FactoryTransitionRequest, humanBoardDrag: boolean): TransitionConsentOptions {
   const autonomy = transitionConsent(request.stage, humanBoardDrag);
-  if (autonomy === undefined) return {};
   return bearsConsent(request.actor) ? { autonomy, consentedBy: actorId(request.actor) } : { autonomy };
 }
 

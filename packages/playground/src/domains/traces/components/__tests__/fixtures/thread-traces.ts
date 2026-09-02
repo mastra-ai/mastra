@@ -53,6 +53,11 @@ export const traceASpans: GetTraceResponse = {
   spans: [{ ...baseTrace, parentSpanId: null }],
 };
 
+export const traceBSpans: GetTraceResponse = {
+  traceId: 'trace-b',
+  spans: [{ ...threadTracesList.spans[1], parentSpanId: null }],
+};
+
 export const spanADetail: GetSpanResponse = {
   span: { ...baseTrace, parentSpanId: null, input: { message: 'cook pasta' }, output: { text: 'carbonara' } },
 };

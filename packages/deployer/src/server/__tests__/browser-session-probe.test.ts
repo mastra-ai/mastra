@@ -79,6 +79,37 @@ describe('deployer browser session probe', () => {
     await expect(response.json()).resolves.toEqual({ hasSession: false, screencastAvailable: false });
   });
 
+  it('resolves a workspace-level CLI browser through getToolset when the agent has no agent-level browser', async () => {
+    const setupBrowserStreamMock = vi.fn().mockResolvedValue({ injectWebSocket: () => {}, registry: {} });
+    vi.doMock('@mastra/hono', async () => {
+      const actual = await vi.importActual<typeof MastraHono>('@mastra/hono');
+      return {
+        ...actual,
+        setupBrowserStream: setupBrowserStreamMock,
+      };
+    });
+
+    const { Agent } = await import('@mastra/core/agent');
+    const { createHonoServer } = await import('../index');
+
+    const agent = new Agent({
+      id: 'cli-browser-agent',
+      name: 'cli-browser-agent',
+      instructions: 'test',
+      model: {} as any,
+    });
+    const workspaceBrowser = { providerType: 'cli', hasThreadSession: () => false };
+    vi.spyOn(agent, 'getWorkspace').mockResolvedValue({ id: 'ws', browser: workspaceBrowser } as any);
+
+    const mastra = new Mastra({ logger: false, agents: { 'cli-browser-agent': agent } });
+    await createHonoServer(mastra, { tools: {} });
+
+    const config = setupBrowserStreamMock.mock.calls[0]![1];
+    await expect(config.getToolset('cli-browser-agent')).resolves.toBe(workspaceBrowser);
+    // Unknown agents still resolve to undefined
+    await expect(config.getToolset('missing-agent')).resolves.toBeUndefined();
+  });
+
   it('mounts the fallback under a custom apiPrefix and forwards it to setupBrowserStream', async () => {
     const setupBrowserStreamMock = vi.fn().mockResolvedValue(null);
     vi.doMock('@mastra/hono', async () => {

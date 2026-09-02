@@ -295,9 +295,10 @@ describe('Board card with a proposed run', () => {
     renderWorkBoard();
 
     await user.click(await screen.findByRole('button', { name: 'Needs attention, 1 waiting for approval, 1 open' }));
-    expect(await screen.findByRole('link', { name: /1 items waiting for approval/i })).toHaveAttribute(
+    expect(await screen.findByText('waiting for approval')).toBeVisible();
+    expect(screen.getByRole('link', { name: 'View all attention' })).toHaveAttribute(
       'href',
-      `/factories/${FACTORY_ID}/rules?group=proposed`,
+      `/factories/${FACTORY_ID}/attention`,
     );
   });
 
@@ -308,7 +309,7 @@ describe('Board card with a proposed run', () => {
 
     await user.click(await screen.findByRole('button', { name: 'Details for Fix login bug' }));
     const dialog = await screen.findByRole('dialog', { name: 'Fix login bug' });
-    await user.click(within(dialog).getByRole('button', { name: 'Investigate' }));
+    await user.click(within(dialog).getByRole('button', { name: 'Start suggested run: Investigate' }));
 
     await waitFor(() => expect(settled).toEqual(['approve']));
     expect(startRequests).toHaveLength(0);
@@ -350,8 +351,11 @@ describe('Board card with a proposed run', () => {
     // parked run is only discoverable by opening the menu on a hunch.
     const card = await screen.findByRole('article', { name: 'Fix login bug' });
     expect(await within(card).findByText('Suggested: Build')).toBeVisible();
+    const release = within(card).getByRole('button', { name: 'Start suggested run: Build' });
+    expect(release).toHaveAttribute('data-variant', 'primary');
+    expect(within(card).getByRole('link', { name: 'Open session' })).toHaveAttribute('data-variant', 'outline');
 
-    await user.click(within(card).getByRole('button', { name: 'Start suggested run: Build' }));
+    await user.click(release);
 
     await waitFor(() => expect(settled).toEqual(['approve']));
     expect(startRequests).toHaveLength(0);

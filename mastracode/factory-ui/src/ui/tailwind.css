@@ -10,7 +10,6 @@
  * uncompiled theme lets Tailwind read @theme and generate DS utilities without
  * treating theme.css as the component stylesheet. */
 @import '@mastra/playground-ui/theme.css';
-@import './domains/factory/metrics-theme.css';
 
 @custom-variant dark (&:is(.dark *));
 

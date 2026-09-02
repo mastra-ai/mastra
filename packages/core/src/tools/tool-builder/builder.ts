@@ -15,7 +15,11 @@ import type { SchemaCompatLayer } from '@mastra/schema-compat';
 import type { JSONSchema7Definition } from 'json-schema';
 import { z } from 'zod/v4';
 import { MastraFGAPermissions } from '../../auth/ee';
-import { backgroundOverrideJsonSchema, backgroundOverrideZodSchema } from '../../background-tasks';
+import {
+  backgroundOverrideJsonSchema,
+  backgroundOverrideZodSchema,
+  isToolBackgroundEligible,
+} from '../../background-tasks';
 import { MastraBase } from '../../base';
 import { ErrorCategory, MastraError, ErrorDomain } from '../../error';
 import type { Mastra } from '../../mastra';
@@ -32,6 +36,7 @@ import { isZodObject, safeExtendZodObject } from '../../utils/zod-utils';
 
 import type { SuspendOptions } from '../../workflows';
 import { markBuilderValidatedInput } from '../builder-validation-context';
+import { createToolObserve } from '../observe';
 import { ToolStream } from '../stream';
 import type {
   CoreTool,
@@ -42,7 +47,6 @@ import type {
   VercelTool,
   VercelToolV5,
 } from '../types';
-import { noopObserve } from '../types';
 import { validateToolInput, validateToolOutput, validateToolSuspendData } from '../validation';
 
 /**
@@ -261,10 +265,20 @@ export class CoreToolBuilder extends MastraBase {
     this.logType = input.logType;
 
     // Only inject the `_background` override schema for tools that are actually
-    // eligible for background execution — otherwise every user tool's input
-    // schema would be mutated with a v4 Zod field, which breaks v3-authored
-    // tools (keyValidator._parse crashes in schema-compat validation).
-    const isBackgroundEligible = !!input.backgroundTaskEnabled;
+    // eligible for background execution: the manager must be enabled AND this
+    // specific tool must be opted in at the agent or tool layer (the same
+    // resolution `resolveBackgroundConfig` uses at dispatch time). Otherwise
+    // every user tool's schema would advertise `_background` even though the
+    // runtime would never honor it (issue #22724), and mutating every schema
+    // with a v4 Zod field breaks v3-authored tools (keyValidator._parse
+    // crashes in schema-compat validation).
+    const isBackgroundEligible =
+      !!input.backgroundTaskEnabled &&
+      isToolBackgroundEligible({
+        toolName: this.options.name,
+        toolConfig: this.options.backgroundConfig,
+        agentConfig: this.options.agentBackgroundConfig,
+      });
     const isResumableTool =
       input.autoResumeSuspendedTools ||
       (this.originalTool as unknown as ToolAction<any, any>).id?.startsWith('agent-') ||
@@ -644,7 +658,7 @@ export class CoreToolBuilder extends MastraBase {
             workspace: execOptions.workspace ?? options.workspace,
             // Browser for web automation (lazily initialized on first use)
             browser: options.browser,
-            observe: execOptions.observe ?? noopObserve,
+            observe: execOptions.observe ?? createToolObserve(toolSpan),
             writer: new ToolStream(
               {
                 prefix: 'tool',
