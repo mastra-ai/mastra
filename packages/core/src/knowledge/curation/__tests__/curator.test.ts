@@ -233,6 +233,22 @@ describe('Knowledge curator', () => {
     await expect(value.curator.retain(source.id)).rejects.toBeInstanceOf(KnowledgeNotFoundError);
   });
 
+  it('reconciles changed host authority exactly before creating another curator', async () => {
+    const value = await fixture();
+    const before = await value.knowledge.evaluateAccess([value.ids['principal:owner']!]);
+    expect(before.scopes[value.ids['scope:uncurated']!]?.manageAccess).toBe(true);
+
+    await value.knowledge.registerCuratorProfile({
+      id: 'owner',
+      identityScope: { address: 'principal:owner', contextualScopeAddress: 'principal:owner' },
+      grants: [{ scopeAddress: 'scope:curated', role: 'owner' }],
+    });
+
+    const after = await value.knowledge.evaluateAccess([value.ids['principal:owner']!]);
+    expect(after.scopes[value.ids['scope:uncurated']!]).toBeUndefined();
+    expect(after.scopes[value.ids['scope:curated']!]?.manageAccess).toBe(true);
+  });
+
   it('reconstructs the ordinary-scope worklist after a runtime restart without a curator queue', async () => {
     const value = await fixture();
     const { node } = await provisionalNode(value, 'Pending verification');
