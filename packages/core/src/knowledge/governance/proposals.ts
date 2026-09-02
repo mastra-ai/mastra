@@ -73,6 +73,10 @@ export class KnowledgeProposalLifecycle {
       id: string;
       scopeIds: KnowledgeScopeIds;
     }) => Promise<KnowledgeRecord | null>,
+    private readonly resolveScope: (input: {
+      id: string;
+      scopeIds: KnowledgeScopeIds;
+    }) => Promise<KnowledgeNode | null>,
   ) {}
 
   async proposeNodeUpdate(input: ProposeKnowledgeNodeUpdateInput): Promise<KnowledgeProposal> {
@@ -109,8 +113,8 @@ export class KnowledgeProposalLifecycle {
         targetType: 'scope',
       });
       for (const scopeId of structuralScopeIds) {
-        const scope = await this.storage.getNode(scopeId);
-        if (!scope?.isScope || scope.deletedAt) throw new KnowledgeNotFoundError('scope', scopeId);
+        const scope = await this.resolveScope({ id: scopeId, scopeIds: input.vouchedScopeIds });
+        if (!scope) throw new KnowledgeNotFoundError('scope', scopeId);
         targets.push({
           type: 'node',
           id: scopeId,
@@ -241,8 +245,8 @@ export class KnowledgeProposalLifecycle {
         targetType: 'scope',
       });
       for (const scopeId of structuralScopeIds) {
-        const scope = await this.storage.getNode(scopeId);
-        if (!scope?.isScope || scope.deletedAt) throw new KnowledgeNotFoundError('scope', scopeId);
+        const scope = await this.resolveScope({ id: scopeId, scopeIds: input.vouchedScopeIds });
+        if (!scope) throw new KnowledgeNotFoundError('scope', scopeId);
         targets.push({
           type: 'node',
           id: scope.id,
@@ -285,9 +289,8 @@ export class KnowledgeProposalLifecycle {
         target.type === 'node'
           ? await this.resolveNode({ id: target.id, scopeIds: vouchedScopeIds })
           : await this.resolveRecord({ id: target.id, scopeIds: vouchedScopeIds });
-      if (!entity && target.type === 'node' && frontier.scopes[target.id]?.read) {
-        const scopeTarget = await this.storage.getNode(target.id);
-        if (scopeTarget?.isScope) entity = scopeTarget;
+      if (!entity && target.type === 'node') {
+        entity = await this.resolveScope({ id: target.id, scopeIds: vouchedScopeIds });
       }
       if (!entity) throw new KnowledgeNotFoundError(target.type, target.id);
       const currentScopeIds =

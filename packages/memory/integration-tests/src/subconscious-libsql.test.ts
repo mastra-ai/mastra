@@ -580,7 +580,7 @@ describe('Subconscious LibSQL integration', () => {
 
     expect(result.observed).toBe(true);
     expect(curateGenerate).toHaveBeenCalledOnce();
-    expect(await knowledge.getCurationCursorInternal({ sourceThreadId: threadId, agent: 'curate' })).toMatchObject({
+    expect(await knowledge.getCurationCursor({ sourceThreadId: threadId, agent: 'curate' })).toMatchObject({
       lastKnowledgeId: record.id,
     });
     await expect(knowledge.updateNode({ id: node.id, version: node.version + 1, name: 'Stale Atlas' })).rejects.toThrow(
@@ -592,7 +592,7 @@ describe('Subconscious LibSQL integration', () => {
       version: record.version,
       deletedBy: 'subconscious:curate',
     });
-    expect(await knowledge.getRecordInternal({ id: record.id })).toBeNull();
+    expect(await knowledge.getRecord({ id: record.id })).toBeNull();
     await memory.drainKnowledgeSemanticIndex(scopeIds);
     const indexName = (await vector.listIndexes()).find(name => name.startsWith('knowledge_documents_dimension'))!;
     const queryVector = (await embedder.doEmbed({ values: ['Project Atlas launch'] })).embeddings[0]!;
@@ -602,7 +602,7 @@ describe('Subconscious LibSQL integration', () => {
 
     await knowledge.restoreRecord({ id: record.id, version: deleted.version });
     await memory.drainKnowledgeSemanticIndex(scopeIds);
-    expect(await knowledge.getRecordInternal({ id: record.id })).toMatchObject({
+    expect(await knowledge.getRecord({ id: record.id })).toMatchObject({
       deletedAt: undefined,
       deletedBy: undefined,
     });
@@ -700,7 +700,7 @@ describe('Subconscious LibSQL integration', () => {
     const evidence = await knowledge.listRecords({ node: skills[0]!.id, scopeIds });
     expect(evidence.records).toHaveLength(4);
     expect(new Set(evidence.records.map(record => record.id)).size).toBe(4);
-    expect(await knowledge.getCurationCursorInternal({ sourceThreadId: threadId, agent: 'learn' })).toMatchObject({
+    expect(await knowledge.getCurationCursor({ sourceThreadId: threadId, agent: 'learn' })).toMatchObject({
       lastKnowledgeId: fourth.id,
     });
   });

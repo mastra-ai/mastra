@@ -1592,6 +1592,39 @@ export function createKnowledgeStorageTests(createStore: () => Promise<Knowledge
       ).rejects.toThrow('must encode a [source, scope] tuple');
     });
 
+    it('atomically promotes a node and restamps its records', async () => {
+      const node = await store.createNode({ name: 'Provisional', scopeIds: [PROJECT_SCOPE_ID] });
+      const record = await store.createRecord({ node, text: 'Verified evidence', scopeIds: [PROJECT_SCOPE_ID] });
+
+      await expect(
+        store.promoteNode({
+          id: node.id,
+          version: node.version + 1,
+          sourceScopeId: PROJECT_SCOPE_ID,
+          destinationScopeId: OTHER_SCOPE_ID,
+          contextScopeId: PROJECT_SCOPE_ID,
+        }),
+      ).rejects.toThrow('version conflict');
+      expect(await store.getNodeScopeIds(node.id)).toEqual([PROJECT_SCOPE_ID]);
+      expect(await store.getRecordScopeIds(record.id)).toEqual([PROJECT_SCOPE_ID]);
+
+      const promoted = await store.promoteNode({
+        id: node.id,
+        version: node.version,
+        sourceScopeId: PROJECT_SCOPE_ID,
+        destinationScopeId: OTHER_SCOPE_ID,
+        contextScopeId: PROJECT_SCOPE_ID,
+      });
+      expect(promoted).toMatchObject({ id: node.id, version: node.version + 1 });
+      expect(await store.getNodeScopeIds(node.id)).toEqual([OTHER_SCOPE_ID]);
+      expect(await store.getRecordScopeIds(record.id)).toEqual([OTHER_SCOPE_ID]);
+      expect(await store.getRecord({ id: record.id })).toMatchObject({
+        source: record.source,
+        text: record.text,
+        version: record.version + 2,
+      });
+    });
+
     it('clears only canonical Knowledge state', async () => {
       const run = await store.createImportRun({
         importerId: 'clear-test',

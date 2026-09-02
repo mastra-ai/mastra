@@ -255,8 +255,16 @@ export class Knowledge extends MastraBase {
       scopeIds => this.evaluateAccess(scopeIds),
       input => this.getNode(input),
       input => this.getRecord(input),
+      input => this.#resolveVisibleScopeNode(input),
     );
     return this.#proposalLifecycle;
+  }
+
+  async #resolveVisibleScopeNode(input: { id: string; scopeIds: KnowledgeScopeIds }) {
+    const frontier = await this.evaluateAccess(input.scopeIds);
+    if (!frontier.scopes[input.id]?.read) return null;
+    const node = await (await this.#getStorage()).getNode(input.id);
+    return node?.isScope && !node.deletedAt ? node : null;
   }
 
   async createScope(input: CreateKnowledgeScopeInput) {

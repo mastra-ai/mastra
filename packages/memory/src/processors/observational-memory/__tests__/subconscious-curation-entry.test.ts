@@ -81,12 +81,14 @@ describe('Memory.runCuration', () => {
     });
   });
 
-  it('writes and refines entity content through the curator tool path', async () => {
+  it('refines provisional knowledge through the governed curator tool path', async () => {
     let generateCall = 0;
     let currentRecordId = '';
-    const description = 'Project Atlas is the current launch project.\n\nLinks: https://github.com/mastra-ai/mastra';
-    const refinedDescription =
-      'Project Atlas is the current launch project, now expanding its knowledge system.\n\nLinks: https://github.com/mastra-ai/mastra';
+    let nodeId = '';
+    const descriptions = [
+      'Project Atlas is the current launch project.',
+      'Project Atlas is expanding its knowledge system.',
+    ];
     const memory = createMemory({
       omModel: new MockLanguageModelV2({
         doGenerate: async (): Promise<any> => {
@@ -99,13 +101,12 @@ describe('Memory.runCuration', () => {
               content: [
                 {
                   type: 'tool-call' as const,
-                  toolCallId: `write-${generateCall}`,
-                  toolName: 'knowledge_write_node_content',
+                  toolCallId: `refine-${generateCall}`,
+                  toolName: 'knowledge_curation_refine',
                   input: JSON.stringify({
-                    name: 'Project Atlas',
-                    content: generateCall === 1 ? description : refinedDescription,
-                    scope: 'thread',
-                    expectedVersion: generateCall === 1 ? 1 : 2,
+                    nodeId,
+                    version: generateCall === 1 ? 1 : 2,
+                    metadata: { description: descriptions[generateCall === 1 ? 0 : 1] },
                   }),
                 },
               ],
@@ -123,10 +124,19 @@ describe('Memory.runCuration', () => {
       }),
     });
     const store = (await memory.storage.getStore('knowledge'))!;
-    const firstRecord = await seedItem(
-      memory,
-      'Project Atlas launches soon. Repository: https://github.com/mastra-ai/mastra',
-    );
+    const scopeIds = await resolveKnowledgeScopeIds(memory, {
+      agent: { threadId: 'alpha', resourceId: 'user-42' },
+      requestContext: requestContext(),
+    });
+    const node = await store.createNode({ name: 'Project Atlas', kind: 'project', scopeIds: [scopeIds[4]!] });
+    nodeId = node.id;
+    const firstRecord = await store.createRecord({
+      node,
+      text: 'Project Atlas launches soon.',
+      scopeIds: [scopeIds[4]!],
+      source: 'alpha',
+      metadata: { sourceThreadId: 'alpha' },
+    });
     currentRecordId = firstRecord.id;
 
     await memory.runCuration({
@@ -135,21 +145,17 @@ describe('Memory.runCuration', () => {
       requestContext: requestContext(),
     });
 
-    const scopeIds = await resolveKnowledgeScopeIds(memory, {
-      agent: { threadId: 'alpha', resourceId: 'user-42' },
-      requestContext: requestContext(),
+    expect(await store.getNode(node.id)).toMatchObject({
+      version: 2,
+      metadata: { description: descriptions[0] },
     });
-    const written = await store.resolveNode({ name: 'Project Atlas', scopeIds });
-    expect(written).toMatchObject({ version: 2 });
-    expect((await store.listRecordsBySource({ source: 'subconscious:curate', scopeIds })).records).toEqual(
-      expect.arrayContaining([expect.objectContaining({ text: description })]),
-    );
 
     const secondRecord = await store.createRecord({
-      node: written!,
-      text: '[[Mastra]] is expanding its knowledge system.',
-      scopeIds: [scopeIds[2]!],
+      node: (await store.getNode(node.id))!,
+      text: 'Project Atlas is expanding its knowledge system.',
+      scopeIds: [scopeIds[4]!],
       source: 'alpha',
+      metadata: { sourceThreadId: 'alpha' },
     });
     currentRecordId = secondRecord.id;
 
@@ -159,10 +165,10 @@ describe('Memory.runCuration', () => {
       requestContext: requestContext(),
     });
 
-    expect(await store.resolveNode({ name: 'Project Atlas', scopeIds })).toMatchObject({ version: 3 });
-    expect((await store.listRecordsBySource({ source: 'subconscious:curate', scopeIds })).records).toEqual(
-      expect.arrayContaining([expect.objectContaining({ text: refinedDescription })]),
-    );
+    expect(await store.getNode(node.id)).toMatchObject({
+      version: 3,
+      metadata: { description: descriptions[1] },
+    });
   });
 
   it('reports no-op when the worklist and prompt are both empty', async () => {

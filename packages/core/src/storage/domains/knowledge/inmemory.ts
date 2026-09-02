@@ -57,6 +57,7 @@ import type {
   ListKnowledgeNodesInput,
   ListKnowledgeProposalsInput,
   ListKnowledgeProposalsOutput,
+  PromoteKnowledgeNodeInput,
   SearchKnowledgeInput,
   SearchKnowledgeResult,
   ReviewKnowledgeProposalInput,
@@ -89,6 +90,14 @@ function cloneNode(node: KnowledgeNode): KnowledgeNode {
 
 function nodeReferenceId(node: KnowledgeNode | string): string {
   return typeof node === 'string' ? node : node.id;
+}
+
+function replaceKnowledgeScopeId(
+  scopeIds: KnowledgeScopeIds,
+  sourceScopeId: string,
+  destinationScopeId: string,
+): KnowledgeScopeIds {
+  return [...new Set(scopeIds.map(scopeId => (scopeId === sourceScopeId ? destinationScopeId : scopeId)))].sort();
 }
 
 function cloneProposal(proposal: KnowledgeProposal): KnowledgeProposal {
@@ -693,6 +702,45 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
     }
     this.#enqueue('node', input.id, 'upsert', updated.version, scopeIds);
     return cloneNode(updated);
+  }
+
+  async promoteNode(input: PromoteKnowledgeNodeInput): Promise<KnowledgeNode> {
+    return this.#runAtomicMutation(() => {
+      this.#assertExpectedAccessEpoch(input.expectedAccessEpoch);
+      const node = this.#db.knowledgeNodes.get(input.id);
+      if (!node || node.deletedAt) throw new KnowledgeNotFoundError('node', input.id);
+      if (node.version !== input.version) throw new KnowledgeConflictError(input.id);
+      const nodeScopeIds = this.#nodeScopeIds(node.id);
+      if (!nodeScopeIds.includes(input.sourceScopeId)) throw new KnowledgeNotFoundError('node', input.id);
+      this.#assertScopeNodes([input.destinationScopeId]);
+
+      const now = new Date();
+      for (const record of this.#db.knowledgeRecords.values()) {
+        if (record.nodeId !== node.id || record.deletedAt) continue;
+        const oldScopeIds = this.#recordScopeIds(record.id);
+        if (!oldScopeIds.includes(input.sourceScopeId)) continue;
+        const scopeIds = replaceKnowledgeScopeId(oldScopeIds, input.sourceScopeId, input.destinationScopeId);
+        const updatedRecord = { ...record, version: record.version + 1, updatedAt: now };
+        this.#db.knowledgeRecords.set(record.id, updatedRecord);
+        this.#db.knowledgeRecordScopes.set(record.id, new Set(scopeIds));
+        this.#recordActivity('move', 'record', record.id, input.contextScopeId);
+        this.#enqueue('record', record.id, 'delete', updatedRecord.version, oldScopeIds);
+        this.#enqueue('record', record.id, 'upsert', updatedRecord.version, scopeIds);
+      }
+
+      return this.#updateNode({
+        id: node.id,
+        version: node.version,
+        scopeIds: replaceKnowledgeScopeId(nodeScopeIds, input.sourceScopeId, input.destinationScopeId),
+        metadata: {
+          ...node.metadata,
+          curatedFromScopeId: input.sourceScopeId,
+          curatedAt: now.toISOString(),
+        },
+        contextScopeId: input.contextScopeId,
+        expectedAccessEpoch: input.expectedAccessEpoch,
+      });
+    });
   }
 
   async deleteNode(input: DeleteKnowledgeNodeInput): Promise<KnowledgeNode> {

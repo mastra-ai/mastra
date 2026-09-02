@@ -97,6 +97,7 @@ import type {
   SearchKnowledgeResult,
   ReviewKnowledgeProposalInput,
   RestoreKnowledgeNodeInput,
+  PromoteKnowledgeNodeInput,
   UpdateKnowledgeImportRunInput,
   UpdateKnowledgeNodeInput,
 } from '@mastra/core/storage';
@@ -117,6 +118,14 @@ interface Executor {
 const ACTIVITY_VISIBILITY_SCOPE_IDS = '__visibilityScopeIds';
 const reconcileChains = new Map<unknown, Promise<unknown>>();
 const unidentifiedClientReconcileKey = {};
+
+function replaceKnowledgeScopeId(
+  scopeIds: KnowledgeScopeIds,
+  sourceScopeId: string,
+  destinationScopeId: string,
+): KnowledgeScopeIds {
+  return [...new Set(scopeIds.map(scopeId => (scopeId === sourceScopeId ? destinationScopeId : scopeId)))].sort();
+}
 
 function activityVisibilityScopeIds(details?: Record<string, unknown>): string[] {
   const value = details?.[ACTIVITY_VISIBILITY_SCOPE_IDS];
@@ -807,6 +816,55 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
 
   async updateNode(input: UpdateKnowledgeNodeInput): Promise<KnowledgeNode> {
     return this.#transaction(tx => this.#updateNode(tx, input));
+  }
+
+  async promoteNode(input: PromoteKnowledgeNodeInput): Promise<KnowledgeNode> {
+    return this.#transaction(async tx => {
+      await this.#assertExpectedAccessEpoch(tx, input.expectedAccessEpoch);
+      const node = await this.#getNode(tx, input.id);
+      if (!node || node.deletedAt) throw new KnowledgeNotFoundError('node', input.id);
+      if (node.version !== input.version) throw new KnowledgeConflictError(input.id);
+      const nodeScopeIds = await this.#getNodeScopeIds(tx, node.id);
+      if (!nodeScopeIds.includes(input.sourceScopeId)) throw new KnowledgeNotFoundError('node', input.id);
+      const destination = await this.#getNode(tx, input.destinationScopeId);
+      if (!destination?.isScope || destination.deletedAt) {
+        throw new KnowledgeNotFoundError('scope', input.destinationScopeId);
+      }
+
+      const rows = await tx.execute({
+        sql: `SELECT *,json(metadata) AS metadataJson FROM "${TABLE_KNOWLEDGE_RECORDS}" WHERE nodeId=? AND deletedAt IS NULL`,
+        args: [node.id],
+      });
+      const now = new Date();
+      for (const row of rows.rows) {
+        const record = parseKnowledge(row);
+        const oldScopeIds = await this.#getRecordScopeIds(tx, record.id);
+        if (!oldScopeIds.includes(input.sourceScopeId)) continue;
+        const scopeIds = replaceKnowledgeScopeId(oldScopeIds, input.sourceScopeId, input.destinationScopeId);
+        const updated = await tx.execute({
+          sql: `UPDATE "${TABLE_KNOWLEDGE_RECORDS}" SET version=version+1,updatedAt=? WHERE id=? AND version=?`,
+          args: [now.toISOString(), record.id, record.version],
+        });
+        if (updated.rowsAffected !== 1) throw new KnowledgeConflictError(record.id);
+        await this.#replaceRecordScopes(tx, record.id, scopeIds, now);
+        await this.#activity(tx, 'move', 'record', record.id, input.contextScopeId);
+        await this.#outbox(tx, 'record', record.id, 'delete', record.version + 1, oldScopeIds);
+        await this.#outbox(tx, 'record', record.id, 'upsert', record.version + 1, scopeIds);
+      }
+
+      return this.#updateNode(tx, {
+        id: node.id,
+        version: node.version,
+        scopeIds: replaceKnowledgeScopeId(nodeScopeIds, input.sourceScopeId, input.destinationScopeId),
+        metadata: {
+          ...node.metadata,
+          curatedFromScopeId: input.sourceScopeId,
+          curatedAt: now.toISOString(),
+        },
+        contextScopeId: input.contextScopeId,
+        expectedAccessEpoch: input.expectedAccessEpoch,
+      });
+    });
   }
 
   async deleteNode(input: DeleteKnowledgeNodeInput): Promise<KnowledgeNode> {
