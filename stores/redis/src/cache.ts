@@ -136,7 +136,9 @@ async function probeEvalStyle(clientEval: ClientEval): Promise<EvalStyle> {
         return attempt.style;
       }
     } catch {
-      // A rejected shape just moves on to the other candidate.
+      // A rejected shape just moves on to the other candidate; if both fail,
+      // the loop yields 'unsupported', callEval returns the EVAL_UNSUPPORTED
+      // sentinel, and callers fall through to their sequential command path.
     }
   }
   return 'unsupported';
