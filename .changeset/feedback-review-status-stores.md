@@ -1,6 +1,5 @@
 ---
 '@mastra/pg': patch
-'@mastra/clickhouse': patch
 '@mastra/duckdb': patch
 ---
 

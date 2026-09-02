@@ -20,7 +20,6 @@ import type {
   CreateFeedbackRecord,
 } from '@mastra/core/storage';
 import { buildInputPreview, computeTraceStatus, EntityType } from '@mastra/core/storage';
-import { coerceFeedbackReviewStatus } from './review-status';
 
 // ---------------------------------------------------------------------------
 // ClickHouse query settings
@@ -563,7 +562,6 @@ export function rowToFeedbackRecord(row: Record<string, any>): FeedbackRecord {
     serviceName: nullableString(row.serviceName),
     feedbackUserId,
     sourceId: nullableString(row.sourceId),
-    reviewStatus: coerceFeedbackReviewStatus(row.reviewStatus),
     feedbackSource,
     feedbackType: row.feedbackType,
     value: hasNumber ? Number(row.valueNumber) : (nullableString(row.valueString) ?? ''),
@@ -609,7 +607,6 @@ export function feedbackRecordToRow(feedback: CreateFeedbackRecord): Record<stri
     serviceName: feedback.serviceName ?? null,
     feedbackUserId,
     sourceId: feedback.sourceId ?? null,
-    reviewStatus: feedback.reviewStatus ?? 'needs-review',
     feedbackSource,
     feedbackType: feedback.feedbackType,
     valueString: typeof feedback.value === 'string' ? feedback.value : null,
