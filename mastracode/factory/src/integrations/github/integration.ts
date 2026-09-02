@@ -58,6 +58,7 @@ import {
   parseCreatedPullRequest,
   subscribeCurrentSessionToPullRequest,
 } from './session-subscriptions.js';
+import { settleOrAbort } from './settle-or-abort.js';
 import type { GithubSubscriptionStorage } from './subscriptions.js';
 
 type InputOf<TMethod extends keyof VersionControl> = VersionControl[TMethod] extends (input: infer TInput) => unknown
@@ -121,6 +122,8 @@ export type GithubRepositoryPermission = 'admin' | 'maintain' | 'write' | 'triag
  */
 const COLLABORATOR_PERMISSION_CACHE_TTL_MS = 30 * 60_000;
 const COLLABORATOR_PERMISSION_CACHE_MAX_ENTRIES = 1000;
+/** Bound on the shared upstream lookup; callers race their own signal against it. */
+const COLLABORATOR_PERMISSION_LOOKUP_TIMEOUT_MS = 10_000;
 
 export interface IssueSummary {
   number: number;
@@ -531,13 +534,13 @@ export class GithubIntegration implements FactoryIntegration {
     if (cached && cached.expiresAt > Date.now()) return cached.permission;
     this.#collaboratorPermissionCache.delete(cacheKey);
     const inFlight = this.#collaboratorPermissionInFlight.get(cacheKey);
-    if (inFlight) return inFlight;
+    if (inFlight) return settleOrAbort(inFlight, signal, undefined);
     const lookup = (async () => {
       try {
         const { data } = await this.getInstallationOctokit(installationId).repos.getCollaboratorPermissionLevel({
           ...parts,
           username,
-          request: { signal },
+          request: { signal: AbortSignal.timeout(COLLABORATOR_PERMISSION_LOOKUP_TIMEOUT_MS) },
         });
         const permission = data.permission as GithubRepositoryPermission;
         // Failures are not cached: a rate-limited or aborted lookup must retry
@@ -558,7 +561,7 @@ export class GithubIntegration implements FactoryIntegration {
       }
     })();
     this.#collaboratorPermissionInFlight.set(cacheKey, lookup);
-    return lookup;
+    return settleOrAbort(lookup, signal, undefined);
   }
 
   /**

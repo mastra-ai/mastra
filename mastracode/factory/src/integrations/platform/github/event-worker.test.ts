@@ -950,11 +950,20 @@ describe('PlatformGithubEventWorker', () => {
       failed: 0,
       errors: [],
     }));
+    const reconcileIssuesFactoryState = vi.fn<GithubIssueReconciler>(async () => ({
+      repositories: 1,
+      checked: 1,
+      updated: 0,
+      closed: 0,
+      failed: 0,
+      errors: [],
+    }));
     const worker = createWorker({
       fetchImpl,
       storage: settings.storage,
       now: () => clock,
       reconcileFactoryState,
+      reconcileIssuesFactoryState,
       intervalMs: 5 * 60_000,
       pollEventsEnabled: false,
     });
@@ -963,6 +972,7 @@ describe('PlatformGithubEventWorker', () => {
     await worker.start();
     await vi.advanceTimersByTimeAsync(0);
     expect(reconcileFactoryState).toHaveBeenCalledTimes(1);
+    expect(reconcileIssuesFactoryState).toHaveBeenCalledTimes(1);
 
     // Eleven more five-minute ticks stay inside the hour: no second sweep.
     for (let tick = 0; tick < 11; tick += 1) {
@@ -970,11 +980,13 @@ describe('PlatformGithubEventWorker', () => {
       await vi.advanceTimersByTimeAsync(5 * 60_000);
     }
     expect(reconcileFactoryState).toHaveBeenCalledTimes(1);
+    expect(reconcileIssuesFactoryState).toHaveBeenCalledTimes(1);
 
     clock += 5 * 60_000;
     await vi.advanceTimersByTimeAsync(5 * 60_000);
     await worker.stop();
     expect(reconcileFactoryState).toHaveBeenCalledTimes(2);
+    expect(reconcileIssuesFactoryState).toHaveBeenCalledTimes(2);
   });
 
   it('reconciles without tailing events when event polling is disabled', async () => {

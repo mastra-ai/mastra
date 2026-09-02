@@ -162,6 +162,30 @@ describe('GithubIntegration collaborator permission coalescing', () => {
   });
 });
 
+describe('GithubIntegration collaborator permission cancellation', () => {
+  it("keeps a coalesced lookup alive for other callers when one caller's signal aborts", async () => {
+    const github = new GithubIntegration(validConfig());
+    let release!: (value: { data: { permission: string } }) => void;
+    const getCollaboratorPermissionLevel = vi.fn(() => new Promise(resolve => (release = resolve)));
+    vi.spyOn(github, 'getInstallationOctokit').mockReturnValue({
+      repos: { getCollaboratorPermissionLevel },
+    } as any);
+    const aborter = new AbortController();
+
+    const aborted = github.getRepositoryCollaboratorPermission(7, 'acme/app', 'grace', aborter.signal);
+    const patient = github.getRepositoryCollaboratorPermission(7, 'acme/app', 'grace');
+    aborter.abort();
+    await expect(aborted).resolves.toBeUndefined();
+
+    release({ data: { permission: 'write' } });
+    await expect(patient).resolves.toBe('write');
+    expect(getCollaboratorPermissionLevel).toHaveBeenCalledTimes(1);
+    const [request] = getCollaboratorPermissionLevel.mock.calls[0] as unknown as [{ request: { signal: AbortSignal } }];
+    expect(request.request.signal).not.toBe(aborter.signal);
+    expect(request.request.signal.aborted).toBe(false);
+  });
+});
+
 describe('GithubIntegration triage comment upsert', () => {
   it('updates the oldest Factory marker across pages and ignores human marker comments', async () => {
     const github = new GithubIntegration(validConfig());

@@ -1187,6 +1187,24 @@ describe('PlatformGithubIntegration', () => {
     expect(fetchImpl).toHaveBeenCalledTimes(1);
   });
 
+  it("keeps a coalesced lookup alive for other callers when one caller's signal aborts", async () => {
+    let release!: (value: Response) => void;
+    const fetchImpl = vi.fn<typeof fetch>(() => new Promise<Response>(resolve => (release = resolve)));
+    const integration = createIntegration(fetchImpl);
+    const aborter = new AbortController();
+
+    const aborted = integration.getRepositoryCollaboratorPermission(7, 'acme/app', 'grace', aborter.signal);
+    const patient = integration.getRepositoryCollaboratorPermission(7, 'acme/app', 'grace');
+    aborter.abort();
+    await expect(aborted).resolves.toBeUndefined();
+
+    release(json({ permission: 'write', roleName: 'write', user: actor }));
+    await expect(patient).resolves.toBe('write');
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    // The shared request never carried the caller's signal.
+    expect((fetchImpl.mock.calls[0]?.[1] as RequestInit).signal?.aborted).toBe(false);
+  });
+
   it('re-requests a collaborator permission once the cache entry expires', async () => {
     vi.useFakeTimers();
     try {
