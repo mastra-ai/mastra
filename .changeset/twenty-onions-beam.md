@@ -4,11 +4,11 @@
 
 Added an opt-in `delegation.enableResultReferences` option, so a parent agent can pass one subagent's result to another by reference instead of restating it.
 
-It's off by default. Turning it on adds a `contextFromRefs` field to each subagent tool and a `[ref: <id>]` line to every delegation result, so existing supervisors keep the tool surface and model context they have today until you ask for the change.
+It's off by default. Turning it on adds a `contextFromRefs` field to each subagent tool and a `[ref: <id>]` line to successful delegation results, so existing supervisors keep the tool surface and model context they have today until you ask for the change.
 
 **Why:** Subagents can't see each other's work. The parent forwards its conversation to each subagent, but tool calls and tool results are stripped first, and a subagent's response reaches the parent as a tool result. The only way to pass findings onward was for the parent model to retype them, which costs output tokens on every delegation and rewords the details.
 
-Every delegation result now carries a `ref` id, which the parent model sees as a `[ref: <id>]` line after the response text. Passing that id on a later delegation inserts the referenced text into that subagent's prompt, inside a block that names its source.
+A delegation that succeeds and returns a non-empty response now carries a `ref` id, which the parent model sees as a `[ref: <id>]` line after the response text. Rejected delegations and empty responses don't get one. Passing that id on a later delegation inserts the referenced text into that subagent's prompt, inside a block that names its source and is introduced as reference material rather than instructions.
 
 **Before**, the parent model had to restate the research it received:
 

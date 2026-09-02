@@ -267,7 +267,7 @@ await parentAgent.generate('Fix the expired-session bug', {
 })
 ```
 
-With it on, every delegation result carries a `ref` id, which the parent model sees as a `[ref: <id>]` line after the response text. Pass those ids in `contextFromRefs` on a later delegation, and Mastra inserts the referenced text into that subagent's prompt.
+With it on, a delegation that succeeds and returns a non-empty response gets a `ref` id, which the parent model sees as a `[ref: <id>]` line after the response text. Rejected delegations and empty responses don't get one. Pass those ids in `contextFromRefs` on a later delegation, and Mastra inserts the referenced text into that subagent's prompt.
 
 Here the parent delegates twice. The second delegation references the first result instead of repeating it, so the prompt carries only the parent's own instructions:
 
@@ -278,7 +278,7 @@ Here the parent delegates twice. The second delegation references the first resu
 }
 ```
 
-The research agent's full response arrives in the implementing subagent's prompt, inside a block that names its source, so the subagent can tell those findings apart from the parent's instructions.
+The research agent's full response arrives in the implementing subagent's prompt, inside a block that names its source, so the subagent can tell those findings apart from the parent's instructions. The blocks are introduced as reference material rather than instructions. Treat that as a mitigation and not a boundary: if your subagents don't trust each other equally, review results in `onDelegationComplete` before they can be referenced onward.
 
 Each entry accepts a bare id, or an object that adds a label and a caveat:
 
