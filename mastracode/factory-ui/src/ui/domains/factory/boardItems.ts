@@ -1,3 +1,5 @@
+import { isValid } from 'date-fns';
+
 import { relativeTime } from '../../../lib/date/relativeTime';
 import type { WorkItem, WorkItemSessionRef, WorkItemSource } from './services/workItems';
 
@@ -74,7 +76,10 @@ export function workItemMeta(item: WorkItem): string {
   const author = typeof item.metadata.author === 'string' ? item.metadata.author : undefined;
   // Prefer when the issue/PR was opened upstream; `item.createdAt` is only
   // when the factory first saw it, which is "just now" for every backfilled card.
-  const sourceCreatedAt = typeof item.metadata.sourceCreatedAt === 'string' ? item.metadata.sourceCreatedAt : undefined;
+  const sourceCreatedAt =
+    typeof item.metadata.sourceCreatedAt === 'string' && isValid(new Date(item.metadata.sourceCreatedAt))
+      ? item.metadata.sourceCreatedAt
+      : undefined;
   const age = relativeTime(sourceCreatedAt ?? item.createdAt);
   const githubNumber = githubNumberForItem(item);
   if (githubNumber !== undefined) return `#${githubNumber}${author ? ` · ${author}` : ''} · ${age}`;
