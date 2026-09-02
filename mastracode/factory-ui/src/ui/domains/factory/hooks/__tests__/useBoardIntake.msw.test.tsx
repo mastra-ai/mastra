@@ -83,7 +83,7 @@ describe('useBoardIntake Linear gating', () => {
 });
 
 const jiraIssue: JiraIssue = {
-  id: '10010',
+  id: 'jira-issue-acme-eng-42',
   identifier: 'ENG-42',
   title: 'Fix intake sync',
   url: 'https://acme.atlassian.net/browse/ENG-42',
@@ -183,7 +183,7 @@ describe('useBoardIntake Jira gating', () => {
 
     await waitFor(() => expect(result.current.candidates).toHaveLength(1));
     const candidate = result.current.candidates[0]!;
-    expect(candidate.sourceKey).toBe('jira:ENG-42');
+    expect(candidate.sourceKey).toBe('jira-issue-acme-eng-42');
     expect(candidate.source).toBe('jira-issue');
     expect(candidate.url).toBe('https://acme.atlassian.net/browse/ENG-42');
     expect(candidate.metadata).toMatchObject({ identifier: 'ENG-42' });
@@ -200,7 +200,7 @@ describe('useBoardIntake Jira gating', () => {
         factoryProjectId: 'factory-1',
         repository,
         kind: 'work',
-        knownSourceKeys: new Set(['jira:ENG-42']),
+        knownSourceKeys: new Set(['jira-issue-acme-eng-42']),
       }),
     );
 
@@ -220,8 +220,10 @@ describe('useBoardIntake Jira gating', () => {
 
     // The Jira feed is not displayed, but its issues are fetched for teammate filtering.
     await waitFor(() =>
-      expect(result.current.participantCandidates.map(candidate => candidate.sourceKey)).toContain('jira:ENG-42'),
+      expect(result.current.participantCandidates.map(candidate => candidate.sourceKey)).toContain(
+        'jira-issue-acme-eng-42',
+      ),
     );
-    expect(result.current.candidates.map(candidate => candidate.sourceKey)).not.toContain('jira:ENG-42');
+    expect(result.current.candidates.map(candidate => candidate.sourceKey)).not.toContain('jira-issue-acme-eng-42');
   });
 });
