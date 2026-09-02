@@ -54,6 +54,11 @@ function getHarnessFactoryProjectId(harness: PlanModeGuardHarness | undefined): 
   return typeof factoryProjectId === 'string' ? factoryProjectId : undefined;
 }
 
+function getHarnessWorkingDirectory(harness: PlanModeGuardHarness | undefined): string | undefined {
+  const workingDirectory = getHarnessState(harness)?.workingDirectory;
+  return typeof workingDirectory === 'string' ? workingDirectory : undefined;
+}
+
 function getToolInputPath(input: unknown): string | undefined {
   const toolPath = (input as { path?: unknown } | undefined)?.path;
   return typeof toolPath === 'string' ? toolPath : undefined;
@@ -66,9 +71,9 @@ export function guardPlanModePlanFileWrites({ workspaceToolName, input, context 
   if (getHarnessModeId(harness) !== 'plan') return;
 
   const factoryProjectId = getHarnessFactoryProjectId(harness);
-  const planOptions = { factoryProjectId };
-  const planDirHint = `${getLocalPlansRelativeDir(planOptions)}/`;
   const projectPath = getHarnessProjectPath(harness);
+  const workingDirectory = getHarnessWorkingDirectory(harness);
+  const planDirHint = `${getLocalPlansRelativeDir({ factoryProjectId })}/`;
   const inputPath = getToolInputPath(input);
   if (!projectPath || !inputPath) {
     return {
@@ -79,7 +84,7 @@ export function guardPlanModePlanFileWrites({ workspaceToolName, input, context 
 
   // Plan mode may write any `.md` file directly inside the configured plan directory,
   // but nothing else in the project.
-  if (isPlanFilePath(projectPath, inputPath, planOptions)) return;
+  if (isPlanFilePath(projectPath, inputPath, { factoryProjectId, workingDirectory })) return;
 
   return {
     proceed: false as const,

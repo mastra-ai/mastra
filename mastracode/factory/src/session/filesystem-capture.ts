@@ -1,3 +1,4 @@
+import { posix as posixPath } from 'node:path';
 import type { AgentControllerEvent, SessionBeforeAgentEndListener } from '@mastra/core/agent-controller';
 import type { WorkspaceSandbox } from '@mastra/core/workspace';
 import { peekSessionSandbox } from '../sandbox/session-sandbox.js';
@@ -7,7 +8,7 @@ import type { SourceControlStorageHandle } from '../storage/domains/source-contr
 import { isMeaningfulToolName } from './first-exec-capture.js';
 
 const GIT_STATUS_ARGS = ['status', '--porcelain=v1', '-z', '--untracked-files=all'];
-const ARTIFACTS_LIST_COMMAND = 'cd "$1" && test -d .artifacts && find .artifacts -type f -print0 || true';
+const ARTIFACTS_LIST_COMMAND = 'test -d "$1/.artifacts" && cd "$1" && find .artifacts -type f -print0 || true';
 
 export interface FilesystemCaptureSession {
   readonly identity: { getResourceId(): string };
@@ -74,6 +75,10 @@ export async function captureSessionFilesystem(
     // workdir), but capture is best-effort — skip rather than guess.
     const workdir = entry.workdir;
     if (!workdir) return;
+    const workingDirectory = entry.workingDirectory ?? posixPath.dirname(workdir);
+    // Persisted paths address the working directory, like every browser
+    // route; git reports paths relative to the checkout.
+    const repoSubdir = posixPath.relative(workingDirectory, workdir);
 
     const result = await sandbox.executeCommand('git', ['-C', workdir, ...GIT_STATUS_ARGS], {
       timeout: 30_000,
@@ -83,7 +88,7 @@ export async function captureSessionFilesystem(
       return;
     }
 
-    const artifacts = await sandbox.executeCommand('sh', ['-c', ARTIFACTS_LIST_COMMAND, 'sh', workdir], {
+    const artifacts = await sandbox.executeCommand('sh', ['-c', ARTIFACTS_LIST_COMMAND, 'sh', workingDirectory], {
       timeout: 30_000,
     });
     if (artifacts.exitCode !== 0) {
@@ -91,12 +96,14 @@ export async function captureSessionFilesystem(
       return;
     }
 
-    const files = new Map(parseFilesystemCaptureFiles(result.stdout).map(file => [file.path, file]));
+    const files = new Map<string, FilesystemFile>();
+    for (const file of parseFilesystemCaptureFiles(result.stdout)) {
+      const path = posixPath.join(repoSubdir, file.path);
+      files.set(path, { path });
+    }
     for (const path of artifacts.stdout.split('\0')) {
       const normalizedPath = path.replace(/^\.\//, '');
-      if (normalizedPath) {
-        files.set(normalizedPath, { path: normalizedPath });
-      }
+      if (normalizedPath) files.set(normalizedPath, { path: normalizedPath });
     }
 
     await filesystem.replaceFiles({

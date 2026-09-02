@@ -474,17 +474,21 @@ export async function listSessionFilesystemFiles(
 
 interface SessionSandboxHandle {
   sandbox: ExecutableSandbox;
+  /** Filesystem view rooted at the working directory; the repo checkout is `repoSubdir/` inside it. */
   filesystem: SandboxFilesystem;
   workdir: string;
+  workingDirectory: string;
+  /** Repo checkout path relative to the working directory (e.g. `mastra`). */
+  repoSubdir: string;
 }
 
 /**
- * Resolve the session's sandbox from the per-process memo and wrap its
- * workdir in a `SandboxFilesystem`. Returns `null` when the session has no
- * sandbox in this process (never opened here, or evicted by retirement).
- * This is a passive read path, so it never constructs or provisions: the
- * session's files come back the next time the workspace is actually opened
- * (e.g. by sending a message).
+ * Resolve the session's sandbox from the per-process memo and create a
+ * filesystem view rooted at the working directory. Returns `null` when the
+ * session has no sandbox in this process (never opened here, or evicted by
+ * retirement). This is a passive read path, so it never constructs or
+ * provisions: the session's files come back the next time the workspace is
+ * actually opened (e.g. by sending a message).
  */
 async function sessionSandbox(session: SourceControlSession): Promise<SessionSandboxHandle | null> {
   const entry = peekSessionSandbox(session.id);
@@ -492,10 +496,17 @@ async function sessionSandbox(session: SourceControlSession): Promise<SessionSan
   // nothing is materialized, so there are no files to browse.
   if (!entry?.workdir) return null;
   const sandbox = requireExec(entry.sandbox);
+  const workingDirectory = entry.workingDirectory ?? posixPath.dirname(entry.workdir);
+  const repoSubdir = posixPath.relative(workingDirectory, entry.workdir);
+  if (!repoSubdir || repoSubdir.startsWith('..') || posixPath.isAbsolute(repoSubdir)) {
+    throw new Error(`Session workdir ${entry.workdir} is not inside its working directory ${workingDirectory}`);
+  }
   return {
     sandbox,
-    filesystem: new SandboxFilesystem({ sandbox, workdir: entry.workdir }),
+    filesystem: new SandboxFilesystem({ sandbox, workdir: workingDirectory }),
     workdir: entry.workdir,
+    workingDirectory,
+    repoSubdir,
   };
 }
 
@@ -506,13 +517,18 @@ export async function listSessionRenderedPath(
 ): Promise<WorkspaceRenderedListing> {
   const safeRoot = assertApprovedRenderedRoot(renderedRoot);
   const handle = await sessionSandbox(session);
-  const rootPath = posixPath.join(handle?.workdir ?? '', safeRoot);
-  const empty: WorkspaceRenderedListing = { workspacePath: session.sessionId, root: safeRoot, rootPath, entries: [] };
+  const workingDirectoryPath = posixPath.join(handle?.workingDirectory ?? '', safeRoot);
+  const empty: WorkspaceRenderedListing = {
+    workspacePath: session.sessionId,
+    root: safeRoot,
+    rootPath: workingDirectoryPath,
+    entries: [],
+  };
   if (!handle) return empty;
 
   // One round trip: emit "type\tsize\tmtime\tpath" per entry. `safeRoot` comes
   // from a fixed allowlist so interpolating it (quoted) is safe.
-  const quotedRoot = `'${rootPath.replace(/'/g, `'\\''`)}'`;
+  const quotedRoot = `'${workingDirectoryPath.replace(/'/g, `'\\''`)}'`;
   const result = await handle.sandbox.executeCommand(
     'sh',
     [
@@ -528,8 +544,8 @@ export async function listSessionRenderedPath(
     if (!line) continue;
     const [type, sizeStr, mtimeStr, ...pathParts] = line.split('\t');
     const fullPath = pathParts.join('\t');
-    if (!fullPath || !fullPath.startsWith(`${rootPath}/`)) continue;
-    const relativePath = fullPath.slice(rootPath.length + 1);
+    if (!fullPath || !fullPath.startsWith(`${workingDirectoryPath}/`)) continue;
+    const relativePath = fullPath.slice(workingDirectoryPath.length + 1);
     entries.push({
       name: posixPath.basename(relativePath),
       path: relativePath,
@@ -540,7 +556,7 @@ export async function listSessionRenderedPath(
   }
   entries.sort((a, b) => a.path.localeCompare(b.path));
 
-  return { workspacePath: session.sessionId, root: safeRoot, rootPath, entries };
+  return { workspacePath: session.sessionId, root: safeRoot, rootPath: workingDirectoryPath, entries };
 }
 
 /** Read a file inside a session's sandbox. Paths outside rendered roots require a persisted-file allowlist check in the route. */
@@ -554,6 +570,7 @@ export async function readSessionWorkspaceFile(
 
   const handle = await sessionSandbox(session);
   if (!handle) throw new Error('Session workspace is not available');
+
   const { filesystem } = handle;
   const info = await filesystem.stat(safePath);
   if (info.type === 'directory') throw new Error('Path is a directory');
@@ -664,7 +681,11 @@ export async function listSessionWorkspaceChanges(session: SourceControlSession)
 
   const changes = parseWorkspaceChanges(statusResult.stdout);
   if (statsResult.exitCode !== 0) {
-    return { workspacePath: session.sessionId, available: true, changes };
+    return {
+      workspacePath: session.sessionId,
+      available: true,
+      changes: changes.map(change => rootRelativeChange(handle, change)),
+    };
   }
 
   const stats = parseWorkspaceChangeStats(statsResult.stdout);
@@ -677,7 +698,34 @@ export async function listSessionWorkspaceChanges(session: SourceControlSession)
     return { ...change, ...changeStats };
   });
 
-  return { workspacePath: session.sessionId, available: true, changes: changesWithStats, additions, deletions };
+  return {
+    workspacePath: session.sessionId,
+    available: true,
+    changes: changesWithStats.map(change => rootRelativeChange(handle, change)),
+    additions,
+    deletions,
+  };
+}
+
+/** Git reports repo-relative paths; the browser addresses the working directory. */
+function rootRelativeChange<T extends { path: string; previousPath?: string }>(
+  handle: Pick<SessionSandboxHandle, 'repoSubdir'>,
+  change: T,
+): T {
+  return {
+    ...change,
+    path: posixPath.join(handle.repoSubdir, change.path),
+    ...(change.previousPath ? { previousPath: posixPath.join(handle.repoSubdir, change.previousPath) } : {}),
+  };
+}
+
+/** Inverse of {@link rootRelativeChange}: a browser path must point inside the repo checkout. */
+function repoRelativePath(handle: Pick<SessionSandboxHandle, 'repoSubdir'>, rootPath: string, label: string) {
+  const prefix = `${handle.repoSubdir}/`;
+  if (!rootPath.startsWith(prefix) || rootPath.length === prefix.length) {
+    throw new Error(`${label} is outside the repository checkout`);
+  }
+  return rootPath.slice(prefix.length);
 }
 
 async function executeBoundedGitDiff(sandbox: ExecutableSandbox, args: string[], allowExitOne = false) {
@@ -700,11 +748,13 @@ export async function readSessionWorkspaceDiff(
   path: string,
   previousPath?: string,
 ): Promise<WorkspaceDiff> {
-  const safePath = assertRelativePath(path, 'path');
-  const safePreviousPath = previousPath ? assertRelativePath(previousPath, 'previousPath') : undefined;
+  const rootPath = assertRelativePath(path, 'path');
+  const rootPreviousPath = previousPath ? assertRelativePath(previousPath, 'previousPath') : undefined;
   const handle = await sessionSandbox(session);
   if (!handle) throw new Error('Session workspace is not available');
 
+  const safePath = repoRelativePath(handle, rootPath, 'path');
+  const safePreviousPath = rootPreviousPath ? repoRelativePath(handle, rootPreviousPath, 'previousPath') : undefined;
   const pathspecs = safePreviousPath ? [safePreviousPath, safePath] : [safePath];
   let result = await executeBoundedGitDiff(handle.sandbox, [
     '--literal-pathspecs',
@@ -754,7 +804,7 @@ export async function readSessionWorkspaceDiff(
   const truncated = patchBuffer.length > MAX_DIFF_BYTES;
   return {
     workspacePath: session.sessionId,
-    path: safePath,
+    path: rootPath,
     patch: truncated ? truncatePatch(patchBuffer) : result.stdout,
     truncated,
   };

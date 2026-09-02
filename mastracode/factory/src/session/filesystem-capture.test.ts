@@ -157,7 +157,7 @@ describe('captureSessionFilesystem', () => {
     expect(dependencies.filesystem.replaceFiles).not.toHaveBeenCalled();
   });
 
-  it('captures Git changes and ignored workspace artifacts', async () => {
+  it('captures Git changes under the repo subdirectory and artifacts at the working directory', async () => {
     const { session, executeCommand } = createSession([
       commandResult({ stdout: ' M src/app.ts\0?? new.txt\0' }),
       commandResult({ stdout: './.artifacts/hello-world.md\0' }),
@@ -172,16 +172,17 @@ describe('captureSessionFilesystem', () => {
       ['-C', '/sessions/s1/worktree', 'status', '--porcelain=v1', '-z', '--untracked-files=all'],
       { timeout: 30_000 },
     );
+    // One root: the working directory. The repo-local `.artifacts` is not consulted.
     expect(executeCommand).toHaveBeenNthCalledWith(
       2,
       'sh',
-      ['-c', 'cd "$1" && test -d .artifacts && find .artifacts -type f -print0 || true', 'sh', '/sessions/s1/worktree'],
+      ['-c', 'test -d "$1/.artifacts" && cd "$1" && find .artifacts -type f -print0 || true', 'sh', '/sessions/s1'],
       { timeout: 30_000 },
     );
     expect(dependencies.filesystem.replaceFiles).toHaveBeenCalledWith({
       resourceId: 'resource-1',
       threadId: 'thread-1',
-      files: [{ path: '.artifacts/hello-world.md' }, { path: 'new.txt' }, { path: 'src/app.ts' }],
+      files: [{ path: '.artifacts/hello-world.md' }, { path: 'worktree/new.txt' }, { path: 'worktree/src/app.ts' }],
     });
   });
 

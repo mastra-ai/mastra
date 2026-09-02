@@ -6,6 +6,7 @@ export { buildModePrompt, buildModePromptFn } from './build.js';
 export { planModePrompt } from './plan.js';
 export { fastModePrompt } from './fast.js';
 
+import * as path from 'node:path';
 import { buildBasePrompt } from '@mastra/core/coding-agent';
 import type { PromptContext as BasePromptContext } from '@mastra/core/coding-agent';
 import { loadSettings, resolveLspSetting } from '../../onboarding/settings.js';
@@ -29,7 +30,14 @@ export interface PromptContext extends Omit<BasePromptContext, 'toolGuidance'> {
   modeId: string;
   state?: any;
   currentDate: string;
+  /** The project path (repo checkout). Instructions, git, and skills load from here. */
   workingDir: string;
+  /**
+   * The directory the agent's file tools and exec root at, when it differs
+   * from the project path (embedders like factory root tools at the parent
+   * directory the repo is checked out into).
+   */
+  workingDirectory?: string;
 }
 
 const modePrompts: Record<string, string | ((ctx: PromptContext) => string)> = {
@@ -101,7 +109,17 @@ export function buildFullPromptSections(ctx: PromptContext): PromptSection[] {
   // guidance must not be advertised either.
   if (resolveLspSetting(loadSettings().lsp) === false) deniedTools.add(MC_TOOLS.LSP_INSPECT);
 
-  // Build mode-aware tool guidance
+  // The working directory the prompt advertises. When an embedder roots tools
+  // at a parent directory (factory: the dir the repo is cloned into), the agent
+  // must be told THAT root so relative paths read `<repo>/...`. Instruction
+  // loading below stays project-scoped (`workingDir`).
+  const workingDirectory =
+    ctx.workingDirectory && ctx.workingDir && ctx.workingDirectory !== ctx.workingDir
+      ? ctx.workingDirectory
+      : undefined;
+
+  // Build mode-aware tool guidance. Factory artifacts live under the working
+  // directory, so their stable `.artifacts/...` spelling works for writes and submit_plan.
   const factoryProjectId = typeof ctx.state?.factoryProjectId === 'string' ? ctx.state.factoryProjectId : undefined;
   const toolGuidance = buildToolGuidance(ctx.modeId, {
     hasWebSearch,
@@ -111,7 +129,7 @@ export function buildFullPromptSections(ctx: PromptContext): PromptSection[] {
 
   // Map new context to base context
   const baseCtx: BasePromptContext = {
-    projectPath: ctx.workingDir || '(no workspace attached)',
+    projectPath: workingDirectory ?? (ctx.workingDir || '(no workspace attached)'),
     projectName: ctx.projectName || 'unknown',
     gitBranch: ctx.gitBranch,
     platform: process.platform,
@@ -182,8 +200,21 @@ export function buildFullPromptSections(ctx: PromptContext): PromptSection[] {
     };
   });
 
+  // When the working directory is the parent of the repo checkout, spell the
+  // layout out so the agent writes repo paths as `<repo>/...` instead of
+  // assuming the working directory is the repo itself.
+  const repoSubdir = workingDirectory ? path.posix.basename(ctx.workingDir) : undefined;
+  const layoutSection: PromptSection | undefined = repoSubdir
+    ? {
+        id: 'workspace-layout',
+        label: 'Workspace layout',
+        content: `# Workspace Layout\nThe project repository is checked out at \`${repoSubdir}/\` inside the working directory above. Reference repo files as \`${repoSubdir}/...\` (e.g. \`${repoSubdir}/package.json\`). Sibling checkouts, if any, are other subdirectories of the working directory.`,
+      }
+    : undefined;
+
   return [
     { id: 'base-prompt', label: 'Base system prompt', content: base },
+    ...(layoutSection ? [layoutSection] : []),
     ...instructionSections,
     { id: 'model-prompt', label: 'Model-specific prompt', detail: ctx.modelId, content: modelSpecific.trim() },
     { id: 'mode-prompt', label: 'Mode prompt', detail: ctx.modeId, content: modeSpecific.trim() },
