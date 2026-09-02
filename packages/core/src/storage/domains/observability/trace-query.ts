@@ -635,11 +635,11 @@ function getRule(
   path: Array<string | number>,
   state: PlannerState,
 ): FieldRule | undefined {
-  const rule = rules[field];
-  if (!rule) {
+  if (!Object.hasOwn(rules, field)) {
     state.issues.push({ code: 'field_not_allowed', path, message: 'The predicate field is not allowed here' });
+    return undefined;
   }
-  return rule;
+  return rules[field];
 }
 
 function addOperatorIssue(operator: string, field: string, path: Array<string | number>, state: PlannerState): void {

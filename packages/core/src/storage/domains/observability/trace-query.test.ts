@@ -280,6 +280,34 @@ describe('planTraceQuery', () => {
     expect(organization.issues[0]).toMatchObject({ code: 'field_not_allowed' });
   });
 
+  it('rejects inherited predicate field names in every predicate context', () => {
+    const contexts = [
+      { where: (field: string) => ({ op: 'exists', path: field }), issuePath: ['where', 'path'] },
+      {
+        where: (field: string) => ({ spans: { some: { op: 'exists', path: field } } }),
+        issuePath: ['where', 'spans', 'some', 'path'],
+      },
+      {
+        where: (field: string) => ({ scores: { some: { op: 'exists', path: field } } }),
+        issuePath: ['where', 'scores', 'some', 'path'],
+      },
+    ];
+
+    for (const field of ['constructor', 'toString', '__proto__']) {
+      for (const context of contexts) {
+        const error = validationError(() => planTraceQuery(parsed({ ...baseRequest, where: context.where(field) })));
+        expect(error.issues).toEqual([
+          {
+            code: 'field_not_allowed',
+            path: context.issuePath,
+            message: 'The predicate field is not allowed here',
+          },
+        ]);
+        expect(JSON.stringify(error.issues)).not.toContain(field);
+      }
+    }
+  });
+
   it('rejects grouped orderBy and fixes grouped ordering', () => {
     const error = validationError(() =>
       planTraceQuery(
