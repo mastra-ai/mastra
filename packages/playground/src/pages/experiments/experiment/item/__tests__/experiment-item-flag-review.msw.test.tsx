@@ -80,6 +80,9 @@ describe('experiment item page — flag for review', () => {
     renderItemPage([buildResult('pending')]);
 
     const flagButton = await screen.findByRole('button', { name: /flag for review/i });
+    // Lives in the panel header (same container as the heading), as the primary action.
+    const heading = screen.getByRole('heading', { name: /result # result-1/i });
+    expect(heading.parentElement?.contains(flagButton)).toBe(true);
     fireEvent.click(flagButton);
 
     await waitFor(() => expect(patchCalls).toHaveLength(1));
