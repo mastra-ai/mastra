@@ -349,6 +349,176 @@ describe('UnixSocketPubSub', () => {
     expect(goodCb).toHaveBeenCalledTimes(1);
   });
 
+  describe('inbound frame size limit', () => {
+    const LIMIT = 64 * 1024;
+
+    async function connectRaw(path: string): Promise<{ socket: net.Socket; lines: string[]; closed: Promise<void> }> {
+      const socket = net.createConnection(path);
+      socket.setEncoding('utf8');
+      // Oversized writes race the broker's destroy; ignore EPIPE/ECONNRESET noise.
+      socket.on('error', () => {});
+      const lines: string[] = [];
+      let buffer = '';
+      socket.on('data', (chunk: string) => {
+        buffer += chunk;
+        while (true) {
+          const newlineIndex = buffer.indexOf('\n');
+          if (newlineIndex === -1) break;
+          lines.push(buffer.slice(0, newlineIndex));
+          buffer = buffer.slice(newlineIndex + 1);
+        }
+      });
+      const closed = new Promise<void>(resolve => socket.once('close', () => resolve()));
+      await new Promise<void>((resolve, reject) => {
+        socket.once('connect', resolve);
+        socket.once('error', reject);
+      });
+      return { socket, lines, closed };
+    }
+
+    function write(socket: net.Socket, data: string | Buffer): Promise<void> {
+      return new Promise(resolve => socket.write(data, () => resolve()));
+    }
+
+    it('rejects an invalid maxInboundFrameBytes option', async () => {
+      const path = await socketPath();
+      for (const value of [0, -1, Number.NaN, Number.POSITIVE_INFINITY]) {
+        expect(() => new UnixSocketPubSub(path, { maxInboundFrameBytes: value })).toThrow(
+          'maxInboundFrameBytes must be a positive finite number',
+        );
+      }
+    });
+
+    it('destroys a remote client that sends an oversized unterminated frame without affecting others', async () => {
+      const path = await socketPath();
+      const broker = new UnixSocketPubSub(path, { maxInboundFrameBytes: LIMIT });
+      const healthy = new UnixSocketPubSub(path);
+      pubsubs.push(broker, healthy);
+      await broker.subscribe('topic-a', vi.fn());
+
+      const healthyCb = vi.fn();
+      await healthy.subscribe('topic-a', healthyCb);
+      expect(broker.remoteClientCount).toBe(1);
+
+      const raw = await connectRaw(path);
+      await waitFor(() => expect(broker.remoteClientCount).toBe(2));
+
+      // Never send a newline; the broker must give up once the buffered bytes exceed the cap.
+      await write(raw.socket, 'x'.repeat(LIMIT + 1));
+      await raw.closed;
+      await waitFor(() => expect(broker.remoteClientCount).toBe(1));
+
+      await broker.publish('topic-a', makeEvent({ type: 'still-alive' }));
+      await waitFor(() => expect(healthyCb).toHaveBeenCalledTimes(1));
+      expect(healthy.isBroker).toBe(false);
+    });
+
+    it('destroys a remote client that sends an oversized terminated frame', async () => {
+      const path = await socketPath();
+      const broker = new UnixSocketPubSub(path, { maxInboundFrameBytes: LIMIT });
+      pubsubs.push(broker);
+
+      const brokerCb = vi.fn();
+      await broker.subscribe('topic-a', brokerCb);
+
+      const raw = await connectRaw(path);
+      await waitFor(() => expect(broker.remoteClientCount).toBe(1));
+
+      const frame = JSON.stringify({
+        type: 'publish',
+        topic: 'topic-a',
+        event: makeEvent({ type: 'too-big', data: { payload: 'x'.repeat(LIMIT) } }),
+      });
+      await write(raw.socket, `${frame}\n`);
+      await raw.closed;
+      await waitFor(() => expect(broker.remoteClientCount).toBe(0));
+      expect(brokerCb).not.toHaveBeenCalled();
+    });
+
+    it('accepts a valid frame delivered in many small chunks below the limit', async () => {
+      const path = await socketPath();
+      const broker = new UnixSocketPubSub(path, { maxInboundFrameBytes: LIMIT });
+      pubsubs.push(broker);
+      await broker.subscribe('topic-a', vi.fn());
+
+      const raw = await connectRaw(path);
+      try {
+        // Include a multi-byte character so a split UTF-8 sequence is exercised.
+        const frame = `${JSON.stringify({ type: 'subscribe', topic: 'topic-é' })}\n`;
+        const bytes = Buffer.from(frame, 'utf8');
+        for (let i = 0; i < bytes.length; i++) {
+          await write(raw.socket, bytes.subarray(i, i + 1));
+        }
+        await waitFor(() => {
+          expect(raw.lines.map(line => JSON.parse(line))).toContainEqual({ type: 'subscribed', topic: 'topic-é' });
+        });
+        expect(broker.remoteClientCount).toBe(1);
+      } finally {
+        raw.socket.destroy();
+      }
+    });
+
+    it('keeps memory proportional to payload when a frame arrives in many tiny chunks', async () => {
+      const path = await socketPath();
+      const limit = 4 * 1024 * 1024;
+      const broker = new UnixSocketPubSub(path, { maxInboundFrameBytes: limit });
+      pubsubs.push(broker);
+      await broker.subscribe('topic-a', vi.fn());
+
+      const raw = await connectRaw(path);
+      try {
+        // Stay under the byte cap but deliver one byte per socket read. Retaining a Buffer object per
+        // read costs a few hundred bytes each, so the old chunk-list parser amplified 256 KiB of
+        // payload into ~75 MiB of heap before the byte cap could ever trip.
+        const payloadBytes = 256 * 1024;
+        const frame = `${JSON.stringify({ type: 'subscribe', topic: 'x'.repeat(payloadBytes) })}\n`;
+        const bytes = Buffer.from(frame, 'utf8');
+        expect(bytes.length).toBeLessThanOrEqual(limit);
+
+        const heapBefore = process.memoryUsage().heapUsed;
+        for (let i = 0; i < bytes.length - 1; i++) {
+          // Flush each byte and yield so the broker observes a separate `data` event per byte.
+          await write(raw.socket, bytes.subarray(i, i + 1));
+          await new Promise(resolve => setImmediate(resolve));
+        }
+        // With the frame still unterminated, retained memory must stay near the payload size.
+        expect(process.memoryUsage().heapUsed - heapBefore).toBeLessThan(16 * 1024 * 1024);
+
+        await write(raw.socket, bytes.subarray(bytes.length - 1));
+        await waitFor(() => {
+          expect(raw.lines.map(line => JSON.parse(line).type)).toContain('subscribed');
+        });
+        expect(broker.remoteClientCount).toBe(1);
+      } finally {
+        raw.socket.destroy();
+      }
+    }, 60_000);
+
+    it('drops a broker connection that sends an oversized frame', async () => {
+      const path = await socketPath();
+      const serverSockets: net.Socket[] = [];
+      const server = net.createServer((socket: net.Socket) => {
+        serverSockets.push(socket);
+        socket.on('error', () => {});
+        // Answer the client's subscribe frame with an oversized reply.
+        socket.once('data', () => socket.write('x'.repeat(LIMIT + 1)));
+      });
+      await new Promise<void>((resolve, reject) => {
+        server.once('error', reject);
+        server.listen(path, () => resolve());
+      });
+      const pubsub = new UnixSocketPubSub(path, { maxInboundFrameBytes: LIMIT });
+      pubsubs.push(pubsub);
+
+      try {
+        await expect(pubsub.subscribe('topic-a', vi.fn())).rejects.toThrow('broker connection closed');
+        await waitFor(() => expect(serverSockets[0]?.destroyed).toBe(true));
+      } finally {
+        await new Promise<void>(resolve => server.close(() => resolve()));
+      }
+    });
+  });
+
   it('rejects subscribe when the broker disconnects before acknowledging', async () => {
     const path = await socketPath();
     const server = net.createServer((socket: net.Socket) => {

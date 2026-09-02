@@ -1,5 +1,27 @@
 # @mastra/libsql
 
+## 1.22.3-alpha.3
+
+### Patch Changes
+
+- Update README to include accurate, up-to-date information ([#22858](https://github.com/mastra-ai/mastra/pull/22858))
+
+- Fix the LibSQL vector filter's `$size` operator emitting invalid SQL: the builder misused the filter value as a parameter index, producing named references (`$2`, `$5`, …) that never matched the positional bindings. `$size` now binds through a standard `?` placeholder like every other operator, and the shared vector filter tests (`supportsSize`) are enabled for LibSQL accordingly. ([#22752](https://github.com/mastra-ai/mastra/pull/22752))
+
+- Updated dependencies [[`e983f74`](https://github.com/mastra-ai/mastra/commit/e983f749873189f767f509eb33d1a3596c0f1c74), [`cedc25d`](https://github.com/mastra-ai/mastra/commit/cedc25d8c2dec005d8b10b6ce2d36feef1162ff0), [`9fdb3bc`](https://github.com/mastra-ai/mastra/commit/9fdb3bc0f9bfab5269b4f3045595e62323da5d3a)]:
+  - @mastra/core@1.64.0-alpha.7
+
+## 1.22.3-alpha.2
+
+### Patch Changes
+
+- Fixed local LibSQL vector corruption during concurrent writes. ([#22834](https://github.com/mastra-ai/mastra/pull/22834))
+
+- Fixed `listResolved()` on versioned storage domains issuing one version query per listed entity. `@mastra/core` adds an overridable `getVersions(ids)` method that `listResolved()` uses to fetch all active versions in a single batch; adapters that don't override it keep their previous per-id behavior. `@mastra/pg` and `@mastra/libsql` override it for the agents and skills domains with a single `WHERE id IN (...)` query. Fixes https://github.com/mastra-ai/mastra/issues/22524 ([#22828](https://github.com/mastra-ai/mastra/pull/22828))
+
+- Updated dependencies [[`c1d3422`](https://github.com/mastra-ai/mastra/commit/c1d3422e8052a4282e8547df914b6231e5345f01), [`4596348`](https://github.com/mastra-ai/mastra/commit/45963483f4cd2810f0646469916f74266a3dd607), [`e8aca33`](https://github.com/mastra-ai/mastra/commit/e8aca339dc92c0b60baad3d948a7c48ec9ae106f), [`19b71cf`](https://github.com/mastra-ai/mastra/commit/19b71cf1de8afe6f69a3171d8a5a28086790e49b)]:
+  - @mastra/core@1.64.0-alpha.6
+
 ## 1.22.3-alpha.1
 
 ### Patch Changes

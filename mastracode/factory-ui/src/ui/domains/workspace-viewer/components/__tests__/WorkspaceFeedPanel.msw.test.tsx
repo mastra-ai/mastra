@@ -34,6 +34,8 @@ function workItem(commentCount: number): WorkItem {
     stageHistory: [],
     sessions: {},
     metadata: {},
+    triageType: null,
+    acceptedAt: null,
     commentCount,
     feedActivityAt: null,
     revision: 1,

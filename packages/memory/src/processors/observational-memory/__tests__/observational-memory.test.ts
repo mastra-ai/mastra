@@ -6313,31 +6313,23 @@ describe('Resource Scope Observation Flow', () => {
     const model = new MockLanguageModelV2({
       doStream: async ({ prompt }: { prompt: unknown }) => {
         const promptText = JSON.stringify(prompt);
-        const observerOutput = promptText.includes('Thread one')
-          ? `<observations>\n- thread-1-secret priority alpha\n</observations>`
-          : `<observations>\n- thread-2-secret priority beta\n</observations>`;
+        const isStructuredExtraction = promptText.includes('thread-1-secret') || promptText.includes('thread-2-secret');
+        if (isStructuredExtraction) structuredPrompts.push(promptText);
+        const output = isStructuredExtraction
+          ? JSON.stringify({ priority: promptText.includes('thread-1-secret') ? 'alpha' : 'beta' })
+          : promptText.includes('Thread one')
+            ? `<observations>\n- thread-1-secret priority alpha\n</observations>`
+            : `<observations>\n- thread-2-secret priority beta\n</observations>`;
         return {
           stream: convertArrayToReadableStream([
             { type: 'stream-start', warnings: [] },
             { type: 'response-metadata', id: 'obs-1', modelId: 'mock-observer', timestamp: new Date() },
             { type: 'text-start', id: 'text-1' },
-            { type: 'text-delta', id: 'text-1', delta: observerOutput },
+            { type: 'text-delta', id: 'text-1', delta: output },
             { type: 'text-end', id: 'text-1' },
             { type: 'finish', finishReason: 'stop', usage: { inputTokens: 100, outputTokens: 50, totalTokens: 150 } },
           ]),
           rawCall: { rawPrompt: null, rawSettings: {} },
-          warnings: [],
-        };
-      },
-      doGenerate: async ({ prompt }: { prompt: unknown }) => {
-        const promptText = JSON.stringify(prompt);
-        structuredPrompts.push(promptText);
-        const priority = promptText.includes('thread-1-secret') ? 'alpha' : 'beta';
-        return {
-          rawCall: { rawPrompt: null, rawSettings: {} },
-          finishReason: 'stop',
-          usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
-          content: [{ type: 'text', text: JSON.stringify({ priority }) }],
           warnings: [],
         };
       },

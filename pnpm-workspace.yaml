@@ -74,6 +74,11 @@ patchedDependencies:
   zod-to-ts@2.1.0: patches/zod-to-ts@2.1.0.patch
 
 packageExtensions:
+  # server-filesystem imports zod at runtime without declaring it (it relies on
+  # npm hoisting). packages/mcp spawns it in tests, so make the dep explicit.
+  '@modelcontextprotocol/server-filesystem@2026.8.31':
+    dependencies:
+      zod: ^3.25.0 || ^4.0.0
   # Stryker core dynamically imports TypeScript without declaring it. The
   # global virtual store has no fallback hoist, so make that dependency explicit.
   '@stryker-mutator/core@10.0.0':

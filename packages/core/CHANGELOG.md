@@ -1,5 +1,57 @@
 # @mastra/core
 
+## 1.64.0-alpha.8
+
+### Patch Changes
+
+- Fixed tool observability helpers to emit correlated logs and child spans during agent execution. ([#22887](https://github.com/mastra-ai/mastra/pull/22887))
+
+## 1.64.0-alpha.7
+
+### Minor Changes
+
+- Added support for server-defined `toModelOutput` on client-side tools. When a tool without an `execute` function runs in the browser and sends its result back, the server tool definition's `toModelOutput` now transforms that result before the model sees it — matching AI SDK behavior. This lets a client tool return a compact payload (like an uploaded file id or base64 image) and have the server map it into real model content: ([#22437](https://github.com/mastra-ai/mastra/pull/22437))
+
+  ```ts
+  import { createTool } from '@mastra/core/tools';
+  import { z } from 'zod';
+
+  // No execute: the browser runs this tool and returns { fileId, dataUrl }
+  const takeScreenshot = createTool({
+    id: 'takeScreenshot',
+    description: 'Captures the screen',
+    inputSchema: z.object({}),
+    outputSchema: z.object({ fileId: z.string(), dataUrl: z.string() }),
+    toModelOutput: output => ({
+      type: 'content',
+      value: [{ type: 'image-url', url: output.dataUrl }],
+    }),
+  });
+  ```
+
+  Previously the model only ever saw the raw JSON tool result and transforming it required a custom input processor.
+
+### Patch Changes
+
+- Update README to include accurate, up-to-date information ([#22858](https://github.com/mastra-ai/mastra/pull/22858))
+
+- Fixed onDelegationComplete reporting successful sub-agent runs when the finish reason is error. ([#22483](https://github.com/mastra-ai/mastra/pull/22483))
+
+- Updated dependencies [[`e983f74`](https://github.com/mastra-ai/mastra/commit/e983f749873189f767f509eb33d1a3596c0f1c74)]:
+  - @mastra/schema-compat@1.3.8-alpha.1
+
+## 1.64.0-alpha.6
+
+### Patch Changes
+
+- Fixed approval event delivery for function-form `toolDisplay` in streaming channels. A function-form `toolDisplay` now receives `approval` events when `streaming: true`, matching static mode. Return `{ kind: 'post', message }` to replace the built-in approval card; `undefined`, blank, or `stream` results fall back to the built-in card so the approval stays actionable. ([#22832](https://github.com/mastra-ai/mastra/pull/22832))
+
+- Fixed per-tool `requireApproval` functions (`needsApprovalFn`) receiving no context on durable agents and `agent.network()`. They now get the same `{ requestContext, workspace }` second argument as `stream()`/`generate()`, so approval logic that reads the request context works consistently. On durable agents the request context is restored from the persisted run snapshot when the check runs in another process or after a resume. Fixes #22491 ([#22841](https://github.com/mastra-ai/mastra/pull/22841))
+
+- Fixed workspace skill discovery silently reporting zero skills when the workspace filesystem is mis-wired. Invalid-argument errors (Node `ERR_INVALID_ARG*`, e.g. a non-string path handed to the skill source) now surface from refresh() instead of being logged as an inaccessible skills path warning. Genuine access failures and network errors keep the warn-and-continue behavior. Closes https://github.com/mastra-ai/mastra/issues/22639 ([#22823](https://github.com/mastra-ai/mastra/pull/22823))
+
+- Fixed `listResolved()` on versioned storage domains issuing one version query per listed entity. `@mastra/core` adds an overridable `getVersions(ids)` method that `listResolved()` uses to fetch all active versions in a single batch; adapters that don't override it keep their previous per-id behavior. `@mastra/pg` and `@mastra/libsql` override it for the agents and skills domains with a single `WHERE id IN (...)` query. Fixes https://github.com/mastra-ai/mastra/issues/22524 ([#22828](https://github.com/mastra-ai/mastra/pull/22828))
+
 ## 1.64.0-alpha.5
 
 ### Patch Changes

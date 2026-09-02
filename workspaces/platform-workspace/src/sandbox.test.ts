@@ -572,16 +572,16 @@ describe('PlatformSandbox', () => {
     expect(body.id).toMatch(/^platform-sandbox-/);
   });
 
-  it('deletes E2B checkpoints created with an automatic recovery id on destroy', async () => {
+  it('destroy() on E2B only kills the sandbox, even with a recovery id and a captured checkpoint', async () => {
     vi.stubEnv('SANDBOX_PROVIDER', 'e2b');
     vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
     const fetchMock = vi
       .fn()
       .mockResolvedValueOnce(json({ id: 'sbx_1' }))
       .mockResolvedValueOnce(json({ checkpointName: 'snap_123', status: 'captured' }))
-      .mockResolvedValueOnce(json({ status: 'deleted' }))
       .mockResolvedValueOnce(new Response(null, { status: 204 }));
     const sandbox = new PlatformSandbox({
+      id: 'mc-session-42',
       accessToken: 'sk_test',
       projectId: 'proj_123',
       environmentId: 'env_123',
@@ -590,15 +590,11 @@ describe('PlatformSandbox', () => {
 
     await sandbox._start();
     await sandbox.captureCheckpoint();
-    const captureBody = JSON.parse(fetchMock.mock.calls[1]![1].body as string);
     await sandbox.destroy();
 
-    expect(String(fetchMock.mock.calls[2]![0])).toBe(
-      'https://proxy.test/v1/e2b/projects/proj_123/sandbox/sbx_1/checkpoint',
-    );
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(String(fetchMock.mock.calls[2]![0])).toBe('https://proxy.test/v1/e2b/projects/proj_123/sandbox/sbx_1');
     expect(fetchMock.mock.calls[2]![1].method).toBe('DELETE');
-    expect(JSON.parse(fetchMock.mock.calls[2]![1].body as string)).toEqual({ id: captureBody.id });
-    expect(String(fetchMock.mock.calls[3]![0])).toBe('https://proxy.test/v1/e2b/projects/proj_123/sandbox/sbx_1');
   });
 
   it('does not send a template field on the create wire body', async () => {

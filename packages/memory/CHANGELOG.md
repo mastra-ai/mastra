@@ -1,5 +1,41 @@
 # @mastra/memory
 
+## 1.28.2-alpha.3
+
+### Patch Changes
+
+- Added persistent reminder conversations and asynchronous `ask_memory` questions with correlated partial and terminal replies. The tool returns immediately with a reply ID and pending status, then delivers answers later as correlated signals. ([#22783](https://github.com/mastra-ai/mastra/pull/22783))
+
+  Enable the experimental reminder sidekick on observational memory:
+
+  ```ts
+  import { Memory, Subconscious } from '@mastra/memory';
+
+  const memory = new Memory({
+    options: {
+      observationalMemory: {
+        model: 'openai/gpt-5-mini',
+        experimental_subconscious: new Subconscious({ observation: ['remind'] }),
+      },
+    },
+  });
+  ```
+
+- Updated dependencies [[`ea56b1f`](https://github.com/mastra-ai/mastra/commit/ea56b1fa6e0f99673d2f8a5b7dacc8d351507ff7)]:
+  - @mastra/core@1.64.0-alpha.8
+
+## 1.28.2-alpha.2
+
+### Patch Changes
+
+- Update README to include accurate, up-to-date information ([#22858](https://github.com/mastra-ai/mastra/pull/22858))
+
+- Improve internal observational-memory processing. ([#22738](https://github.com/mastra-ai/mastra/pull/22738))
+
+- Updated dependencies [[`e983f74`](https://github.com/mastra-ai/mastra/commit/e983f749873189f767f509eb33d1a3596c0f1c74), [`cedc25d`](https://github.com/mastra-ai/mastra/commit/cedc25d8c2dec005d8b10b6ce2d36feef1162ff0), [`9fdb3bc`](https://github.com/mastra-ai/mastra/commit/9fdb3bc0f9bfab5269b4f3045595e62323da5d3a)]:
+  - @mastra/schema-compat@1.3.8-alpha.1
+  - @mastra/core@1.64.0-alpha.7
+
 ## 1.28.2-alpha.1
 
 ### Patch Changes

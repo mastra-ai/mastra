@@ -372,6 +372,11 @@ export function additiveColumns(schema: string): { table: string; column: string
       column: 'isPending',
       ddl: `ALTER TABLE ${qualifiedTable(schema, TABLE_SPAN_EVENTS)} ADD COLUMN IF NOT EXISTS "isPending" boolean NOT NULL DEFAULT false`,
     },
+    {
+      table: TABLE_FEEDBACK_EVENTS,
+      column: 'reviewStatus',
+      ddl: `ALTER TABLE ${qualifiedTable(schema, TABLE_FEEDBACK_EVENTS)} ADD COLUMN IF NOT EXISTS "reviewStatus" text NOT NULL DEFAULT 'needs-review'`,
+    },
   ];
 }
 
