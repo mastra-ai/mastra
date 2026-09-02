@@ -143,7 +143,12 @@ function createMockSettings() {
       stagehand: { env: 'LOCAL' },
     },
     observability: { resources: {}, localTracing: false },
-    signals: { unixSocketPubSub: false, experimentalGithubSignals: false, githubPollIntervalMs: 300_000 },
+    signals: {
+      unixSocketPubSub: false,
+      experimentalGithubSignals: false,
+      experimentalCrossAgentSignals: false,
+      githubPollIntervalMs: 300_000,
+    },
     mcp: { claudeCodeGlobal: false, codexGlobal: false },
   };
 }
@@ -713,7 +718,7 @@ describe('createMastraCode', () => {
     const { AgentConnectionsSignalProvider } = await import('../agent-connections/signal-provider.js');
     const { createMastraCode } = await import('../index.js');
 
-    await createMastraCode({ agentConnections: { offlineTtlMs: 1234 } });
+    await createMastraCode({ agentConnections: { offlineTtlMs: 1234 }, crossAgentSignals: true });
 
     expect(agentConstructorMock).toHaveBeenCalled();
     const codeAgentConfig = agentConstructorMock.mock.calls
@@ -734,6 +739,22 @@ describe('createMastraCode', () => {
     ]);
     expect(controllerOnSessionCreatedMock).toHaveBeenCalledWith(expect.any(Function), { blocking: true });
     expect(controllerOnSessionDeletedMock).toHaveBeenCalledWith(expect.any(Function));
+  });
+
+  it('omits cross-agent signals unless experimental cross-agent communication is enabled', async () => {
+    const { AgentConnectionsSignalProvider } = await import('../agent-connections/signal-provider.js');
+    const { createMastraCode } = await import('../index.js');
+
+    await createMastraCode({ agentConnections: { offlineTtlMs: 1234 } });
+
+    expect(agentConstructorMock).toHaveBeenCalled();
+    const codeAgentConfig = agentConstructorMock.mock.calls
+      .map(call => call?.[0] as { id?: string; signals?: unknown[] } | undefined)
+      .find(config => config?.id === 'code-agent');
+
+    expect(codeAgentConfig).toBeDefined();
+    expect(codeAgentConfig?.signals?.some(provider => provider instanceof AgentConnectionsSignalProvider)).toBe(false);
+    expect(controllerOnSessionCreatedMock).not.toHaveBeenCalledWith(expect.any(Function), { blocking: true });
   });
 
   it('uses the configured default mode when constructing AgentController', async () => {

@@ -29,6 +29,9 @@ export const agentConnectionsToolFlowScenario = {
     advertisingEnabled = true;
     let timer: ReturnType<typeof setInterval> | undefined;
     const app = await startMastraCodeApp({
+      config: {
+        crossAgentSignals: true,
+      },
       onCreated: result => {
         advertisePeer = async () => {
           peerAdvertisement = await (

@@ -27,6 +27,7 @@ export const agentConnectionsNotificationSignalScenario = {
   aimockFixture: 'agent-connections-notification-signal.json',
   env: () => ({
     MASTRACODE_AGENT_CONNECTION_PEERS: peers,
+    MASTRACODE_ENABLE_CROSS_AGENT_SIGNALS: '1',
   }),
   async run({ terminal, runtime }) {
     runtime.startLiveOutput(terminal);

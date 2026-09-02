@@ -41,6 +41,7 @@ export const agentConnectionsExpectedReplyWatchdogScenario = {
         disableHooks: true,
         disableMcp: true,
         unixSocketPubSub: false,
+        crossAgentSignals: true,
       },
       onCreated: result => {
         timer = setInterval(() => {

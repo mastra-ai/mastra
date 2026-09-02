@@ -333,6 +333,8 @@ Use `createNotificationInboxTool()` to give agents one tool for inbox actions in
 
 ## Cross-agent connections in Mastra Code
 
+Cross-agent communication is experimental and off by default. Enable it in Mastra Code with the `/settings` toggle "Experimental cross-agent communication" and restart. The setting gates thread ownership advertisement, peer discovery, and the agent connection tools; it doesn't affect the pub/sub transport itself.
+
 Mastra Code can use notification signals to communicate between agent threads. A peer is an exact `{ agentId, resourceId, threadId }` endpoint. Discovery is a point-in-time advertisement that the exact endpoint is available now; it isn't a durable connection or a guarantee that delivery will succeed.
 
 `agent_connections_list` returns one `peers` collection. Each peer includes:
