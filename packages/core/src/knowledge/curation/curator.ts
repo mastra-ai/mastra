@@ -7,7 +7,7 @@ import {
 } from '../../storage/domains/knowledge';
 import { getKnowledgeMutationCapabilities } from '../access/mutations';
 import type {
-  CreateKnowledgeCuratorInput,
+  ResolvedKnowledgeCuratorInput,
   KnowledgeCuratorDiscardInput,
   KnowledgeCuratorMergeInput,
   KnowledgeCuratorMutationResult,
@@ -36,7 +36,7 @@ export class KnowledgeCurator {
 
   constructor(
     private readonly knowledge: Knowledge,
-    private readonly input: CreateKnowledgeCuratorInput,
+    private readonly input: ResolvedKnowledgeCuratorInput,
     configuredInstructions?: string,
   ) {
     const custom = configuredInstructions?.trim();
@@ -106,22 +106,34 @@ export class KnowledgeCurator {
     const sourceCapabilities = getKnowledgeMutationCapabilities(frontier, [this.input.companionScopeId]);
     const destinationCapabilities = getKnowledgeMutationCapabilities(frontier, [input.destinationScopeId]);
 
-    if (!sourceCapabilities.manageAccess || !destinationCapabilities.manageAccess) {
-      throw new KnowledgeNotFoundError('node', input.nodeId);
-    }
-
-    const storage = await this.knowledge.getStorageInternal();
-    return {
-      mode: 'applied',
-      node: await storage.promoteNode({
-        id: node.id,
-        version: input.version,
-        sourceScopeId: this.input.companionScopeId,
-        destinationScopeId: input.destinationScopeId,
-        contextScopeId: this.input.contextScopeId,
-        expectedAccessEpoch: frontier.accessEpoch,
-      }),
+    const mutation = {
+      id: node.id,
+      version: input.version,
+      sourceScopeId: this.input.companionScopeId,
+      destinationScopeId: input.destinationScopeId,
     };
+    if (sourceCapabilities.manageAccess && destinationCapabilities.manageAccess) {
+      return {
+        mode: 'applied',
+        node: await this.knowledge.promoteNode({
+          ...mutation,
+          contextScopeId: this.input.contextScopeId,
+          vouchedScopeIds: this.input.vouchedScopeIds,
+        }),
+      };
+    }
+    if (sourceCapabilities.suggest && destinationCapabilities.suggest) {
+      return {
+        mode: 'proposed',
+        proposal: await this.knowledge.proposeNodePromotion({
+          mutation,
+          proposerContextScopeId: this.input.contextScopeId,
+          vouchedScopeIds: this.input.vouchedScopeIds,
+          reason: input.reason,
+        }),
+      };
+    }
+    throw new KnowledgeNotFoundError('node', input.nodeId);
   }
 
   async merge(input: KnowledgeCuratorMergeInput) {
