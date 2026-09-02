@@ -1,6 +1,7 @@
 import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
+import { setupMarkerContent } from '@internal/workspace';
 import type { WorkspaceSandbox } from '@mastra/core/workspace';
 import { LocalSandbox } from '@mastra/core/workspace';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -12,6 +13,7 @@ import {
   peekSessionSandbox,
   resolveSessionWorkdir,
 } from './session-sandbox.js';
+import type { SessionSetupGate } from './session-sandbox.js';
 
 afterEach(() => {
   __clearSessionSandboxesForTests();
@@ -126,6 +128,16 @@ describe('session sandbox memo', () => {
 
 describe('session setup hook', () => {
   let dir: string;
+  const SETUP = 'pnpm install';
+  const digest = () => setupMarkerContent(SETUP);
+
+  /** A run that materializes a fake checkout and, when the gate says so, "runs setup". */
+  const runWith = (setupTouch: string) => async (sb: WorkspaceSandbox, _workdir: string, gate: SessionSetupGate) => {
+    await sb.executeCommand!('mkdir -p repo/.git && touch materialized.txt');
+    if (gate.setupDone) return;
+    await sb.executeCommand!(`touch ${setupTouch}`);
+    await gate.markSetupDone();
+  };
 
   beforeEach(async () => {
     dir = await fs.mkdtemp(path.join(os.tmpdir(), 'factory-bootstrap-'));
@@ -135,73 +147,111 @@ describe('session setup hook', () => {
     await fs.rm(dir, { recursive: true, force: true });
   });
 
-  it('runs setup inside start() via the hook and writes the marker', async () => {
-    // The callback forwarded ctx.onStart: setup runs during _start() on the
-    // create branch (fresh directory → outcome: 'created').
+  it('runs setup inside start() on a fresh sandbox and writes the digest marker', async () => {
     const boot = path.join(dir, 'fresh');
-    const hook = createSessionSetupHook(
-      async sb => void (await sb.executeCommand!('mkdir -p repo/.git && touch hook-ran.txt')),
-      'sess-hook',
-      'acme/repo',
-    );
-    const sandbox = new LocalSandbox({ workingDirectory: boot, onStart: hook });
+    const sandbox = new LocalSandbox({
+      workingDirectory: boot,
+      onStart: createSessionSetupHook(runWith('setup-ran.txt'), 'sess-hook', 'acme/repo', SETUP),
+    });
     await sandbox._start();
-    await expect(fs.stat(path.join(boot, 'hook-ran.txt'))).resolves.toBeDefined();
-    await expect(fs.stat(path.join(boot, '.mastra-factory/bootstrap'))).resolves.toBeDefined();
+    await expect(fs.stat(path.join(boot, 'setup-ran.txt'))).resolves.toBeDefined();
+    await expect(fs.readFile(path.join(boot, '.mastra-sandbox/setup'), 'utf8')).resolves.toBe(digest());
   });
 
-  it('the hook skips setup on reconnect when the marker and checkout are present', async () => {
+  it('a fresh sandbox that already carries the marker (warm template image) skips setup but still materializes', async () => {
+    const boot = path.join(dir, 'warm');
+    // What a repo template leaves behind: marker beside a checkout.
+    await fs.mkdir(path.join(boot, 'repo/.git'), { recursive: true });
+    await fs.mkdir(path.join(boot, '.mastra-factory'), { recursive: true });
+    await fs.mkdir(path.join(boot, '.mastra-sandbox'));
+    await fs.writeFile(path.join(boot, '.mastra-sandbox/setup'), digest());
+
+    const sandbox = new LocalSandbox({
+      workingDirectory: boot,
+      onStart: createSessionSetupHook(runWith('setup-ran.txt'), 'sess-hook', 'acme/repo', SETUP),
+    });
+    await sandbox._start();
+    await expect(fs.stat(path.join(boot, 'materialized.txt'))).resolves.toBeDefined();
+    await expect(fs.stat(path.join(boot, 'setup-ran.txt'))).rejects.toThrow();
+  });
+
+  it('the hook skips setup on reconnect when the marker matches and the checkout exists', async () => {
     const boot = path.join(dir, 'reconnect');
-    const workdir = path.join(boot, 'repo');
     const first = new LocalSandbox({
       workingDirectory: boot,
-      onStart: createSessionSetupHook(
-        async sb => void (await sb.executeCommand!('mkdir -p repo/.git && touch first.txt')),
-        'sess-hook',
-        'acme/repo',
-      ),
+      onStart: createSessionSetupHook(runWith('first.txt'), 'sess-hook', 'acme/repo', SETUP),
     });
     await first._start();
 
-    // Second instance reattaches (outcome: 'connected') → marker probe skips setup.
     const second = new LocalSandbox({
       workingDirectory: boot,
-      onStart: createSessionSetupHook(
-        async sb => void (await sb.executeCommand!('touch second.txt')),
-        'sess-hook',
-        'acme/repo',
-      ),
+      onStart: createSessionSetupHook(runWith('second.txt'), 'sess-hook', 'acme/repo', SETUP),
     });
     await second._start();
     await expect(fs.stat(path.join(boot, 'second.txt'))).rejects.toThrow();
   });
 
+  it('an edited setup command (or a legacy touch-only marker) re-runs setup and rewrites the marker', async () => {
+    const boot = path.join(dir, 'edited');
+    await fs.mkdir(path.join(boot, 'repo/.git'), { recursive: true });
+    await fs.mkdir(path.join(boot, '.mastra-factory'), { recursive: true });
+    await fs.mkdir(path.join(boot, '.mastra-sandbox'));
+    await fs.writeFile(path.join(boot, '.mastra-sandbox/setup'), '');
+
+    const legacy = new LocalSandbox({
+      workingDirectory: boot,
+      onStart: createSessionSetupHook(runWith('legacy-rerun.txt'), 'sess-hook', 'acme/repo', SETUP),
+    });
+    await legacy._start();
+    await expect(fs.stat(path.join(boot, 'legacy-rerun.txt'))).resolves.toBeDefined();
+    await expect(fs.readFile(path.join(boot, '.mastra-sandbox/setup'), 'utf8')).resolves.toBe(digest());
+
+    const edited = new LocalSandbox({
+      workingDirectory: boot,
+      onStart: createSessionSetupHook(runWith('edited-rerun.txt'), 'sess-hook', 'acme/repo', 'pnpm ci'),
+    });
+    await edited._start();
+    await expect(fs.stat(path.join(boot, 'edited-rerun.txt'))).resolves.toBeDefined();
+    await expect(fs.readFile(path.join(boot, '.mastra-sandbox/setup'), 'utf8')).resolves.toBe(
+      setupMarkerContent('pnpm ci'),
+    );
+  });
+
   it('a marker without its checkout does not skip setup (removed checkout heals)', async () => {
     const boot = path.join(dir, 'wiped');
-    const workdir = path.join(boot, 'repo');
     const first = new LocalSandbox({
       workingDirectory: boot,
-      onStart: createSessionSetupHook(
-        async sb => void (await sb.executeCommand!('mkdir -p repo/.git && touch first.txt')),
-        'sess-hook',
-        'acme/repo',
-      ),
+      onStart: createSessionSetupHook(runWith('first.txt'), 'sess-hook', 'acme/repo', SETUP),
     });
     await first._start();
 
-    // The checkout is removed but the marker (beside it) survives — a stale
+    // The checkout is removed but the marker (beside it) survives: a stale
     // skip cache must not defeat disk truth.
-    await fs.rm(workdir, { recursive: true, force: true });
+    await fs.rm(path.join(boot, 'repo'), { recursive: true, force: true });
     const second = new LocalSandbox({
       workingDirectory: boot,
-      onStart: createSessionSetupHook(
-        async sb => void (await sb.executeCommand!('mkdir -p repo/.git && touch rebuilt.txt')),
-        'sess-hook',
-        'acme/repo',
-      ),
+      onStart: createSessionSetupHook(runWith('rebuilt.txt'), 'sess-hook', 'acme/repo', SETUP),
     });
     await second._start();
     await expect(fs.stat(path.join(boot, 'rebuilt.txt'))).resolves.toBeDefined();
+  });
+
+  it('with no setup command the gate reports done and nothing is written', async () => {
+    const boot = path.join(dir, 'none');
+    const gates: SessionSetupGate[] = [];
+    const sandbox = new LocalSandbox({
+      workingDirectory: boot,
+      onStart: createSessionSetupHook(
+        async (_sb, _workdir, gate) => void gates.push(gate),
+        'sess-hook',
+        'acme/repo',
+        undefined,
+      ),
+    });
+    await sandbox._start();
+    expect(gates[0]?.setupDone).toBe(true);
+    await gates[0]!.markSetupDone();
+    await expect(fs.stat(path.join(boot, '.mastra-sandbox/setup'))).rejects.toThrow();
   });
 
   it('a failed setup fails start() loudly, writes no marker, and the next start self-heals', async () => {
@@ -214,23 +264,19 @@ describe('session setup hook', () => {
         },
         'sess-hook',
         'acme/repo',
+        SETUP,
       ),
     });
 
     await expect(failing._start()).rejects.toThrow(/Session setup failed \(exit 7\)/);
-    await expect(fs.stat(path.join(boot, '.mastra-factory/bootstrap'))).rejects.toThrow();
+    await expect(fs.stat(path.join(boot, '.mastra-sandbox/setup'))).rejects.toThrow();
 
-    // Reconnect (outcome: 'connected'), marker absent → setup re-runs and heals.
     const healed = new LocalSandbox({
       workingDirectory: boot,
-      onStart: createSessionSetupHook(
-        async sb => void (await sb.executeCommand!('mkdir -p repo/.git && touch healed.txt')),
-        'sess-hook',
-        'acme/repo',
-      ),
+      onStart: createSessionSetupHook(runWith('healed.txt'), 'sess-hook', 'acme/repo', SETUP),
     });
     await healed._start();
     await expect(fs.stat(path.join(boot, 'healed.txt'))).resolves.toBeDefined();
-    await expect(fs.stat(path.join(boot, '.mastra-factory/bootstrap'))).resolves.toBeDefined();
+    await expect(fs.readFile(path.join(boot, '.mastra-sandbox/setup'), 'utf8')).resolves.toBe(digest());
   });
 });

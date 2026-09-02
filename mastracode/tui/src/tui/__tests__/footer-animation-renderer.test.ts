@@ -21,7 +21,6 @@ function createHarness(initialFooterLines = ['old footer']) {
     previousHeight: 24,
     previousViewportTop: chatLines.length + footerLines.length - terminal.rows,
     renderRequested: false,
-    renderTimer: undefined,
     stopped: false,
     hasOverlay: vi.fn(() => false),
     applyLineResets: vi.fn((lines: string[]) => lines.map(line => `${line}<reset>`)),
@@ -81,12 +80,9 @@ describe('FooterAnimationRenderer', () => {
     harness.completeFullRender();
     harness.setFooterLines(['new footer']);
     harness.ui.renderRequested = true;
-    const renderTimer = setTimeout(() => {}, 1_000);
-    Object.assign(harness.ui, { renderTimer });
 
     expect(harness.renderer.renderFrame()).toBe(false);
     expect(harness.terminal.write).not.toHaveBeenCalled();
-    clearTimeout(renderTimer);
   });
 
   it('falls back when an overlay or footer geometry change invalidates the cached rows', () => {

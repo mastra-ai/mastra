@@ -8,6 +8,10 @@ import type { LocalFilesystem } from '@mastra/core/workspace';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
+  /** Whether the mock VM already carries a matching setup marker (warm template image). */
+  markerPresent: false,
+  /** The marker probe the setup hook runs before materializing. */
+  isMarkerProbe: (command: string) => command.includes('.mastra-sandbox/setup') && command.includes('test -f'),
   projects: [] as any[],
   sessions: [] as any[],
   updates: [] as Array<{ set: Record<string, unknown>; where: unknown }>,
@@ -59,6 +63,8 @@ const mocks = vi.hoisted(() => ({
         await sandbox.ensureRunning();
         // The workdir resolver probes the VM's default cwd (its home dir).
         if (command === 'pwd') return { exitCode: 0, stdout: '/home/user\n', stderr: '' };
+        // A fresh VM carries no setup marker unless a test plants one.
+        if (mocks.isMarkerProbe(command)) return { exitCode: mocks.markerPresent ? 0 : 1, stdout: '', stderr: '' };
         return { exitCode: 0, stdout: '', stderr: '' };
       }),
       setEnv: mocks.setEnv,
@@ -135,6 +141,7 @@ afterEach(async () => {
   mocks.updates.splice(0);
   mocks.createSandbox.mockClear();
   mocks.localRoot = null;
+  mocks.markerPresent = false;
   __clearSessionSandboxesForTests();
   mocks.materializeRepo.mockClear();
   mocks.checkoutSessionBranch.mockClear();
@@ -778,6 +785,42 @@ describe('GitHub session workspace preparation', () => {
     expect(mocks.sessions.find(session => session.id === 'session-b')?.sandboxWorkdir).toBe(workdirB);
   });
 
+  it('skips the setup command on a VM that already carries the marker, but still materializes and checks out', async () => {
+    const { workspace } = await createLocalFactory();
+    addProject({ setupCommand: 'pnpm i' });
+    addSession({ id: 'session-a' });
+    mocks.markerPresent = true;
+
+    await workspace({ requestContext: createGithubRequestContext('project-1', 'session-a') });
+    expect(mocks.materializeRepo).toHaveBeenCalledTimes(1);
+    expect(mocks.checkoutSessionBranch).toHaveBeenCalledTimes(1);
+    expect(mocks.runSetupCommand).not.toHaveBeenCalled();
+  });
+
+  it('writes the digest marker only after the setup command succeeds', async () => {
+    const { workspace } = await createLocalFactory();
+    addProject({ setupCommand: 'pnpm i' });
+    addSession({ id: 'session-a' });
+    mocks.runSetupCommand.mockRejectedValueOnce(new SetupCommandError('Setup command failed (exit 1)', 'setup-failed'));
+
+    await expect(workspace({ requestContext: createGithubRequestContext('project-1', 'session-a') })).rejects.toThrow(
+      /setup-failed|Setup command failed/,
+    );
+    const exec = (mocks.createSandbox.mock.results[0]!.value as { executeCommand: ReturnType<typeof vi.fn> })
+      .executeCommand;
+    const markerWrites = () =>
+      exec.mock.calls.filter(([command]) => String(command).includes("printf '%s' 'sha256:")).length;
+    expect(markerWrites()).toBe(0);
+
+    // A session whose setup succeeds records the marker exactly once.
+    mocks.createSandbox.mockClear();
+    addSession({ id: 'session-b' });
+    await workspace({ requestContext: createGithubRequestContext('project-1', 'session-b') });
+    const exec2 = (mocks.createSandbox.mock.results[0]!.value as { executeCommand: ReturnType<typeof vi.fn> })
+      .executeCommand;
+    expect(exec2.mock.calls.filter(([command]) => String(command).includes("printf '%s' 'sha256:")).length).toBe(1);
+  });
+
   it('resolves bundled Factory skills without waiting on sandbox materialization (kickoff path stays lazy)', async () => {
     const { resolver } = await createLocalFactory();
     addProject();
@@ -815,7 +858,17 @@ describe('GitHub session workspace preparation', () => {
 
     // With the sandbox live, the guarded fallback must pass skill discovery
     // through to the checkout instead of reporting empty roots.
-    await workspace.skills?.refresh();
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      await workspace.skills?.refresh();
+      // A mis-wired filesystem (e.g. a SandboxFilesystem that cannot take the
+      // lazy workdir resolver) must fail on its own message rather than be
+      // reported as an inaccessible skills path. Assert before mockRestore(),
+      // which clears the recorded calls.
+      expect(warnSpy).not.toHaveBeenCalledWith(expect.stringContaining('Cannot access skills path'));
+    } finally {
+      warnSpy.mockRestore();
+    }
     expect(sandbox.executeCommand).toHaveBeenCalled();
   });
 
@@ -936,19 +989,6 @@ describe('GitHub session workspace preparation', () => {
    * sandbox mock answers exit 0 to every probe. Force the marker probe to
    * report "absent" so reconnect starts exercise the real re-run path.
    */
-  function forceMarkerAbsent() {
-    const sandboxInstance = mocks.createSandbox.mock.results[0]!.value as {
-      executeCommand: ReturnType<typeof vi.fn>;
-    };
-    const baseExec = sandboxInstance.executeCommand.getMockImplementation()!;
-    sandboxInstance.executeCommand.mockImplementation(async (command: string) => {
-      if (command.includes('.mastra-factory/bootstrap') && command.includes('test -f')) {
-        return { exitCode: 1, stdout: '', stderr: '' };
-      }
-      return baseExec(command);
-    });
-  }
-
   it('recovers on the next attempt after the setup command itself fails', async () => {
     const { workspace } = await createLocalFactory();
     addProject({ setupCommand: 'pnpm install' });
@@ -961,8 +1001,6 @@ describe('GitHub session workspace preparation', () => {
     await expect(workspace({ requestContext: createGithubRequestContext('project-1', 'session-a') })).rejects.toThrow(
       /skipped for the rest of the session/,
     );
-    forceMarkerAbsent();
-
     // Second attempt skips the known-bad command instead of wedging the
     // session behind a permanently failing start.
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});

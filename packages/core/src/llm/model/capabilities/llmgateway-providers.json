@@ -15,6 +15,7 @@
     "alibaba/qwen3.8-max",
     "alibaba/qwen35-397b-a17b",
     "anthropic/claude-fable-5",
+    "anthropic/claude-fable-5-1",
     "anthropic/claude-haiku-4-5",
     "anthropic/claude-haiku-4-5-20251001",
     "anthropic/claude-opus-4-5-20251101",
@@ -498,6 +499,7 @@
   "structuredOutput": [
     "alibaba/qwen3.8-flash",
     "anthropic/claude-fable-5",
+    "anthropic/claude-fable-5-1",
     "anthropic/claude-haiku-4-5",
     "anthropic/claude-haiku-4-5-20251001",
     "anthropic/claude-opus-4-5-20251101",

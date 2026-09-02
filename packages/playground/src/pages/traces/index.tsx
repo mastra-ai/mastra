@@ -220,11 +220,7 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
   const selectedTraceUsesListQuery = listUsageEnabled && traces.some(trace => trace.traceId === url.traceIdParam);
   const selectedTraceUsage = useTraceUsage({
     traceIds: url.traceIdParam ? [url.traceIdParam] : [],
-    enabled:
-      url.listMode === 'traces' &&
-      !observabilityCapabilities.isLoading &&
-      observabilityCapabilities.supportsMetrics &&
-      !selectedTraceUsesListQuery,
+    enabled: listUsageEnabled && !selectedTraceUsesListQuery,
     autoRefetch: autoRefetchTraces,
   });
   const selectedTraceUsageSummary = url.traceIdParam

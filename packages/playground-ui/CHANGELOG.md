@@ -1,5 +1,16 @@
 # @mastra/playground-ui
 
+## 51.4.0-alpha.8
+
+### Patch Changes
+
+- Redesigned the trace side panel summary in Studio. The metadata grid was replaced with a compact, single-line description under the trace title using icons and tooltips for the linked entity, start time, duration, input and output tokens, and estimated cost. The "Details" tab is now labeled "Spans", and secondary trace header actions are consolidated into a single actions menu. ([#22804](https://github.com/mastra-ai/mastra/pull/22804))
+
+- Updated dependencies [[`decd47d`](https://github.com/mastra-ai/mastra/commit/decd47d0db2a891a6832e226557145b6658b0b19), [`285ce1c`](https://github.com/mastra-ai/mastra/commit/285ce1c1399341a37e76233aa94dbf9f1a41bd5d), [`5b5e3cc`](https://github.com/mastra-ai/mastra/commit/5b5e3cc006950b0ff9720c5be8396d4c95e8a6ac), [`045c3c7`](https://github.com/mastra-ai/mastra/commit/045c3c78f2129fea5d4467bb26cff2b49788b3d0), [`d53a056`](https://github.com/mastra-ai/mastra/commit/d53a05614893e8d1bbfdab50b42c19435e6bd065), [`b114e78`](https://github.com/mastra-ai/mastra/commit/b114e787e8438732286611397f77fdcb6e6633b9)]:
+  - @mastra/core@1.64.0-alpha.5
+  - @mastra/client-js@1.42.5-alpha.5
+  - @mastra/react@1.4.10-alpha.6
+
 ## 51.4.0-alpha.7
 
 ### Patch Changes

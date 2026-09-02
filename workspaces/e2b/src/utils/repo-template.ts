@@ -30,6 +30,7 @@
 import { execFile } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { promisify } from 'node:util';
+import { setupMarkerCommand, setupMarkerContent } from '@internal/workspace';
 
 import { Template } from 'e2b';
 import type { ConnectionOpts, TemplateClass } from 'e2b';
@@ -374,6 +375,7 @@ export async function refreshRepoTemplate(
  * so it is checked before it can be interpolated into one. The repoDir is
  * derived from it rather than supplied, so it needs no separate guard.
  */
+
 function assertCloneUrl(cloneUrl: string): void {
   if (!isValidCloneUrl(cloneUrl)) {
     throw new Error(`Invalid cloneUrl '${cloneUrl}': expected an https URL with a plain host and path`);
@@ -428,9 +430,12 @@ function buildRepoTemplateSpec(identity: RepoTemplateIdentity, token?: string): 
       .runCmd(`git -C "${repoDir}" checkout ${sha}`);
   }
   // Build steps use fresh shells, so each setup command needs its own `cd`.
-  for (const command of normalizeSetupCommands(setupCommand)) {
+  const setupCommands = normalizeSetupCommands(setupCommand);
+  for (const command of setupCommands) {
     template = template.runCmd(`cd "${repoDir}" && ${command}`);
   }
+  // Last, so it only exists in images where every step above succeeded.
+  template = template.runCmd(setupMarkerCommand(setupMarkerContent(setupCommands)));
 
   return {
     ref: repoTemplateRef(identity),
@@ -453,13 +458,52 @@ function buildRepoTemplateSpec(identity: RepoTemplateIdentity, token?: string): 
 }
 
 /**
- * Resolve the repository's current default-branch head over HTTPS
- * (`git ls-remote <url> HEAD` — no clone; authenticated via an in-process
- * `http.extraheader` when a token is provided). Returns undefined when the
+ * `owner/repo` for a github.com clone URL, else undefined. Only the public
+ * host is API-resolvable: GitHub Enterprise and other forges keep the git
+ * path.
+ */
+function parseGithubRepo(cloneUrl: string): { owner: string; repo: string } | undefined {
+  let url: URL;
+  try {
+    url = new URL(cloneUrl);
+  } catch {
+    return undefined;
+  }
+  if (url.hostname.toLowerCase() !== 'github.com') return undefined;
+  const [owner, repo, ...rest] = url.pathname.split('/').filter(Boolean);
+  if (!owner || !repo || rest.length > 0) return undefined;
+  return { owner, repo: repo.replace(/\.git$/i, '') };
+}
+
+/**
+ * Resolve the repository's current default-branch head without cloning.
+ * github.com repositories go through the REST API so resolution works
+ * wherever the host runs, including images without a git binary; other
+ * hosts use `git ls-remote <url> HEAD`, authenticated via an in-process
+ * `http.extraheader` when a token is provided. Returns undefined when the
  * head cannot be resolved (inaccessible repo, offline, no git binary);
  * callers degrade to the untagged template ref.
  */
 async function resolveDefaultBranchHead(cloneUrl: string, token?: string): Promise<string | undefined> {
+  const github = parseGithubRepo(cloneUrl);
+  if (github) {
+    try {
+      const response = await fetch(`https://api.github.com/repos/${github.owner}/${github.repo}/commits/HEAD`, {
+        headers: {
+          Accept: 'application/vnd.github.sha',
+          'X-GitHub-Api-Version': '2022-11-28',
+          'User-Agent': 'mastra-e2b',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        signal: AbortSignal.timeout(10_000),
+      });
+      if (!response.ok) return undefined;
+      const sha = (await response.text()).trim();
+      return SHA_PATTERN.test(sha) ? sha : undefined;
+    } catch {
+      return undefined;
+    }
+  }
   try {
     const authArgs = token
       ? ['-c', `http.extraheader=AUTHORIZATION: basic ${Buffer.from(`x-access-token:${token}`).toString('base64')}`]

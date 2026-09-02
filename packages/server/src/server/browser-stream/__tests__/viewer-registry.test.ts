@@ -56,6 +56,21 @@ describe('ViewerRegistry', () => {
       // Called only once despite two viewers
       expect(mockToolset.onBrowserReady).toHaveBeenCalledTimes(1);
       expect(mockToolset.onBrowserClosed).toHaveBeenCalledTimes(1);
+      // Toolset lookup is not repeated once it has resolved
+      expect(getToolset).toHaveBeenCalledTimes(1);
+    });
+
+    it('should retry toolset lookup on the next viewer when the first lookup returned nothing', async () => {
+      const lateGetToolset = vi.fn().mockReturnValueOnce(undefined).mockReturnValue(mockToolset);
+
+      await registry.addViewer('agent-1', mockWs1, lateGetToolset);
+      expect(mockToolset.onBrowserReady).not.toHaveBeenCalled();
+
+      await registry.addViewer('agent-1', mockWs2, lateGetToolset);
+      expect(lateGetToolset).toHaveBeenCalledTimes(2);
+      expect(mockToolset.onBrowserReady).toHaveBeenCalledTimes(1);
+      expect(mockToolset.onBrowserClosed).toHaveBeenCalledTimes(1);
+      expect(registry.getViewerCount('agent-1')).toBe(2);
     });
 
     it('should start screencast if browser is already running', async () => {

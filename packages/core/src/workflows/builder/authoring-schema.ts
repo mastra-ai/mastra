@@ -25,6 +25,7 @@
 import { z } from 'zod';
 
 import type { Predicate } from '../predicate';
+import { validateCron } from '../scheduler/cron';
 
 export const WORKFLOW_BUILDER_MAPPING_CONFIG_DESCRIPTION =
   'An object whose top-level keys become the mapping output fields. Each value must use exactly one canonical source form: { "template": "<text with ${placeholders}>" }, { "value": <constant> }, { "step": "<stepId>", "path": "<field.path>" }, { "initData": true, "path": "<workflow-input-field.path>" }, or { "requestContextPath": "<field.path>" }. IMPORTANT: initData is the boolean true, never a field name string; put the workflow input field name in path. Template placeholders use JavaScript-style ${initData.<field>}, ${inputData.<field>}, ${stepResults.<stepId>.<field>}, ${state.<field>}, or ${requestContext.<field>} — never Handlebars {{...}} and never separate sources/data bindings. May also be provided as a JSON-encoded string of the same object.';
@@ -339,6 +340,55 @@ export const workflowBuilderGraphEntryInputSchema = z.discriminatedUnion('type',
 const GRAPH_DESCRIPTION =
   'The complete ordered top-level graph covering all ten persisted graph families: agent, tool, mapping, nested workflow, parallel, foreach, sleep, sleepUntil, conditional, and loop. Every adjacent pair must compose: the previous output shape must satisfy the next input schema — insert a mapping step whenever shapes differ. The workflow result is exactly the final top-level entry output, so add an explicit final mapping whenever that output does not match outputSchema.';
 
+const SCHEDULE_DESCRIPTION =
+  'Optional declarative cron schedule(s) for the workflow. A single config or an array (array entries must each provide a unique stable id). Persisted with the definition and re-registered on every boot.';
+
+type JsonValue = null | string | number | boolean | JsonValue[] | { [key: string]: JsonValue };
+
+const workflowBuilderJsonValueSchema: z.ZodType<JsonValue> = z.lazy(() =>
+  z.union([
+    z.null(),
+    z.string(),
+    z.number().finite(),
+    z.boolean(),
+    z.array(workflowBuilderJsonValueSchema),
+    z.record(z.string(), workflowBuilderJsonValueSchema),
+  ]),
+);
+
+export const workflowBuilderScheduleConfigSchema = z
+  .strictObject({
+    id: z.string().min(1).optional().describe('Stable schedule id, scoped to the workflow. Required in array form.'),
+    cron: z.string().min(1).describe('Cron expression (5-, 6-, or 7-part).'),
+    timezone: z.string().min(1).optional().describe('Optional IANA timezone.'),
+    inputData: workflowBuilderJsonValueSchema.optional().describe('Static input data for each scheduled run.'),
+    initialState: workflowBuilderJsonValueSchema.optional().describe('Static initial state for each scheduled run.'),
+    requestContext: z
+      .record(z.string(), workflowBuilderJsonValueSchema)
+      .optional()
+      .describe('Request context for each scheduled run.'),
+    metadata: z
+      .record(z.string(), workflowBuilderJsonValueSchema)
+      .optional()
+      .describe('Metadata persisted on the schedule row.'),
+  })
+  .superRefine(({ cron, timezone }, ctx) => {
+    try {
+      validateCron(cron, timezone);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message,
+        path: message.startsWith('Invalid timezone') ? ['timezone'] : ['cron'],
+      });
+    }
+  });
+
+export const workflowBuilderScheduleSchema = z
+  .union([workflowBuilderScheduleConfigSchema, z.array(workflowBuilderScheduleConfigSchema)])
+  .describe(SCHEDULE_DESCRIPTION);
+
 export const workflowBuilderDefinitionSchema = z.strictObject({
   id: z.string().min(1).describe('Workflow id — kebab-case. Preserve the exact requested workflow ID.'),
   description: z.string().optional(),
@@ -348,6 +398,7 @@ export const workflowBuilderDefinitionSchema = z.strictObject({
   stateSchema: z.unknown().optional().describe('Optional JSON Schema for persisted workflow state.'),
   requestContextSchema: z.unknown().optional().describe('Optional JSON Schema for request context values.'),
   graph: z.array(workflowBuilderGraphEntrySchema).min(1).describe(GRAPH_DESCRIPTION),
+  schedule: workflowBuilderScheduleSchema.optional(),
 });
 
 export const workflowBuilderDefinitionInputSchema = z
@@ -363,6 +414,7 @@ export const workflowBuilderDefinitionInputSchema = z
     stateSchema: z.unknown().nullish().describe('Optional JSON Schema for persisted workflow state.'),
     requestContextSchema: z.unknown().nullish().describe('Optional JSON Schema for request context values.'),
     graph: z.array(workflowBuilderGraphEntryInputSchema).min(1).describe(GRAPH_DESCRIPTION),
+    schedule: workflowBuilderScheduleSchema.nullish(),
   })
   .describe(
     'One complete canonical WorkflowDefinition. Submit exactly one complete candidate per attempt — never parallel alternatives. After diagnostics, correct and resubmit the whole definition.',
