@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { AutomationFailedAttentionProvider } from '../routes/attention-providers.js';
 import { FactoryFeedReader } from '../storage/domains/comments/feed-context.js';
-import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
+import { FACTORY_RULE_MATERIALIZATION_KEY, type WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
 import { builtInFactoryRules, defaultFactoryRules } from './defaults.js';
 import { FACTORY_DISPATCH_CONSTANTS, FactoryDecisionDispatcher } from './dispatcher.js';
@@ -3235,6 +3235,76 @@ describe('FactoryDecisionDispatcher', () => {
     expect(pending.map(record => record.status)).toEqual(['succeeded']);
     expect(await storage.list({ orgId: 'org-1', factoryProjectId: PROJECT_ID })).toHaveLength(1);
     expect((await storage.get({ orgId: 'org-1', id: card.id }))?.parentWorkItemId).toBeNull();
+  });
+
+  it('backfills missing source metadata on an already-filed card without overwriting or adopting it', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const { item: card } = await storage.upsert({
+      orgId: 'org-1',
+      userId: 'test',
+      factoryProjectId: PROJECT_ID,
+      input: {
+        externalSource: {
+          integrationId: 'github',
+          type: 'pull-request',
+          externalId: 'github-pr:3',
+          url: 'https://github.com/acme/repo/pull/3',
+        },
+        parentWorkItemId: null,
+        title: 'Linked PR',
+        stages: ['review'],
+        sessions: {},
+        metadata: { author: 'human-edited' },
+      },
+      reuseMode: 'preserve',
+    });
+    await storage.commitRuleEvaluation({
+      orgId: 'org-1',
+      factoryProjectId: PROJECT_ID,
+      workItemId: card.id,
+      ingress: { identity: 'poll:7:pull-request:3', triggerType: 'pull_request.opened' },
+      ruleSetVersion: 'rules-v1',
+      expectedRevision: card.revision,
+      actor: { type: 'system', id: 'rules' },
+      outcome: { status: 'accepted' },
+      decisions: [
+        {
+          type: 'upsertLinkedWorkItem',
+          idempotencyKey: 'linked-pr-backfill',
+          board: 'review',
+          source: 'github-pr',
+          sourceKey: 'github-pr:3',
+          title: 'Linked PR',
+          url: 'https://github.com/acme/repo/pull/3',
+          stage: 'intake',
+          metadata: { author: 'octocat', sourceCreatedAt: '2029-12-01T00:00:00Z' },
+        },
+      ],
+      causalChain: [],
+      now: new Date('2030-01-01T00:00:00Z'),
+    });
+    const transitionService = new FactoryTransitionService({
+      storage,
+      rules: defaultFactoryRules({ version: 'rules-v1' }),
+    });
+    const { controller } = createSession();
+    const dispatcher = new FactoryDecisionDispatcher({
+      controller: controller as never,
+      isAutoRunEnabled: async () => true,
+      transitionService,
+      storage,
+      ownerId: 'worker-1',
+    });
+
+    await dispatcher.runOnce(new Date('2030-01-01T00:00:01Z'));
+
+    const pending = await storage.listDeferredDecisions('org-1', PROJECT_ID);
+    expect(pending.map(record => record.status)).toEqual(['succeeded']);
+    const updated = await storage.get({ orgId: 'org-1', id: card.id });
+    expect(updated?.metadata).toMatchObject({ author: 'human-edited', sourceCreatedAt: '2029-12-01T00:00:00Z' });
+    expect(updated?.metadata?.[FACTORY_RULE_MATERIALIZATION_KEY]).toBeUndefined();
+    // Preserved: not re-entered into intake.
+    expect(updated?.stages).toEqual(['review']);
   });
 
   it('recovers linked-item materialization after an upsert crash and fires Intake onEnter exactly once', async () => {
