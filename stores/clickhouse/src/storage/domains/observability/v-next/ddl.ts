@@ -39,6 +39,7 @@ export const TABLE_METRIC_EVENTS_DELTA = 'mastra_metric_events_delta';
 export const TABLE_LOG_EVENTS_DELTA = 'mastra_log_events_delta';
 export const TABLE_SCORE_EVENTS_DELTA = 'mastra_score_events_delta';
 export const TABLE_FEEDBACK_EVENTS_DELTA = 'mastra_feedback_events_delta';
+export const TABLE_DELETION_REQUESTS = 'mastra_deletion_requests';
 export const TABLE_DISCOVERY_VALUES = 'mastra_discovery_values';
 export const TABLE_DISCOVERY_PAIRS = 'mastra_discovery_pairs';
 
@@ -832,6 +833,30 @@ ORDER BY (traceId, timestamp, feedbackId)
 SETTINGS allow_nullable_key = 1
 `;
 
+export const DELETION_REQUESTS_DDL = `
+CREATE TABLE IF NOT EXISTS ${TABLE_DELETION_REQUESTS} (
+  requestId       UUID,
+  requestedAt     DateTime64(3, 'UTC'),
+  completedAt     Nullable(DateTime64(3, 'UTC')),
+  requestType     LowCardinality(String),
+  organizationId  Nullable(String),
+  resourceId      Nullable(String),
+  traceIds        Array(String),
+  experimentId    Nullable(String),
+  datasetId       Nullable(String),
+  datasetItemIds  Array(String),
+  scoreIds        Array(String),
+  feedbackIds     Array(String),
+  status          LowCardinality(String),
+  lastError       Nullable(String),
+  attemptCount    UInt32 DEFAULT 0,
+  nextAttemptAt   Nullable(DateTime64(3, 'UTC'))
+)
+ENGINE = MergeTree
+ORDER BY (requestedAt, requestId)
+TTL requestedAt + INTERVAL 45 DAY
+`;
+
 export function buildFeedbackEventsDeltaDDL(): string {
   return `
 CREATE TABLE IF NOT EXISTS ${TABLE_FEEDBACK_EVENTS_DELTA} (
@@ -1043,6 +1068,7 @@ export const BASE_TABLE_DDL = [
   LOG_EVENTS_DDL,
   SCORE_EVENTS_DDL,
   FEEDBACK_EVENTS_DDL,
+  DELETION_REQUESTS_DDL,
   DISCOVERY_VALUES_DDL,
   DISCOVERY_PAIRS_DDL,
 ];
@@ -1181,6 +1207,7 @@ export const ALL_TABLE_NAMES = [
   TABLE_LOG_EVENTS,
   TABLE_SCORE_EVENTS,
   TABLE_FEEDBACK_EVENTS,
+  TABLE_DELETION_REQUESTS,
   TABLE_METRIC_EVENTS_DELTA,
   TABLE_LOG_EVENTS_DELTA,
   TABLE_SCORE_EVENTS_DELTA,

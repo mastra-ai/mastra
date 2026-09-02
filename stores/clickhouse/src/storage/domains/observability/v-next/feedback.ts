@@ -19,7 +19,9 @@ import type {
 } from '@mastra/core/storage';
 import { parseFieldKey } from '@mastra/core/utils';
 
+import type { ClickhouseReplicationConfig } from '../../../db/replication';
 import { TABLE_FEEDBACK_EVENTS, TABLE_FEEDBACK_EVENTS_DELTA } from './ddl';
+import { recordDeletionRequest } from './deletion-requests';
 import { buildFeedbackFilterConditions, buildPaginationClause, buildSignalOrderByClause } from './filters';
 import type { FilterResult } from './filters';
 import { CH_INSERT_SETTINGS, CH_SETTINGS, feedbackRecordToRow, rowToFeedbackRecord } from './helpers';
@@ -188,13 +190,25 @@ export async function batchCreateFeedback(client: ClickHouseClient, args: BatchC
  * scoped to a tenant (`organizationId` / `resourceId` are ANDed into the
  * predicate so a scoped caller can never delete another tenant's rows).
  *
- * Lightweight deletes are immediately visible to subsequent reads, so lists
- * and OLAP aggregates over `mastra_feedback_events` reflect the deletion right
- * away. The delta table (`mastra_feedback_events_delta`) is intentionally not
- * touched: its rows are bounded residue that expires via the table's TTL.
+ * A pending deletion request is recorded before the lightweight delete. The
+ * delete is immediately visible to subsequent reads; physical purge depends on
+ * the table's configured retention TTL. The delta table is intentionally not
+ * touched and expires through its fixed two-day TTL.
  */
-export async function deleteFeedback(client: ClickHouseClient, args: DeleteFeedbackArgs): Promise<void> {
+export async function deleteFeedback(
+  client: ClickHouseClient,
+  args: DeleteFeedbackArgs,
+  replication?: ClickhouseReplicationConfig,
+): Promise<void> {
   if (args.feedbackIds.length === 0) return;
+
+  await recordDeletionRequest(client, {
+    requestType: 'feedback',
+    feedbackIds: args.feedbackIds,
+    organizationId: args.organizationId,
+    resourceId: args.resourceId,
+    replication,
+  });
 
   const params: Record<string, string> = {};
   const idPlaceholders: string[] = [];
@@ -217,6 +231,7 @@ export async function deleteFeedback(client: ClickHouseClient, args: DeleteFeedb
   await client.command({
     query: `DELETE FROM ${TABLE_FEEDBACK_EVENTS} WHERE ${conditions.join(' AND ')}`,
     query_params: params,
+    clickhouse_settings: { lightweight_deletes_sync: '1' },
   });
 }
 

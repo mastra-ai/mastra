@@ -975,7 +975,7 @@ export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
 
   override async deleteScores(args: DeleteScoresArgs): Promise<void> {
     try {
-      await scoresOps.deleteScores(this.#client, args);
+      await scoresOps.deleteScores(this.#client, args, this.#replication);
     } catch (error) {
       if (error instanceof MastraError) throw error;
       throw new MastraError(
@@ -1042,7 +1042,7 @@ export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
 
   override async deleteFeedback(args: DeleteFeedbackArgs): Promise<void> {
     try {
-      await feedbackOps.deleteFeedback(this.#client, args);
+      await feedbackOps.deleteFeedback(this.#client, args, this.#replication);
     } catch (error) {
       if (error instanceof MastraError) throw error;
       throw new MastraError(

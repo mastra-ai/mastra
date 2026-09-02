@@ -25,8 +25,13 @@ import {
   MV_DISCOVERY_PAIRS,
   MV_DISCOVERY_VALUES,
   parseTtlExpression,
+  TABLE_DELETION_REQUESTS,
   TABLE_DISCOVERY_PAIRS,
   TABLE_DISCOVERY_VALUES,
+  TABLE_FEEDBACK_EVENTS,
+  TABLE_FEEDBACK_EVENTS_DELTA,
+  TABLE_SCORE_EVENTS,
+  TABLE_SCORE_EVENTS_DELTA,
   TABLE_SPAN_EVENTS,
 } from './ddl';
 import { isReplacingMergeTreeEngine } from './migration';
@@ -2160,7 +2165,7 @@ describe('ObservabilityStorageClickhouseVNext', () => {
 
         expect(warn).toHaveBeenCalledOnce();
         expect(warn).toHaveBeenCalledWith(expect.stringContaining('pre-existing observability table'));
-        expect(warn).toHaveBeenCalledWith(expect.stringContaining('ReplacingMergeTree'));
+        expect(warn).toHaveBeenCalledWith(expect.stringMatching(/local engine '(?:Replacing)?MergeTree'/));
 
         const enginesAfter = (await (
           await scopedClient.query({
@@ -3864,6 +3869,149 @@ describe('ObservabilityStorageClickhouseVNext', () => {
   });
 
   // ==========================================================================
+  // Deletion requests
+  // ==========================================================================
+
+  describe('deletion requests', () => {
+    it('records score and feedback predicates before hiding rows', async () => {
+      await storage.createScore({
+        score: {
+          scoreId: 'request-score-1',
+          timestamp: new Date('2026-09-01T12:00:00Z'),
+          traceId: 'request-trace-1',
+          spanId: null,
+          scorerId: 'request-scorer',
+          score: 0.9,
+          reason: null,
+          experimentId: null,
+          organizationId: 'org-1',
+          resourceId: 'resource-1',
+          metadata: null,
+        },
+      });
+      await storage.createFeedback({
+        feedback: {
+          feedbackId: 'request-feedback-1',
+          timestamp: new Date('2026-09-01T12:00:01Z'),
+          traceId: 'request-trace-1',
+          spanId: null,
+          feedbackSource: 'user',
+          feedbackType: 'rating',
+          value: 1,
+          comment: 'delete me',
+          experimentId: null,
+          organizationId: 'org-1',
+          resourceId: 'resource-1',
+          metadata: null,
+        },
+      });
+
+      await storage.deleteScores({
+        scoreIds: ['request-score-1'],
+        organizationId: 'org-1',
+        resourceId: 'resource-1',
+      });
+      await storage.deleteFeedback({
+        feedbackIds: ['request-feedback-1'],
+        organizationId: 'org-1',
+        resourceId: 'resource-1',
+      });
+
+      expect((await storage.listScores({})).scores).toEqual([]);
+      expect((await storage.listFeedback({})).feedback).toEqual([]);
+
+      const client = createClient({
+        url: process.env.CLICKHOUSE_URL || 'http://localhost:8123',
+        username: process.env.CLICKHOUSE_USERNAME || 'default',
+        password: process.env.CLICKHOUSE_PASSWORD || 'password',
+      });
+      try {
+        const result = await client.query({
+          query: `SELECT requestType, organizationId, resourceId, scoreIds, feedbackIds, status FROM ${TABLE_DELETION_REQUESTS} ORDER BY requestType`,
+          format: 'JSONEachRow',
+        });
+        const rows = (await result.json()) as Array<{
+          requestType: string;
+          organizationId: string | null;
+          resourceId: string | null;
+          scoreIds: string[];
+          feedbackIds: string[];
+          status: string;
+        }>;
+
+        expect(rows).toEqual([
+          {
+            requestType: 'feedback',
+            organizationId: 'org-1',
+            resourceId: 'resource-1',
+            scoreIds: [],
+            feedbackIds: ['request-feedback-1'],
+            status: 'pending',
+          },
+          {
+            requestType: 'score',
+            organizationId: 'org-1',
+            resourceId: 'resource-1',
+            scoreIds: ['request-score-1'],
+            feedbackIds: [],
+            status: 'pending',
+          },
+        ]);
+
+        const requestTableResult = await client.query({
+          query: `SHOW CREATE TABLE ${TABLE_DELETION_REQUESTS}`,
+          format: 'TabSeparatedRaw',
+        });
+        const requestTableDDL = await requestTableResult.text();
+        expect(requestTableDDL).toContain('TTL requestedAt + toIntervalDay(45)');
+        expect(requestTableDDL).not.toContain('deletedAt');
+
+        const deletedAtResult = await client.query({
+          query: `SELECT table FROM system.columns WHERE database = currentDatabase() AND table IN ({scoreTable:String}, {feedbackTable:String}) AND name = 'deletedAt'`,
+          query_params: { scoreTable: TABLE_SCORE_EVENTS, feedbackTable: TABLE_FEEDBACK_EVENTS },
+          format: 'JSONEachRow',
+        });
+        expect(await deletedAtResult.json()).toEqual([]);
+
+        for (const [table, field, id] of [
+          [TABLE_SCORE_EVENTS_DELTA, 'scoreId', 'request-score-1'],
+          [TABLE_FEEDBACK_EVENTS_DELTA, 'feedbackId', 'request-feedback-1'],
+        ] as const) {
+          const deltaResult = await client.query({
+            query: `SELECT count() AS count FROM ${table} WHERE ${field} = {id:String}`,
+            query_params: { id },
+            format: 'JSONEachRow',
+          });
+          const [deltaRow] = (await deltaResult.json()) as Array<{ count: string }>;
+          expect(Number(deltaRow?.count)).toBe(1);
+        }
+
+        await storage.deleteScores({
+          scoreIds: ['request-score-1'],
+          organizationId: 'org-1',
+          resourceId: 'resource-1',
+        });
+        await storage.deleteFeedback({
+          feedbackIds: ['request-feedback-1'],
+          organizationId: 'org-1',
+          resourceId: 'resource-1',
+        });
+        expect((await storage.listScores({})).scores).toEqual([]);
+        expect((await storage.listFeedback({})).feedback).toEqual([]);
+
+        const requestCountResult = await client.query({
+          query: `SELECT count() AS count FROM ${TABLE_DELETION_REQUESTS}`,
+          format: 'JSONEachRow',
+        });
+        const [requestCountRow] = (await requestCountResult.json()) as Array<{ count: string }>;
+        expect(Number(requestCountRow?.count)).toBe(4);
+      } finally {
+        await client.close();
+      }
+    });
+  });
+
+  // ==========================================================================
   // Retention / TTL
   // ==========================================================================
 
@@ -3950,7 +4098,48 @@ describe('ObservabilityStorageClickhouseVNext', () => {
       expect(parseTtlExpression('')).toBeNull();
     });
 
-    // --- Integration test: retention is applied during init ---
+    // --- Integration tests: retention defaults and configured TTLs ---
+
+    it('creates score and feedback tables without TTL by default and applies configured retention', async () => {
+      const database = `mastra_retention_${Date.now()}`;
+      const connection = {
+        url: process.env.CLICKHOUSE_URL || 'http://localhost:8123',
+        username: process.env.CLICKHOUSE_USERNAME || 'default',
+        password: process.env.CLICKHOUSE_PASSWORD || 'password',
+      };
+      const adminClient = createClient(connection);
+      await adminClient.command({ query: `CREATE DATABASE ${database}` });
+      const client = createClient({ ...connection, database });
+
+      try {
+        const storageWithoutRetention = new ObservabilityStorageClickhouseVNext({ client });
+        await storageWithoutRetention.init();
+
+        for (const table of [TABLE_SCORE_EVENTS, TABLE_FEEDBACK_EVENTS]) {
+          const result = await client.query({ query: `SHOW CREATE TABLE ${table}`, format: 'TabSeparatedRaw' });
+          expect(await result.text(), `${table} should not have a default TTL`).not.toContain('TTL');
+        }
+
+        const storageWithRetention = new ObservabilityStorageClickhouseVNext({
+          client,
+          retention: { scores: 30, feedback: 45 },
+        });
+        await storageWithRetention.init();
+
+        const expectedTTLs: Record<string, string> = {
+          [TABLE_SCORE_EVENTS]: 'timestamp + toIntervalDay(30)',
+          [TABLE_FEEDBACK_EVENTS]: 'timestamp + toIntervalDay(45)',
+        };
+        for (const table of [TABLE_SCORE_EVENTS, TABLE_FEEDBACK_EVENTS]) {
+          const result = await client.query({ query: `SHOW CREATE TABLE ${table}`, format: 'TabSeparatedRaw' });
+          expect(await result.text(), `${table} should use configured retention`).toContain(expectedTTLs[table]!);
+        }
+      } finally {
+        await client.close();
+        await adminClient.command({ query: `DROP DATABASE IF EXISTS ${database}` });
+        await adminClient.close();
+      }
+    });
 
     it('init applies retention TTL to tables', async () => {
       const client = createClient({
