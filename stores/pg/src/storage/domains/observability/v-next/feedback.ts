@@ -7,7 +7,8 @@
  */
 
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import { listFeedbackArgsSchema, updateFeedbackReviewStatusArgsSchema } from '@mastra/core/storage';
+import { listFeedbackArgsSchema } from '@mastra/core/storage';
+import { parseUpdateFeedbackReviewStatusArgs } from './review-status';
 import type {
   BatchCreateFeedbackArgs,
   CreateFeedbackArgs,
@@ -117,7 +118,7 @@ export async function updateFeedbackReviewStatus(
   schema: string,
   args: UpdateFeedbackReviewStatusArgs,
 ): Promise<FeedbackRecord> {
-  const { feedbackId, reviewStatus } = updateFeedbackReviewStatusArgsSchema.parse(args);
+  const { feedbackId, reviewStatus } = parseUpdateFeedbackReviewStatusArgs(args);
   const row = await client.oneOrNone<Record<string, any>>(
     `UPDATE ${qualifiedTable(schema, TABLE_FEEDBACK_EVENTS)}
      SET "reviewStatus" = $2

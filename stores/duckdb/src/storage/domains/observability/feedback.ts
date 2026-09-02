@@ -17,12 +17,9 @@ import type {
   FeedbackRecord,
   UpdateFeedbackReviewStatusArgs,
 } from '@mastra/core/storage';
-import {
-  feedbackRecordSchema,
-  listFeedbackArgsSchema,
-  updateFeedbackReviewStatusArgsSchema,
-} from '@mastra/core/storage';
+import { feedbackRecordSchema, listFeedbackArgsSchema } from '@mastra/core/storage';
 import { parseFieldKey } from '@mastra/core/utils';
+import { parseUpdateFeedbackReviewStatusArgs } from './review-status';
 import type { DuckDBConnection } from '../../db/index';
 import { buildWhereClause, buildOrderByClause, buildPaginationClause } from './filters';
 import { v, jsonV, toDate, parseJson, parseJsonArray } from './helpers';
@@ -375,7 +372,7 @@ export async function updateFeedbackReviewStatus(
   db: DuckDBConnection,
   args: UpdateFeedbackReviewStatusArgs,
 ): Promise<FeedbackRecord> {
-  const { feedbackId, reviewStatus } = updateFeedbackReviewStatusArgsSchema.parse(args);
+  const { feedbackId, reviewStatus } = parseUpdateFeedbackReviewStatusArgs(args);
   await db.execute(`UPDATE feedback_events SET reviewStatus = ? WHERE feedbackId = ?`, [reviewStatus, feedbackId]);
   const rows = await db.query<Record<string, unknown>>(
     `SELECT * FROM feedback_events WHERE feedbackId = ? ORDER BY timestamp DESC LIMIT 1`,

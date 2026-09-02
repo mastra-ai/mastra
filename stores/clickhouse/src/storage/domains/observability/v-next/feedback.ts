@@ -1,6 +1,7 @@
 import type { ClickHouseClient } from '@clickhouse/client';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import { listFeedbackArgsSchema, updateFeedbackReviewStatusArgsSchema } from '@mastra/core/storage';
+import { listFeedbackArgsSchema } from '@mastra/core/storage';
+import { parseUpdateFeedbackReviewStatusArgs } from './review-status';
 import type {
   AggregationInterval,
   AggregationType,
@@ -189,7 +190,7 @@ export async function updateFeedbackReviewStatus(
   client: ClickHouseClient,
   args: UpdateFeedbackReviewStatusArgs,
 ): Promise<FeedbackRecord> {
-  const { feedbackId, reviewStatus } = updateFeedbackReviewStatusArgsSchema.parse(args);
+  const { feedbackId, reviewStatus } = parseUpdateFeedbackReviewStatusArgs(args);
 
   const existing = await queryJson<Record<string, any>>(
     client,

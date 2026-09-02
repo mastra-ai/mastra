@@ -202,7 +202,7 @@ describe('InboxPage', () => {
       expect(reviewRequests).toEqual([{ feedbackId: 'feedback-3', body: { reviewStatus: 'reviewed' } }]),
     );
     await waitFor(() => expect(screen.queryByRole('button', { name: /mark as reviewed/i })).toBeNull());
-    expect(screen.getByTestId('location').textContent).not.toContain('feedbackId=');
+    await waitFor(() => expect(screen.getByTestId('location').textContent).not.toContain('feedbackId='));
   });
 
   it('filters feedback rows through the list search', async () => {
