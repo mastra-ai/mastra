@@ -265,6 +265,73 @@ describe('InternalMastraMCPClient - jsonSchemaValidator pass-through', () => {
     expect(sdkClient._jsonSchemaValidator).toBe(customValidator);
   });
 
+  it('should use the configured validator for hydrated tool output', async () => {
+    const validate = vi.fn((input: unknown) => ({
+      valid: input === 'valid',
+      data: input === 'valid' ? input : undefined,
+      errorMessage: input === 'valid' ? undefined : 'expected valid',
+    }));
+    const customValidator = { getValidator: vi.fn(() => validate) };
+    const client = new InternalMastraMCPClient({
+      name: 'hydrated-validator-client',
+      server: {
+        url: new URL('http://127.0.0.1:0/mcp'),
+        jsonSchemaValidator: customValidator,
+      },
+    });
+    vi.spyOn(client, 'connect').mockResolvedValue();
+    // @ts-expect-error - accessing internal SDK client for isolated wrapper testing
+    const sdkClient = client.client as Client;
+    vi.spyOn(sdkClient, 'callTool').mockResolvedValue({
+      structuredContent: 'invalid',
+      content: [{ type: 'text', text: 'invalid' }],
+      isError: false,
+    });
+    const tool = client.toolFromDefinition({
+      definition: {
+        name: 'validated',
+        inputSchema: { type: 'object' },
+        outputSchema: { type: 'string' },
+        server: { name: 'hydrated-validator-client' },
+      },
+    });
+
+    await expect(tool.execute?.({})).rejects.toThrow(/structured content does not match/i);
+    expect(customValidator.getValidator).toHaveBeenCalledWith({ type: 'string' });
+    expect(validate).toHaveBeenCalledWith('invalid');
+  });
+
+  it('should not validate structuredContent from an error result', async () => {
+    const customValidator = { getValidator: vi.fn() };
+    const client = new InternalMastraMCPClient({
+      name: 'error-result-validator-client',
+      server: {
+        url: new URL('http://127.0.0.1:0/mcp'),
+        jsonSchemaValidator: customValidator,
+        onToolError: 'return',
+      },
+    });
+    vi.spyOn(client, 'connect').mockResolvedValue();
+    // @ts-expect-error - accessing internal SDK client for isolated wrapper testing
+    const sdkClient = client.client as Client;
+    vi.spyOn(sdkClient, 'callTool').mockResolvedValue({
+      structuredContent: 42,
+      content: [{ type: 'text', text: 'failed' }],
+      isError: true,
+    });
+    const tool = client.toolFromDefinition({
+      definition: {
+        name: 'failed',
+        inputSchema: { type: 'object' },
+        outputSchema: { type: 'string' },
+        server: { name: 'error-result-validator-client' },
+      },
+    });
+
+    await expect(tool.execute?.({})).resolves.toBe(42);
+    expect(customValidator.getValidator).not.toHaveBeenCalled();
+  });
+
   it('should leave the SDK Client default validator in place when omitted', () => {
     const client = new InternalMastraMCPClient({
       name: 'default-validator-client',
@@ -543,6 +610,29 @@ describe('MastraMCPClient - outputSchema without structuredContent', () => {
 
     expect(storedSchema.properties?.root?.$ref).toBe('#/$defs/node');
     expect(storedSchema.$defs?.node?.properties?.children?.items?.$ref).toBe('#/$defs/node');
+  });
+
+  it('uses JSON Schema 2020-12 by default for input validation', async () => {
+    const sdkClient = (client as any).client as Client;
+    vi.spyOn(sdkClient, 'listTools').mockResolvedValue({
+      tools: [
+        {
+          name: 'tuple_input',
+          inputSchema: {
+            type: 'array' as const,
+            prefixItems: [{ type: 'string' as const }, { type: 'integer' as const }],
+            items: false,
+          },
+        },
+      ],
+    });
+    const callTool = vi.spyOn(sdkClient, 'callTool');
+
+    const tool = (await client.tools()).tuple_input;
+    const result = await tool.execute?.(['invalid', 1, true] as any);
+
+    expect(result).toMatchObject({ error: true, message: expect.stringMatching(/input validation failed/i) });
+    expect(callTool).not.toHaveBeenCalled();
   });
 
   it('preserves JSON Schema 2020-12 identity, composition, and boolean subschemas', async () => {
@@ -1359,6 +1449,38 @@ describe('MastraMCPClient - outputSchema with structuredContent', () => {
     });
 
     const tool = (await client.tools()).validated_tool;
+    await expect(tool.execute?.({})).rejects.toThrow(/structured content does not match/i);
+  });
+
+  it('uses JSON Schema 2020-12 by default when validating structuredContent', async () => {
+    const sdkClient = (client as any).client as Client;
+    vi.spyOn(sdkClient, 'listTools').mockResolvedValue({
+      tools: [
+        {
+          name: 'tuple_tool',
+          inputSchema: { type: 'object' as const, properties: {} },
+          outputSchema: {
+            type: 'array' as const,
+            prefixItems: [{ type: 'string' as const }, { type: 'integer' as const }],
+            items: false,
+          },
+        },
+      ],
+    });
+    vi.spyOn(sdkClient, 'callTool')
+      .mockResolvedValueOnce({
+        structuredContent: ['valid', 1],
+        content: [{ type: 'text', text: 'valid' }],
+        isError: false,
+      })
+      .mockResolvedValueOnce({
+        structuredContent: ['invalid', 1, true],
+        content: [{ type: 'text', text: 'invalid' }],
+        isError: false,
+      });
+
+    const tool = (await client.tools()).tuple_tool;
+    await expect(tool.execute?.({})).resolves.toEqual(['valid', 1]);
     await expect(tool.execute?.({})).rejects.toThrow(/structured content does not match/i);
   });
 

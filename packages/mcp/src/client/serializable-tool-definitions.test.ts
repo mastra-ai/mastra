@@ -248,6 +248,28 @@ describe('serializable MCP tool definitions (issue #20527)', () => {
         await coldClient.disconnect().catch(() => {});
       }
     });
+
+    it('does not count deeply nested annotation data as schema depth', async () => {
+      const definitions = await client.toolDefinitions();
+      const cached = JSON.parse(JSON.stringify(definitions.measure));
+      let deepDefault: Record<string, unknown> = {};
+      for (let depth = 0; depth < 150; depth++) {
+        deepDefault = { nested: deepDefault };
+      }
+      cached.outputSchema = {
+        type: 'object',
+        properties: { celsius: { type: 'number', default: deepDefault } },
+      };
+
+      const coldClient = new InternalMastraMCPClient({ name: 'defs', server: { url: testServer.baseUrl } });
+      const hydrated = coldClient.toolFromDefinition({ definition: cached });
+
+      try {
+        await expect(hydrated.execute!({ city: 'Berlin' } as any, {})).resolves.toMatchObject({ celsius: 21 });
+      } finally {
+        await coldClient.disconnect().catch(() => {});
+      }
+    });
   });
 
   describe('MCPClient', () => {
