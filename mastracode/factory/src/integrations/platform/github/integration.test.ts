@@ -1156,6 +1156,24 @@ describe('PlatformGithubIntegration', () => {
     });
   });
 
+  it('reuses a resolved collaborator permission instead of re-requesting it per card and event', async () => {
+    const fetchImpl = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(json({ permission: 'write', roleName: 'write', user: actor }))
+      .mockResolvedValueOnce(json({ error: 'rate limited' }, 403))
+      .mockResolvedValueOnce(json({ permission: 'read', roleName: 'read', user: actor }));
+    const integration = createIntegration(fetchImpl);
+
+    await expect(integration.getRepositoryCollaboratorPermission(7, 'acme/app', 'Grace')).resolves.toBe('write');
+    await expect(integration.getRepositoryCollaboratorPermission(7, 'acme/app', 'grace')).resolves.toBe('write');
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+
+    // A failed lookup is not cached: the next call for that login retries.
+    await expect(integration.getRepositoryCollaboratorPermission(7, 'acme/app', 'hank')).resolves.toBeUndefined();
+    await expect(integration.getRepositoryCollaboratorPermission(7, 'acme/app', 'hank')).resolves.toBe('read');
+    expect(fetchImpl).toHaveBeenCalledTimes(3);
+  });
+
   it('keeps the reconciliation worker alive when polling is disabled', async () => {
     vi.stubEnv('MASTRA_PLATFORM_GITHUB_POLLING_ENABLED', 'false');
     const seed = await createPlatformStorageForTests();

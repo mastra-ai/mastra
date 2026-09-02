@@ -107,6 +107,32 @@ describe('GithubIntegration constructor', () => {
   });
 });
 
+describe('GithubIntegration collaborator permission', () => {
+  it('reuses a resolved permission per installation, repo, and login; failures are retried', async () => {
+    const github = new GithubIntegration(validConfig());
+    const getCollaboratorPermissionLevel = vi
+      .fn()
+      .mockResolvedValueOnce({ data: { permission: 'write' } })
+      .mockRejectedValueOnce(new Error('rate limited'))
+      .mockResolvedValueOnce({ data: { permission: 'read' } });
+    vi.spyOn(github, 'getInstallationOctokit').mockReturnValue({
+      repos: { getCollaboratorPermissionLevel },
+    } as any);
+
+    await expect(github.getRepositoryCollaboratorPermission(7, 'acme/app', 'Grace')).resolves.toBe('write');
+    await expect(github.getRepositoryCollaboratorPermission(7, 'acme/app', 'grace')).resolves.toBe('write');
+    expect(getCollaboratorPermissionLevel).toHaveBeenCalledTimes(1);
+
+    await expect(github.getRepositoryCollaboratorPermission(7, 'acme/app', 'hank')).resolves.toBeUndefined();
+    await expect(github.getRepositoryCollaboratorPermission(7, 'acme/app', 'hank')).resolves.toBe('read');
+    expect(getCollaboratorPermissionLevel).toHaveBeenCalledTimes(3);
+
+    // A different installation is a different token and a different answer.
+    await github.getRepositoryCollaboratorPermission(8, 'acme/app', 'grace');
+    expect(getCollaboratorPermissionLevel).toHaveBeenCalledTimes(4);
+  });
+});
+
 describe('GithubIntegration triage comment upsert', () => {
   it('updates the oldest Factory marker across pages and ignores human marker comments', async () => {
     const github = new GithubIntegration(validConfig());

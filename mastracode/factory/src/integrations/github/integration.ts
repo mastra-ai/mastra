@@ -112,6 +112,16 @@ export interface GithubTriageCommentUpsertResult {
 
 export type GithubRepositoryPermission = 'admin' | 'maintain' | 'write' | 'triage' | 'read' | 'none';
 
+/**
+ * How long a collaborator permission lookup may be reused. The reconcile
+ * sweep re-stamps every open card's author and webhook gating checks every
+ * human sender, so one login can cost dozens of identical requests per cycle
+ * against the installation's REST budget. Revoked access reads as trusted for
+ * at most this long.
+ */
+const COLLABORATOR_PERMISSION_CACHE_TTL_MS = 30 * 60_000;
+const COLLABORATOR_PERMISSION_CACHE_MAX_ENTRIES = 1000;
+
 export interface IssueSummary {
   number: number;
   title: string;
@@ -343,6 +353,11 @@ export class GithubIntegration implements FactoryIntegration {
   readonly #authorizedBots: readonly string[];
   #storage: IntegrationContext['storage'] | undefined;
   #sourceControlStorage: IntegrationContext['storage']['sourceControl'] | undefined;
+  /** `installationId:owner/repo:login` → cached collaborator permission (TTL-bounded). */
+  readonly #collaboratorPermissionCache = new Map<
+    string,
+    { permission: GithubRepositoryPermission; expiresAt: number }
+  >();
 
   constructor(config: GithubIntegrationConfig) {
     const missing = REQUIRED_FIELDS.filter(field => !config[field]);
@@ -509,13 +524,28 @@ export class GithubIntegration implements FactoryIntegration {
   ): Promise<GithubRepositoryPermission | undefined> {
     const parts = splitRepoFullName(repoFullName);
     if (!parts) return undefined;
+    const cacheKey = `${installationId}:${parts.owner}/${parts.repo}:${username.toLowerCase()}`;
+    const cached = this.#collaboratorPermissionCache.get(cacheKey);
+    if (cached && cached.expiresAt > Date.now()) return cached.permission;
+    this.#collaboratorPermissionCache.delete(cacheKey);
     try {
       const { data } = await this.getInstallationOctokit(installationId).repos.getCollaboratorPermissionLevel({
         ...parts,
         username,
         request: { signal },
       });
-      return data.permission as GithubRepositoryPermission;
+      const permission = data.permission as GithubRepositoryPermission;
+      // Failures are not cached: a rate-limited or aborted lookup must retry
+      // on the next call rather than pin the login as unknown.
+      this.#collaboratorPermissionCache.set(cacheKey, {
+        permission,
+        expiresAt: Date.now() + COLLABORATOR_PERMISSION_CACHE_TTL_MS,
+      });
+      if (this.#collaboratorPermissionCache.size > COLLABORATOR_PERMISSION_CACHE_MAX_ENTRIES) {
+        const oldest = this.#collaboratorPermissionCache.keys().next().value;
+        if (oldest !== undefined) this.#collaboratorPermissionCache.delete(oldest);
+      }
+      return permission;
     } catch {
       return undefined;
     }
