@@ -29,7 +29,7 @@ export function WorkItemFeedPanel({
 
   return (
     <aside
-      className="flex h-full min-w-0 flex-1 flex-col"
+      className="flex min-h-0 min-w-0 grow flex-col"
       aria-label="Work item comments"
       data-testid="work-item-feed-panel"
     >
@@ -59,9 +59,9 @@ export function WorkItemFeedPanel({
         enabled={visible}
         currentUser={auth.data?.user}
         onQuote={setQuote}
-        className="min-h-0 flex-1"
+        className="min-h-0 grow"
       />
-      <div className="mt-auto shrink-0 p-1.5">
+      <div className="shrink-0">
         <CommentComposer
           workItemId={item.id}
           factoryProjectId={factoryProjectId}

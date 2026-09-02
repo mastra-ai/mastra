@@ -7,6 +7,7 @@
 import type { Mastra } from '../../mastra';
 import { cloneWorkflow, createWorkflow } from '../create';
 import { derivePredicateLabel } from '../predicate';
+import type { WorkflowScheduleConfig } from '../scheduler/types';
 import type { Step } from '../step';
 import { createStepFromAgent, createStepFromTool } from '../step-factories';
 import type { SerializedSingleStepEntry, SerializedStepOptions, SingleStepEntry, StepFlowEntry } from '../types';
@@ -30,6 +31,13 @@ export interface DynamicWorkflowGraph {
   stateSchema?: JsonSchema;
   requestContextSchema?: JsonSchema;
   graph: ValidatableStepFlowEntry[];
+  /**
+   * Optional declarative schedule config(s), preserved through the storage
+   * round-trip so rehydrated workflows re-declare their schedules on boot —
+   * without this, boot-time declarative schedule sync would treat the
+   * persisted `wf_*` schedule rows as orphans and delete them.
+   */
+  schedule?: WorkflowScheduleConfig | WorkflowScheduleConfig[];
 }
 
 /**
@@ -60,7 +68,7 @@ export async function rehydrateWorkflow(
   const stateSchema = def.stateSchema ? jsonSchemaToZod(def.stateSchema, opts) : undefined;
   const requestContextSchema = def.requestContextSchema ? jsonSchemaToZod(def.requestContextSchema, opts) : undefined;
 
-  const wf = createWorkflow({
+  const baseParams = {
     id: def.id,
     description: def.description,
     metadata: def.metadata,
@@ -68,7 +76,26 @@ export async function rehydrateWorkflow(
     outputSchema: outputSchema as any,
     stateSchema: stateSchema as any,
     requestContextSchema: requestContextSchema as any,
-  });
+  };
+
+  let wf;
+  if (def.schedule === undefined) {
+    wf = createWorkflow(baseParams);
+  } else {
+    try {
+      // Presence of `schedule` promotes the workflow to the evented engine,
+      // which validates the cron expression(s) at construction time.
+      wf = createWorkflow({ ...baseParams, schedule: def.schedule as any });
+    } catch (error) {
+      // A bad stored schedule shouldn't sink the whole workflow: degrade to
+      // an unscheduled workflow and surface the problem.
+      if (opts?.onUnsupportedSchema !== 'warn') throw error;
+      opts.onUnsupported?.(
+        `Ignoring invalid stored schedule config: ${error instanceof Error ? error.message : String(error)}`,
+      );
+      wf = createWorkflow(baseParams);
+    }
+  }
 
   for (const entry of def.graph) {
     applyGraphEntry(wf, entry, mastra, opts);

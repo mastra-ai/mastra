@@ -2548,6 +2548,7 @@ export class Agent<
             tracingPolicy: this.#options?.tracingPolicy,
             requireApproval: (tool as any).requireApproval,
             backgroundConfig: (tool as any).background,
+            agentBackgroundConfig: this.#backgroundTasks,
             model,
           };
           return [k, makeCoreTool(tool, options)];
@@ -3866,6 +3867,7 @@ export class Agent<
           tracingPolicy: this.#options?.tracingPolicy,
           requireApproval: (toolObj as any).requireApproval,
           backgroundConfig: (toolObj as any).background,
+          agentBackgroundConfig: this.#backgroundTasks,
         };
         const convertedToCoreTool = makeCoreTool(
           toolObj,
@@ -3943,6 +3945,7 @@ export class Agent<
           tracingPolicy: this.#options?.tracingPolicy,
           requireApproval: (toolObj as any).requireApproval,
           backgroundConfig: (toolObj as any).background,
+          agentBackgroundConfig: this.#backgroundTasks,
           workspace,
         };
         const convertedToCoreTool = makeCoreTool(
@@ -4030,6 +4033,7 @@ export class Agent<
           tracingPolicy: this.#options?.tracingPolicy,
           requireApproval: false, // Skill tools never require approval
           backgroundConfig: (toolObj as any).background,
+          agentBackgroundConfig: this.#backgroundTasks,
           workspace,
         };
         const convertedToCoreTool = makeCoreTool(
@@ -4103,6 +4107,7 @@ export class Agent<
           tracingPolicy: this.#options?.tracingPolicy,
           requireApproval: (toolObj as any).requireApproval,
           backgroundConfig: (toolObj as any).background,
+          agentBackgroundConfig: this.#backgroundTasks,
         };
         const convertedToCoreTool = makeCoreTool(
           toolObj,
@@ -4199,6 +4204,7 @@ export class Agent<
               tracingPolicy: this.#options?.tracingPolicy,
               requireApproval: (tool as any).requireApproval,
               backgroundConfig: (tool as any).background,
+              agentBackgroundConfig: this.#backgroundTasks,
               workspace,
             },
             undefined,
@@ -4412,6 +4418,7 @@ export class Agent<
                   tracingPolicy: this.#options?.tracingPolicy,
                   requireApproval: (tool as any).requireApproval,
                   backgroundConfig: (tool as any).background,
+                  agentBackgroundConfig: this.#backgroundTasks,
                   workspace,
                 },
                 undefined,
@@ -4622,6 +4629,7 @@ export class Agent<
           tracingPolicy: this.#options?.tracingPolicy,
           requireApproval: (tool as any).requireApproval,
           backgroundConfig: (tool as any).background,
+          agentBackgroundConfig: this.#backgroundTasks,
         };
         return [k, makeCoreTool(toolToConvert, options, undefined, autoResumeSuspendedTools, backgroundTaskEnabled)];
       }),
@@ -4696,6 +4704,7 @@ export class Agent<
             tracingPolicy: this.#options?.tracingPolicy,
             requireApproval: (toolObj as any).requireApproval,
             backgroundConfig: (toolObj as any).background,
+            agentBackgroundConfig: this.#backgroundTasks,
           };
           const convertedToCoreTool = makeCoreTool(
             toolObj,
@@ -4772,6 +4781,7 @@ export class Agent<
           tracingPolicy: this.#options?.tracingPolicy,
           requireApproval: (tool as any).requireApproval,
           backgroundConfig: (tool as any).background,
+          agentBackgroundConfig: this.#backgroundTasks,
         };
         const convertedToCoreTool = makeCoreTool(
           toolToConvert,
@@ -5831,6 +5841,7 @@ export class Agent<
           ...observabilityContext,
           tracingPolicy: this.#options?.tracingPolicy,
           backgroundConfig: subAgentBackgroundConfig,
+          agentBackgroundConfig: this.#backgroundTasks,
         };
 
         convertedAgentTools[`agent-${agentName}`] = makeCoreTool(
@@ -6104,6 +6115,7 @@ export class Agent<
           model: await this.getModel({ requestContext }),
           ...observabilityContext,
           tracingPolicy: this.#options?.tracingPolicy,
+          agentBackgroundConfig: this.#backgroundTasks,
         };
 
         convertedWorkflowTools[`workflow-${workflowName}`] = makeCoreTool(
@@ -6315,6 +6327,7 @@ export class Agent<
       methodType,
       ...observabilityContext,
       autoResumeSuspendedTools,
+      backgroundTaskEnabled,
     });
 
     const workspaceTools = await this.listWorkspaceTools({

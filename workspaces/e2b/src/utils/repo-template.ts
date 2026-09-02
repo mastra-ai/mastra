@@ -6,7 +6,7 @@
  * need `git fetch` + checkout of their actual ref plus setup drift, instead
  * of a cold clone + full install.
  *
- * There is exactly ONE template per (repo, setup command, workdir): the
+ * There is exactly ONE template per (repo, setup command, repoDir): the
  * template name is a deterministic `mastra-repo-<hash>` over those inputs,
  * and the commit sha rides as a docker-style TAG on that name
  * (`mastra-repo-<hash>:sha-<sha>`). A moved default branch produces a new
@@ -136,11 +136,10 @@ export interface RepoTemplateOptions {
    */
   getRepositoryAccess: (() => Promise<RepositoryAccess | undefined>) | undefined;
   /**
-   * Setup command run inside the checkout during the build (e.g.
-   * `pnpm install`). Hashed into the template name so a changed setup
-   * command produces a new template.
+   * Setup command(s) run inside the checkout and hashed into the template name.
+   * Array entries run as separate cached build steps.
    */
-  setupCommand?: string;
+  setupCommand?: string | string[];
   /**
    * Extra environment for the build, available to every build step
    * including {@link RepoTemplateOptions.setupCommand}. Use it for the
@@ -171,6 +170,13 @@ export interface RepoTemplateOptions {
    * Defaults to the SDK default (1024).
    */
   memoryMB?: number;
+  /**
+   * Absolute parent for the checkout. Created by the build user, so its parent
+   * must already be writable by that user. Becomes the build cwd, the runtime
+   * cwd, and part of template identity; the repo lands at `<workingDirectory>/<repo>`.
+   * Omit to use the base image's working directory for all of the above.
+   */
+  workingDirectory?: string;
 }
 
 /**
@@ -184,10 +190,11 @@ export interface RepoTemplateIdentity {
   cloneUrl: string;
   /** Resolved head sha. Becomes the template's tag. */
   sha?: string;
-  setupCommand?: string;
+  setupCommand?: string | string[];
   buildEnv?: Record<string, string>;
   cpuCount?: number;
   memoryMB?: number;
+  workingDirectory?: string;
 }
 
 /**
@@ -227,6 +234,9 @@ function repoTemplateName(identity: Omit<RepoTemplateIdentity, 'sha'>): string {
     // the same template.
     identity.cpuCount ?? DEFAULT_CPU_COUNT,
     identity.memoryMB ?? DEFAULT_MEMORY_MB,
+    // Appended only when set, so templates predating the option keep their
+    // existing names (and warm builds) instead of all rebuilding.
+    ...(identity.workingDirectory !== undefined ? [identity.workingDirectory] : []),
   ];
   const hash = createHash('sha256').update(JSON.stringify(config)).digest('hex').slice(0, 8);
   // Readable name: the repo slug is right in the template name; the short
@@ -307,10 +317,15 @@ async function resolveSpecAtHead(options: RepoTemplateOptions): Promise<{ spec: 
   const identity: RepoTemplateIdentity = {
     cloneUrl,
     ...(sha ? { sha } : {}),
-    ...(options.setupCommand ? { setupCommand: options.setupCommand } : {}),
+    // Kept in its original shape (string vs array) so existing string-form
+    // templates keep their hashes; omitted entirely when nothing would run.
+    ...(normalizeSetupCommands(options.setupCommand).length > 0 ? { setupCommand: options.setupCommand } : {}),
     ...(buildEnv ? { buildEnv } : {}),
     ...(options.cpuCount !== undefined ? { cpuCount: options.cpuCount } : {}),
     ...(options.memoryMB !== undefined ? { memoryMB: options.memoryMB } : {}),
+    ...(options.workingDirectory !== undefined
+      ? { workingDirectory: trimTrailingSlashes(assertWorkingDirectory(options.workingDirectory)) }
+      : {}),
   };
   return { spec: buildRepoTemplateSpec(identity, token), ...(sha ? { sha } : {}) };
 }
@@ -356,7 +371,7 @@ export async function refreshRepoTemplate(
 
 /**
  * The clone URL is the only untrusted input that reaches a build command,
- * so it is checked before it can be interpolated into one. The workdir is
+ * so it is checked before it can be interpolated into one. The repoDir is
  * derived from it rather than supplied, so it needs no separate guard.
  */
 function assertCloneUrl(cloneUrl: string): void {
@@ -379,26 +394,14 @@ function gitAuthFlag(): string {
 }
 
 function buildRepoTemplateSpec(identity: RepoTemplateIdentity, token?: string): NamedTemplateSpec {
-  const { sha, setupCommand, buildEnv } = identity;
+  const { sha, setupCommand, buildEnv, workingDirectory } = identity;
   const cloneUrl = normalizeCloneUrl(identity.cloneUrl);
-  const workdir = defaultWorkdir(cloneUrl);
+  // Relative to the build cwd, which `setWorkdir` (or the base image) also
+  // makes the runtime cwd, so the checkout sits at `<cwd>/<repo>` either way.
+  const repoDir = repoDirName(cloneUrl);
 
   const auth = token ? `${gitAuthFlag()} ` : '';
 
-  // Double quotes so a `$HOME`-relative workdir expands in the build shell.
-  const steps: string[] = [`git ${auth}clone ${cloneUrl} "${workdir}"`];
-  if (sha) {
-    // GitHub serves fetches of reachable shas, so pinning after a default
-    // clone is reliable without full-history flags.
-    steps.push(`git -C "${workdir}" ${auth}fetch origin ${sha}`, `git -C "${workdir}" checkout ${sha}`);
-  }
-  if (setupCommand) {
-    steps.push(`cd "${workdir}" && ${setupCommand}`);
-  }
-
-  // Build steps run as the sandbox `user` in its own home directory, so the
-  // default `$HOME/<repo>` clone needs no directory prep and keeps runtime
-  // file ownership right.
   let template = createDefaultMountableTemplate().template;
   const env: Record<string, string> = { ...buildEnv };
   if (token) env[BUILD_TOKEN_ENV] = token;
@@ -408,7 +411,26 @@ function buildRepoTemplateSpec(identity: RepoTemplateIdentity, token?: string): 
     // definition until the next rebuild.
     template = template.setEnvs(env);
   }
-  template = template.runCmd(steps);
+  if (workingDirectory) {
+    // Created by the build user so it is writable; `setWorkdir` then makes
+    // it the cwd for the steps below and the runtime default, without
+    // shell expansion.
+    const dir = trimTrailingSlashes(workingDirectory);
+    template = template.runCmd(`mkdir -p "${dir}"`).setWorkdir(dir);
+  }
+  // Each command gets its own cached build layer.
+  template = template.runCmd(`git ${auth}clone ${cloneUrl} "${repoDir}"`);
+  if (sha) {
+    // GitHub serves fetches of reachable shas, so pinning after a default
+    // clone is reliable without full-history flags.
+    template = template
+      .runCmd(`git -C "${repoDir}" ${auth}fetch origin ${sha}`)
+      .runCmd(`git -C "${repoDir}" checkout ${sha}`);
+  }
+  // Build steps use fresh shells, so each setup command needs its own `cd`.
+  for (const command of normalizeSetupCommands(setupCommand)) {
+    template = template.runCmd(`cd "${repoDir}" && ${command}`);
+  }
 
   return {
     ref: repoTemplateRef(identity),
@@ -431,13 +453,52 @@ function buildRepoTemplateSpec(identity: RepoTemplateIdentity, token?: string): 
 }
 
 /**
- * Resolve the repository's current default-branch head over HTTPS
- * (`git ls-remote <url> HEAD` — no clone; authenticated via an in-process
- * `http.extraheader` when a token is provided). Returns undefined when the
+ * `owner/repo` for a github.com clone URL, else undefined. Only the public
+ * host is API-resolvable: GitHub Enterprise and other forges keep the git
+ * path.
+ */
+function parseGithubRepo(cloneUrl: string): { owner: string; repo: string } | undefined {
+  let url: URL;
+  try {
+    url = new URL(cloneUrl);
+  } catch {
+    return undefined;
+  }
+  if (url.hostname.toLowerCase() !== 'github.com') return undefined;
+  const [owner, repo, ...rest] = url.pathname.split('/').filter(Boolean);
+  if (!owner || !repo || rest.length > 0) return undefined;
+  return { owner, repo: repo.replace(/\.git$/i, '') };
+}
+
+/**
+ * Resolve the repository's current default-branch head without cloning.
+ * github.com repositories go through the REST API so resolution works
+ * wherever the host runs, including images without a git binary; other
+ * hosts use `git ls-remote <url> HEAD`, authenticated via an in-process
+ * `http.extraheader` when a token is provided. Returns undefined when the
  * head cannot be resolved (inaccessible repo, offline, no git binary);
  * callers degrade to the untagged template ref.
  */
 async function resolveDefaultBranchHead(cloneUrl: string, token?: string): Promise<string | undefined> {
+  const github = parseGithubRepo(cloneUrl);
+  if (github) {
+    try {
+      const response = await fetch(`https://api.github.com/repos/${github.owner}/${github.repo}/commits/HEAD`, {
+        headers: {
+          Accept: 'application/vnd.github.sha',
+          'X-GitHub-Api-Version': '2022-11-28',
+          'User-Agent': 'mastra-e2b',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        signal: AbortSignal.timeout(10_000),
+      });
+      if (!response.ok) return undefined;
+      const sha = (await response.text()).trim();
+      return SHA_PATTERN.test(sha) ? sha : undefined;
+    } catch {
+      return undefined;
+    }
+  }
   try {
     const authArgs = token
       ? ['-c', `http.extraheader=AUTHORIZATION: basic ${Buffer.from(`x-access-token:${token}`).toString('base64')}`]
@@ -461,8 +522,7 @@ async function resolveDefaultBranchHead(cloneUrl: string, token?: string): Promi
  * not produce two templates.
  */
 function normalizeCloneUrl(cloneUrl: string): string {
-  // Trailing slashes are trimmed with a scan, not an end-anchored `\/+$`
-  // regex, which backtracks quadratically on slash runs.
+  // Avoid regex backtracking on long trailing-slash runs.
   let end = cloneUrl.length;
   while (end > 0 && cloneUrl[end - 1] === '/') end--;
   const withoutSuffix = cloneUrl.slice(0, end).replace(/\.git$/i, '');
@@ -484,8 +544,31 @@ function parseCloneUrl(cloneUrl: string): { host: string; owner: string; repo: s
   return { host, owner, repo };
 }
 
-function defaultWorkdir(cloneUrl: string): string {
+/** Normalize setup commands and drop blank entries that would produce invalid shell steps. */
+function normalizeSetupCommands(setupCommand: string | string[] | undefined): string[] {
+  const list = setupCommand === undefined ? [] : Array.isArray(setupCommand) ? setupCommand : [setupCommand];
+  return list.filter(command => command.trim() !== '');
+}
+
+function repoDirName(cloneUrl: string): string {
   const { repo } = parseCloneUrl(cloneUrl);
-  const name = repo.replace(/[^\w.-]/g, '-').replace(/^\.+/, '') || 'repo';
-  return `$HOME/${name}`;
+  return repo.replace(/[^\w.-]/g, '-').replace(/^\.+/, '') || 'repo';
+}
+
+// Avoid regex backtracking on long trailing-slash runs.
+function trimTrailingSlashes(path: string): string {
+  let end = path.length;
+  while (end > 1 && path[end - 1] === '/') end--;
+  return path.slice(0, end);
+}
+
+/** Validate a literal absolute path before embedding it in shell build steps. */
+function assertWorkingDirectory(dir: string): string {
+  const valid = /^\/[A-Za-z0-9._/-]*$/.test(dir) && !dir.split('/').includes('..');
+  if (!valid) {
+    throw new Error(
+      `Repo template workingDirectory must be an absolute path of plain path characters (got ${JSON.stringify(dir)}); ~ and $HOME are not expanded.`,
+    );
+  }
+  return dir;
 }
