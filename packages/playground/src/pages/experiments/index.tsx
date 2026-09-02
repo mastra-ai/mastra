@@ -21,6 +21,8 @@ export default function Experiments() {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [runDialogOpen, setRunDialogOpen] = useState(false);
+  const [isSelectionActive, setIsSelectionActive] = useState(false);
+  const [selectedExperimentIds, setSelectedExperimentIds] = useState<string[]>([]);
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
 
@@ -54,6 +56,33 @@ export default function Experiments() {
 
   const isLoading = isLoadingDatasets || isLoadingExperiments;
   const error = errorExperiments || errorDatasets;
+
+  // Max 2 selected: keep the oldest pick, replace the most recent one.
+  const toggleExperimentSelection = (experimentId: string) => {
+    setSelectedExperimentIds(prev => {
+      if (prev.includes(experimentId)) return prev.filter(id => id !== experimentId);
+      if (prev.length >= 2) return [prev[0], experimentId];
+      return [...prev, experimentId];
+    });
+  };
+
+  const cancelSelection = () => {
+    setSelectedExperimentIds([]);
+    setIsSelectionActive(false);
+  };
+
+  const selectedExperiments = selectedExperimentIds.map(id => experiments.find(exp => exp.id === id));
+  const selectedDatasetIds = new Set(selectedExperiments.map(exp => exp?.datasetId));
+  const compareDisabledReason =
+    selectedExperimentIds.length === 2 && selectedDatasetIds.size !== 1
+      ? 'experiments must belong to the same dataset'
+      : undefined;
+
+  const executeCompare = () => {
+    if (selectedExperimentIds.length !== 2 || compareDisabledReason) return;
+    const [baseline, contender] = selectedExperimentIds;
+    void navigate(`/experiments/compare?baseline=${baseline}&contender=${contender}`);
+  };
 
   if (error && is401UnauthorizedError(error)) {
     return (
@@ -126,6 +155,12 @@ export default function Experiments() {
           onReset={resetFilters}
           hasActiveFilters={hasFilters}
           onRunClick={() => setRunDialogOpen(true)}
+          onCompareClick={() => setIsSelectionActive(true)}
+          isSelectionActive={isSelectionActive}
+          selectedCount={selectedExperimentIds.length}
+          onExecuteCompare={executeCompare}
+          onCancelSelection={cancelSelection}
+          compareDisabledReason={compareDisabledReason}
         />
       </PageLayout.TopArea>
 
@@ -137,6 +172,9 @@ export default function Experiments() {
         search={search}
         statusFilter={statusFilter}
         datasetFilter={datasetFilter}
+        isSelectionActive={isSelectionActive}
+        selectedExperimentIds={selectedExperimentIds}
+        onToggleSelection={toggleExperimentSelection}
       />
 
       {runDialog}

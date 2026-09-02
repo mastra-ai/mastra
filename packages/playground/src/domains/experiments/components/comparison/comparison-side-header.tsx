@@ -5,7 +5,7 @@ import { getShortId, TextAndIcon } from '@mastra/playground-ui/components/Text';
 import { AgentIcon } from '@mastra/playground-ui/icons/AgentIcon';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { format } from 'date-fns';
-import { CalendarIcon, ExternalLinkIcon, HashIcon, LayersIcon, TargetIcon } from 'lucide-react';
+import { CalendarIcon, HashIcon, LayersIcon, TargetIcon } from 'lucide-react';
 import { ComparisonScoreRow } from './comparison-score-row';
 import { ComparisonSection } from './comparison-section';
 import { useLinkComponent } from '@/lib/framework';
@@ -61,12 +61,9 @@ export function ComparisonSideHeader({
             as={Link}
             size="xs"
             href={`/experiments/${experiment.id}`}
-            target="_blank"
-            rel="noopener noreferrer"
             aria-label={`Open experiment ${experiment.name || shortId}`}
           >
             <span className="min-w-0 truncate">{experiment.name || shortId}</span>
-            <ExternalLinkIcon />
           </Button>
         )}
       </div>
@@ -79,15 +76,9 @@ export function ComparisonSideHeader({
             </TextAndIcon>
           )}
           {experiment.targetType === 'agent' && experiment.targetId ? (
-            <Link
-              href={paths.agentLink(experiment.targetId)}
-              target="_blank"
-              rel="noopener noreferrer"
-              className={linkClass}
-            >
+            <Link href={paths.agentLink(experiment.targetId)} className={linkClass}>
               <AgentIcon />
               <span className="min-w-0 truncate">{experiment.targetId}</span>
-              <ExternalLinkIcon />
             </Link>
           ) : (
             <TextAndIcon>
