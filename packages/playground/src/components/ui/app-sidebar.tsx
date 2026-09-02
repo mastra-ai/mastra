@@ -213,7 +213,7 @@ export function AppSidebar() {
                     link={toSidebarLink(item)}
                     isActive={getIsLinkActive(item, pathname)}
                   >
-                    {item.url === '/inbox' && inboxCount > 1 && state !== 'collapsed' ? (
+                    {item.url === '/inbox' && inboxCount > 0 && state !== 'collapsed' ? (
                       <Badge variant="yellow" size="sm" className="ml-auto">
                         {inboxCount}
                       </Badge>
