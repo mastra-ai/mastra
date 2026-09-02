@@ -166,7 +166,8 @@ describe('cardPrimaryAction', () => {
       onMove,
     });
 
-    expect(action?.label).toBe('Accept and plan');
+    expect(action?.label).toBe('Accept');
+    expect(action?.ariaLabel).toBe('Accept and plan');
     action?.start();
     expect(onMove).toHaveBeenCalledWith('planning');
     expect(onStartRun).not.toHaveBeenCalled();

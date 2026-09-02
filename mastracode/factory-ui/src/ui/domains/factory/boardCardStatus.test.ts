@@ -176,7 +176,7 @@ describe('boardCardStatus', () => {
   it('names the held classification so the card says why it waits on a person', () => {
     expect(boardCardStatus({ heldAs: 'feature request' })).toEqual({
       kind: 'held',
-      label: "Feature request — needs a maintainer's decision",
+      label: 'Feature request · needs your approval',
     });
     // Anything the server is doing outranks the standing hold.
     expect(boardCardStatus({ heldAs: 'feature request', preparing: 'Starting…' })).toEqual({

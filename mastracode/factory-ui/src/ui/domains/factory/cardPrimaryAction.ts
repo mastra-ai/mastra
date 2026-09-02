@@ -8,6 +8,8 @@ import type { BoardStageId } from './stages';
 
 export interface CardPrimaryAction {
   label: string;
+  /** Spoken name when the pill's label is abbreviated to fit the actions row. */
+  ariaLabel?: string;
   start: () => void;
 }
 
@@ -100,8 +102,9 @@ export function cardPrimaryAction({
     return { label: 'Resume', start: () => onMove(stage) };
   }
   if (columnStage !== undefined && awaitsTriageDecision(item, columnStage)) {
+    // One word on the pill so it sits beside "Open session"; the menu spells out the alternatives.
     const [accept] = TRIAGE_DECISIONS;
-    return { label: accept.label, start: () => onMove(accept.stage) };
+    return { label: 'Accept', ariaLabel: accept.label, start: () => onMove(accept.stage) };
   }
   if (resume?.kind === 'run' && runSpec !== undefined) {
     const action = resume.action;
@@ -162,7 +165,7 @@ export function runButton({
   if (action === undefined) return undefined;
   return {
     label: pending ? 'Starting…' : action.label,
-    ariaLabel: suggestion === undefined ? undefined : `Start suggested run: ${suggestion}`,
+    ariaLabel: suggestion === undefined ? action.ariaLabel : `Start suggested run: ${suggestion}`,
     disabled: disabled || pending,
     start: action.start,
   };

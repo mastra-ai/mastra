@@ -155,7 +155,7 @@ export function boardCardStatus(input: BoardCardStatusInput): BoardCardStatus {
     return { kind: 'waiting', label: input.proposal.label, decisionId: input.proposal.decisionId };
   }
   if (input.heldAs !== undefined) {
-    return { kind: 'held', label: `${capitalize(input.heldAs)} — needs a maintainer's decision` };
+    return { kind: 'held', label: `${capitalize(input.heldAs)} · needs your approval` };
   }
   return { kind: 'idle' };
 }
