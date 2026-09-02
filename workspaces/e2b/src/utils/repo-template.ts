@@ -374,6 +374,24 @@ export async function refreshRepoTemplate(
  * so it is checked before it can be interpolated into one. The repoDir is
  * derived from it rather than supplied, so it needs no separate guard.
  */
+/**
+ * Setup completion marker, written beside the checkout as the template's last
+ * build step so it only exists in images where every setup command succeeded.
+ * The content is a digest of the setup commands, so a sandbox booted from the
+ * image can tell whether *this* setup already ran. Path and recipe are a
+ * convention shared with `@mastra/factory` (session-sandbox.ts) and
+ * `@mastra/platform-workspace`; keep the three in sync.
+ */
+export const SETUP_MARKER_PATH = '.mastra-sandbox/setup';
+
+export function setupMarkerContent(setupCommands: readonly string[]): string {
+  return `sha256:${createHash('sha256').update(setupCommands.join('\n')).digest('hex')}`;
+}
+
+function setupMarkerCommand(content: string): string {
+  return `mkdir -p "$(dirname "${SETUP_MARKER_PATH}")" && printf '%s' '${content}' > "${SETUP_MARKER_PATH}"`;
+}
+
 function assertCloneUrl(cloneUrl: string): void {
   if (!isValidCloneUrl(cloneUrl)) {
     throw new Error(`Invalid cloneUrl '${cloneUrl}': expected an https URL with a plain host and path`);
@@ -428,9 +446,12 @@ function buildRepoTemplateSpec(identity: RepoTemplateIdentity, token?: string): 
       .runCmd(`git -C "${repoDir}" checkout ${sha}`);
   }
   // Build steps use fresh shells, so each setup command needs its own `cd`.
-  for (const command of normalizeSetupCommands(setupCommand)) {
+  const setupCommands = normalizeSetupCommands(setupCommand);
+  for (const command of setupCommands) {
     template = template.runCmd(`cd "${repoDir}" && ${command}`);
   }
+  // Last, so it only exists in images where every step above succeeded.
+  template = template.runCmd(setupMarkerCommand(setupMarkerContent(setupCommands)));
 
   return {
     ref: repoTemplateRef(identity),
