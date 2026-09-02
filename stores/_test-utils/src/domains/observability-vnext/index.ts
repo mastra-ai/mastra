@@ -3,10 +3,15 @@ export * from './trace-query';
 import { coreFeatures } from '@mastra/core/features';
 import { EntityType, SpanType } from '@mastra/core/observability';
 import { parseTraceQueryRequest, planTraceQuery } from '@mastra/core/storage';
-import type { CreateSpanRecord, ObservabilityStorage } from '@mastra/core/storage';
+import type { CreateSpanRecord, ObservabilityStorage, TraceQueryRequest } from '@mastra/core/storage';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { VNEXT_BASE_DATE, makeSpan } from './data';
-import { normalizeTraceQueryResponse, TRACE_QUERY_CONFORMANCE_CASES, TRACE_QUERY_FIXTURE_DATA } from './trace-query';
+import {
+  normalizeTraceQueryResponse,
+  TRACE_QUERY_CONFORMANCE_CASES,
+  TRACE_QUERY_FIXTURE_DATA,
+  TRACE_QUERY_ORDINAL_FIXTURE_DATA,
+} from './trace-query';
 
 export interface ObservabilityVNextCapabilities {
   /**
@@ -173,6 +178,54 @@ export function createObservabilityVNextTests(options: CreateObservabilityVNextT
         } while (after);
         expect(pagedTraceIds).toEqual(['trace-d', 'trace-c', 'trace-a', 'trace-b']);
         expect(new Set(pagedTraceIds).size).toBe(pagedTraceIds.length);
+      });
+
+      it('paginates mixed-case and non-ASCII trace and thread IDs in ordinal order', async () => {
+        for (const span of TRACE_QUERY_ORDINAL_FIXTURE_DATA.spans) {
+          await storage.createSpan({
+            span: {
+              traceId: span.traceId!,
+              spanId: span.spanId,
+              parentSpanId: span.parentSpanId,
+              name: span.spanId,
+              spanType: span.spanType as SpanType,
+              isEvent: false,
+              startedAt: new Date(span.startedAt),
+              endedAt: span.endedAt ? new Date(span.endedAt) : null,
+              threadId: span.threadId,
+              resourceId: span.resourceId,
+              entityName: span.entityName,
+              entityType: span.entityType as EntityType,
+              environment: span.environment,
+              error: span.error as CreateSpanRecord['error'],
+            },
+          });
+        }
+
+        const collectPages = async (request: TraceQueryRequest) => {
+          const values: string[] = [];
+          let after: string | undefined;
+          do {
+            const plan = planTraceQuery(
+              parseTraceQueryRequest({ ...request, page: { limit: 1, ...(after ? { after } : {}) } }),
+            );
+            const response = await storage.queryTraces(plan);
+            if ('traces' in response) {
+              values.push(...response.traces.map(trace => trace.traceId));
+            } else {
+              values.push(...response.groups.map(group => group.threadId));
+            }
+            after = response.page.next ?? undefined;
+          } while (after);
+          return values;
+        };
+
+        const timeRange = { from: '2026-08-01T00:00:00Z', to: '2026-09-01T00:00:00Z' };
+        const expected = ['A', 'a', 'é', 'Ω'];
+        await expect(collectPages({ timeRange, orderBy: [{ field: 'startedAt', direction: 'asc' }] })).resolves.toEqual(
+          expected,
+        );
+        await expect(collectPages({ timeRange, group: { by: ['threadId'] } })).resolves.toEqual(expected);
       });
     }
 
