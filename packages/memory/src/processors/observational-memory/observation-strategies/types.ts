@@ -67,7 +67,6 @@ export interface ObservationRunResult {
 /** Processed observation ready for persistence. */
 export interface ProcessedObservation {
   observations: string;
-  cycleObservations: Array<{ sourceThreadId: string; observations: string }>;
   observationTokens: number;
   cycleObservationTokens: number;
   observedMessageIds: string[];

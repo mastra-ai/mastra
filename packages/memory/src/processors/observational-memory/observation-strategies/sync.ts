@@ -180,7 +180,6 @@ export class SyncObservationStrategy extends ObservationStrategy {
 
     return {
       observations: newObservations,
-      cycleObservations: [{ sourceThreadId: threadId, observations: output.observations }],
       observationTokens,
       cycleObservationTokens,
       observedMessageIds,

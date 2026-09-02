@@ -99,7 +99,6 @@ export class AsyncBufferObservationStrategy extends ObservationStrategy {
       omDebug(`[OM:asyncBuffer] empty observations returned, skipping buffer storage`);
       return {
         observations: '',
-        cycleObservations: [],
         observationTokens: 0,
         cycleObservationTokens: 0,
         observedMessageIds: [],
@@ -125,7 +124,6 @@ export class AsyncBufferObservationStrategy extends ObservationStrategy {
 
     return {
       observations: newObservations,
-      cycleObservations: [{ sourceThreadId: threadId, observations: output.observations }],
       observationTokens,
       cycleObservationTokens: observationTokens,
       observedMessageIds: messageIds,

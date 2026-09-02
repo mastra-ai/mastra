@@ -1902,7 +1902,7 @@ ${workingMemory}`;
         }
       : undefined;
 
-    const observationalMemory = new OMClass({
+    return new OMClass({
       storage: memoryStore,
       memory: this,
       scope: omConfig.scope,
@@ -1947,8 +1947,6 @@ ${workingMemory}`;
           }
         : undefined,
     });
-
-    return observationalMemory;
   }
 
   public defaultWorkingMemoryTemplate = `
