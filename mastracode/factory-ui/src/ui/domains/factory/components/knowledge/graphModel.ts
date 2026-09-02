@@ -315,6 +315,7 @@ export type KnowledgeFlowEdge = Edge<{
   recordId?: string;
   linkType: 'wikilink' | 'contains';
   pinned: boolean;
+  boundary?: boolean;
   text?: string;
   /** The edge belongs to the record currently selected in the flyout. */
   focused?: boolean;
@@ -423,7 +424,12 @@ export function toFlowGraph(
       source: edge.source,
       target: edge.target,
       type: 'knowledgeLink',
-      data: { recordId: edge.recordId, linkType: edge.type, pinned: edge.pinned ?? false },
+      data: {
+        recordId: edge.recordId,
+        linkType: edge.type,
+        pinned: edge.pinned ?? false,
+        boundary: edge.boundary,
+      },
     })),
   };
 }

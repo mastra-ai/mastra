@@ -246,7 +246,8 @@ function TruncationBanner({ payload, outOfWindowCount }: { payload: KnowledgeGra
   const parts: string[] = [];
   if (payload.truncated) parts.push(`showing the newest ${payload.nodes.length} nodes`);
   if (outOfWindowCount > 0) parts.push(`${outOfWindowCount} linked nodes outside the window`);
-  if (payload.unresolvedCapped.count > 0) parts.push(`${payload.unresolvedCapped.count} links unresolved (capped)`);
+  if ((payload.unresolvedCapped?.count ?? 0) > 0)
+    parts.push(`${payload.unresolvedCapped?.count ?? 0} links unresolved (capped)`);
   if (parts.length === 0) return null;
   return (
     <Txt
@@ -256,7 +257,7 @@ function TruncationBanner({ payload, outOfWindowCount }: { payload: KnowledgeGra
       data-testid="knowledge-truncation-banner"
       className="border-border bg-card pointer-events-none absolute top-2 left-1/2 z-10 -translate-x-1/2 rounded-md border px-3 py-1"
     >
-      Partial view — {parts.join(' · ')}
+      Bounded lens — showing {payload.nodes.length} nodes and {payload.edges.length} edges
     </Txt>
   );
 }
@@ -360,9 +361,10 @@ function KnowledgeGraphInner({
     // carries them; logical owner→target pairs drive filters/ego/sizing.
     // Authorized boundary summaries become muted endpoints, and matching
     // record wikilinks attach them to the same record element as their owner.
-    const records = graphRecordsWithBoundaries(payload.records ?? [], payload.outOfWindow);
-    const graphNodes = graphNodesWithBoundaries(payload.nodes, payload.outOfWindow, records);
-    const outOfWindowCount = countUnrenderedBoundaries(payload.outOfWindow, graphNodes);
+    const boundaries = payload.outOfWindow ?? [];
+    const records = graphRecordsWithBoundaries(payload.records ?? [], boundaries);
+    const graphNodes = graphNodesWithBoundaries(payload.nodes, boundaries, records);
+    const outOfWindowCount = countUnrenderedBoundaries(boundaries, graphNodes);
     // Position capture policy: new data re-simulates WARM (nodes start
     // from their settled spots — new inbound edges change node sizes, so the
     // layout must re-settle); unchanged data freezes positions hard so

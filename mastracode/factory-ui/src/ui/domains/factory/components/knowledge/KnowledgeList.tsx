@@ -28,7 +28,7 @@ export function KnowledgeList({
 }) {
   const byName = (a: KnowledgeGraphNode, b: KnowledgeGraphNode) => a.name.localeCompare(b.name);
   const childScopes = payload.nodes.filter(node => node.isScope && node.id !== rootScopeId).sort(byName);
-  const contentNodes = payload.nodes.filter(node => !node.isScope && !node.isBoundary).sort(byName);
+  const contentNodes = payload.nodes.filter(node => !node.isScope && !node.isBoundary && !node.boundary).sort(byName);
 
   const row = (node: KnowledgeGraphNode, meta: React.ReactNode) => {
     const selected = node.id === selectedNodeId;
