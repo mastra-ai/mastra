@@ -95,8 +95,11 @@ async function readInWorker(config: {
         worker.send('read');
       }),
     close: async () => {
-      worker.kill();
-      await new Promise<void>(resolveExit => worker.once('exit', () => resolveExit()));
+      if (worker.exitCode !== null || worker.signalCode !== null) return;
+      await new Promise<void>(resolveExit => {
+        worker.once('exit', () => resolveExit());
+        worker.kill();
+      });
     },
   };
 }
