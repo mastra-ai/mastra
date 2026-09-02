@@ -3,8 +3,8 @@
  *
  * The consumer's deploy entry constructs deployment-specific config instances
  * (auth adapter, pubsub) and passes them here explicitly. The only provider
- * defaults constructed here are Platform GitHub and Linear integrations when
- * Platform credentials exist and the caller did not provide those integrations.
+ * defaults constructed here are Platform GitHub, Jira, and Linear integrations
+ * when Platform credentials exist and the caller did not provide them.
  *
  * `prepare()` resolves feature readiness, threads every dependency explicitly,
  * assembles the web routes/middleware, and returns the constructor args for
@@ -47,6 +47,7 @@ import {
 } from './integrations/github/provenance.js';
 import type { FactoryPullRequestProvenanceData } from './integrations/github/provenance.js';
 import { PlatformGithubIntegration } from './integrations/platform/github/integration.js';
+import { PlatformJiraIntegration } from './integrations/platform/jira/integration.js';
 import { PlatformLinearIntegration } from './integrations/platform/linear/integration.js';
 import { createCustomProvidersPrimer, registerCustomProvidersSource } from './routes/custom-provider-source.js';
 import { ProjectRoutes } from './routes/projects.js';
@@ -341,12 +342,15 @@ export class MastraFactory {
     // factory route module receives this handle — no service locator.
     const routeAuth = createFactoryRouteAuth(auth);
 
-    // Explicit integrations win. Platform credentials fill only missing GitHub
-    // and Linear slots so callers can override either provider independently.
+    // Explicit integrations win. Platform credentials fill only missing
+    // provider slots so callers can override each integration independently.
     const integrations = [...(this.#config.integrations ?? [])];
     if (hasPlatformCredentials()) {
       if (!integrations.some(integration => integration.id === 'github')) {
         integrations.push(new PlatformGithubIntegration({ slug: this.#config.platform?.githubAppSlug }));
+      }
+      if (!integrations.some(integration => integration.id === 'jira')) {
+        integrations.push(new PlatformJiraIntegration());
       }
       if (!integrations.some(integration => integration.id === 'linear')) {
         integrations.push(new PlatformLinearIntegration());
