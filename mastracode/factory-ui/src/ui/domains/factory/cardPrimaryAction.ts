@@ -2,7 +2,6 @@ import { FACTORY_ROLE_STAGES, isFactoryRole } from '@mastra/factory/rules/types'
 import type { FactoryRuleStage } from '@mastra/factory/rules/types';
 import { itemSessionSpec } from './boardRunSpecs';
 import type { ItemRunSpec, RunAction } from './boardRunSpecs';
-import type { FactoryDecisionSummary } from './services/decisions';
 import type { WorkItem, WorkItemSessionRef } from './services/workItems';
 import type { BoardStageId } from './stages';
 
@@ -77,7 +76,7 @@ export function cardPrimaryAction({
   runSpec,
   runAction,
   resume,
-  proposal,
+  waiting,
   hasSession,
   onApproveProposal,
   onStartRun,
@@ -90,7 +89,8 @@ export function cardPrimaryAction({
   runSpec?: ItemRunSpec;
   runAction?: RunAction;
   resume?: ResumeTarget;
-  proposal?: FactoryDecisionSummary;
+  /** The card's own parked run, read from its status so the button says what the badge says. */
+  waiting?: { label: string; decisionId: string };
   hasSession: boolean;
   onApproveProposal: (decisionId: string) => void;
   onStartRun: (spec: ItemRunSpec, action: RunAction) => void;
@@ -103,10 +103,8 @@ export function cardPrimaryAction({
     const [accept] = TRIAGE_DECISIONS;
     return { label: 'Accept', ariaLabel: accept.label, start: () => onMove(accept.stage) };
   }
-  if (proposal !== undefined) {
-    const proposed = runSpec?.actions.find(action => action.role === proposal.role) ?? runAction;
-    const label = proposed?.label ?? 'Start run';
-    return { label, start: () => onApproveProposal(proposal.id) };
+  if (waiting !== undefined) {
+    return { label: waiting.label, start: () => onApproveProposal(waiting.decisionId) };
   }
   if (resume?.kind === 'move') {
     const stage = resume.stage;
@@ -181,7 +179,6 @@ export function runButton({
 export function cardActions({
   running,
   waiting,
-  attention,
   session,
   retry,
   run,
@@ -189,8 +186,6 @@ export function cardActions({
   running: boolean;
   /** The run is a parked suggestion or a held card's decision: it needs the user, so it outranks a running session. */
   waiting: boolean;
-  /** The session asked for the user, so opening it is what unblocks the card. */
-  attention: boolean;
   session?: CardAction;
   retry?: CardAction;
   run?: CardAction;
@@ -200,7 +195,6 @@ export function cardActions({
   const main = retry ?? nextRun ?? session;
   if (main === undefined) return [];
   const rest = [session, nextRun].filter(action => action !== undefined).filter(action => action !== main);
-  const urgent = (action: CardAction) =>
-    action === retry || (waiting && action === run) || (attention && action === session);
+  const urgent = (action: CardAction) => action === retry || (waiting && action === run);
   return [main, ...rest].map(action => ({ ...action, urgent: urgent(action) }));
 }

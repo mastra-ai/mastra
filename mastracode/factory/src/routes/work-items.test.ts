@@ -860,7 +860,6 @@ describe('GET /web/factory/projects/:id/attention', () => {
         },
       ],
       openCount: 1,
-      approvalCount: 0,
       badgeCount: 1,
       unreadCount: 1,
       latestOccurrenceKey: firstKey,
@@ -1017,7 +1016,7 @@ describe('GET /web/factory/projects/:id/attention', () => {
     ).resolves.toEqual([]);
   });
 
-  it('reports proposed work as one project approval queue', async () => {
+  it('lists a parked run as an attention item and drops it once it is superseded', async () => {
     const created = await json('POST', `/web/factory/projects/${PROJECT_ID}/work-items`, createBody());
     const workItem = (await created.json()).workItem;
     const now = new Date('2030-01-01T00:00:00.000Z');
@@ -1054,11 +1053,22 @@ describe('GET /web/factory/projects/:id/attention', () => {
     );
 
     await expect((await json('GET', `/web/factory/projects/${PROJECT_ID}/attention`)).json()).resolves.toMatchObject({
-      items: [],
-      approvalCount: 1,
+      items: [
+        {
+          key: `factory:${PROJECT_ID}:attention:automation-proposed:${claimed.id}:0`,
+          kind: 'automation-proposed',
+          decisionId: claimed.id,
+          occurrence: 0,
+          workItemId: workItem.id,
+          detail: 'Waiting for approval to run triage',
+          decisionType: 'invokeSkill',
+          read: false,
+          archived: false,
+        },
+      ],
       badgeCount: 1,
       openCount: 1,
-      unreadCount: 0,
+      unreadCount: 1,
     });
 
     await seed.workItems.supersedeTerminalDecisionsForWorkItem({
@@ -1068,7 +1078,7 @@ describe('GET /web/factory/projects/:id/attention', () => {
       supersededAt: now,
     });
     await expect((await json('GET', `/web/factory/projects/${PROJECT_ID}/attention`)).json()).resolves.toMatchObject({
-      approvalCount: 0,
+      items: [],
       badgeCount: 0,
       openCount: 0,
     });
@@ -1562,11 +1572,11 @@ describe('GET /web/factory/projects/:id/attention', () => {
       hasMore: false,
     });
 
-    const listPage = seed.workItems.listFailedDecisionPage.bind(seed.workItems);
+    const listPage = seed.workItems.listDecisionPageByStatus.bind(seed.workItems);
     let scannedPages = 0;
     let lastScanned: FactoryDeferredDecisionRecord | undefined;
-    const pageSpy = vi.spyOn(seed.workItems, 'listFailedDecisionPage').mockImplementation(async input => {
-      if (input.limit === 1) return listPage(input);
+    const pageSpy = vi.spyOn(seed.workItems, 'listDecisionPageByStatus').mockImplementation(async input => {
+      if (input.status !== 'failed' || input.limit === 1) return listPage(input);
       scannedPages += 1;
       const decisions = Array.from({ length: 50 }, (_, index) => {
         const ordinal = scannedPages * 50 + index;

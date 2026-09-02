@@ -136,20 +136,6 @@ export function WorkItemCard({
     threadSession === undefined
       ? undefined
       : `/factories/${factoryId}/workspaces/${threadSession.sessionId}/threads/${threadSession.threadId}`;
-  const primaryAction = cardPrimaryAction({
-    item,
-    columnStage,
-    runSpec,
-    runAction: defaultRunAction,
-    resume: resumeTarget(columnStage, runSpec, sessions),
-    proposal,
-    hasSession: threadSession !== undefined,
-    onApproveProposal,
-    onStartRun,
-    onRestartRun,
-    onCreateSession,
-    onMove,
-  });
   const proposedRunLabel =
     proposal === undefined
       ? undefined
@@ -178,6 +164,20 @@ export function WorkItemCard({
     heldAs: awaitsTriageDecision(item, columnStage) ? (item.triageType ?? undefined) : undefined,
   });
   const retryDecisionId = status.kind === 'error' ? status.retryDecisionId : undefined;
+  const primaryAction = cardPrimaryAction({
+    item,
+    columnStage,
+    runSpec,
+    runAction: defaultRunAction,
+    resume: resumeTarget(columnStage, runSpec, sessions),
+    waiting: status.kind === 'waiting' ? status : undefined,
+    hasSession: threadSession !== undefined,
+    onApproveProposal,
+    onStartRun,
+    onRestartRun,
+    onCreateSession,
+    onMove,
+  });
 
   const menu: WorkItemMenuProps = {
     item,
@@ -253,7 +253,6 @@ export function WorkItemCard({
   const actions = cardActions({
     running: wickStatus !== undefined,
     waiting: status.kind === 'waiting' || status.kind === 'held',
-    attention: wickStatus === 'ready',
     session: sessionLink(sessionHref),
     retry: retryButton({ decisionId: retryDecisionId, retryingDecisionId, onRetry: onRetryDecision }),
     run: runButton({

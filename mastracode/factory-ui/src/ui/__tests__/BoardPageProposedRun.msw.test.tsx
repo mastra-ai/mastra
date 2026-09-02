@@ -306,34 +306,6 @@ describe('Board card with a proposed run', () => {
     await waitFor(() => expect(within(card).getByRole('button', { name: 'Details for Fix login bug' })).toHaveFocus());
   });
 
-  it('summarizes proposed runs as one approval queue', async () => {
-    stubBoardEndpoints();
-    server.use(
-      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/attention`, () =>
-        HttpResponse.json({
-          items: [],
-          openCount: 1,
-          approvalCount: 1,
-          badgeCount: 1,
-          unreadCount: 0,
-          hasMore: false,
-          latestOccurrenceKey: null,
-          latestOccurrenceAt: null,
-          latestOccurrenceUnread: false,
-        }),
-      ),
-    );
-    const user = userEvent.setup();
-    renderWorkBoard();
-
-    await user.click(await screen.findByRole('button', { name: 'Needs attention, 1 waiting for approval, 1 open' }));
-    expect(await screen.findByText('waiting for approval')).toBeVisible();
-    expect(screen.getByRole('link', { name: 'View all attention' })).toHaveAttribute(
-      'href',
-      `/factories/${FACTORY_ID}/attention`,
-    );
-  });
-
   it('releases the proposal instead of starting a second run from the card details', async () => {
     const { settled, startRequests } = stubBoardEndpoints();
     const user = userEvent.setup();

@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { AutomationFailedAttentionProvider } from '../routes/attention-providers.js';
+import { DecisionAttentionProvider, failedDecisionAttentionSpec } from '../routes/attention-providers.js';
 import { FactoryFeedReader } from '../storage/domains/comments/feed-context.js';
 import { FACTORY_RULE_MATERIALIZATION_KEY, type WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
@@ -2278,7 +2278,7 @@ describe('FactoryDecisionDispatcher', () => {
     expect(record).toMatchObject({ status: 'failed', failureCode: 'plan_awaiting_approval' });
 
     // Not just the row: the surface a person actually reads.
-    const provider = new AutomationFailedAttentionProvider({ workItems: storage });
+    const provider = new DecisionAttentionProvider({ workItems: storage }, failedDecisionAttentionSpec);
     const scope = { orgId: 'org-1', factoryProjectId: PROJECT_ID };
     expect(await provider.counts(scope)).toMatchObject({ open: 1, unread: 1 });
     const page = await provider.page(scope, { view: 'open', search: undefined, before: undefined, limit: 10 });

@@ -2,7 +2,6 @@ import { describe, expect, it, vi } from 'vitest';
 import type { ItemRunSpec, RunAction } from './boardRunSpecs';
 import { cardActions, cardPrimaryAction, resumeTarget } from './cardPrimaryAction';
 import type { CardAction } from './cardPrimaryAction';
-import type { FactoryDecisionSummary } from './services/decisions';
 import type { WorkItem, WorkItemSessionRef } from './services/workItems';
 
 const review: RunAction = {
@@ -59,26 +58,6 @@ function item(sessions: Record<string, WorkItemSessionRef>): WorkItem {
     revision: 1,
     createdAt: '2026-08-30T00:00:00.000Z',
     updatedAt: '2026-08-30T00:00:00.000Z',
-  };
-}
-
-function proposalSummary(): FactoryDecisionSummary {
-  return {
-    id: 'decision-1',
-    evaluationId: 'evaluation-1',
-    workItemId: 'item-1',
-    type: 'invokeSkill',
-    role: 'review',
-    status: 'proposed',
-    attempts: 0,
-    failureOccurrence: 0,
-    source: null,
-    failureCode: null,
-    canRetry: false,
-    lastError: null,
-    createdAt: '2026-08-30T00:00:00.000Z',
-    updatedAt: '2026-08-30T00:00:00.000Z',
-    completedAt: null,
   };
 }
 
@@ -182,7 +161,7 @@ describe('cardPrimaryAction', () => {
       columnStage: 'triage',
       runSpec: spec(investigateTriage, build),
       runAction: build,
-      proposal: proposalSummary(),
+      waiting: { label: 'Review', decisionId: 'decision-1' },
       hasSession: true,
       onApproveProposal,
       onStartRun: vi.fn(),
@@ -223,7 +202,7 @@ describe('cardPrimaryAction', () => {
       item: item({ review: sessionRef('review') }),
       runSpec: spec(review),
       resume: { kind: 'run', action: review },
-      proposal: proposalSummary(),
+      waiting: { label: 'Review', decisionId: 'decision-1' },
       hasSession: true,
       onApproveProposal,
       onStartRun: vi.fn(),
@@ -264,7 +243,7 @@ describe('cardActions', () => {
   const run = { label: 'Investigate', start: vi.fn() };
 
   it('leads with the likeliest click and offers a rival run only beside an idle session', () => {
-    const idle = { running: false, waiting: false, attention: false };
+    const idle = { running: false, waiting: false };
     const labels = (actions: CardAction[]) => actions.map(action => action.label);
     expect(labels(cardActions({ ...idle, session, run }))).toEqual(['Investigate', 'Open session']);
     expect(labels(cardActions({ ...idle, session, retry, run }))).toEqual(['Retry', 'Open session', 'Investigate']);
@@ -277,11 +256,10 @@ describe('cardActions', () => {
   });
 
   it('lights only the click the card waits on a person for', () => {
-    const idle = { running: false, waiting: false, attention: false };
+    const idle = { running: false, waiting: false };
     const lit = (actions: CardAction[]) => actions.filter(action => action.urgent).map(action => action.label);
     expect(lit(cardActions({ ...idle, session, run }))).toEqual([]);
     expect(lit(cardActions({ ...idle, session, retry, run }))).toEqual(['Retry']);
     expect(lit(cardActions({ ...idle, running: true, waiting: true, session, run }))).toEqual(['Investigate']);
-    expect(lit(cardActions({ ...idle, running: true, attention: true, session, run }))).toEqual(['Open session']);
   });
 });
