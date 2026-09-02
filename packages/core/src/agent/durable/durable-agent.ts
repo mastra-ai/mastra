@@ -1028,6 +1028,10 @@ export class DurableAgent<
       messageList,
       recoverAgentSpan,
       registryEntry: {
+        // Restore the original run's flag from the persisted snapshot so a
+        // warm resume after recovery keeps returning scoringData without the
+        // caller re-passing the option.
+        returnScorerData: workflowInput.options?.returnScorerData,
         mastra: this.#mastra,
         model,
         memory,
