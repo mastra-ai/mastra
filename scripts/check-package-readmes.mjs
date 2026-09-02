@@ -13,7 +13,7 @@ export const IGNORE_LIST = [
   'mastra-docs',
   '@mastra/core',
   '@mastra/codemod',
-  'create-mastra'
+  'create-mastra',
 ];
 export const ALLOW_LIST = ['mastra', 'create-mastra', '@mastra'];
 
