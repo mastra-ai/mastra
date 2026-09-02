@@ -320,6 +320,11 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
         const maxRetries = modelEntry.maxRetries || 0;
 
         for (let attempt = 0; attempt <= maxRetries; attempt++) {
+          // Declared outside the try so the outer catch can persist
+          // already-streamed partial output on abort (#22593). Assigned inside
+          // once streaming state exists; undefined means nothing streamed yet.
+          const textDeltas: string[] = [];
+          let materializeStreamedMessages: (() => void) | undefined;
           try {
             // Resolve the model - for single model case (no modelList), use resolved model
             // For model list case, try registry first (works with mock models), then config resolution (for Inngest)
@@ -723,7 +728,6 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
             let warnings: any[] = [];
             let request: any = {};
             let rawResponse: any = {};
-            const textDeltas: string[] = [];
             const toolCalls: DurableToolCallInput[] = [];
             let finishReason: string = 'stop';
             let usage: any = { inputTokens: 0, outputTokens: 0, totalTokens: 0 };
@@ -945,7 +949,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
             // serialized messageListState is the only channel to finalize-run
             // persistence, so skipping this on abort would drop
             // already-streamed partial output (#22593).
-            const materializeStreamedMessages = () => {
+            materializeStreamedMessages = () => {
               const responseModelId = currentModel.modelId ?? responseMetadata?.modelId;
               const responseTraceId = getRootExportSpan(
                 modelSpanTracker?.getTracingContext()?.currentSpan ?? tracingContext?.currentSpan,
@@ -1781,11 +1785,14 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
             const isAbort = outerAbortSignal?.aborted === true || lastError.name === 'AbortError';
             if (isAbort) {
               // Return a clean output instead of throwing so the workflow
-              // engine doesn't crash. The abort event was already emitted
-              // by the inner catch.
+              // engine doesn't crash. Persist already-streamed partial output
+              // first (#22593) — errors thrown after the stream loop (e.g. a
+              // response processor rethrown at the processLLMResponse call)
+              // land here without passing through the inner catch.
+              materializeStreamedMessages?.();
               return {
                 messageListState: messageList.serialize(),
-                text: '',
+                text: textDeltas.join(''),
                 toolCalls: [],
                 stepResult: {
                   reason: 'abort' as any,
