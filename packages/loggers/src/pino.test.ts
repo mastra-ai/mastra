@@ -757,7 +757,12 @@ describe('PinoLogger error serialization', () => {
     await waitForLogs(memoryStream);
     const [log] = await memoryStream.listLogs();
 
-    expect(log.error).toMatchObject({ type: 'Object', message: 'invalid input', code: 'E42' });
+    expect(log.error).toMatchObject({
+      type: 'Object',
+      message: 'invalid input',
+      stack: expect.any(String),
+      code: 'E42',
+    });
   });
 
   it('allows callers to override the default serializers', async () => {
