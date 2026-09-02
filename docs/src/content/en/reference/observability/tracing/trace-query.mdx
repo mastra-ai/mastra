@@ -161,7 +161,7 @@ Cursors are bound to the accepted normalized query shape and ordering. Reusing a
 
 Cursor pagination is deterministic, but it isn't a database snapshot. Traces or replacement signals written between page requests can change later pages.
 
-PostgreSQL and ClickHouse stop an advanced trace query after 15 seconds by default. Set `traceQueryTimeoutMs` in the store's vNext observability configuration to an integer from 1 through 300,000 milliseconds to change the timeout.
+PostgreSQL and ClickHouse stop an advanced trace query after 15 seconds by default and return `504` when the database timeout is exceeded. Set `traceQueryTimeoutMs` in the store's vNext observability configuration to an integer from 1 through 300,000 milliseconds to change the timeout. DuckDB doesn't currently provide query-scoped timeout or cancellation through its driver wrapper, so this `504` guarantee doesn't apply to DuckDB.
 
 | Status | Meaning |
 | - | - |
@@ -170,7 +170,7 @@ PostgreSQL and ClickHouse stop an advanced trace query after 15 seconds by defau
 | `413` | The request body exceeds 256 KiB. |
 | `422` | The JSON is well formed, but the request is structurally or semantically invalid. The response includes stable issue codes and paths. |
 | `501` | The configured observability store doesn't support advanced trace queries. |
-| `504` | The query exceeded the configured database execution timeout. |
+| `504` | A PostgreSQL or ClickHouse query exceeded its configured database execution timeout. |
 
 ## Limitations
 
