@@ -132,6 +132,8 @@ describe.skipIf(process.platform === 'win32')('cross-agent signals over Unix soc
 
     owner.child.stdin.write('close\n');
     owner.child.stdin.end();
+    sender.child.stdin.write('close\n');
+    sender.child.stdin.end();
     const [ownerCode, senderCode] = await Promise.all([owner.result, sender.result]);
 
     expect(owner.child.pid).not.toBe(sender.child.pid);

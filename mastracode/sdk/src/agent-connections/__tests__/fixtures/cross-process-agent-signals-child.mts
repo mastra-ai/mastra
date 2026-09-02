@@ -90,6 +90,10 @@ async function runRequestReply() {
     const reply = await readRun(iterator);
     emit('reply', reply);
     emit('pass');
+    // Stay alive until the parent confirms the owner observed its send-result.
+    // Closing the pubsub here races the acceptance ack for the reply wake,
+    // which would strand the owner's `accepted` promise.
+    await waitForCommand('close');
   } else {
     const request = await readRun(iterator);
     emit('request', request);
