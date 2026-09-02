@@ -1,4 +1,5 @@
 import {
+  compareTraceQueryStrings,
   encodeTraceQueryCursor,
   parseTraceQueryRequest,
   planTraceQuery,
@@ -156,6 +157,16 @@ export const TRACE_QUERY_FIXTURE_DATA: TraceQueryFixtureData = {
 const tiedStartedAt = '2026-08-20T10:00:00.000Z';
 const tiedEndedAt = '2026-08-20T10:00:01.000Z';
 const tiedScoreTimestamp = '2026-08-20T10:00:02.000Z';
+
+export const TRACE_QUERY_ORDINAL_FIXTURE_DATA: TraceQueryFixtureData = {
+  spans: [
+    span(201, 'A', 'root-A', { threadId: 'A', startedAt: tiedStartedAt, endedAt: tiedEndedAt }),
+    span(202, 'a', 'root-a', { threadId: 'a', startedAt: tiedStartedAt, endedAt: tiedEndedAt }),
+    span(203, 'é', 'root-accent', { threadId: 'é', startedAt: tiedStartedAt, endedAt: tiedEndedAt }),
+    span(204, 'Ω', 'root-omega', { threadId: 'Ω', startedAt: tiedStartedAt, endedAt: tiedEndedAt }),
+  ],
+  scores: [],
+};
 
 export const TRACE_QUERY_TIED_TIMESTAMP_FIXTURE_DATA: TraceQueryFixtureData = {
   spans: [
@@ -404,10 +415,10 @@ export function evaluateTraceQuery(data: TraceQueryFixtureData, plan: TrustedTra
     .filter(root => !plan.where || evaluateTracePredicate(plan.where, root, spans, scores));
 
   if (plan.result === 'groups') {
-    let groups = [
-      ...new Set(roots.map(root => root.threadId).filter((value): value is string => value !== null)),
-    ].sort();
-    if (plan.cursor) groups = groups.filter(threadId => threadId > plan.cursor!.threadId);
+    let groups = [...new Set(roots.map(root => root.threadId).filter((value): value is string => value !== null))].sort(
+      compareTraceQueryStrings,
+    );
+    if (plan.cursor) groups = groups.filter(threadId => compareTraceQueryStrings(threadId, plan.cursor!.threadId) > 0);
     const visible = groups.slice(0, plan.limit + 1);
     const hasNext = visible.length > plan.limit;
     const page = visible.slice(0, plan.limit);
@@ -589,9 +600,9 @@ function compareTraces(
   right: TraceQueryTrace,
   plan: Extract<TrustedTraceQueryPlan, { result: 'traces' }>,
 ): number {
-  const values = left[plan.orderBy.field].localeCompare(right[plan.orderBy.field]);
+  const values = compareTraceQueryStrings(left[plan.orderBy.field], right[plan.orderBy.field]);
   if (values !== 0) return plan.orderBy.direction === 'asc' ? values : -values;
-  return left.traceId.localeCompare(right.traceId);
+  return compareTraceQueryStrings(left.traceId, right.traceId);
 }
 
 function isTraceAfterCursor(
@@ -599,7 +610,7 @@ function isTraceAfterCursor(
   plan: Extract<TrustedTraceQueryPlan, { result: 'traces' }>,
 ): boolean {
   const cursor = plan.cursor!;
-  const sortComparison = trace[plan.orderBy.field].localeCompare(cursor.sortValue);
-  if (sortComparison === 0) return trace.traceId > cursor.traceId;
+  const sortComparison = compareTraceQueryStrings(trace[plan.orderBy.field], cursor.sortValue);
+  if (sortComparison === 0) return compareTraceQueryStrings(trace.traceId, cursor.traceId) > 0;
   return plan.orderBy.direction === 'asc' ? sortComparison > 0 : sortComparison < 0;
 }

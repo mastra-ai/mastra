@@ -13,6 +13,12 @@ export const TRACE_QUERY_MAX_TIMEOUT_MS = 300_000;
 
 const PREDICATE_COMPLEXITY_MESSAGE = `Predicates are limited to ${TRACE_QUERY_MAX_NODES} nodes and ${TRACE_QUERY_MAX_DEPTH} levels`;
 
+export function compareTraceQueryStrings(left: string, right: string): number {
+  if (left < right) return -1;
+  if (left > right) return 1;
+  return 0;
+}
+
 const hasMaxUtf8Bytes = (value: string, maxBytes: number) => Buffer.byteLength(value, 'utf8') <= maxBytes;
 const literalStringSchema = z
   .string()
@@ -738,7 +744,7 @@ function stableStringify(value: unknown): string {
   if (value && typeof value === 'object') {
     return `{${Object.entries(value)
       .filter(([, nested]) => nested !== undefined)
-      .sort(([left], [right]) => left.localeCompare(right))
+      .sort(([left], [right]) => compareTraceQueryStrings(left, right))
       .map(([key, nested]) => `${JSON.stringify(key)}:${stableStringify(nested)}`)
       .join(',')}}`;
   }

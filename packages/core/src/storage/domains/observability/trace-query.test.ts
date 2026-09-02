@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { ObservabilityStorage } from './base';
 import {
+  compareTraceQueryStrings,
   encodeTraceQueryCursor,
   parseTraceQueryRequest,
   planTraceQuery,
@@ -488,6 +489,22 @@ describe('planTraceQuery', () => {
 });
 
 describe('trace-query cursors', () => {
+  it('uses locale-independent ordering and stable cursor bindings', () => {
+    expect(['Ω', 'é', 'a', 'A'].sort(compareTraceQueryStrings)).toEqual(['A', 'a', 'é', 'Ω']);
+
+    const first = planTraceQuery({
+      timeRange: { from: baseRequest.timeRange.from, to: baseRequest.timeRange.to },
+      where: { op: 'eq', left: { path: 'traceId' }, right: { literal: 'A' } },
+      page: { limit: 100 },
+    });
+    const second = planTraceQuery({
+      page: { limit: 100 },
+      where: { right: { literal: 'A' }, left: { path: 'traceId' }, op: 'eq' },
+      timeRange: { to: baseRequest.timeRange.to, from: baseRequest.timeRange.from },
+    });
+    expect(second.binding).toBe(first.binding);
+  });
+
   it('round-trips trace and group keyset values', () => {
     const tracePlan = planTraceQuery(parsed());
     const traceCursor = encodeTraceQueryCursor(tracePlan, {

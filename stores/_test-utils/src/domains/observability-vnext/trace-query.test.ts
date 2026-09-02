@@ -7,6 +7,7 @@ import {
   normalizeTraceQueryResponse,
   TRACE_QUERY_CONFORMANCE_CASES,
   TRACE_QUERY_FIXTURE_DATA,
+  TRACE_QUERY_ORDINAL_FIXTURE_DATA,
   TRACE_QUERY_TIED_TIMESTAMP_CASES,
   TRACE_QUERY_TIED_TIMESTAMP_FIXTURE_DATA,
 } from './trace-query';
@@ -73,6 +74,22 @@ describe('trace-query reference evaluator', () => {
     expect(new Set(results.map(result => JSON.stringify(result))).size).toBe(results.length);
   });
 
+  it('paginates tied mixed-case and non-ASCII trace IDs using ordinal order', async () => {
+    const results = await collectTraceQueryPages(
+      async normalized => {
+        return evaluateTraceQuery(TRACE_QUERY_ORDINAL_FIXTURE_DATA, planTraceQuery(normalized));
+      },
+      {
+        timeRange: { from: '2026-08-01T00:00:00Z', to: '2026-09-01T00:00:00Z' },
+        orderBy: [{ field: 'startedAt', direction: 'asc' }],
+        page: { limit: 1 },
+      },
+    );
+
+    expect(results).toEqual([{ traceId: 'A' }, { traceId: 'a' }, { traceId: 'é' }, { traceId: 'Ω' }]);
+    expect(new Set(results.map(result => JSON.stringify(result))).size).toBe(results.length);
+  });
+
   it('traverses group pages without duplicates or null thread IDs', async () => {
     const request = {
       timeRange: { from: '2026-08-01T00:00:00Z', to: '2026-09-01T00:00:00Z' },
@@ -83,6 +100,21 @@ describe('trace-query reference evaluator', () => {
       return evaluateTraceQuery(TRACE_QUERY_FIXTURE_DATA, planTraceQuery(normalized));
     }, request);
     expect(results).toEqual([{ threadId: 'thread-1' }, { threadId: 'thread-2' }]);
+  });
+
+  it('paginates mixed-case and non-ASCII thread groups using ordinal order', async () => {
+    const results = await collectTraceQueryPages(
+      async normalized => {
+        return evaluateTraceQuery(TRACE_QUERY_ORDINAL_FIXTURE_DATA, planTraceQuery(normalized));
+      },
+      {
+        timeRange: { from: '2026-08-01T00:00:00Z', to: '2026-09-01T00:00:00Z' },
+        group: { by: ['threadId'] },
+        page: { limit: 1 },
+      },
+    );
+
+    expect(results).toEqual([{ threadId: 'A' }, { threadId: 'a' }, { threadId: 'é' }, { threadId: 'Ω' }]);
   });
 
   it('applies timeRange to trace start time before predicates', () => {
