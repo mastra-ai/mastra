@@ -1,6 +1,15 @@
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
 import { createKnowledgeStorageTests } from '@internal/storage-test-utils';
 import { createClient } from '@libsql/client';
-import { TABLE_KNOWLEDGE_RECORDS } from '@mastra/core/storage';
+import {
+  KNOWLEDGE_TABLE_NAMES,
+  KnowledgeSchemaResetRequiredError,
+  TABLE_KNOWLEDGE_ACCESS_STATE,
+  TABLE_KNOWLEDGE_RECORDS,
+} from '@mastra/core/storage';
 import { describe, expect, it } from 'vitest';
 
 import { withClientWriteLock } from '../../db/write-lock';
@@ -9,10 +18,11 @@ import { KnowledgeLibSQL } from '.';
 createKnowledgeStorageTests(() => new KnowledgeLibSQL({ url: 'file::memory:?cache=shared' }));
 
 describe('KnowledgeLibSQL initialization', () => {
-  it('adds the description column to pre-existing tables and reads legacy rows as undefined', async () => {
+  it('detects legacy tables without mutation and resets only Knowledge storage', async () => {
     const client = createClient({ url: ':memory:' });
     try {
-      // Pre-description table shape, created via raw DDL.
+      await client.execute('CREATE TABLE existing_domain (id TEXT PRIMARY KEY)');
+      await client.execute("INSERT INTO existing_domain (id) VALUES ('preserved')");
       await client.execute(
         `CREATE TABLE "mastra_knowledge_nodes" (
           id TEXT PRIMARY KEY,
@@ -48,16 +58,112 @@ describe('KnowledgeLibSQL initialization', () => {
       });
 
       const store = new KnowledgeLibSQL({ client });
-      await store.init();
+      expect(await store.inspectSchema()).toMatchObject({ status: 'incompatible-reset-required' });
+      await expect(store.init()).rejects.toBeInstanceOf(KnowledgeSchemaResetRequiredError);
+      expect((await client.execute('SELECT content FROM mastra_knowledge_nodes')).rows[0]?.content).toBe('legacy body');
 
-      const columns = await client.execute(`PRAGMA table_info("mastra_knowledge_nodes")`);
-      expect(columns.rows.map(row => String(row.name))).toContain('description');
-
-      const legacy = await store.getNode('01LEGACY000000000000000000');
-      expect(legacy?.description).toBeUndefined();
-      expect(legacy?.content).toBe('legacy body');
+      await store.dangerouslyReset();
+      expect(await store.inspectSchema()).toEqual({ status: 'compatible', schemaVersion: 2 });
+      expect((await client.execute('SELECT id FROM existing_domain')).rows[0]?.id).toBe('preserved');
+      const tables = await client.execute(
+        "SELECT name FROM sqlite_master WHERE type = 'table' AND name LIKE 'mastra_knowledge_%'",
+      );
+      expect(new Set(tables.rows.map(row => String(row.name)))).toEqual(new Set(KNOWLEDGE_TABLE_NAMES));
+      expect(
+        (await client.execute(`SELECT epoch FROM "${TABLE_KNOWLEDGE_ACCESS_STATE}" WHERE id='global'`)).rows[0]?.epoch,
+      ).toBe(0);
     } finally {
       client.close();
+    }
+  });
+
+  it('rejects a complete Knowledge table set with a missing v2 column', async () => {
+    const client = createClient({ url: ':memory:' });
+    try {
+      const store = new KnowledgeLibSQL({ client });
+      await store.init();
+      await client.execute('ALTER TABLE mastra_knowledge_proposals DROP COLUMN reviewedAt');
+
+      expect(await store.inspectSchema()).toMatchObject({ status: 'incompatible-reset-required' });
+      await expect(store.init()).rejects.toBeInstanceOf(KnowledgeSchemaResetRequiredError);
+    } finally {
+      client.close();
+    }
+  });
+
+  it('rejects an interrupted v2 initialization without its completion marker', async () => {
+    const client = createClient({ url: ':memory:' });
+    try {
+      const store = new KnowledgeLibSQL({ client });
+      await store.init();
+      await client.execute(`DELETE FROM "${TABLE_KNOWLEDGE_ACCESS_STATE}" WHERE id='global'`);
+
+      expect(await store.inspectSchema()).toMatchObject({ status: 'incompatible-reset-required' });
+      await expect(store.init()).rejects.toBeInstanceOf(KnowledgeSchemaResetRequiredError);
+    } finally {
+      client.close();
+    }
+  });
+
+  it('persists normalized multi-scope node membership and record scope rules', async () => {
+    const directory = mkdtempSync(join(tmpdir(), 'knowledge-v2-normalized-'));
+    const client = createClient({ url: `file:${join(directory, 'knowledge.db')}` });
+    try {
+      const store = new KnowledgeLibSQL({ client });
+      await store.init();
+      const now = new Date().toISOString();
+      for (const [id, name, address] of [
+        ['scope-a', 'Scope A', 'org:a'],
+        ['scope-b', 'Scope B', 'resource:b'],
+      ] as const) {
+        await client.execute({
+          sql: `INSERT INTO mastra_knowledge_nodes (id,name,isScope,version,createdAt,updatedAt) VALUES (?,?,TRUE,1,?,?)`,
+          args: [id, name, now, now],
+        });
+        await client.execute({
+          sql: `INSERT INTO mastra_knowledge_scope_addresses (address,scopeNodeId) VALUES (?,?)`,
+          args: [address, id],
+        });
+      }
+      const scope = ['org:a', 'resource:b'];
+      const node = await store.createNode({ id: 'node-a', name: 'Node A', kind: 'test', scope });
+      const record = await store.appendKnowledge({
+        id: 'record-a',
+        node: node.id,
+        text: 'scoped',
+        scope,
+        resolutionScope: scope,
+        defaultScope: scope,
+        sourceThreadId: 'thread-a',
+      });
+
+      expect(
+        (await client.execute(`SELECT scopeNodeId FROM mastra_knowledge_node_scopes WHERE nodeId='node-a'`)).rows,
+      ).toHaveLength(2);
+      expect(
+        (await client.execute(`SELECT scopeNodeId FROM mastra_knowledge_record_scopes WHERE recordId='record-a'`)).rows,
+      ).toHaveLength(2);
+      await store.updateNode({ id: node.id, version: node.version, scope: ['org:a'] });
+      expect(
+        (await client.execute(`SELECT scopeNodeId FROM mastra_knowledge_node_scopes WHERE nodeId='node-a'`)).rows,
+      ).toEqual([expect.objectContaining({ scopeNodeId: 'scope-a' })]);
+      expect(
+        (
+          await client.execute({
+            sql: `SELECT targetType,targetId,contextScopeId FROM mastra_knowledge_activity WHERE targetId=?`,
+            args: [record.id],
+          })
+        ).rows[0],
+      ).toMatchObject({ targetType: 'record', targetId: record.id, contextScopeId: 'scope-a' });
+
+      await store.rescopeKnowledge({ id: record.id, scope: ['org:a'] });
+      expect(
+        (await client.execute(`SELECT scopeNodeId FROM mastra_knowledge_record_scopes WHERE recordId='record-a'`)).rows,
+      ).toEqual([expect.objectContaining({ scopeNodeId: 'scope-a' })]);
+      expect(store.getCapabilities()).toMatchObject({ schemaVersion: 2, supportsV2: true });
+    } finally {
+      client.close();
+      rmSync(directory, { recursive: true, force: true });
     }
   });
 
@@ -67,8 +173,7 @@ describe('KnowledgeLibSQL initialization', () => {
     try {
       const first = new KnowledgeLibSQL({ client: firstClient });
       const second = new KnowledgeLibSQL({ client: secondClient });
-      await first.init();
-      await second.init();
+      await Promise.all([first.init(), second.init()]);
       await first.dangerouslyClearAll();
       await first.createNode({ name: 'Concurrent', kind: 'task', scope: ['org:acme'] });
       const pending = await first.listSemanticOutbox({ status: 'pending' });
