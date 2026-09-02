@@ -11,6 +11,7 @@ import {
   isMaybeAnthropicWithoutAssistantPrefill,
   isMaybeAzure,
   isMaybeCerebras,
+  isMaybeGoogle,
   ProviderHistoryCompat,
   stripForeignProviderExecutedTools,
 } from './provider-history-compat';
@@ -462,6 +463,27 @@ const mockLogger = {
   error: () => {},
   trackException: () => {},
 } as any;
+
+describe('isMaybeGoogle', () => {
+  it('matches gateway-prefixed google and vertex model id strings', () => {
+    expect(isMaybeGoogle('google/gemini-2.5-pro')).toBe(true);
+    expect(isMaybeGoogle('vertex/gemini-2.5-pro')).toBe(true);
+  });
+
+  it('matches resolved language model objects with google or vertex providers', () => {
+    expect(isMaybeGoogle({ provider: 'google.generative-ai', modelId: 'gemini-2.5-pro' })).toBe(true);
+    expect(isMaybeGoogle({ provider: 'google.vertex.chat', modelId: 'gemini-2.5-pro' })).toBe(true);
+    expect(isMaybeGoogle({ provider: 'google', modelId: 'gemini-2.5-flash' })).toBe(true);
+    expect(isMaybeGoogle({ provider: 'vertex', modelId: 'gemini-2.5-flash' })).toBe(true);
+  });
+
+  it('does not match non-google providers', () => {
+    expect(isMaybeGoogle('openai/gpt-4o')).toBe(false);
+    expect(isMaybeGoogle('groq/llama-3.3-70b-versatile')).toBe(false);
+    expect(isMaybeGoogle({ provider: 'openai.chat', modelId: 'gpt-4o' })).toBe(false);
+    expect(isMaybeGoogle({ provider: 'anthropic.messages', modelId: 'claude-sonnet-4-5' })).toBe(false);
+  });
+});
 
 describe('stripForeignProviderExecutedTools', () => {
   const hostedToolPrompt = (provider: 'anthropic' | 'openai', toolCallId: string): LanguageModelV2Prompt => [

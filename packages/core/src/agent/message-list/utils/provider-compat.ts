@@ -1,3 +1,4 @@
+import type { LanguageModelV2Prompt } from '@ai-sdk/provider-v5';
 import type { CoreMessage as CoreMessageV4 } from '@internal/ai-sdk-v4';
 import type { ModelMessage, ToolResultPart } from '@internal/ai-sdk-v5';
 
@@ -58,6 +59,32 @@ export function ensureGeminiCompatibleMessages<T extends ModelMessage | CoreMess
     } as T);
   }
 
+  return result;
+}
+
+/**
+ * Ensures the first non-system message of an outbound `LanguageModelV2Prompt`
+ * is a user turn, which Gemini requires. Intended to run in the LLM execution
+ * step where the resolved model is known, so only Gemini-family providers get
+ * the synthetic turn.
+ *
+ * @see https://github.com/mastra-ai/mastra/issues/22874
+ */
+export function ensureUserFirstPrompt(prompt: LanguageModelV2Prompt, logger?: IMastraLogger): LanguageModelV2Prompt {
+  const firstNonSystemIndex = prompt.findIndex(m => m.role !== 'system');
+  if (firstNonSystemIndex === -1) {
+    if (prompt.length > 0) {
+      logger?.warn('No user or assistant messages in the request. Gemini requires at least one user message.');
+    }
+    return prompt;
+  }
+  if (prompt[firstNonSystemIndex]?.role !== 'assistant') {
+    return prompt;
+  }
+
+  logger?.debug('Injecting a synthetic user turn before an assistant-first prompt for Gemini compatibility.');
+  const result = [...prompt];
+  result.splice(firstNonSystemIndex, 0, { role: 'user', content: [{ type: 'text', text: '.' }] });
   return result;
 }
 

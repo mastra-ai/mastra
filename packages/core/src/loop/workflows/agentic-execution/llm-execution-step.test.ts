@@ -1537,6 +1537,95 @@ describe('createLLMExecutionStep gateway provider tools', () => {
     );
   });
 
+  describe('assistant-first history user-turn injection (issue #22874)', () => {
+    const seedAssistantFirstHistory = () => {
+      messageList = new MessageList();
+      messageList.add({ role: 'assistant', content: 'Hi, you are through to the assistant.' }, 'memory');
+      messageList.add({ role: 'user', content: 'and now?' }, 'input');
+    };
+
+    const createStep = (provider: string, doStream: ReturnType<typeof vi.fn>) =>
+      createLLMExecutionStep({
+        agentId: 'test-agent',
+        messageId: 'msg-0',
+        runId: 'test-run',
+        startTimestamp: Date.now(),
+        methodType: 'stream',
+        controller,
+        outputWriter: vi.fn(),
+        messageList,
+        models: [
+          {
+            id: 'test-model',
+            maxRetries: 0,
+            model: {
+              specificationVersion: 'v2' as const,
+              provider,
+              modelId: 'test',
+              supportedUrls: {},
+              doGenerate: vi.fn(),
+              doStream,
+            } as any,
+          },
+        ],
+        tools: {},
+        streamState: {
+          serialize: vi.fn(),
+          deserialize: vi.fn(),
+        },
+        _internal: {
+          generateId: () => 'generated-id',
+          threadId: 'thread-123',
+          resourceId: 'resource-456',
+        },
+        logger: {
+          error: vi.fn(),
+          warn: vi.fn(),
+          debug: vi.fn(),
+        } as any,
+      } as unknown as OuterLLMRun<{}>);
+
+    const createDoStream = () =>
+      vi.fn(async () => ({
+        stream: convertArrayToReadableStream([{ type: 'finish', finishReason: 'stop', usage: testUsage }]),
+        request: {},
+        response: { headers: undefined },
+        warnings: [],
+      }));
+
+    it('injects a synthetic user turn before an assistant-first history for Gemini models', async () => {
+      seedAssistantFirstHistory();
+      const doStream = createDoStream();
+
+      await createStep('google.generative-ai', doStream).execute(createExecuteParams(createIterationInput()));
+
+      expect(doStream).toHaveBeenCalledOnce();
+      const prompt = doStream.mock.calls[0]?.[0]?.prompt;
+      const firstNonSystem = prompt.find((message: any) => message.role !== 'system');
+      expect(firstNonSystem).toMatchObject({ role: 'user', content: [{ type: 'text', text: '.' }] });
+      // Nothing is persisted to the message list.
+      expect(messageList.get.all.db().map(message => message.role)).toEqual(['assistant', 'user']);
+    });
+
+    it('sends an assistant-first history unchanged to non-Gemini models', async () => {
+      seedAssistantFirstHistory();
+      const doStream = createDoStream();
+
+      await createStep('openai.chat', doStream).execute(createExecuteParams(createIterationInput()));
+
+      expect(doStream).toHaveBeenCalledOnce();
+      const prompt = doStream.mock.calls[0]?.[0]?.prompt;
+      const nonSystemRoles = prompt.filter((message: any) => message.role !== 'system').map((m: any) => m.role);
+      expect(nonSystemRoles).toEqual(['assistant', 'user']);
+      expect(
+        prompt.some(
+          (message: any) =>
+            message.role === 'user' && message.content.some((part: any) => part.type === 'text' && part.text === '.'),
+        ),
+      ).toBe(false);
+    });
+  });
+
   it('bails with a tripwire response when processLLMRequest aborts', async () => {
     const doStream = vi.fn(async () => ({
       stream: convertArrayToReadableStream([

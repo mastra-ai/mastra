@@ -221,12 +221,23 @@ export function isMaybeAnthropic(
   return matchesProviderPrefix(model, 'anthropic');
 }
 
+export function isMaybeGoogle(
+  model:
+    | string
+    | { provider?: string; modelId?: string }
+    | ((...args: any[]) => any)
+    | { model: any; enabled?: boolean }[]
+    | unknown,
+): boolean {
+  return matchesProviderPrefix(model, 'google') || matchesProviderPrefix(model, 'vertex');
+}
+
 type ProviderFamily = 'anthropic' | 'openai' | 'google';
 
 function getModelProviderFamily(model: unknown): ProviderFamily | undefined {
   if (matchesProviderPrefix(model, 'anthropic')) return 'anthropic';
   if (matchesProviderPrefix(model, 'openai') || matchesProviderPrefix(model, 'azure')) return 'openai';
-  if (matchesProviderPrefix(model, 'google') || matchesProviderPrefix(model, 'vertex')) return 'google';
+  if (isMaybeGoogle(model)) return 'google';
   return undefined;
 }
 
