@@ -74,6 +74,7 @@ export const queryKeys = {
   factoryAudit: (githubProjectId: string | undefined, group: string, actorKey?: string) =>
     ['factory', 'audit', githubProjectId ?? null, group, actorKey ?? null] as const,
   factoryAuditPortal: () => ['factory', 'audit-portal'] as const,
+  sessionsRoot: () => ['sessions'] as const,
   sessions: (projectRepositoryId: string | undefined) => ['sessions', projectRepositoryId ?? null] as const,
   workspaces: (projectRepositoryId: string | undefined) => ['sessions', projectRepositoryId ?? null] as const,
   userSession: (sessionId: string | undefined) => ['user-session', sessionId ?? null] as const,

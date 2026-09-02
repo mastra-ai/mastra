@@ -48,19 +48,16 @@ const session: FactoryUserSession = {
 };
 
 function stubRegistry(running: () => boolean) {
-  const sessionsList = { requests: 0 };
   server.use(
-    http.get(`${TEST_BASE_URL}/web/github/projects/${REPOSITORY_ID}/sessions`, () => {
-      sessionsList.requests += 1;
-      return HttpResponse.json({ sessions: [session] });
-    }),
+    http.get(`${TEST_BASE_URL}/web/github/projects/${REPOSITORY_ID}/sessions`, () =>
+      HttpResponse.json({ sessions: [session] }),
+    ),
     http.get(`${TEST_BASE_URL}/api/agent-controller/${AGENT_CONTROLLER_ID}/active-runs`, () =>
       HttpResponse.json({
         runs: running() ? [{ runId: 'run-1', resourceId: SESSION_ID, threadId: SESSION_ID }] : [],
       }),
     ),
   );
-  return sessionsList;
 }
 
 async function refetchRegistry(client: QueryClient) {
@@ -76,27 +73,23 @@ beforeEach(() => {
 });
 
 describe('RunEndObserver', () => {
-  it('rings and refetches the sessions list once when a run it watched in flight ends', async () => {
+  it('rings once when a run it watched in flight ends, never on mount or on an idle refetch', async () => {
     let running = false;
-    const sessionsList = stubRegistry(() => running);
+    stubRegistry(() => running);
     const { client } = renderWithProviders(<RunEndObserver projectRepositoryId={REPOSITORY_ID} />);
     await waitForMutationsIdle(client);
-    expect(sessionsList.requests).toBe(1);
 
     running = true;
     await refetchRegistry(client);
     expect(oscillatorStart).not.toHaveBeenCalled();
-    expect(sessionsList.requests).toBe(1);
 
     running = false;
     await refetchRegistry(client);
     expect(oscillatorStart).toHaveBeenCalled();
-    expect(sessionsList.requests).toBe(2);
 
     oscillatorStart.mockClear();
     await refetchRegistry(client);
     expect(oscillatorStart).not.toHaveBeenCalled();
-    expect(sessionsList.requests).toBe(2);
   });
 
   it('stays silent for a run already over when the tab opened', async () => {

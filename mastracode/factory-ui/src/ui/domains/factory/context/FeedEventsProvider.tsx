@@ -1,10 +1,11 @@
 import { useQueryClient } from '@tanstack/react-query';
-import { createContext, useContext, useEffect, useState } from 'react';
+import { createContext, useContext, useEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 
 import { useApiConfig } from '../../../../api/config';
 import { queryKeys } from '../../../../api/keys';
 import { useDocumentVisible } from '../../../lib/hooks/useDocumentVisible';
+import { AGENT_CONTROLLER_ID } from '../../chat/services/constants';
 import { streamFeedEvents } from '../services/feedEvents';
 import { RequestError } from '../services/request';
 
@@ -17,10 +18,19 @@ export function useFeedEventsConnected(): boolean {
   return useContext(FeedEventsContext);
 }
 
+const FEED_FALLBACK_POLL_MS = 30_000;
+
+/** Under a live stream frames drive refresh; the slow tick only heals a frame that never arrived. */
+export function useFeedPollInterval<T extends number | false>(noStreamMs: T): number | T {
+  return useFeedEventsConnected() ? FEED_FALLBACK_POLL_MS : noStreamMs;
+}
+
 /**
  * Holds the project's feed stream for every surface under the factory route.
- * A frame carries a work item id at most; the queries it invalidates refetch
- * through their own authed GET.
+ * Three frame kinds: a session frame (run started/ended, workspace
+ * materialized) refreshes session-scoped truths, a work-item frame refreshes
+ * its comments, and a plain frame refreshes the attention and decision
+ * projections. The queries refetch through their own authed GET.
  */
 export function FeedEventsProvider({ factoryProjectId, children }: { factoryProjectId: string; children: ReactNode }) {
   const { baseUrl } = useApiConfig();
@@ -29,6 +39,10 @@ export function FeedEventsProvider({ factoryProjectId, children }: { factoryProj
   // per host, so a few background tabs starve every other request to the app.
   const visible = useDocumentVisible();
   const [connected, setConnected] = useState(false);
+  // Frames can only have been missed after a stream was lost (drop, hidden
+  // tab, failed attempt). The first connect lands right after the queries'
+  // own initial fetches, where a blanket refresh would only duplicate them.
+  const streamWasLost = useRef(false);
 
   useEffect(() => {
     if (!visible) return;
@@ -38,25 +52,43 @@ export function FeedEventsProvider({ factoryProjectId, children }: { factoryProj
 
     const refreshAttention = () =>
       void queryClient.invalidateQueries({ queryKey: queryKeys.factoryAttentionRoot(factoryProjectId) });
+    const refreshRunActivity = () =>
+      void queryClient.invalidateQueries({ queryKey: queryKeys.agentControllerActivity(AGENT_CONTROLLER_ID, baseUrl) });
+    // The stream is scoped to the factory project, the sessions cache to a
+    // repository: without the repository id on the frame, refresh them all.
+    const refreshSessions = () => void queryClient.invalidateQueries({ queryKey: queryKeys.sessionsRoot() });
+    const refreshDecisions = () =>
+      void queryClient.invalidateQueries({ queryKey: queryKeys.factoryDecisionsRoot(factoryProjectId) });
 
     const connect = () => {
       streamFeedEvents(
         baseUrl,
         factoryProjectId,
         {
-          onEvent: ({ workItemId }) => {
-            // Card counts stay on the board's own 5s poll: a fetch per event
-            // would double its load to save under 5s of badge latency.
+          onEvent: ({ workItemId, sessionId }) => {
+            // A session frame moves session-scoped truths only; the attention
+            // and decision projections did not change.
+            if (sessionId) {
+              refreshRunActivity();
+              refreshSessions();
+              return;
+            }
             if (workItemId) {
               void queryClient.invalidateQueries({ queryKey: queryKeys.workItemCommentsRoot(workItemId) });
             }
             refreshAttention();
+            refreshDecisions();
           },
           onConnected: () => {
             setConnected(true);
+            if (!streamWasLost.current) return;
+            streamWasLost.current = false;
             // Whatever landed while this tab held no stream was never announced.
             void queryClient.invalidateQueries({ queryKey: queryKeys.workItemCommentsAll() });
             refreshAttention();
+            refreshRunActivity();
+            refreshSessions();
+            refreshDecisions();
           },
         },
         abort.signal,
@@ -64,6 +96,7 @@ export function FeedEventsProvider({ factoryProjectId, children }: { factoryProj
         .then(() => false)
         .catch((error: unknown) => error instanceof RequestError && error.status >= 400 && error.status < 500)
         .then(fatal => {
+          streamWasLost.current = true;
           if (abort.signal.aborted) return;
           setConnected(false);
           // An expired session or a deleted project never heals by retrying;
@@ -74,6 +107,7 @@ export function FeedEventsProvider({ factoryProjectId, children }: { factoryProj
     connect();
 
     return () => {
+      streamWasLost.current = true;
       abort.abort();
       if (retry) clearTimeout(retry);
       setConnected(false);

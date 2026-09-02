@@ -1053,19 +1053,20 @@ export interface FactoryAttentionScope {
 }
 
 export class WorkItemsStorage extends FactoryStorageDomain {
-  #attentionChanged: (scope: FactoryAttentionScope) => void = () => {};
+  #announceFeedTouch: (scope: FactoryAttentionScope) => void = () => {};
 
   constructor() {
     super('work-items');
   }
 
   /**
-   * Wired once at boot. Every write below that changes what this project's
-   * attention list projects announces it here — the one place a new such write
-   * has to remember, since clients stop polling while their stream is up.
+   * Wired once at boot to publish a project feed frame. Every write below that
+   * changes what a live surface projects — the attention list, the board's
+   * decisions — announces it here, the one place a new such write has to
+   * remember, since clients stop polling while their stream is up.
    */
-  onAttentionChanged(listener: (scope: FactoryAttentionScope) => void): void {
-    this.#attentionChanged = listener;
+  onFeedTouch(listener: (scope: FactoryAttentionScope) => void): void {
+    this.#announceFeedTouch = listener;
   }
 
   async init(): Promise<void> {
@@ -1978,7 +1979,10 @@ export class WorkItemsStorage extends FactoryStorageDomain {
   }
 
   async claimDeferredDecisions(input: FactoryLeaseClaimInput): Promise<FactoryDeferredDecisionRecord[]> {
-    return this.#claimLeases('factory_deferred_decisions', input, toDeferredDecision);
+    const claimed = await this.#claimLeases('factory_deferred_decisions', input, toDeferredDecision);
+    const byProject = new Map(claimed.map(record => [`${record.orgId}:${record.factoryProjectId}`, record]));
+    for (const scope of byProject.values()) this.#announceFeedTouch(scope);
+    return claimed;
   }
 
   async renewDeferredDecisionLease(identity: FactoryLeaseIdentity, leaseExpiresAt: Date): Promise<boolean> {
@@ -1990,15 +1994,19 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     now: Date,
   ): Promise<FactoryDeferredDecisionRecord | null> {
     const row = await this.#completeLease('factory_deferred_decisions', identity, now);
-    return row ? toDeferredDecision(row) : null;
+    if (!row) return null;
+    const record = toDeferredDecision(row);
+    this.#announceFeedTouch(record);
+    return record;
   }
 
   async failDeferredDecision(input: FactoryDispatchFailureInput): Promise<FactoryDeferredDecisionRecord | null> {
     const row = await this.#failLease('factory_deferred_decisions', input);
     if (!row) return null;
     const record = toDeferredDecision(row);
-    // A retryable failure surfaces nothing; only a terminal one mints an item.
-    if (input.terminal) this.#attentionChanged(record);
+    // Terminal mints an attention item; a retryable failure still moves the
+    // card's copy, so both deserve the frame.
+    this.#announceFeedTouch(record);
     return record;
   }
 
@@ -2026,7 +2034,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     );
     if (!proposed || !row) return null;
     const record = toDeferredDecision(row);
-    this.#attentionChanged(record);
+    this.#announceFeedTouch(record);
     return record;
   }
 
@@ -2070,7 +2078,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
       }
       return record;
     });
-    if (approved) this.#attentionChanged(approved);
+    if (approved) this.#announceFeedTouch(approved);
     return approved;
   }
 
@@ -2146,7 +2154,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     );
     if (!settled || !row) return null;
     const record = toDeferredDecision(row);
-    this.#attentionChanged(record);
+    this.#announceFeedTouch(record);
     return record;
   }
 
@@ -2184,7 +2192,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
       });
       return toDeferredDecision(row);
     });
-    if (resolved) this.#attentionChanged(resolved);
+    if (resolved) this.#announceFeedTouch(resolved);
     return resolved;
   }
 
@@ -2296,7 +2304,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
       });
       return toDeferredDecision(row);
     });
-    if (retriedRecord) this.#attentionChanged(retriedRecord);
+    if (retriedRecord) this.#announceFeedTouch(retriedRecord);
     return retriedRecord;
   }
 
@@ -2952,7 +2960,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
       );
       return toWorkItem(existing);
     });
-    if (removed) this.#attentionChanged(removed);
+    if (removed) this.#announceFeedTouch(removed);
     return removed;
   }
 }
