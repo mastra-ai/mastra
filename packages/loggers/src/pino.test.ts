@@ -747,6 +747,19 @@ describe('PinoLogger error serialization', () => {
     expect(log.error).toEqual({ code: 'E42', detail: 'plain object' });
   });
 
+  it('normalizes error-like plain objects under `error` while preserving their fields', async () => {
+    const logger = new PinoLogger({ transports: { memory: memoryStream } });
+
+    // Same as pino's stock behavior for `err`: anything with a string `message`
+    // is treated as error-like and gets `type`/`stack`, with own fields kept.
+    logger.warn('failed', { error: { message: 'invalid input', code: 'E42' } });
+
+    await waitForLogs(memoryStream);
+    const [log] = await memoryStream.listLogs();
+
+    expect(log.error).toMatchObject({ type: 'Object', message: 'invalid input', code: 'E42' });
+  });
+
   it('allows callers to override the default serializers', async () => {
     const logger = new PinoLogger({
       transports: { memory: memoryStream },
