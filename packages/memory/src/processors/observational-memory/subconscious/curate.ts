@@ -4,7 +4,12 @@ import type { KnowledgeScopeIds, KnowledgeStorage } from '@mastra/core/storage';
 import type { Memory } from '../../..';
 import type { ObservationalMemoryModel, ReflectionCommittedContext } from '../types';
 import { publishSubconsciousActivity, publishSubconsciousError } from './activity';
-import { createKnowledgeTools, getKnowledgeStore, resolveKnowledgeScopeIds } from './knowledge-tools';
+import {
+  createKnowledgeCurationTools,
+  createKnowledgeTools,
+  getKnowledgeStore,
+  resolveKnowledgeScopeIds,
+} from './knowledge-tools';
 import { createKnowledgeWriteTools } from './knowledge-write-tools';
 import { resolveSubconsciousAgentModel } from './model';
 import { createPinnedTools } from './pinned';
@@ -142,11 +147,19 @@ async function createCuratorAgent(
     requestContext: context.requestContext,
   });
   if (!model) throw new Error('Subconscious curate requires the main agent to resolve its model.');
+  const knowledge = memory.getKnowledgeInstance();
+  if (!knowledge) throw new Error('Subconscious curate requires a configured Knowledge instance.');
+  const governedCurator = knowledge.createCurator({
+    vouchedScopeIds: scopeIds.slice(1),
+    companionScopeId: scopeIds[3]!,
+    contextScopeId: scopeIds[2]!,
+  });
   return new Agent({
     id: `subconscious-curate-${context.parentThreadId}`,
     name: 'Subconscious Curate',
     instructions: [
       DEFAULT_INSTRUCTIONS,
+      governedCurator.instructions,
       subconscious.pins ? PINNED_INSTRUCTIONS : undefined,
       config.instructions?.trim(),
     ]
@@ -156,6 +169,12 @@ async function createCuratorAgent(
     memory: curatorMemory,
     tools: {
       ...createKnowledgeTools(memory, scopeIds.slice(1)),
+      ...createKnowledgeCurationTools(memory, {
+        vouchedScopeIds: scopeIds.slice(1),
+        companionScopeId: scopeIds[3]!,
+        contextScopeId: scopeIds[2]!,
+        destinationScopeIds: [scopeIds[1]!, scopeIds[2]!],
+      }),
       ...createKnowledgeWriteTools(memory, {
         scopeIds,
         sourceThreadId: context.parentThreadId,

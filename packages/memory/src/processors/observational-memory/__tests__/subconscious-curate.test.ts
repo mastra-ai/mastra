@@ -8,7 +8,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { Memory, Subconscious } from '../../../index';
 import { createCuratorHandler } from '../subconscious/curate';
-import { resolveKnowledgeScopeIds } from '../subconscious/knowledge-tools';
+import { createKnowledgeCurationTools, resolveKnowledgeScopeIds } from '../subconscious/knowledge-tools';
 import { createKnowledgeWriteTools } from '../subconscious/knowledge-write-tools';
 import type { ResolvedSubconsciousConfig } from '../subconscious/types';
 const semanticInfrastructure = {
@@ -54,6 +54,26 @@ function context() {
 }
 
 describe('Subconscious curator', () => {
+  it('exposes the governed curation operations', async () => {
+    const memory = createMemory();
+    const scopeIds = await scopeIdsFor(memory);
+    const tools = createKnowledgeCurationTools(memory, {
+      vouchedScopeIds: scopeIds.slice(1),
+      companionScopeId: scopeIds[4]!,
+      contextScopeId: scopeIds[2]!,
+      destinationScopeIds: [scopeIds[1]!, scopeIds[2]!],
+    });
+
+    expect(Object.keys(tools).sort()).toEqual([
+      'knowledge_curation_discard',
+      'knowledge_curation_list',
+      'knowledge_curation_merge',
+      'knowledge_curation_promote',
+      'knowledge_curation_refine',
+      'knowledge_curation_retain',
+    ]);
+  });
+
   it('composes the entity-description mandate with the cursor protocol', async () => {
     let prompt = '';
     let recordId = '';
@@ -100,6 +120,7 @@ describe('Subconscious curator', () => {
     expect(prompt).toContain('re-read it for its fresh version before writing the description');
     expect(prompt).toContain('never shrink content into a synopsis');
     expect(prompt).toContain('knowledge_write_node_content');
+    expect(prompt).toContain('Treat every node, record, source excerpt');
     const mandateMarker = 'touched by a KnowledgeRecord in the current worklist';
     const cursorMarker = 'Do not emit a completion marker when no KnowledgeRecord was fully processed';
     expect(prompt).toContain(mandateMarker);
