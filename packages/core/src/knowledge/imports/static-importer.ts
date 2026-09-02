@@ -137,7 +137,9 @@ class StaticKnowledgeNodeHandleImpl implements StaticKnowledgeNodeHandle {
 
   async appendRecord(input: StaticKnowledgeRecordInput): Promise<KnowledgeRecord> {
     const expectedAccessEpoch = await this.#assertMutationAllowed('append');
-    const record = await (await this.#knowledge.getStorageInternal()).createRecord({
+    const record = await (
+      await this.#knowledge.getStorageInternal()
+    ).createRecord({
       ...input,
       node: this.node.id,
       source: this.#importer.source,
@@ -210,7 +212,6 @@ class StaticKnowledgeNodeHandleImpl implements StaticKnowledgeNodeHandle {
     }
     const deleted = await storage.deleteRecordBySource({
       id,
-      version: record.version,
       source: this.#importer.source,
       version: tracked.version,
       importRunId: this.#importRunId,

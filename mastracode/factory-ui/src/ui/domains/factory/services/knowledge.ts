@@ -11,6 +11,7 @@ import { requestJson } from './request';
 
 export interface KnowledgeGraphNode {
   id: string;
+  reference: string;
   name: string;
   kind: string;
   description?: string;
@@ -112,6 +113,7 @@ export type KnowledgeProposalStatus = 'pending' | 'approved' | 'rejected' | 'con
 
 export interface KnowledgeProposal {
   id: string;
+  reference: string;
   operation: string;
   status: KnowledgeProposalStatus;
   reason?: string;
@@ -204,10 +206,11 @@ export async function fetchKnowledgeActivity(
   scopeId?: string,
   threadId?: string,
   filters: KnowledgeActivityFilters = {},
+  cursor?: string,
   signal?: AbortSignal,
 ): Promise<KnowledgeActivityPayload> {
   return requestJson<KnowledgeActivityPayload>(
-    `${knowledgeBase(baseUrl, factoryProjectId)}/activity${knowledgeQuery({ threadId, scopeId, ...filters })}`,
+    `${knowledgeBase(baseUrl, factoryProjectId)}/activity${knowledgeQuery({ threadId, scopeId, ...filters, cursor })}`,
     { signal },
   );
 }
