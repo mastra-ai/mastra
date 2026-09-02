@@ -1846,6 +1846,58 @@ describe('runEvals', () => {
       expect(result.turnResults![1]!.scores!['per-turn-length']).toBe(1.0);
     });
 
+    it('gives a trajectory-typed gate a WORKFLOW trajectory built from stepResults (#22632, CR-2)', async () => {
+      const stepOne = createStep({
+        id: 'first-step',
+        inputSchema: z.object({ input: z.string() }),
+        outputSchema: z.object({ output: z.string() }),
+        execute: async ({ inputData }) => ({ output: `one:${inputData.input}` }),
+      });
+      const stepTwo = createStep({
+        id: 'second-step',
+        inputSchema: z.object({ output: z.string() }),
+        outputSchema: z.object({ output: z.string() }),
+        execute: async ({ inputData }) => ({ output: `two:${inputData.output}` }),
+      });
+
+      const workflow = createWorkflow({
+        id: 'trajectory-gate-workflow',
+        inputSchema: z.object({ input: z.string() }),
+        // The workflow result is an ordinary object — NOT an iterable of agent messages.
+        outputSchema: z.object({ output: z.string() }),
+        options: { validateInputs: false },
+      })
+        .then(stepOne)
+        .then(stepTwo)
+        .commit();
+
+      let seenOutput: any;
+      const trajectoryGate = createScorer({
+        id: 'workflow-trajectory-gate',
+        description: 'Reads the workflow trajectory it was handed',
+        type: 'trajectory',
+      }).generateScore(({ run }: any) => {
+        seenOutput = run.output;
+        return run.output.steps.length >= 2 ? 1.0 : 0.0;
+      });
+
+      // No Mastra instance is attached, so there is no trace storage: the gate path
+      // must fall back to the workflow step results, exactly as `scorers.trajectory` does.
+      const result = await runEvals({
+        data: [{ input: { input: 'go' } }],
+        gates: [trajectoryGate],
+        target: workflow,
+      } as any);
+
+      expect(seenOutput).toBeDefined();
+      expect(Array.isArray(seenOutput)).toBe(false);
+      expect(seenOutput.steps).toBeInstanceOf(Array);
+      // Built from stepResults, so both executed steps are present.
+      expect(seenOutput.steps.length).toBeGreaterThanOrEqual(2);
+      expect(result.gateResults![0]!.score).toBe(1.0);
+      expect(result.verdict).toBe('passed');
+    });
+
     it('hands a trajectory-typed PER-TURN gate a Trajectory and threads expectedTrajectory (#22632)', async () => {
       const agent = createTurnAgent('turnTrajectoryGateAgent');
 

@@ -353,7 +353,8 @@ export async function runEvals(config: RunEvalsAnyConfig): Promise<RunEvalsResul
               storage,
               targetResult.traceId,
               targetResult.spanId,
-              targetResult.scoringData?.output,
+              targetResult.scoringData,
+              isWorkflow(target),
             )
           : undefined;
 
@@ -527,10 +528,22 @@ async function resolveTrajectory(
   storage: MastraCompositeStore | undefined,
   traceId: string | undefined,
   spanId: string | undefined,
-  rawOutput: any,
+  scoringData: { output?: any; stepResults?: any; stepExecutionPath?: string[] } | undefined,
+  isWorkflowTarget: boolean,
 ): Promise<Trajectory> {
   const traceTrajectory = await extractTrajectoryFromTraceStore(storage, traceId, spanId);
-  return traceTrajectory ?? (rawOutput ? extractTrajectory(rawOutput) : { steps: [] });
+  if (traceTrajectory) return traceTrajectory;
+
+  // A workflow's `scoringData.output` is the workflow's own result, not an
+  // iterable of agent messages, so it must be reconstructed from step results —
+  // the same fallback the workflow branch of `scorers.trajectory` uses.
+  if (isWorkflowTarget) {
+    const stepResults = scoringData?.stepResults;
+    return stepResults ? extractWorkflowTrajectory(stepResults, scoringData?.stepExecutionPath) : { steps: [] };
+  }
+
+  const rawOutput = scoringData?.output;
+  return rawOutput ? extractTrajectory(rawOutput) : { steps: [] };
 }
 
 /**
@@ -565,7 +578,9 @@ async function scoreTurn(
   if (turn.gates) {
     // Same trajectory contract as the top-level gate loop above.
     const gateTrajectory = turn.gates.some(gate => gate.type === 'trajectory')
-      ? await resolveTrajectory(storage, record.traceId, record.spanId, record.output)
+      ? // Per-turn records are produced only by the agent turn runner, never by
+        // `executeWorkflow`, so the agent fallback is the only reachable one here.
+        await resolveTrajectory(storage, record.traceId, record.spanId, { output: record.output }, false)
       : undefined;
 
     for (const gate of turn.gates) {
