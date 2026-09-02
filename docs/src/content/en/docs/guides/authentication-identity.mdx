@@ -52,13 +52,13 @@ Configure `server.auth` with an [auth provider](/docs/auth/overview) or an `auth
 Choose a stable identity from the verifier and map it to the runtime ownership boundary.
 
 ```typescript title="src/mastra/index.ts"
-import { Mastra } from '@mastra/core'
-import { verifyAccessToken } from './lib/auth'
+import { Mastra } from '@mastra/core';
+import { verifyAccessToken } from './lib/auth';
 
 type AuthUser = {
-  id: string
-  workspaceId: string
-}
+  id: string;
+  workspaceId: string;
+};
 
 export const mastra = new Mastra({
   server: {
@@ -67,7 +67,7 @@ export const mastra = new Mastra({
       mapUserToResourceId: (user: AuthUser) => `${user.workspaceId}:${user.id}`,
     },
   },
-})
+});
 ```
 
 Use a canonical identifier from the verified provider as display names and other mutable profile fields aren't suitable ownership keys. Add enough scope to prevent collisions across tenants and identity systems.
@@ -93,6 +93,12 @@ Use `mapUserToResourceId` to derive this value from the verified user. After aut
 - Uses that value to scope memory and thread operations.
 - Ignores a conflicting resource ID supplied by the client.
 
+:::warning
+
+If `server.auth` is configured without `mapUserToResourceId`, there's no server-derived resource ID. Built-in routes then use the resource ID from the request itself (for example `memory.resource` in the body), so any authenticated caller can read and write threads under any resource ID. Mastra logs a warning at startup in this state. Always configure `mapUserToResourceId` when more than one user shares a deployment.
+
+:::
+
 Choose the narrowest boundary that matches how people should share state:
 
 | Desired boundary | Example mapping |
@@ -108,28 +114,28 @@ Mastra applies this boundary automatically to memory and thread operations. Appl
 Authorization belongs in trusted code, as close as possible to the protected operation. Trusted runtime code can derive ownership from the authenticated user in `RequestContext` rather than model-generated tool input:
 
 ```typescript title="src/mastra/tools/list-orders.ts"
-import { createTool } from '@mastra/core/tools'
-import { z } from 'zod'
-import { orders } from '../lib/orders'
+import { createTool } from '@mastra/core/tools';
+import { z } from 'zod';
+import { orders } from '../lib/orders';
 
 type AuthenticatedUser = {
-  id: string
-}
+  id: string;
+};
 
 export const listOrders = createTool({
   id: 'list-orders',
   description: 'List orders owned by the authenticated user',
   inputSchema: z.object({ status: z.enum(['open', 'shipped']).optional() }),
   execute: async ({ status }, { requestContext }) => {
-    const user = requestContext.get('user') as AuthenticatedUser | undefined
+    const user = requestContext.get('user') as AuthenticatedUser | undefined;
 
     if (!user?.id) {
-      throw new Error('Authenticated user is missing')
+      throw new Error('Authenticated user is missing');
     }
 
-    return orders.list({ ownerId: user.id, status })
+    return orders.list({ ownerId: user.id, status });
   },
-})
+});
 ```
 
 The model can choose `status` but it can't choose `ownerId`.
@@ -165,30 +171,30 @@ An incoming auth token and a downstream service credential solve different probl
 Use token forwarding only when the receiving service is intended to trust that token. For multi-tenant services, resolve a tenant-scoped credential in trusted tool code instead:
 
 ```typescript title="src/mastra/tools/list-invoices.ts"
-import { createTool } from '@mastra/core/tools'
-import { z } from 'zod'
+import { createTool } from '@mastra/core/tools';
+import { z } from 'zod';
 
-import { billing, tenantCredentials } from '../lib/billing'
+import { billing, tenantCredentials } from '../lib/billing';
 
 type AuthenticatedUser = {
-  organizationId: string
-}
+  organizationId: string;
+};
 
 export const listInvoices = createTool({
   id: 'list-invoices',
   description: 'List invoices for the authenticated tenant',
   inputSchema: z.object({ limit: z.number().int().min(1).max(100).default(20) }),
   execute: async ({ limit }, { requestContext }) => {
-    const user = requestContext.get('user') as AuthenticatedUser | undefined
+    const user = requestContext.get('user') as AuthenticatedUser | undefined;
 
     if (!user?.organizationId) {
-      throw new Error('Authenticated organization is missing')
+      throw new Error('Authenticated organization is missing');
     }
 
-    const credential = await tenantCredentials.getBillingToken(user.organizationId)
-    return billing.listInvoices({ limit, token: credential.token })
+    const credential = await tenantCredentials.getBillingToken(user.organizationId);
+    return billing.listInvoices({ limit, token: credential.token });
   },
-})
+});
 ```
 
 Configure the credential provider to fail closed for unknown resources and return least-privilege credentials. Keep secrets out of its errors. The model supplies only business input such as `limit`. Trusted code selects the tenant and credential.
@@ -200,22 +206,22 @@ The same pattern applies to an external MCP server. Use the authenticated user's
 By default, when an `MCPServer` runs behind `server.auth`, Mastra places the authenticated caller in the MCP `authInfo` object. Server tools can use this identity without parsing the request again:
 
 ```typescript title="src/mastra/tools/get-customer-record.ts"
-import { createTool } from '@mastra/core/tools'
-import { z } from 'zod'
+import { createTool } from '@mastra/core/tools';
+import { z } from 'zod';
 
-import { customers } from '../lib/customers'
+import { customers } from '../lib/customers';
 
 export const getCustomerRecord = createTool({
   id: 'get-customer-record',
   description: 'Get the authenticated customer record',
   inputSchema: z.object({}),
   execute: async (_input, { mcp }) => {
-    const user = mcp?.extra.authInfo?.extra?.user as { id?: string } | undefined
+    const user = mcp?.extra.authInfo?.extra?.user as { id?: string } | undefined;
 
-    if (!user?.id) throw new Error('Authenticated MCP caller is missing')
-    return customers.getByUserId(user.id)
+    if (!user?.id) throw new Error('Authenticated MCP caller is missing');
+    return customers.getByUserId(user.id);
   },
-})
+});
 ```
 
 This example uses the default bridge. Mastra first preserves any `req.auth` value set by middleware. Otherwise, `server.mcpOptions.setRequestAuth` defines the `authInfo` shape when configured. Whichever source supplies `req.auth` must provide the fields your MCP tools read.

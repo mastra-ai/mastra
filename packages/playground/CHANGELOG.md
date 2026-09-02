@@ -1,5 +1,78 @@
 # @internal/playground
 
+## 1.27.3-alpha.9
+
+### Patch Changes
+
+- Updated dependencies [[`ffca9e5`](https://github.com/mastra-ai/mastra/commit/ffca9e5dd061e64da8a766d59d1bbcd667017c9c), [`ffca9e5`](https://github.com/mastra-ai/mastra/commit/ffca9e5dd061e64da8a766d59d1bbcd667017c9c), [`ffca9e5`](https://github.com/mastra-ai/mastra/commit/ffca9e5dd061e64da8a766d59d1bbcd667017c9c), [`a39be9f`](https://github.com/mastra-ai/mastra/commit/a39be9f6d4be3eab5410a0eccc542eca1cfc7972), [`ea56b1f`](https://github.com/mastra-ai/mastra/commit/ea56b1fa6e0f99673d2f8a5b7dacc8d351507ff7), [`ffca9e5`](https://github.com/mastra-ai/mastra/commit/ffca9e5dd061e64da8a766d59d1bbcd667017c9c)]:
+  - @mastra/client-js@1.43.0-alpha.8
+  - @mastra/playground-ui@52.0.0-alpha.11
+  - @mastra/core@1.64.0-alpha.8
+  - @mastra/react@1.4.10-alpha.9
+
+## 1.27.3-alpha.8
+
+### Patch Changes
+
+- Simplified how datasets and experiments relate in Studio. ([#22867](https://github.com/mastra-ai/mastra/pull/22867))
+
+  **Datasets**
+
+  - The dataset page now only shows its items. The Experiments and Review tabs are gone; a **View experiments** button opens the global Experiments page filtered to that dataset (`/experiments?dataset=<id>`).
+  - The Review column was removed from the datasets table.
+
+  **Experiments**
+
+  - Compare two experiments from the global Experiments list: click **Compare**, pick two runs of the same dataset, and open `/experiments/compare`.
+  - Added a **Rerun** button on the experiment page that reopens the run dialog prefilled with the dataset, version, target and scorers of the current run.
+  - Added a **Flag for review** button when viewing a single experiment item.
+  - Links to the dataset, agent, workflow or scorer on the experiment page now open in the same tab.
+  - The Experiment and Target columns in the experiments list show readable names instead of raw ids.
+
+- Fixed Studio experiment lookups that only searched the 20 most recent runs. Filtering the experiments list by dataset now loads that dataset's runs directly, so older runs no longer disappear, and comparison links now carry the dataset id so older experiments resolve and the compare page survives a refresh. The compare URL is now `/experiments/compare?dataset=…&baseline=…&contender=…`. ([#22867](https://github.com/mastra-ai/mastra/pull/22867))
+
+- Updated dependencies [[`e983f74`](https://github.com/mastra-ai/mastra/commit/e983f749873189f767f509eb33d1a3596c0f1c74), [`cedc25d`](https://github.com/mastra-ai/mastra/commit/cedc25d8c2dec005d8b10b6ce2d36feef1162ff0), [`9fdb3bc`](https://github.com/mastra-ai/mastra/commit/9fdb3bc0f9bfab5269b4f3045595e62323da5d3a)]:
+  - @mastra/playground-ui@51.4.0-alpha.10
+  - @mastra/schema-compat@1.3.8-alpha.1
+  - @mastra/client-js@1.42.5-alpha.7
+  - @mastra/ai-sdk@1.10.1-alpha.1
+  - @mastra/react@1.4.10-alpha.8
+  - @mastra/core@1.64.0-alpha.7
+
+## 1.27.3-alpha.7
+
+### Patch Changes
+
+- Updated dependencies [[`c1d3422`](https://github.com/mastra-ai/mastra/commit/c1d3422e8052a4282e8547df914b6231e5345f01), [`4596348`](https://github.com/mastra-ai/mastra/commit/45963483f4cd2810f0646469916f74266a3dd607), [`e8aca33`](https://github.com/mastra-ai/mastra/commit/e8aca339dc92c0b60baad3d948a7c48ec9ae106f), [`19b71cf`](https://github.com/mastra-ai/mastra/commit/19b71cf1de8afe6f69a3171d8a5a28086790e49b)]:
+  - @mastra/core@1.64.0-alpha.6
+  - @mastra/client-js@1.42.5-alpha.6
+  - @mastra/react@1.4.10-alpha.7
+  - @mastra/playground-ui@51.4.0-alpha.9
+
+## 1.27.3-alpha.6
+
+### Patch Changes
+
+- Fixed Studio-generated forms silently dropping `Date`, `File`, `Blob`, `Map`, and other non-plain object values before validation and submission. The empty-value cleanup now only recurses into arrays and plain objects, so typed schema fields such as `z.date()` receive their values intact. Fixes [#22736](https://github.com/mastra-ai/mastra/issues/22736). ([#22819](https://github.com/mastra-ai/mastra/pull/22819))
+
+- Updated dependencies [[`decd47d`](https://github.com/mastra-ai/mastra/commit/decd47d0db2a891a6832e226557145b6658b0b19), [`285ce1c`](https://github.com/mastra-ai/mastra/commit/285ce1c1399341a37e76233aa94dbf9f1a41bd5d), [`5b5e3cc`](https://github.com/mastra-ai/mastra/commit/5b5e3cc006950b0ff9720c5be8396d4c95e8a6ac), [`b66b233`](https://github.com/mastra-ai/mastra/commit/b66b23374a1e8c10ad81637c3ec758c594c672ca), [`045c3c7`](https://github.com/mastra-ai/mastra/commit/045c3c78f2129fea5d4467bb26cff2b49788b3d0), [`d53a056`](https://github.com/mastra-ai/mastra/commit/d53a05614893e8d1bbfdab50b42c19435e6bd065), [`b114e78`](https://github.com/mastra-ai/mastra/commit/b114e787e8438732286611397f77fdcb6e6633b9)]:
+  - @mastra/core@1.64.0-alpha.5
+  - @mastra/playground-ui@51.4.0-alpha.8
+  - @mastra/client-js@1.42.5-alpha.5
+  - @mastra/react@1.4.10-alpha.6
+
+## 1.27.3-alpha.5
+
+### Patch Changes
+
+- Fixed Studio's workflow Request Context dialog running the workflow when clicking Save. Saving request context values now only stores them, and the next run includes the saved values. Fixes https://github.com/mastra-ai/mastra/issues/22482 ([#22792](https://github.com/mastra-ai/mastra/pull/22792))
+
+- Updated dependencies [[`a499422`](https://github.com/mastra-ai/mastra/commit/a499422cd7eccca184cac7b7a684a6199784aa82), [`9d3073c`](https://github.com/mastra-ai/mastra/commit/9d3073c230dbff45d58c259d676b2b137afd2ff5)]:
+  - @mastra/core@1.64.0-alpha.4
+  - @mastra/client-js@1.42.5-alpha.4
+  - @mastra/react@1.4.10-alpha.5
+  - @mastra/playground-ui@51.4.0-alpha.7
+
 ## 1.27.3-alpha.4
 
 ### Patch Changes

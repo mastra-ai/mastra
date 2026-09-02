@@ -32,8 +32,8 @@ If an agent only needs to read, write, or search files, configure [direct filesy
 Give an agent a local sandbox:
 
 ```typescript title="src/mastra/agents/coding-agent.ts"
-import { Agent } from '@mastra/core/agent'
-import { LocalSandbox, Workspace } from '@mastra/core/workspace'
+import { Agent } from '@mastra/core/agent';
+import { LocalSandbox, Workspace } from '@mastra/core/workspace';
 
 export const codingAgent = new Agent({
   id: 'coding-agent',
@@ -45,9 +45,9 @@ export const codingAgent = new Agent({
       workingDirectory: './workspace',
     }),
   }),
-})
+});
 
-await codingAgent.generate('List the files in the sandbox directory')
+await codingAgent.generate('List the files in the sandbox directory');
 ```
 
 :::warning
@@ -71,7 +71,7 @@ Agents receive tools for the capabilities supported by the sandbox backend:
 Configured capabilities determine which tools are available. Tool configuration can then disable, rename, or add policies to those tools:
 
 ```typescript
-import { LocalSandbox, Workspace, WORKSPACE_TOOLS } from '@mastra/core/workspace'
+import { LocalSandbox, Workspace, WORKSPACE_TOOLS } from '@mastra/core/workspace';
 
 const workspace = new Workspace({
   sandbox: new LocalSandbox({ workingDirectory: './workspace' }),
@@ -81,54 +81,12 @@ const workspace = new Workspace({
       enabled: false,
     },
   },
-})
+});
 ```
 
 Set `{ enabled: false }` on one tool to remove it, or set the top-level `enabled: false` to disable generated tools by default. A per-tool `{ enabled: true }` overrides that global setting. The top-level `requireApproval` policy applies to every generated tool unless a per-tool entry overrides it.
 
 See the [sandbox tools reference](/reference/workspace/workspace-class#sandbox-tools) for all generated tools and the [tool configuration reference](/reference/workspace/workspace-class#tool-configuration) for approvals, output limits, and hooks.
-
-### Computer-use tools
-
-Sandboxes that run a desktop environment can expose screenshot, mouse, and keyboard control. The workspace registers these tools when a statically configured sandbox supports the computer capability:
-
-| Tool | Does |
-| - | - |
-| `computer_screenshot` | Captures the desktop as a PNG image and returns it to the model as native media. |
-| `computer_click` | Presses and releases the left mouse button at pixel coordinates. |
-| `computer_double_click` | Presses the left mouse button twice at pixel coordinates. |
-| `computer_right_click` | Presses and releases the right mouse button at pixel coordinates. |
-| `computer_move_mouse` | Moves the cursor to pixel coordinates without pressing a button. |
-| `computer_drag` | Presses, drags, and releases between two points. |
-| `computer_type` | Types text into the focused element. |
-| `computer_press_key` | Presses a key or key combination, such as `Enter` or `ctrl+s`. |
-| `computer_scroll` | Scrolls up or down. |
-| `computer_get_screen_info` | Gets the screen dimensions and cursor position. |
-| `computer_wait` | Waits for the interface to settle. |
-
-[`DaytonaSandbox`](/integrations/sandboxes/daytona) and [`E2BDesktopSandbox`](/integrations/sandboxes/e2b-desktop) support this capability. Other sandbox backends don't register the computer tools. Resolver-backed sandboxes don't register them because the workspace can't inspect the resolved sandbox's capabilities when it creates the tool list.
-
-Action tools take a screenshot after each action by default. Configure the screenshot behavior for each tool:
-
-```typescript title="src/mastra/workspaces.ts"
-import { Workspace, WORKSPACE_TOOLS } from '@mastra/core/workspace'
-import { E2BDesktopSandbox } from '@mastra/e2b-desktop'
-
-const workspace = new Workspace({
-  sandbox: new E2BDesktopSandbox(),
-  tools: {
-    [WORKSPACE_TOOLS.COMPUTER.CLICK]: {
-      screenshotAfterAction: true,
-      screenshotDelayMs: 1000,
-    },
-    [WORKSPACE_TOOLS.COMPUTER.TYPE]: {
-      requireApproval: true,
-    },
-  },
-})
-```
-
-Computer tools accept the same per-tool `enabled` and `requireApproval` configuration as other workspace tools.
 
 {/* vale ai-tells.VerbTricolon = NO */}
 
@@ -137,8 +95,8 @@ Authored runtime functions, including tools and workflow steps, can get the live
 {/* vale ai-tells.VerbTricolon = YES */}
 
 ```typescript title="src/mastra/tools/start-server.ts"
-import { createTool } from '@mastra/core/tools'
-import { z } from 'zod'
+import { createTool } from '@mastra/core/tools';
+import { z } from 'zod';
 
 export const startServerTool = createTool({
   id: 'start-server',
@@ -148,21 +106,21 @@ export const startServerTool = createTool({
   }),
   execute: async ({ command }, ctx) => {
     if (!ctx.workspace || !ctx.requestContext) {
-      throw new Error('This tool requires a workspace execution context')
+      throw new Error('This tool requires a workspace execution context');
     }
 
     const sandbox = await ctx.workspace.resolveSandbox({
       requestContext: ctx.requestContext,
-    })
+    });
 
     if (!sandbox?.processes) {
-      throw new Error('The configured sandbox does not support background processes')
+      throw new Error('The configured sandbox does not support background processes');
     }
 
-    const server = await sandbox.processes.spawn(command)
-    return { pid: server.pid }
+    const server = await sandbox.processes.spawn(command);
+    return { pid: server.pid };
   },
-})
+});
 ```
 
 ## Sandboxes
@@ -179,7 +137,7 @@ const sandbox = new LocalSandbox({
     allowNetwork: false,
     readOnlyPaths: ['./reference-data'],
   },
-})
+});
 ```
 
 Enable native isolation to restrict filesystem and network access at the operating-system level. On macOS, native isolation uses Seatbelt (`sandbox-exec`). On Linux, it uses Bubblewrap (`bwrap`). Use `LocalSandbox.detectIsolation()` to check whether Seatbelt or Bubblewrap is available on the current operating system.
@@ -202,6 +160,10 @@ Mastra filesystems connect agents and sandboxes to provider-backed storage such 
 
 See [Filesystem](/docs/sandbox/filesystem) for providers, file tools, and mounts.
 
+## Computer use
+
+Supported desktop sandboxes give agents screenshot, mouse, and keyboard control. See [Computer](/docs/sandbox/computer) for supported sandboxes and configuration.
+
 ## Sandboxes per user or thread
 
 Use a **resolver** when each user, tenant, or thread needs a separate sandbox. Set `sandboxCacheKey` to the identity that owns the sandbox so later requests reuse the same live environment.
@@ -209,18 +171,18 @@ Use a **resolver** when each user, tenant, or thread needs a separate sandbox. S
 This example creates and caches one Daytona sandbox per user:
 
 ```typescript title="src/mastra/workspaces.ts"
-import { Workspace } from '@mastra/core/workspace'
-import { DaytonaSandbox } from '@mastra/daytona'
+import { Workspace } from '@mastra/core/workspace';
+import { DaytonaSandbox } from '@mastra/daytona';
 
 const workspace = new Workspace({
   sandbox: async ({ requestContext }) => {
-    const userId = requestContext.get('user-id') as string
-    const sandbox = new DaytonaSandbox({ id: `user-${userId}` })
-    await sandbox.start()
-    return sandbox
+    const userId = requestContext.get('user-id') as string;
+    const sandbox = new DaytonaSandbox({ id: `user-${userId}` });
+    await sandbox.start();
+    return sandbox;
   },
   sandboxCacheKey: ({ requestContext }) => requestContext.get('user-id') as string,
-})
+});
 ```
 
 The first request from a user creates the sandbox. Later requests with the same user ID reuse it.
@@ -228,36 +190,36 @@ The first request from a user creates the sandbox. Later requests with the same 
 For a sandbox with persistent storage, create a [filesystem](/docs/sandbox/filesystem) and mount it inside the resolver. This example creates one Daytona sandbox and one S3 storage prefix per memory thread, then mounts the storage at `/workspace`:
 
 ```typescript title="src/mastra/workspaces.ts"
-import { MASTRA_THREAD_ID_KEY, type RequestContext } from '@mastra/core/request-context'
-import { Workspace } from '@mastra/core/workspace'
-import { DaytonaSandbox } from '@mastra/daytona'
-import { S3Filesystem } from '@mastra/s3'
+import { MASTRA_THREAD_ID_KEY, type RequestContext } from '@mastra/core/request-context';
+import { Workspace } from '@mastra/core/workspace';
+import { DaytonaSandbox } from '@mastra/daytona';
+import { S3Filesystem } from '@mastra/s3';
 
 const getThreadId = (requestContext: RequestContext) =>
-  requestContext.get(MASTRA_THREAD_ID_KEY) as string
+  requestContext.get(MASTRA_THREAD_ID_KEY) as string;
 
 const createThreadFilesystem = (threadId: string) =>
   new S3Filesystem({
     bucket: process.env.S3_BUCKET!,
     region: process.env.S3_REGION!,
     prefix: `threads/${threadId}`,
-  })
+  });
 
 const workspace = new Workspace({
   filesystem: ({ requestContext }) => createThreadFilesystem(getThreadId(requestContext)),
   sandbox: async ({ requestContext }) => {
-    const threadId = getThreadId(requestContext)
+    const threadId = getThreadId(requestContext);
     const sandbox = new DaytonaSandbox({
       id: `thread-${threadId}`,
       language: 'typescript',
-    })
+    });
 
-    await sandbox.start()
-    await sandbox.mount(createThreadFilesystem(threadId), '/workspace')
-    return sandbox
+    await sandbox.start();
+    await sandbox.mount(createThreadFilesystem(threadId), '/workspace');
+    return sandbox;
   },
   sandboxCacheKey: ({ requestContext }) => getThreadId(requestContext),
-})
+});
 ```
 
 The first request in a thread runs the resolver and starts the sandbox. Later requests with the same thread ID reuse the cached sandbox. A different thread ID creates a different sandbox and storage prefix.
@@ -281,7 +243,7 @@ Because a [resolver-backed sandbox](#sandboxes-per-user-or-thread) isn't known u
 When agents start background processes through `execute_command`, you can receive lifecycle callbacks for stdout, stderr, and process exit. Configure these through the `backgroundProcesses` option on its `WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND` entry:
 
 ```typescript title="src/mastra/workspaces.ts"
-import { Workspace, LocalSandbox, WORKSPACE_TOOLS } from '@mastra/core/workspace'
+import { Workspace, LocalSandbox, WORKSPACE_TOOLS } from '@mastra/core/workspace';
 
 const workspace = new Workspace({
   sandbox: new LocalSandbox({ workingDirectory: './workspace' }),
@@ -294,7 +256,7 @@ const workspace = new Workspace({
       },
     },
   },
-})
+});
 ```
 
 These callbacks fire for all background processes started by the agent through `execute_command`.
@@ -332,7 +294,7 @@ const sandbox = new LocalSandbox({
   onStart: ({ sandbox }) => console.log(`Started ${sandbox.id}`),
   onStop: ({ sandbox }) => console.log(`Stopping ${sandbox.id}`),
   onDestroy: ({ sandbox }) => console.log(`Destroying ${sandbox.id}`),
-})
+});
 ```
 
 `onStart` runs after the sandbox starts. `onStop` and `onDestroy` run before their corresponding operation.
@@ -358,7 +320,7 @@ Mastra doesn't define one network policy that applies to every sandbox backend. 
 If an agent starts a web server inside a remote sandbox, that server initially listens on a port inside the sandbox. Backends that support port exposure implement `sandbox.networking.getPortUrl()` to return a URL you can use to preview or test the server from outside the sandbox:
 
 ```typescript
-const url = await sandbox.networking?.getPortUrl(8000)
+const url = await sandbox.networking?.getPortUrl(8000);
 ```
 
 Depending on the backend's access controls, the URL may make the service reachable to others. This inbound exposure is separate from outbound sandbox access. `LocalSandbox` with native isolation blocks network access by default unless `allowNetwork` is enabled. Without native isolation, local commands use the host network.
@@ -366,12 +328,12 @@ Depending on the backend's access controls, the URL may make the service reachab
 For example, `DaytonaSandbox` allows outbound access unless you configure a restriction. Set `networkBlockAll` with a domain allowlist when the task only needs specific services:
 
 ```typescript
-import { DaytonaSandbox } from '@mastra/daytona'
+import { DaytonaSandbox } from '@mastra/daytona';
 
 const sandbox = new DaytonaSandbox({
   networkBlockAll: true,
   domainAllowList: 'registry.npmjs.org,api.github.com',
-})
+});
 ```
 
 Daytona applies these settings when it creates the sandbox. It also supports CIDR rules through `networkAllowList`. See the [Daytona integration page](/integrations/sandboxes/daytona) for full configuration details.
@@ -385,7 +347,7 @@ await sandbox.executeCommand('node', ['scripts/download-reports.js'], {
   env: {
     REPORTS_READ_TOKEN: process.env.REPORTS_READ_TOKEN,
   },
-})
+});
 ```
 
 ## Related

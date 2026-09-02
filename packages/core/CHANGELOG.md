@@ -1,5 +1,91 @@
 # @mastra/core
 
+## 1.64.0-alpha.8
+
+### Patch Changes
+
+- Fixed tool observability helpers to emit correlated logs and child spans during agent execution. ([#22887](https://github.com/mastra-ai/mastra/pull/22887))
+
+## 1.64.0-alpha.7
+
+### Minor Changes
+
+- Added support for server-defined `toModelOutput` on client-side tools. When a tool without an `execute` function runs in the browser and sends its result back, the server tool definition's `toModelOutput` now transforms that result before the model sees it — matching AI SDK behavior. This lets a client tool return a compact payload (like an uploaded file id or base64 image) and have the server map it into real model content: ([#22437](https://github.com/mastra-ai/mastra/pull/22437))
+
+  ```ts
+  import { createTool } from '@mastra/core/tools';
+  import { z } from 'zod';
+
+  // No execute: the browser runs this tool and returns { fileId, dataUrl }
+  const takeScreenshot = createTool({
+    id: 'takeScreenshot',
+    description: 'Captures the screen',
+    inputSchema: z.object({}),
+    outputSchema: z.object({ fileId: z.string(), dataUrl: z.string() }),
+    toModelOutput: output => ({
+      type: 'content',
+      value: [{ type: 'image-url', url: output.dataUrl }],
+    }),
+  });
+  ```
+
+  Previously the model only ever saw the raw JSON tool result and transforming it required a custom input processor.
+
+### Patch Changes
+
+- Update README to include accurate, up-to-date information ([#22858](https://github.com/mastra-ai/mastra/pull/22858))
+
+- Fixed onDelegationComplete reporting successful sub-agent runs when the finish reason is error. ([#22483](https://github.com/mastra-ai/mastra/pull/22483))
+
+- Updated dependencies [[`e983f74`](https://github.com/mastra-ai/mastra/commit/e983f749873189f767f509eb33d1a3596c0f1c74)]:
+  - @mastra/schema-compat@1.3.8-alpha.1
+
+## 1.64.0-alpha.6
+
+### Patch Changes
+
+- Fixed approval event delivery for function-form `toolDisplay` in streaming channels. A function-form `toolDisplay` now receives `approval` events when `streaming: true`, matching static mode. Return `{ kind: 'post', message }` to replace the built-in approval card; `undefined`, blank, or `stream` results fall back to the built-in card so the approval stays actionable. ([#22832](https://github.com/mastra-ai/mastra/pull/22832))
+
+- Fixed per-tool `requireApproval` functions (`needsApprovalFn`) receiving no context on durable agents and `agent.network()`. They now get the same `{ requestContext, workspace }` second argument as `stream()`/`generate()`, so approval logic that reads the request context works consistently. On durable agents the request context is restored from the persisted run snapshot when the check runs in another process or after a resume. Fixes #22491 ([#22841](https://github.com/mastra-ai/mastra/pull/22841))
+
+- Fixed workspace skill discovery silently reporting zero skills when the workspace filesystem is mis-wired. Invalid-argument errors (Node `ERR_INVALID_ARG*`, e.g. a non-string path handed to the skill source) now surface from refresh() instead of being logged as an inaccessible skills path warning. Genuine access failures and network errors keep the warn-and-continue behavior. Closes https://github.com/mastra-ai/mastra/issues/22639 ([#22823](https://github.com/mastra-ai/mastra/pull/22823))
+
+- Fixed `listResolved()` on versioned storage domains issuing one version query per listed entity. `@mastra/core` adds an overridable `getVersions(ids)` method that `listResolved()` uses to fetch all active versions in a single batch; adapters that don't override it keep their previous per-id behavior. `@mastra/pg` and `@mastra/libsql` override it for the agents and skills domains with a single `WHERE id IN (...)` query. Fixes https://github.com/mastra-ai/mastra/issues/22524 ([#22828](https://github.com/mastra-ai/mastra/pull/22828))
+
+## 1.64.0-alpha.5
+
+### Patch Changes
+
+- Fixed `SlashCommandChannelHandler`, `SlashCommandChannelHandlerConfig`, and `SlashCommandEvent` not being exported from `@mastra/core/channels`. Standalone slash-command handlers can now be typed directly instead of reaching through `ChannelHandlers['onSlashCommand']`. ([#22814](https://github.com/mastra-ai/mastra/pull/22814))
+
+  ```ts
+  import type { SlashCommandChannelHandler } from '@mastra/core/channels';
+
+  const onSlashCommand: SlashCommandChannelHandler = async (event, defaultHandler) => {
+    if (event.command === '/help') {
+      await event.channel.post('Available commands: /help');
+      return;
+    }
+    await defaultHandler();
+  };
+  ```
+
+- Exported the validateToolOutput helper from @mastra/core/tools so integrations can validate tool results against a schema and produce the same structured validation error as createTool. ([#22779](https://github.com/mastra-ai/mastra/pull/22779))
+
+- Fixed signals sent after DurableAgent recovery so they are drained by the resumed run. ([#22781](https://github.com/mastra-ai/mastra/pull/22781))
+
+- Fixed background tasks advertising the `_background` override to every tool. Previously, enabling `backgroundTasks` on the Mastra instance injected the `_background` field into every tool's input schema and listed every tool as background-eligible in the system prompt, even when neither the agent nor the tool opted in. Now only tools that are actually background-eligible — via the agent's `backgroundTasks.tools` config or the tool's own `background: { enabled: true }` — advertise the override, matching the runtime dispatch behavior. This removes roughly 2,000 characters of prompt overhead per ineligible tool and stops the model from being told it can background tools it cannot. Fixes [#22724](https://github.com/mastra-ai/mastra/issues/22724). ([#22777](https://github.com/mastra-ai/mastra/pull/22777))
+
+- Fixed scheduled workflows disappearing from Studio's Schedules tab for dynamically created workflows. Dynamic workflow definitions now persist their schedule configuration, so schedules are re-declared after a restart instead of being deleted as orphans. Schedules of dynamic workflows that fail to load are also kept instead of being swept. Fixes https://github.com/mastra-ai/mastra/issues/22756 ([#22778](https://github.com/mastra-ai/mastra/pull/22778))
+
+## 1.64.0-alpha.4
+
+### Patch Changes
+
+- Fixed LocalSandbox native isolation being unable to open /dev/null, which broke git, ssh, and shell redirections (e.g. `2>/dev/null`) inside the sandbox. On Linux, the Bubblewrap backend now mounts a fresh /dev with standard device nodes, emitted after all configured binds so existing workarounds like `readOnlyPaths: ['/dev']` no longer shadow it. On macOS, the Seatbelt profile now allows writing to the standard device nodes (/dev/null, /dev/zero, /dev/random, /dev/urandom, /dev/tty). Fixes https://github.com/mastra-ai/mastra/issues/22702 ([#22791](https://github.com/mastra-ai/mastra/pull/22791))
+
+- Removed the vulnerable @ai-sdk/provider-utils@3.x dependency (CVE-2026-8769 / GHSA-866g-f22w-33x8) from @mastra/core. The helpers it supplied are now sourced from the patched provider-utils 4.x line already installed, so security audits no longer flag @mastra/core and its dependents. AI SDK v5 model compatibility is unchanged. Fixes #22592. ([#22790](https://github.com/mastra-ai/mastra/pull/22790))
+
 ## 1.64.0-alpha.3
 
 ### Patch Changes

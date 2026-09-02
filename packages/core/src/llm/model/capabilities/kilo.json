@@ -6,6 +6,7 @@
     "amazon/nova-pro-v1",
     "anthropic/claude-3-haiku",
     "anthropic/claude-fable-5",
+    "anthropic/claude-fable-5.1",
     "anthropic/claude-haiku-4.5",
     "anthropic/claude-opus-4",
     "anthropic/claude-opus-4.1",
@@ -48,6 +49,7 @@
     "google/gemini-3.5-flash-lite",
     "google/gemini-3.6-flash",
     "google/gemini-3.7-flash",
+    "google/gemini-3.8-flash",
     "google/gemma-3-12b-it",
     "google/gemma-3-27b-it",
     "google/gemma-3-4b-it",
@@ -216,7 +218,8 @@
     "~moonshotai/kimi-latest",
     "~openai/gpt-latest",
     "~openai/gpt-mini-latest",
-    "~x-ai/grok-latest"
+    "~x-ai/grok-latest",
+    "~z-ai/glm-flash-latest"
   ],
   "temperature": [
     "aion-labs/aion-2.0",
@@ -290,6 +293,7 @@
     "google/gemini-3.5-flash-lite",
     "google/gemini-3.6-flash",
     "google/gemini-3.7-flash",
+    "google/gemini-3.8-flash",
     "google/gemma-2-27b-it",
     "google/gemma-3-12b-it",
     "google/gemma-3-27b-it",
@@ -316,7 +320,6 @@
     "liquid/lfm-2.5-2.6b:free",
     "mancer/weaver",
     "meituan/longcat-2.0",
-    "meituan/longcat-2.0-free",
     "meta-llama/llama-3.1-70b-instruct",
     "meta-llama/llama-3.1-8b-instruct",
     "meta-llama/llama-3.2-1b-instruct",
@@ -532,11 +535,13 @@
     "~google/gemini-pro-latest",
     "~moonshotai/kimi-latest",
     "~x-ai/grok-latest",
+    "~z-ai/glm-flash-latest",
     "~z-ai/glm-latest"
   ],
   "structuredOutput": [
     "anthracite-org/magnum-v4-72b",
     "anthropic/claude-fable-5",
+    "anthropic/claude-fable-5.1",
     "anthropic/claude-haiku-4.5",
     "anthropic/claude-opus-4.5",
     "anthropic/claude-opus-4.6",
@@ -590,6 +595,7 @@
     "google/gemini-3.5-flash-lite",
     "google/gemini-3.6-flash",
     "google/gemini-3.7-flash",
+    "google/gemini-3.8-flash",
     "google/gemma-2-27b-it",
     "google/gemma-3-12b-it",
     "google/gemma-3-27b-it",
@@ -802,6 +808,7 @@
     "~openai/gpt-latest",
     "~openai/gpt-mini-latest",
     "~x-ai/grok-latest",
+    "~z-ai/glm-flash-latest",
     "~z-ai/glm-latest"
   ]
 }

@@ -1,5 +1,11 @@
 # @mastra/voice-aws-nova-sonic
 
+## 0.2.2-alpha.1
+
+### Patch Changes
+
+- Update README to include accurate, up-to-date information ([#22858](https://github.com/mastra-ai/mastra/pull/22858))
+
 ## 0.2.2-alpha.0
 
 ### Patch Changes

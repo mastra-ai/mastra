@@ -68,6 +68,7 @@ describe('ExperimentScorerSummary', () => {
 
     const link = await screen.findByText('answer-relevancy');
     expect(link.closest('a')?.getAttribute('href')).toBe('/scorers/answer-relevancy');
+    expect(link.closest('a')?.hasAttribute('target')).toBe(false);
 
     await waitForMutationsIdle(queryClient);
   });

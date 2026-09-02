@@ -1,5 +1,11 @@
 # @mastra/auth-supabase
 
+## 1.1.4-alpha.1
+
+### Patch Changes
+
+- Update README to include accurate, up-to-date information ([#22858](https://github.com/mastra-ai/mastra/pull/22858))
+
 ## 1.1.4-alpha.0
 
 ### Patch Changes

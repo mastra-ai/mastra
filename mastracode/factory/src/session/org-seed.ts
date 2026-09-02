@@ -1,15 +1,15 @@
 /**
  * The tenant organization a session's knowledge is scoped to.
  *
- * Subconscious knowledge capture scopes every node and record on
- * `factoryOrgId`. A session that reaches the capture seam without one used to
+ * Subconscious knowledge curation scopes every node and record on
+ * `factoryOrgId`. A session that reaches the curation seam without one used to
  * fall back to the session owner id — for factory sessions the agent
  * controller's own id — so the knowledge landed under an org rung no reader
  * ever queries. The write succeeded and the read could never see it.
  *
  * The fix is that every session-creation path seeds the org it already holds,
  * and a path that cannot resolve one marks the session `factoryOrgUnresolved`
- * so the capture side refuses loudly instead of inventing an identity. "No
+ * so the curation side refuses loudly instead of inventing an identity. "No
  * project id" is not a proxy for "not a factory session" — chat sessions and
  * Slack channel sessions are factory-owned and carry no project id — which is
  * why the unresolved case needs its own explicit marker.
@@ -56,9 +56,9 @@ export function readRequestContextOrgId(requestContext: OrgBearingRequestContext
 /**
  * Whether a session state value counts as a resolved organization.
  *
- * The capture side trims before deciding (`sdk/src/agents/memory.ts`), so the
+ * The curation side trims before deciding (`sdk/src/agents/memory.ts`), so the
  * recovery guards have to agree with it: a whitespace-only value that reads as
- * truthy here would look resolved to a heal path while capture still refuses,
+ * truthy here would look resolved to a heal path while curation still refuses,
  * and nothing would ever repair it. Not every seam routes its seed through
  * `seedSessionOrg`, so this cannot be assumed away.
  */

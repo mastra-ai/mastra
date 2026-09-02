@@ -31,12 +31,12 @@ Pre-seeding `RequestContext` with `MastraMemory` **isn't** a supported way to dr
 `runEvals` accepts `targetOptions`, which is forwarded to `agent.generate()`. Passing `memory: { thread, resource }` runs every data item against the same thread, useful for testing recall across a multi-turn conversation.
 
 ```typescript title="src/mastra/agents/support-agent.test.ts"
-import { runEvals } from '@mastra/core/evals'
-import { supportAgent } from './support-agent'
-import { recallScorer } from '../scorers/recall-scorer'
+import { runEvals } from '@mastra/core/evals';
+import { supportAgent } from './support-agent';
+import { recallScorer } from '../scorers/recall-scorer';
 
-const memory = await supportAgent.getMemory()
-await memory!.createThread({ threadId: 'eval-thread', resourceId: 'ci-user' })
+const memory = await supportAgent.getMemory();
+await memory!.createThread({ threadId: 'eval-thread', resourceId: 'ci-user' });
 
 const result = await runEvals({
   target: supportAgent,
@@ -48,7 +48,7 @@ const result = await runEvals({
     { input: 'My order number is 12345' },
     { input: 'What is my order number?', groundTruth: '12345' },
   ],
-})
+});
 ```
 
 `targetOptions` is **global per call**. No per-item override on `RunEvalsDataItem` is available today.
@@ -58,36 +58,36 @@ const result = await runEvals({
 When each data item needs its own thread (the common CI shape), call `runEvals` once per item with a unique `targetOptions.memory` and aggregate the scores yourself.
 
 ```typescript title="src/mastra/agents/support-agent.test.ts"
-import { randomUUID } from 'node:crypto'
-import { runEvals } from '@mastra/core/evals'
-import { supportAgent } from './support-agent'
-import { recallScorer } from '../scorers/recall-scorer'
+import { randomUUID } from 'node:crypto';
+import { runEvals } from '@mastra/core/evals';
+import { supportAgent } from './support-agent';
+import { recallScorer } from '../scorers/recall-scorer';
 
-const memory = await supportAgent.getMemory()
-const resourceId = 'ci-user'
+const memory = await supportAgent.getMemory();
+const resourceId = 'ci-user';
 
 const items = [
   { input: 'Cats are mammals', groundTruth: 'mammals' },
   { input: 'Dogs are mammals too', groundTruth: 'mammals' },
-]
+];
 
 // `runEvals` returns `{ scores: Record<string, number>; summary: { totalItems } }`.
-const scores: number[] = []
+const scores: number[] = [];
 for (const item of items) {
-  const threadId = `eval-${randomUUID()}`
-  await memory!.createThread({ threadId, resourceId, title: item.input })
+  const threadId = `eval-${randomUUID()}`;
+  await memory!.createThread({ threadId, resourceId, title: item.input });
 
   const result = await runEvals({
     target: supportAgent,
     scorers: [recallScorer],
     targetOptions: { memory: { thread: threadId, resource: resourceId } },
     data: [item],
-  })
+  });
 
-  scores.push(result.scores[recallScorer.id])
+  scores.push(result.scores[recallScorer.id]);
 }
 
-const average = scores.reduce((a, b) => a + b, 0) / scores.length
+const average = scores.reduce((a, b) => a + b, 0) / scores.length;
 ```
 
 :::note
@@ -99,27 +99,27 @@ Create the thread before running the eval. Observational memory in `thread` scop
 `dataset.startExperiment({ target: agent })` **doesn't** forward a `memory` option to the agent, only `requestContext`. To run a stored dataset against a memory-enabled agent, use an inline `task` function and stash `{ threadId, resourceId }` in each item's `metadata`. The scorer pipeline still runs as normal.
 
 ```typescript title="src/mastra/evals/dataset-experiment.ts"
-import { randomUUID } from 'node:crypto'
-import { mastra } from '../index'
-import { supportAgent } from '../agents/support-agent'
-import { recallScorer } from '../scorers/recall-scorer'
+import { randomUUID } from 'node:crypto';
+import { mastra } from '../index';
+import { supportAgent } from '../agents/support-agent';
+import { recallScorer } from '../scorers/recall-scorer';
 
-const memory = await supportAgent.getMemory()
-const resourceId = 'ci-user'
+const memory = await supportAgent.getMemory();
+const resourceId = 'ci-user';
 
 const items = [
   { input: 'Cats are mammals', groundTruth: 'mammals', thread: `ds-${randomUUID()}` },
   { input: 'Dogs are mammals too', groundTruth: 'mammals', thread: `ds-${randomUUID()}` },
-]
+];
 
 for (const it of items) {
-  await memory!.createThread({ threadId: it.thread, resourceId, title: it.input })
+  await memory!.createThread({ threadId: it.thread, resourceId, title: it.input });
 }
 
 const dataset = await mastra.datasets.create({
   name: 'support-recall',
   description: 'Per-item memory via inline task + item metadata',
-})
+});
 
 await dataset.addItems({
   items: items.map(it => ({
@@ -127,21 +127,21 @@ await dataset.addItems({
     groundTruth: it.groundTruth,
     metadata: { threadId: it.thread, resourceId },
   })),
-})
+});
 
 const summary = await dataset.startExperiment({
   scorers: [recallScorer],
   task: async ({ input, metadata }) => {
     const { threadId, resourceId: rid } = (metadata ?? {}) as {
-      threadId: string
-      resourceId: string
-    }
+      threadId: string;
+      resourceId: string;
+    };
     const result = await supportAgent.generate(input as string, {
       memory: { thread: threadId, resource: rid },
-    })
-    return result.text
+    });
+    return result.text;
   },
-})
+});
 ```
 
 The inline `task` receives the item's `metadata`, so each row can drive its own thread without changing the agent or any scorer. Visit [runEvals reference](/reference/evals/run-evals) and [Dataset reference](/reference/datasets/dataset) for full configuration.
@@ -149,6 +149,6 @@ The inline `task` receives the item's `metadata`, so each row can drive its own 
 ## Related
 
 - [Running scorers in CI](/docs/evals/running-in-ci)
-- [Running experiments](/docs/datasets/running-experiments)
+- [Running experiments](/docs/evals/experiments)
 - [Observational memory](/docs/memory/observational-memory)
 - [runEvals API reference](/reference/evals/run-evals)

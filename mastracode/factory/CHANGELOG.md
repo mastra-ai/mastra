@@ -1,5 +1,111 @@
 # @mastra/factory
 
+## 0.12.0-alpha.13
+
+### Patch Changes
+
+- Updated dependencies [[`ea56b1f`](https://github.com/mastra-ai/mastra/commit/ea56b1fa6e0f99673d2f8a5b7dacc8d351507ff7)]:
+  - @mastra/core@1.64.0-alpha.8
+  - @mastra/code-sdk@1.6.0-alpha.10
+
+## 0.12.0-alpha.12
+
+### Patch Changes
+
+- Update README to include accurate, up-to-date information ([#22858](https://github.com/mastra-ai/mastra/pull/22858))
+
+- Improve internal observational-memory processing. ([#22738](https://github.com/mastra-ai/mastra/pull/22738))
+
+- Fixed issues and pull requests from outside the write-access circle asking for approval again at every lane after a person had already started them. Starting, dragging, or approving a run on such a card now carries that consent through the runs queued by the card's agent on its way to review. One gesture takes the card to a pull request instead of one click per lane. The same holds when a person creates a card straight into a working lane or moves it there through the API, and when the card's agent moves it on from a chat: the run queued by that move no longer waits for a click. Runs queued by a GitHub event on the card still ask first. An agent still cannot pull a rested external card back into work. A run pre-approved by an agent opens its session under the repository connector, never under the agent's id. ([#22862](https://github.com/mastra-ai/mastra/pull/22862))
+
+- Fixed board cards for imported GitHub and Linear issues/PRs showing "just now" — cards now show how long ago the issue or PR was opened upstream instead of when the factory first saw it. ([#22848](https://github.com/mastra-ai/mastra/pull/22848))
+
+- Fixed "Linked card could not be filed: A work item cannot relate to itself" on Review cards. When GitHub polling re-observed a pull request that already had a card, the dispatcher tried to link the card to itself as its parent. ([#22848](https://github.com/mastra-ai/mastra/pull/22848))
+
+- Fixed personal memory settings in the web app showing (and running) the default Gemini observer model after signing in with another provider. Signing in with a provider OAuth flow or saving a personal API key now seeds your unset observer and reflector models from that provider, matching the TUI onboarding behavior. ([#22847](https://github.com/mastra-ai/mastra/pull/22847))
+
+- Updated dependencies [[`e983f74`](https://github.com/mastra-ai/mastra/commit/e983f749873189f767f509eb33d1a3596c0f1c74), [`b40fa91`](https://github.com/mastra-ai/mastra/commit/b40fa91496d794e060494f9c0d2fe940912f9190), [`cedc25d`](https://github.com/mastra-ai/mastra/commit/cedc25d8c2dec005d8b10b6ce2d36feef1162ff0), [`9fdb3bc`](https://github.com/mastra-ai/mastra/commit/9fdb3bc0f9bfab5269b4f3045595e62323da5d3a)]:
+  - @mastra/slack@1.6.3-alpha.1
+  - @mastra/code-sdk@1.6.0-alpha.9
+  - @mastra/core@1.64.0-alpha.7
+  - @mastra/auth-studio@1.3.5-alpha.1
+  - @mastra/auth-workos@1.6.5-alpha.1
+
+## 0.12.0-alpha.11
+
+### Minor Changes
+
+- Session start checks for the `.mastra-sandbox/setup` marker beside the checkout and skips the setup command when the marker holds the sha256 digest of the project's current setup command. Sandboxes booted from a warm repo template carry the marker already; setup runs once when it is missing or stale and writes the marker afterwards. ([#22837](https://github.com/mastra-ai/mastra/pull/22837))
+
+### Patch Changes
+
+- Updated dependencies [[`c1d3422`](https://github.com/mastra-ai/mastra/commit/c1d3422e8052a4282e8547df914b6231e5345f01), [`4596348`](https://github.com/mastra-ai/mastra/commit/45963483f4cd2810f0646469916f74266a3dd607), [`e8aca33`](https://github.com/mastra-ai/mastra/commit/e8aca339dc92c0b60baad3d948a7c48ec9ae106f), [`19b71cf`](https://github.com/mastra-ai/mastra/commit/19b71cf1de8afe6f69a3171d8a5a28086790e49b)]:
+  - @mastra/core@1.64.0-alpha.6
+  - @mastra/code-sdk@1.6.0-alpha.8
+
+## 0.12.0-alpha.10
+
+### Patch Changes
+
+- Reduced the GitHub integration's REST request volume. Collaborator permission lookups are cached for 30 minutes per repo and login, and the PR/issue reconcile sweeps default to hourly instead of every 5 minutes; event polling and webhooks remain the primary sync. Override the interval with `MASTRACODE_PLATFORM_GITHUB_RECONCILE_INTERVAL_MS` (platform) or `MASTRACODE_GITHUB_RECONCILE_INTERVAL_MS` (direct), or the `_PR_` / `_ISSUE_` variants. ([#22835](https://github.com/mastra-ai/mastra/pull/22835))
+
+## 0.12.0-alpha.9
+
+### Patch Changes
+
+- **Session status** ([#22786](https://github.com/mastra-ai/mastra/pull/22786))
+
+  - Fixed session status disagreeing between sidebar rows, board cards, and the open chat.
+  - Running, setting up, and waiting-on-you states now read the same after a reload and in every tab.
+  - Removed the per-browser "your turn" mark; a card waiting on a person is marked from the card itself, and a finished session with nothing waiting shows as idle.
+
+  **Chat**
+
+  - Fixed the favicon claiming the session awaits input while history is still loading.
+  - Allow steering or stopping a running session as soon as it is connected.
+
+  **Done sound**
+
+  - Plays once when a run watched in this tab ends.
+
+- A run started from a work item with comments shows its prompt as the collapsed skill row again, with the item's discussion in its own collapsible row beside it, instead of one raw message wide enough to break the page. Only that discussion may follow the skill envelope; anything else keeps the message raw. ([#22551](https://github.com/mastra-ai/mastra/pull/22551))
+
+  The Mastra Code terminal folds the same prompt into its skill row.
+
+- **Session comments panel** ([#22551](https://github.com/mastra-ai/mastra/pull/22551))
+
+  The comments panel opens at half the height of the chat and grows with the conversation up to the full column, instead of opening full height around an empty feed. It morphs open from the workspace card. The composer is a flush bar at the bottom edge and takes focus as the panel opens. A comment that lands while you are watching rises into place. Editing a comment saves on Enter and keeps Shift+Enter for a new line, with Cancel and Save inside the bottom right of the field. The edit field grows with its text up to ten lines, then scrolls, with no resize handle. The workspace card's corners are concentric with the rows inside it. Session rows in the sidebar no longer open their hover details on a touch viewport, where the card could only appear behind the tap that already navigated away.
+
+  **Board cards**
+
+  A sent comment lands in the feed as soon as the server stores it, with no dimmed placeholder. A failed send keeps the draft and shows the error. Opening a card widens a copy of it over the card, every row anchored where the card had it, and pulls a tray out from beneath, a little narrower than the copy, so opening moves nothing you were about to click. Hovering a card no longer floats its full title over it; the open copy shows it whole.
+
+  The tray holds one timeline in time order: the item's runs, moves and comments, with the composer at the bottom. The description heads that stream in a block of its own, an Activity rule between them. The tray opens at its full height whatever the stream holds, waits for the description and the comments together, and lands them one after another, so nothing shifts once it loads.
+
+  Cards share a minimum height, with their bottom row pinned to the bottom edge. That row leads with one small button, the likeliest next click: the item's run, Retry after a failure, the suggested run while one waits, Open session while one runs. It lights up only while the card waits on you, to release a suggested run, retry a failure, or answer a session that asked. It goes quiet the moment a run is starting, so a lit button on the board always means your turn. A card in a lane leads with that lane's own run. The other buttons sit tucked under the first like pulled tabs, on the card and in its open copy alike. While a session runs, no rival run is offered beside it. The suggestion itself is a badge in the status row. The last worker sits at the right of the bottom row, the name before the picture, and the External badge sits at the right of its own row above. An expand icon appears beside the card's menu on hover, in the spot where the open copy puts Collapse. The copy names its source link with the item's icon and number instead of an arrow. The card's corners round a little more, concentric with the buttons in them, and the empty state of a column rounds its corners the same way.
+
+  **Intake and the rest of the board**
+
+  An intake candidate opens the same way, its run buttons in the copy and its description in the tray. Labels stay on one line that scrolls sideways instead of wrapping. A card near the bottom of the window opens its tray above the card instead of climbing to fit, and in the last column the tray slides left by its overflow while the copy stays over the card. The board dims under the open card, and a click on the dim closes it without pressing whatever sat underneath.
+
+  **On a phone**
+
+  The sheet opens straight onto the same timeline and composer, and hugs its content instead of opening at a fixed height.
+
+- Updated dependencies [[`decd47d`](https://github.com/mastra-ai/mastra/commit/decd47d0db2a891a6832e226557145b6658b0b19), [`285ce1c`](https://github.com/mastra-ai/mastra/commit/285ce1c1399341a37e76233aa94dbf9f1a41bd5d), [`5b5e3cc`](https://github.com/mastra-ai/mastra/commit/5b5e3cc006950b0ff9720c5be8396d4c95e8a6ac), [`045c3c7`](https://github.com/mastra-ai/mastra/commit/045c3c78f2129fea5d4467bb26cff2b49788b3d0), [`d53a056`](https://github.com/mastra-ai/mastra/commit/d53a05614893e8d1bbfdab50b42c19435e6bd065)]:
+  - @mastra/core@1.64.0-alpha.5
+  - @mastra/code-sdk@1.6.0-alpha.7
+
+## 0.12.0-alpha.8
+
+### Patch Changes
+
+- Sessions on a remote sandbox with an absolute `workingDirectory` resolve the checkout at `<workingDirectory>/<repo>` without probing the VM. Sandboxes without one (or with a non-absolute one) keep the probe behavior. ([#22698](https://github.com/mastra-ai/mastra/pull/22698))
+
+- Updated dependencies [[`a499422`](https://github.com/mastra-ai/mastra/commit/a499422cd7eccca184cac7b7a684a6199784aa82), [`9d3073c`](https://github.com/mastra-ai/mastra/commit/9d3073c230dbff45d58c259d676b2b137afd2ff5)]:
+  - @mastra/core@1.64.0-alpha.4
+  - @mastra/code-sdk@1.6.0-alpha.6
+
 ## 0.12.0-alpha.7
 
 ### Patch Changes

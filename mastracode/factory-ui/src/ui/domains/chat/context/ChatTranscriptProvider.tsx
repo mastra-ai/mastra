@@ -1,15 +1,16 @@
 import type { MastraDBMessage } from '@mastra/core/agent-controller';
 import type { ReactNode } from 'react';
-import { useEffect, useEffectEvent, useReducer } from 'react';
+import { useContext, useEffect, useEffectEvent, useReducer } from 'react';
 
+import { chatSessionPhase } from '../../workspaces/services/sessionStatus';
 import { useAgentControllerTranscript } from '../hooks/useAgentControllerTranscript';
 import { initialChatRuntime, runtimeReducer } from '../services/runtime';
 import type { ChatRuntimeState } from '../services/runtime';
 import type { TranscriptState } from '../services/transcript';
 import { SessionFavicon } from '../components/SessionFavicon';
-import type { SessionFaviconState } from '../components/SessionFavicon';
 import { ChatConnectionProvider } from './ChatConnectionProvider';
 import { ChatRuntimeContext } from './ChatRuntimeContext';
+import { ChatThreadMessagesContext } from './ChatThreadMessagesContext';
 import { ChatTranscriptContext } from './ChatTranscriptContext';
 import type { ChatTranscriptApi, LoadMoreHistory } from './ChatTranscriptContext';
 import { useChatConnection } from './useChatConnection';
@@ -84,28 +85,6 @@ function ChatRuntimeValueProvider({ children, runtime }: { children: ReactNode; 
   );
 }
 
-// Precedence mirrors `ChatMessageBoundary` so the favicon and the screen agree.
-function faviconStateFor({
-  hasThread,
-  sessionError,
-  initializing,
-  threadError,
-  busy,
-}: {
-  hasThread: boolean;
-  sessionError: boolean;
-  initializing: boolean;
-  threadError: boolean;
-  busy: boolean;
-}): SessionFaviconState | undefined {
-  if (sessionError) return 'error';
-  if (initializing) return 'initializing';
-  if (!hasThread) return undefined;
-  if (threadError) return 'error';
-  if (busy) return 'working';
-  return 'awaiting';
-}
-
 function ChatTranscriptValueProvider({
   children,
   threadId,
@@ -119,6 +98,7 @@ function ChatTranscriptValueProvider({
 }) {
   const connection = useChatConnection();
   const { sessionError, sandboxPreparing } = useChatSessionContext();
+  const messagesThreadId = useContext(ChatThreadMessagesContext)?.threadId;
   const messagesInitializing = useChatMessagesInitializing();
   const messagesError = useChatMessagesError();
   const { transcript, initialHistoryReady, reset, localUser, failLocalUser, resolvePrompt, clearPending, pushNotice } =
@@ -133,9 +113,22 @@ function ChatTranscriptValueProvider({
     usage: transcript.usage ?? connection.state?.tokenUsage,
   };
   const busy = connection.state?.running === true || effectiveTranscript.pending;
+  const historyInitializing = Boolean(messagesThreadId) && !messagesError && !initialHistoryReady;
+  const initializing = sandboxPreparing || messagesInitializing || historyInitializing;
+  const phase = chatSessionPhase({
+    sessionError: Boolean(sessionError),
+    threadError: messagesError || connection.status === 'error',
+    hasThread: Boolean(effectiveThreadId),
+    running: connection.state?.running === true,
+    initializing,
+    pending: effectiveTranscript.pending,
+  });
   const transcriptValue: ChatTranscriptApi = {
     transcript: effectiveTranscript,
     busy,
+    phase,
+    initializing,
+    historyInitializing,
     initialHistoryReady,
     localUser,
     failLocalUser,
@@ -146,17 +139,9 @@ function ChatTranscriptValueProvider({
     loadMore,
   };
 
-  const faviconState = faviconStateFor({
-    hasThread: Boolean(effectiveThreadId),
-    sessionError: Boolean(sessionError),
-    initializing: sandboxPreparing || messagesInitializing,
-    threadError: messagesError || connection.status === 'error',
-    busy,
-  });
-
   return (
     <ChatTranscriptContext.Provider value={transcriptValue}>
-      <SessionFavicon state={faviconState} />
+      <SessionFavicon state={phase} />
       {children}
     </ChatTranscriptContext.Provider>
   );

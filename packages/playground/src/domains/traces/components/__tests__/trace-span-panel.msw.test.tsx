@@ -144,6 +144,42 @@ describe('TraceSpanPanel', () => {
     await waitFor(() => expect(queryClient.isFetching()).toBe(0));
   });
 
+  it('given an agent root span, then the trace summary shows the entity linked to its agent page, start time, duration, and a Spans tab', async () => {
+    installHandlers();
+    const { queryClient } = renderPanel();
+
+    expect(await screen.findByText(`# ${TRACE_ID}`)).not.toBeNull();
+    await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+
+    // Entity block: type label + name linking to the agent page. ("Agent" also
+    // appears as the span-type badge in the tree, so allow multiple matches.)
+    expect(screen.getAllByText('Agent').length).toBeGreaterThan(0);
+    const entityLink = screen.getByRole('link', { name: /Weather Agent/ });
+    expect(entityLink.getAttribute('href')).toBe('/agents/weather-agent/chat/new');
+
+    // Start time + duration are shown; the old key-value rows are gone.
+    expect(screen.getByLabelText(/^Started at /)).not.toBeNull();
+    expect(screen.getByText('1.0s')).not.toBeNull();
+    expect(screen.queryByText('Status')).toBeNull();
+    expect(screen.queryByText('Ended at')).toBeNull();
+    // Tab labels ("Spans") only render when score/feedback slots are provided;
+    // that rendering is covered by the playground-ui unit tests.
+  });
+
+  it('given a workflow root span, then the entity links to its workflow graph', async () => {
+    installHandlers();
+    renderPanel({
+      spans: panelTraceSpans.spans.map(span =>
+        span.parentSpanId == null
+          ? { ...span, entityType: 'workflow_run', entityId: 'daily-report', entityName: 'Daily report' }
+          : span,
+      ),
+    });
+
+    const entityLink = await screen.findByRole('link', { name: /Daily report/ });
+    expect(entityLink.getAttribute('href')).toBe('/workflows/daily-report/graph');
+  });
+
   it('given anchorSpanId (branches mode), then the selected anchor span shows trace-level metadata', async () => {
     installHandlers();
     const { queryClient } = renderPanel({ anchorSpanId: 'span-child-1', initialSpanId: 'span-child-1' });

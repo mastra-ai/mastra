@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { boardCardStatus } from './boardCardStatus';
+import { boardCardStatus, itemAwaitsPerson } from './boardCardStatus';
 import type { FactoryDecisionSummary } from './services/decisions';
 
 function decision(overrides: Partial<FactoryDecisionSummary> = {}): FactoryDecisionSummary {
@@ -13,6 +13,7 @@ function decision(overrides: Partial<FactoryDecisionSummary> = {}): FactoryDecis
     status: 'leased',
     attempts: 1,
     failureOccurrence: 0,
+    source: null,
     failureCode: null,
     canRetry: true,
     lastError: null,
@@ -90,17 +91,36 @@ describe('boardCardStatus', () => {
     // board ends up showing failures nobody caused.
     expect(
       boardCardStatus({
-        decision: decision({ type: 'upsertLinkedWorkItem', status: 'retry', attempts: 0, lastError: null }),
+        decision: decision({
+          type: 'upsertLinkedWorkItem',
+          source: 'github-pr',
+          status: 'retry',
+          attempts: 0,
+          lastError: null,
+        }),
       }),
-    ).toEqual({ kind: 'busy', label: 'Filing a linked card…' });
+    ).toEqual({ kind: 'busy', label: 'Syncing GitHub pull request…' });
+  });
+
+  it('names the system a linked card is synced with', () => {
+    const sync = (source: FactoryDecisionSummary['source']) =>
+      boardCardStatus({ decision: decision({ type: 'upsertLinkedWorkItem', source, status: 'pending', attempts: 0 }) });
+    expect(sync('github-issue')).toEqual({ kind: 'busy', label: 'Syncing GitHub issue…' });
+    expect(sync('linear-issue')).toEqual({ kind: 'busy', label: 'Syncing Linear issue…' });
   });
 
   it('still reports an effect that has actually been tried and failed', () => {
     expect(
       boardCardStatus({
-        decision: decision({ type: 'upsertLinkedWorkItem', status: 'retry', attempts: 2, lastError: null }),
+        decision: decision({
+          type: 'upsertLinkedWorkItem',
+          source: 'github-issue',
+          status: 'retry',
+          attempts: 2,
+          lastError: null,
+        }),
       }),
-    ).toEqual({ kind: 'error', label: 'Linked card could not be filed — retrying…', detail: undefined });
+    ).toEqual({ kind: 'error', label: "Couldn't sync GitHub issue — retrying…", detail: undefined });
   });
 
   it('tells a run that is underway apart from one still waiting to start', () => {
@@ -108,9 +128,24 @@ describe('boardCardStatus', () => {
       kind: 'busy',
       label: 'Starting an automated run…',
     });
-    expect(boardCardStatus({ decision: decision({ status: 'leased' }) })).toEqual({
+    expect(boardCardStatus({ decision: decision({ status: 'leased' }), sessionStatus: 'working' })).toEqual({
       kind: 'busy',
       label: 'Automated run in progress…',
+    });
+  });
+
+  it('claims a run is in progress only while the run registry agrees', () => {
+    expect(boardCardStatus({ decision: decision({ status: 'leased' }), sessionStatus: 'initializing' })).toEqual({
+      kind: 'busy',
+      label: 'Preparing workspace…',
+    });
+    expect(boardCardStatus({ decision: decision({ status: 'leased' }) })).toEqual({
+      kind: 'busy',
+      label: 'Starting an automated run…',
+    });
+    expect(boardCardStatus({ decision: decision({ status: 'leased' }), sessionStatus: 'ready' })).toEqual({
+      kind: 'busy',
+      label: 'Starting an automated run…',
     });
   });
 
@@ -140,5 +175,17 @@ describe('boardCardStatus', () => {
 
   it('falls back to idle when nothing is in flight', () => {
     expect(boardCardStatus({})).toEqual({ kind: 'idle' });
+  });
+});
+
+describe('itemAwaitsPerson', () => {
+  it('marks a parked run and an effect that failed for good, never a retry the server still owns', () => {
+    expect(itemAwaitsPerson(decision({ status: 'proposed' }), undefined)).toBe(true);
+    expect(itemAwaitsPerson(undefined, decision({ status: 'failed' }))).toBe(true);
+    expect(itemAwaitsPerson(undefined, decision({ status: 'retry' }))).toBe(false);
+  });
+
+  it('stays quiet while an effect the card calls busy runs over the parked run', () => {
+    expect(itemAwaitsPerson(decision({ status: 'proposed' }), decision({ status: 'leased' }))).toBe(false);
   });
 });

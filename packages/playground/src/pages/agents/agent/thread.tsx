@@ -117,7 +117,7 @@ function AgentThread() {
                 key={`session-${agentId}-${actualThreadId}`}
                 agentId={agentId!}
                 threadId={actualThreadId}
-                enabled={Boolean(agent?.browserTools?.length)}
+                enabled={Boolean(agent?.hasBrowser ?? agent?.browserTools?.length)}
               >
                 <ThreadInputProvider>
                   <ObservationalMemoryProvider>

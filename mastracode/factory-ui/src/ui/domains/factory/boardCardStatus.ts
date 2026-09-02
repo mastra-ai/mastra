@@ -1,4 +1,5 @@
 import type { FactoryRunPhase } from '../../../hooks/useStartFactoryRun';
+import type { SessionRowStatus } from '../workspaces/services/sessionStatus';
 import { RUN_PHASE_LABELS } from './boardRunSpecs';
 import type { FactoryDecisionSummary } from './services/decisions';
 
@@ -22,11 +23,46 @@ export interface BoardCardStatusInput {
   decision?: FactoryDecisionSummary;
   /** Why the server refused the last move. */
   transitionReason?: string;
+  /** What the run registry and workspace records say about the card's bound sessions. */
+  sessionStatus?: SessionRowStatus;
+}
+
+/**
+ * The sidebar's reading of a card's `waiting` and `error` kinds: a run parked
+ * for approval, or an effect that failed for good. A retry the server still
+ * owns is not a person's turn, and neither is a proposal that an effect in
+ * flight already outranks on the card.
+ */
+export function itemAwaitsPerson(
+  proposal: FactoryDecisionSummary | undefined,
+  effect: FactoryDecisionSummary | undefined,
+): boolean {
+  if (effect) return effect.status === 'failed';
+  return proposal !== undefined;
+}
+
+/** The system a linked card is synced with, named the way that system names the thing. */
+function linkedSourceName(source: FactoryDecisionSummary['source']): string {
+  switch (source) {
+    case 'github-issue':
+      return 'GitHub issue';
+    case 'github-pr':
+      return 'GitHub pull request';
+    case 'linear-issue':
+      return 'Linear issue';
+    default:
+      // Every linked-card decision carries its source; only a manual card would land here.
+      return 'card';
+  }
 }
 
 /** Human phrasing for a rule effect, by decision type. `underway` speaks for a leased decision. */
-function automationCopy(type: string): { busy: string; underway: string; failed: string } {
-  switch (type) {
+function automationCopy(decision: Pick<FactoryDecisionSummary, 'type' | 'source'>): {
+  busy: string;
+  underway: string;
+  failed: string;
+} {
+  switch (decision.type) {
     case 'invokeSkill':
       return {
         busy: 'Starting an automated run…',
@@ -38,8 +74,9 @@ function automationCopy(type: string): { busy: string; underway: string; failed:
       return { busy, underway: busy, failed: 'Automatic move failed' };
     }
     case 'upsertLinkedWorkItem': {
-      const busy = 'Filing a linked card…';
-      return { busy, underway: busy, failed: 'Linked card could not be filed' };
+      const source = linkedSourceName(decision.source);
+      const busy = `Syncing ${source}…`;
+      return { busy, underway: busy, failed: `Couldn't sync ${source}` };
     }
     case 'sendMessage':
     case 'notify': {
@@ -51,6 +88,19 @@ function automationCopy(type: string): { busy: string; underway: string; failed:
       return { busy, underway: busy, failed: 'Automation failed' };
     }
   }
+}
+
+/**
+ * A leased `invokeSkill` decision also brackets workspace materialization and
+ * kickoff, so `underway` may claim a run only while the run registry agrees.
+ */
+function leasedInvokeSkillLabel(
+  sessionStatus: SessionRowStatus | undefined,
+  copy: { busy: string; underway: string },
+): string {
+  if (sessionStatus === 'working') return copy.underway;
+  if (sessionStatus === 'initializing') return 'Preparing workspace…';
+  return copy.busy;
 }
 
 /**
@@ -72,7 +122,7 @@ export function boardCardStatus(input: BoardCardStatusInput): BoardCardStatus {
   if (decision?.status === 'failed') {
     return {
       kind: 'error',
-      label: automationCopy(decision.type).failed,
+      label: automationCopy(decision).failed,
       ...(decision.canRetry ? { retryDecisionId: decision.id } : {}),
       detail: decision.lastError ?? undefined,
     };
@@ -86,13 +136,15 @@ export function boardCardStatus(input: BoardCardStatusInput): BoardCardStatus {
   if (decision?.status === 'retry' && (decision.attempts > 0 || decision.lastError)) {
     return {
       kind: 'error',
-      label: `${automationCopy(decision.type).failed} — retrying…`,
+      label: `${automationCopy(decision).failed} — retrying…`,
       detail: decision.lastError ?? undefined,
     };
   }
   if (decision) {
-    const copy = automationCopy(decision.type);
-    return { kind: 'busy', label: decision.status === 'leased' ? copy.underway : copy.busy };
+    const copy = automationCopy(decision);
+    if (decision.status !== 'leased') return { kind: 'busy', label: copy.busy };
+    const label = decision.type === 'invokeSkill' ? leasedInvokeSkillLabel(input.sessionStatus, copy) : copy.underway;
+    return { kind: 'busy', label };
   }
   // Nothing is moving on its own, so a parked run is the card's live question.
   if (input.proposal) {

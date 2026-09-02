@@ -43,23 +43,23 @@ These steps take you from an empty project to a voice agent you can talk to. A v
     Add a voice agent to your Mastra instance and expose a connection route. The `liveKitConnectionRoute()` helper adds a `POST /voice/livekit/connection-details` endpoint that mints a LiveKit token and dispatches your agent into a room:
 
     ```typescript title="src/mastra/index.ts"
-    import { Mastra } from '@mastra/core/mastra'
-    import { Agent } from '@mastra/core/agent'
-    import { liveKitConnectionRoute } from '@mastra/livekit'
+    import { Mastra } from '@mastra/core/mastra';
+    import { Agent } from '@mastra/core/agent';
+    import { liveKitConnectionRoute } from '@mastra/livekit';
 
     const supportAgent = new Agent({
       id: 'support',
       name: 'Support',
       instructions: 'You are a friendly phone support agent. Keep replies short and conversational.',
       model: '__GATEWAY_OPENAI_MODEL_MINI__',
-    })
+    });
 
     export const mastra = new Mastra({
       agents: { support: supportAgent },
       server: {
         apiRoutes: [liveKitConnectionRoute({ agentName: 'mastra-voice' })],
       },
-    })
+    });
     ```
   </StepItem>
 
@@ -67,9 +67,9 @@ These steps take you from an empty project to a voice agent you can talk to. A v
     Create the worker. It runs as a separate process, answers LiveKit sessions, and calls your agent each turn. Worker APIs live on the `@mastra/livekit/worker` entry point, so the Mastra server never loads the LiveKit agents runtime. This example uses LiveKit Inference model strings for speech-to-text and text-to-speech, so no provider plugins are required:
 
     ```typescript title="src/mastra/voice-worker.ts"
-    import { fileURLToPath } from 'node:url'
-    import { createLiveKitWorker, runLiveKitWorker } from '@mastra/livekit/worker'
-    import { mastra } from './index'
+    import { fileURLToPath } from 'node:url';
+    import { createLiveKitWorker, runLiveKitWorker } from '@mastra/livekit/worker';
+    import { mastra } from './index';
 
     export default createLiveKitWorker({
       mastra,
@@ -78,10 +78,10 @@ These steps take you from an empty project to a voice agent you can talk to. A v
       tts: 'cartesia/sonic-3',
       turnDetection: 'multilingual',
       greeting: 'Hi! How can I help you today?',
-    })
+    });
 
     if (process.argv[1] === fileURLToPath(import.meta.url)) {
-      runLiveKitWorker({ entry: import.meta.url, agentName: 'mastra-voice' })
+      runLiveKitWorker({ entry: import.meta.url, agentName: 'mastra-voice' });
     }
     ```
 
@@ -136,7 +136,7 @@ export default createLiveKitWorker({
     endpointing: { mode: 'dynamic', minDelay: 300, maxDelay: 3000 },
     interruption: { minDuration: 500, resumeFalseInterruption: true },
   },
-})
+});
 ```
 
 - `turnDetection: 'multilingual'`: Runs LiveKit's semantic end-of-turn model locally on CPU. It reads the live transcript to avoid cutting users off mid-thought. Use `'vad'` or `'stt'` for silence-based endpointing instead.
@@ -153,15 +153,15 @@ The top-level `stt` and `tts` options apply to every call. To pick them per call
 The following example gives each tenant its own text-to-speech voice, keyed off the `tenant` entry in the dispatch metadata:
 
 ```typescript title="src/mastra/voice-worker.ts"
-import * as cartesia from '@livekit/agents-plugin-cartesia'
+import * as cartesia from '@livekit/agents-plugin-cartesia';
 
 // One voice id per tenant, resolved from the dispatch metadata on each call.
 const tenantVoices: Record<string, string> = {
   meridian: 'your-cartesia-voice-id-1',
   coastal: 'your-cartesia-voice-id-2',
-}
+};
 // The resolver runs during call setup, so cache plugin instances across calls.
-const ttsByVoice = new Map<string, cartesia.TTS>()
+const ttsByVoice = new Map<string, cartesia.TTS>();
 
 export default createLiveKitWorker({
   mastra,
@@ -170,17 +170,17 @@ export default createLiveKitWorker({
   tts: 'cartesia/sonic-3',
   configuration: {
     tts: ({ requestContext }) => {
-      const voice = tenantVoices[requestContext?.tenant as string]
-      if (!voice) return undefined // fall back to the top-level `tts`
-      let tts = ttsByVoice.get(voice)
+      const voice = tenantVoices[requestContext?.tenant as string];
+      if (!voice) return undefined; // fall back to the top-level `tts`
+      let tts = ttsByVoice.get(voice);
       if (!tts) {
-        tts = new cartesia.TTS({ voice })
-        ttsByVoice.set(voice, tts)
+        tts = new cartesia.TTS({ voice });
+        ttsByVoice.set(voice, tts);
       }
-      return tts
+      return tts;
     },
   },
-})
+});
 ```
 
 `configuration.stt` works the same way for per-call transcription, for example a different transcription model or language per tenant. The greeting has a matching per-call form: `configuration.greeting.text` accepts a resolver with the same call context, so one worker can open with each tenant's own phrasing.
@@ -209,7 +209,7 @@ export default createLiveKitWorker({
   tts: 'cartesia/sonic-3',
   toolFeedback: ({ toolName }) =>
     toolName === 'searchOrders' ? 'Let me look that up.' : undefined,
-})
+});
 ```
 
 The phrase is spoken as part of the reply and recorded in the transcript.
@@ -221,8 +221,8 @@ By default the worker generates each reply with a Mastra agent. To run multi-ste
 LiveKit still owns the audio loop and calls into Mastra once per turn, so the workflow runs to completion each turn. The workflow can't suspend or resume, and no conversation state carries between turns. Pass the transcript in through `workflowInput` so the workflow stays stateless:
 
 ```typescript title="src/mastra/voice-worker.ts"
-import { createLiveKitWorker, chatContextToMessages } from '@mastra/livekit/worker'
-import { mastra } from './index'
+import { createLiveKitWorker, chatContextToMessages } from '@mastra/livekit/worker';
+import { mastra } from './index';
 
 export default createLiveKitWorker({
   mastra,
@@ -232,7 +232,7 @@ export default createLiveKitWorker({
   stt: 'deepgram/nova-3',
   tts: 'cartesia/sonic-3',
   turnDetection: 'multilingual',
-})
+});
 ```
 
 A workflow streams structured step events, not text. To speak tokens as they generate, the reply step pipes its agent's text into the step `writer`:
@@ -242,11 +242,11 @@ const generateResponse = createStep({
   id: 'generateResponse',
   // input and output schemas omitted
   execute: async ({ inputData, mastra, writer, abortSignal }) => {
-    const stream = await mastra.getAgent('voice').stream(inputData.history, { abortSignal })
-    await stream.textStream.pipeTo(writer)
-    return { assistantMessage: await stream.text }
+    const stream = await mastra.getAgent('voice').stream(inputData.history, { abortSignal });
+    await stream.textStream.pipeTo(writer);
+    return { assistantMessage: await stream.text };
   },
-})
+});
 ```
 
 - `replyStep`: Restricts spoken output to one step. Omit it to speak every step that writes to its `writer`.
@@ -261,15 +261,15 @@ With a workflow, the worker doesn't persist turns automatically the way an agent
 `createLiveKitWorker()` owns the LiveKit session for you. To own the session yourself, use [`MastraLLM`](#mastrallm) instead: a standard LiveKit LLM plugin that puts a Mastra agent in the `llm` slot of your own `voice.AgentSession`. The Mastra app, agent loop, tools, memory, observability, runs on your Mastra server, and the worker reaches it over HTTP. The worker process needs no Mastra app, database, or model provider keys.
 
 ```typescript title="src/mastra/voice-worker-plugin.ts"
-import { fileURLToPath } from 'node:url'
-import { defineAgent, voice } from '@livekit/agents'
-import * as silero from '@livekit/agents-plugin-silero'
-import { MastraLLM } from '@mastra/livekit/plugin'
-import { runLiveKitWorker } from '@mastra/livekit/worker'
+import { fileURLToPath } from 'node:url';
+import { defineAgent, voice } from '@livekit/agents';
+import * as silero from '@livekit/agents-plugin-silero';
+import { MastraLLM } from '@mastra/livekit/plugin';
+import { runLiveKitWorker } from '@mastra/livekit/worker';
 
 export default defineAgent({
   entry: async ctx => {
-    await ctx.connect()
+    await ctx.connect();
 
     const session = new voice.AgentSession({
       llm: new MastraLLM({
@@ -281,20 +281,20 @@ export default defineAgent({
       vad: await silero.VAD.load(),
       // Required with `memory`: LiveKit enables preemptive generation by default.
       turnHandling: { preemptiveGeneration: { enabled: false } },
-    })
+    });
 
     await session.start({
       // These instructions never reach the Mastra agent; its own instructions apply.
       agent: new voice.Agent({ instructions: 'Replies come from the Mastra agent.' }),
       room: ctx.room,
-    })
+    });
 
-    session.say('Hi! How can I help you today?')
+    session.say('Hi! How can I help you today?');
   },
-})
+});
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  runLiveKitWorker({ entry: import.meta.url, agentName: 'mastra-voice' })
+  runLiveKitWorker({ entry: import.meta.url, agentName: 'mastra-voice' });
 }
 ```
 
@@ -321,13 +321,13 @@ Don't combine the `memory` option with LiveKit's `preemptiveGeneration`, which L
 Use `dispatchVoiceSession()` to add a voice agent to a room from your own code, for example to join an existing room or to drive an outbound [SIP call](https://docs.livekit.io/sip/):
 
 ```typescript
-import { dispatchVoiceSession } from '@mastra/livekit'
+import { dispatchVoiceSession } from '@mastra/livekit';
 
 await dispatchVoiceSession({
   roomName: 'support-call-42',
   agentName: 'mastra-voice',
   metadata: { agentId: 'support', threadId: 'thread-42', resourceId: 'user-7' },
-})
+});
 ```
 
 ### Observability
@@ -341,9 +341,9 @@ When the Mastra instance has [observability](/docs/observability/overview) confi
 The worker is a separate process, so point storage at a backend that accepts concurrent writes from both the server and the worker. SQLite-backed [LibSQL](/integrations/databases/libsql) works. Single-writer stores don't. Traces, memory, and threads can share one store:
 
 ```typescript title="src/mastra/index.ts"
-import { Mastra } from '@mastra/core/mastra'
-import { LibSQLStore } from '@mastra/libsql'
-import { Observability, MastraStorageExporter } from '@mastra/observability'
+import { Mastra } from '@mastra/core/mastra';
+import { LibSQLStore } from '@mastra/libsql';
+import { Observability, MastraStorageExporter } from '@mastra/observability';
 
 export const mastra = new Mastra({
   storage: new LibSQLStore({ id: 'voice-agent-storage', url: 'file:./voice-agent.db' }),
@@ -355,7 +355,7 @@ export const mastra = new Mastra({
       },
     },
   }),
-})
+});
 ```
 
 Tracing is on by default. Pass `observability: false` to `createLiveKitWorker` to turn it off.
@@ -396,7 +396,7 @@ See [Realtime voice](#quickstart) for setup and concepts.
 The package has three entry points:
 
 - `@mastra/livekit`: server-side APIs, [`liveKitConnectionRoute()`](#livekitconnectionroute), [`dispatchVoiceSession()`](#dispatchvoicesession), [`pipeAgentReplyToWriter()`](#pipeagentreplytowriter), [`serializeSessionMetadata()`](#livekitsessionmetadata), and [`createEndCallTool()`](#createendcalltool). Import these from Mastra server code. This entry never loads the LiveKit agents runtime.
-- `@mastra/livekit/worker`: the worker runtime, [`createLiveKitWorker()`](#createlivekitworker), [`runLiveKitWorker()`](#runlivekitworker), [`chatContextToMessages()`](#chatcontexttomessages), and the session helpers [`speakGreeting()`](#speakgreeting), [`waitForAgentDoneSpeaking()`](#waitforagentdonespeaking), and [`runEndCall()`](#runendcall). Import it only from the worker entry file.
+- `@mastra/livekit/worker`: the worker runtime, [`createLiveKitWorker()`](#createlivekitworker), [`runLiveKitWorker()`](#runlivekitworker), [`chatContextToMessages()`](#chatcontexttomessages), the per-session agent class [`MastraVoiceAgent`](#mastravoiceagent), and the session helpers [`speakGreeting()`](#speakgreeting), [`waitForAgentDoneSpeaking()`](#waitforagentdonespeaking), and [`runEndCall()`](#runendcall). Import it only from the worker entry file.
 - `@mastra/livekit/plugin`: the LLM-component plugin, [`MastraLLM`](#mastrallm) and [`createRemoteAgentReplyGenerator()`](#createremoteagentreplygenerator). Import it in workers that build their own `voice.AgentSession`. `createRemoteAgentReplyGenerator()` is also exported from `@mastra/livekit/worker` because it plugs into `createLiveKitWorker()`'s `generate` option. `MastraLLM` is plugin-only.
 
 ### `createLiveKitWorker()`
@@ -404,9 +404,9 @@ The package has three entry points:
 Builds a LiveKit agent definition that answers voice sessions with Mastra agents. Use it as the default export of your worker entry file.
 
 ```typescript title="src/mastra/voice-worker.ts"
-import { fileURLToPath } from 'node:url'
-import { createLiveKitWorker, runLiveKitWorker } from '@mastra/livekit/worker'
-import { mastra } from './index'
+import { fileURLToPath } from 'node:url';
+import { createLiveKitWorker, runLiveKitWorker } from '@mastra/livekit/worker';
+import { mastra } from './index';
 
 export default createLiveKitWorker({
   mastra,
@@ -414,10 +414,10 @@ export default createLiveKitWorker({
   stt: 'deepgram/nova-3',
   tts: 'cartesia/sonic-3',
   turnDetection: 'multilingual',
-})
+});
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  runLiveKitWorker({ entry: import.meta.url, agentName: 'mastra-voice' })
+  runLiveKitWorker({ entry: import.meta.url, agentName: 'mastra-voice' });
 }
 ```
 
@@ -660,17 +660,17 @@ Starts the LiveKit worker CLI (`dev`, `start`, and `connect` subcommands) for a 
 Streams a Mastra agent's reply into a workflow step's `writer` on the workflow reply path. It forwards the agent's text deltas, so text-to-speech starts before the full reply is ready, and its tool-call chunks, so `toolFeedback` fires and `onTurnComplete` sees the tool list. Piping only `stream.textStream` silently drops tool calls. Pass the step's `abortSignal` to `agent.stream()` so barge-in stops generation promptly.
 
 ```typescript title="src/mastra/workflows/phone-conversation.ts"
-import { pipeAgentReplyToWriter } from '@mastra/livekit'
+import { pipeAgentReplyToWriter } from '@mastra/livekit';
 
 const generateResponse = createStep({
   id: 'generateResponse',
   // input and output schemas omitted
   execute: async ({ inputData, mastra, writer, abortSignal }) => {
-    const stream = await mastra.getAgent('support').stream(inputData.turn, { abortSignal })
-    const reply = await pipeAgentReplyToWriter(stream, writer)
-    return { reply }
+    const stream = await mastra.getAgent('support').stream(inputData.turn, { abortSignal });
+    const reply = await pipeAgentReplyToWriter(stream, writer);
+    return { reply };
   },
-})
+});
 ```
 
 Returns: `Promise<string>`, the accumulated reply text.
@@ -697,16 +697,122 @@ Returns: `Promise<string>`, the accumulated reply text.
 Converts a LiveKit chat context into plain messages accepted by `agent.stream()`, excluding instructions and function calls. Use it in `workflowInput` to pass the full transcript into a stateless workflow.
 
 ```typescript title="src/mastra/voice-worker.ts"
-import { createLiveKitWorker, chatContextToMessages } from '@mastra/livekit/worker'
+import { createLiveKitWorker, chatContextToMessages } from '@mastra/livekit/worker';
 
 export default createLiveKitWorker({
   mastra,
   workflow: 'phoneConversation',
   workflowInput: ({ chatCtx }) => ({ history: chatContextToMessages(chatCtx) }),
-})
+});
 ```
 
 Returns: `VoiceTurnMessage[]`, where each entry is `{ role: 'system' | 'user' | 'assistant'; content: string; id?: string }`.
+
+### `MastraVoiceAgent`
+
+The LiveKit `voice.Agent` subclass that [`createLiveKitWorker()`](#createlivekitworker) builds for every session. Replies come from a Mastra agent (or a custom `generate` source) through the agent's `llmNode`; LiveKit keeps the audio loop, turn detection, and barge-in. Construct it yourself when you own the `voice.AgentSession`, for example to test a Mastra-backed agent with `@livekit/agents`' `voice.testing` harness without speech-to-text, text-to-speech, or a live worker. `createMastraVoiceAgent(options)` is an equivalent factory.
+
+```typescript title="src/mastra/voice-agent.test.ts"
+import { initializeLogger, voice } from '@livekit/agents';
+import { MastraVoiceAgent } from '@mastra/livekit/worker';
+import { supportAgent } from './agents/support';
+
+// Required outside a LiveKit worker: AgentSession needs the LiveKit logger initialized.
+initializeLogger({ level: 'silent', pretty: false });
+
+const session = new voice.AgentSession();
+await session.start({ agent: new MastraVoiceAgent({ agent: supportAgent, memory: false }) });
+
+// run() returns a RunResult, not a promise; wait() resolves when the turn completes.
+const result = session.run({ userInput: 'What are your opening hours?' });
+await result.wait();
+result.expect.nextEvent().isMessage({ role: 'assistant' });
+result.expect.noMoreEvents();
+```
+
+The agent carries its own placeholder `llm.LLM` so LiveKit runs the reply pipeline; generation always goes through `llmNode`, so a `FakeLLM` in the session's `llm` slot is ignored and calling the placeholder's `chat()` throws. To stub the model in tests, give the Mastra agent a mock model or pass a custom `generate` function.
+
+#### Options
+
+Provide exactly one reply source: `agent` or `generate`.
+
+<PropertiesTable
+  content={[
+  {
+    name: 'agent',
+    type: 'Agent',
+    description: 'In-process Mastra agent. Tools and memory run inside it.',
+    isOptional: true,
+  },
+  {
+    name: 'generate',
+    type: 'VoiceReplyGenerator',
+    description:
+      'Custom reply source, for example from createRemoteAgentReplyGenerator(). A generate source owns its own hooks; toolFeedback, onToolCall, onTurnComplete, and streamOptions only apply to the agent source.',
+    isOptional: true,
+  },
+  {
+    name: 'memory',
+    type: 'MastraVoiceAgentMemory | false',
+    description:
+      'Conversation persistence as { thread, resource? }. When set, only messages new since the agent last spoke are sent each turn and Mastra Memory supplies history. When false, the full in-session LiveKit context is sent every turn.',
+    isOptional: true,
+    defaultValue: 'false',
+  },
+  {
+    name: 'requestContext',
+    type: 'RequestContext | Record<string, unknown>',
+    description: 'Request context entries forwarded to every generation.',
+    isOptional: true,
+  },
+  {
+    name: 'toolFeedback',
+    type: '(toolCall: VoiceToolCall) => string | undefined | void',
+    description: 'Return a short phrase to speak while a tool runs. Agent source only.',
+    isOptional: true,
+  },
+  {
+    name: 'onToolCall',
+    type: '(toolCall: VoiceToolCall) => void',
+    description:
+      'Called as each tool call starts, before its result is known. Keep it cheap and non-throwing. Agent source only.',
+    isOptional: true,
+  },
+  {
+    name: 'onTurnComplete',
+    type: 'VoiceTurnCompleteHook',
+    description:
+      'Called once per turn after the reply finished streaming to text-to-speech. Fire-and-forget; errors are logged. Agent source only.',
+    isOptional: true,
+  },
+  {
+    name: 'greetingReminder',
+    type: '{ everyMs: number; text?: string }',
+    description:
+      'Periodic AI re-disclosure: once everyMs has elapsed, the next reply is prefixed with text (spoken at the turn boundary). The worker derives this from configuration.greeting.repeatEvery / repeatText.',
+    isOptional: true,
+  },
+  {
+    name: 'streamOptions',
+    type: 'MastraStreamOptions',
+    description: 'Extra options merged into every agent.stream() call. Agent source only.',
+    isOptional: true,
+  },
+  {
+    name: 'instructions',
+    type: 'string',
+    description: 'LiveKit agent instructions. Not used for reply generation; the Mastra agent applies its own.',
+    isOptional: true,
+  },
+  {
+    name: 'id / stt / vad / tts / turnHandling',
+    type: "voice.AgentOptions['id' | 'stt' | 'vad' | 'tts' | 'turnHandling']",
+    description:
+      'Passed through to the LiveKit voice.Agent constructor. Use them to set per-agent speech components or turn handling.',
+    isOptional: true,
+  },
+]}
+/>
 
 ### `MastraLLM`
 
@@ -715,8 +821,8 @@ A standard LiveKit LLM plugin (`llm.LLM`) backed by a Mastra agent. Use it when 
 With `remote`, the plugin streams each turn from your Mastra server over HTTP using Server-Sent Events (SSE). The agent loop, tools, and memory run server-side, and interrupting the agent aborts the server-side generation.
 
 ```typescript title="src/mastra/voice-worker-plugin.ts"
-import { voice } from '@livekit/agents'
-import { MastraLLM } from '@mastra/livekit/plugin'
+import { voice } from '@livekit/agents';
+import { MastraLLM } from '@mastra/livekit/plugin';
 
 const session = new voice.AgentSession({
   llm: new MastraLLM({
@@ -727,7 +833,7 @@ const session = new voice.AgentSession({
   tts: 'cartesia/sonic-3',
   // Required with `memory`: LiveKit enables preemptive generation by default.
   turnHandling: { preemptiveGeneration: { enabled: false } },
-})
+});
 ```
 
 The plugin reports `provider` as `mastra` and `model` as the agent id, so LiveKit metrics and fallback adapters identify it like any other LLM.
@@ -820,13 +926,13 @@ When the user interrupts a reply:
 A user who hangs up immediately after interrupting leaves that final fragment unrecorded. When the transcript must capture it, reconcile immediately from the session event; the shared message id means the next turn's re-send upserts instead of duplicating:
 
 ```typescript title="src/mastra/voice-worker-plugin.ts"
-import { voice } from '@livekit/agents'
-import { MastraClient } from '@mastra/client-js'
+import { voice } from '@livekit/agents';
+import { MastraClient } from '@mastra/client-js';
 
-const client = new MastraClient({ baseUrl: process.env.MASTRA_URL! })
+const client = new MastraClient({ baseUrl: process.env.MASTRA_URL! });
 
 session.on(voice.AgentSessionEventTypes.ConversationItemAdded, ({ item }) => {
-  if (item.type !== 'message' || item.role !== 'assistant' || !item.interrupted) return
+  if (item.type !== 'message' || item.role !== 'assistant' || !item.interrupted) return;
   void client.saveMessageToMemory({
     agentId: 'support',
     messages: [
@@ -840,8 +946,8 @@ session.on(voice.AgentSessionEventTypes.ConversationItemAdded, ({ item }) => {
         createdAt: new Date(),
       },
     ],
-  })
-})
+  });
+});
 ```
 
 #### Usage metrics
@@ -865,8 +971,8 @@ Message extraction is text-only: image content is dropped, and audio content is 
 Builds a reply generator that runs the agent loop on a **remote** Mastra server over HTTP/SSE. `MastraLLM`'s `remote` mode uses it internally. Use it directly through `createLiveKitWorker`'s `generate` option to run the batteries-included worker against a remote server:
 
 ```typescript title="src/mastra/voice-worker.ts"
-import { createLiveKitWorker, createRemoteAgentReplyGenerator } from '@mastra/livekit/worker'
-import { mastra } from './index'
+import { createLiveKitWorker, createRemoteAgentReplyGenerator } from '@mastra/livekit/worker';
+import { mastra } from './index';
 
 export default createLiveKitWorker({
   mastra, // local instance for logger and worker config; replies come from the remote server
@@ -877,7 +983,7 @@ export default createLiveKitWorker({
   memory: ({ metadata, roomName }) => ({ thread: metadata.threadId ?? roomName }),
   stt: 'deepgram/nova-3',
   tts: 'cartesia/sonic-3',
-})
+});
 ```
 
 On the `generate` path the worker-level `toolFeedback` and `onTurnComplete` options don't apply, and the worker's end-call detection doesn't fire; pass the hooks to the generator instead.
@@ -968,13 +1074,13 @@ Returns: `VoiceReplyGenerator`.
 Speaks an opening greeting on a session you own, honoring interruption and playout options. Returns the LiveKit `SpeechHandle`, or `undefined` when there's no greeting text. `createLiveKitWorker()` uses it internally for its `greeting` configuration.
 
 ```typescript
-import { speakGreeting } from '@mastra/livekit/worker'
+import { speakGreeting } from '@mastra/livekit/worker';
 
 await speakGreeting(session, {
   text: "You've reached support. You're speaking with an AI assistant.",
   allowInterruptions: false,
   awaitPlayout: true,
-})
+});
 ```
 
 #### Parameters
@@ -1000,9 +1106,9 @@ await speakGreeting(session, {
 Resolves once the agent is no longer producing or playing a reply: its state has left `thinking` and `speaking`. Resolves immediately when the agent is already idle, and always resolves within `maxWaitMs` (30 seconds by default) as a safety cap. Use it before tearing a session down so closing words play out instead of being cut off.
 
 ```typescript
-import { waitForAgentDoneSpeaking } from '@mastra/livekit/worker'
+import { waitForAgentDoneSpeaking } from '@mastra/livekit/worker';
 
-await waitForAgentDoneSpeaking(session)
+await waitForAgentDoneSpeaking(session);
 ```
 
 ### `runEndCall()`
@@ -1012,19 +1118,19 @@ Ends the call after the agent asks to hang up. It waits for the agent's closing 
 Pair it with [`MastraLLM`](#mastrallm)'s `onToolCall` and an [end-call tool](#createendcalltool) on the server-side agent to rebuild agent-initiated hang-up on a session you own:
 
 ```typescript title="src/mastra/voice-worker-plugin.ts"
-import { MastraLLM } from '@mastra/livekit/plugin'
-import { DEFAULT_END_CALL_TOOL, runEndCall } from '@mastra/livekit/worker'
+import { MastraLLM } from '@mastra/livekit/plugin';
+import { DEFAULT_END_CALL_TOOL, runEndCall } from '@mastra/livekit/worker';
 
-let ending = false
+let ending = false;
 
 const llm = new MastraLLM({
   remote: { baseUrl: process.env.MASTRA_URL!, agentId: 'support' },
   onToolCall: ({ toolName }) => {
-    if (toolName !== DEFAULT_END_CALL_TOOL || ending) return
-    ending = true
-    void runEndCall(session, ctx, {}, console)
+    if (toolName !== DEFAULT_END_CALL_TOOL || ending) return;
+    ending = true;
+    void runEndCall(session, ctx, {}, console);
   },
-})
+});
 ```
 
 The exported constants `DEFAULT_END_CALL_TOOL` (`'endCall'`), `DEFAULT_END_CALL_REASON`, and `DEFAULT_END_CALL_MAX_WAIT_MS` (30000) hold the defaults.
@@ -1062,8 +1168,8 @@ The exported constants `DEFAULT_END_CALL_TOOL` (`'endCall'`), `DEFAULT_END_CALL_
 Builds the Mastra tool an agent calls when it wants to end the call. The tool signals intent and can run optional bookkeeping. The worker performs the actual hang-up. The tool lives on the server-safe root entry. Add it to agents defined in server code.
 
 ```typescript title="src/mastra/agents/support-agent.ts"
-import { Agent } from '@mastra/core/agent'
-import { createEndCallTool } from '@mastra/livekit'
+import { Agent } from '@mastra/core/agent';
+import { createEndCallTool } from '@mastra/livekit';
 
 const supportAgent = new Agent({
   id: 'support',
@@ -1072,7 +1178,7 @@ const supportAgent = new Agent({
     'Help the caller. When everything is wrapped up, say goodbye and call endCall as your final action.',
   model: '__GATEWAY_OPENAI_MODEL_MINI__',
   tools: { endCall: createEndCallTool() },
-})
+});
 ```
 
 With `createLiveKitWorker()`, set `configuration: { endCall: {} }` and the worker watches for the tool and hangs up. On a session you own, rebuild the hang-up with [`runEndCall()`](#runendcall).
@@ -1110,14 +1216,14 @@ With `createLiveKitWorker()`, set `configuration: { endCall: {} }` and the worke
 Returns an [API route](/docs/server/custom-api-routes) that mints a LiveKit access token with the voice agent dispatched into the room. Frontends call it to join a session.
 
 ```typescript title="src/mastra/index.ts"
-import { Mastra } from '@mastra/core/mastra'
-import { liveKitConnectionRoute } from '@mastra/livekit'
+import { Mastra } from '@mastra/core/mastra';
+import { liveKitConnectionRoute } from '@mastra/livekit';
 
 export const mastra = new Mastra({
   server: {
     apiRoutes: [liveKitConnectionRoute({ agentName: 'mastra-voice' })],
   },
-})
+});
 ```
 
 The route accepts a JSON body with optional `agentId`, `threadId`, and `resourceId` fields and responds with `{ serverUrl, roomName, participantName, participantToken }`. The `threadId` defaults to the generated room name.
@@ -1202,13 +1308,13 @@ The route accepts a JSON body with optional `agentId`, `threadId`, and `resource
 Dispatches a Mastra voice agent into a LiveKit room programmatically: for server-initiated sessions such as outbound calls.
 
 ```typescript
-import { dispatchVoiceSession } from '@mastra/livekit'
+import { dispatchVoiceSession } from '@mastra/livekit';
 
 await dispatchVoiceSession({
   roomName: 'support-call-42',
   agentName: 'mastra-voice',
   metadata: { agentId: 'support', threadId: 'thread-42' },
-})
+});
 ```
 
 #### Options

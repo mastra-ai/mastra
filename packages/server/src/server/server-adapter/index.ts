@@ -830,6 +830,7 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
   async init() {
     this.registerContextMiddleware();
     this.registerAuthMiddleware();
+    this.validateAuthResourceScoping();
     this.registerUserMiddleware();
     this.registerHttpLoggingMiddleware();
     await this.validateEELicense();
@@ -905,6 +906,27 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
           'Ensure @mastra/core is updated to a version that includes EE support.',
       );
     }
+  }
+
+  /**
+   * Warn when `server.auth` is configured without `mapUserToResourceId`.
+   *
+   * Without it, MASTRA_RESOURCE_ID_KEY is never set in the request context, so
+   * built-in routes fall back to the client-supplied resource ID (for example
+   * `memory.resource`) and ownership checks run against a caller-chosen value.
+   */
+  validateAuthResourceScoping(): void {
+    const auth = this.mastra.getServer()?.auth as { mapUserToResourceId?: unknown } | undefined;
+    if (!auth || typeof auth.mapUserToResourceId === 'function') return;
+
+    this.mastra
+      .getLogger()
+      ?.warn(
+        '[mastra/auth] server.auth is configured without mapUserToResourceId. ' +
+          'Memory, thread and workflow ownership checks will trust the resource ID supplied by the client ' +
+          "(e.g. memory.resource in the request body), so an authenticated user can read or write another user's threads. " +
+          'Configure server.auth.mapUserToResourceId to derive the resource ID from the authenticated user.',
+      );
   }
 
   /**

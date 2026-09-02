@@ -37,7 +37,10 @@ import type {
   ToolsetsInput,
   ToolsInput,
 } from '../types';
-import { fireClientToolOutputHooks } from '../workflows/prepare-stream/client-tool-output-hooks';
+import {
+  applyClientToolModelOutput,
+  fireClientToolOutputHooks,
+} from '../workflows/prepare-stream/client-tool-output-hooks';
 import type { DurableAgenticWorkflowInput, RunRegistryEntry, SerializableStructuredOutput } from './types';
 import { createWorkflowInput } from './utils/serialize-state';
 import { generateDurableThreadTitle } from './workflows/finalize-run';
@@ -526,6 +529,13 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
       messages,
       tools,
       abortSignal: execOptions?.abortSignal,
+      logger,
+    });
+    // Apply server-defined toModelOutput to client-executed results by
+    // enriching the ingested MessageList parts.
+    await applyClientToolModelOutput({
+      messageList,
+      tools,
       logger,
     });
   }

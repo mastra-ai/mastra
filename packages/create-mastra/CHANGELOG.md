@@ -1,5 +1,19 @@
 # create-mastra
 
+## 1.27.3-alpha.9
+
+## 1.27.3-alpha.8
+
+### Patch Changes
+
+- Update README to include accurate, up-to-date information ([#22858](https://github.com/mastra-ai/mastra/pull/22858))
+
+## 1.27.3-alpha.7
+
+## 1.27.3-alpha.6
+
+## 1.27.3-alpha.5
+
 ## 1.27.3-alpha.4
 
 ## 1.27.3-alpha.3

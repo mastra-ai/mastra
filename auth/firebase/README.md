@@ -1,63 +1,37 @@
 # @mastra/auth-firebase
 
-A Firebase authentication integration package for Mastra applications. This package provides seamless integration with Firebase Authentication and Firestore for user authentication and authorization.
+`@mastra/auth-firebase` verifies Firebase ID tokens and can use Firestore data for authorization decisions. Use it when Firebase Authentication already manages your users and Mastra endpoints should honor those identities.
 
 ## Installation
 
 ```bash
 npm install @mastra/auth-firebase
-# or
-yarn add @mastra/auth-firebase
-# or
-pnpm add @mastra/auth-firebase
 ```
 
-## Features
-
-- Firebase Authentication integration
-- Firestore-based user authorization
-- Support for service account credentials
-- Automatic token verification
-- User access control through Firestore
-
 ## Usage
+
+Set `FIREBASE_SERVICE_ACCOUNT` and, when needed, `FIRESTORE_DATABASE_ID`.
 
 ```typescript
 import { Mastra } from '@mastra/core/mastra';
 import { MastraAuthFirebase } from '@mastra/auth-firebase';
 
-// Initialize with default configuration
-const firebaseAuth = new MastraAuthFirebase();
-
-// Or with custom options
-const firebaseAuth = new MastraAuthFirebase({
-  serviceAccount: 'path/to/service-account.json',
-  databaseId: 'your-database-id',
-});
-
-// Enable auth in Mastra
-const mastra = new Mastra({
-  ...
+export const mastra = new Mastra({
   server: {
-    auth: firebaseAuth,
+    auth: new MastraAuthFirebase(),
   },
 });
 ```
 
-## Configuration
+## Documentation
 
-The package can be configured through constructor options or environment variables:
+- [Firebase integration guide](https://mastra.ai/integrations/auth/firebase)
+- [Firebase provider reference](https://mastra.ai/reference/auth/firebase)
 
-### Constructor Options
+## Changelog
 
-- `serviceAccount`: Path to Firebase service account JSON file
-- `databaseId`: Firestore database ID
+See the [package changelog](https://github.com/mastra-ai/mastra/blob/main/auth/firebase/CHANGELOG.md) for version history and release notes.
 
-### Environment Variables
+## Support
 
-- `FIREBASE_SERVICE_ACCOUNT`: Path to Firebase service account JSON file
-- `FIRESTORE_DATABASE_ID` or `FIREBASE_DATABASE_ID`: Firestore database ID
-
-## User Authorization
-
-The package uses Firestore to manage user access. It expects a collection named `user_access` with documents keyed by user UIDs. The presence of a document in this collection determines whether a user is authorized.
+We have an [open community Discord](https://discord.gg/mastra-ai). Come and say hello and let us know if you have any questions or need any help getting things running.
