@@ -1,10 +1,13 @@
 import type { ClickHouseClient } from '@clickhouse/client';
+import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { listFeedbackArgsSchema } from '@mastra/core/storage';
 import type {
   AggregationInterval,
   AggregationType,
   BatchCreateFeedbackArgs,
   CreateFeedbackArgs,
+  FeedbackRecord,
+  UpdateFeedbackReviewStatusArgs,
   ListFeedbackArgs,
   ListFeedbackResponse,
   GetFeedbackAggregateArgs,
@@ -24,6 +27,7 @@ import type { FilterResult } from './filters';
 import { CH_INSERT_SETTINGS, CH_SETTINGS, feedbackRecordToRow, rowToFeedbackRecord } from './helpers';
 import type { ClickHouseDeltaCursorStrategy } from './polling';
 import { assertDeltaPollingSupported, deltaPollingSupported, validateCursorId } from './polling';
+import { parseUpdateFeedbackReviewStatusArgs } from './review-status';
 
 // ============================================================================
 // Helpers
@@ -176,6 +180,41 @@ export async function batchCreateFeedback(client: ClickHouseClient, args: BatchC
     format: 'JSONEachRow',
     clickhouse_settings: CH_INSERT_SETTINGS,
   });
+}
+
+// ============================================================================
+// Review status
+// ============================================================================
+
+export async function updateFeedbackReviewStatus(
+  client: ClickHouseClient,
+  args: UpdateFeedbackReviewStatusArgs,
+): Promise<FeedbackRecord> {
+  const { feedbackId, reviewStatus } = parseUpdateFeedbackReviewStatusArgs(args);
+
+  const existing = await queryJson<Record<string, any>>(
+    client,
+    `SELECT * FROM ${TABLE_FEEDBACK_EVENTS} WHERE feedbackId = {feedbackId:String} ORDER BY timestamp DESC LIMIT 1`,
+    { feedbackId },
+  );
+  if (!existing[0]) {
+    throw new MastraError({
+      id: 'OBSERVABILITY_UPDATE_FEEDBACK_REVIEW_STATUS_NOT_FOUND',
+      domain: ErrorDomain.MASTRA_OBSERVABILITY,
+      category: ErrorCategory.USER,
+      text: 'Feedback record not found',
+      details: { feedbackId },
+    });
+  }
+
+  // `mutations_sync = 1` makes the mutation visible to the read-back below.
+  await client.command({
+    query: `ALTER TABLE ${TABLE_FEEDBACK_EVENTS} UPDATE reviewStatus = {reviewStatus:String} WHERE feedbackId = {feedbackId:String}`,
+    query_params: { feedbackId, reviewStatus },
+    clickhouse_settings: { mutations_sync: '1' },
+  });
+
+  return rowToFeedbackRecord({ ...existing[0], reviewStatus });
 }
 
 // ============================================================================
