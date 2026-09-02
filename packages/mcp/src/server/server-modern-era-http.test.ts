@@ -237,6 +237,7 @@ describe('MCPServer with protocolVersion 2026-07-28 (dual-era HTTP)', () => {
     try {
       const tools = await client.listTools();
       expect(tools.tools.map(t => t.name)).toContain('echoTool');
+      expect(tools.tools.find(tool => tool.name === 'nullTool')?.outputSchema?.$schema).toBeUndefined();
 
       const result = await client.callTool({ name: 'echoTool', arguments: { text: 'legacy' } });
       expect((result as any).content[0].text).toBe('echo: legacy');

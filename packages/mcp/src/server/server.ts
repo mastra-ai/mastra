@@ -972,17 +972,19 @@ export class MCPServer extends MCPServerBase {
   private registerHandlersOnServer(serverInstance: Server) {
     // List tools handler
     serverInstance.setRequestHandler('tools/list', async (_request, ctx) => {
-      const proxiedContext = await this.createProxiedRequestContext(toMCPRequestHandlerExtra(ctx));
+      const extra = toMCPRequestHandlerExtra(ctx);
+      const proxiedContext = await this.createProxiedRequestContext(extra);
       const tools = await this.getAuthorizedConvertedToolEntries(proxiedContext);
+      const modernRequest = isModernEraRequest(extra);
       return {
         tools: tools.map(([, tool]) => {
           const toolSpec: any = {
             name: tool.id || 'unknown',
             description: tool.description,
-            inputSchema: this.convertInputSchema(tool.parameters),
+            inputSchema: this.convertInputSchema(tool.parameters, modernRequest),
           };
           if (tool.outputSchema) {
-            toolSpec.outputSchema = this.convertSchema(tool.outputSchema);
+            toolSpec.outputSchema = this.convertSchema(tool.outputSchema, modernRequest);
           }
           // Include MCP tool annotations if present
           if (tool.mcp?.annotations) {
@@ -2629,14 +2631,14 @@ export class MCPServer extends MCPServerBase {
     };
   }
 
-  private convertSchema(schema: any) {
+  private convertSchema(schema: any, modernEra = this.servesModernEra()) {
     const jsonSchema = isStandardSchemaWithJSON(schema)
-      ? standardSchemaToJSONSchema(schema, { target: this.servesModernEra() ? 'draft-2020-12' : 'draft-07' })
+      ? standardSchemaToJSONSchema(schema, { target: modernEra ? 'draft-2020-12' : 'draft-07' })
       : (schema?.jsonSchema ?? schema);
-    if (this.servesModernEra()) return jsonSchema;
+    if (modernEra) return jsonSchema;
 
-    // Preserve the established legacy wire shape. Modern connections retain the
-    // declaration because their validators dispatch according to the schema dialect.
+    // Preserve the established legacy wire shape for legacy clients. Modern
+    // validators dispatch according to the schema's preserved dialect declaration.
     if (jsonSchema && typeof jsonSchema === 'object' && '$schema' in jsonSchema) {
       const { $schema: _dialect, ...rest } = jsonSchema;
       return rest;
@@ -2644,8 +2646,8 @@ export class MCPServer extends MCPServerBase {
     return jsonSchema;
   }
 
-  private convertInputSchema(schema: any) {
-    return this.convertSchema(schema) ?? { type: 'object', properties: {} };
+  private convertInputSchema(schema: any, modernEra = this.servesModernEra()) {
+    return this.convertSchema(schema, modernEra) ?? { type: 'object', properties: {} };
   }
 
   /**

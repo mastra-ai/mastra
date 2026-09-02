@@ -57,7 +57,7 @@ const server = new MCPServer({
 
 ## Tool schemas and structured results
 
-On the `2026-07-28` protocol revision, MCP tool input and output schemas use JSON Schema 2020-12 when they don't declare a dialect. The server preserves supported references, composition keywords, and boolean subschemas when it advertises converted Mastra tool schemas.
+On the `2026-07-28` protocol revision, MCP tool input and output schemas use JSON Schema 2020-12 when they don't declare a dialect. Modern responses preserve a converted schema's explicit dialect declaration, while responses to legacy clients retain the established declaration-free wire shape. The server preserves supported references, composition keywords, and boolean subschemas when it advertises converted Mastra tool schemas.
 
 A tool with an `outputSchema` can return any JSON value, including an object, array, string, number, boolean, or `null`. The value is sent as `structuredContent` without wrapping it in an object. The server validates successful structured output against the tool's output schema before returning it.
 
