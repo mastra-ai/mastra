@@ -22,7 +22,12 @@ import {
   createShutdownCoordinator,
   startTuiProcessMemoryDiagnostics,
 } from './process-memory-diagnostics-lifecycle.js';
-import { formatResumeHint, parseResumeThreadId, shouldRunHeadless } from './resume-command.js';
+import {
+  formatResumeHint,
+  parseResumeThreadId,
+  shouldRejectResumeWithoutTTY,
+  shouldRunHeadless,
+} from './resume-command.js';
 import { detectTerminalTheme } from './tui/detect-theme.js';
 import { MastraTUI } from './tui/index.js';
 import { applyThemeMode, restoreTerminalForeground } from './tui/theme.js';
@@ -379,6 +384,12 @@ async function main() {
     return acpMain({ dangerousAutoApprove: process.argv.includes('--dangerous-auto-approve') });
   }
 
+  if (shouldRejectResumeWithoutTTY(resumeThreadId, Boolean(process.stdin.isTTY))) {
+    process.stderr.write('mastracode resume requires an interactive terminal.\n');
+    process.exitCode = 1;
+    return;
+  }
+
   // When stdin is piped (e.g. `cat foo | mastracode`), drain the pipe fully
   // before starting the TUI.  The drain blocks until the sender process exits
   // and closes its stdout, so we never see partial output.
@@ -391,11 +402,6 @@ async function main() {
     // stdin is consumed/closed and the TUI needs a live TTY for keyboard input.
     const reopenedStdin = reopenStdinFromTTY();
     if (!reopenedStdin) {
-      if (resumeThreadId) {
-        process.stderr.write('mastracode resume requires an interactive terminal.\n');
-        process.exitCode = 1;
-        return;
-      }
       process.stderr.write('No TTY available — falling back to headless mode.\n');
       return runMCCli(pipedInput);
     }

@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 
-import { formatResumeHint, parseResumeThreadId, shouldRunHeadless } from './resume-command.js';
+import {
+  formatResumeHint,
+  parseResumeThreadId,
+  shouldRejectResumeWithoutTTY,
+  shouldRunHeadless,
+} from './resume-command.js';
 
 describe('resume command', () => {
   it('reads an explicit thread ID', () => {
@@ -15,6 +20,12 @@ describe('resume command', () => {
     const argv = ['node', 'mastracode', 'resume', 'thread-123'];
     expect(shouldRunHeadless(argv, 'thread-123', true)).toBe(false);
     expect(shouldRunHeadless(['node', 'mastracode', '--prompt', 'hello'], undefined, true)).toBe(true);
+  });
+
+  it('rejects resume commands without an interactive terminal', () => {
+    expect(shouldRejectResumeWithoutTTY('thread-123', false)).toBe(true);
+    expect(shouldRejectResumeWithoutTTY('thread-123', true)).toBe(false);
+    expect(shouldRejectResumeWithoutTTY(undefined, false)).toBe(false);
   });
 
   it('formats the exit hint', () => {

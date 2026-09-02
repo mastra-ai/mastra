@@ -16,6 +16,10 @@ export function shouldRunHeadless(
   return !resumeThreadId && (hasHeadlessFlag || argv.includes('--help') || argv.includes('-h'));
 }
 
+export function shouldRejectResumeWithoutTTY(resumeThreadId: string | undefined, isTTY: boolean): boolean {
+  return Boolean(resumeThreadId) && !isTTY;
+}
+
 export function formatResumeHint(threadId: string): string {
   const hasControlCharacters = [...threadId].some(character => {
     const codePoint = character.codePointAt(0)!;
