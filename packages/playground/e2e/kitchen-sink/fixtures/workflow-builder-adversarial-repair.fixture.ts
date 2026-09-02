@@ -122,7 +122,7 @@ const mixedPipelineCorrected = {
       type: 'mapping',
       id: 'support-parallel',
       mapConfig: {
-        agentText: { value: 'Reset your password.' },
+        response: { value: 'Reset your password.' },
         ticket: { value: { ticketId: 'ticket-456', status: 'open' } },
       },
     },

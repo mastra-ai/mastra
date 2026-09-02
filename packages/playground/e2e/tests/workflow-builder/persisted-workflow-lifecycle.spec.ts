@@ -16,8 +16,8 @@ test.describe('Persisted Workflow Builder', () => {
   test.describe('when a permitted user describes a workflow to the editor-owned builder', () => {
     test('completes the persisted workflow Studio lifecycle', async ({ page }) => {
       await selectFixture(page, 'workflow-builder-lifecycle');
-      await page.goto('/workflow-builder');
-      await page.getByRole('link', { name: 'New workflow' }).click();
+      await page.goto('/workflows');
+      await page.getByRole('link', { name: 'Create workflow' }).click();
       await page.waitForURL('/workflow-builder/create');
       await expect(page.getByText('Not started')).toBeVisible();
       await expect(page.getByText('Workflow graph must contain at least one step.')).not.toBeVisible();
@@ -58,8 +58,9 @@ test.describe('Persisted Workflow Builder', () => {
       await page.goto(`/workflow-builder/${workflowId}`);
       await page.getByRole('button', { name: 'Delete', exact: true }).click();
       await page.getByRole('alertdialog').getByRole('button', { name: 'Delete', exact: true }).click();
-      await page.waitForURL('/workflow-builder');
-      await expect(page.getByText('No persisted workflows yet')).toBeVisible();
+      await page.waitForURL('/workflows');
+      await expect(page.getByRole('link', { name: 'Create workflow' })).toBeVisible();
+      await expect(page.getByText(workflowId)).not.toBeVisible();
     });
   });
 });
