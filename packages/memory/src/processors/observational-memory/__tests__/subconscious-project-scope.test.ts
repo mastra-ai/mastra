@@ -3,7 +3,7 @@ import type { ComputeStateSignalArgs } from '@mastra/core/processors';
 import { RequestContext } from '@mastra/core/request-context';
 import { InMemoryStore } from '@mastra/core/storage';
 import type { MastraEmbeddingModel, MastraVector } from '@mastra/core/vector';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { Memory } from '../../../index';
 import { createPinnedTools, PinnedStateProcessor, Subconscious } from '../subconscious';
@@ -50,6 +50,10 @@ function makeSignalArgs(
 }
 
 describe('Subconscious project scope override', () => {
+  // `Agent.prototype.generate` is spied on below; leaking that spy would silently stub every later
+  // test's agent runs in this file.
+  afterEach(() => vi.restoreAllMocks());
+
   it('the pinned state processor surfaces a pin written under the project scope to a different session', async () => {
     const storage = new InMemoryStore();
     const memory = { storage } as unknown as Parameters<typeof createPinnedTools>[0];

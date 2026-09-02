@@ -347,12 +347,20 @@ describe('direct observation curation', () => {
     expect(failed.committed).not.toHaveBeenCalled();
     expect(failed.events).toEqual(['failed']);
 
+    // The abort branch must see an actually-aborted signal, not just an AbortError-shaped failure.
+    const abortController = new AbortController();
+    abortController.abort(new DOMException('aborted', 'AbortError'));
     const aborted = createStrategyHarness({
       mode: 'async-buffer',
       observeError: new DOMException('aborted', 'AbortError'),
       cycleObservations: [{ sourceThreadId: 'alpha', observations: 'aborted' }],
+      turn: { abortSignal: abortController.signal },
     });
-    await expect(aborted.strategy.run()).resolves.toMatchObject({ observed: false });
+    expect(abortController.signal.aborted).toBe(true);
+    // Real abort contract (base.ts `if (abortSignal?.aborted) throw error`): the failed marker is
+    // persisted, then the abort propagates. Without the signal this would have hit the generic
+    // swallow branch and resolved `{ observed: false }`, which is not the abort path at all.
+    await expect(aborted.strategy.run()).rejects.toThrow('aborted');
     expect(aborted.committed).not.toHaveBeenCalled();
     expect(aborted.events).toEqual(['failed']);
   });

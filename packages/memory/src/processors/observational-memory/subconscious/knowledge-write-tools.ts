@@ -13,6 +13,15 @@ import type { JSONSchema7 } from 'json-schema';
 const CURATOR_IDENTITY = 'subconscious:curate';
 const MAX_GUIDANCE_LENGTH = 4_000;
 const scopeLevelSchema: JSONSchema7 = { type: 'string', enum: ['org', 'resource', 'thread'] };
+// `format: 'date-time'` is advisory only: the tool validator's Ajv instance has no format plugin, so
+// an unknown format is silently ignored. The `pattern` is what actually rejects non-RFC 3339 input at
+// schema validation, before `execute` runs. Runtime `new Date()` parsing below stays as defense in depth.
+const dateTimeSchema: JSONSchema7 = {
+  type: 'string',
+  format: 'date-time',
+  pattern: '^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?(Z|[+-]\\d{2}:\\d{2})$',
+  description: 'RFC 3339 date-time, e.g. 2026-09-15T00:00:00Z',
+};
 
 type KnowledgeWriteToolsMemory = {
   storage: {
@@ -70,7 +79,7 @@ export function createKnowledgeWriteTools(
           text: { type: 'string', minLength: 1 },
           nodeScope: scopeLevelSchema,
           scope: scopeLevelSchema,
-          when: { type: 'string' },
+          when: dateTimeSchema,
         },
         required: ['name', 'kind', 'text'],
         additionalProperties: false,
@@ -112,7 +121,7 @@ export function createKnowledgeWriteTools(
           node: { type: 'string', minLength: 1 },
           text: { type: 'string', minLength: 1 },
           scope: scopeLevelSchema,
-          when: { type: 'string' },
+          when: dateTimeSchema,
         },
         required: ['node', 'text'],
         additionalProperties: false,
