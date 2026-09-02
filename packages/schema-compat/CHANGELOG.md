@@ -1,5 +1,11 @@
 # @mastra/schema-compat
 
+## 1.3.8-alpha.1
+
+### Patch Changes
+
+- Update README to include accurate, up-to-date information ([#22858](https://github.com/mastra-ai/mastra/pull/22858))
+
 ## 1.3.8-alpha.0
 
 ### Patch Changes

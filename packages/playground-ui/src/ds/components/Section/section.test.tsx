@@ -17,7 +17,9 @@ describe('Section', () => {
       </Section>,
     );
 
-    expect(screen.getByRole('heading', { name: 'Overview' })).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'Overview' }).className).toContain(
+      'group-data-[variant=default]/section:font-bold',
+    );
     expect(screen.getByText('Section content').closest('[data-slot="section"]')?.dataset.variant).toBe('default');
   });
 
@@ -79,9 +81,13 @@ describe('Section', () => {
       </div>,
     );
 
-    const factory = screen.getByRole('heading', { name: 'Factory' }).closest('[data-slot="section"]');
-    const flat = screen.getByRole('heading', { name: 'Flat' }).closest('[data-slot="section"]');
+    const factoryHeading = screen.getByRole('heading', { name: 'Factory' });
+    const flatHeading = screen.getByRole('heading', { name: 'Flat' });
+    const factory = factoryHeading.closest('[data-slot="section"]');
+    const flat = flatHeading.closest('[data-slot="section"]');
 
+    expect(factoryHeading.className).toContain('group-data-[variant=factory]/section:font-medium');
+    expect(flatHeading.className).toContain('group-data-[variant=flat]/section:font-medium');
     expect(factory?.className).toContain('w-full');
     expect(flat?.className).toContain('w-full');
     expect(factory?.querySelector('[data-slot="section-header"]')?.className).toContain(
