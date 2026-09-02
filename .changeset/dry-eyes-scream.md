@@ -2,7 +2,7 @@
 '@mastra/core': minor
 ---
 
-Added a strict, size-bounded advanced trace-query contract, trusted planner, cursor binding, portable replacement semantics, execution-timeout identity, and storage capability.
+Added a strict, size-bounded advanced trace-query contract, trusted planner, locale-independent cursor ordering, null-inclusive negative predicates, portable replacement semantics, execution-timeout identity, and storage capability.
 
 ```ts
 const request = traceQueryRequestSchema.parse({

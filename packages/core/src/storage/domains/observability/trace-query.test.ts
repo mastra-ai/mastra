@@ -328,7 +328,7 @@ describe('planTraceQuery', () => {
     });
   });
 
-  it('rejects null comparisons in favor of presence operators', () => {
+  it('rejects null predicate literals in favor of presence operators', () => {
     for (const op of ['eq', 'ne'] as const) {
       const error = validationError(() =>
         planTraceQuery(
@@ -341,6 +341,13 @@ describe('planTraceQuery', () => {
       expect(error.issues).toContainEqual(
         expect.objectContaining({ code: 'invalid_literal', path: ['where', 'right', 'literal'] }),
       );
+    }
+
+    for (const op of ['in', 'notIn'] as const) {
+      const error = validationError(() =>
+        planTraceQuery(parsed({ ...baseRequest, where: { op, value: { path: 'threadId' }, set: [null] } })),
+      );
+      expect(error.issues).toContainEqual(expect.objectContaining({ code: 'invalid_literal', path: ['where', 'set'] }));
     }
 
     expect(planTraceQuery(parsed({ ...baseRequest, where: { op: 'notExists', path: 'threadId' } })).where).toEqual({

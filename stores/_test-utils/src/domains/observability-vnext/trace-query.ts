@@ -400,6 +400,48 @@ export const TRACE_QUERY_CONFORMANCE_CASES: TraceQueryConformanceCase[] = [
     expected: [],
   },
   {
+    name: 'eq excludes traces whose nullable field is null',
+    request: {
+      timeRange: fullRange,
+      where: { op: 'eq', left: { path: 'threadId' }, right: { literal: 'thread-1' } },
+    },
+    expected: [{ traceId: 'trace-a' }, { traceId: 'trace-b' }],
+  },
+  {
+    name: 'ne includes traces whose nullable field is null',
+    request: {
+      timeRange: fullRange,
+      where: { op: 'ne', left: { path: 'threadId' }, right: { literal: 'thread-1' } },
+    },
+    expected: [{ traceId: 'trace-d' }, { traceId: 'trace-c' }],
+  },
+  {
+    name: 'in excludes traces whose nullable field is null',
+    request: {
+      timeRange: fullRange,
+      where: { op: 'in', value: { path: 'resourceId' }, set: ['resource-1'] },
+    },
+    expected: [{ traceId: 'trace-a' }],
+  },
+  {
+    name: 'notIn includes traces whose nullable field is null',
+    request: {
+      timeRange: fullRange,
+      where: { op: 'notIn', value: { path: 'resourceId' }, set: ['resource-1'] },
+    },
+    expected: [{ traceId: 'trace-d' }, { traceId: 'trace-c' }, { traceId: 'trace-b' }],
+  },
+  {
+    name: 'exists excludes traces whose nullable field is null',
+    request: { timeRange: fullRange, where: { op: 'exists', path: 'threadId' } },
+    expected: [{ traceId: 'trace-c' }, { traceId: 'trace-a' }, { traceId: 'trace-b' }],
+  },
+  {
+    name: 'notExists includes only traces whose nullable field is null',
+    request: { timeRange: fullRange, where: { op: 'notExists', path: 'threadId' } },
+    expected: [{ traceId: 'trace-d' }],
+  },
+  {
     name: 'returns distinct non-null thread groups',
     request: { timeRange: fullRange, group: { by: ['threadId'] } },
     expected: [{ threadId: 'thread-1' }, { threadId: 'thread-2' }],
@@ -549,7 +591,7 @@ function evaluateScalarPredicate(
     const included = predicate.values.includes(value as never);
     return predicate.operator === 'in' ? included : !included;
   }
-  if (missing) return false;
+  if (missing) return predicate.operator === 'ne';
   switch (predicate.operator) {
     case 'eq':
       return value === predicate.value;
