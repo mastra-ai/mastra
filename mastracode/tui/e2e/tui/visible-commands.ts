@@ -14,8 +14,15 @@ export const visibleCommandsScenario: McE2eScenario = {
     ).toBeVisible();
     runtime.printScreen('after startup', terminal);
 
+    terminal.resize(120, 90);
     terminal.submit('/help');
     await runtime.waitForScreenText(/Commands/i, terminal);
+    await runtime.waitForScreenText(/\/fork\s+Fork the current thread/i, terminal);
+    await runtime.waitForScreenText(/\/clone\s+Alias for \/fork/i, terminal);
+    await runtime.waitForScreenText(/\/resume\s+Resume an existing thread/i, terminal);
+    await runtime.waitForScreenText(/\/threads\s+Alias for \/resume/i, terminal);
+    await runtime.waitForScreenText(/\/rename\s+Rename current thread/i, terminal);
+    await runtime.waitForScreenText(/\/name\s+Alias for \/rename/i, terminal);
     await runtime.waitForScreenText(/\/api-keys/i, terminal);
     await runtime.waitForScreenText(/Ctrl\+Z|Suspend process/i, terminal);
     await runtime.waitForScreenTextAbsent(/\/knowledge\s+Browse scoped Subconscious knowledge/i, terminal);

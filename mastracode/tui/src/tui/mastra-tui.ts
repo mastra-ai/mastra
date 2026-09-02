@@ -647,6 +647,7 @@ export class MastraTUI {
 
     // Resume the latest unlocked thread for this directory.
     await resumeThreadOnStartup(this.state, this.state.options.resumeThreadId);
+    await this.syncThreadActivePackMetadata();
 
     // Subscribe to controller events
     subscribeToAgentController(this.state, event => this.handleEvent(event));
