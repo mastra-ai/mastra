@@ -203,6 +203,7 @@ export function compilePostgresTraceQuery(schema: string, plan: TrustedTraceQuer
     `r."parentSpanId" IS NULL`,
     latestRootPredicate(spanTable),
     `NOT r."isPending"`,
+    `r."endedAt" IS NOT NULL`,
     `r."startedAt" >= $1`,
     `r."startedAt" < $2`,
   ];
@@ -286,6 +287,7 @@ LIMIT $${values.length}`,
 }
 
 function asIsoTimestamp(value: unknown): string {
+  if (value === null || value === undefined) throw new Error('Trace query returned a null timestamp');
   return value instanceof Date ? value.toISOString() : new Date(value as string | number).toISOString();
 }
 

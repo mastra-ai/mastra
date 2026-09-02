@@ -82,6 +82,13 @@ describe('Postgres advanced trace query', () => {
     expect(repeated.match(/FROM current_scores s/g)).toHaveLength(2);
   });
 
+  it('filters null-ended roots before projection and pagination', () => {
+    const compiled = compilePostgresTraceQuery('public', plan());
+
+    expect(compiled.text).toContain('NOT r."isPending"');
+    expect(compiled.text).toContain('r."endedAt" IS NOT NULL');
+  });
+
   it('uses total null semantics for negative predicates', () => {
     const compiled = compilePostgresTraceQuery(
       'public',
@@ -150,6 +157,16 @@ describe('Postgres advanced trace query', () => {
       page: { next: expect.any(String) },
     });
     expect(Object.keys(response.traces[0]!)).toHaveLength(10);
+  });
+
+  it('never converts a null database timestamp into an epoch cursor', async () => {
+    const query = vi.fn().mockResolvedValue({ rows: [] });
+    const any = vi.fn().mockResolvedValue([{ ...traceRow('malformed', '2026-01-01T12:00:00.000Z'), endedAt: null }]);
+    const tx = vi.fn(async callback => callback({ query, any }));
+
+    await expect(queryTraces({ tx } as unknown as DbClient, 'public', plan(), 15_000)).rejects.toThrow(
+      'Trace query returned a null timestamp',
+    );
   });
 
   it('normalizes PostgreSQL statement timeouts without exposing driver details', async () => {

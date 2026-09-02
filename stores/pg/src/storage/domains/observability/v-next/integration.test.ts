@@ -386,6 +386,69 @@ describe('ObservabilityStoragePostgresVNext — integration', () => {
       }
     });
 
+    it('excludes null-ended roots before endedAt pagination', async () => {
+      const harness = await createHarness({
+        connection: parseConnectionString(TIMESCALE_URL),
+        schemaPrefix: 'trace_query_null_ended',
+      });
+      const startedAt = new Date('2026-08-25T10:00:00.000Z');
+
+      try {
+        await harness.domain.batchCreateSpans({
+          records: [
+            makeSpan({
+              traceId: 'completed-a',
+              spanId: 'root-completed-a',
+              parentSpanId: null,
+              startedAt,
+              endedAt: new Date('2026-08-25T10:00:03.000Z'),
+            }),
+            makeSpan({
+              traceId: 'pending-root',
+              spanId: 'root-pending',
+              parentSpanId: null,
+              isEvent: false,
+              startedAt,
+              endedAt: null,
+            }),
+            makeSpan({
+              traceId: 'completed-b',
+              spanId: 'root-completed-b',
+              parentSpanId: null,
+              startedAt,
+              endedAt: new Date('2026-08-25T10:00:02.000Z'),
+            }),
+          ],
+        });
+
+        const traceIds: string[] = [];
+        const endedAtValues: string[] = [];
+        let after: string | undefined;
+        do {
+          const plan = planTraceQuery(
+            parseTraceQueryRequest({
+              timeRange: {
+                from: new Date(startedAt.getTime() - 1_000).toISOString(),
+                to: new Date(startedAt.getTime() + 1_000).toISOString(),
+              },
+              orderBy: [{ field: 'endedAt', direction: 'desc' }],
+              page: { limit: 1, ...(after ? { after } : {}) },
+            }),
+          );
+          const response = await harness.domain.queryTraces(plan);
+          if (!('traces' in response)) throw new Error('Expected trace results');
+          traceIds.push(...response.traces.map(trace => trace.traceId));
+          endedAtValues.push(...response.traces.map(trace => trace.endedAt));
+          after = response.page.next ?? undefined;
+        } while (after);
+
+        expect(traceIds).toEqual(['completed-a', 'completed-b']);
+        expect(endedAtValues).not.toContain('1970-01-01T00:00:00.000Z');
+      } finally {
+        await harness.close();
+      }
+    });
+
     it('uses root indexes and bounds related scans to candidate trace IDs', async () => {
       const harness = await createHarness({
         connection: parseConnectionString(TIMESCALE_URL),
