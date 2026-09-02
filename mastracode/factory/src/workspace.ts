@@ -41,8 +41,8 @@ import {
   resolveSessionWorkdir,
 } from './sandbox/session-sandbox.js';
 import type { SessionSetupGate } from './sandbox/session-sandbox.js';
-
 import type { WorkItemsStorage } from './storage/domains/work-items/base.js';
+import { timedPhase } from './timing.js';
 
 const WORKSPACE_ID_PREFIX = 'mfw';
 const bundleDirectory = dirname(fileURLToPath(import.meta.url));
@@ -430,7 +430,9 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
         // stack a wrapper per call. Factory's setup runs first: a hook the
         // callback installed itself expects a prepared workspace.
         sandbox.setOnStart(previous => async args => {
-          await setupHook(args);
+          await timedPhase(`workspace.onStart(${args.outcome})`, async () => {
+            await setupHook(args);
+          });
           await previous?.(args);
         });
         return sandbox;
@@ -631,7 +633,7 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
           return;
         }
         try {
-          await runSetupCommand(target, workdir, projectRepository.setupCommand);
+          await timedPhase('workspace.setup', () => runSetupCommand(target, workdir, projectRepository.setupCommand!));
           await gate.markSetupDone();
         } catch (setupError) {
           if (projectRepository.teardownCommand) {

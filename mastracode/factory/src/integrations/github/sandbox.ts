@@ -6,8 +6,9 @@
  * operate entirely against the remote checkout.
  *
  * - `materializeRepo(row, token)` runs `git clone` (first open) or `git pull`
- *   (re-open) inside the sandbox, using a short-lived installation token that is
- *   scrubbed from the git remote afterwards so it never persists in the VM.
+ *   (re-open on a branch; a detached template checkout is left as-is) inside
+ *   the sandbox, using a short-lived installation token that is scrubbed from
+ *   the git remote afterwards so it never persists in the VM.
  *
  * This module owns everything git/GitHub: clone/pull, commit/push, setup/teardown commands,
  * and `gh pr create`. Workdir layout lives in `../sandbox/workdir`.
@@ -314,8 +315,9 @@ async function materializeRepoImpl(options: MaterializeRepoOptions): Promise<voi
         throw classifyGitFailure(clone, 'clone-failed');
       }
       tokenInRemote = true;
-    } else {
-      // 2b. Re-open: refresh remote to the token URL and fast-forward pull.
+    } else if ((await sh(sandbox, `git -C ${shellQuote(workdir)} symbolic-ref -q HEAD`)).exitCode === 0) {
+      // 2b. Re-open on a branch: refresh remote to the token URL and
+      // fast-forward pull.
       const setUrl = await sh(sandbox, `git -C ${shellQuote(workdir)} remote set-url origin ${shellQuote(authUrl)}`);
       if (setUrl.exitCode !== 0) {
         throw new MaterializeError(`Failed to set git remote: ${setUrl.stderr}`, 'pull-failed');
@@ -329,12 +331,18 @@ async function materializeRepoImpl(options: MaterializeRepoOptions): Promise<voi
           throw classifyGitFailure(pull, 'pull-failed');
         }
         // The workdir was left on a session's working branch that can't be
-        // fast-forwarded (diverged from upstream, no upstream, or detached
-        // HEAD), or its configured upstream ref was deleted after merge.
-        // That checkout still holds usable work — never rebase or reset it
-        // here. Leave it as-is and let the session reconcile with the remote
-        // itself.
+        // fast-forwarded (diverged from upstream, no upstream), or its
+        // configured upstream ref was deleted after merge. That checkout
+        // still holds usable work: never rebase or reset it here. Leave it
+        // as-is and let the session reconcile with the remote itself.
       }
+    } else {
+      // 2c. Re-open on a detached HEAD: a VM booted from a repo template
+      // image sits at the template's pinned commit with no branch to move, so
+      // a pull has nothing to fast-forward. `git pull` would still pay for its
+      // fetch before refusing, seconds on a fresh VM, and the session branch
+      // checkout that follows fetches the base branch itself. Skip it, and
+      // with it the token round-trip.
     }
   } catch (primary) {
     // 3a. The clone/pull failed — still scrub the token from the VM's git

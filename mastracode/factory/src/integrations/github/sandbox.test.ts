@@ -140,6 +140,25 @@ describe('materializeRepo', () => {
     expect(joined).toContain('https://x-access-token:tok-xyz@github.com/octocat/hello.git');
   });
 
+  it('skips the pull on a detached HEAD (a VM booted from a repo template image)', async () => {
+    const sandbox = new FakeSandbox(script => {
+      if (script.includes('remote get-url origin')) {
+        return { exitCode: 0, stdout: 'https://github.com/octocat/hello.git\n', stderr: '' };
+      }
+      // Detached at the template's pinned commit: no symbolic HEAD.
+      if (script.includes('symbolic-ref -q HEAD')) return { exitCode: 1, stdout: '', stderr: '' };
+      return OK;
+    });
+    await materializeRepo(makeRow({ materializedAt: new Date() }), makeRepoInfo(), sandbox, 'tok-xyz');
+
+    const joined = sandbox.calls.join('\n');
+    expect(joined).not.toContain('pull --ff-only');
+    expect(joined).not.toContain('git clone');
+    // No pull, so the token never reaches the remote and there is nothing to scrub.
+    expect(joined).not.toContain('tok-xyz');
+    expect(dbUpdates.at(-1)).toHaveProperty('materializedAt');
+  });
+
   it('re-clones when the DB says materialized but the sandbox disk was wiped', async () => {
     // A platform/remote sandbox can expire and come back with an empty disk
     // while the binding row still says `materializedAt`. Trusting the row made
