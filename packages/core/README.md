@@ -28,6 +28,9 @@ npm install @mastra/core
 - **Tools** (`/tools`): Functions that agents can invoke to interact with external systems. Each tool has a schema and description enabling AI to understand and use them
   effectively. Supports custom tools, toolsets, and runtime context. [Learn more about Tools](https://mastra.ai/docs/agents/tools)
 
+- **Memory** (`/memory`): Thread-based conversation persistence with semantic recall and working memory capabilities. Stores conversation history, retrieves contextually
+  relevant information, and maintains agent state across interactions. [Learn more about Memory](https://mastra.ai/docs/memory/overview)
+
 - **MCP** (`/mcp`): Model Context Protocol integration enabling external tool sources. Supports SSE, HTTP, and Hono-based MCP servers with automatic tool conversion and
   registration. [Learn more about MCP](https://mastra.ai/docs/connections/mcp)
 
