@@ -4,7 +4,7 @@ import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Select, SelectContent, SelectItem, SelectTrigger } from '@mastra/playground-ui/components/Select';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { ChevronRight } from 'lucide-react';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router';
 
 import {
@@ -24,7 +24,11 @@ import { KnowledgeApprovals } from '../domains/factory/components/knowledge/Know
 import { KnowledgeImports } from '../domains/factory/components/knowledge/KnowledgeImports';
 import type { Arrivals, DiffBaseline } from '../domains/factory/components/knowledge/graphDiff';
 import { computeArrivals } from '../domains/factory/components/knowledge/graphDiff';
-import type { KnowledgeCurationWorkItem, KnowledgeScopeTreePayload } from '../domains/factory/services/knowledge';
+import type {
+  KnowledgeCurationWorkItem,
+  KnowledgeGraphPayload,
+  KnowledgeScopeTreePayload,
+} from '../domains/factory/services/knowledge';
 import { RequestError } from '../domains/factory/services/request';
 import { useInteractionIdle } from '../domains/factory/components/knowledge/useInteractionIdle';
 
@@ -453,13 +457,26 @@ function ActivityPanel({
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All operations</SelectItem>
-            {['create', 'edit', 'delete', 'restore', 'move', 'merge', 'promote', 'demote', 'stamp', 'rebind'].map(
-              value => (
-                <SelectItem key={value} value={value}>
-                  {value}
-                </SelectItem>
-              ),
-            )}
+            {[
+              'create',
+              'edit',
+              'delete',
+              'restore',
+              'move',
+              'merge',
+              'promote',
+              'demote',
+              'stamp',
+              'rebind',
+              'propose',
+              'approve',
+              'reject',
+              'conflict',
+            ].map(value => (
+              <SelectItem key={value} value={value}>
+                {value}
+              </SelectItem>
+            ))}
           </SelectContent>
         </Select>
         <Select value={sourceType} onValueChange={setSourceType}>
@@ -592,6 +609,52 @@ function ThreadGone({ onBack }: { onBack: () => void }) {
   );
 }
 
+function KnowledgeScopeMap({
+  lenses,
+  omittedScopes,
+  onOpen,
+}: {
+  lenses: KnowledgeGraphPayload[];
+  omittedScopes: string[];
+  onOpen: (scopeId: string) => void;
+}) {
+  return (
+    <div
+      aria-label="Scope map"
+      className="bg-surface1 absolute inset-0 z-[5] flex flex-wrap content-start gap-4 overflow-auto p-16"
+    >
+      {lenses.map(lens => (
+        <button
+          key={lens.scope.id}
+          type="button"
+          className="border-surface4 bg-surface2 hover:border-accent1 min-h-40 min-w-64 rounded-[40%] border-2 border-dashed p-6 text-left transition-colors"
+          onClick={() => onOpen(lens.scope.id)}
+        >
+          <Txt as="span" variant="ui-md" className="text-icon6 block font-medium">
+            {lens.scope.name}
+          </Txt>
+          <Txt as="span" variant="ui-xs" className="text-icon3 mt-1 block">
+            {lens.nodes.length} visible nodes
+          </Txt>
+          <span className="mt-4 flex max-w-72 flex-wrap gap-1" aria-label={`${lens.scope.name} members`}>
+            {lens.nodes.slice(0, 12).map(node => (
+              <span key={node.id} className="bg-surface4 text-icon5 rounded-full px-2 py-1 text-xs">
+                {node.name}
+              </span>
+            ))}
+          </span>
+        </button>
+      ))}
+      {omittedScopes.length > 0 ? (
+        <Notice variant="info">
+          {omittedScopes.length} scope{omittedScopes.length === 1 ? '' : 's'} omitted by canvas bounds; open the lens to
+          load it completely.
+        </Notice>
+      ) : null}
+    </div>
+  );
+}
+
 function KnowledgeContent({ factoryProjectId }: { factoryProjectId: string | undefined }) {
   const [searchParams, setSearchParams] = useSearchParams();
   const threadId = searchParams.get('thread') ?? undefined;
@@ -607,6 +670,9 @@ function KnowledgeContent({ factoryProjectId }: { factoryProjectId: string | und
   // The node trail (A7): the flyout shows the LAST entry; earlier entries
   // are clickable breadcrumbs back through the hops.
   const [trail, setTrail] = useState<TrailEntry[]>([]);
+  const [visitedLenses, setVisitedLenses] = useState<KnowledgeGraphPayload[]>([]);
+  const [omittedScopes, setOmittedScopes] = useState<Array<{ id: string; name: string }>>([]);
+  const [canvasMode, setCanvasMode] = useState<'lens' | 'map'>('lens');
   const selected = trail.at(-1) ?? null;
   const setSelected = (entry: TrailEntry | null) => setTrail(entry ? [entry] : []);
 
@@ -615,30 +681,27 @@ function KnowledgeContent({ factoryProjectId }: { factoryProjectId: string | und
   // under someone mid-interaction.
   const { idle, onActivity } = useInteractionIdle(10_000);
   const scopeQuery = useKnowledgeScopes(factoryProjectId, requestedScopeId, threadId);
-  const selectedScopeId = requestedScopeId ?? scopeQuery.data?.scope.id;
+  const selectedScopeId = requestedScopeId;
   const scopeTree = scopeQuery.data;
   const selectedCurationScope =
     scopeTree && scopeTree.scope.id === selectedScopeId && scopeTree.scope.needsCuration
       ? scopeTree.scope
       : scopeTree?.children.find(scope => scope.id === selectedScopeId && scope.needsCuration);
   const graphQuery = useKnowledgeGraph(factoryProjectId, selectedScopeId, threadId, { paused: !idle });
+  const graph = graphQuery.data;
 
   // Arrival diffing: baseline per view; a view switch resets it (no mass
   // arrival animation on switch), same-view polls diff by id sets.
   const baseline = useRef<DiffBaseline | null>(null);
-  const nextBaseline = useMemo<DiffBaseline | undefined>(() => {
-    if (!graphQuery.data) return undefined;
-    return {
-      viewKey: `${threadId ? `thread:${threadId}` : 'project'}:scope:${selectedScopeId ?? 'pending'}`,
-      version: graphQuery.data.version,
-      nodeIds: new Set(graphQuery.data.nodes.map(node => node.id)),
-      edgeIds: new Set(graphQuery.data.edges.map(edge => edge.id)),
-    };
-  }, [graphQuery.data, selectedScopeId, threadId]);
-  const arrivals = useMemo<Arrivals | undefined>(
-    () => (nextBaseline ? computeArrivals(baseline.current, nextBaseline) : undefined),
-    [nextBaseline],
-  );
+  const nextBaseline: DiffBaseline | undefined = graph
+    ? {
+        viewKey: `${threadId ? `thread:${threadId}` : 'project'}:scope:${selectedScopeId ?? 'pending'}`,
+        version: graph.version ?? null,
+        nodeIds: new Set(graph.nodes.map(node => node.id)),
+        edgeIds: new Set(graph.edges.map(edge => edge.id)),
+      }
+    : undefined;
+  const arrivals: Arrivals | undefined = nextBaseline ? computeArrivals(baseline.current, nextBaseline) : undefined;
   // Advance the baseline in an effect so a StrictMode double render or a
   // discarded concurrent render never diffs a payload against itself.
   useEffect(() => {
@@ -647,6 +710,7 @@ function KnowledgeContent({ factoryProjectId }: { factoryProjectId: string | und
 
   const backToProject = () => {
     setSelected(null);
+    setCanvasMode('lens');
     setSearchParams(params => {
       const copy = new URLSearchParams(params);
       copy.delete('thread');
@@ -656,12 +720,29 @@ function KnowledgeContent({ factoryProjectId }: { factoryProjectId: string | und
   };
   const selectScope = (scopeId: string) => {
     setSelected(null);
+    setCanvasMode('lens');
+    if (graph && graph.scope.id !== scopeId) {
+      if (graph.page.truncated) {
+        setOmittedScopes(scopes =>
+          scopes.some(scope => scope.id === graph.scope.id)
+            ? scopes
+            : [...scopes, { id: graph.scope.id, name: graph.scope.name }],
+        );
+      } else {
+        setVisitedLenses(lenses => [...lenses.filter(lens => lens.scope.id !== graph.scope.id), graph]);
+      }
+    }
     setSearchParams(params => {
       const copy = new URLSearchParams(params);
       copy.set('scope', scopeId);
       return copy;
     });
   };
+  const completeLenses = new Map(visitedLenses.map(lens => [lens.scope.id, lens]));
+  if (graph && !graph.page.truncated) completeLenses.set(graph.scope.id, graph);
+  const incompleteScopes = new Map(omittedScopes.map(scope => [scope.id, scope.name]));
+  if (graph?.page.truncated) incompleteScopes.set(graph.scope.id, graph.scope.name);
+  for (const scopeId of completeLenses.keys()) incompleteScopes.delete(scopeId);
 
   let body: React.ReactNode;
   if (scopeQuery.isError) {
@@ -671,6 +752,14 @@ function KnowledgeContent({ factoryProjectId }: { factoryProjectId: string | und
       const message = scopeQuery.error instanceof Error ? scopeQuery.error.message : 'Unable to load knowledge scopes.';
       body = <Notice variant="destructive">{message}</Notice>;
     }
+  } else if (!selectedScopeId) {
+    body = (
+      <div className="border-surface4 bg-surface2 flex min-h-80 items-center justify-center rounded-lg border">
+        <Txt as="p" variant="ui-md" className="text-icon3 max-w-80 text-center">
+          Select a scope to open its bounded knowledge lens.
+        </Txt>
+      </div>
+    );
   } else if (graphQuery.isError) {
     if (threadId && graphQuery.error instanceof RequestError && graphQuery.error.status === 404) {
       // Stale deep link or a session whose knowledge was since deleted —
@@ -681,9 +770,9 @@ function KnowledgeContent({ factoryProjectId }: { factoryProjectId: string | und
         graphQuery.error instanceof Error ? graphQuery.error.message : 'Unable to load the knowledge graph.';
       body = <Notice variant="destructive">{message}</Notice>;
     }
-  } else if (graphQuery.isPending) {
+  } else if (graphQuery.isPending || !graph) {
     body = <SkeletonRows label="Loading knowledge graph" rows={6} />;
-  } else if (graphQuery.data.nodes.length === 0) {
+  } else if (graph.nodes.length === 0) {
     body = (
       <Txt as="p" variant="ui-md" className="text-icon3">
         No knowledge captured yet — the graph fills in as factory sessions work.
@@ -698,24 +787,76 @@ function KnowledgeContent({ factoryProjectId }: { factoryProjectId: string | und
         onPointerMoveCapture={onActivity}
         onWheelCapture={onActivity}
       >
-        <KnowledgeGraph
-          payload={graphQuery.data}
-          arrivals={arrivals}
-          focusedId={selected?.nodeId ?? null}
-          focusedRecordId={selected?.recordId ?? null}
-          onFocusChange={id => {
-            // A graph click starts a fresh trail; a pane click clears it.
-            if (!id) return setTrail([]);
-            const node = graphQuery.data?.nodes.find(entry => entry.id === id);
-            setTrail([{ nodeId: id, name: node?.name ?? id }]);
-          }}
-          onNodeClick={node => setSelected({ nodeId: node.id, name: node.name })}
-          onEdgeClick={edge => {
-            // Selecting an edge selects AND expands the supporting knowledge record (A7).
-            const node = graphQuery.data?.nodes.find(entry => entry.id === edge.source);
-            setSelected({ nodeId: edge.source, name: node?.name ?? edge.source, recordId: edge.recordId });
-          }}
-        />
+        <div
+          data-testid="knowledge-scope-overlay"
+          className="border-surface4 bg-surface2/90 absolute top-3 left-3 z-10 flex max-w-[calc(100%-1.5rem)] flex-wrap items-center gap-2 rounded-md border px-3 py-2"
+        >
+          <Txt as="span" variant="ui-xs" className="text-icon4">
+            Lens
+          </Txt>
+          <Txt as="span" variant="ui-sm" className="text-icon6 font-medium">
+            {graph.scope.name}
+          </Txt>
+          {Array.from(
+            new Map(
+              graph.nodes.flatMap(node =>
+                node.boundary ? [[node.boundary.scope.id, node.boundary.scope] as const] : [],
+              ),
+            ).values(),
+          ).map(scope => (
+            <Button key={scope.id} variant="ghost" size="xs" onClick={() => selectScope(scope.id)}>
+              Open {scope.name}
+            </Button>
+          ))}
+          <Button variant="outline" size="xs" onClick={() => setCanvasMode(mode => (mode === 'lens' ? 'map' : 'lens'))}>
+            {canvasMode === 'lens' ? 'Scope map' : 'Return to lens'}
+          </Button>
+        </div>
+        {canvasMode === 'map' ? (
+          <KnowledgeScopeMap
+            lenses={[...completeLenses.values()]}
+            omittedScopes={[...incompleteScopes.values()]}
+            onOpen={selectScope}
+          />
+        ) : (
+          <KnowledgeGraph
+            payload={graph}
+            arrivals={arrivals}
+            focusedId={selected?.nodeId ?? null}
+            focusedRecordId={selected?.recordId ?? null}
+            onFocusChange={id => {
+              // A graph click starts a fresh trail; a pane click clears it.
+              if (!id) return setTrail([]);
+              const node = graph?.nodes.find(entry => entry.id === id);
+              setTrail([{ nodeId: id, name: node?.name ?? id }]);
+            }}
+            onNodeClick={node => {
+              if (node.boundary) {
+                setTrail([]);
+                selectScope(node.boundary.scope.id);
+                return;
+              }
+              setSelected({ nodeId: node.id, name: node.name });
+            }}
+            onEdgeClick={edge => {
+              // Selecting an edge selects AND expands the supporting knowledge record (A7).
+              const node = graph?.nodes.find(entry => entry.id === edge.source);
+              setSelected({ nodeId: edge.source, name: node?.name ?? edge.source, recordId: edge.recordId });
+            }}
+          />
+        )}
+        {graphQuery.hasNextPage ? (
+          <div className="absolute bottom-3 left-1/2 z-10 -translate-x-1/2">
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={graphQuery.isFetchingNextPage}
+              onClick={() => void graphQuery.fetchNextPage()}
+            >
+              {graphQuery.isFetchingNextPage ? 'Loading lens…' : 'Load more in this lens'}
+            </Button>
+          </div>
+        ) : null}
         {selected && factoryProjectId && selectedScopeId ? (
           <KnowledgeFlyout
             factoryProjectId={factoryProjectId}
@@ -736,7 +877,7 @@ function KnowledgeContent({ factoryProjectId }: { factoryProjectId: string | und
             onNodeRef={name => {
               // A clicked [[wikilink]] gets the full node-click treatment (A7):
               // ego focus + cluster zoom + flyout swap, PUSHED onto the trail.
-              const target = graphQuery.data?.nodes.find(node => node.name.toLowerCase() === name.toLowerCase());
+              const target = graph?.nodes.find(node => node.name.toLowerCase() === name.toLowerCase());
               if (target && target.id !== selected.nodeId)
                 setTrail(current => [...current, { nodeId: target.id, name: target.name }]);
             }}

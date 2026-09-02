@@ -167,7 +167,7 @@ async function rawGraph(h: Harness, query = ''): Promise<{ status: number; body:
 async function graph(h: Harness, query = ''): Promise<{ status: number; body: KnowledgeGraphPayload }> {
   const result = await rawGraph(h, query);
   const ids = new Map<string, string>();
-  for (const item of [...(result.body.nodes ?? []), ...(result.body.outOfWindow ?? [])]) {
+  for (const item of result.body.nodes ?? []) {
     const resolved = await h.knowledge.resolveNode({ name: item.name, scopeIds: h.allScopeIds });
     if (resolved) ids.set(item.id, resolved.id);
   }
@@ -181,7 +181,6 @@ async function graph(h: Harness, query = ''): Promise<{ status: number; body: Kn
         source: ids.get(edge.source) ?? edge.source,
         target: ids.get(edge.target) ?? edge.target,
       })),
-      outOfWindow: result.body.outOfWindow?.map(item => ({ ...item, id: ids.get(item.id) ?? item.id })),
     },
   };
 }
@@ -231,6 +230,7 @@ describe('KnowledgeRoutes', () => {
   it('fails closed when the host has not configured a curation scope', async () => {
     const h = await createHarness();
     const treeResponse = await h.app.request(`/web/factory/projects/${h.projectId}/knowledge/scopes`);
+    expect(treeResponse.status).toBe(200);
     const tree = (await treeResponse.json()) as KnowledgeScopeTreePayload;
     const response = await h.app.request(
       `/web/factory/projects/${h.projectId}/knowledge/curation/worklist?scopeId=${tree.scope.id}`,
@@ -481,7 +481,7 @@ describe('KnowledgeRoutes', () => {
     expect(body.edges).toHaveLength(1);
     expect(body.edges[0]).toMatchObject({ source: service.id, target: runbook.id, type: 'wikilink' });
     expect(body.nodes.find(node => node.id === service.id)?.recordCount).toBe(1);
-    expect(body.truncated).toBe(false);
+    expect(body.page.truncated).toBe(false);
   });
 
   it('projects the bounded description into graph snapshots and never leaks content', async () => {
@@ -511,11 +511,11 @@ describe('KnowledgeRoutes', () => {
     }
     expect(body.nodes).toHaveLength(4);
     expect(body.records).toHaveLength(0);
-    expect(body.truncated).toBe(false);
+    expect(body.page.truncated).toBe(false);
   });
 
   // 2
-  it('yields a real edge for a cross-rung mention (thread fact linking an org entity) in the thread view', async () => {
+  it('adds an authorized one-hop boundary node for a cross-scope mention', async () => {
     const h = await createHarness();
     const orgEntity = await node(h.knowledge, 'Org Concept', h.orgScope);
     const threadEntity = await node(h.knowledge, 'Session Note', await h.threadScope('t-1'));
@@ -524,8 +524,11 @@ describe('KnowledgeRoutes', () => {
     const { status, body } = await graph(h, '?threadId=t-1');
     expect(status).toBe(200);
     expect(body.view).toBe('thread');
-    expect(body.edges).toHaveLength(1);
-    expect(body.edges[0]).toMatchObject({ source: threadEntity.id, target: orgEntity.id, type: 'wikilink' });
+    expect(body.nodes.map(node => node.id)).toEqual([threadEntity.id, orgEntity.id]);
+    expect(body.nodes.find(node => node.id === orgEntity.id)?.boundary?.scope.name).toBe('org-1');
+    expect(body.edges).toEqual([
+      expect.objectContaining({ source: threadEntity.id, target: orgEntity.id, type: 'wikilink', boundary: true }),
+    ]);
   });
 
   // 3
@@ -538,6 +541,38 @@ describe('KnowledgeRoutes', () => {
     const { body } = await graph(h);
     expect(body.edges).toHaveLength(1);
     expect(body.edges[0]).toMatchObject({ source: source.id, target: target.id });
+  });
+
+  it('renders a two-node mention cycle without recursion or duplicate edges', async () => {
+    const h = await createHarness();
+    const first = await node(h.knowledge, 'Cycle A', h.projectScope);
+    const second = await node(h.knowledge, 'Cycle B', h.projectScope);
+    await record(h.knowledge, first, 'Links [[Cycle B]].', h.projectScope);
+    await record(h.knowledge, second, 'Links [[Cycle A]].', h.projectScope);
+
+    const { body } = await graph(h);
+    expect(body.edges).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ source: first.id, target: second.id }),
+        expect.objectContaining({ source: second.id, target: first.id }),
+      ]),
+    );
+    expect(body.edges).toHaveLength(2);
+  });
+
+  it('omits inaccessible mention targets without an edge or boundary affordance', async () => {
+    const h = await createHarness();
+    const source = await node(h.knowledge, 'Visible Source', h.projectScope);
+    const hiddenScope = await h.knowledge.createNode({ name: 'Hidden Scope', isScope: true, scopeIds: [] });
+    await node(h.knowledge, 'Hidden Target', [hiddenScope.id]);
+    await record(h.knowledge, source, 'Links [[Hidden Target]].', h.projectScope, 'thread-a', undefined, {
+      autoCreateScope: [hiddenScope.id],
+    });
+
+    const { body } = await graph(h);
+    expect(body.nodes.map(entry => entry.name)).toEqual(['Visible Source']);
+    expect(body.edges).toEqual([]);
+    expect(JSON.stringify(body)).not.toContain('Hidden Target');
   });
 
   // 4
@@ -559,40 +594,28 @@ describe('KnowledgeRoutes', () => {
     const { body } = await graph(h);
     expect(body.edges).toHaveLength(1);
     expect(body.edges[0]?.source).toBe(solo.id);
-    expect(body.outOfWindow).toHaveLength(0);
-    expect(body.unresolvedCapped.count).toBe(0);
   });
 
   // 5
-  it('reports a resolvable out-of-window target in outOfWindow, not as dangling', async () => {
+  it('does not let same-scope links escape the bounded node window', async () => {
     const h = await createHarness({ limits: { maxNodes: 1 } });
-    // Equal updatedAt → name-asc tiebreak keeps 'A window entity' in the window.
+    // Equal updatedAt → name-asc tiebreak keeps 'A window entity' in the lens page.
     const inWindow = await node(h.knowledge, 'A window entity', h.projectScope);
-    const outside = await node(h.knowledge, 'Z outside entity', h.projectScope);
+    await node(h.knowledge, 'Z outside entity', h.projectScope);
     await record(h.knowledge, inWindow, 'Links [[Z outside entity]].', h.projectScope);
 
-    const { body } = await graph(h);
-    expect(body.nodes.map(node => node.id)).toEqual([inWindow.id]);
-    expect(body.edges).toHaveLength(0);
-    expect(body.outOfWindow).toEqual([
-      expect.objectContaining({ id: outside.id, name: 'Z outside entity', reference: expect.stringMatching(/^kr_/) }),
+    const first = await rawGraph(h);
+    expect(first.body.nodes.map(node => node.name)).toEqual(['A window entity']);
+    expect(first.body.edges).toEqual([]);
+    expect(first.body.page.truncated).toBe(true);
+    expect(first.body.page.nextCursor).toBeDefined();
+
+    const second = await rawGraph(h, `?cursor=${encodeURIComponent(first.body.page.nextCursor!)}`);
+    expect(second.body.nodes.map(node => node.name)).toEqual(['Z outside entity']);
+    expect(second.body.page).toEqual({ truncated: false, incomplete: false });
+    expect(second.body.edges).toEqual([
+      expect.objectContaining({ source: first.body.nodes[0]?.id, target: second.body.nodes[0]?.id }),
     ]);
-    expect(body.unresolvedCapped.count).toBe(0);
-  });
-
-  it('resolves an authorized node handle outside the current graph window', async () => {
-    const h = await createHarness({ limits: { maxNodes: 1 } });
-    const inWindow = await node(h.knowledge, 'A window entity', h.projectScope);
-    const outside = await node(h.knowledge, 'Z outside entity', h.projectScope);
-    await record(h.knowledge, inWindow, 'Links [[Z outside entity]].', h.projectScope);
-
-    const { body } = await rawGraph(h);
-    const outsideHandle = body.outOfWindow?.find(item => item.name === outside.name)?.id;
-    expect(outsideHandle).toMatch(/^kh_/);
-
-    const response = await h.app.request(`/web/factory/projects/${h.projectId}/knowledge/nodes/${outsideHandle}`);
-    expect(response.status).toBe(200);
-    expect((await response.json()) as KnowledgeNodePayload).toMatchObject({ node: { name: outside.name } });
   });
 
   it('lazily materializes host-vouched intake addresses for distinct issue, pull request, Slack, and thread views', async () => {
@@ -667,7 +690,47 @@ describe('KnowledgeRoutes', () => {
 
     const { body } = await graph(h);
     expect(body.nodes).toHaveLength(2);
-    expect(body.truncated).toBe(true);
+    expect(body.page.truncated).toBe(true);
+  });
+
+  it('marks a lens truncated when one node has more records than its bounded preview', async () => {
+    const h = await createHarness();
+    const owner = await node(h.knowledge, 'High-volume node', h.projectScope);
+    await Promise.all(
+      Array.from({ length: 101 }, (_, index) => record(h.knowledge, owner, `Bounded record ${index}`, h.projectScope)),
+    );
+
+    const { body } = await graph(h);
+    expect(body.nodes.find(entry => entry.id === owner.id)?.recordCount).toBe(100);
+    expect(body.page.truncated).toBe(true);
+  });
+
+  it('benchmarks 100, 250, and 500-node lenses and clamps to the 250-node server policy', async () => {
+    const h = await createHarness();
+    const addNodes = async (start: number, count: number) => {
+      await Promise.all(
+        Array.from({ length: count }, (_, offset) =>
+          node(h.knowledge, `Benchmark node ${String(start + offset).padStart(3, '0')}`, h.projectScope),
+        ),
+      );
+    };
+
+    await addNodes(0, 100);
+    const hundred = await rawGraph(h);
+    expect(hundred.body.nodes).toHaveLength(100);
+    expect(hundred.body.page.nextCursor).toBeUndefined();
+
+    await addNodes(100, 150);
+    const twoFifty = await rawGraph(h);
+    expect(twoFifty.body.nodes).toHaveLength(250);
+    expect(twoFifty.body.page.nextCursor).toBeUndefined();
+
+    await addNodes(250, 250);
+    const fiveHundred = await rawGraph(h, '?limit=500');
+    expect(fiveHundred.body.nodes).toHaveLength(250);
+    expect(fiveHundred.body.limits.maxNodes).toBe(250);
+    expect(fiveHundred.body.page.nextCursor).toMatch(/^kh_/);
+    expect(fiveHundred.body.page.truncated).toBe(true);
   });
 
   // 7 (A9: multi-target pins mark their EDGES; single-target pins keep the node accent)
@@ -706,7 +769,6 @@ describe('KnowledgeRoutes', () => {
     expect(pinnedEdge?.recordId).not.toBe(relPin.id);
     expect(defaultView.nodes.find(node => node.id === relA.id)?.pinned).toBe(false);
     expect(defaultView.nodes.find(node => node.id === relB.id)?.pinned).toBe(false);
-    expect(defaultView.pinCensus).toEqual({ resource: 2, thread: null });
     // The thread-scoped pin is invisible in the default view.
     expect(defaultView.nodes.some(node => node.id === threadAccented.id)).toBe(false);
 
@@ -714,7 +776,6 @@ describe('KnowledgeRoutes', () => {
     expect(threadView.nodes.some(node => node.name === 'pinned')).toBe(false);
     expect(threadView.nodes.find(node => node.id === threadAccented.id)?.pinned).toBe(true);
     expect(threadView.nodes.some(node => node.id === accented.id)).toBe(false);
-    expect(threadView.pinCensus).toEqual({ resource: 0, thread: 1 });
   });
 
   // 7b
@@ -847,15 +908,15 @@ describe('KnowledgeRoutes', () => {
     await record(h.knowledge, source, 'First [[Mystery]].', h.projectScope, 'thread-a', undefined, hidden);
     await record(h.knowledge, source, 'Second [[Mystery]].', h.projectScope, 'thread-a', undefined, hidden);
     await record(h.knowledge, source, 'Third [[Mystery]].', h.projectScope, 'thread-a', undefined, hidden);
-    const spy = vi.spyOn(h.knowledge, 'resolveNode');
+    const spy = vi.spyOn(h.knowledge, 'listNodes');
 
     await rawGraph(h);
-    const mysteryLookups = spy.mock.calls.filter(([input]) => input.name.toLocaleLowerCase() === 'mystery');
+    const mysteryLookups = spy.mock.calls.filter(([input]) => input.namePrefix?.toLocaleLowerCase() === 'mystery');
     expect(mysteryLookups).toHaveLength(1);
   });
 
   // 14
-  it('resolves a name identically whether or not its target is in the window', async () => {
+  it('resolves a name to an in-window target', async () => {
     const runtime = new Knowledge({ id: 'mastra', storage: new InMemoryStore() });
     const wide = await createHarness({ knowledgeRuntime: runtime, limits: { maxNodes: 10 } });
     const store = wide.knowledge;
@@ -867,30 +928,10 @@ describe('KnowledgeRoutes', () => {
     expect(wideBody.edges).toEqual([
       expect.objectContaining({ source: source.id, target: target.id, type: 'wikilink' }),
     ]);
-    expect(wideBody.outOfWindow).toHaveLength(0);
-
-    // Same seeded fixture, narrow window: the target still RESOLVES (to the
-    // same entity), it just falls out of the node window.
-    const narrow = await createHarness({ knowledgeRuntime: runtime, limits: { maxNodes: 1 } });
-    // narrow harness has its own project — reseed under its scope.
-    const narrowSource = await node(store, 'A source entity', narrow.projectScope);
-    const narrowTarget = await node(store, 'Z target entity', narrow.projectScope);
-    await record(store, narrowSource, 'Links [[Z target entity]].', narrow.projectScope);
-    const narrowBody = (await graph(narrow)).body;
-    expect(narrowBody.nodes.map(node => node.id)).toEqual([narrowSource.id]);
-    expect(narrowBody.edges).toHaveLength(0);
-    expect(narrowBody.outOfWindow).toEqual([
-      expect.objectContaining({
-        id: narrowTarget.id,
-        name: 'Z target entity',
-        reference: expect.stringMatching(/^kr_/),
-      }),
-    ]);
-    expect(narrowBody.unresolvedCapped.count).toBe(0);
   });
 
   // 15
-  it('reports unique unknown names beyond the fallback cap', async () => {
+  it('does not expose unresolved names beyond the fallback cap', async () => {
     const h = await createHarness({ limits: { maxFallbackLookups: 1 } });
     const source = await node(h.knowledge, 'Capped Source', h.projectScope);
     await record(h.knowledge, source, 'Sees [[Ghost One]] then [[Ghost Two]].', h.projectScope, 'thread-a', undefined, {
@@ -898,9 +939,8 @@ describe('KnowledgeRoutes', () => {
     });
 
     const { body } = await graph(h);
-    expect(body.edges).toHaveLength(1);
-    expect(body.unresolvedCapped.count).toBe(1);
-    expect(body.unresolvedCapped.names).toEqual(['Ghost Two']);
+    expect(body).not.toHaveProperty('unresolvedCapped');
+    expect(body.page.truncated).toBe(true);
   });
 
   // 16

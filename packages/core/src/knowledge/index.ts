@@ -18,6 +18,8 @@ import type {
   KnowledgeImportRunStatus,
   KnowledgeProposalStatus,
   KnowledgeActivityAction,
+  KnowledgeNode,
+  KnowledgeScopeAddress,
   KnowledgeScopeIds,
   KnowledgeSemanticOutboxEntry,
   KnowledgeStructurePlan,
@@ -468,6 +470,11 @@ export class Knowledge extends MastraBase {
     return promise;
   }
 
+  /** Host-only canonical address resolution. */
+  async resolveScopeAddress(address: string): Promise<KnowledgeScopeAddress | null> {
+    return this.#getStorage().then(storage => storage.getScopeAddress(address));
+  }
+
   registerImporter<TPayload = unknown>(definition: KnowledgeImporterDefinition<TPayload>) {
     const handle = this.#importers.register(definition, (binding, payload) =>
       this.runImporter(definition.id, binding, payload, { triggerKind: 'programmatic' }),
@@ -633,6 +640,28 @@ export class Knowledge extends MastraBase {
     if (input.membershipScopeIds && !input.membershipScopeIds.some(scopeId => nodeScopeIds.includes(scopeId)))
       return null;
     return node;
+  }
+
+  async getScope(input: { id: string; scopeIds: KnowledgeScopeIds }) {
+    const storage = await this.#getStorage();
+    const readableScopeIds = await this.#resolveReadScopeIds(input.scopeIds);
+    const scope = await storage.getNode(input.id);
+    if (!scope?.isScope || scope.deletedAt) return null;
+    if (readableScopeIds.includes(scope.id)) return scope;
+    const memberships = await storage.getNodeScopeIds(scope.id);
+    return isKnowledgeReadVisible(memberships, readableScopeIds) ? scope : null;
+  }
+
+  async getNodeScopes(input: { id: string; scopeIds: KnowledgeScopeIds }) {
+    const storage = await this.#getStorage();
+    const scopeIds = await this.#resolveReadScopeIds(input.scopeIds);
+    const node = await storage.getNode(input.id);
+    if (!node || node.deletedAt) return [];
+    const nodeScopeIds = await storage.getNodeScopeIds(node.id);
+    if (!isKnowledgeReadVisible(nodeScopeIds, scopeIds)) return [];
+    const visibleScopeIds = nodeScopeIds.filter(scopeId => scopeIds.includes(scopeId));
+    const scopes = await Promise.all(visibleScopeIds.map(scopeId => storage.getNode(scopeId)));
+    return scopes.filter((scope): scope is KnowledgeNode => Boolean(scope?.isScope && !scope.deletedAt));
   }
 
   /** @internal */

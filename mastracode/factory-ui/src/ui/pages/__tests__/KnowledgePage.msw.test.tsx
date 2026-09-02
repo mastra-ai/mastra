@@ -68,7 +68,7 @@ const scopeTreeFixture: KnowledgeScopeTreePayload = {
 
 const graphFixture: KnowledgeGraphPayload = {
   view: 'project',
-  scopeId: `resource:${FACTORY_ID}`,
+  scope: scopeTreeFixture.scope,
   nodes: [
     {
       id: 'ent-1',
@@ -106,10 +106,8 @@ const graphFixture: KnowledgeGraphPayload = {
     { id: 'record-2', nodeIds: ['ent-2', 'ent-1'], pinned: false, text: 'Runbook references the service.' },
     { id: 'record-3', nodeIds: ['ent-1'], pinned: false, text: 'Deploys run nightly.' },
   ],
-  truncated: false,
-  outOfWindow: [],
-  unresolvedCapped: { count: 0, names: [] },
-  pinCensus: { resource: 1, thread: null },
+  page: { truncated: false, incomplete: false },
+  limits: { maxNodes: 250, maxEdges: 500, maxBoundaryNodes: 100, boundaryHops: 1 },
   version: '01TESTVERSION',
 };
 
@@ -399,7 +397,7 @@ function stubKnowledgeRoute(
   );
 }
 
-function renderRoute(path = `/factories/${FACTORY_ID}/knowledge`) {
+function renderRoute(path = `/factories/${FACTORY_ID}/knowledge?scope=resource:${FACTORY_ID}`) {
   const router = createMemoryRouter(createAppRoutes(), {
     initialEntries: [path],
   });
@@ -434,6 +432,54 @@ describe('KnowledgePage', () => {
     expect(screen.getByRole('button', { name: 'Pinned' })).toBeInTheDocument();
     // Clean payload → no truncation banner.
     expect(screen.queryByTestId('knowledge-truncation-banner')).not.toBeInTheDocument();
+  });
+
+  it('opens with an empty lens until an authorized scope is selected', async () => {
+    stubKnowledgeRoute();
+    const user = userEvent.setup();
+    const { router } = renderRoute(`/factories/${FACTORY_ID}/knowledge`);
+
+    expect(await screen.findByText('Select a scope to open its bounded knowledge lens.')).toBeInTheDocument();
+    await user.click(await screen.findByRole('button', { name: 'Acme Factory' }));
+    expect(await screen.findByRole('region', { name: 'Knowledge graph' })).toBeInTheDocument();
+    expect(router.state.location.search).toContain(`scope=resource%3A${FACTORY_ID}`);
+  });
+
+  it('navigates from an authorized boundary node to its scope lens', async () => {
+    const boundaryScope = { id: 'scope:platform', name: 'Platform', kind: 'team' };
+    stubKnowledgeRoute({
+      ...graphFixture,
+      nodes: [
+        ...graphFixture.nodes,
+        {
+          id: 'ent-3',
+          reference: 'reference-ent-3',
+          name: 'Deploy Platform',
+          kind: 'service',
+          pinned: false,
+          recordCount: 0,
+          boundary: { scope: boundaryScope },
+          createdAt: '2026-08-13T00:00:00.000Z',
+          updatedAt: '2026-08-13T01:00:00.000Z',
+        },
+      ],
+      edges: [
+        ...graphFixture.edges,
+        {
+          id: 'wikilink:ent-1:ent-3',
+          source: 'ent-1',
+          target: 'ent-3',
+          type: 'wikilink',
+          recordId: 'record-4',
+          boundary: true,
+        },
+      ],
+    });
+    const user = userEvent.setup();
+    const { router } = renderRoute();
+
+    await user.click(await screen.findByRole('button', { name: 'Open Platform' }));
+    expect(router.state.location.search).toContain('scope=scope%3Aplatform');
   });
 
   it('uses scope-first navigation and shows the authorized activity feed', async () => {
@@ -574,20 +620,15 @@ describe('KnowledgePage', () => {
     expect(screen.queryByText('Integrated repository history.')).not.toBeInTheDocument();
   });
 
-  it('shows the truncation banner when the payload window was capped', async () => {
+  it('shows the bounded-lens banner when more authorized graph data is available', async () => {
     stubKnowledgeRoute({
       ...graphFixture,
-      truncated: true,
-      outOfWindow: [{ id: 'ent-x', name: 'Elsewhere' }],
-      unresolvedCapped: { count: 3, names: ['Ghost'] },
+      page: { truncated: true, incomplete: true },
     });
     renderRoute();
 
     const banner = await screen.findByTestId('knowledge-truncation-banner');
-    expect(banner).toHaveTextContent(/Partial view/);
-    expect(banner).toHaveTextContent(/newest 2 nodes/);
-    expect(banner).toHaveTextContent(/1 linked nodes outside the window/);
-    expect(banner).toHaveTextContent(/3 links unresolved/);
+    expect(banner).toHaveTextContent('Bounded lens — showing 2 nodes and 2 edges');
   });
 
   it('shows the sidebar Knowledge entry (brain icon) under Audit log', async () => {
@@ -715,7 +756,7 @@ describe('KnowledgePage', () => {
 
   it('renders an explicitly selected thread view and returns via the breadcrumb', async () => {
     stubKnowledgeRoute();
-    renderRoute(`/factories/${FACTORY_ID}/knowledge?thread=thread-abc-123`);
+    renderRoute(`/factories/${FACTORY_ID}/knowledge?thread=thread-abc-123&scope=resource:${FACTORY_ID}`);
     const user = userEvent.setup();
 
     // Thread view: breadcrumb renders and the thread-scoped node appears.
@@ -791,13 +832,14 @@ describe('KnowledgePage', () => {
 
   it('renders the calm not-available state for a stale thread deep link', async () => {
     stubKnowledgeRoute();
-    renderRoute(`/factories/${FACTORY_ID}/knowledge?thread=gone-thread`);
+    const { router } = renderRoute(`/factories/${FACTORY_ID}/knowledge?thread=gone-thread`);
 
     const gone = await screen.findByTestId('knowledge-thread-gone');
     expect(gone).toHaveTextContent(/no longer available/i);
     // Crumb back works from the 404 state.
     const user = userEvent.setup();
     await user.click(screen.getByRole('button', { name: 'Back to the project view' }));
-    expect(await screen.findByText('Payments Service')).toBeInTheDocument();
+    await waitFor(() => expect(router.state.location.search).not.toContain('thread='));
+    expect(screen.queryByTestId('knowledge-thread-gone')).not.toBeInTheDocument();
   });
 });

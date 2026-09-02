@@ -14,12 +14,13 @@ export default function verifyKnowledgeProof() {
   if (!configured) return;
   const output = path.resolve(configured);
   const artifacts = path.join(output, 'artifacts');
-  const curationProof = ['curation-owner.png', 'curation-suggest.png'].some(file =>
-    fs.existsSync(path.join(output, file)),
-  );
-  const screenshots = curationProof
-    ? ['curation-owner.png', 'curation-suggest.png']
-    : ['explore.png', 'imports-completed.png', 'reader.png', 'suggester.png', 'reviewer.png'];
+  const curationScreenshots = ['curation-owner.png', 'curation-suggest.png'];
+  const canvasScreenshots = ['canvas-boundary.png'];
+  const screenshots = curationScreenshots.some(file => fs.existsSync(path.join(output, file)))
+    ? curationScreenshots
+    : canvasScreenshots.some(file => fs.existsSync(path.join(output, file)))
+      ? canvasScreenshots
+      : ['explore.png', 'imports-completed.png', 'reader.png', 'suggester.png', 'reviewer.png'];
   const required = ['results.json', ...screenshots].map(file => path.join(output, file));
   if (required.some(file => !fs.existsSync(file))) throw new Error('Knowledge proof output is incomplete.');
   if (find(artifacts, file => file.endsWith('trace.zip')).length < screenshots.length) {

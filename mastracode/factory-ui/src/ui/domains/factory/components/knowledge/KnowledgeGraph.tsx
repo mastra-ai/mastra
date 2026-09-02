@@ -54,7 +54,8 @@ function NodeNodeComponent({ data, selected }: NodeProps<NodeFlowNode>) {
           markers (dot / line / junction). */}
       <div
         className={[
-          'flex h-full w-full flex-col items-center justify-center overflow-hidden rounded-full border-2 border-purple-500/60 text-center transition-shadow duration-200',
+          'flex h-full w-full flex-col items-center justify-center overflow-hidden rounded-full border-2 text-center transition-shadow duration-200',
+          node.boundary ? 'border-dashed border-purple-300/80' : 'border-purple-500/60',
           selected ? 'ring-2 ring-purple-300' : '',
         ].join(' ')}
         style={{
@@ -73,7 +74,7 @@ function NodeNodeComponent({ data, selected }: NodeProps<NodeFlowNode>) {
         ) : null}
         {labeled && large ? (
           <span className="mt-0.5 text-[9px] font-medium tracking-widest text-purple-300/70 uppercase">
-            {node.kind.slice(0, 12)}
+            {node.boundary ? `Open ${node.boundary.scope.name}` : node.kind.slice(0, 12)}
           </span>
         ) : null}
       </div>
@@ -131,9 +132,11 @@ function KnowledgeLinkComponent({ id, source, target, data }: EdgeProps<Knowledg
               }
             : pinned
               ? { stroke: 'rgba(251,191,36,0.75)', strokeWidth: 2 }
-              : source.startsWith('record:') || target.startsWith('record:')
-                ? { stroke: 'rgba(255,255,255,0.45)', strokeWidth: 1.2 }
-                : { stroke: 'rgba(139,92,246,0.4)', strokeWidth: 1.4 }
+              : data?.boundary
+                ? { stroke: 'rgba(167,139,250,0.7)', strokeWidth: 1.5, strokeDasharray: '6 5' }
+                : source.startsWith('record:') || target.startsWith('record:')
+                  ? { stroke: 'rgba(255,255,255,0.45)', strokeWidth: 1.2 }
+                  : { stroke: 'rgba(139,92,246,0.4)', strokeWidth: 1.4 }
         }
       />
       {pinned && !source.startsWith('record:') && !target.startsWith('record:') ? (
@@ -223,17 +226,13 @@ export interface KnowledgeGraphProps {
 }
 
 function TruncationBanner({ payload }: { payload: KnowledgeGraphPayload }) {
-  const parts: string[] = [];
-  if (payload.truncated) parts.push(`showing the newest ${payload.nodes.length} nodes`);
-  if (payload.outOfWindow.length > 0) parts.push(`${payload.outOfWindow.length} linked nodes outside the window`);
-  if (payload.unresolvedCapped.count > 0) parts.push(`${payload.unresolvedCapped.count} links unresolved (capped)`);
-  if (parts.length === 0) return null;
+  if (!payload.page.truncated) return null;
   return (
     <div
       data-testid="knowledge-truncation-banner"
       className="border-surface5 bg-surface3/90 text-icon4 pointer-events-none absolute top-2 left-1/2 z-10 -translate-x-1/2 rounded-md border px-3 py-1 text-xs"
     >
-      Partial view — {parts.join(' · ')}
+      Bounded lens — showing {payload.nodes.length} nodes and {payload.edges.length} edges
     </div>
   );
 }

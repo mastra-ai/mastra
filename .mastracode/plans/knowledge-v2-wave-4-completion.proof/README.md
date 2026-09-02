@@ -25,3 +25,20 @@ Latest verified output (2026-09-02):
 - `results.json`: `ee82eed3fb0c318e74001a4aa72ab56df7077fefc1ac99d001737f6f53579de9`
 - `curation-owner.png`: `3cea090a3f6cd7ae0ab03580a721339852027ae976f52a9456a14d814ea8a6d2`
 - `curation-suggest.png`: `d71f2b224e9da3752cab6473538c79e781f537b2f8cc8db94190404571ee20b0`
+
+## Graph canvas
+
+```bash
+export KNOWLEDGE_PROOF_OUTPUT="$PWD/.mastracode/plans/knowledge-v2-wave-4-completion.proof/playwright/canvas"
+rm -rf "$KNOWLEDGE_PROOF_OUTPUT"
+pnpm --filter ./mastracode/factory-ui exec playwright test --config e2e/playwright.config.ts e2e/knowledge/canvas.spec.ts --reporter=line
+```
+
+Expected: 1/1 test passes through real Factory routes backed by LibSQL. The journey starts from an empty canvas, selects an authorized scope lens, enforces the 250-node selected-scope cap, preserves mention cycles, omits a hidden mention without an edge or hint, follows one accessible boundary node, and builds the scope map only from complete visited lenses.
+
+Latest verified output (2026-09-02):
+
+- `results.json`: `4c3ef168dfa45e56031e5451db9991bbecd1051b9947fdf754d1d2ecc967fee8`
+- `canvas-boundary.png`: `2bb1704f3d7a63cd889cbf5a381e1ac81c7d8c65991d81d88a06463136786e31`
+- `trace.zip`: `f9c641eb430559416b41e9e237ecdfd5583a8c9f4214b9c92bad511ca99593e7`
+- `video.webm`: `93dd06ee456b0a87ad6247760e0976d4b9e2b7cb7110072120b3ac1bb3ec86e2`
