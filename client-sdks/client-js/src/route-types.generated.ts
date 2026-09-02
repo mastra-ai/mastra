@@ -17929,19 +17929,25 @@ export interface PatchDatasetsDatasetIdItemsItemId_RouteContract {
 // ============================================================================
 export type DeleteDatasetsDatasetIdItemsItemIdPurge_PathParams = GetDatasetsDatasetIdItemsItemId_PathParams;
 
+export type DeleteDatasetsDatasetIdItemsItemIdPurge_QueryParams = GetDatasetsDatasetId_QueryParams;
+
 export type DeleteDatasetsDatasetIdItemsItemIdPurge_Response = PostAuthRefresh_Response;
 
 export type DeleteDatasetsDatasetIdItemsItemIdPurge_Request = Simplify<
   (DeleteDatasetsDatasetIdItemsItemIdPurge_PathParams extends never
     ? {}
     : { params: DeleteDatasetsDatasetIdItemsItemIdPurge_PathParams }) &
-    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (DeleteDatasetsDatasetIdItemsItemIdPurge_QueryParams extends never
+      ? {}
+      : {} extends DeleteDatasetsDatasetIdItemsItemIdPurge_QueryParams
+        ? { query?: DeleteDatasetsDatasetIdItemsItemIdPurge_QueryParams }
+        : { query: DeleteDatasetsDatasetIdItemsItemIdPurge_QueryParams }) &
     (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
 >;
 
 export interface DeleteDatasetsDatasetIdItemsItemIdPurge_RouteContract {
   pathParams: DeleteDatasetsDatasetIdItemsItemIdPurge_PathParams;
-  queryParams: never;
+  queryParams: DeleteDatasetsDatasetIdItemsItemIdPurge_QueryParams;
   body: never;
   request: DeleteDatasetsDatasetIdItemsItemIdPurge_Request;
   response: DeleteDatasetsDatasetIdItemsItemIdPurge_Response;

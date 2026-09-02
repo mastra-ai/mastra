@@ -572,15 +572,17 @@ export const PURGE_ITEM_ROUTE = createRoute({
   path: '/datasets/:datasetId/items/:itemId/purge',
   responseType: 'json',
   pathParamSchema: datasetAndItemIdPathParams,
+  queryParamSchema: tenancyQuerySchema,
   responseSchema: successResponseSchema,
   summary: 'Purge dataset item data',
   description: 'Permanently scrubs item data from all dataset versions and linked experiment results',
   tags: ['Datasets'],
   requiresAuth: true,
-  handler: async ({ mastra, datasetId, itemId }) => {
+  handler: async ({ mastra, datasetId, itemId, ...params }) => {
     assertDatasetsAvailable();
     try {
-      const ds = await mastra.datasets.get({ id: datasetId });
+      const { organizationId, projectId } = params as { organizationId?: string; projectId?: string };
+      const ds = await mastra.datasets.get({ id: datasetId, organizationId, projectId });
       const history = await ds.getItemHistory({ itemId });
       if (history.length === 0) {
         throw new HTTPException(404, { message: `Item not found: ${itemId}` });

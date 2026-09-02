@@ -282,8 +282,13 @@ Returns `Promise<DatasetExperiment>`, the updated experiment record.
 Permanently scrubs an item's content from every dataset version and linked experiment result while preserving version history, experiment counters, and review state.
 
 ```typescript
-await client.purgeDatasetItem('dataset-id', 'item-id')
+await client.purgeDatasetItem('dataset-id', 'item-id', {
+  organizationId: 'organization-id',
+  projectId: 'project-id',
+})
 ```
+
+The optional third argument scopes the purge to a tenant organization and project. The server returns `404` when the dataset doesn't belong to that scope.
 
 Returns `Promise<{ success: boolean }>`. The operation is idempotent and can't be undone. See [`dataset.purgeItem()`](/reference/datasets/purgeItem) for the complete erasure behavior.
 

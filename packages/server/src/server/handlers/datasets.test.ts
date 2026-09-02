@@ -1166,6 +1166,52 @@ describe('Datasets Handlers', () => {
       expect(history.every(row => row.metadata?.__purged === true)).toBe(true);
     });
 
+    it('does not purge item or experiment data when tenancy does not match', async () => {
+      const dataset = await mastra.datasets.create({
+        name: 'Tenant-scoped purge dataset',
+        organizationId: 'org_a',
+        projectId: 'proj_1',
+      });
+      const item = await dataset.addItem({ input: { patient: 'Alice' } });
+      const experimentsStore = await mockStorage.getStore('experiments');
+      const experiment = await experimentsStore!.createExperiment({
+        datasetId: dataset.id,
+        datasetVersion: 1,
+        targetType: 'agent',
+        targetId: 'agent-1',
+        totalItems: 1,
+      });
+      const experimentResult = await experimentsStore!.addExperimentResult({
+        experimentId: experiment.id,
+        itemId: item.id,
+        itemDatasetVersion: 1,
+        input: { patient: 'Alice' },
+        output: { diagnosis: 'private' },
+        groundTruth: null,
+        error: null,
+        startedAt: new Date(),
+        completedAt: new Date(),
+        retryCount: 0,
+      });
+
+      await expect(
+        PURGE_ITEM_ROUTE.handler({
+          ...createTestServerContext({ mastra }),
+          datasetId: dataset.id,
+          itemId: item.id,
+          organizationId: 'org_b',
+          projectId: 'proj_1',
+        } as any),
+      ).rejects.toMatchObject({ status: 404 });
+
+      const history = await dataset.getItemHistory({ itemId: item.id });
+      expect(history).toHaveLength(1);
+      expect(history[0]?.input).toEqual({ patient: 'Alice' });
+      const storedResult = await experimentsStore!.getExperimentResultById({ id: experimentResult.id });
+      expect(storedResult?.input).toEqual({ patient: 'Alice' });
+      expect(storedResult?.output).toEqual({ diagnosis: 'private' });
+    });
+
     it('returns 404 when no item history exists', async () => {
       const dataset = await mastra.datasets.create({ name: 'Missing purge item dataset' });
 
