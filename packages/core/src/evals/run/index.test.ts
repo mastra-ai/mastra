@@ -1846,6 +1846,70 @@ describe('runEvals', () => {
       expect(result.turnResults![1]!.scores!['per-turn-length']).toBe(1.0);
     });
 
+    it('hands a trajectory-typed PER-TURN gate a Trajectory and threads expectedTrajectory (#22632)', async () => {
+      const agent = createTurnAgent('turnTrajectoryGateAgent');
+
+      const seen: Array<{ output: unknown; expected: unknown }> = [];
+      const perTurnTrajectoryGate = createScorer({
+        id: 'per-turn-trajectory-gate',
+        description: 'Records the shape a per-turn trajectory gate receives',
+        type: 'trajectory',
+      }).generateScore(({ run }: any) => {
+        seen.push({ output: run.output, expected: run.expectedTrajectory });
+        return 1.0;
+      });
+
+      const expectedTrajectory = { steps: [] };
+
+      const result = await runEvals({
+        data: [
+          {
+            expectedTrajectory,
+            turns: [{ input: 'Turn one', gates: [perTurnTrajectoryGate] }],
+          },
+        ],
+        target: agent,
+      } as any);
+
+      expect(seen).toHaveLength(1);
+      // Same contract as the top-level gate loop: a Trajectory, never the raw messages.
+      expect(Array.isArray(seen[0]!.output)).toBe(false);
+      expect((seen[0]!.output as { steps?: unknown }).steps).toBeInstanceOf(Array);
+      expect(seen[0]!.expected).toEqual(expectedTrajectory);
+      expect(result.turnResults![0]!.gateResults![0]!.passed).toBe(true);
+    });
+
+    it('logs the cause when a gate throws, while still scoring it 0 (#22632)', async () => {
+      const agent = createTurnAgent('gateThrowLoggingAgent');
+      const warn = vi.fn();
+      const mastra = new Mastra({
+        agents: { gateThrowLoggingAgent: agent },
+        logger: { warn, error: vi.fn(), info: vi.fn(), debug: vi.fn(), trackException: vi.fn() } as any,
+      });
+
+      const throwingGate = createScorer({
+        id: 'throwing-gate-logged',
+        description: 'Always throws',
+      }).generateScore(() => {
+        throw new Error('gate boom');
+      });
+
+      const result = await runEvals({
+        data: [{ input: 'Test' }],
+        gates: [throwingGate],
+        target: mastra.getAgent('gateThrowLoggingAgent'),
+      });
+
+      // The score-0 contract is deliberate and stays.
+      expect(result.gateResults![0]!.score).toBe(0);
+      expect(result.verdict).toBe('failed');
+      // ... but the cause is no longer discarded by a bare catch.
+      expect(warn).toHaveBeenCalled();
+      const logged = warn.mock.calls.map((c: unknown[]) => c.map(String).join(' ')).join(' | ');
+      expect(logged).toContain('throwing-gate-logged');
+      expect(logged).toContain('gate boom');
+    });
+
     it('fails the verdict when a per-turn gate fails on one turn (wrong turn cannot satisfy)', async () => {
       const agent = createTurnAgent('turnGateAgent');
 
