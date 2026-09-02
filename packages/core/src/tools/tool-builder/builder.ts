@@ -46,8 +46,8 @@ import type {
   VercelTool,
   VercelToolV5,
 } from '../types';
-import { noopObserve } from '../types';
 import { validateToolInput, validateToolOutput, validateToolSuspendData } from '../validation';
+import { deriveToolObserve } from './tool-observe';
 
 /**
  * Merge two RequestContexts so non-serializable values survive the evented
@@ -643,6 +643,9 @@ export class CoreToolBuilder extends MastraBase {
           const wrappedMastra = options.mastra ? wrapMastra(options.mastra, { currentSpan: toolSpan }) : options.mastra;
 
           const resumeSchema = this.getResumeSchema();
+          // Derive once so `observe` and the spread ObservabilityContext (tracing,
+          // loggerVNext, metrics) all share the same span-correlated backing.
+          const observabilityContext = createObservabilityContext({ currentSpan: toolSpan });
           // Pass raw args as first parameter, context as second
           // Properly structure context based on execution source
           const baseContext = {
@@ -658,7 +661,10 @@ export class CoreToolBuilder extends MastraBase {
             workspace: execOptions.workspace ?? options.workspace,
             // Browser for web automation (lazily initialized on first use)
             browser: options.browser,
-            observe: execOptions.observe ?? noopObserve,
+            // Fall back to a real, span-correlated observe (not noopObserve) so
+            // `observe.span()` / `observe.log()` work whenever a tracing context
+            // is active, even when no caller supplied one (e.g. the agent path).
+            observe: execOptions.observe ?? deriveToolObserve(observabilityContext),
             writer: new ToolStream(
               {
                 prefix: 'tool',
@@ -668,7 +674,7 @@ export class CoreToolBuilder extends MastraBase {
               },
               options.outputWriter || execOptions.outputWriter,
             ),
-            ...createObservabilityContext({ currentSpan: toolSpan }),
+            ...observabilityContext,
             abortSignal: execOptions.abortSignal,
             suspend: (args: any, suspendOptions?: SuspendOptions) => {
               suspendData = args;
