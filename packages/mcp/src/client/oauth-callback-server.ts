@@ -80,6 +80,11 @@ export interface OAuthCallbackResult {
    * The state parameter echoed back by the authorization server.
    */
   state: string;
+
+  /**
+   * RFC 9207 authorization-server issuer returned with the callback.
+   */
+  iss?: string;
 }
 
 /**
@@ -272,7 +277,7 @@ export async function createOAuthCallbackServer(options: OAuthCallbackServerOpti
     }
 
     respond(200, SUCCESS_HTML);
-    settle({ result: { code, state } });
+    settle({ result: { code, state, iss: url.searchParams.get('iss') ?? undefined } });
   });
 
   // Bind the hostname the redirect URL names (brackets stripped for IPv6

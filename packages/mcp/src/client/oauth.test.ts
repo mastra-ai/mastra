@@ -181,7 +181,7 @@ describe('MCPOAuthClientProvider', () => {
         redirect_uris: ['http://localhost:3000/callback'],
         client_name: 'Test Client',
       },
-    } as ConstructorParameters<typeof MCPOAuthClientProvider>[0] & { clientMetadataUrl: string });
+    });
 
     expect((provider as OAuthClientProvider).clientMetadataUrl).toBe(clientMetadataUrl);
   });
@@ -201,8 +201,23 @@ describe('MCPOAuthClientProvider', () => {
             redirect_uris: ['http://localhost:3000/callback'],
             client_name: 'Test Client',
           },
-        } as ConstructorParameters<typeof MCPOAuthClientProvider>[0] & { clientMetadataUrl: string }),
+        }),
     ).toThrow(message);
+  });
+
+  it('rejects a Client ID Metadata Document without required metadata fields', () => {
+    const clientMetadataUrl = 'https://client.example.com/oauth/client.json';
+    expect(
+      () =>
+        new MCPOAuthClientProvider({
+          redirectUrl: 'http://localhost:3000/callback',
+          clientMetadataUrl,
+          clientMetadata: {
+            client_id: clientMetadataUrl,
+            redirect_uris: [],
+          },
+        }),
+    ).toThrow('require client_id, client_name, and at least one redirect_uri');
   });
 
   it('keeps persisted client credentials and tokens isolated by authorization-server issuer', async () => {
@@ -227,6 +242,18 @@ describe('MCPOAuthClientProvider', () => {
     await expect(provider.tokens(issuerA)).resolves.toMatchObject({ access_token: 'token-a' });
     await expect(provider.clientInformation(issuerB)).resolves.toMatchObject({ client_id: 'client-b' });
     await expect(provider.tokens(issuerB)).resolves.toMatchObject({ access_token: 'token-b' });
+    await expect(provider.tokens()).resolves.toMatchObject({ access_token: 'token-b' });
+
+    const restoredProvider: OAuthClientProvider = new MCPOAuthClientProvider({
+      redirectUrl: 'http://localhost:3000/callback',
+      clientMetadata: {
+        redirect_uris: ['http://localhost:3000/callback'],
+        client_name: 'Test Client',
+      },
+      storage,
+    });
+    await expect(restoredProvider.clientInformation(issuerA)).resolves.toMatchObject({ client_id: 'client-a' });
+    await expect(restoredProvider.tokens(issuerA)).resolves.toMatchObject({ access_token: 'token-a' });
   });
 
   it('should store and retrieve tokens', async () => {

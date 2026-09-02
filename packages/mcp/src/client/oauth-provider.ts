@@ -7,11 +7,16 @@
  * @see https://modelcontextprotocol.io/specification/2025-06-18/basic/authorization
  */
 
+import { validateClientMetadataUrl } from '@modelcontextprotocol/client';
+
 import type {
   OAuthClientProvider,
   OAuthClientMetadata,
   OAuthClientInformation,
-  OAuthClientInformationFull,
+  OAuthClientInformationContext,
+  OAuthDiscoveryState,
+  StoredOAuthClientInformation,
+  StoredOAuthTokens,
   OAuthTokens,
 } from '../shared/oauth-types.js';
 
@@ -67,6 +72,11 @@ export class InMemoryOAuthStorage implements OAuthStorage {
 /**
  * Options for creating a MCPOAuthClientProvider.
  */
+export interface MCPClientMetadata extends OAuthClientMetadata {
+  /** Required by a Client ID Metadata Document and must match its URL. */
+  client_id?: string;
+}
+
 export interface MCPOAuthClientProviderOptions {
   /**
    * The redirect URL for the OAuth callback.
@@ -78,11 +88,19 @@ export interface MCPOAuthClientProviderOptions {
   redirectUrl: string | URL;
 
   /**
-   * OAuth client metadata for registration.
-   * If the client is not pre-registered with the authorization server,
-   * this metadata will be used for dynamic client registration.
+   * OAuth client metadata published by the client metadata document or used
+   * for dynamic client registration fallback.
    */
-  clientMetadata: OAuthClientMetadata;
+  clientMetadata: MCPClientMetadata;
+
+  /**
+   * HTTPS URL of this client's Client ID Metadata Document.
+   *
+   * When the authorization server supports metadata documents, this URL is
+   * used as the client ID instead of dynamic client registration. It must have
+   * a non-root path and exactly match `clientMetadata.client_id`.
+   */
+  clientMetadataUrl?: string;
 
   /**
    * Pre-registered client information.
@@ -118,7 +136,8 @@ export interface MCPOAuthClientProviderOptions {
  *
  * This provider handles the OAuth 2.1 flow for connecting to OAuth-protected
  * MCP servers, including:
- * - Dynamic client registration (RFC 7591)
+ * - Client ID Metadata Documents (preferred)
+ * - Dynamic client registration fallback (deprecated by MCP 2026-07-28)
  * - PKCE (Proof Key for Code Exchange)
  * - Token storage and refresh
  *
@@ -156,19 +175,31 @@ export interface MCPOAuthClientProviderOptions {
  */
 export class MCPOAuthClientProvider implements OAuthClientProvider {
   private _redirectUrl: string | URL;
-  private _clientMetadata: OAuthClientMetadata;
+  private _clientMetadata: MCPClientMetadata;
+  readonly clientMetadataUrl?: string;
   private readonly storage: OAuthStorage;
   private readonly onRedirect?: (url: URL) => void | Promise<void>;
   private readonly generateState: () => string | Promise<string>;
 
-  private _clientInfo?: OAuthClientInformation;
+  private configuredClientInfo?: StoredOAuthClientInformation;
   private _sessionState?: string;
   private _sessionRedirectUrl?: string | URL;
 
   constructor(options: MCPOAuthClientProviderOptions) {
+    if (options.clientMetadataUrl) {
+      validateClientMetadataUrl(options.clientMetadataUrl);
+      if (options.clientMetadata.client_id !== options.clientMetadataUrl) {
+        throw new Error('clientMetadataUrl must match clientMetadata.client_id');
+      }
+      if (!options.clientMetadata.client_name || options.clientMetadata.redirect_uris.length === 0) {
+        throw new Error('Client ID Metadata Documents require client_id, client_name, and at least one redirect_uri');
+      }
+    }
+
     this._redirectUrl = options.redirectUrl;
     this._clientMetadata = options.clientMetadata;
-    this._clientInfo = options.clientInformation;
+    this.clientMetadataUrl = options.clientMetadataUrl;
+    this.configuredClientInfo = options.clientInformation;
     this.storage = options.storage ?? new InMemoryOAuthStorage();
     this.onRedirect = options.onRedirectToAuthorization;
     this.generateState = options.stateGenerator ?? (() => crypto.randomUUID());
@@ -184,7 +215,7 @@ export class MCPOAuthClientProvider implements OAuthClientProvider {
   /**
    * Metadata about this OAuth client.
    */
-  get clientMetadata(): OAuthClientMetadata {
+  get clientMetadata(): MCPClientMetadata {
     return this._clientMetadata;
   }
 
@@ -248,56 +279,95 @@ export class MCPOAuthClientProvider implements OAuthClientProvider {
     };
   }
 
-  /**
-   * Loads information about this OAuth client.
-   */
-  async clientInformation(): Promise<OAuthClientInformation | undefined> {
-    // Check if we have pre-registered client info
-    if (this._clientInfo) {
-      return this._clientInfo;
-    }
+  private credentialKey(kind: 'client_info' | 'tokens', ctx?: OAuthClientInformationContext): string {
+    return ctx ? `${kind}:${encodeURIComponent(ctx.issuer)}` : kind;
+  }
 
-    // Check storage for dynamically registered client info
-    const stored = await this.storage.get('client_info');
+  private async rememberIssuer(issuer: string): Promise<void> {
+    let issuers: string[] = [];
+    const stored = await this.storage.get('credential_issuers');
     if (stored) {
       try {
-        return JSON.parse(stored) as OAuthClientInformation;
+        issuers = JSON.parse(stored) as string[];
       } catch {
-        // Invalid stored data, ignore
+        // Invalid stored data is replaced with a fresh index.
       }
     }
+    if (!issuers.includes(issuer)) {
+      issuers.push(issuer);
+      await this.storage.set('credential_issuers', JSON.stringify(issuers));
+    }
+  }
 
-    return undefined;
+  private async readStored<T>(key: string, expectedIssuer?: string): Promise<T | undefined> {
+    const stored = await this.storage.get(key);
+    if (!stored) return undefined;
+    try {
+      const value = JSON.parse(stored) as T;
+      if (expectedIssuer && (value as { issuer?: unknown }).issuer !== expectedIssuer) return undefined;
+      return value;
+    } catch {
+      return undefined;
+    }
   }
 
   /**
-   * Saves dynamically registered client information.
+   * Loads information about this OAuth client.
    */
-  async saveClientInformation(clientInformation: OAuthClientInformationFull): Promise<void> {
-    this._clientInfo = clientInformation;
+  async clientInformation(ctx?: OAuthClientInformationContext): Promise<StoredOAuthClientInformation | undefined> {
+    if (this.configuredClientInfo) {
+      return this.configuredClientInfo;
+    }
+    return this.readStored(this.credentialKey('client_info', ctx), ctx?.issuer);
+  }
+
+  /**
+   * Saves dynamically registered or Client ID Metadata Document client information.
+   */
+  async saveClientInformation(
+    clientInformation: StoredOAuthClientInformation,
+    ctx?: OAuthClientInformationContext,
+  ): Promise<void> {
+    if (this.configuredClientInfo?.client_id === clientInformation.client_id) {
+      this.configuredClientInfo = clientInformation;
+    }
+    if (ctx) {
+      await this.rememberIssuer(ctx.issuer);
+      await this.storage.set(this.credentialKey('client_info', ctx), JSON.stringify(clientInformation));
+    }
     await this.storage.set('client_info', JSON.stringify(clientInformation));
   }
 
   /**
    * Loads existing OAuth tokens.
    */
-  async tokens(): Promise<OAuthTokens | undefined> {
-    const stored = await this.storage.get('tokens');
-    if (stored) {
-      try {
-        return JSON.parse(stored) as OAuthTokens;
-      } catch {
-        // Invalid stored data, ignore
-      }
-    }
-    return undefined;
+  async tokens(ctx?: OAuthClientInformationContext): Promise<StoredOAuthTokens | undefined> {
+    return this.readStored(this.credentialKey('tokens', ctx), ctx?.issuer);
   }
 
   /**
    * Stores new OAuth tokens after successful authorization.
    */
-  async saveTokens(tokens: OAuthTokens): Promise<void> {
+  async saveTokens(tokens: StoredOAuthTokens, ctx?: OAuthClientInformationContext): Promise<void> {
+    if (ctx) {
+      await this.rememberIssuer(ctx.issuer);
+      await this.storage.set(this.credentialKey('tokens', ctx), JSON.stringify(tokens));
+    }
     await this.storage.set('tokens', JSON.stringify(tokens));
+  }
+
+  /**
+   * Persists authorization-server discovery state across the browser redirect.
+   */
+  async saveDiscoveryState(state: OAuthDiscoveryState): Promise<void> {
+    await this.storage.set('discovery_state', JSON.stringify(state));
+  }
+
+  /**
+   * Loads authorization-server discovery state for callback issuer validation.
+   */
+  async discoveryState(): Promise<OAuthDiscoveryState | undefined> {
+    return this.readStored<OAuthDiscoveryState>('discovery_state');
   }
 
   /**
@@ -333,23 +403,40 @@ export class MCPOAuthClientProvider implements OAuthClientProvider {
   /**
    * Invalidate credentials when server indicates they're no longer valid.
    */
-  async invalidateCredentials(scope: 'all' | 'client' | 'tokens' | 'verifier'): Promise<void> {
+  async invalidateCredentials(scope: 'all' | 'client' | 'tokens' | 'verifier' | 'discovery'): Promise<void> {
+    const issuerIndex = await this.storage.get('credential_issuers');
+    let issuers: string[] = [];
+    if (issuerIndex) {
+      try {
+        issuers = JSON.parse(issuerIndex) as string[];
+      } catch {
+        // Invalid stored data is ignored during cleanup.
+      }
+    }
+    const deleteCredentialKind = async (kind: 'client_info' | 'tokens') => {
+      await this.storage.delete(kind);
+      await Promise.all(issuers.map(issuer => this.storage.delete(this.credentialKey(kind, { issuer }))));
+    };
+
     switch (scope) {
       case 'all':
-        await this.storage.delete('tokens');
-        await this.storage.delete('client_info');
+        await deleteCredentialKind('tokens');
+        await deleteCredentialKind('client_info');
         await this.storage.delete('code_verifier');
-        this._clientInfo = undefined;
+        await this.storage.delete('discovery_state');
+        await this.storage.delete('credential_issuers');
         break;
       case 'client':
-        await this.storage.delete('client_info');
-        this._clientInfo = undefined;
+        await deleteCredentialKind('client_info');
         break;
       case 'tokens':
-        await this.storage.delete('tokens');
+        await deleteCredentialKind('tokens');
         break;
       case 'verifier':
         await this.storage.delete('code_verifier');
+        break;
+      case 'discovery':
+        await this.storage.delete('discovery_state');
         break;
     }
   }

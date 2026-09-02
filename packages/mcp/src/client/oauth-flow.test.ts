@@ -34,6 +34,10 @@ interface FakeAuthorizationServer {
   authorizeRedirectUris: string[];
   /** Register the document the authorization server resolves for a URL client ID. */
   addClientMetadataDocument(clientId: string, redirectUris: string[]): void;
+  /** Issuer returned on authorization callbacks; defaults to this server. */
+  authorizationResponseIssuer: string;
+  /** How many authorization_code grants the token endpoint served. */
+  authorizationCodeGrantCount: number;
   /** How many refresh_token grants the token endpoint served. */
   refreshGrantCount: number;
   /** Access tokens currently accepted by the protected MCP server. */
@@ -59,7 +63,7 @@ function sendJson(res: ServerResponse, statusCode: number, payload: unknown): vo
 
 async function startFakeAuthorizationServer(
   port: number,
-  options: { clientMetadataDocumentSupported?: boolean } = {},
+  options: { clientMetadataDocumentSupported?: boolean; dynamicRegistrationSupported?: boolean } = {},
 ): Promise<FakeAuthorizationServer> {
   const url = `http://127.0.0.1:${port}`;
   const clientsById = new Map<string, ClientRegistration>();
@@ -75,6 +79,8 @@ async function startFakeAuthorizationServer(
     addClientMetadataDocument: (clientId, redirectUris) => {
       clientMetadataDocuments.set(clientId, { client_id: clientId, redirect_uris: redirectUris });
     },
+    authorizationResponseIssuer: url,
+    authorizationCodeGrantCount: 0,
     refreshGrantCount: 0,
     validTokens: new Set(),
     denyAuthorization: false,
@@ -92,12 +98,13 @@ async function startFakeAuthorizationServer(
         issuer: url,
         authorization_endpoint: `${url}/authorize`,
         token_endpoint: `${url}/token`,
-        registration_endpoint: `${url}/register`,
+        ...(options.dynamicRegistrationSupported === false ? {} : { registration_endpoint: `${url}/register` }),
         client_id_metadata_document_supported: options.clientMetadataDocumentSupported ?? false,
         response_types_supported: ['code'],
         grant_types_supported: ['authorization_code', 'refresh_token'],
         code_challenge_methods_supported: ['S256'],
         token_endpoint_auth_methods_supported: ['none'],
+        authorization_response_iss_parameter_supported: true,
       });
       return;
     }
@@ -142,6 +149,7 @@ async function startFakeAuthorizationServer(
         location.searchParams.set('code', code);
       }
       location.searchParams.set('state', oauthState);
+      location.searchParams.set('iss', state.authorizationResponseIssuer);
       res.writeHead(302, { Location: location.toString() });
       res.end();
       return;
@@ -160,6 +168,7 @@ async function startFakeAuthorizationServer(
           return;
         }
         pendingCodes.delete(params.get('code')!);
+        state.authorizationCodeGrantCount += 1;
       } else if (grantType === 'refresh_token') {
         if (!refreshTokens.has(params.get('refresh_token') ?? '')) {
           sendJson(res, 400, { error: 'invalid_grant' });
@@ -273,6 +282,7 @@ async function driveBrowser(authorizationUrl: URL): Promise<void> {
 function createProvider(options: {
   callbackUrl: string;
   clientMetadataUrl?: string;
+  clientInformation?: { client_id: string };
   storage?: InMemoryOAuthStorage;
   onRedirectToAuthorization?: (url: URL) => void | Promise<void>;
 }): MCPOAuthClientProvider {
@@ -287,9 +297,10 @@ function createProvider(options: {
       response_types: ['code'],
       token_endpoint_auth_method: 'none',
     },
+    clientInformation: options.clientInformation,
     storage: options.storage,
     onRedirectToAuthorization: options.onRedirectToAuthorization,
-  } as ConstructorParameters<typeof MCPOAuthClientProvider>[0] & { clientMetadataUrl?: string });
+  });
 }
 
 function createClient(serverUrl: string, provider: MCPOAuthClientProvider): MCPClient {
@@ -307,7 +318,9 @@ function createClient(serverUrl: string, provider: MCPOAuthClientProvider): MCPC
 describe('MCPClient OAuth authorization flow', () => {
   const cleanups: Array<() => Promise<void>> = [];
 
-  const setup = async (options: { clientMetadataDocumentSupported?: boolean } = {}) => {
+  const setup = async (
+    options: { clientMetadataDocumentSupported?: boolean; dynamicRegistrationSupported?: boolean } = {},
+  ) => {
     const ports = allocatePortBlock();
     const authServer = await startFakeAuthorizationServer(ports.authPort, options);
     const mcpServer = await startProtectedMcpServer(ports.mcpPort, authServer);
@@ -387,6 +400,57 @@ describe('MCPClient OAuth authorization flow', () => {
     await expect(provider.clientInformation()).resolves.toMatchObject({ client_id: clientMetadataUrl });
   });
 
+  it('fails closed without downgrading to DCR when metadata document validation fails', async () => {
+    const { authServer, mcpServer, callbackUrl } = await setup({ clientMetadataDocumentSupported: true });
+    const clientMetadataUrl = 'https://client.example.com/oauth/malformed.json';
+    const provider = createProvider({ clientMetadataUrl, callbackUrl, onRedirectToAuthorization: driveBrowser });
+    const mcp = track(createClient(mcpServer.url, provider));
+
+    await expect(mcp.authenticate('fixture')).rejects.toThrow(/did not redirect/);
+
+    expect(authServer.registrations).toHaveLength(0);
+    expect(authServer.authorizationCodeGrantCount).toBe(0);
+    expect(await provider.tokens()).toBeUndefined();
+  });
+
+  it('prefers caller-provided client information over a metadata document', async () => {
+    const { authServer, mcpServer, callbackUrl } = await setup({ clientMetadataDocumentSupported: true });
+    const clientMetadataUrl = 'https://client.example.com/oauth/client.json';
+    const preRegisteredClientId = 'pre-registered-client';
+    const redirectUris = getCallbackUrlCandidates(callbackUrl).map(candidate => candidate.toString());
+    authServer.addClientMetadataDocument(clientMetadataUrl, redirectUris);
+    authServer.addClientMetadataDocument(preRegisteredClientId, redirectUris);
+    const provider = createProvider({
+      clientMetadataUrl,
+      clientInformation: { client_id: preRegisteredClientId },
+      callbackUrl,
+      onRedirectToAuthorization: driveBrowser,
+    });
+    const mcp = track(createClient(mcpServer.url, provider));
+
+    await mcp.authenticate('fixture');
+
+    expect(authServer.registrations).toHaveLength(0);
+    expect(authServer.authorizeClientIds).toEqual([preRegisteredClientId]);
+  });
+
+  it('rejects an authorization response with the wrong issuer before exchanging the code', async () => {
+    const { authServer, mcpServer, callbackUrl } = await setup({ clientMetadataDocumentSupported: true });
+    const clientMetadataUrl = 'https://client.example.com/oauth/client.json';
+    authServer.addClientMetadataDocument(
+      clientMetadataUrl,
+      getCallbackUrlCandidates(callbackUrl).map(candidate => candidate.toString()),
+    );
+    authServer.authorizationResponseIssuer = 'https://attacker.example.com';
+    const provider = createProvider({ clientMetadataUrl, callbackUrl, onRedirectToAuthorization: driveBrowser });
+    const mcp = track(createClient(mcpServer.url, provider));
+
+    await expect(mcp.authenticate('fixture')).rejects.toThrow(/issuer/i);
+
+    expect(authServer.authorizationCodeGrantCount).toBe(0);
+    expect(await provider.tokens()).toBeUndefined();
+  });
+
   it('falls back to dynamic registration when the authorization server does not support metadata documents', async () => {
     const { authServer, mcpServer, callbackUrl } = await setup();
     const clientMetadataUrl = 'https://client.example.com/oauth/client.json';
@@ -398,6 +462,18 @@ describe('MCPClient OAuth authorization flow', () => {
     expect(mcp.getServerAuthState('fixture')).toBe('authorized');
     expect(authServer.registrations).toHaveLength(1);
     expect(authServer.authorizeClientIds[0]).toBe(authServer.registrations[0]?.client_id);
+  });
+
+  it('reports unsupported registration when neither metadata documents nor DCR are available', async () => {
+    const { authServer, mcpServer, callbackUrl } = await setup({ dynamicRegistrationSupported: false });
+    const clientMetadataUrl = 'https://client.example.com/oauth/client.json';
+    const provider = createProvider({ clientMetadataUrl, callbackUrl, onRedirectToAuthorization: driveBrowser });
+    const mcp = track(createClient(mcpServer.url, provider));
+
+    await expect(mcp.authenticate('fixture')).rejects.toThrow(/registration/i);
+
+    expect(authServer.registrations).toHaveLength(0);
+    expect(authServer.authorizationCodeGrantCount).toBe(0);
   });
 
   it('reconnects with persisted tokens without a new browser flow', async () => {

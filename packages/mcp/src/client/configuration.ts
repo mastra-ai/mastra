@@ -937,8 +937,8 @@ To fix this you have three different options:
         }
       }
 
-      const { code } = await callbackServer.waitForCode(options);
-      await client.finishAuth(code);
+      const { code, iss } = await callbackServer.waitForCode(options);
+      await client.finishAuth(code, iss);
 
       try {
         await client.connect();
