@@ -1,9 +1,12 @@
 'use client';
+import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import { SearchFieldBlock } from '@mastra/playground-ui/components/FormFieldBlocks';
-import { Plus, Upload, FileJson, Download, FolderPlus, FolderOutput, Trash2, ChevronDown } from 'lucide-react';
+import { Txt } from '@mastra/playground-ui/components/Txt';
+import { Icon } from '@mastra/playground-ui/icons/Icon';
+import { Plus, Upload, FileJson, Download, FolderPlus, FolderOutput, Trash2, ChevronDown, List } from 'lucide-react';
 
 export type DatasetItemsToolbarProps = {
   // Normal mode actions
@@ -11,6 +14,10 @@ export type DatasetItemsToolbarProps = {
   onImportClick: () => void;
   onImportJsonClick: () => void;
   hasItems: boolean;
+  /** Search-aware total rendered as an "Items" badge next to the search field. */
+  itemsCount?: number;
+  /** Page-level actions rendered after the list actions, on the same row. */
+  rightSlot?: React.ReactNode;
 
   // Search props
   searchQuery?: string;
@@ -35,6 +42,8 @@ export function DatasetItemsToolbar({
   onImportClick,
   onImportJsonClick,
   hasItems,
+  itemsCount,
+  rightSlot,
   searchQuery,
   onSearchChange,
   selectedCount,
@@ -64,17 +73,19 @@ export function DatasetItemsToolbar({
   );
 
   const searchField = (
-    <SearchFieldBlock
-      name="search-items"
-      label="Search"
-      labelIsHidden
-      size="md"
-      placeholder="Search items..."
-      value={searchQuery ?? ''}
-      onChange={e => onSearchChange?.(e.target.value)}
-      onReset={() => onSearchChange?.('')}
-      disabled={!hasItems && !searchQuery}
-    />
+    <div className="w-48 shrink-0">
+      <SearchFieldBlock
+        name="search-items"
+        label="Search"
+        labelIsHidden
+        size="md"
+        placeholder="Search items..."
+        value={searchQuery ?? ''}
+        onChange={e => onSearchChange?.(e.target.value)}
+        onReset={() => onSearchChange?.('')}
+        disabled={!hasItems && !searchQuery}
+      />
+    </div>
   );
 
   const selectionDropdown = selectedCount > 0 && (
@@ -120,8 +131,20 @@ export function DatasetItemsToolbar({
   );
 
   return (
-    <div className="flex w-full items-center justify-between gap-4">
-      <div className="flex min-w-0 items-center gap-4">
+    <div
+      className="flex w-full items-center justify-between gap-4 overflow-x-auto whitespace-nowrap"
+      data-testid="dataset-items-toolbar"
+    >
+      <div className="flex shrink-0 items-center gap-4">
+        {itemsCount !== undefined && (
+          <div className="flex shrink-0 items-center gap-2">
+            <Icon size="sm">
+              <List />
+            </Icon>
+            <Txt variant="ui-sm">Items</Txt>
+            <Badge size="sm">{itemsCount}</Badge>
+          </div>
+        )}
         {searchField}
         {oldVersionNotice}
       </div>
@@ -150,6 +173,7 @@ export function DatasetItemsToolbar({
             </DropdownMenu>
           </ButtonsGroup>
         )}
+        {rightSlot}
       </ButtonsGroup>
     </div>
   );

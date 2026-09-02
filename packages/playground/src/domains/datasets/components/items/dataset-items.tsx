@@ -14,6 +14,10 @@ import { DatasetItemsToolbar } from './dataset-items-toolbar';
 
 export interface DatasetItemsProps {
   items: DatasetItem[];
+  /** Total items shown in the toolbar badge (search-aware; may differ from `items.length` while paginating). */
+  itemsCount?: number;
+  /** Page-level actions rendered at the end of the toolbar row. */
+  rightSlot?: React.ReactNode;
   isLoading: boolean;
   onItemClick: (itemId: string) => void;
   /** Id of the item currently open in the URL-driven item panel, if any. */
@@ -51,6 +55,8 @@ export interface DatasetItemsProps {
  */
 export function DatasetItems({
   items,
+  itemsCount,
+  rightSlot,
   isLoading,
   onItemClick,
   featuredItemId,
@@ -132,6 +138,8 @@ export function DatasetItems({
         onImportClick={onImportClick ?? (() => {})}
         onImportJsonClick={onImportJsonClick ?? (() => {})}
         hasItems={items.length > 0}
+        itemsCount={itemsCount}
+        rightSlot={rightSlot}
         searchQuery={searchQuery}
         onSearchChange={onSearchChange}
         selectedCount={selection.selectedCount}

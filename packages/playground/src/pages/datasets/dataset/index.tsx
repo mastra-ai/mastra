@@ -9,7 +9,7 @@ import { SessionExpired } from '@mastra/playground-ui/components/SessionExpired'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { is401UnauthorizedError, is403ForbiddenError, is404NotFoundError } from '@mastra/playground-ui/utils/errors';
 import { format } from 'date-fns/format';
-import { ArrowLeft, Copy, DatabaseIcon, MoreVertical, Pencil, Play, Trash2 } from 'lucide-react';
+import { ArrowLeft, Copy, DatabaseIcon, FlaskConical, MoreVertical, Pencil, Play, Trash2 } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useState } from 'react';
 import { Link, Outlet, useParams, useNavigate, useSearchParams } from 'react-router';
@@ -136,6 +136,10 @@ function DatasetPage() {
                     currentVersion={dataset?.version}
                     className="w-36"
                   />
+                  <Button as={Link} to={`/experiments?dataset=${datasetId}`}>
+                    <FlaskConical />
+                    View experiments
+                  </Button>
                   {disableExperimentTrigger ? (
                     <Tooltip>
                       <TooltipTrigger asChild>

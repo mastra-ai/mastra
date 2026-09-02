@@ -1,13 +1,8 @@
 import type { DatasetItem } from '@mastra/client-js';
 import { AlertDialog } from '@mastra/playground-ui/components/AlertDialog';
-import { Badge } from '@mastra/playground-ui/components/Badge';
-import { Button } from '@mastra/playground-ui/components/Button';
-import { Txt } from '@mastra/playground-ui/components/Txt';
-import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { toast } from '@mastra/playground-ui/utils/toast';
-import { FlaskConical, List } from 'lucide-react';
 import { useState } from 'react';
-import { Link, useSearchParams } from 'react-router';
+import { useSearchParams } from 'react-router';
 import { useDebounce } from 'use-debounce';
 import { useDatasetItems } from '../../hooks/use-dataset-items';
 import { useDatasetItemsUrlState } from '../../hooks/use-dataset-items-url-state';
@@ -121,47 +116,30 @@ export function DatasetItemsView({ datasetId, onAddItemClick, onNavigateToDatase
 
   return (
     <>
-      <div className="grid h-full grid-rows-[auto_1fr]">
-        <div className="flex items-center justify-between gap-4 px-6 py-3">
-          <div className="flex items-center gap-2">
-            <div className="flex items-center gap-2 px-3 py-2.5">
-              <Icon size="sm">
-                <List />
-              </Icon>
-              <Txt variant="ui-sm">Items</Txt>
-              <Badge size="sm">{itemsCount}</Badge>
-            </div>
-            <Button as={Link} to={`/experiments?dataset=${datasetId}`}>
-              <FlaskConical />
-              View experiments
-            </Button>
-          </div>
-          {rightSlot && <div className="shrink-0 whitespace-nowrap">{rightSlot}</div>}
-        </div>
-
-        <div className="border-border1 grid overflow-auto border-t py-0">
-          <DatasetItems
-            items={items}
-            isLoading={isItemsLoading}
-            onItemClick={handleItemClick}
-            featuredItemId={currentItemId}
-            onAddClick={onAddItemClick ?? (() => {})}
-            onImportClick={() => setImportDialogOpen(true)}
-            onImportJsonClick={() => setImportJsonDialogOpen(true)}
-            onBulkDeleteClick={handleBulkDeleteClick}
-            onCreateDatasetClick={handleCreateDatasetClick}
-            onAddToDatasetClick={handleAddToDatasetClick}
-            datasetName={dataset?.name}
-            clearSelectionTrigger={clearSelectionTrigger}
-            setEndOfListElement={setEndOfListElement}
-            isFetchingNextPage={isFetchingNextPage}
-            hasNextPage={hasNextPage}
-            searchQuery={searchQuery}
-            activeSearchQuery={debouncedSearch}
-            onSearchChange={setSearchQuery}
-            currentDatasetVersion={dataset?.version}
-          />
-        </div>
+      <div className="grid h-full overflow-auto">
+        <DatasetItems
+          items={items}
+          itemsCount={itemsCount}
+          rightSlot={rightSlot}
+          isLoading={isItemsLoading}
+          onItemClick={handleItemClick}
+          featuredItemId={currentItemId}
+          onAddClick={onAddItemClick ?? (() => {})}
+          onImportClick={() => setImportDialogOpen(true)}
+          onImportJsonClick={() => setImportJsonDialogOpen(true)}
+          onBulkDeleteClick={handleBulkDeleteClick}
+          onCreateDatasetClick={handleCreateDatasetClick}
+          onAddToDatasetClick={handleAddToDatasetClick}
+          datasetName={dataset?.name}
+          clearSelectionTrigger={clearSelectionTrigger}
+          setEndOfListElement={setEndOfListElement}
+          isFetchingNextPage={isFetchingNextPage}
+          hasNextPage={hasNextPage}
+          searchQuery={searchQuery}
+          activeSearchQuery={debouncedSearch}
+          onSearchChange={setSearchQuery}
+          currentDatasetVersion={dataset?.version}
+        />
       </div>
       <CSVImportDialog datasetId={datasetId} open={importDialogOpen} onOpenChange={setImportDialogOpen} />
       <JSONImportDialog datasetId={datasetId} open={importJsonDialogOpen} onOpenChange={setImportJsonDialogOpen} />

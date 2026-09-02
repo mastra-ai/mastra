@@ -1,4 +1,4 @@
-import { screen } from '@testing-library/react';
+import { screen, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { beforeEach, describe, expect, it } from 'vitest';
 
@@ -49,10 +49,21 @@ describe('DatasetItemsView', () => {
     expect(screen.queryByText('Review')).toBeNull();
   });
 
-  it('links to the global experiments page filtered by this dataset', async () => {
+  it('shows the Items count next to the search field', async () => {
     renderView();
+    await screen.findByText('item-a');
 
-    const link = await screen.findByRole('link', { name: /view experiments/i });
-    expect(link.getAttribute('href')).toBe(`/experiments?dataset=${DATASET_ID}`);
+    const search = screen.getByRole('textbox', { name: /search/i });
+    const toolbar = search.closest('[data-testid="dataset-items-toolbar"]');
+    expect(toolbar).not.toBeNull();
+    expect(within(toolbar as HTMLElement).getByText('Items')).toBeDefined();
+    expect(within(toolbar as HTMLElement).getByText(String(items.length))).toBeDefined();
+  });
+
+  it('does not own the "View experiments" action (it lives in the page header)', async () => {
+    renderView();
+    await screen.findByText('item-a');
+
+    expect(screen.queryByRole('link', { name: /view experiments/i })).toBeNull();
   });
 });
