@@ -156,6 +156,7 @@ const sidebars = {
       label: 'Client SDK',
       collapsed: true,
       items: [
+        { type: 'doc', id: 'client-js/agent-controller', label: 'Agent Controller API' },
         { type: 'doc', id: 'client-js/agents', label: 'Agents API' },
         { type: 'doc', id: 'client-js/conversations', label: 'Conversations API' },
         { type: 'doc', id: 'client-js/datasets', label: 'Datasets API' },
