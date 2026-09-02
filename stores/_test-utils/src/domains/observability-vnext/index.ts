@@ -27,6 +27,12 @@ export interface ObservabilityVNextCapabilities {
   preferredStrategy: 'event-sourced' | 'insert-only' | 'batch-with-updates';
   /** Whether this adapter implements the advanced trusted trace-query plan. */
   traceQuery?: boolean;
+  /**
+   * The write model used to seed trace-query conformance fixtures. Completion-only
+   * adapters receive only each fixture's final completed record, because they do
+   * not accept pending events or logical replacement writes.
+   */
+  traceQueryWriteModel?: 'current-record' | 'completion-only';
 }
 
 export interface CreateObservabilityVNextTestsOptions {
@@ -76,6 +82,27 @@ export interface CreateObservabilityVNextTestsOptions {
  * materialized views) so the assertion isn't racey. Adapters with synchronous
  * reads (InMemory, DuckDB) satisfy the predicate on the first call.
  */
+function completionOnlyTraceQueryFixture() {
+  const roots = new Map<string | null, (typeof TRACE_QUERY_FIXTURE_DATA.spans)[number]>();
+  const spans = new Map<string, (typeof TRACE_QUERY_FIXTURE_DATA.spans)[number]>();
+  for (const span of TRACE_QUERY_FIXTURE_DATA.spans) {
+    if (span.parentSpanId === null) {
+      roots.set(span.traceId, span);
+    } else {
+      spans.set(`${span.traceId}\u0000${span.spanId}`, span);
+    }
+  }
+
+  const scores = new Map<string, (typeof TRACE_QUERY_FIXTURE_DATA.scores)[number]>();
+  for (const score of TRACE_QUERY_FIXTURE_DATA.scores) scores.set(score.scoreId, score);
+
+  return {
+    spans: [...roots.values()].filter(root => !root.isPending),
+    relatedSpans: [...spans.values()],
+    scores: [...scores.values()],
+  };
+}
+
 async function waitFor<T>(
   fn: () => Promise<T>,
   predicate: (value: T) => boolean,
@@ -117,7 +144,15 @@ export function createObservabilityVNextTests(options: CreateObservabilityVNextT
 
     if (capabilities.traceQuery) {
       it('matches the shared advanced trace-query conformance cases without merge assistance', async () => {
-        const records: CreateSpanRecord[] = TRACE_QUERY_FIXTURE_DATA.spans
+        const fixture =
+          capabilities.traceQueryWriteModel === 'completion-only'
+            ? completionOnlyTraceQueryFixture()
+            : {
+                spans: TRACE_QUERY_FIXTURE_DATA.spans,
+                relatedSpans: [],
+                scores: TRACE_QUERY_FIXTURE_DATA.scores,
+              };
+        const records: CreateSpanRecord[] = [...fixture.spans, ...fixture.relatedSpans]
           .filter(span => span.traceId !== null)
           .map(span => ({
             traceId: span.traceId!,
@@ -137,7 +172,7 @@ export function createObservabilityVNextTests(options: CreateObservabilityVNextT
           }));
         for (const span of records) await storage.createSpan({ span });
 
-        const scores = TRACE_QUERY_FIXTURE_DATA.scores
+        const scores = fixture.scores
           .filter(score => score.traceId !== null && score.score !== null)
           .map(score => {
             const timestamp = score.timestamp

@@ -12,16 +12,11 @@
  */
 import { randomUUID } from 'node:crypto';
 import { createClient } from '@clickhouse/client';
-import {
-  createObservabilityVNextTests,
-  normalizeTraceQueryResponse,
-  TRACE_QUERY_TIED_TIMESTAMP_CASES,
-  TRACE_QUERY_TIED_TIMESTAMP_FIXTURE_DATA,
-} from '@internal/storage-test-utils';
+import { createObservabilityVNextTests } from '@internal/storage-test-utils';
 import { coreFeatures } from '@mastra/core/features';
 import { EntityType, SpanType } from '@mastra/core/observability';
 import { parseTraceQueryRequest, planTraceQuery, TraceQueryExecutionError } from '@mastra/core/storage';
-import type { CreateSpanRecord, ObservabilityStorage } from '@mastra/core/storage';
+import type { ObservabilityStorage } from '@mastra/core/storage';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   ALL_MIGRATIONS,
@@ -55,6 +50,7 @@ createObservabilityVNextTests({
     label: 'ClickHouse vNext',
     preferredStrategy: 'insert-only',
     traceQuery: true,
+    traceQueryWriteModel: 'completion-only',
   },
   getStorage: async () => {
     if (!sharedSuiteStorage) {
@@ -332,145 +328,8 @@ LIMIT 1`,
     }
   });
 
-  it('uses replacement order when trace-query domain timestamps tie', async () => {
-    for (const span of TRACE_QUERY_TIED_TIMESTAMP_FIXTURE_DATA.spans) {
-      if (span.traceId === null) continue;
-      await storage.createSpan({
-        span: {
-          traceId: span.traceId,
-          spanId: span.spanId,
-          parentSpanId: span.parentSpanId,
-          name: span.spanId,
-          spanType: span.spanType as SpanType,
-          isEvent: false,
-          startedAt: new Date(span.startedAt),
-          endedAt: span.endedAt ? new Date(span.endedAt) : null,
-          threadId: span.threadId,
-          resourceId: span.resourceId,
-          entityName: span.entityName,
-          entityType: span.entityType as EntityType,
-          environment: span.environment,
-          error: span.error as CreateSpanRecord['error'],
-        },
-      });
-    }
-
-    for (const score of TRACE_QUERY_TIED_TIMESTAMP_FIXTURE_DATA.scores) {
-      if (score.traceId === null || score.score === null || !score.timestamp) continue;
-      const timestamp = new Date(score.timestamp);
-      await storage.createScore({
-        score: {
-          id: score.scoreId,
-          scoreId: score.scoreId,
-          traceId: score.traceId,
-          scorerId: score.scorerId,
-          score: score.score,
-          timestamp,
-          createdAt: timestamp,
-          updatedAt: null,
-        },
-      });
-    }
-
-    const assertCases = async () => {
-      for (const testCase of TRACE_QUERY_TIED_TIMESTAMP_CASES) {
-        const plan = planTraceQuery(parseTraceQueryRequest(testCase.request));
-        const response = await storage.queryTraces(plan);
-        expect(normalizeTraceQueryResponse(response), testCase.name).toEqual(testCase.expected);
-      }
-    };
-
-    await assertCases();
-
-    const client = createClient({
-      url: process.env.CLICKHOUSE_URL || 'http://localhost:8123',
-      username: process.env.CLICKHOUSE_USERNAME || 'default',
-      password: process.env.CLICKHOUSE_PASSWORD || 'password',
-    });
-    try {
-      for (const table of [TABLE_SPAN_EVENTS, TABLE_TRACE_ROOTS, TABLE_SCORE_EVENTS]) {
-        await client.command({ query: `OPTIMIZE TABLE ${table} FINAL` });
-      }
-    } finally {
-      await client.close();
-    }
-
-    await assertCases();
-  });
-
-  it('collapses duplicate logical replacements within one batch in input order', async () => {
-    const startedAt = new Date('2026-08-20T12:00:00.000Z');
-    const endedAt = new Date('2026-08-20T12:00:01.000Z');
-    await storage.batchCreateSpans({
-      records: [
-        {
-          traceId: 'trace-batch',
-          spanId: 'span-batch',
-          name: 'span-batch',
-          spanType: SpanType.TOOL_CALL,
-          isEvent: false,
-          startedAt,
-          endedAt,
-        },
-        {
-          traceId: 'trace-batch',
-          spanId: 'span-batch',
-          name: 'span-batch',
-          spanType: SpanType.TOOL_CALL,
-          isEvent: false,
-          startedAt,
-          endedAt,
-          error: { message: 'later batch replacement' },
-        },
-      ],
-    });
-
-    const timestamp = new Date('2026-08-20T12:00:02.000Z');
-    await storage.batchCreateScores({
-      scores: [
-        {
-          id: 'score-batch',
-          scoreId: 'score-batch',
-          scorerId: 'quality',
-          score: 0.9,
-          timestamp,
-          createdAt: timestamp,
-          updatedAt: null,
-        },
-        {
-          id: 'score-batch',
-          scoreId: 'score-batch',
-          scorerId: 'quality',
-          score: 0.2,
-          timestamp,
-          createdAt: timestamp,
-          updatedAt: null,
-        },
-      ],
-    });
-
-    const client = createClient({
-      url: process.env.CLICKHOUSE_URL || 'http://localhost:8123',
-      username: process.env.CLICKHOUSE_USERNAME || 'default',
-      password: process.env.CLICKHOUSE_PASSWORD || 'password',
-    });
-    try {
-      const result = await client.query({
-        query: `SELECT
-          (SELECT count() FROM ${TABLE_SPAN_EVENTS} WHERE traceId = 'trace-batch' AND spanId = 'span-batch') AS spans,
-          (SELECT count() FROM ${TABLE_SCORE_EVENTS} WHERE scoreId = 'score-batch') AS scores`,
-        format: 'JSONEachRow',
-      });
-      expect(await result.json()).toEqual([{ spans: 1, scores: 1 }]);
-    } finally {
-      await client.close();
-    }
-
-    expect((await storage.getSpan({ traceId: 'trace-batch', spanId: 'span-batch' }))?.span.error).toEqual({
-      message: 'later batch replacement',
-    });
-    expect((await storage.getScoreById('score-batch'))?.score).toBe(0.2);
-  });
+  // ClickHouse vNext is completion-only. The tied-version fixture models event-sourced
+  // replacement writes and intentionally remains covered by PostgreSQL and DuckDB only.
 
   it('reports insert-only as preferred strategy', () => {
     expect(storage.observabilityStrategy).toEqual({

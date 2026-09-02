@@ -8,8 +8,7 @@ import {
 import type { TrustedTraceQueryPlan } from '@mastra/core/storage';
 import { describe, expect, it, vi } from 'vitest';
 
-import { ALL_MIGRATIONS, SCORE_EVENTS_DDL, SPAN_EVENTS_DDL, TRACE_BRANCHES_DDL, TRACE_ROOTS_DDL } from './ddl';
-import { spanRecordToRow } from './helpers';
+import { SCORE_EVENTS_DDL, SPAN_EVENTS_DDL, TRACE_BRANCHES_DDL, TRACE_ROOTS_DDL } from './ddl';
 import { compileClickHouseTraceQuery, queryTraces } from './trace-query';
 import { ObservabilityStorageClickhouseVNext } from '.';
 
@@ -51,10 +50,9 @@ describe('ClickHouse advanced trace query', () => {
     expect(Object.values(compiled.query_params)).toContain("factuality' OR 1");
     expect(compiled.query.match(/EXISTS \(/g)).toHaveLength(1);
     expect(compiled.query).toContain('s.traceId = r.traceId');
-    expect(compiled.query).toContain('LIMIT 1 BY scoreId');
   });
 
-  it('collapses roots and related records without relying on background merges', () => {
+  it('deduplicates completed span deliveries without relying on background merges', () => {
     const compiled = compileClickHouseTraceQuery(
       plan({
         where: {
@@ -66,12 +64,11 @@ describe('ClickHouse advanced trace query', () => {
     expect(compiled.query).toContain('FROM mastra_trace_roots');
     expect(compiled.query).toContain('FROM mastra_span_events');
     expect(compiled.query).not.toContain('WHERE parentSpanId IS NULL');
-    expect(compiled.query).toContain('WHERE NOT isPending');
-    expect(compiled.query).toContain('ORDER BY dedupeKey, isPending ASC, ingestionVersion DESC');
-    expect(compiled.query).toContain('ORDER BY traceId, ingestionVersion DESC');
+    expect(compiled.query).toContain('ORDER BY dedupeKey');
+    expect(compiled.query).toContain('ORDER BY traceId, dedupeKey');
     expect(compiled.query).toContain('LIMIT 1 BY dedupeKey');
     expect(compiled.query).toContain('LIMIT 1 BY traceId');
-    expect(compiled.query).not.toMatch(/\bFINAL\b|\bOPTIMIZE\b/);
+    expect(compiled.query).not.toMatch(/\bingestionVersion\b|\bisPending\b|\bFINAL\b|\bOPTIMIZE\b/);
   });
 
   it('uses trace_roots and emits one reusable reconstruction per referenced collection', () => {
@@ -155,6 +152,16 @@ describe('ClickHouse advanced trace query', () => {
     expect(() => compileClickHouseTraceQuery(invalid)).toThrow('Unsupported trusted trace-query field');
   });
 
+  it('fails closed when a trusted plan contains an unmapped order field', () => {
+    const trusted = plan();
+    const invalid = {
+      ...trusted,
+      orderBy: { ...trusted.orderBy, field: 'endedAt DESC; DROP TABLE mastra_trace_roots' },
+    } as unknown as TrustedTraceQueryPlan;
+
+    expect(() => compileClickHouseTraceQuery(invalid)).toThrow('Unsupported trusted trace-query field');
+  });
+
   it('returns fixed records and computes the next cursor from the last visible row', async () => {
     const json = vi
       .fn()
@@ -187,48 +194,13 @@ describe('ClickHouse advanced trace query', () => {
     );
   });
 
-  it('persists replacement order in source and materialized trace tables', () => {
+  it('compiles against the existing completion-only schema', () => {
     for (const ddl of [SPAN_EVENTS_DDL, TRACE_ROOTS_DDL, TRACE_BRANCHES_DDL, SCORE_EVENTS_DDL]) {
-      expect(ddl).toMatch(/ingestionVersion\s+UInt128/);
-      expect(ddl).toContain('ReplacingMergeTree(ingestionVersion)');
-      expect(ddl).toMatch(/ORDER BY \([^)]*ingestionVersion\)/);
+      expect(ddl).not.toMatch(/\bingestionVersion\b|\bisPending\b|ReplacingMergeTree\s*\(/);
     }
-    expect(
-      ALL_MIGRATIONS.filter(migration => migration.name === 'ingestionVersion').map(migration => migration.table),
-    ).toEqual(['mastra_span_events', 'mastra_trace_roots', 'mastra_trace_branches', 'mastra_score_events']);
 
-    const first = spanRecordToRow({
-      traceId: 'trace-versioned',
-      spanId: 'span-versioned',
-      startedAt: new Date('2026-08-01T00:00:00Z'),
-      endedAt: new Date('2026-08-01T00:00:01Z'),
-    } as Parameters<typeof spanRecordToRow>[0]);
-    const second = spanRecordToRow({
-      traceId: 'trace-versioned',
-      spanId: 'span-versioned',
-      startedAt: new Date('2026-08-01T00:00:00Z'),
-      endedAt: new Date('2026-08-01T00:00:01Z'),
-    } as Parameters<typeof spanRecordToRow>[0]);
-    expect(BigInt(second.ingestionVersion as string)).toBeGreaterThan(BigInt(first.ingestionVersion as string));
-  });
-
-  it('persists pending state in source and materialized trace tables', () => {
-    expect(SPAN_EVENTS_DDL).toMatch(/isPending\s+Bool/);
-    expect(TRACE_ROOTS_DDL).toMatch(/isPending\s+Bool/);
-    expect(TRACE_BRANCHES_DDL).toMatch(/isPending\s+Bool/);
-    expect(
-      ALL_MIGRATIONS.filter(migration => migration.name === 'isPending').map(migration => migration.table),
-    ).toEqual(['mastra_span_events', 'mastra_trace_roots', 'mastra_trace_branches']);
-
-    const row = spanRecordToRow({
-      traceId: 'trace-running',
-      spanId: 'root-running',
-      parentSpanId: null,
-      startedAt: new Date('2026-08-01T00:00:00Z'),
-      endedAt: null,
-    } as Parameters<typeof spanRecordToRow>[0]);
-    expect(row.isPending).toBe(true);
-    expect(row.endedAt).toEqual(row.startedAt);
+    const compiled = compileClickHouseTraceQuery(plan({ where: { spans: { some: { op: 'exists', path: 'error' } } } }));
+    expect(compiled.query).not.toMatch(/\bingestionVersion\b|\bisPending\b/);
   });
 });
 

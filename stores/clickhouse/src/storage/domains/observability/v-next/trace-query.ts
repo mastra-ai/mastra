@@ -77,6 +77,11 @@ function fieldDefinition<TField extends string>(
   return definition;
 }
 
+function resolveOrderField(field: string): 'startedAt' | 'endedAt' {
+  if (field === 'startedAt' || field === 'endedAt') return field;
+  throw new Error(`Unsupported trusted trace-query field: ${field}`);
+}
+
 function compileScalarPredicate<TField extends string>(
   predicate: TrustedTraceQueryScalarPredicate,
   registry: Partial<FieldRegistry<TField>>,
@@ -159,17 +164,16 @@ export function compileClickHouseTraceQuery(plan: TrustedTraceQueryPlan): Compil
     SELECT * FROM (
       SELECT *
       FROM ${TABLE_TRACE_ROOTS}
-      ORDER BY dedupeKey, ingestionVersion DESC
+      ORDER BY dedupeKey
       LIMIT 1 BY dedupeKey
     )
-    ORDER BY traceId, ingestionVersion DESC
+    ORDER BY traceId, dedupeKey
     LIMIT 1 BY traceId
   )`,
     `root_scope AS (
     SELECT *
     FROM current_roots
-    WHERE NOT isPending
-      AND startedAt >= ${from}
+    WHERE startedAt >= ${from}
       AND startedAt < ${to}
   )`,
   ];
@@ -179,7 +183,7 @@ export function compileClickHouseTraceQuery(plan: TrustedTraceQueryPlan): Compil
     SELECT traceId, spanType, error
     FROM ${TABLE_SPAN_EVENTS}
     WHERE traceId IN (SELECT traceId FROM root_scope)
-    ORDER BY dedupeKey, isPending ASC, ingestionVersion DESC
+    ORDER BY dedupeKey
     LIMIT 1 BY dedupeKey
   )`);
   }
@@ -189,8 +193,6 @@ export function compileClickHouseTraceQuery(plan: TrustedTraceQueryPlan): Compil
     FROM ${TABLE_SCORE_EVENTS}
     WHERE isNotNull(traceId)
       AND traceId IN (SELECT traceId FROM root_scope)
-    ORDER BY scoreId, ingestionVersion DESC
-    LIMIT 1 BY scoreId
   )`);
   }
 
@@ -217,7 +219,7 @@ LIMIT ${limit}`,
     };
   }
 
-  const orderField = plan.orderBy.field;
+  const orderField = resolveOrderField(plan.orderBy.field);
   const direction = plan.orderBy.direction === 'asc' ? 'ASC' : 'DESC';
   let pageCondition = '';
   if (plan.cursor) {
