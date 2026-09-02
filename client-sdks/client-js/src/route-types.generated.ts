@@ -18481,6 +18481,49 @@ export interface GetDatasetsDatasetIdExperimentsExperimentId_RouteContract {
 }
 
 // ============================================================================
+// Route: PATCH /datasets/:datasetId/experiments/:experimentId
+// ============================================================================
+export type PatchDatasetsDatasetIdExperimentsExperimentId_PathParams =
+  PostDatasetsDatasetIdExperimentsExperimentIdResults_PathParams;
+
+export type PatchDatasetsDatasetIdExperimentsExperimentId_Body = {
+  /** New name of the experiment */
+  name?: string | undefined;
+  /** New description of the experiment */
+  description?: string | undefined;
+  /** Replacement metadata for the experiment */
+  metadata?:
+    | {
+        [key: string]: unknown;
+      }
+    | undefined;
+};
+
+export type PatchDatasetsDatasetIdExperimentsExperimentId_Response =
+  PostDatasetsDatasetIdExperimentsExperimentIdFinalize_Response;
+
+export type PatchDatasetsDatasetIdExperimentsExperimentId_Request = Simplify<
+  (PatchDatasetsDatasetIdExperimentsExperimentId_PathParams extends never
+    ? {}
+    : { params: PatchDatasetsDatasetIdExperimentsExperimentId_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (PatchDatasetsDatasetIdExperimentsExperimentId_Body extends never
+      ? {}
+      : {} extends PatchDatasetsDatasetIdExperimentsExperimentId_Body
+        ? { body?: PatchDatasetsDatasetIdExperimentsExperimentId_Body }
+        : { body: PatchDatasetsDatasetIdExperimentsExperimentId_Body })
+>;
+
+export interface PatchDatasetsDatasetIdExperimentsExperimentId_RouteContract {
+  pathParams: PatchDatasetsDatasetIdExperimentsExperimentId_PathParams;
+  queryParams: never;
+  body: PatchDatasetsDatasetIdExperimentsExperimentId_Body;
+  request: PatchDatasetsDatasetIdExperimentsExperimentId_Request;
+  response: PatchDatasetsDatasetIdExperimentsExperimentId_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
 // Route: GET /datasets/:datasetId/experiments/:experimentId/results
 // ============================================================================
 export type GetDatasetsDatasetIdExperimentsExperimentIdResults_PathParams =
@@ -21999,6 +22042,7 @@ export interface RouteTypes {
   'POST /datasets/:datasetId/experiments/:experimentId/results': PostDatasetsDatasetIdExperimentsExperimentIdResults_RouteContract;
   'POST /datasets/:datasetId/experiments/:experimentId/finalize': PostDatasetsDatasetIdExperimentsExperimentIdFinalize_RouteContract;
   'GET /datasets/:datasetId/experiments/:experimentId': GetDatasetsDatasetIdExperimentsExperimentId_RouteContract;
+  'PATCH /datasets/:datasetId/experiments/:experimentId': PatchDatasetsDatasetIdExperimentsExperimentId_RouteContract;
   'GET /datasets/:datasetId/experiments/:experimentId/results': GetDatasetsDatasetIdExperimentsExperimentIdResults_RouteContract;
   'PATCH /datasets/:datasetId/experiments/:experimentId/results/:resultId': PatchDatasetsDatasetIdExperimentsExperimentIdResultsResultId_RouteContract;
   'POST /datasets/:datasetId/compare': PostDatasetsDatasetIdCompare_RouteContract;
@@ -22455,6 +22499,7 @@ export interface Client {
   };
   '/datasets/:datasetId/experiments/:experimentId': {
     GET: GetDatasetsDatasetIdExperimentsExperimentId_RouteContract;
+    PATCH: PatchDatasetsDatasetIdExperimentsExperimentId_RouteContract;
   };
   '/datasets/:datasetId/experiments/:experimentId/finalize': {
     POST: PostDatasetsDatasetIdExperimentsExperimentIdFinalize_RouteContract;

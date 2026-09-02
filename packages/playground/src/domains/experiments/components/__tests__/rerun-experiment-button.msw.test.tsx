@@ -178,6 +178,27 @@ describe('RerunExperimentButton', () => {
     expect(triggerCalls[0].body).toMatchObject({ scorerIds: ['answer-relevancy'] });
   });
 
+  it('should prefill the dialog name and description from the original experiment', async () => {
+    // Given an experiment with a name and description
+    renderButton({ ...original, name: 'Original run', description: 'Original description' });
+
+    // When the rerun dialog opens
+    fireEvent.click(screen.getByRole('button', { name: /rerun/i }));
+    await screen.findByRole('dialog', { name: /run experiment/i });
+
+    // Then the name/description inputs are prefilled and sent with the new run
+    expect((screen.getByLabelText('Name *') as HTMLInputElement).value).toBe('Original run');
+    expect((screen.getByLabelText('Description') as HTMLInputElement).value).toBe('Original description');
+
+    await waitFor(() =>
+      expect((screen.getByRole('combobox', { name: 'Select agent' }) as HTMLSelectElement).value).toBe('agent-1'),
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Run' }));
+
+    await waitFor(() => expect(triggerCalls).toHaveLength(1));
+    expect(triggerCalls[0].body).toMatchObject({ name: 'Original run', description: 'Original description' });
+  });
+
   it('is hidden when the experiment has no dataset', () => {
     renderButton({ ...original, datasetId: null });
     expect(screen.queryByRole('button', { name: /rerun/i })).toBeNull();

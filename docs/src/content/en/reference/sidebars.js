@@ -375,6 +375,7 @@ const sidebars = {
               label: '.submitExperimentResult()',
             },
             { type: 'doc', id: 'datasets/update', label: '.update()' },
+            { type: 'doc', id: 'datasets/updateExperiment', label: '.updateExperiment()' },
             { type: 'doc', id: 'datasets/updateItem', label: '.updateItem()' },
           ],
         },
