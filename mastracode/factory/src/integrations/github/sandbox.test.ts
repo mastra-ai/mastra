@@ -186,6 +186,21 @@ describe('materializeRepo', () => {
     expect(String(err.message)).toContain('scrub');
   });
 
+  it.each([
+    'https://evilgithub.com/octocat/hello.git',
+    'https://github.com.evil.example/octocat/hello.git',
+    'https://github.com/other/hello.git',
+    'https://github.com/octocat/hello-fork.git',
+  ])('re-clones over a checkout whose origin is %s', async origin => {
+    const sandbox = new FakeSandbox(script => {
+      if (script.includes('remote get-url origin')) return { exitCode: 0, stdout: `${origin}\n`, stderr: '' };
+      return OK;
+    });
+    await materializeRepo(makeRow({ materializedAt: null }), makeRepoInfo(), sandbox, 'tok');
+
+    expect(sandbox.calls.some(c => c.includes('git clone'))).toBe(true);
+  });
+
   it('re-clones when the DB says materialized but the sandbox disk was wiped', async () => {
     // A platform/remote sandbox can expire and come back with an empty disk
     // while the binding row still says `materializedAt`. Trusting the row made

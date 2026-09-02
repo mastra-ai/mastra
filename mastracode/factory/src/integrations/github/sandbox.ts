@@ -483,9 +483,20 @@ async function existingCheckoutRemote(
   const result = await sh(sandbox, `git -C ${shellQuote(workdir)} remote get-url origin`);
   if (result.exitCode !== 0) return null;
   const url = result.stdout.trim();
-  const suffix = `github.com/${repoFullName.toLowerCase()}`;
-  const lower = url.toLowerCase();
-  return lower.endsWith(`${suffix}.git`) || lower.endsWith(suffix) ? url : null;
+  return isRemoteForRepo(url, repoFullName) ? url : null;
+}
+
+/** True only for `https://github.com/<repo>[.git]`, with or without embedded credentials. */
+function isRemoteForRepo(url: string, repoFullName: string): boolean {
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    return false;
+  }
+  if (parsed.protocol !== 'https:' || parsed.hostname.toLowerCase() !== 'github.com') return false;
+  const repoPath = parsed.pathname.replace(/\.git$/, '').replace(/^\/+/, '').toLowerCase();
+  return repoPath === repoFullName.toLowerCase();
 }
 
 /** Probed without `git -C` so a missing workdir returns false instead of throwing. */
