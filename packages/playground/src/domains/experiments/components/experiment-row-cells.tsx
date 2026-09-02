@@ -3,10 +3,8 @@ import { Badge } from '@mastra/playground-ui/components/Badge';
 import { DataList as EntityList } from '@mastra/playground-ui/components/DataList';
 import { formatExperimentDate, STATUS_LABEL, STATUS_VARIANT } from './experiment-columns';
 import { ExperimentNameLabel } from './experiment-name-label';
-import { useAgents } from '@/domains/agents/hooks/use-agents';
+import { useTargetRegistries } from '@/domains/experiments/hooks/use-target-registries';
 import { resolveTargetName, TARGET_ICON, TARGET_LABEL } from '@/domains/experiments/utils/target-name';
-import { useScorers } from '@/domains/scores/hooks/use-scorers';
-import { useWorkflows } from '@/domains/workflows/hooks/use-workflows';
 
 export interface ExperimentReviewSummary {
   needsReview: number;
@@ -54,11 +52,8 @@ export function ExperimentRowCells({ experiment: exp, datasetName, review }: Exp
 }
 
 function ExperimentTargetCell({ experiment }: { experiment: DatasetExperiment }) {
-  const { data: agents } = useAgents();
-  const { data: workflows } = useWorkflows();
-  const { data: scorers } = useScorers();
-
-  const name = resolveTargetName(experiment, { agents, workflows, scorers });
+  const registries = useTargetRegistries();
+  const name = resolveTargetName(experiment, registries);
   const targetType = experiment.targetId ? experiment.targetType : null;
   const TargetIcon = targetType ? TARGET_ICON[targetType] : null;
 

@@ -4,6 +4,7 @@ import { http, HttpResponse } from 'msw';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { ExperimentRowCells } from '../experiment-row-cells';
 import { experiments } from './fixtures/experiments';
+import { agents, noScorers, noWorkflows, processors } from './fixtures/target-registries';
 import { server } from '@/test/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '@/test/render';
 
@@ -11,11 +12,10 @@ const base = experiments[0];
 
 beforeEach(() => {
   server.use(
-    http.get(`${TEST_BASE_URL}/api/agents`, () =>
-      HttpResponse.json({ 'agent-1': { name: 'Support Agent', instructions: '', tools: {}, workflows: {} } }),
-    ),
-    http.get(`${TEST_BASE_URL}/api/workflows`, () => HttpResponse.json({})),
-    http.get(`${TEST_BASE_URL}/api/scores/scorers`, () => HttpResponse.json({})),
+    http.get(`${TEST_BASE_URL}/api/agents`, () => HttpResponse.json(agents)),
+    http.get(`${TEST_BASE_URL}/api/workflows`, () => HttpResponse.json(noWorkflows)),
+    http.get(`${TEST_BASE_URL}/api/scores/scorers`, () => HttpResponse.json(noScorers)),
+    http.get(`${TEST_BASE_URL}/api/processors`, () => HttpResponse.json(processors)),
   );
 });
 
@@ -36,6 +36,12 @@ describe('ExperimentRowCells target column', () => {
     expect(await screen.findByText('Support Agent')).toBeDefined();
     expect(screen.getByRole('img', { name: 'Agent' })).toBeDefined();
     expect(screen.queryByText('agent agent-1')).toBeNull();
+  });
+
+  it('resolves processor targets from the processor registry', async () => {
+    renderCells({ ...base, targetType: 'processor', targetId: 'proc-1' });
+    expect(await screen.findByText('PII Redactor')).toBeDefined();
+    expect(screen.getByRole('img', { name: 'Processor' })).toBeDefined();
   });
 
   it('labels caller-run experiments as external', () => {

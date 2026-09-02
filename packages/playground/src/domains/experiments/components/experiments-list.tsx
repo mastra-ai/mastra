@@ -23,10 +23,13 @@ export interface ExperimentsListProps {
   search?: string;
   statusFilter?: string;
   datasetFilter?: string;
-  /** When active, rows toggle selection (for comparison) instead of navigating. */
-  isSelectionActive?: boolean;
-  selectedExperimentIds?: string[];
-  onToggleSelection?: (experimentId: string) => void;
+  /** When provided, rows toggle selection (for comparison) instead of navigating. */
+  selection?: ExperimentsListSelection;
+}
+
+export interface ExperimentsListSelection {
+  selectedExperimentIds: string[];
+  onToggleSelection: (experimentId: string) => void;
 }
 
 const COLUMNS = `${EXPERIMENT_NAME_COLUMN} ${EXPERIMENT_DATASET_COLUMN} ${EXPERIMENT_DETAIL_COLUMNS}`;
@@ -51,10 +54,9 @@ export function ExperimentsList({
   search = '',
   statusFilter = 'all',
   datasetFilter = 'all',
-  isSelectionActive = false,
-  selectedExperimentIds = [],
-  onToggleSelection,
+  selection,
 }: ExperimentsListProps) {
+  const isSelectionActive = selection !== undefined;
   const { paths, Link } = useLinkComponent();
 
   const datasetMap = useMemo(() => {
@@ -121,7 +123,7 @@ export function ExperimentsList({
           <ExperimentRowCells experiment={exp} datasetName={dsName} review={reviewByExperiment?.get(exp.id)} />
         );
 
-        if (!isSelectionActive) {
+        if (!selection) {
           return (
             <EntityList.RowLink
               key={exp.id}
@@ -134,8 +136,8 @@ export function ExperimentsList({
           );
         }
 
-        const isSelected = selectedExperimentIds.includes(exp.id);
-        const toggle = () => onToggleSelection?.(exp.id);
+        const isSelected = selection.selectedExperimentIds.includes(exp.id);
+        const toggle = () => selection.onToggleSelection(exp.id);
 
         return (
           <EntityList.RowWrapper key={exp.id}>

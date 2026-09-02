@@ -1,4 +1,10 @@
-import type { DatasetExperiment, GetAgentResponse, GetScorerResponse, GetWorkflowResponse } from '@mastra/client-js';
+import type {
+  DatasetExperiment,
+  GetAgentResponse,
+  GetProcessorResponse,
+  GetScorerResponse,
+  GetWorkflowResponse,
+} from '@mastra/client-js';
 import { AgentIcon } from '@mastra/playground-ui/icons/AgentIcon';
 import { ProcessorIcon } from '@mastra/playground-ui/icons/ProcessorIcon';
 import { ScorersIcon } from '@mastra/playground-ui/icons/ScorersIcon';
@@ -24,12 +30,13 @@ export interface TargetRegistries {
   agents?: Record<string, GetAgentResponse>;
   workflows?: Record<string, GetWorkflowResponse>;
   scorers?: Record<string, GetScorerResponse>;
+  processors?: Record<string, GetProcessorResponse>;
 }
 
 /** Human-readable name of the experiment target, falling back to the raw id. */
 export function resolveTargetName(
   experiment: Pick<DatasetExperiment, 'targetType' | 'targetId'>,
-  { agents, workflows, scorers }: TargetRegistries,
+  { agents, workflows, scorers, processors }: TargetRegistries,
 ): string {
   const { targetType, targetId } = experiment;
   if (!targetId) return EXTERNAL_TARGET_LABEL;
@@ -40,6 +47,8 @@ export function resolveTargetName(
       return workflows?.[targetId]?.name ?? targetId;
     case 'scorer':
       return scorers?.[targetId]?.scorer?.config?.name ?? targetId;
+    case 'processor':
+      return processors?.[targetId]?.name ?? targetId;
     default:
       return targetId;
   }

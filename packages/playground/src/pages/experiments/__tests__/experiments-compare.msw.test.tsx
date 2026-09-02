@@ -1,10 +1,21 @@
+import type { DatasetExperiment } from '@mastra/client-js';
 import { fireEvent, screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { useLocation } from 'react-router';
 import { beforeEach, describe, expect, it } from 'vitest';
 import ExperimentsPage from '..';
 import { buildDataset, buildListDatasetsResponse } from '@/domains/datasets/components/__tests__/fixtures/datasets';
-import { experiments } from '@/domains/experiments/components/__tests__/fixtures/experiments';
+import {
+  buildListExperimentsResponse,
+  emptyReviewSummary,
+  experiments,
+} from '@/domains/experiments/components/__tests__/fixtures/experiments';
+import {
+  noAgents,
+  noProcessors,
+  noScorers,
+  noWorkflows,
+} from '@/domains/experiments/components/__tests__/fixtures/target-registries';
 import { TestLinkProvider } from '@/test/link-provider';
 import { server } from '@/test/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '@/test/render';
@@ -12,19 +23,20 @@ import { renderWithProviders, TEST_BASE_URL } from '@/test/render';
 const datasetOne = buildDataset({ id: 'dataset-1', name: 'Dataset One' });
 const datasetTwo = buildDataset({ id: 'dataset-2', name: 'Dataset Two' });
 
-const sameDatasetA = { ...experiments[0], id: 'exp-a', datasetId: 'dataset-1', name: 'run a' };
-const sameDatasetB = { ...experiments[1], id: 'exp-b', datasetId: 'dataset-1', name: 'run b' };
-const otherDataset = { ...experiments[2], id: 'exp-c', datasetId: 'dataset-2', name: 'run c' };
+const sameDatasetA: DatasetExperiment = { ...experiments[0], id: 'exp-a', datasetId: 'dataset-1', name: 'run a' };
+const sameDatasetB: DatasetExperiment = { ...experiments[1], id: 'exp-b', datasetId: 'dataset-1', name: 'run b' };
+const otherDataset: DatasetExperiment = { ...experiments[2], id: 'exp-c', datasetId: 'dataset-2', name: 'run c' };
 
 beforeEach(() => {
   server.use(
-    http.get(`${TEST_BASE_URL}/api/agents`, () => HttpResponse.json({})),
-    http.get(`${TEST_BASE_URL}/api/workflows`, () => HttpResponse.json({})),
-    http.get(`${TEST_BASE_URL}/api/scores/scorers`, () => HttpResponse.json({})),
+    http.get(`${TEST_BASE_URL}/api/agents`, () => HttpResponse.json(noAgents)),
+    http.get(`${TEST_BASE_URL}/api/workflows`, () => HttpResponse.json(noWorkflows)),
+    http.get(`${TEST_BASE_URL}/api/processors`, () => HttpResponse.json(noProcessors)),
+    http.get(`${TEST_BASE_URL}/api/scores/scorers`, () => HttpResponse.json(noScorers)),
     http.get(`${TEST_BASE_URL}/api/experiments`, () =>
-      HttpResponse.json({ experiments: [sameDatasetA, sameDatasetB, otherDataset] }),
+      HttpResponse.json(buildListExperimentsResponse([sameDatasetA, sameDatasetB, otherDataset])),
     ),
-    http.get(`${TEST_BASE_URL}/api/experiments/review-summary`, () => HttpResponse.json({ experiments: [] })),
+    http.get(`${TEST_BASE_URL}/api/experiments/review-summary`, () => HttpResponse.json(emptyReviewSummary)),
     http.get(`${TEST_BASE_URL}/api/datasets`, () =>
       HttpResponse.json(buildListDatasetsResponse([datasetOne, datasetTwo])),
     ),
@@ -102,6 +114,26 @@ describe('Experiments page — compare mode', () => {
     expect(screen.queryByRole('checkbox')).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: /^compare$/i }));
     expect(screen.getAllByRole('checkbox').every(box => box.getAttribute('aria-checked') !== 'true')).toBe(true);
+    expect(screen.getByRole('button', { name: /compare experiments/i }).hasAttribute('disabled')).toBe(true);
+  });
+
+  it('drops a selected experiment that disappears from the list after a refetch', async () => {
+    const { queryClient } = renderPage();
+    await enterCompareMode();
+
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Select experiment exp-a' }));
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Select experiment exp-b' }));
+    expect(screen.getByText('2')).toBeDefined();
+
+    server.use(
+      http.get(`${TEST_BASE_URL}/api/experiments`, () =>
+        HttpResponse.json(buildListExperimentsResponse([sameDatasetA, otherDataset])),
+      ),
+    );
+    await queryClient.invalidateQueries();
+    await waitFor(() => expect(screen.queryByText('run b')).toBeNull());
+
+    expect(screen.getByText('1')).toBeDefined();
     expect(screen.getByRole('button', { name: /compare experiments/i }).hasAttribute('disabled')).toBe(true);
   });
 });

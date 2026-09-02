@@ -7,12 +7,10 @@ import { ScorersIcon } from '@mastra/playground-ui/icons/ScorersIcon';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { ArrowRightIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
-import { useAgents } from '@/domains/agents/hooks/use-agents';
 import { useDataset } from '@/domains/datasets/hooks/use-datasets';
 import { useExperimentScorerIds } from '@/domains/experiments/hooks/use-experiment-scorer-ids';
+import { useTargetRegistries } from '@/domains/experiments/hooks/use-target-registries';
 import { resolveTargetName, TARGET_ICON, TARGET_LABEL } from '@/domains/experiments/utils/target-name';
-import { useScorers } from '@/domains/scores/hooks/use-scorers';
-import { useWorkflows } from '@/domains/workflows/hooks/use-workflows';
 import { useLinkComponent } from '@/lib/framework';
 
 export interface ExperimentFlowChainProps {
@@ -63,9 +61,8 @@ const linkClass = 'text-neutral5 inline-flex items-center gap-1.5 hover:underlin
  */
 export function ExperimentFlowChain({ experiment, className }: ExperimentFlowChainProps) {
   const { Link: LinkComponent, paths } = useLinkComponent();
-  const { data: agents } = useAgents();
-  const { data: workflows } = useWorkflows();
-  const { data: scorers } = useScorers();
+  const registries = useTargetRegistries();
+  const { scorers } = registries;
   const { data: dataset, isLoading: isDatasetLoading } = useDataset(experiment.datasetId ?? '');
   const scorerIds = useExperimentScorerIds(experiment);
 
@@ -74,7 +71,7 @@ export function ExperimentFlowChain({ experiment, className }: ExperimentFlowCha
   const targetType = experiment.targetType;
   const targetId = experiment.targetId;
 
-  const targetName = () => resolveTargetName(experiment, { agents, workflows, scorers });
+  const targetName = () => resolveTargetName(experiment, registries);
 
   const targetHref = () => {
     if (!targetId) return null;

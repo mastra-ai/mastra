@@ -4,6 +4,7 @@ import { Route, Routes } from 'react-router';
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import { DatasetPage } from '../index';
+import { buildListDatasetsResponse } from '@/domains/datasets/components/__tests__/fixtures/datasets';
 import {
   DATASET_ID,
   dataset,
@@ -20,7 +21,7 @@ const itemsResponse = {
 
 beforeEach(() => {
   server.use(
-    http.get(`${TEST_BASE_URL}/api/datasets`, () => HttpResponse.json({ datasets: [dataset] })),
+    http.get(`${TEST_BASE_URL}/api/datasets`, () => HttpResponse.json(buildListDatasetsResponse([dataset]))),
     http.get(`${TEST_BASE_URL}/api/datasets/${DATASET_ID}`, () => HttpResponse.json(dataset)),
     http.get(`${TEST_BASE_URL}/api/datasets/${DATASET_ID}/items`, () => HttpResponse.json(itemsResponse)),
     http.get(`${TEST_BASE_URL}/api/datasets/${DATASET_ID}/versions`, () =>

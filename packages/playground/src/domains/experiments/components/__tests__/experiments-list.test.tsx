@@ -3,7 +3,7 @@ import { http, HttpResponse } from 'msw';
 import type { ReactElement } from 'react';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { ExperimentsList } from '../experiments-list';
-import { experiments, noAgents, noScorers, noWorkflows } from './fixtures/experiments';
+import { experiments, noAgents, noProcessors, noScorers, noWorkflows } from './fixtures/experiments';
 import { TestLinkProvider } from '@/test/link-provider';
 import { server } from '@/test/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '@/test/render';
@@ -19,6 +19,7 @@ describe('ExperimentsList', () => {
   beforeEach(() => {
     server.use(
       http.get(`${TEST_BASE_URL}/api/agents`, () => HttpResponse.json(noAgents)),
+      http.get(`${TEST_BASE_URL}/api/processors`, () => HttpResponse.json(noProcessors)),
       http.get(`${TEST_BASE_URL}/api/workflows`, () => HttpResponse.json(noWorkflows)),
       http.get(`${TEST_BASE_URL}/api/scores/scorers`, () => HttpResponse.json(noScorers)),
     );

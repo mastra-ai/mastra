@@ -1,10 +1,21 @@
+import type { DatasetExperiment } from '@mastra/client-js';
 import { fireEvent, screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { useLocation } from 'react-router';
 import { describe, expect, it } from 'vitest';
 import ExperimentsPage from '..';
 import { buildDataset, buildListDatasetsResponse } from '@/domains/datasets/components/__tests__/fixtures/datasets';
-import { experiments } from '@/domains/experiments/components/__tests__/fixtures/experiments';
+import {
+  buildListExperimentsResponse,
+  emptyReviewSummary,
+  experiments,
+} from '@/domains/experiments/components/__tests__/fixtures/experiments';
+import {
+  noAgents,
+  noProcessors,
+  noScorers,
+  noWorkflows,
+} from '@/domains/experiments/components/__tests__/fixtures/target-registries';
 import { TestLinkProvider } from '@/test/link-provider';
 import { server } from '@/test/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '@/test/render';
@@ -12,18 +23,21 @@ import { renderWithProviders, TEST_BASE_URL } from '@/test/render';
 const datasetOne = buildDataset({ id: 'dataset-1', name: 'Dataset One' });
 const datasetTwo = buildDataset({ id: 'dataset-2', name: 'Dataset Two' });
 
-const experimentsAcrossDatasets = [
+const experimentsAcrossDatasets: DatasetExperiment[] = [
   { ...experiments[0], datasetId: 'dataset-1' },
   { ...experiments[1], datasetId: 'dataset-2' },
 ];
 
 function setupHandlers() {
   server.use(
-    http.get(`${TEST_BASE_URL}/api/agents`, () => HttpResponse.json({})),
-    http.get(`${TEST_BASE_URL}/api/workflows`, () => HttpResponse.json({})),
-    http.get(`${TEST_BASE_URL}/api/scores/scorers`, () => HttpResponse.json({})),
-    http.get(`${TEST_BASE_URL}/api/experiments`, () => HttpResponse.json({ experiments: experimentsAcrossDatasets })),
-    http.get(`${TEST_BASE_URL}/api/experiments/review-summary`, () => HttpResponse.json({ experiments: [] })),
+    http.get(`${TEST_BASE_URL}/api/agents`, () => HttpResponse.json(noAgents)),
+    http.get(`${TEST_BASE_URL}/api/workflows`, () => HttpResponse.json(noWorkflows)),
+    http.get(`${TEST_BASE_URL}/api/processors`, () => HttpResponse.json(noProcessors)),
+    http.get(`${TEST_BASE_URL}/api/scores/scorers`, () => HttpResponse.json(noScorers)),
+    http.get(`${TEST_BASE_URL}/api/experiments`, () =>
+      HttpResponse.json(buildListExperimentsResponse(experimentsAcrossDatasets)),
+    ),
+    http.get(`${TEST_BASE_URL}/api/experiments/review-summary`, () => HttpResponse.json(emptyReviewSummary)),
     http.get(`${TEST_BASE_URL}/api/datasets`, () =>
       HttpResponse.json(buildListDatasetsResponse([datasetOne, datasetTwo])),
     ),

@@ -71,16 +71,17 @@ export default function Experiments() {
     setIsSelectionActive(false);
   };
 
-  const selectedExperiments = selectedExperimentIds.map(id => experiments.find(exp => exp.id === id));
-  const selectedDatasetIds = new Set(selectedExperiments.map(exp => exp?.datasetId));
+  // Ignore ids whose experiment disappeared from the list (e.g. after a refetch).
+  const selectedIds = selectedExperimentIds.filter(id => experiments.some(exp => exp.id === id));
+  const selectedDatasetIds = new Set(selectedIds.map(id => experiments.find(exp => exp.id === id)?.datasetId));
   const compareDisabledReason =
-    selectedExperimentIds.length === 2 && selectedDatasetIds.size !== 1
+    selectedIds.length === 2 && selectedDatasetIds.size !== 1
       ? 'experiments must belong to the same dataset'
       : undefined;
 
   const executeCompare = () => {
-    if (selectedExperimentIds.length !== 2 || compareDisabledReason) return;
-    const [baseline, contender] = selectedExperimentIds;
+    if (selectedIds.length !== 2 || compareDisabledReason) return;
+    const [baseline, contender] = selectedIds;
     void navigate(`/experiments/compare?baseline=${baseline}&contender=${contender}`);
   };
 
@@ -156,11 +157,16 @@ export default function Experiments() {
           hasActiveFilters={hasFilters}
           onRunClick={() => setRunDialogOpen(true)}
           onCompareClick={() => setIsSelectionActive(true)}
-          isSelectionActive={isSelectionActive}
-          selectedCount={selectedExperimentIds.length}
-          onExecuteCompare={executeCompare}
-          onCancelSelection={cancelSelection}
-          compareDisabledReason={compareDisabledReason}
+          selection={
+            isSelectionActive
+              ? {
+                  selectedCount: selectedIds.length,
+                  onExecuteCompare: executeCompare,
+                  onCancelSelection: cancelSelection,
+                  compareDisabledReason,
+                }
+              : undefined
+          }
         />
       </PageLayout.TopArea>
 
@@ -172,9 +178,11 @@ export default function Experiments() {
         search={search}
         statusFilter={statusFilter}
         datasetFilter={datasetFilter}
-        isSelectionActive={isSelectionActive}
-        selectedExperimentIds={selectedExperimentIds}
-        onToggleSelection={toggleExperimentSelection}
+        selection={
+          isSelectionActive
+            ? { selectedExperimentIds: selectedIds, onToggleSelection: toggleExperimentSelection }
+            : undefined
+        }
       />
 
       {runDialog}

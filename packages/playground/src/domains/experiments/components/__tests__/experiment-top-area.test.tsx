@@ -2,7 +2,7 @@ import { cleanup, screen } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { ExperimentTopArea } from '../experiment-top-area';
-import { experiments, noAgents, noWorkflows, noScorers } from './fixtures/experiments';
+import { experiments, noAgents, noProcessors, noWorkflows, noScorers } from './fixtures/experiments';
 import { TestLinkProvider } from '@/test/link-provider';
 import { server } from '@/test/msw-server';
 import { TEST_BASE_URL, renderWithProviders, waitForMutationsIdle } from '@/test/render';
@@ -18,6 +18,7 @@ describe('ExperimentTopArea', () => {
   beforeEach(() => {
     server.use(
       http.get(`${TEST_BASE_URL}/api/agents`, () => HttpResponse.json(noAgents)),
+      http.get(`${TEST_BASE_URL}/api/processors`, () => HttpResponse.json(noProcessors)),
       http.get(`${TEST_BASE_URL}/api/workflows`, () => HttpResponse.json(noWorkflows)),
       http.get(`${TEST_BASE_URL}/api/scores/scorers`, () => HttpResponse.json(noScorers)),
       http.get(`${TEST_BASE_URL}/api/scores/run/:experimentId`, () =>

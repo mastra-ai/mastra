@@ -23,12 +23,16 @@ export interface ExperimentsToolbarProps {
   hasActiveFilters?: boolean;
   onRunClick?: () => void;
   runTooltip?: string;
-  /** Comparison selection mode. When `onCompareClick` is omitted the Compare entry point is hidden. */
+  /** When omitted the Compare entry point is hidden. */
   onCompareClick?: () => void;
-  isSelectionActive?: boolean;
-  selectedCount?: number;
-  onExecuteCompare?: () => void;
-  onCancelSelection?: () => void;
+  /** When provided, the toolbar renders the comparison selection controls instead of the filters. */
+  selection?: ExperimentsToolbarSelection;
+}
+
+export interface ExperimentsToolbarSelection {
+  selectedCount: number;
+  onExecuteCompare: () => void;
+  onCancelSelection: () => void;
   /** When set, the "Compare Experiments" action is disabled and this reason is shown. */
   compareDisabledReason?: string;
 }
@@ -46,13 +50,10 @@ export function ExperimentsToolbar({
   onRunClick,
   runTooltip = 'Run an experiment',
   onCompareClick,
-  isSelectionActive = false,
-  selectedCount = 0,
-  onExecuteCompare,
-  onCancelSelection,
-  compareDisabledReason,
+  selection,
 }: ExperimentsToolbarProps) {
-  if (isSelectionActive) {
+  if (selection) {
+    const { selectedCount, onExecuteCompare, onCancelSelection, compareDisabledReason } = selection;
     const canCompare = selectedCount === 2 && !compareDisabledReason;
     return (
       <div className="flex w-full items-center justify-end gap-4">

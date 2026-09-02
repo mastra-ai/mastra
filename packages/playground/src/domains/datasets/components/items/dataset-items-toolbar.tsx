@@ -129,15 +129,17 @@ export function DatasetItemsToolbar({
 
   return (
     <div
-      className="flex w-full items-center justify-between gap-4 whitespace-nowrap"
+      className="flex w-full flex-wrap items-center justify-between gap-x-4 gap-y-2 whitespace-nowrap"
       data-testid="dataset-items-toolbar"
     >
-      <div className="flex min-w-0 flex-1 items-center gap-4">
+      {/* The search keeps a sane minimum width; when the actions do not fit next to it
+          they wrap onto their own row instead of squeezing the search. */}
+      <div className="flex min-w-64 flex-1 items-center gap-4">
         {searchField}
         {oldVersionNotice}
       </div>
 
-      <ButtonsGroup className="shrink-0">
+      <ButtonsGroup className="ml-auto flex-wrap justify-end">
         {leftSlot}
         {selectionDropdown}
         {(hasItems || Boolean(searchQuery)) && !isItemPanelOpen && !isViewingOldVersion && (

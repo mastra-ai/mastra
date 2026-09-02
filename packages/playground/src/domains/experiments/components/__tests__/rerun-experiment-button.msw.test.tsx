@@ -5,6 +5,12 @@ import { RerunExperimentButton } from '../rerun-experiment-button';
 import { experiments } from './fixtures/experiments';
 import { datasetVersionsResponse } from '@/domains/datasets/components/__tests__/fixtures/dataset-versions';
 import { buildDataset, buildListDatasetsResponse } from '@/domains/datasets/components/__tests__/fixtures/datasets';
+import {
+  agent,
+  noProcessors,
+  noWorkflows,
+  scorer,
+} from '@/domains/experiments/components/__tests__/fixtures/target-registries';
 import { TestLinkProvider } from '@/test/link-provider';
 import { server } from '@/test/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '@/test/render';
@@ -68,17 +74,14 @@ beforeEach(() => {
     http.get(`${TEST_BASE_URL}/api/datasets`, () => HttpResponse.json(buildListDatasetsResponse([dataset]))),
     http.get(`${TEST_BASE_URL}/api/datasets/:datasetId`, () => HttpResponse.json(dataset)),
     http.get(`${TEST_BASE_URL}/api/datasets/:datasetId/versions`, () => HttpResponse.json(datasetVersionsResponse)),
-    http.get(`${TEST_BASE_URL}/api/agents`, () =>
-      HttpResponse.json({ 'agent-1': { name: 'Agent One', instructions: '', tools: {}, workflows: {} } }),
-    ),
-    http.get(`${TEST_BASE_URL}/api/workflows`, () => HttpResponse.json({})),
+    http.get(`${TEST_BASE_URL}/api/agents`, () => HttpResponse.json({ 'agent-1': agent('agent-1', 'Agent One') })),
+    http.get(`${TEST_BASE_URL}/api/workflows`, () => HttpResponse.json(noWorkflows)),
+    http.get(`${TEST_BASE_URL}/api/processors`, () => HttpResponse.json(noProcessors)),
     http.get(`${TEST_BASE_URL}/api/scores/run/:experimentId`, () =>
       HttpResponse.json({ scores: [], pagination: { total: 0, page: 0, perPage: 100, hasMore: false } }),
     ),
     http.get(`${TEST_BASE_URL}/api/scores/scorers`, () =>
-      HttpResponse.json({
-        'answer-relevancy': { isRegistered: true, scorer: { config: { name: 'Answer relevancy' } } },
-      }),
+      HttpResponse.json({ 'answer-relevancy': scorer('answer-relevancy', 'Answer relevancy') }),
     ),
     http.post(`${TEST_BASE_URL}/api/datasets/:datasetId/experiments`, async ({ params, request }) => {
       triggerCalls.push({
@@ -177,6 +180,16 @@ describe('RerunExperimentButton', () => {
 
   it('is hidden when the experiment has no dataset', () => {
     renderButton({ ...original, datasetId: null });
+    expect(screen.queryByRole('button', { name: /rerun/i })).toBeNull();
+  });
+
+  it('is hidden for caller-run experiments that have no target', () => {
+    renderButton({ ...original, targetType: null, targetId: null });
+    expect(screen.queryByRole('button', { name: /rerun/i })).toBeNull();
+  });
+
+  it('is hidden when the target type cannot be submitted from the run dialog', () => {
+    renderButton({ ...original, targetType: 'processor', targetId: 'proc-1' });
     expect(screen.queryByRole('button', { name: /rerun/i })).toBeNull();
   });
 });

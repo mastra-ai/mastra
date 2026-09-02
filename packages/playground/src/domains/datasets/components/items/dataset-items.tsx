@@ -14,7 +14,6 @@ import { DatasetItemsToolbar } from './dataset-items-toolbar';
 
 export interface DatasetItemsProps {
   items: DatasetItem[];
-  /** Total items shown in the toolbar badge (search-aware; may differ from `items.length` while paginating). */
   /** Page-level content rendered before the list actions in the toolbar row. */
   leftSlot?: React.ReactNode;
   /** Page-level actions rendered at the end of the toolbar row. */

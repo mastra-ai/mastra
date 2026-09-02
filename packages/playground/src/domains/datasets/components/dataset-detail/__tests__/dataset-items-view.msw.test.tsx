@@ -1,22 +1,24 @@
+import type { MastraClient } from '@mastra/client-js';
 import { screen, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import { DatasetItemsView } from '../dataset-items-view';
 import { DATASET_ID, dataset, items } from './fixtures/dataset-items';
+import { buildListDatasetsResponse } from '@/domains/datasets/components/__tests__/fixtures/datasets';
 import { DatasetItemPanelProvider } from '@/domains/datasets/context/dataset-item-panel-context';
 import { TestLinkProvider } from '@/test/link-provider';
 import { server } from '@/test/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '@/test/render';
 
-const itemsResponse = {
+const itemsResponse: Awaited<ReturnType<MastraClient['listDatasetItems']>> = {
   items,
   pagination: { total: items.length, page: 0, perPage: 10, hasMore: false },
 };
 
 beforeEach(() => {
   server.use(
-    http.get(`${TEST_BASE_URL}/api/datasets`, () => HttpResponse.json({ datasets: [dataset] })),
+    http.get(`${TEST_BASE_URL}/api/datasets`, () => HttpResponse.json(buildListDatasetsResponse([dataset]))),
     http.get(`${TEST_BASE_URL}/api/datasets/${DATASET_ID}`, () => HttpResponse.json(dataset)),
     http.get(`${TEST_BASE_URL}/api/datasets/${DATASET_ID}/items`, () => HttpResponse.json(itemsResponse)),
   );

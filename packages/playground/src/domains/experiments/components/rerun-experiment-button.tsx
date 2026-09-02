@@ -25,9 +25,11 @@ export function RerunExperimentButton({ experiment }: RerunExperimentButtonProps
   const { paths } = useLinkComponent();
   const scorerIds = useExperimentScorerIds(experiment);
 
-  if (!experiment.datasetId) return null;
-
   const initialTargetType = DIALOG_TARGET_TYPES.find(type => type === experiment.targetType);
+
+  // Only targets the run dialog can submit are rerunnable (caller-run/external and
+  // unsupported target types are not).
+  if (!experiment.datasetId || !initialTargetType || !experiment.targetId) return null;
 
   return (
     <>
@@ -49,7 +51,7 @@ export function RerunExperimentButton({ experiment }: RerunExperimentButtonProps
           initialDatasetId={experiment.datasetId}
           initialDatasetVersion={experiment.datasetVersion ?? undefined}
           initialTargetType={initialTargetType}
-          initialTargetId={experiment.targetId ?? undefined}
+          initialTargetId={experiment.targetId}
           initialScorerIds={scorerIds}
           onSuccess={experimentId => void navigate(paths.experimentLink(experimentId))}
         />
