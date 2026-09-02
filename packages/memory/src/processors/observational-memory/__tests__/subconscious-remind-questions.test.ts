@@ -1,4 +1,4 @@
-import { Agent } from '@mastra/core/agent';
+import { Agent, signalToMastraDBMessage } from '@mastra/core/agent';
 import type { MastraDBMessage } from '@mastra/core/agent';
 import { RequestContext } from '@mastra/core/request-context';
 import { InMemoryStore } from '@mastra/core/storage';
@@ -168,6 +168,29 @@ describe('Subconscious reminder questions', () => {
     const result = await tool.execute?.(
       { replyId: 'reply-1', answer: 'January 15.', moreComing: false },
       replyToolContext([providerMessage]),
+    );
+
+    expect(result).toMatchObject({ delivered: true, replyId: 'reply-1', moreComing: false });
+  });
+
+  it('authorizes replies against question rows persisted by sendMessage (role signal, nested metadata)', async () => {
+    const parentAgent = createParentAgent();
+    const tool = createReplyToMemoryQuestionTool({ parentAgent, parentThreadId, resourceId });
+    const persisted = signalToMastraDBMessage(
+      {
+        id: 'reply-1:message',
+        type: 'user',
+        tagName: 'user',
+        contents: 'Memory question reply-1\n\nWhat did I decide?',
+        metadata: { [REMIND_MESSAGE_METADATA_KEY]: { type: 'question', replyId: 'reply-1', askedAt: Date.now() } },
+      },
+      { threadId: `subconscious:${parentThreadId}:remind`, resourceId },
+    );
+    expect(persisted.role).toBe('signal');
+
+    const result = await tool.execute?.(
+      { replyId: 'reply-1', answer: 'January 15.', moreComing: false },
+      replyToolContext([persisted]),
     );
 
     expect(result).toMatchObject({ delivered: true, replyId: 'reply-1', moreComing: false });

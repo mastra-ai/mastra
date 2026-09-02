@@ -8,7 +8,12 @@ import type {
 
 import { withOmInternalThreadId } from '../internal-request-context';
 import { publishSubconsciousError } from './activity';
-import { getRemindMessageMetadata, getRemindMessageText, REMIND_MESSAGE_METADATA_KEY } from './remind-protocol';
+import {
+  getRemindMessageMetadata,
+  getRemindMessageText,
+  isRemindInputMessage,
+  REMIND_MESSAGE_METADATA_KEY,
+} from './remind-protocol';
 
 const NUDGE_AFTER_MS = 20_000;
 const MAX_CONTINUATION_ATTEMPTS = 2;
@@ -59,7 +64,7 @@ function terminalReplies(messages: MastraDBMessage[], result?: ProcessOutputResu
 function messageMetadata(message: MastraDBMessage) {
   const metadata = getRemindMessageMetadata(message);
   if (metadata) return metadata;
-  if (message.role !== 'user') return undefined;
+  if (!isRemindInputMessage(message)) return undefined;
 
   const text = getRemindMessageText(message);
   const question = text.match(/^Memory question (\S+)\n/);

@@ -17,6 +17,7 @@ import {
   ensureOwnedRemindThread,
   getRemindMessageMetadata,
   getRemindThreadId,
+  isRemindInputMessage,
   REMIND_MESSAGE_METADATA_KEY,
 } from './remind-protocol';
 import type { ResolvedSubconsciousAgent } from './types';
@@ -94,7 +95,7 @@ function trustedQuestion(messages: unknown, replyId: string, threadId: string, r
     if (!dbMessage) return false;
     const metadata = getRemindMessageMetadata(dbMessage);
     if (metadata?.type === 'question' && metadata.replyId === replyId) return true;
-    return dbMessage.role === 'user' && messageText(message).startsWith(`Memory question ${replyId}\n`);
+    return isRemindInputMessage(dbMessage) && messageText(message).startsWith(`Memory question ${replyId}\n`);
   });
 }
 
