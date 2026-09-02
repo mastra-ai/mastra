@@ -700,6 +700,7 @@ export type ProviderModelsMap = {
     'alibaba/qwen3.6-27b:thinking',
     'alibaba/qwen3.6-flash',
     'alibaba/qwen3.8-flash',
+    'alibaba/qwen3.8-max-0902',
     'amazon/nova-2-lite-v1',
     'amazon/nova-lite-v1',
     'amazon/nova-pro-v1',
