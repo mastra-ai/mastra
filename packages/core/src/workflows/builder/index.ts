@@ -1,5 +1,6 @@
 import type { ValidatableStepFlowEntry, WorkflowValidationInput } from '../dynamic/validate/types';
 import type { Predicate } from '../predicate';
+import type { WorkflowScheduleConfig } from '../scheduler/types';
 import type { SerializedSingleStepEntry, SerializedStepOptions } from '../types';
 
 export type WorkflowBuilderJsonValue =
@@ -91,6 +92,12 @@ export interface WorkflowBuilderDefinition {
   stateSchema?: WorkflowBuilderJsonObject;
   requestContextSchema?: WorkflowBuilderJsonObject;
   graph: WorkflowBuilderGraphEntry[];
+  /**
+   * Optional declarative schedule config(s). JSON-safe by construction
+   * (literal inputData/initialState/requestContext only), so it persists with
+   * the definition and is re-declared on rehydration.
+   */
+  schedule?: WorkflowScheduleConfig | WorkflowScheduleConfig[];
 }
 
 type Extends<A, B> = [A] extends [B] ? true : false;
@@ -200,6 +207,7 @@ export function normalizeWorkflowBuilderDefinition(input: unknown): WorkflowBuil
   if (normalized.metadata === null) delete normalized.metadata;
   if (normalized.stateSchema === null) delete normalized.stateSchema;
   if (normalized.requestContextSchema === null) delete normalized.requestContextSchema;
+  if (normalized.schedule === null) delete normalized.schedule;
   if (!Array.isArray(normalized.graph)) throw new TypeError('Workflow definition graph must be an array.');
   normalized.graph = normalized.graph.map(entry =>
     normalizeEntry(entry as Record<string, unknown>),

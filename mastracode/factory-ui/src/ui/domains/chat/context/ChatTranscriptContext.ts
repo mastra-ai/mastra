@@ -1,5 +1,6 @@
 import { createContext } from 'react';
 
+import type { ChatSessionPhase } from '../../workspaces/services/sessionStatus';
 import type { SessionStateSnapshot } from '../hooks/useAgentControllerTranscript';
 import type { OutgoingFile, TranscriptState } from '../services/transcript';
 
@@ -16,6 +17,11 @@ export interface LoadMoreHistory {
 export interface ChatTranscriptApi {
   transcript: TranscriptState;
   busy: boolean;
+  /** `undefined` is a session with nothing to report — the default favicon. */
+  phase: ChatSessionPhase | undefined;
+  /** Session metadata, thread messages, or transcript history still loading. */
+  initializing: boolean;
+  historyInitializing: boolean;
   initialHistoryReady: boolean;
   localUser: (text: string, steer?: boolean, files?: OutgoingFile[]) => string;
   failLocalUser: (id: string) => void;

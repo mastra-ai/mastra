@@ -68,7 +68,7 @@ function installWorkspaceHandlers() {
 }
 
 describe('workspace panel comment feed', () => {
-  it('opens the feed from the overview row, expands the panel, and comes back', async () => {
+  it('opens the feed at half height from the overview row, and comes back', async () => {
     installWorkspaceHandlers();
     server.use(
       http.get(COMMENTS_URL, () =>
@@ -77,7 +77,7 @@ describe('workspace panel comment feed', () => {
         }),
       ),
     );
-    const onExpandedChange = vi.fn();
+    const onSizeChange = vi.fn();
     const user = userEvent.setup();
     renderWithProviders(
       <WorkspaceViewerPanel
@@ -85,22 +85,23 @@ describe('workspace panel comment feed', () => {
         threadId={THREAD}
         workItem={workItem(2)}
         factoryProjectId={FACTORY_ID}
-        onExpandedChange={onExpandedChange}
+        onSizeChange={onSizeChange}
       />,
     );
 
     const row = await screen.findByRole('button', { name: /Comments/ });
     expect(row).toHaveTextContent('2');
     await user.click(row);
-    expect(onExpandedChange).toHaveBeenLastCalledWith(true);
+    expect(onSizeChange).toHaveBeenLastCalledWith('half');
 
     const feed = await screen.findByTestId('work-item-feed-panel');
+    expect(within(feed).getByRole('textbox', { name: 'Comment' })).toHaveFocus();
     expect(await within(feed).findByText('first words')).toBeInTheDocument();
     expect(within(feed).getByText('second words')).toBeInTheDocument();
     expect(within(feed).getByText('2 comments')).toBeInTheDocument();
 
     await user.click(within(feed).getByRole('button', { name: 'Back to workspace' }));
-    expect(onExpandedChange).toHaveBeenLastCalledWith(false);
+    expect(onSizeChange).toHaveBeenLastCalledWith('compact');
     expect(await screen.findByRole('button', { name: /Comments/ })).toBeInTheDocument();
   });
 

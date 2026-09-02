@@ -38,10 +38,24 @@ export function deriveLocalWorkdir(
   return undefined;
 }
 
-/** `<home>/<repo>` — where a remote VM's default-cwd clone lands. */
-export function remoteWorkdirFromHome(home: string, repoFullName: string): string {
+/** Derive `<workingDirectory>/<repo>` when a remote sandbox declares an absolute root. */
+export function deriveRemoteRepoDir(
+  sandbox: { provider: string; workingDirectory?: unknown },
+  repoFullName: string,
+): string | undefined {
+  const wd = sandbox.workingDirectory;
+  if (sandbox.provider !== 'local' && typeof wd === 'string' && wd.startsWith('/')) {
+    return repoDirUnder(wd, repoFullName);
+  }
+  return undefined;
+}
+
+/** Join a parent directory and sanitized repository name. */
+export function repoDirUnder(parent: string, repoFullName: string): string {
   const [, name] = repoFullName.split('/', 2);
-  return `${home.replace(/\/+$/, '')}/${sanitizeSegment(name || 'repo')}`;
+  let end = parent.length;
+  while (end > 0 && parent[end - 1] === '/') end--;
+  return `${parent.slice(0, end)}/${sanitizeSegment(name || 'repo')}`;
 }
 
 /** Resolve a workdir under `root`, refusing any path that escapes the configured root. */
