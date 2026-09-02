@@ -2142,8 +2142,7 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
       );
       args.push(input.cursor, input.cursor, input.cursor);
     }
-    const visibility = this.#proposalVisibilityPredicate(scopeIds, input.approvalScopeIds, args);
-    clauses.push(visibility);
+    clauses.push(this.#proposalVisibilityPredicate(scopeIds, input.approvalScopeIds, args));
     args.push(limit + 1);
     const result = await this.#client.execute({
       sql: `SELECT * FROM "${TABLE_KNOWLEDGE_PROPOSALS}" WHERE ${clauses.join(' AND ')} ORDER BY createdAt DESC,id DESC LIMIT ?`,
@@ -2441,10 +2440,6 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
   }): Promise<KnowledgeActivityEvent[]> {
     const clauses: string[] = [];
     const args: InValue[] = [];
-    if (input.contextScopeId) {
-      clauses.push('contextScopeId=?');
-      args.push(input.contextScopeId);
-    }
     if (input.importRunId) {
       clauses.push('importRunId=?');
       args.push(input.importRunId);
@@ -2479,6 +2474,8 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
     for (const row of result.rows) {
       const action = String(row.action) as KnowledgeActivityAction;
       const details = row.detailsJson == null ? undefined : parseJson<Record<string, unknown>>(row.detailsJson);
+      const proposalId = typeof details?.proposalId === 'string' ? details.proposalId : undefined;
+      if (proposalId && !(await this.getVisibleProposal({ id: proposalId, scopeIds }))) continue;
       const retainedScopeIds = activityVisibilityScopeIds(details);
       const targetType = String(row.targetType) as KnowledgeSemanticDocumentType;
       const visibleDeletion = action === 'delete' && isKnowledgeScopeVisible(retainedScopeIds, scopeIds);

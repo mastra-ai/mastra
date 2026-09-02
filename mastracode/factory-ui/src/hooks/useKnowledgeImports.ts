@@ -9,11 +9,13 @@ import {
   fetchKnowledgeImportRuns,
 } from '../ui/domains/factory/services/knowledge-imports';
 
-export function useKnowledgeImporters(factoryProjectId: string | undefined) {
+export function useKnowledgeImporters(factoryProjectId: string | undefined, threadId?: string) {
   const { baseUrl } = useApiConfig();
   return useQuery({
-    queryKey: queryKeys.knowledgeImporters(factoryProjectId),
-    queryFn: factoryProjectId ? ({ signal }) => fetchKnowledgeImporters(baseUrl, factoryProjectId, signal) : skipToken,
+    queryKey: queryKeys.knowledgeImporters(factoryProjectId, threadId),
+    queryFn: factoryProjectId
+      ? ({ signal }) => fetchKnowledgeImporters(baseUrl, factoryProjectId, threadId, signal)
+      : skipToken,
     refetchInterval: 5_000,
   });
 }
@@ -22,16 +24,17 @@ export function useKnowledgeImportRuns(
   factoryProjectId: string | undefined,
   importerId: string | undefined,
   filters: KnowledgeImportFilters,
+  threadId?: string,
 ) {
   const { baseUrl } = useApiConfig();
   const initialPageParam: string | undefined = undefined;
   const queryFn =
     factoryProjectId && importerId
       ? ({ pageParam, signal }: { pageParam: string | undefined; signal: AbortSignal }) =>
-          fetchKnowledgeImportRuns(baseUrl, factoryProjectId, importerId, filters, pageParam, signal)
+          fetchKnowledgeImportRuns(baseUrl, factoryProjectId, importerId, filters, pageParam, threadId, signal)
       : skipToken;
   return useInfiniteQuery({
-    queryKey: queryKeys.knowledgeImportRuns(factoryProjectId, importerId, JSON.stringify(filters)),
+    queryKey: queryKeys.knowledgeImportRuns(factoryProjectId, importerId, threadId, JSON.stringify(filters)),
     queryFn,
     initialPageParam,
     getNextPageParam: lastPage => lastPage.nextCursor,
@@ -43,15 +46,29 @@ export function useKnowledgeImportRun(
   factoryProjectId: string | undefined,
   importerId: string | undefined,
   runId: string | undefined,
+  threadId?: string,
 ) {
   const { baseUrl } = useApiConfig();
-  return useQuery({
-    queryKey: queryKeys.knowledgeImportRun(factoryProjectId, importerId, runId),
-    queryFn:
-      factoryProjectId && importerId && runId
-        ? ({ signal }) => fetchKnowledgeImportRun(baseUrl, factoryProjectId, importerId, runId, signal)
-        : skipToken,
-    refetchInterval: query =>
-      query.state.data?.run.status === 'queued' || query.state.data?.run.status === 'running' ? 2_000 : false,
+  return useInfiniteQuery({
+    queryKey: queryKeys.knowledgeImportRun(factoryProjectId, importerId, runId, threadId),
+    queryFn: ({ pageParam, signal }) => {
+      if (!factoryProjectId || !importerId || !runId) throw new Error('A Knowledge import run is required.');
+      return fetchKnowledgeImportRun(
+        baseUrl,
+        factoryProjectId,
+        importerId,
+        runId,
+        pageParam || undefined,
+        threadId,
+        signal,
+      );
+    },
+    initialPageParam: '',
+    getNextPageParam: page => page.nextCursor,
+    enabled: Boolean(factoryProjectId && importerId && runId),
+    refetchInterval: query => {
+      const run = query.state.data?.pages[0]?.run;
+      return run?.status === 'queued' || run?.status === 'running' ? 2_000 : false;
+    },
   });
 }

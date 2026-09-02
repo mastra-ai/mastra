@@ -437,21 +437,23 @@ export class Knowledge extends MastraBase {
     nodeId: string;
     capability: 'edit' | 'delete' | 'manageAccess';
   }) {
+    const [nodeScopeIds, recordScopeIds] = await Promise.all([
+      input.storage.getNodeScopeIds(input.nodeId),
+      input.storage.getRecordScopeIds(input.recordId),
+    ]);
     assertKnowledgeTargetCapability({
       frontier: input.frontier,
-      scopeIds: await input.storage.getNodeScopeIds(input.nodeId),
+      scopeIds: nodeScopeIds,
       capability: input.capability,
       targetType: 'record',
       targetId: input.recordId,
     });
-    // Retiring or restoring a record changes what every stamped scope can see, so it needs that
-    // authority on each of the record's own scopes, not only on its node's. Stamp edits keep their
-    // per-stamp rules in setRecordScopes.
-    if (input.capability !== 'manageAccess') return;
-    for (const scopeId of await input.storage.getRecordScopeIds(input.recordId)) {
-      if (!input.frontier.scopes[scopeId]?.[input.capability])
-        throw new KnowledgeNotFoundError('record', input.recordId);
-    }
+    assertKnowledgeScopeCapabilities({
+      frontier: input.frontier,
+      scopeIds: recordScopeIds,
+      capability: input.capability,
+      targetType: 'scope',
+    });
   }
 
   async #authorizeMentionTargets(input: {
@@ -587,7 +589,8 @@ export class Knowledge extends MastraBase {
     return (await this.#getStorage()).setImportState(input);
   }
 
-  async createImportRun(input: CreateKnowledgeImportRunInput) {
+  /** @internal */
+  async createImportRunInternal(input: CreateKnowledgeImportRunInput) {
     const importer = this.#assertImporter(input.importerId);
     if (input.triggerKind === 'cron' && !importer.triggers.cron) {
       throw new Error(`Knowledge importer ${input.importerId} does not have a cron trigger`);
@@ -639,7 +642,8 @@ export class Knowledge extends MastraBase {
     return (await this.#getStorage()).listImportRuns({ ...input, importerIds });
   }
 
-  async updateImportRun(input: Omit<UpdateKnowledgeImportRunInput, 'error'> & { error?: unknown }) {
+  /** @internal */
+  async updateImportRunInternal(input: Omit<UpdateKnowledgeImportRunInput, 'error'> & { error?: unknown }) {
     const storage = await this.#getStorage();
     const run = await storage.getImportRun(input.id);
     if (run) this.#assertImporter(run.importerId);
