@@ -5,6 +5,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router';
 import { ExperimentTriggerDialog } from '@/domains/datasets/components/experiment-trigger/experiment-trigger-dialog';
 import type { TargetType } from '@/domains/datasets/components/experiment-trigger/target-selector';
+import { useExperimentScorerIds } from '@/domains/experiments/hooks/use-experiment-scorer-ids';
 import { useLinkComponent } from '@/lib/framework';
 
 export interface RerunExperimentButtonProps {
@@ -22,6 +23,7 @@ export function RerunExperimentButton({ experiment }: RerunExperimentButtonProps
   const [open, setOpen] = useState(false);
   const navigate = useNavigate();
   const { paths } = useLinkComponent();
+  const scorerIds = useExperimentScorerIds(experiment);
 
   if (!experiment.datasetId) return null;
 
@@ -37,16 +39,21 @@ export function RerunExperimentButton({ experiment }: RerunExperimentButtonProps
         <Play />
         Rerun
       </Button>
-      <ExperimentTriggerDialog
-        open={open}
-        onOpenChange={setOpen}
-        initialDatasetId={experiment.datasetId}
-        initialDatasetVersion={experiment.datasetVersion ?? undefined}
-        initialTargetType={initialTargetType}
-        initialTargetId={experiment.targetId ?? undefined}
-        initialScorerIds={experiment.scorerIds ?? []}
-        onSuccess={experimentId => void navigate(paths.experimentLink(experimentId))}
-      />
+      {/* Mounted on demand and keyed on the resolved scorers so the dialog seeds its state
+          from them even when they load asynchronously from score data. */}
+      {open && (
+        <ExperimentTriggerDialog
+          key={scorerIds.join(',')}
+          open
+          onOpenChange={setOpen}
+          initialDatasetId={experiment.datasetId}
+          initialDatasetVersion={experiment.datasetVersion ?? undefined}
+          initialTargetType={initialTargetType}
+          initialTargetId={experiment.targetId ?? undefined}
+          initialScorerIds={scorerIds}
+          onSuccess={experimentId => void navigate(paths.experimentLink(experimentId))}
+        />
+      )}
     </>
   );
 }

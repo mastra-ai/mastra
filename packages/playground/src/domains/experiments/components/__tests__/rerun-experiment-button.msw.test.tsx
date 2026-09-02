@@ -72,8 +72,13 @@ beforeEach(() => {
       HttpResponse.json({ 'agent-1': { name: 'Agent One', instructions: '', tools: {}, workflows: {} } }),
     ),
     http.get(`${TEST_BASE_URL}/api/workflows`, () => HttpResponse.json({})),
+    http.get(`${TEST_BASE_URL}/api/scores/run/:experimentId`, () =>
+      HttpResponse.json({ scores: [], pagination: { total: 0, page: 0, perPage: 100, hasMore: false } }),
+    ),
     http.get(`${TEST_BASE_URL}/api/scores/scorers`, () =>
-      HttpResponse.json({ 'answer-relevancy': { scorer: { config: { name: 'Answer relevancy' } } } }),
+      HttpResponse.json({
+        'answer-relevancy': { isRegistered: true, scorer: { config: { name: 'Answer relevancy' } } },
+      }),
     ),
     http.post(`${TEST_BASE_URL}/api/datasets/:datasetId/experiments`, async ({ params, request }) => {
       triggerCalls.push({
@@ -120,6 +125,11 @@ describe('RerunExperimentButton', () => {
     await waitFor(() =>
       expect((screen.getByRole('combobox', { name: 'Select agent' }) as HTMLSelectElement).value).toBe('agent-1'),
     );
+    await waitFor(() =>
+      expect((screen.getByRole('combobox', { name: 'Select scorers...' }) as HTMLSelectElement).value).toBe(
+        'answer-relevancy',
+      ),
+    );
 
     fireEvent.click(screen.getByRole('button', { name: 'Run' }));
 
@@ -132,6 +142,37 @@ describe('RerunExperimentButton', () => {
       scorerIds: ['answer-relevancy'],
     });
     await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith('/experiments/exp-42'));
+  });
+
+  it('falls back to the scorers that actually produced scores when none are pinned on the experiment', async () => {
+    server.use(
+      http.get(`${TEST_BASE_URL}/api/scores/run/:experimentId`, () =>
+        HttpResponse.json({
+          scores: [
+            { entityId: 'item-1', scorerId: 'answer-relevancy', score: 0.5 },
+            { entityId: 'item-2', scorerId: 'answer-relevancy', score: 0.7 },
+          ],
+          pagination: { total: 2, page: 0, perPage: 100, hasMore: false },
+        }),
+      ),
+    );
+    renderButton({ ...original, scorerIds: null });
+
+    fireEvent.click(screen.getByRole('button', { name: /rerun/i }));
+    await screen.findByRole('dialog', { name: /run experiment/i });
+
+    await waitFor(() =>
+      expect((screen.getByRole('combobox', { name: 'Select scorers...' }) as HTMLSelectElement).value).toBe(
+        'answer-relevancy',
+      ),
+    );
+    await waitFor(() =>
+      expect((screen.getByRole('combobox', { name: 'Select agent' }) as HTMLSelectElement).value).toBe('agent-1'),
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Run' }));
+
+    await waitFor(() => expect(triggerCalls).toHaveLength(1));
+    expect(triggerCalls[0].body).toMatchObject({ scorerIds: ['answer-relevancy'] });
   });
 
   it('is hidden when the experiment has no dataset', () => {

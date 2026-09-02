@@ -6,10 +6,10 @@ import { DatasetsIcon } from '@mastra/playground-ui/icons/DatasetsIcon';
 import { ScorersIcon } from '@mastra/playground-ui/icons/ScorersIcon';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { ArrowRightIcon } from 'lucide-react';
-import { type ReactNode, useMemo } from 'react';
+import type { ReactNode } from 'react';
 import { useAgents } from '@/domains/agents/hooks/use-agents';
-import { useScoresByExperimentId } from '@/domains/datasets/hooks/use-dataset-experiments';
 import { useDataset } from '@/domains/datasets/hooks/use-datasets';
+import { useExperimentScorerIds } from '@/domains/experiments/hooks/use-experiment-scorer-ids';
 import { resolveTargetName, TARGET_ICON, TARGET_LABEL } from '@/domains/experiments/utils/target-name';
 import { useScorers } from '@/domains/scores/hooks/use-scorers';
 import { useWorkflows } from '@/domains/workflows/hooks/use-workflows';
@@ -67,20 +67,7 @@ export function ExperimentFlowChain({ experiment, className }: ExperimentFlowCha
   const { data: workflows } = useWorkflows();
   const { data: scorers } = useScorers();
   const { data: dataset, isLoading: isDatasetLoading } = useDataset(experiment.datasetId ?? '');
-  const { data: scoresByItemId } = useScoresByExperimentId(experiment.id, experiment.status);
-
-  // Scorers are pinned on the experiment at create time, but that field is null
-  // when they resolve from the dataset or the items, so fall back to whichever
-  // scorers actually produced a score.
-  const scorerIds = useMemo(() => {
-    if (experiment.scorerIds?.length) return experiment.scorerIds;
-    if (!scoresByItemId) return [];
-    const ids = new Set<string>();
-    for (const scores of Object.values(scoresByItemId)) {
-      for (const score of scores) ids.add(score.scorerId);
-    }
-    return [...ids].sort();
-  }, [experiment.scorerIds, scoresByItemId]);
+  const scorerIds = useExperimentScorerIds(experiment);
 
   const scorerNames = scorerIds.map(id => scorers?.[id]?.scorer?.config?.name ?? id);
 
