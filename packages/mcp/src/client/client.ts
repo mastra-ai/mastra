@@ -503,7 +503,7 @@ export class InternalMastraMCPClient extends MastraBase {
       this.log('debug', 'Cannot send roots/list_changed: not connected');
       return;
     }
-    if (this.client.getNegotiatedProtocolVersion() === '2026-07-28') {
+    if (this.isModernConnection()) {
       this.log('debug', 'Skipping removed roots/list_changed notification on modern connection');
       return;
     }
@@ -844,9 +844,15 @@ export class InternalMastraMCPClient extends MastraBase {
 
         this.refreshServerInstructions();
         if (this.isModernConnection() && this.resourceSubscriptionUris.size > 0) {
-          await this.enqueueResourceSubscriptionUpdate(async () => {
-            await this.replaceModernResourceSubscription(new Set(this.resourceSubscriptionUris));
-          });
+          try {
+            await this.enqueueResourceSubscriptionUpdate(async () => {
+              await this.replaceModernResourceSubscription(new Set(this.resourceSubscriptionUris));
+            });
+          } catch (error) {
+            this.log('error', 'Failed to restore resource subscriptions after reconnect', {
+              error: error instanceof Error ? error.message : String(error),
+            });
+          }
         }
 
         resolve(true);

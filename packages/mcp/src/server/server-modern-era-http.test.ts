@@ -280,7 +280,7 @@ describe('MCPServer with protocolVersion 2026-07-28 (dual-era HTTP)', () => {
     expect(wireMethods).not.toContain('resources/unsubscribe');
   });
 
-  it('detaches the transport when restoring resource subscriptions fails', async () => {
+  it('keeps the connection usable when restoring resource subscriptions fails', async () => {
     const client = new InternalMastraMCPClient({
       name: 'resource-listen-restore-failure-client',
       server: {
@@ -289,18 +289,23 @@ describe('MCPServer with protocolVersion 2026-07-28 (dual-era HTTP)', () => {
       },
     });
 
+    const updated = new Promise<string>(resolve => {
+      client.setResourceUpdatedNotificationHandler(params => resolve(params.uri));
+    });
     await client.connect();
     await client.subscribeResource('test://resource');
     const sdkClient = (client as unknown as { client: Client }).client;
     const listenSpy = vi.spyOn(sdkClient, 'listen').mockRejectedValueOnce(new Error('listen restore failed'));
 
     try {
-      await expect(client.forceReconnect()).rejects.toThrow('listen restore failed');
-      expect(sdkClient.transport).toBeUndefined();
-      expect((client as unknown as { transport?: unknown }).transport).toBeUndefined();
+      await expect(client.forceReconnect()).resolves.toBeUndefined();
+      expect(sdkClient.transport).toBeDefined();
+      expect(Object.keys(await client.tools())).toContain('echoTool');
 
-      listenSpy.mockRestore();
-      await client.connect();
+      await client.subscribeResource('test://resource');
+      expect(listenSpy).toHaveBeenCalledTimes(2);
+      await server.resources.notifyUpdated({ uri: 'test://resource' });
+      await expect(updated).resolves.toBe('test://resource');
     } finally {
       listenSpy.mockRestore();
       await client.disconnect();

@@ -621,9 +621,9 @@ console.log('Current weather:', content.contents[0].text)
 
 #### `resources.subscribe(serverName: string, uri: string)`
 
-Subscribes to updates for a specific resource on a server. On a `2026-07-28` connection, Mastra adds the URI to a managed `subscriptions/listen` stream. Subscribing to the same URI more than once has no effect. Mastra restores the stream after a reconnect and closes it when the client disconnects.
+Subscribes to updates for a specific resource on a server. On a `2026-07-28` connection, Mastra adds the URI to a managed `subscriptions/listen` stream. Subscribing to the same URI more than once has no effect while the stream is active. Mastra restores the stream after a reconnect and closes it when the client disconnects.
 
-On a legacy connection, this method sends a `resources/subscribe` request.
+The method rejects if the server doesn't honor the requested URI. If stream restoration fails after a reconnect, the connection remains available and calling `subscribe()` again retries the stream. On a legacy connection, this method sends a `resources/subscribe` request.
 
 ```typescript oxfmt:false
 async subscribe(serverName: string, uri: string): Promise<object>
