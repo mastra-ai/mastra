@@ -70,7 +70,7 @@ export function DatasetItemsToolbar({
   );
 
   const searchField = (
-    <div className="w-full max-w-48 min-w-24">
+    <div className="w-full min-w-24">
       <SearchFieldBlock
         name="search-items"
         label="Search"
