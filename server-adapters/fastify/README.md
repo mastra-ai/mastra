@@ -5,7 +5,7 @@ Fastify server adapter for Mastra, enabling you to run Mastra with the [Fastify]
 ## Installation
 
 ```bash
-npm install @mastra/fastify fastify
+npm install @mastra/fastify
 ```
 
 ## Usage
@@ -29,57 +29,14 @@ app.listen({ port: 3000 }, (err, address) => {
 });
 ```
 
-## Adding Custom Routes
+## Documentation
 
-Add routes directly to the Fastify app with access to Mastra context:
+- [Fastify adapter reference](https://mastra.ai/reference/server/fastify-adapter)
 
-```typescript
-// Routes added after init() have access to Mastra context
-app.get('/health', async request => {
-  const mastraInstance = request.mastra;
-  const agents = Object.keys(mastraInstance.listAgents());
-  return { status: 'ok', agents };
-});
-```
+## Changelog
 
-## Configuration Options
+See the [package changelog](https://github.com/mastra-ai/mastra/blob/main/server-adapters/fastify/CHANGELOG.md) for version history and release notes.
 
-```typescript
-const server = new MastraServer({
-  app,
-  mastra,
-  prefix: '/api/v2', // Route prefix
-  openapiPath: '/openapi.json', // OpenAPI spec endpoint
-  bodyLimitOptions: {
-    maxSize: 10 * 1024 * 1024, // 10MB
-    onError: err => ({ error: 'Payload too large' }),
-  },
-  streamOptions: { redact: true }, // Redact sensitive data from streams
-});
-```
+## Support
 
-## Context Variables
-
-Access these in route handlers via `request`:
-
-| Key              | Description                 |
-| ---------------- | --------------------------- |
-| `mastra`         | Mastra instance             |
-| `requestContext` | Request context map         |
-| `abortSignal`    | Request cancellation signal |
-| `tools`          | Available tools             |
-
-## Multipart File Uploads
-
-For multipart file uploads, register `@fastify/multipart`:
-
-```typescript
-import multipart from '@fastify/multipart';
-
-await app.register(multipart);
-```
-
-## Related Links
-
-- [Server Adapters Documentation](https://mastra.ai/docs/server/server-adapters)
-- [Fastify Documentation](https://fastify.dev/docs/latest/)
+We have an [open community Discord](https://discord.gg/mastra-ai). Come and say hello and let us know if you have any questions or need any help getting things running.

@@ -1,14 +1,14 @@
 ---
-title: 'Running experiments | Datasets'
+title: "Experiments"
 description: "Run Mastra dataset experiments against registered agents or workflows, apply scorers, compare results, and inspect experiment output in Studio."
 packages:
-  - '@mastra/core'
+  - "@mastra/core"
 ---
 
 import Tabs from '@theme/Tabs';
 import TabItem from '@theme/TabItem';
 
-# Running experiments
+# Experiments
 
 **Added in:** `@mastra/core@1.4.0`
 
@@ -41,7 +41,7 @@ console.log(summary.failedCount) // number of items that failed
 
 `startExperiment()` blocks until all items finish. For fire-and-forget execution, see [async experiments](#async-experiments).
 
-## Studio
+## Run experiments in Studio
 
 You can also run experiments in [Studio](/docs/studio/overview). After you've added a dataset item, open it and select **Run Experiment** and configure the target, scorers, and options.
 
@@ -645,7 +645,7 @@ Visit the [`startExperiment` reference](/reference/datasets/startExperiment) for
 
 ## Related
 
-- [Datasets overview](/docs/datasets/overview)
+- [Datasets](/docs/evals/datasets)
 - [Scorers overview](/docs/evals/overview)
 - [`startExperiment` reference](/reference/datasets/startExperiment)
 - [`listExperimentResults` reference](/reference/datasets/listExperimentResults)
