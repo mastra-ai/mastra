@@ -124,11 +124,17 @@ function DatasetPage() {
             <DatasetItemsView
               datasetId={datasetId}
               onAddItemClick={() => setAddItemDialogOpen(true)}
+              leftSlot={
+                <span className="text-ui-sm text-neutral3 mr-3 whitespace-nowrap">
+                  {dataset?.createdAt ? `Created ${format(new Date(dataset.createdAt), 'MMM d')}` : ''}
+                </span>
+              }
               rightSlot={
                 <ButtonsGroup>
-                  <span className="text-ui-sm text-neutral3 mr-3 whitespace-nowrap">
-                    {dataset?.createdAt ? `Created ${format(new Date(dataset.createdAt), 'MMM d')}` : ''}
-                  </span>
+                  <Button as={Link} to={`/experiments?dataset=${datasetId}`}>
+                    <FlaskConical />
+                    View experiments
+                  </Button>
                   <DatasetVersions
                     datasetId={datasetId}
                     value={activeVersion}
@@ -136,10 +142,6 @@ function DatasetPage() {
                     currentVersion={dataset?.version}
                     className="w-36"
                   />
-                  <Button as={Link} to={`/experiments?dataset=${datasetId}`}>
-                    <FlaskConical />
-                    View experiments
-                  </Button>
                   {disableExperimentTrigger ? (
                     <Tooltip>
                       <TooltipTrigger asChild>

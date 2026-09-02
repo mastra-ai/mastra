@@ -1,12 +1,9 @@
 'use client';
-import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import { SearchFieldBlock } from '@mastra/playground-ui/components/FormFieldBlocks';
-import { Txt } from '@mastra/playground-ui/components/Txt';
-import { Icon } from '@mastra/playground-ui/icons/Icon';
-import { Plus, Upload, FileJson, Download, FolderPlus, FolderOutput, Trash2, ChevronDown, List } from 'lucide-react';
+import { Plus, Upload, FileJson, Download, FolderPlus, FolderOutput, Trash2, ChevronDown } from 'lucide-react';
 
 export type DatasetItemsToolbarProps = {
   // Normal mode actions
@@ -14,8 +11,8 @@ export type DatasetItemsToolbarProps = {
   onImportClick: () => void;
   onImportJsonClick: () => void;
   hasItems: boolean;
-  /** Search-aware total rendered as an "Items" badge next to the search field. */
-  itemsCount?: number;
+  /** Page-level content rendered before the list actions (e.g. created date). */
+  leftSlot?: React.ReactNode;
   /** Page-level actions rendered after the list actions, on the same row. */
   rightSlot?: React.ReactNode;
 
@@ -42,7 +39,7 @@ export function DatasetItemsToolbar({
   onImportClick,
   onImportJsonClick,
   hasItems,
-  itemsCount,
+  leftSlot,
   rightSlot,
   searchQuery,
   onSearchChange,
@@ -73,7 +70,7 @@ export function DatasetItemsToolbar({
   );
 
   const searchField = (
-    <div className="w-48 shrink-0">
+    <div className="w-full max-w-48 min-w-24">
       <SearchFieldBlock
         name="search-items"
         label="Search"
@@ -132,24 +129,16 @@ export function DatasetItemsToolbar({
 
   return (
     <div
-      className="flex w-full items-center justify-between gap-4 overflow-x-auto whitespace-nowrap"
+      className="flex w-full items-center justify-between gap-4 whitespace-nowrap"
       data-testid="dataset-items-toolbar"
     >
-      <div className="flex shrink-0 items-center gap-4">
-        {itemsCount !== undefined && (
-          <div className="flex shrink-0 items-center gap-2">
-            <Icon size="sm">
-              <List />
-            </Icon>
-            <Txt variant="ui-sm">Items</Txt>
-            <Badge size="sm">{itemsCount}</Badge>
-          </div>
-        )}
+      <div className="flex min-w-0 flex-1 items-center gap-4">
         {searchField}
         {oldVersionNotice}
       </div>
 
-      <ButtonsGroup>
+      <ButtonsGroup className="shrink-0">
+        {leftSlot}
         {selectionDropdown}
         {(hasItems || Boolean(searchQuery)) && !isItemPanelOpen && !isViewingOldVersion && (
           <ButtonsGroup spacing="close">

@@ -26,7 +26,11 @@ function renderView() {
   return renderWithProviders(
     <TestLinkProvider>
       <DatasetItemPanelProvider datasetId={DATASET_ID} items={items} isLoadingItems={false}>
-        <DatasetItemsView datasetId={DATASET_ID} rightSlot={<span>right slot</span>} />
+        <DatasetItemsView
+          datasetId={DATASET_ID}
+          leftSlot={<span>left slot</span>}
+          rightSlot={<span>right slot</span>}
+        />
       </DatasetItemPanelProvider>
     </TestLinkProvider>,
     { router: { initialEntries: [`/datasets/${DATASET_ID}`] } },
@@ -49,15 +53,14 @@ describe('DatasetItemsView', () => {
     expect(screen.queryByText('Review')).toBeNull();
   });
 
-  it('shows the Items count next to the search field', async () => {
+  it('renders the left slot before the "Add Item" action, on the toolbar row', async () => {
     renderView();
     await screen.findByText('item-a');
 
-    const search = screen.getByRole('textbox', { name: /search/i });
-    const toolbar = search.closest('[data-testid="dataset-items-toolbar"]');
-    expect(toolbar).not.toBeNull();
-    expect(within(toolbar as HTMLElement).getByText('Items')).toBeDefined();
-    expect(within(toolbar as HTMLElement).getByText(String(items.length))).toBeDefined();
+    const toolbar = screen.getByTestId('dataset-items-toolbar');
+    const left = within(toolbar).getByText('left slot');
+    const addItem = within(toolbar).getByRole('button', { name: /add item/i });
+    expect(left.compareDocumentPosition(addItem) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
   it('does not own the "View experiments" action (it lives in the page header)', async () => {

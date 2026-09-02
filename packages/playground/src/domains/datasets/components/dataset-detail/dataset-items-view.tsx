@@ -8,7 +8,6 @@ import { useDatasetItems } from '../../hooks/use-dataset-items';
 import { useDatasetItemsUrlState } from '../../hooks/use-dataset-items-url-state';
 import { useDatasetMutations } from '../../hooks/use-dataset-mutations';
 import { useDataset } from '../../hooks/use-datasets';
-import { getItemsTabCount } from '../../utils/tab-counts';
 import { AddItemsToDatasetDialog } from '../add-items-to-dataset-dialog';
 import { CreateDatasetFromItemsDialog } from '../create-dataset-from-items-dialog';
 import { CSVImportDialog } from '../csv-import';
@@ -20,10 +19,17 @@ export interface DatasetItemsViewProps {
   datasetId: string;
   onAddItemClick?: () => void;
   onNavigateToDataset?: (datasetId: string) => void;
+  leftSlot?: React.ReactNode;
   rightSlot?: React.ReactNode;
 }
 
-export function DatasetItemsView({ datasetId, onAddItemClick, onNavigateToDataset, rightSlot }: DatasetItemsViewProps) {
+export function DatasetItemsView({
+  datasetId,
+  onAddItemClick,
+  onNavigateToDataset,
+  leftSlot,
+  rightSlot,
+}: DatasetItemsViewProps) {
   const [searchParams, setSearchParams] = useSearchParams();
   const { activeVersion: activeDatasetVersion } = useDatasetItemsUrlState(searchParams, setSearchParams);
   const [importDialogOpen, setImportDialogOpen] = useState(false);
@@ -41,22 +47,12 @@ export function DatasetItemsView({ datasetId, onAddItemClick, onNavigateToDatase
   const { data: dataset } = useDataset(datasetId);
   const {
     data: items = [],
-    total: itemsTotal,
     isLoading: isItemsLoading,
     setEndOfListElement,
     isFetchingNextPage,
     hasNextPage,
   } = useDatasetItems(datasetId, debouncedSearch || undefined, activeDatasetVersion);
-  // Unfiltered, so a search narrows the list without shrinking the Items count.
-  const { total: unfilteredItemsTotal } = useDatasetItems(datasetId, undefined, activeDatasetVersion);
   const { deleteItems } = useDatasetMutations();
-
-  const itemsCount = getItemsTabCount({
-    hasSearchQuery: Boolean(debouncedSearch),
-    filteredItemsLength: items.length,
-    unfilteredItemsTotal,
-    itemsTotal,
-  });
 
   // Clicking the already-open item closes the URL-driven panel.
   const { currentItemId, openItem, close: closeItemPanel } = useDatasetItemPanel();
@@ -119,7 +115,7 @@ export function DatasetItemsView({ datasetId, onAddItemClick, onNavigateToDatase
       <div className="grid h-full overflow-auto">
         <DatasetItems
           items={items}
-          itemsCount={itemsCount}
+          leftSlot={leftSlot}
           rightSlot={rightSlot}
           isLoading={isItemsLoading}
           onItemClick={handleItemClick}

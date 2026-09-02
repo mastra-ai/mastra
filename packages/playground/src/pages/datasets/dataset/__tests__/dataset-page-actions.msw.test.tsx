@@ -48,7 +48,7 @@ describe('DatasetPage actions', () => {
     const link = within(runButton.parentElement as HTMLElement).getByRole('link', { name: /view experiments/i });
 
     expect(link.getAttribute('href')).toBe(`/experiments?dataset=${DATASET_ID}`);
-    // "View experiments" sits immediately before the primary "Run Experiment" action.
-    expect(link.nextElementSibling).toBe(runButton);
+    // Order: View experiments → version selector → Run Experiment.
+    expect(link.compareDocumentPosition(runButton) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 });
