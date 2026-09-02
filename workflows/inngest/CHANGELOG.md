@@ -1,5 +1,16 @@
 # @mastra/inngest
 
+## 1.8.9-alpha.1
+
+### Patch Changes
+
+- Update README to include accurate, up-to-date information ([#22858](https://github.com/mastra-ai/mastra/pull/22858))
+
+- Fix durable tool execution on the Inngest engine running with no tracing context. The `extract-tool-calls` step now forwards the LLM step's exported `model_step` span onto every tool-call input (matching @mastra/core's durable workflow), so each tool call creates a live `tool_call` span with execution-time children (e.g. `workspace_action` and client-tool spans) nested under the LLM call. The retroactive `tool_call` span creation in the collect step was removed — it produced childless duplicate spans and redundant step-span end/tool-result chunk events already handled by the shared LLM mapping step. Fixes #19842. ([#22279](https://github.com/mastra-ai/mastra/pull/22279))
+
+- Updated dependencies [[`e983f74`](https://github.com/mastra-ai/mastra/commit/e983f749873189f767f509eb33d1a3596c0f1c74), [`cedc25d`](https://github.com/mastra-ai/mastra/commit/cedc25d8c2dec005d8b10b6ce2d36feef1162ff0), [`9fdb3bc`](https://github.com/mastra-ai/mastra/commit/9fdb3bc0f9bfab5269b4f3045595e62323da5d3a)]:
+  - @mastra/core@1.64.0-alpha.7
+
 ## 1.8.9-alpha.0
 
 ### Patch Changes

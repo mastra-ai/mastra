@@ -1,5 +1,28 @@
 # @mastra/factory
 
+## 0.12.0-alpha.12
+
+### Patch Changes
+
+- Update README to include accurate, up-to-date information ([#22858](https://github.com/mastra-ai/mastra/pull/22858))
+
+- Improve internal observational-memory processing. ([#22738](https://github.com/mastra-ai/mastra/pull/22738))
+
+- Fixed issues and pull requests from outside the write-access circle asking for approval again at every lane after a person had already started them. Starting, dragging, or approving a run on such a card now carries that consent through the runs queued by the card's agent on its way to review. One gesture takes the card to a pull request instead of one click per lane. The same holds when a person creates a card straight into a working lane or moves it there through the API, and when the card's agent moves it on from a chat: the run queued by that move no longer waits for a click. Runs queued by a GitHub event on the card still ask first. An agent still cannot pull a rested external card back into work. A run pre-approved by an agent opens its session under the repository connector, never under the agent's id. ([#22862](https://github.com/mastra-ai/mastra/pull/22862))
+
+- Fixed board cards for imported GitHub and Linear issues/PRs showing "just now" — cards now show how long ago the issue or PR was opened upstream instead of when the factory first saw it. ([#22848](https://github.com/mastra-ai/mastra/pull/22848))
+
+- Fixed "Linked card could not be filed: A work item cannot relate to itself" on Review cards. When GitHub polling re-observed a pull request that already had a card, the dispatcher tried to link the card to itself as its parent. ([#22848](https://github.com/mastra-ai/mastra/pull/22848))
+
+- Fixed personal memory settings in the web app showing (and running) the default Gemini observer model after signing in with another provider. Signing in with a provider OAuth flow or saving a personal API key now seeds your unset observer and reflector models from that provider, matching the TUI onboarding behavior. ([#22847](https://github.com/mastra-ai/mastra/pull/22847))
+
+- Updated dependencies [[`e983f74`](https://github.com/mastra-ai/mastra/commit/e983f749873189f767f509eb33d1a3596c0f1c74), [`b40fa91`](https://github.com/mastra-ai/mastra/commit/b40fa91496d794e060494f9c0d2fe940912f9190), [`cedc25d`](https://github.com/mastra-ai/mastra/commit/cedc25d8c2dec005d8b10b6ce2d36feef1162ff0), [`9fdb3bc`](https://github.com/mastra-ai/mastra/commit/9fdb3bc0f9bfab5269b4f3045595e62323da5d3a)]:
+  - @mastra/slack@1.6.3-alpha.1
+  - @mastra/code-sdk@1.6.0-alpha.9
+  - @mastra/core@1.64.0-alpha.7
+  - @mastra/auth-studio@1.3.5-alpha.1
+  - @mastra/auth-workos@1.6.5-alpha.1
+
 ## 0.12.0-alpha.11
 
 ### Minor Changes

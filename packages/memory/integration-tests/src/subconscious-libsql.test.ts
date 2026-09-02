@@ -11,6 +11,14 @@ import { Memory, Subconscious } from '@mastra/memory';
 import type { EmbeddingModel } from 'ai';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import { RemindContinuationProcessor } from '../../src/processors/observational-memory/subconscious/remind-continuation';
+import {
+  ensureOwnedRemindThread,
+  getRemindMessageText,
+  getRemindThreadId,
+} from '../../src/processors/observational-memory/subconscious/remind-protocol';
+import { createAskMemoryTool } from '../../src/processors/observational-memory/subconscious/remind-questions';
+
 function message(threadId: string, resourceId: string, text = 'Maya Chen owns Project Atlas.'): MastraDBMessage {
   return {
     id: randomUUID(),
@@ -188,7 +196,7 @@ describe('Subconscious LibSQL integration', () => {
     expect(hidden).toEqual({ found: false });
   });
 
-  it('runs remind after observation and emits one scoped remembered signal', async () => {
+  it('persists passive reminder continuity and suppresses a duplicate across Memory reconstruction', async () => {
     const directory = await mkdtemp(join(tmpdir(), 'subconscious-remind-libsql-'));
     directories.push(directory);
     const databaseUrl = `file:${join(directory, 'knowledge.db')}`;
@@ -197,18 +205,43 @@ describe('Subconscious LibSQL integration', () => {
     await storage.init();
 
     let streamCall = 0;
+    let sentReminder = false;
     const reminder = 'Project Atlas launches January 15. Source KnowledgeRecord: record-atlas-launch.';
     const model = new MockLanguageModelV2({
-      doStream: async () => {
+      doStream: async options => {
         streamCall += 1;
-        const text =
-          streamCall === 1 ? '<observations>\n- The user is scheduling Project Atlas.\n</observations>' : reminder;
+        const prompt = JSON.stringify(options.prompt);
+        const eventId = prompt.match(/Passive reminder check (subconscious:remind:[^"\\\\]+:event)/)?.[1];
+        if (eventId && !sentReminder) {
+          sentReminder = true;
+          const input = JSON.stringify({ eventId, reminder, sourceIds: ['record-atlas-launch'] });
+          return {
+            stream: convertArrayToReadableStream([
+              { type: 'stream-start', warnings: [] },
+              { type: 'response-metadata', id: `remind-${streamCall}`, modelId: 'aimock', timestamp: new Date() },
+              { type: 'tool-input-start', id: 'send-reminder', toolName: 'send_reminder' },
+              { type: 'tool-input-delta', id: 'send-reminder', delta: input },
+              { type: 'tool-call', toolCallId: 'send-reminder', toolName: 'send_reminder', input },
+              {
+                type: 'finish',
+                finishReason: 'tool-calls',
+                usage: { inputTokens: 20, outputTokens: 10, totalTokens: 30 },
+              },
+            ]),
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            warnings: [],
+          };
+        }
         return {
           stream: convertArrayToReadableStream([
             { type: 'stream-start', warnings: [] },
             { type: 'response-metadata', id: `remind-${streamCall}`, modelId: 'aimock', timestamp: new Date() },
             { type: 'text-start', id: `text-${streamCall}` },
-            { type: 'text-delta', id: `text-${streamCall}`, delta: text },
+            {
+              type: 'text-delta',
+              id: `text-${streamCall}`,
+              delta: '<observations>\n- The user is scheduling Project Atlas.\n</observations>',
+            },
             { type: 'text-end', id: `text-${streamCall}` },
             { type: 'finish', finishReason: 'stop', usage: { inputTokens: 20, outputTokens: 10, totalTokens: 30 } },
           ]),
@@ -258,6 +291,12 @@ describe('Subconscious LibSQL integration', () => {
     requestContext.set('organizationId', 'acme');
     const sendSignal = vi.fn(async () => undefined) as any;
     const mainAgent = new Agent({ id: 'main-agent', name: 'Main Agent', instructions: 'Help the user.', model });
+    const parentSendSignal = vi
+      .spyOn(mainAgent, 'sendSignal')
+      .mockImplementation(((signal: unknown, options: { ifActive?: { behavior?: string } }) =>
+        options.ifActive?.behavior === 'persist'
+          ? { signal, accepted: Promise.resolve({ action: 'persist' }), persisted: Promise.resolve() }
+          : { signal, accepted: Promise.resolve({ action: 'deliver', runId: 'parent-run' }) }) as any);
     const getModel = vi.spyOn(mainAgent, 'getModel');
 
     const result = await (await memory.omEngine)!.observe({
@@ -270,11 +309,53 @@ describe('Subconscious LibSQL integration', () => {
 
     expect(result.observed).toBe(true);
     expect(getModel).not.toHaveBeenCalled();
-    expect(streamCall).toBe(1);
-    expect(sendSignal).toHaveBeenCalledOnce();
-    expect(sendSignal).toHaveBeenCalledWith(
+    expect(streamCall).toBe(3);
+    expect(parentSendSignal).toHaveBeenCalledTimes(2);
+    expect(parentSendSignal).toHaveBeenNthCalledWith(
+      1,
       expect.objectContaining({ type: 'reactive', tagName: 'remembered', contents: expect.stringContaining(reminder) }),
+      expect.objectContaining({ threadId, resourceId, ifActive: { behavior: 'persist' } }),
     );
+    expect(parentSendSignal).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({ type: 'reactive', tagName: 'remembered', contents: expect.stringContaining(reminder) }),
+      expect.objectContaining({ threadId, resourceId, ifActive: { behavior: 'deliver' } }),
+    );
+
+    const reconstructed = new Memory({
+      storage,
+      vector,
+      embedder,
+      options: {
+        observationalMemory: {
+          enabled: true,
+          model,
+          experimental_subconscious: new Subconscious({ observation: ['remind'], reflection: [] }),
+          observation: { messageTokens: 1, bufferTokens: false, previousObserverTokens: 1_000 },
+        },
+      },
+    });
+    await reconstructed.saveMessages({ messages: [message(threadId, resourceId, 'Check the launch schedule again.')] });
+    const second = await (await reconstructed.omEngine)!.observe({
+      threadId,
+      resourceId,
+      agent: mainAgent,
+      requestContext,
+      sendSignal,
+    });
+
+    expect(second.observed).toBe(true);
+    expect(parentSendSignal).toHaveBeenCalledTimes(2);
+    const reminderHistory = await (await storage.getStore('memory'))!.listMessages({
+      threadId: getRemindThreadId(threadId),
+      resourceId,
+      perPage: false,
+      orderBy: { field: 'createdAt', direction: 'ASC' },
+    });
+    expect(
+      reminderHistory.messages.filter(message => getRemindMessageText(message).startsWith('Passive reminder check ')),
+    ).toHaveLength(2);
+    expect(reminderHistory.messages.some(message => message.role === 'assistant')).toBe(true);
   });
 
   it('targets a resource-scoped reminder to its observed thread', async () => {
@@ -289,19 +370,48 @@ describe('Subconscious LibSQL integration', () => {
     const observations = threadIds
       .map(threadId => `<thread id="${threadId}">\n- Project Atlas planning is active.\n</thread>`)
       .join('\n');
+    let sentReminder = false;
     const model = new MockLanguageModelV2({
-      doStream: async () => ({
-        stream: convertArrayToReadableStream([
-          { type: 'stream-start', warnings: [] },
-          { type: 'response-metadata', id: 'resource-observation', modelId: 'aimock', timestamp: new Date() },
-          { type: 'text-start', id: 'resource-text' },
-          { type: 'text-delta', id: 'resource-text', delta: `<observations>${observations}</observations>` },
-          { type: 'text-end', id: 'resource-text' },
-          { type: 'finish', finishReason: 'stop', usage: { inputTokens: 20, outputTokens: 10, totalTokens: 30 } },
-        ]),
-        rawCall: { rawPrompt: null, rawSettings: {} },
-        warnings: [],
-      }),
+      doStream: async options => {
+        const prompt = JSON.stringify(options.prompt);
+        const eventId = prompt.match(/Passive reminder check (subconscious:remind:[^"\\\\]+:event)/)?.[1];
+        if (eventId && !sentReminder) {
+          sentReminder = true;
+          const input = JSON.stringify({
+            eventId,
+            reminder: 'Project Atlas launches January 15. Source KnowledgeRecord: record-atlas-resource-launch.',
+            sourceIds: ['record-atlas-resource-launch'],
+          });
+          return {
+            stream: convertArrayToReadableStream([
+              { type: 'stream-start', warnings: [] },
+              { type: 'response-metadata', id: 'resource-remind', modelId: 'aimock', timestamp: new Date() },
+              { type: 'tool-input-start', id: 'resource-send', toolName: 'send_reminder' },
+              { type: 'tool-input-delta', id: 'resource-send', delta: input },
+              { type: 'tool-call', toolCallId: 'resource-send', toolName: 'send_reminder', input },
+              {
+                type: 'finish',
+                finishReason: 'tool-calls',
+                usage: { inputTokens: 20, outputTokens: 10, totalTokens: 30 },
+              },
+            ]),
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            warnings: [],
+          };
+        }
+        return {
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            { type: 'response-metadata', id: 'resource-observation', modelId: 'aimock', timestamp: new Date() },
+            { type: 'text-start', id: 'resource-text' },
+            { type: 'text-delta', id: 'resource-text', delta: `<observations>${observations}</observations>` },
+            { type: 'text-end', id: 'resource-text' },
+            { type: 'finish', finishReason: 'stop', usage: { inputTokens: 20, outputTokens: 10, totalTokens: 30 } },
+          ]),
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          warnings: [],
+        };
+      },
       doGenerate: async () => ({
         rawCall: { rawPrompt: null, rawSettings: {} },
         finishReason: 'stop' as const,
@@ -382,9 +492,270 @@ describe('Subconscious LibSQL integration', () => {
       expect.objectContaining({
         resourceId,
         threadId: threadIds[0],
-        ifActive: { behavior: 'deliver' },
+        ifActive: { behavior: 'persist' },
         ifIdle: { behavior: 'persist' },
       }),
+      expect.objectContaining({
+        resourceId,
+        threadId: threadIds[0],
+        ifActive: { behavior: 'deliver' },
+        ifIdle: { behavior: 'discard' },
+      }),
     ]);
+  });
+
+  it('persists a direct ask_memory turn and correlated terminal reply through LibSQL', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'subconscious-question-libsql-'));
+    directories.push(directory);
+    const databaseUrl = `file:${join(directory, 'memory.db')}`;
+    const storage = new LibSQLStore({ id: randomUUID(), url: databaseUrl });
+    const vector = new LibSQLVector({ id: randomUUID(), url: databaseUrl });
+    await storage.init();
+    const memory = new Memory({ storage, vector, embedder });
+    const parentThreadId = randomUUID();
+    const resourceId = randomUUID();
+    await memory.createThread({ threadId: parentThreadId, resourceId, title: 'Parent' });
+
+    let streamCall = 0;
+    const model = new MockLanguageModelV2({
+      doGenerate: async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        finishReason: 'stop',
+        usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+        warnings: [],
+        content: [],
+      }),
+      doStream: async options => {
+        streamCall += 1;
+        const replyId = JSON.stringify(options.prompt).match(
+          /Memory question (subconscious:remind:[^\\n"]+:reply)/,
+        )?.[1];
+        const chunks =
+          streamCall === 1 && replyId
+            ? [
+                { type: 'stream-start' as const, warnings: [] },
+                {
+                  type: 'response-metadata' as const,
+                  id: `question-${streamCall}`,
+                  modelId: 'aimock',
+                  timestamp: new Date(),
+                },
+                { type: 'tool-input-start' as const, id: 'reply-call', toolName: 'reply_to_memory_question' },
+                {
+                  type: 'tool-input-delta' as const,
+                  id: 'reply-call',
+                  delta: JSON.stringify({ replyId, answer: 'Project Atlas launches January 15.', moreComing: false }),
+                },
+                {
+                  type: 'tool-call' as const,
+                  toolCallId: 'reply-call',
+                  toolName: 'reply_to_memory_question',
+                  input: JSON.stringify({ replyId, answer: 'Project Atlas launches January 15.', moreComing: false }),
+                },
+                {
+                  type: 'finish' as const,
+                  finishReason: 'tool-calls' as const,
+                  usage: { inputTokens: 5, outputTokens: 5, totalTokens: 10 },
+                },
+              ]
+            : [
+                { type: 'stream-start' as const, warnings: [] },
+                {
+                  type: 'response-metadata' as const,
+                  id: `question-${streamCall}`,
+                  modelId: 'aimock',
+                  timestamp: new Date(),
+                },
+                {
+                  type: 'finish' as const,
+                  finishReason: 'stop' as const,
+                  usage: { inputTokens: 5, outputTokens: 1, totalTokens: 6 },
+                },
+              ];
+        return {
+          stream: convertArrayToReadableStream(chunks),
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          warnings: [],
+        };
+      },
+    });
+    const parentAgent = new Agent({ id: 'question-parent', name: 'Question parent', instructions: 'Help.', model });
+    const parentSendSignal = vi.spyOn(parentAgent, 'sendSignal').mockImplementation((signal, options) => {
+      const action = options.ifActive?.behavior === 'persist' ? 'persist' : 'discard';
+      return {
+        signal,
+        accepted: Promise.resolve({ action }),
+        persisted: action === 'persist' ? Promise.resolve() : undefined,
+      } as any;
+    });
+    const tool = createAskMemoryTool({
+      memory,
+      config: { name: 'remind', builtIn: true, maxSteps: 5, model },
+      getParentAgent: () => parentAgent,
+    });
+    const requestContext = new RequestContext();
+    requestContext.set('organizationId', 'acme');
+
+    const result = (await tool.execute?.({ question: 'When does Project Atlas launch?' }, {
+      agent: { agentId: parentAgent.id, threadId: parentThreadId, resourceId, messages: [] },
+      requestContext,
+    } as any)) as { accepted: boolean; replyId: string; status: string };
+    for (let attempt = 0; attempt < 50 && parentSendSignal.mock.calls.length < 2; attempt += 1) {
+      await new Promise(resolve => setTimeout(resolve, 10));
+    }
+
+    expect(result).toMatchObject({ accepted: true, status: 'pending' });
+    expect(parentSendSignal).toHaveBeenCalledTimes(2);
+    expect(parentSendSignal.mock.calls[0]![0]).toMatchObject({ id: `${result.replyId}:terminal:signal` });
+    const reminderThreadId = getRemindThreadId(parentThreadId);
+    const history = await (await storage.getStore('memory'))!.listMessages({
+      threadId: reminderThreadId,
+      resourceId,
+      perPage: false,
+    });
+    expect(
+      history.messages.some(item => getRemindMessageText(item).startsWith(`Memory question ${result.replyId}\n`)),
+    ).toBe(true);
+    expect(
+      history.messages.some(item =>
+        item.content.parts.some(
+          part =>
+            part.type === 'tool-invocation' &&
+            part.toolInvocation.toolName === 'reply_to_memory_question' &&
+            part.toolInvocation.state === 'result',
+        ),
+      ),
+    ).toBe(true);
+  });
+
+  it('reconstructs direct memory questions and continuation attempts from LibSQL MessageList history', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'subconscious-continuation-libsql-'));
+    directories.push(directory);
+    const storage = new LibSQLStore({ id: randomUUID(), url: `file:${join(directory, 'memory.db')}` });
+    await storage.init();
+    const memory = new Memory({ storage });
+    const parentThreadId = randomUUID();
+    const resourceId = randomUUID();
+    const reminderThread = await ensureOwnedRemindThread({ memory, parentThreadId, resourceId });
+    const question = message(reminderThread.id, resourceId, 'Memory question reply-1\n\nWhat did I decide?');
+    question.createdAt = new Date(1_000);
+    const continuation = message(
+      reminderThread.id,
+      resourceId,
+      'Continue these unanswered memory questions (attempt 1): reply-1. Reply to each with reply_to_memory_question.',
+    );
+    continuation.createdAt = new Date(2_000);
+    await memory.saveMessages({ messages: [question, continuation] });
+
+    const history = await (await storage.getStore('memory'))!.listMessages({
+      threadId: reminderThread.id,
+      resourceId,
+      perPage: false,
+      orderBy: { field: 'createdAt', direction: 'ASC' },
+    });
+    const sendMessage = vi.fn(() => ({ accepted: Promise.resolve({ action: 'deliver', runId: 'sidekick-run' }) }));
+    const processor = new RemindContinuationProcessor({
+      threadId: reminderThread.id,
+      resourceId,
+      parentThreadId,
+      parentAgent: { sendSignal: vi.fn() } as any,
+      maxSteps: 5,
+      getReminderAgent: () => ({ id: 'reminder-agent', sendMessage }) as any,
+    });
+
+    await processor.processOutputResult({
+      state: {},
+      messages: history.messages,
+      messageList: { get: { all: { db: () => history.messages } }, add: vi.fn() },
+      result: { text: '', usage: {}, finishReason: 'stop', steps: [] },
+      requestContext: new RequestContext(),
+    } as any);
+
+    expect(sendMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        contents:
+          'Continue these unanswered memory questions (attempt 2): reply-1. Reply to each with reply_to_memory_question.',
+      }),
+      expect.objectContaining({ threadId: reminderThread.id, resourceId }),
+    );
+
+    const terminalMarker: MastraDBMessage = {
+      id: 'subconscious:remind:reply-1:terminal',
+      role: 'assistant',
+      threadId: reminderThread.id,
+      resourceId,
+      createdAt: new Date(3_000),
+      content: {
+        format: 2,
+        parts: [
+          {
+            type: 'text',
+            text: 'Memory question reply-1 terminal: unable to answer after two continuation attempts',
+          },
+        ],
+      },
+    };
+    await memory.saveMessages({ messages: [terminalMarker] });
+    const reconstructedHistory = await (await storage.getStore('memory'))!.listMessages({
+      threadId: reminderThread.id,
+      resourceId,
+      perPage: false,
+    });
+    const reconstructedSendMessage = vi.fn();
+    const reconstructedParentSignal = vi.fn();
+    const reconstructedProcessor = new RemindContinuationProcessor({
+      threadId: reminderThread.id,
+      resourceId,
+      parentThreadId,
+      parentAgent: { sendSignal: reconstructedParentSignal } as any,
+      maxSteps: 5,
+      getReminderAgent: () => ({ id: 'reminder-agent', sendMessage: reconstructedSendMessage }) as any,
+    });
+    await reconstructedProcessor.processOutputResult({
+      state: {},
+      messages: reconstructedHistory.messages,
+      messageList: { get: { all: { db: () => reconstructedHistory.messages } }, add: vi.fn() },
+      result: { text: '', usage: {}, finishReason: 'stop', steps: [] },
+      requestContext: new RequestContext(),
+    } as any);
+
+    expect(reconstructedSendMessage).not.toHaveBeenCalled();
+    expect(reconstructedParentSignal).not.toHaveBeenCalled();
+  });
+
+  it('isolates owned reminder threads by resource and cascades deletion conservatively', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'subconscious-delete-libsql-'));
+    directories.push(directory);
+    const storage = new LibSQLStore({ id: randomUUID(), url: `file:${join(directory, 'memory.db')}` });
+    await storage.init();
+    const memory = new Memory({ storage });
+    const ownedParentId = randomUUID();
+    const unmarkedParentId = randomUUID();
+    const foreignParentId = randomUUID();
+    const ownedResourceId = randomUUID();
+    const foreignResourceId = randomUUID();
+    for (const [threadId, resourceId] of [
+      [ownedParentId, ownedResourceId],
+      [unmarkedParentId, ownedResourceId],
+      [foreignParentId, ownedResourceId],
+    ]) {
+      await memory.createThread({ threadId, resourceId });
+    }
+    const owned = await ensureOwnedRemindThread({ memory, parentThreadId: ownedParentId, resourceId: ownedResourceId });
+    await memory.saveMessages({ messages: [message(owned.id, ownedResourceId, 'Owned reminder history')] });
+    await memory.createThread({ threadId: getRemindThreadId(unmarkedParentId), resourceId: ownedResourceId });
+    await memory.createThread({ threadId: getRemindThreadId(foreignParentId), resourceId: foreignResourceId });
+
+    await memory.deleteThread(ownedParentId);
+    await memory.deleteThread(unmarkedParentId);
+    await memory.deleteThread(foreignParentId);
+    await memory.settled();
+
+    expect(await memory.getThreadById({ threadId: owned.id })).toBeNull();
+    expect(await memory.getThreadById({ threadId: getRemindThreadId(unmarkedParentId) })).not.toBeNull();
+    expect(await memory.getThreadById({ threadId: getRemindThreadId(foreignParentId) })).not.toBeNull();
+    await expect(
+      ensureOwnedRemindThread({ memory, parentThreadId: foreignParentId, resourceId: ownedResourceId }),
+    ).rejects.toThrow('ownership metadata does not match');
   });
 });

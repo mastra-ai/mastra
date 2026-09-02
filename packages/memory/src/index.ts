@@ -53,6 +53,8 @@ import xxhash from 'xxhash-wasm';
 import type { ObservationalMemory, ObservationalMemoryConfig } from './processors/observational-memory';
 import { KnowledgeSemanticIndexCoordinator, Subconscious } from './processors/observational-memory/subconscious';
 import { createKnowledgeTools } from './processors/observational-memory/subconscious/knowledge-tools';
+import { getRemindThreadId, isOwnedRemindThread } from './processors/observational-memory/subconscious/remind-protocol';
+import { createAskMemoryTool } from './processors/observational-memory/subconscious/remind-questions';
 import { summarizeConversation, SUMMARIZE_THREAD_DEFAULTS } from './processors/observational-memory/summarize';
 import type {
   SummarizeConversationOptions,
@@ -357,6 +359,19 @@ export class Memory extends MastraMemory {
     } else {
       void this._omEngine?.then(engine => engine?.__registerMastra(mastra));
     }
+  }
+
+  /** @internal Creates isolated memory for a derived subconscious agent. */
+  createSubconsciousMemory(): Memory {
+    const memory = new Memory({
+      storage: this.storage,
+      vector: this.vector,
+      embedder: this.embedder,
+      embedderOptions: this.embedderOptions,
+      options: { observationalMemory: false },
+    });
+    if (this._mastraInstance) memory.__registerMastra(this._mastraInstance);
+    return memory;
   }
 
   public override getMergedThreadConfig(config?: MemoryConfigInternal): MemoryConfigInternal {
@@ -861,9 +876,19 @@ export class Memory extends MastraMemory {
   async deleteThread(threadId: string): Promise<void> {
     const memoryStore = await this.getMemoryStore();
     const thread = await memoryStore.getThreadById({ threadId });
+    const remindThreadId = getRemindThreadId(threadId);
+    const remindThread = thread?.resourceId ? await memoryStore.getThreadById({ threadId: remindThreadId }) : null;
+
+    if (thread?.resourceId && isOwnedRemindThread(remindThread, threadId, thread.resourceId)) {
+      await this.deleteStoredThread(memoryStore, remindThreadId, remindThread.resourceId);
+    }
+    await this.deleteStoredThread(memoryStore, threadId, thread?.resourceId);
+  }
+
+  private async deleteStoredThread(memoryStore: MemoryStorage, threadId: string, resourceId?: string): Promise<void> {
     await memoryStore.deleteThread({ threadId });
-    if (thread?.resourceId && memoryStore.supportsObservationalMemory) {
-      await memoryStore.clearObservationalMemory(threadId, thread.resourceId);
+    if (resourceId && memoryStore.supportsObservationalMemory) {
+      await memoryStore.clearObservationalMemory(threadId, resourceId);
     }
     if (this.vector) {
       this.trackVectorCleanup(this.deleteThreadVectors(threadId));
@@ -2546,6 +2571,17 @@ Notes:
       omConfig.experimental_subconscious.resolved.tools
     ) {
       Object.assign(tools, createKnowledgeTools(this));
+      const remind = omConfig.experimental_subconscious.resolved.observation.find(
+        agent => agent.name === 'remind' && 'builtIn' in agent,
+      );
+      if (remind && 'builtIn' in remind) {
+        tools.ask_memory = createAskMemoryTool({
+          memory: this,
+          config: remind,
+          omModel: omConfig.observation?.model ?? omConfig.model,
+          getParentAgent: agentId => this._mastraInstance?.getAgentById(agentId),
+        });
+      }
     }
 
     return tools;
