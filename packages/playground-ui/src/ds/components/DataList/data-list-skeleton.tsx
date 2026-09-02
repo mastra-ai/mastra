@@ -35,7 +35,7 @@ export function DataListSkeleton({ columns = 'auto 1fr auto auto', numberOfRows 
           {Array.from({ length: columnCount }).map((_, colIdx) => (
             <DataListCell key={colIdx}>
               <div
-                className="bg-surface6 h-4 animate-pulse rounded-lg text-transparent select-none"
+                className="bg-gray-5 h-4 animate-pulse rounded-lg text-transparent select-none"
                 style={{ width: getPseudoRandomWidth(rowIdx, colIdx) }}
               />
             </DataListCell>

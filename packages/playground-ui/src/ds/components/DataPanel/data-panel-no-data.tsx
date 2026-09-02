@@ -3,5 +3,5 @@ export interface DataPanelNoDataProps {
 }
 
 export function DataPanelNoData({ children }: DataPanelNoDataProps) {
-  return <p className="text-ui-sm text-neutral2 px-4 py-6">{children ?? 'No data found.'}</p>;
+  return <p className="text-ui-sm px-4 py-6 text-(--text-secondary)">{children ?? 'No data found.'}</p>;
 }

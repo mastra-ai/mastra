@@ -53,9 +53,9 @@
   content: '';
   background: linear-gradient(
     to top,
-    var(--surface2) 0%,
-    var(--surface2) 28%,
-    color-mix(in oklab, var(--surface2) 94%, transparent) 68%,
+    var(--surface-secondary) 0%,
+    var(--surface-secondary) 28%,
+    color-mix(in oklab, var(--surface-secondary) 94%, transparent) 68%,
     transparent 100%
   );
   border-bottom-right-radius: 1rem;

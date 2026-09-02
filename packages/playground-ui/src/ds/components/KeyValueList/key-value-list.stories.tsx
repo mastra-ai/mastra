@@ -171,7 +171,7 @@ export const HiddenLabels: Story = {
 export const CustomClassName: Story = {
   args: {
     data: sampleData,
-    className: 'bg-surface2 p-4 rounded-lg',
+    className: 'bg-surface-secondary p-4 rounded-lg',
   },
 };
 

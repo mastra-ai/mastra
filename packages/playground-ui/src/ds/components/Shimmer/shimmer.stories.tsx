@@ -24,7 +24,7 @@ function StreamingPreview() {
 
   return (
     <div className="flex w-120 flex-col items-start gap-4">
-      <Shimmer active={active} className="text-ui-md text-neutral5">
+      <Shimmer active={active} className="text-ui-md text-(--text-primary)">
         The assistant keeps the same text node while streaming settles.
       </Shimmer>
       <Button onClick={() => setActive(current => !current)}>{active ? 'Finish streaming' : 'Resume streaming'}</Button>

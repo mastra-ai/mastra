@@ -13,9 +13,9 @@ import { cn } from '@/lib/utils';
 
 const inputVariants = cva(
   cn(
-    'flex w-full border bg-transparent text-neutral6',
-    'duration-normal transition-all ease-out-custom',
-    'placeholder:duration-normal placeholder:text-neutral2 placeholder:transition-opacity',
+    'flex w-full border bg-transparent text-(--text-primary)',
+    'transition-all duration-normal ease-out-custom',
+    'placeholder:text-(--text-secondary) placeholder:transition-opacity placeholder:duration-normal',
     'focus:placeholder:opacity-70',
     // type="number": hide native browser spinner arrows (they clip the pill).
     // For incrementable numeric inputs, compose <InputGroup> with +/- buttons

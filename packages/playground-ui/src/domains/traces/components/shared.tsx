@@ -25,68 +25,68 @@ export const spanTypePrefixes = [
 const spanTypeToUiElements: Record<string, UISpanStyle> = {
   agent: {
     icon: <AgentIcon />,
-    color: 'oklch(0.75 0.15 250)',
+    color: 'var(--chart-4)',
     label: 'Agent',
     typePrefix: 'agent',
   },
   workflow: {
     icon: <WorkflowIcon />,
-    color: 'oklch(0.75 0.15 200)',
+    color: 'var(--chart-3)',
     label: 'Workflow',
     typePrefix: 'workflow',
   },
   model: {
     icon: <BrainIcon />,
-    color: 'oklch(0.75 0.15 320)',
+    color: 'var(--chart-5)',
     label: 'Model',
     typePrefix: 'model',
   },
   mcp: {
     icon: <McpServerIcon />,
-    color: 'oklch(0.75 0.15 160)',
+    color: 'var(--chart-1)',
     label: 'MCP',
     typePrefix: 'mcp',
   },
   tool: {
     icon: <ToolsIcon />,
-    color: 'oklch(0.75 0.15 100)',
+    color: 'var(--chart-6)',
     label: 'Tool',
     typePrefix: 'tool',
   },
   provider: {
     icon: <ToolsIcon />,
-    color: 'oklch(0.75 0.15 60)',
+    color: 'var(--chart-2)',
     label: 'Provider Tool',
     typePrefix: 'provider',
   },
   memory: {
     icon: <MemoryIcon />,
-    color: 'oklch(0.75 0.12 50)',
+    color: 'var(--chart-3)',
     label: 'Memory',
     typePrefix: 'memory',
   },
   workspace: {
     icon: <FolderIcon />,
-    color: 'oklch(0.75 0.15 40)',
+    color: 'var(--red-9)',
     label: 'Workspace',
     typePrefix: 'workspace',
   },
   skill: {
     icon: <SkillIcon />,
-    color: 'oklch(0.75 0.15 130)',
+    color: 'var(--chart-1)',
     label: 'Skill',
     typePrefix: 'skill',
   },
   scorer: {
     icon: <GaugeIcon />,
-    color: 'oklch(0.75 0.15 280)',
+    color: 'var(--chart-5)',
     label: 'Scorer',
     typePrefix: 'scorer',
   },
 };
 
 const otherSpanType: UISpanStyle = {
-  color: 'oklch(0.65 0 0)',
+  color: 'var(--text-secondary)',
   label: 'Other',
   typePrefix: 'other',
 };

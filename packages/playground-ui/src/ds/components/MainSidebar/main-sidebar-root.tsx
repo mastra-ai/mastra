@@ -194,7 +194,7 @@ export function MainSidebarRoot({ children, className }: MainSidebarRootProps) {
       <Drawer side="left" open={openMobile} onOpenChange={setOpenMobile}>
         <DrawerContent
           className={cn(
-            'w-3/4 max-w-(--sidebar-width-mobile) overflow-hidden rounded-none border-0 bg-surface2 shadow-xl',
+            'w-3/4 max-w-(--sidebar-width-mobile) overflow-hidden rounded-none border-0 bg-surface-secondary shadow-xl',
             className,
           )}
         >
@@ -264,8 +264,8 @@ export function MainSidebarRoot({ children, className }: MainSidebarRootProps) {
         <ResizeHandleIndicator
           className={cn(
             'group-hover:opacity-100',
-            'group-focus-visible:via-accent1 group-focus-visible:opacity-100',
-            'in-data-[sidebar-gesture=active]:via-neutral6/45 in-data-[sidebar-gesture=active]:opacity-100',
+            'group-focus-visible:via-green-7 group-focus-visible:opacity-100',
+            'in-data-[sidebar-gesture=active]:via-gray-alpha-8 in-data-[sidebar-gesture=active]:opacity-100',
           )}
         />
       </div>

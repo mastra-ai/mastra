@@ -99,7 +99,7 @@ const TooltipContent = React.forwardRef<HTMLDivElement, TooltipContentProps>(
             // consumers query via `getByRole('tooltip')`, so set it explicitly.
             role="tooltip"
             className={cn(
-              'relative z-100 flex origin-(--transform-origin) flex-col rounded-lg border border-border1 bg-surface3 px-2.5 py-1.5 text-ui-sm leading-ui-sm text-neutral5 shadow-dialog transition-[transform,scale,opacity] duration-150',
+              'relative z-100 flex origin-(--transform-origin) flex-col rounded-lg border border-(--border-subtle) bg-surface-raised px-2.5 py-1.5 text-ui-sm leading-ui-sm text-(--text-primary) shadow-dialog transition-[transform,scale,opacity] duration-150',
               'data-[starting-style]:scale-95 data-[starting-style]:opacity-0',
               'data-[ending-style]:scale-95 data-[ending-style]:opacity-0',
               'data-[instant]:transition-none',
@@ -128,16 +128,16 @@ const TooltipContent = React.forwardRef<HTMLDivElement, TooltipContentProps>(
 TooltipContent.displayName = 'TooltipContent';
 
 // Triangle with a rounded apex. The stroke endpoints land on the popup border
-// center (popup_top + 0.5 with `border border-border1`), so the arrow outline
+// center (popup_top + 0.5 with `border border-(--border-subtle)`), so the arrow outline
 // merges cleanly with the popup border without a horizontal extension that
 // would overlap and thicken the border at the join.
 function TooltipArrowSvg() {
   return (
     <svg width="12" height="8" viewBox="0 0 12 8" fill="none" overflow="visible">
-      <path d="M0 7L4 2Q6 0 8 2L12 7L12 8L0 8Z" className="fill-surface3" />
+      <path d="M0 7L4 2Q6 0 8 2L12 7L12 8L0 8Z" className="fill-(--surface-raised)" />
       <path
         d="M0 7.5L4 2.5Q6 0.5 8 2.5L12 7.5"
-        className="stroke-border1 fill-none"
+        className="fill-none stroke-(--border-subtle)"
         strokeWidth="1"
         strokeLinejoin="round"
         strokeLinecap="round"

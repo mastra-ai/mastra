@@ -24,8 +24,8 @@ export const Default: Story = {
           <ChevronDown className="size-4" />
         </Button>
       </CollapsibleTrigger>
-      <CollapsibleContent className="border-border1 bg-surface2 mt-2 rounded-md border p-4">
-        <p className="text-neutral5 text-sm">This is the collapsible content. It can contain any elements.</p>
+      <CollapsibleContent className="bg-surface-secondary mt-2 rounded-md border border-(--border-subtle) p-4">
+        <p className="text-sm text-(--text-primary)">This is the collapsible content. It can contain any elements.</p>
       </CollapsibleContent>
     </Collapsible>
   ),
@@ -40,8 +40,8 @@ export const DefaultOpen: Story = {
           <ChevronDown className="size-4" />
         </Button>
       </CollapsibleTrigger>
-      <CollapsibleContent className="border-border1 bg-surface2 mt-2 rounded-md border p-4">
-        <p className="text-neutral5 text-sm">This section is open by default.</p>
+      <CollapsibleContent className="bg-surface-secondary mt-2 rounded-md border border-(--border-subtle) p-4">
+        <p className="text-sm text-(--text-primary)">This section is open by default.</p>
       </CollapsibleContent>
     </Collapsible>
   ),
@@ -52,23 +52,23 @@ export const SettingsSection: Story = {
     <div className="w-100 space-y-2">
       <Collapsible>
         <CollapsibleTrigger asChild>
-          <button className="text-neutral6 flex w-full items-center justify-between py-2 text-sm font-medium hover:text-white">
+          <button className="flex w-full items-center justify-between py-2 text-sm font-medium text-(--text-primary) hover:text-white">
             Advanced Settings
             <ChevronDown className="size-4" />
           </button>
         </CollapsibleTrigger>
         <CollapsibleContent className="space-y-3 pt-2">
           <div className="flex items-center justify-between">
-            <span className="text-neutral5 text-sm">Debug mode</span>
-            <span className="text-neutral3 text-sm">Disabled</span>
+            <span className="text-sm text-(--text-primary)">Debug mode</span>
+            <span className="text-sm text-(--text-secondary)">Disabled</span>
           </div>
           <div className="flex items-center justify-between">
-            <span className="text-neutral5 text-sm">Verbose logging</span>
-            <span className="text-neutral3 text-sm">Off</span>
+            <span className="text-sm text-(--text-primary)">Verbose logging</span>
+            <span className="text-sm text-(--text-secondary)">Off</span>
           </div>
           <div className="flex items-center justify-between">
-            <span className="text-neutral5 text-sm">Cache timeout</span>
-            <span className="text-neutral3 text-sm">300s</span>
+            <span className="text-sm text-(--text-primary)">Cache timeout</span>
+            <span className="text-sm text-(--text-secondary)">300s</span>
           </div>
         </CollapsibleContent>
       </Collapsible>
@@ -87,7 +87,7 @@ export const MultipleCollapsibles: Story = {
           </Button>
         </CollapsibleTrigger>
         <CollapsibleContent className="p-2">
-          <p className="text-neutral5 text-sm">Content for section 1</p>
+          <p className="text-sm text-(--text-primary)">Content for section 1</p>
         </CollapsibleContent>
       </Collapsible>
       <Collapsible>
@@ -98,7 +98,7 @@ export const MultipleCollapsibles: Story = {
           </Button>
         </CollapsibleTrigger>
         <CollapsibleContent className="p-2">
-          <p className="text-neutral5 text-sm">Content for section 2</p>
+          <p className="text-sm text-(--text-primary)">Content for section 2</p>
         </CollapsibleContent>
       </Collapsible>
       <Collapsible>
@@ -109,7 +109,7 @@ export const MultipleCollapsibles: Story = {
           </Button>
         </CollapsibleTrigger>
         <CollapsibleContent className="p-2">
-          <p className="text-neutral5 text-sm">Content for section 3</p>
+          <p className="text-sm text-(--text-primary)">Content for section 3</p>
         </CollapsibleContent>
       </Collapsible>
     </div>

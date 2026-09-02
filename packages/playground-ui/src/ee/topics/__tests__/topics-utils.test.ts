@@ -43,7 +43,7 @@ describe('topics utilities', () => {
     const [topic] = aggregateTopics(topics);
 
     expect(topic.traceCount).toBe(3);
-    expect(topic.color).toMatch(/^#/);
+    expect(topic.color).toMatch(/^var\(--/);
     expect(topic.subtopics[0].traceCount).toBe(2);
     expect(topic.subtopics[0].traceShare).toEqual({ count: 2, total: 3, percentage: 67 });
     expect(topic.subtopics[1].traceShare).toEqual({ count: 1, total: 3, percentage: 33 });

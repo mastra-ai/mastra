@@ -9,6 +9,8 @@ export default defineConfig({
       'warn',
       {
         allowConstantExport: true,
+        allowExportNames: ['createDrawerHandle', 'useDrawerSide'],
+        customHOCs: ['Object.assign'],
       },
     ],
     'react/rules-of-hooks': 'error',

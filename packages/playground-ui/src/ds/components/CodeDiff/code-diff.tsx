@@ -19,13 +19,13 @@ const diffOverrides = EditorView.theme({
   },
   '&.cm-editor .cm-changedText': {
     backgroundImage: 'none',
-    backgroundColor: '#880000',
+    backgroundColor: 'var(--fill-error)',
     padding: '1px 5px',
     display: 'inline-block',
     borderRadius: '4px',
   },
   '&.cm-editor .cm-changedText, &.cm-editor .cm-changedText *': {
-    color: 'white',
+    color: 'var(--color-error)',
   },
   '&.cm-editor .cm-line': {
     lineHeight: '1.5',
@@ -51,7 +51,7 @@ function buildDiffDarkTheme(): Extension {
       fontSize: '0.8125rem',
       lineHighlight: 'transparent',
       gutterBackground: 'transparent',
-      gutterForeground: '#939393',
+      gutterForeground: 'var(--text-secondary)',
       background: 'transparent',
     },
     styles: [{ tag: [t.className, t.propertyName] }],
@@ -62,7 +62,7 @@ function buildDiffLightTheme(): Extension {
   const editorTheme = EditorView.theme({
     '&': {
       backgroundColor: 'transparent',
-      color: 'var(--neutral6)',
+      color: 'var(--text-primary)',
       fontSize: '0.8125rem',
     },
     '&.cm-editor .cm-scroller': {
@@ -70,11 +70,11 @@ function buildDiffLightTheme(): Extension {
     },
     '.cm-gutters': {
       backgroundColor: 'transparent',
-      color: 'var(--neutral2)',
+      color: 'var(--text-secondary)',
       borderRight: 'none',
     },
     '.cm-content': {
-      color: 'var(--neutral6)',
+      color: 'var(--text-primary)',
     },
     '.cm-activeLine': {
       backgroundColor: 'transparent',
@@ -85,17 +85,17 @@ function buildDiffLightTheme(): Extension {
   });
 
   const highlightStyle = HighlightStyle.define([
-    { tag: [t.comment, t.bracket], color: 'var(--neutral2)' },
-    { tag: [t.string, t.meta, t.regexp], color: 'var(--accent1)' },
-    { tag: [t.atom, t.bool, t.special(t.variableName)], color: 'var(--accent6)' },
-    { tag: [t.keyword, t.operator, t.tagName], color: 'var(--accent2)' },
-    { tag: [t.function(t.propertyName), t.propertyName], color: 'var(--accent5)' },
+    { tag: [t.comment, t.bracket], color: 'var(--text-secondary)' },
+    { tag: [t.string, t.meta, t.regexp], color: 'var(--green-9)' },
+    { tag: [t.atom, t.bool, t.special(t.variableName)], color: 'var(--orange-9)' },
+    { tag: [t.keyword, t.operator, t.tagName], color: 'var(--red-9)' },
+    { tag: [t.function(t.propertyName), t.propertyName], color: 'var(--purple-9)' },
     {
       tag: [t.definition(t.variableName), t.function(t.variableName), t.className, t.attributeName],
-      color: 'var(--accent3)',
+      color: 'var(--blue-9)',
     },
-    { tag: [t.variableName, t.number], color: 'var(--accent5)' },
-    { tag: [t.name, t.quote], color: 'var(--accent1)' },
+    { tag: [t.variableName, t.number], color: 'var(--purple-9)' },
+    { tag: [t.name, t.quote], color: 'var(--green-9)' },
   ]);
 
   return [editorTheme, syntaxHighlighting(highlightStyle)];
@@ -139,8 +139,8 @@ export function CodeDiff({ codeA, codeB }: CodeDiffProps) {
   }, [codeA, codeB, theme]);
 
   return (
-    <div className="border-border1 bg-surface3 relative overflow-auto rounded-xl border dark:border-white/10 dark:bg-black/20">
-      <div className="bg-border1 absolute top-0 left-1/2 z-10 h-full w-px dark:bg-white/10" />
+    <div className="bg-surface-raised relative overflow-auto rounded-xl border border-(--border-subtle)">
+      <div className="absolute top-0 left-1/2 z-10 h-full w-px bg-(--border-subtle)" />
       <div
         ref={containerRef}
         className="[&_.cm-editor]:bg-transparent [&_.cm-editor]:p-6 [&_.cm-gutters]:bg-transparent [&_.cm-mergeViewEditor]:flex-1"

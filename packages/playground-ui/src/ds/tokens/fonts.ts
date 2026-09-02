@@ -15,14 +15,20 @@ export const FontSizes = {
 };
 
 export const LineHeights = {
-  'ui-xs': '160%', // 16px
-  'ui-sm': '150%', // 18px
-  'ui-smd': '150%', // 20px
-  'ui-md': '143%', // 20px
-  'ui-lg': '150%', // 24px
-  'header-xs': '137%', // 22px
-  'header-sm': '133%', // 24px
-  'header-md': '140%', // 28px
-  'header-lg': '133%', // 32px
-  'header-xl': '129%', // 36px
+  'ui-xs': '1rem', // 16px
+  'ui-sm': '1.125rem', // 18px
+  'ui-smd': '1.25rem', // 20px
+  'ui-md': '1.25rem', // 20px
+  'ui-lg': '1.5rem', // 24px
+  'header-xs': '1.375rem', // 22px
+  'header-sm': '1.5rem', // 24px
+  'header-md': '1.75rem', // 28px
+  'header-lg': '2rem', // 32px
+  'header-xl': '2.25rem', // 36px
+};
+
+export const LetterSpacings = {
+  tight: '-0.01em',
+  normal: '0em',
+  caps: '0.08em',
 };

@@ -71,10 +71,10 @@ const drawerViewportVariants = cva('fixed z-50 flex', {
 const drawerPopupVariants = cva(
   cn(
     'drawer-popup group/popup relative z-50 box-border flex [touch-action:auto] flex-col overflow-y-auto overscroll-contain will-change-transform outline-none',
-    'border-border1 bg-surface3 text-neutral5 shadow-dialog',
+    'border-(--border-subtle) bg-surface-raised text-(--text-primary) shadow-dialog',
     'data-[swiping]:select-none',
     "after:pointer-events-none after:absolute after:inset-0 after:bg-transparent after:transition-[background-color] after:duration-[450ms] after:content-['']",
-    'data-[nested-drawer-open]:after:bg-black/25',
+    'data-[nested-drawer-open]:after:bg-surface-overlay',
   ),
   {
     variants: {
@@ -354,7 +354,7 @@ const DrawerHandleBar = () => (
   <div
     aria-hidden
     data-slot="drawer-handle"
-    className={cn('mx-auto my-2 h-1 w-12 shrink-0 rounded-full bg-surface5', nestedFadeClass)}
+    className={cn('mx-auto my-2 h-1 w-12 shrink-0 rounded-full bg-surface-active', nestedFadeClass)}
   />
 );
 DrawerHandleBar.displayName = 'DrawerHandleBar';
@@ -378,7 +378,7 @@ const DrawerFloatingSideHandle = ({ side, variant }: DrawerFloatingSideHandlePro
         side === 'right' ? '-left-2' : '-right-2',
       )}
     >
-      <div className="bg-surface5/80 h-10 w-1 rounded-full shadow-sm" />
+      <div className="bg-surface-active/80 h-10 w-1 rounded-full shadow-sm" />
     </div>
   );
 };
@@ -456,7 +456,11 @@ type DrawerTitleProps = Omit<DrawerPrimitive.Title.Props, 'className'> & {
 };
 
 const DrawerTitle = React.forwardRef<HTMLHeadingElement, DrawerTitleProps>(({ className, ...props }, ref) => (
-  <DrawerPrimitive.Title ref={ref} className={cn('text-ui-md font-medium text-neutral6', className)} {...props} />
+  <DrawerPrimitive.Title
+    ref={ref}
+    className={cn('text-ui-md font-medium text-(--text-primary)', className)}
+    {...props}
+  />
 ));
 DrawerTitle.displayName = 'DrawerTitle';
 
@@ -466,7 +470,7 @@ type DrawerDescriptionProps = Omit<DrawerPrimitive.Description.Props, 'className
 
 const DrawerDescription = React.forwardRef<HTMLParagraphElement, DrawerDescriptionProps>(
   ({ className, ...props }, ref) => (
-    <DrawerPrimitive.Description ref={ref} className={cn('text-ui-sm text-neutral3', className)} {...props} />
+    <DrawerPrimitive.Description ref={ref} className={cn('text-ui-sm text-(--text-secondary)', className)} {...props} />
   ),
 );
 DrawerDescription.displayName = 'DrawerDescription';

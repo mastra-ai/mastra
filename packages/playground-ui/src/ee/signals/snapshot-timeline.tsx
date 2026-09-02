@@ -8,8 +8,8 @@ import { Button } from '@/ds/components/Button';
 export type TimelineMarkerKind = 'selected' | 'compare-point';
 
 const MARKER_TICK_CLASSES: Record<TimelineMarkerKind, string> = {
-  selected: 'bg-accent1 border-accent1',
-  'compare-point': 'bg-accent1 border-accent1',
+  selected: 'bg-green-7 border-green-7',
+  'compare-point': 'bg-green-7 border-green-7',
 };
 
 /**
@@ -37,7 +37,10 @@ export function TimelineTrack({
 
   return (
     <div aria-label="Snapshot landmarks" className="relative mx-2 h-12 min-w-40 flex-1" role="group">
-      <div aria-hidden="true" className="bg-border1 absolute inset-x-0 top-4 h-0.5 -translate-y-1/2 rounded-full" />
+      <div
+        aria-hidden="true"
+        className="absolute inset-x-0 top-4 h-0.5 -translate-y-1/2 rounded-full bg-(--border-subtle)"
+      />
       {snapshots.map((snapshot, index) => {
         const marker = markers.get(index);
         const grabbed = marker === 'compare-point' && index === grabbedIndex;
@@ -48,8 +51,8 @@ export function TimelineTrack({
             aria-label={snapshotTickLabel(snapshot, totalCount)}
             aria-pressed={marker === 'compare-point' ? grabbed : undefined}
             className={`absolute top-4 size-3.5 -translate-1/2 rounded-full border-2 transition-colors ${
-              marker ? MARKER_TICK_CLASSES[marker] : 'border-surface2 bg-surface4 hover:bg-accent1/60'
-            } ${grabbed ? 'ring-accent1/70 ring-2' : ''}`}
+              marker ? MARKER_TICK_CLASSES[marker] : 'bg-surface-hover hover:bg-green-7/60 border-(--border-subtle)'
+            } ${grabbed ? 'ring-focus/70 ring-2' : ''}`}
             data-marker={marker}
             onClick={() => onTickSelect(index)}
             style={{ left: `${positions[index]}%` }}
@@ -62,7 +65,7 @@ export function TimelineTrack({
           <span
             key={`day-${snapshot.snapshotId}`}
             aria-hidden="true"
-            className="text-neutral3 absolute top-7 -translate-x-1/2 font-mono text-[10px] tabular-nums"
+            className="absolute top-7 -translate-x-1/2 font-mono text-[10px] text-(--text-secondary) tabular-nums"
             style={{ left: `${positions[index]}%` }}
           >
             {dayLabels[index]}
@@ -131,7 +134,7 @@ export function SnapshotTimeline({
             {isPlaying ? 'Pause' : 'Play'}
           </Button>
         ) : null}
-        <p className="text-neutral4 font-mono text-xs tabular-nums" data-testid="snapshot-summary">
+        <p className="font-mono text-xs text-(--text-primary) tabular-nums" data-testid="snapshot-summary">
           {summary}
         </p>
       </div>

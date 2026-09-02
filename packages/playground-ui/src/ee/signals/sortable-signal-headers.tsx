@@ -134,7 +134,9 @@ export function SortableSignalHeaders({
                         >
                           <div
                             className={`relative inline-flex items-center justify-center rounded-md border border-transparent px-1 py-0.5 motion-safe:transition-[background-color,border-color,box-shadow,scale] motion-safe:duration-150 ${contentOffsetClass(anchor)} ${
-                              dragSnapshot.isDragging ? 'scale-1.03 border-border2 bg-surface4 shadow-lg' : ''
+                              dragSnapshot.isDragging
+                                ? 'scale-1.03 bg-surface-hover border-(--border-default) shadow-lg'
+                                : ''
                             }`}
                             data-header-anchor={anchor}
                             data-testid="signal-column-header-content"
@@ -153,7 +155,7 @@ export function SortableSignalHeaders({
                               {...dragProvided.dragHandleProps}
                               aria-disabled={reorderDisabled}
                               aria-label={`Reorder ${label}`}
-                              className="text-neutral3 hover:text-neutral5 absolute top-1/2 ml-0.5 -translate-y-1/2 cursor-grab rounded-sm p-1 active:cursor-grabbing aria-disabled:cursor-wait aria-disabled:opacity-50"
+                              className="absolute top-1/2 ml-0.5 -translate-y-1/2 cursor-grab rounded-sm p-1 text-(--text-secondary) hover:text-(--text-primary) active:cursor-grabbing aria-disabled:cursor-wait aria-disabled:opacity-50"
                               style={{ left: '100%' }}
                               title={`Drag to reorder the ${label} column`}
                             >

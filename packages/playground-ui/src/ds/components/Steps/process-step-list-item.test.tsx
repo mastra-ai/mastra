@@ -29,24 +29,24 @@ describe('ProcessStepListItem', () => {
 
   it('leaves the active step without a card surface in the plain variant', () => {
     render(<ProcessStepListItem step={step} isActive position={2} />);
-    expect(cardOf('Cloning repository')?.classList.contains('bg-surface3')).toBe(true);
+    expect(cardOf('Cloning repository')?.classList.contains('bg-surface-raised')).toBe(true);
 
     cleanup();
 
     render(<ProcessStepListItem step={step} isActive position={2} variant="plain" />);
-    expect(cardOf('Cloning repository')?.classList.contains('bg-surface3')).toBe(false);
+    expect(cardOf('Cloning repository')?.classList.contains('bg-surface-raised')).toBe(false);
   });
 
   it('drops the filled disc and its glow from a completed marker in the plain variant', () => {
     const completed: ProcessStep = { ...step, status: 'success', isActive: false };
 
     render(<ProcessStepListItem step={completed} isActive={false} position={2} />);
-    expect(document.querySelector('.bg-accent1Dark.shadow-glow-accent1')).toBeTruthy();
+    expect(document.querySelector('.bg-green-3.shadow-glow-accent1')).toBeTruthy();
 
     cleanup();
 
     render(<ProcessStepListItem step={completed} isActive={false} position={2} variant="plain" />);
-    expect(document.querySelector('.bg-accent1Dark')).toBeNull();
+    expect(document.querySelector('.bg-green-3')).toBeNull();
     expect(document.querySelector('.shadow-glow-accent1')).toBeNull();
   });
 
@@ -62,10 +62,10 @@ describe('ProcessStepListItem', () => {
   });
 
   it.each([
-    ['the active step', { isActive: true, status: 'running' }, 'text-neutral5'],
-    ['a finished step', { isActive: false, status: 'success' }, 'text-neutral5'],
-    ['a step still waiting its turn', { isActive: false, status: 'pending' }, 'text-neutral3'],
-    ['a step that failed', { isActive: false, status: 'failed' }, 'text-neutral3'],
+    ['the active step', { isActive: true, status: 'running' }, 'text-(--text-primary)'],
+    ['a finished step', { isActive: false, status: 'success' }, 'text-(--text-primary)'],
+    ['a step still waiting its turn', { isActive: false, status: 'pending' }, 'text-(--text-secondary)'],
+    ['a step that failed', { isActive: false, status: 'failed' }, 'text-(--text-secondary)'],
   ])('reads %s at the right weight', (_, { isActive, status }, expected) => {
     render(<ProcessStepListItem step={{ ...step, status }} isActive={isActive} position={1} />);
 
@@ -77,7 +77,7 @@ describe('ProcessStepListItem', () => {
   it('leaves an inactive step without the card surface', () => {
     render(<ProcessStepListItem step={step} isActive={false} position={1} />);
 
-    expect(cardOf('Cloning repository')?.classList.contains('bg-surface3')).toBe(false);
+    expect(cardOf('Cloning repository')?.classList.contains('bg-surface-raised')).toBe(false);
   });
 
   it('draws a dashed ring for a step that has not started', () => {
@@ -96,8 +96,8 @@ describe('ProcessStepListItem', () => {
   });
 
   it.each([
-    ['success', 'bg-accent1Dark', 'bg-accent2Dark'],
-    ['failed', 'bg-accent2Dark', 'bg-accent1Dark'],
+    ['success', 'bg-green-3', 'bg-red-3'],
+    ['failed', 'bg-red-3', 'bg-green-3'],
   ])('gives a %s marker its own fill, not the other one', (status, ownFill, otherFill) => {
     render(<ProcessStepListItem step={{ ...step, status }} isActive={false} position={1} />);
 
@@ -140,8 +140,8 @@ describe('ProcessStepListItem', () => {
   });
 
   it.each([
-    ['success', '[&>svg]:text-positive1'],
-    ['failed', '[&>svg]:text-negative1'],
+    ['success', '[&>svg]:text-success'],
+    ['failed', '[&>svg]:text-error'],
   ])('tints a plain %s marker on the icon itself', (status, tint) => {
     render(<ProcessStepListItem step={{ ...step, status }} isActive={false} position={1} variant="plain" />);
     expect(markerOf('Cloning repository')?.classList.contains(tint)).toBe(true);
@@ -184,7 +184,7 @@ describe('ProcessStepListItem', () => {
     render(<ProcessStepListItem step={{ ...step, status: 'running' }} isActive position={1} />);
 
     const marker = markerOf('Cloning repository');
-    expect(marker?.classList.contains('bg-accent1Dark')).toBe(false);
+    expect(marker?.classList.contains('bg-green-3')).toBe(false);
     expect(marker?.classList.contains('shadow-glow-accent1')).toBe(false);
   });
 

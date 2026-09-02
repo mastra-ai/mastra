@@ -7,7 +7,7 @@ const meta: Meta<typeof Code> = {
   component: Code,
   decorators: [
     Story => (
-      <div className="text-ui-sm text-neutral5 w-full p-4 font-mono">
+      <div className="text-ui-sm w-full p-4 font-mono text-(--text-primary)">
         <Story />
       </div>
     ),

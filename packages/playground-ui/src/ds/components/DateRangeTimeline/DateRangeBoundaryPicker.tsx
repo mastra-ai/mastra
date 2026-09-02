@@ -41,10 +41,10 @@ export function DateRangeBoundaryPicker({ boundary, value, min, max, onSelect }:
             size="xs"
             className="h-11 w-full min-w-0 justify-between gap-2 overflow-hidden px-3 sm:h-8"
           >
-            <Txt as="span" variant="ui-sm" className="text-neutral5 truncate tabular-nums">
+            <Txt as="span" variant="ui-sm" className="truncate text-(--text-primary) tabular-nums">
               {formattedDate}
             </Txt>
-            <CalendarDaysIcon className="text-neutral3 size-3.5 shrink-0" aria-hidden="true" />
+            <CalendarDaysIcon className="size-3.5 shrink-0 text-(--text-secondary)" aria-hidden="true" />
           </Button>
         }
       />

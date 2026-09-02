@@ -10,7 +10,7 @@ export interface PendingIndicatorProps {
  * working before any visible output has streamed.
  */
 export const PendingIndicator = ({ className, testId = 'pending-indicator' }: PendingIndicatorProps) => (
-  <div className={cn('flex items-center text-neutral3', className)} data-testid={testId}>
-    <span className="bg-neutral3 size-2 animate-pulse rounded-full" />
+  <div className={cn('flex items-center text-(--text-secondary)', className)} data-testid={testId}>
+    <span className="size-2 animate-pulse rounded-full bg-(--text-disabled)" />
   </div>
 );

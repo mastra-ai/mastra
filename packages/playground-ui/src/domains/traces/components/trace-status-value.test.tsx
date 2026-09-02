@@ -7,9 +7,9 @@ afterEach(cleanup);
 
 describe('TraceStatusValue', () => {
   it.each([
-    ['success', 'Success', 'text-accent1'],
+    ['success', 'Success', 'text-success'],
     ['error', 'Error', 'text-error'],
-    ['running', 'Running', 'text-neutral4'],
+    ['running', 'Running', 'text-(--text-primary)'],
   ] as const)('renders the %s status with its semantic color', (status, label, colorClass) => {
     render(<TraceStatusValue status={status} />);
 

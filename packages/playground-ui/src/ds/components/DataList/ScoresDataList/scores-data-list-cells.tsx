@@ -21,7 +21,7 @@ export interface ScoresDataListDateCellProps {
 export function ScoresDataListDateCell({ timestamp }: ScoresDataListDateCellProps) {
   const date = toDate(timestamp);
   return (
-    <DataListCell className="text-ui-smd text-neutral2">
+    <DataListCell className="text-ui-smd text-(--text-secondary)">
       {date ? (isToday(date) ? 'Today' : format(date, 'MMM dd')) : '-'}
     </DataListCell>
   );
@@ -37,7 +37,11 @@ export interface ScoresDataListTimeCellProps {
 
 export function ScoresDataListTimeCell({ timestamp }: ScoresDataListTimeCellProps) {
   const date = toDate(timestamp);
-  return <DataListCell className="text-ui-smd text-neutral3">{date ? format(date, 'h:mm:ss aaa') : '-'}</DataListCell>;
+  return (
+    <DataListCell className="text-ui-smd text-(--text-secondary)">
+      {date ? format(date, 'h:mm:ss aaa') : '-'}
+    </DataListCell>
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -52,7 +56,7 @@ export function ScoresDataListInputCell({ input }: ScoresDataListInputCellProps)
   const display = input != null ? JSON.stringify(input) : '-';
   return (
     <DataListCell>
-      <span className="text-ui-smd text-neutral3 block max-w-full min-w-0 truncate font-mono" title={display}>
+      <span className="text-ui-smd block max-w-full min-w-0 truncate font-mono text-(--text-secondary)" title={display}>
         {display}
       </span>
     </DataListCell>
@@ -90,7 +94,7 @@ export function ScoresDataListScoreCell({ score }: ScoresDataListScoreCellProps)
   const display = score == null ? '-' : typeof score === 'object' ? JSON.stringify(score) : String(score);
   return (
     <DataListCell>
-      <span className="text-ui-smd text-neutral3 block max-w-full min-w-0 truncate font-mono" title={display}>
+      <span className="text-ui-smd block max-w-full min-w-0 truncate font-mono text-(--text-secondary)" title={display}>
         {display}
       </span>
     </DataListCell>

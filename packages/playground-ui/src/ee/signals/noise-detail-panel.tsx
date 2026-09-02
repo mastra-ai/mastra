@@ -67,7 +67,7 @@ export function NoiseDetailPanel({
       variant="floating"
     >
       <DrawerContent>
-        <DrawerHeader className="border-border1 border-b">
+        <DrawerHeader className="border-b border-(--border-subtle)">
           <DrawerTitle>Noise</DrawerTitle>
           <DrawerDescription className="sr-only">Noise details for the {signalName} trace signal</DrawerDescription>
         </DrawerHeader>
@@ -78,17 +78,20 @@ export function NoiseDetailPanel({
           {insightTraceId === undefined && (
             <>
               <section aria-labelledby="noise-summary-heading">
-                <h2 id="noise-summary-heading" className="text-neutral3 font-mono text-xs tracking-wider uppercase">
+                <h2
+                  id="noise-summary-heading"
+                  className="font-mono text-xs tracking-wider text-(--text-secondary) uppercase"
+                >
                   Summary
                 </h2>
-                <p className="text-neutral5 mt-3 text-sm">
+                <p className="mt-3 text-sm text-(--text-primary)">
                   Noise contains trace signal summaries that did not consistently match a recurring theme in this
                   snapshot.
                 </p>
-                {noiseQuery.isPending && <p className="text-neutral3 mt-4 text-sm">Loading noise details…</p>}
-                {noiseQuery.isError && <p className="mt-4 text-sm text-red-500">Unable to load noise details.</p>}
+                {noiseQuery.isPending && <p className="mt-4 text-sm text-(--text-secondary)">Loading noise details…</p>}
+                {noiseQuery.isError && <p className="text-error mt-4 text-sm">Unable to load noise details.</p>}
                 {noiseQuery.data && (
-                  <p className="text-neutral5 mt-4 font-mono text-sm tabular-nums">
+                  <p className="mt-4 font-mono text-sm text-(--text-primary) tabular-nums">
                     {shareSentence(
                       filteredStats?.traceCount ?? noiseQuery.data.noise.traceCount,
                       filteredStats?.stageShare ?? noiseQuery.data.noise.coverage,
@@ -98,15 +101,18 @@ export function NoiseDetailPanel({
               </section>
 
               <section aria-labelledby="noise-examples-heading">
-                <h2 id="noise-examples-heading" className="text-neutral3 font-mono text-xs tracking-wider uppercase">
+                <h2
+                  id="noise-examples-heading"
+                  className="font-mono text-xs tracking-wider text-(--text-secondary) uppercase"
+                >
                   Example summaries
                 </h2>
-                {examplesQuery.isPending && <p className="text-neutral3 mt-3 text-sm">Loading examples…</p>}
-                {examplesQuery.isError && <p className="mt-3 text-sm text-red-500">Unable to load examples.</p>}
+                {examplesQuery.isPending && <p className="mt-3 text-sm text-(--text-secondary)">Loading examples…</p>}
+                {examplesQuery.isError && <p className="text-error mt-3 text-sm">Unable to load examples.</p>}
                 {examplesQuery.data && (
                   <>
                     {examplesQuery.data.examples.length === 0 ? (
-                      <p className="text-neutral3 mt-3 text-sm">No noise examples in this snapshot.</p>
+                      <p className="mt-3 text-sm text-(--text-secondary)">No noise examples in this snapshot.</p>
                     ) : (
                       <ul className="mt-3 space-y-3">
                         {examplesQuery.data.examples.map(example => (
@@ -114,7 +120,7 @@ export function NoiseDetailPanel({
                             <button
                               type="button"
                               aria-label={`View trace insight for ${example.signalText}`}
-                              className="border-border1 bg-surface3 text-neutral5 hover:bg-surface5 w-full cursor-pointer rounded-md border p-3 text-left text-sm"
+                              className="bg-surface-raised hover:bg-surface-active w-full cursor-pointer rounded-md border border-(--border-subtle) p-3 text-left text-sm text-(--text-primary)"
                               onClick={() => setInsightTraceId(example.traceId)}
                             >
                               {example.signalText}

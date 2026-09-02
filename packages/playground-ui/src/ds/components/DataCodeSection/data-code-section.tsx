@@ -57,7 +57,7 @@ const searchHighlightField = StateField.define<DecorationSet>({
 
 const searchHighlightTheme = EditorView.baseTheme({
   '.cm-search-match': {
-    backgroundColor: 'color-mix(in srgb, var(--accent1) 60%, transparent)',
+    backgroundColor: 'color-mix(in srgb, var(--green-9) 60%, transparent)',
     borderRadius: 'var(--radius-sm)',
   },
 });
@@ -75,7 +75,7 @@ function buildDarkTheme(): Extension {
       fontSize: '0.75rem',
       lineHighlight: 'transparent',
       gutterBackground: 'transparent',
-      gutterForeground: '#939393',
+      gutterForeground: 'var(--text-secondary)',
       background: 'transparent',
     },
     styles: [{ tag: [t.className, t.propertyName] }],
@@ -86,7 +86,7 @@ function buildLightTheme(): Extension {
   const editorTheme = EditorView.theme({
     '&': {
       backgroundColor: 'transparent',
-      color: 'var(--neutral6)',
+      color: 'var(--text-primary)',
       fontSize: '0.75rem',
     },
     '&.cm-editor .cm-scroller': {
@@ -94,12 +94,12 @@ function buildLightTheme(): Extension {
     },
     '.cm-gutters': {
       backgroundColor: 'transparent',
-      color: 'var(--neutral2)',
+      color: 'var(--text-secondary)',
       borderRight: 'none',
     },
     '.cm-content': {
-      color: 'var(--neutral6)',
-      caretColor: 'var(--neutral6)',
+      color: 'var(--text-primary)',
+      caretColor: 'var(--text-primary)',
     },
     '.cm-activeLine': {
       backgroundColor: 'transparent',
@@ -108,22 +108,22 @@ function buildLightTheme(): Extension {
       backgroundColor: 'transparent',
     },
     '.cm-cursor, .cm-dropCursor': {
-      borderLeftColor: 'var(--neutral6)',
+      borderLeftColor: 'var(--text-primary)',
     },
   });
 
   const highlightStyle = HighlightStyle.define([
-    { tag: [t.comment, t.bracket], color: 'var(--neutral2)' },
-    { tag: [t.string, t.meta, t.regexp], color: 'var(--accent1)' },
-    { tag: [t.atom, t.bool, t.special(t.variableName)], color: 'var(--accent6)' },
-    { tag: [t.keyword, t.operator, t.tagName], color: 'var(--accent2)' },
-    { tag: [t.function(t.propertyName), t.propertyName], color: 'var(--accent5)' },
+    { tag: [t.comment, t.bracket], color: 'var(--text-secondary)' },
+    { tag: [t.string, t.meta, t.regexp], color: 'var(--green-9)' },
+    { tag: [t.atom, t.bool, t.special(t.variableName)], color: 'var(--orange-9)' },
+    { tag: [t.keyword, t.operator, t.tagName], color: 'var(--red-9)' },
+    { tag: [t.function(t.propertyName), t.propertyName], color: 'var(--purple-9)' },
     {
       tag: [t.definition(t.variableName), t.function(t.variableName), t.className, t.attributeName],
-      color: 'var(--accent3)',
+      color: 'var(--blue-9)',
     },
-    { tag: [t.variableName, t.number], color: 'var(--accent5)' },
-    { tag: [t.name, t.quote], color: 'var(--accent1)' },
+    { tag: [t.variableName, t.number], color: 'var(--purple-9)' },
+    { tag: [t.name, t.quote], color: 'var(--green-9)' },
   ]);
 
   return [editorTheme, syntaxHighlighting(highlightStyle)];
@@ -280,9 +280,9 @@ export function DataCodeSection({
         </div>
       </div>
 
-      <div className="border-border1 bg-surface3 text-ui-sm text-neutral4 max-h-[30vh] overflow-hidden overflow-y-auto rounded-lg border p-3 break-all dark:border-white/10 dark:bg-black/20">
+      <div className="bg-surface-raised text-ui-sm max-h-[30vh] overflow-hidden overflow-y-auto rounded-lg border border-(--border-subtle) p-3 break-all text-(--text-primary)">
         {usePlainTextView ? (
-          <div className="text-neutral4 font-mono break-all">
+          <div className="font-mono break-all text-(--text-primary)">
             <pre className="text-wrap">{finalCodeStr}</pre>
           </div>
         ) : (
@@ -343,8 +343,8 @@ export function DataCodeSection({
           </DialogHeader>
           <div className="overflow-auto px-6 pb-6">
             {expandedMultiline ? (
-              <div className="border-border1 bg-surface3 text-ui-sm text-neutral4 overflow-hidden overflow-y-auto rounded-lg border p-3 break-all dark:border-white/10 dark:bg-black/20">
-                <div className="text-neutral4 font-mono break-all">
+              <div className="bg-surface-raised text-ui-sm overflow-hidden overflow-y-auto rounded-lg border border-(--border-subtle) p-3 break-all text-(--text-primary)">
+                <div className="font-mono break-all text-(--text-primary)">
                   <pre className="text-wrap">{expandedFinalCodeStr}</pre>
                 </div>
               </div>

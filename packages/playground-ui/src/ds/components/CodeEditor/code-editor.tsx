@@ -30,26 +30,26 @@ function buildDarkTheme(): Extension {
       fontSize: '0.8rem',
       lineHighlight: 'transparent',
       gutterBackground: 'transparent',
-      gutterForeground: 'var(--neutral2)',
+      gutterForeground: 'var(--text-secondary)',
       background: 'transparent',
-      foreground: 'var(--neutral6)',
-      caret: 'var(--neutral6)',
+      foreground: 'var(--text-primary)',
+      caret: 'var(--text-primary)',
     },
     styles: [
-      { tag: [t.className, t.propertyName], color: 'var(--neutral6)' },
-      { tag: t.heading, color: 'var(--accent3)', fontWeight: 'bold' },
+      { tag: [t.className, t.propertyName], color: 'var(--text-primary)' },
+      { tag: t.heading, color: 'var(--blue-9)', fontWeight: 'bold' },
       {
         tag: [t.heading1, t.heading2, t.heading3, t.heading4, t.heading5, t.heading6],
-        color: 'var(--accent3)',
+        color: 'var(--blue-9)',
         fontWeight: 'bold',
       },
-      { tag: t.emphasis, fontStyle: 'italic', color: 'var(--neutral6)' },
-      { tag: t.strong, fontWeight: 'bold', color: 'var(--neutral6)' },
-      { tag: t.link, color: 'var(--accent3)', textDecoration: 'underline' },
-      { tag: t.url, color: 'var(--accent3)' },
-      { tag: t.monospace, color: 'var(--neutral6)' },
+      { tag: t.emphasis, fontStyle: 'italic', color: 'var(--text-primary)' },
+      { tag: t.strong, fontWeight: 'bold', color: 'var(--text-primary)' },
+      { tag: t.link, color: 'var(--blue-9)', textDecoration: 'underline' },
+      { tag: t.url, color: 'var(--blue-9)' },
+      { tag: t.monospace, color: 'var(--text-primary)' },
       { tag: t.strikethrough, textDecoration: 'line-through' },
-      { tag: t.quote, fontStyle: 'italic', color: 'var(--neutral2)' },
+      { tag: t.quote, fontStyle: 'italic', color: 'var(--text-secondary)' },
     ],
   });
 
@@ -58,24 +58,24 @@ function buildDarkTheme(): Extension {
       backgroundColor: 'transparent',
     },
     '.cm-content': {
-      color: 'var(--neutral6)',
-      caretColor: 'var(--neutral6)',
+      color: 'var(--text-primary)',
+      caretColor: 'var(--text-primary)',
     },
     '.cm-lineNumbers .cm-gutterElement': {
-      color: 'var(--neutral2)',
+      color: 'var(--text-secondary)',
     },
     '.cm-activeLineGutter': {
-      color: 'var(--neutral3)',
+      color: 'var(--text-secondary)',
     },
     '.cm-cursor': {
-      borderLeftColor: 'var(--neutral6)',
+      borderLeftColor: 'var(--text-primary)',
     },
     '.cm-selectionBackground, .cm-content ::selection': {
-      backgroundColor: 'color-mix(in srgb, var(--accent3) 22%, transparent)',
+      backgroundColor: 'color-mix(in srgb, var(--blue-9) 22%, transparent)',
     },
     '.cm-tooltip-autocomplete': {
-      backgroundColor: 'var(--surface2)',
-      border: '1px solid var(--border1)',
+      backgroundColor: 'var(--surface-secondary)',
+      border: '1px solid var(--border-subtle)',
       borderRadius: '6px',
       boxShadow: '0 8px 16px rgba(0, 0, 0, 0.2)',
     },
@@ -83,29 +83,29 @@ function buildDarkTheme(): Extension {
       fontFamily: 'var(--font-mono)',
     },
     '.cm-completionLabel': {
-      color: 'var(--neutral6)',
+      color: 'var(--text-primary)',
     },
     '.cm-completionDetail': {
-      color: 'var(--neutral3)',
+      color: 'var(--text-secondary)',
       fontSize: '0.7rem',
       marginLeft: 'auto',
       paddingLeft: '12px',
     },
     '.cm-completionInfo': {
-      backgroundColor: 'var(--surface2)',
-      border: '1px solid var(--border1)',
-      color: 'var(--neutral3)',
+      backgroundColor: 'var(--surface-secondary)',
+      border: '1px solid var(--border-subtle)',
+      color: 'var(--text-secondary)',
       padding: '8px 12px',
     },
     '.cm-completionIcon': {
       display: 'none',
     },
     'ul.cm-completionList li[aria-selected]': {
-      backgroundColor: 'var(--surface4)',
-      color: 'var(--neutral6)',
+      backgroundColor: 'var(--surface-hover)',
+      color: 'var(--text-primary)',
     },
     '.cm-line .cm-variable-highlight': {
-      color: 'var(--accent6) !important',
+      color: 'var(--orange-9) !important',
       fontWeight: '500',
     },
   });
@@ -117,7 +117,7 @@ function buildLightTheme(): Extension {
   const editorTheme = EditorView.theme({
     '&': {
       backgroundColor: 'transparent',
-      color: 'var(--neutral6)',
+      color: 'var(--text-primary)',
       fontSize: '0.8rem',
     },
     '&.cm-editor .cm-scroller': {
@@ -125,33 +125,33 @@ function buildLightTheme(): Extension {
     },
     '.cm-gutters': {
       backgroundColor: 'transparent',
-      color: 'var(--neutral2)',
+      color: 'var(--text-secondary)',
       borderRight: 'none',
     },
     '.cm-content': {
-      color: 'var(--neutral6)',
-      caretColor: 'var(--neutral6)',
+      color: 'var(--text-primary)',
+      caretColor: 'var(--text-primary)',
     },
     '.cm-activeLine': {
       backgroundColor: 'transparent',
     },
     '.cm-lineNumbers .cm-gutterElement': {
-      color: 'var(--neutral2)',
+      color: 'var(--text-secondary)',
     },
     '.cm-activeLineGutter': {
       backgroundColor: 'transparent',
-      color: 'var(--neutral3)',
+      color: 'var(--text-secondary)',
     },
     '.cm-cursor, .cm-dropCursor': {
-      borderLeftColor: 'var(--neutral6)',
+      borderLeftColor: 'var(--text-primary)',
     },
     '&.cm-focused .cm-selectionBackground, & .cm-line::selection, & .cm-selectionLayer .cm-selectionBackground, .cm-content ::selection':
       {
-        background: 'color-mix(in srgb, var(--accent3) 22%, transparent) !important',
+        background: 'color-mix(in srgb, var(--blue-9) 22%, transparent) !important',
       },
     '.cm-tooltip-autocomplete': {
-      backgroundColor: 'var(--surface2)',
-      border: '1px solid var(--border1)',
+      backgroundColor: 'var(--surface-secondary)',
+      border: '1px solid var(--border-subtle)',
       borderRadius: '6px',
       boxShadow: '0 8px 16px rgba(0, 0, 0, 0.2)',
     },
@@ -159,60 +159,60 @@ function buildLightTheme(): Extension {
       fontFamily: 'var(--font-mono)',
     },
     '.cm-completionLabel': {
-      color: 'var(--neutral6)',
+      color: 'var(--text-primary)',
     },
     '.cm-completionDetail': {
-      color: 'var(--neutral3)',
+      color: 'var(--text-secondary)',
       fontSize: '0.7rem',
       marginLeft: 'auto',
       paddingLeft: '12px',
     },
     '.cm-completionInfo': {
-      backgroundColor: 'var(--surface2)',
-      border: '1px solid var(--border1)',
-      color: 'var(--neutral3)',
+      backgroundColor: 'var(--surface-secondary)',
+      border: '1px solid var(--border-subtle)',
+      color: 'var(--text-secondary)',
       padding: '8px 12px',
     },
     '.cm-completionIcon': {
       display: 'none',
     },
     'ul.cm-completionList li[aria-selected]': {
-      backgroundColor: 'var(--surface4)',
-      color: 'var(--neutral6)',
+      backgroundColor: 'var(--surface-hover)',
+      color: 'var(--text-primary)',
     },
     '.cm-line .cm-variable-highlight': {
-      color: 'var(--accent6) !important',
+      color: 'var(--orange-9) !important',
       fontWeight: '500',
     },
   });
 
   const highlightStyle = HighlightStyle.define([
-    { tag: [t.comment, t.bracket], color: 'var(--neutral2)' },
-    { tag: [t.string, t.meta, t.regexp], color: 'var(--accent1)' },
-    { tag: [t.atom, t.bool, t.special(t.variableName)], color: 'var(--accent6)' },
-    { tag: [t.keyword, t.operator, t.tagName], color: 'var(--accent2)' },
-    { tag: [t.function(t.propertyName), t.propertyName], color: 'var(--accent5)' },
+    { tag: [t.comment, t.bracket], color: 'var(--text-secondary)' },
+    { tag: [t.string, t.meta, t.regexp], color: 'var(--green-9)' },
+    { tag: [t.atom, t.bool, t.special(t.variableName)], color: 'var(--orange-9)' },
+    { tag: [t.keyword, t.operator, t.tagName], color: 'var(--red-9)' },
+    { tag: [t.function(t.propertyName), t.propertyName], color: 'var(--purple-9)' },
     {
       tag: [t.definition(t.variableName), t.function(t.variableName), t.className, t.attributeName],
-      color: 'var(--accent3)',
+      color: 'var(--blue-9)',
     },
-    { tag: [t.variableName, t.number], color: 'var(--accent5)' },
-    { tag: [t.name, t.quote], color: 'var(--accent1)' },
-    { tag: t.heading, color: 'var(--accent3)', fontWeight: 'bold' },
+    { tag: [t.variableName, t.number], color: 'var(--purple-9)' },
+    { tag: [t.name, t.quote], color: 'var(--green-9)' },
+    { tag: t.heading, color: 'var(--blue-9)', fontWeight: 'bold' },
     {
       tag: [t.heading1, t.heading2, t.heading3, t.heading4, t.heading5, t.heading6],
-      color: 'var(--accent3)',
+      color: 'var(--blue-9)',
       fontWeight: 'bold',
     },
-    { tag: [t.emphasis], fontStyle: 'italic', color: 'var(--neutral6)' },
-    { tag: [t.strong], fontWeight: 'bold', color: 'var(--neutral6)' },
-    { tag: t.link, color: 'var(--accent3)', textDecoration: 'underline' },
-    { tag: t.url, color: 'var(--accent3)' },
-    { tag: t.monospace, color: 'var(--neutral6)' },
+    { tag: [t.emphasis], fontStyle: 'italic', color: 'var(--text-primary)' },
+    { tag: [t.strong], fontWeight: 'bold', color: 'var(--text-primary)' },
+    { tag: t.link, color: 'var(--blue-9)', textDecoration: 'underline' },
+    { tag: t.url, color: 'var(--blue-9)' },
+    { tag: t.monospace, color: 'var(--text-primary)' },
     { tag: t.strikethrough, textDecoration: 'line-through' },
-    { tag: [t.deleted], color: 'var(--accent2)' },
+    { tag: [t.deleted], color: 'var(--red-9)' },
     { tag: t.invalid, color: 'var(--error)' },
-    { tag: [t.standard(t.tagName)], color: 'var(--accent1)' },
+    { tag: [t.standard(t.tagName)], color: 'var(--green-9)' },
   ]);
 
   return [editorTheme, syntaxHighlighting(highlightStyle)];
@@ -227,12 +227,12 @@ export const useCodemirrorTheme = (): Extension => {
 const codeEditorVariants = cva(
   cn(
     'relative overflow-hidden font-mono outline-hidden focus-within:outline-hidden focus:outline-hidden',
-    'duration-normal transition-colors ease-out-custom',
+    'transition-colors duration-normal ease-out-custom',
   ),
   {
     variants: {
       variant: {
-        default: 'rounded-md border border-border1 bg-surface3 p-1 focus-within:border-neutral6/20',
+        default: 'rounded-md border border-(--border-subtle) bg-surface-raised p-1 focus-within:border-gray-alpha-5',
         embedded: 'rounded-none border-none bg-transparent p-0',
       },
     },

@@ -26,11 +26,11 @@ const inputGroupVariants = ['default', 'filled', 'outline'] as const;
 const expectOnlyGuardedHoverBorder = (className: string) => {
   const hoverBorderTokens = className
     .split(/\s+/)
-    .filter(token => token.includes('hover') && token.includes('border-border2'));
+    .filter(token => token.includes('hover') && token.includes('border-(--border-default)'));
 
-  expect(hoverBorderTokens).toEqual(['[&:hover:not(:focus-within)]:border-border2']);
-  expect(className).toContain('focus-within:border-neutral5/50');
-  expect(className).not.toContain('hover:border-border2');
+  expect(hoverBorderTokens).toEqual(['[&:hover:not(:focus-within)]:border-(--border-default)']);
+  expect(className).toContain('focus-within:border-(--border-strong)');
+  expect(className).not.toContain('hover:border-(--border-default)');
 };
 
 describe('InputGroup', () => {
@@ -189,6 +189,6 @@ describe('InputGroup', () => {
     // Focused border brightens to a neutral tone (no green accent), and the hover border
     // is guarded so it cannot override focus when the group is focused and hovered.
     expectOnlyGuardedHoverBorder(cls);
-    expect(cls).not.toContain('ring-accent1');
+    expect(cls).not.toContain('ring-focus');
   });
 });

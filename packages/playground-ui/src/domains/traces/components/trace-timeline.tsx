@@ -59,7 +59,7 @@ export function TraceTimeline({
       {isLoading ? (
         <div
           className={cn(
-            'flex items-center justify-center gap-3 rounded-md bg-surface3/50 p-3 text-ui-sm text-neutral3',
+            'flex items-center justify-center gap-3 rounded-md bg-surface-raised/50 p-3 text-ui-sm text-(--text-secondary)',
             '[&_svg]:size-[1.25em] [&_svg]:opacity-50',
           )}
         >
@@ -76,7 +76,7 @@ export function TraceTimeline({
               {usedSpanTypes.map(type => {
                 const spanUI = getSpanTypeUi(type);
                 return (
-                  <div key={type} className="text-ui-sm text-neutral3 flex shrink-0 items-center gap-1">
+                  <div key={type} className="text-ui-sm flex shrink-0 items-center gap-1 text-(--text-secondary)">
                     <span
                       className="inline-block size-1.5 shrink-0 rounded-full"
                       style={{ backgroundColor: spanUI?.color }}

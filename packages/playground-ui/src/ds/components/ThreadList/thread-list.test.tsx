@@ -29,9 +29,9 @@ describe('ThreadList', () => {
     );
 
     const nav = screen.getByRole('navigation', { name: 'Threads' });
-    expect(nav.className).toContain('bg-surface3');
+    expect(nav.className).toContain('bg-surface-raised');
     expect(nav.className).toContain('rounded-studio-panel');
-    expect(nav.className).toContain('border-border1/50');
+    expect(nav.className).toContain('border-(--border-subtle)/50');
     expect(getParent(nav).className).toContain('pl-2');
   });
 
@@ -43,9 +43,9 @@ describe('ThreadList', () => {
     );
 
     const nav = screen.getByRole('navigation', { name: 'Threads' });
-    expect(nav.className).not.toContain('bg-surface3');
+    expect(nav.className).not.toContain('bg-surface-raised');
     expect(nav.className).not.toContain('rounded-studio-panel');
-    expect(nav.className).not.toContain('border-border1/50');
+    expect(nav.className).not.toContain('border-(--border-subtle)/50');
     expect(getParent(nav).className).not.toContain('pl-2');
     expect(nav.className).toContain('overflow-y-auto');
   });
@@ -82,8 +82,8 @@ describe('ThreadListItem', () => {
       </>,
     );
 
-    expect(screen.getByRole('link', { name: 'Active thread' }).className).toContain('bg-surface4');
-    expect(screen.getByRole('link', { name: 'Other thread' }).className).not.toContain('bg-surface4');
+    expect(screen.getByRole('link', { name: 'Active thread' }).className).toContain('bg-surface-hover');
+    expect(screen.getByRole('link', { name: 'Other thread' }).className).not.toContain('bg-surface-hover');
   });
 
   it('offers no delete affordance, and no room for one, without a handler', () => {

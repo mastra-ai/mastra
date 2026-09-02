@@ -88,7 +88,7 @@ describe('Switch', () => {
 
     expect(iconEl).toBeDefined();
     expect(iconEl?.getAttribute('aria-hidden')).toBe('true');
-    expect(iconEl?.className).toContain('group-data-[checked]/switch:text-neutral6');
+    expect(iconEl?.className).toContain('group-data-[checked]/switch:text-(--text-primary)');
     expect(screen.getByTestId('switch-icon')).toBeDefined();
   });
 
@@ -120,10 +120,10 @@ describe('Switch', () => {
 
     const switchEl = screen.getByRole('switch');
     const thumbEl = switchEl.querySelector('[data-slot="switch-thumb"]');
-    expect(switchEl.className).toContain('data-[checked]:bg-neutral6');
+    expect(switchEl.className).toContain('data-[checked]:bg-surface-contrast');
     expect(switchEl.className).toContain('border-0');
     expect(switchEl.className).not.toContain('overflow-hidden');
-    expect(switchEl.className).toContain('focus-visible:outline-neutral5/55');
+    expect(switchEl.className).toContain('focus-visible:outline-(--border-strong)');
     expect(switchEl.className).not.toContain('active:scale');
     expect(switchEl.className).not.toContain('hover:scale');
     expect(switchEl.className).not.toContain('transition-[background-color,scale]');

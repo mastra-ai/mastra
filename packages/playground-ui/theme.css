@@ -1,3 +1,5 @@
+@import './tokens.css';
+
 /*
  * Raw design tokens for @mastra/playground-ui. Ships uncompiled as
  * `@mastra/playground-ui/theme.css` so a consumer's Tailwind reads @theme and
@@ -8,290 +10,215 @@
 
 :root {
   /* Dark theme (default) */
-  --surface1: oklch(0% 0 0deg);
-  --surface2: oklch(16% 0 0deg);
-  --surface3: oklch(18% 0 0deg);
-  --surface4: oklch(21.78% 0 0deg);
-  --surface5: oklch(24.35% 0 0deg / 90%);
-  --surface6: oklch(30.92% 0 0deg);
+  --surface1: var(--surface-primary);
+  --surface2: var(--surface-secondary);
+  --surface3: var(--surface-raised);
+  --surface4: var(--surface-hover);
+  --surface5: var(--surface-active);
+  --surface6: var(--gray-5);
 
-  --accent1: oklch(0.723 0.219 149.579);
-  --accent2: oklch(0.637 0.237 25.331);
-  --accent3: oklch(0.623 0.214 259.815);
-  --accent5: oklch(0.707 0.165 254.624);
-  --accent6: oklch(0.769 0.188 70.08);
+  --accent1: var(--green-7);
+  --accent2: var(--red-7);
+  --accent3: var(--blue-7);
+  --accent5: var(--blue-8);
+  --accent6: var(--orange-7);
 
-  --accent1Dark: oklch(0.242 0.051 151);
-  --accent2Dark: oklch(0.216 0.044 22);
-  --accent3Dark: oklch(0.234 0.052 261);
-  --accent5Dark: oklch(0.227 0.03 244);
-  --accent6Dark: oklch(0.229 0.031 71);
+  --accent1Dark: var(--green-3);
+  --accent2Dark: var(--red-3);
+  --accent3Dark: var(--blue-3);
+  --accent5Dark: var(--blue-3);
+  --accent6Dark: var(--orange-3);
 
-  --accent1Darker: oklch(0.181 0.033 147);
-  --accent2Darker: oklch(0.16 0.023 19);
-  --accent3Darker: oklch(0.174 0.031 263);
-  --accent5Darker: oklch(0.17 0.015 240);
-  --accent6Darker: oklch(0.175 0.019 72);
+  --accent1Darker: var(--green-2);
+  --accent2Darker: var(--red-2);
+  --accent3Darker: var(--blue-2);
+  --accent5Darker: var(--blue-2);
+  --accent6Darker: var(--orange-2);
 
-  --neutral1: oklch(0.372 0 0);
-  --neutral2: oklch(0.553 0 0);
-  --neutral3: oklch(0.705 0 0);
-  --neutral4: oklch(0.871 0 0);
-  --neutral5: oklch(0.92 0 0);
-  --neutral6: oklch(0.985 0 0);
+  --neutral1: var(--text-disabled);
+  --neutral2: var(--text-secondary);
+  --neutral3: var(--text-secondary);
+  --neutral4: var(--text-primary);
+  --neutral5: var(--text-primary);
+  --neutral6: var(--text-primary);
 
-  --error: oklch(0.637 0.237 25.331);
-  --overlay: oklch(0% 0 0deg / 75%);
-  --border1: oklch(100% 0 0deg / 7%);
-  --border2: oklch(100% 0 0deg / 11%);
-  --surface-overlay-soft: oklch(100% 0 0deg / 4%);
-  --surface-overlay-strong: oklch(100% 0 0deg / 7%);
-  --surface-header: oklch(15% 0 0deg);
-  --surface-header-hover: oklch(19% 0 0deg);
-  --surface-row-featured: oklch(100% 0 0deg / 12%);
+  --error: var(--color-error);
+  --overlay: rgb(0 0 0 / 75%);
+  --border1: var(--border-subtle);
+  --border2: var(--border-default);
+  --surface-overlay-soft: var(--gray-alpha-1);
+  --surface-overlay-strong: var(--gray-alpha-2);
+  --surface-header: var(--surface-secondary);
+  --surface-header-hover: var(--surface-raised);
+  --surface-row-featured: var(--gray-alpha-3);
   --shadow-main-frame: 0 14px 48px -36px oklch(0% 0 0deg / 85%);
-  --sidebar-nav-hover: oklch(100% 0 0deg / 7%);
-  --sidebar-nav-active: oklch(100% 0 0deg / 11%);
+  --sidebar-nav-hover: var(--gray-alpha-2);
+  --sidebar-nav-active: var(--gray-alpha-3);
 
   /* Semantic color aliases */
-  --text1: var(--neutral6);
-  --warning1: var(--accent6);
-  --positive1: var(--accent1);
-  --negative1: var(--accent2);
+  --text1: var(--text-primary);
+  --warning1: var(--color-warning);
+  --positive1: var(--color-success);
+  --negative1: var(--color-error);
 
   /* Notice admonition colors — bg uses /20 alpha overlay; fg is the on-surface text/icon color */
-  --notice-success: oklch(0.92 0.27 138);
-  --notice-success-fg: oklch(0.96 0.025 145);
-  --notice-destructive: oklch(0.69 0.24 22);
-  --notice-destructive-fg: oklch(0.95 0.014 18);
-  --notice-warning: oklch(0.91 0.16 105);
-  --notice-warning-fg: oklch(0.97 0.025 100);
-  --notice-info: oklch(0.81 0.12 230);
-  --notice-info-fg: oklch(0.97 0.013 224);
-  --notice-note: oklch(0.18 0 0);
-  --notice-note-fg: oklch(0.99 0.001 230);
+  --notice-success: var(--green-7);
+  --notice-success-fg: var(--green-10);
+  --notice-destructive: var(--red-7);
+  --notice-destructive-fg: var(--red-10);
+  --notice-warning: var(--orange-7);
+  --notice-warning-fg: var(--orange-10);
+  --notice-info: var(--blue-7);
+  --notice-info-fg: var(--blue-10);
+  --notice-note: var(--surface-raised);
+  --notice-note-fg: var(--text-primary);
 
-  --badge-neutral-fg: var(--neutral5);
-  --badge-green: oklch(80% 0.105 160deg);
-  --badge-green-fg: oklch(92% 0.05 160deg);
-  --badge-red: oklch(69% 0.24 22deg);
-  --badge-red-fg: oklch(95% 0.014 18deg);
-  --badge-blue: oklch(81% 0.12 230deg);
-  --badge-blue-fg: oklch(97% 0.013 224deg);
-  --badge-yellow: oklch(91% 0.16 105deg);
-  --badge-yellow-fg: oklch(97% 0.025 100deg);
-  --badge-purple: oklch(82% 0.12 303deg);
-  --badge-purple-fg: oklch(93% 0.045 303deg);
-  --badge-orange: oklch(84% 0.13 62deg);
-  --badge-orange-fg: oklch(93% 0.06 62deg);
-  --badge-cyan: oklch(84% 0.1 210deg);
-  --badge-cyan-fg: oklch(93% 0.05 210deg);
-  --badge-pink: oklch(82% 0.12 345deg);
-  --badge-pink-fg: oklch(93% 0.045 345deg);
+  --badge-neutral-fg: var(--text-secondary);
+  --badge-green: var(--green-7);
+  --badge-green-fg: var(--green-10);
+  --badge-red: var(--red-7);
+  --badge-red-fg: var(--red-10);
+  --badge-blue: var(--blue-7);
+  --badge-blue-fg: var(--blue-10);
+  --badge-yellow: var(--yellow-7);
+  --badge-yellow-fg: var(--yellow-10);
+  --badge-purple: var(--purple-7);
+  --badge-purple-fg: var(--purple-10);
+  --badge-orange: var(--orange-7);
+  --badge-orange-fg: var(--orange-10);
+  --badge-cyan: var(--blue-7);
+  --badge-cyan-fg: var(--blue-10);
+  --badge-pink: var(--pink-7);
+  --badge-pink-fg: var(--pink-10);
 
   /* Brand green (dark). Remaps Tailwind green-* via @theme below. */
-  --brand-green-50: oklch(99% 0.024 138);
-  --brand-green-100: oklch(97.5% 0.055 138);
-  --brand-green-200: oklch(95.5% 0.105 138);
-  --brand-green-300: oklch(94% 0.18 138);
-  --brand-green-400: oklch(93% 0.235 138);
-  --brand-green-500: var(--notice-success);
-  --brand-green-600: oklch(76% 0.22 140);
-  --brand-green-700: oklch(62% 0.19 140);
-  --brand-green-800: oklch(45% 0.13 142);
-  --brand-green-900: oklch(33% 0.09 144);
-  --brand-green-950: oklch(22% 0.06 145);
-  --brand-green-badge-bg: oklch(32.3% 0.04 140);
-  --brand-green-badge-fg: oklch(83.6% 0.126 140);
+  --brand-green-50: var(--green-1);
+  --brand-green-100: var(--green-2);
+  --brand-green-200: var(--green-3);
+  --brand-green-300: var(--green-4);
+  --brand-green-400: var(--green-6);
+  --brand-green-500: var(--green-7);
+  --brand-green-600: var(--green-8);
+  --brand-green-700: var(--green-9);
+  --brand-green-800: var(--green-9);
+  --brand-green-900: var(--green-10);
+  --brand-green-950: var(--green-10);
+  --brand-green-badge-bg: var(--green-1);
+  --brand-green-badge-fg: var(--green-10);
 
   /* Chart palette (recharts). blue-600/amber-500/purple-500/red-500; chart-2 = brand green. */
-  --chart-1: oklch(0.546 0.245 262.881);
-  --chart-2: var(--color-green-500);
-  --chart-3: oklch(0.769 0.188 70.08);
-  --chart-4: oklch(0.627 0.265 303.9);
-  --chart-5: oklch(0.637 0.237 25.331);
+  --chart-1: var(--green-7);
+  --chart-2: var(--blue-7);
+  --chart-3: var(--orange-7);
+  --chart-4: var(--purple-7);
+  --chart-5: var(--pink-7);
 
   /* Sequential ramp for one measure read at five depths — one hue, lightness carries the
    * reading. The palette above is categorical: five series, no order between them. */
-  --chart-soft-1: oklch(0.62 0.19 285);
-  --chart-soft-2: oklch(0.7 0.145 285);
-  --chart-soft-3: oklch(0.78 0.1 285);
-  --chart-soft-4: oklch(0.85 0.06 285);
-  --chart-soft-5: oklch(0.9 0.03 285);
 }
 
 html.light {
-  --surface1: oklch(95.6% 0 0deg);
-  --surface2: oklch(98.5% 0 0deg);
-  --surface3: oklch(100% 0 0deg);
-  --surface4: oklch(96.5% 0 0deg);
-  --surface5: oklch(94.4% 0 0deg / 94%);
-  --surface6: oklch(89.5% 0 0deg);
+  --surface1: var(--surface-primary);
+  --surface2: var(--surface-secondary);
+  --surface3: var(--surface-raised);
+  --surface4: var(--surface-hover);
+  --surface5: var(--surface-active);
+  --surface6: var(--gray-5);
 
-  --accent1: oklch(0.627 0.194 149.214);
-  --accent2: oklch(0.577 0.245 27.325);
-  --accent3: oklch(0.546 0.245 262.881);
-  --accent5: oklch(0.623 0.214 259.815);
-  --accent6: oklch(0.666 0.179 58.318);
+  --accent1: var(--green-7);
+  --accent2: var(--red-7);
+  --accent3: var(--blue-7);
+  --accent5: var(--blue-8);
+  --accent6: var(--orange-7);
 
-  --accent1Dark: oklch(0.962 0.044 156.743);
-  --accent2Dark: oklch(0.936 0.032 17.717);
-  --accent3Dark: oklch(0.932 0.032 255.585);
-  --accent5Dark: oklch(0.932 0.032 255.585);
-  --accent6Dark: oklch(0.962 0.059 95.617);
+  --accent1Dark: var(--green-3);
+  --accent2Dark: var(--red-3);
+  --accent3Dark: var(--blue-3);
+  --accent5Dark: var(--blue-3);
+  --accent6Dark: var(--orange-3);
 
-  --accent1Darker: oklch(0.925 0.084 155.995);
-  --accent2Darker: oklch(0.885 0.062 18.334);
-  --accent3Darker: oklch(0.882 0.059 254.128);
-  --accent5Darker: oklch(0.882 0.059 254.128);
-  --accent6Darker: oklch(0.924 0.12 95.746);
+  --accent1Darker: var(--green-2);
+  --accent2Darker: var(--red-2);
+  --accent3Darker: var(--blue-2);
+  --accent5Darker: var(--blue-2);
+  --accent6Darker: var(--orange-2);
 
-  --neutral1: oklch(0.554 0 0);
-  --neutral2: oklch(0.446 0 0);
-  --neutral3: oklch(0.372 0 0);
-  --neutral4: oklch(0.279 0 0);
-  --neutral5: oklch(0.208 0 0);
-  --neutral6: oklch(0.13 0 0);
+  --neutral1: var(--text-disabled);
+  --neutral2: var(--text-secondary);
+  --neutral3: var(--text-secondary);
+  --neutral4: var(--text-primary);
+  --neutral5: var(--text-primary);
+  --neutral6: var(--text-primary);
 
-  --error: oklch(0.577 0.245 27.325);
-  --overlay: oklch(20.8% 0 0deg / 45%);
-  --border1: oklch(20.8% 0 0deg / 10%);
-  --border2: oklch(20.8% 0 0deg / 16%);
-  --surface-overlay-soft: oklch(20.8% 0 0deg / 4%);
-  --surface-overlay-strong: oklch(20.8% 0 0deg / 7%);
-  --surface-header: oklch(92.6% 0 0deg);
-  --surface-header-hover: oklch(90% 0 0deg);
-  --surface-row-featured: oklch(20.8% 0 0deg / 11%);
+  --error: var(--color-error);
+  --overlay: rgb(0 0 0 / 75%);
+  --border1: var(--border-subtle);
+  --border2: var(--border-default);
+  --surface-overlay-soft: var(--gray-alpha-1);
+  --surface-overlay-strong: var(--gray-alpha-2);
+  --surface-header: var(--surface-secondary);
+  --surface-header-hover: var(--surface-raised);
+  --surface-row-featured: var(--gray-alpha-3);
   --shadow-main-frame: 0 1px 2px oklch(24% 0 0deg / 4%), 0 18px 48px -34px oklch(24% 0 0deg / 22%);
-  --sidebar-nav-hover: oklch(20.8% 0 0deg / 5.5%);
-  --sidebar-nav-active: oklch(20.8% 0 0deg / 8.5%);
+  --sidebar-nav-hover: var(--gray-alpha-2);
+  --sidebar-nav-active: var(--gray-alpha-3);
 
   /* Semantic color aliases */
-  --text1: var(--neutral6);
-  --warning1: var(--accent6);
-  --positive1: var(--accent1);
-  --negative1: var(--accent2);
+  --text1: var(--text-primary);
+  --warning1: var(--color-warning);
+  --positive1: var(--color-success);
+  --negative1: var(--color-error);
 
   /* Notice admonition colors — bg keeps saturation, fg flips to deep tint for contrast on light surface */
-  --notice-success: oklch(0.55 0.2 140);
-  --notice-success-fg: oklch(0.32 0.1 145);
-  --notice-destructive: oklch(0.55 0.22 22);
-  --notice-destructive-fg: oklch(0.36 0.18 22);
-  --notice-warning: oklch(0.65 0.16 95);
-  --notice-warning-fg: oklch(0.36 0.1 95);
-  --notice-info: oklch(0.55 0.15 230);
-  --notice-info-fg: oklch(0.36 0.13 225);
-  --notice-note: oklch(0.97 0 0);
-  --notice-note-fg: oklch(0.18 0 0);
+  --notice-success: var(--green-7);
+  --notice-success-fg: var(--green-10);
+  --notice-destructive: var(--red-7);
+  --notice-destructive-fg: var(--red-10);
+  --notice-warning: var(--orange-7);
+  --notice-warning-fg: var(--orange-10);
+  --notice-info: var(--blue-7);
+  --notice-info-fg: var(--blue-10);
+  --notice-note: var(--surface-raised);
+  --notice-note-fg: var(--text-primary);
 
-  --badge-neutral-fg: var(--neutral3);
-  --badge-green: oklch(40% 0.095 160deg);
-  --badge-green-fg: oklch(35% 0.085 160deg);
-  --badge-red: oklch(55% 0.22 22deg);
-  --badge-red-fg: oklch(36% 0.18 22deg);
-  --badge-blue: oklch(55% 0.15 230deg);
-  --badge-blue-fg: oklch(36% 0.13 225deg);
-  --badge-yellow: oklch(65% 0.16 95deg);
-  --badge-yellow-fg: oklch(36% 0.1 95deg);
-  --badge-purple: oklch(40% 0.18 303deg);
-  --badge-purple-fg: oklch(37% 0.16 303deg);
-  --badge-orange: oklch(42% 0.13 62deg);
-  --badge-orange-fg: oklch(37% 0.12 62deg);
-  --badge-cyan: oklch(40% 0.11 210deg);
-  --badge-cyan-fg: oklch(35% 0.095 210deg);
-  --badge-pink: oklch(42% 0.17 345deg);
-  --badge-pink-fg: oklch(37% 0.15 345deg);
+  --badge-neutral-fg: var(--text-secondary);
+  --badge-green: var(--green-7);
+  --badge-green-fg: var(--green-10);
+  --badge-red: var(--red-7);
+  --badge-red-fg: var(--red-10);
+  --badge-blue: var(--blue-7);
+  --badge-blue-fg: var(--blue-10);
+  --badge-yellow: var(--yellow-7);
+  --badge-yellow-fg: var(--yellow-10);
+  --badge-purple: var(--purple-7);
+  --badge-purple-fg: var(--purple-10);
+  --badge-orange: var(--orange-7);
+  --badge-orange-fg: var(--orange-10);
+  --badge-cyan: var(--blue-7);
+  --badge-cyan-fg: var(--blue-10);
+  --badge-pink: var(--pink-7);
+  --badge-pink-fg: var(--pink-10);
 
   /* Brand green (light). badge + chart inherit :root. */
-  --brand-green-50: oklch(97.8% 0.025 140);
-  --brand-green-100: oklch(95.5% 0.055 140);
-  --brand-green-200: oklch(91.5% 0.095 140);
-  --brand-green-300: oklch(84.5% 0.145 140);
-  --brand-green-400: oklch(72.5% 0.18 140);
-  --brand-green-500: var(--notice-success);
-  --brand-green-600: oklch(47% 0.17 142);
-  --brand-green-700: oklch(38% 0.13 144);
-  --brand-green-800: oklch(30% 0.1 145);
-  --brand-green-900: oklch(24% 0.075 146);
-  --brand-green-950: oklch(17% 0.05 147);
+  --brand-green-50: var(--green-1);
+  --brand-green-100: var(--green-2);
+  --brand-green-200: var(--green-3);
+  --brand-green-300: var(--green-4);
+  --brand-green-400: var(--green-6);
+  --brand-green-500: var(--green-7);
+  --brand-green-600: var(--green-8);
+  --brand-green-700: var(--green-9);
+  --brand-green-800: var(--green-9);
+  --brand-green-900: var(--green-10);
+  --brand-green-950: var(--green-10);
 
   /* The ramp inverts per theme: it darkens on white, brightens on near-black. */
-  --chart-soft-1: oklch(0.52 0.2 285);
-  --chart-soft-2: oklch(0.64 0.16 285);
-  --chart-soft-3: oklch(0.75 0.11 285);
-  --chart-soft-4: oklch(0.85 0.065 285);
-  --chart-soft-5: oklch(0.92 0.035 285);
 }
 
 @theme {
-  --spacing-*: initial;
-  --spacing-0: 0rem;
-  --spacing-1: 0.25rem;
-  --spacing-2: 0.5rem;
-  --spacing-3: 0.75rem;
-  --spacing-4: 1rem;
-  --spacing-5: 1.25rem;
-  --spacing-6: 1.5rem;
-  --spacing-7: 1.75rem;
-  --spacing-8: 2rem;
-  --spacing-9: 2.25rem;
-  --spacing-10: 2.5rem;
-  --spacing-11: 2.75rem;
-  --spacing-12: 3rem;
-  --spacing-14: 3.5rem;
-  --spacing-16: 4rem;
-  --spacing-20: 5rem;
-  --spacing-24: 6rem;
-  --spacing-28: 7rem;
-  --spacing-32: 8rem;
-  --spacing-36: 9rem;
-  --spacing-40: 10rem;
-  --spacing-44: 11rem;
-  --spacing-48: 12rem;
-  --spacing-52: 13rem;
-  --spacing-56: 14rem;
-  --spacing-60: 15rem;
-  --spacing-64: 16rem;
-  --spacing-72: 18rem;
-  --spacing-80: 20rem;
-  --spacing-96: 24rem;
-  --spacing-px: 0.0625rem;
-  --spacing-0_5: 0.125rem;
-  --spacing-1_5: 0.375rem;
-  --spacing-2_5: 0.625rem;
-  --spacing-3_5: 0.875rem;
-
   --breakpoint-2xl: 1536px;
   --breakpoint-3xl: 1700px;
   --breakpoint-4xl: 2000px;
-
-  --text-ui-xs: 0.625rem;
-  --text-ui-sm: 0.75rem;
-  --text-ui-smd: 0.8125rem;
-  --text-ui-md: 0.875rem;
-  --text-ui-lg: 1rem;
-  --text-header-xs: 1rem;
-  --text-header-sm: 1.125rem;
-  --text-header-md: 1.25rem;
-  --text-header-lg: 1.5rem;
-  --text-header-xl: 1.75rem;
-
-  --leading-ui-xs: 160%;
-  --leading-ui-sm: 150%;
-  --leading-ui-smd: 150%;
-  --leading-ui-md: 143%;
-  --leading-ui-lg: 150%;
-  --leading-header-xs: 137%;
-  --leading-header-sm: 133%;
-  --leading-header-md: 140%;
-  --leading-header-lg: 133%;
-  --leading-header-xl: 129%;
-
-  --radius-none: 0px;
-  --radius-sm: 4px;
-  --radius-md: 6px;
-  --radius-lg: 10px;
-  --radius-xl: 14px;
 
   --height-icon-default: 16px;
   --height-icon-lg: 20px;
@@ -379,7 +306,7 @@ html.light {
   --color-neutral4: var(--neutral4);
   --color-neutral5: var(--neutral5);
   --color-neutral6: var(--neutral6);
-  --color-error: var(--error);
+  --color-error: var(--red-9);
   --color-overlay: var(--overlay);
   --color-border1: var(--border1);
   --color-border2: var(--border2);
@@ -422,7 +349,17 @@ html.light {
   --color-badge-pink-fg: var(--badge-pink-fg);
 
   /* Replace Tailwind green with brand green. initial clears defaults (native v4), then remap. */
-  --color-green-*: initial;
+  --color-green-50: initial;
+  --color-green-100: initial;
+  --color-green-200: initial;
+  --color-green-300: initial;
+  --color-green-400: initial;
+  --color-green-500: initial;
+  --color-green-600: initial;
+  --color-green-700: initial;
+  --color-green-800: initial;
+  --color-green-900: initial;
+  --color-green-950: initial;
   --color-green-50: var(--brand-green-50);
   --color-green-100: var(--brand-green-100);
   --color-green-200: var(--brand-green-200);

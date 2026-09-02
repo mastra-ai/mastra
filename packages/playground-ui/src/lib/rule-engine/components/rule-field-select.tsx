@@ -48,18 +48,18 @@ const FieldLevelSelect: React.FC<FieldLevelSelectProps> = ({
   return (
     <div className={cn('relative', className)}>
       <Select value={value} onValueChange={onChange}>
-        <SelectTrigger className="bg-surface4 text-neutral6 min-w-35" size="sm">
+        <SelectTrigger className="bg-surface-hover min-w-35 text-(--text-primary)" size="sm">
           <SelectValue placeholder={placeholder} />
         </SelectTrigger>
         <SelectContent>
           {options.map(option => (
             <SelectItem key={option.path} value={option.path}>
               <span className="flex items-center gap-2">
-                <Icon size="sm" className="text-neutral3">
+                <Icon size="sm" className="text-(--text-secondary)">
                   {getFieldTypeIcon(option.type)}
                 </Icon>
                 {option.label}
-                {option.hasChildren && <span className="text-neutral3">...</span>}
+                {option.hasChildren && <span className="text-(--text-secondary)">...</span>}
               </span>
             </SelectItem>
           ))}
@@ -132,14 +132,14 @@ export const RuleFieldSelect: React.FC<RuleFieldSelectProps> = ({ schema, value,
   );
 
   if (selectors.length === 0) {
-    return <div className={cn('text-sm text-neutral3', className)}>No fields available</div>;
+    return <div className={cn('text-sm text-(--text-secondary)', className)}>No fields available</div>;
   }
 
   return (
     <div className={cn('flex items-center gap-1', className)}>
       {selectors.map((selector, index) => (
         <React.Fragment key={`${selector.basePath}-${index}`}>
-          {index > 0 && <span className="text-neutral3">.</span>}
+          {index > 0 && <span className="text-(--text-secondary)">.</span>}
           <FieldLevelSelect
             options={selector.options}
             value={selector.value}

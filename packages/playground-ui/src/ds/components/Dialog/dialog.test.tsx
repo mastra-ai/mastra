@@ -70,7 +70,7 @@ describe('Dialog', () => {
   it('applies custom classes to the overlay', () => {
     render(
       <Dialog defaultOpen>
-        <DialogContent overlayClassName="custom-overlay bg-surface1/40 backdrop-blur-none">
+        <DialogContent overlayClassName="custom-overlay bg-surface-primary/40 backdrop-blur-none">
           <DialogTitle>Custom overlay</DialogTitle>
         </DialogContent>
       </Dialog>,
@@ -78,7 +78,7 @@ describe('Dialog', () => {
 
     const overlay = document.querySelector('.dialog-overlay-anim');
     expect(overlay?.className).toContain('custom-overlay');
-    expect(overlay?.className).toContain('bg-surface1/40');
+    expect(overlay?.className).toContain('bg-surface-primary/40');
     expect(overlay?.className).toContain('backdrop-blur-none');
     expect(overlay?.className).not.toContain('backdrop-blur-xs');
   });

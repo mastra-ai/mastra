@@ -21,7 +21,7 @@ function buildSideDialogDarkTheme(): Extension {
       fontSize: '0.8125rem',
       lineHighlight: 'transparent',
       gutterBackground: 'transparent',
-      gutterForeground: '#939393',
+      gutterForeground: 'var(--text-secondary)',
       background: 'transparent',
     },
     styles: [{ tag: [t.className, t.propertyName] }],
@@ -33,7 +33,7 @@ function buildSideDialogLightTheme(): Extension {
   const editorTheme = EditorView.theme({
     '&': {
       backgroundColor: 'transparent',
-      color: 'var(--neutral6)',
+      color: 'var(--text-primary)',
       fontSize: '0.8125rem',
     },
     '&.cm-editor .cm-scroller': {
@@ -41,12 +41,12 @@ function buildSideDialogLightTheme(): Extension {
     },
     '.cm-gutters': {
       backgroundColor: 'transparent',
-      color: 'var(--neutral2)',
+      color: 'var(--text-secondary)',
       borderRight: 'none',
     },
     '.cm-content': {
-      color: 'var(--neutral6)',
-      caretColor: 'var(--neutral6)',
+      color: 'var(--text-primary)',
+      caretColor: 'var(--text-primary)',
     },
     '.cm-activeLine': {
       backgroundColor: 'transparent',
@@ -55,22 +55,22 @@ function buildSideDialogLightTheme(): Extension {
       backgroundColor: 'transparent',
     },
     '.cm-cursor, .cm-dropCursor': {
-      borderLeftColor: 'var(--neutral6)',
+      borderLeftColor: 'var(--text-primary)',
     },
   });
 
   const highlightStyle = HighlightStyle.define([
-    { tag: [t.comment, t.bracket], color: 'var(--neutral2)' },
-    { tag: [t.string, t.meta, t.regexp], color: 'var(--accent1)' },
-    { tag: [t.atom, t.bool, t.special(t.variableName)], color: 'var(--accent6)' },
-    { tag: [t.keyword, t.operator, t.tagName], color: 'var(--accent2)' },
-    { tag: [t.function(t.propertyName), t.propertyName], color: 'var(--accent5)' },
+    { tag: [t.comment, t.bracket], color: 'var(--text-secondary)' },
+    { tag: [t.string, t.meta, t.regexp], color: 'var(--green-9)' },
+    { tag: [t.atom, t.bool, t.special(t.variableName)], color: 'var(--orange-9)' },
+    { tag: [t.keyword, t.operator, t.tagName], color: 'var(--red-9)' },
+    { tag: [t.function(t.propertyName), t.propertyName], color: 'var(--purple-9)' },
     {
       tag: [t.definition(t.variableName), t.function(t.variableName), t.className, t.attributeName],
-      color: 'var(--accent3)',
+      color: 'var(--blue-9)',
     },
-    { tag: [t.variableName, t.number], color: 'var(--accent5)' },
-    { tag: [t.name, t.quote], color: 'var(--accent1)' },
+    { tag: [t.variableName, t.number], color: 'var(--purple-9)' },
+    { tag: [t.name, t.quote], color: 'var(--green-9)' },
   ]);
 
   return [editorTheme, syntaxHighlighting(highlightStyle)];
@@ -119,9 +119,9 @@ export function SideDialogCodeSection({ codeStr = '', title, icon, simplified = 
         </ButtonsGroup>
       </Section.Header>
       {codeStr && (
-        <div className="border-border1 bg-surface3 text-ui-md text-neutral4 max-h-[30vh] overflow-hidden overflow-y-auto rounded-xl border p-4 break-all dark:border-white/10 dark:bg-black/20">
+        <div className="bg-surface-raised text-ui-md max-h-[30vh] overflow-hidden overflow-y-auto rounded-xl border border-(--border-subtle) p-4 break-all text-(--text-primary)">
           {simplified ? (
-            <div className="text-neutral4 px-2 font-mono break-all">
+            <div className="px-2 font-mono break-all text-(--text-primary)">
               <pre className="text-wrap">{codeStr}</pre>
             </div>
           ) : (

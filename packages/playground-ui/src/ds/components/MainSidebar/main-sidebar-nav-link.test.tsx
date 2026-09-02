@@ -12,7 +12,7 @@ import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from '@/ds/c
 import type { LinkComponentProps } from '@/ds/types/link-component';
 
 const getTooltipPopup = () => {
-  const popup = document.querySelector<HTMLElement>('.bg-surface3');
+  const popup = document.querySelector<HTMLElement>('.bg-surface-raised');
   assert(popup, 'Expected tooltip popup');
   return popup;
 };
@@ -144,7 +144,7 @@ describe('MainSidebarNavLink (collapsed) — tooltip regression', () => {
     );
 
     // The Positioner and Popup both expose data-side. Target the Popup
-    // specifically via its unique design-system class (bg-surface3) so the
+    // specifically via its unique design-system class (bg-surface-raised) so the
     // assertions cannot accidentally pass against the Positioner wrapper.
     const popup = await waitFor(getTooltipPopup);
 
@@ -166,7 +166,7 @@ describe('MainSidebarNavLink (collapsed) — tooltip regression', () => {
     );
 
     // The Positioner and Popup both expose data-side. Target the Popup
-    // specifically via its unique design-system class (bg-surface3) so the
+    // specifically via its unique design-system class (bg-surface-raised) so the
     // assertions cannot accidentally pass against the Positioner wrapper.
     const popup = await waitFor(getTooltipPopup);
 

@@ -283,7 +283,7 @@ export const WithTrailingCell: Story = {
       ].map(item => (
         <DataList.RowWrapper key={item.path}>
           <DataList.RowButton colEnd={-2} onClick={() => {}}>
-            <DataList.Cell className="text-neutral6 font-medium">{item.name}</DataList.Cell>
+            <DataList.Cell className="font-medium text-(--text-primary)">{item.name}</DataList.Cell>
             <DataList.TextCell font="mono">{item.path}</DataList.TextCell>
             <DataList.Cell className="min-w-0">
               <span className="block truncate">{item.description}</span>
@@ -679,7 +679,7 @@ export const ScoresTable: Story = {
             <ScoresDataList.RowButton
               key={score.id}
               onClick={() => setSelectedId(id => (id === score.id ? undefined : score.id))}
-              className={selectedId === score.id ? 'bg-surface4' : ''}
+              className={selectedId === score.id ? 'bg-surface-hover' : ''}
             >
               <ScoresDataList.DateCell timestamp={score.createdAt} />
               <ScoresDataList.TimeCell timestamp={score.createdAt} />

@@ -195,7 +195,7 @@ describe('Plan', () => {
       </Plan>,
     );
 
-    expect(screen.getByText('Draft').classList.contains('bg-neutral6/5')).toBe(true);
+    expect(screen.getByText('Draft').classList.contains('bg-gray-alpha-1')).toBe(true);
   });
 
   it('hints that an overflowing plan is clipped and clears the hint when expanded', () => {

@@ -48,7 +48,7 @@ export function comboboxTriggerClass({
     'w-full min-w-32 justify-between',
     // Read as "active" while the popup is open, per variant (see map above).
     controlTriggerOpenState[visualVariant],
-    'data-[placeholder]:text-neutral3',
+    'data-[placeholder]:text-(--text-secondary)',
     error && 'border-error hover:border-error focus-visible:border-error',
     className,
   );
@@ -58,11 +58,11 @@ export const comboboxItemClass = cva(
   cn(
     'relative flex cursor-pointer items-center rounded-md select-none',
     'min-h-8 py-1.5',
-    'text-ui-smd leading-ui-sm text-neutral4',
+    'text-ui-smd leading-ui-sm text-(--text-primary)',
     'outline-none focus:outline-none focus-visible:outline-none',
     transitions.colors,
-    'data-highlighted:bg-surface4 data-highlighted:text-neutral6',
-    'data-selected:text-neutral6',
+    'data-highlighted:bg-surface-hover data-highlighted:text-(--text-primary)',
+    'data-selected:text-(--text-primary)',
   ),
   {
     variants: {
@@ -85,11 +85,11 @@ export const comboboxStyles = {
   chevron: 'ml-2 h-4 w-4 shrink-0 opacity-60',
 
   /** Placeholder text color */
-  placeholder: 'text-neutral3',
+  placeholder: 'text-(--text-secondary)',
 
   /** Popup container — concentric with rounded-xl + p-1 (8px items inside 12px container). */
   popup: cn(
-    'w-max max-w-(--available-width) min-w-(--anchor-width) rounded-xl border border-border1 bg-surface3 text-neutral4',
+    'w-max max-w-(--available-width) min-w-(--anchor-width) rounded-xl border border-(--border-subtle) bg-surface-raised text-(--text-primary)',
     'shadow-dialog',
     'origin-(--transform-origin)',
     'transition-[transform,scale,opacity] duration-150 ease-out',
@@ -101,21 +101,21 @@ export const comboboxStyles = {
   positioner: 'z-50 pointer-events-auto',
 
   /** Search input container — borderless top section, hairline divider below. */
-  searchContainer: cn('flex items-center border-b border-border1 px-2.5 py-1.5', transitions.colors),
+  searchContainer: cn('flex items-center border-b border-(--border-subtle) px-2.5 py-1.5', transitions.colors),
 
   /** Search icon */
-  searchIcon: cn('mr-2 size-3.5 shrink-0 text-neutral3', transitions.colors),
+  searchIcon: cn('mr-2 size-3.5 shrink-0 text-(--text-secondary)', transitions.colors),
 
   /** Search input */
   searchInput: cn(
-    'flex h-7 w-full rounded-md bg-transparent py-1 text-ui-smd leading-ui-sm text-neutral6',
-    'placeholder:text-neutral3 disabled:cursor-not-allowed disabled:opacity-50',
+    'flex h-7 w-full rounded-md bg-transparent py-1 text-ui-smd leading-ui-sm text-(--text-primary)',
+    'placeholder:text-(--text-secondary) disabled:cursor-not-allowed disabled:opacity-50',
     'outline-none focus:outline-none focus-visible:outline-none',
     transitions.colors,
   ),
 
   /** Empty state */
-  empty: 'not-empty:block hidden py-4 text-center text-ui-smd text-neutral3',
+  empty: 'not-empty:block hidden py-4 text-center text-ui-smd text-(--text-secondary)',
 
   /** Options list */
   list: 'max-h-dropdown-max-height overflow-y-auto overflow-x-hidden p-1',
@@ -130,7 +130,7 @@ export const comboboxStyles = {
   itemRightSlot: 'ml-auto flex items-center gap-2 shrink-0',
 
   /** Check indicator container — inline, fixed 16x16, shown only when item is selected. */
-  checkContainer: 'flex h-4 w-4 shrink-0 items-center justify-center text-neutral6',
+  checkContainer: 'flex h-4 w-4 shrink-0 items-center justify-center text-(--text-primary)',
 
   /** Check icon (single select) */
   checkIcon: 'h-3.5 w-3.5',
@@ -142,11 +142,11 @@ export const comboboxStyles = {
   optionLabel: 'truncate',
 
   /** Option description */
-  optionDescription: 'text-ui-sm text-neutral3 truncate',
+  optionDescription: 'text-ui-sm text-(--text-secondary) truncate',
 
   /** Option end slot — `ml-auto` makes it push right inside flex containers (used by multi-select). */
   optionEnd: 'ml-auto flex items-center shrink-0',
 
   /** Error message */
-  error: 'text-ui-sm text-accent2',
+  error: 'text-ui-sm text-error',
 } as const;

@@ -8,6 +8,7 @@
   ],
   "files": [
     "dist",
+    "tokens.css",
     "theme.css"
   ],
   "exports": {
@@ -114,13 +115,15 @@
     "./package.json": "./package.json"
   },
   "scripts": {
-    "build": "vite build",
-    "dev": "vite build && vite build --watch --mode development",
+    "tokens:generate": "node scripts/generate-tokens.mjs && node scripts/check-token-contrast.mjs && node scripts/check-color-usage.mjs",
+    "tokens:check": "node scripts/generate-tokens.mjs --check && node scripts/check-token-contrast.mjs && node scripts/check-color-usage.mjs",
+    "build": "pnpm tokens:check && vite build",
+    "dev": "pnpm tokens:check && vite build && vite build --watch --mode development",
     "test": "vitest",
     "test:mutate": "stryker run --mutate",
     "typecheck": "tsc",
-    "lint": "oxlint . && eslint .",
-    "lint:fix": "oxlint --fix . && eslint --fix .",
+    "lint": "pnpm tokens:check && oxlint . && eslint .",
+    "lint:fix": "pnpm tokens:generate && oxlint --fix . && eslint --fix .",
     "build:publish": "pnpm build && yalc push",
     "preview": "vite preview",
     "storybook": "storybook dev -p 6006 --no-open",

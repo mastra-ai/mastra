@@ -27,7 +27,7 @@ export const VerticalLayout: StoryObj = {
         </FieldBlock.Label>
         <input
           id="input-email"
-          className="border-border1 text-ui-sm text-neutral6 h-9 rounded-md border bg-transparent px-3"
+          className="text-ui-sm h-9 rounded-md border border-(--border-subtle) bg-transparent px-3 text-(--text-primary)"
           placeholder="john@example.com"
         />
         <FieldBlock.HelpText>We will never share your email.</FieldBlock.HelpText>
@@ -48,7 +48,7 @@ export const HorizontalLayout: StoryObj = {
       <FieldBlock.Column>
         <input
           id="input-email"
-          className="border-border1 text-ui-sm text-neutral6 h-9 w-full rounded-md border bg-transparent px-3"
+          className="text-ui-sm h-9 w-full rounded-md border border-(--border-subtle) bg-transparent px-3 text-(--text-primary)"
           placeholder="john@example.com"
         />
         <FieldBlock.HelpText>We will never share your email.</FieldBlock.HelpText>
@@ -68,7 +68,7 @@ export const WithErrorMsg: StoryObj = {
         <input
           id="input-password"
           type="password"
-          className="text-ui-sm text-neutral6 h-9 rounded-md border border-red-400 bg-transparent px-3"
+          className="border-error text-ui-sm h-9 rounded-md border bg-transparent px-3 text-(--text-primary)"
         />
         <FieldBlock.ErrorMsg>Password must be at least 8 characters.</FieldBlock.ErrorMsg>
       </FieldBlock.Column>
@@ -77,7 +77,6 @@ export const WithErrorMsg: StoryObj = {
 };
 
 export const LabelSizes: StoryObj = {
-  name: 'Label Sizes',
   render: () => (
     <div className="grid gap-6">
       <FieldBlock.Layout>
@@ -87,7 +86,7 @@ export const LabelSizes: StoryObj = {
           </FieldBlock.Label>
           <input
             id="input-default"
-            className="border-border1 text-ui-sm text-neutral6 h-9 rounded-md border bg-transparent px-3"
+            className="text-ui-sm h-9 rounded-md border border-(--border-subtle) bg-transparent px-3 text-(--text-primary)"
           />
         </FieldBlock.Column>
       </FieldBlock.Layout>
@@ -98,7 +97,7 @@ export const LabelSizes: StoryObj = {
           </FieldBlock.Label>
           <input
             id="input-bigger"
-            className="border-border1 text-ui-sm text-neutral6 h-9 rounded-md border bg-transparent px-3"
+            className="text-ui-sm h-9 rounded-md border border-(--border-subtle) bg-transparent px-3 text-(--text-primary)"
           />
         </FieldBlock.Column>
       </FieldBlock.Layout>
@@ -116,7 +115,7 @@ export const AllParts: StoryObj = {
         </FieldBlock.Label>
         <input
           id="input-username"
-          className="text-ui-sm text-neutral6 h-9 rounded-md border border-red-400 bg-transparent px-3"
+          className="border-error text-ui-sm h-9 rounded-md border bg-transparent px-3 text-(--text-primary)"
           defaultValue="ab"
         />
         <FieldBlock.HelpText>Must be 3-20 characters long.</FieldBlock.HelpText>

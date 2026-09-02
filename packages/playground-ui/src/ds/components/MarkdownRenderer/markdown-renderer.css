@@ -10,7 +10,7 @@
 
 @layer components {
   .mastra-markdown {
-    color: var(--neutral5);
+    color: var(--text-primary);
     font-size: var(--text-ui-md);
     line-height: 1.7;
     overflow-wrap: break-word;
@@ -32,7 +32,7 @@
 
   .mastra-markdown :is(h1, h2, h3, h4, h5, h6) {
     margin: 1.6em 0 0.6em;
-    color: var(--neutral6);
+    color: var(--text-primary);
     font-weight: 600;
     letter-spacing: -0.012em;
     line-height: 1.35;
@@ -55,7 +55,7 @@
   }
 
   .mastra-markdown strong {
-    color: var(--neutral6);
+    color: var(--text-primary);
     font-weight: 600;
   }
 
@@ -64,14 +64,14 @@
   }
 
   .mastra-markdown del {
-    color: var(--neutral3);
+    color: var(--text-secondary);
     text-decoration: line-through;
   }
 
   .mastra-markdown a {
-    color: var(--accent1);
+    color: var(--green-9);
     text-decoration: underline;
-    text-decoration-color: color-mix(in oklab, var(--accent1) 30%, transparent);
+    text-decoration-color: color-mix(in oklab, var(--green-9) 30%, transparent);
     text-underline-offset: 0.15em;
   }
 
@@ -111,7 +111,7 @@
   }
 
   .mastra-markdown li::marker {
-    color: var(--neutral3);
+    color: var(--text-secondary);
   }
 
   .mastra-markdown li > p {
@@ -125,20 +125,20 @@
 
   .mastra-markdown .task-list-item input {
     margin-right: 0.5em;
-    accent-color: var(--accent1);
+    accent-color: var(--green-9);
   }
 
   .mastra-markdown blockquote {
     margin: 0.9em 0;
-    border-left: 2px solid var(--border2);
+    border-left: 2px solid var(--border-default);
     padding-left: 0.9em;
-    color: var(--neutral4);
+    color: var(--text-primary);
   }
 
   .mastra-markdown hr {
     margin: 1.5em 0;
     border: 0;
-    border-top: 1px solid var(--border1);
+    border-top: 1px solid var(--border-subtle);
   }
 
   /* Fenced blocks render through the design-system CodeBlock, so this only ever
@@ -147,7 +147,7 @@
     border-radius: 4px;
     background: var(--surface-overlay-strong);
     padding: 0.1em 0.35em;
-    color: var(--neutral6);
+    color: var(--text-primary);
     font-family: var(--font-mono);
     font-size: 0.875em;
   }
@@ -163,14 +163,14 @@
   }
 
   .mastra-markdown :is(th, td) {
-    border: 1px solid var(--border1);
+    border: 1px solid var(--border-subtle);
     padding: 0.4em 0.7em;
     text-align: left;
   }
 
   .mastra-markdown th {
     background: var(--surface-overlay-soft);
-    color: var(--neutral6);
+    color: var(--text-primary);
     font-weight: 600;
   }
 

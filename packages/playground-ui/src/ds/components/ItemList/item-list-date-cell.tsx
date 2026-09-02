@@ -17,7 +17,7 @@ export function ItemListDateCell({ date, className, withTime = false }: ItemList
   const displayTime = date && withTime ? `${format(new Date(date), "'at' h:mm aaa")}` : '';
 
   return (
-    <div className={cn('truncate text-ui-md text-neutral2', className)}>
+    <div className={cn('truncate text-ui-md text-(--text-secondary)', className)}>
       {displayDayAndMonth} {displayYear} {displayTime}
     </div>
   );

@@ -25,7 +25,7 @@ export const WithText: Story = {
   args: {
     label: 'Name',
     children: (
-      <Txt variant="ui-md" className="text-neutral6">
+      <Txt variant="ui-md" className="text-(--text-primary)">
         John Doe
       </Txt>
     ),
@@ -43,7 +43,7 @@ export const WithLongContent: Story = {
   args: {
     label: 'Description',
     children: (
-      <Txt variant="ui-md" className="text-neutral6">
+      <Txt variant="ui-md" className="text-(--text-primary)">
         This is a longer description that contains multiple lines of text to show how the component handles longer
         content.
       </Txt>
@@ -55,7 +55,7 @@ export const MultipleEntries: Story = {
   render: () => (
     <div className="w-dropdown-max-height flex flex-col gap-4">
       <Entry label="Name">
-        <Txt variant="ui-md" className="text-neutral6">
+        <Txt variant="ui-md" className="text-(--text-primary)">
           My Agent
         </Txt>
       </Entry>
@@ -63,7 +63,7 @@ export const MultipleEntries: Story = {
         <Badge variant="green">Running</Badge>
       </Entry>
       <Entry label="Created">
-        <Txt variant="ui-md" className="text-neutral6">
+        <Txt variant="ui-md" className="text-(--text-primary)">
           Jan 14, 2026
         </Txt>
       </Entry>
@@ -76,13 +76,13 @@ export const WithComplexContent: Story = {
     label: 'Configuration',
     children: (
       <div className="flex flex-col gap-1">
-        <Txt variant="ui-sm" className="text-neutral5">
+        <Txt variant="ui-sm" className="text-(--text-primary)">
           Model: GPT-4
         </Txt>
-        <Txt variant="ui-sm" className="text-neutral5">
+        <Txt variant="ui-sm" className="text-(--text-primary)">
           Temperature: 0.7
         </Txt>
-        <Txt variant="ui-sm" className="text-neutral5">
+        <Txt variant="ui-sm" className="text-(--text-primary)">
           Max tokens: 4096
         </Txt>
       </div>

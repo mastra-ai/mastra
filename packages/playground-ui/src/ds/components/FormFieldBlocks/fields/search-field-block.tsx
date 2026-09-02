@@ -119,7 +119,7 @@ export function SearchFieldBlock({
           <SearchIcon
             aria-hidden="true"
             className={cn(
-              'absolute top-1/2 left-3 -translate-y-1/2 text-neutral4 opacity-50 group-has-focus:opacity-100',
+              'absolute top-1/2 left-3 -translate-y-1/2 text-(--text-primary) opacity-50 group-has-focus:opacity-100',
               size === 'sm' && 'size-3.5',
               size === 'md' && 'size-4',
               (!size || size === 'default') && 'size-[1.125rem]',

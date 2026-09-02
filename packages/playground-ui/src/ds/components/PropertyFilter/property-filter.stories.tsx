@@ -69,7 +69,7 @@ export const Creator: Story = {
     return (
       <div className="flex items-center gap-2">
         <PropertyFilterCreator fields={FIELDS} tokens={tokens} onTokensChange={setTokens} />
-        <span className="text-ui-sm text-neutral3">{tokens.length} token(s)</span>
+        <span className="text-ui-sm text-(--text-secondary)">{tokens.length} token(s)</span>
       </div>
     );
   },
@@ -127,7 +127,7 @@ export const PickMultiPanelSingle: Story = {
     const field = FIELDS.find(f => f.id === 'status') as Extract<PropertyFilterField, { kind: 'pick-multi' }>;
     const { tokens, setTokens } = useTokens([{ fieldId: 'status', value: 'running' }]);
     return (
-      <div className="border-border1 bg-surface3 w-64 rounded-md border p-2">
+      <div className="bg-surface-raised w-64 rounded-md border border-(--border-subtle) p-2">
         <PickMultiPanel
           field={field}
           tokens={tokens}
@@ -154,7 +154,7 @@ export const PickMultiPanelMulti: Story = {
     const field = FIELDS.find(f => f.id === 'tags') as Extract<PropertyFilterField, { kind: 'pick-multi' }>;
     const { tokens, setTokens } = useTokens([{ fieldId: 'tags', value: ['production'] }]);
     return (
-      <div className="border-border1 bg-surface3 w-64 rounded-md border p-2">
+      <div className="bg-surface-raised w-64 rounded-md border border-(--border-subtle) p-2">
         <PickMultiPanel
           field={field}
           tokens={tokens}
@@ -191,7 +191,7 @@ export const PickMultiPanelLoading: Story = {
       isLoading: true,
     };
     return (
-      <div className="border-border1 bg-surface3 w-64 rounded-md border p-2">
+      <div className="bg-surface-raised w-64 rounded-md border border-(--border-subtle) p-2">
         <PickMultiPanel field={field} tokens={[]} onChange={() => {}} />
       </div>
     );

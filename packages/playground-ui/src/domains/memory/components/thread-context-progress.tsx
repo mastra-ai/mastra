@@ -33,7 +33,7 @@ function ProgressBar({
           {formatCompactTokens(value)}/{formatCompactTokens(max)}k
         </span>
       </div>
-      <div className="h-1.5 overflow-hidden rounded-full bg-white/[0.08]">
+      <div className="bg-gray-alpha-2 h-1.5 overflow-hidden rounded-full">
         <div className="h-full rounded-full bg-current/80" style={{ width: `${percent}%` }} />
       </div>
     </div>
@@ -55,7 +55,7 @@ export function ThreadContextProgress({
   }
 
   return (
-    <div className="border-border1 border-b px-3 py-2">
+    <div className="border-b border-(--border-subtle) px-3 py-2">
       <div className="flex flex-col gap-2 sm:flex-row">
         {showMessages ? (
           <ProgressBar label="Messages" value={messageTokens} max={messageThreshold} tone="messages" />

@@ -82,7 +82,7 @@ export function SankeyChart({
     <div className={cn('min-w-0', className)}>
       {graph.links.length === 0 ? (
         <div
-          className="border-border1 text-ui-sm text-neutral3 flex items-center justify-center rounded-md border"
+          className="text-ui-sm flex items-center justify-center rounded-md border border-(--border-subtle) text-(--text-secondary)"
           style={{ height }}
         >
           Select at least two columns with data to display a flow
@@ -281,7 +281,7 @@ function SankeyNode({
       <g
         aria-describedby={description ? tooltip.id : undefined}
         aria-label={`${accessibleLabel}: ${value} ${numericValue === 1 ? 'trace' : 'traces'} (${percentage}%)`}
-        className="focus-visible:[&>rect]:stroke-neutral6 outline-hidden focus-visible:[&>rect]:stroke-2"
+        className="outline-hidden focus-visible:[&>rect]:stroke-(--text-primary) focus-visible:[&>rect]:stroke-2"
         onClick={clickable ? onSelect : undefined}
         onKeyDown={clickable ? handleKeyDown : undefined}
         role={clickable ? 'button' : undefined}

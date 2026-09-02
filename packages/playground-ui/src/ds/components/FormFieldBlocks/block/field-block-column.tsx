@@ -6,5 +6,5 @@ export type FieldBlockColumnProps = {
 };
 
 export function FieldBlockColumn({ children, className }: FieldBlockColumnProps) {
-  return <div className={cn('grid gap-2 text-neutral4', className)}>{children}</div>;
+  return <div className={cn('grid gap-2 text-(--text-primary)', className)}>{children}</div>;
 }

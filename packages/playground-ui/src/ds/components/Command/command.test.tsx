@@ -114,13 +114,18 @@ describe('Command', () => {
 
   it('renders a custom CommandDialog overlay when requested', () => {
     render(
-      <CommandDialog open onOpenChange={() => {}} showOverlay overlayClassName="bg-surface1/40 backdrop-blur-none">
+      <CommandDialog
+        open
+        onOpenChange={() => {}}
+        showOverlay
+        overlayClassName="bg-surface-primary/40 backdrop-blur-none"
+      >
         <CommandInput placeholder="Search commands" />
       </CommandDialog>,
     );
 
     const overlay = document.querySelector('.dialog-overlay-anim');
-    expect(overlay?.className).toContain('bg-surface1/40');
+    expect(overlay?.className).toContain('bg-surface-primary/40');
     expect(overlay?.className).toContain('backdrop-blur-none');
     expect(overlay?.className).not.toContain('backdrop-blur-xs');
   });

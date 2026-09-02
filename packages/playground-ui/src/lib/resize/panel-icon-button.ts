@@ -4,7 +4,7 @@ import { cn } from '@/lib/utils';
 // panel drawer trigger (mobile), so both edges read as the same affordance.
 export const panelIconButtonClass = cn(
   'flex size-8 cursor-pointer items-center justify-center rounded-full',
-  'border border-transparent bg-transparent text-neutral5 hover:bg-neutral6/5 hover:text-neutral6 active:bg-neutral6/10',
+  'border border-transparent bg-transparent text-(--text-primary) hover:bg-gray-alpha-1 hover:text-(--text-primary) active:bg-gray-alpha-3',
   'transition-colors duration-150 ease-out-custom motion-reduce:transition-none',
-  'focus-visible:border-accent1 focus-visible:outline-hidden',
+  'focus-visible:border-green-7 focus-visible:outline-hidden',
 );

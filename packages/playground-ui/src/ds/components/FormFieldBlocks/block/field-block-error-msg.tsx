@@ -9,8 +9,8 @@ export function FieldBlockErrorMsg({ children }: FieldBlockErrorMsgProps) {
   return (
     <p
       className={cn(
-        'flex items-center gap-2 text-ui-sm text-neutral4',
-        '[&>svg]:size-[1.2em] [&>svg]:text-red-400 [&>svg]:opacity-70',
+        'flex items-center gap-2 text-ui-sm text-(--text-primary)',
+        '[&>svg]:size-[1.2em] [&>svg]:text-error [&>svg]:opacity-70',
       )}
     >
       <TriangleAlertIcon /> {children}

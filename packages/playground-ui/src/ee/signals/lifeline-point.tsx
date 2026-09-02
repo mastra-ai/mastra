@@ -64,7 +64,7 @@ export function LifelinePoint({
       {tooltipPosition
         ? createPortal(
             <div
-              className="border-border1 bg-surface5 text-neutral6 shadow-elevated pointer-events-none fixed z-50 -translate-x-1/2 -translate-y-full rounded-md border px-2 py-1 font-mono text-[11px] whitespace-nowrap tabular-nums"
+              className="bg-surface-active shadow-elevated pointer-events-none fixed z-50 -translate-x-1/2 -translate-y-full rounded-md border border-(--border-subtle) px-2 py-1 font-mono text-[11px] whitespace-nowrap text-(--text-primary) tabular-nums"
               id={tooltipId}
               role="tooltip"
               style={{ left: tooltipPosition.left, top: tooltipPosition.top }}

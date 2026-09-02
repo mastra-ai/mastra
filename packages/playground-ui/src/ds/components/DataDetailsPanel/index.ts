@@ -4,9 +4,20 @@ import { DataDetailsPanelCodeSection } from './data-details-panel-code-section';
 import { DataDetailsPanelContent } from './data-details-panel-content';
 import { DataDetailsPanelHeader } from './data-details-panel-header';
 import { DataDetailsPanelHeading } from './data-details-panel-heading';
-import { DataDetailsPanelKeyValueList } from './data-details-panel-key-value-list';
+import {
+  DataDetailsPanelKeyValueListHeader,
+  DataDetailsPanelKeyValueListKey,
+  DataDetailsPanelKeyValueListRoot,
+  DataDetailsPanelKeyValueListValue,
+} from './data-details-panel-key-value-list';
 import { DataDetailsPanelLoadingData } from './data-details-panel-loading-data';
 import { DataDetailsPanelNoData } from './data-details-panel-no-data';
+
+const DataDetailsPanelKeyValueList = Object.assign(DataDetailsPanelKeyValueListRoot, {
+  Key: DataDetailsPanelKeyValueListKey,
+  Value: DataDetailsPanelKeyValueListValue,
+  Header: DataDetailsPanelKeyValueListHeader,
+});
 
 const DataDetailsPanel = Object.assign(Root, {
   Header: DataDetailsPanelHeader,

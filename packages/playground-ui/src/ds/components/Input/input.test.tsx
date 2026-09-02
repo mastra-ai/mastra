@@ -13,11 +13,11 @@ const inputVariants = ['default', 'filled', 'outline'] as const;
 const expectOnlyGuardedHoverBorder = (className: string) => {
   const hoverBorderTokens = className
     .split(/\s+/)
-    .filter(token => token.includes('hover') && token.includes('border-border2'));
+    .filter(token => token.includes('hover') && token.includes('border-(--border-default)'));
 
-  expect(hoverBorderTokens).toEqual(['[&:hover:not(:focus-visible)]:border-border2']);
-  expect(className).toContain('focus-visible:border-neutral5/50');
-  expect(className).not.toContain('hover:border-border2');
+  expect(hoverBorderTokens).toEqual(['[&:hover:not(:focus-visible)]:border-(--border-default)']);
+  expect(className).toContain('focus-visible:border-(--border-strong)');
+  expect(className).not.toContain('hover:border-(--border-default)');
 };
 
 describe('Input', () => {
@@ -40,9 +40,9 @@ describe('Input', () => {
     render(<Input placeholder="Name" />);
 
     const cls = screen.getByPlaceholderText('Name').className;
-    expect(cls).toContain('focus-visible:border-neutral5/50');
-    expect(cls).not.toContain('ring-accent1');
-    expect(cls).not.toContain('focus-visible:border-accent1');
+    expect(cls).toContain('focus-visible:border-(--border-strong)');
+    expect(cls).not.toContain('ring-focus');
+    expect(cls).not.toContain('focus-visible:border-green-7');
   });
 
   it.each(inputVariants)('prioritizes the focus border over hover for the %s variant', variant => {

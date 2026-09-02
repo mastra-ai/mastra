@@ -89,7 +89,7 @@ export const AllExamples: Story = {
 
 export const CustomClassName: Story = {
   args: {
-    className: 'text-accent1',
+    className: 'text-success',
     children: (
       <>
         <Clock />

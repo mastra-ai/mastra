@@ -20,7 +20,7 @@ export function DataListNextPageLoading({
   return (
     <div
       ref={setEndOfListElement}
-      className={cn('col-span-full flex min-h-1 justify-center text-ui-md text-neutral3 opacity-50', {
+      className={cn('col-span-full flex min-h-1 justify-center text-ui-md text-(--text-secondary) opacity-50', {
         'py-4': isLoading,
         'py-0': !hasMore,
       })}

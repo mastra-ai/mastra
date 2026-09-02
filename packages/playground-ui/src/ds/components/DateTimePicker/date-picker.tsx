@@ -22,7 +22,7 @@ export function DatePicker({ className, classNames, showOutsideDays = true, ...p
         dropdown_month: 'w-full border-collapse space-y-1',
         weeknumber: 'flex',
         day: cn(
-          'relative p-0 text-center focus-within:relative focus-within:z-20 [&:has([aria-selected])]:bg-surface5 [&:has([aria-selected].day-outside)]:bg-surface5/50 [&:has([aria-selected].day-range-end)]:rounded-r-md',
+          'relative p-0 text-center focus-within:relative focus-within:z-20 [&:has([aria-selected])]:bg-surface-active [&:has([aria-selected].day-outside)]:bg-surface-active/50 [&:has([aria-selected].day-range-end)]:rounded-r-md',
           props.mode === 'range'
             ? '[&:has(>.day-range-end)]:rounded-r-md [&:has(>.day-range-start)]:rounded-l-md first:[&:has([aria-selected])]:rounded-l-md last:[&:has([aria-selected])]:rounded-r-md'
             : '[&:has([aria-selected])]:rounded-md',
@@ -31,16 +31,16 @@ export function DatePicker({ className, classNames, showOutsideDays = true, ...p
         day_range_start: 'day-range-start rounded-l-md',
         day_range_end: 'day-range-end rounded-r-md',
         day_selected: cn(
-          'bg-accent1! text-white! hover:bg-accent1/80! focus:bg-accent1/80! focus:text-white!',
+          'bg-green-7! text-(--text-on-accent)! hover:bg-green-7/90! focus:bg-green-7/80! focus:text-(--text-on-accent)!',
           props.mode !== 'range' && 'rounded-md',
         ),
-        day_today: 'bg-neutral6/10 text-neutral5',
+        day_today: 'bg-gray-alpha-3 text-(--text-primary)',
         day_outside:
-          'day-outside text-neutral3 opacity-50  aria-selected:bg-surface5/50 aria-selected:text-neutral3 aria-selected:opacity-30',
-        day_disabled: 'text-neutral3 opacity-50',
-        day_range_middle: 'aria-selected:bg-surface5 aria-selected:text-neutral5',
+          'day-outside text-(--text-secondary) opacity-50  aria-selected:bg-surface-active/50 aria-selected:text-(--text-secondary) aria-selected:opacity-30',
+        day_disabled: 'text-(--text-secondary) opacity-50',
+        day_range_middle: 'aria-selected:bg-surface-active aria-selected:text-(--text-primary)',
         day_hidden: 'invisible',
-        head_cell: 'text-ui-xs text-neutral3',
+        head_cell: 'text-ui-xs text-(--text-secondary)',
         ...classNames,
       }}
       {...props}

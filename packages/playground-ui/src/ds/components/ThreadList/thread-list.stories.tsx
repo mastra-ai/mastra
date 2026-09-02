@@ -67,7 +67,7 @@ export const Default: Story = {
 
 export const Embedded: Story = {
   render: () => (
-    <div className="border-border1 bg-surface2 rounded-xl border p-3">
+    <div className="bg-surface-secondary rounded-xl border border-(--border-subtle) p-3">
       <ThreadListPreview embedded />
     </div>
   ),

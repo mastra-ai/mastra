@@ -11,14 +11,14 @@ const stateClasses = {
   line: cn(
     'group-hover/separator:opacity-100',
     "group-data-[separator='hover']/separator:opacity-100",
-    "group-data-[separator='active']/separator:via-neutral6/45 group-data-[separator='active']/separator:opacity-100",
-    'group-focus-visible/separator:via-accent1 group-focus-visible/separator:opacity-100',
+    "group-data-[separator='active']/separator:via-gray-alpha-8 group-data-[separator='active']/separator:opacity-100",
+    'group-focus-visible/separator:via-green-7 group-focus-visible/separator:opacity-100',
   ),
   pill: cn(
     'group-hover/separator:h-12 group-hover/separator:w-1',
     "group-data-[separator='hover']/separator:h-12 group-data-[separator='hover']/separator:w-1",
-    "group-data-[separator='active']/separator:h-12 group-data-[separator='active']/separator:w-1 group-data-[separator='active']/separator:bg-accent1",
-    'group-focus-visible/separator:bg-accent1',
+    "group-data-[separator='active']/separator:h-12 group-data-[separator='active']/separator:w-1 group-data-[separator='active']/separator:bg-green-7",
+    'group-focus-visible/separator:bg-green-7',
   ),
 };
 

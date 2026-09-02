@@ -37,7 +37,7 @@ function SearchPreview(props: ListSearchProps) {
           props.onSearch(nextValue);
         }}
       />
-      <p className="text-ui-sm text-neutral3">Debounced value: {debouncedValue || 'None'}</p>
+      <p className="text-ui-sm text-(--text-secondary)">Debounced value: {debouncedValue || 'None'}</p>
     </div>
   );
 }

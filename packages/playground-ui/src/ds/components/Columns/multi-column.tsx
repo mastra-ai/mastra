@@ -111,7 +111,7 @@ function ScrollArrow({ direction, onClick }: { direction: 'left' | 'right'; onCl
   return (
     <div
       className={cn(
-        'absolute inset-y-0 z-20 flex w-20 items-center justify-center bg-surface2 px-5',
+        'absolute inset-y-0 z-20 flex w-20 items-center justify-center bg-surface-secondary px-5',
         isLeft ? 'left-0' : 'right-0',
       )}
     >

@@ -39,7 +39,7 @@ function BrandLoader({ className, size = 'md', 'aria-label': ariaLabel = 'Loadin
     <div
       role="status"
       aria-label={ariaLabel}
-      className={cn('brand-loader inline-block text-neutral6', sizeClasses[size], className)}
+      className={cn('brand-loader inline-block text-(--text-primary)', sizeClasses[size], className)}
       style={{ ['--brand-loader-stroke' as string]: strokeBySize[size] }}
     >
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 34 21" aria-hidden="true">

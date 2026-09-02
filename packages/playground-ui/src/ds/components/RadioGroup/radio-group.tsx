@@ -25,18 +25,18 @@ const RadioGroupItem = React.forwardRef<HTMLSpanElement, RadioGroupItemProps>(({
       data-slot="radio-group-item"
       className={cn(
         'flex size-4 shrink-0 cursor-pointer items-center justify-center rounded-full',
-        'border border-neutral6/[0.06] bg-neutral6/[0.12] text-surface1 outline-hidden',
+        'border border-gray-alpha-2 bg-gray-alpha-3 text-(--text-on-contrast) outline-hidden',
         transitions.all,
-        'hover:border-neutral6/[0.12] hover:bg-neutral6/[0.16]',
-        'active:scale-95 active:border-neutral6/[0.18] active:bg-neutral6/[0.18]',
-        'focus-visible:border-neutral5/50 focus-visible:outline-1 focus-visible:outline-offset-2 focus-visible:outline-neutral5/55 focus-visible:outline-solid',
+        'hover:border-gray-alpha-3 hover:bg-gray-alpha-4',
+        'active:scale-95 active:border-gray-alpha-5 active:bg-gray-alpha-5',
+        'focus-visible:border-(--border-strong) focus-visible:outline-1 focus-visible:outline-offset-2 focus-visible:outline-(--border-strong) focus-visible:outline-solid',
         // Base UI exposes `data-checked`/`data-unchecked` instead of Radix's `data-state`.
-        'data-[checked]:border-neutral6 data-[checked]:bg-neutral6 data-[checked]:text-surface1',
-        'data-[checked]:hover:border-neutral5 data-[checked]:hover:bg-neutral5',
-        'data-[checked]:active:border-neutral4 data-[checked]:active:bg-neutral4',
+        'data-[checked]:border-surface-contrast data-[checked]:bg-surface-contrast data-[checked]:text-(--text-on-contrast)',
+        'data-[checked]:hover:border-(--border-strong) data-[checked]:hover:bg-gray-9',
+        'data-[checked]:active:border-gray-8 data-[checked]:active:bg-gray-8',
         // Base UI's Radio.Root is a `<span>`, so `:disabled` never matches; target `data-disabled`.
-        'data-[disabled]:cursor-not-allowed data-[disabled]:border-neutral6/[0.38] data-[disabled]:bg-neutral6/[0.38] data-[disabled]:hover:border-neutral6/[0.38] data-[disabled]:hover:bg-neutral6/[0.38] data-[disabled]:active:scale-100',
-        'data-[disabled]:data-[checked]:border-neutral6/[0.38] data-[disabled]:data-[checked]:bg-neutral6/[0.38] data-[disabled]:data-[checked]:text-neutral6',
+        'data-[disabled]:cursor-not-allowed data-[disabled]:border-gray-alpha-7 data-[disabled]:bg-gray-alpha-7 data-[disabled]:hover:border-gray-alpha-7 data-[disabled]:hover:bg-gray-alpha-7 data-[disabled]:active:scale-100',
+        'data-[disabled]:data-[checked]:border-gray-alpha-7 data-[disabled]:data-[checked]:bg-gray-alpha-7 data-[disabled]:data-[checked]:text-(--text-primary)',
         className,
       )}
       {...props}

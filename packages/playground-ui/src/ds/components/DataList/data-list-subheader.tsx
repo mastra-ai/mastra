@@ -10,7 +10,7 @@ export const DataListSubheader = forwardRef<HTMLDivElement, DataListSubheaderPro
       <div
         ref={ref}
         className={cn(
-          'relative isolate col-span-full mt-2 border-none px-5 py-3 text-ui-md font-medium text-neutral4',
+          'relative isolate col-span-full mt-2 border-none px-5 py-3 text-ui-md font-medium text-(--text-primary)',
           'before:absolute before:inset-0 before:-z-1 before:rounded-lg before:bg-[var(--data-list-sticky-header-background)]',
           className,
         )}

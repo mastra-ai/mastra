@@ -20,15 +20,15 @@ export const Tab = ({ children, value, onClick, onClose, disabled, disabledToolt
       value={value}
       disabled={disabled}
       className={cn(
-        'text-ui-md font-normal text-neutral3',
+        'text-ui-md font-normal text-(--text-secondary)',
         'flex shrink-0 cursor-pointer items-center justify-center gap-1.5 whitespace-nowrap outline-none',
         transitions.colors,
         focusRing.visible,
-        'hover:text-neutral4',
-        'data-[active]:text-neutral5',
-        'disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:text-neutral3',
-        'aria-disabled:cursor-not-allowed aria-disabled:opacity-50 aria-disabled:hover:text-neutral3',
-        'data-[disabled]:cursor-not-allowed data-[disabled]:opacity-50 data-[disabled]:hover:text-neutral3',
+        'hover:text-(--text-primary)',
+        'data-[active]:text-(--text-primary)',
+        'disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:text-(--text-secondary)',
+        'aria-disabled:cursor-not-allowed aria-disabled:opacity-50 aria-disabled:hover:text-(--text-secondary)',
+        'data-[disabled]:cursor-not-allowed data-[disabled]:opacity-50 data-[disabled]:hover:text-(--text-secondary)',
         // Line variant legacy fallback — active state drawn by <Tabs.Indicator> in TabList
         'group-data-[variant=line]/tabs-list:px-5 group-data-[variant=line]/tabs-list:py-2',
         'group-data-[variant=line]/tabs-list:border-b-2 group-data-[variant=line]/tabs-list:border-transparent',
@@ -52,7 +52,7 @@ export const Tab = ({ children, value, onClick, onClose, disabled, disabledToolt
             e.stopPropagation();
             onClose();
           }}
-          className={cn('rounded p-0.5 hover:bg-surface4', transitions.colors, 'hover:text-neutral5')}
+          className={cn('rounded p-0.5 hover:bg-surface-hover', transitions.colors, 'hover:text-(--text-primary)')}
           aria-label="Close tab"
         >
           <X className="size-3" />

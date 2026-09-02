@@ -6,12 +6,12 @@ import { cn } from '@/lib/utils';
 
 const cardVariants = cva(
   // Base styles
-  'duration-normal rounded-lg transition-all ease-out-custom motion-reduce:transition-none',
+  'rounded-lg transition-all duration-normal ease-out-custom motion-reduce:transition-none',
   {
     variants: {
       appearance: {
-        outlined: 'border border-border1 bg-surface2',
-        surface: 'bg-surface3',
+        outlined: 'border border-(--border-subtle) bg-surface-secondary',
+        surface: 'bg-surface-raised',
       },
       elevation: {
         flat: '',
@@ -27,13 +27,13 @@ const cardVariants = cva(
       {
         appearance: 'outlined',
         interactive: true,
-        className: 'hover:border-border2 hover:bg-surface3',
+        className: 'hover:border-(--border-default) hover:bg-surface-raised',
       },
       {
         appearance: 'surface',
         interactive: true,
         className:
-          'hover:bg-surface4 focus-visible:bg-surface4 focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-border2 active:bg-surface5',
+          'hover:bg-surface-hover focus-visible:bg-surface-hover focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-(--border-default) active:bg-surface-active',
       },
     ],
     defaultVariants: {
@@ -89,7 +89,7 @@ export type CardTitleProps = React.HTMLAttributes<HTMLHeadingElement>;
 export const CardTitle = React.forwardRef<HTMLHeadingElement, CardTitleProps>(({ className, ...props }, ref) => (
   <h3
     ref={ref}
-    className={cn('text-ui-md leading-none font-semibold tracking-tight text-neutral6', className)}
+    className={cn('text-ui-md leading-none font-semibold tracking-tight text-(--text-primary)', className)}
     {...props}
   />
 ));
@@ -99,7 +99,9 @@ CardTitle.displayName = 'CardTitle';
 export type CardDescriptionProps = React.HTMLAttributes<HTMLParagraphElement>;
 
 export const CardDescription = React.forwardRef<HTMLParagraphElement, CardDescriptionProps>(
-  ({ className, ...props }, ref) => <p ref={ref} className={cn('text-ui-sm text-neutral3', className)} {...props} />,
+  ({ className, ...props }, ref) => (
+    <p ref={ref} className={cn('text-ui-sm text-(--text-secondary)', className)} {...props} />
+  ),
 );
 CardDescription.displayName = 'CardDescription';
 

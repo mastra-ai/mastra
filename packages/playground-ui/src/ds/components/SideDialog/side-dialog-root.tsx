@@ -60,12 +60,12 @@ export function SideDialogRoot({
         <DrawerViewport className={isConfirmation ? 'pointer-events-none' : undefined}>
           <DrawerPopup
             className={cn(
-              'max-w-none overflow-visible rounded-none border-y-0 border-r-0 border-l border-border2 bg-surface2',
+              'max-w-none overflow-visible rounded-none border-y-0 border-r-0 border-l border-(--border-default) bg-surface-secondary',
               {
                 'w-[75vw] 2xl:w-[65vw] 4xl:w-[55vw]': level === 1,
                 'w-[70vw] 2xl:w-[59vw] 4xl:w-[48vw]': level === 2,
                 'w-[65vw] 2xl:w-[53vw] 4xl:w-[41vw]': level === 3,
-                'pointer-events-auto bg-surface2/70 backdrop-blur-sm shadow-none': isConfirmation,
+                'pointer-events-auto bg-surface-secondary/70 backdrop-blur-sm shadow-none': isConfirmation,
               },
               className,
             )}
@@ -79,9 +79,9 @@ export function SideDialogRoot({
                   <button
                     type="button"
                     className={cn(
-                      'absolute top-0 -left-14 flex size-14 appearance-none items-center justify-center rounded-bl-lg border-b border-l border-border2 bg-surface2 text-neutral3',
+                      'absolute top-0 -left-14 flex size-14 appearance-none items-center justify-center rounded-bl-lg border-b border-l border-(--border-default) bg-surface-secondary text-(--text-secondary)',
                       transitions.all,
-                      'hover:bg-surface4 hover:text-neutral5',
+                      'hover:bg-surface-hover hover:text-(--text-primary)',
                     )}
                     aria-label="Close"
                   >

@@ -32,9 +32,9 @@ describe('TaskList', () => {
 
       const bars = Array.from(screen.getByRole('progressbar').children).map(bar => bar.className);
       expect(bars).toHaveLength(3);
-      expect(bars[0]).toContain('bg-positive1');
-      expect(bars[1]).toContain('bg-warning1');
-      expect(bars[2]).toContain('bg-surface6');
+      expect(bars[0]).toContain('bg-success');
+      expect(bars[1]).toContain('bg-warning');
+      expect(bars[2]).toContain('bg-gray-5');
     });
 
     it('reveals the exact count on hover', async () => {

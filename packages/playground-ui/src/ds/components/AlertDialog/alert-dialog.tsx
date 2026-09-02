@@ -70,7 +70,7 @@ const AlertDialogContent = React.forwardRef<HTMLDivElement, AlertDialogContentPr
         'dialog-content-anim',
         'fixed top-[50%] left-[50%] z-50 grid translate-[-50%]',
         'w-full max-w-[calc(100%-2rem)] sm:max-w-lg',
-        'rounded-xl border border-border1/40 bg-surface2/96 shadow-dialog backdrop-blur-md',
+        'rounded-xl border border-(--border-subtle)/40 bg-surface-secondary/96 shadow-dialog backdrop-blur-md',
         className,
       )}
       {...props}
@@ -109,7 +109,11 @@ type AlertDialogDescriptionProps = Omit<AlertDialogPrimitive.Description.Props, 
 
 const AlertDialogDescription = React.forwardRef<HTMLParagraphElement, AlertDialogDescriptionProps>(
   ({ className, ...props }, ref) => (
-    <AlertDialogPrimitive.Description ref={ref} className={cn('text-ui-sm text-neutral3', className)} {...props} />
+    <AlertDialogPrimitive.Description
+      ref={ref}
+      className={cn('text-ui-sm text-(--text-secondary)', className)}
+      {...props}
+    />
   ),
 );
 AlertDialogDescription.displayName = 'AlertDialogDescription';

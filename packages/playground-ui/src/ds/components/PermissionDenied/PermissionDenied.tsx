@@ -26,7 +26,7 @@ export function PermissionDenied({ resource, title, description, actionSlot, cla
     <EmptyState
       className={className}
       iconSlot={
-        <Icon size="lg" className="text-neutral3">
+        <Icon size="lg" className="text-(--text-secondary)">
           <ShieldX />
         </Icon>
       }

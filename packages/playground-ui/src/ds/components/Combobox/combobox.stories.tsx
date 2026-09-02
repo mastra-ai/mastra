@@ -23,8 +23,8 @@ const meta: Meta<typeof Combobox> = {
 export default meta;
 type Story = StoryObj<typeof Combobox>;
 
-const iconClassName = 'h-4 w-4 shrink-0 text-neutral3';
-const badgeClassName = 'rounded-full border border-border1 px-2 py-0.5 text-ui-xs text-neutral3';
+const iconClassName = 'h-4 w-4 shrink-0 text-(--text-secondary)';
+const badgeClassName = 'rounded-full border border-(--border-subtle) px-2 py-0.5 text-ui-xs text-(--text-secondary)';
 
 const frameworkOptions = [
   { label: 'React', value: 'react' },
@@ -220,7 +220,7 @@ export const Multiple: Story = {
           {selectedCapabilities.map(option => (
             <span
               key={option.value}
-              className="border-border1 bg-surface3 text-ui-xs text-neutral4 rounded-full border px-2.5 py-1"
+              className="bg-surface-raised text-ui-xs rounded-full border border-(--border-subtle) px-2.5 py-1 text-(--text-primary)"
             >
               {option.label}
             </span>

@@ -7,5 +7,5 @@ export function MetricsKpiCardNoChange({
   message?: string;
   className?: string;
 }) {
-  return <span className={cn('text-sm text-neutral1', className)}>{message}</span>;
+  return <span className={cn('text-sm text-(--text-disabled)', className)}>{message}</span>;
 }

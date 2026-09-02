@@ -32,7 +32,7 @@ export const ComposerBox = forwardRef<HTMLDivElement, ComposerBoxProps>(
       ref={ref}
       data-slot="composer-box"
       className={cn(
-        '@container relative mx-auto mt-auto w-full max-w-3xl overflow-hidden rounded-[22px] border border-border2/40 bg-surface3 transition-colors duration-normal focus-within:border-border2',
+        '@container relative mx-auto mt-auto w-full max-w-3xl overflow-hidden rounded-[22px] border border-(--border-default)/40 bg-surface-raised transition-colors duration-normal focus-within:border-(--border-default)',
         className,
       )}
       {...props}
@@ -88,7 +88,7 @@ export const ComposerInput = forwardRef<HTMLTextAreaElement, ComposerInputProps>
         ref={ref}
         data-slot="composer-input"
         className={cn(
-          'min-h-17 field-sizing-content w-full resize-none overflow-hidden bg-transparent px-3 pt-3 pb-2 text-ui-lg leading-ui-lg text-neutral6 outline-hidden placeholder:text-neutral3 focus:outline-hidden disabled:cursor-not-allowed disabled:opacity-50',
+          'min-h-17 field-sizing-content w-full resize-none overflow-hidden bg-transparent px-3 pt-3 pb-2 text-ui-lg leading-ui-lg text-(--text-primary) outline-hidden placeholder:text-(--text-secondary) focus:outline-hidden disabled:cursor-not-allowed disabled:opacity-50',
           className,
         )}
         {...props}
@@ -113,10 +113,10 @@ ComposerActions.displayName = 'ComposerActions';
 
 const ComposerGradientColumn = ({ className }: { className?: string }) => (
   <div className={cn('flex size-full flex-col -space-y-3', className)}>
-    <div className="bg-accent1 w-full flex-1 blur-xl" />
-    <div className="bg-accent1Dark w-full flex-1 blur-xl" />
-    <div className="bg-accent1 w-full flex-1 blur-xl" />
-    <div className="bg-accent1Darker w-full flex-1 blur-xl" />
+    <div className="bg-green-7 w-full flex-1 blur-xl" />
+    <div className="bg-green-3 w-full flex-1 blur-xl" />
+    <div className="bg-green-7 w-full flex-1 blur-xl" />
+    <div className="bg-green-2 w-full flex-1 blur-xl" />
   </div>
 );
 

@@ -55,8 +55,8 @@ describe('Section', () => {
     );
 
     expect(screen.getByText('View only:')).toBeTruthy();
-    expect(screen.getByText('Project access').className).toContain('text-neutral3');
-    expect(screen.getByText('Leave organization').className).toContain('text-accent2');
+    expect(screen.getByText('Project access').className).toContain('text-(--text-secondary)');
+    expect(screen.getByText('Leave organization').className).toContain('text-error');
   });
 
   it('aligns flat and factory content to the same horizontal inset', () => {

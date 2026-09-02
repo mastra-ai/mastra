@@ -26,7 +26,7 @@ export const Default: Story = {
   args: {
     children: longText,
     variant: 'ui-sm',
-    className: 'text-neutral3',
+    className: 'text-(--text-secondary)',
   },
 };
 
@@ -34,7 +34,7 @@ export const ShortTextNoToggle: Story = {
   args: {
     children: 'Short text that fits within the clamp — no toggle shown.',
     variant: 'ui-sm',
-    className: 'text-neutral3',
+    className: 'text-(--text-secondary)',
   },
 };
 
@@ -43,6 +43,6 @@ export const ThreeLines: Story = {
     children: longText,
     lines: 3,
     variant: 'ui-sm',
-    className: 'text-neutral3',
+    className: 'text-(--text-secondary)',
   },
 };

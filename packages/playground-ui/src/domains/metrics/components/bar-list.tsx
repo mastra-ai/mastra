@@ -40,7 +40,7 @@ export function BarListContent({
                   className="absolute inset-y-0 left-0 rounded"
                   style={{ width: `${pct}%`, backgroundColor: color }}
                 />
-                <span className="absolute inset-y-0 left-2 flex items-center text-xs whitespace-nowrap text-white">
+                <span className="absolute inset-y-0 left-2 flex items-center text-xs whitespace-nowrap text-(--text-on-accent)">
                   {d.name}
                 </span>
               </div>
@@ -112,7 +112,7 @@ export function StackedRunsBars({ data }: { data: Array<{ name: string; complete
                     {d.errors.toLocaleString()} errors
                   </TooltipContent>
                 </Tooltip>
-                <span className="pointer-events-none absolute inset-y-0 left-2 flex items-center text-xs whitespace-nowrap text-white">
+                <span className="pointer-events-none absolute inset-y-0 left-2 flex items-center text-xs whitespace-nowrap text-(--text-on-accent)">
                   {d.name}
                 </span>
               </div>

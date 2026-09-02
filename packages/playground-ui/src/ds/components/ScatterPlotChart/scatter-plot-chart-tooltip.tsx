@@ -32,15 +32,15 @@ export function ScatterPlotChartTooltip({
   const yValue = point[yKey];
 
   return (
-    <div className="border-border1 bg-surface2 rounded-md border px-3 py-2 text-xs shadow-lg">
+    <div className="bg-surface-secondary rounded-md border border-(--border-subtle) px-3 py-2 text-xs shadow-lg">
       {label !== undefined && <p className="text-icon6 mb-1 font-medium">{String(label)}</p>}
       <div className="text-icon2 grid gap-1">
         <p>
-          <span className="text-neutral3">X:</span>{' '}
+          <span className="text-(--text-secondary)">X:</span>{' '}
           <span className="font-mono">{formatX ? formatX(xValue, point) : String(xValue)}</span>
         </p>
         <p>
-          <span className="text-neutral3">Y:</span>{' '}
+          <span className="text-(--text-secondary)">Y:</span>{' '}
           <span className="font-mono">{formatY ? formatY(yValue, point) : String(yValue)}</span>
         </p>
       </div>

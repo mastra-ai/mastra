@@ -39,8 +39,8 @@ export function ItemListRowButton({
         transitions.colors,
         focusRing.visible,
         {
-          'bg-surface4': isFeatured,
-          'hover:bg-surface4': item && !isFeatured && !disabled,
+          'bg-surface-hover': isFeatured,
+          'hover:bg-surface-hover': item && !isFeatured && !disabled,
         },
         className,
       )}

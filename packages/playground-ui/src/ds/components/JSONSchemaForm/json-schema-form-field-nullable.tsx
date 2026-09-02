@@ -26,7 +26,7 @@ export function FieldNullable({
   );
 
   return (
-    <label className={cn('flex cursor-pointer items-center gap-2 text-ui-sm text-neutral3', labelClassName)}>
+    <label className={cn('flex cursor-pointer items-center gap-2 text-ui-sm text-(--text-secondary)', labelClassName)}>
       <Checkbox {...props} className={className} checked={field.nullable} onCheckedChange={handleCheckedChange} />
       {label}
     </label>

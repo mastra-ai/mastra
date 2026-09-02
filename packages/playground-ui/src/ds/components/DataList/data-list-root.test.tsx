@@ -50,7 +50,7 @@ describe('DataListRoot', () => {
 
     it.each([
       ['tinted', 'var(--surface-header)', 'var(--surface-header-hover)'],
-      ['surface', 'var(--surface2)', 'color-mix(in oklch, var(--surface2), var(--neutral6) 10%)'],
+      ['surface', 'var(--surface-secondary)', 'color-mix(in oklch, var(--surface-secondary), var(--text-primary) 10%)'],
       ['transparent', 'transparent', 'transparent'],
     ])('paints a %s sticky header with its own colour', (background, resting, hover) => {
       const { container } = render(
@@ -295,7 +295,7 @@ describe('DataListRoot', () => {
 
     it('applies the selection fill as `!important` so it wins over borderless table styling', () => {
       // Borderless table styling uses root descendant rules (higher specificity),
-      // so a plain `bg-surface4` would lose. The `!` keeps the selected row
+      // so a plain `bg-surface-hover` would lose. The `!` keeps the selected row
       // highlighted regardless of the root variant.
       const { container } = render(
         <DataList columns="1fr" variant="striped">

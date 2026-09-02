@@ -9,7 +9,7 @@ export function DataDetailsPanel({ collapsed, children }: DataDetailsPanelProps)
   return (
     <section
       className={cn(
-        'flex flex-col overflow-hidden rounded-xl border border-border1 bg-surface2',
+        'flex flex-col overflow-hidden rounded-xl border border-(--border-subtle) bg-surface-secondary',
         collapsed ? 'h-auto' : 'h-full',
       )}
     >

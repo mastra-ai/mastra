@@ -18,7 +18,7 @@ export function SideDialogNav({ onNext, onPrevious, className }: SideDialogNavPr
   };
 
   return (
-    <div className={cn('flex items-center gap-4', '[&_svg]:size-[1.1em] [&_svg]:text-neutral3', className)}>
+    <div className={cn('flex items-center gap-4', '[&_svg]:size-[1.1em] [&_svg]:text-(--text-secondary)', className)}>
       {(onNext || onPrevious) && (
         <div className={cn('flex items-baseline gap-4')}>
           <Button onClick={handleOnPrevious} disabled={!onPrevious}>

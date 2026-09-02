@@ -56,9 +56,9 @@ type Story = StoryObj<typeof ThreadRail>;
 
 export const ConversationTimeline: Story = {
   render: args => (
-    <div className="border-border1 bg-surface2 flex h-80 w-112 items-center rounded-xl border px-10">
+    <div className="bg-surface-secondary flex h-80 w-112 items-center rounded-xl border border-(--border-subtle) px-10">
       <ThreadRail {...args} maxHeight="16rem" />
-      <p className="text-ui-sm text-neutral3 ml-10">Hover or focus a rail stop to preview that turn.</p>
+      <p className="text-ui-sm ml-10 text-(--text-secondary)">Hover or focus a rail stop to preview that turn.</p>
     </div>
   ),
 };
@@ -66,7 +66,7 @@ export const ConversationTimeline: Story = {
 export const Empty: Story = {
   args: { turns: [] },
   render: args => (
-    <div className="border-border1 h-40 w-80 rounded-xl border border-dashed">
+    <div className="h-40 w-80 rounded-xl border border-dashed border-(--border-subtle)">
       <ThreadRail {...args} />
     </div>
   ),

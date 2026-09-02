@@ -27,7 +27,7 @@ export const Default: Story = {};
 
 export const Budgets: Story = {
   render: () => (
-    <div className="border-border1 bg-surface2 flex items-center gap-5 rounded-xl border p-4">
+    <div className="bg-surface-secondary flex items-center gap-5 rounded-xl border border-(--border-subtle) p-4">
       <TokenBudget label="Messages" tokens={5_200} threshold={8_000} tone="messages" />
       <TokenBudget label="Observations" tokens={7_200} threshold={8_000} tone="warning" />
       <TokenBudget label="Memory" tokens={1_200} threshold={8_000} tone="memory" working />
@@ -37,7 +37,7 @@ export const Budgets: Story = {
 
 export const Details: Story = {
   render: () => (
-    <div className="border-border1 bg-surface2 grid w-112 gap-5 rounded-xl border p-5">
+    <div className="bg-surface-secondary grid w-112 gap-5 rounded-xl border border-(--border-subtle) p-5">
       <TokenBudgetDetail
         icon={<MessagesSquareIcon />}
         label="Messages"

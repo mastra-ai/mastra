@@ -29,17 +29,17 @@ export const buttonVariants = cva(
     variants: {
       variant: {
         default:
-          'border border-border2 bg-surface3 text-neutral6 hover:bg-surface5 hover:text-neutral6 active:bg-surface6',
+          'border border-(--border-default) bg-surface-raised text-(--text-primary) hover:bg-surface-active hover:text-(--text-primary) active:bg-gray-5',
         primary:
-          'border border-transparent bg-neutral6 font-medium text-surface1 hover:bg-neutral6/90 active:bg-neutral6/80',
+          'border border-transparent bg-surface-contrast font-medium text-(--text-on-contrast) hover:bg-gray-9 active:bg-gray-9',
         destructive:
-          'border border-transparent bg-accent2 font-medium text-white hover:bg-accent2/90 active:bg-accent2/80',
+          'border border-transparent bg-red-7 font-medium text-(--text-on-accent) hover:bg-red-7/90 active:bg-red-7/80',
         'destructive-ghost':
-          'border border-transparent bg-transparent text-accent2 hover:bg-accent2/10 hover:text-accent2 active:bg-accent2/15',
+          'border border-transparent bg-transparent text-error hover:bg-red-7/10 hover:text-error active:bg-red-7/15',
         ghost:
-          'border border-transparent bg-transparent text-neutral4 hover:bg-neutral6/5 hover:text-neutral6 active:bg-neutral6/10',
+          'border border-transparent bg-transparent text-(--text-primary) hover:bg-gray-alpha-1 hover:text-(--text-primary) active:bg-gray-alpha-3',
         outline:
-          'border border-border1 bg-transparent text-neutral5 hover:bg-surface3 hover:text-neutral6 active:bg-surface4',
+          'border border-(--border-subtle) bg-transparent text-(--text-primary) hover:bg-surface-raised hover:text-(--text-primary) active:bg-surface-hover',
       },
       size: {
         xs: cn(controlSizeClasses.xs, 'px-[.8em]', TEXT_MODE_ADORNMENTS),
@@ -47,7 +47,7 @@ export const buttonVariants = cva(
         md: cn(controlSizeClasses.md, 'px-[.9em]', TEXT_MODE_ADORNMENTS),
         lg: cn(controlSizeClasses.default, 'px-[1em]', TEXT_MODE_ADORNMENTS),
         // Icon sizes: square dimensions, fully rounded → circle. Active state inherits from variant
-        // (e.g. `active:bg-surface5`) — same press feedback as text-mode for consistency.
+        // (e.g. `active:bg-surface-active`) — same press feedback as text-mode for consistency.
         'icon-xs': cn(controlHeight.xs, 'w-form-xs rounded-full'),
         'icon-sm': cn(controlHeight.sm, 'w-form-sm rounded-full'),
         'icon-md': cn(controlHeight.md, 'w-form-md rounded-full'),

@@ -43,7 +43,7 @@ export const Default: Story = {
         <DataPanel.CloseButton onClick={() => {}} />
       </DataPanel.Header>
       <DataPanel.Content>
-        <p className="text-ui-sm text-neutral3">Panel content goes here.</p>
+        <p className="text-ui-sm text-(--text-secondary)">Panel content goes here.</p>
       </DataPanel.Content>
     </DataPanel>
   ),
@@ -62,7 +62,7 @@ export const WithNavigation: Story = {
         </div>
       </DataPanel.Header>
       <DataPanel.Content>
-        <p className="text-ui-sm text-neutral3">Navigate between items with the arrows.</p>
+        <p className="text-ui-sm text-(--text-secondary)">Navigate between items with the arrows.</p>
       </DataPanel.Content>
     </DataPanel>
   ),
@@ -100,7 +100,7 @@ export const Collapsed: Story = {
         <DataPanel.CloseButton onClick={() => {}} />
       </DataPanel.Header>
       <DataPanel.Content>
-        <p className="text-ui-sm text-neutral3">This panel uses h-auto instead of h-full.</p>
+        <p className="text-ui-sm text-(--text-secondary)">This panel uses h-auto instead of h-full.</p>
       </DataPanel.Content>
     </DataPanel>
   ),
@@ -119,7 +119,9 @@ export const DisabledNav: Story = {
         </div>
       </DataPanel.Header>
       <DataPanel.Content>
-        <p className="text-ui-sm text-neutral3">Previous button is disabled because onPrevious is undefined.</p>
+        <p className="text-ui-sm text-(--text-secondary)">
+          Previous button is disabled because onPrevious is undefined.
+        </p>
       </DataPanel.Content>
     </DataPanel>
   ),

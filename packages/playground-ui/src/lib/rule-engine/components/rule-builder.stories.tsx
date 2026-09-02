@@ -85,9 +85,9 @@ const RuleBuilderWithState = ({ schema, initialRuleGroup }: { schema: JsonSchema
     <div className="w-150">
       <RuleBuilder schema={schema} ruleGroup={ruleGroup} onChange={setRuleGroup} />
       {ruleGroup && (
-        <div className="bg-surface3 mt-4 rounded-md p-3">
-          <p className="text-neutral3 mb-2 text-xs">Current rule group:</p>
-          <pre className="text-neutral5 overflow-auto text-xs">{JSON.stringify(ruleGroup, null, 2)}</pre>
+        <div className="bg-surface-raised mt-4 rounded-md p-3">
+          <p className="mb-2 text-xs text-(--text-secondary)">Current rule group:</p>
+          <pre className="overflow-auto text-xs text-(--text-primary)">{JSON.stringify(ruleGroup, null, 2)}</pre>
         </div>
       )}
     </div>

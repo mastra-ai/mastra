@@ -105,8 +105,8 @@ export function DateTimeRangePicker({
         </PopoverTrigger>
         <PopoverContent align="start" className={cn('w-auto p-0')}>
           <div className={cn('flex')}>
-            <div className={cn('border-r border-border1')}>
-              <span className={cn('block px-4 pt-3 text-ui-sm font-medium text-neutral3')}>Start</span>
+            <div className={cn('border-r border-(--border-subtle)')}>
+              <span className={cn('block px-4 pt-3 text-ui-sm font-medium text-(--text-secondary)')}>Start</span>
               <DatePicker
                 mode="single"
                 selected={draftDateFrom}
@@ -124,7 +124,7 @@ export function DateTimeRangePicker({
               />
             </div>
             <div>
-              <span className={cn('block px-4 pt-3 text-ui-sm font-medium text-neutral3')}>End</span>
+              <span className={cn('block px-4 pt-3 text-ui-sm font-medium text-(--text-secondary)')}>End</span>
               <DatePicker
                 mode="single"
                 selected={draftDateTo}
@@ -142,13 +142,13 @@ export function DateTimeRangePicker({
               />
             </div>
           </div>
-          {customRangeError && <p className={cn('px-4 pb-1 text-ui-sm text-red-500')}>{customRangeError}</p>}
+          {customRangeError && <p className={cn('px-4 pb-1 text-ui-sm text-error')}>{customRangeError}</p>}
           <div className={cn('flex items-center justify-between px-4 pb-3')}>
             <button
               type="button"
               disabled={disabled}
               className={cn(
-                'text-ui-sm text-neutral3 hover:text-neutral4',
+                'text-ui-sm text-(--text-secondary) hover:text-(--text-primary)',
                 disabled && 'pointer-events-none opacity-50',
               )}
               onClick={() => {

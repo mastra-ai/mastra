@@ -38,7 +38,7 @@ describe('Badge', () => {
       expect(badge.tagName).toBe('SPAN');
       expect(badge.getAttribute('title')).toBe('Publication status');
       expect(badge.parentElement?.textContent).toBe('Status: Published');
-      expect(badge.classList.contains('bg-neutral6/5')).toBe(true);
+      expect(badge.classList.contains('bg-gray-alpha-1')).toBe(true);
       expect(badge.classList.contains('text-badge-neutral-fg')).toBe(true);
       expect(Array.from(badge.classList)).toEqual(
         expect.arrayContaining([
@@ -50,8 +50,8 @@ describe('Badge', () => {
           'dark:inset-shadow-[0_3px_10px_-2px_white]',
           'dark:inset-shadow-white/7',
           'dark:bg-linear-to-b',
-          'dark:from-white/3',
-          'dark:to-white/0',
+          'dark:from-gray-alpha-1',
+          'dark:to-transparent',
         ]),
       );
     });

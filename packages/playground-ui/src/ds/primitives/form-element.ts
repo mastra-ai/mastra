@@ -7,8 +7,8 @@ export const sharedFormElementDisabledStyle = 'disabled:opacity-50 disabled:curs
 // alone (white/7%→11%) does not. `focus-visible` for the bare control,
 // `focus-within` for wrapper variants (InputGroup) whose focus lives on
 // a nested input.
-export const inputFocusBorderVisible = 'focus-visible:border-neutral5/50';
-export const inputFocusBorderWithin = 'focus-within:border-neutral5/50';
+export const inputFocusBorderVisible = 'focus-visible:border-(--border-strong)';
+export const inputFocusBorderWithin = 'focus-within:border-(--border-strong)';
 
 // Canonical focus indicator for a bare interactive control (Button, etc.) in the
 // non-accent input/border language: suppress the browser outline and let the 1px
@@ -20,24 +20,24 @@ export const controlFocusBorderVisible = `outline-hidden focus-visible:outline-h
 // Hover borders are guarded so they can never clobber the focus border. Tailwind
 // can emit focus variants before hover variants, so an unguarded `hover:border-*`
 // of equal specificity may win on a field that is focused AND hovered.
-export const inputHoverBorderVisible = '[&:hover:not(:focus-visible)]:border-border2';
-export const inputHoverBorderWithin = '[&:hover:not(:focus-within)]:border-border2';
+export const inputHoverBorderVisible = '[&:hover:not(:focus-visible)]:border-(--border-default)';
+export const inputHoverBorderWithin = '[&:hover:not(:focus-within)]:border-(--border-default)';
 
 // Background-agnostic surface + focus recipe shared by Input and Textarea.
 // Uses theme-aware opacity overlays so it reads on any underlying surface, with
 // no accent (green) on focus — caller appends a radius (`rounded-full` for
 // single-line inputs, `rounded-xl` for textareas).
 export const inputSurfaceAndFocusStyle =
-  'bg-surface-overlay-soft border border-border1 text-neutral5 ' +
-  'hover:text-neutral6 hover:bg-surface-overlay-strong ' +
+  'bg-surface-overlay-soft border border-(--border-subtle) text-(--text-primary) ' +
+  'hover:text-(--text-primary) hover:bg-surface-overlay-strong ' +
   inputHoverBorderVisible +
   ' ' +
   'outline-hidden focus-visible:outline-hidden focus-visible:bg-surface-overlay-strong ' +
   inputFocusBorderVisible;
 
 export const inputOutlineAndFocusStyle =
-  'bg-transparent border border-border1 text-neutral5 ' +
-  'hover:text-neutral6 ' +
+  'bg-transparent border border-(--border-subtle) text-(--text-primary) ' +
+  'hover:text-(--text-primary) ' +
   inputHoverBorderVisible +
   ' ' +
   'outline-hidden focus-visible:outline-hidden ' +

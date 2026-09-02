@@ -57,8 +57,8 @@ const stickyHeaderBackgroundValues = {
     hoverBackground: 'var(--surface-header-hover)',
   },
   surface: {
-    background: 'var(--surface2)',
-    hoverBackground: 'color-mix(in oklch, var(--surface2), var(--neutral6) 10%)',
+    background: 'var(--surface-secondary)',
+    hoverBackground: 'color-mix(in oklch, var(--surface-secondary), var(--text-primary) 10%)',
   },
   transparent: {
     background: 'transparent',

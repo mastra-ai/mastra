@@ -53,7 +53,7 @@ export const KeyCombination: Story = {
   render: () => (
     <div className="flex items-center gap-1">
       <Kbd>Ctrl</Kbd>
-      <span className="text-neutral3">+</span>
+      <span className="text-(--text-secondary)">+</span>
       <Kbd>K</Kbd>
     </div>
   ),
@@ -65,26 +65,26 @@ export const CommonShortcuts: Story = {
       <div className="flex items-center gap-2">
         <div className="flex items-center gap-1">
           <Kbd>Ctrl</Kbd>
-          <span className="text-neutral3">+</span>
+          <span className="text-(--text-secondary)">+</span>
           <Kbd>C</Kbd>
         </div>
-        <span className="text-neutral5">Copy</span>
+        <span className="text-(--text-primary)">Copy</span>
       </div>
       <div className="flex items-center gap-2">
         <div className="flex items-center gap-1">
           <Kbd>Ctrl</Kbd>
-          <span className="text-neutral3">+</span>
+          <span className="text-(--text-secondary)">+</span>
           <Kbd>V</Kbd>
         </div>
-        <span className="text-neutral5">Paste</span>
+        <span className="text-(--text-primary)">Paste</span>
       </div>
       <div className="flex items-center gap-2">
         <div className="flex items-center gap-1">
           <Kbd>Ctrl</Kbd>
-          <span className="text-neutral3">+</span>
+          <span className="text-(--text-secondary)">+</span>
           <Kbd>Z</Kbd>
         </div>
-        <span className="text-neutral5">Undo</span>
+        <span className="text-(--text-primary)">Undo</span>
       </div>
     </div>
   ),

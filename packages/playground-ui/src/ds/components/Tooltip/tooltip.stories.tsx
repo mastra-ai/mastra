@@ -22,7 +22,7 @@ export default meta;
 type Story = StoryObj<typeof Tooltip>;
 
 const KbdHint = ({ children }: { children: React.ReactNode }) => (
-  <kbd className="bg-surface5 text-ui-xs leading-ui-xs text-neutral4 ml-1 inline-flex items-center justify-center rounded-sm px-1.5 py-0.5 font-mono">
+  <kbd className="bg-surface-active text-ui-xs leading-ui-xs ml-1 inline-flex items-center justify-center rounded-sm px-1.5 py-0.5 font-mono text-(--text-primary)">
     {children}
   </kbd>
 );
@@ -58,8 +58,8 @@ export const WithIcon: Story = {
   render: () => (
     <Tooltip>
       <TooltipTrigger asChild>
-        <button className="hover:bg-surface2 rounded p-1" aria-label="More information">
-          <Info className="text-neutral3 size-4" />
+        <button className="hover:bg-surface-secondary rounded p-1" aria-label="More information">
+          <Info className="size-4 text-(--text-secondary)" />
         </button>
       </TooltipTrigger>
       <TooltipContent>More information</TooltipContent>

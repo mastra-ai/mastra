@@ -20,5 +20,5 @@ export function ColumnRoot({ children, className, withLeftSeparator, withRightSe
 }
 
 function Separator() {
-  return <div className={cn('mx-[1.5vw] w-[3px] shrink-0 bg-surface5')}></div>;
+  return <div className={cn('mx-[1.5vw] w-[3px] shrink-0 bg-surface-active')}></div>;
 }

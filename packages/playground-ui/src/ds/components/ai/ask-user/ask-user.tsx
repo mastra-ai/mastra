@@ -25,15 +25,18 @@ export interface AskUserResult {
 }
 
 export const AskUserContainer = ({ className, ...props }: ComponentProps<'div'>) => (
-  <div className={cn('rounded-lg border border-border1 bg-surface2 p-3 text-sm', className)} {...props} />
+  <div
+    className={cn('rounded-lg border border-(--border-subtle) bg-surface-secondary p-3 text-sm', className)}
+    {...props}
+  />
 );
 
 export const AskUserQuestion = ({ className, ...props }: ComponentProps<'legend'>) => (
-  <legend className={cn('mb-3 font-medium text-neutral6', className)} {...props} />
+  <legend className={cn('mb-3 font-medium text-(--text-primary)', className)} {...props} />
 );
 
 export const AskUserOptionDescription = ({ className, ...props }: ComponentProps<'span'>) => (
-  <span className={cn('block text-ui-xs font-normal text-neutral3', className)} {...props} />
+  <span className={cn('block text-ui-xs font-normal text-(--text-secondary)', className)} {...props} />
 );
 
 interface AskUserOptionControlProps extends Omit<ComponentProps<'input'>, 'type'> {
@@ -45,7 +48,7 @@ interface AskUserOptionControlProps extends Omit<ComponentProps<'input'>, 'type'
 export const AskUserOptionControl = ({ type, label, description, className, ...props }: AskUserOptionControlProps) => (
   <label
     className={cn(
-      'flex cursor-pointer items-start gap-2 rounded-md border border-border1 bg-surface3 px-3 py-2 text-neutral5 transition-colors hover:bg-surface4 has-[:checked]:border-border2 has-[:checked]:bg-surface4 has-[:disabled]:cursor-not-allowed has-[:disabled]:opacity-50',
+      'flex cursor-pointer items-start gap-2 rounded-md border border-(--border-subtle) bg-surface-raised px-3 py-2 text-(--text-primary) transition-colors hover:bg-surface-hover has-[:checked]:border-(--border-default) has-[:checked]:bg-surface-hover has-[:disabled]:cursor-not-allowed has-[:disabled]:opacity-50',
       className,
     )}
   >
@@ -64,7 +67,7 @@ export const AskUserSubmit = ({ children = 'Submit answer', ...props }: Componen
 );
 
 export const AskUserPending = ({ children = 'Submitting…', className, ...props }: ComponentProps<'span'>) => (
-  <span role="status" className={cn('text-ui-xs text-neutral3', className)} {...props}>
+  <span role="status" className={cn('text-ui-xs text-(--text-secondary)', className)} {...props}>
     {children}
   </span>
 );
@@ -76,7 +79,11 @@ export interface AskUserOutputProps extends ComponentProps<'div'> {
 export const AskUserOutput = ({ result, className, ...props }: AskUserOutputProps) => (
   <div
     role={result.isError ? 'alert' : 'status'}
-    className={cn('space-y-2 rounded-md bg-surface3 p-3 text-neutral5', result.isError && 'text-error', className)}
+    className={cn(
+      'space-y-2 rounded-md bg-surface-raised p-3 text-(--text-primary)',
+      result.isError && 'text-error',
+      className,
+    )}
     {...props}
   >
     <Badge size="xs" variant={result.isError ? 'red' : 'green'}>
@@ -121,7 +128,7 @@ const AskUserInput = ({
   if (result || isAnswered) {
     return (
       <AskUserContainer data-testid="ask-user" {...props}>
-        <p className="text-neutral6 mb-2 font-medium">{payload.question}</p>
+        <p className="mb-2 font-medium text-(--text-primary)">{payload.question}</p>
         {result ? <AskUserOutput result={result} /> : <Badge variant="green">Answered</Badge>}
       </AskUserContainer>
     );
@@ -142,7 +149,7 @@ const AskUserInput = ({
   if (options.length === 0) {
     return (
       <AskUserContainer data-testid="ask-user" {...props}>
-        <label className="text-neutral6 mb-2 block font-medium" htmlFor={inputId}>
+        <label className="mb-2 block font-medium text-(--text-primary)" htmlFor={inputId}>
           {payload.question}
         </label>
         <div className="flex items-center gap-2">

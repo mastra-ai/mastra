@@ -16,7 +16,7 @@ export const dataListRowOuterStyles = [
  */
 export const dataListRowInteractiveStyles = [
   'grid grid-cols-subgrid gap-8 px-5 outline-none cursor-pointer',
-  'focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-accent1',
+  'focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-focus',
   'transition-colors duration-200 rounded-lg',
 ] as const;
 
@@ -43,7 +43,7 @@ export type DataListSticky = 'start';
 
 export const dataListStickyStartStyles = [
   'data-list-sticky-start sticky left-0 z-10 isolate self-stretch overflow-visible',
-  'after:absolute after:-right-4 after:top-1/2 after:-translate-y-1/2 after:h-4 after:w-px after:bg-border2 after:content-[""] after:pointer-events-none',
+  'after:absolute after:-right-4 after:top-1/2 after:-translate-y-1/2 after:h-4 after:w-px after:bg-(--border-default) after:content-[""] after:pointer-events-none',
 ] as const;
 
 /** Tone for a single row. `error` lays a subtle, theme-aware destructive tint

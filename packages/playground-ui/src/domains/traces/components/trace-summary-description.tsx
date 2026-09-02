@@ -86,7 +86,7 @@ export function TraceSummaryDescription({
   return (
     <div
       className={cn(
-        'flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 text-ui-xs leading-ui-xs text-neutral3',
+        'flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 text-ui-xs leading-ui-xs text-(--text-secondary)',
         className,
       )}
     >
@@ -96,7 +96,7 @@ export function TraceSummaryDescription({
             {entityHref ? (
               <Link
                 href={entityHref}
-                className="text-neutral4 hover:text-neutral5 flex shrink-0 items-center gap-1 whitespace-nowrap hover:underline"
+                className="flex shrink-0 items-center gap-1 whitespace-nowrap text-(--text-primary) hover:text-(--text-primary) hover:underline"
               >
                 <EntityIcon className="size-3.5 shrink-0" aria-hidden="true" />
                 <span>{entityName}</span>

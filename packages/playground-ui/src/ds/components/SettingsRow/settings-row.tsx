@@ -23,14 +23,14 @@ const settingsRowLabelBlockVariants = cva('flex min-w-0 flex-col', {
 
 const settingsRowLabelVariants = cva('', {
   variants: {
-    variant: { default: 'text-sm font-medium', factory: 'text-ui-md leading-ui-md text-neutral5' },
+    variant: { default: 'text-sm font-medium', factory: 'text-ui-md leading-ui-md text-(--text-primary)' },
   },
   defaultVariants: { variant: 'default' },
 });
 
 const settingsRowDescriptionVariants = cva('flex flex-col gap-0.5', {
   variants: {
-    variant: { default: 'text-sm text-neutral3', factory: 'text-ui-sm text-neutral3' },
+    variant: { default: 'text-sm text-(--text-secondary)', factory: 'text-ui-sm text-(--text-secondary)' },
   },
   defaultVariants: { variant: 'default' },
 });

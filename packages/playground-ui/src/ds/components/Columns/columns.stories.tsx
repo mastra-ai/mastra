@@ -24,7 +24,7 @@ function MetricsColumn({ title }: { title: string }) {
   return (
     <Column className="p-5" withRightSeparator>
       <Column.Toolbar>
-        <h2 className="text-neutral5 text-lg">{title}</h2>
+        <h2 className="text-lg text-(--text-primary)">{title}</h2>
         <Button size="sm" variant="ghost">
           <SlidersHorizontalIcon />
           Configure
@@ -36,7 +36,7 @@ function MetricsColumn({ title }: { title: string }) {
             <CardHeader>
               <CardTitle>{value}</CardTitle>
             </CardHeader>
-            <CardContent density="compact" className="text-ui-sm text-neutral3">
+            <CardContent density="compact" className="text-ui-sm text-(--text-secondary)">
               {label}
             </CardContent>
           </Card>
@@ -48,7 +48,7 @@ function MetricsColumn({ title }: { title: string }) {
 
 export const ResponsiveGrid: Story = {
   render: () => (
-    <div className="bg-surface1 h-144 p-4">
+    <div className="bg-surface-primary h-144 p-4">
       <Columns className="md:grid-cols-2">
         <MetricsColumn title="Production" />
         <MetricsColumn title="Development" />
@@ -59,7 +59,7 @@ export const ResponsiveGrid: Story = {
 
 export const HorizontallyScrollable: Story = {
   render: () => (
-    <div className="bg-surface1 h-128 w-full max-w-3xl p-4">
+    <div className="bg-surface-primary h-128 w-full max-w-3xl p-4">
       <MultiColumn numOfColumns={3} minColumnWidth="18rem">
         <MetricsColumn title="Agents" />
         <MetricsColumn title="Workflows" />

@@ -111,15 +111,15 @@ describe('Tree', () => {
     const inputItem = container.querySelector('[data-tree-item-kind="input"]');
 
     expect(folderRow?.className).not.toContain('group-focus-visible/treeitem');
-    expect(folderRow?.className).not.toContain('ring-accent1');
+    expect(folderRow?.className).not.toContain('ring-focus');
     expect(folderRow?.className).not.toContain('shadow-focus-ring');
 
-    expect(fileItem.className).toContain('focus-visible:bg-surface4');
-    expect(fileItem.className).not.toContain('ring-accent1');
+    expect(fileItem.className).toContain('focus-visible:bg-surface-hover');
+    expect(fileItem.className).not.toContain('ring-focus');
     expect(fileItem.className).not.toContain('shadow-focus-ring');
 
-    expect(inputItem?.className).toContain('focus-within:bg-surface4');
-    expect(inputItem?.className).not.toContain('ring-accent1');
+    expect(inputItem?.className).toContain('focus-within:bg-surface-hover');
+    expect(inputItem?.className).not.toContain('ring-focus');
     expect(inputItem?.className).not.toContain('shadow-focus-ring');
   });
 
@@ -152,14 +152,14 @@ describe('Tree', () => {
     const childRow = getFolderRow('child');
 
     fireEvent.focus(root);
-    expect(getClassTokens(rootRow)).toContain('bg-surface4');
-    expect(getClassTokens(childRow)).not.toContain('bg-surface4');
-    expect(childRow.className).not.toContain('group-focus-visible/treeitem:bg-surface4');
+    expect(getClassTokens(rootRow)).toContain('bg-surface-hover');
+    expect(getClassTokens(childRow)).not.toContain('bg-surface-hover');
+    expect(childRow.className).not.toContain('group-focus-visible/treeitem:bg-surface-hover');
 
     fireEvent.blur(root, { relatedTarget: child });
     fireEvent.focus(child);
-    expect(getClassTokens(rootRow)).not.toContain('bg-surface4');
-    expect(getClassTokens(childRow)).toContain('bg-surface4');
+    expect(getClassTokens(rootRow)).not.toContain('bg-surface-hover');
+    expect(getClassTokens(childRow)).toContain('bg-surface-hover');
   });
 
   it('moves focus through visible items with arrow, home, and end keys', () => {

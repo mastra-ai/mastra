@@ -52,13 +52,13 @@ export function EnvironmentVariablesEditorReadOnlyItem({
     <DataList.RowStatic className={cn('min-h-14', className)} {...props}>
       {showIcon && (
         <DataList.Cell className="justify-items-center overflow-visible">
-          <span className="border-border1 text-neutral3 flex size-7 items-center justify-center rounded-full border [&>svg]:size-3.5">
+          <span className="flex size-7 items-center justify-center rounded-full border border-(--border-subtle) text-(--text-secondary) [&>svg]:size-3.5">
             {leadingIcon}
           </span>
         </DataList.Cell>
       )}
 
-      <DataList.TextCell font="mono" className="text-ui-sm text-neutral6">
+      <DataList.TextCell font="mono" className="text-ui-sm text-(--text-primary)">
         {name}
       </DataList.TextCell>
 
@@ -77,7 +77,7 @@ export function EnvironmentVariablesEditorReadOnlyItem({
             <span className="group relative flex min-w-0 flex-1 items-center">
               <span
                 className={cn(
-                  'block min-w-0 flex-1 truncate font-mono text-ui-xs text-neutral4',
+                  'block min-w-0 flex-1 truncate font-mono text-ui-xs text-(--text-primary)',
                   canCopyValue && 'pr-7',
                 )}
               >
@@ -101,7 +101,7 @@ export function EnvironmentVariablesEditorReadOnlyItem({
         )}
       </DataList.Cell>
 
-      <DataList.Cell className="text-ui-xs text-neutral3 min-w-0 justify-items-end">
+      <DataList.Cell className="text-ui-xs min-w-0 justify-items-end text-(--text-secondary)">
         {(updatedAt || actor) && (
           <span className="flex min-w-0 items-center gap-2">
             <span className="truncate">{updatedAt}</span>

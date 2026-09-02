@@ -53,11 +53,11 @@ const RuleGroupView: React.FC<RuleGroupViewProps> = ({ schema, group, onChange, 
   };
 
   return (
-    <div className={cn(isRoot ? 'bg-surface2' : 'bg-surface3 pl-6')}>
+    <div className={cn(isRoot ? 'bg-surface-secondary' : 'bg-surface-raised pl-6')}>
       {/* Non-root group header */}
       {!isRoot && (
-        <div className="border-border1 flex items-center justify-between border-b border-dashed py-1.5 pr-4 pl-3">
-          <span className="text-ui-xs text-neutral3">Group</span>
+        <div className="flex items-center justify-between border-b border-dashed border-(--border-subtle) py-1.5 pr-4 pl-3">
+          <span className="text-ui-xs text-(--text-secondary)">Group</span>
           {onRemove && (
             <Button type="button" onClick={onRemove} tooltip="Remove group" size="icon-sm" variant="ghost">
               <X />
@@ -67,8 +67,8 @@ const RuleGroupView: React.FC<RuleGroupViewProps> = ({ schema, group, onChange, 
       )}
 
       {group.conditions.map((condition, index) => (
-        <div key={index} className="border-border1 border-b border-dashed last:border-b-0">
-          <div className={cn('relative', isRule(condition) && 'border-l-4 border-border1 p-4')}>
+        <div key={index} className="border-b border-dashed border-(--border-subtle) last:border-b-0">
+          <div className={cn('relative', isRule(condition) && 'border-l-4 border-(--border-subtle) p-4')}>
             {index > 0 && (
               <button
                 type="button"
@@ -76,8 +76,8 @@ const RuleGroupView: React.FC<RuleGroupViewProps> = ({ schema, group, onChange, 
                 className={cn(
                   'absolute top-0 left-1/2 z-10 -translate-1/2 cursor-pointer rounded-full px-3 py-0.5 text-ui-xs',
                   group.operator === 'OR'
-                    ? 'bg-accent6Dark text-accent6 hover:bg-accent6Dark/70'
-                    : 'bg-accent3Dark text-accent3 hover:bg-accent3Dark/70',
+                    ? 'bg-orange-3 text-warning hover:bg-orange-3/70'
+                    : 'bg-blue-3 text-info hover:bg-blue-3/70',
                 )}
               >
                 {group.operator.toLowerCase()}
@@ -154,7 +154,7 @@ export const RuleBuilder: React.FC<RuleBuilderProps> = ({
       <button
         type="button"
         onClick={handleAddFirstRule}
-        className="border-border1 text-ui-sm text-neutral3 hover:text-neutral6 flex w-full items-center justify-center gap-2 rounded-md border border-dashed p-2"
+        className="text-ui-sm flex w-full items-center justify-center gap-2 rounded-md border border-dashed border-(--border-subtle) p-2 text-(--text-secondary) hover:text-(--text-primary)"
       >
         <Icon>
           <Plus />

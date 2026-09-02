@@ -20,7 +20,7 @@ const resources = ['Research agent', 'Support workflow', 'Knowledge search tool'
 export const FullPage: Story = {
   render: () => (
     <PageHeadingContext value="Resources">
-      <div className="bg-surface1 h-152">
+      <div className="bg-surface-primary h-152">
         <PageLayout width="wide" height="full">
           <PageLayout.TopArea>
             <PageLayout.Row align="center" stack="responsive">
@@ -43,7 +43,7 @@ export const FullPage: Story = {
               {resources.map(resource => (
                 <div
                   key={resource}
-                  className="border-border1 bg-surface2 text-ui-md text-neutral5 rounded-xl border p-5"
+                  className="bg-surface-secondary text-ui-md rounded-xl border border-(--border-subtle) p-5 text-(--text-primary)"
                 >
                   {resource}
                 </div>
@@ -58,7 +58,7 @@ export const FullPage: Story = {
 
 export const NarrowSettings: Story = {
   render: () => (
-    <div className="bg-surface1 min-h-136">
+    <div className="bg-surface-primary min-h-136">
       <PageLayout width="narrow">
         <PageLayout.TopArea>
           <PageHeader>
@@ -67,8 +67,12 @@ export const NarrowSettings: Story = {
           </PageHeader>
         </PageLayout.TopArea>
         <PageLayout.MainArea className="grid gap-3">
-          <div className="border-border1 bg-surface2 text-neutral4 rounded-xl border p-5">General settings</div>
-          <div className="border-border1 bg-surface2 text-neutral4 rounded-xl border p-5">Environment variables</div>
+          <div className="bg-surface-secondary rounded-xl border border-(--border-subtle) p-5 text-(--text-primary)">
+            General settings
+          </div>
+          <div className="bg-surface-secondary rounded-xl border border-(--border-subtle) p-5 text-(--text-primary)">
+            Environment variables
+          </div>
         </PageLayout.MainArea>
       </PageLayout>
     </div>
@@ -77,7 +81,7 @@ export const NarrowSettings: Story = {
 
 export const CenteredEmptyState: Story = {
   render: () => (
-    <div className="bg-surface1 h-136">
+    <div className="bg-surface-primary h-136">
       <NoDataPageLayout>
         <EmptyState
           iconSlot={<WrenchIcon />}

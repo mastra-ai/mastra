@@ -75,17 +75,17 @@ export const Disabled: Story = {
 export const OnDifferentSurfaces: Story = {
   render: () => (
     <div className="flex w-96 flex-col gap-4">
-      <div className="border-border1 bg-surface1 rounded-lg border p-4">
-        <Textarea placeholder="On bg-surface1" />
+      <div className="bg-surface-primary rounded-lg border border-(--border-subtle) p-4">
+        <Textarea placeholder="On bg-surface-primary" />
       </div>
-      <div className="border-border1 bg-surface2 rounded-lg border p-4">
-        <Textarea placeholder="On bg-surface2" />
+      <div className="bg-surface-secondary rounded-lg border border-(--border-subtle) p-4">
+        <Textarea placeholder="On bg-surface-secondary" />
       </div>
-      <div className="border-border1 bg-surface3 rounded-lg border p-4">
-        <Textarea placeholder="On bg-surface3" />
+      <div className="bg-surface-raised rounded-lg border border-(--border-subtle) p-4">
+        <Textarea placeholder="On bg-surface-raised" />
       </div>
-      <div className="border-border1 bg-surface4 rounded-lg border p-4">
-        <Textarea placeholder="On bg-surface4" />
+      <div className="bg-surface-hover rounded-lg border border-(--border-subtle) p-4">
+        <Textarea placeholder="On bg-surface-hover" />
       </div>
     </div>
   ),

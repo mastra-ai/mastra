@@ -11,9 +11,9 @@ type BadgeToneStyles = Record<BadgeEmphasis, string> & { indicator: string };
 
 const badgeToneStyles = {
   neutral: {
-    default: 'bg-neutral6/5 text-badge-neutral-fg',
-    muted: 'bg-neutral6/[0.025] text-badge-neutral-fg',
-    indicator: 'bg-neutral3',
+    default: 'bg-gray-alpha-1 text-badge-neutral-fg',
+    muted: 'bg-transparent text-badge-neutral-fg',
+    indicator: 'bg-(--text-disabled)',
   },
   green: {
     default: 'bg-badge-green/20 text-badge-green-fg',
@@ -113,7 +113,7 @@ export const Badge = ({
         'inline-flex w-fit max-w-full shrink-0 items-center rounded-[7px] font-medium',
         'inset-ring-1 inset-ring-current/5',
         'inset-shadow-xs inset-shadow-white/5 dark:inset-shadow-[0_3px_10px_-2px_white] dark:inset-shadow-white/7',
-        'dark:bg-linear-to-b dark:from-white/3 dark:to-white/0',
+        'dark:bg-linear-to-b dark:from-gray-alpha-1 dark:to-transparent',
         badgeToneStyles[variant][emphasis],
         sizeStyles.badge,
         paddingClass,

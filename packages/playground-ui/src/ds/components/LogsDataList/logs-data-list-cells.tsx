@@ -6,11 +6,11 @@ import { WorkflowIcon } from '@/ds/icons/WorkflowIcon';
 import { cn } from '@/lib/utils';
 
 const LEVEL_CONFIG: Record<LogLevel, { label: string; color: string }> = {
-  debug: { label: 'DEBUG', color: '#71717a' },
-  info: { label: 'INFO', color: '#60a5fa' },
-  warn: { label: 'WARN', color: '#facc15' },
-  error: { label: 'ERROR', color: '#f87171' },
-  fatal: { label: 'FATAL', color: '#dc2626' },
+  debug: { label: 'DEBUG', color: 'var(--text-secondary)' },
+  info: { label: 'INFO', color: 'var(--color-info)' },
+  warn: { label: 'WARN', color: 'var(--color-warning)' },
+  error: { label: 'ERROR', color: 'var(--color-error)' },
+  fatal: { label: 'FATAL', color: 'var(--red-10)' },
 };
 
 // ---------------------------------------------------------------------------
@@ -38,7 +38,7 @@ export function LogsDataListLevelCell({ level }: LogsDataListLevelCellProps) {
 // ---------------------------------------------------------------------------
 
 function EntityTypeIcon({ entityType, className }: { entityType: string; className?: string }) {
-  const iconClass = cn('size-3.5 shrink-0 text-neutral2', className);
+  const iconClass = cn('size-3.5 shrink-0 text-(--text-secondary)', className);
   const normalizedEntityType = entityType.toLowerCase();
 
   switch (normalizedEntityType) {
@@ -79,7 +79,9 @@ export interface LogsDataListMessageCellProps {
 }
 
 export function LogsDataListMessageCell({ message }: LogsDataListMessageCellProps) {
-  return <DataListCell className="text-ui-smd text-neutral4 min-w-0 truncate font-mono">{message}</DataListCell>;
+  return (
+    <DataListCell className="text-ui-smd min-w-0 truncate font-mono text-(--text-primary)">{message}</DataListCell>
+  );
 }
 
 // ---------------------------------------------------------------------------

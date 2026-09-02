@@ -1,7 +1,7 @@
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { MetricsLineChartTooltip } from './metrics-line-chart-tooltip';
 
-const LABEL_COLOR = '#a1a1aa';
+const LABEL_COLOR = 'var(--text-secondary)';
 
 export type MetricsLineChartSeries = {
   dataKey: string;
@@ -45,11 +45,13 @@ export function MetricsLineChart({
           return (
             <div key={s.dataKey} className="inline-flex items-baseline gap-2">
               <div className="size-2 shrink-0 -translate-y-px rounded-full" style={{ backgroundColor: s.color }} />
-              <span className="text-ui-sm text-neutral3 max-w-24 truncate">{s.label}</span>
+              <span className="text-ui-sm max-w-24 truncate text-(--text-secondary)">{s.label}</span>
               {aggregated && (
-                <span className="text-ui-sm text-neutral4">
+                <span className="text-ui-sm text-(--text-primary)">
                   {aggregated.value}
-                  {aggregated.suffix && <span className="text-ui-sm text-neutral2"> {aggregated.suffix}</span>}
+                  {aggregated.suffix && (
+                    <span className="text-ui-sm text-(--text-secondary)"> {aggregated.suffix}</span>
+                  )}
                 </span>
               )}
             </div>
@@ -63,7 +65,7 @@ export function MetricsLineChart({
               stroke="currentColor"
               strokeOpacity={0.08}
               vertical={false}
-              className="text-black dark:text-white"
+              className="text-(--border-subtle)"
             />
             <XAxis
               dataKey="time"

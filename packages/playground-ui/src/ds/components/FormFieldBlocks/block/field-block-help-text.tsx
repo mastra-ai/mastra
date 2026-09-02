@@ -3,5 +3,5 @@ export type FieldBlockHelpTextProps = {
 };
 
 export function FieldBlockHelpText({ children }: FieldBlockHelpTextProps) {
-  return <p className="text-ui-sm text-neutral3">{children}</p>;
+  return <p className="text-ui-sm text-(--text-secondary)">{children}</p>;
 }

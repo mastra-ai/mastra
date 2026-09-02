@@ -82,7 +82,7 @@ export function ToolCall({
 export const ToolCallTrigger = ({ className, ...props }: ComponentProps<typeof CollapsibleTrigger>) => (
   <CollapsibleTrigger
     className={cn(
-      'group/row w-full cursor-pointer rounded-md text-left transition-colors hover:bg-neutral6/5 focus-visible:ring-1 focus-visible:ring-accent1 focus-visible:outline-hidden motion-reduce:transition-none',
+      'group/row w-full cursor-pointer rounded-md text-left transition-colors hover:bg-gray-alpha-1 focus-visible:ring-1 focus-visible:ring-focus focus-visible:outline-hidden motion-reduce:transition-none',
       className,
     )}
     {...props}
@@ -136,7 +136,11 @@ export interface ToolCallSpacerProps extends ComponentProps<'span'> {
 export const ToolCallSpacer = ({ rule, className, ...props }: ToolCallSpacerProps) => (
   <span
     aria-hidden
-    className={cn('min-w-2 flex-1', rule && 'h-px bg-border1 mask-r-from-[calc(100%-min(100%,160px))]', className)}
+    className={cn(
+      'min-w-2 flex-1',
+      rule && 'h-px bg-(--border-subtle) mask-r-from-[calc(100%-min(100%,160px))]',
+      className,
+    )}
     {...props}
   />
 );
@@ -208,7 +212,7 @@ export const ToolCallContent = ({ className, children, ...props }: ComponentProp
   <CollapsibleContent className="max-w-full min-w-0" {...props}>
     <div
       className={cn(
-        "relative ml-[14px] flex max-w-full min-w-0 flex-col gap-1.5 py-1.5 pr-1 pl-4 before:absolute before:inset-y-0 before:left-0 before:w-px before:bg-border1 before:mask-b-from-[calc(100%-min(40%,80px))] before:content-['']",
+        "relative ml-[14px] flex max-w-full min-w-0 flex-col gap-1.5 py-1.5 pr-1 pl-4 before:absolute before:inset-y-0 before:left-0 before:w-px before:bg-(--border-subtle) before:mask-b-from-[calc(100%-min(40%,80px))] before:content-['']",
         className,
       )}
     >
@@ -226,7 +230,7 @@ export const ToolCallMono = ({ copyText, className, children, ...props }: ToolCa
   <div className="group/block relative max-w-full min-w-0">
     <pre
       className={cn(
-        'm-0 max-h-60 max-w-full overflow-auto rounded-md bg-neutral6/5 px-3 py-2 font-mono text-xs leading-normal break-words whitespace-pre-wrap',
+        'm-0 max-h-60 max-w-full overflow-auto rounded-md bg-gray-alpha-1 px-3 py-2 font-mono text-xs leading-normal break-words whitespace-pre-wrap',
         className,
       )}
       {...props}

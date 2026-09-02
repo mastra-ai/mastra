@@ -72,11 +72,11 @@ function SubMenuSearch({
     <div className={cn('px-2 pb-2')}>
       <div
         className={cn(
-          'flex items-center gap-2 rounded-md border border-border1 px-2 py-1',
-          'focus-within:border-neutral2',
+          'flex items-center gap-2 rounded-md border border-(--border-subtle) px-2 py-1',
+          'focus-within:border-(--border-subtle)',
         )}
       >
-        <SearchIcon className={cn('size-3.5 shrink-0 text-neutral3')} />
+        <SearchIcon className={cn('size-3.5 shrink-0 text-(--text-secondary)')} />
         <input
           type="text"
           placeholder="Search..."
@@ -84,7 +84,9 @@ function SubMenuSearch({
           value={value}
           onChange={e => onChange(e.target.value)}
           onKeyDown={e => e.stopPropagation()}
-          className={cn('w-full bg-transparent text-ui-sm text-neutral4 outline-none placeholder:text-neutral3')}
+          className={cn(
+            'w-full bg-transparent text-ui-sm text-(--text-primary) outline-none placeholder:text-(--text-secondary)',
+          )}
         />
       </div>
     </div>
@@ -185,7 +187,7 @@ export function SelectDataFilter({
       <DropdownMenu.Sub key={cat.id} onOpenChange={resetSubSearch}>
         <DropdownMenu.SubTrigger>
           <span className={cn('truncate')}>{cat.label}</span>
-          {selectedCount > 0 && <span className={cn('ml-auto text-ui-sm text-accent1')}>{selectedCount}</span>}
+          {selectedCount > 0 && <span className={cn('ml-auto text-ui-sm text-success')}>{selectedCount}</span>}
         </DropdownMenu.SubTrigger>
         <DropdownMenu.SubContent className={cn('max-h-80')}>
           {cat.values.length >= searchThreshold && (
@@ -229,7 +231,7 @@ export function SelectDataFilter({
           {activeFilterCount > 0 && (
             <span
               className={cn(
-                'ml-0.5 inline-flex size-5 items-center justify-center rounded-full bg-accent1/50 text-ui-sm text-neutral5',
+                'ml-0.5 inline-flex size-5 items-center justify-center rounded-full bg-green-7/50 text-ui-sm text-(--text-primary)',
               )}
             >
               {activeFilterCount}
@@ -242,11 +244,11 @@ export function SelectDataFilter({
         <div className={cn('px-2 pb-2')}>
           <div
             className={cn(
-              'flex items-center gap-2 rounded-md border border-border1 px-2 py-1',
-              'focus-within:border-neutral2',
+              'flex items-center gap-2 rounded-md border border-(--border-subtle) px-2 py-1',
+              'focus-within:border-(--border-subtle)',
             )}
           >
-            <SearchIcon className={cn('size-3.5 shrink-0 text-neutral3')} />
+            <SearchIcon className={cn('size-3.5 shrink-0 text-(--text-secondary)')} />
             <input
               type="text"
               placeholder="Search filters..."
@@ -254,7 +256,9 @@ export function SelectDataFilter({
               value={filterSearch}
               onChange={e => setFilterSearch(e.target.value)}
               onKeyDown={e => e.stopPropagation()}
-              className={cn('w-full bg-transparent text-ui-sm text-neutral4 outline-none placeholder:text-neutral3')}
+              className={cn(
+                'w-full bg-transparent text-ui-sm text-(--text-primary) outline-none placeholder:text-(--text-secondary)',
+              )}
             />
           </div>
         </div>

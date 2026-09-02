@@ -51,7 +51,7 @@ export const DateTimePicker: React.FC<DateTimePickerProps> = ({
         )}
       </PopoverTrigger>
       <PopoverContent
-        className="backdrop-blur-4xl bg-surface4 w-auto max-w-66 p-0!"
+        className="backdrop-blur-4xl bg-surface-hover w-auto max-w-66 p-0!"
         align="start"
         data-testid="datepicker-calendar"
       >
@@ -214,8 +214,8 @@ export const DateTimePickerContent = ({
       {localErrorMsg && (
         <div
           className={cn(
-            'm-4 mb-0 text-ui-md text-neutral3',
-            '[&>svg]:float-left [&>svg]:mt-0.5 [&>svg]:mr-2 [&>svg]:size-[1.1em] [&>svg]:text-red-500',
+            'm-4 mb-0 text-ui-md text-(--text-secondary)',
+            '[&>svg]:float-left [&>svg]:mt-0.5 [&>svg]:mr-2 [&>svg]:size-[1.1em] [&>svg]:text-error',
           )}
         >
           <CircleAlertIcon /> {localErrorMsg}
@@ -271,9 +271,9 @@ export const DefaultTrigger = React.forwardRef<HTMLButtonElement, DefaultButtonP
       <Button ref={ref} className={cn('justify-start', className)} {...props}>
         <CalendarIcon className="size-4" />
         {value ? (
-          <span className="text-white">{format(value, 'PP p')}</span>
+          <span className="text-(--text-primary)">{format(value, 'PP p')}</span>
         ) : (
-          <span className="text-gray">{placeholder ?? 'Pick a date'}</span>
+          <span className="text-(--text-secondary)">{placeholder ?? 'Pick a date'}</span>
         )}
       </Button>
     );
