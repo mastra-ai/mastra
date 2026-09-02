@@ -36,6 +36,11 @@ async function pickOption(user: ReturnType<typeof userEvent.setup>, trigger: HTM
   await waitFor(() => expect(screen.queryByRole('option', { name })).not.toBeInTheDocument());
 }
 
+async function pickSelectOption(user: ReturnType<typeof userEvent.setup>, label: string, optionName: string) {
+  await user.click(screen.getByRole('combobox', { name: label }));
+  await user.click(await screen.findByRole('option', { name: optionName }));
+}
+
 async function rowFor(packName: string): Promise<HTMLLIElement> {
   const row = (await screen.findByText(packName)).closest('li');
   if (!(row instanceof HTMLLIElement)) throw new Error(`Model pack row not found for ${packName}`);
@@ -159,6 +164,7 @@ describe('ModelPacksSection', () => {
             name: 'My Pack',
             description: '',
             models: { build: 'openai/gpt-x', plan: 'anthropic/claude-x', fast: 'openai/gpt-x' },
+            thinkingLevels: { build: 'high', fast: 'off' },
             custom: true,
             active: false,
           });
@@ -171,19 +177,24 @@ describe('ModelPacksSection', () => {
 
       await user.click(await screen.findByRole('button', { name: 'New pack' }));
       await user.type(screen.getByPlaceholderText('e.g. my-pack'), 'My Pack');
-      const selects = screen.getAllByRole('combobox');
-      await pickOption(user, selects[0]!, /openai\/gpt-x/);
-      await pickOption(user, selects[1]!, /anthropic\/claude-x/);
-      await pickOption(user, selects[2]!, /openai\/gpt-x/);
+      const modelSelects = screen.getAllByRole('combobox').filter(select => !select.getAttribute('aria-label'));
+      await pickOption(user, modelSelects[0]!, /openai\/gpt-x/);
+      await pickOption(user, modelSelects[1]!, /anthropic\/claude-x/);
+      await pickOption(user, modelSelects[2]!, /openai\/gpt-x/);
+      await pickSelectOption(user, 'Build thinking level', 'high');
+      await pickSelectOption(user, 'Fast thinking level', 'off');
       await user.click(screen.getByRole('button', { name: 'Add' }));
 
       await waitFor(() =>
         expect(postBody).toEqual({
           name: 'My Pack',
           models: { build: 'openai/gpt-x', plan: 'anthropic/claude-x', fast: 'openai/gpt-x' },
+          thinkingLevels: { build: 'high', fast: 'off' },
         }),
       );
-      expect(await screen.findByText('My Pack')).toBeInTheDocument();
+      const createdRow = await rowFor('My Pack');
+      expect(within(createdRow).getByText(/openai\/gpt-x · high thinking/)).toBeInTheDocument();
+      expect(within(createdRow).getByText(/openai\/gpt-x · off thinking/)).toBeInTheDocument();
     });
   });
 

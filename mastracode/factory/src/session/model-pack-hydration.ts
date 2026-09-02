@@ -23,10 +23,15 @@ export interface ModelPackHydrationSession extends ModelPackApplicableSession {
 
 export async function applyActiveModelPack(
   session: ModelPackApplicableSession,
-  activePack: Pick<ActiveModelPackRecord, 'packId' | 'models'>,
+  activePack: Pick<ActiveModelPackRecord, 'packId' | 'models'> &
+    Partial<Pick<ActiveModelPackRecord, 'thinkingLevels'>>,
 ): Promise<void> {
   for (const [modeId, modelId] of Object.entries(activePack.models)) {
     await session.thread.setSetting({ key: `modeModelId_${modeId}`, value: modelId });
+    await session.thread.setSetting({
+      key: `modeThinkingLevel_${modeId}`,
+      value: activePack.thinkingLevels?.[modeId as keyof typeof activePack.thinkingLevels],
+    });
   }
 
   const currentMode = session.mode.get();
@@ -85,6 +90,9 @@ export async function hydrateSessionModelPack(
       session.thread.getSetting({ key: 'modeModelId_build' }),
       session.thread.getSetting({ key: 'modeModelId_plan' }),
       session.thread.getSetting({ key: 'modeModelId_fast' }),
+      session.thread.getSetting({ key: 'modeThinkingLevel_build' }),
+      session.thread.getSetting({ key: 'modeThinkingLevel_plan' }),
+      session.thread.getSetting({ key: 'modeThinkingLevel_fast' }),
     ]);
     if (existingThreadSettings.some(setting => typeof setting === 'string')) return;
 

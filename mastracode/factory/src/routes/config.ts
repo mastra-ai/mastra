@@ -69,14 +69,7 @@ function loose(c: unknown): Context {
  * reports the scoped variants (`oauth-user`/`stored-user`/`stored-org`).
  */
 export type ProviderCredentialSource =
-  | 'oauth'
-  | 'stored'
-  | 'env'
-  | 'none'
-  | 'oauth-user'
-  | 'oauth-org'
-  | 'stored-user'
-  | 'stored-org';
+  'oauth' | 'stored' | 'env' | 'none' | 'oauth-user' | 'oauth-org' | 'stored-user' | 'stored-org';
 
 /** A model provider with the current source of its credentials. */
 export interface ProviderInfo {
@@ -458,7 +451,26 @@ async function authorizePackSession({
 
 /** DB row → the `ModePack` shape the packs list and activation flow consume. */
 function recordToModePack(record: ModelPackRecord): ModePack {
-  return { id: `custom:${record.id}`, name: record.name, description: 'Saved custom pack', models: record.models };
+  return {
+    id: `custom:${record.id}`,
+    name: record.name,
+    description: 'Saved custom pack',
+    models: record.models,
+    thinkingLevels: record.thinkingLevels,
+  };
+}
+
+function parsePackThinkingLevels(value: unknown): ModePack['thinkingLevels'] | null {
+  if (value === undefined) return {};
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const levels: NonNullable<ModePack['thinkingLevels']> = {};
+  for (const mode of ['build', 'plan', 'fast'] as const) {
+    const level = (value as Record<string, unknown>)[mode];
+    if (level === undefined || level === null || level === 'inherit') continue;
+    if (!isThinkingLevelSetting(level)) return null;
+    levels[mode] = level;
+  }
+  return levels;
 }
 
 /**
@@ -1029,7 +1041,7 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
         handler: async c => {
           const packContext = await resolvePackContext({ c: loose(c), auth, modelPacks: options.modelPacks });
           if ('response' in packContext) return packContext.response;
-          let body: { name?: unknown; models?: unknown };
+          let body: { name?: unknown; models?: unknown; thinkingLevels?: unknown };
           try {
             body = await c.req.json();
           } catch {
@@ -1044,11 +1056,18 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
           if (!build || !plan || !fast) {
             return c.json({ error: 'models.build, models.plan and models.fast are required' }, 400);
           }
+          const thinkingLevels = parsePackThinkingLevels(body.thinkingLevels);
+          if (!thinkingLevels) {
+            return c.json(
+              { error: 'thinkingLevels values must be inherit, off, low, medium, high, xhigh or max' },
+              400,
+            );
+          }
           try {
             const record = await packContext.storage.upsert({
               orgId: packContext.orgId,
               userId: packContext.userId,
-              input: { name, models: { build, plan, fast } },
+              input: { name, models: { build, plan, fast }, thinkingLevels },
             });
             return c.json({ ok: true, pack: recordToModePack(record) });
           } catch (error) {
@@ -1149,6 +1168,7 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
                 userId: packContext.userId,
                 packId: pack.id,
                 models: pack.models,
+                thinkingLevels: pack.thinkingLevels,
               });
               return c.json({ ok: true, target, activePackId: pack.id });
             }

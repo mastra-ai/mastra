@@ -111,6 +111,8 @@ export const ABORTED_BY_USER_REASON = 'Aborted by the user';
 const PERSISTED_STATE_KEYS = ['thinkingLevel', 'notifications'] as const;
 /** Persisted thread-setting key prefix for a mode's last-used model. */
 const modeModelKey = (modeId: string) => `modeModelId_${modeId}`;
+/** Persisted thread-setting key prefix for a mode's ModelPack thinking level. */
+export const modeThinkingLevelKey = (modeId: string) => `modeThinkingLevel_${modeId}`;
 
 /**
  * Internal thread-metadata keys used by `Session.loadMetadata()` to persist
@@ -135,7 +137,11 @@ const RESERVED_THREAD_METADATA_KEYS = [
 export type ReservedThreadMetadataKey = (typeof RESERVED_THREAD_METADATA_KEYS)[number];
 
 function isReservedThreadMetadataKey(key: string): boolean {
-  return RESERVED_THREAD_METADATA_KEYS.some(reserved => reserved === key) || key.startsWith('modeModelId_');
+  return (
+    RESERVED_THREAD_METADATA_KEYS.some(reserved => reserved === key) ||
+    key.startsWith('modeModelId_') ||
+    key.startsWith('modeThinkingLevel_')
+  );
 }
 
 /**

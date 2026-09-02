@@ -16,6 +16,7 @@ describe('ModelPacksStorage', () => {
           plan: 'anthropic/claude-fable-5',
           fast: 'anthropic/claude-haiku-4-5',
         },
+        thinkingLevels: { build: 'high', fast: 'low' },
       },
     });
 
@@ -28,6 +29,7 @@ describe('ModelPacksStorage', () => {
         plan: 'anthropic/claude-fable-5',
         fast: 'anthropic/claude-haiku-4-5',
       },
+      thinkingLevels: { build: 'high', fast: 'low' },
     });
     expect(await seed.modelPacks.get({ orgId: 'org-1', id: pack.id })).toEqual(pack);
     expect(await seed.modelPacks.get({ orgId: 'other-org', id: pack.id })).toBeNull();
@@ -93,26 +95,30 @@ describe('ModelPacksStorage', () => {
     const seed = await createFactoryStorageForTests();
     const originalModels = { build: 'openai/gpt-5.5', plan: 'openai/gpt-5.5', fast: 'openai/gpt-5.4-mini' };
     const updatedModels = { build: 'openai/gpt-5.6', plan: 'openai/gpt-5.6', fast: 'openai/gpt-5.4-mini' };
+    const originalThinkingLevels = { build: 'high', plan: 'medium' } as const;
+    const updatedThinkingLevels = { build: 'max', fast: 'low' } as const;
     const pack = await seed.modelPacks.upsert({
       orgId: 'org-1',
       userId: 'user-1',
-      input: { name: 'Default', models: originalModels },
+      input: { name: 'Default', models: originalModels, thinkingLevels: originalThinkingLevels },
     });
     await seed.modelPacks.setActive({
       orgId: 'org-1',
       userId: 'user-1',
       packId: `custom:${pack.id}`,
       models: originalModels,
+      thinkingLevels: originalThinkingLevels,
     });
 
     await seed.modelPacks.upsert({
       orgId: 'org-1',
       userId: 'user-2',
-      input: { name: 'Default', models: updatedModels },
+      input: { name: 'Default', models: updatedModels, thinkingLevels: updatedThinkingLevels },
     });
 
     expect(await seed.modelPacks.getActive({ orgId: 'org-1', userId: 'user-1' })).toMatchObject({
       models: updatedModels,
+      thinkingLevels: updatedThinkingLevels,
     });
     expect(await seed.modelPacks.clearActive({ orgId: 'org-1', userId: 'user-1' })).toBe(true);
     expect(await seed.modelPacks.getActive({ orgId: 'org-1', userId: 'user-1' })).toBeNull();

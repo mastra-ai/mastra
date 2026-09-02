@@ -538,6 +538,7 @@ describe('model pack routes with a tenant', () => {
   const packBody = {
     name: 'Team pack',
     models: { build: 'anthropic/claude-fable-5', plan: 'anthropic/claude-fable-5', fast: 'anthropic/claude-haiku-4-5' },
+    thinkingLevels: { build: 'high', fast: 'low' },
   };
 
   const postPack = (app: Hono, body: unknown) =>
@@ -600,7 +601,11 @@ describe('model pack routes with a tenant', () => {
     const created = await postPack(buildApp(userA), packBody);
     expect(created.status).toBe(200);
     const { pack } = await created.json();
-    expect(pack).toMatchObject({ name: 'Team pack', models: packBody.models });
+    expect(pack).toMatchObject({
+      name: 'Team pack',
+      models: packBody.models,
+      thinkingLevels: packBody.thinkingLevels,
+    });
     expect(pack.id).toMatch(/^custom:/);
 
     const stored = await seed.modelPacks.list({ orgId: 'org1' });
@@ -610,6 +615,18 @@ describe('model pack routes with a tenant', () => {
     const listed = await buildApp(userA).request('/web/config/model-packs');
     const { packs } = await listed.json();
     expect(packs.find((p: { id: string }) => p.id === pack.id)).toMatchObject({ custom: true, active: false });
+  });
+
+  it('rejects invalid pack thinking levels', async () => {
+    const response = await postPack(buildApp(userA), {
+      ...packBody,
+      thinkingLevels: { build: 'ultra' },
+    });
+
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({
+      error: 'thinkingLevels values must be inherit, off, low, medium, high, xhigh or max',
+    });
   });
 
   it('persists one personal active pack without requiring an open session', async () => {
@@ -626,6 +643,7 @@ describe('model pack routes with a tenant', () => {
     expect(await seed.modelPacks.getActive({ orgId: 'org1', userId: 'user-a' })).toMatchObject({
       packId: pack.id,
       models: packBody.models,
+      thinkingLevels: packBody.thinkingLevels,
     });
 
     const userAList = await buildApp(userA).request('/web/config/model-packs');
