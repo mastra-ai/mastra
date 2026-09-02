@@ -32,17 +32,6 @@ import { experimentScoreId } from './experiment/scorer.js';
 import type { ExperimentConfig, StartExperimentConfig, ExperimentSummary } from './experiment/types.js';
 
 /**
- * Scorer ids to pin on a persisted experiment. Only a flat list of string ids
- * is serializable; scorer instances and categorized configs are resolved at
- * run time and not stored.
- */
-function runLevelScorerIds(scorers: StartExperimentConfig['scorers']): string[] | null {
-  if (!Array.isArray(scorers) || scorers.length === 0) return null;
-  const ids = scorers.filter((scorer): scorer is string => typeof scorer === 'string');
-  return ids.length === scorers.length ? ids : null;
-}
-
-/**
  * Public API for interacting with a single dataset.
  *
  * Provides methods for item CRUD, versioning, and experiment management.
@@ -420,7 +409,6 @@ export class Dataset {
         datasetVersion: targetVersion,
         targetType: config.targetType ?? 'agent',
         targetId: config.targetId ?? 'inline',
-        scorerIds: runLevelScorerIds(config.scorers),
         totalItems: items.length,
         name: config.name,
         description: config.description,
