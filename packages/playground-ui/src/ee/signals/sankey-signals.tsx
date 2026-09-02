@@ -2,6 +2,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { ArrowLeftRight, ChartNoAxesGantt, Waypoints } from 'lucide-react';
 import { useMemo, useState } from 'react';
 
+import { PendingSignalProgress } from './components/signals-empty-state';
 import { SignalsOverviewPage as SignalsEmptyState } from './components/signals-overview-page';
 import { fetchThemeFlow, fetchThemePaths, fetchThemeSnapshots, serializeThemeFilters } from './entity-learning-api';
 import { FlowCard } from './flow-card';
@@ -17,7 +18,7 @@ import {
   snapshotSummaryLabel,
   stabilizeThemeFlow,
 } from './sankey-signals-data';
-import { SIGNAL_PROCESSING_ORDER } from './signal-formatting';
+import { orderedSignals, signalLabel } from './signal-formatting';
 import { SignalsErrorState } from './signals-error-state';
 import { SignalsFrameLoadingSkeleton, SignalsLoadingSkeleton } from './signals-loading-skeleton';
 import { SnapshotTimeline } from './snapshot-timeline';
@@ -34,6 +35,7 @@ import {
 import type { SelectedTheme, ThemeSelection } from './theme-drilldown-data';
 import { ThemeFilterBanner } from './theme-filter-banner';
 import { ThemeLifelines } from './theme-lifelines';
+import { TraceIntelligenceContext } from './trace-intelligence-context';
 import { TraceIntelligenceExplainer } from './trace-intelligence-explainer';
 import type { ThemeFlowResponse, TraceSignalName } from './types';
 import { useTraceIntelligence } from './use-trace-intelligence';
@@ -59,14 +61,18 @@ export interface SankeySignalsProps {
 }
 
 const DRILL_IN_TRACE_LIMIT = 2000;
-const FLOW_SIGNAL_LIST = `${SIGNAL_PROCESSING_ORDER.slice(0, -1).join(', ')}, and ${SIGNAL_PROCESSING_ORDER[SIGNAL_PROCESSING_ORDER.length - 1]}`;
 
 /** One-line answer to "what am I looking at?" for each view, shown under the tabs. */
-const VIEW_DESCRIPTIONS: Record<SignalsViewMode, string> = {
-  flow: `How this agent's traces distribute across ${FLOW_SIGNAL_LIST} themes at this point in time.`,
+const VIEW_DESCRIPTIONS: Omit<Record<SignalsViewMode, string>, 'flow'> = {
   compare: 'Which themes grew, shrank, appeared, or disappeared between two points in time.',
   lifelines: "Each theme's share of traces across the whole selected range.",
 };
+
+function formatSignalList(labels: string[]): string {
+  if (labels.length < 2) return labels[0] ?? 'trace signal';
+  if (labels.length === 2) return labels.join(' and ');
+  return `${labels.slice(0, -1).join(', ')}, and ${labels.at(-1)}`;
+}
 
 export function SankeySignals({
   entityId,
@@ -82,10 +88,16 @@ export function SankeySignals({
   dateRangePicker,
 }: SankeySignalsProps) {
   const queryClient = useQueryClient();
-  const { cacheScope, request, LinkComponent } = useTraceIntelligence();
+  const traceIntelligence = useTraceIntelligence();
+  const { cacheScope, request, LinkComponent, signalCatalog } = traceIntelligence;
   const [signalNames, setSignalNames] = useState(() => initialSignalNames);
   const [pendingSignalNames, setPendingSignalNames] = useState<TraceSignalName[]>();
   const snapshotsQuery = useThemeSnapshots(entityId, entityType, signalNames, dateFrom, dateTo);
+  const effectiveSignalCatalog = snapshotsQuery.data?.signalCatalog ?? signalCatalog;
+  const traceIntelligenceContext = useMemo(
+    () => ({ ...traceIntelligence, signalCatalog: effectiveSignalCatalog }),
+    [effectiveSignalCatalog, traceIntelligence],
+  );
   const snapshots = [...(snapshotsQuery.data?.snapshots ?? [])].sort((left, right) => left.ordinal - right.ordinal);
   const [isPlaying, setIsPlaying] = useState(false);
   const [viewMode, setViewMode] = useState<SignalsViewMode>('flow');
@@ -158,10 +170,13 @@ export function SankeySignals({
   const detailSelection =
     stableUnfilteredFlow && selectedThemeId ? findThemeSelectionById(stableUnfilteredFlow, selectedThemeId) : undefined;
   const populatedStageCount = currentFlow?.stages.filter(stage => stage.nodes.length > 0).length ?? 0;
+  const hasPendingEnabledSignals = effectiveSignalCatalog.some(signal => signal.enabled && signal.status !== 'ready');
   const shouldLoadProgress =
     snapshotsQuery.isSuccess &&
     !snapshotsQuery.isError &&
-    (!snapshot || Boolean(currentFlow && (!flow || !graphSummary || populatedStageCount < 2)));
+    (hasPendingEnabledSignals ||
+      !snapshot ||
+      Boolean(currentFlow && (!flow || !graphSummary || populatedStageCount < 2)));
   const progressQuery = useEntityLearningProgress(entityId, entityType, shouldLoadProgress);
   const isPlaybackBlockedByDrillIn = drillStack.length > 0 && (pathsQuery.isFetching || pathsQuery.isError);
   const hasActivePathsError = drillStack.length > 0 && pathsQuery.isError;
@@ -263,7 +278,12 @@ export function SankeySignals({
     return (
       <>
         {dateRangePicker && <div className="flex justify-end px-4 pt-4 lg:px-6 lg:pt-6">{dateRangePicker}</div>}
-        <SignalsEmptyState LinkComponent={LinkComponent} progress={progressQuery.data} isRangeEmpty />
+        <SignalsEmptyState
+          LinkComponent={LinkComponent}
+          progress={progressQuery.data}
+          signalCatalog={effectiveSignalCatalog}
+          isRangeEmpty
+        />
       </>
     );
   }
@@ -290,7 +310,11 @@ export function SankeySignals({
     return (
       <>
         {dateRangePicker && <div className="flex justify-end px-4 pt-4 lg:px-6 lg:pt-6">{dateRangePicker}</div>}
-        <SignalsEmptyState LinkComponent={LinkComponent} progress={progressQuery.data} />
+        <SignalsEmptyState
+          LinkComponent={LinkComponent}
+          progress={progressQuery.data}
+          signalCatalog={effectiveSignalCatalog}
+        />
       </>
     );
   }
@@ -332,137 +356,149 @@ export function SankeySignals({
     ? findSelectionStats(flow, drillStack, noiseSignalName ? { kind: 'noise', signalName: noiseSignalName } : undefined)
     : undefined;
   const filterKey = serializeThemeFilters(drillStack);
+  const catalogSignalNames = orderedSignals(effectiveSignalCatalog, signalNames);
+  const viewDescription =
+    viewMode === 'flow'
+      ? `How this agent's traces distribute across ${formatSignalList(catalogSignalNames.map(name => signalLabel(effectiveSignalCatalog, name).toLocaleLowerCase()))} themes at this point in time.`
+      : VIEW_DESCRIPTIONS[viewMode];
+  const labeledColumns = graphSummary.columns.map(column => ({
+    ...column,
+    label: signalLabel(effectiveSignalCatalog, column.id),
+  }));
 
   return (
-    <main className="min-w-0 space-y-5 p-4 lg:p-6">
-      <div className="flex min-w-0 flex-wrap items-center justify-between gap-3">
-        <div className="flex min-w-0 flex-wrap items-center gap-4">
-          <Tabs<SignalsViewMode>
-            value={viewMode}
-            defaultTab="flow"
-            onValueChange={handleViewModeChange}
-            className="w-fit"
-          >
-            <TabList variant="pill-ghost">
-              <ViewModeTab value="flow" icon={<Waypoints />} label="Flow" />
-              <ViewModeTab value="compare" icon={<ArrowLeftRight />} label="Compare" />
-              <ViewModeTab value="lifelines" icon={<ChartNoAxesGantt />} label="Lifelines" />
-            </TabList>
-          </Tabs>
-          <TraceIntelligenceExplainer />
+    <TraceIntelligenceContext.Provider value={traceIntelligenceContext}>
+      <main className="min-w-0 space-y-5 p-4 lg:p-6">
+        <div className="flex min-w-0 flex-wrap items-center justify-between gap-3">
+          <div className="flex min-w-0 flex-wrap items-center gap-4">
+            <Tabs<SignalsViewMode>
+              value={viewMode}
+              defaultTab="flow"
+              onValueChange={handleViewModeChange}
+              className="w-fit"
+            >
+              <TabList variant="pill-ghost">
+                <ViewModeTab value="flow" icon={<Waypoints />} label="Flow" />
+                <ViewModeTab value="compare" icon={<ArrowLeftRight />} label="Compare" />
+                <ViewModeTab value="lifelines" icon={<ChartNoAxesGantt />} label="Lifelines" />
+              </TabList>
+            </Tabs>
+            <TraceIntelligenceExplainer signalCatalog={effectiveSignalCatalog} />
+          </div>
+          {dateRangePicker}
         </div>
-        {dateRangePicker}
-      </div>
-      <p className="text-neutral3 text-xs">{VIEW_DESCRIPTIONS[viewMode]}</p>
-      {viewMode === 'compare' ? (
-        <ThemeCompare
-          entityId={entityId}
-          entityType={entityType}
-          signalNames={signalNames}
-          snapshots={snapshots}
-          totalSnapshots={totalSnapshots}
-          onThemeSelect={openThemeDetailsAt}
-        />
-      ) : viewMode === 'lifelines' ? (
-        <ThemeLifelines
-          entityId={entityId}
-          entityType={entityType}
-          signalNames={signalNames}
-          snapshots={snapshots}
-          totalSnapshots={totalSnapshots}
-          selectedIndex={selectedSnapshotIndex}
-          onSnapshotSelect={selectSnapshot}
-          onThemeSelect={openThemeDetailsAt}
-        />
-      ) : (
-        <>
-          <SnapshotTimeline
+        <p className="text-neutral3 text-xs">{viewDescription}</p>
+        <PendingSignalProgress progress={progressQuery.data} signalCatalog={effectiveSignalCatalog} />
+        {viewMode === 'compare' ? (
+          <ThemeCompare
+            entityId={entityId}
+            entityType={entityType}
+            signalNames={signalNames}
             snapshots={snapshots}
-            selectedIndex={selectedSnapshotIndex}
             totalSnapshots={totalSnapshots}
-            summary={`${drillStack.length > 0 ? (drillInAvailable ? 'Filtered · ' : 'Filters unavailable · ') : ''}${snapshotSummaryLabel(snapshot, flow)}`}
-            isPlaying={isPlaying}
-            onPlayingChange={handlePlayingChange}
-            onSnapshotChange={selectSnapshot}
+            onThemeSelect={openThemeDetailsAt}
           />
-          {drillStack.length > 0 ? (
-            <ThemeFilterBanner
-              selections={drillStack}
-              filteredTraceCount={filtersResolved ? flow.snapshot.traceCount : undefined}
-              totalTraceCount={currentFlow.snapshot.traceCount}
-              isUnavailable={!drillInAvailable}
-              onViewDetails={selection => {
-                if (selection.kind === 'theme') {
-                  setNoiseSignalName(undefined);
-                  setThemeDetails(selection);
-                } else {
-                  setThemeDetails(undefined);
-                  setNoiseSignalName(selection.signalName);
+        ) : viewMode === 'lifelines' ? (
+          <ThemeLifelines
+            entityId={entityId}
+            entityType={entityType}
+            signalNames={signalNames}
+            snapshots={snapshots}
+            totalSnapshots={totalSnapshots}
+            selectedIndex={selectedSnapshotIndex}
+            onSnapshotSelect={selectSnapshot}
+            onThemeSelect={openThemeDetailsAt}
+          />
+        ) : (
+          <>
+            <SnapshotTimeline
+              snapshots={snapshots}
+              selectedIndex={selectedSnapshotIndex}
+              totalSnapshots={totalSnapshots}
+              summary={`${drillStack.length > 0 ? (drillInAvailable ? 'Filtered · ' : 'Filters unavailable · ') : ''}${snapshotSummaryLabel(snapshot, flow)}`}
+              isPlaying={isPlaying}
+              onPlayingChange={handlePlayingChange}
+              onSnapshotChange={selectSnapshot}
+            />
+            {drillStack.length > 0 ? (
+              <ThemeFilterBanner
+                selections={drillStack}
+                filteredTraceCount={filtersResolved ? flow.snapshot.traceCount : undefined}
+                totalTraceCount={currentFlow.snapshot.traceCount}
+                isUnavailable={!drillInAvailable}
+                onViewDetails={selection => {
+                  if (selection.kind === 'theme') {
+                    setNoiseSignalName(undefined);
+                    setThemeDetails(selection);
+                  } else {
+                    setThemeDetails(undefined);
+                    setNoiseSignalName(selection.signalName);
+                  }
+                }}
+                onRemove={signalName =>
+                  setDrillStack(current => current.filter(filter => filter.signalName !== signalName))
                 }
-              }}
-              onRemove={signalName =>
-                setDrillStack(current => current.filter(filter => filter.signalName !== signalName))
-              }
-              onClear={() => setDrillStack([])}
-            />
-          ) : null}
-          {isDrilledEmpty ? (
-            <section className="border-border1 bg-surface2 text-neutral3 rounded-lg border p-6 text-sm">
-              This theme is not present in the selected snapshot. Use the clear filter action above to return to the
-              full flow.
-            </section>
-          ) : graphSummary.records.length === 0 ? (
-            <section className="border-border1 bg-surface2 text-neutral3 rounded-lg border p-6 text-sm">
-              No cross-signal flow for this snapshot — its trace signals have not overlapped on shared traces yet. Pick
-              another snapshot from the timeline below.
-            </section>
-          ) : (
-            <FlowCard
-              columns={graphSummary.columns}
-              records={graphSummary.records}
-              stages={stages}
-              height={height}
-              onNodeClick={handleNodeClick}
-              isNodeClickable={isNodeClickable}
-              drillInDisabledReason={drillInDisabledReason}
-              onOrderChange={handleSignalOrderChange}
-              signalOrder={pendingSignalNames ?? signalNames}
-              reorderDisabled={perspectiveMutation.isPending}
-            />
-          )}
-          {perspectiveMutation.isPending ? (
-            <p className="text-neutral3 font-mono text-xs" role="status">
-              Reloading snapshots for new trace signal perspective…
-            </p>
-          ) : null}
-          {perspectiveMutation.isError ? (
-            <p className="text-xs text-red-500" role="alert">
-              Unable to load that trace signal perspective. Try reordering the columns again.
-            </p>
-          ) : null}
-        </>
-      )}
-      <ThemeDetailPanel
-        key={`${snapshot.snapshotId}:${detailSelection?.signalName ?? ''}:${detailSelection?.themeId ?? ''}:${filterKey}`}
-        entityId={entityId}
-        entityType={entityType}
-        snapshotId={snapshot.snapshotId}
-        snapshotTotal={snapshot.total}
-        selection={detailSelection}
-        filters={drillStack}
-        filteredStats={detailStats}
-        onClose={() => setThemeDetails(undefined)}
-      />
-      <NoiseDetailPanel
-        key={`${snapshot.snapshotId}:${noiseSignalName ?? ''}:${filterKey}`}
-        entityId={entityId}
-        entityType={entityType}
-        snapshotId={snapshot.snapshotId}
-        signalName={noiseSignalName}
-        filters={drillStack}
-        filteredStats={noiseStats}
-        onClose={() => setNoiseSignalName(undefined)}
-      />
-    </main>
+                onClear={() => setDrillStack([])}
+              />
+            ) : null}
+            {isDrilledEmpty ? (
+              <section className="border-border1 bg-surface2 text-neutral3 rounded-lg border p-6 text-sm">
+                This theme is not present in the selected snapshot. Use the clear filter action above to return to the
+                full flow.
+              </section>
+            ) : graphSummary.records.length === 0 ? (
+              <section className="border-border1 bg-surface2 text-neutral3 rounded-lg border p-6 text-sm">
+                No cross-signal flow for this snapshot — its trace signals have not overlapped on shared traces yet.
+                Pick another snapshot from the timeline below.
+              </section>
+            ) : (
+              <FlowCard
+                columns={labeledColumns}
+                records={graphSummary.records}
+                stages={stages}
+                height={height}
+                onNodeClick={handleNodeClick}
+                isNodeClickable={isNodeClickable}
+                drillInDisabledReason={drillInDisabledReason}
+                onOrderChange={handleSignalOrderChange}
+                signalOrder={pendingSignalNames ?? signalNames}
+                reorderDisabled={perspectiveMutation.isPending}
+              />
+            )}
+            {perspectiveMutation.isPending ? (
+              <p className="text-neutral3 font-mono text-xs" role="status">
+                Reloading snapshots for new trace signal perspective…
+              </p>
+            ) : null}
+            {perspectiveMutation.isError ? (
+              <p className="text-xs text-red-500" role="alert">
+                Unable to load that trace signal perspective. Try reordering the columns again.
+              </p>
+            ) : null}
+          </>
+        )}
+        <ThemeDetailPanel
+          key={`${snapshot.snapshotId}:${detailSelection?.signalName ?? ''}:${detailSelection?.themeId ?? ''}:${filterKey}`}
+          entityId={entityId}
+          entityType={entityType}
+          snapshotId={snapshot.snapshotId}
+          snapshotTotal={snapshot.total}
+          selection={detailSelection}
+          filters={drillStack}
+          filteredStats={detailStats}
+          onClose={() => setThemeDetails(undefined)}
+        />
+        <NoiseDetailPanel
+          key={`${snapshot.snapshotId}:${noiseSignalName ?? ''}:${filterKey}`}
+          entityId={entityId}
+          entityType={entityType}
+          snapshotId={snapshot.snapshotId}
+          signalName={noiseSignalName}
+          filters={drillStack}
+          filteredStats={noiseStats}
+          onClose={() => setNoiseSignalName(undefined)}
+        />
+      </main>
+    </TraceIntelligenceContext.Provider>
   );
 }
