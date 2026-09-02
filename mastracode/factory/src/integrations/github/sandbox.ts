@@ -89,9 +89,23 @@ export async function sh(
   // remaining, so transport retries can never multiply the hang guard.
   const deadlineMs = Date.now() + (options.timeoutMs ?? DEFAULT_COMMAND_TIMEOUT_MS);
   for (let attempt = 0; ; attempt++) {
+    const started = performance.now();
     try {
-      return await shOnce(sandbox, script, { ...options, timeoutMs: Math.max(deadlineMs - Date.now(), 1) });
+      const result = await shOnce(sandbox, script, { ...options, timeoutMs: Math.max(deadlineMs - Date.now(), 1) });
+      // Phased commands are the session start path; report each so a slow
+      // start names the command that took the time rather than the phase.
+      if (options.phase) {
+        process.stderr.write(
+          `[factory:timing] ${options.phase} attempt=${attempt + 1} exit=${result.exitCode} ${Math.round(performance.now() - started)}ms\n`,
+        );
+      }
+      return result;
     } catch (error) {
+      if (options.phase) {
+        process.stderr.write(
+          `[factory:timing] ${options.phase} attempt=${attempt + 1} threw after ${Math.round(performance.now() - started)}ms: ${error instanceof Error ? error.message : String(error)}\n`,
+        );
+      }
       if (attempt >= SH_RETRIES || !isTransientTransportError(error)) throw error;
       const delayMs = SH_RETRY_DELAY_MS * (attempt + 1);
       if (deadlineMs - Date.now() <= delayMs) throw error;
@@ -170,6 +184,7 @@ async function gitTransfer(
       timeoutMs: Math.max(deadlineMs - Date.now(), 1),
     });
     if (result.exitCode === 0 || attempt >= GIT_TRANSFER_RETRIES || !isTransientGitFailure(result)) return result;
+    process.stderr.write(`[factory:timing] git ${shOptions.phase ?? 'transfer'} retrying after attempt ${attempt + 1}\n`);
     const delayMs = GIT_TRANSFER_RETRY_DELAY_MS * (attempt + 1);
     if (deadlineMs - Date.now() <= delayMs) return result;
     await new Promise(resolve => setTimeout(resolve, delayMs));
@@ -386,7 +401,9 @@ async function checkoutSessionBranchImpl(
 
   const authUrl = tokenUrl(repoFullName, token);
   try {
-    const setUrl = await sh(sandbox, `git -C ${shellQuote(workdir)} remote set-url origin ${shellQuote(authUrl)}`);
+    const setUrl = await sh(sandbox, `git -C ${shellQuote(workdir)} remote set-url origin ${shellQuote(authUrl)}`, {
+      phase: 'branch checkout remote',
+    });
     if (setUrl.exitCode !== 0) throw classifyGitFailure(setUrl, 'pull-failed');
     const fetch = await sh(
       sandbox,
