@@ -141,6 +141,50 @@ describe('OpenAISchemaCompatLayer', () => {
       expect(JSON.stringify(filter).split('SINGLE_OBJECT_SENTINEL').length - 1).toBe(1);
     });
 
+    it('keeps enum and const constraints out of the null branch for single-type properties', async () => {
+      const schema = {
+        type: 'object',
+        properties: {
+          filter: {
+            type: 'object',
+            enum: [{ field: 'name' }],
+            properties: { field: { type: 'string' } },
+            required: ['field'],
+            additionalProperties: false,
+          },
+          tags: {
+            type: 'array',
+            const: ['stable'],
+            items: { type: 'string' },
+          },
+        },
+        required: [],
+      } as any;
+      const compatSchema = compat.processToCompatSchema(schema);
+      const result = compatSchema['~standard'].jsonSchema.input({ target: 'draft-07' }) as Record<string, any>;
+
+      const filter = result.properties.filter;
+      expect(filter).not.toHaveProperty('enum');
+      expect(filter.anyOf).toEqual([
+        {
+          type: 'object',
+          enum: [{ field: 'name' }],
+          properties: { field: { type: 'string' } },
+          required: ['field'],
+          additionalProperties: false,
+        },
+        { type: 'null' },
+      ]);
+
+      const tags = result.properties.tags;
+      expect(tags).not.toHaveProperty('const');
+      expect(tags.anyOf).toEqual([{ type: 'array', items: { type: 'string' }, const: ['stable'] }, { type: 'null' }]);
+
+      const nullResult: any = await compatSchema['~standard'].validate({ filter: null, tags: null });
+      expect(nullResult).not.toHaveProperty('issues');
+      expect(nullResult.value).toEqual({ filter: undefined, tags: undefined });
+    });
+
     it('keeps items only in the array branch for array/string unions', () => {
       const result = compat.processToJSONSchema({
         type: 'object',

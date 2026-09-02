@@ -309,7 +309,7 @@ export class OpenAISchemaCompatLayer extends SchemaCompatLayer {
               const keywords = typeSpecificKeywords(originalType);
               if (keywords.length > 0) {
                 const branch = { type: originalType } as JSONSchema7;
-                for (const keyword of keywords) {
+                for (const keyword of [...keywords, 'const', 'enum'] as const) {
                   if (keyword in prop) {
                     // @ts-expect-error - keyword is a valid property for JSON Schema
                     branch[keyword] = prop[keyword];
