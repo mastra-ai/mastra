@@ -104,11 +104,59 @@ describe('mastracode working directory split', () => {
       });
       expect(workspace.filesystem.basePath).toBe(parentDir);
       expect(workspace.sandbox.workingDirectory).toBe(parentDir);
-      // The workspace identity stays project-scoped.
-      expect(workspace.id).toContain(projectDir);
+      // The identity carries both the project and the distinct root.
+      expect(workspace.id).toContain(`${projectDir}@${parentDir}`);
     } finally {
       try {
         await workspace?.destroy();
+      } finally {
+        await fs.rm(parentDir, { recursive: true, force: true });
+      }
+    }
+  });
+
+  it('does not reuse a cached workspace rooted at the project when the working directory changes', async () => {
+    const parentDir = await fs.mkdtemp(path.join(os.tmpdir(), 'mastracode-workspace-reuse-'));
+    const projectDir = path.join(parentDir, 'repo');
+    await fs.mkdir(projectDir);
+    const registered = new Map<string, any>();
+    const mastra = {
+      getWorkspaceById(id: string) {
+        const found = registered.get(id);
+        if (!found) throw new Error(`not registered: ${id}`);
+        return found;
+      },
+    };
+    const created: Array<{ destroy(): Promise<void> }> = [];
+    try {
+      const { getDynamicWorkspace } = await import('./workspace.js');
+      const coupled = await getDynamicWorkspace({
+        requestContext: createRequestContext(projectDir) as any,
+        mastra: mastra as any,
+      });
+      created.push(coupled);
+      registered.set(coupled.id, coupled);
+
+      const split = await getDynamicWorkspace({
+        requestContext: createRequestContext(projectDir, parentDir) as any,
+        mastra: mastra as any,
+      });
+      created.push(split);
+      registered.set(split.id, split);
+
+      expect(split).not.toBe(coupled);
+      expect(split.filesystem.basePath).toBe(parentDir);
+      expect(split.sandbox.workingDirectory).toBe(parentDir);
+
+      // Same roots again reuse the cached workspace.
+      const again = await getDynamicWorkspace({
+        requestContext: createRequestContext(projectDir, parentDir) as any,
+        mastra: mastra as any,
+      });
+      expect(again).toBe(split);
+    } finally {
+      try {
+        for (const workspace of created) await workspace.destroy();
       } finally {
         await fs.rm(parentDir, { recursive: true, force: true });
       }

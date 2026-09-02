@@ -209,7 +209,8 @@ describe('readWorkspaceFile', () => {
 
 // ── Session-backed (sandbox) workspace access ────────────────────────────────
 
-const WORKDIR = '/workspaces/acme/repo';
+const WORKING_DIRECTORY = '/workspaces/acme';
+const WORKDIR = `${WORKING_DIRECTORY}/repo`;
 
 function makeSession(overrides: Partial<SourceControlSession> = {}): SourceControlSession {
   return {
@@ -358,14 +359,14 @@ describe('persisted session workspace files routes', () => {
 });
 
 describe('listSessionRenderedPath', () => {
-  it('lists rendered entries from the session sandbox in one command', async () => {
+  it('lists rendered artifacts from the session working directory in one command', async () => {
     const { executeCommand } = seedSessionSandbox(script => {
-      expect(script).toContain(`'${WORKDIR}/.artifacts'`);
+      expect(script).toContain(`'${WORKING_DIRECTORY}/.artifacts'`);
       return {
         exitCode: 0,
         stdout: [
-          `d\t0\t1700000000.0\t${WORKDIR}/.artifacts/understand-pr`,
-          `f\t5\t1700000100.5\t${WORKDIR}/.artifacts/understand-pr/HISTORY.md`,
+          `d\t0\t1700000000.0\t${WORKING_DIRECTORY}/.artifacts/understand-pr`,
+          `f\t5\t1700000100.5\t${WORKING_DIRECTORY}/.artifacts/understand-pr/HISTORY.md`,
           '',
         ].join('\n'),
       };
@@ -376,12 +377,31 @@ describe('listSessionRenderedPath', () => {
 
     expect(listing.workspacePath).toBe(session.sessionId);
     expect(listing.root).toBe('.artifacts');
-    expect(listing.rootPath).toBe(`${WORKDIR}/.artifacts`);
+    expect(listing.rootPath).toBe(`${WORKING_DIRECTORY}/.artifacts`);
     expect(listing.entries).toEqual([
       expect.objectContaining({ name: 'understand-pr', path: 'understand-pr', type: 'directory', size: 0 }),
       expect.objectContaining({ name: 'HISTORY.md', path: 'understand-pr/HISTORY.md', type: 'file', size: 5 }),
     ]);
     expect(executeCommand).toHaveBeenCalledTimes(1);
+  });
+
+  it('lists only the working directory, never the repo-local .artifacts', async () => {
+    seedSessionSandbox(script => {
+      expect(script).not.toContain(`${WORKDIR}/.artifacts`);
+      return {
+        exitCode: 0,
+        stdout: [
+          `f\t7\t1700000200.0\t${WORKING_DIRECTORY}/.artifacts/current.md`,
+          `f\t6\t1700000100.0\t${WORKDIR}/.artifacts/legacy.md`,
+          '',
+        ].join('\n'),
+      };
+    });
+
+    const listing = await listSessionRenderedPath(makeSession(), '.artifacts');
+
+    expect(listing.rootPath).toBe(`${WORKING_DIRECTORY}/.artifacts`);
+    expect(listing.entries).toEqual([expect.objectContaining({ path: 'current.md', size: 7 })]);
   });
 
   it('returns an empty listing when this process holds no sandbox for the session', async () => {
@@ -422,17 +442,17 @@ describe('listSessionRenderedPath', () => {
 });
 
 describe('readSessionWorkspaceFile', () => {
-  function respondForFile(content: string) {
-    const abs = `${WORKDIR}/.artifacts/understand-pr/HISTORY.md`;
+  function respondForFile(content: string, root = WORKING_DIRECTORY) {
+    const abs = `${root}/.artifacts/understand-pr/HISTORY.md`;
     return (script: string) => {
-      if (script.includes(`p='${abs}'`)) return { exitCode: 0, stdout: `${WORKDIR}\n${abs}` };
+      if (script.includes(`p='${abs}'`)) return { exitCode: 0, stdout: `${root}\n${abs}` };
       if (script.startsWith('stat -c')) return { exitCode: 0, stdout: `regular file|${content.length}|1700000000|0\n` };
       if (script.includes('base64 <')) return { exitCode: 0, stdout: Buffer.from(content, 'utf8').toString('base64') };
       return { exitCode: 1, stdout: '', stderr: `unexpected script: ${script}` };
     };
   }
 
-  it('reads text content through the session sandbox', async () => {
+  it('reads text content from working-directory artifacts through the session sandbox', async () => {
     seedSessionSandbox(respondForFile('# History'));
 
     const session = makeSession();
@@ -448,6 +468,46 @@ describe('readSessionWorkspaceFile', () => {
         truncated: false,
       }),
     );
+  });
+
+  it('does not fall back to repo-local artifacts', async () => {
+    const legacy = respondForFile('# Legacy', WORKDIR);
+    seedSessionSandbox(script => {
+      if (script.includes(`${WORKING_DIRECTORY}/.artifacts/understand-pr/HISTORY.md`)) {
+        return { exitCode: 20, stdout: '' };
+      }
+      return legacy(script);
+    });
+
+    await expect(readSessionWorkspaceFile(makeSession(), '.artifacts/understand-pr/HISTORY.md')).rejects.toThrow(
+      /not found/i,
+    );
+  });
+
+  it('reads repo files by their working-directory path through one jail', async () => {
+    const abs = `${WORKDIR}/src/index.ts`;
+    const resolved: string[] = [];
+    seedSessionSandbox(script => {
+      if (script.includes("p='")) {
+        resolved.push(script);
+        return script.includes(`p='${abs}'`)
+          ? { exitCode: 0, stdout: `${WORKING_DIRECTORY}\n${abs}` }
+          : { exitCode: 20, stdout: '' };
+      }
+      if (script.startsWith('stat -c')) return { exitCode: 0, stdout: `regular file|9|1700000000|0\n` };
+      if (script.includes('base64 <'))
+        return { exitCode: 0, stdout: Buffer.from('export {}', 'utf8').toString('base64') };
+      return { exitCode: 1, stdout: '', stderr: `unexpected script: ${script}` };
+    });
+
+    const file = await readSessionWorkspaceFile(makeSession(), 'repo/src/index.ts', { allowUnapprovedPath: true });
+
+    expect(file).toEqual(expect.objectContaining({ path: 'repo/src/index.ts', content: 'export {}' }));
+    expect(resolved.length).toBeGreaterThan(0);
+    for (const script of resolved) {
+      expect(script).toContain(`root=$(cd '${WORKING_DIRECTORY}'`);
+      expect(script).toContain(`p='${abs}'`);
+    }
   });
 
   it('rejects reads outside approved rendered roots', async () => {
@@ -467,8 +527,8 @@ describe('readSessionWorkspaceFile', () => {
 
   it('rejects directories', async () => {
     seedSessionSandbox(script => {
-      if (script.includes(`p='${WORKDIR}/.artifacts'`)) {
-        return { exitCode: 0, stdout: `${WORKDIR}\n${WORKDIR}/.artifacts` };
+      if (script.includes(`p='${WORKING_DIRECTORY}/.artifacts'`)) {
+        return { exitCode: 0, stdout: `${WORKING_DIRECTORY}\n${WORKING_DIRECTORY}/.artifacts` };
       }
       if (script.startsWith('stat -c')) return { exitCode: 0, stdout: `directory|0|1700000000|0\n` };
       return { exitCode: 1, stdout: '' };
@@ -538,8 +598,8 @@ describe('workspace changes', () => {
       additions: 8,
       deletions: 1,
       changes: [
-        { path: 'src/edited.ts', status: 'modified', additions: 3, deletions: 1 },
-        { path: 'src/new.ts', status: 'untracked', additions: 5, deletions: 0 },
+        { path: 'repo/src/edited.ts', status: 'modified', additions: 3, deletions: 1 },
+        { path: 'repo/src/new.ts', status: 'untracked', additions: 5, deletions: 0 },
       ],
     });
     expect(executeCommand).toHaveBeenCalledTimes(2);
@@ -556,7 +616,7 @@ describe('workspace changes', () => {
     await expect(listSessionWorkspaceChanges(session)).resolves.toEqual({
       workspacePath: session.sessionId,
       available: true,
-      changes: [{ path: 'src/edited.ts', status: 'modified' }],
+      changes: [{ path: 'repo/src/edited.ts', status: 'modified' }],
     });
   });
 
@@ -591,9 +651,9 @@ describe('workspace changes', () => {
     });
 
     const session = makeSession();
-    await expect(readSessionWorkspaceDiff(session, 'src/edited.ts')).resolves.toEqual({
+    await expect(readSessionWorkspaceDiff(session, 'repo/src/edited.ts')).resolves.toEqual({
       workspacePath: session.sessionId,
-      path: 'src/edited.ts',
+      path: 'repo/src/edited.ts',
       patch,
       truncated: false,
     });
@@ -604,7 +664,7 @@ describe('workspace changes', () => {
     const maxDiffBytes = 512 * 1024;
     seedSessionSandbox(() => ({ exitCode: 0, stdout: 'a'.repeat(maxDiffBytes + 1) }));
 
-    const result = await readSessionWorkspaceDiff(makeSession(), 'src/large.ts');
+    const result = await readSessionWorkspaceDiff(makeSession(), 'repo/src/large.ts');
 
     expect(result.truncated).toBe(true);
     expect(Buffer.byteLength(result.patch)).toBe(maxDiffBytes);
@@ -615,7 +675,7 @@ describe('workspace changes', () => {
     const prefix = 'a'.repeat(maxDiffBytes - 1);
     seedSessionSandbox(() => ({ exitCode: 0, stdout: `${prefix}€` }));
 
-    const result = await readSessionWorkspaceDiff(makeSession(), 'src/unicode.ts');
+    const result = await readSessionWorkspaceDiff(makeSession(), 'repo/src/unicode.ts');
 
     expect(result.truncated).toBe(true);
     expect(result.patch).toBe(prefix);
@@ -643,13 +703,14 @@ describe('workspace changes', () => {
       return { exitCode: 0, stdout: 'rename diff' };
     });
 
-    await expect(readSessionWorkspaceDiff(makeSession(), 'src/renamed.ts', 'src/old.ts')).resolves.toEqual(
-      expect.objectContaining({ path: 'src/renamed.ts', patch: 'rename diff' }),
+    await expect(readSessionWorkspaceDiff(makeSession(), 'repo/src/renamed.ts', 'repo/src/old.ts')).resolves.toEqual(
+      expect.objectContaining({ path: 'repo/src/renamed.ts', patch: 'rename diff' }),
     );
   });
 
   it('treats pathspec magic in file names literally', async () => {
     const path = 'src/:(exclude)*.ts';
+    const rootPath = `repo/${path}`;
     seedSessionSandbox((_script, command, args) => {
       expect(command).toBe('sh');
       expect(args.slice(3)).toEqual([
@@ -669,9 +730,18 @@ describe('workspace changes', () => {
       return { exitCode: 0, stdout: 'literal path diff' };
     });
 
-    await expect(readSessionWorkspaceDiff(makeSession(), path)).resolves.toEqual(
-      expect.objectContaining({ path, patch: 'literal path diff' }),
+    await expect(readSessionWorkspaceDiff(makeSession(), rootPath)).resolves.toEqual(
+      expect.objectContaining({ path: rootPath, patch: 'literal path diff' }),
     );
+  });
+
+  it('refuses a diff for a path outside the repository checkout', async () => {
+    const { executeCommand } = seedSessionSandbox(() => ({ exitCode: 0, stdout: '' }));
+
+    await expect(readSessionWorkspaceDiff(makeSession(), '.artifacts/plan.md')).rejects.toThrow(
+      'path is outside the repository checkout',
+    );
+    expect(executeCommand).not.toHaveBeenCalled();
   });
 
   it('creates a bounded diff for an untracked file', async () => {
@@ -714,8 +784,8 @@ describe('workspace changes', () => {
       return { exitCode: 0, stdout: 'new file diff' };
     });
 
-    await expect(readSessionWorkspaceDiff(makeSession(), 'src/new.ts')).resolves.toEqual(
-      expect.objectContaining({ path: 'src/new.ts', patch: 'new file diff' }),
+    await expect(readSessionWorkspaceDiff(makeSession(), 'repo/src/new.ts')).resolves.toEqual(
+      expect.objectContaining({ path: 'repo/src/new.ts', patch: 'new file diff' }),
     );
     expect(executeCommand).toHaveBeenCalledTimes(3);
   });

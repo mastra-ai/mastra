@@ -124,7 +124,7 @@ describe('buildFullPrompt untrusted checkout', () => {
 describe('buildFullPrompt workspace-root split', () => {
   // Embedders (factory) root file tools/exec at the parent directory the repo
   // is checked out into. The prompt must advertise THAT root as the working
-  // directory and name the repo subdir — while AGENTS.md keeps loading from
+  // directory and name the repo subdir, while AGENTS.md keeps loading from
   // the repo-scoped workingDir (the regression the split exists to avoid).
   const projectDir = mkdtempSync(join(tmpdir(), 'prompt-split-repo-'));
   writeFileSync(join(projectDir, 'AGENTS.md'), 'REPO-SCOPED: project instruction marker');

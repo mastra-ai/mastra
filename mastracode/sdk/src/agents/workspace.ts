@@ -198,15 +198,19 @@ export async function getDynamicWorkspace({
   }
 
   const projectPath = path.resolve(rawProjectPath);
-  // File tools and exec root at the working directory; skills, LSP detection,
-  // and the workspace identity stay project-scoped. Absent state defaults
-  // the root to the project path, today's coupled behavior.
+  // File tools and exec root at the working directory; skills and LSP
+  // detection stay project-scoped. Absent state defaults the root to the
+  // project path, today's coupled behavior.
   const workingDirectory = state?.workingDirectory ? path.resolve(state.workingDirectory) : projectPath;
   const configDir = state?.configDir ?? DEFAULT_CONFIG_DIR;
   const projectSkillPaths = buildSkillPaths(projectPath, configDir, state?.homeDir, state?.pluginSkillPaths ?? []);
   const skillPaths = [...(skillExtension?.paths ?? []), ...projectSkillPaths];
   const extensionId = skillExtension ? `-${skillExtension.id}` : '';
-  const workspaceId = `${WORKSPACE_ID_PREFIX}-${projectPath}${extensionId}`;
+  // The cached workspace's filesystem/sandbox roots are fixed at creation, so
+  // a distinct working directory is part of the identity: a later resolution
+  // with a different root must not reuse a workspace rooted elsewhere.
+  const rootId = workingDirectory === projectPath ? '' : `@${workingDirectory}`;
+  const workspaceId = `${WORKSPACE_ID_PREFIX}-${projectPath}${rootId}${extensionId}`;
   const sandboxPaths = state?.sandboxAllowedPaths ?? [];
   const allowedPaths = [
     ...projectSkillPaths,
