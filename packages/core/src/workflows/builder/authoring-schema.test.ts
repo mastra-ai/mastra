@@ -9,6 +9,7 @@ import {
   workflowBuilderForeachEntrySchema,
   workflowBuilderNestedWorkflowEntrySchema,
   workflowBuilderParallelEntrySchema,
+  workflowBuilderScheduleConfigSchema,
   storedWorkflowDefinitionSchema,
 } from './index';
 
@@ -274,6 +275,29 @@ describe('shared workflow builder authoring schema', () => {
         ],
       });
       expect(result.success).toBe(false);
+    });
+  });
+
+  describe('schedule configuration', () => {
+    it('accepts valid cron, timezone, and nested JSON values', () => {
+      expect(
+        workflowBuilderScheduleConfigSchema.safeParse({
+          cron: '0 9 * * 1',
+          timezone: 'America/New_York',
+          inputData: { nested: [null, true, 42, 'value'] },
+          requestContext: { tenant: { id: 'acme' } },
+        }).success,
+      ).toBe(true);
+    });
+
+    it.each([
+      { cron: 'not a cron' },
+      { cron: '0 9 * * 1', timezone: 'Not/A_Timezone' },
+      { cron: '0 9 * * 1', inputData: { invalid: undefined } },
+      { cron: '0 9 * * 1', initialState: new Date() },
+      { cron: '0 9 * * 1', metadata: { invalid: Number.POSITIVE_INFINITY } },
+    ])('rejects invalid schedule config %#', schedule => {
+      expect(workflowBuilderScheduleConfigSchema.safeParse(schedule).success).toBe(false);
     });
   });
 

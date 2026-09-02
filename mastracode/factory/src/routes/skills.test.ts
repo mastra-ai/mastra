@@ -1,3 +1,4 @@
+import { RequestContext } from '@mastra/core/request-context';
 import type { Skill } from '@mastra/core/workspace';
 import { Hono } from 'hono';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -24,10 +25,11 @@ function createHarness(
   options: {
     authorized?: boolean;
     workspaceBThrows?: boolean;
+    user?: unknown;
   } = {},
 ) {
-  const sendA = vi.fn(async (_input: { content: string }) => {});
-  const sendB = vi.fn(async (_input: { content: string }) => {});
+  const sendA = vi.fn(async (_input: { content: string; requestContext?: RequestContext }) => {});
+  const sendB = vi.fn(async (_input: { content: string; requestContext?: RequestContext }) => {});
   const refreshA = vi.fn(async () => {});
   const refreshB = vi.fn(async () => {});
   const getA = vi.fn(async (name: string) => (name === skill.name ? skill : undefined));
@@ -64,7 +66,13 @@ function createHarness(
         }
       : { allowed: true as const },
   );
+  const requestContext = new RequestContext();
+  requestContext.set('user', options.user ?? { workosId: 'user-1', organizationId: 'org-1' });
   const app = new Hono();
+  app.use('*', async (context, next) => {
+    context.set('requestContext' as never, requestContext);
+    await next();
+  });
   mountApiRoutes(
     app as never,
     new SkillRoutes({
@@ -84,6 +92,7 @@ function createHarness(
     getB,
     getSessionByResource,
     authorizeSessionAddress,
+    requestContext,
   };
 }
 
@@ -141,7 +150,28 @@ describe('workspace skill invocation route', () => {
     expect(harness.refreshA).toHaveBeenCalledOnce();
     expect(harness.refreshA.mock.invocationCallOrder[0]!).toBeLessThan(harness.getA.mock.invocationCallOrder[0]!);
     expect(harness.sendA).toHaveBeenCalledOnce();
-    expect(harness.sendA).toHaveBeenCalledWith({ content: message });
+    expect(harness.sendA).toHaveBeenCalledWith({ content: message, requestContext: harness.requestContext });
+  });
+
+  it('forwards a Better Auth session-shaped principal unchanged', async () => {
+    const user = {
+      session: { activeOrganizationId: 'org-1' },
+      user: { id: 'user-1' },
+    };
+    const harness = createHarness({ user });
+
+    const response = await invoke(harness.app, {
+      resourceId: 'resource-1',
+      scope: '/worktrees/a',
+      name: 'understand-pr',
+    });
+
+    expect(response.status).toBe(200);
+    expect(harness.requestContext.get('user')).toBe(user);
+    expect(harness.sendA).toHaveBeenCalledWith({
+      content: expect.stringContaining('<skill name="understand-pr">'),
+      requestContext: harness.requestContext,
+    });
   });
 
   it('prepares the exact activation envelope without dispatching it', async () => {

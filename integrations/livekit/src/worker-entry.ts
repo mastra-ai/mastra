@@ -34,8 +34,14 @@ export { runLiveKitWorker } from './run';
 export type { RunLiveKitWorkerOptions } from './run';
 export { chatContextToMessages } from './messages';
 export type { VoiceTurnMessage } from './messages';
+// The `voice.Agent` subclass `createLiveKitWorker()` builds for every session. Exported so callers
+// who own their own `voice.AgentSession` (including `@livekit/agents` `voice.testing`) can construct
+// the same agent without standing up the worker.
+export { MastraVoiceAgent, createMastraVoiceAgent } from './bridge';
 export type {
+  MastraStreamOptions,
   MastraVoiceAgentMemory,
+  MastraVoiceAgentOptions,
   VoiceReplyGenerator,
   VoiceToolCall,
   VoiceTurnCompleteContext,

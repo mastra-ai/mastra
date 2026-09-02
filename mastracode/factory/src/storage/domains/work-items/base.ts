@@ -157,6 +157,8 @@ const FACTORY_DISPATCH_FAILURE_CODES = [
   'source_repository_missing',
   'unsupported_provider_item',
   'notification_delivery_failed',
+  'plan_awaiting_approval',
+  'run_awaiting_input',
   'repository_git_missing',
   'repository_egress_blocked',
   'repository_clone_failed',
@@ -341,6 +343,7 @@ export interface FactoryPendingStartRecord {
   leaseOwner: string | null;
   leaseExpiresAt: Date | null;
   lastError: string | null;
+  failureCode: FactoryDispatchFailureCode | null;
   completedAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
@@ -407,6 +410,8 @@ export interface PrepareFactoryRunStartInput {
   kickoffMessage: string | null;
   /** Arm the item's autonomy in the same transaction that prepares the run. */
   armAutonomy?: boolean;
+  /** Grant the item's plans auto-approval in the same transaction — the person chose a hands-off run. */
+  preapprovePlans?: boolean;
 }
 
 export interface PrepareFactoryRunStartResult {
@@ -445,6 +450,11 @@ export interface WorkItemRow {
    * work they already asked for, so runs on an armed item skip the gate.
    */
   autonomyArmedAt: Date | null;
+  /**
+   * When a person chose to run this item hands-off: the dispatcher answers its
+   * parked plans even while the project's Auto-approve plans switch is off.
+   */
+  plansPreapprovedAt: Date | null;
   /** Denormalized feed counters, maintained by the comments domain via recount. */
   commentCount: number;
   /** Bumps on every feed mutation (create/edit/delete) — the clients' change hint. */
@@ -499,6 +509,7 @@ export const WORK_ITEMS_SCHEMA: CollectionSchema = {
     metadata: { type: 'json', nullable: true },
     triage_type: { type: 'text', nullable: true },
     autonomy_armed_at: { type: 'timestamp', nullable: true },
+    plans_preapproved_at: { type: 'timestamp', nullable: true },
     comment_count: { type: 'integer', default: 0 },
     feed_activity_at: { type: 'timestamp', nullable: true },
     revision: { type: 'integer', default: 1 },
@@ -544,6 +555,7 @@ interface WorkItemDbRow extends Record<string, unknown> {
   metadata: Record<string, unknown> | null;
   triage_type: FactoryTriageType | null;
   autonomy_armed_at: Date | null;
+  plans_preapproved_at: Date | null;
   comment_count: number;
   feed_activity_at: Date | null;
   revision: number;
@@ -577,6 +589,7 @@ function toWorkItem(row: WorkItemDbRow): WorkItemRow {
     metadata: row.metadata,
     triageType: row.triage_type ?? null,
     autonomyArmedAt: row.autonomy_armed_at ?? null,
+    plansPreapprovedAt: row.plans_preapproved_at ?? null,
     commentCount: row.comment_count ?? 0,
     feedActivityAt: row.feed_activity_at ?? null,
     revision: row.revision,
@@ -904,6 +917,7 @@ const FACTORY_GOVERNANCE_SCHEMAS: CollectionSchema[] = [
       lease_owner: { type: 'text', nullable: true },
       lease_expires_at: { type: 'timestamp', nullable: true },
       last_error: { type: 'text', nullable: true },
+      failure_code: { type: 'text', nullable: true },
       completed_at: { type: 'timestamp', nullable: true },
       created_at: { type: 'timestamp' },
       updated_at: { type: 'timestamp' },
@@ -1025,6 +1039,7 @@ function toPendingStart(row: GovernanceDbRow): FactoryPendingStartRecord {
     leaseOwner: (row.lease_owner as string | null) ?? null,
     leaseExpiresAt: (row.lease_expires_at as Date | null) ?? null,
     lastError: (row.last_error as string | null) ?? null,
+    failureCode: (row.failure_code as FactoryDispatchFailureCode | null) ?? null,
     completedAt: (row.completed_at as Date | null) ?? null,
     createdAt: row.created_at,
     updatedAt: row.updated_at as Date,
@@ -1203,7 +1218,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
           lease_owner: null,
           lease_expires_at: null,
           last_error: input.lastError,
-          ...(table === 'factory_deferred_decisions' ? { failure_code: input.failureCode } : {}),
+          failure_code: input.failureCode,
           completed_at: input.terminal ? input.now : null,
           ...(table === 'factory_deferred_decisions' && input.terminal
             ? { failure_occurrence: Number(current.failure_occurrence ?? 0) + 1 }
@@ -2548,6 +2563,12 @@ export class WorkItemsStorage extends FactoryStorageDomain {
           );
           if (armedRow) item = toRow(armedRow);
         }
+        if (input.preapprovePlans && !item.plansPreapprovedAt) {
+          const grantedRow = await ops.updateAtomic<WorkItemDbRow>('work_items', { id: item.id }, current =>
+            current.plans_preapproved_at ? null : { plans_preapproved_at: now },
+          );
+          if (grantedRow) item = toRow(grantedRow);
+        }
         await ops.updateMany(
           'factory_run_bindings',
           {
@@ -2596,6 +2617,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
           lease_owner: null,
           lease_expires_at: null,
           last_error: null,
+          failure_code: null,
           completed_at: null,
           created_at: now,
           updated_at: now,

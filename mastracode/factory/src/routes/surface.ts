@@ -20,7 +20,9 @@ import {
   ensureFactorySourceSession,
   FactorySourceSessionResolutionError,
   resolveFactoryDefaultModelId,
+  resolveFactoryProjectForSession,
 } from '../session/factory-session.js';
+import type { EnsuredFactorySourceSession } from '../session/factory-session.js';
 import { LiveSessions } from '../session/live-sessions.js';
 import type { StateSigner } from '../state-signing.js';
 import type { AuditEmitter } from '../storage/domains/audit/domain.js';
@@ -41,7 +43,11 @@ import {
   SourceControlConnectionNotFoundError,
   type SourceControlStorage,
 } from '../storage/domains/source-control/base.js';
-import type { FactoryDispatchFailureCode, WorkItemsStorage } from '../storage/domains/work-items/base.js';
+import {
+  isAgentActor,
+  type FactoryDispatchFailureCode,
+  type WorkItemsStorage,
+} from '../storage/domains/work-items/base.js';
 import { workItemBranch, workItemBranchSource } from '../work-item-branch.js';
 import { ConfigRoutes } from './config.js';
 import { invalidateCustomProvidersSnapshots } from './custom-provider-source.js';
@@ -166,6 +172,39 @@ function guardIntegrationRoutes({
 }
 
 /**
+ * Resolve the source-control session the work item already holds for this role,
+ * when it still resolves to the item's org and factory project. Returns
+ * `undefined` when there is no ref or the ref no longer resolves, so the caller
+ * falls back to minting one.
+ */
+async function reuseBoundSession(
+  sourceControl: GithubIntegration['sourceControlStorage'],
+  input: FactoryBindingPreparationInput,
+): Promise<EnsuredFactorySourceSession | undefined> {
+  const ref = input.item.sessions[input.role];
+  if (!ref) return undefined;
+  // At least as strict as the coordinator's resolveSourceSession: a ref it
+  // would reject must fall through to minting, not hard-fail the run.
+  const resolved = await resolveFactoryProjectForSession({ sourceControl, sessionId: ref.sessionId });
+  if (
+    !resolved ||
+    resolved.orgId !== input.record.orgId ||
+    resolved.factoryProjectId !== input.record.factoryProjectId
+  ) {
+    return undefined;
+  }
+  const session = await sourceControl.sessions.getBySessionId(ref.sessionId);
+  if (!session) return undefined;
+  return {
+    sessionId: session.sessionId,
+    userId: session.userId,
+    projectRepositoryId: session.projectRepositoryId,
+    branch: session.branch,
+    baseBranch: session.baseBranch,
+  };
+}
+
+/**
  * Start a factory run for a rule binding: ensure the source-control session the
  * coordinator requires, then hand it to `prepare` along with the factory's
  * default model. Exported for tests — this is the autonomous entry point with no
@@ -196,16 +235,23 @@ export async function prepareFactoryRuleBinding(
     }
     const repositorySlug =
       typeof input.item.metadata?.repository === 'string' ? input.item.metadata.repository : undefined;
-    const preparedSession = await ensureFactorySourceSession({
-      sourceControl: github.sourceControlStorage,
-      orgId: input.record.orgId,
-      factoryProjectId: input.record.factoryProjectId,
-      repositorySlug,
-      branch,
-      // A human-approved proposal has an interactive user: attribute the run to
-      // the approver, not the repo connector.
-      attributeToUserId: input.record.approvedBy ?? undefined,
-    });
+    // Re-preparing a binding (server restart, retired controller session) must
+    // land in the role's existing session: minting a replacement would repoint
+    // the work item, flip the session's owner to the approver, and orphan the
+    // previous sandbox.
+    const approver = input.record.approvedBy ?? undefined;
+    const preparedSession =
+      (await reuseBoundSession(github.sourceControlStorage, input)) ??
+      (await ensureFactorySourceSession({
+        sourceControl: github.sourceControlStorage,
+        orgId: input.record.orgId,
+        factoryProjectId: input.record.factoryProjectId,
+        repositorySlug,
+        branch,
+        // A person who approved the run is its interactive user: attribute it to
+        // them, not the repo connector. An agent's pre-approval names no person.
+        attributeToUserId: isAgentActor(approver) ? undefined : approver,
+      }));
 
     await coordinator.prepare({
       orgId: input.record.orgId,
@@ -472,6 +518,7 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
       auth: deps.auth,
       authStorage: deps.authStorage,
       modelCredentials: deps.domains.modelCredentials,
+      memorySettings: deps.domains.memorySettings,
       onCredentialsChanged: invalidateTenantCredentialSnapshots,
     }).routes(),
     ...new SkillRoutes({

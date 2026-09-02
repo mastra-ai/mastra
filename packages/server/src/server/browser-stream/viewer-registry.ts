@@ -90,9 +90,10 @@ export class ViewerRegistry implements ViewerRegistryLike {
     const wasEmpty = viewerSet.size === 0;
     viewerSet.add(ws);
 
-    // Start screencast if this is the first viewer
+    // Start screencast if this is the first viewer, or if an earlier viewer failed to
+    // resolve a toolset (no callbacks registered yet) so the lookup gets retried.
     // Use agentId for toolset lookup, viewerKey for registry keying
-    if (wasEmpty) {
+    if (wasEmpty || !this.browserReadyCleanups.has(viewerKey)) {
       await this.startScreencast(viewerKey, getToolset, agentId ?? viewerKey, threadId);
     } else {
       // Send current state to new viewer (screencast already running)
@@ -264,6 +265,8 @@ export class ViewerRegistry implements ViewerRegistryLike {
   /**
    * Start screencast for a viewer. Only starts if browser is already running.
    * If browser not running, registers a callback to start when browser becomes ready.
+   * If no toolset can be resolved, nothing is registered; `addViewer` retries the
+   * lookup the next time a viewer connects for this key.
    *
    * @param viewerKey - The viewer key (for registry keying)
    * @param getToolset - Function to retrieve the BrowserToolset
@@ -283,10 +286,9 @@ export class ViewerRegistry implements ViewerRegistryLike {
       return;
     }
     if (!toolset) {
-      // No browser available for this agent - just keep connection open.
-      // The screencast will start when the agent hydrates and the browser launches
-      // (via the generation flow calling getAgentFromSystem → createAgentFromStoredConfig).
-      console.info(`[ViewerRegistry] No toolset for ${viewerKey}, waiting...`);
+      // No browser configured for this agent (neither agent.browser nor workspace.browser).
+      // Keep the connection open; the lookup is retried when the next viewer connects.
+      console.info(`[ViewerRegistry] No browser toolset for ${viewerKey}; will retry on next viewer connect`);
       return;
     }
 
@@ -331,8 +333,9 @@ export class ViewerRegistry implements ViewerRegistryLike {
       this.browserClosedCleanups.set(viewerKey, cleanup);
     }
 
-    // Check if browser is already running
-    if (toolset.isBrowserRunning()) {
+    // Check if browser is already running for this viewer's thread.
+    // Pass threadId so thread-scoped viewers don't fall back to the globally "current" thread.
+    if (toolset.isBrowserRunning(threadId)) {
       // Browser is running, start screencast immediately
       await this.doStartScreencast(viewerKey, toolset, threadId);
     } else {

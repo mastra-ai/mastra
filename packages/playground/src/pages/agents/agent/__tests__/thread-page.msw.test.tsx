@@ -102,6 +102,7 @@ function installHandlers() {
     return HttpResponse.json(emptyThreadTracesList);
   };
   server.use(
+    http.get(`${BASE_URL}/api/auth/capabilities`, () => HttpResponse.json({ enabled: false })),
     http.get(`${BASE_URL}/api/agents/${AGENT_ID}`, () => HttpResponse.json(agentResponse)),
     http.get(`${BASE_URL}/api/memory/status`, () => HttpResponse.json({ result: true, memoryType: 'local' })),
     http.get(`${BASE_URL}/api/memory/threads`, () => HttpResponse.json(threadsResponse)),
@@ -289,6 +290,84 @@ describe('Standalone thread page', () => {
     renderAt(`/agents/${AGENT_ID}/threads/${THREAD_ID}`);
 
     expect(await screen.findByText('Permission Denied')).not.toBeNull();
+  });
+
+  describe('thread deletion', () => {
+    // Regression for #22763: the standalone sidebar shipped without any delete
+    // affordance on thread rows, so persisted threads could not be removed.
+    it('deletes a thread from the sidebar after confirmation and refreshes the list', async () => {
+      installHandlers();
+      const onDelete = vi.fn<() => void>();
+      let deleted = false;
+      server.use(
+        http.get(`${BASE_URL}/api/memory/threads`, () =>
+          HttpResponse.json(
+            deleted ? { threads: threadsResponse.threads.filter(t => t.id !== 'thread-2') } : threadsResponse,
+          ),
+        ),
+        http.delete(`${BASE_URL}/api/memory/threads/thread-2`, ({ request }) => {
+          onDelete();
+          expect(new URL(request.url).searchParams.get('agentId')).toBe(AGENT_ID);
+          deleted = true;
+          return HttpResponse.json({ result: 'deleted' });
+        }),
+      );
+
+      renderAt(`/agents/${AGENT_ID}/threads/${THREAD_ID}`);
+      await screen.findByText('Sushi ideas');
+
+      const deleteButtons = screen.getAllByRole('button', { name: 'Delete thread' });
+      expect(deleteButtons).toHaveLength(2);
+      fireEvent.click(deleteButtons[1]);
+
+      // Confirmation dialog gates the deletion.
+      expect(await screen.findByText('Are you absolutely sure?')).not.toBeNull();
+      expect(onDelete).not.toHaveBeenCalled();
+
+      fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
+
+      await waitFor(() => expect(onDelete).toHaveBeenCalledTimes(1));
+      await waitFor(() => expect(screen.queryByText('Sushi ideas')).toBeNull());
+      // The non-active thread was deleted: no redirect away from the current thread.
+      expect(screen.getByTestId('location-probe').textContent).toBe(`/agents/${AGENT_ID}/threads/${THREAD_ID}`);
+    });
+
+    it('redirects to /threads/new when the active thread is deleted', async () => {
+      installHandlers();
+      server.use(
+        http.delete(`${BASE_URL}/api/memory/threads/${THREAD_ID}`, () => HttpResponse.json({ result: 'deleted' })),
+      );
+
+      renderAt(`/agents/${AGENT_ID}/threads/${THREAD_ID}`);
+      await screen.findByText('Pasta night');
+
+      fireEvent.click(screen.getAllByRole('button', { name: 'Delete thread' })[0]);
+      fireEvent.click(await screen.findByRole('button', { name: 'Continue' }));
+
+      await waitFor(() =>
+        expect(screen.getByTestId('location-probe').textContent).toBe(`/agents/${AGENT_ID}/threads/new`),
+      );
+    });
+
+    it('hides the delete control when the user lacks the memory:delete permission', async () => {
+      installHandlers();
+      server.use(
+        http.get(`${BASE_URL}/api/auth/capabilities`, () =>
+          HttpResponse.json({
+            enabled: true,
+            login: { type: 'credentials' },
+            user: { id: 'user-1', email: 'user@example.com' },
+            capabilities: { user: true, session: true, sso: false, rbac: true, acl: false },
+            access: { roles: ['member'], permissions: ['agents:read', 'memory:read'] },
+          }),
+        ),
+      );
+
+      renderAt(`/agents/${AGENT_ID}/threads/${THREAD_ID}`);
+      await screen.findByText('Sushi ideas');
+
+      expect(screen.queryByRole('button', { name: 'Delete thread' })).toBeNull();
+    });
   });
 
   it('shows "Agent not found" for an unknown agent', async () => {
