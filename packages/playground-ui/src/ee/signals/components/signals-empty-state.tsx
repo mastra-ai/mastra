@@ -19,10 +19,10 @@ const signalDefinitions: SignalDefinition[] = [
   { key: 'goal', label: 'Goal', description: 'What the user is trying to achieve.' },
   { key: 'outcome', label: 'Outcome', description: 'Whether the interaction was completed, unresolved, or blocked.' },
   {
-    key: 'behavior',
-    label: 'Behavior',
+    key: 'issues',
+    label: 'Issues',
     description:
-      'The observable actions and patterns in the trace, including tool use, retries, failures, and recovery.',
+      'Actionable failure patterns such as loops, incorrect tool use, instruction violations, and unresolved requests.',
   },
   { key: 'sentiment', label: 'Sentiment', description: "The user's emotional state or attitude." },
 ];
@@ -79,7 +79,7 @@ function statusCopy(progress?: TraceIntelligenceProgress, isRangeEmpty?: boolean
   if (progress.status === 'ready') {
     return {
       title: 'Trace Intelligence themes are ready.',
-      body: 'Select at least two available trace signal types to see how goals, outcomes, behaviors, and sentiment connect.',
+      body: 'Select at least two available trace signal types to see how goals, outcomes, issues, and sentiment connect.',
     };
   }
   return {
@@ -153,7 +153,7 @@ export const SignalsEmptyState = ({
             Understand what drives every agent interaction
           </h1>
           <p className="text-neutral3 mt-2 max-w-180 text-sm leading-5">
-            Trace Intelligence groups recurring goals, outcomes, behaviors, and sentiment across completed traces.
+            Trace Intelligence groups recurring goals, outcomes, issues, and sentiment across completed traces.
           </p>
         </header>
 

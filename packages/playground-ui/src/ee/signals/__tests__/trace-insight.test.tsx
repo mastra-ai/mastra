@@ -47,7 +47,7 @@ class ChartResizeObserver implements ResizeObserver {
 function ControlledSankeySignals() {
   const [selectedThemeId, setSelectedThemeId] = useState<string>();
   const [selectedFrameId, setSelectedFrameId] = useState<string>();
-  const snapshotsQuery = useThemeSnapshots('support-agent', 'agent', ['goal', 'outcome', 'behavior']);
+  const snapshotsQuery = useThemeSnapshots('support-agent', 'agent', ['goal', 'outcome', 'issues']);
   const snapshots = [...(snapshotsQuery.data?.snapshots ?? [])].sort((left, right) => left.ordinal - right.ordinal);
   const frameId = selectedFrameId ?? snapshots[0]?.snapshotId;
   if (!frameId) return null;
@@ -55,7 +55,7 @@ function ControlledSankeySignals() {
     <SankeySignals
       entityId="support-agent"
       entityType="agent"
-      signalNames={['goal', 'outcome', 'behavior']}
+      signalNames={['goal', 'outcome', 'issues']}
       selectedThemeId={selectedThemeId}
       onSelectedThemeIdChange={setSelectedThemeId}
       selectedFrameId={frameId}

@@ -1,7 +1,7 @@
 import type { TraceSignalName } from './types';
 
 /** Order signals are produced during an interaction. */
-export const SIGNAL_PROCESSING_ORDER: TraceSignalName[] = ['goal', 'sentiment', 'behavior', 'outcome'];
+export const SIGNAL_PROCESSING_ORDER: TraceSignalName[] = ['goal', 'sentiment', 'issues', 'outcome'];
 
 export function formatSignalName(signalName: TraceSignalName) {
   return signalName.charAt(0).toUpperCase() + signalName.slice(1);
@@ -11,7 +11,7 @@ export function formatSignalName(signalName: TraceSignalName) {
 export const SIGNAL_DESCRIPTIONS: Record<TraceSignalName, string> = {
   goal: 'What the user wanted from the interaction.',
   sentiment: 'The tone the user expressed during the interaction.',
-  behavior: 'What the agent did in response.',
+  issues: 'What actionable failure occurred during the interaction.',
   outcome: 'How the interaction ended.',
 };
 
