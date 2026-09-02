@@ -96,7 +96,16 @@ describe('Knowledge curator', () => {
     expect(value.curator.instructions).toContain('Prefer verified current truth');
     expect(value.curator.instructions).not.toContain(node.name);
 
-    await expect(value.curator.listWorklist()).resolves.toMatchObject({ nodes: [{ id: node.id }] });
+    await expect(value.curator.listWorklist()).resolves.toMatchObject({
+      nodes: [{ id: node.id }],
+      items: [{ node: { id: node.id }, records: [{ source: 'untrusted-intake' }] }],
+    });
+    const editableTarget = await value.storage.createNode({
+      name: 'Merge target editable',
+      scopeIds: [value.ids['scope:curated']!],
+    });
+    await value.storage.createNode({ name: 'Merge target hidden', scopeIds: [value.ids['scope:hidden']!] });
+    await expect(value.curator.listMergeTargets({ namePrefix: 'Merge target' })).resolves.toEqual([editableTarget]);
     await expect(value.curator.retain(node.id)).resolves.toMatchObject({
       outcome: 'retained',
       node: { id: node.id },
@@ -105,6 +114,32 @@ describe('Knowledge curator', () => {
     await expect(
       value.knowledge.getNode({ id: node.id, scopeIds: [value.ids['principal:owner']!] }),
     ).resolves.toMatchObject({ id: node.id });
+  });
+
+  it('bounds worklist record previews and exposes continuation for complete provenance review', async () => {
+    const value = await fixture();
+    const { node } = await provisionalNode(value, 'Mixed provenance');
+    for (let index = 0; index < 15; index += 1) {
+      await value.storage.createRecord({
+        node,
+        text: `Evidence ${index}`,
+        source: `source:${index}`,
+        scopeIds: [value.ids['scope:uncurated']!],
+        metadata: { provenance: index % 2 === 0 ? 'trusted' : 'untrusted' },
+      });
+    }
+
+    const worklist = await value.curator.listWorklist({ limit: 1 });
+    expect(worklist.items[0]?.records).toHaveLength(10);
+    expect(worklist.items[0]?.recordsNextCursor).toBeDefined();
+    const remainder = await value.curator.listItemRecords({
+      nodeId: node.id,
+      cursor: worklist.items[0]?.recordsNextCursor,
+      limit: 100,
+    });
+    expect(remainder.records).toHaveLength(6);
+    expect(remainder.nextCursor).toBeUndefined();
+    expect(new Set([...worklist.items[0]!.records, ...remainder.records].map(record => record.source)).size).toBe(16);
   });
 
   it('promotes through ordinary governed CAS mutations while preserving record provenance', async () => {
@@ -124,7 +159,7 @@ describe('Knowledge curator', () => {
       source: 'untrusted-intake',
       version: record.version + 1,
     });
-    await expect(value.curator.listWorklist()).resolves.toEqual({ nodes: [], nextCursor: undefined });
+    await expect(value.curator.listWorklist()).resolves.toEqual({ nodes: [], items: [], nextCursor: undefined });
   });
 
   it('uses complete review proposals for suggest-only refinements and promotions', async () => {
@@ -226,7 +261,21 @@ describe('Knowledge curator', () => {
     });
 
     await expect(
-      value.curator.merge({ sourceId: source.id, targetId: target.id, sourceVersion: source.version + 1 }),
+      value.curator.merge({
+        sourceId: source.id,
+        targetId: target.id,
+        sourceVersion: source.version,
+        targetVersion: target.version + 1,
+      }),
+    ).rejects.toBeInstanceOf(KnowledgeConflictError);
+    await expect(value.storage.getNode(source.id)).resolves.toMatchObject({ version: source.version });
+    await expect(
+      value.curator.merge({
+        sourceId: source.id,
+        targetId: target.id,
+        sourceVersion: source.version + 1,
+        targetVersion: target.version,
+      }),
     ).rejects.toBeInstanceOf(KnowledgeConflictError);
     const discarded = await value.curator.discard({ nodeId: source.id, version: source.version });
     expect(discarded).toMatchObject({ id: source.id, deletedBy: 'knowledge:curator' });

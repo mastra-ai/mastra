@@ -17,7 +17,7 @@ type Shared_Auxiliary_298 =
       [key: string]: Shared_Auxiliary_298;
     };
 
-type Shared_Auxiliary_1095 =
+type Shared_Auxiliary_1098 =
   | {
       op: 'eq' | 'ne' | 'lt' | 'lte' | 'gt' | 'gte';
       left:
@@ -62,19 +62,19 @@ type Shared_Auxiliary_1095 =
     }
   | {
       op: 'and' | 'or';
-      args: Shared_Auxiliary_1095[];
+      args: Shared_Auxiliary_1098[];
     }
   | {
       op: 'not';
-      arg: Shared_Auxiliary_1095;
+      arg: Shared_Auxiliary_1098;
     };
 
-type Shared_Auxiliary_1236 = {
+type Shared_Auxiliary_1239 = {
   id?: string | undefined;
   name: string;
   type: 'file' | 'folder';
   content?: string | undefined;
-  children?: Shared_Auxiliary_1236[] | undefined;
+  children?: Shared_Auxiliary_1239[] | undefined;
 };
 
 type Shared_Type_0 = {
@@ -2482,13 +2482,13 @@ type Shared_Type_107 =
   | {
       type: 'conditional';
       steps: Shared_Type_105[];
-      predicates: Shared_Auxiliary_1095[];
+      predicates: Shared_Auxiliary_1098[];
     }
   | {
       type: 'loop';
       step: Shared_Type_105;
       loopType: 'dowhile' | 'dountil';
-      predicate: Shared_Auxiliary_1095;
+      predicate: Shared_Auxiliary_1098;
     };
 
 type Shared_Type_108 = {
@@ -2825,7 +2825,7 @@ type Shared_Type_120 = {
   /** List of asset file paths */
   assets?: string[] | undefined;
   /** Full file tree structure for the skill */
-  files?: Shared_Auxiliary_1236[] | undefined;
+  files?: Shared_Auxiliary_1239[] | undefined;
   /** Additional metadata for the skill */
   metadata?:
     | {
@@ -8186,6 +8186,54 @@ export interface PostMemoryNetworkMessagesDelete_RouteContract {
   body: PostMemoryNetworkMessagesDelete_Body;
   request: PostMemoryNetworkMessagesDelete_Request;
   response: PostMemoryNetworkMessagesDelete_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: POST /knowledge/:instanceKey/importers/:importerId/webhook
+// ============================================================================
+export type PostKnowledgeInstanceKeyImportersImporterIdWebhook_PathParams = {
+  instanceKey: string;
+  importerId: string;
+};
+
+export type PostKnowledgeInstanceKeyImportersImporterIdWebhook_Body = {
+  payload?: unknown | undefined;
+};
+
+export type PostKnowledgeInstanceKeyImportersImporterIdWebhook_Response = {
+  id: string;
+  importerId: string;
+  binding: string;
+  importKind: 'static' | 'agentic';
+  triggerKind: 'cron' | 'webhook' | 'programmatic';
+  status: 'queued' | 'running' | 'succeeded' | 'failed' | 'skipped' | 'interrupted';
+  error?: string | undefined;
+  transcriptThreadId?: string | undefined;
+  traceId?: string | undefined;
+  queuedAt: Date;
+  startedAt?: Date | undefined;
+  completedAt?: Date | undefined;
+};
+
+export type PostKnowledgeInstanceKeyImportersImporterIdWebhook_Request = Simplify<
+  (PostKnowledgeInstanceKeyImportersImporterIdWebhook_PathParams extends never
+    ? {}
+    : { params: PostKnowledgeInstanceKeyImportersImporterIdWebhook_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (PostKnowledgeInstanceKeyImportersImporterIdWebhook_Body extends never
+      ? {}
+      : {} extends PostKnowledgeInstanceKeyImportersImporterIdWebhook_Body
+        ? { body?: PostKnowledgeInstanceKeyImportersImporterIdWebhook_Body }
+        : { body: PostKnowledgeInstanceKeyImportersImporterIdWebhook_Body })
+>;
+
+export interface PostKnowledgeInstanceKeyImportersImporterIdWebhook_RouteContract {
+  pathParams: PostKnowledgeInstanceKeyImportersImporterIdWebhook_PathParams;
+  queryParams: never;
+  body: PostKnowledgeInstanceKeyImportersImporterIdWebhook_Body;
+  request: PostKnowledgeInstanceKeyImportersImporterIdWebhook_Request;
+  response: PostKnowledgeInstanceKeyImportersImporterIdWebhook_Response;
   responseType: 'json';
 }
 
@@ -16439,7 +16487,7 @@ export type PostStoredSkills_Body = {
   /** List of asset file paths */
   assets?: string[] | undefined;
   /** Full file tree structure for the skill */
-  files?: Shared_Auxiliary_1236[] | undefined;
+  files?: Shared_Auxiliary_1239[] | undefined;
   /** Additional metadata for the skill */
   metadata?:
     | {
@@ -16497,7 +16545,7 @@ export type PatchStoredSkillsStoredSkillId_Body = {
   /** List of asset file paths */
   assets?: (string[] | undefined) | undefined;
   /** Full file tree structure for the skill */
-  files?: (Shared_Auxiliary_1236[] | undefined) | undefined;
+  files?: (Shared_Auxiliary_1239[] | undefined) | undefined;
   /** Additional metadata for the skill */
   metadata?:
     | (
@@ -21754,6 +21802,7 @@ export interface RouteTypes {
   'PATCH /memory/network/threads/:threadId': PatchMemoryNetworkThreadsThreadId_RouteContract;
   'DELETE /memory/network/threads/:threadId': DeleteMemoryNetworkThreadsThreadId_RouteContract;
   'POST /memory/network/messages/delete': PostMemoryNetworkMessagesDelete_RouteContract;
+  'POST /knowledge/:instanceKey/importers/:importerId/webhook': PostKnowledgeInstanceKeyImportersImporterIdWebhook_RouteContract;
   'GET /scores/scorers': GetScoresScorers_RouteContract;
   'GET /scores/scorers/:scorerId': GetScoresScorersScorerId_RouteContract;
   'GET /scores/run/:runId': GetScoresRunRunId_RouteContract;
@@ -22486,6 +22535,9 @@ export interface Client {
   };
   '/experiments/review-summary': {
     GET: GetExperimentsReviewSummary_RouteContract;
+  };
+  '/knowledge/:instanceKey/importers/:importerId/webhook': {
+    POST: PostKnowledgeInstanceKeyImportersImporterIdWebhook_RouteContract;
   };
   '/logs': {
     GET: GetLogs_RouteContract;

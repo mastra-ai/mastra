@@ -654,7 +654,12 @@ export function createKnowledgeStorageTests(createStore: () => Promise<Knowledge
       const target = await store.createNode({ name: 'Target', scopeIds: [PROJECT_SCOPE_ID] });
       const record = await store.createRecord({ node: source, text: 'Move me', scopeIds: [PROJECT_SCOPE_ID] });
 
-      await store.mergeNodes({ sourceId: source.id, targetId: target.id, sourceVersion: source.version });
+      await store.mergeNodes({
+        sourceId: source.id,
+        targetId: target.id,
+        sourceVersion: source.version,
+        targetVersion: target.version,
+      });
       expect(
         (await store.listRecords({ node: target, scopeIds: [PROJECT_SCOPE_ID] })).records.map(item => item.id),
       ).toEqual([record.id]);
@@ -682,7 +687,12 @@ export function createKnowledgeStorageTests(createStore: () => Promise<Knowledge
       );
       expect(await store.listSemanticOutbox({ limit: 100 })).toEqual(outboxBeforeStaleMove);
       await store.setRecordScopes({ id: moved.id, version: moved.version, scopeIds: [OTHER_SCOPE_ID] });
-      await store.mergeNodes({ sourceId: source.id, targetId: target.id, sourceVersion: source.version });
+      await store.mergeNodes({
+        sourceId: source.id,
+        targetId: target.id,
+        sourceVersion: source.version,
+        targetVersion: target.version,
+      });
 
       const keys = (await store.listSemanticOutbox()).map(entry => entry.idempotencyKey);
       const movedDocumentId = knowledgeSemanticDocumentId('record', moved.id);

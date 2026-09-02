@@ -160,6 +160,7 @@ describe('Knowledge mutation authorization', () => {
         sourceId: source.id,
         targetId: target.id,
         sourceVersion: source.version,
+        targetVersion: target.version,
         vouchedScopeIds: [ids['principal:edit']!],
       }),
     ).rejects.toThrow(`Knowledge node not found: ${source.id}`);
@@ -170,6 +171,7 @@ describe('Knowledge mutation authorization', () => {
         sourceId: source.id,
         targetId: target.id,
         sourceVersion: source.version,
+        targetVersion: target.version,
         vouchedScopeIds: [ids['principal:owner']!, ids['principal:edit']!],
       }),
     ).resolves.toMatchObject({ id: target.id });

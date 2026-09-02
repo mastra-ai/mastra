@@ -137,12 +137,13 @@ export function createKnowledgeWriteTools(
           sourceId: { type: 'string', minLength: 1 },
           targetId: { type: 'string', minLength: 1 },
           sourceVersion: { type: 'integer', minimum: 1 },
+          targetVersion: { type: 'integer', minimum: 1 },
         },
-        required: ['sourceId', 'targetId', 'sourceVersion'],
+        required: ['sourceId', 'targetId', 'sourceVersion', 'targetVersion'],
         additionalProperties: false,
       } satisfies JSONSchema7,
       execute: async input => {
-        const value = input as { sourceId: string; targetId: string; sourceVersion: number };
+        const value = input as { sourceId: string; targetId: string; sourceVersion: number; targetVersion: number };
         const store = await getStore(memory);
         const source = await store.getNode(value.sourceId);
         if (!source) throw new Error(`Knowledge node not found: ${value.sourceId}`);

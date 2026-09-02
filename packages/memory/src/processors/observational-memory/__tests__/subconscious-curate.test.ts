@@ -207,11 +207,11 @@ describe('Subconscious curator', () => {
     await expect(removeAbsent).rejects.toThrow('KnowledgeRecord not found: missing-record');
 
     const mergeHidden = tools.knowledge_merge_nodes!.execute?.(
-      { sourceId: hiddenNode.id, targetId: 'missing-target', sourceVersion: hiddenNode.version },
+      { sourceId: hiddenNode.id, targetId: 'missing-target', sourceVersion: hiddenNode.version, targetVersion: 1 },
       {} as any,
     );
     const mergeAbsent = tools.knowledge_merge_nodes!.execute?.(
-      { sourceId: 'missing-source', targetId: 'missing-target', sourceVersion: 1 },
+      { sourceId: 'missing-source', targetId: 'missing-target', sourceVersion: 1, targetVersion: 1 },
       {} as any,
     );
     await expect(mergeHidden).rejects.toThrow(`Knowledge node not found: ${hiddenNode.id}`);

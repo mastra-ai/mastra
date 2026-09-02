@@ -57,6 +57,12 @@ const scopeTreeFixture: KnowledgeScopeTreePayload = {
       name: 'Payments',
       kind: 'feature',
     },
+    {
+      id: 'scope:uncurated',
+      name: 'Payments intake',
+      kind: 'scope',
+      needsCuration: true,
+    },
   ],
 };
 
@@ -172,6 +178,81 @@ function stubKnowledgeRoute(
     }),
     http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/knowledge/nodes/:nodeId`, () =>
       HttpResponse.json(nodePayload),
+    ),
+    http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/knowledge/curation/worklist`, () =>
+      HttpResponse.json({
+        scopeId: 'scope:uncurated',
+        items: [
+          {
+            id: 'curation-node-1',
+            reference: 'curation-reference-1',
+            name: 'Provisional runbook',
+            kind: 'document',
+            version: 2,
+            description: 'Untrusted draft waiting for review.',
+            evidence: [
+              { source: 'customer-report', provenance: 'subconscious:capture' },
+              { source: 'verified-runbook', provenance: 'import:github' },
+            ],
+            evidenceCursor: 'kh_evidence_cursor',
+            createdAt: '2026-08-13T03:00:00.000Z',
+            updatedAt: '2026-08-13T03:00:00.000Z',
+          },
+          {
+            id: 'curation-node-2',
+            reference: 'curation-reference-2',
+            name: 'Independent draft',
+            kind: 'document',
+            version: 1,
+            evidence: [],
+            createdAt: '2026-08-13T03:01:00.000Z',
+            updatedAt: '2026-08-13T03:01:00.000Z',
+          },
+        ],
+      }),
+    ),
+    http.get(
+      `${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/knowledge/curation/items/:nodeId/evidence`,
+      ({ request }) => {
+        expect(new URL(request.url).searchParams.get('cursor')).toBe('kh_evidence_cursor');
+        return HttpResponse.json({
+          evidence: [{ source: 'incident-review', provenance: 'human:verified' }],
+        });
+      },
+    ),
+    http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/knowledge/curation/merge-targets`, () =>
+      HttpResponse.json({
+        targets: [
+          {
+            id: 'merge-target-1',
+            reference: 'merge-reference-1',
+            name: 'Canonical runbook',
+            kind: 'document',
+            version: 4,
+          },
+        ],
+      }),
+    ),
+    http.post(
+      `${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/knowledge/curation/actions/:action`,
+      ({ params }) => {
+        if (params.action === 'promote') {
+          return HttpResponse.json({
+            outcome: 'proposed',
+            proposal: { id: 'proposal-2', reference: 'proposal-reference-2', status: 'pending' },
+          });
+        }
+        return HttpResponse.json({
+          outcome: 'applied',
+          node: {
+            id: 'curation-node-1',
+            reference: 'curation-reference-1',
+            name: 'Provisional runbook',
+            kind: 'document',
+            version: 3,
+          },
+        });
+      },
     ),
     http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/knowledge/activity`, () =>
       HttpResponse.json({
@@ -670,6 +751,42 @@ describe('KnowledgePage', () => {
     await user.click(within(breadcrumb).getByRole('button', { name: 'Payments Service' }));
     await waitFor(() => expect(breadcrumb).not.toHaveTextContent('Deploy Runbook'));
     expect(breadcrumb).toHaveTextContent('Payments Service');
+  });
+
+  it('filters provisional scopes and sends suggest-only promotion to Approvals', async () => {
+    stubKnowledgeRoute();
+    renderRoute();
+    const user = userEvent.setup();
+
+    await user.click(await screen.findByRole('checkbox', { name: 'Needs curation' }));
+    expect(screen.queryByRole('button', { name: 'Payments' })).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Payments intake' }));
+
+    const worklist = await screen.findByTestId('knowledge-curation-worklist');
+    expect(worklist).toHaveTextContent('Provisional runbook');
+    expect(worklist).toHaveTextContent('subconscious:capture');
+    const primaryArticle = within(worklist).getByRole('heading', { name: 'Provisional runbook' }).closest('article');
+    const independentArticle = within(worklist).getByRole('heading', { name: 'Independent draft' }).closest('article');
+    if (!primaryArticle || !independentArticle) throw new Error('Expected independent curation items');
+    const primary = within(primaryArticle);
+    const independent = within(independentArticle);
+    expect(primary.getByRole('list', { name: 'Evidence for Provisional runbook' })).toHaveTextContent(
+      'customer-report',
+    );
+    await user.click(primary.getByRole('button', { name: 'Load more evidence' }));
+    expect(await primary.findByText(/incident-review/)).toBeInTheDocument();
+    await user.type(primary.getByRole('textbox', { name: 'Find merge target for Provisional runbook' }), 'Canonical');
+    const mergeTarget = await primary.findByRole('button', { name: /Canonical runbook/ });
+    await user.click(mergeTarget);
+    expect(primary.getByRole('button', { name: 'Merge' })).toBeEnabled();
+    expect(independent.getByRole('button', { name: 'Merge' })).toBeDisabled();
+    await user.click(primary.getByRole('button', { name: 'Retain' }));
+    expect(await primary.findByText('retained · unintegrated')).toBeInTheDocument();
+    expect(independent.getByText('provisional')).toBeInTheDocument();
+    await user.click(primary.getByRole('button', { name: 'Promote' }));
+    expect(await primary.findByText('Sent to Approvals for review.')).toBeInTheDocument();
+    await user.click(primary.getByRole('button', { name: 'Open proposal' }));
+    expect(await screen.findByRole('tab', { name: 'approvals' })).toHaveAttribute('aria-selected', 'true');
   });
 
   it('renders the calm not-available state for a stale thread deep link', async () => {

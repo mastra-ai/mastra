@@ -52,11 +52,13 @@ export interface KnowledgeScopeTreeNode {
   name: string;
   kind: string;
   description?: string;
+  needsCuration?: boolean;
 }
 
 export interface KnowledgeScopeTreePayload {
   scope: KnowledgeScopeTreeNode;
   children: KnowledgeScopeTreeNode[];
+  curationDestination?: KnowledgeScopeTreeNode;
   nextCursor?: string;
 }
 
@@ -149,6 +151,70 @@ export interface KnowledgeNodePayload {
   records: KnowledgeNodeRecord[];
 }
 
+export interface KnowledgeCurationWorkItem {
+  id: string;
+  reference: string;
+  name: string;
+  kind: string;
+  version: number;
+  description?: string;
+  evidence: Array<{ source?: string; provenance?: string }>;
+  evidenceCursor?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface KnowledgeCurationWorklistPayload {
+  scopeId: string;
+  items: KnowledgeCurationWorkItem[];
+  nextCursor?: string;
+}
+
+export interface KnowledgeCurationEvidencePayload {
+  evidence: Array<{ source?: string; provenance?: string }>;
+  nextCursor?: string;
+}
+
+export interface KnowledgeCurationMergeTargetsPayload {
+  targets: Array<{ id: string; reference: string; name: string; kind: string; version: number }>;
+}
+
+export interface KnowledgeCurationActionPayload {
+  outcome: 'applied' | 'proposed' | 'retained';
+  node?: { id: string; reference: string; name: string; kind: string; version: number };
+  proposal?: { id: string; reference: string; status: KnowledgeProposalStatus };
+}
+
+export type KnowledgeCurationActionInput =
+  | { action: 'retain'; scopeId: string; nodeId: string }
+  | { action: 'discard'; scopeId: string; nodeId: string; version: number }
+  | {
+      action: 'refine';
+      scopeId: string;
+      nodeId: string;
+      version: number;
+      name?: string;
+      kind?: string;
+      description?: string;
+      reason?: string;
+    }
+  | {
+      action: 'promote';
+      scopeId: string;
+      nodeId: string;
+      version: number;
+      destinationScopeId: string;
+      reason?: string;
+    }
+  | {
+      action: 'merge';
+      scopeId: string;
+      nodeId: string;
+      version: number;
+      targetId: string;
+      targetVersion: number;
+    };
+
 function knowledgeBase(baseUrl: string, factoryProjectId: string): string {
   return `${baseUrl}/web/factory/projects/${encodeURIComponent(factoryProjectId)}/knowledge`;
 }
@@ -157,6 +223,7 @@ function knowledgeQuery(input: {
   threadId?: string;
   scopeId?: string;
   cursor?: string;
+  query?: string;
   action?: string;
   sourceType?: 'importer' | 'system';
   from?: string;
@@ -166,6 +233,7 @@ function knowledgeQuery(input: {
   if (input.threadId) params.set('threadId', input.threadId);
   if (input.scopeId) params.set('scopeId', input.scopeId);
   if (input.cursor) params.set('cursor', input.cursor);
+  if (input.query) params.set('query', input.query);
   if (input.action) params.set('action', input.action);
   if (input.sourceType) params.set('sourceType', input.sourceType);
   if (input.from) params.set('from', input.from);
@@ -260,6 +328,66 @@ export async function reviewKnowledgeProposal(
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ reason }),
+    },
+  );
+}
+
+export async function fetchKnowledgeCurationWorklist(
+  baseUrl: string,
+  factoryProjectId: string,
+  scopeId: string,
+  cursor?: string,
+  threadId?: string,
+  signal?: AbortSignal,
+): Promise<KnowledgeCurationWorklistPayload> {
+  return requestJson<KnowledgeCurationWorklistPayload>(
+    `${knowledgeBase(baseUrl, factoryProjectId)}/curation/worklist${knowledgeQuery({ scopeId, cursor, threadId })}`,
+    { signal },
+  );
+}
+
+export async function fetchKnowledgeCurationEvidence(
+  baseUrl: string,
+  factoryProjectId: string,
+  scopeId: string,
+  nodeId: string,
+  cursor?: string,
+  threadId?: string,
+  signal?: AbortSignal,
+): Promise<KnowledgeCurationEvidencePayload> {
+  return requestJson<KnowledgeCurationEvidencePayload>(
+    `${knowledgeBase(baseUrl, factoryProjectId)}/curation/items/${encodeURIComponent(nodeId)}/evidence${knowledgeQuery({ scopeId, cursor, threadId })}`,
+    { signal },
+  );
+}
+
+export async function fetchKnowledgeCurationMergeTargets(
+  baseUrl: string,
+  factoryProjectId: string,
+  scopeId: string,
+  query: string,
+  threadId?: string,
+  signal?: AbortSignal,
+): Promise<KnowledgeCurationMergeTargetsPayload> {
+  return requestJson<KnowledgeCurationMergeTargetsPayload>(
+    `${knowledgeBase(baseUrl, factoryProjectId)}/curation/merge-targets${knowledgeQuery({ scopeId, query, threadId })}`,
+    { signal },
+  );
+}
+
+export async function runKnowledgeCurationAction(
+  baseUrl: string,
+  factoryProjectId: string,
+  input: KnowledgeCurationActionInput,
+  threadId?: string,
+): Promise<KnowledgeCurationActionPayload> {
+  const { action, ...body } = input;
+  return requestJson<KnowledgeCurationActionPayload>(
+    `${knowledgeBase(baseUrl, factoryProjectId)}/curation/actions/${action}${knowledgeQuery({ threadId })}`,
+    {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(body),
     },
   );
 }
