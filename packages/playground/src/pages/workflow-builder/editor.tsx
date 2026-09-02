@@ -254,10 +254,10 @@ export default function WorkflowBuilderEditorPage({ create = false }: { create?:
               <Badge
                 variant={
                   workflowDraft.lifecycle === 'ready'
-                    ? 'success'
+                    ? 'green'
                     : workflowDraft.lifecycle === 'constructing'
-                      ? 'warning'
-                      : 'default'
+                      ? 'yellow'
+                      : 'neutral'
                 }
               >
                 {workflowDraft.lifecycle === 'untouched'
