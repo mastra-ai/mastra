@@ -807,7 +807,7 @@ export const batchProcessWorkflow = createWorkflow({
 
 ## Labeling control-flow entries
 
-Every control-flow method accepts an optional final argument with a stable `id`, a `description`, and JSON-serializable `metadata`. These fields identify and describe the graph entry itself, separate from the steps inside it. They survive serialization and storage, appear in `serializedStepGraph`, and have no effect on execution.
+Every control-flow method accepts an optional final argument with a stable `id`, a `description`, and JSON-serializable `metadata`. These fields identify and describe the graph entry itself, separate from the steps inside it. They survive serialization and storage and appear in `serializedStepGraph`. They have no effect on execution.
 
 ```typescript
 workflow
