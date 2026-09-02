@@ -4,10 +4,10 @@ export interface PlatformApiClientConfig {
   fetchImpl?: typeof fetch;
 }
 
-const DEFAULT_INTEGRATIONS_URL = 'https://integrations.mastra.ai/v1';
+const DEFAULT_INTEGRATIONS_URL = 'https://integrations.mastra.ai';
 const REGIONAL_INTEGRATIONS_URLS: Record<'us' | 'eu', string> = {
-  us: 'https://integrations.us.mastra.ai/v1',
-  eu: 'https://integrations.eu.mastra.ai/v1',
+  us: 'https://integrations.us.mastra.ai',
+  eu: 'https://integrations.eu.mastra.ai',
 };
 
 export function platformApiClientConfigFromEnv(): PlatformApiClientConfig {
