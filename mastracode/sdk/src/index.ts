@@ -861,6 +861,7 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
     // default when the `workspace` key is absent.
     workspace: undefined,
     instructions: getDynamicInstructions,
+    maxProcessorRetries: MASTRACODE_TRANSIENT_CONNECTION_MAX_RETRIES,
     // `settingsPath` matches the source `createMastraCode()` reads from so the
     // per-mode thinking defaults resolve against the same config file.
     model: ctx => getDynamicModel(ctx, config?.settingsPath),

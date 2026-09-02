@@ -996,8 +996,9 @@ describe('createMastraCode', () => {
 
     expect(agentConstructorMock).toHaveBeenCalled();
     const agentConfig = agentConstructorMock.mock.calls
-      .map(call => call[0] as { errorProcessors?: Array<{ id?: string }> } | undefined)
+      .map(call => call[0] as { errorProcessors?: Array<{ id?: string }>; maxProcessorRetries?: number } | undefined)
       .find(config => config?.errorProcessors?.some(processor => processor.id === 'stream-error-retry-processor'));
+    expect(agentConfig?.maxProcessorRetries).toBe(10);
     expect(agentConfig?.errorProcessors?.map(processor => processor.id)).toEqual([
       'provider-history-compat',
       'stream-error-retry-processor',
