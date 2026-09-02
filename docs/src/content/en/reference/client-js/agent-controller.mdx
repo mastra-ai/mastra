@@ -78,7 +78,7 @@ Returns: `Promise<AgentControllerWorkspaceStatus>`
 
 Returns an `AgentControllerSession` bound to one resource. Sessions are get-or-create on the server, so calling `create()` on the same `resourceId` and `scope` resumes the existing conversation instead of forking it.
 
-Pass `scope` to address an independent session over the same `resourceId`. Two sessions with the same `resourceId` and different scopes have their own run loop, thread binding, mode, model, and state, for example one session per git worktree with the worktree path as the scope. The scope travels on every request as a `sessionScope` query parameter.
+Pass `scope` to address an independent session over the same `resourceId`. Sessions that share a `resourceId` but use different scopes each get their own run loop, thread binding, mode, model, and state. A common pattern is one session per git worktree with the worktree path as the scope. The scope travels on every request as a `sessionScope` query parameter.
 
 ## Session methods
 
@@ -155,7 +155,7 @@ Injects a message into the in-flight run without starting a new turn.
 
 ### `followUp(message, options?)`
 
-Queues a follow-up message. If the session is idle it sends immediately; if a run is active it queues for after the run completes.
+Queues a follow-up message. If the session is idle it sends immediately. If a run is active it queues for after the run completes.
 
 ### `abort()`
 
@@ -195,7 +195,7 @@ Switches the active mode.
 
 ### `switchModel(modelId, options?)`
 
-Switches the model. `options.scope` is `'thread'` (default) or `'global'`; `options.modeId` targets a specific mode.
+Switches the model. `options.scope` is `'thread'` (default) or `'global'`. `options.modeId` targets a specific mode.
 
 ### `listThreads(options?)`
 
@@ -235,7 +235,7 @@ Returns: `Promise<MastraDBMessage[]>`
 
 ### `getGoal()`, `setGoal(objective, options?)`, `updateGoal(options)`, `clearGoal()`
 
-Read, set, update, and clear the goal for the session's thread. `setGoal` accepts `{ judgeModelId?, maxRuns? }`; `updateGoal` also accepts `status: 'active' | 'paused' | 'done'`. The agent's in-loop judge evaluates progress after each turn and reports it as `goal_evaluation` events.
+Read, set, update, and clear the goal for the session's thread. `setGoal` accepts `{ judgeModelId?, maxRuns? }`. `updateGoal` also accepts `status: 'active' | 'paused' | 'done'`. The agent's in-loop judge evaluates progress after each turn and reports it as `goal_evaluation` events.
 
 ### `getPermissions()`, `setPermissionForCategory(category, policy)`, `setPermissionForTool(toolName, policy)`
 
@@ -251,7 +251,7 @@ Returns the observational memory record for the session's thread.
 
 ### `sendNotification(input)`
 
-Sends a notification signal to the session. The agent's delivery policy determines whether the notification wakes an idle thread, is summarised, or is persisted for later.
+Sends a notification signal to the session. The agent's delivery policy decides whether the notification wakes an idle thread immediately or is held and summarised for later.
 
 Returns: `Promise<SendNotificationResult>`
 
@@ -272,7 +272,7 @@ Returns: `Promise<SendNotificationResult>`
 
 `message_*` events carry a `MastraDBMessage` and `thread_created` carries a thread, with timestamps hydrated to `Date`.
 
-A controller can also emit events the SDK doesn't type. `AgentControllerEvent` is the union of `KnownAgentControllerEvent` and `OtherAgentControllerEvent`, whose `type` is `string`, so comparing `event.type` to a literal doesn't narrow the union. Narrow with `isKnownAgentControllerEvent(event)` first:
+A controller can also emit events the SDK doesn't type. `AgentControllerEvent` is the union of `KnownAgentControllerEvent` and `OtherAgentControllerEvent`. Because `OtherAgentControllerEvent.type` is `string`, comparing `event.type` to a literal doesn't narrow the union. Narrow with `isKnownAgentControllerEvent(event)` first:
 
 ```typescript
 import { isKnownAgentControllerEvent } from '@mastra/client-js'
