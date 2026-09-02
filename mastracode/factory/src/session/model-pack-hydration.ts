@@ -21,37 +21,50 @@ export interface ModelPackHydrationSession extends ModelPackApplicableSession {
   };
 }
 
+const activePackApplications = new WeakMap<ModelPackApplicableSession, Promise<void>>();
+
 export async function applyActiveModelPack(
   session: ModelPackApplicableSession,
   activePack: Pick<ActiveModelPackRecord, 'packId' | 'models'> & Partial<Pick<ActiveModelPackRecord, 'thinkingLevels'>>,
 ): Promise<void> {
-  for (const [modeId, modelId] of Object.entries(activePack.models)) {
-    await session.thread.setSetting({ key: `modeModelId_${modeId}`, value: modelId });
-    await session.thread.setSetting({
-      key: `modeThinkingLevel_${modeId}`,
-      value: activePack.thinkingLevels?.[modeId as keyof typeof activePack.thinkingLevels],
+  const previousApplication = activePackApplications.get(session) ?? Promise.resolve();
+  const application = previousApplication
+    .catch(() => {})
+    .then(async () => {
+      for (const [modeId, modelId] of Object.entries(activePack.models)) {
+        await session.thread.setSetting({ key: `modeModelId_${modeId}`, value: modelId });
+        await session.thread.setSetting({
+          key: `modeThinkingLevel_${modeId}`,
+          value: activePack.thinkingLevels?.[modeId as keyof typeof activePack.thinkingLevels],
+        });
+      }
+
+      const currentMode = session.mode.get();
+      const currentModeModel =
+        currentMode === 'build' || currentMode === 'plan' || currentMode === 'fast'
+          ? activePack.models[currentMode]
+          : undefined;
+      if (currentModeModel) {
+        await session.model.switch({ modelId: currentModeModel });
+      }
+
+      const subagentModels = [
+        ['explore', activePack.models.fast],
+        ['plan', activePack.models.plan],
+        ['execute', activePack.models.build],
+      ] as const;
+      for (const [agentType, modelId] of subagentModels) {
+        await session.subagents.model.set({ modelId, agentType });
+      }
+
+      await session.thread.setSetting({ key: 'activeModelPackId', value: activePack.packId });
     });
+  activePackApplications.set(session, application);
+  try {
+    await application;
+  } finally {
+    if (activePackApplications.get(session) === application) activePackApplications.delete(session);
   }
-
-  const currentMode = session.mode.get();
-  const currentModeModel =
-    currentMode === 'build' || currentMode === 'plan' || currentMode === 'fast'
-      ? activePack.models[currentMode]
-      : undefined;
-  if (currentModeModel) {
-    await session.model.switch({ modelId: currentModeModel });
-  }
-
-  const subagentModels = [
-    ['explore', activePack.models.fast],
-    ['plan', activePack.models.plan],
-    ['execute', activePack.models.build],
-  ] as const;
-  for (const [agentType, modelId] of subagentModels) {
-    await session.subagents.model.set({ modelId, agentType });
-  }
-
-  await session.thread.setSetting({ key: 'activeModelPackId', value: activePack.packId });
 }
 
 export interface ModelPackHydrationDependencies {

@@ -470,6 +470,8 @@ function recordToModePack(record: ModelPackRecord): ModePack {
 function parsePackThinkingLevels(value: unknown): ModePack['thinkingLevels'] | null {
   if (value === undefined) return {};
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const allowedModes = new Set(['build', 'plan', 'fast']);
+  if (Object.keys(value).some(key => !allowedModes.has(key))) return null;
   const levels: NonNullable<ModePack['thinkingLevels']> = {};
   for (const mode of ['build', 'plan', 'fast'] as const) {
     const level = (value as Record<string, unknown>)[mode];

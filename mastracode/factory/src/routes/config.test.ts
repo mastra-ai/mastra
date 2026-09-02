@@ -617,10 +617,10 @@ describe('model pack routes with a tenant', () => {
     expect(packs.find((p: { id: string }) => p.id === pack.id)).toMatchObject({ custom: true, active: false });
   });
 
-  it('rejects invalid pack thinking levels', async () => {
+  it.each([{ build: 'ultra' }, { buid: 'high' }])('rejects invalid pack thinking levels: %o', async thinkingLevels => {
     const response = await postPack(buildApp(userA), {
       ...packBody,
-      thinkingLevels: { build: 'ultra' },
+      thinkingLevels,
     });
 
     expect(response.status).toBe(400);
