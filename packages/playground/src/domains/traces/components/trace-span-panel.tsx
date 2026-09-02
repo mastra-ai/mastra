@@ -8,6 +8,14 @@ import { TraceDataPanel } from '@/domains/traces/components/trace-data-panel';
 import { Link } from '@/lib/link';
 
 type TraceDataPanelViewProps = ComponentProps<typeof TraceDataPanelView>;
+
+function getEntityHref(entityType: string | null | undefined, entityId: string | null | undefined) {
+  if (!entityId || !entityType) return undefined;
+  const normalizedEntityType = entityType.toLowerCase();
+  if (normalizedEntityType.includes('workflow')) return `/workflows/${encodeURIComponent(entityId)}/graph`;
+  if (normalizedEntityType.includes('agent')) return `/agents/${encodeURIComponent(entityId)}/chat/new`;
+  return undefined;
+}
 type SpanDataPanelViewProps = ComponentProps<typeof SpanDataPanelView>;
 
 export interface TraceSpanPanelProps {
@@ -23,7 +31,6 @@ export interface TraceSpanPanelProps {
   onSpanClose?: () => void;
 
   // Trace-panel pass-through.
-  usage?: TraceDataPanelViewProps['usage'];
   anchorSpanId?: string;
   initialSpanId?: string | null;
   onPrevious?: () => void;
@@ -34,6 +41,7 @@ export interface TraceSpanPanelProps {
   feedbackTabSlot?: TraceDataPanelViewProps['feedbackTabSlot'];
   scoresTabBadge?: ReactNode;
   scoresTabSlot?: TraceDataPanelViewProps['scoresTabSlot'];
+  usage?: TraceDataPanelViewProps['usage'];
   traceHref?: string;
   className?: string;
 
@@ -58,7 +66,6 @@ export function TraceSpanPanel({
   onSpanSelect,
   onClose,
   onSpanClose,
-  usage,
   anchorSpanId,
   initialSpanId,
   onPrevious,
@@ -69,6 +76,7 @@ export function TraceSpanPanel({
   feedbackTabSlot,
   scoresTabBadge,
   scoresTabSlot,
+  usage,
   traceHref,
   className,
   spanActiveTab,
@@ -80,13 +88,20 @@ export function TraceSpanPanel({
   const { data: spanDetailData, isLoading: isLoadingSpanDetail } = useSpanDetail(traceId, selectedSpanId ?? '');
   const { handlePreviousSpan, handleNextSpan } = useTraceSpanNavigation(spans, selectedSpanId, onSpanSelect);
 
+  // The trace summary links the entity to its Studio page; only Studio knows the routes.
+  const rootSpan = anchorSpanId
+    ? spans?.find(s => s.spanId === anchorSpanId)
+    : spans?.find(s => s.parentSpanId == null);
+  const entityHref = getEntityHref(rootSpan?.entityType, rootSpan?.entityId);
+
   return (
     <TraceDataPanel
       className={className}
       traceId={traceId}
       spans={spans}
-      usage={usage}
       anchorSpanId={anchorSpanId}
+      entityHref={entityHref}
+      usage={usage}
       isLoading={isLoadingSpans}
       onClose={onClose}
       onSpanSelect={onSpanSelect}

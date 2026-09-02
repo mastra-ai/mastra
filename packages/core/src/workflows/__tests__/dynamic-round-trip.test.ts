@@ -1662,3 +1662,127 @@ describe('inner-entry options + re-serialize idempotency', () => {
     expect(restored).toEqual(stored);
   });
 });
+
+describe('dynamic workflow schedules (#22756)', () => {
+  const inputSchema = { type: 'object', properties: { value: { type: 'number' } }, required: ['value'] };
+  const outputSchema = { type: 'object', properties: { message: { type: 'string' } }, required: ['message'] };
+
+  it('persists schedule config and re-declares it after a fresh boot instead of sweeping it as orphaned', async () => {
+    const storage = new InMemoryStore({ id: 'sched-round-trip' });
+    const stored = JSON.parse(JSON.stringify(toStorableGraph(buildOriginalWorkflow().stepGraph)));
+
+    // First process: save via addDynamicWorkflow with a declarative schedule.
+    {
+      const mastra = new Mastra({ logger: false, tools: { 'double-tool': doubleTool } as any, storage });
+      await mastra.addDynamicWorkflow({
+        id: 'scheduled-dyn-wf',
+        inputSchema,
+        outputSchema,
+        graph: stored,
+        schedule: { cron: '0 0 * * *', inputData: { value: 3 } },
+      });
+      await mastra.startWorkers();
+
+      const schedulesStore = (await storage.getStore('schedules'))!;
+      const rows = (await schedulesStore.listSchedules()).filter(r => r.id.startsWith('wf_'));
+      expect(rows).toHaveLength(1);
+      expect(rows[0]!.target).toMatchObject({ type: 'workflow', workflowId: 'scheduled-dyn-wf' });
+      await mastra.stopWorkers?.();
+    }
+
+    // Second "process": rehydration must restore the schedule config so the
+    // boot-time declarative sync keeps (not orphan-sweeps) the `wf_*` row.
+    {
+      const mastra2 = new Mastra({ logger: false, tools: { 'double-tool': doubleTool } as any, storage });
+      await mastra2.startWorkers();
+
+      const wf = mastra2.getWorkflow('scheduled-dyn-wf') as any;
+      expect(wf.getScheduleConfigs()).toHaveLength(1);
+      expect(wf.getScheduleConfigs()[0]).toMatchObject({ cron: '0 0 * * *', inputData: { value: 3 } });
+
+      const schedulesStore = (await storage.getStore('schedules'))!;
+      const rows = (await schedulesStore.listSchedules()).filter(r => r.id.startsWith('wf_'));
+      expect(rows).toHaveLength(1);
+      await mastra2.stopWorkers?.();
+    }
+  });
+
+  it('keeps the wf_* schedule rows of a dynamic workflow that failed to rehydrate', async () => {
+    const storage = new InMemoryStore({ id: 'sched-failed-rehydrate' });
+    const stored = JSON.parse(JSON.stringify(toStorableGraph(buildOriginalWorkflow().stepGraph)));
+
+    // Persist the definition and its schedule row directly (as a prior boot
+    // would have), then boot WITHOUT the tool the graph needs so rehydration
+    // fails.
+    const defsStore = (await storage.getStore('workflowDefinitions'))!;
+    await defsStore.upsert({
+      id: 'broken-dyn-wf',
+      inputSchema,
+      outputSchema,
+      graph: stored,
+      schedule: { cron: '0 0 * * *' },
+    });
+
+    const schedulesStore = (await storage.getStore('schedules'))!;
+    const rowId = `wf_${encodeURIComponent('broken-dyn-wf')}`;
+    const now = Date.now();
+    await schedulesStore.createSchedule({
+      id: rowId,
+      target: { type: 'workflow', workflowId: 'broken-dyn-wf' },
+      cron: '0 0 * * *',
+      status: 'active',
+      nextFireAt: now + 60_000,
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    const mastra = new Mastra({ logger: false, storage });
+    await mastra.startWorkers();
+
+    // The workflow failed to load…
+    expect(() => mastra.getWorkflow('broken-dyn-wf')).toThrow();
+    // …but its schedule row must survive the orphan sweep.
+    const row = await schedulesStore.getSchedule(rowId);
+    expect(row).toBeTruthy();
+    await mastra.stopWorkers?.();
+  });
+
+  it('keeps the wf_* schedule rows of a failed dynamic workflow whose id contains "__"', async () => {
+    // `encodeURIComponent` does not escape underscores, so `wf_broken__dyn`
+    // is ambiguous between workflow `broken__dyn` (single form) and workflow
+    // `broken` schedule `dyn` (array form). The sweep must match failed ids
+    // by generated row-id prefix, not by decoding the row id.
+    const storage = new InMemoryStore({ id: 'sched-failed-rehydrate-underscore' });
+    const stored = JSON.parse(JSON.stringify(toStorableGraph(buildOriginalWorkflow().stepGraph)));
+
+    const defsStore = (await storage.getStore('workflowDefinitions'))!;
+    await defsStore.upsert({
+      id: 'broken__dyn',
+      inputSchema,
+      outputSchema,
+      graph: stored,
+      schedule: { cron: '0 0 * * *' },
+    });
+
+    const schedulesStore = (await storage.getStore('schedules'))!;
+    const rowId = `wf_${encodeURIComponent('broken__dyn')}`;
+    const now = Date.now();
+    await schedulesStore.createSchedule({
+      id: rowId,
+      target: { type: 'workflow', workflowId: 'broken__dyn' },
+      cron: '0 0 * * *',
+      status: 'active',
+      nextFireAt: now + 60_000,
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    const mastra = new Mastra({ logger: false, storage });
+    await mastra.startWorkers();
+
+    expect(() => mastra.getWorkflow('broken__dyn')).toThrow();
+    const row = await schedulesStore.getSchedule(rowId);
+    expect(row).toBeTruthy();
+    await mastra.stopWorkers?.();
+  });
+});

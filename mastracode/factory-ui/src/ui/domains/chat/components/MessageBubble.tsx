@@ -228,7 +228,16 @@ export function MessageBubble({
     entry.message.role === 'user' && parts.length === 1 && parts[0].type === 'text'
       ? parseSkillActivation(parts[0].text)
       : undefined;
-  if (skillActivation) return <SkillMessage activation={skillActivation} />;
+  if (skillActivation) {
+    return skillActivation.feed === undefined ? (
+      <SkillMessage activation={skillActivation} />
+    ) : (
+      <div className="flex flex-col">
+        <SkillMessage activation={skillActivation} />
+        <SignalRow kind="reactive" label="Work item feed" message={skillActivation.feed} />
+      </div>
+    );
+  }
   if (isSkillNotificationSignal(entry)) return null;
 
   const notifications = notificationMetadata(entry);
