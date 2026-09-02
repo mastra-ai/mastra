@@ -189,44 +189,26 @@ describe('FactoryTransitionService', () => {
         }),
       ).resolves.toMatchObject({ status: 'rejected', code: 'approval_required' });
     }
+    expect((await storage.get({ orgId: 'org-1', id: item.id }))?.acceptedAt).toBeNull();
     const approved = await service.transition({
       ...request({ id: item.id, revision }, { stage: 'planning', identity: 'human-plan' }),
       cause: 'board_drag',
     });
+    expect(approved).toMatchObject({ status: 'accepted', stage: 'planning' });
     const planningRevision = (approved as { revision: number }).revision;
-    for (const [actor, ingress] of [
-      [
-        { type: 'agent', bindingId: 'agent', role: 'work' },
-        { type: 'agent', identity: 'agent-execute' },
-      ],
-      [
-        { type: 'system', id: 'dispatcher' },
-        { type: 'rule', identity: 'rule-execute' },
-      ],
-      [
-        { type: 'system', id: 'tool-result' },
-        { type: 'toolResult', identity: 'tool-execute' },
-      ],
-      [
-        { type: 'github', login: 'octocat', trusted: true, factoryAuthored: true },
-        { type: 'github', identity: 'github-execute' },
-      ],
-    ] as const) {
-      await expect(
-        service.transition({
-          ...request({ id: item.id, revision: planningRevision }, { stage: 'execute', identity: ingress.identity }),
-          actor,
-          ingress,
-        }),
-      ).resolves.toMatchObject({ status: 'rejected', code: 'approval_required' });
-    }
+    // The person's move out of Triage is the approval; it is recorded once so
+    // the plan agent's own hop into Execute needs no second gesture.
+    const acceptedAt = (await storage.get({ orgId: 'org-1', id: item.id }))?.acceptedAt;
+    expect(acceptedAt).toBeInstanceOf(Date);
     expect(planningRule).toHaveBeenCalledTimes(1);
-    expect(executeRule).not.toHaveBeenCalled();
     const executed = await service.transition({
-      ...request({ id: item.id, revision: planningRevision }, { stage: 'execute', identity: 'human-execute' }),
-      cause: 'board_drag',
+      ...request({ id: item.id, revision: planningRevision }, { stage: 'execute', identity: 'agent-execute' }),
+      actor: { type: 'agent', bindingId: 'agent', role: 'plan' },
+      ingress: { type: 'agent', identity: 'agent-execute' },
     });
     expect(executed).toMatchObject({ status: 'accepted', stage: 'execute' });
+    expect(executeRule).toHaveBeenCalledTimes(1);
+    expect((await storage.get({ orgId: 'org-1', id: item.id }))?.acceptedAt).toEqual(acceptedAt);
     const reviewed = await service.transition(
       request(
         { id: item.id, revision: (executed as { revision: number }).revision },
@@ -234,6 +216,91 @@ describe('FactoryTransitionService', () => {
       ),
     );
     expect(reviewed).toMatchObject({ status: 'accepted', stage: 'review' });
+  });
+
+  it('lets an agent carry a non-bug card that already left rest, and stamps acceptance on the next human move', async () => {
+    const seed = await createFactoryStorageForTests();
+    const storage = seed.workItems;
+    const item = await createItem(storage);
+    const onAccepted = vi.fn();
+    const service = new FactoryTransitionService({
+      rules: defaultFactoryRules({ version: 'rules-v1' }),
+      storage,
+      onAccepted,
+    });
+    const classified = await service.transition({
+      ...request(item, { stage: 'intake', identity: 'classify' }),
+      actor: { type: 'agent', bindingId: 'triage', role: 'triage' },
+      ingress: { type: 'agent', identity: 'classify' },
+      triageType: 'feature request',
+    });
+    const planned = await service.transition({
+      ...request({ id: item.id, revision: (classified as { revision: number }).revision }, { stage: 'planning' }),
+      cause: 'board_drag',
+    });
+    // A card accepted before acceptance was recorded: in Planning, no stamp.
+    await seed.storage.ops.updateMany('work_items', { id: item.id }, { accepted_at: null });
+    expect((await storage.get({ orgId: 'org-1', id: item.id }))?.acceptedAt).toBeNull();
+
+    const executed = await service.transition({
+      ...request({ id: item.id, revision: (planned as { revision: number }).revision }, { stage: 'execute' }),
+      actor: { type: 'agent', bindingId: 'agent', role: 'plan' },
+      ingress: { type: 'agent', identity: 'agent-execute' },
+    });
+    expect(executed).toMatchObject({ status: 'accepted', stage: 'execute' });
+    expect((await storage.get({ orgId: 'org-1', id: item.id }))?.acceptedAt).toBeNull();
+
+    const reworked = await service.transition({
+      ...request(
+        { id: item.id, revision: (executed as { revision: number }).revision },
+        { stage: 'planning', identity: 'human-rework' },
+      ),
+      cause: 'board_drag',
+    });
+    expect(reworked).toMatchObject({ status: 'accepted', stage: 'planning' });
+    expect((await storage.get({ orgId: 'org-1', id: item.id }))?.acceptedAt).toBeInstanceOf(Date);
+    await vi.waitFor(() => expect(onAccepted).toHaveBeenCalledTimes(2));
+  });
+
+  it('fires onAccepted once, with the accepted row, and never lets the hook fail the transition', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const item = await createItem(storage);
+    const onAccepted = vi.fn().mockRejectedValue(new Error('label sync down'));
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const service = new FactoryTransitionService({
+      rules: defaultFactoryRules({ version: 'rules-v1' }),
+      storage,
+      onAccepted,
+    });
+    const classified = await service.transition({
+      ...request(item, { stage: 'intake', identity: 'classify' }),
+      actor: { type: 'agent', bindingId: 'triage', role: 'triage' },
+      ingress: { type: 'agent', identity: 'classify' },
+      triageType: 'feature request',
+    });
+    const accepted = await service.transition({
+      ...request({ id: item.id, revision: (classified as { revision: number }).revision }, { stage: 'planning' }),
+      cause: 'board_drag',
+    });
+    expect(accepted).toMatchObject({ status: 'accepted', stage: 'planning' });
+    await vi.waitFor(() => expect(onAccepted).toHaveBeenCalledTimes(1));
+    expect(onAccepted.mock.calls[0]?.[0]).toMatchObject({
+      orgId: 'org-1',
+      workItemId: item.id,
+      item: { id: item.id, acceptedAt: expect.any(Date) },
+    });
+    await vi.waitFor(() => expect(warn).toHaveBeenCalled());
+
+    const moved = await service.transition({
+      ...request(
+        { id: item.id, revision: (accepted as { revision: number }).revision },
+        { stage: 'execute', identity: 'human-execute' },
+      ),
+      cause: 'board_drag',
+    });
+    expect(moved).toMatchObject({ status: 'accepted', stage: 'execute' });
+    expect(onAccepted).toHaveBeenCalledTimes(1);
+    warn.mockRestore();
   });
 
   it('keeps bugs autonomous and leaves grandfathered work and terminal transitions unaffected', async () => {

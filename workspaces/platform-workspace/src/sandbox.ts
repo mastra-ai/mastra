@@ -904,8 +904,9 @@ export class PlatformSandbox extends MastraSandbox {
    * sandbox they can't safely retry.
    *
    * Railway requires a caller-supplied recovery `id` before it can have a
-   * checkpoint to delete. E2B also permits capture with the automatic id, so
-   * destroy releases that named snapshot even when no recovery id was supplied.
+   * checkpoint to delete. On E2B the sandbox itself is the persistent thing
+   * (idle sandboxes pause and resume in place), so destroy only kills the
+   * VM; any snapshot a caller captured on purpose is the caller's to manage.
    */
   async destroy(): Promise<void> {
     if (!this._sandboxId) return;
@@ -917,7 +918,7 @@ export class PlatformSandbox extends MastraSandbox {
     // resolution the pending capture already had; we don't rethrow.
     this._captureInFlight = null;
 
-    if (this._hasRecoveryKey || this._client.sandboxProvider === 'e2b') {
+    if (this._hasRecoveryKey && this._client.sandboxProvider !== 'e2b') {
       // Body mirrors the POST /checkpoint shape (`{ id }`) so the proxy
       // can hash the same recovery key into the same checkpoint name.
       // Best-effort: a proxy 404/410 means the checkpoint is already

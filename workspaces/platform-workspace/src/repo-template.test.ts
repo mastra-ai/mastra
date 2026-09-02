@@ -44,7 +44,7 @@ describe('createRepoTemplate', () => {
     expect(serializeSandboxTemplate(template!)).toEqual({
       schemaVersion: 1,
       operations: [
-        { method: 'runCmd', args: ['git clone https://github.com/acme/widgets "widgets"'] },
+        { method: 'runCmd', args: [`git clone --depth=1 --single-branch 'https://github.com/acme/widgets' 'widgets'`] },
         { method: 'runCmd', args: [`git -C "widgets" fetch origin ${SHA_1}`] },
         { method: 'runCmd', args: [`git -C "widgets" checkout ${SHA_1}`] },
         { method: 'runCmd', args: ['cd "widgets" && pnpm install --frozen-lockfile'] },
@@ -121,7 +121,7 @@ describe('createRepoTemplate', () => {
     expect(serialized.operations.slice(0, 3)).toEqual([
       { method: 'runCmd', args: ['mkdir -p "/workspace"'] },
       { method: 'setWorkdir', args: ['/workspace'] },
-      { method: 'runCmd', args: ['git clone https://github.com/acme/widgets "widgets"'] },
+      { method: 'runCmd', args: [`git clone --depth=1 --single-branch 'https://github.com/acme/widgets' 'widgets'`] },
     ]);
     const commands = serialized.operations.filter(op => op.method === 'runCmd').map(op => String(op.args[0]));
     expect(commands.at(-2)).toBe('cd "widgets" && pnpm i');
@@ -139,7 +139,7 @@ describe('createRepoTemplate', () => {
     expect(serialized.operations.map(op => op.method)).not.toContain('setWorkdir');
     expect(serialized.operations[0]).toEqual({
       method: 'runCmd',
-      args: ['git clone https://github.com/acme/widgets "widgets"'],
+      args: [`git clone --depth=1 --single-branch 'https://github.com/acme/widgets' 'widgets'`],
     });
   });
 
@@ -167,7 +167,7 @@ describe('createRepoTemplate', () => {
     expect(serialized.operations).toEqual([
       { method: 'cpuCount', args: [4] },
       { method: 'memoryMB', args: [8_192] },
-      { method: 'runCmd', args: ['git clone https://github.com/acme/widgets "widgets"'] },
+      { method: 'runCmd', args: [`git clone --depth=1 --single-branch 'https://github.com/acme/widgets' 'widgets'`] },
       { method: 'runCmd', args: [`git -C "widgets" fetch origin ${SHA_1}`] },
       { method: 'runCmd', args: [`git -C "widgets" checkout ${SHA_1}`] },
       markerStep(),
