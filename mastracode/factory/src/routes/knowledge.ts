@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 
-import type { Knowledge } from '@mastra/core/knowledge';
+import type { Knowledge, MaterializeKnowledgeScopeInput } from '@mastra/core/knowledge';
 import type { ApiRoute } from '@mastra/core/server';
 import { registerApiRoute } from '@mastra/core/server';
 import type {
@@ -41,9 +41,9 @@ const DEFAULT_LIMITS: KnowledgeRouteLimits = { maxNodes: 500, maxRecords: 2000, 
 
 export interface KnowledgeAccessProfile {
   id: string;
-  rootScopeId: string;
-  baselineScopeIds: KnowledgeScopeIds;
-  intakeScopeIds?: KnowledgeScopeIds;
+  rootScopeAddress: string;
+  baselineScopes: MaterializeKnowledgeScopeInput[];
+  intakeScopes?: MaterializeKnowledgeScopeInput[];
 }
 
 export interface KnowledgeAccessProfileInput {
@@ -53,10 +53,10 @@ export interface KnowledgeAccessProfileInput {
   userId: string;
   projectId: string;
   threadId?: string;
-  builtInScopeIds: {
-    org: string;
-    resource: string;
-    thread?: string;
+  builtInScopes: {
+    org: MaterializeKnowledgeScopeInput;
+    resource: MaterializeKnowledgeScopeInput;
+    thread?: MaterializeKnowledgeScopeInput;
   };
 }
 
@@ -73,6 +73,7 @@ export interface KnowledgeRoutesDeps extends RouteDependencies {
 
 export interface KnowledgeGraphNode {
   id: string;
+  reference: string;
   name: string;
   kind: string;
   description?: string;
@@ -100,6 +101,7 @@ export interface KnowledgeGraphRecord {
 
 export interface KnowledgeScopeTreeNode {
   id: string;
+  reference: string;
   name: string;
   kind: string;
   description?: string;
@@ -138,6 +140,7 @@ export interface KnowledgeNodeRecordPayload {
 export interface KnowledgeNodePayload {
   node: {
     id: string;
+    reference: string;
     name: string;
     kind: string;
     createdAt: string;
@@ -156,6 +159,7 @@ export interface KnowledgeImporterSummary {
 
 export interface KnowledgeImportRunPayload {
   id: string;
+  reference: string;
   importerId: string;
   binding: string;
   source?: string;
@@ -171,10 +175,12 @@ export interface KnowledgeImportRunPayload {
 export interface KnowledgeImportRunDetailPayload {
   run: KnowledgeImportRunPayload;
   activity: Array<{ id: string; action: string; targetType: string; createdAt: string }>;
+  nextCursor?: string;
 }
 
 export interface KnowledgeProposalPayload {
   id: string;
+  reference: string;
   operation: string;
   status: KnowledgeProposalStatus;
   reason?: string;
@@ -204,7 +210,7 @@ function boundedThreadId(raw: string | undefined): string | undefined {
 }
 
 function isKnowledgeHandle(value: string | undefined): boolean {
-  return !value || /^kh_[0-9a-f-]{36}$/.test(value);
+  return !value || /^kh_[0-9a-f-]{36}$/.test(value) || /^kr_[A-Za-z0-9_-]+$/.test(value);
 }
 
 interface ResolvedView {
@@ -244,12 +250,15 @@ function importBinding(binding: string): { source?: string; scopeAddress?: strin
   return {};
 }
 
-function importScopeBelongsToProject(scope: string | undefined, projectId: string): boolean {
-  return scope === `resource:${projectId}`;
+function importScopeBelongsToView(scope: string | undefined, projectId: string, threadId?: string): boolean {
+  return (
+    scope === `resource:${projectId}` ||
+    (threadId !== undefined && scope === `resource:${projectId}:thread:${threadId}`)
+  );
 }
 
-function importRunBelongsToProject(run: KnowledgeImportRun, projectId: string): boolean {
-  return importScopeBelongsToProject(importBinding(run.binding).scopeAddress, projectId);
+function importRunBelongsToView(run: KnowledgeImportRun, projectId: string, threadId?: string): boolean {
+  return importScopeBelongsToView(importBinding(run.binding).scopeAddress, projectId, threadId);
 }
 
 async function proposalPayload(
@@ -258,19 +267,20 @@ async function proposalPayload(
   proposal: KnowledgeProposal,
   scopeIds: KnowledgeScopeIds,
   handle: (kind: 'proposal' | 'node' | 'record', value: string) => string,
+  reference: (kind: 'proposal' | 'node' | 'record', value: string) => string,
   allowActions = true,
 ): Promise<KnowledgeProposalPayload | null> {
   const frontier = await knowledge.evaluateAccess(scopeIds);
   const currentTargets = await Promise.all(
     proposal.targets.map(async target => {
-      const isPrimaryTarget = target.id === proposal.targetId;
-      const current = isPrimaryTarget
-        ? target.type === 'node'
+      let current =
+        target.type === 'node'
           ? await knowledge.getNode({ id: target.id, scopeIds })
-          : await knowledge.getRecord({ id: target.id, scopeIds })
-        : target.type === 'node'
-          ? await store.getNode(target.id)
-          : await store.getRecord({ id: target.id, includeDeleted: true });
+          : await knowledge.getRecord({ id: target.id, scopeIds });
+      if (!current && target.type === 'node' && frontier.scopes[target.id]?.read) {
+        const scopeTarget = await store.getNode(target.id);
+        if (scopeTarget?.isScope) current = scopeTarget;
+      }
       if (!current || current.deletedAt) return null;
       const currentScopeIds =
         target.type === 'node'
@@ -298,6 +308,7 @@ async function proposalPayload(
         : [];
   return {
     id: handle('proposal', proposal.id),
+    reference: reference('proposal', proposal.id),
     operation: proposal.operation,
     status: proposal.status,
     reason: proposal.reason,
@@ -449,7 +460,18 @@ class WikilinkResolver {
   }
 }
 
-type KnowledgeSurfaceHandleKind = 'scope' | 'node' | 'record' | 'proposal' | 'run' | 'binding' | 'cursor';
+type KnowledgeSurfaceHandleKind =
+  | 'scope'
+  | 'node'
+  | 'record'
+  | 'proposal'
+  | 'run'
+  | 'binding'
+  | 'scope-cursor'
+  | 'activity-cursor'
+  | 'import-runs-cursor'
+  | 'import-activity-cursor'
+  | 'proposal-cursor';
 
 interface KnowledgeSurfaceHandle {
   projectId: string;
@@ -458,6 +480,8 @@ interface KnowledgeSurfaceHandle {
   value: string;
   expiresAt: number;
 }
+
+type KnowledgeStableReferenceKind = 'scope' | 'node' | 'record' | 'proposal' | 'run';
 
 export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
   readonly #limits: KnowledgeRouteLimits;
@@ -509,10 +533,49 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
     return entry.value;
   }
 
+  #mintReference(projectId: string, kind: KnowledgeStableReferenceKind, value: string): string {
+    return `kr_${Buffer.from(JSON.stringify([projectId, kind, value])).toString('base64url')}`;
+  }
+
+  #resolveReference(
+    projectId: string,
+    kind: KnowledgeStableReferenceKind,
+    reference: string | undefined,
+  ): string | undefined {
+    if (!reference?.startsWith('kr_') || reference.length > 2048) return undefined;
+    try {
+      const parsed: unknown = JSON.parse(Buffer.from(reference.slice(3), 'base64url').toString());
+      if (
+        !Array.isArray(parsed) ||
+        parsed.length !== 3 ||
+        parsed[0] !== projectId ||
+        parsed[1] !== kind ||
+        typeof parsed[2] !== 'string'
+      ) {
+        return undefined;
+      }
+      return parsed[2];
+    } catch {
+      return undefined;
+    }
+  }
+
+  #resolveResource(
+    projectId: string,
+    perspectiveKey: string,
+    kind: KnowledgeStableReferenceKind,
+    token: string | undefined,
+  ): string | undefined {
+    return (
+      this.#resolveHandle(projectId, perspectiveKey, kind, token) ?? this.#resolveReference(projectId, kind, token)
+    );
+  }
+
   #importRunPayload(projectId: string, perspectiveKey: string, run: KnowledgeImportRun): KnowledgeImportRunPayload {
     const binding = importBinding(run.binding);
     return {
       id: this.#mintHandle(projectId, perspectiveKey, 'run', run.id),
+      reference: this.#mintReference(projectId, 'run', run.id),
       importerId: run.importerId,
       binding: this.#mintHandle(projectId, perspectiveKey, 'binding', run.binding),
       source: binding.source,
@@ -523,71 +586,6 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
       queuedAt: run.queuedAt.toISOString(),
       startedAt: run.startedAt?.toISOString(),
       completedAt: run.completedAt?.toISOString(),
-    };
-  }
-
-  async #resolveOperator(c: Context): Promise<
-    | {
-        knowledge: Knowledge;
-        store: KnowledgeStorage;
-        orgId: string;
-        projectId: string;
-        scopeIds: KnowledgeScopeIds;
-        perspectiveKey: string;
-      }
-    | { response: Response }
-  > {
-    await this.deps.auth.ensureUser(c);
-    const tenant = this.deps.auth.tenant(c);
-    if (!tenant) return { response: c.json({ error: 'unauthorized' }, 401) };
-    if (!tenant.orgId) return { response: c.json({ error: 'organization_required' }, 403) };
-
-    const projectId = c.req.param('id');
-    if (!projectId || !UUID_RE.test(projectId)) return { response: c.json({ error: 'Project not found' }, 404) };
-    await this.deps.projects.ensureReady();
-    if (!(await this.deps.projects.get({ orgId: tenant.orgId, id: projectId }))) {
-      return { response: c.json({ error: 'Project not found' }, 404) };
-    }
-    if (this.deps.auth.enabled() && !(await this.deps.auth.isOrganizationAdmin(c, tenant.orgId))) {
-      return { response: c.json({ error: 'forbidden' }, 403) };
-    }
-
-    const knowledge = await this.deps.knowledge().catch(() => undefined);
-    const store = await knowledge?.getStorageInternal().catch(() => undefined);
-    if (!knowledge || !store) {
-      return {
-        response: c.json(
-          { error: 'knowledge_unavailable', message: 'The configured Knowledge runtime is unavailable.' },
-          503,
-        ),
-      };
-    }
-    const [orgScope, resourceScope] = await Promise.all([
-      store.getScopeAddress(`org:${tenant.orgId}`),
-      store.getScopeAddress(`resource:${projectId}`),
-    ]);
-    if (!orgScope || !resourceScope) return { response: c.json({ error: 'knowledge_not_found' }, 404) };
-    const orgScopeId = orgScope.scopeNodeId;
-    const resourceScopeId = resourceScope.scopeNodeId;
-    const profile = await this.#resolveAccessProfile({
-      c,
-      knowledge,
-      store,
-      orgId: tenant.orgId,
-      userId: tenant.userId,
-      projectId,
-      orgScopeId,
-      resourceScopeId,
-    });
-    if (!profile) return { response: c.json({ error: 'knowledge_profile_unavailable' }, 503) };
-    const frontier = await knowledge.evaluateAccess(profile.scopeIds);
-    return {
-      knowledge,
-      store,
-      orgId: tenant.orgId,
-      projectId,
-      scopeIds: profile.scopeIds,
-      perspectiveKey: `${profile.perspectiveKey}\u0000${frontier.accessEpoch}`,
     };
   }
 
@@ -610,25 +608,48 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
       userId: input.userId,
       projectId: input.projectId,
       threadId: input.threadId,
-      builtInScopeIds: {
-        org: input.orgScopeId,
-        resource: input.resourceScopeId,
-        thread: input.threadScopeId,
+      builtInScopes: {
+        org: {
+          address: `org:${input.orgId}`,
+          contextualScopeAddress: `org:${input.orgId}`,
+          parameters: { orgId: input.orgId },
+        },
+        resource: {
+          address: `resource:${input.projectId}`,
+          contextualScopeAddress: `org:${input.orgId}`,
+          parameters: { resourceId: input.projectId },
+        },
+        ...(input.threadId
+          ? {
+              thread: {
+                address: `resource:${input.projectId}:thread:${input.threadId}`,
+                contextualScopeAddress: `resource:${input.projectId}`,
+                parameters: { resourceId: input.projectId, threadId: input.threadId },
+              },
+            }
+          : {}),
       },
     });
     if (!profile?.id.trim()) return undefined;
-    const scopeIds = [...new Set([...profile.baselineScopeIds, ...(profile.intakeScopeIds ?? [])])].sort();
-    if (scopeIds.length === 0) return undefined;
-    const [rootScope, ...scopes] = await Promise.all([
-      input.store.getNode(profile.rootScopeId),
-      ...scopeIds.map(scopeId => input.store.getNode(scopeId)),
-    ]);
-    if (!rootScope?.isScope || rootScope.deletedAt || scopes.some(scope => !scope?.isScope || scope.deletedAt)) {
+    const scopesByAddress = new Map(
+      [...profile.baselineScopes, ...(profile.intakeScopes ?? [])].map(scope => [scope.address, scope]),
+    );
+    if (scopesByAddress.size === 0 || !scopesByAddress.has(profile.rootScopeAddress)) return undefined;
+    try {
+      await Promise.all([...scopesByAddress.values()].map(scope => input.knowledge.materializeScope(scope)));
+    } catch {
       return undefined;
     }
+    const resolvedScopes = await Promise.all(
+      [...scopesByAddress.keys()].map(address => input.store.getScopeAddress(address)),
+    );
+    if (resolvedScopes.some(scope => !scope)) return undefined;
+    const scopeIds = resolvedScopes.map(scope => scope!.scopeNodeId).sort();
+    const rootScope = await input.store.getScopeAddress(profile.rootScopeAddress);
+    if (!rootScope) return undefined;
     return {
       scopeIds,
-      rootScopeId: profile.rootScopeId,
+      rootScopeId: rootScope.scopeNodeId,
       perspectiveKey: `${input.projectId}\u0000${input.userId}\u0000${profile.id}\u0000${knowledgeScopeIdsKey(scopeIds)}`,
     };
   }
@@ -840,6 +861,7 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
     const description = metadataString(node.metadata, 'description');
     return {
       id: this.#mintHandle(projectId, perspectiveKey, 'scope', node.id),
+      reference: this.#mintReference(projectId, 'scope', node.id),
       name: node.name,
       kind: node.kind ?? 'scope',
       ...(description ? { description } : {}),
@@ -849,6 +871,7 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
   async #projectImportRuns(input: {
     knowledge: Knowledge;
     projectId: string;
+    threadId?: string;
     scopeIds: KnowledgeScopeIds;
     importerId: string;
     binding?: string;
@@ -871,7 +894,7 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
         limit: 100,
       });
       for (const run of page.runs) {
-        if (!importRunBelongsToProject(run, input.projectId)) continue;
+        if (!importRunBelongsToView(run, input.projectId, input.threadId)) continue;
         if (input.trigger && run.triggerKind !== input.trigger) continue;
         if (input.from && run.queuedAt < input.from) continue;
         if (input.to && run.queuedAt > input.to) continue;
@@ -891,7 +914,7 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
         requiresAuth: true,
         handler: async raw => {
           const c = loose(raw);
-          const resolved = await this.#resolveOperator(c);
+          const resolved = await this.#resolveView(c);
           if ('response' in resolved) return resolved.response;
           const importers = await Promise.all(
             resolved.knowledge.listImporters().map(async importer => {
@@ -905,7 +928,7 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
               const bindings = Array.from(
                 new Map(declaredBindings.map(binding => [`${binding.source}\u0000${binding.scope}`, binding])).values(),
               )
-                .filter(binding => importScopeBelongsToProject(binding.scope, resolved.projectId))
+                .filter(binding => importScopeBelongsToView(binding.scope, resolved.projectId, resolved.threadId))
                 .map(binding => ({
                   source: binding.source,
                   binding: this.#mintHandle(
@@ -919,6 +942,7 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
                 await this.#projectImportRuns({
                   knowledge: resolved.knowledge,
                   projectId: resolved.projectId,
+                  threadId: resolved.threadId,
                   scopeIds: resolved.scopeIds,
                   importerId: importer.importerId,
                   limit: 1,
@@ -944,7 +968,7 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
         requiresAuth: true,
         handler: async raw => {
           const c = loose(raw);
-          const resolved = await this.#resolveOperator(c);
+          const resolved = await this.#resolveView(c);
           if ('response' in resolved) return resolved.response;
           const importerId = c.req.param('importerId')!;
           if (!resolved.knowledge.getImporter(importerId)) return c.json({ error: 'importer_not_found' }, 404);
@@ -964,11 +988,17 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
           const binding = this.#resolveHandle(resolved.projectId, resolved.perspectiveKey, 'binding', bindingHandle);
           if (bindingHandle && !binding) return c.json({ runs: [] });
           const cursorHandle = c.req.query('cursor');
-          const cursor = this.#resolveHandle(resolved.projectId, resolved.perspectiveKey, 'cursor', cursorHandle);
+          const cursor = this.#resolveHandle(
+            resolved.projectId,
+            resolved.perspectiveKey,
+            'import-runs-cursor',
+            cursorHandle,
+          );
           if (cursorHandle && !cursor) return c.json({ runs: [] });
           const page = await this.#projectImportRuns({
             knowledge: resolved.knowledge,
             projectId: resolved.projectId,
+            threadId: resolved.threadId,
             scopeIds: resolved.scopeIds,
             importerId,
             binding,
@@ -982,7 +1012,7 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
           return c.json({
             runs: page.runs.map(run => this.#importRunPayload(resolved.projectId, resolved.perspectiveKey, run)),
             nextCursor: page.nextCursor
-              ? this.#mintHandle(resolved.projectId, resolved.perspectiveKey, 'cursor', page.nextCursor)
+              ? this.#mintHandle(resolved.projectId, resolved.perspectiveKey, 'import-runs-cursor', page.nextCursor)
               : undefined,
           });
         },
@@ -992,40 +1022,62 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
         requiresAuth: true,
         handler: async raw => {
           const c = loose(raw);
-          const resolved = await this.#resolveOperator(c);
+          const resolved = await this.#resolveView(c);
           if ('response' in resolved) return resolved.response;
           const importerId = c.req.param('importerId')!;
           const importer = resolved.knowledge.getImporter(importerId);
           if (!importer) return c.json({ error: 'importer_not_found' }, 404);
-          const runId = this.#resolveHandle(resolved.projectId, resolved.perspectiveKey, 'run', c.req.param('runId'));
+          const runId = this.#resolveResource(resolved.projectId, resolved.perspectiveKey, 'run', c.req.param('runId'));
           if (!runId) return c.json({ error: 'import_run_not_found' }, 404);
           const run = await resolved.knowledge.getImportRun({
             id: runId,
             scopeIds: resolved.scopeIds,
           });
-          if (!run || run.importerId !== importerId || !importRunBelongsToProject(run, resolved.projectId)) {
+          if (
+            !run ||
+            run.importerId !== importerId ||
+            !importRunBelongsToView(run, resolved.projectId, resolved.threadId)
+          ) {
             return c.json({ error: 'import_run_not_found' }, 404);
           }
 
           const store = await resolved.knowledge.getStorageInternal();
           const binding = importBinding(run.binding);
           const scope = binding.scopeAddress ? await store.getScopeAddress(binding.scopeAddress) : undefined;
+          const cursorHandle = c.req.query('cursor');
+          const after = this.#resolveHandle(
+            resolved.projectId,
+            resolved.perspectiveKey,
+            'import-activity-cursor',
+            cursorHandle,
+          );
+          if (cursorHandle && !after) return c.json({ error: 'cursor_not_found' }, 404);
           const activity = scope
             ? await resolved.knowledge.listActivity({
                 scopeIds: resolved.scopeIds,
                 membershipScopeIds: [scope.scopeNodeId],
                 importRunId: run.id,
-                limit: 100,
+                after,
+                limit: 101,
               })
             : [];
           const payload: KnowledgeImportRunDetailPayload = {
             run: this.#importRunPayload(resolved.projectId, resolved.perspectiveKey, run),
-            activity: activity.map(event => ({
-              id: this.#mintHandle(resolved.projectId, resolved.perspectiveKey, 'cursor', event.id),
+            activity: activity.slice(0, 100).map(event => ({
+              id: this.#mintHandle(resolved.projectId, resolved.perspectiveKey, 'import-activity-cursor', event.id),
               action: event.action,
               targetType: event.targetType,
               createdAt: event.createdAt.toISOString(),
             })),
+            nextCursor:
+              activity.length > 100 && activity[99]
+                ? this.#mintHandle(
+                    resolved.projectId,
+                    resolved.perspectiveKey,
+                    'import-activity-cursor',
+                    activity[99].id,
+                  )
+                : undefined,
           };
           return c.json(payload);
         },
@@ -1051,7 +1103,7 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
               : undefined;
           if (rawStatus && !status) return c.json({ error: 'invalid_proposal_status' }, 400);
           const cursorHandle = c.req.query('cursor');
-          const cursor = this.#resolveHandle(view.projectId, view.perspectiveKey, 'cursor', cursorHandle);
+          const cursor = this.#resolveHandle(view.projectId, view.perspectiveKey, 'proposal-cursor', cursorHandle);
           if (cursorHandle && !cursor) return c.json({ error: 'cursor_not_found' }, 404);
           const visible: Array<{ proposal: KnowledgeProposalPayload; cursor: string }> = [];
           let scanCursor = cursor;
@@ -1070,6 +1122,7 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
                   proposal,
                   view.scopeIds,
                   (kind, value) => this.#mintHandle(view.projectId, view.perspectiveKey, kind, value),
+                  (kind, value) => this.#mintReference(view.projectId, kind, value),
                   allowActions,
                 ),
               ),
@@ -1086,7 +1139,7 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
             proposals,
             nextCursor:
               visible.length > 100
-                ? this.#mintHandle(view.projectId, view.perspectiveKey, 'cursor', visible[99]!.cursor)
+                ? this.#mintHandle(view.projectId, view.perspectiveKey, 'proposal-cursor', visible[99]!.cursor)
                 : undefined,
           });
         },
@@ -1097,10 +1150,9 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
         handler: async raw => {
           const c = loose(raw);
           const proposalHandle = c.req.param('proposalId');
-          if (!isKnowledgeHandle(proposalHandle)) return c.json({ error: 'proposal_not_found' }, 404);
           const view = await this.#resolveView(c);
           if ('response' in view) return view.response;
-          const proposalId = this.#resolveHandle(view.projectId, view.perspectiveKey, 'proposal', proposalHandle);
+          const proposalId = this.#resolveResource(view.projectId, view.perspectiveKey, 'proposal', proposalHandle);
           if (!proposalId) return c.json({ error: 'proposal_not_found' }, 404);
           const proposal = await view.knowledge.getProposal({ id: proposalId, vouchedScopeIds: view.scopeIds });
           if (!proposal) return c.json({ error: 'proposal_not_found' }, 404);
@@ -1114,6 +1166,7 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
             proposal,
             view.scopeIds,
             (kind, value) => this.#mintHandle(view.projectId, view.perspectiveKey, kind, value),
+            (kind, value) => this.#mintReference(view.projectId, kind, value),
             allowActions,
           );
           return payload ? c.json(payload) : c.json({ error: 'proposal_not_found' }, 404);
@@ -1165,6 +1218,7 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
               proposal,
               vouchedScopeIds,
               (kind, value) => this.#mintHandle(resolved.projectId, resolved.perspectiveKey, kind, value),
+              (kind, value) => this.#mintReference(resolved.projectId, kind, value),
             );
             return payload ? c.json(payload) : c.json({ error: 'proposal_not_found' }, 404);
           } catch (error) {
@@ -1184,12 +1238,12 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
           if (!isKnowledgeHandle(scopeHandle)) return loose(c).json({ error: 'scope_not_found' }, 404);
           const view = await this.#resolveView(loose(c));
           if ('response' in view) return view.response;
-          const scopeId = this.#resolveHandle(projectId, view.perspectiveKey, 'scope', scopeHandle);
+          const scopeId = this.#resolveResource(projectId, view.perspectiveKey, 'scope', scopeHandle);
           if (scopeHandle && !scopeId) return loose(c).json({ error: 'scope_not_found' }, 404);
           const selected = await this.#resolveSelectedScope(view, scopeId, true);
           if (!selected) return loose(c).json({ error: 'scope_not_found' }, 404);
           const cursorHandle = loose(c).req.query('cursor');
-          const cursor = this.#resolveHandle(projectId, view.perspectiveKey, 'cursor', cursorHandle);
+          const cursor = this.#resolveHandle(projectId, view.perspectiveKey, 'scope-cursor', cursorHandle);
           if (cursorHandle && !cursor) return loose(c).json({ error: 'cursor_not_found' }, 404);
           const fetched = await view.knowledge.listNodes({
             scopeIds: view.scopeIds,
@@ -1210,7 +1264,7 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
                   nextCursor: this.#mintHandle(
                     projectId,
                     view.perspectiveKey,
-                    'cursor',
+                    'scope-cursor',
                     createKnowledgeNodeCursor(last, { isScope: true }),
                   ),
                 }
@@ -1227,7 +1281,7 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
           if (!isKnowledgeHandle(scopeHandle)) return loose(c).json({ error: 'scope_not_found' }, 404);
           const view = await this.#resolveView(loose(c));
           if ('response' in view) return view.response;
-          const scopeId = this.#resolveHandle(projectId, view.perspectiveKey, 'scope', scopeHandle);
+          const scopeId = this.#resolveResource(projectId, view.perspectiveKey, 'scope', scopeHandle);
           if (scopeHandle && !scopeId) return loose(c).json({ error: 'scope_not_found' }, 404);
           const selected = await this.#resolveSelectedScope(view, scopeId, true);
           if (!selected) return loose(c).json({ error: 'scope_not_found' }, 404);
@@ -1327,6 +1381,7 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
             const description = metadataString(node.metadata, 'description');
             return {
               id: this.#mintHandle(projectId, view.perspectiveKey, 'node', node.id),
+              reference: this.#mintReference(projectId, 'node', node.id),
               name: node.name,
               kind: node.kind ?? 'concept',
               ...(description ? { description } : {}),
@@ -1351,6 +1406,7 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
             truncated,
             outOfWindow: [...resolver.outOfWindow.values()].map(node => ({
               id: this.#mintHandle(projectId, view.perspectiveKey, 'node', node.id),
+              reference: this.#mintReference(projectId, 'node', node.id),
               name: node.name,
             })),
             unresolvedCapped: { count: resolver.cappedCount, names: resolver.cappedNames },
@@ -1358,7 +1414,9 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
               resource: pinnedRecords.filter(value => value.level === 'resource').length,
               thread: view.view === 'thread' ? pinnedRecords.filter(value => value.level === 'thread').length : null,
             },
-            version: activity[0] ? this.#mintHandle(projectId, view.perspectiveKey, 'cursor', activity[0].id) : null,
+            version: activity[0]
+              ? this.#mintHandle(projectId, view.perspectiveKey, 'activity-cursor', activity[0].id)
+              : null,
           };
           return c.json(payload);
         },
@@ -1374,9 +1432,9 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
           if (!isKnowledgeHandle(nodeHandle)) return loose(c).json({ error: 'node_not_found' }, 404);
           const view = await this.#resolveView(loose(c));
           if ('response' in view) return view.response;
-          const scopeId = this.#resolveHandle(projectId, view.perspectiveKey, 'scope', scopeHandle);
+          const scopeId = this.#resolveResource(projectId, view.perspectiveKey, 'scope', scopeHandle);
           if (scopeHandle && !scopeId) return c.json({ error: 'scope_not_found' }, 404);
-          const nodeId = this.#resolveHandle(projectId, view.perspectiveKey, 'node', nodeHandle);
+          const nodeId = this.#resolveResource(projectId, view.perspectiveKey, 'node', nodeHandle);
           if (!nodeId) return c.json({ error: 'node_not_found' }, 404);
           const selected = await this.#resolveSelectedScope(view, scopeId, true);
           if (!selected) return loose(c).json({ error: 'scope_not_found' }, 404);
@@ -1430,6 +1488,7 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
           const payload: KnowledgeNodePayload = {
             node: {
               id: this.#mintHandle(projectId, view.perspectiveKey, 'node', node.id),
+              reference: this.#mintReference(projectId, 'node', node.id),
               name: node.name,
               kind: node.kind ?? 'concept',
               ...(metadataString(node.metadata, 'description')
@@ -1453,7 +1512,7 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
           if (!isKnowledgeHandle(scopeHandle)) return c.json({ error: 'scope_not_found' }, 404);
           const view = await this.#resolveView(c);
           if ('response' in view) return view.response;
-          const scopeId = this.#resolveHandle(projectId, view.perspectiveKey, 'scope', scopeHandle);
+          const scopeId = this.#resolveResource(projectId, view.perspectiveKey, 'scope', scopeHandle);
           if (scopeHandle && !scopeId) return c.json({ error: 'scope_not_found' }, 404);
           const selected = await this.#resolveSelectedScope(view, scopeId, true);
           if (!selected) return c.json({ error: 'scope_not_found' }, 404);
@@ -1474,7 +1533,7 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
             return c.json({ error: 'invalid_activity_filters' }, 400);
           }
           const cursorHandle = c.req.query('cursor');
-          const after = this.#resolveHandle(projectId, view.perspectiveKey, 'cursor', cursorHandle);
+          const after = this.#resolveHandle(projectId, view.perspectiveKey, 'activity-cursor', cursorHandle);
           if (cursorHandle && !after) return c.json({ error: 'cursor_not_found' }, 404);
           const events = await view.knowledge.listActivity({
             scopeIds: view.scopeIds,
@@ -1492,7 +1551,7 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
                 ? await view.knowledge.getImportRun({ id: event.importRunId, scopeIds: view.scopeIds })
                 : undefined;
               return {
-                id: this.#mintHandle(projectId, view.perspectiveKey, 'cursor', event.id),
+                id: this.#mintHandle(projectId, view.perspectiveKey, 'activity-cursor', event.id),
                 action: event.action,
                 targetType: event.targetType,
                 ...(event.contextScopeId && view.readableScopeIds.includes(event.contextScopeId)
@@ -1504,7 +1563,7 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
                 ...(run
                   ? {
                       sourceId: run.importerId,
-                      importRunId: this.#mintHandle(projectId, view.perspectiveKey, 'run', run.id),
+                      importRunId: this.#mintReference(projectId, 'run', run.id),
                     }
                   : {}),
                 createdAt: event.createdAt.toISOString(),
@@ -1515,7 +1574,7 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
             events: projected,
             ...(events.length === 100
               ? {
-                  nextCursor: this.#mintHandle(projectId, view.perspectiveKey, 'cursor', events.at(-1)!.id),
+                  nextCursor: this.#mintHandle(projectId, view.perspectiveKey, 'activity-cursor', events.at(-1)!.id),
                 }
               : {}),
           });

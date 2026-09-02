@@ -453,21 +453,21 @@ describe('KnowledgeInspector', () => {
       source: 'calendar:uncurated',
       scope: 'resource:project-1:uncurated',
     });
-    const visible = await harness.runtime.createImportRun({
+    const visible = await harness.runtime.createImportRunInternal({
       id: 'visible-run',
       importerId: 'calendar',
       binding: visibleBinding,
       importKind: 'static',
       triggerKind: 'cron',
     });
-    const foreign = await harness.runtime.createImportRun({
+    const foreign = await harness.runtime.createImportRunInternal({
       id: 'foreign-run',
       importerId: 'calendar',
       binding: foreignBinding,
       importKind: 'static',
       triggerKind: 'cron',
     });
-    const unsupportedDescendant = await harness.runtime.createImportRun({
+    const unsupportedDescendant = await harness.runtime.createImportRunInternal({
       id: 'unsupported-descendant-run',
       importerId: 'calendar',
       binding: unsupportedDescendantBinding,
@@ -509,14 +509,14 @@ describe('KnowledgeInspector', () => {
       source: 'calendar:thread-2',
       scope: 'resource:project-1:thread:thread-2',
     });
-    await harness.runtime.createImportRun({
+    await harness.runtime.createImportRunInternal({
       id: 'thread-run',
       importerId: 'calendar',
       binding: threadBinding,
       importKind: 'static',
       triggerKind: 'cron',
     });
-    await harness.runtime.createImportRun({
+    await harness.runtime.createImportRunInternal({
       id: 'sibling-thread-run',
       importerId: 'calendar',
       binding: siblingBinding,

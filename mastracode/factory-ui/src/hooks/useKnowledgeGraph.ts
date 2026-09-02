@@ -77,11 +77,23 @@ export function useKnowledgeActivity(
   filters: KnowledgeActivityFilters,
 ) {
   const { baseUrl } = useApiConfig();
-  return useQuery({
+  return useInfiniteQuery({
     queryKey: queryKeys.knowledgeActivity(factoryProjectId, scopeId, threadId, JSON.stringify(filters)),
-    queryFn: factoryProjectId
-      ? ({ signal }) => fetchKnowledgeActivity(baseUrl, factoryProjectId, scopeId, threadId, filters, signal)
-      : skipToken,
+    queryFn: ({ pageParam, signal }) => {
+      if (!factoryProjectId) throw new Error('A Factory project is required.');
+      return fetchKnowledgeActivity(
+        baseUrl,
+        factoryProjectId,
+        scopeId,
+        threadId,
+        filters,
+        pageParam || undefined,
+        signal,
+      );
+    },
+    initialPageParam: '',
+    getNextPageParam: page => page.nextCursor,
+    enabled: Boolean(factoryProjectId),
     refetchInterval: 5_000,
   });
 }

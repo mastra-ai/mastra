@@ -23,6 +23,7 @@ import { runLayout } from './layout';
 function node(id: string, overrides: Partial<KnowledgeGraphNode> = {}): KnowledgeGraphNode {
   return {
     id,
+    reference: `reference-${id}`,
     name: `Knowledge node ${id}`,
     kind: 'concept',
     pinned: false,

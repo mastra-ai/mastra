@@ -8,6 +8,7 @@ const output = process.env.KNOWLEDGE_PROOF_OUTPUT ? path.resolve(process.env.KNO
 
 const queuedRun = {
   id: 'run-proof',
+  reference: 'run-proof-reference',
   importerId: 'github',
   binding: 'kh_binding',
   source: 'repo:mastra',
@@ -84,7 +85,7 @@ test('observes an agentic import from queue through filtered activity', async ({
         },
       });
     }
-    if (url.pathname.endsWith('/knowledge/importers/github/runs/run-proof')) {
+    if (url.pathname.includes('/knowledge/importers/github/runs/') && !url.pathname.endsWith('/runs')) {
       return route.fulfill({
         json: {
           run: completedRun,
@@ -117,7 +118,6 @@ test('observes an agentic import from queue through filtered activity', async ({
   if (output) {
     fs.mkdirSync(output, { recursive: true });
     await page.screenshot({ path: path.join(output, 'imports-completed.png'), fullPage: true });
-    await page.screenshot({ path: path.join(output, 'explore.png'), fullPage: true });
     fs.writeFileSync(
       path.join(output, 'results.json'),
       JSON.stringify(

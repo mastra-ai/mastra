@@ -315,12 +315,22 @@ export class Knowledge extends MastraBase {
     nodeId: string;
     capability: 'edit' | 'delete' | 'manageAccess';
   }) {
+    const [nodeScopeIds, recordScopeIds] = await Promise.all([
+      input.storage.getNodeScopeIds(input.nodeId),
+      input.storage.getRecordScopeIds(input.recordId),
+    ]);
     assertKnowledgeTargetCapability({
       frontier: input.frontier,
-      scopeIds: await input.storage.getNodeScopeIds(input.nodeId),
+      scopeIds: nodeScopeIds,
       capability: input.capability,
       targetType: 'record',
       targetId: input.recordId,
+    });
+    assertKnowledgeScopeCapabilities({
+      frontier: input.frontier,
+      scopeIds: recordScopeIds,
+      capability: input.capability,
+      targetType: 'scope',
     });
   }
 
@@ -446,7 +456,8 @@ export class Knowledge extends MastraBase {
     return (await this.#getStorage()).setImportState(input);
   }
 
-  async createImportRun(input: CreateKnowledgeImportRunInput) {
+  /** @internal */
+  async createImportRunInternal(input: CreateKnowledgeImportRunInput) {
     const importer = this.#assertImporter(input.importerId);
     if (input.triggerKind === 'cron' && !importer.triggers.cron) {
       throw new Error(`Knowledge importer ${input.importerId} does not have a cron trigger`);
@@ -498,7 +509,8 @@ export class Knowledge extends MastraBase {
     return (await this.#getStorage()).listImportRuns({ ...input, importerIds });
   }
 
-  async updateImportRun(input: Omit<UpdateKnowledgeImportRunInput, 'error'> & { error?: unknown }) {
+  /** @internal */
+  async updateImportRunInternal(input: Omit<UpdateKnowledgeImportRunInput, 'error'> & { error?: unknown }) {
     const storage = await this.#getStorage();
     const run = await storage.getImportRun(input.id);
     if (run) this.#assertImporter(run.importerId);

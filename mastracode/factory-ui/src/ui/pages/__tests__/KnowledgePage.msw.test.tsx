@@ -66,6 +66,7 @@ const graphFixture: KnowledgeGraphPayload = {
   nodes: [
     {
       id: 'ent-1',
+      reference: 'reference-ent-1',
       name: 'Payments Service',
       kind: 'service',
       description:
@@ -77,6 +78,7 @@ const graphFixture: KnowledgeGraphPayload = {
     },
     {
       id: 'ent-2',
+      reference: 'reference-ent-2',
       name: 'Deploy Runbook',
       kind: 'doc',
       pinned: false,
@@ -181,7 +183,7 @@ function stubKnowledgeRoute(
             scopeId: 'scope:payments',
             sourceType: 'importer',
             sourceId: 'github',
-            importRunId: 'run-1',
+            importRunId: 'run-reference-1',
             createdAt: '2026-08-13T03:00:00.000Z',
           },
         ],
@@ -195,6 +197,7 @@ function stubKnowledgeRoute(
             ? [
                 {
                   id: 'proposal-1',
+                  reference: 'proposal-reference-1',
                   operation: 'update-node',
                   status: proposalStatus,
                   reason: 'The current name is stale',
@@ -220,9 +223,10 @@ function stubKnowledgeRoute(
             : [],
       });
     }),
-    http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/knowledge/proposals/proposal-1`, () =>
+    http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/knowledge/proposals/proposal-reference-1`, () =>
       HttpResponse.json({
         id: 'proposal-1',
+        reference: 'proposal-reference-1',
         operation: 'update-node',
         status: proposalStatus,
         reason: 'The current name is stale',
@@ -246,6 +250,7 @@ function stubKnowledgeRoute(
         proposalStatus = params.action === 'reject' ? 'rejected' : 'approved';
         return HttpResponse.json({
           id: 'proposal-1',
+          reference: 'proposal-reference-1',
           operation: 'update-node',
           status: proposalStatus,
           targets: [{ type: 'node', id: 'ent-1', name: 'Payments Service', expectedVersion: 1, currentVersion: 1 }],
@@ -274,6 +279,7 @@ function stubKnowledgeRoute(
         runs: [
           {
             id: 'run-1',
+            reference: 'run-reference-1',
             importerId: 'github',
             binding: 'kh_binding',
             source: 'repo:mastra',
@@ -287,24 +293,27 @@ function stubKnowledgeRoute(
         ],
       }),
     ),
-    http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/knowledge/importers/github/runs/run-1`, () =>
-      HttpResponse.json({
-        run: {
-          id: 'run-1',
-          importerId: 'github',
-          binding: 'kh_binding',
-          source: 'repo:mastra',
-          importKind: 'agentic',
-          triggerKind: 'webhook',
-          status: 'succeeded',
-          queuedAt: '2026-08-13T03:00:00.000Z',
-          startedAt: '2026-08-13T03:00:01.000Z',
-          completedAt: '2026-08-13T03:00:02.000Z',
-        },
-        activity: [
-          { id: 'activity-import', action: 'create', targetType: 'record', createdAt: '2026-08-13T03:00:02.000Z' },
-        ],
-      }),
+    http.get(
+      `${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/knowledge/importers/github/runs/run-reference-1`,
+      () =>
+        HttpResponse.json({
+          run: {
+            id: 'run-1',
+            reference: 'run-reference-1',
+            importerId: 'github',
+            binding: 'kh_binding',
+            source: 'repo:mastra',
+            importKind: 'agentic',
+            triggerKind: 'webhook',
+            status: 'succeeded',
+            queuedAt: '2026-08-13T03:00:00.000Z',
+            startedAt: '2026-08-13T03:00:01.000Z',
+            completedAt: '2026-08-13T03:00:02.000Z',
+          },
+          activity: [
+            { id: 'activity-import', action: 'create', targetType: 'record', createdAt: '2026-08-13T03:00:02.000Z' },
+          ],
+        }),
     ),
   );
 }
@@ -364,6 +373,47 @@ describe('KnowledgePage', () => {
     expect(screen.queryByText('Agent transcript')).not.toBeInTheDocument();
   });
 
+  it('continues the authorized activity feed with its opaque cursor', async () => {
+    stubKnowledgeRoute();
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/knowledge/activity`, ({ request }) => {
+        const cursor = new URL(request.url).searchParams.get('cursor');
+        return HttpResponse.json(
+          cursor
+            ? {
+                events: [
+                  {
+                    id: 'activity-2',
+                    action: 'edit',
+                    targetType: 'node',
+                    sourceType: 'system',
+                    createdAt: '2026-08-13T03:00:01.000Z',
+                  },
+                ],
+              }
+            : {
+                events: [
+                  {
+                    id: 'activity-1',
+                    action: 'create',
+                    targetType: 'record',
+                    sourceType: 'system',
+                    createdAt: '2026-08-13T03:00:02.000Z',
+                  },
+                ],
+                nextCursor: 'activity-cursor',
+              },
+        );
+      }),
+    );
+    const user = userEvent.setup();
+    renderRoute();
+
+    await user.click(await screen.findByRole('tab', { name: 'activity' }));
+    await user.click(await screen.findByRole('button', { name: 'Load more activity' }));
+    expect(await screen.findByText('edit')).toBeInTheDocument();
+  });
+
   it('shows the filtered approvals worklist and applies a review action', async () => {
     stubKnowledgeRoute();
     const user = userEvent.setup();
@@ -388,6 +438,7 @@ describe('KnowledgePage', () => {
             proposals: [
               {
                 id: 'proposal-2',
+                reference: 'proposal-reference-2',
                 operation: 'update-node',
                 status: 'pending',
                 reason: 'Second authorized proposal',
@@ -403,6 +454,7 @@ describe('KnowledgePage', () => {
           proposals: [
             {
               id: 'proposal-1',
+              reference: 'proposal-reference-1',
               operation: 'update-node',
               status: 'pending',
               reason: 'The current name is stale',
@@ -421,7 +473,7 @@ describe('KnowledgePage', () => {
 
     expect(await screen.findByText('The current name is stale')).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Open proposal' }));
-    await waitFor(() => expect(router.state.location.search).toContain('proposal=proposal-1'));
+    await waitFor(() => expect(router.state.location.search).toContain('proposal=proposal-reference-1'));
     await user.click(screen.getByRole('button', { name: 'Load more proposals' }));
     expect(await screen.findByText('Second authorized proposal')).toBeInTheDocument();
   });

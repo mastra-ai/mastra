@@ -41,6 +41,7 @@ async function createGovernanceHarness(perspective: Perspective) {
     canSuggest: true,
   });
 
+  const proposerContext = await store.createNode({ name: 'Private proposer', isScope: true, scopeIds: [] });
   const pendingNode = await store.createNode({
     name: 'Deployment guide',
     kind: 'document',
@@ -48,8 +49,8 @@ async function createGovernanceHarness(perspective: Perspective) {
   });
   await knowledge.proposeNodeUpdate({
     mutation: { id: pendingNode.id, version: pendingNode.version, name: 'Deployment handbook' },
-    proposerContextScopeId: orgScopeId,
-    vouchedScopeIds: [orgScopeId],
+    proposerContextScopeId: proposerContext.id,
+    vouchedScopeIds: [orgScopeId, proposerContext.id],
     reason: 'Rename the deployment guide',
   });
 
@@ -60,32 +61,38 @@ async function createGovernanceHarness(perspective: Perspective) {
   });
   const conflicted = await knowledge.proposeNodeUpdate({
     mutation: { id: conflictedNode.id, version: conflictedNode.version, name: 'Incident handbook' },
-    proposerContextScopeId: orgScopeId,
-    vouchedScopeIds: [orgScopeId],
+    proposerContextScopeId: proposerContext.id,
+    vouchedScopeIds: [orgScopeId, proposerContext.id],
     reason: 'Refresh the incident guide',
   });
   await knowledge.updateNode({
     id: conflictedNode.id,
     version: conflictedNode.version,
     name: 'Concurrent incident guide',
-    vouchedScopeIds: [orgScopeId],
+    vouchedScopeIds: [orgScopeId, proposerContext.id],
   });
   await knowledge
     .approveProposal({
       id: conflicted.id,
       reviewerContextScopeId: orgScopeId,
-      vouchedScopeIds: [orgScopeId],
+      vouchedScopeIds: [orgScopeId, proposerContext.id],
     })
     .catch(() => undefined);
+  await store.removeScopeGrant({
+    scopeNodeId: resourceScopeId,
+    scopeRefId: orgScopeId,
+    expectedAccessEpoch: await store.getAccessEpoch(),
+  });
 
-  const principal = await store.createNode({
-    name: `${perspective} host profile`,
-    isScope: true,
-    scopeIds: [orgScopeId],
+  const intakeAddress = `thread:${perspective}`;
+  const intake = await knowledge.materializeScope({
+    address: intakeAddress,
+    parentAddresses: [resourceAddress],
+    contextualScopeAddress: resourceAddress,
   });
   await store.upsertScopeGrant({
     scopeNodeId: resourceScopeId,
-    scopeRefId: principal.id,
+    scopeRefId: intake.scopes[intakeAddress]!,
     role: perspective === 'reviewer' ? 'owner' : 'readonly',
     canSuggest: perspective !== 'reader',
   });
@@ -93,11 +100,17 @@ async function createGovernanceHarness(perspective: Perspective) {
     auth: fakeRouteAuth({ isOrganizationAdmin: async () => perspective === 'reviewer' }),
     projects: factory.projects,
     knowledge: async () => knowledge,
-    accessProfile: async () => ({
+    accessProfile: async ({ builtInScopes }) => ({
       id: perspective,
-      rootScopeId: resourceScopeId,
-      baselineScopeIds: [resourceScopeId],
-      intakeScopeIds: [principal.id],
+      rootScopeAddress: builtInScopes.resource.address,
+      baselineScopes: [builtInScopes.org, builtInScopes.resource],
+      intakeScopes: [
+        {
+          address: `thread:${perspective}`,
+          parentAddresses: [builtInScopes.resource.address],
+          contextualScopeAddress: builtInScopes.resource.address,
+        },
+      ],
     }),
   }).routes();
   const app = createRouteTestApp(routes, {

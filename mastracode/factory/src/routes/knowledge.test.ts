@@ -1,4 +1,5 @@
 import { Knowledge } from '@mastra/core/knowledge';
+import type { MaterializeKnowledgeScopeInput } from '@mastra/core/knowledge';
 import { InMemoryStore, knowledgeImporterBindingKey } from '@mastra/core/storage';
 import type { KnowledgeNode, KnowledgeScopeIds, KnowledgeStorage } from '@mastra/core/storage';
 import { Hono } from 'hono';
@@ -51,11 +52,11 @@ async function createHarness(
     knowledge: options.knowledgeResolver ?? (async () => runtime),
     accessProfile:
       options.accessProfile ??
-      (async ({ builtInScopeIds, threadId }) => ({
+      (async ({ builtInScopes, threadId }) => ({
         id: threadId ? `thread:${threadId}` : 'project',
-        rootScopeId: builtInScopeIds.thread ?? builtInScopeIds.resource,
-        baselineScopeIds: [builtInScopeIds.org, builtInScopeIds.resource],
-        ...(builtInScopeIds.thread ? { intakeScopeIds: [builtInScopeIds.thread] } : {}),
+        rootScopeAddress: builtInScopes.thread?.address ?? builtInScopes.resource.address,
+        baselineScopes: [builtInScopes.org, builtInScopes.resource],
+        ...(builtInScopes.thread ? { intakeScopes: [builtInScopes.thread] } : {}),
       })),
     ...(options.limits ? { limits: options.limits } : {}),
   }).routes();
@@ -361,7 +362,9 @@ describe('KnowledgeRoutes', () => {
     const { body } = await graph(h);
     expect(body.nodes.map(node => node.id)).toEqual([inWindow.id]);
     expect(body.edges).toHaveLength(0);
-    expect(body.outOfWindow).toEqual([{ id: outside.id, name: 'Z outside entity' }]);
+    expect(body.outOfWindow).toEqual([
+      expect.objectContaining({ id: outside.id, name: 'Z outside entity', reference: expect.stringMatching(/^kr_/) }),
+    ]);
     expect(body.unresolvedCapped.count).toBe(0);
   });
 
@@ -380,39 +383,34 @@ describe('KnowledgeRoutes', () => {
     expect((await response.json()) as KnowledgeNodePayload).toMatchObject({ node: { name: outside.name } });
   });
 
-  it('uses host-vouched intake profiles for distinct issue, pull request, Slack, and thread views', async () => {
-    const profiles = new Map<string, { identityScopeId: string; rootScopeId: string }>();
+  it('lazily materializes host-vouched intake addresses for distinct issue, pull request, Slack, and thread views', async () => {
+    const profiles = new Map<string, MaterializeKnowledgeScopeInput>();
     const h = await createHarness({
       accessProfile: async ({ request }) => {
-        const profile = profiles.get(request.headers.get('x-knowledge-intake') ?? '');
-        return profile
-          ? {
-              id: request.headers.get('x-knowledge-intake')!,
-              rootScopeId: profile.rootScopeId,
-              baselineScopeIds: [profile.identityScopeId],
-            }
-          : undefined;
+        const intake = request.headers.get('x-knowledge-intake') ?? '';
+        const scope = profiles.get(intake);
+        return scope ? { id: intake, rootScopeAddress: scope.address, baselineScopes: [scope] } : undefined;
       },
     });
     for (const intake of ['issue', 'pull-request', 'slack', 'thread']) {
-      const identity = await h.knowledge.createNode({
-        name: `${intake} principal`,
-        isScope: true,
-        scopeIds: h.projectScope,
+      profiles.set(intake, {
+        address: `resource:${h.projectId}:thread:${intake}`,
+        contextualScopeAddress: `resource:${h.projectId}`,
+        parameters: { resourceId: h.projectId, threadId: intake },
       });
-      const root = await h.knowledge.createNode({
-        name: `${intake} intake`,
-        isScope: true,
-        scopeIds: h.projectScope,
+      const firstTouch = await h.app.request(`/web/factory/projects/${h.projectId}/knowledge/subgraph`, {
+        headers: { 'x-knowledge-intake': intake },
       });
+      expect(firstTouch.status).toBe(200);
+      const root = await h.knowledge.getScopeAddress(`resource:${h.projectId}:thread:${intake}`);
+      expect(root).not.toBeNull();
       await h.knowledge.upsertScopeGrant({
-        scopeNodeId: root.id,
-        scopeRefId: identity.id,
+        scopeNodeId: root!.scopeNodeId,
+        scopeRefId: root!.scopeNodeId,
         role: 'readonly',
         canSuggest: false,
       });
-      await node(h.knowledge, `${intake} knowledge`, [root.id]);
-      profiles.set(intake, { identityScopeId: identity.id, rootScopeId: root.id });
+      await node(h.knowledge, `${intake} knowledge`, [root!.scopeNodeId]);
     }
 
     for (const intake of profiles.keys()) {
@@ -559,10 +557,10 @@ describe('KnowledgeRoutes', () => {
         auth: fakeRouteAuth(),
         projects: seed.projects,
         knowledge: async () => h.knowledge,
-        accessProfile: async ({ builtInScopeIds }) => ({
+        accessProfile: async ({ builtInScopes }) => ({
           id: 'project',
-          rootScopeId: builtInScopeIds.resource,
-          baselineScopeIds: [builtInScopeIds.org, builtInScopeIds.resource],
+          rootScopeAddress: builtInScopes.resource.address,
+          baselineScopes: [builtInScopes.org, builtInScopes.resource],
         }),
       }).routes(),
     );
@@ -669,7 +667,13 @@ describe('KnowledgeRoutes', () => {
     const narrowBody = (await graph(narrow)).body;
     expect(narrowBody.nodes.map(node => node.id)).toEqual([narrowSource.id]);
     expect(narrowBody.edges).toHaveLength(0);
-    expect(narrowBody.outOfWindow).toEqual([{ id: narrowTarget.id, name: 'Z target entity' }]);
+    expect(narrowBody.outOfWindow).toEqual([
+      expect.objectContaining({
+        id: narrowTarget.id,
+        name: 'Z target entity',
+        reference: expect.stringMatching(/^kr_/),
+      }),
+    ]);
     expect(narrowBody.unresolvedCapped.count).toBe(0);
   });
 
@@ -850,16 +854,16 @@ describe('KnowledgeRoutes', () => {
     });
     const h = await createHarness({ knowledgeRuntime: runtime });
     const binding = knowledgeImporterBindingKey({ source: 'calendar:primary', scope: `resource:${h.projectId}` });
-    const run = await runtime.createImportRun({
+    const run = await runtime.createImportRunInternal({
       id: 'run-failed',
       importerId: 'calendar',
       binding,
       importKind: 'static',
       triggerKind: 'programmatic',
     });
-    await runtime.updateImportRun({ id: run.id, status: 'running' });
-    await runtime.updateImportRun({ id: run.id, status: 'failed', error: 'private\u0000 failure' });
-    const foreignRun = await runtime.createImportRun({
+    await runtime.updateImportRunInternal({ id: run.id, status: 'running' });
+    await runtime.updateImportRunInternal({ id: run.id, status: 'failed', error: 'private\u0000 failure' });
+    const foreignRun = await runtime.createImportRunInternal({
       id: 'run-foreign',
       importerId: 'calendar',
       binding: knowledgeImporterBindingKey({
@@ -869,12 +873,25 @@ describe('KnowledgeRoutes', () => {
       importKind: 'static',
       triggerKind: 'programmatic',
     });
-    const unsupportedDescendantRun = await runtime.createImportRun({
+    const unsupportedDescendantRun = await runtime.createImportRunInternal({
       id: 'run-uncurated',
       importerId: 'calendar',
       binding: knowledgeImporterBindingKey({
         source: 'calendar:uncurated',
         scope: `resource:${h.projectId}:uncurated`,
+      }),
+      importKind: 'static',
+      triggerKind: 'programmatic',
+    });
+    const threadScope = await h.threadScope('t-import');
+    const threadNode = await node(h.knowledge, 'Thread import context', threadScope);
+    await record(h.knowledge, threadNode, 'Thread import context.', threadScope, 't-import');
+    const threadRun = await runtime.createImportRunInternal({
+      id: 'run-thread',
+      importerId: 'calendar',
+      binding: knowledgeImporterBindingKey({
+        source: 'calendar:thread',
+        scope: `resource:${h.projectId}:thread:t-import`,
       }),
       importKind: 'static',
       triggerKind: 'programmatic',
@@ -925,6 +942,22 @@ describe('KnowledgeRoutes', () => {
     expect(unsupportedDescendantDetail.status).toBe(404);
     expect(JSON.stringify(runsBody)).not.toContain(foreignRun.id);
     expect(JSON.stringify(runsBody)).not.toContain(unsupportedDescendantRun.id);
+    expect(JSON.stringify(runsBody)).not.toContain(threadRun.id);
+
+    const threadRuns = await h.app.request(
+      `/web/factory/projects/${h.projectId}/knowledge/importers/calendar/runs?threadId=t-import`,
+    );
+    expect(threadRuns.status).toBe(200);
+    const threadRunsBody = await threadRuns.json();
+    const visibleThreadRun = threadRunsBody.runs.find(
+      (candidate: { source?: string }) => candidate.source === 'calendar:thread',
+    );
+    expect(visibleThreadRun).toMatchObject({ id: expect.stringMatching(/^kh_/) });
+    const threadDetail = await h.app.request(
+      `/web/factory/projects/${h.projectId}/knowledge/importers/calendar/runs/${visibleThreadRun.id}?threadId=t-import`,
+    );
+    expect(threadDetail.status).toBe(200);
+    await expect(threadDetail.json()).resolves.toMatchObject({ run: { source: 'calendar:thread' } });
   });
 
   it('applies trigger filters before run pagination', async () => {
@@ -946,7 +979,7 @@ describe('KnowledgeRoutes', () => {
     });
     const h = await createHarness({ knowledgeRuntime: runtime });
     const binding = knowledgeImporterBindingKey({ source: 'calendar:primary', scope: `resource:${h.projectId}` });
-    const expected = await runtime.createImportRun({
+    const expected = await runtime.createImportRunInternal({
       id: 'programmatic-run',
       importerId: 'calendar',
       binding,
@@ -954,7 +987,7 @@ describe('KnowledgeRoutes', () => {
       triggerKind: 'programmatic',
     });
     for (let index = 0; index < 101; index += 1) {
-      await runtime.createImportRun({
+      await runtime.createImportRunInternal({
         id: `cron-run-${String(index).padStart(3, '0')}`,
         importerId: 'calendar',
         binding,
@@ -1007,6 +1040,8 @@ describe('KnowledgeRoutes', () => {
     expect(JSON.stringify(listBody)).not.toContain(target.id);
 
     let proposalHandle = listBody.proposals[0].id;
+    const proposalReference = listBody.proposals[0].reference;
+    expect(proposalReference).toMatch(/^kr_/);
     const detail = await h.app.request(`/web/factory/projects/${h.projectId}/knowledge/proposals/${proposalHandle}`);
     expect(detail.status).toBe(200);
     expect(await detail.json()).toMatchObject({ id: proposalHandle, status: 'pending' });
@@ -1027,6 +1062,11 @@ describe('KnowledgeRoutes', () => {
       `/web/factory/projects/${h.projectId}/knowledge/proposals/${proposalHandle}`,
     );
     expect(staleHandle.status).toBe(404);
+    const stableReference = await h.app.request(
+      `/web/factory/projects/${h.projectId}/knowledge/proposals/${proposalReference}`,
+    );
+    expect(stableReference.status).toBe(200);
+    expect(await stableReference.json()).toMatchObject({ reference: proposalReference, status: 'pending' });
     const refreshedList = await h.app.request(
       `/web/factory/projects/${h.projectId}/knowledge/proposals?status=pending`,
     );
@@ -1166,7 +1206,7 @@ describe('KnowledgeRoutes', () => {
     expect(body).toMatchObject({ status: 'pending' });
   });
 
-  it('gates importer run metadata at organization-admin trust', async () => {
+  it('filters importer metadata through the host-vouched perspective without requiring organization admin', async () => {
     const runtime = new Knowledge({
       id: 'mastra',
       storage: new InMemoryStore(),
@@ -1175,7 +1215,7 @@ describe('KnowledgeRoutes', () => {
     const h = await createHarness({ knowledgeRuntime: runtime, isOrganizationAdmin: async () => false });
 
     const response = await h.app.request(`/web/factory/projects/${h.projectId}/knowledge/importers`);
-    expect(response.status).toBe(403);
-    await expect(response.json()).resolves.toEqual({ error: 'forbidden' });
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({ importers: [] });
   });
 });

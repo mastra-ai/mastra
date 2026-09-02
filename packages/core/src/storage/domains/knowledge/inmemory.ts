@@ -1341,9 +1341,7 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
   async getVisibleProposal(input: { id: string; scopeIds: KnowledgeScopeIds }): Promise<KnowledgeProposal | null> {
     const proposal = this.#db.knowledgeProposals.get(input.id);
     const scopeIds = canonicalizeKnowledgeScopeIds(input.scopeIds);
-    return proposal && proposal.targets.every(target => this.#isProposalTargetVisible(target, scopeIds))
-      ? cloneProposal(proposal)
-      : null;
+    return proposal && (await this.#isProposalVisible(proposal, scopeIds)) ? cloneProposal(proposal) : null;
   }
 
   async listProposals(input: ListKnowledgeProposalsInput): Promise<ListKnowledgeProposalsOutput> {
@@ -1354,11 +1352,11 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
       input.cursor &&
       (!cursor ||
         (input.status && cursor.status !== input.status) ||
-        !cursor.targets.every(target => this.#isProposalTargetVisible(target, scopeIds)))
+        !(await this.#isProposalVisible(cursor, scopeIds)))
     ) {
       return { proposals: [] };
     }
-    const proposals = [...this.#db.knowledgeProposals.values()]
+    const candidates = [...this.#db.knowledgeProposals.values()]
       .filter(proposal => !input.status || proposal.status === input.status)
       .filter(
         proposal =>
@@ -1366,8 +1364,11 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
           proposal.createdAt < cursor.createdAt ||
           (proposal.createdAt.getTime() === cursor.createdAt.getTime() && proposal.id < cursor.id),
       )
-      .filter(proposal => proposal.targets.every(target => this.#isProposalTargetVisible(target, scopeIds)))
       .sort((left, right) => right.createdAt.getTime() - left.createdAt.getTime() || right.id.localeCompare(left.id));
+    const proposals: KnowledgeProposal[] = [];
+    for (const proposal of candidates) {
+      if (await this.#isProposalVisible(proposal, scopeIds)) proposals.push(proposal);
+    }
     const page = proposals.slice(0, limit);
     return {
       proposals: page.map(cloneProposal),
@@ -1457,9 +1458,14 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
     const membershipScope = input.membershipScopeIds
       ? canonicalizeKnowledgeScopeIds(input.membershipScopeIds)
       : undefined;
+    const visibleProposalIds = new Set<string>();
+    for (const proposal of this.#db.knowledgeProposals.values()) {
+      if (await this.#isProposalVisible(proposal, queryScope)) visibleProposalIds.add(proposal.id);
+    }
     return this.#db.knowledgeActivity
-      .filter(event => !input.contextScopeId || event.contextScopeId === input.contextScopeId)
       .filter(event => {
+        const proposalId = typeof event.details?.proposalId === 'string' ? event.details.proposalId : undefined;
+        if (proposalId && !visibleProposalIds.has(proposalId)) return false;
         const retainedScopeIds = activityVisibilityScopeIds(event.details);
         const visibleDeletion = event.action === 'delete' && isKnowledgeScopeVisible(retainedScopeIds, queryScope);
         if (event.targetType === 'node') {
@@ -1730,8 +1736,19 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
     return cloneProposal(proposal);
   }
 
-  #isProposalTargetVisible(target: KnowledgeProposal['targets'][number], visibleScopeIds: KnowledgeScopeIds): boolean {
-    return isKnowledgeScopeVisible(target.scopeIds, visibleScopeIds);
+  async #isProposalVisible(proposal: KnowledgeProposal, visibleScopeIds: KnowledgeScopeIds): Promise<boolean> {
+    for (const target of proposal.targets) {
+      if (target.type === 'node') {
+        const node = this.#db.knowledgeNodes.get(target.id);
+        if (!node || node.deletedAt) return false;
+        const scopeIds = node.isScope ? [node.id] : this.#nodeScopeIds(node.id);
+        if (!isKnowledgeScopeVisible(scopeIds, visibleScopeIds)) return false;
+      } else {
+        const record = this.#db.knowledgeRecords.get(target.id);
+        if (!record || record.deletedAt || !this.#isRecordVisible(record, visibleScopeIds)) return false;
+      }
+    }
+    return true;
   }
 
   #isRecordVisible(record: KnowledgeRecord, visibleScopeIds: KnowledgeScopeIds): boolean {

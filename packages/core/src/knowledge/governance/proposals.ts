@@ -281,15 +281,15 @@ export class KnowledgeProposalLifecycle {
     vouchedScopeIds: KnowledgeScopeIds,
   ): Promise<KnowledgeProposalTarget | undefined> {
     for (const target of proposal.targets) {
-      const isPrimaryTarget = target.id === proposal.targetId;
-      const entity = isPrimaryTarget
-        ? target.type === 'node'
+      let entity =
+        target.type === 'node'
           ? await this.resolveNode({ id: target.id, scopeIds: vouchedScopeIds })
-          : await this.resolveRecord({ id: target.id, scopeIds: vouchedScopeIds })
-        : target.type === 'node'
-          ? await this.storage.getNode(target.id)
-          : await this.storage.getRecord({ id: target.id, includeDeleted: true });
-      if (isPrimaryTarget && !entity) throw new KnowledgeNotFoundError(target.type, target.id);
+          : await this.resolveRecord({ id: target.id, scopeIds: vouchedScopeIds });
+      if (!entity && target.type === 'node' && frontier.scopes[target.id]?.read) {
+        const scopeTarget = await this.storage.getNode(target.id);
+        if (scopeTarget?.isScope) entity = scopeTarget;
+      }
+      if (!entity) throw new KnowledgeNotFoundError(target.type, target.id);
       const currentScopeIds =
         target.type === 'node'
           ? entity && 'isScope' in entity && entity.isScope
@@ -297,7 +297,6 @@ export class KnowledgeProposalLifecycle {
             : await this.storage.getNodeScopeIds(target.id)
           : await this.storage.getRecordScopeIds(target.id);
       this.#assertApprovalCapability(frontier, currentScopeIds, target.approvalCapability, target.type, target.id);
-      if (!entity) throw new KnowledgeNotFoundError(target.type, target.id);
       if (
         entity.deletedAt ||
         entity.version !== target.expectedVersion ||

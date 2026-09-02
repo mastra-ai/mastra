@@ -132,7 +132,8 @@ export interface KnowledgeInspectorImportRun {
 
 export interface KnowledgeInspectorImportRunDetail {
   run: KnowledgeInspectorImportRun;
-  activity: Array<{ id: string; action: string; targetType: string; createdAt: string }>;
+  activity: Array<{ action: string; targetType: string; createdAt: string }>;
+  nextCursor?: string;
 }
 
 export interface KnowledgeInspectorProposal {
@@ -189,7 +190,12 @@ export interface KnowledgeInspector {
     cursor?: string;
     limit?: number;
   }): Promise<{ runs: KnowledgeInspectorImportRun[]; nextCursor?: string }>;
-  getImportRun(input: { importerId: string; runId: string }): Promise<KnowledgeInspectorImportRunDetail>;
+  getImportRun(input: {
+    importerId: string;
+    runId: string;
+    cursor?: string;
+    limit?: number;
+  }): Promise<KnowledgeInspectorImportRunDetail>;
   listProposals(input: {
     level: KnowledgeInspectorScopeLevel;
     status?: KnowledgeProposalStatus;
@@ -242,7 +248,15 @@ interface HandleEntry {
 interface CursorEntry {
   identityKey: string;
   level: KnowledgeInspectorScopeLevel;
-  kind: 'node' | 'ranked-node' | 'records' | 'mentioning-records' | 'activity' | 'proposal' | 'import-run';
+  kind:
+    | 'node'
+    | 'ranked-node'
+    | 'records'
+    | 'mentioning-records'
+    | 'activity'
+    | 'proposal'
+    | 'import-run'
+    | 'import-run-activity';
   value: string;
   filters?: { namePrefix?: string; kind?: string; sort?: KnowledgeInspectorNodeSort };
   expiresAt: number;
@@ -658,9 +672,16 @@ class ScopedKnowledgeInspector implements KnowledgeInspector {
     };
   }
 
-  async getImportRun(input: { importerId: string; runId: string }): Promise<KnowledgeInspectorImportRunDetail> {
+  async getImportRun(input: {
+    importerId: string;
+    runId: string;
+    cursor?: string;
+    limit?: number;
+  }): Promise<KnowledgeInspectorImportRunDetail> {
     const binding = await this.#binding();
     const runId = this.#readHandle(input.runId, binding, 'import-run').recordId;
+    const after = this.#consumeCursor(input.cursor, binding, 'resource', 'import-run-activity');
+    const limit = boundedLimit(input.limit, DEFAULT_ACTIVITY_LIMIT, MAX_ACTIVITY_LIMIT);
     const scopeIds = await this.#scope(binding, binding.threadId ? 'thread' : 'resource');
     const run = await this.#runtime.getImportRun({ id: runId, scopeIds });
     if (
@@ -675,20 +696,24 @@ class ScopedKnowledgeInspector implements KnowledgeInspector {
     const activity = scope
       ? await this.#runtime.listActivity({
           scopeIds,
-          contextScopeId: scope.scopeNodeId,
+          membershipScopeIds: [scope.scopeNodeId],
           importRunId: run.id,
-          limit: 100,
+          after,
+          limit: limit + 1,
         })
       : [];
     await this.#assertStable(binding);
     return {
       run: importRunSummary(run, input.runId, this.#mintHandle(binding, 'resource', 'import-binding', run.binding)),
-      activity: activity.map(event => ({
-        id: event.id,
+      activity: activity.slice(0, limit).map(event => ({
         action: event.action,
         targetType: event.targetType,
         createdAt: event.createdAt.toISOString(),
       })),
+      nextCursor:
+        activity.length > limit && activity[limit - 1]
+          ? this.#mintCursor(binding, 'resource', 'import-run-activity', activity[limit - 1]!.id)
+          : undefined,
     };
   }
 
