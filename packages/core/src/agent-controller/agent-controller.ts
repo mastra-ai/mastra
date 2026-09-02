@@ -553,6 +553,8 @@ export class AgentController<TState = {}> {
           } else {
             await session.thread.create({ id: threadId });
           }
+        } else if (createInitialThread && session.thread.getId() === null) {
+          await session.thread.create();
         }
         // A deletion may have started during the thread-rebinding awaits.
         pendingDeletion = this.#deletionsInProgress.get(registryKey);

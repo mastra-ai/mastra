@@ -178,6 +178,22 @@ describe('AgentController.createSession — cross-session isolation', () => {
     expect(await session.thread.list()).toEqual([]);
   });
 
+  it('creates a thread when a cached threadless session later requests one', async () => {
+    const storage = new InMemoryStore();
+    const controller = createController(storage, {
+      resourceId: 'current-resource',
+      initialState: { projectPath: '/tmp/mastra-project' },
+    });
+    await controller.init();
+
+    const threadless = await controller.createSession({ createInitialThread: false });
+    const resumed = await controller.createSession();
+
+    expect(resumed).toBe(threadless);
+    expect(resumed.thread.getId()).not.toBeNull();
+    expect(await resumed.thread.list()).toHaveLength(1);
+  });
+
   it('still resumes a matching thread when initial thread creation is deferred', async () => {
     const storage = new InMemoryStore();
     const projectPath = '/tmp/mastra-project';
