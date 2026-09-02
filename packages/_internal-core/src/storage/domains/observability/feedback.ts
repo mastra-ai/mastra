@@ -96,7 +96,12 @@ const feedbackRecordObjectSchema = z.object({
   // User-defined metadata (context fields stored here)
   metadata: z.record(z.string(), z.unknown()).nullish().describe('User-defined metadata'),
 
-  reviewStatus: feedbackReviewStatusSchema.default('needs-review').describe('Feedback review workflow status'),
+  reviewStatus: feedbackReviewStatusSchema.describe('Feedback review workflow status'),
+});
+
+/** Feedback record fields accepted on creation: `reviewStatus` is optional and defaults to `needs-review` in storage */
+const createFeedbackRecordObjectSchema = feedbackRecordObjectSchema.extend({
+  reviewStatus: feedbackReviewStatusSchema.optional().describe('Feedback review workflow status'),
 });
 
 export const feedbackRecordSchema = z
@@ -143,7 +148,9 @@ export type FeedbackInput = z.infer<typeof feedbackInputSchema>;
 // ============================================================================
 
 /** Schema for creating a feedback record */
-export const createFeedbackRecordSchema = feedbackRecordSchema;
+export const createFeedbackRecordSchema = z
+  .object(createFeedbackRecordObjectSchema.shape)
+  .describe('Feedback record accepted on creation');
 
 /** Feedback record for creation */
 export type CreateFeedbackRecord = z.infer<typeof createFeedbackRecordSchema>;
@@ -151,7 +158,7 @@ export type CreateFeedbackRecord = z.infer<typeof createFeedbackRecordSchema>;
 /** Schema for createFeedback operation arguments */
 export const createFeedbackArgsSchema = z
   .object({
-    feedback: z.preprocess(normalizeLegacyFeedbackActor, feedbackRecordObjectSchema),
+    feedback: z.preprocess(normalizeLegacyFeedbackActor, createFeedbackRecordObjectSchema),
   })
   .describe('Arguments for creating feedback');
 
@@ -161,9 +168,7 @@ export type CreateFeedbackArgs = z.infer<typeof createFeedbackArgsSchema>;
 /** Schema for createFeedback operation body in client/server */
 export const createFeedbackBodySchema = z
   .object({
-    feedback: feedbackRecordObjectSchema
-      .omit({ timestamp: true, reviewStatus: true })
-      .extend({ reviewStatus: feedbackReviewStatusSchema.optional() }),
+    feedback: createFeedbackRecordObjectSchema.omit({ timestamp: true }),
   })
   .describe('Arguments for creating feedback');
 
@@ -181,7 +186,7 @@ export type CreateFeedbackResponse = z.infer<typeof createFeedbackResponseSchema
 /** Schema for batchCreateFeedback operation arguments */
 export const batchCreateFeedbackArgsSchema = z
   .object({
-    feedbacks: z.array(z.preprocess(normalizeLegacyFeedbackActor, feedbackRecordObjectSchema)),
+    feedbacks: z.array(z.preprocess(normalizeLegacyFeedbackActor, createFeedbackRecordObjectSchema)),
   })
   .describe('Arguments for batch recording feedback');
 

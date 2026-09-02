@@ -37,6 +37,7 @@ describe('Feedback Schemas', () => {
         executionSource: 'cloud',
         tags: ['prod'],
         metadata: { page: '/chat' },
+        reviewStatus: 'needs-review',
       });
       expect(record.feedbackSource).toBe('user');
       expect(record.feedbackType).toBe('thumbs');
@@ -46,10 +47,33 @@ describe('Feedback Schemas', () => {
       expect(record.reviewStatus).toBe('needs-review');
     });
 
+    it('requires reviewStatus on stored records', () => {
+      const result = feedbackRecordSchema.safeParse({
+        timestamp: now,
+        traceId: 'trace-1',
+        feedbackSource: 'user',
+        feedbackType: 'thumbs',
+        value: 1,
+      });
+      expect(result.success).toBe(false);
+    });
+
+    it('lets createFeedbackRecordSchema omit reviewStatus', () => {
+      const record = createFeedbackRecordSchema.parse({
+        timestamp: now,
+        traceId: 'trace-1',
+        feedbackSource: 'user',
+        feedbackType: 'thumbs',
+        value: 1,
+      });
+      expect(record.reviewStatus).toBeUndefined();
+    });
+
     it('accepts string value', () => {
       const record = feedbackRecordSchema.parse({
         id: 'fb-2',
         timestamp: now,
+        reviewStatus: 'needs-review',
         traceId: 'trace-1',
         feedbackSource: 'qa',
         feedbackType: 'correction',
@@ -64,6 +88,7 @@ describe('Feedback Schemas', () => {
       const record = feedbackRecordSchema.parse({
         id: 'fb-3',
         timestamp: now,
+        reviewStatus: 'needs-review',
         traceId: 'trace-1',
         feedbackSource: 'user',
         feedbackType: 'rating',
@@ -79,6 +104,7 @@ describe('Feedback Schemas', () => {
       const record = feedbackRecordSchema.parse({
         id: 'fb-4',
         timestamp: now,
+        reviewStatus: 'needs-review',
         feedbackSource: 'user',
         feedbackType: 'thumbs',
         value: 1,
@@ -203,6 +229,7 @@ describe('Feedback Schemas', () => {
           {
             id: 'fb-1',
             timestamp: now,
+            reviewStatus: 'needs-review',
             traceId: 'trace-1',
             feedbackSource: 'user',
             feedbackType: 'thumbs',

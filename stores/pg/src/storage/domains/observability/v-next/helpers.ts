@@ -21,7 +21,7 @@ import type {
   ScoreRecord,
   SpanRecord,
 } from '@mastra/core/storage';
-import { EntityType } from '@mastra/core/storage';
+import { EntityType, feedbackReviewStatusSchema } from '@mastra/core/storage';
 
 const PROMOTED_KEYS = new Set([
   'experimentId',
@@ -491,6 +491,7 @@ export function feedbackRecordToRow(feedback: CreateFeedbackRecord): Record<stri
     spanId: feedback.spanId ?? null,
     feedbackUserId: feedback.feedbackUserId ?? null,
     sourceId: feedback.sourceId ?? null,
+    reviewStatus: feedback.reviewStatus ?? 'needs-review',
     feedbackSource,
     feedbackType: feedback.feedbackType,
     valueString: typeof feedback.value === 'string' ? feedback.value : null,
@@ -514,6 +515,7 @@ export function rowToFeedbackRecord(row: Record<string, any>): FeedbackRecord {
     spanId: nullableString(row.spanId),
     feedbackUserId: nullableString(row.feedbackUserId),
     sourceId: nullableString(row.sourceId),
+    reviewStatus: feedbackReviewStatusSchema.catch('needs-review').parse(row.reviewStatus),
     feedbackSource,
     feedbackType: row.feedbackType,
     value: hasNumber ? Number(row.valueNumber) : (nullableString(row.valueString) ?? ''),
