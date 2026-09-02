@@ -2474,11 +2474,8 @@ describe('MastraMCPClient - Custom _meta', () => {
     await client.connect();
 
     const sdkClient = (client as any).client as Client;
-    const callToolSpy = vi.spyOn(sdkClient, 'callTool').mockResolvedValue({
-      content: [{ type: 'text', text: 'ok' }],
-      isError: false,
-    });
     const tools = await client.tools();
+    const sendSpy = vi.spyOn((sdkClient as any).transport, 'send');
 
     await tools['echo']?.execute?.({ msg: 'first' });
     activeTrace = {
@@ -2491,12 +2488,13 @@ describe('MastraMCPClient - Custom _meta', () => {
       { _meta: { traceparent: '00-33333333333333333333333333333333-3333333333333333-01', custom: true } },
     );
 
-    expect(callToolSpy.mock.calls[0]?.[0]._meta).toEqual({
+    const callRequests = sendSpy.mock.calls.map(call => call[0]).filter(message => message.method === 'tools/call');
+    expect(callRequests[0]?.params?._meta).toEqual({
       traceparent: '00-11111111111111111111111111111111-1111111111111111-01',
       tracestate: 'vendor=first',
       baggage: 'tenant=one',
     });
-    expect(callToolSpy.mock.calls[1]?.[0]._meta).toEqual({
+    expect(callRequests[1]?.params?._meta).toEqual({
       traceparent: '00-33333333333333333333333333333333-3333333333333333-01',
       tracestate: 'vendor=second',
       baggage: 'tenant=two',

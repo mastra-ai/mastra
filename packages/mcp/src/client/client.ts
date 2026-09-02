@@ -46,6 +46,7 @@ import type {
   InternalMastraMCPClientOptions,
   Root,
   RequireToolApproval,
+  MCPTraceContext,
   SerializableMCPToolDefinition,
 } from './types';
 import {
@@ -69,6 +70,7 @@ export type {
   RequireToolApproval,
   RequireToolApprovalFn,
   RequireToolApprovalContext,
+  MCPTraceContext,
   SerializableMCPToolDefinition,
 } from './types';
 
@@ -357,6 +359,22 @@ function convertLogLevelToLoggerMethod(level: LoggingLevel): 'debug' | 'info' | 
   }
 }
 
+class MastraMCPProtocolClient extends Client {
+  constructor(
+    clientInfo: ConstructorParameters<typeof Client>[0],
+    options: ConstructorParameters<typeof Client>[1],
+    private readonly traceContext?: () => MCPTraceContext | undefined,
+  ) {
+    super(clientInfo, options);
+  }
+
+  protected override _outboundMetaEnvelope(): Readonly<Record<string, unknown>> | undefined {
+    const envelope = super._outboundMetaEnvelope();
+    const traceContext = this.traceContext?.();
+    return envelope || traceContext ? { ...envelope, ...traceContext } : undefined;
+  }
+}
+
 /**
  * Internal MCP client implementation for connecting to a single MCP server.
  *
@@ -452,7 +470,7 @@ export class InternalMastraMCPClient extends MastraBase {
         ? undefined
         : { mode: server.protocolVersion === 'auto' ? ('auto' as const) : { pin: server.protocolVersion } };
 
-    this.client = new Client(
+    this.client = new MastraMCPProtocolClient(
       {
         name,
         version,
@@ -462,6 +480,7 @@ export class InternalMastraMCPClient extends MastraBase {
         ...(server.jsonSchemaValidator ? { jsonSchemaValidator: server.jsonSchemaValidator } : {}),
         ...(versionNegotiation ? { versionNegotiation } : {}),
       },
+      server.traceContext,
     );
 
     // Set up log message capturing
@@ -1695,7 +1714,8 @@ export class InternalMastraMCPClient extends MastraBase {
               const executeToolCall = async () => {
                 this.log('debug', `Executing tool: ${tool.name}`, { toolArgs: input, runId: context?.runId });
                 const userMeta = context?._meta;
-                // progressMeta spreads last so Mastra-managed progressToken takes precedence over any user-supplied one
+                // Explicit caller metadata wins over provider trace keys at the SDK envelope boundary.
+                // progressMeta spreads last so Mastra-managed progressToken takes precedence over any user-supplied one.
                 const progressMeta = this.enableProgressTracking
                   ? { progressToken: context?.runId || crypto.randomUUID() }
                   : undefined;
