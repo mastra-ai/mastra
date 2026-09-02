@@ -457,8 +457,8 @@ export async function runEvals(config: {
         return failItem(failurePhase, error);
       }
 
-      try {
-        if (storage) {
+      if (storage) {
+        try {
           await saveScoresToStorage({
             storage,
             scorerResults,
@@ -466,22 +466,26 @@ export async function runEvals(config: {
             item,
             mastra,
           });
+        } catch (error) {
+          return failItem('completion', error);
         }
-
-        const result = {
-          status: 'success' as const,
-          item,
-          ...itemTrace,
-          scorerResults,
-        };
-        if (onItemComplete) {
-          await onItemComplete({ ...result, targetResult: targetResult as any });
-        }
-        itemSpan?.end({ output: { status: 'success' } });
-        return { result, scorerResults, itemGateScores, itemTurnResults };
-      } catch (error) {
-        return failItem('completion', error, false);
       }
+
+      const result = {
+        status: 'success' as const,
+        item,
+        ...itemTrace,
+        scorerResults,
+      };
+      if (onItemComplete) {
+        try {
+          await onItemComplete({ ...result, targetResult: targetResult as any });
+        } catch (error) {
+          return failItem('completion', error, false);
+        }
+      }
+      itemSpan?.end({ output: { status: 'success' } });
+      return { result, scorerResults, itemGateScores, itemTurnResults };
     },
     { concurrency },
   );
