@@ -1,5 +1,11 @@
 # @mastra/core
 
+## 1.64.0-alpha.8
+
+### Patch Changes
+
+- Fixed tool observability helpers to emit correlated logs and child spans during agent execution. ([#22887](https://github.com/mastra-ai/mastra/pull/22887))
+
 ## 1.64.0-alpha.7
 
 ### Minor Changes

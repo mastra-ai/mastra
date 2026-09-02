@@ -331,6 +331,7 @@ describe('Board card pending states', () => {
               status: 'failed',
               attempts: 5,
               failureOccurrence: 1,
+              source: null,
               failureCode: 'repository_clone_failed',
               canRetry: true,
               lastError: 'Command failed with ENOENT',

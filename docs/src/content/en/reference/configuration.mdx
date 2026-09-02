@@ -770,7 +770,7 @@ export const mastra = new Mastra({
 })
 ```
 
-The `mapUserToResourceId` callback maps the authenticated user to a resource ID for memory/thread scoping. When provided, it's called after successful authentication and the returned value is set on the request context as `MASTRA_RESOURCE_ID_KEY`. See [Authorization (User Isolation)](/docs/server/middleware#authorization-user-isolation) for details.
+The `mapUserToResourceId` callback maps the authenticated user to a resource ID for memory/thread scoping. When provided, it's called after successful authentication and the returned value is set on the request context as `MASTRA_RESOURCE_ID_KEY`. When omitted, built-in routes fall back to the client-supplied resource ID (for example `memory.resource`), so ownership checks trust the caller. Mastra logs a startup warning in that case. See [Authorization (User Isolation)](/docs/server/middleware#authorization-user-isolation) for details.
 
 ### server.bodySizeLimit
 

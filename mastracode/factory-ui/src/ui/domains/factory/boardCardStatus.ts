@@ -41,9 +41,28 @@ export function itemAwaitsPerson(
   return proposal !== undefined;
 }
 
+/** The system a linked card is synced with, named the way that system names the thing. */
+function linkedSourceName(source: FactoryDecisionSummary['source']): string {
+  switch (source) {
+    case 'github-issue':
+      return 'GitHub issue';
+    case 'github-pr':
+      return 'GitHub pull request';
+    case 'linear-issue':
+      return 'Linear issue';
+    default:
+      // Every linked-card decision carries its source; only a manual card would land here.
+      return 'card';
+  }
+}
+
 /** Human phrasing for a rule effect, by decision type. `underway` speaks for a leased decision. */
-function automationCopy(type: string): { busy: string; underway: string; failed: string } {
-  switch (type) {
+function automationCopy(decision: Pick<FactoryDecisionSummary, 'type' | 'source'>): {
+  busy: string;
+  underway: string;
+  failed: string;
+} {
+  switch (decision.type) {
     case 'invokeSkill':
       return {
         busy: 'Starting an automated run…',
@@ -55,8 +74,9 @@ function automationCopy(type: string): { busy: string; underway: string; failed:
       return { busy, underway: busy, failed: 'Automatic move failed' };
     }
     case 'upsertLinkedWorkItem': {
-      const busy = 'Filing a linked card…';
-      return { busy, underway: busy, failed: 'Linked card could not be filed' };
+      const source = linkedSourceName(decision.source);
+      const busy = `Syncing ${source}…`;
+      return { busy, underway: busy, failed: `Couldn't sync ${source}` };
     }
     case 'sendMessage':
     case 'notify': {
@@ -102,7 +122,7 @@ export function boardCardStatus(input: BoardCardStatusInput): BoardCardStatus {
   if (decision?.status === 'failed') {
     return {
       kind: 'error',
-      label: automationCopy(decision.type).failed,
+      label: automationCopy(decision).failed,
       ...(decision.canRetry ? { retryDecisionId: decision.id } : {}),
       detail: decision.lastError ?? undefined,
     };
@@ -116,12 +136,12 @@ export function boardCardStatus(input: BoardCardStatusInput): BoardCardStatus {
   if (decision?.status === 'retry' && (decision.attempts > 0 || decision.lastError)) {
     return {
       kind: 'error',
-      label: `${automationCopy(decision.type).failed} — retrying…`,
+      label: `${automationCopy(decision).failed} — retrying…`,
       detail: decision.lastError ?? undefined,
     };
   }
   if (decision) {
-    const copy = automationCopy(decision.type);
+    const copy = automationCopy(decision);
     if (decision.status !== 'leased') return { kind: 'busy', label: copy.busy };
     const label = decision.type === 'invokeSkill' ? leasedInvokeSkillLabel(input.sessionStatus, copy) : copy.underway;
     return { kind: 'busy', label };
