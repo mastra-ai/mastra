@@ -218,6 +218,50 @@ describe('FactoryTransitionService', () => {
     expect(reviewed).toMatchObject({ status: 'accepted', stage: 'review' });
   });
 
+  it('lets an agent carry a non-bug card that already left rest, and stamps acceptance on the next human move', async () => {
+    const seed = await createFactoryStorageForTests();
+    const storage = seed.workItems;
+    const item = await createItem(storage);
+    const onAccepted = vi.fn();
+    const service = new FactoryTransitionService({
+      rules: defaultFactoryRules({ version: 'rules-v1' }),
+      storage,
+      onAccepted,
+    });
+    const classified = await service.transition({
+      ...request(item, { stage: 'intake', identity: 'classify' }),
+      actor: { type: 'agent', bindingId: 'triage', role: 'triage' },
+      ingress: { type: 'agent', identity: 'classify' },
+      triageType: 'feature request',
+    });
+    const planned = await service.transition({
+      ...request({ id: item.id, revision: (classified as { revision: number }).revision }, { stage: 'planning' }),
+      cause: 'board_drag',
+    });
+    // A card accepted before acceptance was recorded: in Planning, no stamp.
+    await seed.storage.ops.updateMany('work_items', { id: item.id }, { accepted_at: null });
+    expect((await storage.get({ orgId: 'org-1', id: item.id }))?.acceptedAt).toBeNull();
+
+    const executed = await service.transition({
+      ...request({ id: item.id, revision: (planned as { revision: number }).revision }, { stage: 'execute' }),
+      actor: { type: 'agent', bindingId: 'agent', role: 'plan' },
+      ingress: { type: 'agent', identity: 'agent-execute' },
+    });
+    expect(executed).toMatchObject({ status: 'accepted', stage: 'execute' });
+    expect((await storage.get({ orgId: 'org-1', id: item.id }))?.acceptedAt).toBeNull();
+
+    const reworked = await service.transition({
+      ...request(
+        { id: item.id, revision: (executed as { revision: number }).revision },
+        { stage: 'planning', identity: 'human-rework' },
+      ),
+      cause: 'board_drag',
+    });
+    expect(reworked).toMatchObject({ status: 'accepted', stage: 'planning' });
+    expect((await storage.get({ orgId: 'org-1', id: item.id }))?.acceptedAt).toBeInstanceOf(Date);
+    await vi.waitFor(() => expect(onAccepted).toHaveBeenCalledTimes(2));
+  });
+
   it('fires onAccepted once, with the accepted row, and never lets the hook fail the transition', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const item = await createItem(storage);

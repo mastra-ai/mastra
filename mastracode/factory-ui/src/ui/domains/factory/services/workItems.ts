@@ -81,13 +81,23 @@ interface ExternalWorkItemSource {
 
 interface WireWorkItem extends Omit<
   WorkItem,
-  'githubProjectId' | 'source' | 'sourceKey' | 'url' | 'metadata' | 'commentCount' | 'feedActivityAt'
+  | 'githubProjectId'
+  | 'source'
+  | 'sourceKey'
+  | 'url'
+  | 'metadata'
+  | 'commentCount'
+  | 'feedActivityAt'
+  | 'triageType'
+  | 'acceptedAt'
 > {
   factoryProjectId: string;
   externalSource: ExternalWorkItemSource | null;
   metadata: Record<string, unknown> | null;
   commentCount?: number;
   feedActivityAt?: string | null;
+  triageType?: WorkItem['triageType'];
+  acceptedAt?: string | null;
 }
 
 interface WireCreateWorkItemInput extends Omit<CreateWorkItemInput, 'source' | 'sourceKey' | 'url'> {
@@ -135,7 +145,8 @@ function toWireCreateInput(input: CreateWorkItemInput): WireCreateWorkItemInput 
 }
 
 function fromWireWorkItem(item: WireWorkItem): WorkItem {
-  const { factoryProjectId, externalSource, metadata, commentCount, feedActivityAt, ...rest } = item;
+  const { factoryProjectId, externalSource, metadata, commentCount, feedActivityAt, triageType, acceptedAt, ...rest } =
+    item;
   return {
     ...rest,
     githubProjectId: factoryProjectId,
@@ -145,6 +156,8 @@ function fromWireWorkItem(item: WireWorkItem): WorkItem {
     metadata: metadata ?? {},
     commentCount: commentCount ?? 0,
     feedActivityAt: feedActivityAt ?? null,
+    triageType: triageType ?? null,
+    acceptedAt: acceptedAt ?? null,
   };
 }
 

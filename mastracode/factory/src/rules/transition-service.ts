@@ -174,14 +174,20 @@ function requiresHumanApproval(triageType: FactoryTriageType | null | undefined)
   return triageType !== undefined && triageType !== null && triageType !== 'bug';
 }
 
-// A person moving a card out of rest into Planning/Execute is the approval
-// gesture — recorded once, so later agent hops need no second nod.
-function acceptsItem(request: FactoryTransitionRequest, fromStage: FactoryRuleStage): boolean {
-  return (
-    isHumanTransition(request) &&
-    (request.stage === 'planning' || request.stage === 'execute') &&
-    (fromStage === 'intake' || fromStage === 'triage')
-  );
+function isAtRest(stage: FactoryRuleStage): boolean {
+  return stage === 'intake' || stage === 'triage';
+}
+
+function entersWork(stage: FactoryRuleStage): boolean {
+  return stage === 'planning' || stage === 'execute';
+}
+
+// A person moving a card into Planning/Execute is the approval gesture —
+// recorded once, so later agent hops need no second nod. Not limited to moves
+// out of rest: a card accepted before acceptance was recorded still gets its
+// stamp (and its label reconciled) the next time a person moves it forward.
+function acceptsItem(request: FactoryTransitionRequest): boolean {
+  return isHumanTransition(request) && entersWork(request.stage);
 }
 
 function ruleFailure(error: unknown): { code: FactoryRuleRejectionCode; reason: string } {
@@ -282,10 +288,15 @@ export class FactoryTransitionService {
         'The persisted triage classification cannot be changed by a later transition.',
       );
     }
+    // The gate stands at the exit of rest. A non-bug card already in
+    // Planning/Execute can only have been put there by a person, so an agent
+    // carrying it further (plan → build) is not asked for a second nod even
+    // when the acceptance stamp predates its recording.
     const triageType = item.triageType ?? request.triageType;
     if (
       requiresHumanApproval(triageType) &&
-      (request.stage === 'planning' || request.stage === 'execute') &&
+      entersWork(request.stage) &&
+      isAtRest(fromStage) &&
       !isHumanTransition(request) &&
       !item.acceptedAt
     ) {
@@ -410,7 +421,7 @@ export class FactoryTransitionService {
       transitionId,
       evaluation,
       evaluation.outcome === 'accepted'
-        ? { ...consentEffect(request, humanBoardDrag), accept: acceptsItem(request, fromStage) && !item.acceptedAt }
+        ? { ...consentEffect(request, humanBoardDrag), accept: acceptsItem(request) && !item.acceptedAt }
         : {},
     );
   }
