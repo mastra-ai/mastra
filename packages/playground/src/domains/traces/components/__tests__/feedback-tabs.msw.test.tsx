@@ -38,7 +38,7 @@ afterEach(() => cleanup());
 
 describe('feedback tabs composer', () => {
   it('submits span-scoped feedback and refetches the list', async () => {
-    const onPost = vi.fn<(body: Record<string, unknown>) => void>();
+    const onPost = vi.fn<(body: unknown) => void>();
     const onList = vi.fn();
     server.use(
       http.get(FEEDBACK_URL, () => {
@@ -46,7 +46,7 @@ describe('feedback tabs composer', () => {
         return HttpResponse.json(spanFeedbackResponse);
       }),
       http.post(FEEDBACK_URL, async ({ request }) => {
-        onPost((await request.json()) as Record<string, unknown>);
+        onPost(await request.json());
         return HttpResponse.json({ success: true });
       }),
     );
@@ -64,11 +64,11 @@ describe('feedback tabs composer', () => {
   });
 
   it('submits trace-level feedback without a spanId', async () => {
-    const onPost = vi.fn<(body: Record<string, unknown>) => void>();
+    const onPost = vi.fn<(body: unknown) => void>();
     server.use(
       http.get(FEEDBACK_URL, () => HttpResponse.json(spanFeedbackResponse)),
       http.post(FEEDBACK_URL, async ({ request }) => {
-        onPost((await request.json()) as Record<string, unknown>);
+        onPost(await request.json());
         return HttpResponse.json({ success: true });
       }),
     );
@@ -79,13 +79,13 @@ describe('feedback tabs composer', () => {
 
     await waitFor(() => expect(onPost).toHaveBeenCalled());
     expect(onPost.mock.calls[0][0]).toMatchObject({ feedback: { traceId: TRACE_ID, value: 'trace note' } });
-    expect((onPost.mock.calls[0][0] as { feedback: object }).feedback).not.toHaveProperty('spanId');
+    expect(onPost.mock.calls[0][0]).not.toMatchObject({ feedback: { spanId: expect.anything() } });
   });
 });
 
 describe('feedback tabs delete', () => {
   it('deletes a span feedback record and refetches the list', async () => {
-    const onDelete = vi.fn<(body: Record<string, unknown>) => void>();
+    const onDelete = vi.fn<(body: unknown) => void>();
     const onList = vi.fn();
     let listResponse = spanFeedbackResponse;
     server.use(
@@ -94,7 +94,7 @@ describe('feedback tabs delete', () => {
         return HttpResponse.json(listResponse);
       }),
       http.delete(FEEDBACK_URL, async ({ request }) => {
-        onDelete((await request.json()) as Record<string, unknown>);
+        onDelete(await request.json());
         listResponse = listFeedbackResponse([]);
         return HttpResponse.json({ success: true });
       }),
@@ -115,11 +115,11 @@ describe('feedback tabs delete', () => {
   });
 
   it('deletes a trace-level feedback record by feedbackId', async () => {
-    const onDelete = vi.fn<(body: Record<string, unknown>) => void>();
+    const onDelete = vi.fn<(body: unknown) => void>();
     server.use(
       http.get(FEEDBACK_URL, () => HttpResponse.json(listFeedbackResponse([feedbackRecord({ feedbackId: 'fb-42' })]))),
       http.delete(FEEDBACK_URL, async ({ request }) => {
-        onDelete((await request.json()) as Record<string, unknown>);
+        onDelete(await request.json());
         return HttpResponse.json({ success: true });
       }),
     );
@@ -135,11 +135,7 @@ describe('feedback tabs delete', () => {
 
   it('shows no delete action for records without a feedbackId', async () => {
     server.use(
-      http.get(FEEDBACK_URL, () =>
-        HttpResponse.json(
-          listFeedbackResponse([{ ...feedbackRecord({ feedbackId: 'ignored' }), feedbackId: null } as never]),
-        ),
-      ),
+      http.get(FEEDBACK_URL, () => HttpResponse.json(listFeedbackResponse([feedbackRecord({ feedbackId: null })]))),
     );
 
     render(<TraceFeedbackTab traceId={TRACE_ID} />, { wrapper });

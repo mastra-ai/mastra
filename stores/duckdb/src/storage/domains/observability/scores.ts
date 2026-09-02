@@ -351,9 +351,9 @@ export async function batchCreateScores(db: DuckDBConnection, args: BatchCreateS
 }
 
 /**
- * Delete score events by scoreId, optionally scoped to a tenant
- * (`organizationId` / `resourceId` are ANDed into the predicate so a scoped
- * caller can never delete another tenant's rows).
+ * Delete score events by scoreId. Optional `organizationId` and `resourceId`
+ * values are ANDed into the predicate to restrict deletion to records with
+ * matching scope fields.
  */
 export async function deleteScores(db: DuckDBConnection, args: DeleteScoresArgs): Promise<void> {
   if (args.scoreIds.length === 0) return;

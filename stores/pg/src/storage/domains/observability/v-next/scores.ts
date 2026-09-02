@@ -106,9 +106,9 @@ export async function batchCreateScores(client: DbClient, schema: string, args: 
 // ---------------------------------------------------------------------------
 
 /**
- * Delete score events by scoreId, optionally scoped to a tenant
- * (`organizationId` / `resourceId` are ANDed into the predicate so a scoped
- * caller can never delete another tenant's rows).
+ * Delete score events by scoreId. Optional `organizationId` and `resourceId`
+ * values are ANDed into the predicate to restrict deletion to records with
+ * matching scope fields.
  */
 export async function deleteScores(client: DbClient, schema: string, args: DeleteScoresArgs): Promise<void> {
   if (args.scoreIds.length === 0) return;

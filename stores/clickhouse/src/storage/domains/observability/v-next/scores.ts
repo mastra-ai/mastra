@@ -182,9 +182,9 @@ export async function batchCreateScores(client: ClickHouseClient, args: BatchCre
 // ============================================================================
 
 /**
- * Delete score events by scoreId via lightweight DELETE, optionally scoped to
- * a tenant (`organizationId` / `resourceId` are ANDed into the predicate so a
- * scoped caller can never delete another tenant's rows).
+ * Delete score events by scoreId via lightweight DELETE. Optional
+ * `organizationId` and `resourceId` values are ANDed into the predicate to
+ * restrict deletion to records with matching scope fields.
  *
  * A pending deletion request is recorded before the lightweight delete. The
  * delete is immediately visible to subsequent reads; physical purge depends on

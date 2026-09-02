@@ -144,9 +144,9 @@ export async function updateFeedbackReviewStatus(
 // ---------------------------------------------------------------------------
 
 /**
- * Delete feedback events by feedbackId, optionally scoped to a tenant
- * (`organizationId` / `resourceId` are ANDed into the predicate so a scoped
- * caller can never delete another tenant's rows).
+ * Delete feedback events by feedbackId. Optional `organizationId` and
+ * `resourceId` values are ANDed into the predicate to restrict deletion to
+ * records with matching scope fields.
  */
 export async function deleteFeedback(client: DbClient, schema: string, args: DeleteFeedbackArgs): Promise<void> {
   if (args.feedbackIds.length === 0) return;
