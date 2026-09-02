@@ -84,11 +84,20 @@ function getJsonSchemaComplexityError(schema: unknown): string | undefined {
   const seen = new Set<object>();
   let nodes = 0;
   const stack = [{ value: schema, depth: 0 }];
-  const schemaMapKeywords = ['$defs', 'definitions', 'properties', 'patternProperties', 'dependentSchemas'];
-  const schemaArrayKeywords = ['prefixItems', 'allOf', 'anyOf', 'oneOf'];
+  const schemaMapKeywords = [
+    '$defs',
+    'definitions',
+    'properties',
+    'patternProperties',
+    'dependentSchemas',
+    'dependencies',
+  ];
+  const schemaArrayKeywords = ['prefixItems', 'allOf', 'anyOf', 'oneOf', 'items'];
   const schemaKeywords = [
     'additionalProperties',
     'unevaluatedProperties',
+    'additionalItems',
+    'unevaluatedItems',
     'items',
     'contains',
     'propertyNames',
@@ -1410,10 +1419,20 @@ export class InternalMastraMCPClient extends MastraBase {
   private convertInputSchema(
     inputSchema: Awaited<ReturnType<Client['listTools']>>['tools'][0]['inputSchema'],
   ): StandardSchemaWithJSON {
-    const schema = ('jsonSchema' in inputSchema ? inputSchema.jsonSchema : inputSchema) as JSONSchema7;
-    return toStandardSchema(
-      schema.$schema ? schema : { ...schema, $schema: 'https://json-schema.org/draft/2020-12/schema' },
-    );
+    const rawSchema = ('jsonSchema' in inputSchema ? inputSchema.jsonSchema : inputSchema) as JSONSchema7;
+    const schema = rawSchema.$schema
+      ? rawSchema
+      : { ...rawSchema, $schema: 'https://json-schema.org/draft/2020-12/schema' };
+    const standardSchema = toStandardSchema(schema);
+    const complexityError = getJsonSchemaComplexityError(schema);
+    if (!complexityError) return standardSchema;
+
+    return {
+      '~standard': {
+        ...standardSchema['~standard'],
+        validate: () => ({ issues: [{ message: complexityError }] }),
+      },
+    };
   }
 
   /**

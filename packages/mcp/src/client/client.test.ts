@@ -635,6 +635,24 @@ describe('MastraMCPClient - outputSchema without structuredContent', () => {
     expect(callTool).not.toHaveBeenCalled();
   });
 
+  it('bounds nested input subschemas before compiling them', async () => {
+    const sdkClient = (client as any).client as Client;
+    let nestedSchema: Record<string, unknown> = { type: 'string' };
+    for (let depth = 0; depth < 150; depth++) {
+      nestedSchema = { unevaluatedItems: nestedSchema };
+    }
+    vi.spyOn(sdkClient, 'listTools').mockResolvedValue({
+      tools: [{ name: 'deep_input', inputSchema: nestedSchema as any }],
+    });
+    const callTool = vi.spyOn(sdkClient, 'callTool');
+
+    const tool = (await client.tools()).deep_input;
+    const result = await tool.execute?.({} as any);
+
+    expect(result).toMatchObject({ error: true, message: expect.stringMatching(/maximum depth/i) });
+    expect(callTool).not.toHaveBeenCalled();
+  });
+
   it('preserves JSON Schema 2020-12 identity, composition, and boolean subschemas', async () => {
     const sdkClient = (client as any).client as Client;
     const schema2020 = {
@@ -1480,6 +1498,39 @@ describe('MastraMCPClient - outputSchema with structuredContent', () => {
       });
 
     const tool = (await client.tools()).tuple_tool;
+    await expect(tool.execute?.({})).resolves.toEqual(['valid', 1]);
+    await expect(tool.execute?.({})).rejects.toThrow(/structured content does not match/i);
+  });
+
+  it('validates output schemas that explicitly declare draft-07', async () => {
+    const sdkClient = (client as any).client as Client;
+    vi.spyOn(sdkClient, 'listTools').mockResolvedValue({
+      tools: [
+        {
+          name: 'draft7_tuple_tool',
+          inputSchema: { type: 'object' as const, properties: {} },
+          outputSchema: {
+            $schema: 'http://json-schema.org/draft-07/schema#',
+            type: 'array' as const,
+            items: [{ type: 'string' as const }, { type: 'integer' as const }],
+            additionalItems: false,
+          },
+        },
+      ],
+    });
+    vi.spyOn(sdkClient, 'callTool')
+      .mockResolvedValueOnce({
+        structuredContent: ['valid', 1],
+        content: [{ type: 'text', text: 'valid' }],
+        isError: false,
+      })
+      .mockResolvedValueOnce({
+        structuredContent: ['invalid', 1, true],
+        content: [{ type: 'text', text: 'invalid' }],
+        isError: false,
+      });
+
+    const tool = (await client.tools()).draft7_tuple_tool;
     await expect(tool.execute?.({})).resolves.toEqual(['valid', 1]);
     await expect(tool.execute?.({})).rejects.toThrow(/structured content does not match/i);
   });
