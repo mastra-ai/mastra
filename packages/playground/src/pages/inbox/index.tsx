@@ -56,8 +56,8 @@ export default function InboxPage() {
 
   const selectFeedback = (feedback: FeedbackRecord) =>
     updateSelection({
-      feedbackId: feedback.feedbackId,
-      traceId: feedback.traceId,
+      feedbackId: feedback.feedbackId ?? undefined,
+      traceId: feedback.traceId ?? undefined,
       spanId: feedback.spanId ?? undefined,
     });
 

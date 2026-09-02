@@ -48,17 +48,17 @@ export function InboxTracePanel({
 
   return (
     <RouteItemOverlay label={`Review feedback for trace ${traceId}`} wide={!!selectedSpanId}>
-      <div className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)] gap-4 p-3 [&>*]:rounded-lg [&>*]:bg-surface3 [&>*]:shadow-lg">
+      <div className="[&>*]:bg-surface3 grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)] gap-4 p-3 [&>*]:rounded-lg [&>*]:shadow-lg">
         <DataPanel className="max-h-[33vh]">
           <DataPanel.Header className="items-start">
             <div className="flex min-w-0 flex-col gap-1">
               <div className="flex items-center gap-2">
                 <DataPanel.Heading>Feedback</DataPanel.Heading>
-                <Badge tone="neutral" emphasis="muted">
+                <Badge variant="neutral" emphasis="muted">
                   {feedback.feedbackType}
                 </Badge>
                 {feedback.feedbackSource && (
-                  <Badge tone="neutral" emphasis="muted">
+                  <Badge variant="neutral" emphasis="muted">
                     {feedback.feedbackSource}
                   </Badge>
                 )}

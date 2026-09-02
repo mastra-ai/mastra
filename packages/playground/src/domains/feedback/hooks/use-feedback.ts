@@ -17,13 +17,13 @@ export function useFeedback({ reviewStatus }: { reviewStatus?: FeedbackReviewSta
         orderBy: { field: 'timestamp', direction: 'DESC' },
       }),
     initialPageParam: 0,
-    getNextPageParam: lastPage => (lastPage.pagination.hasMore ? lastPage.pagination.page + 1 : undefined),
+    getNextPageParam: lastPage => (lastPage.pagination?.hasMore ? lastPage.pagination.page + 1 : undefined),
   });
 
   return {
     ...query,
     items: query.data?.pages.flatMap(page => page.feedback) ?? [],
-    total: query.data?.pages[0]?.pagination.total,
+    total: query.data?.pages[0]?.pagination?.total,
   };
 }
 
