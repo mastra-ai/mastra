@@ -3169,6 +3169,74 @@ describe('FactoryDecisionDispatcher', () => {
     expect(linked?.parentWorkItemId).toBe(parent.id);
   });
 
+  it('does not parent a linked card to itself when a poll re-emits "opened" for an already-filed PR', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const { item: card } = await storage.upsert({
+      orgId: 'org-1',
+      userId: 'test',
+      factoryProjectId: PROJECT_ID,
+      input: {
+        externalSource: {
+          integrationId: 'github',
+          type: 'pull-request',
+          externalId: 'github-pr:3',
+          url: 'https://github.com/acme/repo/pull/3',
+        },
+        parentWorkItemId: null,
+        title: 'Linked PR',
+        stages: ['intake'],
+        sessions: {},
+        metadata: {},
+      },
+      reuseMode: 'preserve',
+    });
+    // The second evaluation resolves the PR card itself as the triggering item.
+    await storage.commitRuleEvaluation({
+      orgId: 'org-1',
+      factoryProjectId: PROJECT_ID,
+      workItemId: card.id,
+      ingress: { identity: 'poll:7:pull-request:3', triggerType: 'pull_request.opened' },
+      ruleSetVersion: 'rules-v1',
+      expectedRevision: card.revision,
+      actor: { type: 'system', id: 'rules' },
+      outcome: { status: 'accepted' },
+      decisions: [
+        {
+          type: 'upsertLinkedWorkItem',
+          idempotencyKey: 'linked-pr-polled-again',
+          board: 'review',
+          source: 'github-pr',
+          sourceKey: 'github-pr:3',
+          title: 'Linked PR',
+          url: 'https://github.com/acme/repo/pull/3',
+          stage: 'intake',
+          metadata: { githubRepositoryId: 7, githubPullRequestNumber: 3 },
+        },
+      ],
+      causalChain: [],
+      now: new Date('2030-01-01T00:00:00Z'),
+    });
+    const transitionService = new FactoryTransitionService({
+      storage,
+      rules: defaultFactoryRules({ version: 'rules-v1' }),
+    });
+    const { controller } = createSession();
+    const dispatcher = new FactoryDecisionDispatcher({
+      controller: controller as never,
+      isAutoRunEnabled: async () => true,
+      transitionService,
+      storage,
+      ownerId: 'worker-1',
+    });
+
+    await dispatcher.runOnce(new Date('2030-01-01T00:00:01Z'));
+
+    const pending = await storage.listDeferredDecisions('org-1', PROJECT_ID);
+    expect(pending.map(record => record.status)).toEqual(['succeeded']);
+    expect(await storage.list({ orgId: 'org-1', factoryProjectId: PROJECT_ID })).toHaveLength(1);
+    expect((await storage.get({ orgId: 'org-1', id: card.id }))?.parentWorkItemId).toBeNull();
+  });
+
   it('recovers linked-item materialization after an upsert crash and fires Intake onEnter exactly once', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const parent = await createItem(storage);

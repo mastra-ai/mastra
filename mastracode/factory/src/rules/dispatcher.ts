@@ -848,7 +848,10 @@ export class FactoryDecisionDispatcher {
       },
       reuseMode: 'preserve',
     });
-    if (!result.item.parentWorkItemId && parentWorkItemId) {
+    // A re-evaluation for an already-filed card (poll/reconcile re-emitting
+    // "opened") resolves the card itself as the triggering item; it is not
+    // its own parent.
+    if (!result.item.parentWorkItemId && parentWorkItemId && parentWorkItemId !== result.item.id) {
       const item = await this.#storage.setParentWorkItemIfMissing({
         orgId: record.orgId,
         id: result.item.id,
