@@ -347,6 +347,21 @@ describe('Dataset', () => {
     await new Promise(r => setTimeout(r, 500));
   });
 
+  it('startExperimentAsync persists the run-level scorer ids on the experiment', async () => {
+    await ds.addItem({ input: { prompt: 'Hello' } });
+
+    const { experimentId } = await ds.startExperimentAsync({
+      task: async () => 'ok',
+      scorers: ['scorer-a', 'scorer-b'],
+    });
+
+    const experiment = await experimentsStorage.getExperimentById({ id: experimentId });
+    expect(experiment?.scorerIds).toEqual(['scorer-a', 'scorer-b']);
+
+    // Wait for fire-and-forget to complete
+    await new Promise(r => setTimeout(r, 500));
+  });
+
   it('startExperimentAsync persists provenance and grouping before execution', async () => {
     await ds.addItem({ input: { prompt: 'Hello' } });
 
