@@ -983,6 +983,9 @@ export class FactoryDecisionDispatcher {
    * owed a retry, and whatever ends the shared turn afterwards belongs to the
    * successor's decision. A revoke with no successor (terminal cleanup, an
    * operator pulling the seat) is not supersession and still fails as before.
+   * Only a hand-on that happened after this decision was queued counts: a
+   * fresh decision for the role (the card came back to it) must still dispatch
+   * even though an older revoked binding for that role is on record.
    */
   async #roleSuperseded(record: FactoryDeferredDecisionRecord, role: string): Promise<boolean> {
     if (!record.workItemId) return false;
@@ -992,6 +995,7 @@ export class FactoryDecisionDispatcher {
     return own.some(
       revoked =>
         revoked.revokedAt !== null &&
+        revoked.revokedAt.getTime() >= record.createdAt.getTime() &&
         bindings.some(
           successor =>
             successor.role !== role &&

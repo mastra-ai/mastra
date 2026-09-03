@@ -1116,7 +1116,7 @@ describe('FactoryDecisionDispatcher', () => {
 
   describe('a role handed past on a shared session', () => {
     /** Seat `role` on the one session every role of a card shares. */
-    async function bindRole(storage: WorkItemsStorage, workItemId: string, role: string) {
+    async function bindRole(storage: WorkItemsStorage, workItemId: string, role: string, kickoffKey?: string) {
       const prepared = await storage.prepareRunStart({
         orgId: 'org-1',
         userId: 'user-1',
@@ -1134,7 +1134,7 @@ describe('FactoryDecisionDispatcher', () => {
         role,
         session: { sessionId: 'session-1', branch: 'factory/issue-1', threadId: 'thread-1' },
         resourceId: PROJECT_ID,
-        kickoffKey: `kickoff-${role}-${workItemId}`,
+        kickoffKey: kickoffKey ?? `kickoff-${role}-${workItemId}`,
         kickoffMessage: null,
       });
       await storage.markPendingStart(prepared.binding.id, 'sent');
@@ -1169,8 +1169,7 @@ describe('FactoryDecisionDispatcher', () => {
       });
 
       const tick = dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
-      await new Promise(resolve => setTimeout(resolve, 0));
-      expect(session.sendSignal).toHaveBeenCalledTimes(1);
+      await vi.waitFor(() => expect(session.sendSignal).toHaveBeenCalledTimes(1));
       await bindRole(storage, item.id, 'work');
       emitAgentEnd('error');
       await tick;
@@ -1201,6 +1200,45 @@ describe('FactoryDecisionDispatcher', () => {
 
       expect(prepareBinding).not.toHaveBeenCalled();
       expect(session.sendSignal).not.toHaveBeenCalled();
+      expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]).toMatchObject({
+        status: 'succeeded',
+        attempts: 1,
+      });
+    });
+
+    it('still dispatches a plan decision queued after an earlier hand-on to Build', async () => {
+      // The card went plan -> work once already. A later plan decision (the
+      // card came back) must not be written off by that old handoff: its seat
+      // gets prepared and the kickoff goes out.
+      const storage = (await createFactoryStorageForTests()).workItems;
+      const { item, transitionService } = await queueDecision(storage, planSkill('plan-second-pass'));
+      // The earlier hand-on: plan seat revoked before this decision existed,
+      // work seat live on the shared session since.
+      const stale = await bindRole(storage, item.id, 'plan');
+      await storage.revokeRunBinding({
+        orgId: 'org-1',
+        factoryProjectId: PROJECT_ID,
+        bindingId: stale.id,
+        revokedAt: new Date('2020-01-01T00:00:00Z'),
+      });
+      await bindRole(storage, item.id, 'work');
+      const { controller, session } = createSession();
+      const prepareBinding = vi.fn(async () => {
+        await bindRole(storage, item.id, 'plan', 'plan-second-pass');
+      });
+      const dispatcher = new FactoryDecisionDispatcher({
+        controller: controller as never,
+        isAutoRunEnabled: async () => true,
+        transitionService,
+        storage,
+        ownerId: 'worker-1',
+        prepareBinding,
+      });
+
+      await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
+
+      expect(prepareBinding).toHaveBeenCalledTimes(1);
+      expect(session.sendSignal).toHaveBeenCalledTimes(1);
       expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]).toMatchObject({
         status: 'succeeded',
         attempts: 1,
