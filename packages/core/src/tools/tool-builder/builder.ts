@@ -31,7 +31,6 @@ import { isStandardSchemaWithJSON, toStandardSchema, standardSchemaToJSONSchema 
 import type { StandardSchemaWithJSON } from '../../schema';
 import { getNeedsApprovalFn, isVercelTool, isProviderDefinedTool } from '../../tools/toolchecks';
 import type { ToolOptions } from '../../utils';
-import { safeStringify } from '../../utils';
 import { isZodObject, safeExtendZodObject } from '../../utils/zod-utils';
 
 import type { SuspendOptions } from '../../workflows';
@@ -874,7 +873,7 @@ export class CoreToolBuilder extends MastraBase {
       }
 
       try {
-        logger.debug(start, { ...logData, ...rest, model: logModelObject, args });
+        logger.debug(start, { ...logData, ...rest, model: logModelObject });
 
         // When a tool is being resumed (resumeData present in execOptions), skip input
         // validation. The original args were already validated during the initial
@@ -919,16 +918,17 @@ export class CoreToolBuilder extends MastraBase {
             id: 'TOOL_EXECUTION_FAILED',
             domain: ErrorDomain.TOOL,
             category: ErrorCategory.USER,
+            // Raw args are intentionally omitted: they can carry credentials or PII and
+            // are already recorded on the tool span, where observability redaction applies.
             details: {
               errorMessage: String(err),
-              argsJson: safeStringify(args),
               model: model?.modelId ?? '',
             },
           },
           err,
         );
         toolSpan?.error({ error: mastraError, attributes: { success: false } });
-        logger.trackException(mastraError, { ...logData, ...rest, model: logModelObject, args });
+        logger.trackException(mastraError, { ...logData, ...rest, model: logModelObject });
         throw mastraError;
       }
     };

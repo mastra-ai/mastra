@@ -1,5 +1,13 @@
 # @mastra/voice-murf
 
+## 0.13.1
+
+### Patch Changes
+
+- Update README to include accurate, up-to-date information ([#22858](https://github.com/mastra-ai/mastra/pull/22858))
+
+- Remove `CHANGELOG.md` from distributed npm files resulting in reduced package size ([#22737](https://github.com/mastra-ai/mastra/pull/22737))
+
 ## 0.13.1-alpha.1
 
 ### Patch Changes
