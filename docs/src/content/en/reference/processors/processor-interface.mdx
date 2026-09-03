@@ -254,7 +254,7 @@ A declared span type replaces `PROCESSOR_RUN`, but the span keeps its entity typ
 
 To record values only known at runtime, update the processor's own span from inside a method:
 
-```typescript
+```typescript oxfmt:false
 async processInputStep({ messageList, tracingContext }: ProcessInputStepArgs) {
   tracingContext?.currentSpan?.update({ attributes: { messageCount: messageList.get.all.db().length } });
   return { messageList };
