@@ -10,6 +10,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
 import { Agent } from '@mastra/core/agent';
+import { Knowledge } from '@mastra/core/knowledge';
 import { RequestContext } from '@mastra/core/request-context';
 import { LibSQLStore, LibSQLVector } from '@mastra/libsql';
 import { Memory, Subconscious } from '@mastra/memory';
@@ -52,7 +53,24 @@ describe('Pinned knowledge live proof', () => {
     const url = `file:${join(directory, 'proof.db')}`;
     const storage = new LibSQLStore({ id: randomUUID(), url });
     const vector = new LibSQLVector({ id: randomUUID(), url });
-    await storage.init();
+    const threadId = randomUUID();
+    const resourceId = 'proof-user';
+    const knowledge = new Knowledge({
+      id: 'pinned-proof',
+      storage,
+      structure: {
+        scopes: [
+          { address: 'org:acme', name: 'Acme' },
+          { address: `resource:${resourceId}`, name: resourceId, parentAddresses: ['org:acme'] },
+          {
+            address: `resource:${resourceId}:thread:${threadId}`,
+            name: threadId,
+            parentAddresses: [`resource:${resourceId}`],
+          },
+        ],
+      },
+    });
+    const reconciled = await knowledge.reconcile();
 
     const prompts: string[] = [];
     const model = new MockLanguageModelV2({
@@ -74,6 +92,7 @@ describe('Pinned knowledge live proof', () => {
 
     const memory = new Memory({
       storage,
+      knowledge,
       vector,
       embedder,
       options: {
@@ -93,15 +112,17 @@ describe('Pinned knowledge live proof', () => {
       memory,
     });
 
-    const threadId = randomUUID();
-    const resourceId = 'proof-user';
     const requestContext = new RequestContext();
     requestContext.set('organizationId', 'acme');
     const turnOptions = { memory: { thread: threadId, resource: resourceId }, requestContext } as any;
 
-    const scope = [`org:acme`, `resource:${resourceId}`, `thread:${threadId}`];
-    const tools = createPinnedTools({ storage } as any, {
-      scope,
+    const scopeIds = [
+      reconciled.scopes['org:acme']!,
+      reconciled.scopes[`resource:${resourceId}`]!,
+      reconciled.scopes[`resource:${resourceId}:thread:${threadId}`]!,
+    ];
+    const tools = createPinnedTools(memory, {
+      scopeIds,
       sourceThreadId: threadId,
       maxPins: 20,
       maxCharacters: 2_000,
