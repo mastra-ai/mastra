@@ -135,7 +135,7 @@ export function ExperimentResultsSection({
   const resultsListColumns = useMemo(
     () => [
       { name: 'itemId', label: 'Item ID', size: '7rem' },
-      { name: 'input', label: 'Input', size: 'minmax(15rem,1fr)' },
+      { name: 'input', label: 'Input', size: 'minmax(10rem,20rem)' },
       ...scorerIds.map(id => ({ name: id, label: id, size: '12rem' })),
     ],
     [scorerIds],
