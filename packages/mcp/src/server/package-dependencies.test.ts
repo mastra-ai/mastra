@@ -21,7 +21,7 @@ async function readPackageJson(url: URL): Promise<Record<string, any>> {
 it('keeps the v2 package compatible with the existing core v1 peer range', async () => {
   const pkg = await readPackageJson(new URL('package.json', packageRoot));
 
-  expect(pkg.peerDependencies?.['@mastra/core']).toBe('>=1.0.0-0 <2.0.0-0');
+  expect(pkg.peerDependencies?.['@mastra/core']).toBe('>=1.64.0-0 <2.0.0-0');
 });
 
 it('widens editor MCP compatibility without making the peer required', async () => {
