@@ -147,7 +147,7 @@ Deleting an item hides it from the current dataset version but retains its conte
 await dataset.purgeItem({ itemId: 'item-abc-123' })
 ```
 
-Purging replaces content in every historical row and linked experiment result with redacted values. It keeps version, identity, experiment counters, and review state so pinned dataset versions and experiment records remain structurally consistent. Purging doesn't create a dataset version and can't be undone. Avoid storing sensitive data in `externalId`, which remains unchanged as the item's identity key.
+Purging replaces content in every historical row and deletion tombstone with redacted values, and scrubs linked experiment-result payloads. It keeps version, identity, experiment counters, and review state so pinned dataset versions and experiment records remain structurally consistent. Purging doesn't create a dataset version and can't be undone. Avoid storing sensitive data in `externalId`, which remains unchanged as the item's identity key.
 
 ## Listing and searching items
 
