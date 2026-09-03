@@ -2329,21 +2329,24 @@ describe('Lance vector store tests', () => {
       for (let attempt = 1; ; attempt++) {
         const tableName = `${namePrefix}_${Date.now()}_${attempt}`;
         await vectorDB.createTable(tableName, rows);
-        await vectorDB.createIndex({ tableName, indexName: 'vector', dimension: 8, metric: 'euclidean' });
+        try {
+          await vectorDB.createIndex({ tableName, indexName: 'vector', dimension: 8, metric: 'euclidean' });
 
-        const results = await vectorDB.query({
-          indexName: 'vector',
-          tableName,
-          queryVector: [1, 0, 0, 0, 0, 0, 0, 0],
-          topK: 300,
-          ...(queryMetric ? { metric: queryMetric } : {}),
-        });
-        await vectorDB.deleteTable(tableName);
+          const results = await vectorDB.query({
+            indexName: 'vector',
+            tableName,
+            queryVector: [1, 0, 0, 0, 0, 0, 0, 0],
+            topK: 300,
+            ...(queryMetric ? { metric: queryMetric } : {}),
+          });
 
-        const exact = results.find(r => r.id === '1');
-        const far = results.find(r => farIds.has(r.id));
-        if ((exact && far) || attempt === MAX_ATTEMPTS) {
-          return { exact, far };
+          const exact = results.find(r => r.id === '1');
+          const far = results.find(r => farIds.has(r.id));
+          if ((exact && far) || attempt === MAX_ATTEMPTS) {
+            return { exact, far };
+          }
+        } finally {
+          await vectorDB.deleteTable(tableName);
         }
       }
     };

@@ -464,6 +464,22 @@ describe('QdrantVector', () => {
         });
         expect(wholeTokenResults.length).toBe(1);
         expect(wholeTokenResults[0]?.metadata?.name).toBe('item2');
+
+        // With a full-text payload index the token semantics apply on every
+        // Qdrant version, so a partial token must not match. The index is
+        // dropped afterwards to keep the shared collection unindexed for the
+        // other filter tests.
+        await qdrant.createPayloadIndex({ indexName: testCollectionName, fieldName: 'name', fieldSchema: 'text' });
+        try {
+          const partialTokenResults = await qdrant.query({
+            indexName: testCollectionName,
+            queryVector: [1, 0, 0],
+            filter: { name: { $regex: 'item' } },
+          });
+          expect(partialTokenResults.length).toBe(0);
+        } finally {
+          await qdrant.deletePayloadIndex({ indexName: testCollectionName, fieldName: 'name' });
+        }
       });
 
       it('handles array operators in queries', async () => {
