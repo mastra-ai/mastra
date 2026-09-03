@@ -1151,7 +1151,7 @@ The document served at `clientMetadataUrl` must contain the same `client_id`, `c
 
 Client information and tokens saved by `MCPOAuthClientProvider` are bound to the authorization server's validated `issuer`. The loopback callback also forwards the RFC 9207 `iss` parameter to the SDK and rejects a mismatch before exchanging the authorization code.
 
-Give each server its own `MCPOAuthClientProvider` instance. A provider holds per-server session and credential state during authorization, so sharing one instance across multiple servers lets their flows overwrite each other. When configuring several protected servers, construct a separate provider for each.
+Give each server its own `MCPOAuthClientProvider` instance. A provider holds per-server session and credential state during authorization, so sharing one instance across multiple servers lets their flows overwrite each other. When configuring several protected servers, construct a separate provider for each. If those providers use the same persistent backend, give each provider a separate `OAuthStorage` namespace because storage mutation ordering is coordinated only within one provider instance.
 
 ### Interactive browser authentication
 

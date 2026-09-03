@@ -185,7 +185,7 @@ export class MCPOAuthClientProvider implements OAuthClientProvider {
   private readonly generateState: () => string | Promise<string>;
 
   private configuredClientInfo?: StoredOAuthClientInformation;
-  private issuerIndexUpdate: Promise<void> = Promise.resolve();
+  private credentialMutation: Promise<unknown> = Promise.resolve();
   private _sessionState?: string;
   private _sessionRedirectUrl?: string | URL;
 
@@ -289,24 +289,26 @@ export class MCPOAuthClientProvider implements OAuthClientProvider {
     return ctx ? `${kind}:${encodeURIComponent(ctx.issuer)}` : kind;
   }
 
+  private enqueueCredentialMutation<T>(mutation: () => Promise<T>): Promise<T> {
+    const operation = this.credentialMutation.catch(() => {}).then(mutation);
+    this.credentialMutation = operation;
+    return operation;
+  }
+
   private async rememberIssuer(issuer: string): Promise<void> {
-    const update = this.issuerIndexUpdate.catch(() => {}).then(async () => {
-      let issuers: string[] = [];
-      const stored = await this.storage.get('credential_issuers');
-      if (stored) {
-        try {
-          issuers = JSON.parse(stored) as string[];
-        } catch {
-          // Invalid stored data is replaced with a fresh index.
-        }
+    let issuers: string[] = [];
+    const stored = await this.storage.get('credential_issuers');
+    if (stored) {
+      try {
+        issuers = JSON.parse(stored) as string[];
+      } catch {
+        // Invalid stored data is replaced with a fresh index.
       }
-      if (!issuers.includes(issuer)) {
-        issuers.push(issuer);
-        await this.storage.set('credential_issuers', JSON.stringify(issuers));
-      }
-    });
-    this.issuerIndexUpdate = update;
-    await update;
+    }
+    if (!issuers.includes(issuer)) {
+      issuers.push(issuer);
+      await this.storage.set('credential_issuers', JSON.stringify(issuers));
+    }
   }
 
   private async readStored<T>(key: string, expectedIssuer?: string): Promise<T | undefined> {
@@ -341,11 +343,13 @@ export class MCPOAuthClientProvider implements OAuthClientProvider {
     if (this.configuredClientInfo?.client_id === clientInformation.client_id) {
       this.configuredClientInfo = clientInformation;
     }
-    if (ctx) {
-      await this.rememberIssuer(ctx.issuer);
-      await this.storage.set(this.credentialKey('client_info', ctx), JSON.stringify(clientInformation));
-    }
-    await this.storage.set('client_info', JSON.stringify(clientInformation));
+    await this.enqueueCredentialMutation(async () => {
+      if (ctx) {
+        await this.rememberIssuer(ctx.issuer);
+        await this.storage.set(this.credentialKey('client_info', ctx), JSON.stringify(clientInformation));
+      }
+      await this.storage.set('client_info', JSON.stringify(clientInformation));
+    });
   }
 
   /**
@@ -359,18 +363,22 @@ export class MCPOAuthClientProvider implements OAuthClientProvider {
    * Stores new OAuth tokens after successful authorization.
    */
   async saveTokens(tokens: StoredOAuthTokens, ctx?: OAuthClientInformationContext): Promise<void> {
-    if (ctx) {
-      await this.rememberIssuer(ctx.issuer);
-      await this.storage.set(this.credentialKey('tokens', ctx), JSON.stringify(tokens));
-    }
-    await this.storage.set('tokens', JSON.stringify(tokens));
+    await this.enqueueCredentialMutation(async () => {
+      if (ctx) {
+        await this.rememberIssuer(ctx.issuer);
+        await this.storage.set(this.credentialKey('tokens', ctx), JSON.stringify(tokens));
+      }
+      await this.storage.set('tokens', JSON.stringify(tokens));
+    });
   }
 
   /**
    * Persists authorization-server discovery state across the browser redirect.
    */
   async saveDiscoveryState(state: OAuthDiscoveryState): Promise<void> {
-    await this.storage.set('discovery_state', JSON.stringify(state));
+    await this.enqueueCredentialMutation(async () => {
+      await this.storage.set('discovery_state', JSON.stringify(state));
+    });
   }
 
   /**
@@ -396,7 +404,9 @@ export class MCPOAuthClientProvider implements OAuthClientProvider {
    * Saves a PKCE code verifier before redirecting to authorization.
    */
   async saveCodeVerifier(codeVerifier: string): Promise<void> {
-    await this.storage.set('code_verifier', codeVerifier);
+    await this.enqueueCredentialMutation(async () => {
+      await this.storage.set('code_verifier', codeVerifier);
+    });
   }
 
   /**
@@ -414,42 +424,43 @@ export class MCPOAuthClientProvider implements OAuthClientProvider {
    * Invalidate credentials when server indicates they're no longer valid.
    */
   async invalidateCredentials(scope: 'all' | 'client' | 'tokens' | 'verifier' | 'discovery'): Promise<void> {
-    await this.issuerIndexUpdate.catch(() => {});
-    const issuerIndex = await this.storage.get('credential_issuers');
-    let issuers: string[] = [];
-    if (issuerIndex) {
-      try {
-        issuers = JSON.parse(issuerIndex) as string[];
-      } catch {
-        // Invalid stored data is ignored during cleanup.
+    await this.enqueueCredentialMutation(async () => {
+      const issuerIndex = await this.storage.get('credential_issuers');
+      let issuers: string[] = [];
+      if (issuerIndex) {
+        try {
+          issuers = JSON.parse(issuerIndex) as string[];
+        } catch {
+          // Invalid stored data is ignored during cleanup.
+        }
       }
-    }
-    const deleteCredentialKind = async (kind: 'client_info' | 'tokens') => {
-      await this.storage.delete(kind);
-      await Promise.all(issuers.map(issuer => this.storage.delete(this.credentialKey(kind, { issuer }))));
-    };
+      const deleteCredentialKind = async (kind: 'client_info' | 'tokens') => {
+        await this.storage.delete(kind);
+        await Promise.all(issuers.map(issuer => this.storage.delete(this.credentialKey(kind, { issuer }))));
+      };
 
-    switch (scope) {
-      case 'all':
-        await deleteCredentialKind('tokens');
-        await deleteCredentialKind('client_info');
-        await this.storage.delete('code_verifier');
-        await this.storage.delete('discovery_state');
-        await this.storage.delete('credential_issuers');
-        break;
-      case 'client':
-        await deleteCredentialKind('client_info');
-        break;
-      case 'tokens':
-        await deleteCredentialKind('tokens');
-        break;
-      case 'verifier':
-        await this.storage.delete('code_verifier');
-        break;
-      case 'discovery':
-        await this.storage.delete('discovery_state');
-        break;
-    }
+      switch (scope) {
+        case 'all':
+          await deleteCredentialKind('tokens');
+          await deleteCredentialKind('client_info');
+          await this.storage.delete('code_verifier');
+          await this.storage.delete('discovery_state');
+          await this.storage.delete('credential_issuers');
+          break;
+        case 'client':
+          await deleteCredentialKind('client_info');
+          break;
+        case 'tokens':
+          await deleteCredentialKind('tokens');
+          break;
+        case 'verifier':
+          await this.storage.delete('code_verifier');
+          break;
+        case 'discovery':
+          await this.storage.delete('discovery_state');
+          break;
+      }
+    });
   }
 
   /**

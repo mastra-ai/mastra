@@ -293,6 +293,43 @@ describe('MCPOAuthClientProvider', () => {
     );
   });
 
+  it('does not let a credential write land after invalidate all completes', async () => {
+    const backing = new InMemoryOAuthStorage();
+    let releaseScopedWrite!: () => void;
+    const scopedWriteCanFinish = new Promise<void>(resolve => (releaseScopedWrite = resolve));
+    let scopedWriteStarted!: () => void;
+    const scopedWriteDidStart = new Promise<void>(resolve => (scopedWriteStarted = resolve));
+    const storage = {
+      get: (key: string) => backing.get(key),
+      delete: (key: string) => backing.delete(key),
+      set: async (key: string, value: string) => {
+        if (key.startsWith('tokens:')) {
+          scopedWriteStarted();
+          await scopedWriteCanFinish;
+        }
+        backing.set(key, value);
+      },
+    };
+    const provider: OAuthClientProvider = new MCPOAuthClientProvider({
+      redirectUrl: 'http://localhost:3000/callback',
+      clientMetadata: {
+        redirect_uris: ['http://localhost:3000/callback'],
+        client_name: 'Test Client',
+      },
+      storage,
+    });
+    const issuer = { issuer: 'https://auth-race.example.com' };
+
+    const save = provider.saveTokens({ access_token: 'racing-token', token_type: 'Bearer', issuer: issuer.issuer }, issuer);
+    await scopedWriteDidStart;
+    const invalidate = provider.invalidateCredentials('all');
+    await new Promise(resolve => setImmediate(resolve));
+    releaseScopedWrite();
+    await Promise.all([save, invalidate]);
+
+    await expect(provider.tokens(issuer)).resolves.toBeUndefined();
+  });
+
   it('should store and retrieve tokens', async () => {
     const provider = new MCPOAuthClientProvider({
       redirectUrl: 'http://localhost:3000/callback',
