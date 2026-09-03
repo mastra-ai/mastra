@@ -221,6 +221,7 @@ export default createLiveKitWorker({
     if (!mapping || !memory) return
 
     let shuttingDown = false
+    const maxRetries = 5
     const retryTimers = new Set<ReturnType<typeof setTimeout>>()
     ctx.addShutdownCallback(async () => {
       shuttingDown = true
@@ -251,6 +252,10 @@ export default createLiveKitWorker({
           })
         } catch (error) {
           if (shuttingDown) return
+          if (attempt >= maxRetries) {
+            console.error(`Failed to persist committed voice item ${item.id}; giving up`, error)
+            return
+          }
           console.error(`Failed to persist committed voice item ${item.id}; retrying`, error)
           const delay = Math.min(1_000 * 2 ** attempt, 30_000)
           const timer = setTimeout(() => {
