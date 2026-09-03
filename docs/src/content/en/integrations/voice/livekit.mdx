@@ -203,7 +203,7 @@ LiveKit's preemptive generation calls the Mastra agent on interim transcripts an
 
 ```typescript title="src/mastra/voice-worker.ts"
 import { voice } from '@livekit/agents'
-import { createLiveKitWorker } from '@mastra/livekit'
+import { createLiveKitWorker } from '@mastra/livekit/worker'
 import { mastra } from './index'
 
 export default createLiveKitWorker({
@@ -220,7 +220,7 @@ export default createLiveKitWorker({
     const memory = await mastra.getAgent('support').getMemory()
     if (!mapping || !memory) return
     session.on(voice.AgentSessionEventTypes.ConversationItemAdded, ({ item }) => {
-      if (item.type !== 'message' || item.role === 'system') return
+      if (item.type !== 'message' || (item.role !== 'user' && item.role !== 'assistant')) return
       void memory.saveMessages({
         messages: [
           {
@@ -228,7 +228,10 @@ export default createLiveKitWorker({
             threadId: mapping.thread,
             resourceId: mapping.resource ?? mapping.thread,
             role: item.role,
-            content: item.textContent ?? '',
+            content: {
+              format: 2,
+              parts: [{ type: 'text', text: item.textContent ?? '' }],
+            },
             type: 'text',
             createdAt: new Date(),
           },
