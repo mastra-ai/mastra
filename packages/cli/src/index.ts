@@ -38,6 +38,7 @@ import { logsAction } from './commands/studio/deploy-logs';
 import { statusAction } from './commands/studio/deploy-status';
 import { suggestionsAction } from './commands/studio/deploy-suggestions';
 import { listProjectsAction, createProjectAction } from './commands/studio/projects';
+import { registerTracesCommand } from './commands/traces/index';
 import { parseComponents, parseLlmProvider, parseMcp, wrapAction } from './commands/utils';
 import { buildWorker } from './commands/worker/build';
 import { devWorker } from './commands/worker/dev';
@@ -101,6 +102,7 @@ program
   .action(initProject);
 
 registerApiCommand(program);
+registerTracesCommand(program);
 
 program
   .command('lint')

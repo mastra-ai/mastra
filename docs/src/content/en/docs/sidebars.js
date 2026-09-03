@@ -714,6 +714,14 @@ const sidebars = {
     },
     {
       type: 'doc',
+      id: 'mastra-platform/import-langfuse-traces',
+      label: 'Import Langfuse traces',
+      customProps: {
+        tags: ['new'],
+      },
+    },
+    {
+      type: 'doc',
       id: 'mastra-platform/trace-intelligence',
       label: 'Trace Intelligence',
       customProps: {

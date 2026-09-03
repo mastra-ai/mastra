@@ -1,0 +1,123 @@
+---
+title: 'Import Langfuse traces | Mastra platform'
+description: 'Import a resumable 30-day snapshot of completed Langfuse traces into Mastra Platform Observability with the Mastra CLI.'
+packages:
+  - 'mastra'
+---
+
+# Import traces from Langfuse
+
+The Mastra Command-Line Interface (CLI) imports completed Langfuse traces into [Mastra Platform Observability](/docs/mastra-platform/observability). Imported traces use the same Platform views and queries as live traces. This workflow runs entirely in the CLI and doesn't require a Studio or Server deployment.
+
+The command reads Langfuse observations, which are the individual events and spans inside a trace. It groups those observations by Langfuse trace ID before validating and importing the complete trace tree.
+
+## Prerequisites
+
+The import requires:
+
+- A Langfuse Cloud project or a self-hosted Langfuse v4 or later project. The importer uses the Observations API v2.
+- The Langfuse project public key, secret key, and base URL.
+- A Mastra Platform project ID.
+- A Mastra Platform organization access token that begins with `sk_`. A token created by `mastra auth login` can't write to the observability collector.
+
+Add the credentials to `.env` in the directory where you run the command:
+
+```bash title=".env"
+LANGFUSE_PUBLIC_KEY=pk-lf-...
+LANGFUSE_SECRET_KEY=sk-lf-...
+LANGFUSE_BASE_URL=https://cloud.langfuse.com
+MASTRA_PLATFORM_ACCESS_TOKEN=sk_...
+MASTRA_PROJECT_ID=...
+```
+
+`MASTRA_CLOUD_ACCESS_TOKEN` is accepted temporarily when `MASTRA_PLATFORM_ACCESS_TOKEN` is absent, but it is deprecated and produces a warning. Rename it to `MASTRA_PLATFORM_ACCESS_TOKEN`.
+
+Use the base URL for your Langfuse region or self-hosted installation. Don't pass secrets as command options because shell history and process listings can expose them.
+
+## Preview the import
+
+Run a dry run to read, validate, and stage the snapshot without sending data to Mastra Platform:
+
+```bash
+mastra traces import --provider langfuse --dry-run
+```
+
+The report includes the fixed import window, source and target project IDs, eligible and skipped counts, estimated payload size, and an import ID. It never prints credentials.
+
+The source window covers physical trace roots whose Langfuse `startTime` falls within the 30 consecutive 24-hour periods before the command starts. A trace is skipped as a unit when its root or parent is missing, its parent graph is invalid, or a duration observation has no valid end time. No spans from an invalid trace are enqueued.
+
+Langfuse can make recently ingested observations visible at different times. The importer validates every observation returned in its fixed snapshot, but the API doesn't expose an expected-child count that could reveal an observation that isn't queryable yet. For a project that was receiving traffic near the snapshot boundary, wait for Langfuse's consistency window and rerun the command. Deterministic target IDs make the overlapping retry safe.
+
+## Start the import
+
+Run the command without `--dry-run`:
+
+```bash
+mastra traces import --provider langfuse
+```
+
+Review the staged summary, then confirm the upload. Use `--yes` in a non-interactive environment:
+
+```bash
+mastra traces import --provider langfuse --yes
+```
+
+The CLI sends batches to the existing project-scoped Platform observability collector. After every batch is acknowledged, it polls the existing lightweight trace query with the same organization key and verifies the exact span IDs for a deterministic sample of up to 10 traces. This accounts for the asynchronous collector, Pub/Sub, and ClickHouse pipeline without introducing a second ingestion or storage path.
+
+A completed upload still distinguishes enqueue acknowledgement from query verification. Reports use `verification.status: "verified"` only when every sampled trace contains every expected span ID. This confirms the logical trace state, not exactly-once storage of a particular upload attempt. `"partial"`, `"timed-out"`, or `"unavailable"` means the upload was acknowledged but couldn't be fully confirmed through the query API; the reason and verified sample count remain in the report. The CLI never connects to ClickHouse directly.
+
+Imported spans count against the target project's observability quota. If the quota is exhausted or retryable failures continue past the retry limit, the command pauses and retains its checkpoint.
+
+## Resume a paused import
+
+Use the import ID from the report to continue from the first unacknowledged batch:
+
+```bash
+mastra traces import --provider langfuse --resume <import-id> --yes
+```
+
+Resume uses the original snapshot boundaries and saved batch contents. It rejects changes to the Langfuse host, target project, collector origin, or environment attribution. Deterministic trace and span IDs make retrying an identical batch safe with Platform's logical deduplication, but the importer doesn't provide a continuous synchronization or exactly-once delivery contract.
+
+By default, state is stored under `~/.mastra/imports/<project-id>/<import-id>/`. Source inputs and outputs can contain sensitive data. The CLI restricts local permissions and removes raw source and batch files after success. Use `--state-dir` to choose another parent directory. Use `--keep-state` only for controlled debugging because it retains those files after success.
+
+## Timestamp and retention behavior
+
+The importer preserves each observation's original `startTime` and `endTime`. Langfuse `EVENT` observations use their start time as their end time. It never replaces source timestamps with the import date.
+
+Because Mastra Platform retention expires spans 30 days after their original end time, importing a span that ended 29 days earlier leaves it about one day before expiry.
+
+## Type and data mapping
+
+Langfuse observation types map conservatively to Mastra span types. Generations, agents, tools, evaluators, and embeddings use corresponding Mastra classifications. Events, spans, chains, retrievers, guardrails, and unknown future types use a generic classification. The exact Langfuse type and original identifiers remain in span metadata.
+
+Valid JSON input and output strings become JSON values. Other strings remain unchanged. Model, token, cost, pricing-tier ID and name, error, environment, user, session, and source metadata are retained when the target schema supports them.
+
+Platform limits an individual stored JSON field to 1 MiB, arrays to 1,000 entries, nesting to 100 levels, and field names to 200 bytes. The dry-run report warns when an eligible span exceeds one of these limits because Platform may truncate that value during storage.
+
+## Unusual and interrupted traces
+
+Langfuse doesn't expose a separate cancelled or aborted observation status. An operation that ended can carry `level: "ERROR"` and a status message such as `Request aborted by user`; the importer keeps it as a completed Mastra error span. A non-event observation without `endTime` may still be running or may never have been closed, so the importer skips its entire trace rather than inventing an end time.
+
+| Source condition | Import behavior |
+| - | - |
+| Completed observation, including zero duration | Import with the original timestamps. |
+| Completed `ERROR` observation | Import as an error span and retain the status message. |
+| `WARNING` or `DEBUG` observation | Import without classifying it as an error; retain the source level. |
+| Point-in-time `EVENT` without a duration | Import with `endedAt` equal to `startedAt`. |
+| Non-event observation without `endTime` | Skip the complete trace as incomplete. |
+| Missing physical root, missing parent, multiple roots, cycle, or duplicate observation ID | Skip the complete trace as structurally unsafe. |
+| SDK application root whose physical parent wasn't exported | Skip rather than detach it from its source parent. |
+| Child outside its parent's time range | Import when both observations have valid individual times; asynchronous work can outlive a parent. |
+| Unknown future observation type | Import as a generic span and include a warning. |
+| User declines confirmation | Upload nothing and retain the staged plan. |
+| CLI interruption, quota exhaustion, or exhausted transient retries | Pause with acknowledged batches checkpointed for resume. |
+
+Observations API v2 returns input and output as raw strings. The importer parses valid JSON so objects, arrays, numbers, booleans, and `null` retain their useful types in Platform; non-JSON strings remain strings. A source string that intentionally contains valid JSON text is indistinguishable from serialized JSON in the V2 response and will therefore be parsed.
+
+This version imports traces only. It preserves prompt IDs, names, and versions found on observations as source metadata, but it doesn't migrate prompt entities or content. It also doesn't import Langfuse scores, feedback, comments, datasets, attachments, logs, metrics, or file exports.
+
+## Command options
+
+Use `--project` to override `MASTRA_PROJECT_ID` or the linked project configuration. Use `--platform-url` or `MASTRA_PLATFORM_OBSERVABILITY_ENDPOINT` for a regional, staging, or self-hosted collector origin. `--environment` overrides the source environment attribution for every imported span.
+
+For automation, `--json` writes a machine-readable report. The command exits with status `2` when an import is safely paused and status `130` when an interrupt pauses it. See the [`mastra traces import` reference](/reference/cli/mastra#mastra-traces-import) for every option.

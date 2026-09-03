@@ -1055,6 +1055,46 @@ See the [Storage migration guide](/reference/migrations/upgrade-to-v1/storage#du
 
 It accepts [common flags][common-flags].
 
+## `mastra traces import`
+
+Imports a fixed 30-day snapshot of completed traces from Langfuse into Mastra Platform Observability.
+
+```bash
+mastra traces import --provider langfuse [options]
+```
+
+The command requires `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY`, and `LANGFUSE_BASE_URL`. Uploads also require an organization key in `MASTRA_PLATFORM_ACCESS_TOKEN` and a target project from `--project`, `MASTRA_PROJECT_ID`, or the linked project configuration. `MASTRA_CLOUD_ACCESS_TOKEN` is a deprecated fallback. A dry run doesn't require the Platform access token when the project is already identified by UUID or linked configuration.
+
+| Option | Description |
+| - | - |
+| `--provider <provider>` | Required. V0 accepts `langfuse`. |
+| `--project <id-or-slug>` | Overrides the target project from environment or linked configuration. |
+| `--platform-url <url>` | Overrides the Platform collector origin or project-scoped endpoint. |
+| `--environment <name>` | Overrides environment attribution on every imported span. |
+| `--dry-run` | Reads, validates, maps, and stages data without uploading it. |
+| `--resume <import-id>` | Continues a checkpointed import. |
+| `--state-dir <path>` | Overrides the import state parent directory. |
+| `--batch-size <count>` | Sets the record limit per batch from 1 through 1,000. The default is 100. |
+| `--json` | Writes the report as JSON. |
+| `--yes` | Skips the interactive upload confirmation. |
+| `--keep-state` | Retains sensitive source and batch files after success. |
+
+Run a complete validation without writing to Platform:
+
+```bash
+mastra traces import --provider langfuse --dry-run
+```
+
+Resume an interrupted or quota-paused import:
+
+```bash
+mastra traces import --provider langfuse --resume <import-id> --yes
+```
+
+The command preserves source span times. Platform's 30-day retention remains based on the original end time, not the import time. After upload, the CLI verifies the exact span IDs for a deterministic sample of up to 10 traces through the existing project-scoped light query API. The JSON report distinguishes `verified`, `partial`, `timed-out`, and `unavailable` query results from the separately acknowledged `enqueuedSpans` count. Exit status `2` means the import is safely paused and can be resumed. An interrupt uses status `130`.
+
+See [Import traces from Langfuse](/docs/mastra-platform/import-langfuse-traces) for the complete workflow, eligibility rules, security notes, and mapping behavior.
+
 ## `mastra api`
 
 Calls a Mastra runtime server with JSON input and JSON output. Use it for local development servers, deployed Mastra platform projects, self-hosted Mastra servers, or hosted Mastra Platform Observability APIs.
