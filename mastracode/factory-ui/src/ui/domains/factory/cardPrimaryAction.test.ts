@@ -52,11 +52,16 @@ describe('cardMoves', () => {
     ).toEqual([investigate, build]);
   });
 
-  it('re-reviews an open pull request sitting in Done, and reviews it anywhere else', () => {
+  it('re-reviews an open pull request sitting in Done, and reviews it in a working lane', () => {
     const pullRequest = { source: 'github-pr' as const, metadata: { state: 'open' }, stages: ['done'] };
     expect(cardMoves(pullRequest, 'done')).toEqual([{ label: 'Re-review', role: 'review', stage: 'review' }]);
     expect(cardMoves(pullRequest, 'review')).toEqual([review]);
-    expect(cardMoves({ ...pullRequest, metadata: { merged: true } }, 'done')).toEqual([review]);
+  });
+
+  it('offers a finished card no lane, so its session is the action', () => {
+    expect(cardMoves({ source: 'github-pr', metadata: { merged: true }, stages: ['done'] }, 'done')).toEqual([]);
+    expect(cardMoves({ source: 'github-pr', metadata: { state: 'open' } }, 'canceled')).toEqual([]);
+    expect(cardMoves({ source: 'github-issue', metadata: {} }, 'done')).toEqual([]);
   });
 
   it('offers nothing for a manual card', () => {

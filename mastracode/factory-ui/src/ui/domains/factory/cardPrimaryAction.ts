@@ -2,6 +2,7 @@ import { FACTORY_ROLE_STAGES, isFactoryRole, needsApproval } from '@mastra/facto
 import type { FactoryRole, FactoryRuleStage } from '@mastra/factory/rules/types';
 import { itemSessionSpec, pullRequestStatusForItem } from './boardItems';
 import type { WorkItem, WorkItemSessionRef } from './services/workItems';
+import { isTerminalStage } from './stages';
 import type { BoardStageId } from './stages';
 
 export interface CardPrimaryAction {
@@ -37,15 +38,18 @@ const RE_REVIEW: CardMove = { label: 'Re-review', role: 'review', stage: 'review
 
 /** Where a card's button can send it, likeliest first; the lane's rule decides what runs there. */
 export function cardMoves(item: MovableCard, columnStage: BoardStageId): CardMove[] {
+  if (isTerminalStage(columnStage)) return openPullRequestInDone(item, columnStage) ? [RE_REVIEW] : [];
   if (item.source === 'github-issue') return needsApproval(item) ? [PREPARE_APPROVAL] : [INVESTIGATE, BUILD];
   if (item.source === 'linear-issue') return [INVESTIGATE, BUILD];
-  if (item.source !== 'github-pr') return [];
-  // A Done-lane PR that is still open likely picked up commits after its
-  // review; re-entering Review supersedes the pass that already ran.
-  const reviewed =
+  return item.source === 'github-pr' ? [REVIEW] : [];
+}
+
+function openPullRequestInDone(item: MovableCard, columnStage: BoardStageId): boolean {
+  return (
     columnStage === 'done' &&
-    ['open', 'draft'].includes(pullRequestStatusForItem({ ...item, stages: item.stages ?? [] }));
-  return [reviewed ? RE_REVIEW : REVIEW];
+    item.source === 'github-pr' &&
+    ['open', 'draft'].includes(pullRequestStatusForItem({ ...item, stages: item.stages ?? [] }))
+  );
 }
 
 function seatDepth(role: string): number {

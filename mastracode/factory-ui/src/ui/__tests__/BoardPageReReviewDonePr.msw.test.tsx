@@ -175,7 +175,7 @@ describe('Re-review action for open PRs in Done', () => {
     ]);
   });
 
-  it('does not offer Re-review for a merged PR in Done', async () => {
+  it('offers a merged PR in Done no lane at all', async () => {
     stubReviewBoard({
       workItems: [{ ...donePrWorkItem, metadata: { number: 42, state: 'closed', merged: true } }],
     });
@@ -184,6 +184,6 @@ describe('Re-review action for open PRs in Done', () => {
 
     await user.click(await screen.findByRole('button', { name: 'Actions for Add rate limiting' }));
     await screen.findByRole('menuitem', { name: 'Remove' });
-    expect(screen.queryByRole('menuitem', { name: 'Re-review' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('menuitem', { name: /^(Re-)?review$/ })).not.toBeInTheDocument();
   });
 });
