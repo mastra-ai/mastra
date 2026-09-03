@@ -328,8 +328,7 @@ export class GithubRules {
     const reReviewEvent = reviewRequested || event === 'pullRequestUpdated';
     const requestedReviewer = string(object(parsed.payload.requested_reviewer)?.login);
     const pullRequestAuthor = string(object(pullRequest?.user)?.login);
-    const pullRequestFactoryAuthored =
-      provenance !== null || (pullRequestAuthor !== undefined && this.#isFactoryLogin(pullRequestAuthor));
+    const pullRequestFactoryAuthored = provenance !== null || this.#isFactoryLogin(pullRequestAuthor);
     const relatedItem = await this.#relatedItem(
       project.orgId,
       project.factoryProjectId,

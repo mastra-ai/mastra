@@ -449,6 +449,10 @@ function reReviewRequestedPullRequest(context: FactoryGithubRuleContext) {
   if (!trustedGithubActor(context)) return;
   if (context.actor.type === 'github' && context.actor.factoryAuthored) return;
   if (!context.item) {
+    // On this path the actor is the *requester*, so the materialized
+    // `authorTrusted` stamp records their trust (always true past the gate
+    // above), not the PR author's: a trusted maintainer requesting a Factory
+    // review vouches for the PR.
     return materializePullRequestIntake(context, {
       idempotencyKey: `${context.ingress.id}:pull-request-review-requested-intake`,
       autoStartCandidate: true,
