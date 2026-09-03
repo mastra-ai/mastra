@@ -1,3 +1,4 @@
+import { reviewBoard } from '../boards/review.js';
 import type {
   FactoryBoardRuleLeaf,
   FactoryBoardRules,
@@ -136,27 +137,6 @@ function completeIssue(context: FactoryStageRuleContext) {
     role: 'triage',
     skillName: 'factory-complete-issue',
     arguments: context.item.url ? `GitHub issue (${context.item.url})` : context.item.title,
-  } as const;
-}
-
-function reviewPullRequest(context: FactoryStageRuleContext) {
-  // Only a Review-to-Review re-entry can supersede an active pass. A card
-  // returning from Done has no live review to cancel; aborting its bound session
-  // would instead cancel the fresh re-review kickoff.
-  const supersedes = context.fromStage === 'review';
-  // The re-review skill only applies when a prior review pass actually completed
-  // (the card is returning from `done`). A cancelled first-time review that
-  // re-enters Review from `review` itself still has no prior pass to reconcile —
-  // it gets the regular factory-review skill.
-  const priorReviewCompleted = context.fromStage === 'done';
-  const skillName = priorReviewCompleted ? 'factory-rereview' : 'factory-review';
-  return {
-    type: 'invokeSkill',
-    idempotencyKey: `${context.ingress.id}:${skillName}`,
-    role: 'review',
-    skillName,
-    arguments: context.item.url ? `GitHub pull request (${context.item.url})` : context.item.title,
-    ...(supersedes ? { cancelInFlight: true } : {}),
   } as const;
 }
 
@@ -564,10 +544,7 @@ const BUILT_IN_DEFAULTS: FactoryRulesOverrides = {
       issue: { onEnter: completeIssue },
     },
   },
-  review: {
-    intake: { pullRequest: { onEnter: onArrival(reviewPullRequest) } },
-    review: { pullRequest: { onEnter: reviewPullRequest } },
-  },
+  review: reviewBoard.rules,
   tools: { submit_plan: { onResult: advanceApprovedPlan } },
   github: {
     issueOpened: { onEvent: issueOpened },
