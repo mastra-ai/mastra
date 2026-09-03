@@ -275,22 +275,8 @@ export const TRACE_QUERY_TIED_TIMESTAMP_FIXTURE_DATA: TraceQueryFixtureData = {
     }),
   ],
   scores: [
-    {
-      cursorId: 100,
-      scoreId: 'score-tied',
-      traceId: 'trace-tied',
-      scorerId: 'factuality',
-      score: 0.9,
-      timestamp: tiedScoreTimestamp,
-    },
-    {
-      cursorId: 101,
-      scoreId: 'score-tied',
-      traceId: 'trace-tied',
-      scorerId: 'factuality',
-      score: 0.2,
-      timestamp: tiedScoreTimestamp,
-    },
+    scoreRecord(100, 'score-tied', 'trace-tied', 'factuality', 0.9, { timestamp: tiedScoreTimestamp }),
+    scoreRecord(101, 'score-tied', 'trace-tied', 'factuality', 0.2, { timestamp: tiedScoreTimestamp }),
   ],
 };
 
