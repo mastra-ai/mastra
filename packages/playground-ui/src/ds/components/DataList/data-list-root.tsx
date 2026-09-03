@@ -134,9 +134,14 @@ export function DataListRoot({
       // Outer radius = row radius (8px) + 4px inset so the corners stay concentric.
       // Size to content but never exceed the parent. Flex (unlike grid `1fr`) lays
       // items out against the max-height-clamped container, so short lists stay
-      // compact and long ones shrink the viewport and scroll.
+      // compact and long ones shrink the viewport and scroll. `self-start` stops
+      // a grid/flex parent from stretching the root to the full row height.
       viewPortClassName="min-h-0 flex-1 basis-auto"
-      className={cn('flex max-h-full w-full flex-col rounded-xl px-1 pb-1', dataListVariantClasses[variant], className)}
+      className={cn(
+        'flex max-h-full w-full flex-col self-start rounded-xl px-1 pb-1',
+        dataListVariantClasses[variant],
+        className,
+      )}
     >
       {grid}
     </ScrollArea>

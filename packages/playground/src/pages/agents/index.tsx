@@ -68,7 +68,7 @@ function Agents() {
   }
 
   return (
-    <PageLayout height="full" className="grid-rows-[auto_minmax(0,1fr)] content-normal">
+    <PageLayout height="full">
       <AgentHeaderCreateAction />
       <PageLayout.TopArea>
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center">

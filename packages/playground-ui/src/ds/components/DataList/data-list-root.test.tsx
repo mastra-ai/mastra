@@ -45,6 +45,8 @@ describe('DataListRoot', () => {
       expect(grid?.className).not.toContain('overflow-auto');
       expect(container.firstElementChild?.className).toContain('rounded-xl');
       expect(container.firstElementChild?.className).toContain('bg-surface4');
+      expect(container.firstElementChild?.className).toContain('self-start');
+      expect(container.firstElementChild?.className).toContain('max-h-full');
       expect(grid?.className).toContain('gap-y-px');
       expect(grid?.className).toContain('[&_.data-list-subheader+.data-list-row]:rounded-t-lg');
       expect(grid?.className).toContain('[&_.data-list-row:has(+.data-list-subheader)]:rounded-b-lg');
