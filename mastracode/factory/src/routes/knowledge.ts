@@ -151,7 +151,7 @@ export interface KnowledgeGraphPayload {
   page: {
     nextCursor?: string;
     truncated: boolean;
-    incomplete: boolean;
+    terminalBounds: Array<'record-window' | 'edge-window' | 'wikilink-resolution-window'>;
   };
   limits: {
     maxNodes: number;
@@ -926,7 +926,8 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
         await view.knowledge.listNodes({
           scopeIds: view.scopeIds,
           membershipScopeIds: [scopeId],
-          limit: this.#limits.maxNodes,
+          name: PINNED_NODE_NAME,
+          limit: 1,
         })
       ).find(candidate => candidate.name === PINNED_NODE_NAME);
       if (node) out.push({ level, scopeId, id: node.id });
@@ -1863,17 +1864,29 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
           const edges: KnowledgeGraphEdge[] = [];
           const boundaryNodes = new Map<string, { node: KnowledgeNode; scope?: KnowledgeNode }>();
           const edgeSeen = new Set<string>();
+          let edgesTruncated = false;
           for (const { record } of pinnedRecords) {
             const targets: string[] = [];
+            let targetsTruncated = false;
             for (const name of parseKnowledgeWikilinks(record.text)) {
               const target = await resolver.resolve(name, view.scopeIds);
-              if (target && resolver.inWindowId(target.id) && !targets.includes(target.id)) targets.push(target.id);
+              if (!target) continue;
+              if (!resolver.inWindowId(target.id)) {
+                edgesTruncated = true;
+                targetsTruncated = true;
+                continue;
+              }
+              if (!targets.includes(target.id)) targets.push(target.id);
             }
-            if (targets.length === 1) accented.add(targets[0]!);
+            if (targets.length === 1 && !targetsTruncated) accented.add(targets[0]!);
             for (let a = 0; a < targets.length; a++) {
               for (let b = a + 1; b < targets.length; b++) {
                 const key = `${targets[a]}\u0000${targets[b]}\u0000pin`;
-                if (edgeSeen.has(key) || edges.length >= this.#limits.maxEdges) continue;
+                if (edgeSeen.has(key)) continue;
+                if (edges.length >= this.#limits.maxEdges) {
+                  edgesTruncated = true;
+                  continue;
+                }
                 edgeSeen.add(key);
                 edges.push({
                   id: `pin:${record.id}:${targets[a]}:${targets[b]}`,
@@ -1887,9 +1900,12 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
             }
           }
           const recordCounts = new Map<string, number>();
-          let edgesTruncated = false;
           for (const record of recordWindow) {
             recordCounts.set(record.nodeId, (recordCounts.get(record.nodeId) ?? 0) + 1);
+            if (!resolver.inWindowId(record.nodeId)) {
+              edgesTruncated = true;
+              continue;
+            }
             for (const name of parseKnowledgeWikilinks(record.text)) {
               const target = await resolver.resolve(name, view.scopeIds);
               if (!target || target.id === record.nodeId) continue;
@@ -1900,13 +1916,13 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
                 if (existing) {
                   boundary = Boolean(existing.scope);
                 } else {
-                  if (boundaryNodes.size >= this.#limits.maxBoundaryNodes) {
-                    edgesTruncated = true;
-                    continue;
-                  }
                   const targetScope = await this.#lensTargetScope(view, target.id, selected.id);
                   if (!targetScope) continue;
                   if (targetScope.id === selected.id) {
+                    edgesTruncated = true;
+                    continue;
+                  }
+                  if (boundaryNodes.size >= this.#limits.maxBoundaryNodes) {
                     edgesTruncated = true;
                     continue;
                   }
@@ -1942,7 +1958,7 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
               ...nodes.map(node => ({ node, boundaryScope: undefined })),
               ...[...boundaryNodes.values()].map(value => ({ node: value.node, boundaryScope: value.scope })),
             ].map(async ({ node, boundaryScope }) => {
-              const nodeScopeIds = await store.getNodeScopeIds(node.id);
+              const nodeScopeIds = await view.store.getNodeScopeIds(node.id);
               const description = metadataString(node.metadata, 'description');
               return {
                 id: this.#mintHandle(projectId, view.perspectiveKey, 'node', node.id),
@@ -1961,7 +1977,11 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
               } satisfies KnowledgeGraphNode;
             }),
           );
-          const incomplete = Boolean(recordsTruncated || edgesTruncated || resolver.cappedCount);
+          const terminalBounds: KnowledgeGraphPayload['page']['terminalBounds'] = [
+            ...(recordsTruncated ? ['record-window' as const] : []),
+            ...(edgesTruncated ? ['edge-window' as const] : []),
+            ...(resolver.cappedCount ? ['wikilink-resolution-window' as const] : []),
+          ];
           const payload: KnowledgeGraphPayload = {
             view: view.view,
             scope: this.#scopeTreeNode(
@@ -1980,8 +2000,8 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
             })),
             records: [],
             page: {
-              truncated: Boolean(last || incomplete),
-              incomplete,
+              truncated: Boolean(last),
+              terminalBounds,
               ...(last
                 ? {
                     nextCursor: this.#mintHandle(
