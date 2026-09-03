@@ -59,6 +59,8 @@
     "dev:playground": "pnpm turbo run dev --filter ./packages/playground-ui --filter ./packages/playground --filter ./client-sdks/react",
     "dev:playground:full": "pnpm install && pnpm setup && pnpm --dir examples/agent install && pnpm --dir examples/agent dev:ui",
     "generate:integration": "tsx ./integration-generator/index.ts",
+    "sync:official-skills": "tsx ./scripts/sync-official-skills.ts",
+    "check:official-skills": "tsx ./scripts/sync-official-skills.ts --check",
     "test": "vitest run",
     "test:watch": "vitest watch",
     "test:watch:combined-stores": "pnpm --filter \"./stores/*\" test:watch",

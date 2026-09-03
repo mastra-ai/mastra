@@ -1,0 +1,46 @@
+# Importers
+
+Importers turn external systems into replayable Knowledge mutations. Design them for at-least-once execution: deterministic identity, durable checkpoints, idempotent writes, and explicit conflicts.
+
+## Bind an importer
+
+Register importer bindings in host configuration and map each binding to authorized target scopes. Keep source credentials and principal resolution outside model-generated content.
+
+An import run moves through guarded states such as queued, running, completed, failed, or skipped. Concurrent cron enqueues must produce one active run; other attempts are skipped rather than racing.
+
+## Preserve identity
+
+Give every source object a stable external address. Static importer operations resolve and upsert those addresses inside a transaction-bound run. Node merges rebind source addresses to the surviving target, preserving importer idempotency.
+
+```ts
+knowledge.registerImporter({
+  id: 'notion',
+  access: { 'project:$projectId': 'edit' },
+  async handler({ importer, state }) {
+    const operations = await importer();
+    const cursor = await state.get('cursor');
+    for (const page of await notion.pages({ after: cursor })) {
+      await operations.upsertNode(page.id, { name: page.title });
+      await state.set('cursor', page.id);
+    }
+  },
+});
+```
+
+Consult installed types for the exact importer APIs supported by your package version.
+
+## Store progress outside content
+
+Use the importer's durable key-value state for cursors, high-water marks, source versions, and retry metadata. Don't encode operational checkpoints as knowledge records. Advance a cursor only after its mutations commit.
+
+## Handle conflicts
+
+Treat stale node/record versions, stale access epochs, and invalid state transitions as conflicts. Reread authorized state and retry deliberately. Don't turn duplicate-key or transaction errors into successful imports.
+
+## Keep runs bounded
+
+Page external data and Knowledge reads. Enforce a maximum batch size and persist the next cursor. Search, counts, and deduplication must still authorize before shaping. Avoid loading an entire instance to reconcile one source page.
+
+## Transaction guarantees
+
+Knowledge mutations that update memberships, activity, addresses, proposals, or semantic outbox state must commit atomically. MongoDB Knowledge writes require replica-set or sharded transaction support and fail closed otherwise. MySQL access-grant reconciliation and access-epoch updates run in one transaction.

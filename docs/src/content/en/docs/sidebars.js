@@ -237,9 +237,22 @@ const sidebars = {
           ],
         },
         {
-          type: 'doc',
-          id: 'knowledge/configuration',
+          type: 'category',
           label: 'Knowledge',
+          collapsible: true,
+          collapsed: false,
+          items: [
+            {
+              type: 'doc',
+              id: 'knowledge/configuration',
+              label: 'Configuration',
+            },
+            {
+              type: 'doc',
+              id: 'knowledge/skill',
+              label: 'Skill',
+            },
+          ],
         },
       ],
     },
