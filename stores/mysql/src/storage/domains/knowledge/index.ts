@@ -1074,8 +1074,13 @@ export class KnowledgeMySQL extends KnowledgeStorage {
         args: [target.id, source.id],
       });
       await tx.execute({ sql: `DELETE FROM "${TABLE_KNOWLEDGE_MENTIONS}" WHERE targetNodeId=?`, args: [source.id] });
+      await tx.execute({
+        sql: `UPDATE "${TABLE_KNOWLEDGE_NODE_ADDRESSES}" SET nodeId=? WHERE nodeId=?`,
+        args: [target.id, source.id],
+      });
       await this.#activity(tx, 'merge', 'node', source.id, input.contextScopeId, input.importRunId, {
         targetId: target.id,
+        [ACTIVITY_VISIBILITY_SCOPE_IDS]: sourceScopeIds,
       });
       await this.#outbox(tx, 'node', source.id, 'delete', input.sourceVersion + 1, sourceScopeIds);
       await tx.execute({ sql: `DELETE FROM "${TABLE_KNOWLEDGE_NODE_SCOPES}" WHERE nodeId=?`, args: [source.id] });
