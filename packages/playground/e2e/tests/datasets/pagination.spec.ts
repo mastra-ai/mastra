@@ -25,6 +25,7 @@ test.describe('Datasets list infinite scroll', () => {
       await expect(page.getByRole('link', { name: /E2E Dataset 25/ })).toBeVisible();
       await expect(page.getByRole('link', { name: /E2E Dataset 06/ })).toHaveCount(1);
       await expect(page.getByRole('link', { name: /E2E Dataset 05/ })).toHaveCount(0);
+      await expect(page.getByRole('link', { name: /E2E Dataset/ })).toHaveCount(20);
 
       // Scroll the last loaded row into view; the sentinel right below it
       // triggers fetching the next page.
@@ -33,6 +34,7 @@ test.describe('Datasets list infinite scroll', () => {
       await expect(page.getByRole('link', { name: /E2E Dataset 05/ })).toHaveCount(1);
       await page.getByRole('link', { name: /E2E Dataset 01/ }).scrollIntoViewIfNeeded();
       await expect(page.getByRole('link', { name: /E2E Dataset 01/ })).toBeVisible();
+      await expect(page.getByRole('link', { name: /E2E Dataset/ })).toHaveCount(25);
     });
   });
 
@@ -44,11 +46,13 @@ test.describe('Datasets list infinite scroll', () => {
 
       await expect(page.getByRole('link', { name: /E2E Dataset 12/ })).toBeVisible();
       await expect(page.getByRole('link', { name: /E2E Dataset 01/ })).toBeVisible();
+      await expect(page.getByRole('link', { name: /E2E Dataset/ })).toHaveCount(12);
 
       await page.getByPlaceholder('Filter by dataset name').fill('E2E Dataset 12');
 
       await expect(page.getByRole('link', { name: /E2E Dataset 12/ })).toBeVisible();
       await expect(page.getByRole('link', { name: /E2E Dataset 01/ })).toHaveCount(0);
+      await expect(page.getByRole('link', { name: /E2E Dataset/ })).toHaveCount(1);
     });
   });
 });
