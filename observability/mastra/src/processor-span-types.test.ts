@@ -17,12 +17,16 @@ import type { ObservabilityExporter, TracingEvent, AnyExportedSpan } from '@mast
 import type {
   ComputeStateSignalArgs,
   ComputeStateSignalResult,
+  ProcessInputArgs,
   ProcessInputStepArgs,
   ProcessOutputResultArgs,
+  ProcessOutputStepArgs,
+  ProcessOutputStreamArgs,
   Processor,
   ProcessorSpanPhase,
 } from '@mastra/core/processors';
 import { MockStore } from '@mastra/core/storage';
+import type { ChunkType } from '@mastra/core/stream';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { Observability } from './default';
@@ -151,6 +155,36 @@ class TwoPhaseProcessor implements Processor<'two-phase'> {
 }
 
 /**
+ * Implements every processor method that produces a span, so a run covers each
+ * phase rather than only the two the built-in processors happen to use. The
+ * name encodes the phase, which is what lets a test assert that no phase
+ * silently fell back to the default label.
+ */
+class AllPhasesProcessor implements Processor<'all-phases'> {
+  readonly id = 'all-phases' as const;
+  readonly name = 'All Phases Processor';
+  readonly spanType = SpanType.MEMORY_OPERATION;
+  readonly spanName = (phase: ProcessorSpanPhase) => `phase:${phase}`;
+  readonly spanAttributes = { operationType: 'recall' } as const;
+
+  async processInput({ messages }: ProcessInputArgs) {
+    return messages;
+  }
+  async processInputStep({ messageList }: ProcessInputStepArgs) {
+    return { messageList };
+  }
+  async processOutputStream({ part }: ProcessOutputStreamArgs): Promise<ChunkType | null | undefined> {
+    return part;
+  }
+  async processOutputStep({ messageList }: ProcessOutputStepArgs) {
+    return messageList;
+  }
+  async processOutputResult({ messageList }: ProcessOutputResultArgs) {
+    return messageList;
+  }
+}
+
+/**
  * Projects a value onto the state-signal lane. `emitOnStep` controls which steps
  * produce a signal so the "no change, no event" path is exercised too.
  */
@@ -194,6 +228,24 @@ async function runAgent(processors: Processor[], opts: { memory?: boolean } = {}
   await mastra.getAgent('agent').generate('Hello', {
     ...(opts.memory ? { memory: { thread: 'thread-1', resource: 'resource-1' } } : {}),
   });
+}
+
+/** Streams a run so `processOutputStream` executes, and drains the stream. */
+async function streamAgent(processors: Processor[]) {
+  const agent = new Agent({
+    id: 'span-type-agent',
+    name: 'Span Type Agent',
+    instructions: 'Test',
+    model: createMockModel(),
+    inputProcessors: processors,
+    outputProcessors: processors,
+  });
+
+  const mastra = new Mastra({ ...baseConfig(), agents: { agent } });
+  const result = await mastra.getAgent('agent').stream('Hello');
+  for await (const _chunk of result.fullStream) {
+    // drain
+  }
 }
 
 describe('processor-declared span types', () => {
@@ -240,6 +292,30 @@ describe('processor-declared span types', () => {
     // first in the chain and runs on the workflow executor.
     expect(attributes?.processorIndex).toBe(0);
     expect(attributes?.processorExecutor).toBe('workflow');
+  });
+
+  it('leaves no phase of a declaring processor on the default span type', async () => {
+    // The general invariant behind the individual phase tests: whichever
+    // methods a processor implements, none of its spans may fall back.
+    await streamAgent([new AllPhasesProcessor()]);
+
+    const mine = exporter.ended.filter(
+      span => span.entityId === 'all-phases' || span.entityName === 'All Phases Processor',
+    );
+
+    expect(mine.length).toBeGreaterThan(0);
+    for (const span of mine) {
+      expect(span.type).toBe(SpanType.MEMORY_OPERATION);
+      expect(span.name).toMatch(/^phase:/);
+      expect((span.attributes as any)?.operationType).toBe('recall');
+      // The runner's own facts still survive the retyping.
+      expect((span.attributes as any)?.processorExecutor).toBeDefined();
+    }
+
+    // Every phase this processor implements is represented, so the assertion
+    // above cannot pass by covering only one of them.
+    const phases = new Set(mine.map(span => span.name));
+    expect(phases.size).toBeGreaterThan(1);
   });
 
   it('leaves a processor that declares nothing on PROCESSOR_RUN', async () => {

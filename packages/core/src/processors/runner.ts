@@ -20,7 +20,7 @@ import {
   createObservabilityContext,
   resolveObservabilityContext,
 } from '../observability';
-import type { ObservabilityContext, Span } from '../observability';
+import type { ObservabilityContext, ProcessorSpanType, Span } from '../observability';
 import type { TracingContext } from '../observability/types';
 import type { RequestContext } from '../request-context';
 import type { ChunkType } from '../stream';
@@ -110,13 +110,22 @@ export class ProcessorState<OUTPUT = undefined> {
   private outputChunkCount = 0;
   public customState: Record<string, unknown> = {};
   public streamParts: ChunkType<OUTPUT>[] = [];
-  public span?: Span<SpanType.PROCESSOR_RUN>;
+  public span?: Span<ProcessorSpanType>;
 
   constructor(
     options?: {
       processorName?: string;
       processorIndex?: number;
       createSpan?: boolean;
+      /**
+       * The processor this state belongs to, so a span created here honours
+       * its span declaration. `processOutputStream` is the one processor
+       * method whose span is created from this constructor rather than from
+       * one of the runner's own call sites, so without this a processor that
+       * declares a span type would keep it everywhere except its streaming
+       * phase.
+       */
+      processor?: Pick<Processor, 'id' | 'spanType' | 'spanName' | 'spanAttributes'>;
     } & Partial<ObservabilityContext>,
   ) {
     // Only create span if explicitly requested (legacy processors)
@@ -125,14 +134,19 @@ export class ProcessorState<OUTPUT = undefined> {
       return;
     }
 
+    const processor = options.processor;
     const currentSpan = options.tracingContext?.currentSpan;
     const parentSpan = currentSpan?.findParent(SpanType.AGENT_RUN) || currentSpan?.parent || currentSpan;
     this.span = parentSpan?.createChildSpan({
-      type: SpanType.PROCESSOR_RUN,
-      name: `output stream processor: ${options.processorName}`,
+      type: processor?.spanType ?? SpanType.PROCESSOR_RUN,
+      name: processor
+        ? resolveProcessorSpanName(processor, 'output', `output stream processor: ${options.processorName}`)
+        : `output stream processor: ${options.processorName}`,
       entityType: EntityType.OUTPUT_PROCESSOR,
+      entityId: processor?.id,
       entityName: options.processorName,
       attributes: {
+        ...(processor ? resolveProcessorSpanAttributes(processor, 'output') : {}),
         processorExecutor: 'legacy',
         processorIndex: options.processorIndex ?? 0,
       },
@@ -917,6 +931,7 @@ export class ProcessorRunner {
                 ...observabilityContext,
                 processorIndex: index,
                 createSpan: true,
+                processor,
               });
               processorStates.set(processor.id, state);
             }
