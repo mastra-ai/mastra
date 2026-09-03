@@ -221,22 +221,33 @@ export default createLiveKitWorker({
     if (!mapping || !memory) return
     session.on(voice.AgentSessionEventTypes.ConversationItemAdded, ({ item }) => {
       if (item.type !== 'message' || (item.role !== 'user' && item.role !== 'assistant')) return
-      void memory.saveMessages({
-        messages: [
-          {
-            id: item.id,
-            threadId: mapping.thread,
-            resourceId: mapping.resource ?? mapping.thread,
-            role: item.role,
-            content: {
-              format: 2,
-              parts: [{ type: 'text', text: item.textContent ?? '' }],
-            },
-            type: 'text',
-            createdAt: new Date(),
-          },
-        ],
-      })
+
+      const persist = async (attempt = 0): Promise<void> => {
+        try {
+          await memory.saveMessages({
+            messages: [
+              {
+                id: item.id,
+                threadId: mapping.thread,
+                resourceId: mapping.resource ?? mapping.thread,
+                role: item.role,
+                content: {
+                  format: 2,
+                  parts: [{ type: 'text', text: item.textContent ?? '' }],
+                },
+                type: 'text',
+                createdAt: new Date(),
+              },
+            ],
+          })
+        } catch (error) {
+          console.error(`Failed to persist committed voice item ${item.id}; retrying`, error)
+          const delay = Math.min(1_000 * 2 ** attempt, 30_000)
+          setTimeout(() => void persist(attempt + 1), delay)
+        }
+      }
+
+      void persist()
     })
   },
 })
