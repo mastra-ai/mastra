@@ -1,3 +1,4 @@
+import type { StreamParams } from '@mastra/client-js';
 import { TooltipProvider } from '@mastra/playground-ui/components/Tooltip';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -54,21 +55,7 @@ const allOff: Features = {
   browser: false,
 };
 
-type WireTool = { id?: string; description?: string };
-type StreamBody = {
-  memory?: { thread?: string };
-  clientTools?: Record<string, WireTool>;
-  instructions?: string;
-  system?: string;
-  messages?: Array<{ content?: unknown }>;
-  maxSteps?: number;
-  modelSettings?: {
-    maxRetries?: number;
-    maxOutputTokens?: number;
-    temperature?: number;
-  };
-  providerOptions?: unknown;
-};
+type StreamBody = Partial<StreamParams>;
 
 /** Closes immediately so useChat completes without producing messages. */
 const emptyStream = () =>
