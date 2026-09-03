@@ -3940,6 +3940,22 @@ describe('ObservabilityStorageClickhouseVNext', () => {
           })
         ).feedback,
       ).toEqual([]);
+      await expect(
+        storage.updateFeedbackReviewStatus({
+          feedbackId: 'request-feedback-1',
+          reviewStatus: 'reviewed',
+        }),
+      ).rejects.toThrow('Feedback record not found');
+      expect((await storage.listFeedback({})).feedback).toEqual([]);
+      expect(
+        (
+          await storage.listFeedback({
+            mode: 'delta',
+            after: feedbackDeltaBootstrap.deltaCursor!,
+            filters: { traceId: 'request-trace-1' },
+          })
+        ).feedback,
+      ).toEqual([]);
 
       const client = createClient({
         url: process.env.CLICKHOUSE_URL || 'http://localhost:8123',

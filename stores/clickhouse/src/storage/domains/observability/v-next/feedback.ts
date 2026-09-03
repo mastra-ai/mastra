@@ -24,7 +24,7 @@ import { parseFieldKey } from '@mastra/core/utils';
 
 import { isReplicationConfigured } from '../../../db/replication';
 import type { ClickhouseReplicationConfig } from '../../../db/replication';
-import { TABLE_FEEDBACK_EVENTS, TABLE_FEEDBACK_EVENTS_DELTA } from './ddl';
+import { TABLE_DELETION_REQUESTS, TABLE_FEEDBACK_EVENTS, TABLE_FEEDBACK_EVENTS_DELTA } from './ddl';
 import { recordDeletionRequest } from './deletion-requests';
 import { buildFeedbackFilterConditions, buildPaginationClause, buildSignalOrderByClause } from './filters';
 import type { FilterResult } from './filters';
@@ -200,21 +200,11 @@ export async function batchCreateFeedback(client: ClickHouseClient, args: BatchC
  * the table's configured retention TTL. The delta table is intentionally not
  * touched and expires through its fixed two-day TTL.
  */
-export async function deleteFeedback(
+async function hideFeedback(
   client: ClickHouseClient,
   args: DeleteFeedbackArgs,
   replication?: ClickhouseReplicationConfig,
 ): Promise<void> {
-  if (args.feedbackIds.length === 0) return;
-
-  await recordDeletionRequest(client, {
-    requestType: 'feedback',
-    feedbackIds: args.feedbackIds,
-    organizationId: args.organizationId,
-    resourceId: args.resourceId,
-    replication,
-  });
-
   const params: Record<string, string> = {};
   const idPlaceholders: string[] = [];
   for (let i = 0; i < args.feedbackIds.length; i++) {
@@ -240,13 +230,62 @@ export async function deleteFeedback(
   });
 }
 
+export async function deleteFeedback(
+  client: ClickHouseClient,
+  args: DeleteFeedbackArgs,
+  replication?: ClickhouseReplicationConfig,
+): Promise<void> {
+  if (args.feedbackIds.length === 0) return;
+
+  await recordDeletionRequest(client, {
+    requestType: 'feedback',
+    feedbackIds: args.feedbackIds,
+    organizationId: args.organizationId,
+    resourceId: args.resourceId,
+    replication,
+  });
+
+  await hideFeedback(client, args, replication);
+}
+
 // ============================================================================
 // Review status
 // ============================================================================
 
+function feedbackNotFoundError(feedbackId: string): MastraError {
+  return new MastraError({
+    id: 'OBSERVABILITY_UPDATE_FEEDBACK_REVIEW_STATUS_NOT_FOUND',
+    domain: ErrorDomain.MASTRA_OBSERVABILITY,
+    category: ErrorCategory.USER,
+    text: 'Feedback record not found',
+    details: { feedbackId },
+  });
+}
+
+async function hasPendingFeedbackDeletion(
+  client: ClickHouseClient,
+  feedbackId: string,
+  organizationId: string | null,
+  resourceId: string | null,
+): Promise<boolean> {
+  const rows = await queryJson<{ found: number }>(
+    client,
+    `SELECT 1 AS found FROM ${TABLE_DELETION_REQUESTS}
+     WHERE requestType = 'feedback'
+       AND status = 'pending'
+       AND has(feedbackIds, {feedbackId:String})
+       AND (organizationId IS NULL OR organizationId = {organizationId:Nullable(String)})
+       AND (resourceId IS NULL OR resourceId = {resourceId:Nullable(String)})
+     LIMIT 1`,
+    { feedbackId, organizationId, resourceId },
+  );
+  return rows.length > 0;
+}
+
 export async function updateFeedbackReviewStatus(
   client: ClickHouseClient,
   args: UpdateFeedbackReviewStatusArgs,
+  replication?: ClickhouseReplicationConfig,
 ): Promise<FeedbackRecord> {
   const { feedbackId, reviewStatus } = parseUpdateFeedbackReviewStatusArgs(args);
 
@@ -255,14 +294,13 @@ export async function updateFeedbackReviewStatus(
     `SELECT * FROM ${TABLE_FEEDBACK_EVENTS} FINAL WHERE feedbackId = {feedbackId:String} LIMIT 1`,
     { feedbackId },
   );
-  if (!existing[0]) {
-    throw new MastraError({
-      id: 'OBSERVABILITY_UPDATE_FEEDBACK_REVIEW_STATUS_NOT_FOUND',
-      domain: ErrorDomain.MASTRA_OBSERVABILITY,
-      category: ErrorCategory.USER,
-      text: 'Feedback record not found',
-      details: { feedbackId },
-    });
+  const existingRow = existing[0];
+  if (!existingRow) {
+    throw feedbackNotFoundError(feedbackId);
+  }
+
+  if (await hasPendingFeedbackDeletion(client, feedbackId, existingRow.organizationId, existingRow.resourceId)) {
+    throw feedbackNotFoundError(feedbackId);
   }
 
   // ClickHouse is append-only in practice: never mutate a written row. Instead
@@ -270,13 +308,18 @@ export async function updateFeedbackReviewStatus(
   // (traceId, timestamp, feedbackId). Background merges collapse the
   // duplicates keeping the last inserted row, and every read on this table
   // uses FINAL so the latest version wins before merges happen.
-  const updated = rowToFeedbackRecord({ ...existing[0], reviewStatus });
+  const updated = rowToFeedbackRecord({ ...existingRow, reviewStatus });
   await client.insert({
     table: TABLE_FEEDBACK_EVENTS,
     values: [feedbackRecordToRow(updated)],
     format: 'JSONEachRow',
     clickhouse_settings: CH_INSERT_SETTINGS,
   });
+
+  if (await hasPendingFeedbackDeletion(client, feedbackId, existingRow.organizationId, existingRow.resourceId)) {
+    await hideFeedback(client, { feedbackIds: [feedbackId] }, replication);
+    throw feedbackNotFoundError(feedbackId);
+  }
 
   return updated;
 }

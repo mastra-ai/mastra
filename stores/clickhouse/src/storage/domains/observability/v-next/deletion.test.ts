@@ -2,13 +2,19 @@ import type { ClickHouseClient } from '@clickhouse/client';
 import { describe, expect, it, vi } from 'vitest';
 
 import { DELETION_REQUESTS_DDL, TABLE_DELETION_REQUESTS, TABLE_FEEDBACK_EVENTS, TABLE_SCORE_EVENTS } from './ddl';
-import { deleteFeedback } from './feedback';
+import { deleteFeedback, updateFeedbackReviewStatus } from './feedback';
+import { feedbackRecordToRow } from './helpers';
 import { deleteScores } from './scores';
 
 function createClient() {
   const insert = vi.fn().mockResolvedValue({ query_id: 'insert-query' });
   const command = vi.fn().mockResolvedValue({ query_id: 'delete-query' });
-  return { client: { insert, command } as unknown as ClickHouseClient, insert, command };
+  const query = vi.fn();
+  return { client: { insert, command, query } as unknown as ClickHouseClient, insert, command, query };
+}
+
+function queryResult(rows: unknown[]) {
+  return { json: vi.fn().mockResolvedValue(rows) };
 }
 
 describe('ClickHouse deletion lifecycle', () => {
@@ -110,6 +116,41 @@ describe('ClickHouse deletion lifecycle', () => {
 
     await expect(deleteFeedback(client, { feedbackIds: ['feedback-1'] })).rejects.toThrow('lightweight delete failed');
     expect(insert).toHaveBeenCalledOnce();
+  });
+
+  it('re-hides a review-status replacement when deletion starts during the update', async () => {
+    const { client, insert, command, query } = createClient();
+    const existingRow = feedbackRecordToRow({
+      feedbackId: 'feedback-1',
+      timestamp: new Date('2026-09-03T12:00:00Z'),
+      traceId: 'trace-1',
+      feedbackSource: 'user',
+      feedbackType: 'rating',
+      value: 1,
+      organizationId: 'org-1',
+      resourceId: 'resource-1',
+      reviewStatus: 'needs-review',
+    });
+    query
+      .mockResolvedValueOnce(queryResult([existingRow]))
+      .mockResolvedValueOnce(queryResult([]))
+      .mockResolvedValueOnce(queryResult([{ found: 1 }]));
+
+    await expect(
+      updateFeedbackReviewStatus(
+        client,
+        { feedbackId: 'feedback-1', reviewStatus: 'reviewed' },
+        { cluster: 'test-cluster' },
+      ),
+    ).rejects.toThrow('Feedback record not found');
+
+    expect(insert).toHaveBeenCalledOnce();
+    expect(command).toHaveBeenCalledWith({
+      query: `DELETE FROM ${TABLE_FEEDBACK_EVENTS} WHERE feedbackId IN ({fid_0:String})`,
+      query_params: { fid_0: 'feedback-1' },
+      clickhouse_settings: { lightweight_deletes_sync: '2' },
+    });
+    expect(insert.mock.invocationCallOrder[0]).toBeLessThan(command.mock.invocationCallOrder[0]!);
   });
 
   it('is a complete no-op for empty id arrays', async () => {
