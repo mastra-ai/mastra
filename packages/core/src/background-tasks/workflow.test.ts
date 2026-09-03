@@ -35,6 +35,7 @@ describe('background-task workflow registration', () => {
     });
 
     expect(await waitForWorkflowRegistration(mastra, true)).toBe(true);
+    expect(mastra.__getInternalWorkflow(BACKGROUND_TASK_WORKFLOW_ID).engineType).toBe('default');
   });
 
   it('does not register the workflow when bg tasks are disabled', async () => {
