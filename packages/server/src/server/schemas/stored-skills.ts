@@ -212,8 +212,23 @@ export const deleteStoredSkillResponseSchema = z.object({
 // Publish / Rollback Schemas
 // ============================================================================
 
-export const publishStoredSkillBodySchema = z.object({
-  skillPath: z.string().describe('Path to the skill directory on the server filesystem (containing SKILL.md)'),
-});
+export const publishStoredSkillBodySchema = z
+  .object({
+    skillPath: z
+      .string()
+      .optional()
+      .describe(
+        'Path to the skill directory on the server filesystem (containing SKILL.md). When omitted, publishes from the stored skill version snapshot.',
+      ),
+    versionId: z
+      .string()
+      .optional()
+      .describe(
+        'Version ID to publish from storage. Defaults to the latest version when skillPath is omitted. Cannot be combined with skillPath.',
+      ),
+  })
+  .refine(data => !(data.skillPath && data.versionId), {
+    message: 'Provide skillPath or versionId, not both',
+  });
 
 export const publishStoredSkillResponseSchema = storedSkillSchema;
