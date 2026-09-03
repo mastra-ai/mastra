@@ -17,7 +17,7 @@ async function setup(permission: string | undefined) {
   const integrationStorage = seeded.integrations.forIntegration<
     Record<string, unknown>,
     Record<string, unknown>,
-    { kind: 'factory-pr-provenance'; workItemId: string }
+    { kind: 'factory-pr-provenance'; factoryProjectId: string; workItemId: string }
   >('github');
   const project = await seeded.projects.create({
     orgId: 'org-1',
@@ -922,7 +922,7 @@ describe('GithubRules', () => {
       targetKey: 'factory-pr-provenance:10:17',
       threadId: 'thread-1',
       status: 'active',
-      data: { kind: 'factory-pr-provenance', workItemId: work.item.id },
+      data: { kind: 'factory-pr-provenance', factoryProjectId: project.id, workItemId: work.item.id },
     });
     // The PR's own Review card, already reviewed once.
     const card = await workItems.upsert({
@@ -1226,7 +1226,7 @@ describe('GithubRules', () => {
       targetKey: 'factory-pr-provenance:10:17',
       threadId: 'thread-1',
       status: 'active',
-      data: { kind: 'factory-pr-provenance', workItemId: work.item.id },
+      data: { kind: 'factory-pr-provenance', factoryProjectId: project.id, workItemId: work.item.id },
     });
     const service = new GithubRules({
       github,
@@ -1517,7 +1517,7 @@ describe('GithubRules', () => {
       targetKey: 'factory-pr-provenance:10:17',
       threadId: 'thread-work',
       status: 'active',
-      data: { kind: 'factory-pr-provenance', workItemId: prepared.workItemId },
+      data: { kind: 'factory-pr-provenance', factoryProjectId: project.id, workItemId: prepared.workItemId },
     });
     const dispatcher = new FactoryDecisionDispatcher({
       controller: controller as never,
@@ -1595,7 +1595,7 @@ describe('GithubRules', () => {
       targetKey: 'factory-pr-provenance:10:17',
       threadId: 'thread-1',
       status: 'active',
-      data: { kind: 'factory-pr-provenance', workItemId: work.item.id },
+      data: { kind: 'factory-pr-provenance', factoryProjectId: project.id, workItemId: work.item.id },
     });
     const service = new GithubRules({
       github,
@@ -1664,7 +1664,7 @@ describe('GithubRules', () => {
       targetKey: 'factory-pr-provenance:10:17',
       threadId: 'thread-1',
       status: 'active',
-      data: { kind: 'factory-pr-provenance', workItemId: work.item.id },
+      data: { kind: 'factory-pr-provenance', factoryProjectId: project.id, workItemId: work.item.id },
     });
     const service = new GithubRules({
       github,
@@ -1693,6 +1693,58 @@ describe('GithubRules', () => {
     expect(decisions.map(entry => entry.decision)).not.toEqual(
       expect.arrayContaining([expect.objectContaining({ type: 'transition' })]),
     );
+  });
+
+  it('ignores provenance recorded by a sibling Factory project in the same org', async () => {
+    const { github, sourceControl, integrationStorage, workItems, projects, project } = await setup('read');
+    const work = await workItems.upsert({
+      orgId: 'org-1',
+      userId: 'user-1',
+      factoryProjectId: project.id,
+      input: {
+        externalSource: {
+          integrationId: 'github',
+          type: 'issue',
+          externalId: 'github:10:issue:42',
+          url: 'https://github.com/acme/repo/issues/42',
+        },
+        title: 'Issue 42',
+        stages: ['execute'],
+        sessions: {},
+        metadata: {},
+      },
+    });
+    await integrationStorage.subscriptions.create({
+      orgId: 'org-1',
+      targetKey: 'factory-pr-provenance:10:17',
+      threadId: 'thread-1',
+      status: 'active',
+      data: { kind: 'factory-pr-provenance', factoryProjectId: 'sibling-project', workItemId: work.item.id },
+    });
+    const service = new GithubRules({
+      github,
+      sourceControl,
+      integrationStorage,
+      projects,
+      storage: workItems,
+      rules: builtInFactoryRules(),
+    });
+
+    await service.ingest(pullRequest('opened', 'delivery-foreign-provenance'));
+
+    // The PR still gets its Review card, but unbranded: another project's
+    // provenance must neither bind this project's Work item nor mark the PR
+    // Factory-authored (which would auto-start a review that executes it).
+    const decisions = await workItems.listDeferredDecisions('org-1', project.id);
+    expect(decisions).toEqual([
+      expect.objectContaining({
+        decision: expect.objectContaining({
+          type: 'upsertLinkedWorkItem',
+          metadata: expect.objectContaining({ factoryAuthored: false, autoStartCandidate: false }),
+        }),
+      }),
+    ]);
+    expect(decisions[0]?.workItemId).not.toBe(work.item.id);
   });
 
   it('links an opened Review card to the work item whose session branch matches the PR head branch', async () => {
@@ -1859,7 +1911,7 @@ describe('GithubRules', () => {
       targetKey: 'factory-pr-provenance:10:17',
       threadId: 'thread-1',
       status: 'active',
-      data: { kind: 'factory-pr-provenance', workItemId: work.id },
+      data: { kind: 'factory-pr-provenance', factoryProjectId: project.id, workItemId: work.id },
     });
     const service = new GithubRules({
       github,

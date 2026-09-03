@@ -821,7 +821,7 @@ export class MastraFactory {
                 prepareBinding,
                 feedReader: new FactoryFeedReader(workItemCommentsStorage),
                 primeCredentials: tenant => primeTenantCredentials({ tenant, credentials: modelCredentialsStorage }),
-                resolveLinkedWorkItemParentId: async ({ orgId, decision }) => {
+                resolveLinkedWorkItemParentId: async ({ orgId, factoryProjectId, decision }) => {
                   if (decision.source !== 'github-pr') return null;
                   const repositoryId = decision.metadata?.githubRepositoryId;
                   const pullRequestNumber = decision.metadata?.githubPullRequestNumber;
@@ -832,7 +832,7 @@ export class MastraFactory {
                       Record<string, unknown>,
                       FactoryPullRequestProvenanceData
                     >('github'),
-                    { orgId, repositoryId, pullRequestNumber },
+                    { orgId, factoryProjectId, repositoryId, pullRequestNumber },
                   );
                 },
               });
