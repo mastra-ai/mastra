@@ -903,7 +903,7 @@ describe('CoreToolBuilder requestContext merge', () => {
 });
 
 describe('CoreToolBuilder execution failures', () => {
-  it('does not copy raw tool args into the error details or exception metadata', async () => {
+  it('does not copy raw tool args into logs, error details, or exception metadata', async () => {
     const marker = 'SENSITIVE_REPORT_CONTENT';
     const testTool = createTool({
       id: 'failing_tool',
@@ -945,5 +945,11 @@ describe('CoreToolBuilder execution failures', () => {
     const metadata = logger.trackException.mock.calls[0]?.[1];
     expect(metadata).not.toHaveProperty('args');
     expect(JSON.stringify(metadata)).not.toContain(marker);
+
+    for (const level of ['debug', 'info', 'warn', 'error'] as const) {
+      for (const call of logger[level].mock.calls) {
+        expect(JSON.stringify(call)).not.toContain(marker);
+      }
+    }
   });
 });
