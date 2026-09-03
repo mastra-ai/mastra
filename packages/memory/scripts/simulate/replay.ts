@@ -1,27 +1,16 @@
-/**
- * Replay reconstructed observation cycles through the real Subconscious capture
- * extractor and curator, against a local Postgres.
- *
- *   pnpm simulate:replay -- \
- *     --input  postgres://user:local@127.0.0.1:55432/simulate_input \
- *     --target postgres://user:local@127.0.0.1:55432/simulate_arm_a \
- *     --org my-org --model openai/gpt-5-mini
- *
- * Both databases must be local: this tool never writes to a remote deployment.
- */
+#!/usr/bin/env tsx
+/** Replay recorded observation cycles directly through the production curator dispatch path. */
 import { createRequire } from 'node:module';
 import { pathToFileURL } from 'node:url';
 
 import { Agent } from '@mastra/core/agent';
 
 import { Memory } from '../../src/index';
-import type { ArmSnapshot } from './diff';
-import { buildArmSubconscious, replayCycles } from './drive';
-import type { ArmConfig } from './drive';
+import { Subconscious } from '../../src/processors/observational-memory/subconscious';
+import { replayCycles } from './drive';
 import { assertLocalDatabase, assertLocalTarget, withLocalDatabase } from './extract';
 import { reconstructCycles } from './reconstruct';
 
-/** Minimal `--flag value` reader; the extractor's parser is specific to its own flags. */
 export function parseFlags(argv: string[]): Map<string, string[]> {
   const out = new Map<string, string[]>();
   for (let i = 0; i < argv.length; i++) {
@@ -36,7 +25,6 @@ export function parseFlags(argv: string[]): Map<string, string[]> {
   return out;
 }
 
-/** A bare `Number()` turns a typo into NaN, which silently disables cadence comparisons. */
 export function positiveInt(flag: string, value: string | undefined, fallback: number): number {
   if (value === undefined) return fallback;
   const parsed = Number(value);
@@ -44,78 +32,42 @@ export function positiveInt(flag: string, value: string | undefined, fallback: n
   return parsed;
 }
 
-/**
- * Cadence accepts the literal `off` in addition to a positive integer. `off` means raw
- * capture without curation: the driver's `runCuration` calls are the only curation path
- * in this replay (nothing here runs the OM lifecycle), so turning them off guarantees
- * zero curations. The knowledge left behind is uncurated capture output — useful for
- * A/B-ing capture prompts in isolation, useless for observing lifecycle curation.
- */
-export function cadenceOrOff(flag: string, value: string | undefined, fallback: number): number | false {
-  if (value === 'off') return false;
-  return positiveInt(flag, value, fallback);
-}
-
-/**
- * Derive an arm's database URL by suffixing the database name, not the raw string.
- * Naive `` `${url}_a` `` appends to whatever the URL happens to end with — for
- * `postgres://host/simulate?sslmode=disable` that yields `sslmode=disable_a`, leaving
- * every arm pointed at the same database and destroying the isolation guarantee.
- */
-export function armDatabaseUrl(prefix: string, suffix: string): string {
-  const url = new URL(prefix);
-  const database = url.pathname.replace(/^\//, '');
-  if (!database) throw new Error(`--target-prefix must include a database name, got "${prefix}"`);
-  url.pathname = `/${database}_${suffix}`;
-  return url.toString();
-}
-
-// `pg` and `@mastra/pg` are not dependencies of this package; borrow the workspace
-// copies rather than adding one for a dev tool.
 const require = createRequire(new URL('../../../../stores/pg/package.json', import.meta.url));
 const { Client } = require('pg');
 
-async function attestLocalConnection(connectionString: string): Promise<void> {
-  assertLocalTarget(connectionString);
-  const client = new Client({ connectionString });
-  await client.connect();
-  try {
-    await assertLocalDatabase(client);
-  } finally {
-    await client.end();
-  }
-}
+const pgModulePath = '../../../../stores/pg/dist/index.js';
 
 async function loadStore(connectionString: string) {
-  const { PostgresStore } = await import('../../../../stores/pg/dist/index.js');
-  const store = new PostgresStore({ id: 'simulate-arm', connectionString });
-  // Creates the domain tables in the freshly-recreated arm database.
+  const { PostgresStore } = await import(pgModulePath);
+  const store = new PostgresStore({ id: 'simulate-direct-curation', connectionString });
   await store.init();
   return store;
 }
 
-/** Subconscious knowledge is semantic, so an arm needs a vector store alongside its Postgres. */
 async function loadVector(connectionString: string) {
-  const { PgVector } = await import('../../../../stores/pg/dist/index.js');
-  return new PgVector({ id: 'simulate-arm-vector', connectionString });
+  const { PgVector } = await import(pgModulePath);
+  return new PgVector({ id: 'simulate-direct-curation-vector', connectionString });
 }
 
-/** Drop and recreate an arm database, so arms can never contaminate each other. */
-export async function recreateDatabase(
-  connectionString: string,
-  createClient: (connectionString: string) => InstanceType<typeof Client> = value =>
-    new Client({ connectionString: value }),
-): Promise<void> {
+export function assertDistinctReplayDatabases(inputUrl: string, targetUrl: string): void {
+  const input = new URL(inputUrl);
+  const target = new URL(targetUrl);
+  const port = (url: URL) => url.port || '5432';
+  const database = (url: URL) => decodeURIComponent(url.pathname.replace(/^\//, ''));
+  if (port(input) === port(target) && database(input) === database(target)) {
+    throw new Error('refusing to overwrite the input database: --input and --target resolve to the same database');
+  }
+}
+
+export async function recreateDatabase(connectionString: string): Promise<void> {
   assertLocalTarget(connectionString);
   const url = new URL(connectionString);
-  // Quote-escaped: the database name comes from a URL, and identifiers cannot be bound as parameters.
   const database = url.pathname.replace(/^\//, '').replace(/"/g, '""');
   url.pathname = '/postgres';
-  const admin = createClient(url.toString());
+  const admin = new Client({ connectionString: url.toString() });
   await admin.connect();
   try {
     await withLocalDatabase(admin, async () => {
-      // WITH (FORCE) requires Postgres 13+; see scripts/simulate/README.md prerequisites.
       await admin.query(`DROP DATABASE IF EXISTS "${database}" WITH (FORCE)`);
       await admin.query(`CREATE DATABASE "${database}"`);
     });
@@ -124,206 +76,98 @@ export async function recreateDatabase(
   }
 }
 
-/** Read every OM record generation out of the immutable input database, grouped by thread. */
 export async function readRecordsByThread(inputUrl: string): Promise<Map<string, Record<string, unknown>[]>> {
   assertLocalTarget(inputUrl);
   const client = new Client({ connectionString: inputUrl });
   await client.connect();
-  let records: Record<string, unknown>[];
   try {
-    records = await client
+    const records = await client
       .query('SELECT * FROM mastra_observational_memory ORDER BY "threadId", "generationCount"')
       .then((result: { rows: Record<string, unknown>[] }) => result.rows);
+    const byThread = new Map<string, Record<string, unknown>[]>();
+    for (const record of records) {
+      const threadId = record.threadId as string | null;
+      if (threadId) byThread.set(threadId, [...(byThread.get(threadId) ?? []), record]);
+    }
+    return byThread;
   } finally {
     await client.end();
   }
+}
 
-  const byThread = new Map<string, Record<string, unknown>[]>();
-  for (const record of records) {
-    const threadId = record.threadId as string | null;
-    if (!threadId) continue;
-    byThread.set(threadId, [...(byThread.get(threadId) ?? []), record]);
+async function run(argv: string[]): Promise<void> {
+  const flags = parseFlags(argv);
+  const input = flags.get('input')?.[0];
+  const target = flags.get('target')?.[0];
+  const organizationId = flags.get('org')?.[0];
+  const model = flags.get('model')?.[0];
+  const knowledgeResourceId = flags.get('knowledge-resource')?.[0];
+  if (!input || !target || !organizationId || !model) {
+    throw new Error('Required flags: --input, --target, --org, --model');
   }
-  return byThread;
-}
 
-/** One isolated replay variant in an A/B comparison, with its own prompts and database. */
-export type ArmRunOptions = {
-  arm: ArmConfig;
-  inputUrl: string;
-  targetUrl: string;
-  organizationId: string;
-  captureModel: string;
-  curateModel: string;
-  embedder: string;
-  onlyThreads?: string[];
-  /** Shared knowledge resource rung (production Factory project id). */
-  knowledgeResourceId?: string;
-  onEvent?: (line: string) => void;
-};
-
-export type ArmRunResult = {
-  threadsReplayed: number;
-  cyclesReplayed: number;
-  outcomes: Record<string, number>;
-};
-
-type LoadedStore = Awaited<ReturnType<typeof loadStore>>;
-type LoadedVector = Awaited<ReturnType<typeof loadVector>>;
-
-export async function prepareArmTarget(
-  targetUrl: string,
-  dependencies: {
-    attest?: (connectionString: string) => Promise<void>;
-    storage?: (connectionString: string) => Promise<LoadedStore>;
-    vector?: (connectionString: string) => Promise<LoadedVector>;
-  } = {},
-): Promise<{ storage: LoadedStore; vector: LoadedVector }> {
-  await (dependencies.attest ?? attestLocalConnection)(targetUrl);
-  const storage = await (dependencies.storage ?? loadStore)(targetUrl);
-  const vector = await (dependencies.vector ?? loadVector)(targetUrl);
-  return { storage, vector };
-}
-
-/** Run one arm end to end against its own database. */
-export async function runArm(options: ArmRunOptions): Promise<ArmRunResult> {
-  const { arm, inputUrl, targetUrl, organizationId, captureModel, curateModel, embedder } = options;
-  assertLocalTarget(inputUrl);
-  const { storage, vector } = await prepareArmTarget(targetUrl);
-
-  const byThread = await readRecordsByThread(inputUrl);
-  const subconscious = buildArmSubconscious(arm);
-  const memory = new Memory({
-    storage,
-    vector,
-    embedder,
-    options: { observationalMemory: { model: curateModel, experimental_subconscious: subconscious } },
-  });
-  const captureAgent = new Agent({
-    id: 'simulate-capture',
-    name: 'simulate-capture',
-    instructions: 'Extract knowledge.',
-    model: captureModel,
-  });
-
-  let cyclesReplayed = 0;
-  let threadsReplayed = 0;
-  const outcomes: Record<string, number> = {};
-  const onlyThreads = options.onlyThreads ?? [];
-  const log = options.onEvent ?? (line => console.log(line));
-
+  assertLocalTarget(input);
+  assertLocalTarget(target);
+  assertDistinctReplayDatabases(input, target);
+  const inputClient = new Client({ connectionString: input });
+  await inputClient.connect();
   try {
-    for (const [threadId, threadRecords] of byThread) {
-      if (onlyThreads.length && !onlyThreads.includes(threadId)) continue;
-      const { cycles, warnings } = reconstructCycles(threadRecords as never);
-      if (!cycles.length) continue;
-      const resourceId = (threadRecords[0]?.resourceId as string) ?? threadId;
-      threadsReplayed++;
-
-      const result = await replayCycles({
-        cycles,
-        threadId,
-        resourceId,
-        organizationId,
-        memory: memory as never,
-        subconscious,
-        captureAgent,
-        curationCadence: arm.curationCadence,
-        knowledgeResourceId: options.knowledgeResourceId,
-        onEvent: line => log(`[${arm.name}][${threadId.slice(0, 8)}] ${line}`),
-      });
-
-      cyclesReplayed += result.cyclesReplayed;
-      for (const curation of result.curations) outcomes[curation.outcome] = (outcomes[curation.outcome] ?? 0) + 1;
-      for (const warning of [...warnings.map(w => w.kind), ...result.warnings]) log(`WARNING: ${warning}`);
-    }
-
-    return { threadsReplayed, cyclesReplayed, outcomes };
+    await assertLocalDatabase(inputClient);
   } finally {
-    // ab.ts runs up to three arms in one process, so each arm releases its pools before the next.
+    await inputClient.end();
+  }
+  await recreateDatabase(target);
+
+  const storage = await loadStore(target);
+  const vector = await loadVector(target);
+  const memory = new Memory({ storage, vector });
+  try {
+    const subconscious = new Subconscious({
+      model,
+      observation: ['remind', 'curate'],
+      defaultScope: 'resource',
+      maxScope: 'resource',
+    }).resolved;
+    const mainAgent = new Agent({
+      id: 'simulate-direct-curation',
+      name: 'simulate-direct-curation',
+      instructions: '',
+      model,
+    });
+    const recordsByThread = await readRecordsByThread(input);
+
+    for (const [threadId, records] of recordsByThread) {
+      const reconstruction = reconstructCycles(records as any);
+      const result = await replayCycles({
+        cycles: reconstruction.cycles,
+        threadId,
+        resourceId: `simulate:${threadId}`,
+        organizationId,
+        memory,
+        subconscious,
+        mainAgent,
+        knowledgeResourceId,
+        onEvent: console.log,
+      });
+      console.log(
+        JSON.stringify({
+          threadId,
+          reconstructionWarnings: reconstruction.warnings,
+          excludedReflectionHeads: reconstruction.excluded.length,
+          ...result,
+        }),
+      );
+    }
+  } finally {
+    await memory.settled();
     await storage.close();
     await vector.disconnect();
   }
 }
 
-/** Read an arm's resulting knowledge for content comparison. */
-export async function snapshotArm(targetUrl: string): Promise<ArmSnapshot> {
-  assertLocalTarget(targetUrl);
-  const client = new Client({ connectionString: targetUrl });
-  await client.connect();
-  try {
-    const nodes = await client
-      .query('SELECT id, name FROM mastra_knowledge_nodes')
-      .then((result: { rows: { id: string; name: string }[] }) => result.rows);
-    const records = await client
-      .query('SELECT id, node, text FROM mastra_knowledge_records WHERE "deletedAt" IS NULL')
-      .then((result: { rows: { id: string; node: string; text: string }[] }) => result.rows);
-    return { nodes, records };
-  } finally {
-    await client.end();
-  }
-}
-
-async function main() {
-  const flags = parseFlags(process.argv.slice(2));
-  const args = {
-    get: (key: string) => flags.get(key)?.at(-1),
-    getAll: (key: string) => flags.get(key) ?? [],
-  };
-  const input = args.get('input');
-  const target = args.get('target');
-  const organizationId = args.get('org') ?? 'simulate';
-  const model = args.get('model') ?? 'openai/gpt-5-mini';
-  // Capture and curation can run on different models (a provider may support one path
-  // better than the other). Both arms of an A/B use the same pair, so this cannot
-  // confound a diff.
-  const captureModel = args.get('capture-model') ?? model;
-  const curateModel = args.get('curate-model') ?? model;
-
-  if (!input || !target) {
-    throw new Error(
-      'Usage: simulate:replay --input <local-pg-url> --target <local-pg-url> [--org id] [--model id] [--cadence N|off] [--knowledge-resource id]',
-    );
-  }
-
-  const arm: ArmConfig = {
-    name: args.get('arm') ?? 'a',
-    prompts: { capture: args.get('capture-instructions'), curate: args.get('curate-instructions') },
-    curationCadence: cadenceOrOff('cadence', args.get('cadence'), 3),
-    defaultScope: 'resource',
-    maxScope: 'resource',
-    curateMaxSteps: positiveInt('curate-max-steps', args.get('curate-max-steps'), 25),
-  };
-
-  const result = await runArm({
-    arm,
-    inputUrl: input,
-    targetUrl: target,
-    organizationId,
-    captureModel,
-    curateModel,
-    embedder: args.get('embedder') ?? 'google/gemini-embedding-001',
-    onlyThreads: args.getAll('thread-id'),
-    knowledgeResourceId: args.get('knowledge-resource'),
-  });
-
-  console.log(`ARM=${arm.name}`);
-  // Printed so a reader can tell curated output (cadence N) from raw capture output
-  // (cadence off, which always reports zero curations).
-  console.log(`DRIVER_CADENCE=${arm.curationCadence === false ? 'off' : arm.curationCadence}`);
-  console.log(`CAPTURE_MODEL=${captureModel}`);
-  console.log(`CURATE_MODEL=${curateModel}`);
-  console.log(`THREADS_REPLAYED=${result.threadsReplayed}`);
-  console.log(`CYCLES_REPLAYED=${result.cyclesReplayed}`);
-  for (const [outcome, count] of Object.entries(result.outcomes)) {
-    console.log(`CURATION_${outcome.toUpperCase()}=${count}`);
-  }
-}
-
-// Only run the CLI when invoked directly; `ab.ts` imports the helpers above.
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  main().catch(error => {
-    console.error(error instanceof Error ? error.message : error);
-    process.exit(1);
+if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
+  run(process.argv.slice(2)).catch(error => {
+    console.error(error);
+    process.exitCode = 1;
   });
 }

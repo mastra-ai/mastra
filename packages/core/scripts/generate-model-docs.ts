@@ -5,6 +5,8 @@ import { z } from 'zod/v4';
 import type { ProviderConfig } from '../src/llm';
 import { EXCLUDED_PROVIDERS, PROVIDERS_WITH_INSTALLED_PACKAGES } from '../src/llm/model/gateways/constants';
 import { generateProviderOptionsSection } from './generate-provider-options-docs';
+import { getGatewayPageMetadata, getModelsDevAttribution, getProviderPageMetadata } from './model-doc-metadata';
+import type { ModelPageData } from './model-doc-metadata';
 
 /**
  * Generate a comment indicating the file was auto-generated
@@ -243,7 +245,7 @@ async function parseProviders(): Promise<GroupedProviders> {
   return { gateways, popular, other };
 }
 
-async function fetchProviderInfo(providerId: string): Promise<{ models: any[]; packageName?: string }> {
+async function fetchProviderInfo(providerId: string): Promise<{ models: ModelPageData[]; packageName?: string }> {
   try {
     const response = await fetch('https://models.dev/api.json');
     const data = await response.json();
@@ -311,16 +313,18 @@ Learn more in the [${provider.name} documentation](${docUrl}).`
   // Fetch model capabilities from models.dev
   const { models: modelsWithCapabilities, packageName } = await fetchProviderInfo(provider.id);
   provider.packageName = packageName;
+  const metadata = getProviderPageMetadata(provider.name, modelsWithCapabilities);
 
   // Check for AI SDK docs link if package is available
   const aiSdkDocsLink = packageName ? await checkAiSdkDocsLink(provider.id) : null;
 
   // Generate static model data as JSON for the component (show all models)
   const modelDataJson = JSON.stringify(modelsWithCapabilities, null, 2);
+  const modelsDevAttribution = getModelsDevAttribution(modelsWithCapabilities);
 
   return `---
-title: "${provider.name} | Models"
-description: "Use ${provider.name} models with Mastra. ${modelCount} model${modelCount !== 1 ? 's' : ''} available."
+title: "${metadata.title}"
+description: "${metadata.description}"
 ---
 
 ${getGeneratedComment()}
@@ -369,7 +373,7 @@ Mastra uses the OpenAI-compatible \`/chat/completions\` endpoint. Some provider-
 <ProviderModelsTable
   models={${modelDataJson}}
 />
-
+${modelsDevAttribution}
 ## Advanced configuration
 
 ### Custom headers
@@ -498,6 +502,7 @@ function generateGatewayPage(
 ): string {
   const displayName = formatProviderName(gatewayName);
   const totalModels = providers.reduce((sum, p) => sum + p.models.length, 0);
+  const metadata = getGatewayPageMetadata(displayName, totalModels);
   // Get documentation URL if available
   // Special override for Vercel to use the AI SDK documentation
   let rawDocUrl: string | undefined;
@@ -549,8 +554,8 @@ ${allModels.map(m => `| \`${m}\` |`).join('\n')}
     : `<img src="${getLogoUrl(gatewayName)}" alt="${displayName} logo" className="${getLogoClass(gatewayName)}" />`;
 
   return `---
-title: "${displayName} | Models"
-description: "Use AI models through ${displayName}."
+title: "${metadata.title}"
+description: "${metadata.description}"
 ---
 
 ${getGeneratedComment()}
@@ -1487,6 +1492,9 @@ export {
   parseProviders,
   generateProviderPage,
   generateGatewayPage,
+  getProviderPageMetadata,
+  getGatewayPageMetadata,
+  getModelsDevAttribution,
   generateEnvListPage,
   generateIndexPage,
   generateSidebarsFile,

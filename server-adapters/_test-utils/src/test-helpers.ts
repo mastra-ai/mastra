@@ -633,6 +633,20 @@ export async function createDefaultTestContext(): Promise<AdapterTestContext> {
           isEvent: false,
         },
       });
+
+      // Add test feedback for the review-status route
+      await observability.createFeedback({
+        feedback: {
+          feedbackId: 'test-feedback',
+          timestamp: new Date(),
+          traceId: 'test-trace',
+          spanId: 'test-span',
+          feedbackSource: 'user',
+          feedbackType: 'comment',
+          value: 'test feedback',
+          reviewStatus: 'needs-review',
+        },
+      });
     }
 
     // Add test stored agent for stored agents routes

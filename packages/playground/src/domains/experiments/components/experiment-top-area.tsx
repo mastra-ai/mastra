@@ -3,10 +3,13 @@ import { Button } from '@mastra/playground-ui/components/Button';
 import { DataKeysAndValues } from '@mastra/playground-ui/components/DataKeysAndValues';
 import { PageHeader } from '@mastra/playground-ui/components/PageHeader';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
-import { Trash2 } from 'lucide-react';
+import { ClipboardCheck, Trash2 } from 'lucide-react';
 import { ExperimentFlowChain } from '@/domains/experiments/components/experiment-flow-chain';
 import { ExperimentMetaBar } from '@/domains/experiments/components/experiment-meta-bar';
 import { ExperimentStatusIcon } from '@/domains/experiments/components/experiment-stats';
+import { RenameExperimentButton } from '@/domains/experiments/components/rename-experiment-button';
+import { RerunExperimentButton } from '@/domains/experiments/components/rerun-experiment-button';
+import { experimentReviewQueueLink } from '@/lib/app-routing';
 import { useLinkComponent } from '@/lib/framework';
 
 export interface ExperimentTopAreaProps {
@@ -37,18 +40,28 @@ export function ExperimentTopArea({ experiment, onDeleteClick }: ExperimentTopAr
             <ExperimentStatusIcon status={experiment.status} className="h-7" />
             <PageHeader>
               {/* The run is the subject of the page; what it ran on is spelled out by the chain below. */}
-              <PageHeader.Title>Experiment #{experiment.id.slice(0, 8)}</PageHeader.Title>
+              <div className="flex items-center gap-1">
+                <PageHeader.Title>{experiment.name || `Experiment #${experiment.id.slice(0, 8)}`}</PageHeader.Title>
+                <RenameExperimentButton experiment={experiment} />
+              </div>
               {experiment.description && <PageHeader.Description>{experiment.description}</PageHeader.Description>}
               <ExperimentFlowChain experiment={experiment} className="mt-2" />
             </PageHeader>
           </div>
         </PageLayout.Column>
         <PageLayout.Column className="justify-items-end gap-3">
-          {onDeleteClick && (
-            <Button size="sm" variant="ghost" onClick={onDeleteClick} aria-label="Delete experiment">
-              <Trash2 /> Delete Experiment
+          <div className="flex items-center gap-2">
+            <Button as={LinkComponent} to={experimentReviewQueueLink(experiment.id)}>
+              <ClipboardCheck />
+              View items to review
             </Button>
-          )}
+            <RerunExperimentButton experiment={experiment} />
+            {onDeleteClick && (
+              <Button size="sm" variant="ghost" onClick={onDeleteClick} aria-label="Delete experiment">
+                <Trash2 /> Delete Experiment
+              </Button>
+            )}
+          </div>
           {experiment.agentVersion && (
             <DataKeysAndValues numOfCol={1}>
               <DataKeysAndValues.Key>Version</DataKeysAndValues.Key>

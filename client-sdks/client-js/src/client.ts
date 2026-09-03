@@ -34,6 +34,8 @@ import type {
   ListFeedbackResponse,
   CreateFeedbackBody,
   CreateFeedbackResponse,
+  UpdateFeedbackReviewStatusArgs,
+  FeedbackRecord,
   GetFeedbackAggregateArgs,
   GetFeedbackAggregateResponse,
   GetFeedbackBreakdownArgs,
@@ -192,6 +194,7 @@ import type {
   GenerateDatasetItemsParams,
   GeneratedItem,
   TriggerDatasetExperimentParams,
+  UpdateDatasetExperimentParams,
   CreateDatasetExperimentParams,
   CreateDatasetExperimentResponse,
   RunExperimentItemParams,
@@ -1184,6 +1187,11 @@ export class MastraClient extends BaseResource {
     return this.observability.createFeedback(params);
   }
 
+  /** Updates a feedback record's review workflow status. */
+  updateFeedbackReviewStatus(params: UpdateFeedbackReviewStatusArgs): Promise<FeedbackRecord> {
+    return this.observability.updateFeedbackReviewStatus(params);
+  }
+
   /** Returns an aggregated feedback value with optional period-over-period comparison. */
   getFeedbackAggregate(params: GetFeedbackAggregateArgs): Promise<GetFeedbackAggregateResponse> {
     return this.observability.getFeedbackAggregate(params);
@@ -2171,6 +2179,17 @@ export class MastraClient extends BaseResource {
     const qs = buildTenancyQuery(tenancy);
     return this.request(`/experiments/${encodeURIComponent(experimentId)}${qs}`, {
       method: 'DELETE',
+    });
+  }
+
+  /**
+   * Updates a dataset experiment's name, description or metadata
+   */
+  public updateDatasetExperiment(params: UpdateDatasetExperimentParams): Promise<DatasetExperiment> {
+    const { datasetId, experimentId, ...body } = params;
+    return this.request(`/datasets/${encodeURIComponent(datasetId)}/experiments/${encodeURIComponent(experimentId)}`, {
+      method: 'PATCH',
+      body,
     });
   }
 

@@ -64,7 +64,7 @@ const results = [makeResult('r-1', 'first input'), makeResult('r-2', 'second inp
 const setupHandlers = (reviewResults = results) => {
   server.use(
     http.get('*/api/datasets/ds-1', () => HttpResponse.json(dataset)),
-    http.get('*/api/datasets/:datasetId/experiments', () =>
+    http.get('*/api/experiments', () =>
       HttpResponse.json({ experiments: [experiment], pagination: { total: 1, page: 0, perPage: 100, hasMore: false } }),
     ),
     http.get('*/api/datasets/:datasetId/experiments/:experimentId/results', () =>

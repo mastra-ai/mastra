@@ -97,6 +97,20 @@ const buildingWorkItem = {
   },
 };
 
+/**
+ * Triage classified this card as a feature request and a plan run was parked
+ * on it, but the rules will not let that run advance the card until a person
+ * accepts it.
+ */
+const heldWorkItem = {
+  ...workItem,
+  triageType: 'feature request',
+  acceptedAt: null,
+  sessions: {
+    triage: { sessionId: SESSION_ID, branch: 'factory/issue-1', threadId: 'thread-1', startedBy: 'user-1' },
+  },
+};
+
 /** A Review card whose pull request has since closed: its parked run is moot. */
 const closedPullRequestWorkItem = {
   ...workItem,
@@ -109,18 +123,22 @@ function stubBoardEndpoints({
   withLiveSession = false,
   building = false,
   closedPullRequest = false,
-}: { withLiveSession?: boolean; building?: boolean; closedPullRequest?: boolean } = {}) {
+  held = false,
+}: { withLiveSession?: boolean; building?: boolean; closedPullRequest?: boolean; held?: boolean } = {}) {
   const settled: string[] = [];
   const startRequests: unknown[] = [];
+  const transitions: unknown[] = [];
   let status: 'proposed' | 'pending' | 'dismissed' = 'proposed';
-  const item = closedPullRequest
-    ? closedPullRequestWorkItem
-    : building
-      ? buildingWorkItem
-      : withLiveSession
-        ? liveSessionWorkItem
-        : workItem;
-  const sessions = withLiveSession || building ? [userSession] : [];
+  const item = held
+    ? heldWorkItem
+    : closedPullRequest
+      ? closedPullRequestWorkItem
+      : building
+        ? buildingWorkItem
+        : withLiveSession
+          ? liveSessionWorkItem
+          : workItem;
+  const sessions = withLiveSession || building || held ? [userSession] : [];
 
   server.use(
     http.get(`${TEST_BASE_URL}/auth/me`, () =>
@@ -169,6 +187,20 @@ function stubBoardEndpoints({
       status = 'dismissed';
       return HttpResponse.json({ decision: decision('dismissed') });
     }),
+    http.post(
+      `${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items/${ITEM_ID}/transition`,
+      async ({ request }) => {
+        transitions.push(await request.json());
+        return HttpResponse.json({
+          status: 'accepted',
+          transitionId: 'transition-1',
+          itemId: ITEM_ID,
+          revision: 2,
+          stage: 'planning',
+          decisions: [],
+        });
+      },
+    ),
     http.post(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/runs/start`, async ({ request }) => {
       startRequests.push(await request.json());
       return HttpResponse.json({
@@ -209,7 +241,7 @@ function stubBoardEndpoints({
     ),
   );
 
-  return { settled, startRequests };
+  return { settled, startRequests, transitions };
 }
 
 function renderBoard(board: 'work' | 'review' = 'work', initialEntry = `/factories/${FACTORY_ID}/${board}`) {
@@ -358,6 +390,33 @@ describe('Board card with a proposed run', () => {
     await user.click(release);
 
     await waitFor(() => expect(settled).toEqual(['approve']));
+    expect(startRequests).toHaveLength(0);
+  });
+
+  it('asks for the maintainer decision on a held card, not the run parked on it', async () => {
+    const { settled, startRequests, transitions } = stubBoardEndpoints({ held: true });
+    const user = userEvent.setup();
+    renderWorkBoard();
+
+    // The parked plan cannot move a feature request on its own, so the card
+    // leads with the decision and keeps the run out of reach until it is made.
+    const card = await screen.findByRole('article', { name: 'Fix login bug' });
+    expect(await within(card).findByText('Feature request · needs your approval')).toBeVisible();
+    expect(within(card).queryByText('Suggested: Investigate')).not.toBeInTheDocument();
+    const accept = within(card).getByRole('button', { name: 'Accept and plan' });
+    expect(accept).toHaveAttribute('data-variant', 'primary');
+
+    await user.click(within(card).getByRole('button', { name: 'Actions for Fix login bug' }));
+    await screen.findByRole('menuitem', { name: 'Accept and build' });
+    expect(screen.queryByRole('menuitem', { name: 'Start suggested run' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('menuitem', { name: 'Build' })).not.toBeInTheDocument();
+    expect(screen.getByRole('menuitem', { name: 'Dismiss suggested run' })).toBeVisible();
+    await user.keyboard('{Escape}');
+
+    await user.click(accept);
+
+    await waitFor(() => expect(transitions).toEqual([expect.objectContaining({ stage: 'planning' })]));
+    expect(settled).toEqual([]);
     expect(startRequests).toHaveLength(0);
   });
 

@@ -14,6 +14,7 @@ export interface MCPServerComboboxProps {
   className?: string;
   disabled?: boolean;
   variant?: ComboboxProps['variant'];
+  size?: ComboboxProps['size'];
   container?: HTMLElement | ShadowRoot | null | React.RefObject<HTMLElement | ShadowRoot | null>;
 }
 
@@ -26,6 +27,7 @@ export function MCPServerCombobox({
   className,
   disabled = false,
   variant,
+  size,
   container,
 }: MCPServerComboboxProps) {
   const { data: mcpServers = [], isLoading, isError, error } = useMCPServers();
@@ -62,6 +64,7 @@ export function MCPServerCombobox({
       className={className}
       disabled={disabled || isLoading || isError}
       variant={variant}
+      size={size}
       container={container}
     />
   );
