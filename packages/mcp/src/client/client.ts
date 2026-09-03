@@ -683,9 +683,15 @@ export class InternalMastraMCPClient extends MastraBase {
           throw error;
         }
 
-        // Policy violations and pinned protocol negotiation failures are final:
-        // retrying over legacy SSE cannot succeed and would bury the typed error.
-        if (isUrlPolicyError(error) || this.serverConfig.protocolVersion === '2026-07-28') {
+        // OAuth-flow and policy failures are transport-independent. Retrying them over
+        // legacy SSE cannot succeed and would bury the actionable registration or
+        // metadata-document error. HTTP status failures still reach the compatibility
+        // fallback below because a legacy SSE endpoint commonly rejects the initial POST.
+        if (
+          (authProvider && !(error instanceof SdkHttpError)) ||
+          isUrlPolicyError(error) ||
+          this.serverConfig.protocolVersion === '2026-07-28'
+        ) {
           throw error;
         }
 
@@ -856,18 +862,19 @@ export class InternalMastraMCPClient extends MastraBase {
    * transport that started the flow, then leaves the client ready to connect().
    *
    * @param authorizationCode - The authorization code captured at the redirect URI
+   * @param issuer - The RFC 9207 issuer captured at the redirect URI, when present
    * @throws {Error} If no authorization flow is pending for this server
    *
    * @internal
    */
-  async finishAuth(authorizationCode: string): Promise<void> {
+  async finishAuth(authorizationCode: string, issuer?: string): Promise<void> {
     const pending = this.pendingAuthTransport;
     if (!pending) {
       throw new Error('No OAuth authorization is pending for this server. Call connect() first.');
     }
     this.pendingAuthTransport = undefined;
     try {
-      await pending.finishAuth(authorizationCode);
+      await pending.finishAuth(authorizationCode, issuer);
     } finally {
       // The pending transport only ran the token exchange; the next connect() builds a fresh one.
       void pending.close().catch(() => {});

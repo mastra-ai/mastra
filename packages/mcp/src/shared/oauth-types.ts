@@ -17,6 +17,10 @@ export type {
   OAuthClientMetadata,
   OAuthClientInformation,
   OAuthClientInformationFull,
+  OAuthClientInformationContext,
+  StoredOAuthClientInformation,
+  StoredOAuthTokens,
+  OAuthDiscoveryState,
   OAuthClientRegistrationError,
   OAuthTokenRevocationRequest,
   OAuthProtectedResourceMetadata,
@@ -37,6 +41,7 @@ export {
   parseErrorResponse,
   UnauthorizedError,
   buildDiscoveryUrls,
+  validateClientMetadataUrl,
 } from '@modelcontextprotocol/client';
 
 // Re-export OAuthClientProvider interface

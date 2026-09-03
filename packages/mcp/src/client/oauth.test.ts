@@ -25,13 +25,13 @@ import {
   createIntrospectionValidator,
 } from '../server/oauth-middleware.js';
 import { MCPServer } from '../server/server.js';
-import type { MCPServerOAuthConfig } from '../shared/oauth-types.js';
+import type { MCPServerOAuthConfig, OAuthClientProvider } from '../shared/oauth-types.js';
 import {
   generateProtectedResourceMetadata,
   generateWWWAuthenticateHeader,
   extractBearerToken,
 } from '../shared/oauth-types.js';
-import { MCPOAuthClientProvider, createSimpleTokenProvider } from './oauth-provider.js';
+import { InMemoryOAuthStorage, MCPOAuthClientProvider, createSimpleTokenProvider } from './oauth-provider.js';
 
 // =============================================================================
 // Unit Tests for OAuth Types and Helpers
@@ -169,6 +169,165 @@ describe('MCPOAuthClientProvider', () => {
     });
 
     expect(provider.clientMetadata).toEqual(metadata);
+  });
+
+  it('exposes a validated Client ID Metadata Document URL', () => {
+    const clientMetadataUrl = 'https://client.example.com/oauth/client.json';
+    const provider = new MCPOAuthClientProvider({
+      redirectUrl: 'http://localhost:3000/callback',
+      clientMetadataUrl,
+      clientMetadata: {
+        client_id: clientMetadataUrl,
+        redirect_uris: ['http://localhost:3000/callback'],
+        client_name: 'Test Client',
+      },
+    });
+
+    expect(provider.clientMetadataUrl).toBe(clientMetadataUrl);
+    expect(provider.clientMetadata).not.toHaveProperty('client_id');
+  });
+
+  it.each([
+    ['http://client.example.com/oauth/client.json', 'must be a valid HTTPS URL'],
+    ['https://client.example.com/', 'must be a valid HTTPS URL'],
+    ['https://client.example.com/oauth/client.json', 'must match clientMetadata.client_id'],
+  ])('rejects malformed Client ID Metadata Document configuration: %s', (clientMetadataUrl, message) => {
+    expect(
+      () =>
+        new MCPOAuthClientProvider({
+          redirectUrl: 'http://localhost:3000/callback',
+          clientMetadataUrl,
+          clientMetadata: {
+            client_id: 'https://other.example.com/oauth/client.json',
+            redirect_uris: ['http://localhost:3000/callback'],
+            client_name: 'Test Client',
+          },
+        }),
+    ).toThrow(message);
+  });
+
+  it('rejects a Client ID Metadata Document without required metadata fields', () => {
+    const clientMetadataUrl = 'https://client.example.com/oauth/client.json';
+    expect(
+      () =>
+        new MCPOAuthClientProvider({
+          redirectUrl: 'http://localhost:3000/callback',
+          clientMetadataUrl,
+          clientMetadata: {
+            client_id: clientMetadataUrl,
+            redirect_uris: [],
+          },
+        }),
+    ).toThrow('require client_name and at least one redirect_uri');
+  });
+
+  it('keeps persisted client credentials and tokens isolated by authorization-server issuer', async () => {
+    const storage = new InMemoryOAuthStorage();
+    const provider: OAuthClientProvider = new MCPOAuthClientProvider({
+      redirectUrl: 'http://localhost:3000/callback',
+      clientMetadata: {
+        redirect_uris: ['http://localhost:3000/callback'],
+        client_name: 'Test Client',
+      },
+      storage,
+    });
+    const issuerA = { issuer: 'https://auth-a.example.com' };
+    const issuerB = { issuer: 'https://auth-b.example.com' };
+
+    await provider.saveClientInformation?.({ client_id: 'client-a', issuer: issuerA.issuer }, issuerA);
+    await provider.saveTokens({ access_token: 'token-a', token_type: 'Bearer', issuer: issuerA.issuer }, issuerA);
+    await provider.saveClientInformation?.({ client_id: 'client-b', issuer: issuerB.issuer }, issuerB);
+    await provider.saveTokens({ access_token: 'token-b', token_type: 'Bearer', issuer: issuerB.issuer }, issuerB);
+
+    await expect(provider.clientInformation(issuerA)).resolves.toMatchObject({ client_id: 'client-a' });
+    await expect(provider.tokens(issuerA)).resolves.toMatchObject({ access_token: 'token-a' });
+    await expect(provider.clientInformation(issuerB)).resolves.toMatchObject({ client_id: 'client-b' });
+    await expect(provider.tokens(issuerB)).resolves.toMatchObject({ access_token: 'token-b' });
+    await expect(provider.tokens()).resolves.toMatchObject({ access_token: 'token-b' });
+
+    const restoredProvider: OAuthClientProvider = new MCPOAuthClientProvider({
+      redirectUrl: 'http://localhost:3000/callback',
+      clientMetadata: {
+        redirect_uris: ['http://localhost:3000/callback'],
+        client_name: 'Test Client',
+      },
+      storage,
+    });
+    await expect(restoredProvider.clientInformation(issuerA)).resolves.toMatchObject({ client_id: 'client-a' });
+    await expect(restoredProvider.tokens(issuerA)).resolves.toMatchObject({ access_token: 'token-a' });
+  });
+
+  it('tracks concurrent issuer-scoped writes so invalidate all removes every credential', async () => {
+    const storage = new InMemoryOAuthStorage();
+    const provider: OAuthClientProvider = new MCPOAuthClientProvider({
+      redirectUrl: 'http://localhost:3000/callback',
+      clientMetadata: {
+        redirect_uris: ['http://localhost:3000/callback'],
+        client_name: 'Test Client',
+      },
+      storage,
+    });
+    const issuers = Array.from({ length: 25 }, (_, index) => ({ issuer: `https://auth-${index}.example.com` }));
+
+    await Promise.all(
+      issuers.flatMap((issuer, index) => [
+        provider.saveClientInformation?.({ client_id: `client-${index}`, issuer: issuer.issuer }, issuer),
+        provider.saveTokens({ access_token: `token-${index}`, token_type: 'Bearer', issuer: issuer.issuer }, issuer),
+      ]),
+    );
+
+    await Promise.all(
+      issuers.map(async (issuer, index) => {
+        await expect(provider.clientInformation(issuer)).resolves.toMatchObject({ client_id: `client-${index}` });
+        await expect(provider.tokens(issuer)).resolves.toMatchObject({ access_token: `token-${index}` });
+      }),
+    );
+
+    await provider.invalidateCredentials('all');
+
+    await Promise.all(
+      issuers.map(async issuer => {
+        await expect(provider.clientInformation(issuer)).resolves.toBeUndefined();
+        await expect(provider.tokens(issuer)).resolves.toBeUndefined();
+      }),
+    );
+  });
+
+  it('does not let a credential write land after invalidate all completes', async () => {
+    const backing = new InMemoryOAuthStorage();
+    let releaseScopedWrite!: () => void;
+    const scopedWriteCanFinish = new Promise<void>(resolve => (releaseScopedWrite = resolve));
+    let scopedWriteStarted!: () => void;
+    const scopedWriteDidStart = new Promise<void>(resolve => (scopedWriteStarted = resolve));
+    const storage = {
+      get: (key: string) => backing.get(key),
+      delete: (key: string) => backing.delete(key),
+      set: async (key: string, value: string) => {
+        if (key.startsWith('tokens:')) {
+          scopedWriteStarted();
+          await scopedWriteCanFinish;
+        }
+        backing.set(key, value);
+      },
+    };
+    const provider: OAuthClientProvider = new MCPOAuthClientProvider({
+      redirectUrl: 'http://localhost:3000/callback',
+      clientMetadata: {
+        redirect_uris: ['http://localhost:3000/callback'],
+        client_name: 'Test Client',
+      },
+      storage,
+    });
+    const issuer = { issuer: 'https://auth-race.example.com' };
+
+    const save = provider.saveTokens({ access_token: 'racing-token', token_type: 'Bearer', issuer: issuer.issuer }, issuer);
+    await scopedWriteDidStart;
+    const invalidate = provider.invalidateCredentials('all');
+    await new Promise(resolve => setImmediate(resolve));
+    releaseScopedWrite();
+    await Promise.all([save, invalidate]);
+
+    await expect(provider.tokens(issuer)).resolves.toBeUndefined();
   });
 
   it('should store and retrieve tokens', async () => {

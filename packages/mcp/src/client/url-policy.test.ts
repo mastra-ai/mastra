@@ -764,6 +764,18 @@ describe('allowedHosts and OAuth discovery', () => {
     return { host: baseUrl.host, url: `http://${baseUrl.host}`, requests };
   }
 
+  async function startMetadataRedirectServer(location: string) {
+    const requests: string[] = [];
+    const httpServer = createServer((req, res) => {
+      requests.push(req.url ?? '');
+      res.writeHead(302, { location }).end();
+    });
+    const baseUrl = await listen(httpServer, '/');
+    const close = () => closeServer(httpServer);
+    cleanups.push(close);
+    return { host: baseUrl.host, url: `http://${baseUrl.host}`, requests };
+  }
+
   /** Protected MCP server: 401s everything, advertises the auth server via RFC 9728 metadata. */
   async function startProtectedServer(authServerUrl: string) {
     const requests: string[] = [];
@@ -826,6 +838,29 @@ describe('allowedHosts and OAuth discovery', () => {
     // Discovery went through the policy-wrapped fetch: the MCP host was reached,
     // the auth server was never contacted, and no authorization redirect happened.
     expect(mcpServer.requests.length).toBeGreaterThan(0);
+    expect(authServer.requests).toHaveLength(0);
+    expect(authorizationUrls).toHaveLength(0);
+  }, 15000);
+
+  it('blocks an OAuth metadata redirect to a disallowed host before following it', async () => {
+    const authServer = await startAuthServer();
+    const redirectServer = await startMetadataRedirectServer(
+      `${authServer.url}/.well-known/oauth-authorization-server`,
+    );
+    const mcpServer = await startProtectedServer(redirectServer.url);
+    const authorizationUrls: URL[] = [];
+
+    client = new InternalMastraMCPClient({
+      name: 'oauth-metadata-redirect-test',
+      server: {
+        url: mcpServer.baseUrl,
+        authProvider: createProvider(authorizationUrls),
+        allowedHosts: [mcpServer.host, redirectServer.host],
+      },
+    });
+
+    await expect(client.connect()).rejects.toThrow(/allowedHosts/);
+    expect(redirectServer.requests.length).toBeGreaterThan(0);
     expect(authServer.requests).toHaveLength(0);
     expect(authorizationUrls).toHaveLength(0);
   }, 15000);
