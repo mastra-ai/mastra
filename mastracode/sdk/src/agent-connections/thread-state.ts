@@ -51,24 +51,29 @@ export function normalizeAgentConnectionsState(value: unknown): AgentConnections
   };
 }
 
+function readString(value: unknown): string | undefined {
+  return typeof value === 'string' && value.length > 0 ? value : undefined;
+}
+
 export function normalizeConnectedPeers(peers: unknown[]): ConnectedAgentPeer[] {
   const seen = new Set<string>();
   const normalized: ConnectedAgentPeer[] = [];
   for (const peer of peers) {
     if (!peer || typeof peer !== 'object') continue;
     const candidate = peer as Partial<ConnectedAgentPeer>;
-    if (!candidate.id || !candidate.resourceId || !candidate.threadId) continue;
-    if (seen.has(candidate.id)) continue;
-    seen.add(candidate.id);
+    if (!readString(candidate.id) || !readString(candidate.resourceId) || !readString(candidate.threadId)) continue;
+    if (candidate.agentId !== undefined && typeof candidate.agentId !== 'string') continue;
+    if (seen.has(candidate.id as string)) continue;
+    seen.add(candidate.id as string);
     normalized.push({
-      id: candidate.id,
+      id: candidate.id as string,
       agentId: candidate.agentId,
-      resourceId: candidate.resourceId,
-      threadId: candidate.threadId,
-      label: candidate.label,
-      title: candidate.title,
-      mode: candidate.mode,
-      pid: candidate.pid,
+      resourceId: candidate.resourceId as string,
+      threadId: candidate.threadId as string,
+      label: readString(candidate.label),
+      title: readString(candidate.title),
+      mode: readString(candidate.mode),
+      pid: typeof candidate.pid === 'number' ? candidate.pid : undefined,
       connectedAt: typeof candidate.connectedAt === 'number' ? candidate.connectedAt : Date.now(),
       lastSeenAt: typeof candidate.lastSeenAt === 'number' ? candidate.lastSeenAt : 0,
     });
@@ -111,12 +116,16 @@ export async function readAgentConnections(context: AgentConnectionContext): Pro
   return (await readAgentConnectionsState(context)).peers;
 }
 
-export async function writeAgentConnections(
+export async function updateAgentConnections(
   context: AgentConnectionContext,
-  peers: ConnectedAgentPeer[],
-): Promise<void> {
-  await updateAgentConnectionsState(context, current => ({ ...current, peers: sortConnectedPeers(peers) }));
-  context.requestContext?.set(AGENT_CONNECTIONS_REQUEST_CONTEXT_KEY, sortConnectedPeers(peers));
+  update: (current: ConnectedAgentPeer[]) => ConnectedAgentPeer[],
+): Promise<ConnectedAgentPeer[]> {
+  const next = await updateAgentConnectionsState(context, current => ({
+    ...current,
+    peers: sortConnectedPeers(update(current.peers)),
+  }));
+  context.requestContext?.set(AGENT_CONNECTIONS_REQUEST_CONTEXT_KEY, next.peers);
+  return next.peers;
 }
 
 export async function readSentAgentSignals(context: AgentConnectionContext): Promise<SentAgentSignal[]> {
@@ -140,10 +149,10 @@ export async function writeSentAgentSignals(
 async function updateAgentConnectionsState(
   context: AgentConnectionContext,
   update: (current: AgentConnectionsState) => AgentConnectionsState,
-): Promise<void> {
+): Promise<AgentConnectionsState> {
   const store = await resolveAgentConnectionStore(context);
   const threadId = context.agent?.threadId;
-  if (!store || !threadId) return;
+  if (!store || !threadId) return update({ peers: [] });
 
   const queueOwner = context.mastra ?? store;
   let queues = stateWriteQueues.get(queueOwner);
@@ -156,17 +165,23 @@ async function updateAgentConnectionsState(
     .catch(() => {})
     .then(async () => {
       const state = await store.getState<AgentConnectionsState>({ threadId, type: AGENT_CONNECTIONS_STATE_TYPE });
+      const next = update(normalizeAgentConnectionsState(state));
       await store.setState({
         threadId,
         type: AGENT_CONNECTIONS_STATE_TYPE,
-        value: update(normalizeAgentConnectionsState(state)),
+        value: next,
       });
+      return next;
     });
-  queues.set(threadId, pending);
+  const queued = pending.then(
+    () => {},
+    () => {},
+  );
+  queues.set(threadId, queued);
   try {
-    await pending;
+    return await pending;
   } finally {
-    if (queues.get(threadId) === pending) queues.delete(threadId);
+    if (queues.get(threadId) === queued) queues.delete(threadId);
   }
 }
 

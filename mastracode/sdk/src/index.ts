@@ -1227,7 +1227,18 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
           threadOwnership.close();
         });
         const initialThreadId = session.thread.getId();
-        if (initialThreadId) await claimThreadOwnership(initialThreadId);
+        if (initialThreadId) {
+          // This listener blocks session creation, so bound the initial claim:
+          // an unsettled PubSub subscription must not hang createSession().
+          // The claim keeps settling in the background either way.
+          await Promise.race([
+            claimThreadOwnership(initialThreadId),
+            new Promise<void>(resolve => {
+              const timer = setTimeout(resolve, 5_000);
+              timer.unref?.();
+            }),
+          ]);
+        }
       },
       { blocking: true },
     );

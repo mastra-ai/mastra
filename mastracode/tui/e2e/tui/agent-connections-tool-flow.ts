@@ -13,7 +13,7 @@ type PeerAdvertisement = { unsubscribe: () => void };
 
 let peerAdvertisement: PeerAdvertisement | undefined;
 let advertisePeer: (() => Promise<void>) | undefined;
-let advertisePeerPending = false;
+let advertisePeerInFlight: Promise<void> | undefined;
 let advertisingEnabled = true;
 
 export const agentConnectionsToolFlowScenario = {
@@ -25,7 +25,7 @@ export const agentConnectionsToolFlowScenario = {
   async inProcessApp({ startMastraCodeApp }) {
     peerAdvertisement = undefined;
     advertisePeer = undefined;
-    advertisePeerPending = false;
+    advertisePeerInFlight = undefined;
     advertisingEnabled = true;
     let timer: ReturnType<typeof setInterval> | undefined;
     const app = await startMastraCodeApp({
@@ -35,48 +35,51 @@ export const agentConnectionsToolFlowScenario = {
       onCreated: result => {
         let peerAgent: Agent | undefined;
         advertisePeer = async () => {
-          if (advertisePeerPending || peerAdvertisement) return;
-          advertisePeerPending = true;
-          try {
-            const mastra = result.controller.getMastra();
-            const agent = mastra?.getAgentById('code-agent');
-            if (!mastra || !agent) return;
-            peerAgent ??= new Agent({
-              id: 'code-agent',
-              name: 'Peer Reviewer',
-              instructions: 'A peer agent used by the Mastra Code E2E harness.',
-              model: createOpenAI({
-                baseURL: process.env.OPENAI_BASE_URL,
-                apiKey: process.env.OPENAI_API_KEY,
-              })('gpt-5.4-mini'),
-              pubsub: mastra.pubsub,
-            });
-            peerAdvertisement = await peerAgent.claimThreadOwnership({
-              resourceId: peerResourceId,
-              threadId: peerThreadId,
-              streamOptions: {},
-              peer: {
-                label: 'Peer Reviewer',
-                title: 'Peer Reviewer',
-                metadata: { mode: 'build', projectName: 'Peer Reviewer' },
-              },
-            });
-          } finally {
-            advertisePeerPending = false;
-          }
+          if (peerAdvertisement) return;
+          // Share one in-flight claim so every caller awaits the same publish.
+          advertisePeerInFlight ??= (async () => {
+            try {
+              const mastra = result.controller.getMastra();
+              const agent = mastra?.getAgentById('code-agent');
+              if (!mastra || !agent) return;
+              peerAgent ??= new Agent({
+                id: 'code-agent',
+                name: 'Peer Reviewer',
+                instructions: 'A peer agent used by the Mastra Code E2E harness.',
+                model: createOpenAI({
+                  baseURL: process.env.OPENAI_BASE_URL,
+                  apiKey: process.env.OPENAI_API_KEY,
+                })('gpt-5.4-mini'),
+                pubsub: mastra.pubsub,
+              });
+              peerAdvertisement = await peerAgent.claimThreadOwnership({
+                resourceId: peerResourceId,
+                threadId: peerThreadId,
+                streamOptions: {},
+                peer: {
+                  label: 'Peer Reviewer',
+                  title: 'Peer Reviewer',
+                  metadata: { mode: 'build', projectName: 'Peer Reviewer' },
+                },
+              });
+            } finally {
+              advertisePeerInFlight = undefined;
+            }
+          })();
+          await advertisePeerInFlight;
         };
         timer = setInterval(() => {
           const threadId = result.session.thread.getId();
           if (
             !advertisingEnabled ||
             peerAdvertisement ||
-            advertisePeerPending ||
+            advertisePeerInFlight ||
             !threadId ||
             !result.session.stream.isActive()
           ) {
             return;
           }
-          void advertisePeer?.();
+          void advertisePeer?.().catch(() => {});
         }, 25);
       },
     });
@@ -95,6 +98,10 @@ export const agentConnectionsToolFlowScenario = {
     await expect(terminal.getByText(/Project:|Resource ID:|>/gi, { full: true, strict: false })).toBeVisible();
     runtime.printScreen('after startup', terminal);
 
+    // Ensure the peer claim is published before the first discovery request so
+    // agent_connect cannot race an unadvertised peer id. The interval remains
+    // as a safety net for re-advertisement.
+    await advertisePeer?.();
     terminal.submit('Connect to the peer reviewer agent.');
     await runtime.waitForScreenText(/agent_connections_list ✓/i, terminal, 20_000);
     await runtime.waitForScreenText(/agent_connect .*✓/i, terminal, 20_000);
@@ -138,7 +145,10 @@ export const agentConnectionsToolFlowScenario = {
     expect(serialized).toContain('agent_signal_send');
     expect(serialized).toContain(peerId);
     expect(serialized).toContain('[discovered]');
-    expect(serialized).toContain('[connected]');
+    // The connect delta reaches the model through the connected-agents state
+    // signal; released advertisements no longer answer discovery, so a list
+    // never deterministically shows [connected].
+    expect(serialized).toMatch(/displayStatus\\?":\\?"connected/);
     expect(serialized).toContain('[saved]');
     expect(serialized).toContain('No peer agents are discovered or saved.');
     expect(serialized).toContain('connected-agents');

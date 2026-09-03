@@ -22,6 +22,12 @@ import {
   type AgentPeerView,
   type ConnectedAgentPeer,
 } from './types.js';
+import {
+  UNTRUSTED_PEER_ID_MAX_LENGTH,
+  UNTRUSTED_PEER_METADATA_MAX_LENGTH,
+  boundUntrustedText,
+  serializeUntrustedData,
+} from './untrusted-text.js';
 
 const DELTA_SNAPSHOT_CAP = 10;
 
@@ -316,30 +322,10 @@ function savedPeersFromViews(peers: AgentPeerView[]): ConnectedAgentPeer[] {
   );
 }
 
-const MODEL_PEER_ID_MAX_LENGTH = 512;
-const MODEL_PEER_METADATA_MAX_LENGTH = 256;
-
-function boundModelText(value: string | undefined, maxLength: number): string | undefined {
-  if (value === undefined || value.length <= maxLength) return value;
-  return `${value.slice(0, maxLength)}…`;
-}
-
-function serializeUntrustedPeerData(value: Record<string, unknown>): string {
-  return JSON.stringify(value).replace(/[<>&\u2028\u2029]/g, character => {
-    switch (character) {
-      case '<':
-        return '\\u003c';
-      case '>':
-        return '\\u003e';
-      case '&':
-        return '\\u0026';
-      case '\u2028':
-        return '\\u2028';
-      default:
-        return '\\u2029';
-    }
-  });
-}
+const MODEL_PEER_ID_MAX_LENGTH = UNTRUSTED_PEER_ID_MAX_LENGTH;
+const MODEL_PEER_METADATA_MAX_LENGTH = UNTRUSTED_PEER_METADATA_MAX_LENGTH;
+const boundModelText = boundUntrustedText;
+const serializeUntrustedPeerData = serializeUntrustedData;
 
 function renderConnectedPeers(peers: AgentPeerView[]): string {
   if (peers.length === 0) return '\n(no saved agents)\n';

@@ -152,10 +152,8 @@ describe.skipIf(process.platform === 'win32')('cross-agent signals over Unix soc
     expect(ownerCode).toBe(0);
     expect(senderCode).toBe(0);
 
-    let leftoverSockets: string[] = [];
-    try {
-      leftoverSockets = readdirSync(socketDir).filter(name => name.endsWith('.sock'));
-    } catch {}
+    expect(existsSync(socketDir)).toBe(true);
+    const leftoverSockets = readdirSync(socketDir).filter(name => name.endsWith('.sock'));
     expect(leftoverSockets).toEqual([]);
   }, 30_000);
 
@@ -192,10 +190,8 @@ describe.skipIf(process.platform === 'win32')('cross-agent signals over Unix soc
     expect(ownerCode).toBe(0);
     expect(senderCode).toBe(0);
 
-    let leftoverSockets: string[] = [];
-    try {
-      leftoverSockets = readdirSync(socketDir).filter(name => name.endsWith('.sock'));
-    } catch {}
+    expect(existsSync(socketDir)).toBe(true);
+    const leftoverSockets = readdirSync(socketDir).filter(name => name.endsWith('.sock'));
     expect(leftoverSockets).toEqual([]);
   }, 30_000);
 

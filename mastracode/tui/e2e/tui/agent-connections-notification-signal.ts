@@ -55,7 +55,12 @@ export const agentConnectionsNotificationSignalScenario = {
         })();
       },
     });
-    await claimPromise;
+    try {
+      await claimPromise;
+    } catch (error) {
+      await app.stop?.();
+      throw error;
+    }
     return {
       stop: async () => {
         peerClaim?.unsubscribe();

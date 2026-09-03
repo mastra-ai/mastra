@@ -71,37 +71,45 @@ export const agentConnectionsExpectedReplyWatchdogScenario = {
           sent = true;
           if (timer) clearInterval(timer);
           const agent = result.controller.getMastra()?.getAgentById('code-agent');
-          void agent?.sendNotificationSignal(
-            {
-              source: 'agent-connection',
-              kind: 'peer-signal',
-              priority: 'urgent',
-              summary: peerSummary,
-              dedupeKey: 'mc-e2e-agent-connections-expected-reply-watchdog',
-              attributes: { expectsReply: true, messageId, returnPeerId: peerId },
-              metadata: {
-                crossAgentMessaging: {
-                  expectsReply: true,
-                  messageId,
-                  returnPeerId: peerId,
-                  from: {
-                    resourceId: 'mc-e2e-expected-reply-peer-resource',
-                    threadId: 'mc-e2e-expected-reply-peer-thread',
+          agent
+            ?.sendNotificationSignal(
+              {
+                source: 'agent-connection',
+                kind: 'peer-signal',
+                priority: 'urgent',
+                summary: peerSummary,
+                dedupeKey: 'mc-e2e-agent-connections-expected-reply-watchdog',
+                attributes: { expectsReply: true, messageId, returnPeerId: peerId },
+                metadata: {
+                  crossAgentMessaging: {
+                    expectsReply: true,
+                    messageId,
+                    returnPeerId: peerId,
+                    from: {
+                      resourceId: 'mc-e2e-expected-reply-peer-resource',
+                      threadId: 'mc-e2e-expected-reply-peer-thread',
+                    },
                   },
                 },
               },
-            },
-            {
-              resourceId: result.session.identity.getResourceId(),
-              threadId,
-              ifIdle: { behavior: 'wake' },
-            },
-          );
+              {
+                resourceId: result.session.identity.getResourceId(),
+                threadId,
+                ifIdle: { behavior: 'wake' },
+              },
+            )
+            .catch(() => {});
         }, 50);
         timer.unref?.();
       },
     });
-    await claimPromise;
+    try {
+      await claimPromise;
+    } catch (error) {
+      if (timer) clearInterval(timer);
+      await app.stop?.();
+      throw error;
+    }
 
     return {
       stop: async () => {

@@ -159,7 +159,7 @@ describe('CrossAgentMessagingExpectedReplyProcessor', () => {
         attributes: expect.objectContaining({ messageIds: 'request-1' }),
       }),
     );
-    expect(abort).toHaveBeenCalledWith(expect.stringContaining('replyTo=request-1'), {
+    expect(abort).toHaveBeenCalledWith(expect.stringContaining('replyTo="request-1"'), {
       retry: true,
       metadata: { peerIds: ['code-agent:r:t'], messageIds: ['request-1'] },
     });
