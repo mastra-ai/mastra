@@ -158,7 +158,17 @@ describe('DataListRoot', () => {
         </DataList>,
       );
 
-      expect(scrollRef.current?.className).toContain('max-h-[inherit]');
+      // The root is a flex column clamped by max-height (flex, unlike grid `1fr`,
+      // shrinks items against the clamped size); the viewport is the shrinkable item
+      // so short lists stay compact and long ones scroll.
+      const root = scrollRef.current?.parentElement;
+      expect(root?.className).toContain('flex-col');
+      // Consumer max-height overrides the default `max-h-full`.
+      expect(root?.className).toContain('max-h-80');
+      expect(root?.className).not.toContain('max-h-full');
+      expect(root?.className).not.toContain('size-full');
+      expect(scrollRef.current?.className).toContain('min-h-0');
+      expect(scrollRef.current?.className).toContain('flex-1');
     });
   });
 

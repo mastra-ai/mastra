@@ -108,8 +108,11 @@ export function DataListRoot({
       orientation="both"
       mask={getDataListMask(mask)}
       viewportRef={scrollRef}
-      viewPortClassName="max-h-[inherit]"
-      className={cn('size-full rounded-2xl bg-surface4 px-1 pb-1', className)}
+      // Size to content but never exceed the parent. Flex (unlike grid `1fr`) lays
+      // items out against the max-height-clamped container, so short lists stay
+      // compact and long ones shrink the viewport and scroll.
+      viewPortClassName="min-h-0 flex-1 basis-auto"
+      className={cn('flex max-h-full w-full flex-col rounded-2xl bg-surface4 px-1 pb-1', className)}
     >
       {grid}
     </ScrollArea>
