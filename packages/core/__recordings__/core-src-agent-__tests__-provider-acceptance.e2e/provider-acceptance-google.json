@@ -1,0 +1,281 @@
+{
+  "meta": {
+    "name": "provider-acceptance-google",
+    "testFile": "src/agent/__tests__/provider-acceptance.e2e.test.ts",
+    "testName": "provider acceptance › google",
+    "createdAt": "2026-09-03T04:37:12.396Z"
+  },
+  "recordings": [
+    {
+      "hash": "7d185f3e79efdebb",
+      "request": {
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent",
+        "method": "POST",
+        "body": {
+          "generationConfig": {},
+          "contents": [
+            {
+              "role": "user",
+              "parts": [
+                {
+                  "text": "."
+                }
+              ]
+            },
+            {
+              "role": "model",
+              "parts": [
+                {
+                  "text": "Hello! How can I help you today?"
+                }
+              ]
+            },
+            {
+              "role": "user",
+              "parts": [
+                {
+                  "text": "Say the word \"ready\" and nothing else."
+                }
+              ]
+            }
+          ],
+          "systemInstruction": {
+            "parts": [
+              {
+                "text": "Answer in at most five words."
+              }
+            ]
+          }
+        },
+        "timestamp": 1788410227057
+      },
+      "response": {
+        "status": 200,
+        "statusText": "OK",
+        "headers": {
+          "alt-svc": "h3=\":443\"; ma=2592000,h3-29=\":443\"; ma=2592000",
+          "content-type": "application/json; charset=UTF-8",
+          "date": "Thu, 03 Sep 2026 04:37:08 GMT",
+          "server": "scaffolding on HTTPServer2",
+          "server-timing": "gfet4t7; dur=1667",
+          "vary": "Origin, X-Origin, Referer",
+          "x-content-type-options": "nosniff",
+          "x-frame-options": "SAMEORIGIN",
+          "x-gemini-service-tier": "standard",
+          "x-xss-protection": "0"
+        },
+        "body": {
+          "candidates": [
+            {
+              "content": {
+                "parts": [
+                  {
+                    "text": "Ready.",
+                    "thoughtSignature": "ErAECq0EARFNMg9RzdKaUh29VtLTc9+37mD5ezgJ/7QVgNflgSrHqaiEqr7A6TJaoXpmRrCPgaL4XysTwj14kekgDRxOpWjbUPznLu216eqEtYMu1glgUxftjQXj+a/zscw+t7CYsnP9n32W3Wn/Zhk2lA5vCszsbWpaixIgH65qNP4l46Z9XtChjvVg0iWelS8aEiiILDWbO2IvhbzEvlSQb2zfKF9q3VA+LVqUjYR6om02+KzAPAlK9fNjUzuNBX8a9bw6St/5EJ+rT7+Dq1yrcm4JKc9g6gIXLMfJL88Z+dzbEP4Vozb7pffFV06hlhkLoLU3TOHqKl3VNhw4GLDBJEQah4XFBzqbykJYICa/0TUYYNX7x8cDkNNa82kSvxi0FeN7RYzF+LnTTrhNaCHr0SO8iwBSGurMO1dwVowIUWfzxMdIEFTZrRLh4wkwoCywALQOEBO6NgrIkpAWPWRZStTbLbIPIjhn0WHTuFhqwBn5zZBuPdorM3QtD6RLmlmxORnLrfs4cxqN+YFKJtsbQnyNIfkOesCrtmlhQr0eBdCTW510bxAkKrmmOCo9GzLdNNPstEGM2QcCUQmZwZ9R3YDU7IfCNRuGIecYBwrwaa0kSlV0AyeP3F7YEq9LGVxrfHhNfUcw6D1TnqzNFfWzFWhWCp4HZ9wtYR9AEpjZvGtONCahNWsDIjrEiuazf8CZZEbCXI9vgYRCHw1VvH3gwKR1sCnQ7wKS/hV9/baAoWU="
+                  }
+                ],
+                "role": "model"
+              },
+              "finishReason": "STOP",
+              "index": 0
+            }
+          ],
+          "usageMetadata": {
+            "promptTokenCount": 30,
+            "candidatesTokenCount": 2,
+            "totalTokenCount": 155,
+            "promptTokensDetails": [
+              {
+                "modality": "TEXT",
+                "tokenCount": 30
+              }
+            ],
+            "thoughtsTokenCount": 123,
+            "serviceTier": "standard"
+          },
+          "modelVersion": "gemini-3.6-flash",
+          "responseId": "c_mYapyYDoq6mtkPhaGK2Q8"
+        },
+        "isStreaming": false
+      }
+    },
+    {
+      "hash": "a214d75c58fc9698",
+      "request": {
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent",
+        "method": "POST",
+        "body": {
+          "generationConfig": {},
+          "contents": [
+            {
+              "role": "user",
+              "parts": [
+                {
+                  "text": "I will ask a question next."
+                }
+              ]
+            },
+            {
+              "role": "user",
+              "parts": [
+                {
+                  "text": "Say the word \"ready\" and nothing else."
+                }
+              ]
+            }
+          ],
+          "systemInstruction": {
+            "parts": [
+              {
+                "text": "Answer in at most five words."
+              }
+            ]
+          }
+        },
+        "timestamp": 1788410228821
+      },
+      "response": {
+        "status": 200,
+        "statusText": "OK",
+        "headers": {
+          "alt-svc": "h3=\":443\"; ma=2592000,h3-29=\":443\"; ma=2592000",
+          "content-type": "application/json; charset=UTF-8",
+          "date": "Thu, 03 Sep 2026 04:37:11 GMT",
+          "server": "scaffolding on HTTPServer2",
+          "server-timing": "gfet4t7; dur=2261",
+          "vary": "Origin, X-Origin, Referer",
+          "x-content-type-options": "nosniff",
+          "x-frame-options": "SAMEORIGIN",
+          "x-gemini-service-tier": "standard",
+          "x-xss-protection": "0"
+        },
+        "body": {
+          "candidates": [
+            {
+              "content": {
+                "parts": [
+                  {
+                    "text": "Ready.",
+                    "thoughtSignature": "EsoECscEARFNMg8hz7qgE7le0toilIMDkj3CNDgpSBxF5ubTRCXBqhbe57Vi3fzlXkX7vcWSeAnAcAU1sq6bsdAkLbp5qFJ5VT/pnIut6kNWIx+BGV21zFdJ1w+ky5KmDgn8/cZx/+3qmgr3uRpjArbthGvzun/+hAU+ZAHJ755CGzG81Uhc9+ohTPF7Kc3DUnRiaTYLp4nTsFZgrpTTRNb3NXHFvMWLa1Un8+b/Euu1v+LOHqh7xZXvSKCZ8Cm8EDeeA3b7CB/31hXq1snV7KSrNtsdXOF2lCcF+ZolGMq1O8XEHgxAOqHYPPA8CeQXuq2/atHi+EXPT6h1Gackm5eBXsrS7whK9FuQwKjiKL+8YarkAvVkxd5SDjsdRVQQYFhk3T8JzmmnvPGsYVluzNadxUPAG0Ln488MEorz7Sh5+1ZYOVln6SdLHYfAMpgrIEmqIBF2Bz4Z9eVP2WdKpHn+ElFnB4bBj/hLBADc8OUHAWqeOFfFZVDdR8oZbBfjwEnxScH6Gm9hY7T4r9F18vbyKTov1KwtN6ZMsjBaFi8Foe2YtBEogGb92UuOSEg+1yP8UiULBLhgETat31JYVq7YN3b0n/EQ/KYrIvXXGa4pCqbKayS3V3yIMuS4/ZyFH5sUQOrL6qk74cdX+J6S7rNCqh6NW4nXp2n9jSIXwrR3JKxay3sjD/z7JkAuiLGmjbPRy2ZnPreoNgIXTk8B4jYnJEluBnxOHtuJbhBy7/FVR5FP+7hyyj7oFdh8agFeGDmYybGGCBpNizbpdQ=="
+                  }
+                ],
+                "role": "model"
+              },
+              "finishReason": "STOP",
+              "index": 0
+            }
+          ],
+          "usageMetadata": {
+            "promptTokenCount": 26,
+            "candidatesTokenCount": 2,
+            "totalTokenCount": 166,
+            "promptTokensDetails": [
+              {
+                "modality": "TEXT",
+                "tokenCount": 26
+              }
+            ],
+            "thoughtsTokenCount": 138,
+            "serviceTier": "standard"
+          },
+          "modelVersion": "gemini-3.6-flash",
+          "responseId": "dPmYasq-OOi9qtsP1_nw6AQ"
+        },
+        "isStreaming": false
+      }
+    },
+    {
+      "hash": "44cfb7a4238dfb36",
+      "request": {
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent",
+        "method": "POST",
+        "body": {
+          "generationConfig": {},
+          "contents": [
+            {
+              "role": "user",
+              "parts": [
+                {
+                  "text": "Hi."
+                }
+              ]
+            },
+            {
+              "role": "model",
+              "parts": [
+                {
+                  "text": "Hello! How can I help you today?"
+                }
+              ]
+            },
+            {
+              "role": "user",
+              "parts": [
+                {
+                  "text": "Say the word \"ready\" and nothing else."
+                }
+              ]
+            }
+          ],
+          "systemInstruction": {
+            "parts": [
+              {
+                "text": "Answer in at most five words."
+              }
+            ]
+          }
+        },
+        "timestamp": 1788410231112
+      },
+      "response": {
+        "status": 200,
+        "statusText": "OK",
+        "headers": {
+          "alt-svc": "h3=\":443\"; ma=2592000,h3-29=\":443\"; ma=2592000",
+          "content-type": "application/json; charset=UTF-8",
+          "date": "Thu, 03 Sep 2026 04:37:12 GMT",
+          "server": "scaffolding on HTTPServer2",
+          "server-timing": "gfet4t7; dur=1260",
+          "vary": "Origin, X-Origin, Referer",
+          "x-content-type-options": "nosniff",
+          "x-frame-options": "SAMEORIGIN",
+          "x-gemini-service-tier": "standard",
+          "x-xss-protection": "0"
+        },
+        "body": {
+          "candidates": [
+            {
+              "content": {
+                "parts": [
+                  {
+                    "text": "Ready.",
+                    "thoughtSignature": "EtYECtMEARFNMg+7v9fnuWiFawP2dilZXzRs6PNFq2FMKrCzv5/58As9NGTGuKMBGQZo7Y1heiCSUrDJhmfGklWKJDkfCzqX4Xgl+zKY1mSpReuZCsG/ItDyeGd9QLcvmjAmeTOluBP3ZWg/rHFB4o/FCUDWM1oCMjbM4Ehky/bdptAhT4iFliJEodX46XV9bIymQ2BuJFl/YpoG1kiyL99rQkawaANEmR89DAE6Z8xTW3UvyUxGHaUhnKsud9sbctTgenW4ZElehwo2BhcBsbnpf8KLN716ll1GDXghVEJM2bSTvV9N+3uOwKbzWkJLx0AB/wxPLBaTZOY4y0SqCKOoSdL+OgZVBZax0AZnq+mnPjjzMUHeNhk96F85sfMvzpkSEJ9gaCuiueUyRkA1z0klc0xNFgCnzGbaowMylftudDY43pki8qGJMaDp/CviCbujHUsd2NhtdDWzjhtf00pbP1XPlub9i50Jopn1IJ2hM2BBcF2ZoTiE3AJqTZ8uQ0KmM48QdESNYWqzG7HiV//ORfgoFs4SMIS1yilDQGYPg9WlHQkhx6qT1ePh0vNXjsQpZ9tgnBWNPrpLsH61WGGI4MKXdN7Pl0vycQZF3xIyQqBOYnJR5fvKtBIcJFEAWX9sbEfhWsxU5cuEDaxyCdZq61D8zHyMi1iIQ6ksiu5Jh8C7BuitrQ1Qt8kSsthosLQuawuzbAPFxjkWltf9FrrjMwS16NR2HBxQVK0VMIkH0BtCIRGreNRfJSanJ5I77sQQJaJ2Rlv1j0gs0I6/pjdmiUIaTJzt+w=="
+                  }
+                ],
+                "role": "model"
+              },
+              "finishReason": "STOP",
+              "index": 0
+            }
+          ],
+          "usageMetadata": {
+            "promptTokenCount": 31,
+            "candidatesTokenCount": 2,
+            "totalTokenCount": 173,
+            "promptTokensDetails": [
+              {
+                "modality": "TEXT",
+                "tokenCount": 31
+              }
+            ],
+            "thoughtsTokenCount": 140,
+            "serviceTier": "standard"
+          },
+          "modelVersion": "gemini-3.6-flash",
+          "responseId": "d_mYare_DJKkqtsPx9aTwQE"
+        },
+        "isStreaming": false
+      }
+    }
+  ]
+}
