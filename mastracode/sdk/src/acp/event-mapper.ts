@@ -2,16 +2,6 @@ import type { SessionNotification, RequestPermissionRequest, AgentSideConnection
 import type { AgentControllerEvent, MastraDBMessage, Session, TokenUsage } from '@mastra/core/agent-controller';
 import { mastraDBMessageToSignal } from '@mastra/core/signals';
 
-/** Concatenate the text of all `text` parts on a DB-native assistant message. */
-function getMessageText(message: MastraDBMessage): string {
-  const content = message.content;
-  if (typeof content === 'string' || !content?.parts) return '';
-  return content.parts
-    .filter((part): part is Extract<(typeof content.parts)[number], { type: 'text' }> => part.type === 'text')
-    .map(part => part.text)
-    .join('');
-}
-
 function getSignalText(message: MastraDBMessage): string {
   const contents = mastraDBMessageToSignal(message).contents;
   if (typeof contents === 'string') return contents;
@@ -62,6 +52,7 @@ function mapToolKind(
  */
 export interface PromptState {
   sessionId: string;
+  activeAssistantMessageId?: string;
   lastTextLength: number;
   usage: TokenUsage;
   resolve: (reason: 'complete' | 'aborted' | 'error' | 'suspended') => void;
@@ -86,6 +77,11 @@ export function handleAgentControllerEvent(
       break;
 
     case 'message_start': {
+      if (event.message.role === 'assistant') {
+        state.activeAssistantMessageId = event.message.id;
+        state.lastTextLength = 0;
+        break;
+      }
       if (event.message.role !== 'signal') break;
       const text = getSignalText(event.message);
       if (text) {
@@ -97,22 +93,21 @@ export function handleAgentControllerEvent(
       break;
     }
 
-    case 'message_update': {
-      if (event.message.role !== 'assistant') break;
-      const fullText = getMessageText(event.message);
-      if (fullText.length > state.lastTextLength) {
-        const delta = fullText.slice(state.lastTextLength);
-        state.lastTextLength = fullText.length;
+    case 'message_update':
+      if (event.id === state.activeAssistantMessageId && event.event.delta) {
+        state.lastTextLength += event.event.delta.length;
         sendUpdate(connection, state.sessionId, {
           sessionUpdate: 'agent_message_chunk',
-          content: { type: 'text', text: delta },
+          content: { type: 'text', text: event.event.delta },
         });
       }
       break;
-    }
 
     case 'message_end':
-      if (event.message.role === 'assistant') state.lastTextLength = 0;
+      if (event.id === state.activeAssistantMessageId) {
+        state.activeAssistantMessageId = undefined;
+        state.lastTextLength = 0;
+      }
       break;
 
     case 'tool_start':

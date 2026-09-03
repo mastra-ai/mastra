@@ -169,36 +169,34 @@ describe('message streaming', () => {
   const msg1 = {
     id: 'm1',
     role: 'assistant' as const,
-    content: [{ type: 'text' as const, text: 'hello' }],
+    content: { format: 2 as const, parts: [{ type: 'text' as const, text: 'hello' }] },
     createdAt: new Date(),
   };
-  const msg2 = {
-    id: 'm1',
-    role: 'assistant' as const,
-    content: [{ type: 'text' as const, text: 'hello world' }],
-    createdAt: new Date(),
-  };
-
   beforeEach(async () => {
     const ctx = await createSession();
     session = ctx.session;
   });
 
-  it('tracks currentMessage on message_start', () => {
+  it('tracks an isolated currentMessage on message_start', () => {
     emit(session, { type: 'message_start', message: msg1 as any });
-    expect(session.displayState.get().currentMessage).toBe(msg1);
+    expect(session.displayState.get().currentMessage).toEqual(msg1);
+    expect(session.displayState.get().currentMessage).not.toBe(msg1);
   });
 
-  it('updates currentMessage on message_update', () => {
+  it('applies compact text deltas to the matching current message', () => {
     emit(session, { type: 'message_start', message: msg1 as any });
-    emit(session, { type: 'message_update', message: msg2 as any });
-    expect(session.displayState.get().currentMessage).toBe(msg2);
+    emit(session, { type: 'message_update', id: 'm1', event: { type: 'text-delta', delta: ' world' } });
+    expect(session.displayState.get().currentMessage).toMatchObject({
+      id: 'm1',
+      content: { parts: [{ type: 'text', text: 'hello world' }] },
+    });
   });
 
-  it('keeps currentMessage reference on message_end', () => {
+  it('ignores compact deltas for a different message id and id-only ends', () => {
     emit(session, { type: 'message_start', message: msg1 as any });
-    emit(session, { type: 'message_end', message: msg2 as any });
-    expect(session.displayState.get().currentMessage).toBe(msg2);
+    emit(session, { type: 'message_update', id: 'other', event: { type: 'text-delta', delta: ' ignored' } });
+    emit(session, { type: 'message_end', id: 'm1' });
+    expect(session.displayState.get().currentMessage).toEqual(msg1);
   });
 });
 
@@ -1655,9 +1653,10 @@ describe('full lifecycle integration', () => {
     expect(ds.isRunning).toBe(true);
 
     // Message starts streaming
-    const msg = { id: 'm1', role: 'assistant' as const, content: [], createdAt: new Date() };
-    emit(session, { type: 'message_start', message: msg as any });
-    expect(ds.currentMessage).toBe(msg);
+    const msg = { id: 'm1', role: 'assistant' as const, content: { format: 2 as const, parts: [] }, createdAt: new Date() };
+    emit(session, { type: 'message_start', message: msg });
+    expect(ds.currentMessage).toEqual(msg);
+    expect(ds.currentMessage).not.toBe(msg);
 
     // Tool input streaming
     emit(session, { type: 'tool_input_start', toolCallId: 't1', toolName: 'string_replace_lsp' });

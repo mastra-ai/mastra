@@ -1,6 +1,6 @@
 import type { AgentControllerEvent, AgentControllerSessionState } from '@mastra/client-js';
 import { isKnownAgentControllerEvent } from '@mastra/client-js';
-import type { MastraDBMessage, TokenUsage } from '@mastra/core/agent-controller';
+import type { TokenUsage } from '@mastra/core/agent-controller';
 
 import type { OMBudgets } from './om';
 
@@ -52,8 +52,9 @@ export function runtimeReducer(state: ChatRuntimeState, action: RuntimeAction): 
     case 'agent_end':
       return { ...state, _decodeStartedAt: 0 };
     case 'message_start':
+      return state;
     case 'message_update':
-      if (!hasAssistantText(event.message) || state._decodeStartedAt > 0) return state;
+      if (event.event.delta.length === 0 || state._decodeStartedAt > 0) return state;
       return { ...state, _decodeStartedAt: Date.now() };
     case 'usage_update': {
       const usage = event.usage;
@@ -98,8 +99,4 @@ export function runtimeReducer(state: ChatRuntimeState, action: RuntimeAction): 
     default:
       return state;
   }
-}
-
-function hasAssistantText(message: MastraDBMessage) {
-  return message.role === 'assistant' && message.content.parts.some(part => part.type === 'text' && part.text.trim());
 }

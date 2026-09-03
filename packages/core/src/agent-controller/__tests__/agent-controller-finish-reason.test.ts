@@ -130,10 +130,10 @@ describe('AgentController: non-success finish reasons', () => {
     expect(errorEvent).toBeDefined();
     expect(errorEvent.error.message).toContain('content filter');
 
-    // DB-native: the terminal error state lives on content.metadata.
+    const messageStart = events.find(e => e.type === 'message_start' && e.message.role === 'assistant');
     const messageEnd = [...events].reverse().find(e => e.type === 'message_end');
-    expect(messageEnd?.message.content.metadata.stopReason).toBe('error');
-    expect(messageEnd?.message.content.metadata.errorMessage).toContain('content filter');
+    expect(messageEnd?.id).toBe(messageStart?.message.id);
+    expect(messageStart?.message.content.parts).toEqual([{ type: 'text', text: '' }]);
   });
 
   it('surfaces a content-filter refusal even without provider stop details', async () => {
@@ -149,9 +149,10 @@ describe('AgentController: non-success finish reasons', () => {
     await session.sendMessage({ content: 'do something blocked' });
 
     expect(events.find(e => e.type === 'agent_end')?.reason).toBe('error');
+    const messageStart = events.find(e => e.type === 'message_start' && e.message.role === 'assistant');
     const messageEnd = [...events].reverse().find(e => e.type === 'message_end');
-    expect(messageEnd?.message.content.metadata.stopReason).toBe('error');
-    expect(messageEnd?.message.content.metadata.errorMessage).toBe('The model stopped on a content filter.');
+    expect(messageEnd?.id).toBe(messageStart?.message.id);
+    expect(messageStart?.message.content.parts).toEqual([{ type: 'text', text: '' }]);
   });
 
   it('surfaces a length finish reason as a terminal error state', async () => {
@@ -165,9 +166,10 @@ describe('AgentController: non-success finish reasons', () => {
     await session.sendMessage({ content: 'write a very long answer' });
 
     expect(events.find(e => e.type === 'agent_end')?.reason).toBe('error');
+    const messageStart = events.find(e => e.type === 'message_start' && e.message.role === 'assistant');
     const messageEnd = [...events].reverse().find(e => e.type === 'message_end');
-    expect(messageEnd?.message.content.metadata.stopReason).toBe('error');
-    expect(messageEnd?.message.content.metadata.errorMessage).toContain('maximum output length');
+    expect(messageEnd?.id).toBe(messageStart?.message.id);
+    expect(messageStart?.message.content.parts).toEqual([{ type: 'text', text: '' }]);
   });
 
   it('emits an info notice when a server-side fallback model served the turn', async () => {
@@ -211,8 +213,9 @@ describe('AgentController: non-success finish reasons', () => {
 
     expect(events.find(e => e.type === 'agent_end')?.reason).toBe('complete');
     expect(events.some(e => e.type === 'error')).toBe(false);
+    const messageStart = events.find(e => e.type === 'message_start' && e.message.role === 'assistant');
     const messageEnd = [...events].reverse().find(e => e.type === 'message_end');
-    expect(messageEnd?.message.content.metadata.stopReason).toBe('complete');
-    expect(messageEnd?.message.content.metadata.errorMessage).toBeUndefined();
+    expect(messageEnd?.id).toBe(messageStart?.message.id);
+    expect(messageStart?.message.content.parts).toEqual([{ type: 'text', text: '' }]);
   });
 });

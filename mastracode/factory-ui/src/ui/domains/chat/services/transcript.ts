@@ -200,15 +200,47 @@ function applyEvent(state: TranscriptState, event: AgentControllerEvent, viewerI
       return { ...state, pending: false };
 
     case 'message_start':
+      return upsertMessage(state, event.message, true, viewerId);
+
     case 'message_update': {
-      const message = event.message;
-      const next = upsertMessage(state, message, true, viewerId);
-      if (message.role !== 'assistant') return next;
-      return hasAssistantText(next) ? { ...next, pending: false } : next;
+      if (event.event.delta.length === 0) return state;
+      const entryIndex = state.entries.findIndex(
+        entry => entry.kind === 'message' && (entry.id === event.id || entry.message.id === event.id),
+      );
+      const entry = state.entries[entryIndex];
+      if (!entry || entry.kind !== 'message') return state;
+
+      const partIndex = entry.message.content.parts.findLastIndex(part => part.type === 'text');
+      if (partIndex === -1) return state;
+      const part = entry.message.content.parts[partIndex];
+      if (!part || part.type !== 'text') return state;
+
+      const message = {
+        ...entry.message,
+        content: {
+          ...entry.message.content,
+          parts: entry.message.content.parts.map((candidate, index) =>
+            index === partIndex ? { ...candidate, text: part.text + event.event.delta } : candidate,
+          ),
+        },
+      };
+      const entries = state.entries.map((candidate, index) =>
+        index === entryIndex ? { ...entry, message, streaming: true } : candidate,
+      );
+      const next = { ...state, entries };
+      return message.role === 'assistant' && hasAssistantText(next) ? { ...next, pending: false } : next;
     }
     case 'message_end': {
-      const next = upsertMessage(state, event.message, false, viewerId);
-      return event.message.role === 'assistant' ? { ...next, pending: false } : next;
+      const entryIndex = state.entries.findIndex(
+        entry => entry.kind === 'message' && (entry.id === event.id || entry.message.id === event.id),
+      );
+      const entry = state.entries[entryIndex];
+      if (!entry || entry.kind !== 'message') return state;
+
+      const entries = state.entries.map((candidate, index) =>
+        index === entryIndex ? { ...entry, streaming: false } : candidate,
+      );
+      return entry.message.role === 'assistant' ? { ...state, entries, pending: false } : { ...state, entries };
     }
 
     case 'tool_input_start':

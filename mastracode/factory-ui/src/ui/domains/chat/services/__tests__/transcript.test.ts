@@ -199,28 +199,49 @@ describe('transcript reducer message entries', () => {
     expect(steered.role).toBe('signal');
   });
 
-  it('streams message updates without replacing non-message transcript state', () => {
+  it('applies compact text deltas immutably without replacing non-message transcript state', () => {
     const withNotice = transcriptReducer(initialTranscript, {
       type: 'localNotice',
       level: 'info',
       text: 'Command handled',
     });
-
-    const state = transcriptReducer(withNotice, {
+    const started = transcriptReducer(withNotice, {
       type: 'event',
       event: {
-        type: 'message_update',
-        message: dbMessage('assistant-1', 'assistant', [{ type: 'text', text: 'Streaming text' }]),
+        type: 'message_start',
+        message: dbMessage('assistant-1', 'assistant', [{ type: 'text', text: '' }]),
       },
     });
+    const state = transcriptReducer(started, {
+      type: 'event',
+      event: { type: 'message_update', id: 'assistant-1', event: { type: 'text-delta', delta: 'Streaming text' } },
+    });
 
+    expect(state).not.toBe(started);
+    expect(state.entries[1]).not.toBe(started.entries[1]);
     expect(state.pending).toBe(false);
     expect(state.entries[0]).toMatchObject({ kind: 'notice', text: 'Command handled' });
     expect(state.entries[1]).toMatchObject({ kind: 'message', id: 'assistant-1', streaming: true });
     expect(messageParts(state.entries[1])).toEqual([{ type: 'text', text: 'Streaming text' }]);
   });
 
-  it('retains live signal messages between assistant segments', () => {
+  it('deduplicates starts and finalizes only the matching assistant message', () => {
+    const message = dbMessage('assistant-1', 'assistant', [{ type: 'text', text: '' }]);
+    const started = transcriptReducer(
+      { ...initialTranscript, pending: true },
+      { type: 'event', event: { type: 'message_start', message } },
+    );
+    const duplicate = transcriptReducer(started, { type: 'event', event: { type: 'message_start', message } });
+    const mismatchedEnd = transcriptReducer(duplicate, { type: 'event', event: { type: 'message_end', id: 'assistant-2' } });
+    const ended = transcriptReducer(mismatchedEnd, { type: 'event', event: { type: 'message_end', id: message.id } });
+
+    expect(duplicate.entries).toHaveLength(1);
+    expect(mismatchedEnd).toBe(duplicate);
+    expect(ended.entries[0]).toMatchObject({ id: message.id, streaming: false });
+    expect(ended.pending).toBe(false);
+  });
+
+  it('retains live signal messages between assistant segments without changing assistant decode state', () => {
     const firstAssistant = dbMessage('assistant-1', 'assistant', [{ type: 'text', text: 'Before signals' }]);
     const reminder = signalMessage({
       id: 'reminder-1',
@@ -242,24 +263,27 @@ describe('transcript reducer message entries', () => {
       { ...initialTranscript, pending: true },
       {
         type: 'event',
-        event: { type: 'message_update', message: firstAssistant },
+        event: { type: 'message_start', message: firstAssistant },
       },
     );
-    state = transcriptReducer(state, { type: 'event', event: { type: 'message_end', message: firstAssistant } });
+    state = transcriptReducer(state, { type: 'event', event: { type: 'message_end', id: firstAssistant.id } });
+    const decodeStartedAt = state._decodeStartedAt;
 
     for (const message of [reminder, summary]) {
       state = transcriptReducer(state, { type: 'event', event: { type: 'message_start', message } });
       expect(state.entries.at(-1)).toMatchObject({ kind: 'message', id: message.id, streaming: true });
       expect(state.pending).toBe(false);
+      expect(state._decodeStartedAt).toBe(decodeStartedAt);
 
-      state = transcriptReducer(state, { type: 'event', event: { type: 'message_end', message } });
+      state = transcriptReducer(state, { type: 'event', event: { type: 'message_end', id: message.id } });
       expect(state.entries.at(-1)).toMatchObject({ kind: 'message', id: message.id, streaming: false });
       expect(state.pending).toBe(false);
+      expect(state._decodeStartedAt).toBe(decodeStartedAt);
     }
 
     state = transcriptReducer(state, {
       type: 'event',
-      event: { type: 'message_update', message: secondAssistant },
+      event: { type: 'message_start', message: secondAssistant },
     });
 
     expect(state.entries.map(entry => entry.id)).toEqual(['assistant-1', 'reminder-1', 'summary-1', 'assistant-2']);
@@ -296,7 +320,7 @@ describe('transcript reducer message entries', () => {
     expect(messageParts(state.entries[3])).toEqual([{ type: 'text', text: 'After signals' }]);
   });
 
-  it('keeps signal-only events from clearing pending', () => {
+  it('keeps signal-only events from clearing pending or starting decode timing', () => {
     const reminder = signalMessage({
       id: 'reminder-1',
       type: 'system-reminder',
@@ -311,10 +335,11 @@ describe('transcript reducer message entries', () => {
     });
     const ended = transcriptReducer(started, {
       type: 'event',
-      event: { type: 'message_end', message: reminder },
+      event: { type: 'message_end', id: reminder.id },
     });
 
     expect(ended.pending).toBe(true);
+    expect(ended._decodeStartedAt).toBe(0);
     expect(ended.entries).toHaveLength(1);
     expect(ended.entries[0]).toMatchObject({ id: 'reminder-1', streaming: false });
   });
@@ -346,13 +371,17 @@ describe('transcript reducer message entries', () => {
       { type: 'text', text: 'After question' },
     ]);
 
-    const beforeResume = transcriptReducer(initialTranscript, {
+    let beforeResume = transcriptReducer(initialTranscript, {
       type: 'event',
-      event: { type: 'message_end', message: suspendedMessage },
+      event: { type: 'message_start', message: suspendedMessage },
+    });
+    beforeResume = transcriptReducer(beforeResume, {
+      type: 'event',
+      event: { type: 'message_end', id: suspendedMessage.id },
     });
     const afterResume = transcriptReducer(beforeResume, {
       type: 'event',
-      event: { type: 'message_update', message: resumedMessage },
+      event: { type: 'message_start', message: resumedMessage },
     });
 
     const matchingParts = afterResume.entries.flatMap(entry =>
@@ -372,6 +401,8 @@ describe('transcript reducer message entries', () => {
 
     expect(matchingParts).toHaveLength(1);
     expect(afterResume.entries).toHaveLength(2);
+    // The question stays in the bubble the reader answered it in, with the
+    // resumed copy's result folded in; the new message keeps only its own text.
     expect(messageParts(afterResume.entries[0])).toEqual([
       { type: 'text', text: 'Before question' },
       resumedMessage.content.parts[0],
@@ -380,12 +411,16 @@ describe('transcript reducer message entries', () => {
   });
 
   it('keeps a call where the reader watched it land when the rotated message claims it', () => {
+    // A step's first call can stream in before the engine announces the step's
+    // message, so its row is already drawn under the previous bubble when the
+    // rotated message arrives carrying the same call. Moving the part would
+    // remount the row under the reader; the drawn row keeps it.
     const first = dbMessage('turn-1', 'assistant', [{ type: 'text', text: 'Looking around' }]);
     let state = transcriptReducer(initialTranscript, {
       type: 'event',
       event: { type: 'message_start', message: first },
     });
-    state = transcriptReducer(state, { type: 'event', event: { type: 'message_end', message: first } });
+    state = transcriptReducer(state, { type: 'event', event: { type: 'message_end', id: first.id } });
     state = transcriptReducer(state, {
       type: 'event',
       event: { type: 'tool_start', toolCallId: 'tool-1', toolName: 'view', args: { path: 'src/index.ts' } },
@@ -393,7 +428,7 @@ describe('transcript reducer message entries', () => {
     state = transcriptReducer(state, {
       type: 'event',
       event: {
-        type: 'message_update',
+        type: 'message_start',
         message: dbMessage('turn-2', 'assistant', [
           {
             type: 'tool-invocation',
@@ -422,7 +457,7 @@ describe('transcript reducer message entries', () => {
       type: 'event',
       event: { type: 'message_start', message: first },
     });
-    state = transcriptReducer(state, { type: 'event', event: { type: 'message_end', message: first } });
+    state = transcriptReducer(state, { type: 'event', event: { type: 'message_end', id: first.id } });
     state = transcriptReducer(state, {
       type: 'event',
       event: { type: 'tool_start', toolCallId: 'tool-1', toolName: 'view', args: { path: 'src/index.ts' } },
@@ -430,7 +465,7 @@ describe('transcript reducer message entries', () => {
     state = transcriptReducer(state, {
       type: 'event',
       event: {
-        type: 'message_update',
+        type: 'message_start',
         message: dbMessage('turn-2', 'assistant', [
           {
             type: 'tool-invocation',
@@ -516,6 +551,8 @@ describe('transcript reducer message entries', () => {
   });
 
   it('stamps isError on the mirrored part when tool_end reports a failure', () => {
+    // Without the flag the terminal-state render precedence would read the
+    // failed tool as a bare successful `result`.
     const started = transcriptReducer(initialTranscript, {
       type: 'event',
       event: { type: 'tool_start', toolCallId: 'tool-1', toolName: 'view', args: {} },
@@ -541,6 +578,9 @@ describe('transcript reducer message entries', () => {
   });
 
   it('keeps a tool call in one card when a steer rotates the assistant message mid-stream', () => {
+    // A steer closes the running assistant message and opens the next one while
+    // the tool arguments are still streaming; the remaining deltas belong to the
+    // call that started, not to whatever message is latest.
     let state = transcriptReducer(initialTranscript, {
       type: 'event',
       event: {
@@ -575,6 +615,10 @@ describe('transcript reducer message entries', () => {
   });
 
   it('rewrites the entry when the same turn comes back under a new message id', () => {
+    // The engine adopts the run loop's message id only while its own message is
+    // still empty, so a turn can start streaming under one identity and keep
+    // going under another. Drawing both leaves the first copy stripped of the
+    // tool parts the second one claims, next to a full copy of its own text.
     const started = dbMessage('streamed-turn', 'assistant', [
       { type: 'text', text: 'gh is missing here.' },
       {
@@ -591,19 +635,23 @@ describe('transcript reducer message entries', () => {
       type: 'event',
       event: { type: 'message_start', message: started },
     });
-    state = transcriptReducer(state, { type: 'event', event: { type: 'message_update', message: reidentified } });
+    state = transcriptReducer(state, { type: 'event', event: { type: 'message_start', message: reidentified } });
 
     expect(state.entries).toHaveLength(1);
     expect(messageParts(state.entries[0])).toEqual(reidentified.content.parts);
   });
 
   it('draws a rotated turn as its own entry even when its text repeats the last one', () => {
+    // The run loop seals one response and opens the next at a step boundary, and
+    // the engine announces the new id on its first empty text part. That
+    // announcement is what tells a fresh turn apart from a re-identified one
+    // when the model happens to open with the same words.
     const first = dbMessage('turn-1', 'assistant', [{ type: 'text', text: 'Let me check' }]);
     let state = transcriptReducer(initialTranscript, {
       type: 'event',
       event: { type: 'message_start', message: first },
     });
-    state = transcriptReducer(state, { type: 'event', event: { type: 'message_end', message: first } });
+    state = transcriptReducer(state, { type: 'event', event: { type: 'message_end', id: first.id } });
     state = transcriptReducer(state, {
       type: 'event',
       event: { type: 'message_start', message: dbMessage('turn-2', 'assistant', [{ type: 'text', text: '' }]) },
@@ -611,7 +659,7 @@ describe('transcript reducer message entries', () => {
     state = transcriptReducer(state, {
       type: 'event',
       event: {
-        type: 'message_update',
+        type: 'message_start',
         message: dbMessage('turn-2', 'assistant', [{ type: 'text', text: 'Let me check the tests too' }]),
       },
     });
@@ -624,6 +672,8 @@ describe('transcript reducer message entries', () => {
 
 describe('transcript reducer mergeWindow', () => {
   it('prepends only messages older than the oldest entry already on screen', () => {
+    // On screen: newest window (msg-3, msg-4). Grown fetch returns an older
+    // window that overlaps at msg-3 (the anchor).
     const onScreen = createInitialTranscript({
       messages: [
         dbMessage('msg-3', 'user', [{ type: 'text', text: 'third' }]),
@@ -664,13 +714,10 @@ describe('transcript reducer mergeWindow', () => {
     let state = createInitialTranscript({
       messages: [dbMessage('history-2', 'assistant', [{ type: 'text', text: 'older reply' }])],
     });
-    state = transcriptReducer(state, {
-      type: 'event',
-      event: {
-        type: 'message_end',
-        message: dbMessage('live-1', 'assistant', [{ type: 'text', text: 'live reply' }]),
-      },
-    });
+    // A message streams in live after mount and persists at the tail.
+    const live = dbMessage('live-1', 'assistant', [{ type: 'text', text: 'live reply' }]);
+    state = transcriptReducer(state, { type: 'event', event: { type: 'message_start', message: live } });
+    state = transcriptReducer(state, { type: 'event', event: { type: 'message_end', id: live.id } });
 
     const grown = [
       dbMessage('history-1', 'user', [{ type: 'text', text: 'oldest' }]),
@@ -680,6 +727,7 @@ describe('transcript reducer mergeWindow', () => {
     const next = transcriptReducer(state, { type: 'mergeWindow', messages: grown });
     const ids = next.entries.filter(e => e.kind === 'message').map(e => (e.kind === 'message' ? e.id : ''));
 
+    // Older history joins the front; the live message stays at the tail.
     expect(ids).toEqual(['history-1', 'history-2', 'live-1']);
   });
 
@@ -741,7 +789,7 @@ describe('transcript reducer mergeWindow', () => {
     state = transcriptReducer(state, {
       type: 'event',
       event: {
-        type: 'message_update',
+        type: 'message_start',
         message: dbMessage('assistant-1', 'assistant', [{ type: 'text', text: 'partial' }]),
       },
     });
@@ -756,6 +804,8 @@ describe('transcript reducer mergeWindow', () => {
   });
 
   it('replaces a tool part stuck at call with the terminal copy from the window', () => {
+    // A dropped stream can swallow tool_end; the refetched window carries the
+    // persisted result and must heal the stuck part.
     const onScreen = createInitialTranscript({
       messages: [
         dbMessage('assistant-1', 'assistant', [
@@ -793,7 +843,7 @@ describe('transcript reducer mergeWindow', () => {
     state = transcriptReducer(state, {
       type: 'event',
       event: {
-        type: 'message_update',
+        type: 'message_start',
         message: dbMessage('assistant-1', 'assistant', [
           { type: 'text', text: 'streamed text' },
           {
@@ -883,11 +933,14 @@ describe('transcript reducer mergeWindow', () => {
   );
 
   it('adopts trailing parts the gap swallowed when the run ended before reconnect', () => {
+    // The stream died mid-turn: the live entry holds a cut-off text and a tool
+    // stuck at call. The run finished during the gap, so the refetched window
+    // is the only carrier of the extended text, the result and the final text.
     let state = createInitialTranscript({ messages: [] });
     state = transcriptReducer(state, {
       type: 'event',
       event: {
-        type: 'message_update',
+        type: 'message_start',
         message: dbMessage('live-1', 'assistant', [
           { type: 'text', text: 'working' },
           {
@@ -921,6 +974,8 @@ describe('transcript reducer mergeWindow', () => {
   });
 
   it('returns the same state when the window matches the on-screen turn exactly', () => {
+    // Routine revalidation must stay a referential no-op or every refetch
+    // rerenders the whole transcript.
     const parts: MastraMessagePart[] = [
       { type: 'text', text: 'done' },
       {
@@ -939,11 +994,14 @@ describe('transcript reducer mergeWindow', () => {
   });
 
   it('does not duplicate a turn the window carries under its persisted id', () => {
+    // A streamed turn keeps its display id; the persisted copy arrives under a
+    // different id but shares the toolCallId. Merge must heal in place, not
+    // append a second copy of the turn.
     let state = createInitialTranscript({ messages: [] });
     state = transcriptReducer(state, {
       type: 'event',
       event: {
-        type: 'message_update',
+        type: 'message_start',
         message: dbMessage('live-1', 'assistant', [
           { type: 'text', text: 'working on it' },
           {
@@ -975,11 +1033,14 @@ describe('transcript reducer mergeWindow', () => {
   });
 
   it('does not redraw the text of a turn the server persisted as its own step', () => {
+    // The stream carries one assistant message per run; the server persists one
+    // per step, so the trailing text comes back under an id the timeline never
+    // saw — and used to land on screen a second time on every revalidation.
     let state = createInitialTranscript({ messages: [] });
     state = transcriptReducer(state, {
       type: 'event',
       event: {
-        type: 'message_update',
+        type: 'message_start',
         message: dbMessage('streamed-turn', 'assistant', [
           {
             type: 'tool-invocation',
@@ -1007,11 +1068,13 @@ describe('transcript reducer mergeWindow', () => {
   });
 
   it('does not redraw a step the stream has already written further', () => {
+    // A focus revalidation lands mid-run: the persisted step holds a prefix of
+    // the text still streaming on screen — same step, older snapshot.
     let state = createInitialTranscript({ messages: [] });
     state = transcriptReducer(state, {
       type: 'event',
       event: {
-        type: 'message_update',
+        type: 'message_start',
         message: dbMessage('streamed-turn', 'assistant', [
           {
             type: 'tool-invocation',
@@ -1055,11 +1118,13 @@ describe('transcript reducer mergeWindow', () => {
   });
 
   it('adopts a window copy that has written the streaming step further', () => {
+    // SSE is behind the server: the persisted step extends the text still
+    // streaming on screen. One turn, healed in place — never a second bubble.
     let state = createInitialTranscript({ messages: [] });
     state = transcriptReducer(state, {
       type: 'event',
       event: {
-        type: 'message_update',
+        type: 'message_start',
         message: dbMessage('streamed-turn', 'assistant', [{ type: 'text', text: 'Almost' }]),
       },
     });
@@ -1078,7 +1143,7 @@ describe('transcript reducer mergeWindow', () => {
     state = transcriptReducer(state, {
       type: 'event',
       event: {
-        type: 'message_update',
+        type: 'message_start',
         message: dbMessage('streamed-turn', 'assistant', [
           { type: 'text', text: 'Checking.' },
           {
@@ -1110,7 +1175,7 @@ describe('transcript reducer mergeWindow', () => {
     state = transcriptReducer(state, {
       type: 'event',
       event: {
-        type: 'message_update',
+        type: 'message_start',
         message: dbMessage('streamed-turn', 'assistant', [{ type: 'text', text: 'Almost' }]),
       },
     });
@@ -1129,6 +1194,9 @@ describe('transcript reducer mergeWindow', () => {
   });
 
   it('lets the persisted copy claim the local echo of a steer', () => {
+    // A steer sent while the tab is hidden loses its live signal event to the
+    // SSE gap: the reconnect refetch is the first time the timeline sees it, and
+    // the echo it belongs to carries a client-minted `local-…` id.
     let state = createInitialTranscript({ messages: [], threadId: 't1' });
     state = transcriptReducer(state, { type: 'localUser', text: 'stop and read the file', steer: true });
     const localId = state.entries[0]?.id;
@@ -1160,7 +1228,7 @@ describe('transcript reducer mergeWindow', () => {
     state = transcriptReducer(state, {
       type: 'event',
       event: {
-        type: 'message_update',
+        type: 'message_start',
         message: dbMessage('streamed-turn', 'assistant', [{ type: 'text', text: 'gh is missing here.' }]),
       },
     });
@@ -1261,6 +1329,11 @@ describe('transcript reducer workspace errors', () => {
 });
 
 describe('live user-signal events render the same as their persisted copy', () => {
+  /**
+   * `agent-channels` stamps this on every inbound channel message, and
+   * `toDataPart` carries it onto the live event — it is what marks the signal
+   * as Slack-origin rather than composer-origin.
+   */
   const slackProviderOptions = {
     mastra: { channels: { slack: { author: { userId: 'U123', userName: 'caleb' } } } },
   };
@@ -1274,6 +1347,7 @@ describe('live user-signal events render the same as their persisted copy', () =
     providerOptions: slackProviderOptions,
   };
 
+  /** The live event shape: signal payload as one data part, text inside `data.contents`. */
   function liveUserSignal(): MastraDBMessage {
     return {
       id: 'sig-1',
@@ -1316,7 +1390,7 @@ describe('live user-signal events render the same as their persisted copy', () =
   it('gives the live data-user-message event a drawable text part', () => {
     let state = createInitialTranscript({ messages: [], threadId: 't1' });
     state = transcriptReducer(state, { type: 'event', event: { type: 'message_start', message: liveUserSignal() } });
-    state = transcriptReducer(state, { type: 'event', event: { type: 'message_end', message: liveUserSignal() } });
+    state = transcriptReducer(state, { type: 'event', event: { type: 'message_end', id: liveUserSignal().id } });
 
     expect(firstEntryParts(state)).toEqual([{ type: 'text', text: 'hello from slack' }]);
   });
@@ -1324,9 +1398,10 @@ describe('live user-signal events render the same as their persisted copy', () =
   it('does not blank the row when the live event replaces an already-rendered one', () => {
     let state = createInitialTranscript({ messages: [], threadId: 't1' });
 
+    // Persisted-shaped copy first, then the live data-part copy with the same id.
     const persisted = signalMessage({ id: 'sig-1', type: 'user', tagName: 'user', text: 'hello from slack' });
     state = transcriptReducer(state, { type: 'event', event: { type: 'message_start', message: persisted } });
-    state = transcriptReducer(state, { type: 'event', event: { type: 'message_end', message: liveUserSignal() } });
+    state = transcriptReducer(state, { type: 'event', event: { type: 'message_end', id: liveUserSignal().id } });
 
     expect(firstEntryParts(state)).toEqual([{ type: 'text', text: 'hello from slack' }]);
   });
@@ -1347,7 +1422,7 @@ describe('live user-signal events render the same as their persisted copy', () =
     });
     state = transcriptReducer(state, {
       type: 'event',
-      event: { type: 'message_end', message: liveComposerSignal() },
+      event: { type: 'message_end', id: liveComposerSignal().id },
     });
 
     const drawable = state.entries.filter(
@@ -1371,7 +1446,7 @@ describe('live user-signal events render the same as their persisted copy', () =
 
     const delivered = liveComposerSignal({ delivery: 'while-active' });
     state = transcriptReducer(state, { type: 'event', event: { type: 'message_start', message: delivered } });
-    state = transcriptReducer(state, { type: 'event', event: { type: 'message_end', message: delivered } });
+    state = transcriptReducer(state, { type: 'event', event: { type: 'message_end', id: delivered.id } });
 
     expect(state.entries).toHaveLength(1);
     expect(state.entries[0]).toMatchObject({
@@ -1499,16 +1574,19 @@ describe('live user-signal events render the same as their persisted copy', () =
   });
 
   it('leaves a sealed turn alone when a later turn opens with the same words', () => {
+    // A turn only gets re-identified while it is still streaming. Once sealed it
+    // is history, and a fresh turn that happens to open on the same words — an
+    // SSE gap having swallowed its empty opening event — must not overwrite it.
     const sealed = dbMessage('turn-1', 'assistant', [{ type: 'text', text: 'Done.' }]);
     let state = transcriptReducer(initialTranscript, {
       type: 'event',
       event: { type: 'message_start', message: sealed },
     });
-    state = transcriptReducer(state, { type: 'event', event: { type: 'message_end', message: sealed } });
+    state = transcriptReducer(state, { type: 'event', event: { type: 'message_end', id: sealed.id } });
     state = transcriptReducer(state, {
       type: 'event',
       event: {
-        type: 'message_update',
+        type: 'message_start',
         message: dbMessage('turn-2', 'assistant', [{ type: 'text', text: 'Done. Now the next thing' }]),
       },
     });
@@ -1531,7 +1609,7 @@ describe('transcript reducer entry identity', () => {
     const claimed = transcriptReducer(drawn, {
       type: 'event',
       event: {
-        type: 'message_update',
+        type: 'message_start',
         message: dbMessage('assistant-first', 'assistant', [{ type: 'text', text: 'Read it.' }]),
       },
     });
@@ -1542,7 +1620,7 @@ describe('transcript reducer entry identity', () => {
     const next = transcriptReducer(claimed, {
       type: 'event',
       event: {
-        type: 'message_update',
+        type: 'message_start',
         message: dbMessage('assistant-second', 'assistant', [{ type: 'text', text: 'Now the next one.' }]),
       },
     });

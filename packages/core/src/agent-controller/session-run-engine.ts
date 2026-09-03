@@ -221,6 +221,7 @@ async function abortDeadline(run: Session['run'], guard: AbortSignal, graceMs: n
 type StreamState = {
   currentMessage: MastraDBMessage;
   lastFinishedMessage?: MastraDBMessage;
+  messageStarted: boolean;
   isSuspended: boolean;
   spans: MessagePartSpans;
   messageIdObserved: boolean;
@@ -315,10 +316,22 @@ export class SessionRunEngine {
     message.content.metadata.errorMessage = errorMessage;
   }
 
+  private startCurrentMessage(state: StreamState): void {
+    if (state.messageStarted) return;
+    this.#session.emit({ type: 'message_start', message: structuredClone(state.currentMessage) });
+    state.messageStarted = true;
+  }
+
+  private finishCurrentMessage(state: StreamState): void {
+    if (!state.messageStarted) return;
+    this.#session.emit({ type: 'message_end', id: state.currentMessage.id });
+    state.messageStarted = false;
+  }
+
   private finishCurrentMessageAndRotate(state: StreamState): void {
     if (!this.isCurrentMessageObserved(state)) return;
     this.setStopReason(state.currentMessage, 'complete');
-    this.#session.emit({ type: 'message_end', message: state.currentMessage });
+    this.finishCurrentMessage(state);
     state.lastFinishedMessage = state.currentMessage;
     state.currentMessage = this.createEmptyAssistantMessage();
     state.spans.clear();
@@ -330,6 +343,7 @@ export class SessionRunEngine {
   createStreamState(): StreamState {
     return {
       currentMessage: this.createEmptyAssistantMessage(),
+      messageStarted: false,
       isSuspended: false,
       spans: new MessagePartSpans({ providerMetadata: false }),
       messageIdObserved: false,
@@ -382,6 +396,7 @@ export class SessionRunEngine {
       }
       state.currentMessage.content.parts.push(toolInvocationPart);
     }
+    this.startCurrentMessage(state);
     this.#session.emit({
       type: 'tool_end',
       toolCallId,
@@ -389,7 +404,7 @@ export class SessionRunEngine {
       isError,
       ...(providerMetadata ? { providerMetadata } : {}),
     });
-    this.#session.emit({ type: 'message_update', message: state.currentMessage });
+    // this.#session.emit({ type: 'message_update', message: state.currentMessage });
   }
 
   private abortForOmFailure({ operationType, stage, error }: { operationType: string; stage: string; error: string }) {
@@ -496,13 +511,23 @@ export class SessionRunEngine {
     }
 
     if (isSpanChunk(chunk)) {
+      const textDelta = chunk.type === 'text-delta' ? chunk.payload.text : undefined;
       const folded = state.spans.fold(state.currentMessage.content.parts, chunk);
-      const opensTheAnswer = chunk.type === 'text-start' || (folded?.created && folded.part.type === 'text');
-      if (opensTheAnswer && !state.messageIdObserved) {
+      if (folded?.created && folded.part.type === 'text' && !state.messageStarted) {
+        const startMessage = structuredClone(state.currentMessage);
+        const startPart = startMessage.content.parts.at(-1);
+        if (startPart?.type === 'text') startPart.text = '';
         state.messageIdObserved = true;
-        this.#session.emit({ type: 'message_start', message: state.currentMessage });
+        this.#session.emit({ type: 'message_start', message: startMessage });
+        state.messageStarted = true;
       }
-      if (folded) this.#session.emit({ type: 'message_update', message: state.currentMessage });
+      if (textDelta !== undefined && folded) {
+        this.#session.emit({
+          type: 'message_update',
+          id: state.currentMessage.id,
+          event: { type: 'text-delta', delta: textDelta },
+        });
+      }
       return undefined;
     }
 
@@ -582,13 +607,14 @@ export class SessionRunEngine {
           },
         });
         state.toolPartById.set(toolCallId, toolIndex);
+        this.startCurrentMessage(state);
         this.#session.emit({
           type: 'tool_start',
           toolCallId,
           toolName,
           args,
         });
-        this.#session.emit({ type: 'message_update', message: state.currentMessage });
+        // this.#session.emit({ type: 'message_update', message: state.currentMessage });
         break;
       }
 
@@ -648,7 +674,7 @@ export class SessionRunEngine {
         }
 
         this.#session.emit({ type: 'tool_end', toolCallId, result: reason, isError: false, denied: true });
-        this.#session.emit({ type: 'message_update', message: state.currentMessage });
+        // this.#session.emit({ type: 'message_update', message: state.currentMessage });
         break;
       }
 
@@ -1039,7 +1065,7 @@ export class SessionRunEngine {
         if (payload) {
           const message = this.createSignalMessage('data-signal', payload);
           this.#session.emit({ type: 'message_start', message });
-          this.#session.emit({ type: 'message_end', message });
+          this.#session.emit({ type: 'message_end', id: message.id });
         }
         break;
       }
@@ -1049,7 +1075,7 @@ export class SessionRunEngine {
           this.finishCurrentMessageAndRotate(state);
           const message = this.createSignalMessage('data-user-message', payload);
           this.#session.emit({ type: 'message_start', message });
-          this.#session.emit({ type: 'message_end', message });
+          this.#session.emit({ type: 'message_end', id: message.id });
         }
         break;
       }
@@ -1059,7 +1085,7 @@ export class SessionRunEngine {
         if (payload) {
           const message = this.createSignalMessage('data-system-reminder', payload);
           this.#session.emit({ type: 'message_start', message });
-          this.#session.emit({ type: 'message_end', message });
+          this.#session.emit({ type: 'message_end', id: message.id });
         }
         break;
       }
@@ -1178,13 +1204,14 @@ export class SessionRunEngine {
       state.currentMessage.content.parts.push({ type: 'tool-invocation', toolInvocation });
     }
 
+    this.startCurrentMessage(state);
     this.#session.emit({ type: 'tool_end', toolCallId, result: ABORTED_BY_USER_REASON, isError: false, denied: true });
-    this.#session.emit({ type: 'message_update', message: state.currentMessage });
+    // this.#session.emit({ type: 'message_update', message: state.currentMessage });
   }
 
   private finishStreamState(state: StreamState): { message: MastraDBMessage; suspended?: boolean } {
-    if (this.isCurrentMessageObserved(state) || !state.lastFinishedMessage) {
-      this.#session.emit({ type: 'message_end', message: state.currentMessage });
+    if (this.hasCurrentMessageContent(state) || !state.lastFinishedMessage) {
+      this.finishCurrentMessage(state);
       return { message: state.currentMessage, suspended: state.isSuspended || undefined };
     }
 
@@ -1245,6 +1272,7 @@ export class SessionRunEngine {
 
     const consume = async (): Promise<void> => {
       for await (const chunk of subscription.stream) {
+        console.log('chunk - res', chunk);
         if (bailed) return;
         if (!this.#session.stream.isCurrent({ subscription })) {
           subscription.unsubscribe();
