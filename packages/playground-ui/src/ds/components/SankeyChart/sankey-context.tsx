@@ -18,6 +18,8 @@ export type SankeyProps = {
   getRecordNodeLabel?: (record: SankeyChartRecord, column: SankeyChartColumn) => string;
   getRecordNodeValue?: (record: SankeyChartRecord, column: SankeyChartColumn) => number;
   getColumnHue?: (column: SankeyChartColumn) => number;
+  /** Muted nodes render with a neutral fill instead of their column hue. */
+  getNodeMuted?: (nodeId: string, column: SankeyChartColumn) => boolean;
 };
 
 export type SankeyControlColumn = SankeyChartColumn & {
@@ -34,6 +36,7 @@ type SankeyRenderContext = {
   graph: SankeyChartGraph;
   enabledColumns: Array<SankeyChartColumn>;
   hueMap: Record<string, number>;
+  mutedNodeIds: ReadonlySet<string>;
   usesFixedGeometry: boolean;
 };
 
@@ -54,6 +57,7 @@ export function Sankey({
   getRecordNodeLabel,
   getRecordNodeValue,
   getColumnHue,
+  getNodeMuted,
 }: SankeyProps) {
   const columnIds = columns.map(column => column.id);
   const [internalOrder, setInternalOrder] = useState(columnIds);
@@ -76,6 +80,11 @@ export function Sankey({
       String(node.value),
       getColumnHue?.(node.column) ?? defaultHueMap[String(node.value)] ?? 0,
     ]),
+  );
+  const mutedNodeIds = new Set(
+    graph.nodes
+      .filter(node => getNodeMuted?.(String(node.value), node.column) === true)
+      .map(node => String(node.value)),
   );
 
   const setVisibleColumns = (nextIds: Array<string>) => {
@@ -109,7 +118,7 @@ export function Sankey({
   return (
     <SankeyControlsContext.Provider value={{ columns: controlColumns, toggleColumn, reorderColumns }}>
       <SankeyRenderContext.Provider
-        value={{ graph, enabledColumns, hueMap, usesFixedGeometry: getRecordLayoutWeight !== undefined }}
+        value={{ graph, enabledColumns, hueMap, mutedNodeIds, usesFixedGeometry: getRecordLayoutWeight !== undefined }}
       >
         {children}
       </SankeyRenderContext.Provider>
