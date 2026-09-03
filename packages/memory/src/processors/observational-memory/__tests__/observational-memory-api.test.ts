@@ -913,10 +913,10 @@ describe('buffer()', () => {
     const om = createOM(storage, { messageTokens: 500, bufferTokens: 0.2 });
     const messages = createBulkMessages(5, threadId);
     const updateBufferedObservations = storage.updateBufferedObservations.bind(storage);
-    const updateSpy = vi
-      .spyOn(storage, 'updateBufferedObservations')
-      .mockRejectedValueOnce(new Error('Connection terminated due to connection timeout'))
-      .mockImplementation(updateBufferedObservations);
+    const updateSpy = vi.spyOn(storage, 'updateBufferedObservations').mockImplementationOnce(async input => {
+      await updateBufferedObservations(input);
+      throw new Error('Connection terminated due to connection timeout');
+    });
 
     const result = await om.buffer({ threadId, messages });
     expect(result.buffered).toBe(true);
