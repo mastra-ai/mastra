@@ -14,6 +14,7 @@ import { FactoryStorageDomain, UniqueViolationError } from '@mastra/core/storage
 import type { CollectionSchema, CollectionWhere, FactoryStorageOps } from '@mastra/core/storage';
 import { isTerminalFactoryRuleStage } from '../../../rules/types.js';
 import type { FactoryTriageType } from '../../../rules/types.js';
+import type { FactoryHealthFinding } from '../../../supervisor/health.js';
 import {
   WORK_ITEM_ACTIVITY_SCHEMA,
   WORK_ITEM_COMMENT_MENTIONS_SCHEMA,
@@ -1171,26 +1172,36 @@ export class WorkItemsStorage extends FactoryStorageDomain {
   async syncSupervisorFindings(input: {
     orgId: string;
     factoryProjectId: string;
-    findings: Array<{ id: string }>;
+    findings: FactoryHealthFinding[];
     now: Date;
   }): Promise<void> {
-    await this.storage.withTransaction(async ops => {
-      const existing = await ops.findMany<GovernanceDbRow>('factory_supervisor_findings', {
+    const changed = await this.#withProjectRelationTransaction(input.orgId, input.factoryProjectId, async ops => {
+      let changed = false;
+      const existingOpen = await ops.findMany<GovernanceDbRow>('factory_supervisor_findings', {
         org_id: input.orgId,
         factory_project_id: input.factoryProjectId,
+        resolved_at: null,
       });
       const currentKeys = new Set(input.findings.map(finding => finding.id));
-      for (const row of existing) {
-        if (!currentKeys.has(String(row.finding_key)) && row.resolved_at === null) {
+      for (const row of existingOpen) {
+        if (!currentKeys.has(String(row.finding_key))) {
           await ops.updateAtomic<GovernanceDbRow>(
             'factory_supervisor_findings',
             { id: row.id, resolved_at: null },
             () => ({ resolved_at: input.now, updated_at: input.now }),
           );
+          changed = true;
         }
       }
+      const openByKey = new Map(existingOpen.map(row => [String(row.finding_key), row]));
       for (const finding of input.findings) {
-        const row = existing.find(candidate => candidate.finding_key === finding.id);
+        const row =
+          openByKey.get(finding.id) ??
+          (await ops.findOne<GovernanceDbRow>('factory_supervisor_findings', {
+            org_id: input.orgId,
+            factory_project_id: input.factoryProjectId,
+            finding_key: finding.id,
+          }));
         if (!row) {
           await ops.insertOne<GovernanceDbRow>('factory_supervisor_findings', {
             org_id: input.orgId,
@@ -1202,19 +1213,24 @@ export class WorkItemsStorage extends FactoryStorageDomain {
             updated_at: input.now,
             resolved_at: null,
           });
+          changed = true;
           continue;
         }
         const reopening = row.resolved_at !== null;
-        await ops.updateAtomic<GovernanceDbRow>('factory_supervisor_findings', { id: row.id }, () => ({
+        const findingChanged = stableJson(row.finding) !== stableJson(finding);
+        if (!reopening && !findingChanged) continue;
+        await ops.updateAtomic<GovernanceDbRow>('factory_supervisor_findings', { id: row.id }, current => ({
           finding,
-          occurrence: Number(row.occurrence) + (reopening ? 1 : 0),
-          opened_at: reopening ? input.now : row.opened_at,
+          occurrence: Number(current.occurrence) + (current.resolved_at !== null ? 1 : 0),
+          opened_at: current.resolved_at !== null ? input.now : current.opened_at,
           updated_at: input.now,
           resolved_at: null,
         }));
+        changed = true;
       }
+      return changed;
     });
-    this.#attentionChanged?.({ orgId: input.orgId, factoryProjectId: input.factoryProjectId });
+    if (changed) this.#attentionChanged?.({ orgId: input.orgId, factoryProjectId: input.factoryProjectId });
   }
 
   async listSupervisorFindingPage(input: {

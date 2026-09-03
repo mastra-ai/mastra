@@ -697,6 +697,7 @@ export class MastraFactory {
           ...(sandboxConfig ? { sandbox: sandboxConfig } : {}),
           ...(this.#config.sandboxStart ? { sandboxStart: this.#config.sandboxStart } : {}),
           ...(githubIntegration ? { github: githubIntegration } : {}),
+          ...(factoryProjectsStorage ? { projects: factoryProjectsStorage } : {}),
           ...(workItemsStorage ? { workItems: workItemsStorage } : {}),
           workspaceRegistry,
         }),
@@ -1096,7 +1097,9 @@ export class MastraFactory {
     // built-ins. Never passed for the disabled/not-ready case — a worker for
     // an unavailable integration must not run.
     const integrationWorkers = [
-      new FactorySupervisorHealthWorker({ projects: factoryProjectsStorage, workItems: workItemsStorage }),
+      ...(workItemsReady
+        ? [new FactorySupervisorHealthWorker({ projects: factoryProjectsStorage, workItems: workItemsStorage })]
+        : []),
       ...integrationRegistrations
         .filter(({ integration, ready }) => ready && integration.workers)
         .flatMap(({ integration }) =>

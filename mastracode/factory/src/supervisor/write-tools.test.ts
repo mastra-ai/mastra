@@ -105,7 +105,7 @@ async function setup() {
     signalSession,
     now: () => NOW,
   });
-  return { ...seed, tools, reconcileAcceptanceLabels, signalSession, onAccepted };
+  return { ...seed, tools, transitionService, reconcileAcceptanceLabels, signalSession, onAccepted };
 }
 
 async function latestAudit(audit: Awaited<ReturnType<typeof setup>>['audit']) {
@@ -180,6 +180,26 @@ describe('createFactorySupervisorWriteTools', () => {
       actorType: 'human',
       action: 'factory.run.dismissed',
       metadata: expect.objectContaining({ cause: 'supervisor', workItemId: dismissed.item.id }),
+    });
+  });
+
+  it('throws when a requested transition is rejected', async () => {
+    const context = await setup();
+    const item = await createItem(context.workItems, 6);
+    vi.spyOn(context.transitionService, 'transition').mockResolvedValue({
+      status: 'rejected',
+      code: 'stale_revision',
+      reason: 'The work item changed before the transition was applied.',
+      transitionId: 'transition-rejected',
+    });
+
+    await expect(
+      execute(context.tools.factory_transition_work_item, { workItemId: item.id, stage: 'planning' }),
+    ).rejects.toThrow('The transition was rejected (stale_revision)');
+    expect(await auditByAction(context.audit, 'factory.work_item.transition_rejected')).toMatchObject({
+      actorId: 'user-supervisor',
+      actorType: 'human',
+      metadata: expect.objectContaining({ cause: 'supervisor', code: 'stale_revision' }),
     });
   });
 

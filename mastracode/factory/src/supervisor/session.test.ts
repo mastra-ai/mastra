@@ -24,12 +24,12 @@ function requestContext(overrides: Partial<{ orgId: string; resourceId: string }
   return context;
 }
 
-async function seedProject() {
+async function seedProject(defaultModelId: string | null = 'anthropic/claude-sonnet-4') {
   const seed = await createFactoryStorageForTests();
   const project = await seed.projects.create({
     orgId: 'org-1',
     userId: 'user-1',
-    input: { name: 'Mastra', defaultModelId: 'anthropic/claude-sonnet-4' },
+    input: { name: 'Mastra', ...(defaultModelId ? { defaultModelId } : {}) },
   });
   return { ...seed, project };
 }
@@ -104,6 +104,16 @@ describe('hydrateSupervisorSession', () => {
       hostInstructions: SUPERVISOR_INSTRUCTIONS,
     });
     expect(session.model.switch).toHaveBeenCalledWith({ modelId: 'anthropic/claude-sonnet-4' });
+  });
+
+  it('keeps the current model when the project has no default model', async () => {
+    const { projects, project } = await seedProject(null);
+    const session = sessionDouble(supervisorResourceId(project.id));
+
+    await hydrateSupervisorSession(session as never, { projects });
+
+    expect(session.state.set).toHaveBeenCalled();
+    expect(session.model.switch).not.toHaveBeenCalled();
   });
 
   it('leaves sessions that are not supervisors alone', async () => {

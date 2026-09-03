@@ -58,19 +58,25 @@ export class FactorySupervisorHealthWorker extends MastraWorker {
   async #tick(): Promise<void> {
     const now = new Date();
     const projects = await this.#projects.listAll();
+    const concurrency = 4;
+    let nextIndex = 0;
     await Promise.all(
-      projects.map(async project => {
-        const report = await runFactoryHealthCheck(
-          this.#workItems,
-          { orgId: project.orgId, factoryProjectId: project.id },
-          { now },
-        );
-        await this.#workItems.syncSupervisorFindings({
-          orgId: project.orgId,
-          factoryProjectId: project.id,
-          findings: report.findings,
-          now,
-        });
+      Array.from({ length: Math.min(concurrency, projects.length) }, async () => {
+        while (nextIndex < projects.length) {
+          const project = projects[nextIndex++];
+          if (!project) return;
+          const report = await runFactoryHealthCheck(
+            this.#workItems,
+            { orgId: project.orgId, factoryProjectId: project.id },
+            { now },
+          );
+          await this.#workItems.syncSupervisorFindings({
+            orgId: project.orgId,
+            factoryProjectId: project.id,
+            findings: report.findings,
+            now,
+          });
+        }
       }),
     );
   }

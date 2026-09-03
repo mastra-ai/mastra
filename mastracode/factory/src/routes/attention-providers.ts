@@ -325,12 +325,34 @@ export class SupervisorFindingAttentionProvider implements AttentionProvider {
   }
 
   async counts(scope: AttentionScope): Promise<AttentionCounts> {
-    const open = await this.#workItems.countOpenSupervisorFindings(scope);
-    const [read, archived] = await Promise.all([
-      this.#workItems.countAttentionReceipts({ ...scope, kind: this.kind, state: 'read' }),
-      this.#workItems.countAttentionReceipts({ ...scope, kind: this.kind, state: 'archived' }),
-    ]);
-    return { open: Math.max(0, open - archived), unread: Math.max(0, open - read - archived) };
+    let before: { occurredAt: Date; id: string } | undefined;
+    let open = 0;
+    let unread = 0;
+    while (true) {
+      const page = await this.#workItems.listSupervisorFindingPage({
+        ...scope,
+        ...(before ? { before } : {}),
+        limit: SCAN_PAGE_SIZE,
+      });
+      if (page.rows.length === 0) break;
+      const identities = page.rows.map(row =>
+        factorySupervisorFindingAttentionIdentity(row.findingKey, row.occurrence),
+      );
+      const receipts = await this.#workItems.listAttentionReceipts({ ...scope, identities });
+      const byIdentity = new Map(
+        receipts.map(receipt => [`${receipt.sourceId}\0${receipt.occurrence}`, receipt] as const),
+      );
+      for (const row of page.rows) {
+        const receipt = byIdentity.get(`${row.findingKey}\0${row.occurrence}`);
+        if (receipt?.state === 'archived') continue;
+        open += 1;
+        if (!receipt) unread += 1;
+      }
+      if (!page.hasMore) break;
+      const last = page.rows.at(-1)!;
+      before = { occurredAt: last.updatedAt, id: last.id };
+    }
+    return { open, unread };
   }
 
   async latest(scope: AttentionScope): Promise<AttentionLatest | null> {
@@ -375,6 +397,7 @@ export class SupervisorFindingAttentionProvider implements AttentionProvider {
               resumeCursor: { occurredAt: row.updatedAt, id: row.id },
               receipt,
               item: {
+                key: factoryAttentionKey(scope.factoryProjectId, identity),
                 kind: this.kind,
                 findingKey: row.findingKey,
                 occurrence: row.occurrence,

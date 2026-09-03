@@ -138,6 +138,9 @@ export function createFactorySupervisorWriteTools(deps: SupervisorWriteDependenc
             ? { from, to: result.stage, revision: result.revision, transitionId: result.transitionId }
             : { from, to: stage, code: result.code, reason: result.reason, transitionId: result.transitionId },
         );
+        if (result.status !== 'accepted') {
+          throw new Error(`The transition was rejected (${result.code}): ${result.reason}`);
+        }
         return result;
       },
     }),

@@ -340,8 +340,19 @@ export function createFactorySupervisorReadTools(deps: SupervisorReadDependencie
             failureLabel: factoryDispatchFailureMetadata(group.decisions[0]!.failureCode).label,
             error: group.error,
             count: group.decisions.length,
-            firstFailedAt: iso(new Date(Math.min(...group.decisions.map(d => d.updatedAt.getTime())))),
-            lastFailedAt: iso(new Date(Math.max(...group.decisions.map(d => d.updatedAt.getTime())))),
+            firstFailedAt: iso(
+              new Date(
+                group.decisions.reduce(
+                  (earliest, decision) => Math.min(earliest, decision.updatedAt.getTime()),
+                  Infinity,
+                ),
+              ),
+            ),
+            lastFailedAt: iso(
+              new Date(
+                group.decisions.reduce((latest, decision) => Math.max(latest, decision.updatedAt.getTime()), -Infinity),
+              ),
+            ),
             decisions: group.decisions.slice(0, limit).map(decision => {
               const item = decision.workItemId ? itemsById.get(decision.workItemId) : undefined;
               return {

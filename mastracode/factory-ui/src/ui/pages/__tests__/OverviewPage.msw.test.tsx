@@ -38,10 +38,20 @@ function card(stageHistory: WorkItemStageEntry[], overrides: Record<string, unkn
 }
 
 function stubBoard(workItems: unknown[], runningSessionIds: string[] = [], findings: unknown[] = []) {
+  const counts = {
+    'decision-failed': 0,
+    'decision-stuck': 0,
+    'start-stalled': 0,
+    'seat-orphaned': 0,
+    'seat-missing': 0,
+    'proposal-waiting': 0,
+    'held-waiting': 0,
+    'label-drift': 0,
+  };
   server.use(
     http.get('*/web/factory/projects/:id/work-items', () => HttpResponse.json({ workItems, runningSessionIds })),
     http.get('*/web/factory/projects/:id/supervisor/health', () =>
-      HttpResponse.json({ generatedAt: new Date().toISOString(), findings }),
+      HttpResponse.json({ checkedAt: new Date().toISOString(), findings, counts }),
     ),
   );
 }
