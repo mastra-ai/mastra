@@ -1,5 +1,42 @@
 # @mastra/factory
 
+## 0.12.0-alpha.15
+
+### Minor Changes
+
+- Added `sandboxStart: 'eager' | 'lazy'` to `MastraFactoryConfig`. `'eager'` starts a session's sandbox as soon as its workspace is first resolved instead of on the agent's first command. Defaults to `'lazy'`. ([#22577](https://github.com/mastra-ai/mastra/pull/22577))
+
+  ```ts
+  new MastraFactory({
+    sandbox: ctx => new PlatformSandbox({ id: ctx.sessionId }),
+    sandboxStart: 'eager',
+  });
+  ```
+
+## 0.12.0-alpha.14
+
+### Minor Changes
+
+- Removed the automatic sandbox snapshot Factory took after every agent turn. ([#22846](https://github.com/mastra-ai/mastra/pull/22846))
+
+  `PlatformSandbox.destroy()` on E2B now only kills the sandbox instead of first asking the platform to delete a recovery checkpoint.
+
+### Patch Changes
+
+- Session start no longer runs `git pull` on an existing checkout; it only clones when the repo is missing from the sandbox. Start-path phases (`workspace.onStart`, `workspace.setup-marker`, `workspace.setup`) now log their timings. ([#22840](https://github.com/mastra-ai/mastra/pull/22840))
+
+- Improved the board card status shown while a linked card is synced. Instead of "Filing a linked card…", cards now name the system they mirror, for example "Syncing GitHub pull request…" or "Couldn't sync GitHub issue". ([#22883](https://github.com/mastra-ai/mastra/pull/22883))
+
+- Factory now remembers a maintainer's acceptance of non-bug work. Triage classifies feature requests, questions and docs as needing a person's decision; before, that decision was checked again on every later agent move, so a card a maintainer had dragged into Planning still stalled when the plan agent tried to advance it to Build. ([#22921](https://github.com/mastra-ai/mastra/pull/22921))
+
+  - The first time a person moves a held card into Planning or Build, the acceptance is recorded on the work item. Later agent transitions along the working lanes proceed without a second gesture, and the gate only guards the exit from Intake/Triage. Cards accepted before this release are recognised by their stage, and pick up the record on their next human move.
+  - On acceptance, the GitHub `status: needs approval` label is removed automatically (best effort; a label failure never blocks the move).
+  - A held card on the board leads with the decision — **Accept and plan**, **Accept and build**, or **Close** — and says why it waits (`Feature request · needs your approval`). Runs, re-runs and suggested runs on that card are withheld until it is accepted, so nothing advances it as a side effect. Bugs are never held.
+
+- Updated dependencies [[`7686114`](https://github.com/mastra-ai/mastra/commit/7686114e3802f4cea414377eaf10999524d670fa), [`50469b2`](https://github.com/mastra-ai/mastra/commit/50469b2d085fc8550579ca4b741eb359d1705abc), [`809e882`](https://github.com/mastra-ai/mastra/commit/809e882ee9c154ac642eaed396163df706db6ae4), [`74b21fd`](https://github.com/mastra-ai/mastra/commit/74b21fd9bbe88e770d9acf4e00e01c8bbb7c9e61), [`c5c9ffc`](https://github.com/mastra-ai/mastra/commit/c5c9ffc3b36bdc7b17d6f911be81e28ba02acfad)]:
+  - @mastra/core@1.64.0-alpha.9
+  - @mastra/code-sdk@1.6.0-alpha.11
+
 ## 0.12.0-alpha.13
 
 ### Patch Changes

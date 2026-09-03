@@ -40,6 +40,7 @@ import {
 } from './auth.js';
 import { touchFeed } from './feed-events.js';
 import type { FactoryIntegration, IntegrationPostToolContext, IntegrationTools } from './integrations/base.js';
+import { reconcileGithubAcceptanceLabels } from './integrations/github/acceptance-labels.js';
 import type { GithubIntegration } from './integrations/github/integration.js';
 import {
   recordFactoryPullRequestProvenance,
@@ -97,8 +98,10 @@ import { FactoryProjectsStorage } from './storage/domains/projects/base.js';
 import { QueueHealthStorage } from './storage/domains/queue-health/base.js';
 import { SourceControlStorage } from './storage/domains/source-control/base.js';
 import { WorkItemsStorage } from './storage/domains/work-items/base.js';
+import type { WorkItemRow } from './storage/domains/work-items/base.js';
 import { timedPhase } from './timing.js';
 import { createWorkspaceFactory, FactoryWorkspaceRegistry } from './workspace.js';
+import type { FactorySandboxStart } from './workspace.js';
 
 type BuildApiRoutesDeps = Pick<FactoryApiRoutesDeps, 'controller' | 'authStorage'>;
 
@@ -159,6 +162,12 @@ export interface MastraFactoryConfig {
   allowedOrigins?: string[];
   /** Sandbox configuration. Omitted → repository sandboxes are disabled. */
   sandbox?: MastraFactorySandboxConfig;
+  /**
+   * When a session's sandbox boots: on the agent's first command (`'lazy'`,
+   * the default) or as soon as the session's workspace is first resolved
+   * (`'eager'`), so the boot overlaps the model's own latency.
+   */
+  sandboxStart?: FactorySandboxStart;
   /** Background Factory dispatcher configuration. */
   dispatcher?: MastraFactoryDispatcherConfig;
   /**
@@ -201,6 +210,7 @@ export interface MastraFactoryConfig {
 }
 
 export type { MastraFactorySandboxConfig } from './sandbox/session-sandbox.js';
+export type { FactorySandboxStart } from './workspace.js';
 
 /**
  * Per-process cap on concurrent background Factory dispatches. Omitted means
@@ -566,6 +576,16 @@ export class MastraFactory {
           rules,
           storage: workItemsStorage,
           ...(onTerminalStage ? { onTerminalStage } : {}),
+          ...(githubIntegration
+            ? {
+                onAccepted: (args: { orgId: string; factoryProjectId: string; item: WorkItemRow }) =>
+                  reconcileGithubAcceptanceLabels(
+                    githubIntegration,
+                    sourceControlStorage.forIntegration(githubIntegration.id),
+                    args,
+                  ),
+              }
+            : {}),
         })
       : undefined;
     const projectRoutes = new ProjectRoutes({
@@ -645,6 +665,7 @@ export class MastraFactory {
         controllerId: CONTROLLER_ID,
         workspace: createWorkspaceFactory({
           ...(sandboxConfig ? { sandbox: sandboxConfig } : {}),
+          ...(this.#config.sandboxStart ? { sandboxStart: this.#config.sandboxStart } : {}),
           ...(githubIntegration ? { github: githubIntegration } : {}),
           ...(workItemsStorage ? { workItems: workItemsStorage } : {}),
           workspaceRegistry,
