@@ -7522,16 +7522,20 @@ export class Agent<
       if (result.status !== 'success' && agentSpan && !agentSpan.endTime) {
         if (result.status === 'failed') {
           // The workflow serializes step errors, so result.error may be a
-          // plain { message, stack } object rather than an Error instance.
+          // plain { message, stack } object rather than an Error instance;
+          // MastraError extracts a usable message from any cause shape.
           const raw = result.error as unknown;
           const error =
             raw instanceof Error
               ? raw
-              : new Error(
-                  typeof raw === 'string'
-                    ? raw
-                    : ((raw as { message?: string } | null | undefined)?.message ??
-                        'Agent prepare workflow failed without an error payload'),
+              : new MastraError(
+                  {
+                    id: 'AGENT_PREPARE_STREAM_FAILED',
+                    domain: ErrorDomain.AGENT,
+                    category: ErrorCategory.SYSTEM,
+                    details: { runId },
+                  },
+                  raw,
                 );
           agentSpan.error({ error, endTree: true });
         } else {
@@ -7540,16 +7544,19 @@ export class Agent<
       }
       return result;
     } catch (error) {
-      // Rejections are not guaranteed to be Error instances; normalize so the
-      // span records a usable message instead of choking on null/strings.
+      // Rejections are not guaranteed to be Error instances; MastraError
+      // extracts a usable message from any cause shape.
       const spanError =
         error instanceof Error
           ? error
-          : new Error(
-              typeof error === 'string'
-                ? error
-                : ((error as { message?: string } | null | undefined)?.message ??
-                    'Agent prepare workflow rejected with a non-error value'),
+          : new MastraError(
+              {
+                id: 'AGENT_PREPARE_STREAM_REJECTED',
+                domain: ErrorDomain.AGENT,
+                category: ErrorCategory.SYSTEM,
+                details: { runId },
+              },
+              error,
             );
       agentSpan?.error({ error: spanError, endTree: true });
       throw error;
