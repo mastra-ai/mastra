@@ -1,5 +1,4 @@
 ---
-'@mastra/qdrant': patch
 '@mastra/lance': patch
 ---
 
