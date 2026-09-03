@@ -67,7 +67,7 @@ describe('ACP Event Mapper', () => {
 
       for (const message of messages) {
         handleAgentControllerEvent({ type: 'message_start', message }, state, mockConnection, mockSession);
-        handleAgentControllerEvent({ type: 'message_end', message }, state, mockConnection, mockSession);
+        handleAgentControllerEvent({ type: 'message_end', id: message.id }, state, mockConnection, mockSession);
       }
 
       expect(sessionUpdateSpy).toHaveBeenNthCalledWith(1, {
@@ -89,15 +89,40 @@ describe('ACP Event Mapper', () => {
 
     it('forwards compact assistant deltas across interleaved signals', () => {
       const state = createPromptState('session-1');
-      const assistant = { id: 'assistant-1', role: 'assistant' as const, content: { format: 2 as const, parts: [] } };
-      const signal = createSignal({ id: 'reminder-1', type: 'system-reminder', tagName: 'system-reminder', contents: 'Remember this.', createdAt: new Date() }).toDBMessage();
+      const assistant = {
+        id: 'assistant-1',
+        role: 'assistant' as const,
+        content: { format: 2 as const, parts: [] },
+        createdAt: new Date(),
+      };
+      const signal = createSignal({
+        id: 'reminder-1',
+        type: 'system-reminder',
+        tagName: 'system-reminder',
+        contents: 'Remember this.',
+        createdAt: new Date(),
+      }).toDBMessage();
       handleAgentControllerEvent({ type: 'message_start', message: assistant }, state, mockConnection, mockSession);
-      handleAgentControllerEvent({ type: 'message_update', id: assistant.id, event: { type: 'text-delta', delta: 'Before signal' } }, state, mockConnection, mockSession);
+      handleAgentControllerEvent(
+        { type: 'message_update', id: assistant.id, event: { type: 'text-delta', delta: 'Before signal' } },
+        state,
+        mockConnection,
+        mockSession,
+      );
       handleAgentControllerEvent({ type: 'message_start', message: signal }, state, mockConnection, mockSession);
       handleAgentControllerEvent({ type: 'message_end', id: signal.id }, state, mockConnection, mockSession);
-      handleAgentControllerEvent({ type: 'message_update', id: assistant.id, event: { type: 'text-delta', delta: ' after' } }, state, mockConnection, mockSession);
+      handleAgentControllerEvent(
+        { type: 'message_update', id: assistant.id, event: { type: 'text-delta', delta: ' after' } },
+        state,
+        mockConnection,
+        mockSession,
+      );
       handleAgentControllerEvent({ type: 'message_end', id: assistant.id }, state, mockConnection, mockSession);
-      expect(sessionUpdateSpy.mock.calls.map(([notification]) => notification.update.content.text)).toEqual(['Before signal', 'Remember this.', ' after']);
+      expect(sessionUpdateSpy.mock.calls.map(([notification]) => notification.update.content.text)).toEqual([
+        'Before signal',
+        'Remember this.',
+        ' after',
+      ]);
       expect(state.lastTextLength).toBe(0);
     });
   });
@@ -105,13 +130,61 @@ describe('ACP Event Mapper', () => {
   describe('message_update - compact text deltas', () => {
     it('emits only matching assistant text deltas', () => {
       const state = createPromptState('session-1');
-      const assistant = { id: 'msg-1', role: 'assistant' as const, content: { format: 2 as const, parts: [] } };
+      const assistant = {
+        id: 'msg-1',
+        role: 'assistant' as const,
+        content: { format: 2 as const, parts: [] },
+        createdAt: new Date(),
+      };
       handleAgentControllerEvent({ type: 'message_start', message: assistant }, state, mockConnection, mockSession);
-      handleAgentControllerEvent({ type: 'message_update', id: assistant.id, event: { type: 'text-delta', delta: 'Hello' } }, state, mockConnection, mockSession);
-      handleAgentControllerEvent({ type: 'message_update', id: 'other', event: { type: 'text-delta', delta: 'ignored' } }, state, mockConnection, mockSession);
-      expect(sessionUpdateSpy).toHaveBeenCalledWith({ sessionId: 'session-1', update: { sessionUpdate: 'agent_message_chunk', content: { type: 'text', text: 'Hello' } } });
+      handleAgentControllerEvent(
+        { type: 'message_update', id: assistant.id, event: { type: 'text-delta', delta: 'Hello' } },
+        state,
+        mockConnection,
+        mockSession,
+      );
+      handleAgentControllerEvent(
+        { type: 'message_update', id: 'other', event: { type: 'text-delta', delta: 'ignored' } },
+        state,
+        mockConnection,
+        mockSession,
+      );
+      expect(sessionUpdateSpy).toHaveBeenCalledWith({
+        sessionId: 'session-1',
+        update: { sessionUpdate: 'agent_message_chunk', content: { type: 'text', text: 'Hello' } },
+      });
       expect(sessionUpdateSpy).toHaveBeenCalledTimes(1);
       expect(state.lastTextLength).toBe(5);
+    });
+
+    it('does not emit ACP text chunks for reasoning or part updates', () => {
+      const state = createPromptState('session-1');
+      const assistant = {
+        id: 'msg-1',
+        role: 'assistant' as const,
+        content: { format: 2 as const, parts: [] },
+        createdAt: new Date(),
+      };
+      handleAgentControllerEvent({ type: 'message_start', message: assistant }, state, mockConnection, mockSession);
+      handleAgentControllerEvent(
+        { type: 'message_update', id: assistant.id, event: { type: 'reasoning-delta', index: 0, delta: 'Thinking' } },
+        state,
+        mockConnection,
+        mockSession,
+      );
+      handleAgentControllerEvent(
+        {
+          type: 'message_update',
+          id: assistant.id,
+          event: { type: 'part', index: 0, part: { type: 'reasoning', reasoning: 'Thinking', details: [] } },
+        },
+        state,
+        mockConnection,
+        mockSession,
+      );
+
+      expect(sessionUpdateSpy).not.toHaveBeenCalled();
+      expect(state.lastTextLength).toBe(0);
     });
   });
 
@@ -488,12 +561,8 @@ describe('ACP Event Mapper', () => {
     it('ignores events when state is null', () => {
       const event: Extract<AgentControllerEvent, { type: 'message_update' }> = {
         type: 'message_update',
-        message: {
-          id: 'msg-1',
-          role: 'assistant',
-          content: { format: 2, parts: [{ type: 'text', text: 'Hello' }] },
-          createdAt: new Date(),
-        },
+        id: 'msg-1',
+        event: { type: 'text-delta', delta: 'Hello' },
       };
 
       handleAgentControllerEvent(event, null, mockConnection, mockSession);

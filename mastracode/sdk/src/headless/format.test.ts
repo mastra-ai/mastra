@@ -29,14 +29,42 @@ describe('formatHuman', () => {
   it('streams compact assistant text deltas', () => {
     const state = createHumanFormatState();
     formatHuman({ type: 'message_start', message: textMessage('', 'assistant-1') } as AgentControllerEvent, state);
-    expect(formatHuman({ type: 'message_update', id: 'assistant-1', event: { type: 'text-delta', delta: 'Hello' } }, state)).toEqual({ stdout: 'Hello' });
-    expect(formatHuman({ type: 'message_update', id: 'assistant-1', event: { type: 'text-delta', delta: ' world' } }, state)).toEqual({ stdout: ' world' });
+    expect(
+      formatHuman({ type: 'message_update', id: 'assistant-1', event: { type: 'text-delta', delta: 'Hello' } }, state),
+    ).toEqual({ stdout: 'Hello' });
+    expect(
+      formatHuman({ type: 'message_update', id: 'assistant-1', event: { type: 'text-delta', delta: ' world' } }, state),
+    ).toEqual({ stdout: ' world' });
+  });
+
+  it('ignores compact reasoning and part updates in human text output', () => {
+    const state = createHumanFormatState();
+    formatHuman({ type: 'message_start', message: textMessage('', 'assistant-1') } as AgentControllerEvent, state);
+
+    expect(
+      formatHuman(
+        { type: 'message_update', id: 'assistant-1', event: { type: 'reasoning-delta', index: 0, delta: 'Thinking' } },
+        state,
+      ),
+    ).toEqual({});
+    expect(
+      formatHuman(
+        {
+          type: 'message_update',
+          id: 'assistant-1',
+          event: { type: 'part', index: 0, part: { type: 'reasoning', reasoning: 'Thinking', details: [] } },
+        },
+        state,
+      ),
+    ).toEqual({});
   });
 
   it('ignores deltas for another message', () => {
     const state = createHumanFormatState();
     formatHuman({ type: 'message_start', message: textMessage('', 'assistant-1') } as AgentControllerEvent, state);
-    expect(formatHuman({ type: 'message_update', id: 'assistant-2', event: { type: 'text-delta', delta: 'Hi' } }, state)).toEqual({});
+    expect(
+      formatHuman({ type: 'message_update', id: 'assistant-2', event: { type: 'text-delta', delta: 'Hi' } }, state),
+    ).toEqual({});
   });
 
   it('resets the cursor and emits a trailing newline on matching message_end', () => {

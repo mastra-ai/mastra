@@ -224,6 +224,49 @@ describe('transcript reducer message entries', () => {
     expect(messageParts(state.entries[1])).toEqual([{ type: 'text', text: 'Streaming text' }]);
   });
 
+  it('reconstructs compact reasoning and tool part updates by their indexes', () => {
+    const started = transcriptReducer(initialTranscript, {
+      type: 'event',
+      event: {
+        type: 'message_start',
+        message: dbMessage('assistant-1', 'assistant', [{ type: 'text', text: 'Before' }]),
+      },
+    });
+    const withReasoning = transcriptReducer(started, {
+      type: 'event',
+      event: {
+        type: 'message_update',
+        id: 'assistant-1',
+        event: { type: 'part', index: 1, part: { type: 'reasoning', reasoning: '', details: [] } },
+      },
+    });
+    const withDelta = transcriptReducer(withReasoning, {
+      type: 'event',
+      event: { type: 'message_update', id: 'assistant-1', event: { type: 'reasoning-delta', index: 1, delta: 'Thinking' } },
+    });
+    const state = transcriptReducer(withDelta, {
+      type: 'event',
+      event: {
+        type: 'message_update',
+        id: 'assistant-1',
+        event: {
+          type: 'part',
+          index: 2,
+          part: {
+            type: 'tool-invocation',
+            toolInvocation: { state: 'call', toolCallId: 'tool-1', toolName: 'view', args: { path: 'a.ts' } },
+          },
+        },
+      },
+    });
+
+    expect(messageParts(state.entries[0])).toEqual([
+      { type: 'text', text: 'Before' },
+      { type: 'reasoning', reasoning: 'Thinking', details: [{ type: 'text', text: 'Thinking' }] },
+      { type: 'tool-invocation', toolInvocation: { state: 'call', toolCallId: 'tool-1', toolName: 'view', args: { path: 'a.ts' } } },
+    ]);
+  });
+
   it('deduplicates starts and finalizes only the matching assistant message', () => {
     const message = dbMessage('assistant-1', 'assistant', [{ type: 'text', text: '' }]);
     const started = transcriptReducer(
