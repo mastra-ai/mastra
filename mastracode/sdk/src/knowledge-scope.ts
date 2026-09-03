@@ -27,16 +27,62 @@ function readStoredMachineId(filePath: string): string | undefined {
   }
 }
 
+const LOCK_WAIT_MS = 1_000;
+const LOCK_STALE_MS = 5_000;
+const LOCK_POLL_MS = 20;
+
+function sleepSync(ms: number): void {
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+}
+
+/**
+ * Run `fn` while holding an exclusive lock directory next to the machine-id
+ * file. `mkdirSync` without `recursive` is atomic, so exactly one process at a
+ * time reads, validates, and (re)writes the file; nothing is ever raced or
+ * overwritten. A lock older than LOCK_STALE_MS is presumed abandoned (crashed
+ * holder) and broken. Throws if the lock cannot be acquired in LOCK_WAIT_MS.
+ */
+function withMachineIdLock<T>(filePath: string, fn: () => T): T {
+  const lockDir = `${filePath}.lock`;
+  const deadline = Date.now() + LOCK_WAIT_MS;
+  for (;;) {
+    try {
+      fs.mkdirSync(lockDir);
+      break;
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
+      let stale = false;
+      try {
+        stale = Date.now() - fs.statSync(lockDir).mtimeMs > LOCK_STALE_MS;
+      } catch {
+        continue; // holder released between our mkdir and stat; retry immediately
+      }
+      if (stale) {
+        fs.rmSync(lockDir, { recursive: true, force: true });
+        continue;
+      }
+      if (Date.now() >= deadline) throw new Error(`Timed out waiting for ${lockDir}`);
+      sleepSync(LOCK_POLL_MS);
+    }
+  }
+  try {
+    return fn();
+  } finally {
+    fs.rmSync(lockDir, { recursive: true, force: true });
+  }
+}
+
 /**
  * A durable, random identifier for this machine, persisted at
  * `<homeDir>/<configDirName>/machine-id` on first use so that the local
  * knowledge org survives hostname changes (as long as the config dir does).
  *
- * Creation is exclusive (`wx`): when two processes race, the loser reads the
- * winner's id back instead of overwriting it. A corrupt file is replaced. If the
- * file can neither be read nor written, this falls back to a hash of the
- * hostname without persisting or caching it, so a read-only home never blocks
- * curation and a later permission fix takes effect on the next call.
+ * Creation and corrupt-file replacement happen under an exclusive lock (see
+ * {@link withMachineIdLock}), so concurrent first runs converge on one id. If
+ * the file can neither be read nor written, or the lock cannot be taken, this
+ * falls back to a hash of the hostname without persisting or caching it, so a
+ * read-only home never blocks curation and a later fix takes effect on the
+ * next call.
  */
 export function localMachineId(options: LocalKnowledgeOrgOptions = {}): string {
   const filePath = path.join(
@@ -51,7 +97,14 @@ export function localMachineId(options: LocalKnowledgeOrgOptions = {}): string {
   if (!id) {
     try {
       fs.mkdirSync(path.dirname(filePath), { recursive: true });
-      id = createMachineIdFile(filePath);
+      id = withMachineIdLock(filePath, () => {
+        // Re-read under the lock: another process may have just created it.
+        const existing = readStoredMachineId(filePath);
+        if (existing) return existing;
+        const fresh = randomBytes(6).toString('hex');
+        fs.writeFileSync(filePath, `${fresh}\n`, 'utf-8');
+        return fresh;
+      });
     } catch {
       return createHash('sha256').update(hostname()).digest('hex').slice(0, 12);
     }
@@ -59,43 +112,6 @@ export function localMachineId(options: LocalKnowledgeOrgOptions = {}): string {
 
   machineIdCache.set(filePath, id);
   return id;
-}
-
-/**
- * Exclusive create; on EEXIST take what the other process wrote. If what exists
- * is corrupt, move it aside atomically (rename) and try once more, so two
- * processes recovering from the same corrupt file still converge on one id
- * instead of both overwriting it.
- */
-function createMachineIdFile(filePath: string): string {
-  let candidate = randomBytes(6).toString('hex');
-  for (let attempt = 0; attempt < 3; attempt++) {
-    try {
-      fs.writeFileSync(filePath, `${candidate}\n`, { encoding: 'utf-8', flag: 'wx' });
-      return candidate;
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
-      const winner = readStoredMachineId(filePath);
-      if (winner) return winner;
-      const aside = `${filePath}.corrupt-${candidate}`;
-      try {
-        fs.renameSync(filePath, aside);
-      } catch (renameError) {
-        // Someone else already moved it aside; just retry the create.
-        if ((renameError as NodeJS.ErrnoException).code !== 'ENOENT') throw renameError;
-        continue;
-      }
-      // The rename is atomic but not conditional: between our corrupt read and
-      // the rename another process may have replaced the file with a valid id.
-      // If we displaced one, it is the winner; put it back instead of a fresh id.
-      const displaced = readStoredMachineId(aside);
-      if (displaced) {
-        candidate = displaced;
-        fs.rmSync(aside, { force: true });
-      }
-    }
-  }
-  throw new Error(`Unable to establish ${filePath}`);
 }
 
 /**

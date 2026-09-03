@@ -54,14 +54,14 @@ describe('localMachineId', () => {
     expect(readFileSync(file, 'utf-8').trim()).toBe(id);
   });
 
-  it('takes the winner’s id when another process creates the file first', () => {
+  it('takes the winner’s id when another process creates the file before we hold the lock', () => {
     const homeDir = tempHome();
     const file = path.join(homeDir, '.mastracode', MACHINE_ID_FILE);
     const winner = '0123456789ab';
-    // Simulate the race: the other process lands between our read-miss and our exclusive create.
-    const mkdir = vi.spyOn(fs, 'mkdirSync').mockImplementationOnce((dir, opts) => {
-      const result = fs.mkdirSync(dir, opts);
-      fs.writeFileSync(file, `${winner}\n`);
+    // Simulate the race: the other process lands between our read-miss and our lock acquisition.
+    const mkdir = vi.spyOn(fs, 'mkdirSync').mockImplementation((dir, opts) => {
+      const result = mkdirSync(dir, opts as never);
+      if (String(dir).endsWith('.lock') && !fs.existsSync(file)) fs.writeFileSync(file, `${winner}\n`);
       return result;
     });
     try {
@@ -70,51 +70,34 @@ describe('localMachineId', () => {
     } finally {
       mkdir.mockRestore();
     }
+    expect(fs.existsSync(`${file}.lock`)).toBe(false);
   });
 
-  it('converges on one id when two processes recover from the same corrupt file', () => {
+  it('breaks a stale lock left by a crashed process', () => {
     const homeDir = tempHome();
     const file = path.join(homeDir, '.mastracode', MACHINE_ID_FILE);
-    mkdirSync(path.dirname(file), { recursive: true });
-    writeFileSync(file, 'garbage\n');
-    const winner = 'fedcba987654';
-    // The other process moves the corrupt file aside and creates its id while we are between our EEXIST and our rename.
-    const rename = vi.spyOn(fs, 'renameSync').mockImplementationOnce((from, to) => {
-      fs.renameSync(from, to);
-      fs.writeFileSync(file, `${winner}\n`);
-      throw Object.assign(new Error('ENOENT'), { code: 'ENOENT' });
-    });
-    try {
-      expect(localMachineId({ homeDir })).toBe(winner);
-      expect(readFileSync(file, 'utf-8').trim()).toBe(winner);
-      expect(
-        fs.readdirSync(path.dirname(file)).filter(name => name.startsWith(`${MACHINE_ID_FILE}.corrupt-`)),
-      ).toHaveLength(1);
-    } finally {
-      rename.mockRestore();
-    }
+    const lock = `${file}.lock`;
+    mkdirSync(lock, { recursive: true });
+    const old = new Date(Date.now() - 60_000);
+    fs.utimesSync(lock, old, old);
+    expect(localMachineId({ homeDir })).toMatch(/^[0-9a-f]{12}$/);
+    expect(fs.existsSync(lock)).toBe(false);
   });
 
-  it('restores a valid id it displaced when the other recoverer won between our read and our rename', () => {
+  it('does not write, cache, or break a live lock it cannot acquire; falls back to the hostname hash', () => {
     const homeDir = tempHome();
     const file = path.join(homeDir, '.mastracode', MACHINE_ID_FILE);
-    mkdirSync(path.dirname(file), { recursive: true });
-    writeFileSync(file, 'garbage\n');
-    const winner = '13579bdf2468';
-    // The other process finishes its whole recovery (move aside + create) before our rename runs,
-    // so our rename displaces the winner's valid file rather than the corrupt one.
-    const rename = vi.spyOn(fs, 'renameSync').mockImplementationOnce((from, to) => {
-      fs.renameSync(from, `${file}.corrupt-other`);
-      fs.writeFileSync(file, `${winner}\n`);
-      fs.renameSync(from, to);
-    });
-    try {
-      expect(localMachineId({ homeDir })).toBe(winner);
-      expect(readFileSync(file, 'utf-8').trim()).toBe(winner);
-      expect(fs.readdirSync(path.dirname(file)).sort()).toEqual([MACHINE_ID_FILE, `${MACHINE_ID_FILE}.corrupt-other`]);
-    } finally {
-      rename.mockRestore();
-    }
+    const lock = `${file}.lock`;
+    mkdirSync(lock, { recursive: true });
+    const hostHash = createHash('sha256').update(hostname()).digest('hex').slice(0, 12);
+    expect(localMachineId({ homeDir })).toBe(hostHash);
+    expect(fs.existsSync(file)).toBe(false);
+    expect(fs.existsSync(lock)).toBe(true);
+    // Lock released: a real id is minted on the next call, nothing was cached.
+    fs.rmdirSync(lock);
+    const id = localMachineId({ homeDir });
+    expect(id).toMatch(/^[0-9a-f]{12}$/);
+    expect(id).not.toBe(hostHash);
   });
 
   it('falls back to a hostname hash without persisting or caching when the config dir is unwritable', () => {
