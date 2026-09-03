@@ -38,6 +38,12 @@ export function withCaptureCompanions(scopeIds: KnowledgeScopeIds): KnowledgeSco
   return scopeIds;
 }
 
+export function getKnowledgeInstance(memory: KnowledgeStoreMemory): Knowledge {
+  const knowledge = memory.getKnowledgeInstance?.();
+  if (!knowledge) throw new Error('Knowledge tools require a configured Knowledge instance.');
+  return knowledge;
+}
+
 export async function getKnowledgeStore(memory: KnowledgeStoreMemory): Promise<KnowledgeStorage> {
   if (memory.getKnowledgeStore) return memory.getKnowledgeStore();
   const store = await memory.storage?.getStore('knowledge');
