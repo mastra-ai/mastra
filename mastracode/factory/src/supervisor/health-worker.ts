@@ -60,7 +60,7 @@ export class FactorySupervisorHealthWorker extends MastraWorker {
     const projects = await this.#projects.listAll();
     const concurrency = 4;
     let nextIndex = 0;
-    await Promise.all(
+    const results = await Promise.allSettled(
       Array.from({ length: Math.min(concurrency, projects.length) }, async () => {
         while (nextIndex < projects.length) {
           const project = projects[nextIndex++];
@@ -79,5 +79,7 @@ export class FactorySupervisorHealthWorker extends MastraWorker {
         }
       }),
     );
+    const failure = results.find((result): result is PromiseRejectedResult => result.status === 'rejected');
+    if (failure) throw failure.reason;
   }
 }

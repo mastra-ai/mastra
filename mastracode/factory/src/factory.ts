@@ -1106,7 +1106,7 @@ export class MastraFactory {
     // built-ins. Never passed for the disabled/not-ready case — a worker for
     // an unavailable integration must not run.
     const integrationWorkers = [
-      ...(workItemsReady
+      ...(factoryReady
         ? [new FactorySupervisorHealthWorker({ projects: factoryProjectsStorage, workItems: workItemsStorage })]
         : []),
       ...integrationRegistrations

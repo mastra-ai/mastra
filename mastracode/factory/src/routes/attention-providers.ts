@@ -325,16 +325,14 @@ export class SupervisorFindingAttentionProvider implements AttentionProvider {
   }
 
   async counts(scope: AttentionScope): Promise<AttentionCounts> {
-    let before: { occurredAt: Date; id: string } | undefined;
     let open = 0;
     let unread = 0;
-    while (true) {
-      const page = await this.#workItems.listSupervisorFindingPage({
-        ...scope,
-        ...(before ? { before } : {}),
-        limit: SCAN_PAGE_SIZE,
-      });
-      if (page.rows.length === 0) break;
+    const batches = scanBatches<FactorySupervisorFindingRecord>(
+      before =>
+        this.#workItems.listSupervisorFindingPage({ ...scope, ...(before ? { before } : {}), limit: SCAN_PAGE_SIZE }),
+      row => ({ occurredAt: row.updatedAt, id: row.id }),
+    );
+    for await (const page of batches) {
       const identities = page.rows.map(row =>
         factorySupervisorFindingAttentionIdentity(row.findingKey, row.occurrence),
       );
@@ -348,9 +346,6 @@ export class SupervisorFindingAttentionProvider implements AttentionProvider {
         open += 1;
         if (!receipt) unread += 1;
       }
-      if (!page.hasMore) break;
-      const last = page.rows.at(-1)!;
-      before = { occurredAt: last.updatedAt, id: last.id };
     }
     return { open, unread };
   }

@@ -466,9 +466,11 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
     const fireEagerStart = () => {
       if (!startEagerly) return;
       startEagerly = false;
-      Promise.resolve(sessionEntry.sandbox.start?.()).catch(error => {
-        console.warn(`[factory] Eager sandbox start for session ${session.id} failed:`, error);
-      });
+      Promise.resolve()
+        .then(() => sessionEntry.sandbox.start?.())
+        .catch(error => {
+          console.warn(`[factory] Eager sandbox start for session ${session.id} failed:`, error);
+        });
     };
     const sessionEntry = constructSessionEntry();
     const workdir = sessionEntry.workdir;
