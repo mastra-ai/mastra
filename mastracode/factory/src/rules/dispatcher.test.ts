@@ -59,6 +59,7 @@ function createSession(
     suspendsOnTool?: string;
     /** The resumed run writes another plan, so an uncapped gate would never end. */
     replansAfterApproval?: boolean;
+    streamActive?: boolean;
   },
 ) {
   let threadId = 'thread-1';
@@ -136,6 +137,7 @@ function createSession(
       requireId: vi.fn(() => threadId),
       listActiveMessages: vi.fn(async () => [...deliveredSignals].map(id => ({ id }))),
     },
+    stream: { isActive: vi.fn(() => options?.streamActive ?? false) },
     abort,
     getWorkspace: () => ({
       skills: {
@@ -143,7 +145,16 @@ function createSession(
         get: vi.fn(async (name: string) => ({ name, instructions: 'Follow the skill.' })),
       },
     }),
-    state: { set: vi.fn(async () => {}) },
+    state: {
+      get: vi.fn(() => ({ factoryProjectId: PROJECT_ID })),
+      set: vi.fn(async () => {}),
+    },
+    model: { get: vi.fn(() => 'openai/gpt-5.6-sol') },
+    mode: { get: vi.fn(() => 'build') },
+    identity: {
+      getId: vi.fn(() => 'session-1'),
+      getOwnerId: vi.fn(() => 'user-1'),
+    },
     permissions: { setForTool: vi.fn(async () => {}) },
     sendMessage: vi.fn(async () => {}),
     sendSignal: vi.fn((input: { id: string }, _options: { requestContext: { get(key: string): unknown } }) => {
@@ -1110,6 +1121,11 @@ describe('FactoryDecisionDispatcher', () => {
     );
     const requestContext = session.sendSignal.mock.calls[0]?.[1]?.requestContext;
     expect(requestContext?.get('user')).toEqual({ workosId: 'user-1', organizationId: 'org-1' });
+    expect(requestContext?.get('controller')).toMatchObject({
+      resourceId: PROJECT_ID,
+      threadId: 'thread-1',
+      session: { modeId: 'build', modelId: 'openai/gpt-5.6-sol' },
+    });
     expect(session.subscribe).toHaveBeenCalledTimes(1);
     expect(getAgentEndListenerCount()).toBe(0);
   });
@@ -1474,7 +1490,7 @@ describe('FactoryDecisionDispatcher', () => {
       idempotencyKey: 'skill-cancel-1',
       cancelInFlight: true,
     });
-    const { controller, session, abort } = createSession();
+    const { controller, session, abort } = createSession(undefined, { streamActive: true });
     await storage.prepareRunStart({
       orgId: 'org-1',
       userId: 'user-1',
@@ -1506,6 +1522,7 @@ describe('FactoryDecisionDispatcher', () => {
 
     await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
 
+    expect(session.thread.switch).not.toHaveBeenCalled();
     expect(abort).toHaveBeenCalledTimes(1);
     expect(abort.mock.invocationCallOrder[0]!).toBeLessThan(session.sendSignal.mock.invocationCallOrder[0]!);
     expect(session.sendSignal).toHaveBeenCalledTimes(1);
@@ -4083,6 +4100,11 @@ describe('FactoryDecisionDispatcher', () => {
     expect(primeCredentials).toHaveBeenCalledWith({ orgId: 'org-1', userId: 'user-1' });
     const kickoffOptions = sendNotificationSignal.mock.calls[0]![1];
     expect(kickoffOptions?.requestContext?.get('user')).toEqual({ workosId: 'user-1', organizationId: 'org-1' });
+    expect(kickoffOptions?.requestContext?.get('controller')).toMatchObject({
+      threadId: 'thread-1',
+      resourceId: 'session-1',
+      session: { id: 'session-1', ownerId: 'user-1', modeId: 'build', modelId: 'openai/gpt-5.6-sol' },
+    });
     expect((await storage.listPendingStarts('org-1', PROJECT_ID))[0]?.status).toBe('sent');
   });
 

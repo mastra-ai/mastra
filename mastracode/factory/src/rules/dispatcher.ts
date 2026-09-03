@@ -177,6 +177,7 @@ function waitForAgentEndOrTimeout(agentEnd: Promise<void>, timeoutMs: number): P
 
 interface ThreadSwitchSession {
   thread: {
+    requireId(): string;
     switch(input: { threadId: string }): Promise<unknown>;
   };
 }
@@ -194,6 +195,7 @@ interface DispatcherSession extends SkillSession {
     switch(input: { threadId: string }): Promise<unknown>;
     listActiveMessages(): Promise<Array<{ id: string }>>;
   };
+  stream: { isActive(): boolean };
   abort(): void;
   sendSignal(
     input: { id: string; type: 'user'; tagName: 'user'; contents: string },
@@ -205,6 +207,32 @@ interface DispatcherSession extends SkillSession {
 
 type FactoryController = Pick<AgentController<MastraCodeState>, 'getSessionByResource'>;
 type BoundDispatcherSession = Session<MastraCodeState>;
+
+function factoryRequestContext(input: {
+  session: BoundDispatcherSession;
+  binding: FactoryRunBindingRecord;
+  userId: string;
+  orgId: string;
+}): RequestContext {
+  const { session, binding, userId, orgId } = input;
+  const requestContext = new RequestContext();
+  requestContext.set('user', { workosId: userId, organizationId: orgId });
+  const modeId = session.mode.get();
+  requestContext.set('controller', {
+    state: session.state.get(),
+    getState: () => session.state.get(),
+    threadId: binding.threadId,
+    resourceId: binding.resourceId,
+    session: {
+      id: session.identity.getId(),
+      ownerId: session.identity.getOwnerId(),
+      modeId,
+      modelId: session.model.get() ?? '',
+    },
+    workspace: session.getWorkspace(),
+  });
+  return requestContext;
+}
 
 export interface FactoryBindingPreparationInput {
   record: FactoryDeferredDecisionRecord;
@@ -629,10 +657,14 @@ export class FactoryDecisionDispatcher {
         const startedBy = item.sessions[binding.role]?.startedBy;
         if (!startedBy) return;
         await this.#primeCredentials?.({ orgId: record.orgId, userId: startedBy });
-        const requestContext = new RequestContext();
-        requestContext.set('user', { workosId: startedBy, organizationId: record.orgId });
         const session = await this.#findSession(binding);
         if (!session) return;
+        const requestContext = factoryRequestContext({
+          session,
+          binding,
+          userId: startedBy,
+          orgId: record.orgId,
+        });
         await awaitNotification(
           () =>
             session.sendNotificationSignal(
@@ -668,8 +700,13 @@ export class FactoryDecisionDispatcher {
         const startedBy = item?.sessions[binding.role]?.startedBy;
         if (!startedBy) throw new Error(`Factory binding ${binding.id} has no authenticated session owner.`);
         await this.#primeCredentials?.({ orgId: record.orgId, userId: startedBy });
-        const requestContext = new RequestContext();
-        requestContext.set('user', { workosId: startedBy, organizationId: record.orgId });
+        const session = await this.#requireSession(binding);
+        const requestContext = factoryRequestContext({
+          session,
+          binding,
+          userId: startedBy,
+          orgId: record.orgId,
+        });
         const resolved =
           decision.skillName === undefined
             ? await resolvePromptInvocation(this.#controller, {
@@ -681,7 +718,6 @@ export class FactoryDecisionDispatcher {
                 name: decision.skillName,
                 arguments: decision.arguments,
               });
-        const session = resolved.session as DispatcherSession;
         await this.#switchThread(session, binding);
         const deliveryId =
           record.deliveryGeneration === 0 ? record.id : `${record.id}:retry:${record.deliveryGeneration}`;
@@ -693,7 +729,7 @@ export class FactoryDecisionDispatcher {
           { orgId: record.orgId, factoryProjectId: record.factoryProjectId, workItemId: record.workItemId },
           resolved.message,
         );
-        if (decision.cancelInFlight) session.abort();
+        if (decision.cancelInFlight && session.stream.isActive()) session.abort();
         const precedingMessage = decision.precedingMessage;
         if (precedingMessage) {
           await awaitNotification(() =>
@@ -806,9 +842,13 @@ export class FactoryDecisionDispatcher {
         const startedBy = item?.sessions[binding.role]?.startedBy;
         if (!startedBy) throw new Error(`Factory binding ${binding.id} has no authenticated session owner.`);
         await this.#primeCredentials?.({ orgId: record.orgId, userId: startedBy });
-        const requestContext = new RequestContext();
-        requestContext.set('user', { workosId: startedBy, organizationId: record.orgId });
         const session = await this.#requireSession(binding);
+        const requestContext = factoryRequestContext({
+          session,
+          binding,
+          userId: startedBy,
+          orgId: record.orgId,
+        });
         await awaitNotification(
           () =>
             session.sendNotificationSignal(
@@ -1067,6 +1107,7 @@ export class FactoryDecisionDispatcher {
   }
 
   async #switchThread(session: ThreadSwitchSession, binding: FactoryRunBindingRecord): Promise<void> {
+    if (session.thread.requireId() === binding.threadId) return;
     await session.thread.switch({ threadId: binding.threadId });
   }
 
@@ -1123,9 +1164,13 @@ export class FactoryDecisionDispatcher {
           const startedBy = item?.sessions[binding.role]?.startedBy;
           if (!startedBy) throw new Error(`Factory binding ${binding.id} has no authenticated session owner.`);
           await this.#primeCredentials?.({ orgId: record.orgId, userId: startedBy });
-          const requestContext = new RequestContext();
-          requestContext.set('user', { workosId: startedBy, organizationId: record.orgId });
           const session = await this.#requireSession(binding);
+          const requestContext = factoryRequestContext({
+            session,
+            binding,
+            userId: startedBy,
+            orgId: record.orgId,
+          });
           // The run's own verdict, not the delivery's: a kickoff delivered
           // into a run that is already terminating is consumed without
           // execution, and completing the pending start on the delivery ack
