@@ -3,11 +3,12 @@ import { useState } from 'react';
 import { EXAMPLES_PAGE_SIZE, ExamplesPager } from './examples-pager';
 import { useThemeDetail, useThemeExamples, useThemeHistory } from './hooks';
 import { getSignalHue } from './signal-colors';
-import { formatSnapshotDate, shareSentence, SIGNAL_DESCRIPTIONS } from './signal-formatting';
+import { formatSnapshotDate, shareSentence, signalDescription, signalLabel } from './signal-formatting';
 import type { SelectedTheme, ThemeSelection, ThemeSelectionStats } from './theme-drilldown-data';
 import { chronologicalHistoryPoints, themeTrendDirection } from './theme-trend';
 import { ThemeTrendChart } from './theme-trend-chart';
 import { TraceInsightView } from './trace-insight-view';
+import { useTraceIntelligence } from './use-trace-intelligence';
 import {
   Drawer,
   DrawerBody,
@@ -40,6 +41,7 @@ export function ThemeDetailPanel({
   filteredStats,
   onClose,
 }: ThemeDetailPanelProps) {
+  const { signalCatalog } = useTraceIntelligence();
   const filterKey = filters
     .map(filter => `${filter.signalName}:${filter.kind === 'theme' ? filter.themeId : 'noise'}`)
     .join(',');
@@ -72,6 +74,8 @@ export function ThemeDetailPanel({
   );
   const title = detailQuery.data?.theme?.label ?? selection?.label ?? 'Theme details';
   const signalName = selection?.signalName;
+  const signalDisplayLabel = signalName ? signalLabel(signalCatalog, signalName) : undefined;
+  const signalDisplayDescription = signalName ? signalDescription(signalCatalog, signalName) : undefined;
   const historyPoints = historyQuery.data ? chronologicalHistoryPoints(historyQuery.data.points) : [];
   const oldestHistoryPoint = historyPoints[0];
 
@@ -96,10 +100,16 @@ export function ThemeDetailPanel({
               className="font-mono text-xs font-semibold tracking-widest"
               style={{ color: nodeColor(getSignalHue(signalName)) }}
             >
-              <Tooltip>
-                <TooltipTrigger className="cursor-default uppercase">{signalName}</TooltipTrigger>
-                <TooltipContent>{SIGNAL_DESCRIPTIONS[signalName]}</TooltipContent>
-              </Tooltip>
+              {signalDisplayDescription ? (
+                <Tooltip>
+                  <TooltipTrigger aria-label={signalDisplayLabel} className="cursor-default uppercase">
+                    {signalDisplayLabel}
+                  </TooltipTrigger>
+                  <TooltipContent>{signalDisplayDescription}</TooltipContent>
+                </Tooltip>
+              ) : (
+                <span className="uppercase">{signalDisplayLabel}</span>
+              )}
             </span>
           )}
           <DrawerTitle>{title}</DrawerTitle>

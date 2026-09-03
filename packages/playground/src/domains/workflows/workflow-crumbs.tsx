@@ -6,7 +6,7 @@ export function WorkflowCrumb() {
   const { workflowId } = useParams<{ workflowId: string }>();
   if (!workflowId) return null;
 
-  return <WorkflowCombobox value={workflowId} variant="ghost" />;
+  return <WorkflowCombobox value={workflowId} variant="ghost" size="sm" />;
 }
 
 export function WorkflowRunCrumb() {

@@ -87,6 +87,8 @@ import type {
   ListBranchesResponse,
   ListFeedbackArgs,
   ListFeedbackResponse,
+  FeedbackRecord,
+  UpdateFeedbackReviewStatusArgs,
   ListLogsArgs,
   ListLogsResponse,
   ListMetricsArgs,
@@ -466,6 +468,14 @@ export class ObservabilityStoragePostgresVNext extends ObservabilityStorage {
 
   override async listFeedback(args: ListFeedbackArgs): Promise<ListFeedbackResponse> {
     return this.#run('LIST_FEEDBACK', () => feedbackOps.listFeedback(this.#client, this.#schema, args));
+  }
+
+  override async updateFeedbackReviewStatus(args: UpdateFeedbackReviewStatusArgs): Promise<FeedbackRecord> {
+    return this.#run(
+      'UPDATE_FEEDBACK_REVIEW_STATUS',
+      () => feedbackOps.updateFeedbackReviewStatus(this.#client, this.#schema, args),
+      { feedbackId: args.feedbackId },
+    );
   }
 
   // -------------------------------------------------------------------------

@@ -3011,6 +3011,14 @@ describe('MastraMCPClient - Session Reconnection (Issue #7675)', () => {
 });
 
 describe('MastraMCPClient - Filesystem Server Integration (Issue #8660)', () => {
+  // Resolve the filesystem server from the workspace instead of `npx -y`, which
+  // downloads it on the fly and can hang or produce no output in CI.
+  const filesystemServer = path.join(
+    path.dirname(require.resolve('@modelcontextprotocol/server-filesystem/package.json')),
+    'dist',
+    'index.js',
+  );
+
   /**
    * Integration test using the actual @modelcontextprotocol/server-filesystem
    * This reproduces the exact scenario from issue #8660:
@@ -3033,7 +3041,7 @@ describe('MastraMCPClient - Filesystem Server Integration (Issue #8660)', () => 
       let settled = false;
       let ready = false;
 
-      const proc = spawn('npx', ['-y', '@modelcontextprotocol/server-filesystem', '/tmp'], {
+      const proc = spawn(process.execPath, [filesystemServer, '/tmp'], {
         stdio: ['pipe', 'pipe', 'pipe'],
       });
 
@@ -3168,8 +3176,8 @@ describe('MastraMCPClient - Filesystem Server Integration (Issue #8660)', () => 
     const client = new InternalMastraMCPClient({
       name: 'with-roots-proof-test',
       server: {
-        command: 'npx',
-        args: ['-y', '@modelcontextprotocol/server-filesystem', '/tmp'],
+        command: process.execPath,
+        args: [filesystemServer, '/tmp'],
         roots: [{ uri: 'file:///tmp', name: 'Temp Directory' }],
       },
     });
@@ -3198,8 +3206,8 @@ describe('MastraMCPClient - Filesystem Server Integration (Issue #8660)', () => 
     const client = new InternalMastraMCPClient({
       name: 'filesystem-roots-test',
       server: {
-        command: 'npx',
-        args: ['-y', '@modelcontextprotocol/server-filesystem', '/tmp'],
+        command: process.execPath,
+        args: [filesystemServer, '/tmp'],
         roots: [{ uri: 'file:///tmp', name: 'Temp Directory' }],
       },
     });
@@ -3227,8 +3235,8 @@ describe('MastraMCPClient - Filesystem Server Integration (Issue #8660)', () => 
     const client = new InternalMastraMCPClient({
       name: 'filesystem-roots-update-test',
       server: {
-        command: 'npx',
-        args: ['-y', '@modelcontextprotocol/server-filesystem', '/tmp'],
+        command: process.execPath,
+        args: [filesystemServer, '/tmp'],
         roots: [{ uri: 'file:///tmp' }],
       },
     });
@@ -4544,9 +4552,11 @@ describe('InternalMastraMCPClient - concurrent tool reconnects', () => {
     (client as any).transport = transport;
 
     let rejectToolCall!: (error: Error) => void;
-    const callTool = vi.spyOn(sdkClient, 'callTool').mockImplementationOnce(
-      () => new Promise((_, reject) => (rejectToolCall = reject)) as ReturnType<Client['callTool']>,
-    );
+    const callTool = vi
+      .spyOn(sdkClient, 'callTool')
+      .mockImplementationOnce(
+        () => new Promise((_, reject) => (rejectToolCall = reject)) as ReturnType<Client['callTool']>,
+      );
     const connect = vi.spyOn(client, 'connect');
     const tool = (await client.tools())['ping'];
     const result = tool.execute?.({});

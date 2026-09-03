@@ -1,6 +1,6 @@
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { setupMarkerCommand, setupMarkerContent } from '@internal/workspace';
+import { repoCloneCommand, setupMarkerCommand, setupMarkerContent } from '@internal/workspace';
 
 import { Template, type SandboxTemplateBuilder } from './template.js';
 
@@ -175,9 +175,11 @@ export function createRepoTemplate(options: PlatformRepoTemplateOptions): Platfo
       // shell expansion.
       template = template.runCmd(`mkdir -p "${workingDirectory}"`).setWorkdir(workingDirectory);
     }
-    // Each operation gets its own cached provider build step.
+    // Each operation gets its own cached provider build step. Same shallow
+    // clone Factory makes at session start when no image provided one, so
+    // both paths yield the same checkout.
     template = template
-      .runCmd(`git ${auth}clone ${cloneUrl} "${repoDir}"`)
+      .runCmd(repoCloneCommand({ cloneUrl, destination: repoDir, ...(token ? { tokenEnv: BUILD_TOKEN_ENV } : {}) }))
       .runCmd(`git -C "${repoDir}" ${auth}fetch origin ${sha}`)
       .runCmd(`git -C "${repoDir}" checkout ${sha}`);
     // Build steps use fresh shells, so each setup command needs its own `cd`.

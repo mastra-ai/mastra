@@ -30,7 +30,7 @@
 import { execFile } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { promisify } from 'node:util';
-import { setupMarkerCommand, setupMarkerContent } from '@internal/workspace';
+import { repoCloneCommand, setupMarkerCommand, setupMarkerContent } from '@internal/workspace';
 
 import { Template } from 'e2b';
 import type { ConnectionOpts, TemplateClass } from 'e2b';
@@ -420,8 +420,12 @@ function buildRepoTemplateSpec(identity: RepoTemplateIdentity, token?: string): 
     const dir = trimTrailingSlashes(workingDirectory);
     template = template.runCmd(`mkdir -p "${dir}"`).setWorkdir(dir);
   }
-  // Each command gets its own cached build layer.
-  template = template.runCmd(`git ${auth}clone ${cloneUrl} "${repoDir}"`);
+  // Each command gets its own cached build layer. Same shallow clone Factory
+  // makes at session start when no image provided one, so both paths yield
+  // the same checkout.
+  template = template.runCmd(
+    repoCloneCommand({ cloneUrl, destination: repoDir, ...(token ? { tokenEnv: BUILD_TOKEN_ENV } : {}) }),
+  );
   if (sha) {
     // GitHub serves fetches of reachable shas, so pinning after a default
     // clone is reliable without full-history flags.
