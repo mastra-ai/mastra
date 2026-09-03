@@ -88,13 +88,19 @@ export function useScopeControl(
   options: readonly SettingsScope[],
   initial: SettingsScope = 'personal',
 ): ScopeSwapControl {
-  const [value, setValue] = useState(initial);
-  const [shown, setShown] = useState(initial);
+  const [picked, setPicked] = useState(initial);
+  const [revealed, setRevealed] = useState(initial);
   const bodyRef = useRef<HTMLDivElement>(null);
+
+  // Options shrink when a permission answer lands, so a scope picked while the
+  // answer was pending falls back rather than editing a scope no longer offered.
+  const offered = (scope: SettingsScope) => (options.includes(scope) ? scope : (options[0] ?? initial));
+  const value = offered(picked);
+  const shown = offered(revealed);
 
   const onChange = (next: SettingsScope) => {
     if (next === value) return;
-    setValue(next);
+    setPicked(next);
     const dx = options.indexOf(next) > options.indexOf(value) ? SLIDE_PX : -SLIDE_PX;
     const exit = animate(
       bodyRef.current,
@@ -104,10 +110,10 @@ export function useScopeControl(
       ],
       { duration: 120, easing: 'ease-in', fill: 'forwards' },
     );
-    if (!exit) return setShown(next);
+    if (!exit) return setRevealed(next);
     exit.finished.then(
       () => {
-        flushSync(() => setShown(next));
+        flushSync(() => setRevealed(next));
         animate(
           bodyRef.current,
           [

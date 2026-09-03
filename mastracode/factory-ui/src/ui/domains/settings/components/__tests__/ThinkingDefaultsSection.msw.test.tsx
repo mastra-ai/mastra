@@ -1,6 +1,7 @@
 import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
+import assert from 'node:assert/strict';
 import { describe, expect, it } from 'vitest';
 
 import { server } from '../../../../../../e2e/ui/msw-server';
@@ -20,6 +21,12 @@ const baseConfig: ThinkingConfigInfo = {
 
 /** What a drag does: the thumb moves, the value is not saved until the pointer comes up. */
 const dragTo = (slider: HTMLElement, level: number) => fireEvent.change(slider, { target: { value: String(level) } });
+
+const rowOf = (slider: HTMLElement) => {
+  const row = slider.closest<HTMLElement>('[data-slot="settings-row"]');
+  assert(row, 'the slider should sit inside a settings row');
+  return row;
+};
 
 describe('BaseThinkingSection', () => {
   it('renders the base thinking level from the server', async () => {
@@ -51,6 +58,27 @@ describe('BaseThinkingSection', () => {
     await waitForMutationsIdle(client);
     expect(requestBody).toEqual({ globalDefault: 'high' });
     await waitFor(() => expect(base).toHaveAttribute('aria-valuetext', 'High'));
+  });
+
+  it('writes once when the slider is released and then blurred', async () => {
+    let writes = 0;
+    server.use(
+      http.get(THINKING_URL, () => HttpResponse.json(baseConfig)),
+      http.put(THINKING_URL, () => {
+        writes += 1;
+        return HttpResponse.json({ ok: true, globalDefault: 'high', modeDefaults: baseConfig.modeDefaults });
+      }),
+    );
+
+    const { client } = renderWithProviders(<BaseThinkingSection />);
+
+    const base = await screen.findByRole('slider', { name: 'Base thinking level' });
+    dragTo(base, 3);
+    fireEvent.pointerUp(base);
+    fireEvent.blur(base);
+
+    await waitForMutationsIdle(client);
+    expect(writes).toBe(1);
   });
 
   it('renders read-only rows when the deployment refuses writes', async () => {
@@ -129,7 +157,13 @@ describe('ModeThinkingDefaultsSection', () => {
     server.use(
       http.get(THINKING_URL, () => HttpResponse.json(baseConfig)),
       http.put(THINKING_URL, () =>
-        HttpResponse.json({ error: 'Deployment thinking defaults can only be changed in local mode' }, { status: 403 }),
+        HttpResponse.json(
+          {
+            error:
+              'Deployment thinking defaults are shared by the whole deployment, so they cannot be changed while authentication is enabled',
+          },
+          { status: 403 },
+        ),
       ),
     );
 
@@ -140,13 +174,11 @@ describe('ModeThinkingDefaultsSection', () => {
     fireEvent.pointerUp(build);
 
     await waitForMutationsIdle(client);
-    const buildRow = build.closest('[data-slot="settings-row"]') as HTMLElement;
-    const planRow = screen
-      .getByRole('slider', { name: 'plan mode thinking level' })
-      .closest('[data-slot="settings-row"]') as HTMLElement;
+    const buildRow = rowOf(build);
+    const planRow = rowOf(screen.getByRole('slider', { name: 'plan mode thinking level' }));
 
-    expect(await within(buildRow).findByText(/only be changed in local mode/)).toBeInTheDocument();
-    expect(within(planRow).queryByText(/only be changed in local mode/)).not.toBeInTheDocument();
+    expect(await within(buildRow).findByText(/cannot be changed while authentication is enabled/)).toBeInTheDocument();
+    expect(within(planRow).queryByText(/cannot be changed while authentication is enabled/)).not.toBeInTheDocument();
   });
 
   it('clears a per-mode override back to the global default with null', async () => {

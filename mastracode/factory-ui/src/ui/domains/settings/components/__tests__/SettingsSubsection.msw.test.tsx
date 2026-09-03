@@ -2,7 +2,14 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 
+import { useScopeControl } from '../SettingsScope';
+import type { SettingsScope } from '../SettingsScope';
 import { SettingsSubsection } from '../SettingsSubsection';
+
+function ScopeHarness({ options }: { options: SettingsScope[] }) {
+  const control = useScopeControl(options);
+  return <SettingsSubsection scope={control} title="Provider access" />;
+}
 
 describe('SettingsSubsection', () => {
   describe('given a fixed scope', () => {
@@ -57,6 +64,23 @@ describe('SettingsSubsection', () => {
       await user.click(screen.getByRole('button', { name: 'Org-wide' }));
 
       expect(onChange).toHaveBeenCalledWith('org');
+    });
+  });
+
+  describe('given the picked scope stops being offered', () => {
+    it('falls back to a scope the caller still has', async () => {
+      const user = userEvent.setup();
+      // Org rights are assumed while the permission query is pending, so the
+      // switch offers a scope the answer may take away.
+      const { rerender } = render(<ScopeHarness options={['personal', 'org']} />);
+
+      await user.click(screen.getByRole('button', { name: 'Org-wide' }));
+      expect(screen.getByRole('button', { name: 'Org-wide' })).toHaveAttribute('aria-pressed', 'true');
+
+      rerender(<ScopeHarness options={['personal']} />);
+
+      expect(screen.queryByRole('button', { name: 'Org-wide' })).not.toBeInTheDocument();
+      expect(screen.getByText('Personal')).toBeInTheDocument();
     });
   });
 });

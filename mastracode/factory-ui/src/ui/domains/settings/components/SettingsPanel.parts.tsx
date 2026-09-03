@@ -1,19 +1,12 @@
 import type {
-  AgentControllerAvailableModel,
   AgentControllerSessionSettings,
   PermissionPolicy,
   PermissionRules,
   ToolCategory,
 } from '@mastra/client-js';
-import { Badge } from '@mastra/playground-ui/components/Badge';
-import { Button } from '@mastra/playground-ui/components/Button';
-import { Input } from '@mastra/playground-ui/components/Input';
 import { Switch } from '@mastra/playground-ui/components/Switch';
 import { ThemeToggle } from '@mastra/playground-ui/components/ThemeToggle';
-import { Txt } from '@mastra/playground-ui/components/Txt';
-import { cn } from '@mastra/playground-ui/utils/cn';
-import { Check } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
+import { useState } from 'react';
 
 import { loadDoneSound, playDoneSound, saveDoneSound } from '../services/doneSound';
 import type { DoneSound } from '../services/doneSound';
@@ -156,10 +149,6 @@ function PermissionsSection({
   pendingPermissionCategory,
   setPermissionForCategory,
 }: Pick<BehaviorSettingsProps, 'permissions' | 'pendingPermissionCategory' | 'setPermissionForCategory'>) {
-  const update = async (category: ToolCategory, policy: PermissionPolicy) => {
-    await setPermissionForCategory(category, policy);
-  };
-
   return (
     <SettingsSubsection
       scope="factory"
@@ -174,170 +163,12 @@ function PermissionsSection({
               value={permissions?.categories?.[value] ?? 'ask'}
               disabled={!permissions || pendingPermissionCategory === value}
               options={PERMISSION_POLICIES}
-              onChange={policy => void update(value, policy)}
+              onChange={policy => void setPermissionForCategory(value, policy)}
             />
           </SettingsRow>
         ))}
       </SettingsCard>
     </SettingsSubsection>
-  );
-}
-
-function ModelPicker({
-  models,
-  currentModelId,
-  onModelChange,
-}: {
-  models: AgentControllerAvailableModel[];
-  currentModelId: string | null;
-  onModelChange: (id: string) => void;
-}) {
-  const [open, setOpen] = useState(false);
-  const [query, setQuery] = useState('');
-  const [active, setActive] = useState(0);
-  const rootRef = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
-
-  const current = models.find(m => m.id === currentModelId);
-  const currentLabel = current ? `${current.provider} / ${current.modelName}` : (currentModelId ?? 'Select a model');
-
-  const q = query.trim().toLowerCase();
-  const matched = q
-    ? models.filter(
-        m =>
-          m.provider.toLowerCase().includes(q) ||
-          m.modelName.toLowerCase().includes(q) ||
-          m.id.toLowerCase().includes(q),
-      )
-    : models;
-  const filtered = [...matched].sort((a, b) => {
-    if (a.hasApiKey !== b.hasApiKey) return a.hasApiKey ? -1 : 1;
-    return a.id.localeCompare(b.id);
-  });
-
-  // Open/close is an event, not a synchronization: reset search state in the
-  // handlers that trigger it instead of reacting via effects.
-  const openPicker = () => {
-    setQuery('');
-    setActive(0);
-    setOpen(true);
-    requestAnimationFrame(() => inputRef.current?.focus());
-  };
-
-  const updateQuery = (next: string) => {
-    setQuery(next);
-    setActive(0);
-  };
-
-  useEffect(() => {
-    if (!open) return;
-    const onDocClick = (e: MouseEvent) => {
-      if (rootRef.current && !rootRef.current.contains(e.target as Node)) setOpen(false);
-    };
-    document.addEventListener('mousedown', onDocClick);
-    return () => document.removeEventListener('mousedown', onDocClick);
-  }, [open]);
-
-  const choose = (m: AgentControllerAvailableModel) => {
-    if (!m.hasApiKey) return;
-    onModelChange(m.id);
-    setOpen(false);
-  };
-
-  const onKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'ArrowDown') {
-      e.preventDefault();
-      setActive(a => Math.min(a + 1, filtered.length - 1));
-    } else if (e.key === 'ArrowUp') {
-      e.preventDefault();
-      setActive(a => Math.max(a - 1, 0));
-    } else if (e.key === 'Enter') {
-      e.preventDefault();
-      const m = filtered[active];
-      if (m) choose(m);
-    } else if (e.key === 'Escape') {
-      e.preventDefault();
-      setOpen(false);
-    }
-  };
-
-  if (models.length === 0) {
-    return (
-      <Txt variant="ui-sm" className="text-icon3">
-        No models available.
-      </Txt>
-    );
-  }
-
-  return (
-    <div className="relative" ref={rootRef}>
-      <Button
-        variant="outline"
-        size="md"
-        className="w-full justify-between"
-        aria-haspopup="listbox"
-        aria-expanded={open}
-        onClick={() => (open ? setOpen(false) : openPicker())}
-      >
-        <span className="truncate">{currentLabel}</span>
-        <span aria-hidden>▾</span>
-      </Button>
-
-      {open && (
-        <div
-          className="border-border1/60 bg-surface3 shadow-dialog absolute z-50 mt-1 w-full rounded-lg border"
-          role="dialog"
-          aria-label="Choose a model"
-        >
-          <div className="border-border1/40 border-b p-2">
-            <Input
-              ref={inputRef}
-              placeholder="Search models or providers…"
-              value={query}
-              onChange={e => updateQuery(e.target.value)}
-              onKeyDown={onKeyDown}
-              aria-label="Search models"
-            />
-          </div>
-          <ul className="max-h-72 overflow-y-auto p-1" role="listbox" aria-label="Models">
-            {filtered.length === 0 && (
-              <li className="px-3 py-2">
-                <Txt variant="ui-sm" className="text-icon3">
-                  No models match “{query}”.
-                </Txt>
-              </li>
-            )}
-            {filtered.slice(0, 100).map((m, i) => (
-              <li key={m.id}>
-                <button
-                  type="button"
-                  role="option"
-                  aria-selected={m.id === currentModelId}
-                  className={cn(
-                    'flex w-full items-center justify-between gap-3 rounded-md px-3 py-2 text-left',
-                    i === active && 'bg-surface4',
-                    m.hasApiKey ? 'cursor-pointer' : 'cursor-not-allowed opacity-50',
-                  )}
-                  disabled={!m.hasApiKey}
-                  onMouseEnter={() => setActive(i)}
-                  onClick={() => choose(m)}
-                >
-                  <span className="flex min-w-0 flex-col gap-0.5">
-                    <Txt variant="ui-md" className="text-icon6 truncate">
-                      {m.modelName}
-                    </Txt>
-                    <Txt variant="ui-sm" className="text-icon3 truncate">
-                      {m.provider}
-                    </Txt>
-                  </span>
-                  {m.id === currentModelId ? <Check size={14} /> : m.hasApiKey ? null : <Badge>no key</Badge>}
-                </button>
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
-    </div>
   );
 }
 

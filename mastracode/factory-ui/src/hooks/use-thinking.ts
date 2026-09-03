@@ -45,6 +45,9 @@ export function useUpdateThinkingMutation() {
   const key = queryKeys.thinkingConfig();
 
   return useMutation({
+    // Base and per-mode rows write the same file: run them one at a time so a
+    // rollback restores the value before that write, not before its neighbour's.
+    scope: { id: 'thinking-config' },
     mutationFn: (args: UpdateThinkingArgs) => client.put<UpdateThinkingConfigResponse>('/web/config/thinking', args),
     onMutate: async args => {
       await queryClient.cancelQueries({ queryKey: key, exact: true });

@@ -71,10 +71,10 @@ export function ModeThinkingDefaultsSection() {
         >
           <ThinkingLevelPicker
             ariaLabel={`${mode} mode thinking level`}
-            value={config?.modeDefaults[mode] ?? null}
+            value={config?.modeDefaults[mode]}
             inherited={config?.globalDefault ?? 'off'}
             disabled={disabled}
-            onChange={level => update.mutateAsync({ modeDefaults: { [mode]: level } }).catch(() => {})}
+            onChange={level => update.mutateAsync({ modeDefaults: { [mode]: level ?? null } }).catch(() => {})}
           />
         </SettingsRow>
       ))}

@@ -130,7 +130,7 @@ export function ProviderAccessSection({ description }: { description?: string })
 
   // OAuth-capable providers usually accept API keys too, so the API-key tab
   // lists every provider, credentialed-first.
-  const apiKeyProviders = [...providers].sort((left, right) => {
+  const apiKeyProviders = providers.toSorted((left, right) => {
     const leftHas = credentialAt(left, scope) !== undefined;
     const rightHas = credentialAt(right, scope) !== undefined;
     if (leftHas !== rightHas) return leftHas ? -1 : 1;

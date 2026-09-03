@@ -322,7 +322,7 @@ describe('ProviderAccessSection', () => {
       );
 
       const user = userEvent.setup();
-      renderWithProviders(<ProviderAccessSection />);
+      const { client } = renderWithProviders(<ProviderAccessSection />);
 
       await user.click(screen.getByRole('tab', { name: 'Connect with API key' }));
       await screen.findByText('OpenAI');
@@ -332,7 +332,8 @@ describe('ProviderAccessSection', () => {
       await user.type(screen.getByPlaceholderText('Paste API key'), 'sk-org');
       await user.click(screen.getByRole('button', { name: 'Save' }));
 
-      await waitFor(() => expect(putBody).toEqual({ key: 'sk-org', scope: 'org' }));
+      await waitForMutationsIdle(client);
+      expect(putBody).toEqual({ key: 'sk-org', scope: 'org' });
       await waitFor(() => expect(within(rowFor('openai')).getByText('Key saved')).toBeInTheDocument());
       expect(within(rowFor('openai')).getByRole('button', { name: 'Remove key for OpenAI' })).toBeInTheDocument();
 
@@ -430,7 +431,7 @@ describe('ProviderAccessSection', () => {
       );
 
       const user = userEvent.setup();
-      renderWithProviders(<ProviderAccessSection />);
+      const { client } = renderWithProviders(<ProviderAccessSection />);
 
       await screen.findByText('Anthropic');
       expect(within(rowFor('anthropic')).getByRole('button', { name: 'Sign out of Anthropic' })).toBeInTheDocument();
@@ -446,6 +447,7 @@ describe('ProviderAccessSection', () => {
       await user.type(await screen.findByLabelText('Authorization code'), 'code#state');
       await user.click(screen.getByRole('button', { name: 'Complete sign in' }));
 
+      await waitForMutationsIdle(client);
       await waitFor(() =>
         expect(
           within(rowFor('anthropic')).getByRole('button', { name: 'Sign out of Anthropic for the org' }),

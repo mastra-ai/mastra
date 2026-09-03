@@ -11,7 +11,9 @@ import type { DoneSound } from '../services/doneSound';
 
 type ThinkingLevel = NonNullable<AgentControllerSessionSettings['thinkingLevel']>;
 
-export const THINKING_LEVELS: { value: ThinkingLevel; label: string }[] = [
+const AUDIBLE_SOUNDS = DONE_SOUND_OPTIONS.filter(option => option.value !== 'none');
+
+const THINKING_LEVELS: { value: ThinkingLevel; label: string }[] = [
   { value: 'off', label: 'Off' },
   { value: 'low', label: 'Low' },
   { value: 'medium', label: 'Medium' },
@@ -21,13 +23,13 @@ export const THINKING_LEVELS: { value: ThinkingLevel; label: string }[] = [
 ];
 
 interface ThinkingLevelPickerProps {
-  value: ThinkingLevel | null;
+  value?: ThinkingLevel;
   ariaLabel: string;
   disabled?: boolean;
-  /** When given, `value: null` means the row follows this level instead of setting its own. */
+  /** When given, an absent `value` means the row follows this level instead of setting its own. */
   inherited?: ThinkingLevel;
   /** Returning the write lets the thumb hold the dropped stop until it lands. */
-  onChange: (value: ThinkingLevel | null) => void | Promise<unknown>;
+  onChange: (value?: ThinkingLevel) => void | Promise<unknown>;
 }
 
 /**
@@ -37,26 +39,32 @@ interface ThinkingLevelPickerProps {
  * signal - muted at Off, plain through High, warning once the bill turns.
  */
 export function ThinkingLevelPicker({ value, ariaLabel, disabled, inherited, onChange }: ThinkingLevelPickerProps) {
-  const [dragged, setDragged] = useState<number | null>(null);
+  const [dragged, setDragged] = useState<number>();
+  const inFlight = useRef<number>(undefined);
   const last = THINKING_LEVELS.length - 1;
 
   const indexOf = (level: ThinkingLevel) => THINKING_LEVELS.findIndex(entry => entry.value === level);
-  const inheriting = value === null;
+  const inheriting = inherited !== undefined && value === undefined;
   const settled = indexOf(value ?? inherited ?? 'off');
   const shown = dragged ?? settled;
   const label = THINKING_LEVELS[shown]?.label ?? '';
   const tone = shown >= last - 1 ? 'text-warning1' : shown === 0 ? 'text-neutral2' : 'text-neutral5';
-  const valueText = `${label}${inheriting && dragged === null ? ' \u00b7 follows base' : ''}`;
+  const valueText = `${label}${inheriting && dragged === undefined ? ' \u00b7 follows base' : ''}`;
   const travelled = `calc(0.5rem + (100% - 1rem) * ${shown / last})`;
 
   // Holding the drop until the write settles: clearing it first shows the old
   // stop for a frame, then the new one — two jumps for one change.
   const commit = async () => {
-    if (dragged === null || dragged === settled) return setDragged(null);
+    const level = dragged === undefined ? undefined : THINKING_LEVELS[dragged];
+    if (!level || dragged === settled) return setDragged(undefined);
+    // Release and blur both ask to commit, and blur can land before the write does.
+    if (dragged === inFlight.current) return;
+    inFlight.current = dragged;
     try {
-      await onChange(THINKING_LEVELS[dragged]!.value);
+      await onChange(level.value);
     } finally {
-      setDragged(null);
+      inFlight.current = undefined;
+      setDragged(current => (current === dragged ? undefined : current));
     }
   };
 
@@ -67,7 +75,7 @@ export function ThinkingLevelPicker({ value, ariaLabel, disabled, inherited, onC
           (inheriting ? (
             <span className="text-neutral2 text-ui-xs">Follows base</span>
           ) : (
-            <Button variant="ghost" size="sm" disabled={disabled} onClick={() => onChange(null)}>
+            <Button variant="ghost" size="sm" disabled={disabled} onClick={() => onChange()}>
               Reset to base
             </Button>
           ))}
@@ -120,10 +128,15 @@ export function ThinkingLevelPicker({ value, ariaLabel, disabled, inherited, onC
   );
 }
 
+/** The mute button swaps the value for `none`, so the picker keeps the sound it has to come back to. */
 export function SoundPicker({ value, onChange }: { value: DoneSound; onChange: (value: DoneSound) => void }) {
-  const lastAudible = useRef<DoneSound>(value === 'none' ? 'chime' : value);
-  if (value !== 'none') lastAudible.current = value;
+  const [lastAudible, setLastAudible] = useState<DoneSound>(value === 'none' ? 'chime' : value);
   const muted = value === 'none';
+
+  const pick = (sound: DoneSound) => {
+    setLastAudible(sound);
+    onChange(sound);
+  };
 
   return (
     <div className="flex items-center">
@@ -137,12 +150,19 @@ export function SoundPicker({ value, onChange }: { value: DoneSound; onChange: (
           'transition-colors duration-150 motion-reduce:transition-none',
           'hover:text-neutral6 focus-visible:ring-neutral6/60 focus-visible:ring-2 focus-visible:outline-none',
         )}
-        onClick={() => onChange(muted ? lastAudible.current : 'none')}
+        onClick={() => onChange(muted ? lastAudible : 'none')}
       >
         {muted ? <VolumeXIcon aria-hidden className="size-4" /> : <Volume2Icon aria-hidden className="size-4" />}
       </button>
 
-      <Select value={lastAudible.current} disabled={muted} onValueChange={sound => onChange(sound as DoneSound)}>
+      <Select
+        value={lastAudible}
+        disabled={muted}
+        onValueChange={next => {
+          const picked = AUDIBLE_SOUNDS.find(option => option.value === next);
+          if (picked) pick(picked.value);
+        }}
+      >
         <SelectTrigger
           variant="outline"
           size="sm"
@@ -154,10 +174,10 @@ export function SoundPicker({ value, onChange }: { value: DoneSound; onChange: (
             muted && 'text-neutral1 hover:text-neutral1 border-border1/60 hover:bg-surface3 [&_svg]:opacity-25',
           )}
         >
-          {DONE_SOUND_OPTIONS.find(option => option.value === lastAudible.current)?.label}
+          {AUDIBLE_SOUNDS.find(option => option.value === lastAudible)?.label}
         </SelectTrigger>
         <SelectContent>
-          {DONE_SOUND_OPTIONS.filter(option => option.value !== 'none').map(option => (
+          {AUDIBLE_SOUNDS.map(option => (
             <SelectItem key={option.value} value={option.value}>
               {option.label}
             </SelectItem>
