@@ -3,6 +3,7 @@ import type { ToolsInput } from '@mastra/core/agent';
 import { createGitlabTools } from './providers/gitlab.js';
 import { createJiraTools } from './providers/jira.js';
 import { createLinearTools } from './providers/linear.js';
+import { createNeonTools } from './providers/neon.js';
 import { createNotionTools } from './providers/notion.js';
 import { createSnowflakeTools } from './providers/snowflake.js';
 import type { ProviderToolsOptions } from './toolset.js';
@@ -50,6 +51,11 @@ export const PROVIDERS: Partial<Record<ProviderKey, ProviderRegistration>> = {
     integrationId: 'gitlab-group-token',
     envVar: 'MASTRA_GITLAB_CONNECTION_ID',
     createTools: createGitlabTools,
+  },
+  neon: {
+    integrationId: 'neon',
+    envVar: 'MASTRA_NEON_CONNECTION_ID',
+    createTools: createNeonTools,
   },
   snowflake: {
     integrationId: 'snowflake',

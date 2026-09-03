@@ -8,6 +8,7 @@ export type { ProviderKey } from './registry.js';
 export type { ProviderToolsOptions } from './toolset.js';
 export { createGitlabTools } from './providers/gitlab.js';
 export { createJiraTools } from './providers/jira.js';
+export { createNeonTools } from './providers/neon.js';
 export { createLinearTools } from './providers/linear.js';
 export { createNotionTools } from './providers/notion.js';
 export { createSnowflakeTools } from './providers/snowflake.js';
