@@ -28,6 +28,7 @@ const result = await mastraClient.queryTraces({
         op: 'and',
         args: [
           { op: 'eq', left: { path: 'scorerId' }, right: { literal: 'factuality' } },
+          { op: 'eq', left: { path: 'scorerVersion' }, right: { literal: '2.1.0' } },
           { op: 'lt', left: { path: 'score' }, right: { literal: 0.6 } },
         ],
       },
@@ -38,7 +39,7 @@ const result = await mastraClient.queryTraces({
 })
 ```
 
-A `some` clause matches when one related record satisfies its complete nested predicate. In this example, `scorerId` and `score` must match on the same score record. A `none` clause matches when no related record satisfies its complete nested predicate.
+A `some` clause matches when one related record satisfies its complete nested predicate. In this example, `scorerId`, `scorerVersion`, and `score` must match on the same score record. A `none` clause uses anti-existence semantics: it matches when no related record satisfies its complete nested predicate. A trace with no related scores therefore matches `scores.none`.
 
 Span clauses examine the current root span and current child spans. The root `timeRange` applies only to the selected current root's `startedAt`. Related spans and scores can participate even when their own timestamps are outside that range. Related records correlate only through a matching non-null `traceId`.
 
@@ -109,10 +110,56 @@ Hono and Fastify enforce the request-body limit before JSON parsing. Express and
 | Trace | `startedAt`, `endedAt` | `eq`, `ne`, `in`, `notIn`, `lt`, `lte`, `gt`, `gte`, `exists`, `notExists` |
 | Span | `spanType` | `eq`, `ne`, `in`, `notIn`, `exists`, `notExists` |
 | Span | `error` | `exists`, `notExists` |
-| Score | `scorerId` | `eq`, `ne`, `in`, `notIn`, `exists`, `notExists` |
-| Score | `score` | `eq`, `ne`, `in`, `notIn`, `lt`, `lte`, `gt`, `gte`, `exists`, `notExists` |
+| Score | `scorerId`, `scorerVersion`, `scoreSource`, `entityVersionId`, `parentEntityVersionId`, `rootEntityVersionId` | `eq`, `ne`, `in`, `notIn`, `exists`, `notExists` |
+| Score | `score`, `timestamp` | `eq`, `ne`, `in`, `notIn`, `lt`, `lte`, `gt`, `gte`, `exists`, `notExists` |
+| Score | `spanId` | `exists`, `notExists` |
 
 Compose predicates with `{ op: 'and', args: [...] }`, `{ op: 'or', args: [...] }`, and `{ op: 'not', arg: ... }`. Comparison predicates place a field reference on the left and a literal on the right. Membership predicates use a field reference in `value` and a homogeneous literal array in `set`.
+
+String comparisons are exact and case-sensitive. Literals are never coerced: numeric score predicates require numbers, and timestamp predicates require ISO timestamp strings. Positive and ordered predicates don't match a missing value. The negative operators `ne` and `notIn` do match a missing value. Combine a negative predicate with `exists` when the field must also be present.
+
+### Filter by score time
+
+Score timestamps are independent of the required top-level trace `timeRange`. The top-level range selects trace candidates by trace start time. A nested `timestamp` predicate limits related score records:
+
+```typescript
+const query = {
+  where: {
+    scores: {
+      some: {
+        op: 'and',
+        args: [
+          { op: 'eq', left: { path: 'scoreSource' }, right: { literal: 'automated' } },
+          {
+            op: 'gte',
+            left: { path: 'timestamp' },
+            right: { literal: '2026-07-15T00:00:00.000Z' },
+          },
+          {
+            op: 'lt',
+            left: { path: 'timestamp' },
+            right: { literal: '2026-08-01T00:00:00.000Z' },
+          },
+        ],
+      },
+    },
+  },
+}
+```
+
+### Filter by span anchoring
+
+Use `spanId` only to test whether a score targets a span. The predicate doesn't join the score to a matching span predicate:
+
+```typescript
+// At least one score targets a span.
+const anchoredToSpanWhere = { scores: { some: { op: 'exists', path: 'spanId' } } }
+
+// At least one score applies to the trace rather than a span.
+const traceLevelScoreWhere = { scores: { some: { op: 'notExists', path: 'spanId' } } }
+```
+
+The deprecated `source` field and `scorerName` aren't available as score predicate fields. Use the canonical `scoreSource` and `scorerId` fields.
 
 ## Responses
 

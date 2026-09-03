@@ -35,9 +35,15 @@ export interface RawTraceQueryScore {
   cursorId: number;
   scoreId: string;
   traceId: string | null;
+  spanId: string | null;
+  timestamp: string;
   scorerId: string;
+  scorerVersion: string | null;
+  scoreSource: string | null;
   score: number | null;
-  timestamp?: string;
+  entityVersionId: string | null;
+  parentEntityVersionId: string | null;
+  rootEntityVersionId: string | null;
 }
 
 export interface TraceQueryFixtureData {
@@ -65,6 +71,29 @@ const span = (
   entityName: 'agent',
   entityType: 'agent',
   environment: 'production',
+  ...overrides,
+});
+
+const scoreRecord = (
+  cursorId: number,
+  scoreId: string,
+  traceId: string | null,
+  scorerId: string,
+  score: number | null,
+  overrides: Partial<RawTraceQueryScore> = {},
+): RawTraceQueryScore => ({
+  cursorId,
+  scoreId,
+  traceId,
+  spanId: null,
+  timestamp: '2026-08-10T00:00:00.000Z',
+  scorerId,
+  scorerVersion: null,
+  scoreSource: null,
+  score,
+  entityVersionId: null,
+  parentEntityVersionId: null,
+  rootEntityVersionId: null,
   ...overrides,
 });
 
@@ -144,13 +173,60 @@ export const TRACE_QUERY_FIXTURE_DATA: TraceQueryFixtureData = {
     }),
   ],
   scores: [
-    { cursorId: 1, scoreId: 'score-a-factuality', traceId: 'trace-a', scorerId: 'factuality', score: 0.9 },
-    { cursorId: 2, scoreId: 'score-a-factuality', traceId: 'trace-a', scorerId: 'factuality', score: 0.4 },
-    { cursorId: 3, scoreId: 'score-a-safety', traceId: 'trace-a', scorerId: 'safety', score: 0.95 },
-    { cursorId: 4, scoreId: 'score-b-factuality', traceId: 'trace-b', scorerId: 'factuality', score: 0.9 },
-    { cursorId: 5, scoreId: 'score-b-safety', traceId: 'trace-b', scorerId: 'safety', score: 0.4 },
-    { cursorId: 6, scoreId: 'score-c-factuality', traceId: 'trace-c', scorerId: 'factuality', score: null },
-    { cursorId: 7, scoreId: 'score-uncorrelated', traceId: null, scorerId: 'factuality', score: 0.1 },
+    scoreRecord(1, 'score-a-factuality', 'trace-a', 'factuality', 0.9, {
+      spanId: 'span-a-tool',
+      timestamp: '2026-07-19T10:00:00.000Z',
+      scorerVersion: 'v1',
+      scoreSource: 'manual',
+      entityVersionId: 'entity-v1',
+      parentEntityVersionId: 'parent-v1',
+      rootEntityVersionId: 'root-v1',
+    }),
+    scoreRecord(2, 'score-a-factuality', 'trace-a', 'factuality', 0.4, {
+      spanId: 'span-a-tool',
+      timestamp: '2026-07-20T10:00:00.000Z',
+      scorerVersion: 'v2',
+      scoreSource: 'automated',
+      entityVersionId: 'entity-v2',
+      parentEntityVersionId: 'parent-v2',
+      rootEntityVersionId: 'root-v1',
+    }),
+    scoreRecord(3, 'score-a-safety', 'trace-a', 'safety', 0.95, {
+      timestamp: '2026-08-05T10:00:03.000Z',
+      scorerVersion: 'v1',
+      scoreSource: 'automated',
+      entityVersionId: 'safety-v1',
+      rootEntityVersionId: 'root-v1',
+    }),
+    scoreRecord(4, 'score-b-factuality', 'trace-b', 'factuality', 0.9, {
+      spanId: 'span-b-tool',
+      timestamp: '2026-08-06T10:00:00.000Z',
+      scorerVersion: 'v2',
+      scoreSource: 'automated',
+      entityVersionId: 'entity-v2',
+      parentEntityVersionId: 'parent-v2',
+      rootEntityVersionId: 'root-v1',
+    }),
+    scoreRecord(5, 'score-b-safety', 'trace-b', 'safety', 0.4, {
+      timestamp: '2026-08-06T10:00:01.000Z',
+      scorerVersion: 'v1',
+      scoreSource: 'manual',
+      entityVersionId: 'safety-v1',
+      rootEntityVersionId: 'root-v2',
+    }),
+    scoreRecord(6, 'score-c-factuality', 'trace-c', 'factuality', 0.7, {
+      timestamp: '2026-08-07T10:00:03.000Z',
+    }),
+    scoreRecord(7, 'score-uncorrelated', null, 'factuality', 0.1, {
+      timestamp: '2026-07-20T10:00:00.000Z',
+      scorerVersion: 'v2',
+      scoreSource: 'automated',
+    }),
+    scoreRecord(8, 'score-nonmatching-trace', 'trace-without-root', 'factuality', 0.1, {
+      timestamp: '2026-07-20T10:00:00.000Z',
+      scorerVersion: 'v2',
+      scoreSource: 'automated',
+    }),
   ],
 };
 
@@ -296,6 +372,115 @@ export const TRACE_QUERY_CONFORMANCE_CASES: TraceQueryConformanceCase[] = [
       },
     },
     expected: [{ traceId: 'trace-a' }],
+  },
+  {
+    name: 'binds scorer version and threshold to one current score record',
+    request: {
+      timeRange: fullRange,
+      where: {
+        scores: {
+          some: {
+            op: 'and',
+            args: [
+              { op: 'eq', left: { path: 'scorerVersion' }, right: { literal: 'v2' } },
+              { op: 'lt', left: { path: 'score' }, right: { literal: 0.6 } },
+            ],
+          },
+        },
+      },
+    },
+    expected: [{ traceId: 'trace-a' }],
+  },
+  {
+    name: 'filters current scores by source and an independent score-time range',
+    request: {
+      timeRange: fullRange,
+      where: {
+        scores: {
+          some: {
+            op: 'and',
+            args: [
+              { op: 'eq', left: { path: 'scoreSource' }, right: { literal: 'automated' } },
+              {
+                op: 'gte',
+                left: { path: 'timestamp' },
+                right: { literal: '2026-07-15T00:00:00Z' },
+              },
+              {
+                op: 'lt',
+                left: { path: 'timestamp' },
+                right: { literal: '2026-08-01T00:00:00Z' },
+              },
+            ],
+          },
+        },
+      },
+    },
+    expected: [{ traceId: 'trace-a' }],
+  },
+  {
+    name: 'filters scores by span anchoring presence',
+    request: {
+      timeRange: fullRange,
+      where: { scores: { some: { op: 'exists', path: 'spanId' } } },
+    },
+    expected: [{ traceId: 'trace-a' }, { traceId: 'trace-b' }],
+  },
+  {
+    name: 'filters scores by missing span anchoring',
+    request: {
+      timeRange: fullRange,
+      where: { scores: { some: { op: 'notExists', path: 'spanId' } } },
+    },
+    expected: [{ traceId: 'trace-c' }, { traceId: 'trace-a' }, { traceId: 'trace-b' }],
+  },
+  {
+    name: 'binds version lineage and threshold to one current score record',
+    request: {
+      timeRange: fullRange,
+      where: {
+        scores: {
+          some: {
+            op: 'and',
+            args: [
+              { op: 'eq', left: { path: 'entityVersionId' }, right: { literal: 'entity-v2' } },
+              { op: 'in', value: { path: 'parentEntityVersionId' }, set: ['parent-v2'] },
+              { op: 'notIn', value: { path: 'rootEntityVersionId' }, set: ['root-v2'] },
+              { op: 'lt', left: { path: 'score' }, right: { literal: 0.6 } },
+            ],
+          },
+        },
+      },
+    },
+    expected: [{ traceId: 'trace-a' }],
+  },
+  {
+    name: 'supports missing-required-scorer anti-existence',
+    request: {
+      timeRange: fullRange,
+      where: {
+        scores: { none: { op: 'eq', left: { path: 'scorerId' }, right: { literal: 'safety' } } },
+      },
+    },
+    expected: [{ traceId: 'trace-d' }, { traceId: 'trace-c' }],
+  },
+  {
+    name: 'includes missing string values in negative membership predicates',
+    request: {
+      timeRange: fullRange,
+      where: { scores: { some: { op: 'notIn', value: { path: 'scorerVersion' }, set: ['v2'] } } },
+    },
+    expected: [{ traceId: 'trace-c' }, { traceId: 'trace-a' }, { traceId: 'trace-b' }],
+  },
+  {
+    name: 'includes missing string values in negative equality predicates',
+    request: {
+      timeRange: fullRange,
+      where: {
+        scores: { some: { op: 'ne', left: { path: 'scorerVersion' }, right: { literal: 'v2' } } },
+      },
+    },
+    expected: [{ traceId: 'trace-c' }, { traceId: 'trace-a' }, { traceId: 'trace-b' }],
   },
   {
     name: 'binds span type and error predicates to one current span record',
