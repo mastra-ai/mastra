@@ -107,14 +107,26 @@ export const openaiStrictSchemaScenario = {
 
     const properties = isObject(schema.properties) ? schema.properties : undefined;
     const nested = isObject(properties?.nested) ? properties.nested : undefined;
+    check(nested, `Expected nested property schema, received ${JSON.stringify(properties)}`);
+    const nestedObjectBranch = Array.isArray(nested.anyOf)
+      ? nested.anyOf.find(branch => isObject(branch) && branch.type === 'object')
+      : undefined;
+    const nestedNullBranch = Array.isArray(nested?.anyOf)
+      ? nested.anyOf.find(branch => isObject(branch) && branch.type === 'null')
+      : undefined;
     check(
-      nested && isObject(nested.properties),
-      `Expected nested to keep object properties, received ${JSON.stringify(nested)}`,
+      isObject(nestedObjectBranch) && isObject(nestedObjectBranch.properties),
+      `Expected nested object properties inside its anyOf branch, received ${JSON.stringify(nested)}`,
     );
-    check(nested.additionalProperties === false, 'Expected nested additionalProperties false');
+    check(nestedNullBranch, `Expected nested to include a null branch, received ${JSON.stringify(nested)}`);
     check(
-      JSON.stringify(requiredKeys(nested)) === JSON.stringify(sortedKeys(nested.properties)),
-      `Expected all nested properties to be required, received required=${JSON.stringify(nested.required)} properties=${JSON.stringify(sortedKeys(nested.properties))}`,
+      !('properties' in nested),
+      `Expected nested properties to be branch-local, received ${JSON.stringify(nested)}`,
+    );
+    check(nestedObjectBranch.additionalProperties === false, 'Expected nested additionalProperties false');
+    check(
+      JSON.stringify(requiredKeys(nestedObjectBranch)) === JSON.stringify(sortedKeys(nestedObjectBranch.properties)),
+      `Expected all nested properties to be required, received required=${JSON.stringify(nestedObjectBranch.required)} properties=${JSON.stringify(sortedKeys(nestedObjectBranch.properties))}`,
     );
   },
 } satisfies McE2eScenario;
