@@ -236,6 +236,11 @@ const sidebars = {
             },
           ],
         },
+        {
+          type: 'doc',
+          id: 'knowledge/configuration',
+          label: 'Knowledge',
+        },
       ],
     },
     {
