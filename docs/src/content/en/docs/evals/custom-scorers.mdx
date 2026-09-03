@@ -168,16 +168,15 @@ const glutenCheckerScorer = createScorer(...)
 
 ```typescript oxfmt:false
 import { createScorer, notScorable } from '@mastra/core/evals'
+import { extractToolCalls } from '@mastra/evals/scorers/utils'
 
 const refundJudge = createScorer(...)
 .preprocess(({ run }) => {
-  const calledRefund = run.output.some(message =>
-    message.content.parts?.some(part => part.type === 'tool-invocation' && part.toolInvocation.toolName === 'refundCustomer')
-  );
-  if (!calledRefund) {
+  const { tools } = extractToolCalls(run.output);
+  if (!tools.includes('refundCustomer')) {
     return notScorable('refundCustomer was not called');
   }
-  return { calledRefund };
+  return { tools };
 })
 ```
 

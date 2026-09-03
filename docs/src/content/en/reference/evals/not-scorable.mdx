@@ -21,6 +21,7 @@ Use an [eligibility filter](/docs/evals/overview#live-evaluations) when the deci
 
 ```typescript title="src/mastra/scorers/refund-judge.ts"
 import { createScorer, notScorable } from '@mastra/core/evals'
+import { extractToolCalls } from '@mastra/evals/scorers/utils'
 import { z } from 'zod'
 
 export const refundJudge = createScorer({
@@ -30,16 +31,11 @@ export const refundJudge = createScorer({
   judge: { model: '__GATEWAY_OPENAI_MODEL_MINI__', instructions: 'You judge refund handling.' },
 })
   .preprocess(({ run }) => {
-    const calledRefund = run.output.some(message =>
-      message.content.parts?.some(
-        part =>
-          part.type === 'tool-invocation' && part.toolInvocation.toolName === 'refundCustomer',
-      ),
-    )
-    if (!calledRefund) {
+    const { tools } = extractToolCalls(run.output)
+    if (!tools.includes('refundCustomer')) {
       return notScorable('refundCustomer was not called')
     }
-    return { calledRefund }
+    return { tools }
   })
   .analyze({
     description: 'Assess the refund handling',
