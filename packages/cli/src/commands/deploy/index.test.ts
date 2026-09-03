@@ -32,6 +32,8 @@ import {
   renderDeploymentArchitecture,
   resolveEnvironment,
   resolveProject,
+  resolveWorkersDeployMode,
+  suppressWorkersManifestForInlineMode,
   zipOutput,
 } from './index.js';
 
@@ -367,4 +369,148 @@ describe('deploy artifact', () => {
       expect(diagram).toContain(colors.green(boxTop));
     },
   );
+});
+
+describe('resolveWorkersDeployMode', () => {
+  const CANCEL_SYMBOL = Symbol('cancel');
+  const isCancel = (value: unknown): value is symbol => value === CANCEL_SYMBOL;
+
+  it('respects an explicit --workers=inline flag without prompting', async () => {
+    const promptConfirm = vi.fn();
+    const mode = await resolveWorkersDeployMode({
+      workersEnabled: true,
+      environmentHasWorkerService: false,
+      workersOption: 'inline',
+      autoAccept: false,
+      promptConfirm,
+      isCancel,
+    });
+    expect(mode).toBe('inline');
+    expect(promptConfirm).not.toHaveBeenCalled();
+  });
+
+  it('respects an explicit --workers=separate flag without prompting', async () => {
+    const promptConfirm = vi.fn();
+    const mode = await resolveWorkersDeployMode({
+      workersEnabled: true,
+      environmentHasWorkerService: false,
+      workersOption: 'separate',
+      autoAccept: false,
+      promptConfirm,
+      isCancel,
+    });
+    expect(mode).toBe('separate');
+    expect(promptConfirm).not.toHaveBeenCalled();
+  });
+
+  it('stays on separate when the environment already has a worker service', async () => {
+    const promptConfirm = vi.fn();
+    const mode = await resolveWorkersDeployMode({
+      workersEnabled: true,
+      environmentHasWorkerService: true,
+      workersOption: undefined,
+      autoAccept: false,
+      promptConfirm,
+      isCancel,
+    });
+    expect(mode).toBe('separate');
+    expect(promptConfirm).not.toHaveBeenCalled();
+  });
+
+  it('does not prompt when no workers are configured', async () => {
+    const promptConfirm = vi.fn();
+    const mode = await resolveWorkersDeployMode({
+      workersEnabled: false,
+      environmentHasWorkerService: false,
+      workersOption: undefined,
+      autoAccept: false,
+      promptConfirm,
+      isCancel,
+    });
+    expect(mode).toBe('separate');
+    expect(promptConfirm).not.toHaveBeenCalled();
+  });
+
+  it('defaults to separate in non-interactive / --yes runs', async () => {
+    const promptConfirm = vi.fn();
+    const mode = await resolveWorkersDeployMode({
+      workersEnabled: true,
+      environmentHasWorkerService: false,
+      workersOption: undefined,
+      autoAccept: true,
+      promptConfirm,
+      isCancel,
+    });
+    expect(mode).toBe('separate');
+    expect(promptConfirm).not.toHaveBeenCalled();
+  });
+
+  it('prompts and returns inline when the user opts out', async () => {
+    const promptConfirm = vi.fn().mockResolvedValue(false);
+    const mode = await resolveWorkersDeployMode({
+      workersEnabled: true,
+      environmentHasWorkerService: false,
+      workersOption: undefined,
+      autoAccept: false,
+      promptConfirm,
+      isCancel,
+    });
+    expect(mode).toBe('inline');
+    expect(promptConfirm).toHaveBeenCalledTimes(1);
+  });
+
+  it('prompts and returns separate when the user confirms', async () => {
+    const promptConfirm = vi.fn().mockResolvedValue(true);
+    const mode = await resolveWorkersDeployMode({
+      workersEnabled: true,
+      environmentHasWorkerService: false,
+      workersOption: undefined,
+      autoAccept: false,
+      promptConfirm,
+      isCancel,
+    });
+    expect(mode).toBe('separate');
+  });
+
+  it('treats a cancelled prompt as the safe default (separate)', async () => {
+    const promptConfirm = vi.fn().mockResolvedValue(CANCEL_SYMBOL);
+    const mode = await resolveWorkersDeployMode({
+      workersEnabled: true,
+      environmentHasWorkerService: false,
+      workersOption: undefined,
+      autoAccept: false,
+      promptConfirm,
+      isCancel,
+    });
+    expect(mode).toBe('separate');
+  });
+});
+
+describe('suppressWorkersManifestForInlineMode', () => {
+  let projectDir: string;
+  let outputDir: string;
+  let manifestPath: string;
+
+  beforeEach(() => {
+    projectDir = mkdtempSync(join(tmpdir(), 'cli-workers-inline-'));
+    outputDir = join(projectDir, '.mastra', 'output');
+    mkdirSync(outputDir, { recursive: true });
+    manifestPath = join(outputDir, 'workers.json');
+  });
+
+  afterEach(() => {
+    rmSync(projectDir, { recursive: true, force: true });
+  });
+
+  it('removes the workers manifest so the platform runs workers in the API container', async () => {
+    writeFileSync(manifestPath, JSON.stringify({ version: 1, orchestration: { enabled: true } }));
+
+    await suppressWorkersManifestForInlineMode(projectDir);
+
+    await expect(hasEnabledWorkers(projectDir)).resolves.toBe(false);
+  });
+
+  it('is a no-op when no manifest is present', async () => {
+    await expect(suppressWorkersManifestForInlineMode(projectDir)).resolves.toBeUndefined();
+  });
 });

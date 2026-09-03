@@ -11,7 +11,7 @@
 
 import { execSync } from 'node:child_process';
 import { createWriteStream } from 'node:fs';
-import { mkdir, rm, stat, access, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, rm, stat, access, readFile, writeFile, unlink } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import * as p from '@clack/prompts';
@@ -146,6 +146,58 @@ function workerManifestHasEnabledWorkers(manifest: Record<string, unknown> | nul
 
 export async function hasEnabledWorkers(targetDir: string): Promise<boolean> {
   return workerManifestHasEnabledWorkers(await readWorkersConfig(targetDir));
+}
+
+export type WorkersDeployMode = 'separate' | 'inline';
+
+/**
+ * Decide whether this deploy should provision a dedicated worker service
+ * ("separate") or run workers alongside the API server in the same container
+ * ("inline").
+ *
+ * Order of precedence:
+ *   1. Explicit `--workers` flag wins.
+ *   2. If the environment already has a worker service, stay on separate —
+ *      switching a live environment to inline is a destructive-feeling
+ *      change we don't perform without an explicit flag.
+ *   3. If no workers are actually configured in the build, mode is
+ *      irrelevant; return `separate` (the default, no side effects).
+ *   4. Non-interactive / `--yes` deploys default to the recommended
+ *      `separate` mode.
+ *   5. Otherwise prompt.
+ */
+export async function resolveWorkersDeployMode(input: {
+  workersEnabled: boolean;
+  environmentHasWorkerService: boolean;
+  workersOption: WorkersDeployMode | undefined;
+  autoAccept: boolean;
+  promptConfirm: (message: string) => Promise<boolean | symbol>;
+  isCancel: (value: unknown) => value is symbol;
+}): Promise<WorkersDeployMode> {
+  if (input.workersOption) return input.workersOption;
+  if (input.environmentHasWorkerService) return 'separate';
+  if (!input.workersEnabled) return 'separate';
+  if (input.autoAccept) return 'separate';
+
+  const answer = await input.promptConfirm(
+    'Run background workers as a separate service? (recommended — the alternative runs them alongside the API server in the same container)',
+  );
+  if (input.isCancel(answer)) return 'separate';
+  return answer === false ? 'inline' : 'separate';
+}
+
+/**
+ * Suppress the workers manifest from the build output so the platform treats
+ * this deploy as "no dedicated worker service" and railway-builder omits
+ * `ENV MASTRA_WORKERS=false`, letting workers boot in the API container.
+ */
+export async function suppressWorkersManifestForInlineMode(targetDir: string): Promise<void> {
+  try {
+    await unlink(workersManifestPath(targetDir));
+  } catch (error) {
+    // Missing file is the desired end state — nothing to do.
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+  }
 }
 
 type ArchitectureColors = ReturnType<typeof pc.createColors>;
@@ -1066,9 +1118,20 @@ export interface DeployOptions {
   region?: string;
   debug?: boolean;
   envFile?: string;
+  /**
+   * How to run background workers for this deploy:
+   *   `separate` — provision a dedicated worker service.
+   *   `inline`   — run workers in-process alongside the API server.
+   * When omitted, the CLI prompts on the first deploy where workers are
+   * detected but the environment has no worker service yet.
+   */
+  workers?: 'separate' | 'inline';
 }
 
 export async function unifiedDeployAction(dir: string | undefined, opts: DeployOptions) {
+  if (opts.workers !== undefined && opts.workers !== 'separate' && opts.workers !== 'inline') {
+    throw new Error(`--workers must be "separate" or "inline" (got "${String(opts.workers)}")`);
+  }
   const analytics = getAnalytics();
   if (!analytics) {
     return runUnifiedDeploy(dir, opts);
@@ -1085,6 +1148,7 @@ export async function unifiedDeployAction(dir: string | undefined, opts: DeployO
       hasEnvFile: Boolean(opts.envFile),
       hasConfig: Boolean(opts.config),
       debug: Boolean(opts.debug),
+      workers: opts.workers ?? 'prompt',
       headless: Boolean(process.env.MASTRA_API_TOKEN),
       targetApi: bucketApiHost(MASTRA_PLATFORM_API_URL),
     },
@@ -1428,8 +1492,25 @@ async function runUnifiedDeploy(dir: string | undefined, opts: DeployOptions) {
     }
   }
 
-  const workersConfig = await readWorkersConfig(targetDir);
-  const workersEnabled = workerManifestHasEnabledWorkers(workersConfig);
+  let workersConfig = await readWorkersConfig(targetDir);
+  let workersEnabled = workerManifestHasEnabledWorkers(workersConfig);
+
+  const workersMode = await resolveWorkersDeployMode({
+    workersEnabled,
+    environmentHasWorkerService: Boolean(environment.workerProviderServiceId),
+    workersOption: opts.workers,
+    autoAccept,
+    promptConfirm: message => p.confirm({ message, initialValue: true }),
+    isCancel: (value): value is symbol => p.isCancel(value),
+  });
+  if (workersMode === 'inline' && workersEnabled) {
+    await suppressWorkersManifestForInlineMode(targetDir);
+    p.log.step('Running workers inline in the server container (no dedicated worker service)');
+    // Re-derive so the deployment overview reflects the inline mode.
+    workersConfig = await readWorkersConfig(targetDir);
+    workersEnabled = workerManifestHasEnabledWorkers(workersConfig);
+  }
+
   const publicUrls = derivePublicUrls(environment.slug, projectType);
   let databases: ProjectDatabase[] = [];
   try {
