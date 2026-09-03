@@ -17,7 +17,7 @@ Build a tool-calling Mastra agent in TanStack Start, then mount the Mastra serve
 
 ## Create a new TanStack Start app (optional)
 
-You need a running TanStack Start app with a `src/routes` directory. If you don't already have one, follow the [TanStack Start quick start](https://tanstack.com/start/latest/docs/framework/react/quick-start) to create and run an app before continuing.
+You need a running TanStack Start app with a `src/routes` directory. If you don't already have one, follow the [TanStack Start quick start](https://tanstack.com/start/latest/docs/framework/react/getting-started) to create and run an app before continuing.
 
 ## Initialize Mastra
 
@@ -29,9 +29,9 @@ npx mastra@latest init
 
 This creates a `src/mastra` directory with an example weather agent and the following files:
 
-- `index.ts` - Mastra configuration, including memory
-- `tools/weather-tool.ts` - a tool that fetches weather for a location
-- `agents/weather-agent.ts` - a weather agent with instructions to use the tool
+- `index.ts`: Mastra configuration, including memory
+- `tools/weather-tool.ts`: A tool that fetches weather for a location
+- `agents/weather-agent.ts`: A weather agent with instructions to use the tool
 
 You'll pass the Mastra instance exported from `src/mastra/index.ts` to the server adapter.
 

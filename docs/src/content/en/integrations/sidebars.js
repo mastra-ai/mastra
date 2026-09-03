@@ -127,7 +127,10 @@ const sidebars = {
           type: 'doc',
           id: 'frameworks/tanstack-start',
           label: 'TanStack Start',
-          customProps: { icon: 'https://cdn.simpleicons.org/tanstack?viewbox=auto&size=28' },
+          customProps: {
+            icon: 'https://cdn.simpleicons.org/tanstack/black?viewbox=auto&size=28',
+            iconDark: 'https://cdn.simpleicons.org/tanstack?viewbox=auto&size=28',
+          },
         },
       ],
     },
