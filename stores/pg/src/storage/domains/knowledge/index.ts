@@ -1231,6 +1231,10 @@ export class KnowledgePG extends KnowledgeStorage {
         args: [target.id, source.id],
       });
       await tx.execute({ sql: `DELETE FROM "${TABLE_KNOWLEDGE_MENTIONS}" WHERE targetNodeId=?`, args: [source.id] });
+      await tx.execute({
+        sql: `UPDATE "${TABLE_KNOWLEDGE_NODE_ADDRESSES}" SET nodeId=? WHERE nodeId=?`,
+        args: [target.id, source.id],
+      });
       await this.#activity(tx, 'merge', 'node', source.id, input.contextScopeId, input.importRunId, {
         targetId: target.id,
       });

@@ -671,17 +671,29 @@ export function createKnowledgeStorageTests(createStore: () => Promise<Knowledge
         version: deletedRecord.version,
         deletedBy: 'test',
       });
+      const mentionOwner = await store.createNode({ name: 'Mention owner', scopeIds: [PROJECT_SCOPE_ID] });
+      const duplicateMention = await store.createRecord({
+        node: mentionOwner,
+        text: 'Connect [[Source]] with [[Target]].',
+        scopeIds: [PROJECT_SCOPE_ID],
+      });
       await store.setNodeAddress({ source: 'github', address: 'source-address', nodeId: source.id });
 
-      await store.mergeNodes({
+      const merged = await store.mergeNodes({
         sourceId: source.id,
         targetId: target.id,
         sourceVersion: source.version,
         targetVersion: target.version,
       });
+      expect(merged.version).toBe(target.version);
       expect(
         (await store.listRecords({ node: target, scopeIds: [PROJECT_SCOPE_ID] })).records.map(item => item.id),
       ).toEqual([record.id]);
+      expect(
+        (await store.listMentioningRecords({ node: target, scopeIds: [PROJECT_SCOPE_ID] })).records.map(
+          item => item.id,
+        ),
+      ).toContain(duplicateMention.id);
       const movedDeleted = await store.getRecord({ id: deletedRecord.id, includeDeleted: true });
       expect(movedDeleted).toMatchObject({ nodeId: target.id, version: deleted.version + 1 });
       if (!movedDeleted) throw new Error('Expected merged deleted record');
@@ -693,6 +705,9 @@ export function createKnowledgeStorageTests(createStore: () => Promise<Knowledge
       await expect(store.getNodeAddress({ source: 'github', address: 'source-address' })).resolves.toMatchObject({
         nodeId: target.id,
       });
+      await expect(store.listNodeAddresses({ source: 'github' })).resolves.toEqual(
+        expect.arrayContaining([expect.objectContaining({ address: 'source-address', nodeId: target.id })]),
+      );
       expect(await store.getNode(source.id)).toBeNull();
       expect(await store.getNodeScopeIds(source.id)).toEqual([]);
     });
