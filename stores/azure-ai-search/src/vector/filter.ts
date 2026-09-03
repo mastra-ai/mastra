@@ -214,6 +214,15 @@ export class AzureAISearchFilterTranslator {
       }
 
       if (key === '$or' && Array.isArray(value)) {
+        if (value.length === 0) {
+          // An empty $or has no clause it could satisfy, so — unlike an empty
+          // $and, which is vacuously true — it must match nothing. Azure OData
+          // requires a comparison to involve an actual field, not two bare
+          // literals, so this compares the always-present `id` key field
+          // against a sentinel value no real document id can equal.
+          conditions.push(`id eq '__mastra_empty_or_never_matches__'`);
+          continue;
+        }
         const orConditions = value.map(item => this.translateMastraFilter(item)).filter(Boolean);
         if (orConditions.length > 0) {
           conditions.push(`(${orConditions.join(' or ')})`);
@@ -244,8 +253,7 @@ export class AzureAISearchFilterTranslator {
       if (value.length === 0) {
         return [];
       }
-      const list = value.map(v => this.formatValue(v)).join(', ');
-      return [`${this.escapeFieldName(field)} in (${list})`];
+      return [this.formatInClause(field, value)];
     }
 
     if (value === null || value === undefined || typeof value !== 'object') {
@@ -275,24 +283,43 @@ export class AzureAISearchFilterTranslator {
           break;
         case '$in':
           if (Array.isArray(operatorValue) && operatorValue.length > 0) {
-            const list = operatorValue.map(v => this.formatValue(v)).join(', ');
-            conditions.push(`${this.escapeFieldName(field)} in (${list})`);
+            conditions.push(this.formatInClause(field, operatorValue));
           }
           break;
         case '$nin':
           if (Array.isArray(operatorValue) && operatorValue.length > 0) {
-            const list = operatorValue.map(v => this.formatValue(v)).join(', ');
-            conditions.push(`not (${this.escapeFieldName(field)} in (${list}))`);
+            conditions.push(`not (${this.formatInClause(field, operatorValue)})`);
           }
           break;
         case '$exists':
           conditions.push(`${this.escapeFieldName(field)} ${operatorValue ? 'ne' : 'eq'} null`);
           break;
-        default:
+        case '$not': {
+          const negatedConditions = this.translateMastraFieldCondition(field, operatorValue);
+          if (negatedConditions.length > 0) {
+            conditions.push(`not (${negatedConditions.join(' and ')})`);
+          }
           break;
+        }
+        default:
+          throw new Error(
+            `Unsupported filter operator '${operator}' on field '${field}'. Azure AI Search supports $eq, $ne, $gt, $gte, $lt, $lte, $in, $nin, $exists, $not.`,
+          );
       }
     }
     return conditions;
+  }
+
+  /**
+   * Builds a membership check as an OR-chain of equality comparisons.
+   * OData's `in` keyword is not a real operator in Azure AI Search's filter
+   * syntax (it only exists as the `search.in()` function, which needs its own
+   * comma-escaping for values that may contain the separator), so membership
+   * is expressed the portable way: `(field eq v1 or field eq v2 or ...)`.
+   */
+  private formatInClause(field: string, values: any[]): string {
+    const escapedField = this.escapeFieldName(field);
+    return `(${values.map(v => `${escapedField} eq ${this.formatValue(v)}`).join(' or ')})`;
   }
 
   private translateComparison(comparison: Record<string, any>, operator: string): string[] {

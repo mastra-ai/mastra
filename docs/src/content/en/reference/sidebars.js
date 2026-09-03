@@ -518,6 +518,7 @@ const sidebars = {
       items: [
         { type: 'doc', id: 'vectors/s3vectors', label: 'Amazon S3 Vector Store' },
         { type: 'doc', id: 'vectors/astra', label: 'Astra Vector Store' },
+        { type: 'doc', id: 'vectors/azure-ai-search', label: 'Azure AI Search Vector Store' },
         { type: 'doc', id: 'vectors/chroma', label: 'Chroma Vector Store' },
         { type: 'doc', id: 'vectors/vectorize', label: 'Cloudflare Vector Store' },
         { type: 'doc', id: 'vectors/convex', label: 'Convex Vector Store' },

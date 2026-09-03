@@ -5,7 +5,6 @@ import type {
   SemanticSearchOptions,
   SearchRequestOptions,
   VectorizedQuery,
-  VectorizableTextQuery,
   SearchClientOptions,
 } from '@azure/search-documents';
 import { SearchClient, SearchIndexClient, AzureKeyCredential } from '@azure/search-documents';
@@ -108,8 +107,14 @@ export interface AzureAISearchCreateIndexParams extends CreateIndexParams {
     facetable?: boolean;
     key?: boolean;
   }>;
-  /** Metadata keys that should also be created as explicit filterable Azure AI Search fields */
-  metadataIndexes?: string[];
+  /**
+   * Metadata keys that should also be created as explicit filterable Azure AI Search fields.
+   * A plain string declares a field as `Edm.String` (backward-compatible default). To filter
+   * on a numeric or boolean metadata value with the correct Azure field type — required for
+   * numeric comparisons like $gt/$gte/$lt/$lte to work, since Azure rejects an unquoted numeric
+   * literal against an Edm.String field — pass `{ name, type }` instead.
+   */
+  metadataIndexes?: Array<string | { name: string; type: 'string' | 'number' | 'boolean' }>;
   /** HNSW algorithm parameters */
   hnswParameters?: {
     m?: number;
@@ -127,6 +132,17 @@ export interface AzureAISearchCreateIndexParams extends CreateIndexParams {
       /** Keywords fields for semantic ranking (renamed from keywordsFields) */
       prioritizedKeywordsFields?: Array<{ fieldName: string }>;
     };
+  };
+  /**
+   * Enable vector compression (quantization) on the index's vector field.
+   * Required for the `oversampling` query parameter to have any effect —
+   * Azure AI Search only allows oversampling when the vector field has a
+   * compression configured, since oversampling compensates for the recall
+   * lost to compression.
+   */
+  compression?: {
+    /** Compression kind. Defaults to 'scalarQuantization'. */
+    kind?: 'scalarQuantization' | 'binaryQuantization';
   };
 }
 
@@ -157,11 +173,16 @@ export interface AzureAISearchAdvancedQueryParams extends AzureAISearchQueryVect
   weight?: number;
   /** Query type: simple, full, or semantic */
   queryType?: 'simple' | 'full' | 'semantic';
-  /** Enable automatic text vectorization */
+  /**
+   * Combine a full-text query with the vector query for hybrid search.
+   * Runs as native Azure AI Search hybrid search (BM25 full-text + vector,
+   * fused via Reciprocal Rank Fusion) — no vectorizer needs to be configured
+   * on the index, unlike Azure's server-side query vectorization.
+   */
   textVectorization?: {
-    /** Text to vectorize and search */
+    /** Text to search for (BM25 full-text search term) */
     text: string;
-    /** Vector fields to search against */
+    /** Searchable text fields to match against. Defaults to the index's default searchable fields (e.g. content). */
     fields?: string[];
   };
   /** Multiple vector queries for hybrid search */
@@ -314,15 +335,27 @@ export class AzureAISearchVector extends MastraVector<AzureAISearchVectorFilter>
   }
 
   private getMetadataIndexFields(
-    metadataIndexes: string[],
+    metadataIndexes: NonNullable<AzureAISearchCreateIndexParams['metadataIndexes']>,
     additionalFields: AzureAISearchCreateIndexParams['additionalFields'],
   ) {
+    const edmTypeFor = (type?: 'string' | 'number' | 'boolean'): string => {
+      switch (type) {
+        case 'number':
+          return 'Edm.Double';
+        case 'boolean':
+          return 'Edm.Boolean';
+        default:
+          return 'Edm.String';
+      }
+    };
+
     const reservedFieldNames = new Set(['id', 'metadata', 'content', 'vector']);
     return metadataIndexes
-      .filter(fieldName => !reservedFieldNames.has(fieldName) && !additionalFields?.some(field => field.name === fieldName))
-      .map(fieldName => ({
-        name: fieldName,
-        type: 'Edm.String',
+      .map(entry => (typeof entry === 'string' ? { name: entry, type: 'string' as const } : entry))
+      .filter(entry => !reservedFieldNames.has(entry.name) && !additionalFields?.some(field => field.name === entry.name))
+      .map(entry => ({
+        name: entry.name,
+        type: edmTypeFor(entry.type),
         searchable: false,
         filterable: true,
         retrievable: true,
@@ -420,6 +453,7 @@ export class AzureAISearchVector extends MastraVector<AzureAISearchVectorFilter>
       metadataIndexes = [],
       hnswParameters = {},
       semanticConfig,
+      compression,
     } = params as AzureAISearchCreateIndexParams;
 
     if (!Number.isInteger(dimension) || dimension <= 0) {
@@ -435,12 +469,17 @@ export class AzureAISearchVector extends MastraVector<AzureAISearchVectorFilter>
     try {
       const similarityFunction = METRIC_MAPPING[metric as keyof typeof METRIC_MAPPING];
 
-      // Vector field configuration (customizable name)
+      // Vector field configuration (customizable name).
+      // Both `retrievable` and `hidden` are set: some API versions key retrievability
+      // off `retrievable`, newer ones off `hidden` (inverted) — the service otherwise
+      // silently defaults new vector fields to hidden/non-retrievable and `$select`ing
+      // them for `includeVector` fails with "'vector' is not a retrievable field".
       const vectorFieldConfig = {
         name: vectorField,
         type: 'Collection(Edm.Single)',
         searchable: true,
         retrievable: true,
+        hidden: false,
         vectorSearchDimensions: dimension,
         vectorSearchProfileName: 'vector-profile',
       };
@@ -500,6 +539,7 @@ export class AzureAISearchVector extends MastraVector<AzureAISearchVectorFilter>
             {
               name: 'vector-profile',
               algorithmConfigurationName: 'vector-algorithm',
+              ...(compression && { compressionName: 'vector-compression' }),
             },
           ],
           algorithms: [
@@ -509,18 +549,49 @@ export class AzureAISearchVector extends MastraVector<AzureAISearchVectorFilter>
               hnswParameters: hnswConfig,
             },
           ],
+          ...(compression && {
+            compressions: [
+              {
+                kind: compression.kind ?? 'scalarQuantization',
+                compressionName: 'vector-compression',
+                // Rescoring with full-precision vectors is what makes `oversampling`
+                // meaningful: oversampling widens the initial (compressed) candidate
+                // set so the rescore step has more to recover recall from.
+                rescoringOptions: {
+                  enableRescoring: true,
+                  defaultOversampling: 10,
+                },
+              },
+            ],
+          }),
         },
       };
 
-      // Add semantic search configuration if provided
+      // Add semantic search configuration if provided.
+      // Note: the SDK's SearchIndex field is `semanticSearch`, not `semantic`, and its
+      // SemanticField entries use `name`, not `fieldName` — an unrecognized top-level
+      // property is silently dropped by the service rather than rejected, so a wrong
+      // shape here does not surface as a createIndex error, only later as "this index
+      // must have valid semantic configurations defined" from a semantic query.
       if (semanticConfig) {
-        indexDefinition.semantic = {
+        const prioritizedFields = semanticConfig.prioritizedFields ?? {
+          titleField: { fieldName: 'content' },
+          prioritizedContentFields: [{ fieldName: 'content' }],
+        };
+        indexDefinition.semanticSearch = {
           configurations: [
             {
               name: semanticConfig.name ?? 'default-semantic-config',
-              prioritizedFields: semanticConfig.prioritizedFields ?? {
-                titleField: { fieldName: 'content' },
-                prioritizedContentFields: [{ fieldName: 'content' }],
+              prioritizedFields: {
+                ...(prioritizedFields.titleField && {
+                  titleField: { name: prioritizedFields.titleField.fieldName },
+                }),
+                ...(prioritizedFields.prioritizedContentFields && {
+                  contentFields: prioritizedFields.prioritizedContentFields.map(f => ({ name: f.fieldName })),
+                }),
+                ...(prioritizedFields.prioritizedKeywordsFields && {
+                  keywordsFields: prioritizedFields.prioritizedKeywordsFields.map(f => ({ name: f.fieldName })),
+                }),
               },
             },
           ],
@@ -704,6 +775,25 @@ export class AzureAISearchVector extends MastraVector<AzureAISearchVectorFilter>
     ids,
     deleteFilter,
   }: AzureAISearchUpsertParams): Promise<string[]> {
+    if (metadata.length > 0 && metadata.length !== vectors.length) {
+      throw new MastraError({
+        id: 'STORAGE_AZURE_AI_SEARCH_UPSERT_METADATA_LENGTH_MISMATCH',
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.USER,
+        text: `Vectors and metadata must have the same length. Got ${vectors.length} vectors and ${metadata.length} metadata entries.`,
+        details: { indexName, vectorsLength: vectors.length, metadataLength: metadata.length },
+      });
+    }
+    if (ids && ids.length !== vectors.length) {
+      throw new MastraError({
+        id: 'STORAGE_AZURE_AI_SEARCH_UPSERT_IDS_LENGTH_MISMATCH',
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.USER,
+        text: `Vectors and ids must have the same length. Got ${vectors.length} vectors and ${ids.length} ids.`,
+        details: { indexName, vectorsLength: vectors.length, idsLength: ids.length },
+      });
+    }
+
     try {
       if (deleteFilter) {
         await this.deleteVectors({ indexName, filter: deleteFilter });
@@ -796,7 +886,7 @@ export class AzureAISearchVector extends MastraVector<AzureAISearchVectorFilter>
    * @param queryVector - Vector to search with
    * @param topK - Maximum number of results to return
    * @param filter - Optional filter to apply to the search
-   * @param includeVector - Whether to include vector data (Note: Always false for Azure AI Search due to platform limitations)
+   * @param includeVector - Whether to include the vector in each result (requires an extra retrievable select)
    * @param useSemanticSearch - Enable semantic search for better relevance
    * @param semanticOptions - Configuration for semantic search features
    * @param exhaustiveSearch - Use exhaustive k-NN search for exact results
@@ -808,9 +898,6 @@ export class AzureAISearchVector extends MastraVector<AzureAISearchVectorFilter>
    * @param filterMode - Apply filters before or after vector search
    * @returns Array of search results with scores and metadata
    * @throws {MastraError} When search operation fails
-   *
-   * Note: Vector fields are not retrievable in Azure AI Search, so vectors
-   * are never included in query results regardless of includeVector parameter.
    */
   async advancedQuery({
     indexName,
@@ -828,8 +915,6 @@ export class AzureAISearchVector extends MastraVector<AzureAISearchVectorFilter>
     additionalVectorQueries = [],
     filterMode = 'preFilter',
   }: AzureAISearchAdvancedQueryParams): Promise<QueryResult[]> {
-    // Note: includeVector is ignored due to Azure AI Search limitations - vectors are not retrievable
-    void includeVector;
     try {
       const searchClient = this.getSearchClient(indexName);
 
@@ -847,24 +932,13 @@ export class AzureAISearchVector extends MastraVector<AzureAISearchVectorFilter>
         fields: [vectorFieldName],
         exhaustive: exhaustiveSearch,
         weight: weight,
-        ...(oversampling && { oversampling }),
+        // Oversampling only makes sense for approximate (compressed) search — Azure
+        // rejects the combination of oversampling and exhaustive search outright.
+        ...(oversampling && !exhaustiveSearch && { oversampling }),
       };
 
       // Prepare additional vector queries for hybrid search
       const allVectorQueries: VectorQuery<any>[] = [primaryVectorQuery];
-
-      // Add text vectorization query if specified
-      if (textVectorization) {
-        const textQuery: VectorizableTextQuery<any> = {
-          kind: 'text' as const,
-          text: textVectorization.text,
-          fields: textVectorization.fields || [vectorFieldName],
-          kNearestNeighborsCount: topK,
-          exhaustive: exhaustiveSearch,
-          weight: weight,
-        };
-        allVectorQueries.push(textQuery);
-      }
 
       // Add additional vector queries
       additionalVectorQueries.forEach(vq => {
@@ -885,8 +959,9 @@ export class AzureAISearchVector extends MastraVector<AzureAISearchVectorFilter>
         filterMode: filterMode,
       };
 
-      // Prepare field selection
-      const selectFields = ['id', 'metadata', 'content'];
+      // Prepare field selection. The vector field is declared `retrievable: true`
+      // in the index schema, so it can be selected back when explicitly requested.
+      const selectFields = includeVector ? ['id', 'metadata', 'content', vectorFieldName] : ['id', 'metadata', 'content'];
 
       // Build search options
       let searchOptions: SearchRequestOptions<any> = {
@@ -894,6 +969,11 @@ export class AzureAISearchVector extends MastraVector<AzureAISearchVectorFilter>
         filter: odataFilter,
         top: topK,
         select: selectFields,
+        // Combining a full-text `search` term with vectorSearchOptions makes Azure AI
+        // Search run true hybrid search (BM25 + vector, fused via Reciprocal Rank Fusion)
+        // in a single request. This needs no server-side vectorizer, unlike a
+        // VectorizableTextQuery, which requires one to be configured on the index.
+        ...(textVectorization?.fields && { searchFields: textVectorization.fields }),
       };
 
       // Add semantic search if enabled
@@ -929,8 +1009,10 @@ export class AzureAISearchVector extends MastraVector<AzureAISearchVectorFilter>
         };
       }
 
-      // Perform search
-      const searchResults = await searchClient.search('*', searchOptions as any);
+      // Perform search. A text query (from textVectorization.text) is passed as the
+      // full-text search term rather than vectorized server-side, so hybrid search
+      // works against any index without requiring a configured vectorizer.
+      const searchResults = await searchClient.search(textVectorization?.text ?? '*', searchOptions as any);
 
       // Process results - Azure SDK returns object with .results property
       const results: QueryResult[] = [];
@@ -949,8 +1031,7 @@ export class AzureAISearchVector extends MastraVector<AzureAISearchVectorFilter>
                 })()
               : {},
             document: result.document.content,
-            // Note: Vector field is not retrievable in Azure AI Search, so it's not included
-            // even when includeVector is true
+            ...(includeVector && { vector: (result.document as Record<string, any>)[vectorFieldName] }),
           };
 
           // Add semantic-specific fields if available
@@ -1021,7 +1102,7 @@ export class AzureAISearchVector extends MastraVector<AzureAISearchVectorFilter>
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.USER,
           details: { indexName },
-          text: 'Cannot provide both id and filter',
+          text: 'Cannot provide both id and filter - they are mutually exclusive',
         });
       }
 
@@ -1047,7 +1128,7 @@ export class AzureAISearchVector extends MastraVector<AzureAISearchVectorFilter>
             domain: ErrorDomain.STORAGE,
             category: ErrorCategory.USER,
             details: { indexName },
-            text: 'Filter cannot be empty',
+            text: 'Cannot update with empty filter',
           });
         }
         targetIds = await this.findIdsByFilter(indexName, filter);
@@ -1117,7 +1198,7 @@ export class AzureAISearchVector extends MastraVector<AzureAISearchVectorFilter>
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.USER,
           details: { indexName },
-          text: 'Cannot specify both ids and filter',
+          text: 'Cannot specify both ids and filter - they are mutually exclusive',
         });
       }
 
@@ -1127,7 +1208,7 @@ export class AzureAISearchVector extends MastraVector<AzureAISearchVectorFilter>
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.USER,
           details: { indexName },
-          text: 'Either ids or filter must be provided',
+          text: 'Either filter or ids must be provided',
         });
       }
 
@@ -1336,14 +1417,17 @@ export class AzureAISearchVector extends MastraVector<AzureAISearchVectorFilter>
   }
 
   /**
-   * Convenience method for hybrid vector + text search
+   * Convenience method for hybrid vector + text search. Combines the vector query with a
+   * BM25 full-text query over `textQuery`, fused via Azure AI Search's native Reciprocal
+   * Rank Fusion. No vectorizer needs to be configured on the index.
    *
-   * @param params - Query parameters with text vectorization
+   * @param params - Query parameters with a text query
    * @returns Array of search results from hybrid search
    */
   async hybridQuery(
     params: Omit<AzureAISearchAdvancedQueryParams, 'textVectorization'> & {
       textQuery: string;
+      /** Searchable text fields to match `textQuery` against. Defaults to the index's default searchable fields. */
       vectorFields?: string[];
     },
   ): Promise<QueryResult[]> {

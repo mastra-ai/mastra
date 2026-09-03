@@ -1,0 +1,307 @@
+---
+title: "Reference: Azure AI Search vector store | Vectors"
+description: Documentation for the AzureAISearchVector class in Mastra, which provides vector search using Azure AI Search.
+packages:
+  - "@mastra/azure-ai-search"
+---
+
+# Azure AI Search vector store
+
+The `AzureAISearchVector` class provides vector search using [Azure AI Search](https://learn.microsoft.com/azure/search/vector-search-overview), Microsoft's cloud search service with native vector search support. It offers metadata filtering, hybrid (vector + text) search, and semantic ranking on top of an existing Azure AI Search resource.
+
+## Constructor options
+
+<PropertiesTable
+  content={[
+  {
+    name: 'id',
+    type: 'string',
+    description: 'Unique identifier for this vector store instance.',
+  },
+  {
+    name: 'endpoint',
+    type: 'string',
+    description: "The endpoint URL of your Azure AI Search service, e.g. 'https://your-service.search.windows.net'.",
+  },
+  {
+    name: 'credential',
+    type: 'string | AzureKeyCredential | TokenCredential',
+    description:
+      'An admin API key string, an AzureKeyCredential, or an Azure Identity TokenCredential (e.g. DefaultAzureCredential) for Azure AD authentication.',
+  },
+  {
+    name: 'apiVersion',
+    type: 'string',
+    isOptional: true,
+    description: 'Azure AI Search REST API version to use. Defaults to the SDK default.',
+  },
+  {
+    name: 'clientOptions',
+    type: 'SearchClientOptions',
+    isOptional: true,
+    description:
+      'Additional options passed to the underlying SearchClient/SearchIndexClient, such as additionalPolicies for proxies, custom headers, or retry behavior.',
+  },
+]}
+/>
+
+```typescript
+import { AzureAISearchVector } from '@mastra/azure-ai-search'
+
+const vectorStore = new AzureAISearchVector({
+  id: 'azure-search-vectors',
+  endpoint: process.env.AZURE_AI_SEARCH_ENDPOINT!,
+  credential: process.env.AZURE_AI_SEARCH_CREDENTIAL!,
+})
+```
+
+## Methods
+
+### `createIndex()`
+
+<PropertiesTable
+  content={[
+  {
+    name: 'indexName',
+    type: 'string',
+    description: 'Name of the index to create',
+  },
+  {
+    name: 'dimension',
+    type: 'number',
+    description: 'Vector dimension (must match your embedding model)',
+  },
+  {
+    name: 'metric',
+    type: "'cosine' | 'euclidean' | 'dotproduct'",
+    isOptional: true,
+    defaultValue: 'cosine',
+    description: 'Distance metric for similarity search',
+  },
+  {
+    name: 'metadataIndexes',
+    type: 'string[]',
+    isOptional: true,
+    description:
+      'Metadata keys that should also be created as explicit filterable Azure AI Search fields, in addition to the JSON-encoded metadata blob.',
+  },
+]}
+/>
+
+For Azure AI Search-specific index features (custom vector field name, additional schema fields, HNSW parameters, semantic configuration), use `createAdvancedIndex()` with `AzureAISearchCreateIndexParams`.
+
+### `upsert()`
+
+<PropertiesTable
+  content={[
+  {
+    name: 'indexName',
+    type: 'string',
+    description: 'Name of the index to upsert into',
+  },
+  {
+    name: 'vectors',
+    type: 'number[][]',
+    description: 'Array of embedding vectors',
+  },
+  {
+    name: 'metadata',
+    type: 'Record<string, any>[]',
+    isOptional: true,
+    description: 'Metadata for each vector',
+  },
+  {
+    name: 'ids',
+    type: 'string[]',
+    isOptional: true,
+    description: 'Optional vector IDs (auto-generated if not provided)',
+  },
+  {
+    name: 'deleteFilter',
+    type: 'AzureAISearchVectorFilter',
+    isOptional: true,
+    description: 'Azure AI Search-specific: delete documents matching this filter before upserting.',
+  },
+]}
+/>
+
+### `query()`
+
+<PropertiesTable
+  content={[
+  {
+    name: 'indexName',
+    type: 'string',
+    description: 'Name of the index to query',
+  },
+  {
+    name: 'queryVector',
+    type: 'number[]',
+    description: 'Query vector to find similar vectors',
+  },
+  {
+    name: 'topK',
+    type: 'number',
+    isOptional: true,
+    defaultValue: '10',
+    description: 'Number of results to return',
+  },
+  {
+    name: 'filter',
+    type: 'AzureAISearchVectorFilter',
+    isOptional: true,
+    description:
+      'Metadata filter for the query. Accepts Mastra-style operators ($eq, $ne, $gt, $gte, $lt, $lte, $in, $nin, $exists, $and, $or, $not) or the legacy Azure-specific shape (eq, ne, gt, ge, lt, le, contains, startsWith, endsWith, any, all, $filter).',
+  },
+  {
+    name: 'includeVector',
+    type: 'boolean',
+    isOptional: true,
+    defaultValue: 'false',
+    description: 'Whether to include vectors in the results',
+  },
+]}
+/>
+
+Unsupported filter operators (for example `$regex`, `$size`, or `$all`, none of which map to Azure AI Search's OData filter syntax) throw an error rather than being silently dropped from the query.
+
+### `listIndexes()`
+
+Returns an array of index names as strings.
+
+### `describeIndex()`
+
+<PropertiesTable
+  content={[
+  {
+    name: 'indexName',
+    type: 'string',
+    description: 'Name of the index to describe',
+  },
+]}
+/>
+
+Returns:
+
+```typescript
+interface IndexStats {
+  dimension: number
+  count: number
+  metric: 'cosine' | 'euclidean' | 'dotproduct'
+}
+```
+
+### `deleteIndex()`
+
+<PropertiesTable
+  content={[
+  {
+    name: 'indexName',
+    type: 'string',
+    description: 'Name of the index to delete',
+  },
+]}
+/>
+
+### `updateVector()`
+
+Update a single vector by ID or by metadata filter. Either `id` or `filter` must be provided, but not both.
+
+<PropertiesTable
+  content={[
+  {
+    name: 'indexName',
+    type: 'string',
+    description: 'Name of the index containing the vector to update',
+  },
+  {
+    name: 'id',
+    type: 'string',
+    isOptional: true,
+    description: 'ID of the vector to update (mutually exclusive with filter)',
+  },
+  {
+    name: 'filter',
+    type: 'AzureAISearchVectorFilter',
+    isOptional: true,
+    description: 'Metadata filter to identify vector(s) to update (mutually exclusive with id)',
+  },
+  {
+    name: 'update',
+    type: 'object',
+    description: 'Update parameters: { vector?: number[]; metadata?: Record<string, any> }',
+  },
+]}
+/>
+
+### `deleteVector()`
+
+<PropertiesTable
+  content={[
+  {
+    name: 'indexName',
+    type: 'string',
+    description: 'Name of the index containing the vector to delete',
+  },
+  {
+    name: 'id',
+    type: 'string',
+    description: 'ID of the vector to delete',
+  },
+]}
+/>
+
+### `deleteVectors()`
+
+Delete multiple vectors by IDs or by metadata filter. Either `ids` or `filter` must be provided, but not both.
+
+<PropertiesTable
+  content={[
+  {
+    name: 'indexName',
+    type: 'string',
+    description: 'Name of the index containing the vectors to delete',
+  },
+  {
+    name: 'ids',
+    type: 'string[]',
+    isOptional: true,
+    description: 'Array of vector IDs to delete (mutually exclusive with filter)',
+  },
+  {
+    name: 'filter',
+    type: 'AzureAISearchVectorFilter',
+    isOptional: true,
+    description: 'Metadata filter to identify vectors to delete (mutually exclusive with ids)',
+  },
+]}
+/>
+
+## Azure-specific query methods
+
+Beyond the standard `query()` method, `AzureAISearchVector` exposes Azure AI Search-specific capabilities:
+
+- **`advancedQuery()`** — exposes Azure AI Search vector query parameters directly: exhaustive search, query weighting, oversampling, additional vector queries for multi-vector search, pre/post filtering mode, and text-based query types (`semantic`, `hybrid`).
+- **`semanticQuery()`** — convenience wrapper around `advancedQuery()` for semantic ranking with a configured semantic configuration.
+- **`hybridQuery()`** — convenience wrapper combining vector search with a full-text query.
+- **`multiVectorQuery()`** — convenience wrapper for querying against multiple weighted vectors at once.
+- **`exactQuery()`** — convenience wrapper for `advancedQuery()` with exhaustive (non-approximate) search enabled.
+
+These methods are additive: `query()` remains the Memory-compatible entry point used by Mastra's semantic recall.
+
+## Response types
+
+Query results are returned in this format:
+
+```typescript
+interface QueryResult {
+  id: string
+  score: number
+  metadata: Record<string, any>
+  vector?: number[] // Only included if includeVector is true
+}
+```
+
+## Related
+
+- [Metadata Filters](../rag/metadata-filters)
