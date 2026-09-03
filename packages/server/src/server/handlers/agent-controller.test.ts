@@ -849,7 +849,7 @@ describe('agent-controller routes', () => {
           controllerId: 'storage-fallback',
           resourceId: 'storage-user',
           threadId,
-          limit: 1,
+          limit: 2,
           page: 0,
         } as any)) as { messages: { id: string }[]; total: number; page: number; perPage: number; hasMore: boolean };
 
@@ -861,8 +861,8 @@ describe('agent-controller routes', () => {
         expect(filtered.messages.map(message => message.id)).toEqual(['third', 'first']);
         expect(limited).toMatchObject({ total: 3, page: 0, perPage: 2, hasMore: true });
         expect(limited.messages.map(message => message.id)).toEqual(['second', 'third']);
-        expect(limitPaged).toMatchObject({ total: 3, page: 0, perPage: 1, hasMore: true });
-        expect(limitPaged.messages.map(message => message.id)).toEqual(['third']);
+        expect(limitPaged).toMatchObject({ total: 3, page: 0, perPage: 2, hasMore: true });
+        expect(limitPaged.messages.map(message => message.id)).toEqual(['second', 'third']);
         expect(queryThreadMessages).toHaveBeenNthCalledWith(1, { threadId, resourceId: 'storage-user' });
         expect(queryThreadMessages).toHaveBeenNthCalledWith(2, {
           threadId,
@@ -887,8 +887,9 @@ describe('agent-controller routes', () => {
         expect(queryThreadMessages).toHaveBeenNthCalledWith(5, {
           threadId,
           resourceId: 'storage-user',
-          perPage: 1,
+          perPage: 2,
           page: 0,
+          orderBy: { field: 'createdAt', direction: 'DESC' },
         });
         expect(initStorage).toHaveBeenCalled();
       } finally {

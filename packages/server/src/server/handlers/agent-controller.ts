@@ -1277,15 +1277,15 @@ export const LIST_AGENT_CONTROLLER_THREAD_MESSAGES_ROUTE = createRoute({
 
       // Read-only route: delegate storage retrieval to the controller without
       // constructing a Session, which would initialize the workspace/sandbox.
-      const isLegacyLimitQuery = limit !== undefined && page === undefined;
+      const isLegacyLimitQuery = limit !== undefined;
       const result = await controller.queryThreadMessages(
         limit !== undefined
           ? {
               threadId,
               resourceId,
               perPage: limit,
-              ...(isLegacyLimitQuery ? { page: 0, orderBy: { field: 'createdAt', direction: 'DESC' as const } } : {}),
-              ...(page !== undefined ? { page } : {}),
+              page: page ?? 0,
+              orderBy: { field: 'createdAt', direction: 'DESC' as const },
             }
           : {
               threadId,
