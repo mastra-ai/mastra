@@ -721,6 +721,38 @@ describe('processInputStep', () => {
   });
 
   describe('tools', () => {
+    it('should pass the active run ID to the processor', async () => {
+      let receivedRunId: string | undefined;
+
+      const processor: Processor = {
+        id: 'run-id-reader',
+        processInputStep: async ({ runId }) => {
+          receivedRunId = runId;
+          return {};
+        },
+      };
+
+      const runner = new ProcessorRunner({
+        inputProcessors: [processor],
+        outputProcessors: [],
+        logger: mockLogger,
+        agentName: 'test-agent',
+      });
+
+      const messageList = new MessageList({ threadId: 'test-thread' });
+      messageList.add([createMessage('Hello')], 'input');
+
+      await runner.runProcessInputStep({
+        messageList,
+        runId: 'origin-run-id',
+        stepNumber: 0,
+        model: createMockModel(),
+        steps: [],
+      });
+
+      expect(receivedRunId).toBe('origin-run-id');
+    });
+
     it('should pass tools to processor', async () => {
       let receivedTools: any;
 
