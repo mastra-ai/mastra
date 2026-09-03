@@ -3,6 +3,7 @@ import { openai } from '@ai-sdk/openai-v5';
 import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
+import { MastraError } from '../../error';
 import { Mastra } from '../../mastra';
 import { MockMemory } from '../../memory/mock';
 import type { Processor, ProcessOutputResultArgs } from '../../processors/index';
@@ -564,6 +565,15 @@ describe('Supervisor Pattern Integration Tests', () => {
         agents: { failingAgent: subAgent },
         memory: new MockMemory(),
       });
+      const trackException = vi.fn();
+      supervisorAgent.__setLogger({
+        debug: vi.fn(),
+        info: vi.fn(),
+        warn: vi.fn(),
+        error: vi.fn(),
+        trackException,
+        getTransports: vi.fn().mockReturnValue(new Map()),
+      } as any);
 
       await supervisorAgent.generate('Do the thing', {
         maxSteps: 3,
@@ -571,6 +581,14 @@ describe('Supervisor Pattern Integration Tests', () => {
       });
 
       expect(onDelegationComplete).toHaveBeenCalledTimes(1);
+      const trackedErrors = trackException.mock.calls.map(([error]) => error);
+      const delegationToolError = trackedErrors.find(
+        error => error instanceof MastraError && error.id === 'AGENT_AGENT_TOOL_EXECUTION_FAILED',
+      );
+      expect(delegationToolError).toMatchObject({
+        message: resultText,
+        cause: expect.objectContaining({ message: delegationError.message }),
+      });
       expect(promptsSeenByParent).toHaveLength(2);
       expect(promptsSeenByParent[1]).toContain(resultText);
       expect(promptsSeenByParent[1]).not.toContain('[Agent:supervisor] - Failed agent tool execution for failingAgent');
