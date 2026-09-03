@@ -185,6 +185,7 @@ export class MCPOAuthClientProvider implements OAuthClientProvider {
   private readonly generateState: () => string | Promise<string>;
 
   private configuredClientInfo?: StoredOAuthClientInformation;
+  private issuerIndexUpdate: Promise<void> = Promise.resolve();
   private _sessionState?: string;
   private _sessionRedirectUrl?: string | URL;
 
@@ -289,19 +290,23 @@ export class MCPOAuthClientProvider implements OAuthClientProvider {
   }
 
   private async rememberIssuer(issuer: string): Promise<void> {
-    let issuers: string[] = [];
-    const stored = await this.storage.get('credential_issuers');
-    if (stored) {
-      try {
-        issuers = JSON.parse(stored) as string[];
-      } catch {
-        // Invalid stored data is replaced with a fresh index.
+    const update = this.issuerIndexUpdate.catch(() => {}).then(async () => {
+      let issuers: string[] = [];
+      const stored = await this.storage.get('credential_issuers');
+      if (stored) {
+        try {
+          issuers = JSON.parse(stored) as string[];
+        } catch {
+          // Invalid stored data is replaced with a fresh index.
+        }
       }
-    }
-    if (!issuers.includes(issuer)) {
-      issuers.push(issuer);
-      await this.storage.set('credential_issuers', JSON.stringify(issuers));
-    }
+      if (!issuers.includes(issuer)) {
+        issuers.push(issuer);
+        await this.storage.set('credential_issuers', JSON.stringify(issuers));
+      }
+    });
+    this.issuerIndexUpdate = update;
+    await update;
   }
 
   private async readStored<T>(key: string, expectedIssuer?: string): Promise<T | undefined> {
@@ -409,6 +414,7 @@ export class MCPOAuthClientProvider implements OAuthClientProvider {
    * Invalidate credentials when server indicates they're no longer valid.
    */
   async invalidateCredentials(scope: 'all' | 'client' | 'tokens' | 'verifier' | 'discovery'): Promise<void> {
+    await this.issuerIndexUpdate.catch(() => {});
     const issuerIndex = await this.storage.get('credential_issuers');
     let issuers: string[] = [];
     if (issuerIndex) {

@@ -257,6 +257,42 @@ describe('MCPOAuthClientProvider', () => {
     await expect(restoredProvider.tokens(issuerA)).resolves.toMatchObject({ access_token: 'token-a' });
   });
 
+  it('tracks concurrent issuer-scoped writes so invalidate all removes every credential', async () => {
+    const storage = new InMemoryOAuthStorage();
+    const provider: OAuthClientProvider = new MCPOAuthClientProvider({
+      redirectUrl: 'http://localhost:3000/callback',
+      clientMetadata: {
+        redirect_uris: ['http://localhost:3000/callback'],
+        client_name: 'Test Client',
+      },
+      storage,
+    });
+    const issuers = Array.from({ length: 25 }, (_, index) => ({ issuer: `https://auth-${index}.example.com` }));
+
+    await Promise.all(
+      issuers.flatMap((issuer, index) => [
+        provider.saveClientInformation?.({ client_id: `client-${index}`, issuer: issuer.issuer }, issuer),
+        provider.saveTokens({ access_token: `token-${index}`, token_type: 'Bearer', issuer: issuer.issuer }, issuer),
+      ]),
+    );
+
+    await Promise.all(
+      issuers.map(async (issuer, index) => {
+        await expect(provider.clientInformation(issuer)).resolves.toMatchObject({ client_id: `client-${index}` });
+        await expect(provider.tokens(issuer)).resolves.toMatchObject({ access_token: `token-${index}` });
+      }),
+    );
+
+    await provider.invalidateCredentials('all');
+
+    await Promise.all(
+      issuers.map(async issuer => {
+        await expect(provider.clientInformation(issuer)).resolves.toBeUndefined();
+        await expect(provider.tokens(issuer)).resolves.toBeUndefined();
+      }),
+    );
+  });
+
   it('should store and retrieve tokens', async () => {
     const provider = new MCPOAuthClientProvider({
       redirectUrl: 'http://localhost:3000/callback',
