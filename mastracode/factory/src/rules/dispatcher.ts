@@ -195,6 +195,32 @@ interface DispatcherSession extends SkillSession {
 type FactoryController = Pick<AgentController<MastraCodeState>, 'getSessionByResource'>;
 type BoundDispatcherSession = Session<MastraCodeState>;
 
+function factoryRequestContext(input: {
+  session: BoundDispatcherSession;
+  binding: FactoryRunBindingRecord;
+  userId: string;
+  orgId: string;
+}): RequestContext {
+  const { session, binding, userId, orgId } = input;
+  const requestContext = new RequestContext();
+  requestContext.set('user', { workosId: userId, organizationId: orgId });
+  const modeId = session.mode.get();
+  requestContext.set('controller', {
+    state: session.state.get(),
+    getState: () => session.state.get(),
+    threadId: binding.threadId,
+    resourceId: binding.resourceId,
+    session: {
+      id: session.identity.getId(),
+      ownerId: session.identity.getOwnerId(),
+      modeId,
+      modelId: session.model.get() ?? '',
+    },
+    workspace: session.getWorkspace(),
+  });
+  return requestContext;
+}
+
 export interface FactoryBindingPreparationInput {
   record: FactoryDeferredDecisionRecord;
   item: WorkItemRow;
@@ -618,10 +644,14 @@ export class FactoryDecisionDispatcher {
         const startedBy = item.sessions[binding.role]?.startedBy;
         if (!startedBy) return;
         await this.#primeCredentials?.({ orgId: record.orgId, userId: startedBy });
-        const requestContext = new RequestContext();
-        requestContext.set('user', { workosId: startedBy, organizationId: record.orgId });
         const session = await this.#findSession(binding);
         if (!session) return;
+        const requestContext = factoryRequestContext({
+          session,
+          binding,
+          userId: startedBy,
+          orgId: record.orgId,
+        });
         await awaitNotification(
           () =>
             session.sendNotificationSignal(
@@ -654,8 +684,13 @@ export class FactoryDecisionDispatcher {
         const startedBy = item?.sessions[binding.role]?.startedBy;
         if (!startedBy) throw new Error(`Factory binding ${binding.id} has no authenticated session owner.`);
         await this.#primeCredentials?.({ orgId: record.orgId, userId: startedBy });
-        const requestContext = new RequestContext();
-        requestContext.set('user', { workosId: startedBy, organizationId: record.orgId });
+        const session = await this.#requireSession(binding);
+        const requestContext = factoryRequestContext({
+          session,
+          binding,
+          userId: startedBy,
+          orgId: record.orgId,
+        });
         const resolved =
           decision.skillName === undefined
             ? await resolvePromptInvocation(this.#controller, {
@@ -667,7 +702,6 @@ export class FactoryDecisionDispatcher {
                 name: decision.skillName,
                 arguments: decision.arguments,
               });
-        const session = resolved.session as DispatcherSession;
         await this.#switchThread(session, binding);
         const deliveryId =
           record.deliveryGeneration === 0 ? record.id : `${record.id}:retry:${record.deliveryGeneration}`;
@@ -781,9 +815,13 @@ export class FactoryDecisionDispatcher {
         const startedBy = item?.sessions[binding.role]?.startedBy;
         if (!startedBy) throw new Error(`Factory binding ${binding.id} has no authenticated session owner.`);
         await this.#primeCredentials?.({ orgId: record.orgId, userId: startedBy });
-        const requestContext = new RequestContext();
-        requestContext.set('user', { workosId: startedBy, organizationId: record.orgId });
         const session = await this.#requireSession(binding);
+        const requestContext = factoryRequestContext({
+          session,
+          binding,
+          userId: startedBy,
+          orgId: record.orgId,
+        });
         await awaitNotification(
           () =>
             session.sendNotificationSignal(

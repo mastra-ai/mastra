@@ -143,7 +143,16 @@ function createSession(
         get: vi.fn(async (name: string) => ({ name, instructions: 'Follow the skill.' })),
       },
     }),
-    state: { set: vi.fn(async () => {}) },
+    state: {
+      get: vi.fn(() => ({ factoryProjectId: PROJECT_ID })),
+      set: vi.fn(async () => {}),
+    },
+    model: { get: vi.fn(() => 'openai/gpt-5.6-sol') },
+    mode: { get: vi.fn(() => 'build') },
+    identity: {
+      getId: vi.fn(() => 'session-1'),
+      getOwnerId: vi.fn(() => 'user-1'),
+    },
     permissions: { setForTool: vi.fn(async () => {}) },
     sendMessage: vi.fn(async () => {}),
     sendSignal: vi.fn((input: { id: string }, _options: { requestContext: { get(key: string): unknown } }) => {
@@ -1110,6 +1119,11 @@ describe('FactoryDecisionDispatcher', () => {
     );
     const requestContext = session.sendSignal.mock.calls[0]?.[1]?.requestContext;
     expect(requestContext?.get('user')).toEqual({ workosId: 'user-1', organizationId: 'org-1' });
+    expect(requestContext?.get('controller')).toMatchObject({
+      resourceId: PROJECT_ID,
+      threadId: 'thread-1',
+      session: { modeId: 'build', modelId: 'openai/gpt-5.6-sol' },
+    });
     expect(session.subscribe).toHaveBeenCalledTimes(1);
     expect(getAgentEndListenerCount()).toBe(0);
   });
