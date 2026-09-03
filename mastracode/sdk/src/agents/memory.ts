@@ -70,6 +70,40 @@ Don't say "Agent did x", say "did x". It will be assumed the agent did what was 
 Drop caveman for: security warnings, irreversible action confirmations, multi-step sequences where fragment order risks misread, user asks to clarify or repeats question, and anything that requires remembering verbatim content. Resume caveman after clear part done`;
 
 /**
+ * The organization rung local (TUI/studio) knowledge is curated under. A fixed
+ * literal on purpose: deriving it from a hostname or path would fragment local
+ * knowledge per checkout into scopes nothing ever reads.
+ */
+export const LOCAL_KNOWLEDGE_ORG_ID = 'local';
+
+// One error per session, not per memory resolution. Keyed on the session id
+// rather than the controller object: the controller is read off the request
+// context on every resolution, so it is a fresh object per request and would
+// dedupe nothing. Bounded so a long-running Factory process cannot grow this
+// without limit — refusing sessions are rare, and losing the oldest ids only
+// costs one extra log line.
+const REPORTED_ORG_UNRESOLVED_LIMIT = 500;
+const reportedOrgUnresolved = new Set<string>();
+
+function reportOrgUnresolved(
+  controller: AgentControllerRequestContext<MastraCodeState> | undefined,
+  factoryProjectId: string | undefined,
+) {
+  const sessionId = controller?.session?.id;
+  if (sessionId) {
+    if (reportedOrgUnresolved.has(sessionId)) return;
+    if (reportedOrgUnresolved.size >= REPORTED_ORG_UNRESOLVED_LIMIT) {
+      reportedOrgUnresolved.delete(reportedOrgUnresolved.values().next().value as string);
+    }
+    reportedOrgUnresolved.add(sessionId);
+  }
+  const session = controller?.session;
+  console.error(
+    `[Subconscious] Knowledge curation disabled: no organization resolved for session ${session?.id ?? 'unknown'} (project ${factoryProjectId ?? 'none'}). Knowledge is not written rather than written where it cannot be read.`,
+  );
+}
+
+/**
  * Dynamic memory factory function.
  * Reads OM thresholds from controller state via requestContext.
  * Model functions also read from requestContext (no mutable bridge needed).
@@ -87,16 +121,24 @@ export function getDynamicMemory(storage: MastraCompositeStore, vector?: MastraV
     const factoryProjectId = state?.factoryProjectId;
     const isFactory = typeof factoryProjectId === 'string' && factoryProjectId.trim().length > 0;
 
+    // A Factory-owned session that could not resolve its org refuses to curate:
+    // writing under a substituted identity produces knowledge the fail-closed
+    // read path can never see.
+    let orgUnresolvedRefusal = false;
+
     if (subconsciousEnabled) {
-      // Factory seeds the authoritative org id into session state; prefer it.
-      // The session owner is a USER id — mapping it into organizationId is only
-      // the legacy fallback for clients (TUI/studio) that never set factoryOrgId.
+      // Factory seeds the authoritative org id into session state. There is no
+      // fallback: a session owner is a USER id, never an organization.
       const factoryOrgId = state?.factoryOrgId;
-      const ownerId = controller?.session.ownerId;
+      const factoryOwned = isFactory || state?.factoryOrgUnresolved === true;
       if (typeof factoryOrgId === 'string' && factoryOrgId.trim()) {
         requestContext.set('organizationId', factoryOrgId);
-      } else if (ownerId) {
-        requestContext.set('organizationId', ownerId);
+      } else if (factoryOwned) {
+        orgUnresolvedRefusal = true;
+        reportOrgUnresolved(controller, factoryProjectId);
+      } else {
+        // TUI/studio: an explicit, named scope rather than a cascaded identity.
+        requestContext.set('organizationId', LOCAL_KNOWLEDGE_ORG_ID);
       }
       // Factory runs share one knowledge graph per project: anchor the
       // subconscious knowledge scope's resource rung on the project id.
@@ -104,6 +146,8 @@ export function getDynamicMemory(storage: MastraCompositeStore, vector?: MastraV
         requestContext.set('knowledgeResourceId', factoryProjectId);
       }
     }
+
+    const subconsciousAvailable = subconsciousEnabled && !orgUnresolvedRefusal;
 
     const omScope = state?.omScope ?? getOmScope(state?.projectPath);
 
@@ -115,7 +159,7 @@ export function getDynamicMemory(storage: MastraCompositeStore, vector?: MastraV
     const observeAttachments = state?.observeAttachments;
     // Factory sessions get a factory-only Subconscious config, so the cache key
     // carries a factory presence bit to keep the two configs from cross-serving.
-    const cacheKey = `${obsThreshold}:${refThreshold}:${omScope}:${observerPreviousObservationTokens}:${caveman ? 1 : 0}:${observeAttachments}:${isFactory ? 1 : 0}:${subconsciousEnabled ? 1 : 0}`;
+    const cacheKey = `${obsThreshold}:${refThreshold}:${omScope}:${observerPreviousObservationTokens}:${caveman ? 1 : 0}:${observeAttachments}:${isFactory ? 1 : 0}:${subconsciousAvailable ? 1 : 0}`;
     if (cachedMemory && cachedMemoryKey === cacheKey) {
       return cachedMemory;
     }
@@ -133,27 +177,18 @@ export function getDynamicMemory(storage: MastraCompositeStore, vector?: MastraV
       vector: vector || false,
       embedder: vector ? fastembed.small : undefined,
       options: {
-        // The factory sidebar shows a session the moment it exists, so it needs a
-        // name on the first turn. The TUI names its threads from OM's `threadTitle`
-        // as they grow and would only pay for an extra call here.
-        ...(isFactory ? { generateTitle: { model: getObserverModel } } : {}),
+        // Generate a durable title from the first user message. Every client uses
+        // the same title in its thread list and active-session chrome.
+        generateTitle: { model: getObserverModel },
         observationalMemory: {
           enabled: true,
           temporalMarkers: true,
           retrieval: vector ? { vector: true } : true,
-          experimental_subconscious: subconsciousEnabled
+          experimental_subconscious: subconsciousAvailable
             ? new Subconscious({
                 defaultScope: 'resource',
                 maxScope: 'resource',
-                // Capture-time pinning is a factory-only opinion; every other
-                // client keeps plain curator-maintained pins.
-                pins: isFactory ? { capturePinning: true } : true,
-                // Factory sessions run the curator every 3 observation runs;
-                // other clients leave the cadence trigger dormant.
-                ...(isFactory ? { curationCadence: 3 } : {}),
-                // Real curation over a factory worklist needs tool room: the
-                // default 5-step budget exhausts mid-batch and the curator never
-                // reaches its cursor acknowledgment (observed live 2026-08-13).
+                pins: true,
                 ...(isFactory ? { maxSteps: 25 } : {}),
               })
             : undefined,

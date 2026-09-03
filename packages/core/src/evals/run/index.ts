@@ -32,6 +32,7 @@ import type {
   ThresholdConfig,
 } from '../thresholds';
 import { extractTrajectory, extractTrajectoryFromTrace, extractWorkflowTrajectory } from '../types';
+import type { Trajectory } from '../types';
 import { ScoreAccumulator } from './scorerAccumulator';
 
 export type { ThresholdConfig } from '../thresholds';
@@ -201,6 +202,49 @@ type RunEvalsAgentOptions = Omit<
   memory?: Omit<AgentMemoryOption, 'thread'> & { thread?: AgentMemoryOption['thread'] };
 };
 
+/**
+ * Widest configuration accepted by `runEvals`, across all overloads.
+ * Useful for typing helpers that forward their options to `runEvals`;
+ * calling `runEvals` directly goes through the narrower per-target overloads.
+ */
+type RunEvalsBaseConfig<TTarget> = {
+  data: RunEvalsDataItem<TTarget>[];
+  gates?: MastraScorer<any, any, any, any>[];
+  onItemComplete?: (
+    outcome: RunEvalsItemCompletion<RunEvalsDataItem<TTarget>, any, Record<string, any>>,
+  ) => void | Promise<void>;
+  concurrency?: number;
+};
+
+/** Agent-targeted `runEvals` configuration: agent-compatible data, scorers and execution options only. */
+export type RunEvalsAgentConfig = RunEvalsBaseConfig<Agent> & {
+  target: Agent;
+  scorers?: ScorerEntry[] | MastraScorer<any, any, any, any>[] | AgentScorerConfig;
+  targetOptions?: RunEvalsAgentOptions;
+};
+
+/** Workflow-targeted `runEvals` configuration: workflow-compatible data, scorers and run options only. */
+export type RunEvalsWorkflowConfig = RunEvalsBaseConfig<Workflow> & {
+  target: Workflow;
+  scorers?: ScorerEntry[] | MastraScorer<any, any, any, any>[] | WorkflowScorerConfig;
+  targetOptions?: WorkflowRunOptions;
+};
+
+export type RunEvalsConfig = RunEvalsAgentConfig | RunEvalsWorkflowConfig;
+
+/** Widened implementation-only config so the narrower public overloads stay compatible. */
+type RunEvalsAnyConfig = {
+  data: RunEvalsDataItem<any>[];
+  scorers?: ScorerEntry[] | MastraScorer<any, any, any, any>[] | WorkflowScorerConfig | AgentScorerConfig;
+  target: Agent | Workflow;
+  gates?: MastraScorer<any, any, any, any>[];
+  targetOptions?: RunEvalsAgentOptions | WorkflowRunOptions;
+  onItemComplete?: (
+    outcome: RunEvalsItemCompletion<RunEvalsDataItem<any>, any, Record<string, any>>,
+  ) => void | Promise<void>;
+  concurrency?: number;
+};
+
 // Agent with gates (scorers optional) — gate-only runs are allowed
 export function runEvals<TAgent extends Agent>(config: {
   data: RunEvalsDataItem<TAgent>[];
@@ -298,17 +342,7 @@ export function runEvals<TAgent extends Agent>(config: {
   concurrency?: number;
 }): Promise<RunEvalsResult>;
 
-export async function runEvals(config: {
-  data: RunEvalsDataItem<any>[];
-  scorers?: ScorerEntry[] | MastraScorer<any, any, any, any>[] | WorkflowScorerConfig | AgentScorerConfig;
-  target: Agent | Workflow;
-  gates?: MastraScorer<any, any, any, any>[];
-  targetOptions?: RunEvalsAgentOptions | WorkflowRunOptions;
-  onItemComplete?: (
-    outcome: RunEvalsItemCompletion<RunEvalsDataItem<any>, any, Record<string, any>>,
-  ) => void | Promise<void>;
-  concurrency?: number;
-}): Promise<RunEvalsResult> {
+export async function runEvals(config: RunEvalsAnyConfig): Promise<RunEvalsResult> {
   const { data, scorers = [], gates, target, targetOptions, onItemComplete, concurrency = 1 } = config;
 
   // Normalize ScorerEntry[] into bare scorers + threshold metadata
@@ -400,14 +434,27 @@ export async function runEvals(config: {
       try {
         // Run gates first
         if (gates) {
+          // Trajectory gates receive the same trace-first trajectory shape as trajectory scorers.
+          const gateTrajectory = gates.some(gate => gate.type === 'trajectory')
+            ? await resolveTrajectory(
+                storage,
+                targetResult.traceId,
+                targetResult.spanId,
+                targetResult.scoringData,
+                isWorkflow(target),
+              )
+            : undefined;
+
           for (const gate of gates) {
+            const isTrajectoryGate = gate.type === 'trajectory';
             const gateScore = await gate.run({
               input: targetResult.scoringData?.input,
-              output: targetResult.scoringData?.output,
+              output: isTrajectoryGate ? gateTrajectory : targetResult.scoringData?.output,
               groundTruth: item.groundTruth,
+              ...(isTrajectoryGate ? { expectedTrajectory: item.expectedTrajectory } : {}),
               requestContext: item.requestContext,
               scoreSource: 'experiment',
-              targetScope: 'span',
+              targetScope: isTrajectoryGate ? 'trajectory' : 'span',
               targetEntityType: targetResult.entityType,
               targetTraceId: targetResult.traceId,
               targetSpanId: targetResult.spanId,
@@ -426,7 +473,7 @@ export async function runEvals(config: {
           for (let ti = 0; ti < turns.length; ti++) {
             const record = perTurn[ti];
             if (!record) continue;
-            const { rawResults, ...scored } = await scoreTurn(turns[ti]!, record, item);
+            const { rawResults, ...scored } = await scoreTurn(turns[ti]!, record, item, storage);
             itemTurnResults.push({ index: ti, ...scored });
 
             if (storage) {
@@ -578,6 +625,34 @@ export async function runEvals(config: {
   return result;
 }
 
+/**
+ * Resolves the `Trajectory` a trajectory-typed scorer expects, using the same
+ * precedence as the `scorers.trajectory` branch: the hierarchical trace when a
+ * trace store and id are available, otherwise flat extraction from the output
+ * messages.
+ */
+async function resolveTrajectory(
+  storage: MastraCompositeStore | undefined,
+  traceId: string | undefined,
+  spanId: string | undefined,
+  scoringData: { output?: any; stepResults?: any; stepExecutionPath?: string[] } | undefined,
+  isWorkflowTarget: boolean,
+): Promise<Trajectory> {
+  const traceTrajectory = await extractTrajectoryFromTraceStore(storage, traceId, spanId);
+  if (traceTrajectory) return traceTrajectory;
+
+  // A workflow's `scoringData.output` is the workflow's own result, not an
+  // iterable of agent messages, so it must be reconstructed from step results —
+  // the same fallback the workflow branch of `scorers.trajectory` uses.
+  if (isWorkflowTarget) {
+    const stepResults = scoringData?.stepResults;
+    return stepResults ? extractWorkflowTrajectory(stepResults, scoringData?.stepExecutionPath) : { steps: [] };
+  }
+
+  const rawOutput = scoringData?.output;
+  return rawOutput ? extractTrajectory(rawOutput) : { steps: [] };
+}
+
 function average(scores: number[]): number {
   return scores.length > 0 ? scores.reduce((a, b) => a + b, 0) / scores.length : 0;
 }
@@ -587,6 +662,7 @@ async function scoreTurn(
   turn: EvalTurn,
   record: PerTurnRecord,
   item: RunEvalsDataItem<any>,
+  storage?: MastraCompositeStore,
 ): Promise<Omit<ScoredTurn, 'index'> & { rawResults: Record<string, any> }> {
   const gates: Array<{ id: string; score: number }> = [];
   const thresholds: Array<{ id: string; score: number; threshold: ThresholdConfig }> = [];
@@ -594,14 +670,23 @@ async function scoreTurn(
   const rawResults: Record<string, any> = {};
 
   if (turn.gates) {
+    // Same trajectory contract as the top-level gate loop above.
+    const gateTrajectory = turn.gates.some(gate => gate.type === 'trajectory')
+      ? // Per-turn records are produced only by the agent turn runner, never by
+        // `executeWorkflow`, so the agent fallback is the only reachable one here.
+        await resolveTrajectory(storage, record.traceId, record.spanId, { output: record.output }, false)
+      : undefined;
+
     for (const gate of turn.gates) {
+      const isTrajectoryGate = gate.type === 'trajectory';
       const gateScore = await gate.run({
         input: record.input,
-        output: record.output,
+        output: isTrajectoryGate ? gateTrajectory : record.output,
         groundTruth: item.groundTruth,
+        ...(isTrajectoryGate ? { expectedTrajectory: item.expectedTrajectory } : {}),
         requestContext: item.requestContext,
         scoreSource: 'experiment',
-        targetScope: 'span',
+        targetScope: isTrajectoryGate ? 'trajectory' : 'span',
         targetEntityType: record.entityType,
         targetTraceId: record.traceId,
         targetSpanId: record.spanId,

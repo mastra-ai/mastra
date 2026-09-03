@@ -1,5 +1,51 @@
 # @mastra/github-signals
 
+## 0.4.0-alpha.2
+
+### Patch Changes
+
+- Update README to include accurate, up-to-date information ([#22858](https://github.com/mastra-ai/mastra/pull/22858))
+
+- Updated dependencies [[`e983f74`](https://github.com/mastra-ai/mastra/commit/e983f749873189f767f509eb33d1a3596c0f1c74), [`cedc25d`](https://github.com/mastra-ai/mastra/commit/cedc25d8c2dec005d8b10b6ce2d36feef1162ff0), [`9fdb3bc`](https://github.com/mastra-ai/mastra/commit/9fdb3bc0f9bfab5269b4f3045595e62323da5d3a)]:
+  - @mastra/core@1.64.0-alpha.7
+
+## 0.4.0-alpha.1
+
+### Patch Changes
+
+- Remove `CHANGELOG.md` from distributed npm files resulting in reduced package size ([#22737](https://github.com/mastra-ai/mastra/pull/22737))
+
+- Updated dependencies [[`cf58c86`](https://github.com/mastra-ai/mastra/commit/cf58c86cb48ccc72677bdaa422e43f102683184c), [`449d112`](https://github.com/mastra-ai/mastra/commit/449d1120cc1f9c43a71308a9fd8b178cfb11355f), [`2a0ca02`](https://github.com/mastra-ai/mastra/commit/2a0ca021d95e23f1d1c0b5fe858b0b56f71fe0ba), [`ff539f6`](https://github.com/mastra-ai/mastra/commit/ff539f6dc21137fbeb3f0867f07069cbce45c15f), [`420052f`](https://github.com/mastra-ai/mastra/commit/420052fcac3fc672be17fe655667dfbdbd35a2cc), [`28ce924`](https://github.com/mastra-ai/mastra/commit/28ce924276eeca492e6a360e5482ed20c2785ef6)]:
+  - @mastra/core@1.64.0-alpha.2
+
+## 0.4.0-alpha.0
+
+### Minor Changes
+
+- Added multi-PR GitHub signal tools and improved notification filtering. ([#22407](https://github.com/mastra-ai/mastra/pull/22407))
+
+  Agents can subscribe to multiple pull requests, unsubscribe from multiple pull requests, and unsubscribe from all tracked pull requests. The tool input shape now uses a `prs` array instead of the old single-PR top-level fields.
+
+  Before:
+
+  ```json
+  { "owner": "mastra-ai", "repo": "mastra", "number": 123 }
+  ```
+
+  After:
+
+  ```json
+  { "prs": [{ "owner": "mastra-ai", "repo": "mastra", "number": 123 }] }
+  ```
+
+  Unsubscribe all:
+
+  ```json
+  { "all": true }
+  ```
+
+  GitHub signal notifications now also filter repeated low-value bot comments such as skipped CodeRabbit reviews and bot status summaries.
+
 ## 0.3.0
 
 ### Minor Changes

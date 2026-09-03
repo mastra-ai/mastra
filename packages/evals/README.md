@@ -5,34 +5,30 @@
 - **LLM scorers** – leverage a judge model (e.g. OpenAI, Anthropic) to rate responses for qualities such as faithfulness or toxicity.
 - **Code/NLP scorers** – deterministic heuristics (keyword coverage, similarity, etc.) that do not require an external model.
 
-The scorers do not persist results or integrate with Mastra Storage; you decide where and how to record outcomes.
-
 ## Installation
 
 ```bash
 npm install @mastra/evals
 ```
 
-## Quick Start
+## Usage
 
-```ts
-import { createFaithfulnessScorer, createContentSimilarityScorer } from '@mastra/evals/scorers/prebuilt';
+Import prebuilt scorers from the package subpath.
 
-const faithfulness = createFaithfulnessScorer({
-   model: 'openai/gpt-4o-mini')
-});
+```typescript
+import { createToolCallAccuracyScorerCode } from '@mastra/evals/scorers/prebuilt';
 
-const similarity = createContentSimilarityScorer({ ignoreCase: true });
-
-const answer = 'Paris is the capital of France.';
-const context = ['Paris is the capital of France', 'France is in Europe'];
-
-const faithfulnessScore = await faithfulness.score({ answer, context });
-
-const similarityScore = similarity.score({
-   input: context[0],
-   output: answer
-});
-
-console.log({ faithfulnessScore, similarityScore });
+const scorer = createToolCallAccuracyScorerCode({ expectedTool: 'weather' });
 ```
+
+## Documentation
+
+- [@mastra/evals documentation](https://mastra.ai/docs/evals/overview)
+
+## Changelog
+
+See the [package changelog](https://github.com/mastra-ai/mastra/blob/main/packages/evals/CHANGELOG.md) for version history and release notes.
+
+## Support
+
+We have an [open community Discord](https://discord.gg/mastra-ai). Come and say hello and let us know if you have any questions or need any help getting things running.

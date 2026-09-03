@@ -87,7 +87,7 @@ export function BoardColumnEmptyState({
       }
     : boardColumnEmptyCopy(stage, kind, hasIntakeSource);
   return (
-    <div className="border-border1 flex min-h-24 flex-col justify-center rounded-lg border border-dashed px-4 py-4">
+    <div className="border-border1 flex min-h-24 flex-col justify-center rounded-3xl border border-dashed px-4 py-4">
       <Txt as="p" variant="ui-sm" className="text-icon4 m-0 font-medium">
         {copy.title}
       </Txt>

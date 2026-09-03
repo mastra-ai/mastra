@@ -506,6 +506,11 @@ export interface GetAgentResponse {
   workspaceTools?: string[];
   /** Browser tool names available to this agent (if browser is configured) */
   browserTools?: string[];
+  /**
+   * Whether the agent has any browser provider — agent-level SDK browser or
+   * workspace-level CLI browser. Gates the Studio browser viewer.
+   */
+  hasBrowser?: boolean;
   /** ID of the agent's workspace (if configured) */
   workspaceId?: string;
   provider: string;
@@ -2811,7 +2816,8 @@ export interface DatasetExperimentResult {
   output: unknown | null;
   groundTruth: unknown | null;
   metadata?: Record<string, unknown> | null;
-  error: string | null;
+  /** Structured failure info, as persisted by the experiment runner. */
+  error: { message: string; stack?: string; code?: string } | null;
   startedAt: string | Date;
   completedAt: string | Date;
   retryCount: number;
@@ -2821,7 +2827,11 @@ export interface DatasetExperimentResult {
   tags: string[] | null;
   comment?: string | null;
   toolMockReport?: ToolMockReport | null;
-  scores: Array<{
+  /**
+   * Aggregated scorer runs. Absent on endpoints that return raw result rows
+   * (scores live in the scores store, keyed by `runId = experimentId`).
+   */
+  scores?: Array<{
     scorerId: string;
     scorerName: string;
     score: number | null;
@@ -2989,9 +2999,7 @@ export interface RunExperimentItemParams {
  * `error` object and no aggregated `scores` (scores live in the scores
  * store, keyed by `runId = experimentId`).
  */
-export type DatasetExperimentResultRow = Omit<DatasetExperimentResult, 'error' | 'scores'> & {
-  error: { message: string; stack?: string; code?: string } | null;
-};
+export type DatasetExperimentResultRow = Omit<DatasetExperimentResult, 'scores'>;
 
 export interface RunExperimentItemResponse {
   result: DatasetExperimentResultRow;

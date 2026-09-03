@@ -808,6 +808,9 @@ CREATE TABLE IF NOT EXISTS ${TABLE_FEEDBACK_EVENTS} (
   feedbackUserId     Nullable(String),
   sourceId           Nullable(String),
 
+  -- Review workflow
+  reviewStatus       LowCardinality(String) DEFAULT 'needs-review',
+
   -- Feedback identity
   feedbackSource     LowCardinality(String),
   feedbackType       LowCardinality(String),
@@ -1133,6 +1136,7 @@ export const ALL_MIGRATIONS: readonly MigrationEntry[] = [
   addColumn(TABLE_SCORE_EVENTS, 'rootEntityVersionId', 'Nullable(String)'),
   // Feedback
   addColumn(TABLE_FEEDBACK_EVENTS, 'entityVersionId', 'Nullable(String)'),
+  addColumn(TABLE_FEEDBACK_EVENTS, 'reviewStatus', "LowCardinality(String) DEFAULT 'needs-review'"),
   addColumn(TABLE_FEEDBACK_EVENTS, 'parentEntityVersionId', 'Nullable(String)'),
   addColumn(TABLE_FEEDBACK_EVENTS, 'rootEntityVersionId', 'Nullable(String)'),
   // Metric skip indexes — additive, instant DDL. Existing parts keep no index

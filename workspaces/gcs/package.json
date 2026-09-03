@@ -1,6 +1,6 @@
 {
   "name": "@mastra/gcs",
-  "version": "0.3.2",
+  "version": "0.3.3-alpha.1",
   "description": "Google Cloud Storage filesystem provider for Mastra workspaces",
   "type": "module",
   "main": "dist/index.js",
@@ -53,8 +53,7 @@
     "@mastra/core": ">=1.4.0-0 <2.0.0-0"
   },
   "files": [
-    "dist",
-    "CHANGELOG.md"
+    "dist"
   ],
   "homepage": "https://mastra.ai",
   "repository": {

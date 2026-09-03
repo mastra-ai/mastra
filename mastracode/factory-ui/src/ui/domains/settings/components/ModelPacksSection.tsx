@@ -202,7 +202,7 @@ export function ModelPacksSection({ models }: { models: AvailableModelOption[] }
                   </Txt>
                   {p.custom && <Badge size="sm">Custom</Badge>}
                   {p.active && (
-                    <Badge size="sm" variant="success">
+                    <Badge size="sm" variant="green">
                       Default
                     </Badge>
                   )}

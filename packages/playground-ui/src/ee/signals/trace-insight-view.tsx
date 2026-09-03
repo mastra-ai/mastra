@@ -1,5 +1,5 @@
 import { useTraceInsight } from './hooks';
-import { formatSignalName } from './signal-formatting';
+import { signalLabel } from './signal-formatting';
 import type { TraceInsightResponse } from './types';
 import { useTraceIntelligence } from './use-trace-intelligence';
 import { Button } from '@/ds/components/Button';
@@ -88,6 +88,7 @@ function ObservationItem({ observation }: { observation: string }) {
 }
 
 function TraceInsightBody({ insight }: { insight: TraceInsightResponse }) {
+  const { signalCatalog } = useTraceIntelligence();
   return (
     <>
       {insight.summary === undefined ? (
@@ -132,7 +133,7 @@ function TraceInsightBody({ insight }: { insight: TraceInsightResponse }) {
           <ul className="mt-3 space-y-3">
             {insight.signals.map(signal => (
               <li key={signal.signalName} className="border-border1 bg-surface3 rounded-md border p-3 text-sm">
-                <p className="text-neutral3">{formatSignalName(signal.signalName)}</p>
+                <p className="text-neutral3">{signalLabel(signalCatalog, signal.signalName)}</p>
                 <p className="text-neutral5 mt-1">{signal.signalText}</p>
               </li>
             ))}

@@ -1,11 +1,10 @@
 {
   "name": "@mastra/browser-viewer",
-  "version": "0.2.2",
+  "version": "0.2.3-alpha.2",
   "description": "Playwright-based browser viewer for Mastra CLI providers",
   "type": "module",
   "files": [
-    "dist",
-    "CHANGELOG.md"
+    "dist"
   ],
   "main": "dist/index.js",
   "types": "dist/index.d.ts",

@@ -1,6 +1,6 @@
 {
   "name": "@mastra/auth-google",
-  "version": "0.1.1",
+  "version": "0.1.2-alpha.1",
   "description": "Mastra Google Workspace Auth integration",
   "type": "module",
   "main": "dist/index.js",
@@ -19,8 +19,7 @@
     "./package.json": "./package.json"
   },
   "files": [
-    "dist",
-    "CHANGELOG.md"
+    "dist"
   ],
   "scripts": {
     "build": "tsdown --silent --config tsdown.config.ts",

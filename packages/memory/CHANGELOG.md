@@ -1,5 +1,92 @@
 # @mastra/memory
 
+## 1.28.2-alpha.3
+
+### Patch Changes
+
+- Added persistent reminder conversations and asynchronous `ask_memory` questions with correlated partial and terminal replies. The tool returns immediately with a reply ID and pending status, then delivers answers later as correlated signals. ([#22783](https://github.com/mastra-ai/mastra/pull/22783))
+
+  Enable the experimental reminder sidekick on observational memory:
+
+  ```ts
+  import { Memory, Subconscious } from '@mastra/memory';
+
+  const memory = new Memory({
+    options: {
+      observationalMemory: {
+        model: 'openai/gpt-5-mini',
+        experimental_subconscious: new Subconscious({ observation: ['remind'] }),
+      },
+    },
+  });
+  ```
+
+- Updated dependencies [[`ea56b1f`](https://github.com/mastra-ai/mastra/commit/ea56b1fa6e0f99673d2f8a5b7dacc8d351507ff7)]:
+  - @mastra/core@1.64.0-alpha.8
+
+## 1.28.2-alpha.2
+
+### Patch Changes
+
+- Update README to include accurate, up-to-date information ([#22858](https://github.com/mastra-ai/mastra/pull/22858))
+
+- Improve internal observational-memory processing. ([#22738](https://github.com/mastra-ai/mastra/pull/22738))
+
+- Updated dependencies [[`e983f74`](https://github.com/mastra-ai/mastra/commit/e983f749873189f767f509eb33d1a3596c0f1c74), [`cedc25d`](https://github.com/mastra-ai/mastra/commit/cedc25d8c2dec005d8b10b6ce2d36feef1162ff0), [`9fdb3bc`](https://github.com/mastra-ai/mastra/commit/9fdb3bc0f9bfab5269b4f3045595e62323da5d3a)]:
+  - @mastra/schema-compat@1.3.8-alpha.1
+  - @mastra/core@1.64.0-alpha.7
+
+## 1.28.2-alpha.1
+
+### Patch Changes
+
+- Remove `CHANGELOG.md` from distributed npm files resulting in reduced package size ([#22737](https://github.com/mastra-ai/mastra/pull/22737))
+
+- Updated dependencies [[`cf58c86`](https://github.com/mastra-ai/mastra/commit/cf58c86cb48ccc72677bdaa422e43f102683184c), [`449d112`](https://github.com/mastra-ai/mastra/commit/449d1120cc1f9c43a71308a9fd8b178cfb11355f), [`2a0ca02`](https://github.com/mastra-ai/mastra/commit/2a0ca021d95e23f1d1c0b5fe858b0b56f71fe0ba), [`ff539f6`](https://github.com/mastra-ai/mastra/commit/ff539f6dc21137fbeb3f0867f07069cbce45c15f), [`420052f`](https://github.com/mastra-ai/mastra/commit/420052fcac3fc672be17fe655667dfbdbd35a2cc), [`28ce924`](https://github.com/mastra-ai/mastra/commit/28ce924276eeca492e6a360e5482ed20c2785ef6)]:
+  - @mastra/core@1.64.0-alpha.2
+  - @mastra/schema-compat@1.3.8-alpha.0
+
+## 1.28.2-alpha.0
+
+### Patch Changes
+
+- Improve tool schema compatibility with providers that validate tool definitions server-side. ([#22487](https://github.com/mastra-ai/mastra/pull/22487))
+
+- Fixed observational memory prompts appearing in stored conversation history. ([#22324](https://github.com/mastra-ai/mastra/pull/22324))
+
+## 1.28.1
+
+### Patch Changes
+
+- Add an optional bounded description field to knowledge nodes across storage adapters, written through a dedicated curator tool. Part of an unreleased experimental memory feature. ([#21830](https://github.com/mastra-ai/mastra/pull/21830))
+
+- Knowledge curation no longer fails on Gemini models: the curator's `knowledge_update_node` tool schema was rejected by Google's API ("required only allowed for OBJECT type"), causing every curation attempt with a Gemini curator to fail before the model ran. The tool now accepts the same inputs with `name`/`kind` as optional properties (at least one required). ([#22337](https://github.com/mastra-ai/mastra/pull/22337))
+
+- Improve the reliability and capacity of experimental memory processing. ([#22178](https://github.com/mastra-ai/mastra/pull/22178))
+
+- Updated dependencies [[`bae1502`](https://github.com/mastra-ai/mastra/commit/bae150254b06a4da6964d7c137af97f336362359), [`0885364`](https://github.com/mastra-ai/mastra/commit/0885364c2fc7fa31febcfc444fc1ba5231ac1257), [`b8cb683`](https://github.com/mastra-ai/mastra/commit/b8cb683ba66499df254ddd1f7edd8cae3f89d2e7), [`078affd`](https://github.com/mastra-ai/mastra/commit/078affdaea57ac5e95a77e9e7b197d1878190684), [`9e3403e`](https://github.com/mastra-ai/mastra/commit/9e3403e9868240cb18841898e84cf008ebd7a87e), [`791bf5e`](https://github.com/mastra-ai/mastra/commit/791bf5e81cd27e2e1cff66122f1380ab8a3dda41)]:
+  - @mastra/core@1.63.1
+
+## 1.28.1-alpha.1
+
+### Patch Changes
+
+- Add an optional bounded description field to knowledge nodes across storage adapters, written through a dedicated curator tool. Part of an unreleased experimental memory feature. ([#21830](https://github.com/mastra-ai/mastra/pull/21830))
+
+- Updated dependencies [[`0885364`](https://github.com/mastra-ai/mastra/commit/0885364c2fc7fa31febcfc444fc1ba5231ac1257)]:
+  - @mastra/core@1.63.1-alpha.2
+
+## 1.28.1-alpha.0
+
+### Patch Changes
+
+- Knowledge curation no longer fails on Gemini models: the curator's `knowledge_update_node` tool schema was rejected by Google's API ("required only allowed for OBJECT type"), causing every curation attempt with a Gemini curator to fail before the model ran. The tool now accepts the same inputs with `name`/`kind` as optional properties (at least one required). ([#22337](https://github.com/mastra-ai/mastra/pull/22337))
+
+- Improve the reliability and capacity of experimental memory processing. ([#22178](https://github.com/mastra-ai/mastra/pull/22178))
+
+- Updated dependencies [[`078affd`](https://github.com/mastra-ai/mastra/commit/078affdaea57ac5e95a77e9e7b197d1878190684), [`9e3403e`](https://github.com/mastra-ai/mastra/commit/9e3403e9868240cb18841898e84cf008ebd7a87e), [`791bf5e`](https://github.com/mastra-ai/mastra/commit/791bf5e81cd27e2e1cff66122f1380ab8a3dda41)]:
+  - @mastra/core@1.63.1-alpha.1
+
 ## 1.28.0
 
 ### Minor Changes

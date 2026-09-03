@@ -205,6 +205,8 @@ export interface FactoryProjectPayload {
   slackWorkItemsEnabled?: boolean;
   /** Whether Factory rules may start agent runs without someone asking for them. */
   autoRunEnabled?: boolean;
+  /** Whether the Factory answers a run's plan itself instead of waiting for a person. */
+  autoApprovePlans?: boolean;
 }
 
 /** `{...projectRepository, repository}` payload from the Factory project routes. */
@@ -332,19 +334,19 @@ export async function updateFactoryDefaultModel(
   return project;
 }
 
-/** Enable or disable rule-started agent runs (review, triage, planning) for this Factory. */
-export async function updateFactoryAutoRun(
+/** Toggle a Factory's automation settings: rule-started runs, plan approval. */
+export async function updateFactoryAutomation(
   baseUrl: string,
   factoryProjectId: string,
-  autoRunEnabled: boolean,
+  patch: { autoRunEnabled?: boolean; autoApprovePlans?: boolean },
 ): Promise<FactoryProjectPayload> {
   const res = await fetch(`${baseUrl}/web/factory/projects/${encodeURIComponent(factoryProjectId)}`, {
     method: 'PATCH',
     credentials: 'include',
     headers: { 'content-type': 'application/json', Accept: 'application/json' },
-    body: JSON.stringify({ autoRunEnabled }),
+    body: JSON.stringify(patch),
   });
-  const { project } = await readJsonOrThrow<{ project: FactoryProjectPayload }>(res, 'Failed to update automatic runs');
+  const { project } = await readJsonOrThrow<{ project: FactoryProjectPayload }>(res, 'Failed to update automation');
   return project;
 }
 
@@ -456,120 +458,6 @@ export async function deleteFactoryProject(baseUrl: string, factoryProjectId: st
     headers: { Accept: 'application/json' },
   });
   if (!res.ok && res.status !== 404) throw new Error(`Failed to delete Factory (${res.status})`);
-}
-
-export interface MaterializeResult {
-  resourceId: string;
-  factoryProjectId: string;
-  projectRepositoryId: string;
-  sandboxId: string;
-  sandboxWorkdir: string;
-}
-
-/** A coarse-grained step of the server-side sandbox preparation. */
-export interface PrepareProgress {
-  phase: 'reattaching' | 'provisioning' | 'preparing-workspace' | 'cloning' | 'pulling' | 'finalizing' | 'done';
-  message: string;
-}
-
-/**
- * Materialize a GitHub project into its cloud sandbox: provision/reattach the
- * sandbox and clone/pull the repo inside it. Streams live server-side progress
- * via SSE, invoking `onProgress` for each step so the UI can show the user what
- * is happening. Returns the resourceId used to open the project. Throws an Error
- * whose message carries the server's error code so the UI can surface
- * "sandbox not configured" distinctly.
- */
-export async function ensureRepoMaterialized(
-  baseUrl: string,
-  projectRepositoryId: string,
-  onProgress?: (event: PrepareProgress) => void,
-): Promise<MaterializeResult> {
-  const res = await fetch(`${baseUrl}/web/github/projects/${encodeURIComponent(projectRepositoryId)}/ensure`, {
-    method: 'POST',
-    credentials: 'include',
-    headers: { Accept: 'text/event-stream' },
-  });
-
-  // Non-2xx responses are sent as plain JSON (auth gate, 503, 404, etc.) rather
-  // than as an SSE stream, so handle those before reading the event stream.
-  if (!res.ok) {
-    throw await ensureError(res);
-  }
-
-  const contentType = res.headers.get('content-type') ?? '';
-  if (!contentType.includes('text/event-stream') || !res.body) {
-    // Server fell back to a single JSON response — read it directly.
-    return (await res.json()) as MaterializeResult;
-  }
-
-  let result: MaterializeResult | undefined;
-  let failure: (Error & { code?: string }) | undefined;
-
-  await readSSE(res.body, (event, data) => {
-    if (event === 'progress') {
-      onProgress?.(JSON.parse(data) as PrepareProgress);
-    } else if (event === 'done') {
-      result = JSON.parse(data) as MaterializeResult;
-    } else if (event === 'error') {
-      const body = JSON.parse(data) as { error?: string; message?: string };
-      failure = new Error(body.message ?? 'Failed to prepare repository') as Error & { code?: string };
-      failure.code = body.error;
-    }
-  });
-
-  if (failure) throw failure;
-  if (!result) throw new Error('Sandbox preparation ended without a result.');
-  return result;
-}
-
-/** Build an Error carrying the server's error code from a non-OK JSON response. */
-async function ensureError(res: Response): Promise<Error & { code?: string }> {
-  let code = `http_${res.status}`;
-  let message = `Failed to prepare repository (${res.status})`;
-  try {
-    const body = (await res.json()) as { error?: string; message?: string };
-    if (body.error) code = body.error;
-    if (body.message) message = body.message;
-  } catch {
-    /* ignore non-JSON */
-  }
-  const err = new Error(message) as Error & { code?: string };
-  err.code = code;
-  return err;
-}
-
-/**
- * Minimal SSE reader over a fetch ReadableStream. Parses `event:`/`data:` frames
- * separated by blank lines and invokes `onEvent` for each. Defaults the event
- * name to `message` per the SSE spec.
- */
-async function readSSE(
-  body: ReadableStream<Uint8Array>,
-  onEvent: (event: string, data: string) => void,
-): Promise<void> {
-  const reader = body.getReader();
-  const decoder = new TextDecoder();
-  let buffer = '';
-  for (;;) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    // Normalize CRLF/CR to LF so frame and line splitting work regardless of
-    // how the server terminates SSE lines (the spec allows \r\n, \r, or \n).
-    buffer += decoder.decode(value, { stream: true }).replace(/\r\n|\r/g, '\n');
-    let sep: number;
-    while ((sep = buffer.indexOf('\n\n')) !== -1) {
-      const frame = buffer.slice(0, sep);
-      buffer = buffer.slice(sep + 2);
-      let event = 'message';
-      const dataLines: string[] = [];
-      for (const line of frame.split('\n')) {
-        if (line.startsWith('event:')) event = line.slice(6).trim();
-        else if (line.startsWith('data:')) dataLines.push(line.slice(5).replace(/^ /, ''));
-      }
-      if (dataLines.length > 0) onEvent(event, dataLines.join('\n'));
-    }
-  }
 }
 
 export interface CommitResult {

@@ -1,6 +1,6 @@
 {
   "name": "@mastra/voyageai",
-  "version": "0.4.0",
+  "version": "0.4.1-alpha.1",
   "description": "VoyageAI embeddings integration for Mastra - text, multimodal, and contextualized chunk embeddings",
   "license": "Apache-2.0",
   "type": "module",
@@ -20,8 +20,7 @@
     "./package.json": "./package.json"
   },
   "files": [
-    "dist",
-    "CHANGELOG.md"
+    "dist"
   ],
   "homepage": "https://mastra.ai",
   "repository": {

@@ -1,11 +1,12 @@
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
-import { ArrowUpRight, CircleSlash, Trash2 } from 'lucide-react';
+import { ArrowUpRight, CircleSlash, FastForward, Trash2 } from 'lucide-react';
 import type { ReactElement } from 'react';
 
 import type { FactoryRunPhase } from '../../../../hooks/useStartFactoryRun';
 import type { ItemRunSpec, RunAction } from '../boardRunSpecs';
 import { externalLinkLabel } from '../boardItems';
 import { itemStageOptions } from '../boardStages';
+import { TRIAGE_DECISIONS, awaitsTriageDecision } from '../cardPrimaryAction';
 import type { FactoryDecisionSummary } from '../services/decisions';
 import type { WorkItem } from '../services/workItems';
 import type { BoardStageId } from '../stages';
@@ -23,13 +24,42 @@ export interface WorkItemMenuProps {
   pendingRunRoles: ReadonlyMap<string, FactoryRunPhase | undefined>;
   runDisabled: boolean;
   approvingDecisionId?: string;
-  onStartRun: (spec: ItemRunSpec, action: RunAction) => void;
+  onStartRun: (spec: ItemRunSpec, action: RunAction, options?: { preapprovePlans?: boolean }) => void;
   /** Re-run an action whose session slot is already used (e.g. re-review an updated PR). */
-  onRestartRun: (spec: ItemRunSpec, action: RunAction) => void;
+  onRestartRun: (spec: ItemRunSpec, action: RunAction, options?: { preapprovePlans?: boolean }) => void;
   onApproveProposal: (decisionId: string) => void;
   onDismissProposal: (decisionId: string) => void;
   onMove: (toStage: string) => void;
   onRemove: () => void;
+}
+
+/** An action's menu entries: the plain run and, unless a person must decide its outcome, a hands-off twin. */
+function runItemPair(
+  spec: ItemRunSpec,
+  action: RunAction,
+  label: string,
+  startRun: WorkItemMenuProps['onStartRun'],
+  { runDisabled, pendingRunRoles }: Pick<WorkItemMenuProps, 'runDisabled' | 'pendingRunRoles'>,
+): ReactElement[] {
+  const starting = pendingRunRoles.has(action.role);
+  return [
+    <DropdownMenu.Item key={label} disabled={runDisabled || starting} onClick={() => startRun(spec, action)}>
+      {actionIcon(action.label)}
+      <span>{starting ? 'Starting…' : label}</span>
+    </DropdownMenu.Item>,
+    ...(action.awaitsHumanDecision
+      ? []
+      : [
+          <DropdownMenu.Item
+            key={`${label} hands-off`}
+            disabled={runDisabled || starting}
+            onClick={() => startRun(spec, action, { preapprovePlans: true })}
+          >
+            <FastForward aria-hidden />
+            <span>{`${label} hands-off`}</span>
+          </DropdownMenu.Item>,
+        ]),
+  ];
 }
 
 export function WorkItemMenuItems({
@@ -51,43 +81,34 @@ export function WorkItemMenuItems({
   onMove,
   onRemove,
 }: WorkItemMenuProps): ReactElement {
+  // A held card leads with the maintainer's decision. Nothing that starts,
+  // restarts, or releases a run is offered until the card is accepted: every
+  // one of those would advance it as a side effect. Dismissing a stale
+  // suggestion stays, since that starts nothing.
+  const decision = awaitsTriageDecision(item, columnStage);
+  const runsOffered = runSpec !== undefined && !decision;
   return (
     <>
-      {runSpec !== undefined &&
-        runActions.map(action => {
-          const starting = pendingRunRoles.has(action.role);
-          return (
-            <DropdownMenu.Item
-              key={action.label}
-              disabled={runDisabled || starting}
-              onClick={() => onStartRun(runSpec, action)}
-            >
-              {actionIcon(action.label)}
-              <span>{starting ? 'Starting…' : action.label}</span>
-            </DropdownMenu.Item>
-          );
-        })}
-      {runSpec !== undefined && reReviewAction !== undefined && (
-        <DropdownMenu.Item
-          disabled={runDisabled || pendingRunRoles.has(reReviewAction.role)}
-          onClick={() => onRestartRun(runSpec, reReviewAction)}
-        >
-          {actionIcon(reReviewAction.label)}
-          <span>{pendingRunRoles.has(reReviewAction.role) ? 'Starting…' : 'Re-review'}</span>
-        </DropdownMenu.Item>
-      )}
-      {runSpec !== undefined && laneAction !== undefined && (
-        <DropdownMenu.Item
-          disabled={runDisabled || pendingRunRoles.has(laneAction.role)}
-          onClick={() => onRestartRun(runSpec, laneAction)}
-        >
-          {actionIcon(laneAction.label)}
-          <span>{pendingRunRoles.has(laneAction.role) ? 'Starting…' : laneAction.label}</span>
-        </DropdownMenu.Item>
-      )}
+      {decision &&
+        TRIAGE_DECISIONS.map(choice => (
+          <DropdownMenu.Item key={choice.stage} onClick={() => onMove(choice.stage)}>
+            <BoardStageIcon stage={choice.stage} />
+            <span>{choice.label}</span>
+          </DropdownMenu.Item>
+        ))}
+      {runsOffered &&
+        runActions.flatMap(action =>
+          runItemPair(runSpec, action, action.label, onStartRun, { runDisabled, pendingRunRoles }),
+        )}
+      {runsOffered &&
+        reReviewAction !== undefined &&
+        runItemPair(runSpec, reReviewAction, 'Re-review', onRestartRun, { runDisabled, pendingRunRoles })}
+      {runsOffered &&
+        laneAction !== undefined &&
+        runItemPair(runSpec, laneAction, laneAction.label, onRestartRun, { runDisabled, pendingRunRoles })}
       {/* Once the card has a live session its surface opens details, so the
           menus stay the only place left to release a proposed run. */}
-      {proposal !== undefined && (
+      {proposal !== undefined && !decision && (
         <DropdownMenu.Item
           disabled={runDisabled || approvingDecisionId === proposal.id}
           onClick={() => onApproveProposal(proposal.id)}
@@ -110,6 +131,7 @@ export function WorkItemMenuItems({
       )}
       {itemStageOptions(item)
         .filter(stage => stage.id !== columnStage)
+        .filter(stage => !decision || !TRIAGE_DECISIONS.some(choice => choice.stage === stage.id))
         .map(stage => (
           <DropdownMenu.Item key={stage.id} onClick={() => onMove(stage.id)}>
             <BoardStageIcon stage={stage.id} />
