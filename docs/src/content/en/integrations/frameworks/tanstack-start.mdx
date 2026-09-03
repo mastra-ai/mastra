@@ -35,6 +35,30 @@ This creates a `src/mastra` directory with an example weather agent and the foll
 
 You'll pass the Mastra instance exported from `src/mastra/index.ts` to the server adapter.
 
+## Configure Vite and Nitro
+
+Update `vite.config.ts` so Vite and Nitro leave DuckDB's native dependencies out of their processing pipelines:
+
+```diff title="vite.config.ts"
+ const config = defineConfig({
+   resolve: { tsconfigPaths: true },
++  optimizeDeps: {
++    exclude: ['@mastra/duckdb'],
++  },
+   plugins: [
+     devtools(),
+-    nitro({ rollupConfig: { external: [/^@sentry\//] } }),
++    nitro({
++      rollupConfig: {
++        external: [/^@sentry\//, /^@duckdb\//],
++      },
++    }),
+```
+
+The `optimizeDeps.exclude` setting prevents Vite's development optimizer from opening DuckDB's native `.node` binary as JavaScript. Adding `/^@duckdb\//` to Nitro's `rollupConfig.external` keeps DuckDB's native Node packages out of the production bundle so Node.js can load them at runtime.
+
+These changes apply only to `vite.config.ts`; you don't need to change your application or Mastra source files.
+
 ## Add the server adapter
 
 Install the TanStack Start server adapter and its Hono peer dependency:
