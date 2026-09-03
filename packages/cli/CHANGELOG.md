@@ -1,5 +1,23 @@
 # mastra
 
+## 1.28.0-alpha.1
+
+### Minor Changes
+
+- Added a **Review Queue** page to Studio under Evaluation → Experiments. Pick an experiment from the combobox (or deep-link with `/experiments/review-queue?experiment=<id>&review=<resultId>`) to review its flagged results. ([#22958](https://github.com/mastra-ai/mastra/pull/22958))
+
+  The experiment detail page now shows only Results, with a **View items to review** button that opens the queue for that experiment. Review links from the Inbox and from an experiment item panel now open the new page.
+
+### Patch Changes
+
+- Studio list pages (Workflows, Tools, MCP Servers, Scorers, Processors, Datasets, Experiments, Prompts) now scroll the list itself instead of the whole page, matching the Agents page: the header and filters stay fixed while the list scrolls. `DataList` no longer stretches to fill its container, so short lists and loading skeletons stay compact instead of rendering a full-height empty panel. `PageLayout height="full"` now bounds its main row to the remaining page height so nested lists can scroll internally. ([#22975](https://github.com/mastra-ai/mastra/pull/22975))
+
+- Improved experiment naming in Studio. The "Run experiment" dialog now asks for a required name (and optional description) so runs are easy to tell apart, the experiment page shows that name as its title, and a new "Rename" action lets you change the name or description after the run was created. Rerunning an experiment prefills the original name. ([#22924](https://github.com/mastra-ai/mastra/pull/22924))
+
+- Updated dependencies [[`b72c747`](https://github.com/mastra-ai/mastra/commit/b72c747a1a698c829c7c1d42e75f72c6d1808dde), [`89f2486`](https://github.com/mastra-ai/mastra/commit/89f2486028ce25c5db19d1f361d5f65cd3ff93e5), [`1778103`](https://github.com/mastra-ai/mastra/commit/17781034204a151a1ff910e9d11d21effe22a9e0), [`2801d26`](https://github.com/mastra-ai/mastra/commit/2801d26b69bbe8929d302abd09619a68b4cc0d98), [`ffc6440`](https://github.com/mastra-ai/mastra/commit/ffc6440d13b9392b3cf1ff309d3b9cde4a791038), [`f31c3fa`](https://github.com/mastra-ai/mastra/commit/f31c3fae16a0710f9e52dba9bccc0018f9da2ac1), [`9d647e2`](https://github.com/mastra-ai/mastra/commit/9d647e25b51cd246ef974d9cad6b05dfdd37126e)]:
+  - @mastra/core@1.65.0-alpha.1
+  - @mastra/deployer@1.65.0-alpha.1
+
 ## 1.27.4-alpha.0
 
 ### Patch Changes

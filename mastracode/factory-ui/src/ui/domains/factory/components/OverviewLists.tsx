@@ -1,7 +1,7 @@
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { GithubIcon } from '@mastra/playground-ui/icons/GithubIcon';
-import { Bot, CircleAlert, MessageSquare, User, Zap } from 'lucide-react';
+import { Bot, Brain, CircleAlert, MessageSquare, User, Zap } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { useState, type ReactNode } from 'react';
 import { Link } from 'react-router';
@@ -224,6 +224,7 @@ export function ActivityFeed({
 const ATTENTION_GLYPHS: Record<FactoryAttentionItem['kind'], { Glyph: LucideIcon; tone: string; label: string }> = {
   mention: { Glyph: MessageSquare, tone: 'text-badge-blue-fg', label: 'Mention' },
   'automation-failed': { Glyph: CircleAlert, tone: 'text-badge-red-fg', label: 'Failed run' },
+  'supervisor-finding': { Glyph: Brain, tone: 'text-accent1', label: 'Supervisor finding' },
   activity: { Glyph: MessageSquare, tone: 'text-icon3', label: 'Comment' },
 };
 

@@ -1,5 +1,99 @@
 # @mastra/core
 
+## 1.65.0-alpha.1
+
+### Minor Changes
+
+- Added optional `id`, `description`, and `metadata` to workflow control-flow entries: `.parallel()`, `.branch()`, `.dowhile()`, `.dountil()`, `.foreach()`, `.sleep()`, `.sleepUntil()`, and `.map()`. Executable steps already supported these fields; the entries between them now follow the same model, so visual editors and review tools can label a parallel block or a sleep and address it with a stable id instead of a generated one or a position in the graph. ([#22633](https://github.com/mastra-ai/mastra/pull/22633))
+
+  ```typescript
+  workflow
+    .parallel([validateStep, enrichStep], {
+      id: 'independent-enrichment',
+      description: 'Run independent enrichment tasks concurrently',
+      metadata: { title: 'Independent enrichment' },
+    })
+    .sleep(5000, { id: 'wait-before-retry', metadata: { title: 'Wait before retry' } });
+  ```
+
+  The fields appear in `serializedStepGraph`, survive storage and rehydration of dynamic workflow definitions, and have no effect on execution. For `.map()`, `.sleep()`, and `.sleepUntil()`, a supplied `id` replaces the generated entry id.
+
+- Traces now show Mastra's built-in add-ons as the subsystem they came from, instead of anonymous processor runs. ([#22542](https://github.com/mastra-ai/mastra/pull/22542))
+
+  Skills, workspace instructions, observational memory and agent state signals all run on the processor pipeline, but you configure `skills`, `workspace`, `memory` and `signals` — not processors. Their spans were named after a pipeline phase you never chose:
+
+  | Was                                                      | Now                            |
+  | -------------------------------------------------------- | ------------------------------ |
+  | `input step processor: skills-processor`                 | `skill:inject`                 |
+  | `input step processor: workspace-instructions-processor` | `workspace:mount:instructions` |
+  | `input step processor: observational-memory`             | `memory: recall`               |
+
+  **New span types**
+
+  - `SKILL_ACTION` covers the whole skill lifecycle — resolve, inject, activate, search, read. `SKILL_RESOLUTION` is deprecated and no longer emitted.
+  - `AGENT_SIGNAL` records each state signal emission as a point-in-time event. A turn where the lane computes no change records nothing.
+
+  **Tracing your own processors**
+
+  Any processor can declare how it is traced, and one that declares nothing is unchanged:
+
+  ```ts
+  import { SpanType } from '@mastra/core/observability';
+  import type { Processor, ProcessorSpanPhase } from '@mastra/core/processors';
+
+  class MyProcessor implements Processor<'my-processor'> {
+    readonly id = 'my-processor' as const;
+    readonly spanType = SpanType.MEMORY_OPERATION;
+    readonly spanName = (phase: ProcessorSpanPhase) => `memory: ${phase === 'inputStep' ? 'recall' : 'save'}`;
+    readonly spanAttributes = { operationType: 'recall' } as const;
+  }
+  ```
+
+  **Fixes**
+
+  - The skills processor reports `skillCount` on every run. A skills path that resolved to nothing previously produced no span at all; it now shows as `skillCount: 0`.
+  - `computeStateSignal` implementations receive the `tracingContext` their argument type always advertised but never passed.
+
+- Added `dataset.updateExperiment()` to rename an experiment or change its description and metadata after it has been created. Status and result counters remain managed by the experiment lifecycle. ([#22924](https://github.com/mastra-ai/mastra/pull/22924))
+
+  ```typescript
+  const dataset = await mastra.datasets.get({ id: 'dataset-id' });
+
+  await dataset.updateExperiment({
+    experimentId: 'exp-id',
+    name: 'Baseline vs. new prompt',
+    description: 'Run after switching to the shorter system prompt',
+  });
+  ```
+
+### Patch Changes
+
+- Update provider registry and model documentation with latest models and providers ([`b72c747`](https://github.com/mastra-ai/mastra/commit/b72c747a1a698c829c7c1d42e75f72c6d1808dde))
+
+- Fixed agent run traces leaking open spans when a run ends abnormally. Errors, aborts, suspensions, tripwires, and prepare failures now close the whole span tree, and a span that ends early hands its still-open children to the nearest live ancestor. Exporters that wait for every span to finish (such as Datadog) no longer retain the trace and its payloads in memory forever. ([#22764](https://github.com/mastra-ai/mastra/pull/22764))
+
+  Added an `endTree` option to `span.end()` and `span.error()` for terminal points: it also closes any still-open descendant spans, without applying the terminal output or error to them.
+
+- Fixed durable agents dropping `scoringData` from `generate()` and `stream()` results when `returnScorerData: true` is set. The flag was serialized into the durable workflow input but never forwarded to the client-side output, so `runEvals` and `startExperiment` scorers silently evaluated `undefined` output. Durable agents now return `scoringData` across generate, stream, resume, and recovery paths, matching non-durable agents. Also fixed tool-calling durable runs replacing the run's message list mid-run, which left resumed runs reading stale messages. Fixes #22743 ([#22878](https://github.com/mastra-ai/mastra/pull/22878))
+
+- Fixed durable agent runs being restarted by the generic boot-time workflow recovery. On server start, `Mastra.restartAllActiveWorkflowRuns()` restarted every active workflow run, including the internal workflows that back durable agents — even when `recovery.durableAgents` was `'off'` (the default), and racing the dedicated recovery path when set to `'auto'`. Durable agent runs are now only recovered through `recovery.durableAgents: 'auto'`. The internal durable agent workflows also no longer appear in `listWorkflows()` or the Studio workflow list; they remain accessible by id. Fixes [#22598](https://github.com/mastra-ai/mastra/issues/22598). ([#22960](https://github.com/mastra-ai/mastra/pull/22960))
+
+  **New workflow option `autoRestartActiveRuns`**
+
+  Any workflow can now opt out of the automatic boot-time restart, for example when its side effects must not be re-driven by a blanket restart:
+
+  ```typescript
+  const workflow = createWorkflow({
+    id: 'my-workflow',
+    inputSchema,
+    outputSchema,
+    options: {
+      // Exclude this workflow from Mastra.restartAllActiveWorkflowRuns()
+      autoRestartActiveRuns: false,
+    },
+  });
+  ```
+
 ## 1.64.1-alpha.0
 
 ### Patch Changes

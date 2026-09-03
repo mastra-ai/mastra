@@ -369,7 +369,7 @@ describe('defaultFactoryRules', () => {
     expect(decision).not.toHaveProperty('cancelInFlight');
   });
 
-  it('cancels an in-flight review pass and dispatches factory-rereview when a push into an already-reviewed PR restarts Review', async () => {
+  it('dispatches factory-rereview without cancellation when a completed review restarts', async () => {
     const rule = defaultFactoryRules({ version: 'deployment-7' }).review.review?.pullRequest?.onEnter;
     const context = {
       ...stageContext({ type: 'github', login: 'author', trusted: true, factoryAuthored: false }, 'review'),
@@ -378,12 +378,13 @@ describe('defaultFactoryRules', () => {
       fromStage: 'done',
       toStage: 'review',
     } as FactoryStageRuleContext;
-    expect(await rule?.(context)).toMatchObject({
+    const decision = await rule?.(context);
+    expect(decision).toMatchObject({
       type: 'invokeSkill',
       role: 'review',
       skillName: 'factory-rereview',
-      cancelInFlight: true,
     });
+    expect(decision).not.toHaveProperty('cancelInFlight');
   });
 
   it('cancels an in-flight review pass but stays on factory-review when the re-entry did not follow a completed pass', async () => {
