@@ -119,4 +119,4 @@ For that description, the compiler returns a template such as:
 
 Scope-type plans use copy-on-create semantics. Changing the description affects future scope creation only. Mastra doesn't retrofit new child structure or access rules onto an existing concrete scope.
 
-Description compilation requires thread-state storage. Configure a durable storage provider when compiled plans and checkpoints must survive process restarts.
+Description compilation uses thread-state storage and falls back to in-memory state. Configure a durable thread-state provider when compiled plans and checkpoints must survive process restarts.

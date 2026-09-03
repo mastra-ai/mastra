@@ -237,9 +237,57 @@ const sidebars = {
           ],
         },
         {
-          type: 'doc',
-          id: 'knowledge/configuration',
+          type: 'category',
           label: 'Knowledge',
+          collapsible: true,
+          collapsed: false,
+          items: [
+            {
+              type: 'doc',
+              id: 'knowledge/configuration',
+              label: 'Configuration',
+            },
+            {
+              type: 'doc',
+              id: 'knowledge/access',
+              label: 'Access and scopes',
+            },
+            {
+              type: 'doc',
+              id: 'knowledge/records',
+              label: 'Nodes and records',
+            },
+            {
+              type: 'doc',
+              id: 'knowledge/importers',
+              label: 'Importers',
+            },
+            {
+              type: 'doc',
+              id: 'knowledge/capture',
+              label: 'Capture',
+            },
+            {
+              type: 'doc',
+              id: 'knowledge/curation',
+              label: 'Curation',
+            },
+            {
+              type: 'doc',
+              id: 'knowledge/ui',
+              label: 'UI',
+            },
+            {
+              type: 'doc',
+              id: 'knowledge/example',
+              label: 'Example',
+            },
+            {
+              type: 'doc',
+              id: 'knowledge/skill',
+              label: 'Skill guidance',
+            },
+          ],
         },
       ],
     },

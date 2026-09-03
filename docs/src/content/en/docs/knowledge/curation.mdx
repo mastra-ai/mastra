@@ -1,0 +1,52 @@
+---
+title: 'Knowledge curation'
+description: 'Integrate provisional evidence through host-bound curator profiles and governed mutations.'
+packages:
+  - '@mastra/core'
+---
+
+# Knowledge curation
+
+Curation integrates provisional evidence into governed Knowledge. Register profiles in host code, then create a curator by profile ID.
+
+```typescript
+await knowledge.registerCuratorProfile({
+  id: 'default-curator',
+  identityScope: {
+    address: 'identity:curator:default',
+    name: 'Default curator',
+    contextualScopeAddress: 'org:acme',
+  },
+  grants: [{ scopeAddress: 'shared-product', role: 'edit' }],
+})
+
+const curator = knowledge.createCurator({
+  profileId: 'default-curator',
+  companionScopeId,
+  contextScopeId,
+})
+```
+
+Use installed types for the complete registration shape. Missing or unknown profiles fail closed. Re-registering an identical profile is idempotent. Conflicting definitions fail.
+
+## Curator tools
+
+A curator exposes bounded tools for listing work and refining, promoting, merging, discarding, or retaining evidence. It doesn't expose unrestricted legacy write tools. Tool runs must end with the required completion marker after all requested worklist pages are handled.
+
+The worklist is bounded and cursor-driven. Evidence, merge candidates, and destinations are filtered by curator authority and operator visibility before pagination or counts. Inaccessible evidence serializes as empty rather than leaking metadata.
+
+## Actions
+
+- **Refine** edits provisional content while preserving provenance.
+- **Promote** moves accepted evidence into an authorized curated destination.
+- **Merge** combines duplicate nodes and moves all source-owned records.
+- **Discard** removes rejected provisional material.
+- **Retain** marks evidence as intentionally unintegrated.
+
+Every action uses numeric compare-and-swap versions. Late records or stale target versions conflict rather than being silently overwritten. Suggest-only profiles can refine, retain, and propose promotion for review. They can't merge or discard, so the curation UI doesn't show those controls without the corresponding direct authority.
+
+## Governance
+
+Promotion and merging use public governed Knowledge mutations, not raw storage. Affected records are authorized and restamped atomically. Managed profile grants reconcile atomically and remove stale managed grants while preserving unrelated host grants.
+
+Test prompt-injection resistance: evidence text is untrusted data and can't change the curator's instructions, profile, scopes, completion protocol, or tool permissions.
