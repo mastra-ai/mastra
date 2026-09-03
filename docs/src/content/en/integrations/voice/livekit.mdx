@@ -215,10 +215,19 @@ export default createLiveKitWorker({
     options: { readOnly: true },
   }),
   turnHandling: { preemptiveGeneration: { enabled: true } },
-  onSessionStart: async ({ session, agent }) => {
+  onSessionStart: async ({ session, ctx, agent }) => {
     const mapping = agent.memory
     const memory = await mastra.getAgent('support').getMemory()
     if (!mapping || !memory) return
+
+    let shuttingDown = false
+    const retryTimers = new Set<ReturnType<typeof setTimeout>>()
+    ctx.addShutdownCallback(async () => {
+      shuttingDown = true
+      for (const timer of retryTimers) clearTimeout(timer)
+      retryTimers.clear()
+    })
+
     session.on(voice.AgentSessionEventTypes.ConversationItemAdded, ({ item }) => {
       if (item.type !== 'message' || (item.role !== 'user' && item.role !== 'assistant')) return
 
@@ -241,9 +250,14 @@ export default createLiveKitWorker({
             ],
           })
         } catch (error) {
+          if (shuttingDown) return
           console.error(`Failed to persist committed voice item ${item.id}; retrying`, error)
           const delay = Math.min(1_000 * 2 ** attempt, 30_000)
-          setTimeout(() => void persist(attempt + 1), delay)
+          const timer = setTimeout(() => {
+            retryTimers.delete(timer)
+            void persist(attempt + 1)
+          }, delay)
+          retryTimers.add(timer)
         }
       }
 
