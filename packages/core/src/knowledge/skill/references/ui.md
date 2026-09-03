@@ -1,0 +1,27 @@
+# Knowledge UI
+
+Mastra Studio and Agent Builder expose Knowledge as a scope-first workspace. Use the scope tree as the primary entry point; the graph canvas is a bounded lens, not a whole-instance graph.
+
+## Explore
+
+Select a scope in the sidebar before loading its canvas. The lens shows authorized nodes and visible intra-scope mentions plus accessible one-hop boundary relationships. Follow `Load more in this lens` to continue an opaque cursor. Terminal-bound notices mean some relationships were intentionally omitted and can't be recovered by loading another node page.
+
+Use the scope overlay for details and adjacent-scope navigation. `Scope map` contains only complete visited lenses, so it grows incrementally. Hidden targets produce no edge, placeholder, count, or navigation affordance.
+
+## Needs curation
+
+Uncurated companions appear nested under curated scopes with provisional styling. Open `Needs curation` to inspect bounded evidence and perform refine, promote, merge, discard, or retain actions. Retained evidence remains visibly `retained · unintegrated`.
+
+Suggest-only operators route changes to Approvals. They don't gain direct mutation controls.
+
+## Other sections
+
+- **Approvals** lists authorized proposals and their conflicts or review state.
+- **Imports** shows importer bindings and resumable run state.
+- **Activity** includes write, curation, proposal, approval, rejection, and conflict actions.
+
+These sections use the same server authorization path as Explore. A view-as perspective changes the principal used by that path; it isn't a client-side visibility filter.
+
+## Deep links and bounded views
+
+Deep links identify authorized server-issued handles, not raw storage IDs. Unknown and hidden destinations both resolve as absent. Keep canvas requests within server limits and preserve the selected scope in the URL so refresh, back, and view-as behavior remain consistent.
