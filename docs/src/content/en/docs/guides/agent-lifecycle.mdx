@@ -160,13 +160,13 @@ These checks work together rather than forming a public, exhaustive internal ord
 
 ## Finalization
 
-A stop moves the run into finalization. `processOutputResult` runs once per request on the final assistant message, whether the run completes normally or the provider throws. Configured output processors run first, then auto-attached memory output processors run after them so message history can persist the final form. Observational Memory manages its own persistence during its `processOutputStep` instead. When finalization completes, `generate()` resolves or the stream closes.
+A stop moves the run into finalization. `processOutputResult` runs once per request on the final assistant message, whether the run completes normally or the provider throws. Configured output processors run first, then auto-attached memory output processors run after them so message history can persist the final form. Observational Memory persists on its own hooks instead of relying on that auto-attached memory output processor. When finalization completes, `generate()` resolves or the stream closes.
 
 Finalization is separate from a model step. It operates on the result of the whole run rather than the response from one provider call.
 
 ## Errors, retries, and aborts
 
-A provider API rejection can reach `processAPIError`. An error processor may change the request or messages and request another provider attempt. `processAPIError` retries and tripwire retries share the same `maxProcessorRetries` bound on the request. When error processors are configured and `maxProcessorRetries` is omitted, Mastra applies a default budget. Set `maxProcessorRetries` explicitly when you need a specific limit.
+A provider API rejection can reach `processAPIError`. An error processor may change the request or messages and request another provider attempt. `processAPIError` retries and tripwire retries share the same `maxProcessorRetries` bound on the request. When error processors are configured and `maxProcessorRetries` is omitted, Mastra applies a default error-retry budget. Set `maxProcessorRetries` explicitly when you need a specific limit.
 
 Calling `abort()` from an input or output processor raises a tripwire. Set `retry: true` to let an eligible input-step or output-step check replay the model step with feedback. `maxProcessorRetries` bounds replay attempts. A tripwire without a retry stops normal execution and is included in the result or stream.
 
@@ -184,7 +184,7 @@ Durable execution also lets a run suspend, such as while a tool waits for approv
 
 Mastra snapshots serializable `RequestContext` entries for durable work. Functions, class instances, open connections, and similar non-serializable values shouldn't be expected to survive either suspension or transport into another process. Reconstruct them from stable identifiers at a trusted request or resume boundary.
 
-Resuming from a stored snapshot can skip initial `processInput` processing, while signal and schedule wakes run it again.
+Initial `processInput` processing is skipped when a durable run resumes from a stored snapshot. Wakes that start a fresh segment, including signal and schedule wakes, run it again.
 
 - Repeat the authoritative enrichment step whenever an external request resumes a run.
 - Store only the serializable scope you need downstream.
