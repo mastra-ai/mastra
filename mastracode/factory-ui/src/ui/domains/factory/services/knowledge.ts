@@ -214,6 +214,7 @@ export interface KnowledgeCurationWorkItem {
   name: string;
   kind: string;
   version: number;
+  actions: { merge: boolean; discard: boolean };
   description?: string;
   evidence: Array<{ source?: string; provenance?: string }>;
   evidenceCursor?: string;
