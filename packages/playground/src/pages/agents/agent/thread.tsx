@@ -7,6 +7,7 @@ import { MainSidebar, MainSidebarProvider, useMainSidebar } from '@mastra/playgr
 import { PermissionDenied } from '@mastra/playground-ui/components/PermissionDenied';
 import { SessionExpired } from '@mastra/playground-ui/components/SessionExpired';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
+import { cn } from '@mastra/playground-ui/utils/cn';
 import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
 import { ArrowLeft, ChartNoAxesGantt, Plus, X } from 'lucide-react';
 import { useMemo, useState } from 'react';
@@ -31,6 +32,7 @@ import { useDeleteThread, useMemory, useThreads } from '@/domains/memory/hooks/u
 import { TracingSettingsProvider } from '@/domains/observability/context/tracing-settings-context';
 import { SchemaRequestContextProvider } from '@/domains/request-context/context/schema-request-context';
 import { ThreadTraces } from '@/domains/traces/components/thread-traces';
+import { ThreadViewByTrace } from '@/domains/traces/components/thread-view-by-trace';
 import { useLinkComponent } from '@/lib/framework';
 
 function AgentThread() {
@@ -67,6 +69,8 @@ function AgentThread() {
   );
 
   const messageId = searchParams.get('messageId') ?? undefined;
+  // A new thread has no traces yet, so the advanced (trace-based) view falls back to the chat.
+  const isAdvancedVariant = searchParams.get('variant') === 'advanced' && !isNewThread;
   const suggestedPrompts = getAgentSuggestedPrompts(agent?.metadata);
 
   const defaultSettings = useMemo(() => buildAgentDefaultSettings(agent), [agent]);
@@ -134,27 +138,38 @@ function AgentThread() {
                             />
                             <div className="relative min-h-0">
                               <div className="rounded-studio-frame border-border1 bg-surface2 shadow-main-frame m-1.5 h-[calc(100%-0.75rem)] min-h-0 overflow-hidden border [--studio-frame-inset:0.5rem] [--studio-frame-radius:1.5rem] lg:m-2 lg:ml-0 lg:h-[calc(100%-1rem)]">
-                                <div className="relative grid h-full min-h-0 overflow-y-auto pt-6">
-                                  <AgentChat
-                                    key={actualThreadId}
-                                    agentId={agentId!}
-                                    agentName={agent?.name}
-                                    modelVersion={agent?.modelVersion}
-                                    supportsMemory={agent?.supportsMemory}
-                                    threadId={actualThreadId}
-                                    memory={hasMemory}
-                                    refreshThreadList={handleRefreshThreadList}
-                                    modelList={agent?.modelList}
-                                    messageId={messageId}
-                                    suggestedPrompts={suggestedPrompts}
-                                    isNewThread={isNewThread}
-                                  />
+                                <div
+                                  className={cn(
+                                    'relative grid h-full min-h-0',
+                                    // The advanced view manages its own scroll container.
+                                    !isAdvancedVariant && 'overflow-y-auto pt-6',
+                                  )}
+                                >
+                                  {isAdvancedVariant ? (
+                                    <ThreadViewByTrace key={actualThreadId} threadId={actualThreadId} />
+                                  ) : (
+                                    <AgentChat
+                                      key={actualThreadId}
+                                      agentId={agentId!}
+                                      agentName={agent?.name}
+                                      modelVersion={agent?.modelVersion}
+                                      supportsMemory={agent?.supportsMemory}
+                                      threadId={actualThreadId}
+                                      memory={hasMemory}
+                                      refreshThreadList={handleRefreshThreadList}
+                                      modelList={agent?.modelList}
+                                      messageId={messageId}
+                                      suggestedPrompts={suggestedPrompts}
+                                      isNewThread={isNewThread}
+                                    />
+                                  )}
                                 </div>
                               </div>
-                              {!isNewThread && (
-                                // Keyed by thread so the overlay state fully resets when switching threads.
-                                <ThreadTracesOverlay key={actualThreadId} threadId={actualThreadId} />
-                              )}
+                              {!isNewThread &&
+                                !isAdvancedVariant && (
+                                  // Keyed by thread so the overlay state fully resets when switching threads.
+                                  <ThreadTracesOverlay key={actualThreadId} threadId={actualThreadId} />
+                                )}
                             </div>
                           </div>
                         </MainSidebarProvider>

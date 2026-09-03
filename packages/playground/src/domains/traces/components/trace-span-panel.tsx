@@ -1,4 +1,5 @@
 import { SpanType } from '@mastra/core/observability';
+import { Button } from '@mastra/playground-ui/components/Button';
 import { SpanDataPanelView } from '@mastra/playground-ui/domains/traces/components/span-data-panel-view';
 import type { TraceDataPanelView } from '@mastra/playground-ui/domains/traces/components/trace-data-panel-view';
 import { useSpanDetail } from '@mastra/playground-ui/domains/traces/hooks/use-span-detail';
@@ -108,6 +109,14 @@ export function TraceSpanPanel({
   const canShowPartialThread =
     showPartialThread && !anchorSpanId && rootSpan?.spanType === SpanType.AGENT_RUN && hasThreadId;
 
+  // Link to the advanced thread view (?variant=advanced) — available when the root span
+  // is an agent run with a known entityId (agentId) and threadId.
+  const threadId = hasThreadId ? (rootSpan as { threadId: string }).threadId : undefined;
+  const fullThreadHref =
+    rootSpan?.entityId && threadId
+      ? `/agents/${encodeURIComponent(rootSpan.entityId)}/threads/${threadId}?variant=advanced`
+      : undefined;
+
   return (
     <TraceDataPanel
       className={className}
@@ -134,7 +143,20 @@ export function TraceSpanPanel({
       feedbackTabSlot={feedbackTabSlot}
       partialThreadTabSlot={
         canShowPartialThread
-          ? ({ traceId: selectedTraceId }) => <TraceThreadItemView traceId={selectedTraceId} />
+          ? ({ traceId: selectedTraceId }) => (
+              <div className="flex h-full min-h-0 flex-col">
+                {fullThreadHref && (
+                  <div className="flex justify-end px-3 pt-2">
+                    <Button as={Link} href={fullThreadHref} variant="default" size="xs">
+                      Voir le thread complet
+                    </Button>
+                  </div>
+                )}
+                <div className="min-h-0 flex-1">
+                  <TraceThreadItemView traceId={selectedTraceId} />
+                </div>
+              </div>
+            )
           : undefined
       }
       scoresTabBadge={scoresTabBadge}
