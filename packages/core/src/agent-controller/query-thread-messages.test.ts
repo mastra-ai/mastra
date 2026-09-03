@@ -120,5 +120,6 @@ describe('AgentController queryThreadMessages', () => {
       { id: 'second' },
       { id: 'third' },
     ]);
+    await expect(session.thread.listMessages({ threadId, limit: 0 })).resolves.toEqual([]);
   });
 });
