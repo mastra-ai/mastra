@@ -43,7 +43,7 @@ The worklist is bounded and cursor-driven. Evidence, merge candidates, and desti
 - **Discard** removes rejected provisional material.
 - **Retain** marks evidence as intentionally unintegrated.
 
-Every action uses numeric compare-and-swap versions. Late records or stale target versions conflict rather than being silently overwritten. Suggest-only profiles create proposals when the contract permits. Their authority remains limited to suggestions.
+Every action uses numeric compare-and-swap versions. Late records or stale target versions conflict rather than being silently overwritten. Suggest-only profiles can refine, retain, and propose promotion for review. They can't merge or discard, so the curation UI doesn't show those controls without the corresponding direct authority.
 
 ## Governance
 
