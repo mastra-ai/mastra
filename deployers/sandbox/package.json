@@ -1,6 +1,6 @@
 {
   "name": "@mastra/deployer-sandbox",
-  "version": "0.3.8",
+  "version": "0.3.9-alpha.0",
   "description": "Deploy a Mastra server into any workspace sandbox that supports networking and get a live public URL",
   "type": "module",
   "files": [

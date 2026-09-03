@@ -1,5 +1,13 @@
 # mastra
 
+## 1.27.4-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [[`eef3409`](https://github.com/mastra-ai/mastra/commit/eef3409c125dcd9765e4a85d17f10c53892f6f2c)]:
+  - @mastra/core@1.64.1-alpha.0
+  - @mastra/deployer@1.64.1-alpha.0
+
 ## 1.27.3
 
 ### Patch Changes

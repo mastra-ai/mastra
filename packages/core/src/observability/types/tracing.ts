@@ -1329,6 +1329,13 @@ interface UpdateBaseOptions<TType extends SpanType> {
 export interface EndSpanOptions<TType extends SpanType> extends UpdateBaseOptions<TType> {
   /** Output data */
   output?: any;
+  /**
+   * Also close any descendant spans still open, without applying these
+   * options to them. Use at terminal points (error, abort, suspension) where
+   * nothing below this span may keep running. Unlike `endTree()`, options
+   * apply to this span only.
+   */
+  endTree?: boolean;
 }
 
 /** Options for updating a span's attributes, input, or output mid-flight. */
@@ -1347,6 +1354,12 @@ export interface ErrorSpanOptions<TType extends SpanType> extends UpdateBaseOpti
   error: MastraError | Error;
   /** End the span when true */
   endSpan?: boolean;
+  /**
+   * Also close any descendant spans still open, without recording the error
+   * on them. Implies ending this span. Use at terminal points where nothing
+   * below this span may keep running.
+   */
+  endTree?: boolean;
 }
 
 /** Options for retrieving an existing span or creating a new one from a tracing context. */

@@ -261,14 +261,16 @@ describe('InboxPage', () => {
     expect(screen.queryByText('Your inbox is empty')).toBeNull();
   });
 
-  it('opens the experiment Reviews tab featuring the result when a dataset row is clicked', async () => {
+  it('opens the Review Queue page featuring the result when a dataset row is clicked', async () => {
     seedHandlers();
     renderInbox('/inbox?tab=dataset');
 
     fireEvent.click(await screen.findByRole('button', { name: /item-1/ }));
 
     await waitFor(() =>
-      expect(screen.getByTestId('location').textContent).toBe('/experiments/experiment-1?review=result-1'),
+      expect(screen.getByTestId('location').textContent).toBe(
+        '/experiments/review-queue?experiment=experiment-1&review=result-1',
+      ),
     );
   });
 });

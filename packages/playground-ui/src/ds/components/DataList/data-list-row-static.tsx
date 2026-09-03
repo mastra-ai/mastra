@@ -1,7 +1,7 @@
 import { forwardRef } from 'react';
 import type { ComponentPropsWithoutRef } from 'react';
 import { useDataListRowWrapperContext } from './data-list-row-wrapper-context';
-import { dataListRowStaticStyles, dataListRowVariants } from './shared';
+import { dataListRowStaticStyles } from './shared';
 import type { DataListRowSharedProps } from './shared';
 import { cn } from '@/lib/utils';
 
@@ -20,16 +20,12 @@ export const DataListRowStatic = forwardRef<HTMLDivElement, DataListRowStaticPro
       <div
         ref={ref}
         className={cn(
-          isWrapped
-            ? 'grid grid-cols-subgrid gap-8 rounded-lg px-5 transition-colors duration-200'
-            : dataListRowStaticStyles,
-          // `!` so the selection fill wins over borderless table root styling
-          // (higher-specificity descendant rules); same color in `default`.
-          featured && 'bg-surface-row-featured!',
-          dataListRowVariants({ variant }),
+          isWrapped ? 'grid grid-cols-subgrid gap-8 px-5 transition-colors duration-200' : dataListRowStaticStyles,
           className,
         )}
         style={resolvedStyle}
+        data-featured={featured || undefined}
+        data-variant={variant ?? 'default'}
         {...rest}
       >
         {children}
