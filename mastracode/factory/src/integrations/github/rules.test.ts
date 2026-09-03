@@ -134,6 +134,37 @@ function issueComment(
   };
 }
 
+function pullRequestComment(
+  deliveryId: string,
+  options: { action?: 'created' | 'edited' | 'deleted'; sender?: string; author?: string; body?: string; state?: string } = {},
+) {
+  const sender = options.sender ?? 'maintainer';
+  const author = options.author ?? sender;
+  return {
+    event: 'issue_comment',
+    deliveryId,
+    payload: {
+      action: options.action ?? 'created',
+      installation: { id: 7 },
+      repository: { id: 10, full_name: 'acme/repo' },
+      sender: { login: sender },
+      issue: {
+        number: 17,
+        title: 'PR 17',
+        html_url: 'https://github.com/acme/repo/pull/17',
+        state: options.state ?? 'open',
+        pull_request: {},
+        user: { login: 'pr-author' },
+      },
+      comment: {
+        id: 101,
+        body: options.body ?? '@factory-app review',
+        user: { login: author, type: author.endsWith('[bot]') ? 'Bot' : 'User' },
+      },
+    },
+  };
+}
+
 async function createLinkedIssue(
   workItems: Awaited<ReturnType<typeof createFactoryStorageForTests>>['workItems'],
   projectId: string,
@@ -528,7 +559,10 @@ describe('GithubRules', () => {
           agentEndListeners.add(listener);
           return () => agentEndListeners.delete(listener);
         }),
-        state: { set: vi.fn(async () => {}) },
+        state: { get: vi.fn(() => ({ factoryProjectId: project.id })), set: vi.fn(async () => {}) },
+        mode: { get: vi.fn(() => 'build') },
+        model: { get: vi.fn(() => 'openai/gpt-5.6-sol') },
+        identity: { getId: vi.fn(() => key), getOwnerId: vi.fn(() => 'user-1') },
         permissions: { setForTool: vi.fn(async () => {}) },
         sendMessage: vi.fn(async () => {}),
         sendNotificationSignal: vi.fn(async () => ({ persisted: Promise.resolve(), accepted: Promise.resolve() })),
@@ -792,6 +826,53 @@ describe('GithubRules', () => {
     expect(await workItems.list({ orgId: 'org-1', factoryProjectId: project.id })).toHaveLength(1);
   });
 
+  it('materializes a Review card from Factory\'s exact PR comment command', async () => {
+    const { github, sourceControl, integrationStorage, workItems, projects, project } = await setup('write');
+    const rules = builtInFactoryRules();
+    const service = new GithubRules({
+      github,
+      sourceControl,
+      integrationStorage,
+      projects,
+      storage: workItems,
+      rules,
+    });
+    const dispatcher = new FactoryDecisionDispatcher({
+      controller: { getSessionByResource: vi.fn(async () => undefined) } as never,
+      transitionService: new FactoryTransitionService({ storage: workItems, rules }),
+      storage: workItems,
+      isAutoRunEnabled: async () => true,
+      ownerId: 'worker-1',
+    });
+
+    await expect(service.ingest(pullRequestComment('delivery-comment-review'))).resolves.toEqual({ status: 'committed' });
+    await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
+
+    const [card] = await workItems.list({ orgId: 'org-1', factoryProjectId: project.id });
+    expect(card).toMatchObject({
+      title: 'PR 17',
+      stages: ['intake'],
+      metadata: { author: 'pr-author', authorTrusted: true, factoryAuthored: false, autoStartCandidate: true },
+    });
+    expect(await workItems.listDeferredDecisions('org-1', project.id)).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          workItemId: card!.id,
+          decision: expect.objectContaining({ type: 'invokeSkill', skillName: 'factory-review', role: 'review' }),
+        }),
+      ]),
+    );
+
+    await expect(service.ingest(pullRequestComment('delivery-comment-review'))).resolves.toEqual({ status: 'replayed' });
+    await expect(
+      service.ingest(pullRequestComment('delivery-comment-prose', { body: 'Please @factory-app review this PR.' })),
+    ).resolves.toEqual({ status: 'committed' });
+    await expect(
+      service.ingest(pullRequestComment('delivery-comment-quoted', { body: '> @factory-app review' })),
+    ).resolves.toEqual({ status: 'committed' });
+    expect(await workItems.list({ orgId: 'org-1', factoryProjectId: project.id })).toHaveLength(1);
+  });
+
   it('does not materialize a Review card when an untrusted actor requests Factory', async () => {
     const { github, sourceControl, integrationStorage, workItems, projects, project } = await setup('read');
     const service = new GithubRules({
@@ -829,6 +910,29 @@ describe('GithubRules', () => {
     ).resolves.toEqual({ status: 'committed' });
     expect(await workItems.list({ orgId: 'org-1', factoryProjectId: project.id })).toEqual([]);
     expect(await workItems.listDeferredDecisions('org-1', project.id)).toEqual([]);
+
+    await expect(
+      service.ingest(pullRequestComment('delivery-comment-review-untrusted', { sender: 'contributor' })),
+    ).resolves.toEqual({ status: 'committed' });
+    expect(await workItems.list({ orgId: 'org-1', factoryProjectId: project.id })).toEqual([]);
+  });
+
+  it('ignores comment commands until Factory can resolve its own GitHub identity', async () => {
+    const { github, sourceControl, integrationStorage, workItems, projects, project } = await setup('write');
+    (github as { slug?: string }).slug = undefined;
+    const service = new GithubRules({
+      github,
+      sourceControl,
+      integrationStorage,
+      projects,
+      storage: workItems,
+      rules: builtInFactoryRules(),
+    });
+
+    await expect(service.ingest(pullRequestComment('delivery-comment-review-unknown-identity'))).resolves.toEqual({
+      status: 'committed',
+    });
+    expect(await workItems.list({ orgId: 'org-1', factoryProjectId: project.id })).toEqual([]);
   });
 
   it('commits a re-review transition when review is re-requested from the Factory bot', async () => {
@@ -895,6 +999,18 @@ describe('GithubRules', () => {
         decision: expect.objectContaining({ type: 'transition', board: 'review', stage: 'review' }),
       }),
     ]);
+
+    await expect(
+      service.ingest(pullRequestComment('delivery-rr-comment', { body: '@factory-app re-review' })),
+    ).resolves.toEqual({ status: 'committed' });
+    expect(await workItems.listDeferredDecisions('org-1', project.id)).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          workItemId: reviewed.item.id,
+          decision: expect.objectContaining({ type: 'transition', board: 'review', stage: 'review' }),
+        }),
+      ]),
+    );
   });
 
   it('re-reviews a Factory-authored PR: provenance binds neither the card nor the human requester', async () => {
@@ -1061,6 +1177,7 @@ describe('GithubRules', () => {
     await expect(service.ingest(reviewRequested('delivery-rr-dispatch'))).resolves.toEqual({ status: 'replayed' });
     // A second re-request while the card is already Reviewing is a guarded no-op.
     await expect(service.ingest(reviewRequested('delivery-rr-again'))).resolves.toEqual({ status: 'committed' });
+    await expect(service.ingest(pullRequestComment('delivery-rr-comment-again'))).resolves.toEqual({ status: 'committed' });
     const decisions = await workItems.listDeferredDecisions('org-1', project.id);
     expect(decisions.filter(entry => entry.decision.type === 'transition')).toHaveLength(1);
     expect(decisions.filter(entry => entry.decision.type === 'invokeSkill')).toHaveLength(1);
@@ -1111,16 +1228,16 @@ describe('GithubRules', () => {
     expect(item).toMatchObject({ id: card.item.id, stages: ['review'] });
     const decisions = await workItems.listDeferredDecisions('org-1', project.id);
     expect(decisions.filter(entry => entry.decision.type === 'transition')).toHaveLength(1);
-    // The onEnter review rule sees a re-entry (from a post-intake stage) and dispatches
-    // factory-rereview, asking the dispatcher to cancel any in-flight review run first.
+    // A completed pass has no active run to supersede. Its re-entry dispatches
+    // factory-rereview without aborting the newly prepared session.
     const invocations = decisions.filter(entry => entry.decision.type === 'invokeSkill');
     expect(invocations).toHaveLength(1);
     expect(invocations[0]!.decision).toMatchObject({
       type: 'invokeSkill',
       skillName: 'factory-rereview',
       role: 'review',
-      cancelInFlight: true,
     });
+    expect(invocations[0]!.decision).not.toHaveProperty('cancelInFlight');
 
     // A follow-up push while the card is still Reviewing supersedes the pass it
     // just started, which is now reading code the push replaced. Re-entering
@@ -1461,7 +1578,10 @@ describe('GithubRules', () => {
       },
       getWorkspace: () => ({ skills: { maybeRefresh: vi.fn(async () => {}), get: vi.fn(async () => undefined) } }),
       subscribe: vi.fn(() => () => {}),
-      state: { set: vi.fn(async () => {}) },
+      state: { get: vi.fn(() => ({ factoryProjectId: project.id })), set: vi.fn(async () => {}) },
+      mode: { get: vi.fn(() => 'build') },
+      model: { get: vi.fn(() => 'openai/gpt-5.6-sol') },
+      identity: { getId: vi.fn(() => 'session-work-42'), getOwnerId: vi.fn(() => 'user-1') },
       permissions: { setForTool: vi.fn(async () => {}) },
       sendMessage: vi.fn(async () => {}),
       sendSignal: vi.fn(() => ({ accepted: Promise.resolve({ accepted: true, action: 'wake' }) })),
