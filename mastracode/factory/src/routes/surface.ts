@@ -47,8 +47,7 @@ import {
   type FactoryDispatchFailureCode,
   type WorkItemsStorage,
 } from '../storage/domains/work-items/base.js';
-import { workItemBranch, workItemBranchSource, workItemNumber } from '../work-item-branch.js';
-import type { WorkItemBranchSource } from '../work-item-branch.js';
+import { workItemBranch, workItemBranchSource, workItemThreadTitle } from '../work-item-branch.js';
 import { ConfigRoutes } from './config.js';
 import { invalidateCustomProvidersSnapshots } from './custom-provider-source.js';
 import { buildFsRoutes } from './fs.js';
@@ -204,16 +203,6 @@ async function reuseBoundSession(
   };
 }
 
-/** A Linear card's title already opens with its identifier; a GitHub card gets its number here. */
-function factoryThreadTitle(
-  source: WorkItemBranchSource,
-  item: { title: string; metadata: Record<string, unknown> | null },
-): string {
-  const number = workItemNumber({ source, metadata: item.metadata });
-  if (number === undefined) return item.title;
-  return `${source === 'github-pr' ? 'PR' : 'Issue'} #${number}: ${item.title}`;
-}
-
 /**
  * Start a factory run for a rule binding: ensure the source-control session the
  * coordinator requires, then hand it to `prepare` along with the factory's
@@ -266,7 +255,7 @@ export async function prepareFactoryRuleBinding(
       factoryProjectId: input.record.factoryProjectId,
       sessionId: preparedSession.sessionId,
       defaultModelId: await resolveFactoryDefaultModelId(projects, input.record.factoryProjectId),
-      threadTitle: factoryThreadTitle(source, input.item),
+      threadTitle: workItemThreadTitle({ source, title: input.item.title, metadata: input.item.metadata }),
       kickoffKey: input.record.id,
       destinationStage,
       workItem: {

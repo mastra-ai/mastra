@@ -36,6 +36,15 @@ export function workItemNumber(item: Pick<WorkItemBranchInput, 'source' | 'metad
   return;
 }
 
+/** How a card names its thread: a Linear title already opens with its identifier, a GitHub card gets its number here. */
+export function workItemThreadTitle(
+  item: Pick<WorkItemBranchInput, 'source' | 'metadata'> & { title: string },
+): string {
+  const number = workItemNumber(item);
+  if (number === undefined) return item.title;
+  return `${item.source === 'github-pr' ? 'PR' : 'Issue'} #${number}: ${item.title}`;
+}
+
 /**
  * The git branch an item's runs and sessions share, one grammar for both sides
  * of the wire: the dispatcher names autonomous run branches with it and the

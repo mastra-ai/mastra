@@ -1,11 +1,10 @@
 import { NEEDS_APPROVAL_LABEL } from '@mastra/factory/rules/types';
-import { workItemBranch } from '@mastra/factory/work-item-branch';
+import { workItemBranch, workItemThreadTitle } from '@mastra/factory/work-item-branch';
 import { isValid } from 'date-fns';
 
 import { relativeTime } from '../../../lib/date/relativeTime';
 import type { WorkItem, WorkItemSessionRef, WorkItemSource } from './services/workItems';
 
-export { NEEDS_APPROVAL_LABEL };
 export const AUTO_TRIAGED_LABEL = 'status: auto-triaged';
 export const HIDDEN_CARD_LABELS = new Set([AUTO_TRIAGED_LABEL, NEEDS_APPROVAL_LABEL]);
 
@@ -100,20 +99,13 @@ export function cardMatchesSearch(card: Pick<WorkItem, 'source' | 'metadata' | '
   return named.some(text => text.toLowerCase().includes(needle));
 }
 
-/** How a card names its thread: the same grammar the server's runs use. */
-export function itemThreadTitle(item: Pick<WorkItem, 'source' | 'metadata' | 'title'>): string {
-  const number = item.source === 'github-issue' || item.source === 'github-pr' ? githubNumberForItem(item) : undefined;
-  if (number === undefined) return item.title;
-  return `${item.source === 'github-pr' ? 'PR' : 'Issue'} #${number}: ${item.title}`;
-}
-
 /**
  * Branch + thread title for a card's session, shared with the server's runs
  * (`workItemBranch`), so the title click and a later run converge on one
  * worktree.
  */
 export function itemSessionSpec(item: WorkItem): { branch: string; threadTitle: string } {
-  return { branch: workItemBranch(item), threadTitle: itemThreadTitle(item) };
+  return { branch: workItemBranch(item), threadTitle: workItemThreadTitle(item) };
 }
 
 /**
