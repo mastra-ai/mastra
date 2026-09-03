@@ -347,6 +347,17 @@ describe('bundled Factory skill assets', () => {
     expect(rereview).toContain('Review runtime: <model>, reasoning setting: <reasoning>.');
   });
 
+  it('guards the initial triage label when any status label is present', async () => {
+    const assetRoot = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'factory-skills');
+    const triage = await fs.readFile(path.join(assetRoot, 'factory-triage', 'SKILL.md'), 'utf8');
+    const phase1 = triage.slice(triage.indexOf('## Phase 1'), triage.indexOf('## Phase 2'));
+
+    expect(phase1).toContain('add `status: needs triage` only if no `status:` label is present');
+    expect(phase1).toContain('gh issue edit "$ISSUE" --add-label "status: needs triage"');
+    expect(phase1).toContain('For Linear issues, skip this GitHub-only label mutation.');
+    expect(triage).toContain('gh issue edit "$ISSUE" --remove-label "status: needs triage"');
+  });
+
   it('keeps the autonomous Factory skills on the terminal-handoff contract', async () => {
     const assetRoot = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'factory-skills');
     const read = (skillName: string) => fs.readFile(path.join(assetRoot, skillName, 'SKILL.md'), 'utf8');

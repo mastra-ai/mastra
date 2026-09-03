@@ -1,6 +1,6 @@
 import type { CSSProperties, ComponentPropsWithoutRef, ReactNode } from 'react';
 import { useDataListRowWrapperContext } from './data-list-row-wrapper-context';
-import { dataListRowInteractiveStyles, dataListRowStyles, dataListRowVariants } from './shared';
+import { dataListRowInteractiveStyles, dataListRowStyles } from './shared';
 import type { DataListRowSharedProps } from './shared';
 import type { LinkComponent } from '@/ds/types/link-component';
 import { cn } from '@/lib/utils';
@@ -31,15 +31,10 @@ export function DataListRowLink({
   return (
     <Link
       href={to}
-      className={cn(
-        ...(isWrapped ? dataListRowInteractiveStyles : dataListRowStyles),
-        // `!` so the selection fill wins over borderless table root styling
-        // (higher-specificity descendant rules); same color in `default`.
-        featured && 'bg-surface-row-featured!',
-        dataListRowVariants({ variant }),
-        className,
-      )}
+      className={cn(...(isWrapped ? dataListRowInteractiveStyles : dataListRowStyles), className)}
       style={resolvedStyle}
+      data-featured={featured || undefined}
+      data-variant={variant ?? 'default'}
       {...rest}
     >
       {children}

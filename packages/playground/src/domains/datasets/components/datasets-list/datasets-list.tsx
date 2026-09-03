@@ -24,10 +24,9 @@ export interface DatasetsListProps {
   targetFilter?: string;
   experimentFilter?: string;
   tagFilter?: string;
-  currentPage?: number;
-  hasMore?: boolean;
-  onNextPage?: () => void;
-  onPrevPage?: () => void;
+  isFetchingNextPage?: boolean;
+  hasNextPage?: boolean;
+  setEndOfListElement?: (element: HTMLDivElement | null) => void;
 }
 
 const COLUMNS = 'auto 1fr auto 5rem 9rem 10rem 7rem';
@@ -68,10 +67,9 @@ export function DatasetsList({
   targetFilter = 'all',
   experimentFilter = 'all',
   tagFilter = 'all',
-  currentPage,
-  hasMore,
-  onNextPage,
-  onPrevPage,
+  isFetchingNextPage,
+  hasNextPage,
+  setEndOfListElement,
 }: DatasetsListProps) {
   const { paths, Link } = useLinkComponent();
 
@@ -107,7 +105,7 @@ export function DatasetsList({
   }
 
   return (
-    <EntityList columns={COLUMNS} variant="striped" scrollRef={containerRef}>
+    <EntityList columns={COLUMNS} scrollRef={containerRef}>
       <EntityList.Top>
         <EntityList.TopCell>Name</EntityList.TopCell>
         <EntityList.TopCell>Description</EntityList.TopCell>
@@ -183,11 +181,10 @@ export function DatasetsList({
         );
       })}
 
-      <EntityList.Pagination
-        currentPage={currentPage}
-        hasMore={hasMore}
-        onNextPage={onNextPage}
-        onPrevPage={onPrevPage}
+      <EntityList.NextPageLoading
+        isLoading={isFetchingNextPage}
+        hasMore={hasNextPage}
+        setEndOfListElement={setEndOfListElement}
       />
     </EntityList>
   );
