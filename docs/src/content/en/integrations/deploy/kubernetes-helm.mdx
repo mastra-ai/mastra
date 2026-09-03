@@ -90,10 +90,13 @@ Configure [authentication](/docs/auth/overview) in your Mastra application befor
     kubectl create secret generic mastra-app-env -n mastra \
       --from-literal=DATABASE_URL='postgresql://user:pass@host:5432/mastra' \
       --from-literal=MASTRA_EE_LICENSE='<your-license-key>' \
-      --from-literal=OPENAI_API_KEY='<provider-key>'
+      --from-literal=OPENAI_API_KEY='<provider-key>' \
+      --from-literal=CLICKHOUSE_URL='https://your-instance.clickhouse.cloud:8443' \
+      --from-literal=CLICKHOUSE_USERNAME='<clickhouse-username>' \
+      --from-literal=CLICKHOUSE_PASSWORD='<clickhouse-password>'
     ```
 
-    Include any other environment variables your agents need, such as model provider API keys.
+    Include any other environment variables your agents need, such as model provider API keys. Omit the `CLICKHOUSE_*` variables unless you use ClickHouse for observability.
   </StepItem>
 
   <StepItem>
@@ -284,6 +287,14 @@ mastra-server:
 ```
 
 Put `S3_ACCESS_KEY_ID` and `S3_SECRET_ACCESS_KEY` in your existing Secret rather than in values. On EKS and GKE, prefer IRSA or Workload Identity over static keys.
+
+## ClickHouse observability
+
+To persist traces, logs, metrics, scores, and feedback in ClickHouse, add `CLICKHOUSE_URL`, `CLICKHOUSE_USERNAME`, and `CLICKHOUSE_PASSWORD` to the Secret that `mastra-server.existingSecret` references. The Secret example above includes those variables for ClickHouse Cloud.
+
+The chart makes the variables available to your application. It doesn't configure observability or send telemetry by itself. Configure `ObservabilityStorageClickhouseVNext` for the `observability` storage domain and add `MastraStorageExporter` to your Mastra application. See [ClickHouse](/integrations/databases/clickhouse#observability-with-vnext-recommended) for the complete application configuration.
+
+When you enable `mastra-workers`, worker pods mount the Server's Secret. If you install the `mastra-workers` chart separately, set `mastra-workers.server.existingSecret` to the same Secret name. The `mastra-projects` chart verifies that the names match.
 
 ## Scale server replicas
 
