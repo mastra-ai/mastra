@@ -802,18 +802,44 @@ describe('TraceDataPanelView — following the URL to another span', () => {
 });
 
 describe('TraceDataPanelView — trace-level tabs', () => {
+  describe('when a partial thread slot is provided', () => {
+    it('renders Messages immediately after Spans', () => {
+      render(<TraceDataPanelView {...baseProps} partialThreadTabSlot={() => <div>partial thread here</div>} />);
+
+      expect(screen.getAllByRole('tab').map(tab => tab.textContent)).toEqual(['Spans', 'Messages']);
+      expect(screen.getByText('agent run')).toBeTruthy();
+      expect(screen.queryByText('partial thread here')).toBeNull();
+    });
+
+    it('renders the selected trace in the Messages tab', () => {
+      const partialThreadTabSlot = vi.fn(({ traceId }: { traceId: string }) => <div>partial thread for {traceId}</div>);
+
+      render(
+        <TraceDataPanelView
+          {...baseProps}
+          activeTab="partial-thread"
+          onTabChange={vi.fn()}
+          partialThreadTabSlot={partialThreadTabSlot}
+        />,
+      );
+
+      expect(partialThreadTabSlot).toHaveBeenCalledWith({ traceId: 'trace-1' });
+      expect(screen.getByText('partial thread for trace-1')).toBeTruthy();
+    });
+  });
+
   it('renders no tabs when no scores slot is provided', () => {
     render(<TraceDataPanelView {...baseProps} />);
 
     expect(screen.queryByRole('tab', { name: /spans/i })).toBeNull();
-    expect(screen.queryByRole('tab', { name: /evaluations/i })).toBeNull();
+    expect(screen.queryByRole('tab', { name: /scores/i })).toBeNull();
   });
 
   it('renders Spans and Scores tabs when a scores slot is provided', () => {
     render(<TraceDataPanelView {...baseProps} scoresTabSlot={() => <div>trace scores here</div>} />);
 
     expect(screen.getByRole('tab', { name: /spans/i })).toBeTruthy();
-    expect(screen.getByRole('tab', { name: /evaluations/i })).toBeTruthy();
+    expect(screen.getByRole('tab', { name: /scores/i })).toBeTruthy();
     // Spans is the default tab.
     expect(screen.getByText('agent run')).toBeTruthy();
     expect(screen.queryByText('trace scores here')).toBeNull();
@@ -844,7 +870,7 @@ describe('TraceDataPanelView — trace-level tabs', () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole('tab', { name: /evaluations/i }));
+    fireEvent.click(screen.getByRole('tab', { name: /scores/i }));
 
     expect(onTabChange).toHaveBeenCalledWith('scores');
   });
@@ -852,30 +878,29 @@ describe('TraceDataPanelView — trace-level tabs', () => {
   it('shows the badge count in the Scores tab label', () => {
     render(<TraceDataPanelView {...baseProps} scoresTabSlot={() => null} scoresTabBadge={3} />);
 
-    expect(screen.getByRole('tab', { name: /evaluations \(3\)/i })).toBeTruthy();
+    expect(screen.getByRole('tab', { name: /scores \(3\)/i })).toBeTruthy();
   });
 });
 
 describe('TraceDataPanelView — trace feedback tab', () => {
-  it('renders a Feedback tab next to Spans and Evaluations', () => {
+  it('renders Feedback before Scores and after Messages', () => {
     render(
       <TraceDataPanelView
         {...baseProps}
+        partialThreadTabSlot={() => <div>trace messages here</div>}
         scoresTabSlot={() => <div>trace scores here</div>}
         feedbackTabSlot={() => <div>trace feedback here</div>}
       />,
     );
 
-    expect(screen.getByRole('tab', { name: /spans/i })).toBeTruthy();
-    expect(screen.getByRole('tab', { name: /evaluations/i })).toBeTruthy();
-    expect(screen.getByRole('tab', { name: /feedback/i })).toBeTruthy();
+    expect(screen.getAllByRole('tab').map(tab => tab.textContent)).toEqual(['Spans', 'Messages', 'Feedback', 'Scores']);
   });
 
   it('renders the Feedback tab even when no scores slot is provided', () => {
     render(<TraceDataPanelView {...baseProps} feedbackTabSlot={() => <div>trace feedback here</div>} />);
 
     expect(screen.getByRole('tab', { name: /feedback/i })).toBeTruthy();
-    expect(screen.queryByRole('tab', { name: /evaluations/i })).toBeNull();
+    expect(screen.queryByRole('tab', { name: /scores/i })).toBeNull();
   });
 
   it('shows the feedback slot with the trace id — and no span id — when the tab is active', () => {

@@ -1,9 +1,10 @@
-import type { ThemeLearningEntity } from '@mastra/client-js';
+import type { SignalCatalogEntry, ThemeLearningEntity } from '@mastra/client-js';
 import { Columns2, List, Radar } from 'lucide-react';
 import { useState, type ReactNode } from 'react';
 
 import { useThemeEntities } from '../hooks';
 import { TraceSignalSettingsButton, TraceSignalSettingsPanel } from '../settings/trace-signal-settings';
+import { TraceIntelligenceExplainer } from '../trace-intelligence-explainer';
 import { useTraceIntelligence } from '../use-trace-intelligence';
 import { EntityIndexCompactGrid } from './entity-index-compact-grid';
 import { EntityIndexList } from './entity-index-list';
@@ -67,10 +68,11 @@ function EntityIndexControls({
   onSortChange,
   onViewChange,
   headerAction,
+  signalCatalog,
 }: Pick<
   TraceIntelligenceEntityIndexProps,
   'search' | 'sort' | 'view' | 'onSearchChange' | 'onSortChange' | 'onViewChange' | 'headerAction'
->) {
+> & { signalCatalog: readonly SignalCatalogEntry[] }) {
   return (
     <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
       <div className="max-w-120 flex-1">
@@ -82,6 +84,7 @@ function EntityIndexControls({
         />
       </div>
       <div className="flex items-center justify-between gap-2 sm:ml-auto sm:justify-end">
+        <TraceIntelligenceExplainer signalCatalog={signalCatalog} />
         <Select<TraceIntelligenceEntitySort> value={sort} onValueChange={onSortChange}>
           <SelectTrigger aria-label="Sort entities" size="md" variant="ghost" className="w-auto min-w-36">
             <SelectValue />
@@ -96,7 +99,7 @@ function EntityIndexControls({
         <ButtonsGroup spacing="close" aria-label="Entities view">
           <Button
             type="button"
-            variant={view === 'list' ? 'default' : 'ghost'}
+            variant={view === 'list' ? 'primary' : 'outline'}
             size="icon-md"
             tooltip="List view"
             aria-pressed={view === 'list'}
@@ -106,7 +109,7 @@ function EntityIndexControls({
           </Button>
           <Button
             type="button"
-            variant={view === 'compact' ? 'default' : 'ghost'}
+            variant={view === 'compact' ? 'primary' : 'outline'}
             size="icon-md"
             tooltip="Compact view"
             aria-pressed={view === 'compact'}
@@ -132,12 +135,15 @@ export function TraceIntelligenceEntityIndex({
   headerAction,
 }: TraceIntelligenceEntityIndexProps) {
   const entitiesQuery = useThemeEntities(entityType);
-  const { LinkComponent, signalManagement } = useTraceIntelligence();
+  const { LinkComponent, signalCatalog: contextSignalCatalog, signalManagement } = useTraceIntelligence();
   const [settingsOpen, setSettingsOpen] = useState(false);
 
   if (entitiesQuery.error) return <EntityIndexError error={entitiesQuery.error} />;
 
-  const entities = filterAndSortEntities(entitiesQuery.data?.entities ?? [], search, sort);
+  const sourceEntities = entitiesQuery.data?.entities ?? [];
+  const signalCatalog =
+    sourceEntities.find(entity => entity.signalCatalog?.length)?.signalCatalog ?? contextSignalCatalog;
+  const entities = filterAndSortEntities(sourceEntities, search, sort);
   const hasSearch = search.trim().length > 0;
   let body = (
     <EntityIndexList
@@ -182,6 +188,7 @@ export function TraceIntelligenceEntityIndex({
           onSearchChange={onSearchChange}
           onSortChange={onSortChange}
           onViewChange={onViewChange}
+          signalCatalog={signalCatalog}
           headerAction={
             headerAction || signalManagement ? (
               <>

@@ -38,6 +38,7 @@ import type {
   ListFeedbackArgs,
   ListFeedbackResponse,
   FeedbackRecord,
+  UpdateFeedbackReviewStatusArgs,
 } from './feedback';
 import { listLogsArgsSchema } from './logs';
 import type { BatchCreateLogsArgs, ListLogsArgs, ListLogsResponse, LogRecord } from './logs';
@@ -2173,6 +2174,7 @@ export class ObservabilityInMemory extends ObservabilityStorage {
         args.feedback.feedbackUserId ??
         args.feedback.userId ??
         (typeof args.feedback.metadata?.userId === 'string' ? args.feedback.metadata.userId : null),
+      reviewStatus: args.feedback.reviewStatus ?? 'needs-review',
     } as FeedbackRecord;
     this.upsertByIdField(this.db.feedbackRecords, this.db.feedbackCursorIds, record, 'feedbackId');
   }
@@ -2185,6 +2187,7 @@ export class ObservabilityInMemory extends ObservabilityStorage {
         source: fb.feedbackSource ?? fb.source ?? '',
         feedbackUserId:
           fb.feedbackUserId ?? fb.userId ?? (typeof fb.metadata?.userId === 'string' ? fb.metadata.userId : null),
+        reviewStatus: fb.reviewStatus ?? 'needs-review',
       } as FeedbackRecord;
       this.upsertByIdField(this.db.feedbackRecords, this.db.feedbackCursorIds, record, 'feedbackId');
     }
@@ -2231,6 +2234,21 @@ export class ObservabilityInMemory extends ObservabilityStorage {
         ),
       ),
     };
+  }
+
+  async updateFeedbackReviewStatus(args: UpdateFeedbackReviewStatusArgs): Promise<FeedbackRecord> {
+    const feedback = this.db.feedbackRecords.find(record => record.feedbackId === args.feedbackId);
+    if (!feedback) {
+      throw new MastraError({
+        id: 'OBSERVABILITY_UPDATE_FEEDBACK_REVIEW_STATUS_NOT_FOUND',
+        domain: ErrorDomain.MASTRA_OBSERVABILITY,
+        category: ErrorCategory.USER,
+        text: 'Feedback record not found',
+      });
+    }
+
+    feedback.reviewStatus = args.reviewStatus;
+    return feedback;
   }
 
   async getFeedbackAggregate(args: GetFeedbackAggregateArgs): Promise<GetFeedbackAggregateResponse> {
@@ -2490,6 +2508,8 @@ export class ObservabilityInMemory extends ObservabilityStorage {
     if (filters.source !== undefined && feedbackSource !== filters.source) return false;
     if (filters.experimentId !== undefined && fb.experimentId !== filters.experimentId) return false;
     if (filters.feedbackUserId !== undefined && fb.feedbackUserId !== filters.feedbackUserId) return false;
+    if (filters.reviewStatus !== undefined && (fb.reviewStatus ?? 'needs-review') !== filters.reviewStatus)
+      return false;
     if (filters.tags != null && filters.tags.length > 0) {
       if (fb.tags == null) return false;
       for (const tag of filters.tags) {

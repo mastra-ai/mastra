@@ -51,7 +51,7 @@ export function TraceSignalSettingsPanel({ onClose }: { onClose: () => void }) {
 }
 
 function TraceSignalSettingsContent() {
-  const { signalCatalog, signalManagement } = useTraceIntelligence();
+  const { signalManagement } = useTraceIntelligence();
   const query = useSignalManagementList();
   const mutations = useSignalManagementMutations();
   const [creating, setCreating] = useState(false);
@@ -110,49 +110,16 @@ function TraceSignalSettingsContent() {
 
   return (
     <div className="space-y-6">
-      <div className="space-y-2">
-        <div className="border-border1 grid gap-2 rounded-md border p-3 sm:grid-cols-2">
-          <div>
-            <p className="text-ui-sm text-neutral4 font-medium">Organization signal library</p>
-            <p className="text-ui-xs text-neutral3">Definitions, prompts, and versions are shared by every project.</p>
-          </div>
-          <div>
-            <p className="text-ui-sm text-neutral4 font-medium">Current project</p>
-            <p className="text-ui-xs text-neutral3">Enable switches apply only to this project.</p>
-          </div>
-        </div>
-        {!canManage ? (
-          <Notice variant="info">
-            <Notice.Message>You have read-only access. An organization admin can change these settings.</Notice.Message>
-          </Notice>
-        ) : null}
-        {actionError ? (
-          <Notice variant="destructive">
-            <Notice.Message>{actionError}</Notice.Message>
-          </Notice>
-        ) : null}
-      </div>
-
-      <section aria-labelledby="built-in-signals-heading">
-        <h3 id="built-in-signals-heading" className="text-ui-md text-neutral4 mb-2 font-medium">
-          Built-in signals
-        </h3>
-        <div className="divide-border1 border-border1 divide-y rounded-md border px-3">
-          {signalCatalog
-            .filter(signal => signal.builtIn)
-            .map(signal => (
-              <div key={signal.name} className="flex min-h-12 items-center justify-between gap-3 py-2">
-                <div className="min-w-0">
-                  <p className="text-ui-sm text-neutral4">{signal.label}</p>
-                  <p className="text-ui-xs text-neutral3 truncate">{signal.description}</p>
-                </div>
-                <Badge variant="neutral" size="sm">
-                  Read only
-                </Badge>
-              </div>
-            ))}
-        </div>
-      </section>
+      {!canManage ? (
+        <Notice variant="info">
+          <Notice.Message>You have read-only access. An organization admin can change these settings.</Notice.Message>
+        </Notice>
+      ) : null}
+      {actionError ? (
+        <Notice variant="destructive">
+          <Notice.Message>{actionError}</Notice.Message>
+        </Notice>
+      ) : null}
 
       <section aria-labelledby="custom-signals-heading">
         <div className="mb-2 flex flex-wrap items-center justify-between gap-3">

@@ -6,6 +6,7 @@ import type { FactoryRunPhase } from '../../../../hooks/useStartFactoryRun';
 import type { ItemRunSpec, RunAction } from '../boardRunSpecs';
 import { externalLinkLabel } from '../boardItems';
 import { itemStageOptions } from '../boardStages';
+import { TRIAGE_DECISIONS, awaitsTriageDecision } from '../cardPrimaryAction';
 import type { FactoryDecisionSummary } from '../services/decisions';
 import type { WorkItem } from '../services/workItems';
 import type { BoardStageId } from '../stages';
@@ -80,21 +81,34 @@ export function WorkItemMenuItems({
   onMove,
   onRemove,
 }: WorkItemMenuProps): ReactElement {
+  // A held card leads with the maintainer's decision. Nothing that starts,
+  // restarts, or releases a run is offered until the card is accepted: every
+  // one of those would advance it as a side effect. Dismissing a stale
+  // suggestion stays, since that starts nothing.
+  const decision = awaitsTriageDecision(item, columnStage);
+  const runsOffered = runSpec !== undefined && !decision;
   return (
     <>
-      {runSpec !== undefined &&
+      {decision &&
+        TRIAGE_DECISIONS.map(choice => (
+          <DropdownMenu.Item key={choice.stage} onClick={() => onMove(choice.stage)}>
+            <BoardStageIcon stage={choice.stage} />
+            <span>{choice.label}</span>
+          </DropdownMenu.Item>
+        ))}
+      {runsOffered &&
         runActions.flatMap(action =>
           runItemPair(runSpec, action, action.label, onStartRun, { runDisabled, pendingRunRoles }),
         )}
-      {runSpec !== undefined &&
+      {runsOffered &&
         reReviewAction !== undefined &&
         runItemPair(runSpec, reReviewAction, 'Re-review', onRestartRun, { runDisabled, pendingRunRoles })}
-      {runSpec !== undefined &&
+      {runsOffered &&
         laneAction !== undefined &&
         runItemPair(runSpec, laneAction, laneAction.label, onRestartRun, { runDisabled, pendingRunRoles })}
       {/* Once the card has a live session its surface opens details, so the
           menus stay the only place left to release a proposed run. */}
-      {proposal !== undefined && (
+      {proposal !== undefined && !decision && (
         <DropdownMenu.Item
           disabled={runDisabled || approvingDecisionId === proposal.id}
           onClick={() => onApproveProposal(proposal.id)}
@@ -117,6 +131,7 @@ export function WorkItemMenuItems({
       )}
       {itemStageOptions(item)
         .filter(stage => stage.id !== columnStage)
+        .filter(stage => !decision || !TRIAGE_DECISIONS.some(choice => choice.stage === stage.id))
         .map(stage => (
           <DropdownMenu.Item key={stage.id} onClick={() => onMove(stage.id)}>
             <BoardStageIcon stage={stage.id} />

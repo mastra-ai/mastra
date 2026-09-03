@@ -106,6 +106,8 @@ describe('Experiments page — Run Experiment', () => {
     const dialog = await screen.findByRole('dialog', { name: /run experiment/i });
     expect(dialog).toBeDefined();
 
+    fireEvent.change(screen.getByLabelText('Name *'), { target: { value: 'My experiment' } });
+
     // Select dataset, version, and target
     await waitFor(() => expect(screen.getByRole('option', { name: 'Dataset 1' })).toBeDefined());
     selectOption('Select a dataset...', 'dataset-1');
@@ -119,6 +121,7 @@ describe('Experiments page — Run Experiment', () => {
 
     await waitFor(() => expect(triggerCalls).toHaveLength(1));
     expect(triggerCalls[0].datasetId).toBe('dataset-1');
+    expect(triggerCalls[0].body.name).toBe('My experiment');
     expect(triggerCalls[0].body.targetType).toBe('agent');
     expect(triggerCalls[0].body.targetId).toBe('agent-1');
     expect(triggerCalls[0].body.version).toBe(11);

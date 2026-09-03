@@ -61,6 +61,7 @@ const failedDecision: FactoryDecisionSummary = {
   status: 'failed',
   attempts: 1,
   failureOccurrence: 1,
+  source: null,
   failureCode: 'repository_clone_failed',
   canRetry: true,
   lastError: DECISION_ERROR,

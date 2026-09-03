@@ -217,6 +217,7 @@ export interface FactoryDecisionDispatcherOptions {
   feedReader?: FactoryFeedReader;
   resolveLinkedWorkItemParentId?: (input: {
     orgId: string;
+    factoryProjectId: string;
     decision: Extract<FactoryCommitDecision, { type: 'upsertLinkedWorkItem' }>;
   }) => Promise<string | null>;
   maxInFlight?: number;
@@ -831,6 +832,7 @@ export class FactoryDecisionDispatcher {
       record.workItemId ??
       (await this.#resolveLinkedWorkItemParentId?.({
         orgId: record.orgId,
+        factoryProjectId: record.factoryProjectId,
         decision,
       })) ??
       null;

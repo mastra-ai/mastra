@@ -92,6 +92,7 @@ export function ThreadTraces({ threadId, onTraceOpenChange, onSpanOpenChange }: 
         onPrevious={handlePreviousTrace}
         onNext={handleNextTrace}
         traceHref={`/traces?traceId=${encodeURIComponent(featuredTraceId)}`}
+        showPartialThread
       />
     );
   }
