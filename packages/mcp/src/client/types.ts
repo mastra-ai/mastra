@@ -163,6 +163,13 @@ export type RequireToolApprovalFn = (ctx: RequireToolApprovalContext) => boolean
  */
 export type RequireToolApproval = boolean | RequireToolApprovalFn;
 
+/** W3C trace fields carried in MCP request `_meta`. */
+export interface MCPTraceContext {
+  traceparent: string;
+  tracestate?: string;
+  baggage?: string;
+}
+
 /**
  * Base options common to all MCP server definitions.
  */
@@ -177,6 +184,13 @@ export type BaseServerOptions = {
   enableServerLogs?: boolean;
   /** Whether to enable progress tracking (default: false) */
   enableProgressTracking?: boolean;
+  /**
+   * Returns W3C trace fields to attach to each outgoing MCP request.
+   *
+   * The provider is called when the request is sent so consumers can read from
+   * their own request-local trace carrier without coupling MCP to a tracing SDK.
+   */
+  traceContext?: () => MCPTraceContext | undefined;
   /**
    * Whether instructions returned by this MCP server during initialization should
    * be forwarded to agents that use the server's tools.

@@ -2461,6 +2461,57 @@ describe('MastraMCPClient - Custom _meta', () => {
     );
   });
 
+  it('should resolve fresh W3C trace context per tool request and preserve explicit caller precedence', async () => {
+    let activeTrace = {
+      traceparent: '00-11111111111111111111111111111111-1111111111111111-01',
+      tracestate: 'vendor=first',
+      baggage: 'tenant=one',
+      'io.modelcontextprotocol/protocolVersion': 'attacker-controlled',
+    };
+    client = new InternalMastraMCPClient({
+      name: 'trace-context-client',
+      server: { url: testServer.baseUrl, traceContext: () => activeTrace },
+    });
+    await client.connect();
+
+    const sdkClient = (client as any).client as Client;
+    const tools = await client.tools();
+    const sendSpy = vi.spyOn((sdkClient as any).transport, 'send');
+
+    await tools['echo']?.execute?.({ msg: 'first' });
+    activeTrace = {
+      traceparent: '00-22222222222222222222222222222222-2222222222222222-01',
+      tracestate: 'vendor=second',
+      baggage: 'tenant=two',
+      'io.modelcontextprotocol/protocolVersion': 'attacker-controlled',
+    };
+    await tools['echo']?.execute?.(
+      { msg: 'second' },
+      { _meta: { traceparent: '00-33333333333333333333333333333333-3333333333333333-01', custom: true } },
+    );
+
+    const callRequests = sendSpy.mock.calls.map(call => call[0]).filter(message => message.method === 'tools/call');
+    expect(callRequests[0]?.params?._meta).toEqual({
+      traceparent: '00-11111111111111111111111111111111-1111111111111111-01',
+      tracestate: 'vendor=first',
+      baggage: 'tenant=one',
+    });
+    expect(callRequests[1]?.params?._meta).toEqual({
+      traceparent: '00-33333333333333333333333333333333-3333333333333333-01',
+      tracestate: 'vendor=second',
+      baggage: 'tenant=two',
+      custom: true,
+    });
+
+    await client.listResources();
+    const resourceRequest = sendSpy.mock.calls.map(call => call[0]).find(message => message.method === 'resources/list');
+    expect(resourceRequest?.params?._meta).toEqual({
+      traceparent: '00-22222222222222222222222222222222-2222222222222222-01',
+      tracestate: 'vendor=second',
+      baggage: 'tenant=two',
+    });
+  });
+
   it('should merge custom _meta with progressToken when progress tracking is enabled', async () => {
     client = new InternalMastraMCPClient({
       name: 'meta-progress-client',

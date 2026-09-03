@@ -9,6 +9,7 @@ export type {
   RequireToolApproval,
   RequireToolApprovalFn,
   RequireToolApprovalContext,
+  MCPTraceContext,
   ToolAnnotations,
   SerializableMCPToolDefinition,
   SerializableMCPToolCatalog,
