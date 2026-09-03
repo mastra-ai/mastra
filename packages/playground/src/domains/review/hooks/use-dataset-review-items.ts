@@ -8,10 +8,10 @@ import { useDatasetExperiments } from '@/domains/datasets/hooks/use-dataset-expe
  */
 export const useDatasetReviewItems = (datasetId: string) => {
   const client = useMastraClient();
-  const { data: experimentsData } = useDatasetExperiments(datasetId);
+  const { data: experimentsData, isLoading: isLoadingExperiments } = useDatasetExperiments(datasetId);
   const experiments = experimentsData?.experiments;
 
-  return useQuery({
+  const query = useQuery({
     queryKey: ['dataset-review-items', datasetId, experiments?.map(e => e.id)],
     queryFn: async () => {
       if (!experiments || experiments.length === 0) return [] as ReviewItem[];
@@ -47,6 +47,10 @@ export const useDatasetReviewItems = (datasetId: string) => {
     enabled: Boolean(datasetId) && Boolean(experiments) && experiments!.length > 0,
     refetchOnWindowFocus: false,
   });
+
+  // The results query is disabled until experiments arrive, so its own `isLoading`
+  // is false during that window; surface the upstream load to avoid an empty flash.
+  return { ...query, isLoading: query.isLoading || isLoadingExperiments };
 };
 
 /**
@@ -54,10 +58,10 @@ export const useDatasetReviewItems = (datasetId: string) => {
  */
 export const useDatasetCompletedItems = (datasetId: string) => {
   const client = useMastraClient();
-  const { data: experimentsData } = useDatasetExperiments(datasetId);
+  const { data: experimentsData, isLoading: isLoadingExperiments } = useDatasetExperiments(datasetId);
   const experiments = experimentsData?.experiments;
 
-  return useQuery({
+  const query = useQuery({
     queryKey: ['dataset-completed-items', datasetId, experiments?.map(e => e.id)],
     queryFn: async () => {
       if (!experiments || experiments.length === 0) return [] as ReviewItem[];
@@ -93,4 +97,8 @@ export const useDatasetCompletedItems = (datasetId: string) => {
     enabled: Boolean(datasetId) && Boolean(experiments) && experiments!.length > 0,
     refetchOnWindowFocus: false,
   });
+
+  // The results query is disabled until experiments arrive, so its own `isLoading`
+  // is false during that window; surface the upstream load to avoid an empty flash.
+  return { ...query, isLoading: query.isLoading || isLoadingExperiments };
 };

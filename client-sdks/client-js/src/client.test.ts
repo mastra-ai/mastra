@@ -1270,6 +1270,29 @@ describe('MastraClient', () => {
       });
     });
 
+    it('updateDatasetExperiment should PATCH the experiment route with name, description and metadata', async () => {
+      const updated = { id: 'exp-1', datasetId: 'ds-1', name: 'renamed', description: 'new desc', metadata: { k: 1 } };
+      (global.fetch as any).mockResolvedValueOnce({
+        ok: true,
+        headers: { get: () => 'application/json' },
+        json: async () => updated,
+      });
+
+      const result = await client.updateDatasetExperiment({
+        datasetId: 'ds-1',
+        experimentId: 'exp-1',
+        name: 'renamed',
+        description: 'new desc',
+        metadata: { k: 1 },
+      });
+
+      const [url, init] = (global.fetch as any).mock.calls[0];
+      expect(url).toBe('http://localhost:4111/api/datasets/ds-1/experiments/exp-1');
+      expect(init.method).toBe('PATCH');
+      expect(JSON.parse(init.body)).toEqual({ name: 'renamed', description: 'new desc', metadata: { k: 1 } });
+      expect(result).toEqual(updated);
+    });
+
     it('batchInsertDatasetItems preserves an explicit empty scorerIds override', async () => {
       (global.fetch as any).mockResolvedValueOnce({
         ok: true,

@@ -1,17 +1,16 @@
 import type { DatasetExperiment } from '@mastra/client-js';
-import { getShortId } from '@mastra/playground-ui/components/Text';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
+import { getExperimentDisplayName } from '@/domains/experiments/utils/experiment-display-name';
 
 const LONG_DESCRIPTION = 60;
 
 /**
- * Primary line: the experiment name, or a readable `Experiment #<short id>` when
- * unnamed. Secondary line: the description, or a version/scorer summary so an
- * unnamed run is still identifiable at a glance. Caller supplies the cell.
+ * Primary line: the experiment display name. Secondary line: the description,
+ * or a version/scorer summary so an unnamed run is still identifiable at a
+ * glance. Caller supplies the cell.
  */
 export function ExperimentNameLabel({ experiment }: { experiment: DatasetExperiment }) {
-  const shortId = getShortId(experiment.id) ?? experiment.id;
-  const primary = experiment.name || `Experiment #${shortId}`;
+  const primary = getExperimentDisplayName(experiment);
   const secondary = experiment.description || buildRunSummary(experiment);
 
   const label = (

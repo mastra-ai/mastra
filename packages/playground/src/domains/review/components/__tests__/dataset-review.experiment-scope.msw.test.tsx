@@ -63,17 +63,19 @@ const resultsByExperiment: Record<string, DatasetExperimentResult[]> = {
   'exp-2': [makeResult('r-2', 'exp-2', 'exp two input')],
 };
 
-// Experiment results resolve slowly so the component mounts before the review
-// queue is known — the deep-link case (`/experiments/:id?review=`) on a cold cache.
+// Experiments and results resolve slowly so the component mounts before the review
+// queue is known — the deep-link case (`/experiments/review-queue?experiment=<id>&review=<resultId>`)
+// on a cold cache.
 const setupHandlers = () => {
   server.use(
     http.get('*/api/datasets/ds-1', () => HttpResponse.json(dataset)),
-    http.get('*/api/datasets/:datasetId/experiments', () =>
-      HttpResponse.json({
+    http.get('*/api/datasets/:datasetId/experiments', async () => {
+      await delay(50);
+      return HttpResponse.json({
         experiments: [makeExperiment('exp-1'), makeExperiment('exp-2')],
         pagination: { total: 2, page: 0, perPage: 100, hasMore: false },
-      }),
-    ),
+      });
+    }),
     http.get('*/api/datasets/:datasetId/experiments/:experimentId/results', async ({ params }) => {
       await delay(50);
       const results = resultsByExperiment[String(params.experimentId)] ?? [];
@@ -93,6 +95,15 @@ describe('DatasetReview scoped to an experiment', () => {
 
       expect(await screen.findByText(/exp two input/)).toBeTruthy();
       expect(screen.queryByText(/exp one input/)).toBeNull();
+    });
+
+    it('never flashes the empty state while the dataset experiments are still loading', async () => {
+      setupHandlers();
+      renderWithProviders(<DatasetReview datasetId="ds-1" experimentId="exp-2" />);
+
+      // Before any request resolves the queue is unknown: a spinner, not "No items to review".
+      expect(screen.queryByText('No items to review')).toBeNull();
+      await screen.findByText(/exp two input/);
     });
   });
 });
