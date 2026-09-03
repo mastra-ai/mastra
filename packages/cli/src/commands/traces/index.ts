@@ -15,6 +15,7 @@ export function registerTracesCommand(program: Command): void {
     .option('--resume <import-id>', 'Resume a staged import')
     .option('--state-dir <path>', 'Directory under which import state is stored')
     .option('--batch-size <count>', 'Target records per batch (1-1000)', Number)
+    .option('--max-staging-mb <megabytes>', 'Maximum local source staging size in MiB (default: 5120)', Number)
     .option('--json', 'Emit machine-readable output')
     .option('--yes', 'Upload without an interactive confirmation')
     .option('--keep-state', 'Keep sensitive staged trace data after a successful import')

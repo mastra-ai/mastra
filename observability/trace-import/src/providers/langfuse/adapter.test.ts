@@ -223,6 +223,22 @@ describe('normalizeLangfuseTrace', () => {
     expect(spans[1]?.metadata.langfuse).toMatchObject({ tags: ['trace-tag'] });
   });
 
+  it('detaches an imported logical root while preserving its source physical parent', () => {
+    const source = observation('SPAN', {
+      parentObservationId: 'external-parent',
+      isRootObservation: true,
+    });
+    const span = normalizeLangfuseTrace(trace(source), {
+      importBatchId: crypto.randomUUID(),
+    }).spans[0]!;
+
+    expect(span.parentSpanId).toBeNull();
+    expect(span.metadata.langfuse).toMatchObject({
+      isRootObservation: true,
+      parentObservationId: 'external-parent',
+    });
+  });
+
   it('uses start time as event end time and applies an explicit environment override', () => {
     const source = observation('EVENT', { endTime: null, environment: 'source-env' });
     const span = normalizeLangfuseTrace(trace(source), {

@@ -2,11 +2,26 @@ import { chmod, mkdtemp, readFile, readdir, rm, stat, writeFile } from 'node:fs/
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { runTraceImport } from './import-run.js';
+import {
+  runTraceImportWithDependencies,
+  type RunTraceImportDependencies,
+  type RunTraceImportOptions,
+} from './import-run.js';
 import { readManifest } from './manifest.js';
 import { TRACE_IMPORT_FIELDS } from './types.js';
 
 const roots: string[] = [];
+
+function runTraceImport(options: RunTraceImportOptions & RunTraceImportDependencies) {
+  const { fetch, maxBatchBytes, now, sleep, verify, ...runOptions } = options;
+  return runTraceImportWithDependencies(runOptions, {
+    fetch,
+    maxBatchBytes,
+    now,
+    sleep,
+    verify,
+  });
+}
 
 afterEach(async () => {
   await Promise.all(roots.splice(0).map(path => rm(path, { recursive: true, force: true })));
@@ -78,6 +93,17 @@ function options(root: string) {
 }
 
 describe('runTraceImport', () => {
+  it('requires source credentials when starting a new import', async () => {
+    const root = await stateRoot();
+
+    await expect(
+      runTraceImport({
+        ...options(root),
+        source: undefined,
+      }),
+    ).rejects.toThrow('Langfuse credentials are required to start a trace import.');
+  });
+
   it('dry-runs without a target credential and preserves a resumable plan', async () => {
     const root = await stateRoot();
     const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(Response.json(sourcePage));
@@ -161,6 +187,7 @@ describe('runTraceImport', () => {
 
     const report = await runTraceImport({
       ...options(root),
+      source: undefined,
       resumeId: dryRun.importId,
       fetch: targetFetch,
       confirm: async () => true,
@@ -177,6 +204,38 @@ describe('runTraceImport', () => {
     expect(body.spans[0]?.parentSpanId).toBeNull();
     expect(body.spans[1]?.parentSpanId).toBe(body.spans[0]?.spanId);
     expect(body.spans[1]?.attributes).toMatchObject({ model: 'gpt-4o-mini' });
+  });
+
+  it('requires source credentials when a resumed source download is incomplete', async () => {
+    const root = await stateRoot();
+    const controller = new AbortController();
+    const firstPage = {
+      data: [sourcePage.data[1]],
+      meta: { cursor: 'page-2' },
+    };
+    const fetchMock = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(Response.json(firstPage))
+      .mockImplementationOnce(async () => {
+        controller.abort(new Error('test interrupt'));
+        throw controller.signal.reason;
+      });
+
+    const paused = await runTraceImport({
+      ...options(root),
+      dryRun: true,
+      fetch: fetchMock,
+      signal: controller.signal,
+    });
+    expect(paused.status).toBe('paused');
+
+    await expect(
+      runTraceImport({
+        ...options(root),
+        source: undefined,
+        resumeId: paused.importId,
+      }),
+    ).rejects.toThrow('resumed import has not finished downloading source data');
   });
 
   it('keeps the original snapshot window when a staged import resumes later', async () => {
@@ -379,7 +438,7 @@ describe('runTraceImport', () => {
       runTraceImport({
         ...options(root),
         dryRun: true,
-        maxSpoolBytes: 1024,
+        maxStagingBytes: 1024,
         fetch: vi.fn<typeof fetch>().mockResolvedValue(Response.json(page)),
       }),
     ).rejects.toThrow('local staging limit');

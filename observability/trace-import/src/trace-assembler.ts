@@ -40,12 +40,17 @@ function validateAndOrderTrace(
     byId.set(observation.id, observation);
   }
 
-  const roots = observations.filter(observation => !observation.parentObservationId);
+  const roots = observations.filter(
+    observation =>
+      !observation.parentObservationId ||
+      (observation.isRootObservation === true && !byId.has(observation.parentObservationId)),
+  );
   if (roots.length === 0) return { skipped: skip(sourceTraceId, observations, 'missing_root') };
   if (roots.length > 1) return { skipped: skip(sourceTraceId, observations, 'multiple_roots') };
+  const root = roots[0]!;
 
   for (const observation of observations) {
-    if (observation.parentObservationId && !byId.has(observation.parentObservationId)) {
+    if (observation !== root && observation.parentObservationId && !byId.has(observation.parentObservationId)) {
       return {
         skipped: skip(sourceTraceId, observations, 'missing_parent', observation.parentObservationId),
       };
@@ -73,9 +78,11 @@ function validateAndOrderTrace(
     if (end < start) {
       return { skipped: skip(sourceTraceId, observations, 'invalid_timestamp', observation.id) };
     }
+    if (end > snapshotMs) {
+      return { skipped: skip(sourceTraceId, observations, 'completed_after_snapshot', observation.id) };
+    }
   }
 
-  const root = roots[0]!;
   const rootStart = parseTimestamp(root.startTime)!;
   if (rootStart < cutoffMs || rootStart >= snapshotMs) {
     return { skipped: skip(sourceTraceId, observations, 'root_outside_window') };
@@ -83,7 +90,7 @@ function validateAndOrderTrace(
 
   const children = new Map<string, LangfuseObservation[]>();
   for (const observation of observations) {
-    if (!observation.parentObservationId) continue;
+    if (observation === root || !observation.parentObservationId) continue;
     const siblings = children.get(observation.parentObservationId) ?? [];
     siblings.push(observation);
     children.set(observation.parentObservationId, siblings);

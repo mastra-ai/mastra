@@ -78,6 +78,23 @@ export async function fetchProjects(token: string, orgId: string): Promise<Proje
   return data.projects;
 }
 
+export async function fetchTokenOrganizationId(token: string): Promise<string> {
+  const resp = await fetch(`${getApiUrl()}/v1/auth/verify`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+
+  if (!resp.ok) {
+    const err = await resp.json().catch(() => ({}));
+    throwApiError('Failed to verify Platform credential', resp.status, extractApiErrorDetail(err));
+  }
+
+  const data = (await resp.json()) as { organizationId?: unknown };
+  if (typeof data.organizationId !== 'string' || data.organizationId.length === 0) {
+    throw new Error('Platform credential verification did not return an organization ID.');
+  }
+  return data.organizationId;
+}
+
 export async function fetchEnvironments(token: string, orgId: string, projectId: string): Promise<Environment[]> {
   const resp = await fetch(`${getApiUrl()}/v1/projects/${projectId}/environments`, {
     headers: {

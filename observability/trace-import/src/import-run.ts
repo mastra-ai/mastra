@@ -43,7 +43,8 @@ const CONSISTENCY_WARNING =
   'Langfuse observations from older SDKs or direct OTLP exporters can take up to 15 minutes to appear. Re-run with an overlapping window if the source was still receiving traffic.';
 
 export interface RunTraceImportOptions {
-  source: {
+  /** Required for a new import and while a resumed import is still downloading source data. */
+  source?: {
     baseUrl: string;
     publicKey: string;
     secretKey: string;
@@ -59,15 +60,18 @@ export interface RunTraceImportOptions {
   dryRun?: boolean;
   keepState?: boolean;
   batchSize?: number;
+  maxStagingBytes?: number;
+  signal?: AbortSignal;
+  confirm?: (report: TraceImportReport) => Promise<boolean>;
+}
+
+/** Test and resource-limit seams kept outside the package's public entry point. */
+export interface RunTraceImportDependencies {
   maxBatchBytes?: number;
-  maxSpoolBytes?: number;
   now?: Date;
   fetch?: FetchLike;
   sleep?: Sleep;
-  signal?: AbortSignal;
-  /** @internal Enabled by default. This exists so isolated upload tests can avoid mocking the query service. */
   verify?: boolean;
-  confirm?: (report: TraceImportReport) => Promise<boolean>;
 }
 
 function sha256(value: string): string {
@@ -570,10 +574,17 @@ async function cleanupSensitiveState(directory: string): Promise<void> {
   await rm(join(directory, BATCHES_DIRECTORY), { recursive: true, force: true });
 }
 
-export async function runTraceImport(options: RunTraceImportOptions): Promise<TraceImportReport> {
+export function runTraceImport(options: RunTraceImportOptions): Promise<TraceImportReport> {
+  return runTraceImportWithDependencies(options);
+}
+
+export async function runTraceImportWithDependencies(
+  options: RunTraceImportOptions,
+  dependencies: RunTraceImportDependencies = {},
+): Promise<TraceImportReport> {
   const batchSize = options.batchSize ?? DEFAULT_TARGET_BATCH_SIZE;
-  const maxBatchBytes = options.maxBatchBytes ?? DEFAULT_TARGET_BATCH_BYTES;
-  const maxSpoolBytes = options.maxSpoolBytes ?? DEFAULT_MAX_SOURCE_SPOOL_BYTES;
+  const maxBatchBytes = dependencies.maxBatchBytes ?? DEFAULT_TARGET_BATCH_BYTES;
+  const maxSpoolBytes = options.maxStagingBytes ?? DEFAULT_MAX_SOURCE_SPOOL_BYTES;
   if (!Number.isInteger(batchSize) || batchSize < 1 || batchSize > MAX_TARGET_BATCH_SIZE) {
     throw new Error(`Batch size must be an integer from 1 to ${MAX_TARGET_BATCH_SIZE}.`);
   }
@@ -586,14 +597,16 @@ export async function runTraceImport(options: RunTraceImportOptions): Promise<Tr
 
   const target = resolveCollectorEndpoint(options.target.collectorUrl, options.target.projectId);
   let manifest: TraceImportManifest;
-  const sourceClient = new LangfuseObservationsClient({
-    ...options.source,
-    fetch: options.fetch,
-    sleep: options.sleep,
-    onRetry: () => {
-      manifest.counts.sourceRetries += 1;
-    },
-  });
+  const sourceClient = options.source
+    ? new LangfuseObservationsClient({
+        ...options.source,
+        fetch: dependencies.fetch,
+        sleep: dependencies.sleep,
+        onRetry: () => {
+          manifest.counts.sourceRetries += 1;
+        },
+      })
+    : undefined;
   let directory: string;
   if (options.resumeId) {
     directory = resolveImportStateDirectory({
@@ -603,13 +616,16 @@ export async function runTraceImport(options: RunTraceImportOptions): Promise<Tr
     });
     manifest = await readManifest(directory);
     assertResumeCompatible(manifest, {
-      sourceBaseUrl: sourceClient.baseUrl,
+      sourceBaseUrl: sourceClient?.baseUrl ?? manifest.source.baseUrl,
       projectId: options.target.projectId,
       collectorOrigin: target.origin,
       environment: options.target.environment,
     });
   } else {
-    const snapshotAt = (options.now ?? new Date()).toISOString();
+    if (!sourceClient) {
+      throw new Error('Langfuse credentials are required to start a trace import.');
+    }
+    const snapshotAt = (dependencies.now ?? new Date()).toISOString();
     const cutoffAt = new Date(Date.parse(snapshotAt) - DEFAULT_RETENTION_DAYS * 24 * 60 * 60 * 1000).toISOString();
     const initialized = await initializeImportState({
       stateRoot: options.stateRoot,
@@ -626,6 +642,11 @@ export async function runTraceImport(options: RunTraceImportOptions): Promise<Tr
 
   try {
     if (manifest.phase !== 'complete' && !manifest.source.complete) {
+      if (!sourceClient) {
+        throw new Error(
+          'Langfuse credentials are required because this resumed import has not finished downloading source data.',
+        );
+      }
       await stageSource(directory, manifest, sourceClient, maxSpoolBytes, options.signal);
     }
     if (manifest.phase === 'reading' || (manifest.phase === 'paused' && manifest.batches.length === 0)) {
@@ -639,7 +660,7 @@ export async function runTraceImport(options: RunTraceImportOptions): Promise<Tr
     }
     if (manifest.phase === 'complete') {
       if (
-        options.verify !== false &&
+        dependencies.verify !== false &&
         manifest.verification.status !== 'verified' &&
         manifest.verification.samples.length > 0
       ) {
@@ -655,10 +676,10 @@ export async function runTraceImport(options: RunTraceImportOptions): Promise<Tr
               collectorOrigin: target.origin,
               projectId: options.target.projectId,
               accessToken: options.target.accessToken,
-              fetch: options.fetch,
+              fetch: dependencies.fetch,
             }),
             DEFAULT_VERIFICATION_MAX_ATTEMPTS,
-            options.sleep ?? defaultSleep,
+            dependencies.sleep ?? defaultSleep,
             options.signal,
           );
         }
@@ -686,8 +707,8 @@ export async function runTraceImport(options: RunTraceImportOptions): Promise<Tr
         collectorUrl: options.target.collectorUrl,
         projectId: options.target.projectId,
         accessToken: options.target.accessToken,
-        fetch: options.fetch,
-        sleep: options.sleep,
+        fetch: dependencies.fetch,
+        sleep: dependencies.sleep,
         onRetry: () => {
           manifest.counts.targetRetries += 1;
         },
@@ -695,7 +716,7 @@ export async function runTraceImport(options: RunTraceImportOptions): Promise<Tr
       await uploadBatches(directory, manifest, collectorClient, options.signal);
     }
 
-    if (options.verify !== false && manifest.verification.samples.length > 0) {
+    if (dependencies.verify !== false && manifest.verification.samples.length > 0) {
       await verifyUploadedTraces(
         directory,
         manifest,
@@ -703,10 +724,10 @@ export async function runTraceImport(options: RunTraceImportOptions): Promise<Tr
           collectorOrigin: target.origin,
           projectId: options.target.projectId,
           accessToken: options.target.accessToken!,
-          fetch: options.fetch,
+          fetch: dependencies.fetch,
         }),
         DEFAULT_VERIFICATION_MAX_ATTEMPTS,
-        options.sleep ?? defaultSleep,
+        dependencies.sleep ?? defaultSleep,
         options.signal,
       );
     }

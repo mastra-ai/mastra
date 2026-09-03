@@ -98,13 +98,30 @@ describe('assembleTraces', () => {
     expect(result.skipped).toEqual([]);
   });
 
-  it('does not fabricate a physical root for an app root whose external parent is absent', () => {
+  it('detaches an explicitly marked app root whose external physical parent is absent', () => {
     const result = assembleTraces(
       [observation({ parentObservationId: 'external-parent', isRootObservation: true })],
       window,
     );
+    expect(result.traces).toMatchObject([
+      {
+        sourceTraceId: 'trace-1',
+        observations: [{ id: 'root', parentObservationId: 'external-parent', isRootObservation: true }],
+      },
+    ]);
+    expect(result.skipped).toEqual([]);
+  });
+
+  it('does not detach an unmarked observation whose physical parent is absent', () => {
+    const result = assembleTraces([observation({ parentObservationId: 'external-parent' })], window);
     expect(result.traces).toEqual([]);
     expect(result.skipped).toMatchObject([{ reason: 'missing_root' }]);
+  });
+
+  it('skips a trace that completed after the fixed snapshot', () => {
+    const result = assembleTraces([observation({ endTime: '2026-09-03T00:00:00.001Z' })], window);
+    expect(result.traces).toEqual([]);
+    expect(result.skipped).toMatchObject([{ reason: 'completed_after_snapshot', detail: 'root' }]);
   });
 
   it('treats a blank trace ID as missing', () => {

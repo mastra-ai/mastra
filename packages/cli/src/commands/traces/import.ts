@@ -1,17 +1,12 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { isAbsolute, resolve } from 'node:path';
 import * as p from '@clack/prompts';
-import {
-  resolveCollectorEndpoint,
-  runTraceImport,
-  TRACE_IMPORT_MAPPER_VERSION,
-  type TraceImportReport,
-} from '@mastra/trace-import';
+import { runTraceImport, TRACE_IMPORT_MAPPER_VERSION, type TraceImportReport } from '@mastra/trace-import';
 import { parse } from 'dotenv';
 import pc from 'picocolors';
 import { getAnalytics } from '../../analytics/index.js';
 import { getCurrentOrgId, getToken } from '../auth/credentials.js';
-import { fetchProjects } from '../env/platform-api.js';
+import { fetchProjects, fetchTokenOrganizationId } from '../env/platform-api.js';
 import { loadProjectConfig } from '../studio/project-config.js';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -25,6 +20,7 @@ export interface TraceImportCliOptions {
   resume?: string;
   stateDir?: string;
   batchSize?: number;
+  maxStagingMb?: number;
   json?: boolean;
   yes?: boolean;
   keepState?: boolean;
@@ -62,16 +58,25 @@ async function resolveProjectId(
 
   let token: string;
   let organizationId: string | null;
-  try {
-    [token, organizationId] = await Promise.all([
-      platformAccessToken ? Promise.resolve(platformAccessToken) : getToken(undefined, { allowLogin: false }),
-      getCurrentOrgId(),
-    ]);
-  } catch (cause) {
-    throw new Error(
-      `Project "${wanted}" is not a UUID and could not be resolved as a slug. Log in with mastra auth login or pass the project ID.`,
-      { cause },
-    );
+  if (platformAccessToken) {
+    token = platformAccessToken;
+    try {
+      organizationId = await fetchTokenOrganizationId(platformAccessToken);
+    } catch (cause) {
+      throw new Error(
+        `Project "${wanted}" is a slug, but the Platform credential could not be verified. Check MASTRA_PLATFORM_ACCESS_TOKEN or pass a project UUID.`,
+        { cause },
+      );
+    }
+  } else {
+    try {
+      [token, organizationId] = await Promise.all([getToken(undefined, { allowLogin: false }), getCurrentOrgId()]);
+    } catch (cause) {
+      throw new Error(
+        `Project "${wanted}" is not a UUID and could not be resolved as a slug. Log in with mastra auth login or pass the project ID.`,
+        { cause },
+      );
+    }
   }
   if (!organizationId) {
     throw new Error('No active Mastra organization is available to resolve the project slug.');
@@ -137,9 +142,14 @@ export async function traceImportAction(options: TraceImportCliOptions): Promise
   const publicKey = envValue(env, 'LANGFUSE_PUBLIC_KEY');
   const secretKey = envValue(env, 'LANGFUSE_SECRET_KEY');
   const baseUrl = envValue(env, 'LANGFUSE_BASE_URL');
-  if (!publicKey || !secretKey || !baseUrl) {
+  const hasSourceCredentials = Boolean(publicKey || secretKey || baseUrl);
+  if (hasSourceCredentials && (!publicKey || !secretKey || !baseUrl)) {
+    throw new Error('LANGFUSE_PUBLIC_KEY, LANGFUSE_SECRET_KEY, and LANGFUSE_BASE_URL must be provided together.');
+  }
+  if (!options.resume && (!publicKey || !secretKey || !baseUrl)) {
     throw new Error('LANGFUSE_PUBLIC_KEY, LANGFUSE_SECRET_KEY, and LANGFUSE_BASE_URL are required.');
   }
+  const source = publicKey && secretKey && baseUrl ? { baseUrl, publicKey, secretKey } : undefined;
 
   const preferredAccessToken = envValue(env, 'MASTRA_PLATFORM_ACCESS_TOKEN');
   const legacyAccessToken = envValue(env, 'MASTRA_CLOUD_ACCESS_TOKEN');
@@ -150,7 +160,6 @@ export async function traceImportAction(options: TraceImportCliOptions): Promise
       : undefined;
   const projectId = await resolveProjectId(options.project, env, accessToken);
   const collectorUrl = options.platformUrl ?? envValue(env, 'MASTRA_PLATFORM_OBSERVABILITY_ENDPOINT');
-  const collector = resolveCollectorEndpoint(collectorUrl, projectId);
   if (!options.dryRun && !accessToken) {
     throw new Error(
       'MASTRA_PLATFORM_ACCESS_TOKEN is required for an import (MASTRA_CLOUD_ACCESS_TOKEN is accepted temporarily as a deprecated fallback). Use --dry-run to validate without it.',
@@ -178,11 +187,11 @@ export async function traceImportAction(options: TraceImportCliOptions): Promise
   if (!options.json) p.intro(pc.cyan('Mastra Langfuse trace import'));
   try {
     const baseReport = await runTraceImport({
-      source: { baseUrl, publicKey, secretKey },
+      source,
       target: {
         projectId,
         accessToken,
-        collectorUrl: collector.endpoint,
+        collectorUrl,
         environment: options.environment,
       },
       stateRoot,
@@ -190,6 +199,7 @@ export async function traceImportAction(options: TraceImportCliOptions): Promise
       dryRun: options.dryRun,
       keepState: options.keepState,
       batchSize: options.batchSize,
+      maxStagingBytes: options.maxStagingMb === undefined ? undefined : options.maxStagingMb * 1024 * 1024,
       signal: controller.signal,
       confirm: options.yes
         ? undefined

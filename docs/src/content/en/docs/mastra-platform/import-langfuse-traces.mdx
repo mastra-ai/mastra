@@ -16,8 +16,8 @@ The command reads Langfuse observations, which are the individual events and spa
 The import requires:
 
 - A Langfuse Cloud project or a self-hosted Langfuse v4 or later project. The importer uses the Observations API v2.
-- The Langfuse project public key, secret key, and base URL.
-- A Mastra Platform project ID.
+- The Langfuse project public key, secret key, and base URL. These aren't required when resuming an import whose source download already completed.
+- A current Mastra Platform project ID or slug.
 - A Mastra Platform organization access token that begins with `sk_`. A token created by `mastra auth login` can't write to the observability collector.
 
 Add the credentials to `.env` in the directory where you run the command:
@@ -44,7 +44,9 @@ mastra traces import --provider langfuse --dry-run
 
 The report includes the fixed import window, source and target project IDs, eligible and skipped counts, estimated payload size, and an import ID. It never prints credentials.
 
-The source window covers physical trace roots whose Langfuse `startTime` falls within the 30 consecutive 24-hour periods before the command starts. A trace is skipped as a unit when its root or parent is missing, its parent graph is invalid, or a duration observation has no valid end time. No spans from an invalid trace are enqueued.
+The source window covers trace roots whose Langfuse `startTime` falls within the 30 consecutive 24-hour periods before the command starts. A trace is skipped as a unit when its root or parent is missing, its parent graph is invalid, a duration observation has no valid end time, or an observation completed after the fixed snapshot. No spans from an invalid trace are enqueued.
+
+This is a root-start migration window, not an end-time query. A long-running trace whose root started before the cutoff isn't selected even if it ended inside the window. Original end times still control Platform retention after import.
 
 Langfuse can make recently ingested observations visible at different times. The importer validates every observation returned in its fixed snapshot, but the API doesn't expose an expected-child count that could reveal an observation that isn't queryable yet. For a project that was receiving traffic near the snapshot boundary, wait for Langfuse's consistency window and rerun the command. Deterministic target IDs make the overlapping retry safe.
 
@@ -76,9 +78,9 @@ Use the import ID from the report to continue from the first unacknowledged batc
 mastra traces import --provider langfuse --resume <import-id> --yes
 ```
 
-Resume uses the original snapshot boundaries and saved batch contents. It rejects changes to the Langfuse host, target project, collector origin, or environment attribution. Deterministic trace and span IDs make retrying an identical batch safe with Platform's logical deduplication, but the importer doesn't provide a continuous synchronization or exactly-once delivery contract.
+Resume uses the original snapshot boundaries and saved batch contents. Once source download has completed, only the Mastra credential is required; Langfuse credentials are needed again only when resuming an unfinished source download. It rejects changes to the Langfuse host, target project, collector origin, or environment attribution. Deterministic trace and span IDs make retrying an identical batch safe with Platform's logical deduplication, but the importer doesn't provide a continuous synchronization or exactly-once delivery contract.
 
-By default, state is stored under `~/.mastra/imports/<project-id>/<import-id>/`. Source inputs and outputs can contain sensitive data. The CLI restricts local permissions and removes raw source and batch files after success. Use `--state-dir` to choose another parent directory. Use `--keep-state` only for controlled debugging because it retains those files after success.
+By default, state is stored under `~/.mastra/imports/<project-id>/<import-id>/`. Source inputs and outputs can contain sensitive data. The CLI restricts local permissions and removes raw source and batch files after success. Source staging is limited to 5,120 MiB by default; use `--max-staging-mb` when a larger export has sufficient local disk capacity. Use `--state-dir` to choose another parent directory. Use `--keep-state` only for controlled debugging because it retains those files after success.
 
 ## Timestamp and retention behavior
 
@@ -105,8 +107,9 @@ Langfuse doesn't expose a separate cancelled or aborted observation status. An o
 | `WARNING` or `DEBUG` observation | Import without classifying it as an error; retain the source level. |
 | Point-in-time `EVENT` without a duration | Import with `endedAt` equal to `startedAt`. |
 | Non-event observation without `endTime` | Skip the complete trace as incomplete. |
+| Observation completed after the fixed snapshot | Skip the complete trace so a resumed import can't include work that wasn't complete at snapshot time. |
 | Missing physical root, missing parent, multiple roots, cycle, or duplicate observation ID | Skip the complete trace as structurally unsafe. |
-| SDK application root whose physical parent wasn't exported | Skip rather than detach it from its source parent. |
+| SDK application root whose physical parent wasn't exported | Import it as the Mastra root and preserve the original physical parent ID in Langfuse metadata. |
 | Child outside its parent's time range | Import when both observations have valid individual times; asynchronous work can outlive a parent. |
 | Unknown future observation type | Import as a generic span and include a warning. |
 | User declines confirmation | Upload nothing and retain the staged plan. |
@@ -118,6 +121,6 @@ This version imports traces only. It preserves prompt IDs, names, and versions f
 
 ## Command options
 
-Use `--project` to override `MASTRA_PROJECT_ID` or the linked project configuration. Use `--platform-url` or `MASTRA_PLATFORM_OBSERVABILITY_ENDPOINT` for a regional, staging, or self-hosted collector origin. `--environment` overrides the source environment attribution for every imported span.
+Use `--project` to override `MASTRA_PROJECT_ID` or the linked project configuration. Use `--platform-url` or `MASTRA_PLATFORM_OBSERVABILITY_ENDPOINT` for a regional, staging, or self-hosted collector origin. `--environment` overrides the source environment attribution for every imported span. Use `--max-staging-mb` to raise or lower the 5,120 MiB source-staging limit.
 
 For automation, `--json` writes a machine-readable report. The command exits with status `2` when an import is safely paused and status `130` when an interrupt pauses it. See the [`mastra traces import` reference](/reference/cli/mastra#mastra-traces-import) for every option.

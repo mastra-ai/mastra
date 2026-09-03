@@ -25,6 +25,7 @@ export type TraceSkipReason =
   | 'cycle'
   | 'invalid_timestamp'
   | 'incomplete_duration'
+  | 'completed_after_snapshot'
   | 'root_outside_window'
   | 'oversized_span';
 

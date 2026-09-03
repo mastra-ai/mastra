@@ -2,10 +2,6 @@ import { Command } from 'commander';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('@mastra/trace-import', () => ({
-  resolveCollectorEndpoint: vi.fn(() => ({
-    endpoint: 'https://platform.example/projects/11111111-1111-4111-8111-111111111111/ai/spans/publish',
-    origin: 'https://platform.example',
-  })),
   runTraceImport: vi.fn(),
 }));
 
@@ -20,11 +16,12 @@ vi.mock('../auth/credentials.js', () => ({
 
 vi.mock('../env/platform-api.js', () => ({
   fetchProjects: vi.fn(),
+  fetchTokenOrganizationId: vi.fn(),
 }));
 
 const { runTraceImport } = await import('@mastra/trace-import');
 const { getToken, getCurrentOrgId } = await import('../auth/credentials.js');
-const { fetchProjects } = await import('../env/platform-api.js');
+const { fetchProjects, fetchTokenOrganizationId } = await import('../env/platform-api.js');
 const { loadProjectConfig } = await import('../studio/project-config.js');
 const prompts = await import('@clack/prompts');
 const { traceImportAction } = await import('./import.js');
@@ -77,6 +74,7 @@ describe('traces import command', () => {
     vi.mocked(loadProjectConfig).mockResolvedValue(null);
     vi.mocked(getToken).mockResolvedValue('login-token');
     vi.mocked(getCurrentOrgId).mockResolvedValue('organization-1');
+    vi.mocked(fetchTokenOrganizationId).mockResolvedValue('organization-1');
     vi.mocked(fetchProjects).mockResolvedValue([]);
     process.exitCode = undefined;
   });
@@ -97,6 +95,7 @@ describe('traces import command', () => {
     expect(importCommand?.helpInformation()).toContain('--provider <provider>');
     expect(importCommand?.helpInformation()).toContain('--dry-run');
     expect(importCommand?.helpInformation()).toContain('--resume <import-id>');
+    expect(importCommand?.helpInformation()).toContain('--max-staging-mb <megabytes>');
     expect(importCommand?.helpInformation()).not.toContain('studio');
   });
 
@@ -109,6 +108,7 @@ describe('traces import command', () => {
       project: '11111111-1111-4111-8111-111111111111',
       dryRun: true,
       json: true,
+      maxStagingMb: 6144,
     });
 
     expect(runTraceImport).toHaveBeenCalledWith(
@@ -123,9 +123,49 @@ describe('traces import command', () => {
           accessToken: undefined,
         }),
         dryRun: true,
+        maxStagingBytes: 6144 * 1024 * 1024,
       }),
     );
     expect(output).toHaveBeenCalledWith(JSON.stringify(report));
+  });
+
+  it('resumes staged data without requiring Langfuse credentials', async () => {
+    vi.stubEnv('LANGFUSE_PUBLIC_KEY', '');
+    vi.stubEnv('LANGFUSE_SECRET_KEY', '');
+    vi.stubEnv('LANGFUSE_BASE_URL', '');
+
+    await traceImportAction({
+      provider: 'langfuse',
+      project: '11111111-1111-4111-8111-111111111111',
+      resume: 'import-1',
+      yes: true,
+      json: true,
+    });
+
+    expect(runTraceImport).toHaveBeenCalledWith(
+      expect.objectContaining({
+        source: undefined,
+        resumeId: 'import-1',
+      }),
+    );
+  });
+
+  it('rejects a partial Langfuse credential set when resuming', async () => {
+    vi.stubEnv('LANGFUSE_PUBLIC_KEY', '');
+    vi.stubEnv('LANGFUSE_SECRET_KEY', '');
+    vi.stubEnv('LANGFUSE_BASE_URL', 'https://cloud.langfuse.com');
+
+    await expect(
+      traceImportAction({
+        provider: 'langfuse',
+        project: '11111111-1111-4111-8111-111111111111',
+        resume: 'import-1',
+        dryRun: true,
+        json: true,
+      }),
+    ).rejects.toThrow('LANGFUSE_PUBLIC_KEY, LANGFUSE_SECRET_KEY, and LANGFUSE_BASE_URL must be provided together.');
+
+    expect(runTraceImport).not.toHaveBeenCalled();
   });
 
   it('requires --yes when upload confirmation is unavailable', async () => {
@@ -270,7 +310,9 @@ describe('traces import command', () => {
       expect.objectContaining({ target: expect.objectContaining({ projectId: 'project-by-slug' }) }),
     );
     expect(fetchProjects).toHaveBeenCalledWith('sk_mastra_test', 'organization-1');
+    expect(fetchTokenOrganizationId).toHaveBeenCalledWith('sk_mastra_test');
     expect(getToken).not.toHaveBeenCalled();
+    expect(getCurrentOrgId).not.toHaveBeenCalled();
     expect(output).toHaveBeenCalledTimes(1);
 
     await expect(
@@ -287,6 +329,17 @@ describe('traces import command', () => {
       traceImportAction({ provider: 'langfuse', project: 'deleted-project', dryRun: true, json: true }),
     ).rejects.toThrow('Project "deleted-project" was not found in the active organization. It may be stale or deleted');
     expect(fetchProjects).toHaveBeenCalledWith('sk_mastra_test', 'organization-1');
+  });
+
+  it('explains when an organization key cannot resolve a project slug', async () => {
+    vi.mocked(fetchTokenOrganizationId).mockRejectedValue(new Error('HTTP 401'));
+
+    await expect(
+      traceImportAction({ provider: 'langfuse', project: 'current-project', dryRun: true, json: true }),
+    ).rejects.toThrow(
+      'Project "current-project" is a slug, but the Platform credential could not be verified. Check MASTRA_PLATFORM_ACCESS_TOKEN or pass a project UUID.',
+    );
+    expect(fetchProjects).not.toHaveBeenCalled();
   });
 
   it('uses resumable and interrupt exit statuses', async () => {

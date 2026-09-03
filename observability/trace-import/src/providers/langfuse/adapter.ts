@@ -144,6 +144,7 @@ function buildMetadata(
     langfuseMetadata: wrapSourceMetadata(observation.metadata),
     langfuse: definedRecord({
       isRootObservation: observation.isRootObservation ?? undefined,
+      parentObservationId: observation.parentObservationId ?? undefined,
       level: observation.level ?? undefined,
       statusMessage: observation.statusMessage ?? undefined,
       version: observation.version ?? undefined,
@@ -201,9 +202,10 @@ export function normalizeLangfuseTrace(
     const span = collectorSpanSchema.parse({
       traceId: targetTraceId,
       spanId: createTargetSpanId(trace.projectId, observation.id),
-      parentSpanId: observation.parentObservationId
-        ? createTargetSpanId(trace.projectId, observation.parentObservationId)
-        : null,
+      parentSpanId:
+        index > 0 && observation.parentObservationId
+          ? createTargetSpanId(trace.projectId, observation.parentObservationId)
+          : null,
       name: observation.name?.trim() || `langfuse:${observation.type.toLowerCase()}`,
       spanType,
       attributes: buildAttributes(observation),

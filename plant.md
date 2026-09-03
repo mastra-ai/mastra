@@ -305,13 +305,14 @@ This matches the future multi-provider shape without adding Studio code. Keep th
    - `limit=1000`
    - `fields=core,basic,time,io,metadata,model,usage,prompt,metrics,trace_context`
 5. Persist every source page to a restricted-permission local JSONL spool before advancing the manifest cursor. Store no credentials in the manifest.
+   Default the spool limit to 5,120 MiB and expose `--max-staging-mb` so an operator can choose a smaller safety bound or explicitly provision more local disk.
 6. Reconstruct traces by `traceId` using disk-backed hash shards, not an unbounded in-memory map. This allows a second pass to validate complete trees for large projects.
 7. A V0 trace is eligible only when:
    - it has a nonempty `traceId`;
-   - exactly one physical root has `parentObservationId == null` inside the snapshot window;
-   - every non-root parent is present;
+   - exactly one import root exists: either a physical root with no parent or a Langfuse `isRootObservation: true` application root whose physical parent is outside the exported trace;
+   - every non-import-root parent is present;
    - observation IDs are unique and the parent graph is acyclic;
-   - all duration observations have a valid `endTime >= startTime`;
+   - all duration observations have a valid `endTime >= startTime` and no observation completes after the fixed snapshot;
    - all timestamps parse and the root start is within `[cutoffAt, snapshotAt)`.
 8. Skip an entire invalid trace rather than uploading a partial tree. Record a stable reason and count in the report. `--dry-run` performs the complete read/validation/mapping phase without target writes.
 9. Topologically order each valid trace root-first, normalize it, validate the final collector DTO, and assemble batches bounded by both record count and serialized bytes.
@@ -333,7 +334,7 @@ This is non-negotiable for the feature:
 - The source window is fixed once per run. A resume reuses the same `snapshotAt`/`cutoffAt`; it does not slide forward.
 - Because ClickHouse TTL is `endedAt + 30 days`, imported data expires at the same wall-clock time it would have expired if it had arrived live. Importing it does not renew retention.
 
-V0 defines “last 30 days” as traces whose physical root **started** in the 30-day source window. This matches the available bounded Langfuse filter and avoids importing recent children without their older root. “Root ended in the last 30 days” is not the V0 definition because V2 does not provide an `endTime` range filter and implementing it could require an unbounded source scan.
+V0 defines “last 30 days” as traces whose import root **started** in the 30-day source window. This follows Langfuse's documented bounded-export path (`fromStartTime`/`toStartTime`) and avoids importing recent children without their older root. A hosted probe confirmed that the generic advanced filter currently accepts an `endTime` condition, but changing the product definition to “root ended in the last 30 days” would require a different tree-completeness strategy and explicit product approval. It is not silently inferred from ClickHouse's per-span TTL.
 
 ## 8. Identity, provenance, and re-import behavior
 
@@ -530,7 +531,7 @@ The final report must distinguish `read`, `eligible`, `skipped`, `enqueued`, and
 - Langfuse has no separate cancelled/aborted observation state. A completed `ERROR` observation is imported with its error and status message; a non-event without `endTime` is treated as incomplete and its entire trace is skipped.
 - `EVENT` is a point-in-time observation and may omit `endTime`; Mastra receives `endedAt = startedAt`.
 - `WARNING` and `DEBUG` remain provenance levels and do not become Mastra errors.
-- Structural ambiguity is never repaired silently. Missing roots/parents, multiple roots, duplicate IDs, cycles, and SDK app roots whose external physical parent is absent are skipped as complete trace units.
+- Structural ambiguity is never repaired silently. Missing unmarked roots/parents, multiple roots, duplicate IDs, and cycles are skipped as complete trace units. A Langfuse SDK application root explicitly marked with `isRootObservation: true` is detached only when its physical parent isn't part of the exported trace; that source parent ID is preserved in metadata.
 - Valid zero-duration observations and children outside the parent's time range are retained because asynchronous work and clock behavior can produce them without corrupting physical parentage.
 - Unknown future Langfuse types map to `generic` with a warning and retain the original type.
 - A user cancellation before upload retains the staged plan; interruption during source read, upload, or verification pauses checkpointed state for resume.
@@ -622,6 +623,16 @@ Unit and contract tests do not need real credentials. The hosted smoke test uses
 - The edge trace query returned all 10 expected deterministic span IDs, one physical root, zero broken parents, preserved timestamps, the aborted generation as a Mastra error span, the warning without false error classification, and the event as a point-in-time span.
 - No direct ClickHouse credential or connection was used for this test.
 
+### Final hardening evidence captured on 2026-09-03
+
+- A supported OTLP write created an observation with a non-null parent that was absent from its trace. Langfuse returned `isRootObservation: false`, proving that an arbitrary missing parent must remain a structural skip. The importer only detaches the documented `isRootObservation: true` application-root form.
+- A future-ending observation was visible in the fixed start-time read. Before the snapshot-completion guard it was incorrectly eligible; after the guard, the same 32-row source produced 30 eligible spans in 3 traces and skipped that trace with `completed_after_snapshot`.
+- The Platform API key resolved its bound organization through `/v1/auth/verify`; the configured old project ID was stale, while the same key returned two current projects through `/v1/projects`.
+- A real CLI dry run resolved a current project by slug and staged all source rows. The subsequent `--resume` process had no Langfuse public key, secret key, or base URL, yet it enqueued the staged 30 spans and verified all 3 sampled traces through the existing light query API.
+- The live V2 `usage` field group returned `usagePricingTierId` and `usagePricingTierName` as strings on 2 observations; both fields were present on the corresponding 2 normalized Mastra spans.
+- A synthetic load run staged and planned 50,000 observations belonging to one trace across 50 source pages and 500 target batches in 5.96 seconds, with zero skips. The 13.54 MiB spool reached about 320 MiB process RSS, documenting that a pathological single enormous trace is still the memory worst case even though ordinary projects are distributed across 64 disk shards.
+- The hosted run encountered a local DNS resolver failure for `platform.mastra.ai`. The endpoint itself was confirmed through its current public DNS record, and the test used a loopback HTTPS-forwarding proxy solely as a local DNS workaround; collector and query traffic still used their normal public HTTPS hosts.
+
 1. Seed Langfuse with a trace containing generation, tool, event, agent, embedding, warning, and error observations; include JSON/string I/O and source metadata.
 2. Include traces just inside/outside the cutoff, an incomplete trace, an orphan, and a very large field.
 3. Run dry-run and compare the report to the seed.
@@ -666,7 +677,7 @@ Adjust the exact Platform filters after checking package scripts; do not run roo
 These are the V0 decisions. They do not need credentials or maintainer input unless a maintainer wants to change the product scope deliberately:
 
 1. **Authentication:** Require the existing `MASTRA_PLATFORM_ACCESS_TOKEN=sk_*` organization key and project-scoped route. Accept `MASTRA_CLOUD_ACCESS_TOKEN` only as a warned deprecated environment-name fallback. Do not add Platform runtime code or use the ordinary CLI login token in V0. A login-only experience is a later enhancement through a short-lived token exchange.
-2. **30-day definition:** Import complete traces whose physical root `startTime` is in the immutable 30-day window. This is the only exact, bounded definition directly supported by Langfuse V2. Retention still uses the untouched source `endedAt`.
+2. **30-day definition:** Import complete traces whose import root `startTime` is in the immutable 30-day window, using Langfuse's documented bounded start-time parameters. Retention still uses the untouched source `endedAt`. An end-time-based product definition is technically possible through a different read/tree strategy, but is not assumed from the storage TTL and requires explicit product approval.
 3. **Identity:** Use deterministic namespaced hashes for valid Mastra/OTel IDs and collision isolation. Preserve every original Langfuse ID in metadata.
 4. **Signals:** Import observation spans only. Do not backfill Platform metric rows, and do not migrate scores/feedback until Platform has a lossless representation for every Langfuse score type.
 5. **Environment/region:** Preserve each Langfuse environment label by default, with `--environment` as an explicit attribution override. Resolve collector placement from `MASTRA_PLATFORM_OBSERVABILITY_ENDPOINT`; default to the production US origin only when it is absent, matching the existing exporter. Non-US imports must configure the regional endpoint explicitly because the current project config does not contain enough information to infer it safely.
