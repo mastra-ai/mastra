@@ -266,7 +266,8 @@ describe('defaultFactoryRules', () => {
       item: {
         ...item,
         source: 'linear-issue',
-        sourceKey: 'linear:ENG-42',
+        sourceKey: 'linear:issue:linear:ENG-42',
+        metadata: { identifier: 'ENG-42' },
         title: 'ENG-42: Fix intake sync',
         url: 'https://linear.app/acme/issue/ENG-42',
       },
@@ -288,7 +289,12 @@ describe('defaultFactoryRules', () => {
     const rule = defaultFactoryRules({ version: 'deployment-7' }).work.triage?.linearIssue?.onEnter;
     const context = {
       ...stageContext({ type: 'human', id: 'user-1' }, 'work'),
-      item: { ...item, source: 'linear-issue', sourceKey: 'linear:ENG-42' },
+      item: {
+        ...item,
+        source: 'linear-issue',
+        sourceKey: 'linear:issue:linear:ENG-42',
+        metadata: { identifier: 'ENG-42' },
+      },
       source: 'linearIssue',
       stage: 'triage',
       fromStage: 'intake',

@@ -30,8 +30,10 @@ function githubActorLogin(context: Pick<FactoryStageRuleContext, 'actor'>): stri
   return context.actor.type === 'github' ? context.actor.login : undefined;
 }
 
+// `sourceKey` reaches a rule as `linear:issue:linear:ENG-42`; the intake stamps the bare identifier.
 function linearIdentifier(item: FactoryRuleItemContext): string | undefined {
-  return item.sourceKey?.startsWith('linear:') ? item.sourceKey.slice('linear:'.length) : undefined;
+  const identifier = item.metadata?.identifier;
+  return typeof identifier === 'string' ? identifier : undefined;
 }
 
 /** How a run names the card it is about: the noun, the provider number when the card carries one, the link. */
