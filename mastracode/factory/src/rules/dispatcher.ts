@@ -1103,9 +1103,13 @@ export class FactoryDecisionDispatcher {
           const startedBy = item?.sessions[binding.role]?.startedBy;
           if (!startedBy) throw new Error(`Factory binding ${binding.id} has no authenticated session owner.`);
           await this.#primeCredentials?.({ orgId: record.orgId, userId: startedBy });
-          const requestContext = new RequestContext();
-          requestContext.set('user', { workosId: startedBy, organizationId: record.orgId });
           const session = await this.#requireSession(binding);
+          const requestContext = factoryRequestContext({
+            session,
+            binding,
+            userId: startedBy,
+            orgId: record.orgId,
+          });
           // The run's own verdict, not the delivery's: a kickoff delivered
           // into a run that is already terminating is consumed without
           // execution, and completing the pending start on the delivery ack

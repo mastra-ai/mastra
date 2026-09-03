@@ -3821,6 +3821,11 @@ describe('FactoryDecisionDispatcher', () => {
     expect(primeCredentials).toHaveBeenCalledWith({ orgId: 'org-1', userId: 'user-1' });
     const kickoffOptions = sendNotificationSignal.mock.calls[0]![1];
     expect(kickoffOptions?.requestContext?.get('user')).toEqual({ workosId: 'user-1', organizationId: 'org-1' });
+    expect(kickoffOptions?.requestContext?.get('controller')).toMatchObject({
+      threadId: 'thread-1',
+      resourceId: 'session-1',
+      session: { id: 'session-1', ownerId: 'user-1', modeId: 'build', modelId: 'openai/gpt-5.6-sol' },
+    });
     expect((await storage.listPendingStarts('org-1', PROJECT_ID))[0]?.status).toBe('sent');
   });
 
