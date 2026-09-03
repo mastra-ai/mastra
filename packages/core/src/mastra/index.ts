@@ -521,10 +521,12 @@ export interface Config<
   /**
    * Scheduler configuration for cron-driven workflow triggers.
    *
-   * The scheduler starts with the default worker set, even when no schedules
-   * exist yet. Set `scheduler.enabled` to `false` to disable it, or exclude the
-   * scheduler role with `MASTRA_WORKERS`. It requires a storage adapter
-   * implementing the `schedules` domain (e.g. `@mastra/libsql`).
+   * The scheduler is auto-enabled when any registered workflow declares a
+   * `schedule` config, when schedule rows exist in storage, when a schedule is
+   * created at runtime (in this process or — via the shared pubsub — in
+   * another), or when `scheduler.enabled` is true. Apps that never schedule
+   * anything never poll storage. It requires a storage adapter implementing
+   * the `schedules` domain (e.g. `@mastra/libsql`).
    */
   scheduler?: SchedulerConfig;
 
@@ -695,6 +697,15 @@ export interface MastraRecoveryConfig {
 // already-wired family also warns; falls back to the instance itself.
 const attachedLoggerOwners = new WeakMap<object, unknown>();
 
+/**
+ * Pubsub topic used to tell every process running the default worker set that
+ * a schedule now exists and the scheduler tick loop should start. Lets a
+ * standalone worker that booted with an empty schedules table discover
+ * schedules created later by the API process without continuously polling storage.
+ */
+const SCHEDULER_WAKE_TOPIC = 'scheduler';
+const SCHEDULER_WAKE_EVENT = 'scheduler.wake';
+
 export class Mastra<
   TAgents extends Record<string, Agent<any>> = Record<string, Agent<any>>,
   TWorkflows extends Record<string, AnyWorkflow> = Record<string, AnyWorkflow>,
@@ -853,6 +864,10 @@ export class Mastra<
     topic: string;
     cb: EventCallback;
   }> = [];
+  // Callback subscribed to SCHEDULER_WAKE_TOPIC while the scheduler is not
+  // running, so another process creating a schedule can start it here.
+  // Removed once the scheduler starts and in stopWorkers().
+  #schedulerWakeSubscription?: EventCallback;
 
   #events: {
     [topic: string]: ((event: Event) => Promise<void> | void)[];
@@ -998,8 +1013,8 @@ export class Mastra<
    * Returns the workflow scheduler owned by the SchedulerWorker,
    * or undefined if the scheduler is not enabled / not yet started.
    *
-   * The scheduler is created when `startWorkers()` initializes the
-   * SchedulerWorker, unless scheduling or workers are explicitly disabled.
+   * It is created when worker startup detects scheduling work, or lazily when
+   * a schedule is created after boot.
    *
    * This is runtime plumbing (the cron tick loop). To create, list, pause,
    * resume, or delete schedules use `mastra.schedules` instead.
@@ -1426,8 +1441,7 @@ export class Mastra<
       if (pubsubModes.includes('pull')) {
         defaultWorkers.push(new OrchestrationWorker());
       }
-      // SchedulerWorker is added in startWorkers() rather than here so its
-      // storage-backed runtime is only initialized when workers actually start.
+      // SchedulerWorker is added lazily in startWorkers() once scheduling work exists.
       if (config?.backgroundTasks?.enabled) {
         defaultWorkers.push(new BackgroundTaskWorker(config.backgroundTasks));
       }
@@ -2798,7 +2812,7 @@ export class Mastra<
     if (declaredSchedulesOf(agent).length === 0) return;
 
     const worker = this.#findSchedulerWorker();
-    // Workers not started yet — SchedulerWorker.init() will sync these.
+    // SchedulerWorker.init() syncs these when the scheduler starts.
     if (!worker?.scheduler) return;
 
     // A sweep is already in flight. It may already have read the agent map, so
@@ -4917,8 +4931,7 @@ export class Mastra<
           }
         })();
       }
-      // If the worker doesn't exist yet (workers not started), schedules
-      // will be registered when SchedulerWorker.init() runs.
+      // SchedulerWorker.init() registers this schedule when the scheduler starts.
     }
   }
 
@@ -5259,6 +5272,89 @@ export class Mastra<
   }
 
   /**
+   * Publish a best-effort cross-process wake after the schedule row is durable.
+   * This also runs in producer-only (`workers: false`) processes.
+   *
+   * @internal
+   */
+  async __publishSchedulerWake(scheduleId: string): Promise<void> {
+    try {
+      await this.#pubsub.publish(SCHEDULER_WAKE_TOPIC, { type: SCHEDULER_WAKE_EVENT, runId: scheduleId, data: {} });
+    } catch (err) {
+      this.#logger?.warn?.('Failed to publish scheduler wake event', err as any);
+    }
+  }
+
+  /** Subscribe until this process's scheduling workers start. Idempotent. */
+  async #wireSchedulerWakeSubscription(): Promise<void> {
+    if (this.#schedulerWakeSubscription) return;
+    const cb: EventCallback = async (event, ack, nack) => {
+      try {
+        // Persistent backends require every delivery, including unknown event
+        // types, to be settled.
+        if (event.type !== SCHEDULER_WAKE_EVENT) {
+          await ack?.();
+          return;
+        }
+        this.#schedulerRequested = true;
+        // Mid-boot (subscribed before the worker start loop ran) the flag is
+        // enough: `startWorkers()` re-checks it before returning. Injecting
+        // here would race that loop and start the scheduler twice.
+        if (this.#workersStarted) {
+          await this.#ensureSchedulingWorkersStarted();
+        }
+        await ack?.();
+      } catch (err) {
+        await nack?.();
+        // Some PubSub backends invoke callbacks without observing returned
+        // promise rejections, so log after nacking instead of rethrowing.
+        this.#logger?.warn?.('Failed to start scheduling workers from wake event', err as any);
+      }
+    };
+    this.#schedulerWakeSubscription = cb;
+    try {
+      // Wake events are transient hints; the awaited boot probe below is the
+      // durable recovery path. Starting from latest avoids replaying retained
+      // wakes and starting the scheduler when no schedule rows remain.
+      await this.#pubsub.subscribe(SCHEDULER_WAKE_TOPIC, cb, { startFrom: 'latest' });
+    } catch (err) {
+      // Allow a later startWorkers() call to retry a transient subscribe error.
+      if (this.#schedulerWakeSubscription === cb) {
+        this.#schedulerWakeSubscription = undefined;
+      }
+      throw err;
+    }
+  }
+
+  async #unwireSchedulerWakeSubscription(): Promise<void> {
+    const cb = this.#schedulerWakeSubscription;
+    if (!cb) return;
+    this.#schedulerWakeSubscription = undefined;
+    await this.#pubsub.unsubscribe(SCHEDULER_WAKE_TOPIC, cb);
+  }
+
+  /**
+   * One-shot boot probe for persisted agent, workflow, or notification-dispatch
+   * schedules. Runtime discovery uses the wake subscription instead.
+   */
+  async #detectPersistedSchedulerWork(): Promise<void> {
+    if (!this.#storage) return;
+    try {
+      const schedulesStore = await this.#storage.getStore('schedules');
+      if (!schedulesStore) return;
+
+      const rows = await schedulesStore.listSchedules();
+      // A leftover dispatcher row must not wake the scheduler when dispatch
+      // has since been disabled — nothing would consume it.
+      const dispatchDisabled = this.#notificationDispatchConfig?.enabled === false;
+      const hasWork = rows.some(row => !dispatchDisabled || row.id !== NOTIFICATION_DISPATCH_SCHEDULE_ROW_ID);
+      if (hasWork) this.#schedulerRequested = true;
+    } catch (err) {
+      this.#logger?.warn?.('Failed to detect persisted scheduler work on boot', err as any);
+    }
+  }
+
+  /**
    * Signal that a deferred notification exists and the dispatcher schedule is
    * needed. Lazily upserts the dispatcher schedule row (imperative, non-`wf_`
    * id so declarative orphan-cleanup leaves it alone) and requests the
@@ -5270,7 +5366,6 @@ export class Mastra<
   async __ensureNotificationDispatchReady(): Promise<void> {
     if (this.#notificationDispatchReady) return;
     if (this.#notificationDispatchConfig?.enabled === false) return;
-    if (this.#schedulerDisabled()) return;
     if (!this.#storage) return;
 
     try {
@@ -5312,6 +5407,7 @@ export class Mastra<
     if (this.#workersStarted) {
       await this.#ensureSchedulingWorkersStarted();
     }
+    await this.__publishSchedulerWake(NOTIFICATION_DISPATCH_SCHEDULE_ROW_ID);
   }
 
   /**
@@ -5347,23 +5443,34 @@ export class Mastra<
       mastra: this,
     };
 
-    if (!this.#findSchedulerWorker()) {
-      const sw = new SchedulerWorker(this.#schedulerConfig);
-      sw.__registerMastra(this);
-      this.#workers.push(sw);
-      await sw.init(deps);
-      await sw.start();
+    let schedulerWorker = this.#findSchedulerWorker();
+    if (!schedulerWorker) {
+      schedulerWorker = new SchedulerWorker(this.#schedulerConfig);
+      schedulerWorker.__registerMastra(this);
+      this.#workers.push(schedulerWorker);
+    }
+    if (!schedulerWorker.isRunning) {
+      await schedulerWorker.init(deps);
+      await schedulerWorker.start();
     }
 
     const agentScheduleSelected = !this.#workerFilter || this.#workerFilter.has('agent-schedule');
-    if (agentScheduleSelected && !this.#findAgentScheduleWorker()) {
-      const { AgentScheduleWorker } = await import('../schedules/worker');
-      const asw = new AgentScheduleWorker();
-      asw.__registerMastra(this);
-      this.#workers.push(asw);
-      await asw.init(deps);
-      await asw.start();
+    if (agentScheduleSelected) {
+      let agentScheduleWorker = this.#findAgentScheduleWorker();
+      if (!agentScheduleWorker) {
+        const { AgentScheduleWorker } = await import('../schedules/worker');
+        agentScheduleWorker = new AgentScheduleWorker();
+        agentScheduleWorker.__registerMastra(this);
+        this.#workers.push(agentScheduleWorker);
+      }
+      if (!agentScheduleWorker.isRunning) {
+        await agentScheduleWorker.init(deps);
+        await agentScheduleWorker.start();
+      }
     }
+
+    // Startup is complete; further wake events have nothing to do.
+    await this.#unwireSchedulerWakeSubscription();
   }
 
   private registerStaticWorkflowScorers(workflow: AnyWorkflow): void {
@@ -6166,13 +6273,37 @@ export class Mastra<
       await this.#storage.init();
     }
 
-    // The scheduler is part of the default worker set. It must be running even
-    // when storage is empty at boot because another process can create an
-    // imperative schedule later. Explicit scheduler/worker opt-outs and worker
-    // role filters still take precedence.
+    // Skip the boot probe when it cannot affect startup. Besides avoiding an
+    // unnecessary query, this preserves request-scoped storage behavior from
+    // #20550.
     const schedulerSelected =
       !this.#schedulerDisabled() && (!this.#workerFilter || this.#workerFilter.has('scheduler'));
-    if (!name && schedulerSelected && this.#storage) {
+    const schedulerForcedByFilter = schedulerSelected && (this.#workerFilter?.has('scheduler') ?? false);
+
+    // Subscribe before probing so a schedule committed during boot cannot fall
+    // between the probe and subscription.
+    if (!name && schedulerSelected && this.#storage && !this.#findSchedulerWorker()?.isRunning) {
+      try {
+        await this.#wireSchedulerWakeSubscription();
+      } catch (err) {
+        // The wake subscription is a cross-process hint; the boot probe and
+        // `scheduler.enabled` remain the durable paths. Don't let a pubsub
+        // failure on this one topic keep every other worker from starting.
+        this.#logger?.warn?.(
+          'Failed to subscribe to scheduler wake events; scheduler will not wake on demand',
+          err as any,
+        );
+      }
+    }
+
+    if (!name && schedulerSelected && !this.#schedulerRequested && !schedulerForcedByFilter) {
+      await this.#detectPersistedSchedulerWork();
+    }
+
+    // Do not create the polling worker until work exists. An explicit
+    // MASTRA_WORKERS=scheduler filter remains an unconditional opt-in for
+    // dedicated scheduler processes.
+    if (!name && (this.#shouldEnableScheduler() || schedulerForcedByFilter) && this.#storage) {
       if (!this.#findSchedulerWorker()) {
         const sw = new SchedulerWorker(this.#schedulerConfig);
         sw.__registerMastra(this);
@@ -6267,6 +6398,18 @@ export class Mastra<
     // runtime signals (e.g. `mastra.schedules.create()`) know whether they need
     // to lazily inject + start additional workers themselves.
     this.#workersStarted = true;
+
+    // A wake event (or a local `schedules.create()`) that landed while this
+    // method was running only flipped the request flag, because injecting
+    // workers mid-boot would race the start loop above. Honor it now.
+    if (!name && this.#schedulerRequested && !this.#findSchedulerWorker()) {
+      await this.#ensureSchedulingWorkersStarted();
+    }
+
+    // The wake subscription is only needed while the scheduler is stopped.
+    if (this.#findSchedulerWorker()?.isRunning) {
+      await this.#unwireSchedulerWakeSubscription();
+    }
   }
 
   /**
@@ -6414,12 +6557,20 @@ export class Mastra<
    * Stop all running workers and unsubscribe event listeners.
    */
   public async stopWorkers(): Promise<void> {
-    // A background-task dispatch may have kicked off a lazy execution-worker
-    // start (`__ensureExecutionWorkersStarted`) that is still in flight. Wait
-    // for it so the teardown below covers what it started — otherwise the
-    // start finishes after this method returns, leaving workers running and
-    // subscriptions wired behind a "stopped" instance. Failures are already
-    // logged by the start path; here they just mean there is less to stop.
+    // Block new lazy starts immediately. Runtime signals that arrive during
+    // teardown still set their request flags, so a later startWorkers() can
+    // honor them, but they must not resurrect workers behind a stopped instance.
+    this.#workersStarted = false;
+
+    // A runtime signal may have kicked off a lazy worker start that is still in
+    // flight. Wait for it so the teardown below covers what it started —
+    // otherwise the start can finish after this method returns, leaving workers
+    // running and subscriptions wired behind a "stopped" instance. Failures are
+    // already logged by the start paths; here they just mean there is less to
+    // stop.
+    while (this.#schedulingWorkersStartPromise) {
+      await this.#schedulingWorkersStartPromise.catch(() => {});
+    }
     while (this.#executionWorkersStartPromise) {
       await this.#executionWorkersStartPromise.catch(() => {});
     }
@@ -6444,9 +6595,9 @@ export class Mastra<
       await this.#pubsub.unsubscribe(topic, cb);
     }
     this.#userEventSubscriptions = [];
+    await this.#unwireSchedulerWakeSubscription();
 
     await this.#pubsub.flush();
-    this.#workersStarted = false;
     this.#executionWorkersStarted = false;
   }
 

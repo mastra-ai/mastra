@@ -1,5 +1,13 @@
 # @mastra/hono
 
+## 1.7.6-alpha.9
+
+### Patch Changes
+
+- Updated dependencies [[`7686114`](https://github.com/mastra-ai/mastra/commit/7686114e3802f4cea414377eaf10999524d670fa), [`50469b2`](https://github.com/mastra-ai/mastra/commit/50469b2d085fc8550579ca4b741eb359d1705abc), [`809e882`](https://github.com/mastra-ai/mastra/commit/809e882ee9c154ac642eaed396163df706db6ae4), [`74b21fd`](https://github.com/mastra-ai/mastra/commit/74b21fd9bbe88e770d9acf4e00e01c8bbb7c9e61), [`c5c9ffc`](https://github.com/mastra-ai/mastra/commit/c5c9ffc3b36bdc7b17d6f911be81e28ba02acfad), [`7df48dc`](https://github.com/mastra-ai/mastra/commit/7df48dc2c9538a3228ac5a77391649a6c85f8e48)]:
+  - @mastra/core@1.64.0-alpha.9
+  - @mastra/server@1.64.0-alpha.9
+
 ## 1.7.6-alpha.8
 
 ### Patch Changes

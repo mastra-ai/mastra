@@ -1,5 +1,44 @@
 # @mastra/core
 
+## 1.64.0-alpha.9
+
+### Minor Changes
+
+- Added a review workflow status to observability feedback. ([#22805](https://github.com/mastra-ai/mastra/pull/22805))
+
+  - Feedback records now carry a `reviewStatus` (`needs-review` | `reviewed`), defaulting to `needs-review` and settable at creation; `listFeedback` can filter on it.
+  - New storage method `updateFeedbackReviewStatus` and `PATCH /api/observability/feedback/:feedbackId/review-status` endpoint (requires `observability:write`), exposed on the client as `updateFeedbackReviewStatus`.
+
+  ```ts
+  const { feedback } = await client.listFeedback({
+    filters: { reviewStatus: 'needs-review' },
+    pagination: { page: 0, perPage: 20 },
+  });
+
+  await client.updateFeedbackReviewStatus({
+    feedbackId: feedback[0].feedbackId,
+    reviewStatus: 'reviewed',
+  });
+  ```
+
+### Patch Changes
+
+- Fixed the scheduler polling storage every 10 seconds in apps that never create a schedule, which kept Railway/Neon-style deployments from scaling to zero. The scheduler now runs a single `listSchedules()` check at boot and only starts polling when a schedule exists or is created (or when `scheduler: { enabled: true }` / `MASTRA_WORKERS=scheduler` opts in explicitly), and worker processes learn about schedules created by the API process through the shared PubSub backend instead of constant polling. Also fixed deferred notifications sent from a `workers: false` API process never being dispatched: that process now registers the dispatcher schedule so a standalone worker can run it. ([#22909](https://github.com/mastra-ai/mastra/pull/22909))
+
+- Fixed durable agent run recovery losing the fallback model list. After a process restart, DurableAgent.recover() now restores the live fallback models with the ids the run was prepared with, so recovered runs keep using custom or dynamically resolved fallback model instances instead of failing or falling back to models rebuilt from serialized config. Fixes [#22594](https://github.com/mastra-ai/mastra/issues/22594). ([#22860](https://github.com/mastra-ai/mastra/pull/22860))
+
+- Fixed durable agents dropping already-streamed assistant text from memory when a run is aborted mid-stream. The partial response was visible in the live stream and in the onAbort callback, but disappeared after a reload or memory recall — only the user message remained. Aborted runs now persist the partial assistant message to memory, matching the regular agent's behavior. Fixes #22593 ([#22872](https://github.com/mastra-ai/mastra/pull/22872))
+
+- Fixed UnixSocketPubSub accepting unbounded inbound frames. Added a `maxInboundFrameBytes` option (default 64 MiB); a connection that sends a larger frame, or an unterminated partial frame beyond that size, is disconnected, and partial frames are buffered compactly regardless of how they are fragmented, so a single peer can no longer exhaust broker memory. Fixes #22376 ([#22882](https://github.com/mastra-ai/mastra/pull/22882))
+
+  ```ts
+  import { UnixSocketPubSub } from '@mastra/core/events';
+
+  const pubsub = new UnixSocketPubSub('/tmp/mastra.sock', {
+    maxInboundFrameBytes: 8 * 1024 * 1024, // 8 MiB
+  });
+  ```
+
 ## 1.64.0-alpha.8
 
 ### Patch Changes

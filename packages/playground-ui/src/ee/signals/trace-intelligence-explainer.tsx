@@ -25,7 +25,7 @@ export function TraceIntelligenceExplainer({ signalCatalog }: { signalCatalog: r
       </TooltipTrigger>
       <TooltipContent className="max-w-sm space-y-3 p-4 text-xs">
         <p className="text-neutral5">
-          Every trace from this agent is analyzed for {enabledSignals.length === 4 ? 'four' : enabledSignals.length}{' '}
+          Every trace is analyzed for {enabledSignals.length === 4 ? 'four' : enabledSignals.length}{' '}
           {enabledSignals.length === 1 ? 'signal' : 'signals'}, and traces with similar signals are clustered into named
           themes.
         </p>

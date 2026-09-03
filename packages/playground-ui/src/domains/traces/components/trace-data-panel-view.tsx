@@ -33,7 +33,7 @@ import { truncateString } from '@/lib/truncate-string';
 
 export type TraceDataPanelPlacement = 'traces-list' | 'trace-page';
 
-export type TraceDataPanelTab = 'details' | 'scores' | 'feedback';
+export type TraceDataPanelTab = 'details' | 'partial-thread' | 'scores' | 'feedback';
 
 export interface TraceDataPanelViewProps {
   traceId: string;
@@ -89,6 +89,8 @@ export interface TraceDataPanelViewProps {
   feedbackTabSlot?: (args: { traceId: string }) => ReactNode;
   /** Optional count shown in the "Feedback" tab label. */
   feedbackTabBadge?: ReactNode;
+  /** When provided, a "Messages" tab renders the trace as one reconstructed agent turn. */
+  partialThreadTabSlot?: (args: { traceId: string }) => ReactNode;
   activeTab?: TraceDataPanelTab;
   onTabChange?: (tab: TraceDataPanelTab) => void;
   /**
@@ -126,6 +128,7 @@ export function TraceDataPanelView({
   scoresTabBadge,
   feedbackTabSlot,
   feedbackTabBadge,
+  partialThreadTabSlot,
   activeTab,
   onTabChange,
   spanPanelSlot,
@@ -338,7 +341,7 @@ export function TraceDataPanelView({
                 );
 
                 // No extra tab slots → render details directly without the Tabs wrapper.
-                if (!scoresTabSlot && !feedbackTabSlot) return detailsBody;
+                if (!partialThreadTabSlot && !scoresTabSlot && !feedbackTabSlot) return detailsBody;
 
                 return (
                   <Tabs<TraceDataPanelTab>
@@ -346,30 +349,36 @@ export function TraceDataPanelView({
                     value={activeTab}
                     onValueChange={onTabChange}
                     className={
-                      activeTab === 'scores' || activeTab === 'feedback'
+                      activeTab === 'partial-thread' || activeTab === 'scores' || activeTab === 'feedback'
                         ? 'grid h-full min-h-0 grid-rows-[auto_1fr]'
                         : undefined
                     }
                   >
                     <TabList variant="pill-ghost" className="px-0">
                       <Tab value="details">Spans</Tab>
-                      {scoresTabSlot && (
-                        <Tab value="scores">Evaluations {scoresTabBadge != null && <>({scoresTabBadge})</>}</Tab>
-                      )}
+                      {partialThreadTabSlot && <Tab value="partial-thread">Messages</Tab>}
                       {feedbackTabSlot && (
-                        <Tab value="feedback">Feedback {feedbackTabBadge != null && <>({feedbackTabBadge})</>}</Tab>
+                        <Tab value="feedback">Feedback{feedbackTabBadge != null && <> ({feedbackTabBadge})</>}</Tab>
+                      )}
+                      {scoresTabSlot && (
+                        <Tab value="scores">Scores{scoresTabBadge != null && <> ({scoresTabBadge})</>}</Tab>
                       )}
                     </TabList>
 
                     <TabContent value="details">{detailsBody}</TabContent>
-                    {scoresTabSlot && (
-                      <TabContent value="scores" className="h-full min-h-0">
-                        {scoresTabSlot({ traceId, rootSpanId: rootSpan?.spanId })}
+                    {partialThreadTabSlot && (
+                      <TabContent value="partial-thread" className="h-full min-h-0">
+                        {partialThreadTabSlot({ traceId })}
                       </TabContent>
                     )}
                     {feedbackTabSlot && (
                       <TabContent value="feedback" className="h-full min-h-0">
                         {feedbackTabSlot({ traceId })}
+                      </TabContent>
+                    )}
+                    {scoresTabSlot && (
+                      <TabContent value="scores" className="h-full min-h-0">
+                        {scoresTabSlot({ traceId, rootSpanId: rootSpan?.spanId })}
                       </TabContent>
                     )}
                   </Tabs>
