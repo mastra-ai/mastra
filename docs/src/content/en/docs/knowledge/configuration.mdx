@@ -83,7 +83,7 @@ Reconciliation is additive and idempotent:
 
 ## Compile scope-type descriptions
 
-A configured scope type can compile child structure once and apply it when a new concrete scope is materialized. Use `$scope` for the new scope, `$self` for the caller's contextual write scope, and `$parent` when the concrete scope has exactly one parent.
+A configured scope type can compile child structure once and apply it when a new concrete scope is materialized. Only descriptions declared in the host's `scopes` configuration request compilation; built-in descriptions remain placement guidance. Use `$scope` for the new scope, `$self` for the caller's contextual write scope, and `$parent` when the concrete scope has exactly one parent.
 
 ```typescript
 const knowledge = new Knowledge({
