@@ -5,3 +5,7 @@
 ---
 
 Added storage-backed pagination, ordering, filtering, and message includes to Agent Controller message listing. Existing Session and numeric client APIs continue to return message arrays for compatibility.
+
+```ts
+const page = await session.listMessages('thread-id', { perPage: 20, page: 0 });
+```
