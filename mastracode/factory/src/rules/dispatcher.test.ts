@@ -1116,7 +1116,13 @@ describe('FactoryDecisionDispatcher', () => {
 
   describe('a role handed past on a shared session', () => {
     /** Seat `role` on the one session every role of a card shares. */
-    async function bindRole(storage: WorkItemsStorage, workItemId: string, role: string, kickoffKey?: string) {
+    async function bindRole(
+      storage: WorkItemsStorage,
+      workItemId: string,
+      role: string,
+      kickoffKey?: string,
+      resourceId = PROJECT_ID,
+    ) {
       const prepared = await storage.prepareRunStart({
         orgId: 'org-1',
         userId: 'user-1',
@@ -1133,7 +1139,7 @@ describe('FactoryDecisionDispatcher', () => {
         },
         role,
         session: { sessionId: 'session-1', branch: 'factory/issue-1', threadId: 'thread-1' },
-        resourceId: PROJECT_ID,
+        resourceId,
         kickoffKey: kickoffKey ?? `kickoff-${role}-${workItemId}`,
         kickoffMessage: null,
       });
@@ -1200,6 +1206,40 @@ describe('FactoryDecisionDispatcher', () => {
 
       expect(prepareBinding).not.toHaveBeenCalled();
       expect(session.sendSignal).not.toHaveBeenCalled();
+      expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]).toMatchObject({
+        status: 'succeeded',
+        attempts: 1,
+      });
+    });
+
+    it('does not treat a matching session on another resource as a successor', async () => {
+      const storage = (await createFactoryStorageForTests()).workItems;
+      const { item, transitionService } = await queueDecision(storage, planSkill('plan-other-resource'));
+      const stale = await bindRole(storage, item.id, 'plan');
+      await storage.revokeRunBinding({
+        orgId: 'org-1',
+        factoryProjectId: PROJECT_ID,
+        bindingId: stale.id,
+        revokedAt: new Date(),
+      });
+      await bindRole(storage, item.id, 'work', undefined, 'another-resource');
+      const { controller, session } = createSession();
+      const prepareBinding = vi.fn(async () => {
+        await bindRole(storage, item.id, 'plan', 'plan-after-other-resource');
+      });
+      const dispatcher = new FactoryDecisionDispatcher({
+        controller: controller as never,
+        isAutoRunEnabled: async () => true,
+        transitionService,
+        storage,
+        ownerId: 'worker-1',
+        prepareBinding,
+      });
+
+      await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
+
+      expect(prepareBinding).toHaveBeenCalledTimes(1);
+      expect(session.sendSignal).toHaveBeenCalledTimes(1);
       expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]).toMatchObject({
         status: 'succeeded',
         attempts: 1,

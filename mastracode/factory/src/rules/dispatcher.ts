@@ -1000,6 +1000,7 @@ export class FactoryDecisionDispatcher {
           successor =>
             successor.role !== role &&
             successor.status === 'active' &&
+            successor.resourceId === revoked.resourceId &&
             successor.sessionId === revoked.sessionId &&
             successor.threadId === revoked.threadId &&
             successor.createdAt.getTime() >= revoked.revokedAt!.getTime(),
