@@ -3606,19 +3606,33 @@ export function createObservabilityVNextTests(options: CreateObservabilityVNextT
             makeScore('score-del-org-a', { organizationId: 'org-a', resourceId: 'res-a' }),
             makeScore('score-del-resource-b', { organizationId: 'org-a', resourceId: 'res-b' }),
             makeScore('score-del-org-b', { organizationId: 'org-b', resourceId: 'res-b' }),
+            makeScore('score-del-org-only', { organizationId: 'org-a', resourceId: 'res-c' }),
+            makeScore('score-del-resource-only', { organizationId: 'org-c', resourceId: 'res-a' }),
           ],
         });
 
         // Mismatched tenant scope must not delete another tenant's rows.
         await storage.deleteScores({ scoreIds: ['score-del-org-a'], organizationId: 'org-b' });
-        expect((await storage.listScores({})).scores).toHaveLength(3);
+        expect((await storage.listScores({})).scores).toHaveLength(5);
 
         await storage.deleteScores({
           scoreIds: ['score-del-org-a'],
           organizationId: 'org-a',
           resourceId: 'res-b',
         });
-        expect((await storage.listScores({})).scores).toHaveLength(3);
+        expect((await storage.listScores({})).scores).toHaveLength(5);
+
+        await storage.deleteScores({ scoreIds: ['score-del-org-only'], organizationId: 'org-a' });
+        await waitFor(
+          () => storage.listScores({}),
+          value => value.scores.length === 4,
+        );
+
+        await storage.deleteScores({ scoreIds: ['score-del-resource-only'], resourceId: 'res-a' });
+        await waitFor(
+          () => storage.listScores({}),
+          value => value.scores.length === 3,
+        );
 
         await storage.deleteScores({ scoreIds: ['score-del-org-a'], organizationId: 'org-a', resourceId: 'res-a' });
         const result = await waitFor(
@@ -3680,19 +3694,33 @@ export function createObservabilityVNextTests(options: CreateObservabilityVNextT
             makeFeedback('fb-del-org-a', { organizationId: 'org-a', resourceId: 'res-a' }),
             makeFeedback('fb-del-resource-b', { organizationId: 'org-a', resourceId: 'res-b' }),
             makeFeedback('fb-del-org-b', { organizationId: 'org-b', resourceId: 'res-b' }),
+            makeFeedback('fb-del-org-only', { organizationId: 'org-a', resourceId: 'res-c' }),
+            makeFeedback('fb-del-resource-only', { organizationId: 'org-c', resourceId: 'res-a' }),
           ],
         });
 
         // Mismatched tenant scope must not delete another tenant's rows.
         await storage.deleteFeedback({ feedbackIds: ['fb-del-org-a'], organizationId: 'org-b' });
-        expect((await storage.listFeedback({})).feedback).toHaveLength(3);
+        expect((await storage.listFeedback({})).feedback).toHaveLength(5);
 
         await storage.deleteFeedback({
           feedbackIds: ['fb-del-org-a'],
           organizationId: 'org-a',
           resourceId: 'res-b',
         });
-        expect((await storage.listFeedback({})).feedback).toHaveLength(3);
+        expect((await storage.listFeedback({})).feedback).toHaveLength(5);
+
+        await storage.deleteFeedback({ feedbackIds: ['fb-del-org-only'], organizationId: 'org-a' });
+        await waitFor(
+          () => storage.listFeedback({}),
+          value => value.feedback.length === 4,
+        );
+
+        await storage.deleteFeedback({ feedbackIds: ['fb-del-resource-only'], resourceId: 'res-a' });
+        await waitFor(
+          () => storage.listFeedback({}),
+          value => value.feedback.length === 3,
+        );
 
         await storage.deleteFeedback({ feedbackIds: ['fb-del-org-a'], organizationId: 'org-a', resourceId: 'res-a' });
         const result = await waitFor(
