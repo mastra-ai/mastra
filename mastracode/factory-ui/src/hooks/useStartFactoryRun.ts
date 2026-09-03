@@ -40,7 +40,7 @@ export function useStartFactoryRun() {
 
   const mutation = useMutation({
     mutationFn: async ({ branch, threadTitle, workItem }: StartFactoryRunInput) => {
-      if (!factoryId) throw new Error('Factory run requires a board work item');
+      if (!factoryId) throw new Error('A Factory session needs a factory in the route');
       if (!repository) throw new Error('Select a repository before starting a Factory run');
       const userSession = await createUserSession(baseUrl, repository.projectRepositoryId, { branch });
       const sessionId = userSession.sessionId;
