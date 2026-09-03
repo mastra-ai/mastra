@@ -327,27 +327,27 @@ const modelsToTestV1 = [
   // openrouter('anthropic/claude-3.7-sonnet'),
   // openrouter('anthropic/claude-sonnet-4.5'),
   openrouter('anthropic/claude-haiku-4.5'),
-  // openrouter('openai/gpt-4o-mini'),
-  // openrouter('openai/gpt-4.1-mini'),
-  // openrouter_v5('openai/o3-mini'),
-  // openai('o3-mini'),
+  openrouter('openai/gpt-4o-mini'),
+  openrouter('openai/gpt-4.1-mini'),
+  openai('o3-mini'),
   openai('o4-mini'),
   // openrouter('google/gemini-2.5-pro'),
   // openrouter('google/gemini-2.5-flash'),
-  openrouter('google/gemini-2.0-flash-lite-001'),
+  // gemini-2.0-flash-lite-001 was delisted from OpenRouter; use the current lite tier
+  openrouter('google/gemini-3.1-flash-lite'),
 ];
 const modelsToTestV2 = [
   // openrouter_v5('anthropic/claude-3.7-sonnet'),
   // openrouter_v5('anthropic/claude-sonnet-4.5'),
   openrouter_v5('anthropic/claude-haiku-4.5'),
-  // openrouter_v5('openai/gpt-4o-mini'),
-  // openrouter_v5('openai/gpt-4.1-mini'),
-  // openrouter_v5('openai/o3-mini'),
-  // openai_v5('o3-mini'),
+  openrouter_v5('openai/gpt-4o-mini'),
+  openrouter_v5('openai/gpt-4.1-mini'),
+  openrouter_v5('openai/o3-mini'),
+  openai_v5('o3-mini'),
   openai_v5('o4-mini'),
   // openrouter_v5('google/gemini-2.5-pro'),
   // openrouter_v5('google/gemini-2.5-flash'),
-  openrouter_v5('google/gemini-2.0-flash-lite-001'),
+  openrouter_v5('google/gemini-3.1-flash-lite'),
 ];
 
 // Specify which schemas to test - empty array means test all
