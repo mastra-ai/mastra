@@ -83,6 +83,16 @@ export type PlatformRepoTemplateResolver = () => Promise<SandboxTemplateBuilder 
 
 /** Last default-branch head resolved per clone URL, shared across resolvers in this process. */
 const lastKnownHeads = new Map<string, string>();
+const MAX_LAST_KNOWN_HEADS = 1000;
+
+function rememberHead(cloneUrl: string, sha: string): void {
+  // Re-insert so the map stays in recency order and the oldest URL is evicted first.
+  lastKnownHeads.delete(cloneUrl);
+  lastKnownHeads.set(cloneUrl, sha);
+  if (lastKnownHeads.size > MAX_LAST_KNOWN_HEADS) {
+    lastKnownHeads.delete(lastKnownHeads.keys().next().value!);
+  }
+}
 
 /**
  * Create a lazy repository template definition for PlatformSandbox, mirroring
@@ -143,7 +153,7 @@ export function createRepoTemplate(options: PlatformRepoTemplateOptions): Platfo
     let sha: string;
     if (resolved && SHA_PATTERN.test(resolved)) {
       sha = resolved;
-      lastKnownHeads.set(cloneUrl, sha);
+      rememberHead(cloneUrl, sha);
     } else {
       // A transient lookup failure (rate limit, timeout) must not drop the
       // repo steps: an older pin still boots a warm family image, and the
