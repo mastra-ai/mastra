@@ -9,6 +9,7 @@
  */
 import { describe, it, expect, vi } from 'vitest';
 import type { Agent } from '../../agent';
+import { ErrorCategory, ErrorDomain, MastraError } from '../../error';
 import type { MastraScorer } from '../../evals/base';
 import type { Mastra } from '../../mastra';
 import type { MastraCompositeStore, StorageDomains } from '../../storage/base';
@@ -551,8 +552,20 @@ describe('runExperimentItem (mode 2: caller drives loop, Mastra runs items)', ()
     expect(listed.results).toHaveLength(2);
   });
 
-  it('captures agent errors on the row instead of throwing', async () => {
-    const agent = createMockAgent('unused', true);
+  it('persists agent errors with their trace ID instead of throwing', async () => {
+    const tracedError = new MastraError(
+      {
+        id: 'AGENT_GENERATE_FAILED',
+        domain: ErrorDomain.AGENT,
+        category: ErrorCategory.USER,
+        details: { traceId: 'failed-agent-trace', spanId: 'failed-agent-span' },
+      },
+      new Error('Agent error'),
+    );
+    const agent = {
+      ...createMockAgent('unused'),
+      generate: vi.fn().mockRejectedValue(tracedError),
+    } as unknown as Agent;
     const { ds, itemIds } = await setup(THREE_ITEMS, { agent });
     const { experimentId } = await ds.createExperiment({ targetType: 'agent', targetId: 'test-agent' });
 
@@ -560,6 +573,10 @@ describe('runExperimentItem (mode 2: caller drives loop, Mastra runs items)', ()
 
     expect(result.error).toMatchObject({ message: expect.stringContaining('Agent error') });
     expect(result.output).toBeNull();
+    expect(result.traceId).toBe('failed-agent-trace');
+
+    const listed = await ds.listExperimentResults({ experimentId });
+    expect(listed.results[0]?.traceId).toBe('failed-agent-trace');
   });
 
   it('falls back to item scorerIds, then dataset scorerIds, when the experiment has no scorers', async () => {

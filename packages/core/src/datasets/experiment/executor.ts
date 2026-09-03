@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import type { Agent } from '../../agent';
 import { isSupportedLanguageModel } from '../../agent';
 import type { MessageListInput } from '../../agent/message-list';
+import { MastraError } from '../../error';
 import type { MastraScorer } from '../../evals/base';
 import type { ScorerRunInputForAgent, ScorerRunOutputForAgent } from '../../evals/types';
 import type { ScoringData } from '../../llm/model/base.types';
@@ -32,6 +33,14 @@ interface AgentGenerateResult {
   scoringData?: ScoringData;
 }
 
+function getTraceDetailsFromError(error: unknown): { traceId: string | null; spanId?: string } {
+  if (!(error instanceof MastraError)) return { traceId: null };
+
+  const traceId = typeof error.details?.traceId === 'string' ? error.details.traceId : null;
+  const spanId = typeof error.details?.spanId === 'string' ? error.details.spanId : undefined;
+  return { traceId, ...(spanId ? { spanId } : {}) };
+}
+
 /**
  * Target types supported for dataset execution.
  * Agent and Workflow are Phase 2; scorer and processor are Phase 4.
@@ -46,7 +55,7 @@ export interface ExecutionResult {
   output: unknown;
   /** Structured error if execution failed */
   error: { message: string; stack?: string; code?: string } | null;
-  /** Trace ID from agent/workflow execution (null for scorers or errors) */
+  /** Trace ID from agent/workflow execution (null when no trace was created) */
   traceId: string | null;
   /** Root span ID from agent/workflow execution (null when not traced) */
   spanId?: string | null;
@@ -174,13 +183,14 @@ export async function executeTarget(
 
     return await executionPromise;
   } catch (error) {
+    const traceDetails = getTraceDetailsFromError(error);
     return {
       output: null,
       error: {
         message: error instanceof Error ? error.message : String(error),
         stack: error instanceof Error ? error.stack : undefined,
       },
-      traceId: null,
+      ...traceDetails,
     };
   }
 }

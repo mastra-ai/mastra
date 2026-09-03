@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { Agent } from '../../../agent';
+import { ErrorCategory, ErrorDomain, MastraError } from '../../../error';
 import { RequestContext } from '../../../request-context';
 import type { Workflow } from '../../../workflows';
 import { executeTarget } from '../executor';
@@ -148,7 +149,7 @@ describe('executeTarget', () => {
       });
     });
 
-    it('captures error as string when agent throws', async () => {
+    it('captures error as string when agent throws without trace details', async () => {
       const mockAgent = createMockAgent('', true);
 
       const result = await executeTarget(mockAgent, 'agent', {
@@ -163,6 +164,45 @@ describe('executeTarget', () => {
 
       expect(result.output).toBeNull();
       expect(result.error).toEqual(expect.objectContaining({ message: 'Agent error' }));
+      expect(result.traceId).toBeNull();
+      expect(result.spanId).toBeUndefined();
+    });
+
+    it('preserves trace details when agent generation fails', async () => {
+      const providerError = new Error('Provider rejected request');
+      const tracedError = new MastraError(
+        {
+          id: 'AGENT_GENERATE_FAILED',
+          domain: ErrorDomain.AGENT,
+          category: ErrorCategory.USER,
+          details: { traceId: 'trace-123', spanId: 'span-456' },
+        },
+        providerError,
+      );
+      const mockAgent = {
+        ...createMockAgent(''),
+        generate: vi.fn().mockRejectedValue(tracedError),
+      } as unknown as Agent;
+
+      const result = await executeTarget(mockAgent, 'agent', {
+        id: 'item-4-traced',
+        datasetId: 'ds-1',
+        input: 'Test',
+        groundTruth: null,
+        version: new Date(),
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
+
+      expect(result.output).toBeNull();
+      expect(result.error).toEqual(
+        expect.objectContaining({
+          message: 'Provider rejected request',
+          stack: tracedError.stack,
+        }),
+      );
+      expect(result.traceId).toBe('trace-123');
+      expect(result.spanId).toBe('span-456');
     });
 
     it('uses generateLegacy when model is not supported', async () => {
