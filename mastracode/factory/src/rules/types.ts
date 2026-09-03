@@ -4,6 +4,7 @@ export type WorkItemSource = 'github-issue' | 'github-pr' | 'linear-issue' | 'ma
 
 /** The source label that holds an issue at rest until a maintainer decides; compared lowercased. */
 export const NEEDS_APPROVAL_LABEL = 'status: needs approval';
+export const AUTO_TRIAGED_LABEL = 'status: auto-triaged';
 
 // The label only holds a card at rest: once a person accepted it, or it sits in a working
 // lane only a person could have moved it into, the label is stale until the source catches up.

@@ -1,5 +1,6 @@
+import { AUTO_TRIAGED_LABEL } from '@mastra/factory/rules/types';
 import { relativeTime } from '../../../lib/date/relativeTime';
-import { AUTO_TRIAGED_LABEL, hasLabel } from './boardItems';
+import { hasLabel } from './boardItems';
 import { itemAppearsInStage } from './boardStages';
 import type { GithubIssue, GithubPullRequest } from './services/factory';
 import type { LinearIssue } from './services/linear';

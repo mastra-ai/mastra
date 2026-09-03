@@ -1,11 +1,10 @@
-import { NEEDS_APPROVAL_LABEL } from '@mastra/factory/rules/types';
+import { AUTO_TRIAGED_LABEL, NEEDS_APPROVAL_LABEL } from '@mastra/factory/rules/types';
 import { workItemBranch, workItemThreadTitle } from '@mastra/factory/work-item-branch';
 import { isValid } from 'date-fns';
 
 import { relativeTime } from '../../../lib/date/relativeTime';
 import type { WorkItem, WorkItemSessionRef, WorkItemSource } from './services/workItems';
 
-export const AUTO_TRIAGED_LABEL = 'status: auto-triaged';
 export const HIDDEN_CARD_LABELS = new Set([AUTO_TRIAGED_LABEL, NEEDS_APPROVAL_LABEL]);
 
 export const SOURCE_LABELS: Record<WorkItemSource, string> = {
