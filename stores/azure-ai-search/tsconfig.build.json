@@ -1,8 +1,9 @@
 {
-  "extends": "./tsconfig.json",
+  "extends": ["./tsconfig.json", "../../tsconfig.build.json"],
   "compilerOptions": {
-    "declaration": true,
-    "declarationMap": true
+    "outDir": "./dist",
+    "rootDir": "./src"
   },
-  "exclude": ["**/*.test.ts", "**/*.spec.ts", "node_modules"]
+  "include": ["src/**/*"],
+  "exclude": ["node_modules", "**/*.test.ts", "src/**/*.mock.ts"]
 }
