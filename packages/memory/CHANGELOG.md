@@ -1,5 +1,14 @@
 # @mastra/memory
 
+## 1.28.3-alpha.1
+
+### Patch Changes
+
+- Fixed observational memory buffering so transient database connection timeouts are retried instead of failing the buffer operation. ([#23019](https://github.com/mastra-ai/mastra/pull/23019))
+
+- Updated dependencies [[`ae375e6`](https://github.com/mastra-ai/mastra/commit/ae375e6799af20820d90e30f63a084ba1507b771)]:
+  - @mastra/core@1.65.0-alpha.2
+
 ## 1.28.3-alpha.0
 
 ### Patch Changes
