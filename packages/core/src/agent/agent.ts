@@ -7521,7 +7521,18 @@ export class Agent<
       }
       return result;
     } catch (error) {
-      agentSpan?.error({ error: error as Error, endTree: true });
+      // Rejections are not guaranteed to be Error instances; normalize so the
+      // span records a usable message instead of choking on null/strings.
+      const spanError =
+        error instanceof Error
+          ? error
+          : new Error(
+              typeof error === 'string'
+                ? error
+                : ((error as { message?: string } | null | undefined)?.message ??
+                    'Agent prepare workflow rejected with a non-error value'),
+            );
+      agentSpan?.error({ error: spanError, endTree: true });
       throw error;
     }
   }
