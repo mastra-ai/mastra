@@ -284,32 +284,34 @@ function applyEvent(state: TranscriptState, event: AgentControllerEvent): Transc
       return upsertMessage(state, event.message, true);
 
     case 'message_update': {
-      if (event.event.delta.length === 0) return state;
       const entryIndex = state.entries.findIndex(
         entry => entry.kind === 'message' && (entry.id === event.id || entry.message.id === event.id),
       );
       const entry = state.entries[entryIndex];
       if (!entry || entry.kind !== 'message') return state;
 
-      const partIndex = entry.message.content.parts.findLastIndex(part => part.type === 'text');
-      if (partIndex === -1) return state;
-      const part = entry.message.content.parts[partIndex];
-      if (!part || part.type !== 'text') return state;
+      const parts = [...entry.message.content.parts];
+      if (event.event.type === 'text-delta') {
+        if (event.event.delta.length === 0) return state;
+        const partIndex = parts.findLastIndex(part => part.type === 'text');
+        const part = parts[partIndex];
+        if (!part || part.type !== 'text') return state;
+        parts[partIndex] = { ...part, text: part.text + event.event.delta };
+      } else if (event.event.type === 'reasoning-delta') {
+        const part = parts[event.event.index];
+        if (!part || part.type !== 'reasoning') return state;
+        const reasoning = part.reasoning + event.event.delta;
+        parts[event.event.index] = { ...part, reasoning, details: [{ type: 'text', text: reasoning }] };
+      } else {
+        parts[event.event.index] = event.event.part;
+      }
 
-      const message = {
-        ...entry.message,
-        content: {
-          ...entry.message.content,
-          parts: entry.message.content.parts.map((candidate, index) =>
-            index === partIndex ? { ...candidate, text: part.text + event.event.delta } : candidate,
-          ),
-        },
-      };
+      const message = { ...entry.message, content: { ...entry.message.content, parts } };
       const entries = state.entries.map((candidate, index) =>
         index === entryIndex ? { ...entry, message, streaming: true } : candidate,
       );
       const next = { ...state, entries };
-      if (message.role !== 'assistant') return next;
+      if (event.event.type !== 'text-delta' || message.role !== 'assistant') return next;
 
       // The empty shell from message_start does not start decode timing. The
       // first non-empty assistant delta does, and also clears the pending turn.

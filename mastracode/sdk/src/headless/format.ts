@@ -46,7 +46,8 @@ export function formatHuman(event: AgentControllerEvent, state: HumanFormatState
       }
       return {};
     case 'message_update':
-      if (event.id !== state.activeAssistantMessageId || !event.event.delta) return {};
+      if (event.event.type !== 'text-delta' || event.id !== state.activeAssistantMessageId || !event.event.delta)
+        return {};
       state.lastTextLength += event.event.delta.length;
       return { stdout: event.event.delta };
     case 'message_end':

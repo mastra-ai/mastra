@@ -315,10 +315,22 @@ export class SessionRunEngine {
     message.content.metadata.errorMessage = errorMessage;
   }
 
-  private startCurrentMessage(state: StreamState): void {
-    if (state.messageStarted) return;
+  private startCurrentMessage(state: StreamState): boolean {
+    if (state.messageStarted) return false;
     this.#session.emit({ type: 'message_start', message: structuredClone(state.currentMessage) });
     state.messageStarted = true;
+    return true;
+  }
+
+  private emitMessagePart(state: StreamState, index: number): void {
+    if (this.startCurrentMessage(state)) return;
+    const part = state.currentMessage.content.parts[index];
+    if (!part) return;
+    this.#session.emit({
+      type: 'message_update',
+      id: state.currentMessage.id,
+      event: { type: 'part', index, part: structuredClone(part) },
+    });
   }
 
   private finishCurrentMessage(state: StreamState): void {
@@ -367,6 +379,7 @@ export class SessionRunEngine {
     const { toolCallId, toolName, result, isError, providerMetadata } = outcome;
     const toolIndex = state.toolPartById.get(toolCallId);
     const existing = toolIndex !== undefined ? state.currentMessage.content.parts[toolIndex] : undefined;
+    const partIndex = toolIndex ?? state.currentMessage.content.parts.length;
     if (existing && existing.type === 'tool-invocation') {
       existing.toolInvocation = Object.assign(existing.toolInvocation, {
         state: 'result' as const,
@@ -392,8 +405,9 @@ export class SessionRunEngine {
         toolInvocationPart.providerMetadata = providerMetadata;
       }
       state.currentMessage.content.parts.push(toolInvocationPart);
+      state.toolPartById.set(toolCallId, partIndex);
     }
-    this.startCurrentMessage(state);
+    this.emitMessagePart(state, partIndex);
     this.#session.emit({
       type: 'tool_end',
       toolCallId,
@@ -401,7 +415,6 @@ export class SessionRunEngine {
       isError,
       ...(providerMetadata ? { providerMetadata } : {}),
     });
-    // this.#session.emit({ type: 'message_update', message: state.currentMessage });
   }
 
   private abortForOmFailure({ operationType, stage, error }: { operationType: string; stage: string; error: string }) {
@@ -530,7 +543,7 @@ export class SessionRunEngine {
         const textIndex = state.currentMessage.content.parts.length;
         state.currentMessage.content.parts.push({ type: 'text', text: '' });
         state.textContentById.set(getString(getPayload(chunk).id) ?? '', { index: textIndex, text: '' });
-        this.startCurrentMessage(state);
+        this.emitMessagePart(state, textIndex);
         break;
       }
 
@@ -563,8 +576,7 @@ export class SessionRunEngine {
         const thinkingIndex = state.currentMessage.content.parts.length;
         state.currentMessage.content.parts.push({ type: 'reasoning', reasoning: '', details: [] });
         state.thinkingContentById.set(getString(getPayload(chunk).id) ?? '', { index: thinkingIndex, text: '' });
-        this.startCurrentMessage(state);
-        // this.#session.emit({ type: 'message_update', id: state.currentMessage.id, part: 'reasoning', delta: '' });
+        this.emitMessagePart(state, thinkingIndex);
         break;
       }
 
@@ -577,13 +589,15 @@ export class SessionRunEngine {
             thinkingContent.reasoning = thinkingState.text;
             thinkingContent.details = [{ type: 'text', text: thinkingState.text }];
           }
-          // this.#session.emit({ type: 'message_update', message: state.currentMessage });
-          // this.#session.emit({
-          //   type: 'message_update',
-          //   id: state.currentMessage.id,
-          //   part: 'reasoning',
-          //   delta: thinkingState.text,
-          // });
+          this.#session.emit({
+            type: 'message_update',
+            id: state.currentMessage.id,
+            event: {
+              type: 'reasoning-delta',
+              index: thinkingState.index,
+              delta: getString(getPayload(chunk).text) ?? '',
+            },
+          });
         }
         break;
       }
@@ -635,14 +649,13 @@ export class SessionRunEngine {
           },
         });
         state.toolPartById.set(toolCallId, toolIndex);
-        this.startCurrentMessage(state);
+        this.emitMessagePart(state, toolIndex);
         this.#session.emit({
           type: 'tool_start',
           toolCallId,
           toolName,
           args,
         });
-        // this.#session.emit({ type: 'message_update', message: state.currentMessage });
         break;
       }
 
@@ -695,14 +708,16 @@ export class SessionRunEngine {
           },
         };
 
+        const partIndex = toolIndex ?? state.currentMessage.content.parts.length;
         if (existing && existing.type === 'tool-invocation') {
           existing.toolInvocation = Object.assign(existing.toolInvocation, toolInvocation);
         } else {
           state.currentMessage.content.parts.push({ type: 'tool-invocation', toolInvocation });
+          state.toolPartById.set(toolCallId, partIndex);
         }
 
+        this.emitMessagePart(state, partIndex);
         this.#session.emit({ type: 'tool_end', toolCallId, result: reason, isError: false, denied: true });
-        // this.#session.emit({ type: 'message_update', message: state.currentMessage });
         break;
       }
 
@@ -1221,15 +1236,16 @@ export class SessionRunEngine {
 
     const toolIndex = state.toolPartById.get(toolCallId);
     const existing = toolIndex !== undefined ? state.currentMessage.content.parts[toolIndex] : undefined;
+    const partIndex = toolIndex ?? state.currentMessage.content.parts.length;
     if (existing && existing.type === 'tool-invocation') {
       existing.toolInvocation = Object.assign(existing.toolInvocation, toolInvocation);
     } else {
       state.currentMessage.content.parts.push({ type: 'tool-invocation', toolInvocation });
+      state.toolPartById.set(toolCallId, partIndex);
     }
 
-    this.startCurrentMessage(state);
+    this.emitMessagePart(state, partIndex);
     this.#session.emit({ type: 'tool_end', toolCallId, result: ABORTED_BY_USER_REASON, isError: false, denied: true });
-    // this.#session.emit({ type: 'message_update', message: state.currentMessage });
   }
 
   private finishStreamState(state: StreamState): { message: MastraDBMessage; suspended?: boolean } {

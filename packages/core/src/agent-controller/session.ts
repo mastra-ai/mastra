@@ -2357,22 +2357,34 @@ export class SessionDisplayState {
         };
         break;
 
-      case 'message_update':
-        if (ds.currentMessage?.id === event.id) {
-          const lastTextPart = ds.currentMessage.content.parts.findLast(p => p.type === 'text');
-          if (lastTextPart) {
-            lastTextPart.text += event.event.delta;
+      case 'message_update': {
+        if (ds.currentMessage?.id !== event.id) break;
+
+        const parts = ds.currentMessage.content.parts.map(part => structuredClone(part));
+        if (event.event.type === 'text-delta') {
+          const textIndex = parts.findLastIndex(part => part.type === 'text');
+          const textPart = parts[textIndex];
+          if (textPart?.type === 'text') {
+            textPart.text += event.event.delta;
           } else {
-            ds.currentMessage.content.parts.push({ type: 'text', text: event.event.delta });
+            parts.push({ type: 'text', text: event.event.delta });
           }
-          ds.currentMessage = {
-            ...ds.currentMessage,
-            content: {
-              ...ds.currentMessage.content,
-            },
-          };
+        } else if (event.event.type === 'reasoning-delta') {
+          const reasoningPart = parts[event.event.index];
+          if (reasoningPart?.type === 'reasoning') {
+            reasoningPart.reasoning += event.event.delta;
+            reasoningPart.details = [{ type: 'text', text: reasoningPart.reasoning }];
+          }
+        } else {
+          parts[event.event.index] = structuredClone(event.event.part);
         }
+
+        ds.currentMessage = {
+          ...ds.currentMessage,
+          content: { ...ds.currentMessage.content, parts },
+        };
         break;
+      }
 
       case 'message_end':
         break;

@@ -60,22 +60,28 @@ function trackInteractivePrompt(
   ectx.analytics?.trackInteractivePrompt(promptType, properties);
 }
 
-function appendTextDelta(message: MastraDBMessage, delta: string): MastraDBMessage | undefined {
+function applyMessageUpdate(
+  message: MastraDBMessage,
+  update: Extract<AgentControllerEvent, { type: 'message_update' }>['event'],
+): MastraDBMessage | undefined {
   if (message.role !== 'assistant' || typeof message.content === 'string') return undefined;
 
-  const textIndex = message.content.parts.findLastIndex(part => part.type === 'text');
-  const textPart = message.content.parts[textIndex];
-  if (!textPart || textPart.type !== 'text') return undefined;
+  const parts = [...message.content.parts];
+  if (update.type === 'text-delta') {
+    const textIndex = parts.findLastIndex(part => part.type === 'text');
+    const textPart = parts[textIndex];
+    if (!textPart || textPart.type !== 'text') return undefined;
+    parts[textIndex] = { ...textPart, text: textPart.text + update.delta };
+  } else if (update.type === 'reasoning-delta') {
+    const reasoningPart = parts[update.index];
+    if (!reasoningPart || reasoningPart.type !== 'reasoning') return undefined;
+    const reasoning = reasoningPart.reasoning + update.delta;
+    parts[update.index] = { ...reasoningPart, reasoning, details: [{ type: 'text', text: reasoning }] };
+  } else {
+    parts[update.index] = update.part;
+  }
 
-  return {
-    ...message,
-    content: {
-      ...message.content,
-      parts: message.content.parts.map((part, index) =>
-        index === textIndex ? { ...part, text: textPart.text + delta } : part,
-      ),
-    },
-  };
+  return { ...message, content: { ...message.content, parts } };
 }
 
 export async function dispatchEvent(
@@ -133,14 +139,16 @@ export async function dispatchEvent(
       const message = state.streamingMessage;
       if (!message || message.id !== event.id) break;
 
-      const updated = appendTextDelta(message, event.event.delta);
+      const updated = applyMessageUpdate(message, event.event);
       if (!updated) break;
 
-      state.agentRunLastStreamPartAt = Date.now();
-      if (state.decodeStartedAt === 0) {
-        state.decodeStartedAt = state.agentRunLastStreamPartAt;
+      if (event.event.type === 'text-delta') {
+        state.agentRunLastStreamPartAt = Date.now();
+        if (state.decodeStartedAt === 0) {
+          state.decodeStartedAt = state.agentRunLastStreamPartAt;
+        }
+        ectx.updateStatusLine();
       }
-      ectx.updateStatusLine();
       handleMessageUpdate(ectx, updated);
       break;
     }

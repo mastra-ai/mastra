@@ -1,5 +1,5 @@
 import type { Agent } from '../agent';
-import type { MastraDBMessage } from '../agent/message-list/state/types';
+import type { MastraDBMessage, MastraMessagePart } from '../agent/message-list/state/types';
 import type { AgentInstructions, ToolsInput } from '../agent/types';
 import type { MastraBrowser } from '../browser/browser';
 import type { AgentControllerChannelsConfig } from '../channels/agent-controller-channels';
@@ -214,7 +214,13 @@ export type AgentControllerStateSchema<T> = T;
  * Identifiers for the built-in controller tools that can be selectively disabled.
  */
 export type BuiltinToolId =
-  'ask_user' | 'submit_plan' | 'task_write' | 'task_update' | 'task_complete' | 'task_check' | 'subagent';
+  | 'ask_user'
+  | 'submit_plan'
+  | 'task_write'
+  | 'task_update'
+  | 'task_complete'
+  | 'task_check'
+  | 'subagent';
 
 /** Process-local listener notified after AgentController materializes a live session. */
 export type AgentControllerSessionCreatedListener<TState = {}> = (session: Session<TState>) => void | Promise<void>;
@@ -765,10 +771,10 @@ export function defaultOMProgressState(): OMProgressState {
  * Events emitted by the controller that UIs can subscribe to.
  *
  * A logical message emits one `message_start` containing its initial
- * `MastraDBMessage`, zero or more compact `message_update` text deltas addressed
- * by message id, and one id-only `message_end` after terminal metadata has been
- * applied. Consumers reconstruct streamed text from the ordered deltas and use
- * the id-only end to finalize the matching entry.
+ * `MastraDBMessage`, zero or more compact id-addressed `message_update` deltas,
+ * and one id-only `message_end` after terminal metadata has been applied.
+ * Consumers reconstruct streamed text, reasoning, and non-text message parts
+ * from ordered deltas, then use the id-only end to finalize the matching entry.
  */
 export type AgentControllerEvent =
   | { type: 'mode_changed'; modeId: string; previousModeId: string }
@@ -783,7 +789,10 @@ export type AgentControllerEvent =
   | {
       type: 'message_update';
       id: string;
-      event: { type: 'text-delta'; delta: string };
+      event:
+        | { type: 'text-delta'; delta: string }
+        | { type: 'reasoning-delta'; index: number; delta: string }
+        | { type: 'part'; index: number; part: MastraMessagePart };
     }
   | { type: 'message_end'; id: string }
   | { type: 'tool_start'; toolCallId: string; toolName: string; args: unknown }

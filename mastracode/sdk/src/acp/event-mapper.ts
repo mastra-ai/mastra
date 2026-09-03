@@ -94,7 +94,7 @@ export function handleAgentControllerEvent(
     }
 
     case 'message_update':
-      if (event.id === state.activeAssistantMessageId && event.event.delta) {
+      if (event.event.type === 'text-delta' && event.id === state.activeAssistantMessageId && event.event.delta) {
         state.lastTextLength += event.event.delta.length;
         sendUpdate(connection, state.sessionId, {
           sessionUpdate: 'agent_message_chunk',
