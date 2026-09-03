@@ -1375,7 +1375,7 @@ export class KnowledgeMongoDB extends KnowledgeStorage {
       const records = await (
         await this.#collection(TABLE_KNOWLEDGE_RECORDS)
       )
-        .find({ nodeId: input.sourceId, deletedAt: { $exists: false } }, sessionOptions(session))
+        .find({ nodeId: input.sourceId }, sessionOptions(session))
         .toArray();
       for (const recordRow of records) {
         await (
@@ -1385,13 +1385,10 @@ export class KnowledgeMongoDB extends KnowledgeStorage {
           { $set: { nodeId: input.targetId, updatedAt: new Date() }, $inc: { version: 1 } },
           sessionOptions(session),
         );
-        await (
-          await this.#collection(TABLE_KNOWLEDGE_MENTIONS)
-        ).updateMany({ recordId: recordRow.id }, { $set: { recordId: recordRow.id } }, sessionOptions(session));
         await this.#outbox(
           'record',
           String(recordRow.id),
-          'upsert',
+          recordRow.deletedAt ? 'delete' : 'upsert',
           await this.#getRecordScopeIds(String(recordRow.id), session),
           Number(recordRow.version) + 1,
           session,
@@ -1404,6 +1401,9 @@ export class KnowledgeMongoDB extends KnowledgeStorage {
         { $set: { targetNodeId: input.targetId } },
         sessionOptions(session),
       );
+      await (
+        await this.#collection(TABLE_KNOWLEDGE_NODE_ADDRESSES)
+      ).updateMany({ nodeId: input.sourceId }, { $set: { nodeId: input.targetId } }, sessionOptions(session));
       const now = new Date();
       const sourceResult = await (
         await this.#collection(TABLE_KNOWLEDGE_NODES)
