@@ -198,7 +198,12 @@ describe('InMemoryKnowledgeStorage canonical model', () => {
     const target = await store.createNode({ name: 'Target', scopeIds: [PROJECT_SCOPE_ID] });
     const record = await store.createRecord({ node: source, text: 'Move me', scopeIds: [PROJECT_SCOPE_ID] });
 
-    await store.mergeNodes({ sourceId: source.id, targetId: target.id, sourceVersion: source.version });
+    await store.mergeNodes({
+      sourceId: source.id,
+      targetId: target.id,
+      sourceVersion: source.version,
+      targetVersion: target.version,
+    });
     expect(
       (await store.listRecords({ node: target, scopeIds: [PROJECT_SCOPE_ID] })).records.map(item => item.id),
     ).toEqual([record.id]);
@@ -219,7 +224,12 @@ describe('InMemoryKnowledgeStorage canonical model', () => {
     const node = await store.createNode({ name: 'Addressed node', scopeIds: [PROJECT_SCOPE_ID] });
     const target = await store.createNode({ name: 'Merge target', scopeIds: [PROJECT_SCOPE_ID] });
     await store.setNodeAddress({ source: 'test', address: 'before', nodeId: node.id });
-    await store.mergeNodes({ sourceId: node.id, targetId: target.id, sourceVersion: node.version });
+    await store.mergeNodes({
+      sourceId: node.id,
+      targetId: target.id,
+      sourceVersion: node.version,
+      targetVersion: target.version,
+    });
 
     await expect(store.setNodeAddress({ source: 'test', address: 'new', nodeId: node.id })).rejects.toThrow(
       'Knowledge node not found',

@@ -12,13 +12,18 @@ import { useApiConfig } from '../api/config';
 import { queryKeys } from '../api/keys';
 import {
   fetchKnowledgeActivity,
+  fetchKnowledgeCurationEvidence,
+  fetchKnowledgeCurationMergeTargets,
+  fetchKnowledgeCurationWorklist,
   fetchKnowledgeNode,
   fetchKnowledgeGraph,
   fetchKnowledgeProposal,
   fetchKnowledgeProposals,
   fetchKnowledgeScopes,
   reviewKnowledgeProposal,
+  runKnowledgeCurationAction,
   type KnowledgeActivityFilters,
+  type KnowledgeCurationActionInput,
   type KnowledgeProposalStatus,
 } from '../ui/domains/factory/services/knowledge';
 import { RequestError } from '../ui/domains/factory/services/request';
@@ -145,6 +150,103 @@ export function useReviewKnowledgeProposal(factoryProjectId: string | undefined,
       await queryClient.invalidateQueries({ queryKey: ['factory', 'knowledge-proposals', factoryProjectId ?? null] });
       await queryClient.invalidateQueries({ queryKey: ['factory', 'knowledge-subgraph', factoryProjectId ?? null] });
       await queryClient.invalidateQueries({ queryKey: ['factory', 'knowledge-activity', factoryProjectId ?? null] });
+    },
+  });
+}
+
+export function useKnowledgeCurationWorklist(
+  factoryProjectId: string | undefined,
+  scopeId: string | undefined,
+  threadId?: string,
+) {
+  const { baseUrl } = useApiConfig();
+  return useInfiniteQuery({
+    queryKey: ['factory', 'knowledge-curation', factoryProjectId ?? null, scopeId ?? null, threadId ?? null],
+    queryFn: ({ pageParam, signal }) => {
+      if (!factoryProjectId || !scopeId) throw new Error('A Factory project and companion scope are required.');
+      return fetchKnowledgeCurationWorklist(
+        baseUrl,
+        factoryProjectId,
+        scopeId,
+        pageParam || undefined,
+        threadId,
+        signal,
+      );
+    },
+    initialPageParam: '',
+    getNextPageParam: page => page.nextCursor,
+    enabled: Boolean(factoryProjectId && scopeId),
+  });
+}
+
+export function useKnowledgeCurationEvidence(
+  factoryProjectId: string | undefined,
+  scopeId: string,
+  nodeId: string,
+  initialCursor: string | undefined,
+  enabled: boolean,
+  threadId?: string,
+) {
+  const { baseUrl } = useApiConfig();
+  return useInfiniteQuery({
+    queryKey: [
+      'factory',
+      'knowledge-curation-evidence',
+      factoryProjectId ?? null,
+      scopeId,
+      nodeId,
+      initialCursor ?? null,
+      threadId ?? null,
+    ],
+    queryFn: ({ pageParam, signal }) => {
+      if (!factoryProjectId) throw new Error('A Factory project is required.');
+      return fetchKnowledgeCurationEvidence(baseUrl, factoryProjectId, scopeId, nodeId, pageParam, threadId, signal);
+    },
+    initialPageParam: initialCursor,
+    getNextPageParam: page => page.nextCursor,
+    enabled: Boolean(factoryProjectId && initialCursor && enabled),
+  });
+}
+
+export function useKnowledgeCurationMergeTargets(
+  factoryProjectId: string | undefined,
+  scopeId: string | undefined,
+  query: string,
+  threadId?: string,
+) {
+  const { baseUrl } = useApiConfig();
+  return useQuery({
+    queryKey: [
+      'factory',
+      'knowledge-curation-targets',
+      factoryProjectId ?? null,
+      scopeId ?? null,
+      query,
+      threadId ?? null,
+    ],
+    queryFn: ({ signal }) => {
+      if (!factoryProjectId || !scopeId) throw new Error('A Factory project and companion scope are required.');
+      return fetchKnowledgeCurationMergeTargets(baseUrl, factoryProjectId, scopeId, query, threadId, signal);
+    },
+    enabled: Boolean(factoryProjectId && scopeId && query.trim()),
+  });
+}
+
+export function useKnowledgeCurationAction(factoryProjectId: string | undefined, threadId?: string) {
+  const { baseUrl } = useApiConfig();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: KnowledgeCurationActionInput) => {
+      if (!factoryProjectId) throw new Error('A Factory project is required.');
+      return runKnowledgeCurationAction(baseUrl, factoryProjectId, input, threadId);
+    },
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['factory', 'knowledge-curation', factoryProjectId ?? null] }),
+        queryClient.invalidateQueries({ queryKey: ['factory', 'knowledge-subgraph', factoryProjectId ?? null] }),
+        queryClient.invalidateQueries({ queryKey: ['factory', 'knowledge-activity', factoryProjectId ?? null] }),
+        queryClient.invalidateQueries({ queryKey: ['factory', 'knowledge-proposals', factoryProjectId ?? null] }),
+      ]);
     },
   });
 }

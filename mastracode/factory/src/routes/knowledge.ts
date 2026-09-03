@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 
-import type { Knowledge, MaterializeKnowledgeScopeInput } from '@mastra/core/knowledge';
+import { KnowledgeCurator, type Knowledge, type MaterializeKnowledgeScopeInput } from '@mastra/core/knowledge';
 import type { ApiRoute } from '@mastra/core/server';
 import { registerApiRoute } from '@mastra/core/server';
 import type {
@@ -44,6 +44,12 @@ export interface KnowledgeAccessProfile {
   rootScopeAddress: string;
   baselineScopes: MaterializeKnowledgeScopeInput[];
   intakeScopes?: MaterializeKnowledgeScopeInput[];
+  /** Addresses whose resolved scope IDs the host vouches for this request principal. */
+  vouchedScopeAddresses?: string[];
+  /** Host-declared companion addresses eligible for the curation worklist. */
+  curationScopeAddresses?: string[];
+  /** Host-selected standing curator identity. Never sourced from request data. */
+  curatorProfileId?: string;
 }
 
 export interface KnowledgeAccessProfileInput {
@@ -105,11 +111,13 @@ export interface KnowledgeScopeTreeNode {
   name: string;
   kind: string;
   description?: string;
+  needsCuration?: boolean;
 }
 
 export interface KnowledgeScopeTreePayload {
   scope: KnowledgeScopeTreeNode;
   children: KnowledgeScopeTreeNode[];
+  curationDestination?: KnowledgeScopeTreeNode;
   nextCursor?: string;
 }
 
@@ -147,6 +155,39 @@ export interface KnowledgeNodePayload {
     updatedAt: string;
   };
   records: KnowledgeNodeRecordPayload[];
+}
+
+export interface KnowledgeCurationWorkItem {
+  id: string;
+  reference: string;
+  name: string;
+  kind: string;
+  version: number;
+  evidence: Array<{ source?: string; provenance?: string }>;
+  evidenceCursor?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface KnowledgeCurationWorklistPayload {
+  scopeId: string;
+  items: KnowledgeCurationWorkItem[];
+  nextCursor?: string;
+}
+
+export interface KnowledgeCurationEvidencePayload {
+  evidence: Array<{ source?: string; provenance?: string }>;
+  nextCursor?: string;
+}
+
+export interface KnowledgeCurationMergeTargetsPayload {
+  targets: Array<{ id: string; reference: string; name: string; kind: string; version: number }>;
+}
+
+export interface KnowledgeCurationActionPayload {
+  outcome: 'applied' | 'proposed' | 'retained';
+  node?: { id: string; reference: string; name: string; kind: string; version: number };
+  proposal?: { id: string; reference: string; status: KnowledgeProposalStatus };
 }
 
 export interface KnowledgeImporterSummary {
@@ -222,6 +263,8 @@ interface ResolvedView {
   scopeIds: KnowledgeScopeIds;
   perspectiveKey: string;
   readableScopeIds: KnowledgeScopeIds;
+  curatorProfileId?: string;
+  curationScopeIds: KnowledgeScopeIds;
   orgScopeId: string;
   resourceScopeId: string;
   threadScopeId?: string;
@@ -471,7 +514,9 @@ type KnowledgeSurfaceHandleKind =
   | 'activity-cursor'
   | 'import-runs-cursor'
   | 'import-activity-cursor'
-  | 'proposal-cursor';
+  | 'proposal-cursor'
+  | 'curation-cursor'
+  | 'curation-record-cursor';
 
 interface KnowledgeSurfaceHandle {
   projectId: string;
@@ -600,7 +645,16 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
     resourceScopeId: string;
     threadId?: string;
     threadScopeId?: string;
-  }): Promise<{ scopeIds: KnowledgeScopeIds; rootScopeId: string; perspectiveKey: string } | undefined> {
+  }): Promise<
+    | {
+        scopeIds: KnowledgeScopeIds;
+        rootScopeId: string;
+        perspectiveKey: string;
+        curatorProfileId?: string;
+        curationScopeIds: KnowledgeScopeIds;
+      }
+    | undefined
+  > {
     const profile = await this.deps.accessProfile({
       request: input.c.req.raw,
       knowledge: input.knowledge,
@@ -636,7 +690,14 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
     );
     if (scopesByAddress.size === 0 || !scopesByAddress.has(profile.rootScopeAddress)) return undefined;
     try {
-      await Promise.all([...scopesByAddress.values()].map(scope => input.knowledge.materializeScope(scope)));
+      const existingScopes = await Promise.all(
+        [...scopesByAddress.keys()].map(address => input.store.getScopeAddress(address)),
+      );
+      await Promise.all(
+        [...scopesByAddress.values()]
+          .filter((_, index) => !existingScopes[index])
+          .map(scope => input.knowledge.materializeScope(scope)),
+      );
     } catch {
       return undefined;
     }
@@ -644,13 +705,32 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
       [...scopesByAddress.keys()].map(address => input.store.getScopeAddress(address)),
     );
     if (resolvedScopes.some(scope => !scope)) return undefined;
-    const scopeIds = resolvedScopes.map(scope => scope!.scopeNodeId).sort();
+    const curationScopeAddresses = new Set(profile.curationScopeAddresses ?? []);
+    const vouchedScopeAddresses = new Set(
+      profile.vouchedScopeAddresses ??
+        [...scopesByAddress.keys()].filter(address => !curationScopeAddresses.has(address)),
+    );
+    if ([...vouchedScopeAddresses].some(address => !scopesByAddress.has(address))) return undefined;
+    const scopeIds = [...scopesByAddress.keys()]
+      .map((address, index) => ({ address, scope: resolvedScopes[index] }))
+      .filter(({ address }) => vouchedScopeAddresses.has(address))
+      .map(({ scope }) => scope!.scopeNodeId)
+      .sort();
     const rootScope = await input.store.getScopeAddress(profile.rootScopeAddress);
     if (!rootScope) return undefined;
+    const curationScopeIds: string[] = [];
+    for (const address of profile.curationScopeAddresses ?? []) {
+      if (!scopesByAddress.has(address)) return undefined;
+      const scope = await input.store.getScopeAddress(address);
+      if (!scope) return undefined;
+      curationScopeIds.push(scope.scopeNodeId);
+    }
     return {
       scopeIds,
       rootScopeId: rootScope.scopeNodeId,
       perspectiveKey: `${input.projectId}\u0000${input.userId}\u0000${profile.id}\u0000${knowledgeScopeIdsKey(scopeIds)}`,
+      curatorProfileId: profile.curatorProfileId?.trim() || undefined,
+      curationScopeIds: [...new Set(curationScopeIds)].sort(),
     };
   }
 
@@ -772,6 +852,8 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
         scopeIds: profile.scopeIds,
         perspectiveKey,
         readableScopeIds,
+        curatorProfileId: profile.curatorProfileId,
+        curationScopeIds: profile.curationScopeIds,
         orgScopeId,
         resourceScopeId: profile.rootScopeId,
         pinScopes: [{ level: 'resource', scopeId: profile.rootScopeId }],
@@ -791,6 +873,8 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
       scopeIds: profile.scopeIds,
       perspectiveKey,
       readableScopeIds,
+      curatorProfileId: profile.curatorProfileId,
+      curationScopeIds: profile.curationScopeIds,
       orgScopeId,
       resourceScopeId,
       threadScopeId,
@@ -857,7 +941,12 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
     return null;
   }
 
-  #scopeTreeNode(projectId: string, perspectiveKey: string, node: KnowledgeNode): KnowledgeScopeTreeNode {
+  #scopeTreeNode(
+    projectId: string,
+    perspectiveKey: string,
+    node: KnowledgeNode,
+    needsCuration = false,
+  ): KnowledgeScopeTreeNode {
     const description = metadataString(node.metadata, 'description');
     return {
       id: this.#mintHandle(projectId, perspectiveKey, 'scope', node.id),
@@ -865,6 +954,7 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
       name: node.name,
       kind: node.kind ?? 'scope',
       ...(description ? { description } : {}),
+      ...(needsCuration ? { needsCuration: true } : {}),
     };
   }
 
@@ -1229,6 +1319,303 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
           }
         },
       }),
+      registerApiRoute('/web/factory/projects/:id/knowledge/curation/worklist', {
+        method: 'GET',
+        requiresAuth: true,
+        handler: async raw => {
+          const c = loose(raw);
+          const view = await this.#resolveView(c);
+          if ('response' in view) return view.response;
+          const scopeHandle = c.req.query('scopeId');
+          const companionScopeId = this.#resolveHandle(view.projectId, view.perspectiveKey, 'scope', scopeHandle);
+          if (!companionScopeId || !view.curationScopeIds.includes(companionScopeId)) {
+            return c.json({ error: 'scope_not_found' }, 404);
+          }
+          const selected = await this.#resolveSelectedScope(view, companionScopeId, true);
+          if (!selected) return c.json({ error: 'scope_not_found' }, 404);
+          const cursorHandle = c.req.query('cursor');
+          const cursor = this.#resolveHandle(view.projectId, view.perspectiveKey, 'curation-cursor', cursorHandle);
+          if (cursorHandle && !cursor) return c.json({ error: 'cursor_not_found' }, 404);
+          const rawLimit = Number(c.req.query('limit') ?? 50);
+          const limit = Number.isInteger(rawLimit) ? Math.min(Math.max(rawLimit, 1), 100) : 50;
+          try {
+            const curator = new KnowledgeCurator(view.knowledge, {
+              vouchedScopeIds: view.scopeIds,
+              companionScopeId,
+              contextScopeId: view.threadScopeId ?? view.resourceScopeId,
+            });
+            const page = await curator.listWorklist({ cursor, limit });
+            const items = page.items.map(({ node, records, recordsNextCursor }) => ({
+              id: this.#mintHandle(view.projectId, view.perspectiveKey, 'node', node.id),
+              reference: this.#mintReference(view.projectId, 'node', node.id),
+              name: node.name,
+              kind: node.kind ?? 'unknown',
+              version: node.version,
+              description: metadataString(node.metadata, 'description'),
+              evidence: records.map(record => ({
+                source: record.source,
+                provenance: metadataString(record.metadata, 'provenance'),
+              })),
+              evidenceCursor: recordsNextCursor
+                ? this.#mintHandle(view.projectId, view.perspectiveKey, 'curation-record-cursor', recordsNextCursor)
+                : undefined,
+              createdAt: node.createdAt.toISOString(),
+              updatedAt: node.updatedAt.toISOString(),
+            }));
+            const payload: KnowledgeCurationWorklistPayload = {
+              scopeId: scopeHandle!,
+              items,
+              nextCursor: page.nextCursor
+                ? this.#mintHandle(view.projectId, view.perspectiveKey, 'curation-cursor', page.nextCursor)
+                : undefined,
+            };
+            return c.json(payload);
+          } catch (error) {
+            if (
+              error instanceof Error &&
+              (error.name === 'KnowledgeNotFoundError' ||
+                error.message.startsWith('Knowledge curator profile is not registered:'))
+            ) {
+              return c.json({ error: 'curation_not_found' }, 404);
+            }
+            throw error;
+          }
+        },
+      }),
+      registerApiRoute('/web/factory/projects/:id/knowledge/curation/items/:nodeId/evidence', {
+        method: 'GET',
+        requiresAuth: true,
+        handler: async raw => {
+          const c = loose(raw);
+          const view = await this.#resolveView(c);
+          if ('response' in view) return view.response;
+          const companionScopeId = this.#resolveHandle(
+            view.projectId,
+            view.perspectiveKey,
+            'scope',
+            c.req.query('scopeId'),
+          );
+          const nodeId = this.#resolveHandle(view.projectId, view.perspectiveKey, 'node', c.req.param('nodeId'));
+          if (!companionScopeId || !view.curationScopeIds.includes(companionScopeId) || !nodeId) {
+            return c.json({ error: 'curation_not_found' }, 404);
+          }
+          const cursorHandle = c.req.query('cursor');
+          const cursor = this.#resolveHandle(
+            view.projectId,
+            view.perspectiveKey,
+            'curation-record-cursor',
+            cursorHandle,
+          );
+          if (cursorHandle && !cursor) return c.json({ error: 'cursor_not_found' }, 404);
+          const curator = new KnowledgeCurator(view.knowledge, {
+            vouchedScopeIds: view.scopeIds,
+            companionScopeId,
+            contextScopeId: view.threadScopeId ?? view.resourceScopeId,
+          });
+          try {
+            const page = await curator.listItemRecords({ nodeId, cursor, limit: 100 });
+            return c.json({
+              evidence: page.records.map(record => ({
+                source: record.source,
+                provenance: metadataString(record.metadata, 'provenance'),
+              })),
+              nextCursor: page.nextCursor
+                ? this.#mintHandle(view.projectId, view.perspectiveKey, 'curation-record-cursor', page.nextCursor)
+                : undefined,
+            } satisfies KnowledgeCurationEvidencePayload);
+          } catch (error) {
+            if (error instanceof Error && error.name === 'KnowledgeNotFoundError') {
+              return c.json({ error: 'curation_not_found' }, 404);
+            }
+            throw error;
+          }
+        },
+      }),
+      registerApiRoute('/web/factory/projects/:id/knowledge/curation/merge-targets', {
+        method: 'GET',
+        requiresAuth: true,
+        handler: async raw => {
+          const c = loose(raw);
+          const view = await this.#resolveView(c);
+          if ('response' in view) return view.response;
+          const scopeHandle = c.req.query('scopeId');
+          const companionScopeId = this.#resolveHandle(view.projectId, view.perspectiveKey, 'scope', scopeHandle);
+          if (!companionScopeId || !view.curationScopeIds.includes(companionScopeId)) {
+            return c.json({ error: 'curation_not_found' }, 404);
+          }
+          const namePrefix = c.req.query('query')?.trim();
+          if (!namePrefix) return c.json({ targets: [] } satisfies KnowledgeCurationMergeTargetsPayload);
+          try {
+            const curator = new KnowledgeCurator(view.knowledge, {
+              vouchedScopeIds: view.scopeIds,
+              companionScopeId,
+              contextScopeId: view.threadScopeId ?? view.resourceScopeId,
+            });
+            const nodes = await curator.listMergeTargets({ namePrefix, limit: 20 });
+            return c.json({
+              targets: nodes.map(node => ({
+                id: this.#mintHandle(view.projectId, view.perspectiveKey, 'node', node.id),
+                reference: this.#mintReference(view.projectId, 'node', node.id),
+                name: node.name,
+                kind: node.kind ?? 'unknown',
+                version: node.version,
+              })),
+            } satisfies KnowledgeCurationMergeTargetsPayload);
+          } catch (error) {
+            if (error instanceof Error && error.message.startsWith('Knowledge curator profile is not registered:')) {
+              return c.json({ error: 'curation_not_found' }, 404);
+            }
+            throw error;
+          }
+        },
+      }),
+      registerApiRoute('/web/factory/projects/:id/knowledge/curation/actions/:action', {
+        method: 'POST',
+        requiresAuth: true,
+        handler: async raw => {
+          const c = loose(raw);
+          const view = await this.#resolveView(c);
+          if ('response' in view) return view.response;
+          const action = c.req.param('action');
+          if (
+            action !== 'refine' &&
+            action !== 'promote' &&
+            action !== 'merge' &&
+            action !== 'discard' &&
+            action !== 'retain'
+          ) {
+            return c.json({ error: 'curation_action_not_found' }, 404);
+          }
+          const body: unknown = await c.req.json().catch(() => undefined);
+          if (!body || typeof body !== 'object') return c.json({ error: 'invalid_curation_action' }, 400);
+          const input = body as Record<string, unknown>;
+          const companionScopeId = this.#resolveHandle(
+            view.projectId,
+            view.perspectiveKey,
+            'scope',
+            typeof input.scopeId === 'string' ? input.scopeId : undefined,
+          );
+          const nodeId = this.#resolveHandle(
+            view.projectId,
+            view.perspectiveKey,
+            'node',
+            typeof input.nodeId === 'string' ? input.nodeId : undefined,
+          );
+          if (!companionScopeId || !view.curationScopeIds.includes(companionScopeId) || !nodeId) {
+            return c.json({ error: 'curation_not_found' }, 404);
+          }
+          if (!(await this.#resolveSelectedScope(view, companionScopeId, true))) {
+            return c.json({ error: 'curation_not_found' }, 404);
+          }
+          const version =
+            typeof input.version === 'number' && Number.isInteger(input.version) ? input.version : undefined;
+          try {
+            const curator = new KnowledgeCurator(view.knowledge, {
+              vouchedScopeIds: view.scopeIds,
+              companionScopeId,
+              contextScopeId: view.threadScopeId ?? view.resourceScopeId,
+            });
+            let result;
+            if (action === 'retain') {
+              const retained = await curator.retain(nodeId);
+              const payload: KnowledgeCurationActionPayload = {
+                outcome: 'retained',
+                node: {
+                  id: this.#mintHandle(view.projectId, view.perspectiveKey, 'node', retained.node.id),
+                  reference: this.#mintReference(view.projectId, 'node', retained.node.id),
+                  name: retained.node.name,
+                  kind: retained.node.kind ?? 'unknown',
+                  version: retained.node.version,
+                },
+              };
+              return c.json(payload);
+            }
+            if (version === undefined) return c.json({ error: 'invalid_curation_action' }, 400);
+            if (action === 'refine') {
+              result = await curator.refine({
+                nodeId,
+                version,
+                name: typeof input.name === 'string' ? input.name.slice(0, 512) : undefined,
+                kind: typeof input.kind === 'string' ? input.kind.slice(0, 128) : undefined,
+                metadata:
+                  typeof input.description === 'string'
+                    ? { description: input.description.slice(0, 10_000) }
+                    : undefined,
+                reason: typeof input.reason === 'string' ? input.reason.slice(0, 2_000) : undefined,
+              });
+            } else if (action === 'promote') {
+              const destinationScopeId = this.#resolveHandle(
+                view.projectId,
+                view.perspectiveKey,
+                'scope',
+                typeof input.destinationScopeId === 'string' ? input.destinationScopeId : undefined,
+              );
+              if (!destinationScopeId || !(await this.#resolveSelectedScope(view, destinationScopeId, true))) {
+                return c.json({ error: 'curation_not_found' }, 404);
+              }
+              result = await curator.promote({
+                nodeId,
+                version,
+                destinationScopeId,
+                reason: typeof input.reason === 'string' ? input.reason.slice(0, 2_000) : undefined,
+              });
+            } else if (action === 'merge') {
+              const targetId = this.#resolveHandle(
+                view.projectId,
+                view.perspectiveKey,
+                'node',
+                typeof input.targetId === 'string' ? input.targetId : undefined,
+              );
+              const targetVersion =
+                typeof input.targetVersion === 'number' && Number.isInteger(input.targetVersion)
+                  ? input.targetVersion
+                  : undefined;
+              if (!targetId || targetVersion === undefined) return c.json({ error: 'curation_not_found' }, 404);
+              const merged = await curator.merge({
+                sourceId: nodeId,
+                targetId,
+                sourceVersion: version,
+                targetVersion,
+              });
+              result = { mode: 'applied', node: merged } as const;
+            } else {
+              const discarded = await curator.discard({ nodeId, version });
+              result = { mode: 'applied', node: discarded } as const;
+            }
+            const payload: KnowledgeCurationActionPayload =
+              result.mode === 'proposed'
+                ? {
+                    outcome: 'proposed',
+                    proposal: {
+                      id: this.#mintHandle(view.projectId, view.perspectiveKey, 'proposal', result.proposal.id),
+                      reference: this.#mintReference(view.projectId, 'proposal', result.proposal.id),
+                      status: result.proposal.status,
+                    },
+                  }
+                : {
+                    outcome: 'applied',
+                    node: {
+                      id: this.#mintHandle(view.projectId, view.perspectiveKey, 'node', result.node.id),
+                      reference: this.#mintReference(view.projectId, 'node', result.node.id),
+                      name: result.node.name,
+                      kind: result.node.kind ?? 'unknown',
+                      version: result.node.version,
+                    },
+                  };
+            return c.json(payload);
+          } catch (error) {
+            const name = error instanceof Error ? error.name : '';
+            if (
+              name === 'KnowledgeNotFoundError' ||
+              (error instanceof Error && error.message.startsWith('Knowledge curator profile is not registered:'))
+            ) {
+              return c.json({ error: 'curation_not_found' }, 404);
+            }
+            if (name === 'KnowledgeConflictError') return c.json({ error: 'curation_conflicted' }, 409);
+            throw error;
+          }
+        },
+      }),
       registerApiRoute('/web/factory/projects/:id/knowledge/scopes', {
         method: 'GET',
         requiresAuth: false,
@@ -1254,11 +1641,22 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
           });
           const eligible = fetched.filter(node => node.id !== selected.id);
           const page = eligible.slice(0, this.#limits.maxNodes);
-          const children = page.map(node => this.#scopeTreeNode(projectId, view.perspectiveKey, node));
+          const children = page.map(node =>
+            this.#scopeTreeNode(projectId, view.perspectiveKey, node, view.curationScopeIds.includes(node.id)),
+          );
           const last = eligible.length > this.#limits.maxNodes ? page.at(-1) : undefined;
+          const selectedNeedsCuration = view.curationScopeIds.includes(selected.id);
+          const destinationScopeId = view.view === 'thread' ? view.threadScopeId : view.resourceScopeId;
+          const curationDestination =
+            selectedNeedsCuration && destinationScopeId
+              ? await view.knowledge.getNode({ id: destinationScopeId, scopeIds: view.scopeIds })
+              : undefined;
           return loose(c).json({
-            scope: this.#scopeTreeNode(projectId, view.perspectiveKey, selected),
+            scope: this.#scopeTreeNode(projectId, view.perspectiveKey, selected, selectedNeedsCuration),
             children,
+            ...(curationDestination
+              ? { curationDestination: this.#scopeTreeNode(projectId, view.perspectiveKey, curationDestination) }
+              : {}),
             ...(last
               ? {
                   nextCursor: this.#mintHandle(

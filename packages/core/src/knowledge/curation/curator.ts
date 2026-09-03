@@ -2,7 +2,6 @@ import type { Knowledge } from '..';
 import {
   createKnowledgeNodeCursor,
   KnowledgeNotFoundError,
-  type KnowledgeRecord,
   type KnowledgeScopeIds,
 } from '../../storage/domains/knowledge';
 import { getKnowledgeMutationCapabilities } from '../access/mutations';
@@ -10,8 +9,11 @@ import type {
   ResolvedKnowledgeCuratorInput,
   KnowledgeCuratorDiscardInput,
   KnowledgeCuratorMergeInput,
+  KnowledgeCuratorMergeTargetsInput,
   KnowledgeCuratorMutationResult,
   KnowledgeCuratorPromoteInput,
+  KnowledgeCuratorRecordPage,
+  KnowledgeCuratorRecordPageInput,
   KnowledgeCuratorRefineInput,
   KnowledgeCuratorRetainedItem,
   KnowledgeCuratorWorklist,
@@ -20,6 +22,7 @@ import type {
 
 const DEFAULT_LIMIT = 50;
 const MAX_LIMIT = 100;
+const WORKLIST_RECORD_PREVIEW_LIMIT = 10;
 
 export const KNOWLEDGE_CURATOR_INSTRUCTIONS = `Curate provisional knowledge from the configured uncurated companion scope.
 
@@ -57,8 +60,53 @@ export class KnowledgeCurator {
     const nodes = page.slice(0, limit);
     return {
       nodes,
+      items: await Promise.all(
+        nodes.map(async node => {
+          const recordPage = await this.listItemRecords({ nodeId: node.id, limit: WORKLIST_RECORD_PREVIEW_LIMIT });
+          return { node, records: recordPage.records, recordsNextCursor: recordPage.nextCursor };
+        }),
+      ),
       nextCursor: page.length > limit && nodes.length ? createKnowledgeNodeCursor(nodes[nodes.length - 1]!) : undefined,
     };
+  }
+
+  async listItemRecords(input: KnowledgeCuratorRecordPageInput): Promise<KnowledgeCuratorRecordPage> {
+    await this.#requireWorklistNode(input.nodeId);
+    const page = await this.knowledge.listRecords({
+      node: input.nodeId,
+      scopeIds: this.input.vouchedScopeIds,
+      after: input.cursor,
+      limit: normalizeLimit(input.limit),
+      includeDeleted: false,
+    });
+    return { records: page.records, nextCursor: page.nextCursor };
+  }
+
+  async listMergeTargets(input: KnowledgeCuratorMergeTargetsInput) {
+    await this.#requireCompanionRead();
+    const frontier = await this.knowledge.evaluateAccess(this.input.vouchedScopeIds);
+    const targets = [];
+    const limit = Math.min(normalizeLimit(input.limit), 20);
+    let cursor: string | undefined;
+    let scanned = 0;
+    do {
+      const page = await this.knowledge.listNodes({
+        scopeIds: this.input.vouchedScopeIds,
+        namePrefix: input.namePrefix,
+        isScope: false,
+        cursor,
+        limit: 100,
+      });
+      for (const node of page) {
+        scanned += 1;
+        if (node.id === input.excludeNodeId) continue;
+        const scopeIds = await (await this.knowledge.getStorageInternal()).getNodeScopeIds(node.id);
+        if (getKnowledgeMutationCapabilities(frontier, scopeIds).edit) targets.push(node);
+        if (targets.length >= limit || scanned >= 1_000) break;
+      }
+      cursor = page.length === 100 ? createKnowledgeNodeCursor(page[page.length - 1]!) : undefined;
+    } while (cursor && targets.length < limit && scanned < 1_000);
+    return targets;
   }
 
   async refine(input: KnowledgeCuratorRefineInput): Promise<KnowledgeCuratorMutationResult> {
@@ -156,7 +204,8 @@ export class KnowledgeCurator {
 
   async retain(nodeId: string): Promise<KnowledgeCuratorRetainedItem> {
     const { node } = await this.#requireWorklistNode(nodeId);
-    return { outcome: 'retained', node, records: await this.#listNodeRecords(node.id) };
+    const recordPage = await this.listItemRecords({ nodeId, limit: WORKLIST_RECORD_PREVIEW_LIMIT });
+    return { outcome: 'retained', node, records: recordPage.records, recordsNextCursor: recordPage.nextCursor };
   }
 
   async #requireCompanionRead(): Promise<void> {
@@ -176,22 +225,5 @@ export class KnowledgeCurator {
     if (!node) throw new KnowledgeNotFoundError('node', nodeId);
     const scopeIds = await (await this.knowledge.getStorageInternal()).getNodeScopeIds(node.id);
     return { node, scopeIds };
-  }
-
-  async #listNodeRecords(nodeId: string): Promise<KnowledgeRecord[]> {
-    const records: KnowledgeRecord[] = [];
-    let after: string | undefined;
-    do {
-      const page = await this.knowledge.listRecords({
-        node: nodeId,
-        scopeIds: this.input.vouchedScopeIds,
-        after,
-        limit: 100,
-        includeDeleted: false,
-      });
-      records.push(...page.records);
-      after = page.nextCursor;
-    } while (after);
-    return records;
   }
 }

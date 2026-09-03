@@ -867,6 +867,7 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
     sourceId: string;
     targetId: string;
     sourceVersion: number;
+    targetVersion: number;
     importRunId?: string;
     expectedAccessEpoch?: number;
   }): Promise<KnowledgeNode> {
@@ -879,6 +880,7 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
       if (source.version !== input.sourceVersion) throw new KnowledgeConflictError(input.sourceId);
       const target = this.#db.knowledgeNodes.get(input.targetId);
       if (!target) throw new KnowledgeNotFoundError('node', input.targetId);
+      if (target.version !== input.targetVersion) throw new KnowledgeConflictError(input.targetId);
 
       for (const [id, record] of this.#db.knowledgeRecords) {
         if (record.nodeId !== source.id) continue;

@@ -843,6 +843,7 @@ export abstract class KnowledgeStorage extends StorageDomain {
     sourceId: string;
     targetId: string;
     sourceVersion: number;
+    targetVersion: number;
     importRunId?: string;
     expectedAccessEpoch?: number;
   }): Promise<KnowledgeNode> {

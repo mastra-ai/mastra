@@ -713,6 +713,7 @@ export class Knowledge extends MastraBase {
     sourceId: string;
     targetId: string;
     sourceVersion: number;
+    targetVersion: number;
     importRunId?: string;
     vouchedScopeIds: KnowledgeScopeIds;
   }) {

@@ -7,7 +7,15 @@ import { ChevronRight } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router';
 
-import { useKnowledgeActivity, useKnowledgeGraph, useKnowledgeScopes } from '../../hooks/useKnowledgeGraph';
+import {
+  useKnowledgeActivity,
+  useKnowledgeCurationAction,
+  useKnowledgeCurationEvidence,
+  useKnowledgeCurationMergeTargets,
+  useKnowledgeCurationWorklist,
+  useKnowledgeGraph,
+  useKnowledgeScopes,
+} from '../../hooks/useKnowledgeGraph';
 import { SkeletonRows } from '../ui/SkeletonRows';
 import { FactoryPageShell } from '../domains/factory/components/FactoryPageShell';
 import { KnowledgeGraph } from '../domains/factory/components/knowledge/KnowledgeGraph';
@@ -16,7 +24,7 @@ import { KnowledgeApprovals } from '../domains/factory/components/knowledge/Know
 import { KnowledgeImports } from '../domains/factory/components/knowledge/KnowledgeImports';
 import type { Arrivals, DiffBaseline } from '../domains/factory/components/knowledge/graphDiff';
 import { computeArrivals } from '../domains/factory/components/knowledge/graphDiff';
-import type { KnowledgeScopeTreePayload } from '../domains/factory/services/knowledge';
+import type { KnowledgeCurationWorkItem, KnowledgeScopeTreePayload } from '../domains/factory/services/knowledge';
 import { RequestError } from '../domains/factory/services/request';
 import { useInteractionIdle } from '../domains/factory/components/knowledge/useInteractionIdle';
 
@@ -86,6 +94,256 @@ function Breadcrumb({
   );
 }
 
+function CurationItem({
+  item,
+  factoryProjectId,
+  scopeId,
+  destinationScopeId,
+  threadId,
+  onSelectProposal,
+}: {
+  item: KnowledgeCurationWorkItem;
+  factoryProjectId?: string;
+  scopeId: string;
+  destinationScopeId: string;
+  threadId?: string;
+  onSelectProposal: (proposalId: string) => void;
+}) {
+  const action = useKnowledgeCurationAction(factoryProjectId, threadId);
+  const [description, setDescription] = useState('');
+  const [mergeQuery, setMergeQuery] = useState('');
+  const [mergeTargetId, setMergeTargetId] = useState('');
+  const [proposalId, setProposalId] = useState('');
+  const [retained, setRetained] = useState(false);
+  const [loadingMoreEvidence, setLoadingMoreEvidence] = useState(false);
+  const mergeTargets = useKnowledgeCurationMergeTargets(factoryProjectId, scopeId, mergeQuery, threadId);
+  const mergeTarget = mergeTargets.data?.targets.find(target => target.id === mergeTargetId);
+  const evidence = useKnowledgeCurationEvidence(
+    factoryProjectId,
+    scopeId,
+    item.id,
+    item.evidenceCursor,
+    loadingMoreEvidence,
+    threadId,
+  );
+  const evidenceEntries = [...item.evidence, ...(evidence.data?.pages.flatMap(page => page.evidence) ?? [])];
+
+  return (
+    <article className="border-surface5 bg-surface2 flex flex-col gap-2 rounded-lg border border-dashed p-3">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <Txt as="h3" variant="ui-md" className="text-icon6 font-medium">
+            {item.name}
+          </Txt>
+          <Txt as="p" variant="ui-xs" className="text-icon3">
+            Version {item.version}
+          </Txt>
+          {evidenceEntries.length > 0 ? (
+            <ul aria-label={`Evidence for ${item.name}`} className="text-icon3 list-disc pl-4 text-xs">
+              {evidenceEntries.map((entry, index) => (
+                <li key={`${entry.source ?? 'unspecified'}-${index}`}>
+                  {entry.source ?? 'unspecified source'}
+                  {entry.provenance ? ` · ${entry.provenance}` : ''}
+                </li>
+              ))}
+            </ul>
+          ) : null}
+          {item.evidenceCursor && !loadingMoreEvidence ? (
+            <Button size="xs" variant="ghost" onClick={() => setLoadingMoreEvidence(true)}>
+              Load more evidence
+            </Button>
+          ) : evidence.hasNextPage ? (
+            <Button
+              size="xs"
+              variant="ghost"
+              onClick={() => evidence.fetchNextPage()}
+              disabled={evidence.isFetchingNextPage}
+            >
+              Load more evidence
+            </Button>
+          ) : null}
+        </div>
+        <span className="rounded bg-yellow-950 px-2 py-0.5 text-xs text-yellow-200">
+          {retained ? 'retained · unintegrated' : 'provisional'}
+        </span>
+      </div>
+      {item.description ? (
+        <Txt as="p" variant="ui-sm" className="text-icon4">
+          {item.description}
+        </Txt>
+      ) : null}
+      <Input
+        aria-label={`Refined description for ${item.name}`}
+        value={description}
+        onChange={event => setDescription(event.target.value)}
+        placeholder="Refined description"
+      />
+      <div className="flex flex-col gap-1">
+        <Input
+          aria-label={`Find merge target for ${item.name}`}
+          value={mergeQuery}
+          onChange={event => {
+            setMergeQuery(event.target.value);
+            setMergeTargetId('');
+          }}
+          placeholder="Find an authorized merge target"
+        />
+        {mergeTargets.data?.targets
+          .filter(target => target.id !== item.id)
+          .map(target => (
+            <button
+              key={target.id}
+              type="button"
+              aria-pressed={target.id === mergeTargetId}
+              className="border-surface5 hover:bg-surface3 flex items-center justify-between rounded border px-2 py-1 text-left text-xs"
+              onClick={() => setMergeTargetId(target.id)}
+            >
+              <span>{target.name}</span>
+              <span className="text-icon3">
+                {target.kind} · v{target.version}
+              </span>
+            </button>
+          ))}
+      </div>
+      <div className="flex flex-wrap gap-2">
+        <Button
+          size="xs"
+          onClick={() =>
+            action.mutate({ action: 'refine', scopeId, nodeId: item.id, version: item.version, description })
+          }
+          disabled={!description || action.isPending}
+        >
+          Refine
+        </Button>
+        <Button
+          size="xs"
+          onClick={() =>
+            action.mutate(
+              { action: 'promote', scopeId, nodeId: item.id, version: item.version, destinationScopeId },
+              { onSuccess: result => setProposalId(result.proposal?.id ?? '') },
+            )
+          }
+          disabled={action.isPending}
+        >
+          Promote
+        </Button>
+        <Button
+          size="xs"
+          variant="outline"
+          onClick={() => {
+            if (!mergeTarget) return;
+            action.mutate({
+              action: 'merge',
+              scopeId,
+              nodeId: item.id,
+              version: item.version,
+              targetId: mergeTarget.id,
+              targetVersion: mergeTarget.version,
+            });
+          }}
+          disabled={!mergeTarget || action.isPending}
+        >
+          Merge
+        </Button>
+        <Button
+          size="xs"
+          variant="outline"
+          onClick={() =>
+            action.mutate({ action: 'retain', scopeId, nodeId: item.id }, { onSuccess: () => setRetained(true) })
+          }
+          disabled={action.isPending}
+        >
+          Retain
+        </Button>
+        <Button
+          size="xs"
+          variant="destructive"
+          onClick={() => action.mutate({ action: 'discard', scopeId, nodeId: item.id, version: item.version })}
+          disabled={action.isPending}
+        >
+          Discard
+        </Button>
+      </div>
+      {action.isError ? (
+        <Notice variant="destructive">
+          {action.error instanceof Error ? action.error.message : 'Curation failed.'}
+        </Notice>
+      ) : null}
+      {proposalId ? (
+        <Notice
+          variant="info"
+          action={
+            <Button size="xs" variant="outline" onClick={() => onSelectProposal(proposalId)}>
+              Open proposal
+            </Button>
+          }
+        >
+          Sent to Approvals for review.
+        </Notice>
+      ) : null}
+    </article>
+  );
+}
+
+function CurationPanel({
+  factoryProjectId,
+  scopeId,
+  destinationScopeId,
+  threadId,
+  onSelectProposal,
+}: {
+  factoryProjectId?: string;
+  scopeId: string;
+  destinationScopeId: string;
+  threadId?: string;
+  onSelectProposal: (proposalId: string) => void;
+}) {
+  const worklist = useKnowledgeCurationWorklist(factoryProjectId, scopeId, threadId);
+  if (worklist.isPending) return <SkeletonRows label="Loading curation worklist" rows={4} />;
+  if (worklist.isError) {
+    return <Notice variant="destructive">The curation worklist is unavailable for this scope.</Notice>;
+  }
+  const items = worklist.data.pages.flatMap(page => page.items);
+  return (
+    <div className="flex flex-col gap-3" data-testid="knowledge-curation-worklist">
+      <div>
+        <Txt as="h2" variant="header-sm" className="text-icon6 font-semibold">
+          Needs curation
+        </Txt>
+        <Txt as="p" variant="ui-sm" className="text-icon3">
+          Review provisional knowledge before promoting it.
+        </Txt>
+      </div>
+      {items.length === 0 ? (
+        <Txt as="p" variant="ui-md" className="text-icon3">
+          No provisional knowledge needs review.
+        </Txt>
+      ) : null}
+      {items.map(item => (
+        <CurationItem
+          key={item.id}
+          item={item}
+          factoryProjectId={factoryProjectId}
+          scopeId={scopeId}
+          destinationScopeId={destinationScopeId}
+          threadId={threadId}
+          onSelectProposal={onSelectProposal}
+        />
+      ))}
+      {worklist.hasNextPage ? (
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => worklist.fetchNextPage()}
+          disabled={worklist.isFetchingNextPage}
+        >
+          Load more
+        </Button>
+      ) : null}
+    </div>
+  );
+}
+
 function ScopeTree({
   tree,
   selectedScopeId,
@@ -97,11 +355,21 @@ function ScopeTree({
   onSelectScope: (scopeId: string) => void;
   onProjectClick: () => void;
 }) {
+  const [needsCurationOnly, setNeedsCurationOnly] = useState(false);
+  const children = tree?.children.filter(scope => !needsCurationOnly || scope.needsCuration) ?? [];
   return (
     <aside aria-label="Knowledge scopes" className="border-surface5 bg-surface2 w-48 shrink-0 rounded-lg border p-3">
       <Txt as="h2" variant="ui-sm" className="text-icon5 mb-2 font-semibold">
         Scopes
       </Txt>
+      <label className="text-icon4 mb-2 flex items-center gap-2 text-xs">
+        <input
+          type="checkbox"
+          checked={needsCurationOnly}
+          onChange={event => setNeedsCurationOnly(event.target.checked)}
+        />
+        Needs curation
+      </label>
       <div className="text-icon4 flex flex-col gap-1 text-xs">
         <button type="button" className="hover:text-icon6 text-left" onClick={onProjectClick}>
           Project scope
@@ -116,11 +384,11 @@ function ScopeTree({
             >
               {tree.scope.name}
             </button>
-            {tree.children.map(scope => (
+            {children.map(scope => (
               <button
                 key={scope.id}
                 type="button"
-                className="hover:text-icon6 truncate pl-6 text-left"
+                className={`hover:text-icon6 truncate pl-6 text-left ${scope.needsCuration ? 'border-icon3 text-icon3 border-l border-dashed italic' : ''}`}
                 onClick={() => onSelectScope(scope.id)}
               >
                 {scope.name}
@@ -348,6 +616,11 @@ function KnowledgeContent({ factoryProjectId }: { factoryProjectId: string | und
   const { idle, onActivity } = useInteractionIdle(10_000);
   const scopeQuery = useKnowledgeScopes(factoryProjectId, requestedScopeId, threadId);
   const selectedScopeId = requestedScopeId ?? scopeQuery.data?.scope.id;
+  const scopeTree = scopeQuery.data;
+  const selectedCurationScope =
+    scopeTree && scopeTree.scope.id === selectedScopeId && scopeTree.scope.needsCuration
+      ? scopeTree.scope
+      : scopeTree?.children.find(scope => scope.id === selectedScopeId && scope.needsCuration);
   const graphQuery = useKnowledgeGraph(factoryProjectId, selectedScopeId, threadId, { paused: !idle });
 
   // Arrival diffing: baseline per view; a view switch resets it (no mass
@@ -557,7 +830,19 @@ function KnowledgeContent({ factoryProjectId }: { factoryProjectId: string | und
               setTrail([{ nodeId, name }]);
               setView('explore');
             }}
-            explore={body}
+            explore={
+              selectedCurationScope && scopeQuery.data ? (
+                <CurationPanel
+                  factoryProjectId={factoryProjectId}
+                  scopeId={selectedCurationScope.id}
+                  destinationScopeId={scopeQuery.data.curationDestination?.id ?? scopeQuery.data.scope.id}
+                  threadId={threadId}
+                  onSelectProposal={selectProposal}
+                />
+              ) : (
+                body
+              )
+            }
           />
         </div>
       </div>

@@ -38,6 +38,7 @@ async function createHarness(
     knowledgeRuntime?: Knowledge;
     knowledgeResolver?: () => Promise<Knowledge | undefined>;
     accessProfile?: KnowledgeAccessProfileResolver;
+    curatorProfileId?: string;
     isOrganizationAdmin?: (organizationId: string, userId: string) => Promise<boolean>;
   } = {},
 ): Promise<Harness> {
@@ -52,12 +53,27 @@ async function createHarness(
     knowledge: options.knowledgeResolver ?? (async () => runtime),
     accessProfile:
       options.accessProfile ??
-      (async ({ builtInScopes, threadId }) => ({
-        id: threadId ? `thread:${threadId}` : 'project',
-        rootScopeAddress: builtInScopes.thread?.address ?? builtInScopes.resource.address,
-        baselineScopes: [builtInScopes.org, builtInScopes.resource],
-        ...(builtInScopes.thread ? { intakeScopes: [builtInScopes.thread] } : {}),
-      })),
+      (async ({ builtInScopes, threadId }) => {
+        const companion = {
+          address: `${builtInScopes.resource.address}:uncurated`,
+          parentAddresses: [builtInScopes.resource.address],
+          contextualScopeAddress: builtInScopes.resource.address,
+        };
+        return {
+          id: threadId ? `thread:${threadId}` : 'project',
+          rootScopeAddress: builtInScopes.thread?.address ?? builtInScopes.resource.address,
+          baselineScopes: [builtInScopes.org, builtInScopes.resource],
+          intakeScopes: [
+            ...(builtInScopes.thread ? [builtInScopes.thread] : []),
+            ...(options.curatorProfileId ? [companion] : []),
+          ],
+          vouchedScopeAddresses: options.curatorProfileId
+            ? [builtInScopes.org.address]
+            : [builtInScopes.org.address, builtInScopes.resource.address],
+          curationScopeAddresses: options.curatorProfileId ? [companion.address] : [],
+          curatorProfileId: options.curatorProfileId,
+        };
+      }),
     ...(options.limits ? { limits: options.limits } : {}),
   }).routes();
   const app = new Hono();
@@ -212,6 +228,176 @@ async function nodeDetail(
 }
 
 describe('KnowledgeRoutes', () => {
+  it('fails closed when the host has not configured a curation scope', async () => {
+    const h = await createHarness();
+    const treeResponse = await h.app.request(`/web/factory/projects/${h.projectId}/knowledge/scopes`);
+    const tree = (await treeResponse.json()) as KnowledgeScopeTreePayload;
+    const response = await h.app.request(
+      `/web/factory/projects/${h.projectId}/knowledge/curation/worklist?scopeId=${tree.scope.id}`,
+    );
+
+    expect(response.status).toBe(404);
+    expect(await response.json()).toEqual({ error: 'scope_not_found' });
+  });
+
+  it('keeps human curation reads and actions within the request principal authority', async () => {
+    const h = await createHarness({ curatorProfileId: 'factory-curator' });
+    const resourceAddress = `resource:${h.projectId}`;
+    const companionAddress = `${resourceAddress}:uncurated`;
+    const companion = await h.runtime.materializeScope({
+      address: companionAddress,
+      parentAddresses: [resourceAddress],
+      contextualScopeAddress: resourceAddress,
+    });
+    const curatorPrivateAddress = `${resourceAddress}:curator-private`;
+    const curatorPrivate = await h.runtime.materializeScope({
+      address: curatorPrivateAddress,
+      contextualScopeAddress: curatorPrivateAddress,
+    });
+    await h.runtime.registerCuratorProfile({
+      id: 'factory-curator',
+      identityScope: { address: `curator:${h.projectId}`, contextualScopeAddress: `curator:${h.projectId}` },
+      grants: [
+        { scopeAddress: companionAddress, role: 'readonly', canSuggest: true },
+        { scopeAddress: resourceAddress, role: 'readonly', canSuggest: true },
+        { scopeAddress: curatorPrivateAddress, role: 'edit' },
+      ],
+    });
+    const companionScopeId = companion.scopes[companionAddress]!;
+    const curatorPrivateScopeId = curatorPrivate.scopes[curatorPrivateAddress]!;
+    await h.knowledge.upsertScopeGrant({
+      scopeNodeId: h.projectScope.at(-1)!,
+      scopeRefId: h.orgScope[0]!,
+      role: 'readonly',
+    });
+    await h.knowledge.upsertScopeGrant({
+      scopeNodeId: companionScopeId,
+      scopeRefId: h.orgScope[0]!,
+      role: 'readonly',
+    });
+    const companionNode = await h.knowledge.getNode(companionScopeId);
+    h.allScopeIds.push(companionScopeId);
+    const provisional = await h.knowledge.createNode({
+      name: 'Provisional finding',
+      kind: 'finding',
+      scopeIds: [companionScopeId],
+    });
+    const provisionalRecord = await h.knowledge.createRecord({
+      node: provisional,
+      text: 'Observed in an import.',
+      scopeIds: [curatorPrivateScopeId],
+      source: 'github',
+      metadata: { provenance: 'import:github' },
+    });
+    const sharedRecord = await h.knowledge.createRecord({
+      node: provisional,
+      text: 'Reported by support.',
+      scopeIds: [companionScopeId],
+      source: 'support',
+      metadata: { provenance: 'subconscious:capture' },
+    });
+    for (let index = 0; index < 14; index += 1) {
+      await h.knowledge.createRecord({
+        node: provisional,
+        text: `Additional report ${index}`,
+        scopeIds: [companionScopeId],
+        source: `support:${index}`,
+        metadata: { provenance: index % 2 === 0 ? 'trusted' : 'untrusted' },
+      });
+    }
+    const operatorOnly = await h.knowledge.createNode({
+      name: 'Operator-only finding',
+      kind: 'finding',
+      scopeIds: [companionScopeId],
+    });
+    const curatorOnlyTarget = await h.knowledge.createNode({
+      name: 'Curator-only canonical finding',
+      kind: 'finding',
+      scopeIds: [curatorPrivateScopeId],
+    });
+    const curator = h.runtime.createCurator({
+      profileId: 'factory-curator',
+      companionScopeId,
+      contextScopeId: h.projectScope.at(-1)!,
+    });
+    const autonomousEvidence = await curator.listItemRecords({ nodeId: provisional.id, limit: 100 });
+    expect(autonomousEvidence.records).toEqual(expect.arrayContaining([provisionalRecord, sharedRecord]));
+    expect(await curator.listMergeTargets({ namePrefix: 'Curator', limit: 20 })).toEqual([curatorOnlyTarget]);
+
+    const treeResponse = await h.app.request(`/web/factory/projects/${h.projectId}/knowledge/scopes`);
+    const tree = (await treeResponse.json()) as KnowledgeScopeTreePayload;
+    const identity = await h.knowledge.getScopeAddress(`curator:${h.projectId}`);
+    const curatorFrontier = await h.runtime.evaluateAccess([identity!.scopeNodeId]);
+    expect(curatorFrontier.scopes[companionScopeId]?.read).toBe(true);
+    const companionHandle = tree.children.find(item => item.name === companionNode?.name)?.id;
+    expect(companionHandle).toBeDefined();
+    const selectedTreeResponse = await h.app.request(
+      `/web/factory/projects/${h.projectId}/knowledge/scopes?scopeId=${companionHandle}`,
+    );
+    const selectedTree = (await selectedTreeResponse.json()) as KnowledgeScopeTreePayload;
+    expect(selectedTree.scope).toMatchObject({ id: companionHandle, needsCuration: true });
+    expect(selectedTree.curationDestination).toMatchObject({ id: tree.scope.id });
+    const worklistResponse = await h.app.request(
+      `/web/factory/projects/${h.projectId}/knowledge/curation/worklist?scopeId=${companionHandle}`,
+    );
+    const worklist = (await worklistResponse.json()) as {
+      items: Array<{
+        id: string;
+        name: string;
+        version: number;
+        evidence: Array<{ source?: string; provenance?: string }>;
+        evidenceCursor?: string;
+      }>;
+    };
+    expect(worklistResponse.status).toBe(200);
+    expect(worklist.items).toHaveLength(2);
+    expect(worklist.items.map(item => item.name).sort()).toEqual(['Operator-only finding', 'Provisional finding']);
+    const provisionalItem = worklist.items.find(item => item.name === 'Provisional finding');
+    expect(provisionalItem?.evidence).toHaveLength(10);
+    expect(provisionalItem?.evidence.some(entry => entry.source === 'github')).toBe(false);
+    expect(provisionalItem?.evidenceCursor).toBeDefined();
+    expect(worklist.items.find(item => item.name === 'Operator-only finding')?.evidence).toEqual([]);
+    const evidenceResponse = await h.app.request(
+      `/web/factory/projects/${h.projectId}/knowledge/curation/items/${provisionalItem?.id}/evidence?scopeId=${companionHandle}&cursor=${provisionalItem?.evidenceCursor}`,
+    );
+    expect(evidenceResponse.status).toBe(200);
+    const evidencePage = (await evidenceResponse.json()) as {
+      evidence: Array<{ source?: string; provenance?: string }>;
+      nextCursor?: string;
+    };
+    expect(evidencePage.evidence).toHaveLength(5);
+    expect(evidencePage.evidence.some(entry => entry.source === 'github')).toBe(false);
+    expect(evidencePage.nextCursor).toBeUndefined();
+    expect(await h.runtime.getNode({ id: operatorOnly.id, scopeIds: h.allScopeIds })).not.toBeNull();
+
+    const targetsResponse = await h.app.request(
+      `/web/factory/projects/${h.projectId}/knowledge/curation/merge-targets?scopeId=${companionHandle}&query=Curator`,
+    );
+    const targets = (await targetsResponse.json()) as { targets: Array<{ id: string; version: number; name: string }> };
+    expect(targetsResponse.status).toBe(200);
+    expect(targets.targets).toEqual([]);
+
+    expect(provisionalItem).toBeDefined();
+    if (!provisionalItem) throw new Error('Expected the visible provisional worklist item.');
+    const promoteResponse = await h.app.request(
+      `/web/factory/projects/${h.projectId}/knowledge/curation/actions/promote`,
+      {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          scopeId: companionHandle,
+          nodeId: provisionalItem.id,
+          version: provisionalItem.version,
+          destinationScopeId: tree.scope.id,
+          curatorProfileId: 'forged-client-profile',
+        }),
+      },
+    );
+    expect(promoteResponse.status).toBe(404);
+    expect(await promoteResponse.json()).toEqual({ error: 'curation_not_found' });
+    expect((await h.runtime.listProposals({ vouchedScopeIds: h.allScopeIds })).proposals).toEqual([]);
+  });
+
   it('fails closed when the selected keyed Knowledge runtime is unavailable', async () => {
     const absent = await createHarness({ knowledgeResolver: async () => undefined });
     const failed = await createHarness({
