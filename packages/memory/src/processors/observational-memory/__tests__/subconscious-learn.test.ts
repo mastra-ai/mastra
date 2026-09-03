@@ -110,6 +110,30 @@ describe('Subconscious learner', () => {
     });
   });
 
+  it('exposes canonical read tools without the legacy write registry', async () => {
+    const memory = createMemory();
+    const { second } = await seed(memory);
+    const generate = vi.spyOn(Agent.prototype, 'generate').mockImplementationOnce(async function (this: Agent) {
+      const tools = await this.listTools();
+      expect(Object.keys(tools)).toEqual(
+        expect.arrayContaining(['knowledge_search', 'knowledge_read', 'knowledge_browse', 'knowledge_record_skill']),
+      );
+      expect(Object.keys(tools)).not.toEqual(
+        expect.arrayContaining([
+          'knowledge_append',
+          'knowledge_remove',
+          'knowledge_update_node',
+          'knowledge_merge_nodes',
+        ]),
+      );
+      return { text: `<learning-complete through="${second.id}" />` } as any;
+    });
+
+    await createLearnerHandler(memory, resolved())(context());
+
+    expect(generate).toHaveBeenCalledOnce();
+  });
+
   it('runs curator before learner while isolating either failure', async () => {
     const calls: string[] = [];
     const curate = vi.fn(async () => {
@@ -144,8 +168,11 @@ describe('Subconscious learner', () => {
     const memory = createMemory();
     const { store, first, second, scopeIds } = await seed(memory);
     const state = {};
+    const knowledge = memory.getKnowledgeInstance()!;
+    const createNode = vi.spyOn(knowledge, 'createNode');
+    const createRecord = vi.spyOn(knowledge, 'createRecord');
     const tool = createLearnerRecordSkillTool({
-      store,
+      knowledge,
       scopeIds,
       pendingRecords: [first, second],
       parentThreadId: 'alpha',
@@ -168,6 +195,14 @@ describe('Subconscious learner', () => {
     });
     expect(evidence.records).toHaveLength(2);
     expect(evidence.records.every(record => record.source === 'subconscious:alpha:learn')).toBe(true);
+    expect(evidence.records.every(record => record.metadata?.sourceThreadId === 'alpha')).toBe(true);
+    await expect(Promise.all(evidence.records.map(record => store.getRecordScopeIds(record.id)))).resolves.toEqual([
+      [scopeIds[1]],
+      [scopeIds[1]],
+    ]);
+    expect(createNode).toHaveBeenCalledWith(expect.objectContaining({ vouchedScopeIds: scopeIds.slice(1) }));
+    expect(createRecord).toHaveBeenCalledTimes(2);
+    expect(createRecord).toHaveBeenCalledWith(expect.objectContaining({ vouchedScopeIds: scopeIds.slice(1) }));
   });
 
   it('updates a visible resource-scoped skill instead of creating a duplicate', async () => {
@@ -179,7 +214,7 @@ describe('Subconscious learner', () => {
       scopeIds: [scopeIds[1]!],
     });
     const tool = createLearnerRecordSkillTool({
-      store,
+      knowledge: memory.getKnowledgeInstance()!,
       scopeIds,
       pendingRecords: [first, second],
       parentThreadId: 'alpha',
@@ -199,11 +234,46 @@ describe('Subconscious learner', () => {
     expect((await store.listRecords({ node: existing.id, scopeIds })).records).toHaveLength(2);
   });
 
+  it('does not attach reusable resource evidence to a same-name thread-scoped skill', async () => {
+    const memory = createMemory();
+    const { store, first, second, scopeIds } = await seed(memory);
+    const threadSkill = await store.createNode({
+      name: 'deploy-atlas-safely',
+      kind: 'skill',
+      scopeIds: [scopeIds[2]!],
+    });
+    const tool = createLearnerRecordSkillTool({
+      knowledge: memory.getKnowledgeInstance()!,
+      scopeIds,
+      pendingRecords: [first, second],
+      parentThreadId: 'alpha',
+      state: {},
+    });
+
+    const result = await tool.execute?.(
+      {
+        name: threadSkill.name,
+        procedure: 'Validate, publish, then verify the health check.',
+        sourceRecordIds: [first.id, second.id],
+      },
+      {} as any,
+    );
+
+    expect(result).toMatchObject({ node: expect.any(Object), evidence: expect.any(Array) });
+    const skills = await store.listNodes({ scopeIds, kind: 'skill' });
+    expect(skills.filter(skill => skill.name === threadSkill.name)).toHaveLength(2);
+    const resourceSkill = skills.find(skill => skill.id !== threadSkill.id);
+    expect(resourceSkill).toBeDefined();
+    await expect(store.getNodeScopeIds(resourceSkill!.id)).resolves.toEqual([scopeIds[1]]);
+    expect((await store.listRecords({ node: threadSkill.id, scopeIds })).records).toHaveLength(0);
+    expect((await store.listRecords({ node: resourceSkill!.id, scopeIds })).records).toHaveLength(2);
+  });
+
   it('rejects one-off evidence before creating a skill', async () => {
     const memory = createMemory();
     const { store, first, scopeIds } = await seed(memory);
     const tool = createLearnerRecordSkillTool({
-      store,
+      knowledge: memory.getKnowledgeInstance()!,
       scopeIds,
       pendingRecords: [first],
       parentThreadId: 'alpha',
@@ -213,6 +283,28 @@ describe('Subconscious learner', () => {
       tool.execute?.({ name: 'one-off', procedure: 'Do one thing.', sourceRecordIds: [first.id] }, {} as any),
     ).resolves.toMatchObject({ error: true });
     expect(await store.listNodes({ scopeIds, kind: 'skill' })).toHaveLength(0);
+  });
+
+  it('filters hidden source records before shaping the learner worklist', async () => {
+    const memory = createMemory();
+    const { store, second } = await seed(memory);
+    const hiddenScope = await store.createNode({ name: 'Hidden scope', isScope: true, scopeIds: [] });
+    const hiddenNode = await store.createNode({ name: 'Hidden node', scopeIds: [hiddenScope.id] });
+    const hiddenRecord = await store.createRecord({
+      node: hiddenNode,
+      text: 'PRIVATE LEARNER INPUT',
+      scopeIds: [hiddenScope.id],
+      source: 'alpha',
+    });
+    const generate = vi
+      .spyOn(Agent.prototype, 'generate')
+      .mockResolvedValueOnce({ text: `<learning-complete through="${second.id}" />` } as any);
+
+    await createLearnerHandler(memory, resolved())(context());
+
+    const prompt = generate.mock.calls[0]![0] as string;
+    expect(prompt).not.toContain(hiddenRecord.id);
+    expect(prompt).not.toContain('PRIVATE LEARNER INPUT');
   });
 
   it('uses full pre-reflection observations and advances only its independent cursor after success', async () => {

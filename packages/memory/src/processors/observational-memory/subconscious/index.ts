@@ -277,8 +277,6 @@ export {
   stablePinsCacheKey,
 } from './pinned-state-processor';
 export type { PinDeltaOp, PinEntry, PinnedStateProcessorDeps } from './pinned-state-processor';
-export { createKnowledgeWriteTools } from './knowledge-write-tools';
-export type { KnowledgeWriteToolsOptions } from './knowledge-write-tools';
 export { KnowledgeSemanticIndexCoordinator, StaleKnowledgeSemanticIndexError } from './semantic-index';
 export type { KnowledgeSemanticIndexCoordinatorConfig } from './semantic-index';
 export type { CaptureExtractorOptions } from './capture';
