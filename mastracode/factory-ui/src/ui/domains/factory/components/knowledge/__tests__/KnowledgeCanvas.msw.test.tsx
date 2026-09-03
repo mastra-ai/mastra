@@ -50,7 +50,7 @@ const rootLens = {
     },
   ],
   records: [],
-  page: { truncated: false, incomplete: false },
+  page: { truncated: false, terminalBounds: [] },
   limits: { maxNodes: 250, maxEdges: 500, maxBoundaryNodes: 100, boundaryHops: 1 },
 } satisfies KnowledgeGraphPayload;
 
@@ -169,10 +169,10 @@ describe('Knowledge graph canvas', () => {
         },
       ],
       edges: [],
-      page: { truncated: false, incomplete: false },
+      page: { truncated: false, terminalBounds: [] },
     } satisfies KnowledgeGraphPayload;
     installHandlers(cursor =>
-      cursor ? secondPage : { ...rootLens, page: { nextCursor: 'cursor-2', truncated: true, incomplete: false } },
+      cursor ? secondPage : { ...rootLens, page: { nextCursor: 'cursor-2', truncated: true, terminalBounds: [] } },
     );
     const user = userEvent.setup();
     renderCanvas(`/factories/${projectId}/knowledge?scope=${encodeURIComponent(rootScope.id)}`);
@@ -189,12 +189,26 @@ describe('Knowledge graph canvas', () => {
     expect(map).toHaveTextContent('Second page service');
   });
 
-  it('drops an incomplete scope as a whole from the scope map', async () => {
-    installHandlers({ ...rootLens, page: { truncated: true, incomplete: true } });
+  it('keeps a terminally bounded scope out of the map after its node pages finish', async () => {
+    installHandlers(cursor =>
+      cursor
+        ? { ...rootLens, page: { truncated: false, terminalBounds: [] } }
+        : {
+            ...rootLens,
+            page: { nextCursor: 'cursor-2', truncated: true, terminalBounds: ['record-window'] },
+          },
+    );
     const user = userEvent.setup();
     renderCanvas(`/factories/${projectId}/knowledge?scope=${encodeURIComponent(rootScope.id)}`);
 
-    await user.click(await screen.findByRole('button', { name: 'Open Platform scope' }));
+    expect(await screen.findByTestId('knowledge-truncation-banner')).toHaveTextContent(
+      'Load more only loads additional nodes',
+    );
+    await user.click(screen.getByRole('button', { name: 'Load more in this lens' }));
+    await waitFor(() =>
+      expect(screen.queryByRole('button', { name: 'Load more in this lens' })).not.toBeInTheDocument(),
+    );
+    await user.click(screen.getByRole('button', { name: 'Open Platform scope' }));
     expect(await screen.findByTestId('knowledge-scope-overlay')).toHaveTextContent('Platform scope');
     await user.click(screen.getByRole('button', { name: 'Scope map' }));
 

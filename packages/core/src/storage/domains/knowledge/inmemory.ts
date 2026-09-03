@@ -654,6 +654,7 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
     const queryScope = canonicalizeKnowledgeScopeIds(input.scopeIds);
     const cursor = input.cursor
       ? parseKnowledgeNodeCursor(input.cursor, {
+          name: input.name,
           namePrefix: input.namePrefix,
           kind: input.kind,
           isScope: input.isScope,
@@ -666,6 +667,7 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
         node =>
           !input.membershipScopeIds || isKnowledgeScopeVisible(this.#nodeScopeIds(node.id), input.membershipScopeIds),
       )
+      .filter(node => !input.name || node.name.trim().toLocaleLowerCase() === input.name.trim().toLocaleLowerCase())
       .filter(
         node => !input.namePrefix || node.name.toLocaleLowerCase().startsWith(input.namePrefix.toLocaleLowerCase()),
       )

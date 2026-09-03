@@ -597,7 +597,7 @@ describe('KnowledgeRoutes', () => {
   });
 
   // 5
-  it('does not let same-scope links escape the bounded node window', async () => {
+  it('keeps every edge page-local and marks cross-page same-scope links terminally bounded', async () => {
     const h = await createHarness({ limits: { maxNodes: 1 } });
     // Equal updatedAt → name-asc tiebreak keeps 'A window entity' in the lens page.
     const inWindow = await node(h.knowledge, 'A window entity', h.projectScope);
@@ -609,13 +609,35 @@ describe('KnowledgeRoutes', () => {
     expect(first.body.edges).toEqual([]);
     expect(first.body.page.truncated).toBe(true);
     expect(first.body.page.nextCursor).toBeDefined();
+    expect(first.body.page.terminalBounds).toContain('edge-window');
 
     const second = await rawGraph(h, `?cursor=${encodeURIComponent(first.body.page.nextCursor!)}`);
     expect(second.body.nodes.map(node => node.name)).toEqual(['Z outside entity']);
-    expect(second.body.page).toEqual({ truncated: false, incomplete: false });
-    expect(second.body.edges).toEqual([
-      expect.objectContaining({ source: first.body.nodes[0]?.id, target: second.body.nodes[0]?.id }),
-    ]);
+    expect(second.body.edges).toEqual([]);
+    expect(second.body.page).toEqual({ truncated: false, terminalBounds: ['edge-window'] });
+  });
+
+  it('keeps reverse-direction cross-page edges self-contained when the boundary window is full', async () => {
+    const h = await createHarness({ limits: { maxNodes: 1, maxBoundaryNodes: 1 } });
+    const source = await node(h.knowledge, 'A source', h.projectScope);
+    const sameScopeTarget = await node(h.knowledge, 'Z same-scope target', h.projectScope);
+    const boundary = await node(h.knowledge, 'Org boundary target', h.orgScope);
+    await record(h.knowledge, sameScopeTarget, `Links back to [[${source.name}]].`, h.projectScope);
+    await record(h.knowledge, source, `Links [[${boundary.name}]] and [[Z same-scope target]].`, h.projectScope);
+
+    const first = await rawGraph(h);
+    expect(first.body.page.nextCursor).toBeDefined();
+    expect(first.body.page.terminalBounds).toContain('edge-window');
+
+    const second = await rawGraph(h, `?cursor=${encodeURIComponent(first.body.page.nextCursor!)}`);
+    expect(second.body.page.terminalBounds).toContain('edge-window');
+    for (const page of [first.body, second.body]) {
+      const nodeIds = new Set(page.nodes.map(node => node.id));
+      for (const edge of page.edges) {
+        expect(nodeIds.has(edge.source)).toBe(true);
+        expect(nodeIds.has(edge.target)).toBe(true);
+      }
+    }
   });
 
   it('lazily materializes host-vouched intake addresses for distinct issue, pull request, Slack, and thread views', async () => {
@@ -693,7 +715,21 @@ describe('KnowledgeRoutes', () => {
     expect(body.page.truncated).toBe(true);
   });
 
-  it('marks a lens truncated when one node has more records than its bounded preview', async () => {
+  it('surfaces a terminal edge bound independently from node pagination', async () => {
+    const h = await createHarness({ limits: { maxNodes: 1, maxEdges: 1 } });
+    const boundaryA = await node(h.knowledge, 'Boundary A', h.orgScope);
+    const boundaryB = await node(h.knowledge, 'Boundary B', h.orgScope);
+    await node(h.knowledge, 'Older project node', h.projectScope);
+    const source = await node(h.knowledge, 'Current project node', h.projectScope);
+    await record(h.knowledge, source, `Links [[${boundaryA.name}]] and [[${boundaryB.name}]].`, h.projectScope);
+
+    const { body } = await graph(h);
+    expect(body.page.nextCursor).toMatch(/^kh_/);
+    expect(body.page.terminalBounds).toContain('edge-window');
+    expect(body.edges).toHaveLength(1);
+  });
+
+  it('surfaces a terminal record bound without implying another node page can load it', async () => {
     const h = await createHarness();
     const owner = await node(h.knowledge, 'High-volume node', h.projectScope);
     await Promise.all(
@@ -702,7 +738,7 @@ describe('KnowledgeRoutes', () => {
 
     const { body } = await graph(h);
     expect(body.nodes.find(entry => entry.id === owner.id)?.recordCount).toBe(100);
-    expect(body.page.truncated).toBe(true);
+    expect(body.page).toEqual({ truncated: false, terminalBounds: ['record-window'] });
   });
 
   it('benchmarks 100, 250, and 500-node lenses and clamps to the 250-node server policy', async () => {
@@ -776,6 +812,59 @@ describe('KnowledgeRoutes', () => {
     expect(threadView.nodes.some(node => node.name === 'pinned')).toBe(false);
     expect(threadView.nodes.find(node => node.id === threadAccented.id)?.pinned).toBe(true);
     expect(threadView.nodes.some(node => node.id === accented.id)).toBe(false);
+  });
+
+  it('surfaces a terminal edge bound when pinned relationships exceed the edge window', async () => {
+    const h = await createHarness({ limits: { maxEdges: 1 } });
+    const first = await node(h.knowledge, 'Pinned target A', h.projectScope);
+    const second = await node(h.knowledge, 'Pinned target B', h.projectScope);
+    const third = await node(h.knowledge, 'Pinned target C', h.projectScope);
+    const pinned = await node(h.knowledge, 'pinned', h.projectScope, 'system');
+    await record(
+      h.knowledge,
+      pinned,
+      `Remember [[${first.name}]], [[${second.name}]], and [[${third.name}]].`,
+      h.projectScope,
+    );
+
+    const { body } = await graph(h);
+    expect(body.edges).toHaveLength(1);
+    expect(body.page.terminalBounds).toContain('edge-window');
+  });
+
+  it('marks pinned relationships split across node pages as terminally bounded', async () => {
+    const h = await createHarness({ limits: { maxNodes: 1 } });
+    const firstTarget = await node(h.knowledge, 'A pinned target', h.projectScope);
+    await node(h.knowledge, 'Z pinned target', h.projectScope);
+    const pinned = await node(h.knowledge, 'pinned', h.projectScope, 'system');
+    await record(h.knowledge, pinned, 'Connect [[A pinned target]] and [[Z pinned target]].', h.projectScope);
+
+    const first = await rawGraph(h);
+    expect(first.body.page.nextCursor).toBeDefined();
+    expect(first.body.page.terminalBounds).toContain('edge-window');
+    expect(first.body.nodes.find(entry => entry.name === firstTarget.name)?.pinned).toBe(false);
+    expect(first.body.edges).toEqual([]);
+
+    const second = await rawGraph(h, `?cursor=${encodeURIComponent(first.body.page.nextCursor!)}`);
+    expect(second.body.page.terminalBounds).toContain('edge-window');
+    expect(second.body.nodes[0]?.pinned).toBe(false);
+    expect(second.body.edges).toEqual([]);
+  });
+
+  it('resolves the reserved pinned lane beyond the first 250 scope members', async () => {
+    const h = await createHarness();
+    const pinned = await node(h.knowledge, 'pinned', h.projectScope, 'system');
+    await Promise.all(
+      Array.from({ length: 251 }, (_, index) =>
+        node(h.knowledge, `A filler ${String(index).padStart(3, '0')}`, h.projectScope),
+      ),
+    );
+    const target = await node(h.knowledge, 'A 000 highlighted target', h.projectScope);
+    await record(h.knowledge, pinned, 'Remember [[A 000 highlighted target]].', h.projectScope);
+
+    const { body } = await graph(h);
+    expect(body.nodes.some(entry => entry.name === 'pinned')).toBe(false);
+    expect(body.nodes.find(entry => entry.name === target.name)?.pinned).toBe(true);
   });
 
   // 7b
@@ -940,7 +1029,8 @@ describe('KnowledgeRoutes', () => {
 
     const { body } = await graph(h);
     expect(body).not.toHaveProperty('unresolvedCapped');
-    expect(body.page.truncated).toBe(true);
+    expect(body.page.truncated).toBe(false);
+    expect(body.page.terminalBounds).toContain('wikilink-resolution-window');
   });
 
   // 16

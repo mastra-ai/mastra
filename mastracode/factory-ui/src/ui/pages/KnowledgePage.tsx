@@ -722,7 +722,7 @@ function KnowledgeContent({ factoryProjectId }: { factoryProjectId: string | und
     setSelected(null);
     setCanvasMode('lens');
     if (graph && graph.scope.id !== scopeId) {
-      if (graph.page.truncated) {
+      if (graph.page.truncated || graph.page.terminalBounds.length > 0) {
         setOmittedScopes(scopes =>
           scopes.some(scope => scope.id === graph.scope.id)
             ? scopes
@@ -739,9 +739,10 @@ function KnowledgeContent({ factoryProjectId }: { factoryProjectId: string | und
     });
   };
   const completeLenses = new Map(visitedLenses.map(lens => [lens.scope.id, lens]));
-  if (graph && !graph.page.truncated) completeLenses.set(graph.scope.id, graph);
+  const graphIsBounded = Boolean(graph && (graph.page.truncated || graph.page.terminalBounds.length > 0));
+  if (graph && !graphIsBounded) completeLenses.set(graph.scope.id, graph);
   const incompleteScopes = new Map(omittedScopes.map(scope => [scope.id, scope.name]));
-  if (graph?.page.truncated) incompleteScopes.set(graph.scope.id, graph.scope.name);
+  if (graph && graphIsBounded) incompleteScopes.set(graph.scope.id, graph.scope.name);
   for (const scopeId of completeLenses.keys()) incompleteScopes.delete(scopeId);
 
   let body: React.ReactNode;

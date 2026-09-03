@@ -39,6 +39,6 @@ Expected: 1/1 test passes through real Factory routes backed by LibSQL. The jour
 Latest verified output (2026-09-02):
 
 - `results.json`: `4c3ef168dfa45e56031e5451db9991bbecd1051b9947fdf754d1d2ecc967fee8`
-- `canvas-boundary.png`: `2bb1704f3d7a63cd889cbf5a381e1ac81c7d8c65991d81d88a06463136786e31`
-- `trace.zip`: `f9c641eb430559416b41e9e237ecdfd5583a8c9f4214b9c92bad511ca99593e7`
-- `video.webm`: `93dd06ee456b0a87ad6247760e0976d4b9e2b7cb7110072120b3ac1bb3ec86e2`
+- `canvas-boundary.png`: `4e837c502a278425b6f4083236311baf49a4ef38943f8da74fff832713c21a12`
+- `trace.zip`: `87ea2bdeef95774980b35bd12523c0c5408d292a62a630da602031c13acd8656`
+- `video.webm`: `1d5864f440203be71cf8d46026775e44ead22609de9246c6e557bcc6047e7132`

@@ -226,13 +226,16 @@ export interface KnowledgeGraphProps {
 }
 
 function TruncationBanner({ payload }: { payload: KnowledgeGraphPayload }) {
-  if (!payload.page.truncated) return null;
+  if (!payload.page.truncated && payload.page.terminalBounds.length === 0) return null;
+  const terminalDetail = payload.page.terminalBounds.length
+    ? ' Relationship data reached a terminal server bound; Load more only loads additional nodes.'
+    : '';
   return (
     <div
       data-testid="knowledge-truncation-banner"
       className="border-surface5 bg-surface3/90 text-icon4 pointer-events-none absolute top-2 left-1/2 z-10 -translate-x-1/2 rounded-md border px-3 py-1 text-xs"
     >
-      Bounded lens — showing {payload.nodes.length} nodes and {payload.edges.length} edges
+      Bounded lens — showing {payload.nodes.length} nodes and {payload.edges.length} edges.{terminalDetail}
     </div>
   );
 }
