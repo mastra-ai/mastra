@@ -20,6 +20,7 @@ import type {
 } from '@mastra/core/storage';
 import { parseFieldKey } from '@mastra/core/utils';
 
+import { isReplicationConfigured } from '../../../db/replication';
 import type { ClickhouseReplicationConfig } from '../../../db/replication';
 import { TABLE_SCORE_EVENTS, TABLE_SCORE_EVENTS_DELTA } from './ddl';
 import { recordDeletionRequest } from './deletion-requests';
@@ -227,7 +228,7 @@ export async function deleteScores(
   await client.command({
     query: `DELETE FROM ${TABLE_SCORE_EVENTS} WHERE ${conditions.join(' AND ')}`,
     query_params: params,
-    clickhouse_settings: { lightweight_deletes_sync: '1' },
+    clickhouse_settings: { lightweight_deletes_sync: isReplicationConfigured(replication) ? '2' : '1' },
   });
 }
 

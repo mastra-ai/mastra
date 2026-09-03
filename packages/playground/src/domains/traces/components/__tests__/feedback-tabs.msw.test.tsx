@@ -79,7 +79,7 @@ describe('feedback tabs composer', () => {
 
     await waitFor(() => expect(onPost).toHaveBeenCalled());
     expect(onPost.mock.calls[0][0]).toMatchObject({ feedback: { traceId: TRACE_ID, value: 'trace note' } });
-    expect(onPost.mock.calls[0][0]).not.toMatchObject({ feedback: { spanId: expect.anything() } });
+    expect(onPost.mock.calls[0][0]).not.toHaveProperty('feedback.spanId');
   });
 });
 

@@ -63,7 +63,7 @@ describe('ClickHouse deletion lifecycle', () => {
         delOrganizationId: 'org-1',
         delResourceId: 'resource-1',
       },
-      clickhouse_settings: { lightweight_deletes_sync: '1' },
+      clickhouse_settings: { lightweight_deletes_sync: '2' },
     });
     expect(insert.mock.invocationCallOrder[0]).toBeLessThan(command.mock.invocationCallOrder[0]!);
   });
