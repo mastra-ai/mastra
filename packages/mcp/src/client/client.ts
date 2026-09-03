@@ -1610,8 +1610,8 @@ export class InternalMastraMCPClient extends MastraBase {
             : tool.outputSchema
           : undefined;
         const outputSchemaComplexityError = outputSchema ? getJsonSchemaComplexityError(outputSchema) : undefined;
-        let outputValidator: ReturnType<jsonSchemaValidator['getValidator']> | undefined;
-        const getOutputValidator = async () => {
+        let outputValidationSchema: StandardSchemaWithJSON | undefined;
+        const getOutputValidationSchema = async () => {
           if (!outputSchema) return undefined;
           if (outputSchemaComplexityError) {
             throw new MastraError({
@@ -1622,8 +1622,20 @@ export class InternalMastraMCPClient extends MastraBase {
               details: { toolName: tool.name, serverName: this.name },
             });
           }
-          outputValidator ??= (await this.getJsonSchemaValidator()).getValidator(outputSchema);
-          return outputValidator;
+          if (!outputValidationSchema) {
+            const validator = (await this.getJsonSchemaValidator()).getValidator(outputSchema);
+            const standardSchema = toStandardSchema(outputSchema)['~standard'];
+            outputValidationSchema = {
+              '~standard': {
+                ...standardSchema,
+                validate: value => {
+                  const result = validator(value);
+                  return result.valid ? { value: result.data } : { issues: [{ message: result.errorMessage }] };
+                },
+              },
+            };
+          }
+          return outputValidationSchema;
         };
         const mcpToolProps =
           toolMeta || annotations
@@ -1634,13 +1646,6 @@ export class InternalMastraMCPClient extends MastraBase {
                 },
               }
             : {};
-        // Real validator for structuredContent. Kept separate from the Tool's outputSchema
-        // (whose validator is a no-op — see convertOutputSchema) because only the
-        // structuredContent success path should be validated, not envelope returns.
-        const rawOutputSchema = tool.outputSchema
-          ? (('jsonSchema' in tool.outputSchema ? tool.outputSchema.jsonSchema : tool.outputSchema) as JSONSchema7)
-          : undefined;
-        const outputValidator = rawOutputSchema ? toStandardSchema(rawOutputSchema) : undefined;
         const mastraTool = createTool({
           id: `${this.name}_${tool.name}`,
           description: tool.description || '',
@@ -1719,20 +1724,6 @@ export class InternalMastraMCPClient extends MastraBase {
                   });
                 }
 
-                if (!res.isError && res.structuredContent !== undefined) {
-                  const validator = await getOutputValidator();
-                  const validation = validator?.(res.structuredContent);
-                  if (validation && !validation.valid) {
-                    throw new MastraError({
-                      id: 'MCP_CLIENT_OUTPUT_SCHEMA_VALIDATION_FAILED',
-                      domain: ErrorDomain.MCP,
-                      category: ErrorCategory.THIRD_PARTY,
-                      text: `Structured content does not match the tool's output schema: ${validation.errorMessage}`,
-                      details: { toolName: tool.name, serverName: this.name },
-                    });
-                  }
-                }
-
                 this.log('debug', `Tool executed successfully: ${tool.name}`);
 
                 if (res.structuredContent !== undefined) {
@@ -1743,8 +1734,9 @@ export class InternalMastraMCPClient extends MastraBase {
                   // return the same structured ValidationError shape createTool produces so
                   // the model can self-correct. Skipped for isError results, which are handled
                   // above / by the `onToolError: 'return'` envelope path.
-                  if (!res.isError && outputValidator) {
-                    const validation = validateToolOutput(outputValidator, res.structuredContent, tool.name);
+                  if (!res.isError && outputSchema) {
+                    const validationSchema = await getOutputValidationSchema();
+                    const validation = validateToolOutput(validationSchema, res.structuredContent, tool.name);
                     if (validation.error) {
                       this.log('debug', `Tool output failed schema validation: ${tool.name}`, {
                         message: validation.error.message,

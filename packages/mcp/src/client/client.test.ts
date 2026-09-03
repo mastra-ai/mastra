@@ -296,7 +296,10 @@ describe('InternalMastraMCPClient - jsonSchemaValidator pass-through', () => {
       },
     });
 
-    await expect(tool.execute?.({})).rejects.toThrow(/structured content does not match/i);
+    await expect(tool.execute?.({})).resolves.toMatchObject({
+      error: true,
+      message: expect.stringMatching(/tool output validation failed for validated/i),
+    });
     expect(customValidator.getValidator).toHaveBeenCalledWith({ type: 'string' });
     expect(validate).toHaveBeenCalledWith('invalid');
   });
@@ -1467,7 +1470,10 @@ describe('MastraMCPClient - outputSchema with structuredContent', () => {
     });
 
     const tool = (await client.tools()).validated_tool;
-    await expect(tool.execute?.({})).rejects.toThrow(/structured content does not match/i);
+    await expect(tool.execute?.({})).resolves.toMatchObject({
+      error: true,
+      message: expect.stringMatching(/tool output validation failed for validated_tool/i),
+    });
   });
 
   it('uses JSON Schema 2020-12 by default when validating structuredContent', async () => {
@@ -1499,7 +1505,10 @@ describe('MastraMCPClient - outputSchema with structuredContent', () => {
 
     const tool = (await client.tools()).tuple_tool;
     await expect(tool.execute?.({})).resolves.toEqual(['valid', 1]);
-    await expect(tool.execute?.({})).rejects.toThrow(/structured content does not match/i);
+    await expect(tool.execute?.({})).resolves.toMatchObject({
+      error: true,
+      message: expect.stringMatching(/tool output validation failed for tuple_tool/i),
+    });
   });
 
   it('validates output schemas that explicitly declare draft-07', async () => {
@@ -1532,7 +1541,10 @@ describe('MastraMCPClient - outputSchema with structuredContent', () => {
 
     const tool = (await client.tools()).draft7_tuple_tool;
     await expect(tool.execute?.({})).resolves.toEqual(['valid', 1]);
-    await expect(tool.execute?.({})).rejects.toThrow(/structured content does not match/i);
+    await expect(tool.execute?.({})).resolves.toMatchObject({
+      error: true,
+      message: expect.stringMatching(/tool output validation failed for draft7_tuple_tool/i),
+    });
   });
 
   it('should use scalar structuredContent as JSON model output', async () => {

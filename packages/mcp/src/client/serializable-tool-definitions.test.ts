@@ -222,9 +222,10 @@ describe('serializable MCP tool definitions (issue #20527)', () => {
       const hydrated = coldClient.toolFromDefinition({ definition: cached });
 
       try {
-        await expect(hydrated.execute!({ city: 'Berlin' } as any, {})).rejects.toThrow(
-          /structured content does not match/i,
-        );
+        await expect(hydrated.execute!({ city: 'Berlin' } as any, {})).resolves.toMatchObject({
+          error: true,
+          message: expect.stringMatching(/tool output validation failed for measure/i),
+        });
       } finally {
         await coldClient.disconnect().catch(() => {});
       }
