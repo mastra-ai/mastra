@@ -549,6 +549,57 @@ describe('GeminiLiveVoice', () => {
 
       await expect(errorPromise).resolves.toBeDefined();
     });
+
+    it('should execute a tool call delivered through both wire formats only once', async () => {
+      const mockExecute = vi.fn(async ({}: { context: any }) => ({ result: 'ok' }));
+      const tools = {
+        testTool: {
+          id: 'testTool',
+          description: 'Test tool',
+          inputSchema: { type: 'object', properties: {} },
+          execute: mockExecute,
+        },
+      };
+
+      voice.addTools(tools);
+
+      (voice as any).state = 'connected';
+      (voice as any).ws = {
+        send: vi.fn(),
+        readyState: 1, // WebSocket.OPEN
+        close: vi.fn(),
+        once: vi.fn(),
+      };
+      (voice as any).connectionManager.setWebSocket((voice as any).ws);
+      mockWs = (voice as any).ws;
+
+      const toolCallEvents: any[] = [];
+      voice.on('toolCall', event => toolCallEvents.push(event));
+
+      // The same provider call (id `call-1`) is delivered twice: once embedded
+      // in serverContent.modelTurn.parts and once as a top-level toolCall.
+      (voice as any).handleServerContent({
+        modelTurn: {
+          parts: [{ functionCall: { name: 'testTool', args: { test: 'value' }, id: 'call-1' } }],
+        },
+      });
+      // Flush the async dispatch started by handleServerContent
+      await new Promise(resolve => setTimeout(resolve, 0));
+
+      await (voice as any).handleToolCall({
+        toolCall: {
+          functionCalls: [{ name: 'testTool', args: { test: 'value' }, id: 'call-1' }],
+        },
+      });
+
+      expect(mockExecute).toHaveBeenCalledTimes(1);
+      expect(mockExecute).toHaveBeenCalledWith(
+        { test: 'value' },
+        expect.objectContaining({ requestContext: undefined }),
+      );
+      expect(toolCallEvents).toHaveLength(1);
+      expect(mockWs.send).toHaveBeenCalledTimes(1);
+    });
   });
 
   describe('Session Management', () => {
