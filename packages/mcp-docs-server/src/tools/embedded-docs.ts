@@ -138,7 +138,7 @@ async function readSourceMap(packageName: string, projectPath: string): Promise<
       return null;
     }
 
-    const sourceMapPath = path.join(packageInfo.rootPath, 'dist', 'docs', 'SOURCE_MAP.json');
+    const sourceMapPath = path.join(packageInfo.rootPath, 'dist', 'docs', 'assets', 'SOURCE_MAP.json');
     const content = await fs.readFile(sourceMapPath, 'utf-8');
     const sourceMap = JSON.parse(content) as SourceMap;
     sourceMapCache.set(cacheKey, sourceMap);
