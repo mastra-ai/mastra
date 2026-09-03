@@ -1,5 +1,6 @@
 import type { ToolsInput } from '@mastra/core/agent';
 
+import { createGitlabTools } from './providers/gitlab.js';
 import { createJiraTools } from './providers/jira.js';
 import { createLinearTools } from './providers/linear.js';
 import { createNotionTools } from './providers/notion.js';
@@ -44,6 +45,11 @@ export const PROVIDERS: Partial<Record<ProviderKey, ProviderRegistration>> = {
     integrationId: 'jira',
     envVar: 'MASTRA_JIRA_CONNECTION_ID',
     createTools: createJiraTools,
+  },
+  gitlab: {
+    integrationId: 'gitlab-group-token',
+    envVar: 'MASTRA_GITLAB_CONNECTION_ID',
+    createTools: createGitlabTools,
   },
   snowflake: {
     integrationId: 'snowflake',
