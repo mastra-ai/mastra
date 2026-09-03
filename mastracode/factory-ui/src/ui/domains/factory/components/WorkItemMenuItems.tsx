@@ -8,6 +8,7 @@ import type { ItemRunSpec, RunAction } from '../boardRunSpecs';
 import { externalLinkLabel, githubNumberForItem } from '../boardItems';
 import { itemStageOptions } from '../boardStages';
 import { TRIAGE_DECISIONS, awaitsTriageDecision } from '../cardPrimaryAction';
+import { workItemPrompt } from '../../supervisor/services/supervisor';
 import type { FactoryDecisionSummary } from '../services/decisions';
 import type { WorkItem } from '../services/workItems';
 import type { BoardStageId } from '../stages';
@@ -40,8 +41,7 @@ export function askSupervisorPath(
   item: Pick<WorkItem, 'id' | 'source' | 'metadata' | 'title'>,
 ) {
   const number = githubNumberForItem(item);
-  const subject = number ? `#${number}` : `"${item.title}" (${item.id})`;
-  const ask = `What's going on with ${subject}? Explain its current state and anything that needs me.`;
+  const ask = workItemPrompt({ id: item.id, title: item.title, ...(number ? { number } : {}) });
   return `/factories/${factoryId}/supervisor?ask=${encodeURIComponent(ask)}`;
 }
 
