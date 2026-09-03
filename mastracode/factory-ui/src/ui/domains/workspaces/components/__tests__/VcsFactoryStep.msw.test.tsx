@@ -1,10 +1,10 @@
-import { screen, waitFor } from '@testing-library/react';
+import { act, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { describe, expect, it, vi } from 'vitest';
 
 import { server } from '../../../../../../e2e/ui/msw-server';
-import { renderWithProviders, TEST_BASE_URL } from '../../../../../../e2e/ui/render';
+import { renderWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '../../../../../../e2e/ui/render';
 import { VcsFactoryStep } from '../VcsFactoryStep';
 
 const connectedGithub = {
@@ -39,7 +39,7 @@ describe('VCS Factory step', () => {
       }),
     );
 
-    renderWithProviders(
+    const { client } = renderWithProviders(
       <VcsFactoryStep
         connectingRepositoryId={null}
         githubRedirecting={false}
@@ -52,13 +52,16 @@ describe('VCS Factory step', () => {
     );
 
     const search = await screen.findByLabelText('Search repositories');
-    await waitFor(() => expect(queries).toEqual(['']));
+    await waitForMutationsIdle(client);
+    expect(queries).toEqual(['']);
     queries.splice(0);
 
     const user = userEvent.setup({ delay: 350 });
     await user.type(search, 'jal');
 
     expect(queries).toEqual([]);
-    await waitFor(() => expect(queries).toEqual(['jal']));
+    await act(() => new Promise(resolve => setTimeout(resolve, 800)));
+    await waitForMutationsIdle(client);
+    expect(queries).toEqual(['jal']);
   });
 });

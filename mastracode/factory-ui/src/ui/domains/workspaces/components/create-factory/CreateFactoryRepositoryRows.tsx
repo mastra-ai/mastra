@@ -1,11 +1,11 @@
 import { CommandGroup } from '@mastra/playground-ui/components/Command';
 import { CommandPaletteItem } from '@mastra/playground-ui/components/CommandPalette';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
+import { useDebouncedValue } from '@mastra/playground-ui/hooks/use-debounced-value';
 import { GithubIcon } from '@mastra/playground-ui/icons/GithubIcon';
 import { Settings2 } from 'lucide-react';
 
 import { useGithubReposQuery } from '../../../../../hooks/useGithubRepos';
-import { useDebouncedValue } from '../../../../lib/hooks/useDebouncedValue';
 import { useGithubStatusQuery } from '../../../../../hooks/useGithubStatus';
 import { SkeletonRows } from '../../../../ui/SkeletonRows';
 import type { GithubRepo, GithubStatus } from '../../services/github';
