@@ -7,7 +7,6 @@ import { LibSQLStore } from '@mastra/libsql';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { createPinnedTools, listPinnedKnowledge } from '../../src/processors/observational-memory/subconscious/pinned';
-import { resolveKnowledgeScopeIds } from '../../src/processors/observational-memory/subconscious/knowledge-tools';
 import { PinnedStateProcessor } from '../../src/processors/observational-memory/subconscious/pinned-state-processor';
 
 describe('Subconscious pinned facts against LibSQL', () => {
@@ -21,23 +20,35 @@ describe('Subconscious pinned facts against LibSQL', () => {
     const directory = await mkdtemp(join(tmpdir(), 'subconscious-pins-libsql-'));
     directories.push(directory);
     const storage = new LibSQLStore({ id: randomUUID(), url: `file:${join(directory, 'pins.db')}` });
-    await storage.init();
-    const knowledge = new Knowledge({ id: 'default', storage });
+    const knowledge = new Knowledge({
+      id: 'pins',
+      storage,
+      structure: {
+        scopes: [
+          { address: 'org:acme', name: 'Acme' },
+          { address: 'resource:user-42', name: 'User 42', parentAddresses: ['org:acme'] },
+          { address: 'resource:user-42:thread:alpha', name: 'Thread alpha', parentAddresses: ['resource:user-42'] },
+        ],
+      },
+    });
+    const reconciled = await knowledge.reconcile();
+    const scopeIds = [
+      reconciled.scopes['org:acme']!,
+      reconciled.scopes['resource:user-42']!,
+      reconciled.scopes['resource:user-42:thread:alpha']!,
+    ];
+    const store = (await storage.getStore('knowledge'))!;
     const memory = {
+      storage,
       getKnowledgeInstance: () => knowledge,
-      getKnowledgeStore: async () => (await storage.getStore('knowledge'))!,
-    };
-    const scopeIds = await resolveKnowledgeScopeIds(memory, {
-      agent: { threadId: 'alpha', resourceId: 'user-42' },
-      requestContext: { get: (key: string) => (key === 'organizationId' ? 'acme' : undefined) },
-    } as any);
+      getKnowledgeStore: async () => store,
+    } as unknown as Parameters<typeof createPinnedTools>[0];
     const tools = createPinnedTools(memory, {
       scopeIds,
       sourceThreadId: 'alpha',
       maxPins: 20,
       maxCharacters: 2_000,
     });
-    const store = (await storage.getStore('knowledge'))!;
     return { tools, store, storage, knowledge, scopeIds };
   }
 

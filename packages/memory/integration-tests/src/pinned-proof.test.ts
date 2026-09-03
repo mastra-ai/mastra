@@ -17,7 +17,6 @@ import { Memory, Subconscious } from '@mastra/memory';
 import type { EmbeddingModel } from 'ai';
 import { afterAll, describe, expect, it } from 'vitest';
 
-import { resolveKnowledgeScopeIds } from '../../src/processors/observational-memory/subconscious/knowledge-tools';
 import { createPinnedTools } from '../../src/processors/observational-memory/subconscious/pinned';
 
 const embedder: EmbeddingModel<string> = {
@@ -54,7 +53,24 @@ describe('Pinned knowledge live proof', () => {
     const url = `file:${join(directory, 'proof.db')}`;
     const storage = new LibSQLStore({ id: randomUUID(), url });
     const vector = new LibSQLVector({ id: randomUUID(), url });
-    await storage.init();
+    const threadId = randomUUID();
+    const resourceId = 'proof-user';
+    const knowledge = new Knowledge({
+      id: 'pinned-proof',
+      storage,
+      structure: {
+        scopes: [
+          { address: 'org:acme', name: 'Acme' },
+          { address: `resource:${resourceId}`, name: resourceId, parentAddresses: ['org:acme'] },
+          {
+            address: `resource:${resourceId}:thread:${threadId}`,
+            name: threadId,
+            parentAddresses: [`resource:${resourceId}`],
+          },
+        ],
+      },
+    });
+    const reconciled = await knowledge.reconcile();
 
     const prompts: string[] = [];
     const model = new MockLanguageModelV2({
@@ -74,7 +90,6 @@ describe('Pinned knowledge live proof', () => {
       },
     });
 
-    const knowledge = new Knowledge({ id: 'default', storage });
     const memory = new Memory({
       storage,
       knowledge,
@@ -97,20 +112,16 @@ describe('Pinned knowledge live proof', () => {
       memory,
     });
 
-    const threadId = randomUUID();
-    const resourceId = 'proof-user';
     const requestContext = new RequestContext();
     requestContext.set('organizationId', 'acme');
     const turnOptions = { memory: { thread: threadId, resource: resourceId }, requestContext } as any;
 
-    const scopeIds = await resolveKnowledgeScopeIds(
-      memory as any,
-      {
-        agent: { threadId, resourceId },
-        requestContext,
-      } as any,
-    );
-    const tools = createPinnedTools(memory as any, {
+    const scopeIds = [
+      reconciled.scopes['org:acme']!,
+      reconciled.scopes[`resource:${resourceId}`]!,
+      reconciled.scopes[`resource:${resourceId}:thread:${threadId}`]!,
+    ];
+    const tools = createPinnedTools(memory, {
       scopeIds,
       sourceThreadId: threadId,
       maxPins: 20,
