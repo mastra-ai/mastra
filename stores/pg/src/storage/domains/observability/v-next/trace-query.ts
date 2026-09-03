@@ -2,6 +2,7 @@ import * as coreStorage from '@mastra/core/storage';
 import type {
   TraceQueryCanonicalField,
   TraceQueryField,
+  TraceQueryPredicateField,
   TraceQueryResponse,
   TraceQueryScoreField,
   TraceQuerySpanField,
@@ -81,6 +82,10 @@ function fieldSql<TField extends string>(
   return sql;
 }
 
+function isMetadataField(field: TraceQueryPredicateField): field is `metadata.${string}` {
+  return field.startsWith('metadata.');
+}
+
 function placeholders(values: readonly unknown[], offset: number): string {
   return values.map((_, index) => `$${offset + index}`).join(', ');
 }
@@ -89,11 +94,12 @@ function compileScalarPredicate<TField extends string>(
   predicate: TrustedTraceQueryScalarPredicate,
   registry: Partial<FieldRegistry<TField>>,
   parameterOffset: number,
+  allowMetadata = false,
 ): SqlFragment {
   if (predicate.type === 'boolean') {
     const values: unknown[] = [];
     const parts = predicate.args.map(arg => {
-      const compiled = compileScalarPredicate(arg, registry, parameterOffset + values.length);
+      const compiled = compileScalarPredicate(arg, registry, parameterOffset + values.length, allowMetadata);
       values.push(...compiled.values);
       return `(${compiled.sql})`;
     });
@@ -101,37 +107,50 @@ function compileScalarPredicate<TField extends string>(
   }
 
   if (predicate.type === 'not') {
-    const compiled = compileScalarPredicate(predicate.arg, registry, parameterOffset);
+    const compiled = compileScalarPredicate(predicate.arg, registry, parameterOffset, allowMetadata);
     return { sql: `NOT (${compiled.sql})`, values: compiled.values };
   }
 
-  const field = fieldSql(registry, predicate.field);
+  let field: string;
+  let fieldValues: unknown[] = [];
+  if (isMetadataField(predicate.field)) {
+    if (!allowMetadata) throw new Error(`Unsupported trusted trace-query field: ${predicate.field}`);
+    const keyParameter = `$${parameterOffset++}`;
+    field = `CASE WHEN jsonb_typeof(r."metadataSearch" -> ${keyParameter}) = 'string' THEN r."metadataSearch" ->> ${keyParameter} END`;
+    fieldValues = [predicate.field.slice('metadata.'.length)];
+  } else {
+    field = fieldSql(registry, predicate.field);
+  }
+
   if (predicate.type === 'presence') {
     return {
       sql: `${field} IS ${predicate.operator === 'exists' ? 'NOT ' : ''}NULL`,
-      values: [],
+      values: fieldValues,
     };
   }
 
   if (predicate.type === 'membership') {
     const list = placeholders(predicate.values, parameterOffset);
     if (predicate.operator === 'in') {
-      return { sql: `${field} IS NOT NULL AND ${field} IN (${list})`, values: predicate.values };
+      return { sql: `${field} IS NOT NULL AND ${field} IN (${list})`, values: [...fieldValues, ...predicate.values] };
     }
-    return { sql: `${field} IS NULL OR ${field} NOT IN (${list})`, values: predicate.values };
+    return { sql: `${field} IS NULL OR ${field} NOT IN (${list})`, values: [...fieldValues, ...predicate.values] };
   }
 
   const parameter = `$${parameterOffset}`;
   const operators = { lt: '<', lte: '<=', gt: '>', gte: '>=' } as const;
   if (predicate.operator === 'eq') {
-    return { sql: `${field} IS NOT DISTINCT FROM ${parameter}`, values: [predicate.value] };
+    return { sql: `${field} IS NOT DISTINCT FROM ${parameter}`, values: [...fieldValues, predicate.value] };
   }
   if (predicate.operator === 'ne') {
-    return { sql: `${field} IS DISTINCT FROM ${parameter}`, values: [predicate.value] };
+    return { sql: `${field} IS DISTINCT FROM ${parameter}`, values: [...fieldValues, predicate.value] };
   }
   const operator = operators[predicate.operator];
   if (operator === undefined) throw new Error(`Unsupported trusted trace-query operator: ${predicate.operator}`);
-  return { sql: `${field} IS NOT NULL AND ${field} ${operator} ${parameter}`, values: [predicate.value] };
+  return {
+    sql: `${field} IS NOT NULL AND ${field} ${operator} ${parameter}`,
+    values: [...fieldValues, predicate.value],
+  };
 }
 
 function latestRootPredicate(spanTable: string): string {
@@ -206,7 +225,7 @@ function compilePredicate(predicate: TrustedTraceQueryPredicate, parameterOffset
     return { sql: `NOT (${compiled.sql})`, values: compiled.values };
   }
 
-  return compileScalarPredicate(predicate, TRACE_FIELDS, parameterOffset);
+  return compileScalarPredicate(predicate, TRACE_FIELDS, parameterOffset, true);
 }
 
 export interface CompiledPostgresTraceQuery {

@@ -72,6 +72,42 @@ describe('Postgres advanced trace query', () => {
     expect(compiled.values).toContain('2026-01-01T12:00:00.000Z');
   });
 
+  it('parameterizes metadata keys and values with total missing semantics', () => {
+    const key = `message'id`;
+    const value = `message' OR TRUE --`;
+    const compiled = compilePostgresTraceQuery(
+      'public',
+      plan({
+        where: {
+          op: 'and',
+          args: [
+            { op: 'eq', left: { path: `metadata.${key}` }, right: { literal: value } },
+            { op: 'notIn', value: { path: 'metadata.actorRole' }, set: ['assistant', 'tool'] },
+            { op: 'notExists', path: 'metadata.parentMessageId' },
+          ],
+        },
+      }),
+    );
+
+    expect(compiled.text).not.toContain(key);
+    expect(compiled.text).not.toContain(value);
+    expect(compiled.text).toContain(`jsonb_typeof(r."metadataSearch" -> $3) = 'string'`);
+    expect(compiled.text).toContain(`r."metadataSearch" ->> $3`);
+    expect(compiled.text).toContain('IS NOT DISTINCT FROM $4');
+    expect(compiled.text).toContain('IS NULL OR');
+    expect(compiled.values).toEqual([
+      TIME_RANGE.from,
+      TIME_RANGE.to,
+      key,
+      value,
+      'actorRole',
+      'assistant',
+      'tool',
+      'parentMessageId',
+      101,
+    ]);
+  });
+
   it('projects canonical span values and compiles one richer same-span existence check', () => {
     const compiled = compilePostgresTraceQuery(
       'public',

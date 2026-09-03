@@ -166,6 +166,28 @@ describe('QUERY_TRACES', () => {
     expect(observabilityStore.queryTraces).not.toHaveBeenCalled();
   });
 
+  it('rejects disallowed metadata keys before touching storage', async () => {
+    const { mastra, observabilityStore, getStore } = createHarness();
+    const error = await captureHttpException(
+      QUERY_TRACES.handler(
+        params(mastra, {
+          timeRange: TIME_RANGE,
+          where: { op: 'eq', left: { path: 'metadata.api-key' }, right: { literal: 'sensitive-value' } },
+        }),
+      ),
+    );
+
+    expect(error.status).toBe(422);
+    const body = getDeclaredErrorSchema(422).parse(await error.getResponse().json());
+    expect(body).toMatchObject({
+      code: 'TRACE_QUERY_INVALID',
+      issues: [{ code: 'field_not_allowed', path: ['where', 'left', 'path'] }],
+    });
+    expect(JSON.stringify(body)).not.toContain('sensitive-value');
+    expect(getStore).not.toHaveBeenCalled();
+    expect(observabilityStore.queryTraces).not.toHaveBeenCalled();
+  });
+
   it('rejects invalid score operators and literals before touching storage', async () => {
     const { mastra, observabilityStore, getStore } = createHarness();
     const cases = [

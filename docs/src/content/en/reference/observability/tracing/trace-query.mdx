@@ -107,6 +107,7 @@ Hono and Fastify enforce the request-body limit before JSON parsing. Express and
 | Predicate context | Fields | Operators |
 | - | - | - |
 | Trace | `traceId`, `threadId`, `resourceId`, `entityName`, `entityType`, `environment`, `status` | `eq`, `ne`, `in`, `notIn`, `exists`, `notExists` |
+| Trace metadata | `metadata.<key>` | `eq`, `ne`, `in`, `notIn`, `exists`, `notExists` |
 | Trace | `startedAt`, `endedAt` | `eq`, `ne`, `in`, `notIn`, `lt`, `lte`, `gt`, `gte`, `exists`, `notExists` |
 | Span | `name`, `spanType`, `model`, `provider`, `status`, `entityType`, `entityId`, `entityName`, `entityVersionId`, `parentEntityVersionId`, `rootEntityVersionId` | `eq`, `ne`, `in`, `notIn`, `exists`, `notExists` |
 | Span | `startedAt`, `endedAt`, `durationMs` | `eq`, `ne`, `in`, `notIn`, `lt`, `lte`, `gt`, `gte`, `exists`, `notExists` |
@@ -118,6 +119,33 @@ Hono and Fastify enforce the request-body limit before JSON parsing. Express and
 Compose predicates with `{ op: 'and', args: [...] }`, `{ op: 'or', args: [...] }`, and `{ op: 'not', arg: ... }`. Comparison predicates place a field reference on the left and a literal on the right. Membership predicates use a field reference in `value` and a homogeneous literal array in `set`.
 
 String comparisons are exact and case-sensitive. The planner rejects a string where a number is required, including for score and `durationMs`, and accepts only ISO timestamp strings for timestamp predicates. A missing field satisfies neither positive nor ordered predicates, although the negative operators `ne` and `notIn` do match it. Combine a negative predicate with `exists` when the field must also be present.
+
+### Filter by metadata
+
+Use `metadata.<key>` paths for custom dimensions stored on the current root span. Metadata predicates support non-empty, top-level string values. Null, empty, numeric, boolean, object, and array values count as missing.
+
+```typescript
+const messageTrace = {
+  op: 'and',
+  args: [
+    { op: 'eq', left: { path: 'metadata.messageId' }, right: { literal: 'message-123' } },
+    { op: 'in', value: { path: 'metadata.actorRole' }, set: ['assistant', 'tool'] },
+    { op: 'exists', path: 'metadata.protocolVersion' },
+    {
+      op: 'or',
+      args: [
+        { op: 'eq', left: { path: 'metadata.temporalRunId' }, right: { literal: 'run-456' } },
+        { op: 'eq', left: { path: 'metadata.externalTraceId' }, right: { literal: 'trace-789' } },
+      ],
+    },
+    { op: 'not', arg: { op: 'exists', path: 'metadata.parentMessageId' } },
+  ],
+}
+```
+
+The key must name one top-level property. Empty keys and nested paths are rejected. Promoted metadata keys, such as `resourceId`, `threadId`, and `environment`, must use their canonical trace fields instead. Sensitive key names aren't queryable.
+
+Metadata fields aren't available for grouping or field discovery.
 
 ### Filter by span properties
 

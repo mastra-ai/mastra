@@ -3,6 +3,7 @@ import * as coreStorage from '@mastra/core/storage';
 import type {
   TraceQueryCanonicalField,
   TraceQueryField,
+  TraceQueryPredicateField,
   TraceQueryResponse,
   TraceQueryScoreField,
   TraceQuerySpanField,
@@ -102,19 +103,35 @@ function resolveOrderField(field: string): 'startedAt' | 'endedAt' {
   throw new Error(`Unsupported trusted trace-query field: ${field}`);
 }
 
+function isMetadataField(field: TraceQueryPredicateField): field is `metadata.${string}` {
+  return field.startsWith('metadata.');
+}
+
 function compileScalarPredicate<TField extends string>(
   predicate: TrustedTraceQueryScalarPredicate,
   registry: Partial<FieldRegistry<TField>>,
   parameters: ParameterBuilder,
+  allowMetadata = false,
 ): string {
   if (predicate.type === 'boolean') {
-    const parts = predicate.args.map(arg => `(${compileScalarPredicate(arg, registry, parameters)})`);
+    const parts = predicate.args.map(arg => `(${compileScalarPredicate(arg, registry, parameters, allowMetadata)})`);
     return parts.join(predicate.operator === 'and' ? ' AND ' : ' OR ');
   }
 
-  if (predicate.type === 'not') return `NOT (${compileScalarPredicate(predicate.arg, registry, parameters)})`;
+  if (predicate.type === 'not') {
+    return `NOT (${compileScalarPredicate(predicate.arg, registry, parameters, allowMetadata)})`;
+  }
 
-  const field = fieldDefinition(registry, predicate.field);
+  const field = isMetadataField(predicate.field)
+    ? (() => {
+        if (!allowMetadata) throw new Error(`Unsupported trusted trace-query field: ${predicate.field}`);
+        const key = parameters.add(predicate.field.slice('metadata.'.length), 'String');
+        return {
+          sql: `if(mapContains(r.metadataSearch, ${key}), r.metadataSearch[${key}], NULL)`,
+          parameterType: 'String' as const,
+        };
+      })()
+    : fieldDefinition(registry, predicate.field);
   if (predicate.type === 'presence') {
     return `${predicate.operator === 'exists' ? 'isNotNull' : 'isNull'}(${field.sql})`;
   }
@@ -166,7 +183,7 @@ function compilePredicate(predicate: TrustedTraceQueryPredicate, parameters: Par
   }
 
   if (predicate.type === 'not') return `NOT (${compilePredicate(predicate.arg, parameters)})`;
-  return compileScalarPredicate(predicate, TRACE_FIELDS, parameters);
+  return compileScalarPredicate(predicate, TRACE_FIELDS, parameters, true);
 }
 
 export interface CompiledClickHouseTraceQuery {
