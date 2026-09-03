@@ -569,6 +569,38 @@ describe('stripForeignProviderExecutedTools', () => {
     expect(result).toBeUndefined();
   });
 
+  it('infers hosted-tool ownership from stable IDs when provider metadata is missing', () => {
+    const openaiPrompt = hostedToolPrompt('openai', 'ws_abc123');
+    delete (openaiPrompt[1].content as any[])[1].providerOptions;
+    const anthropicPrompt = hostedToolPrompt('anthropic', 'srvtoolu_abc123');
+    delete (anthropicPrompt[1].content as any[])[1].providerOptions;
+
+    expect(
+      stripForeignProviderExecutedTools.applyToPrompt!({
+        prompt: openaiPrompt,
+        model: { provider: 'anthropic.messages', modelId: 'claude-sonnet-4-5' },
+      }),
+    ).toBeDefined();
+    expect(
+      stripForeignProviderExecutedTools.applyToPrompt!({
+        prompt: anthropicPrompt,
+        model: { provider: 'openai.responses', modelId: 'gpt-5' },
+      }),
+    ).toBeDefined();
+  });
+
+  it('does not guess ownership for unknown provider-executed tool IDs', () => {
+    const prompt = hostedToolPrompt('openai', 'provider_tool_abc123');
+    delete (prompt[1].content as any[])[1].providerOptions;
+
+    expect(
+      stripForeignProviderExecutedTools.applyToPrompt!({
+        prompt,
+        model: { provider: 'anthropic.messages', modelId: 'claude-sonnet-4-5' },
+      }),
+    ).toBeUndefined();
+  });
+
   it('does not remove client-executed tool pairs', () => {
     const prompt = hostedToolPrompt('anthropic', 'call_abc123');
     delete (prompt[1].content as any[])[1].providerExecuted;
@@ -579,6 +611,17 @@ describe('stripForeignProviderExecutedTools', () => {
     });
 
     expect(result).toBeUndefined();
+  });
+
+  it('is idempotent after stripping a foreign hosted-tool pair', () => {
+    const model = { provider: 'anthropic.messages', modelId: 'claude-sonnet-4-5' };
+    const result = stripForeignProviderExecutedTools.applyToPrompt!({
+      prompt: hostedToolPrompt('openai', 'ws_abc123'),
+      model,
+    });
+
+    expect(result).toBeDefined();
+    expect(stripForeignProviderExecutedTools.applyToPrompt!({ prompt: result!, model })).toBeUndefined();
   });
 });
 
@@ -950,6 +993,143 @@ describe('cerebrasStripReasoningContent', () => {
     });
     expect(result).toBeDefined();
     expect(result![0]).toEqual(prompt[0]);
+  });
+});
+
+describe('default preemptive rule contracts', () => {
+  it('includes every built-in preemptive rule in the default set', () => {
+    expect(DEFAULT_COMPAT_RULES).toEqual(
+      expect.arrayContaining([
+        stripForeignProviderExecutedTools,
+        cerebrasStripReasoningContent,
+        anthropicStripEmptySignedReasoningContent,
+        anthropicStripForeignReasoningContent,
+        azureSystemReminderTransform,
+        googleEnsureUserFirstTurn,
+      ]),
+    );
+  });
+
+  it('keeps every built-in preemptive rewrite idempotent', () => {
+    const emptySignedPrompt: LanguageModelV2Prompt = [
+      {
+        role: 'assistant',
+        content: [
+          {
+            type: 'reasoning',
+            text: '',
+            providerOptions: { anthropic: { signature: 'sig-legacy' } },
+          },
+          { type: 'text', text: 'answer' },
+        ],
+      },
+      { role: 'user', content: [{ type: 'text', text: 'continue' }] },
+    ];
+    const azurePrompt: LanguageModelV2Prompt = [
+      { role: 'user', content: [{ type: 'text', text: '<system-reminder>context</system-reminder>' }] },
+    ];
+    const googlePrompt: LanguageModelV2Prompt = [
+      { role: 'assistant', content: [{ type: 'text', text: 'assistant first' }] },
+    ];
+    const foreignToolPrompt: LanguageModelV2Prompt = [
+      {
+        role: 'assistant',
+        content: [
+          {
+            type: 'tool-call',
+            toolCallId: 'ws_abc123',
+            toolName: 'web_search',
+            input: {},
+            providerExecuted: true,
+          },
+        ],
+      },
+      {
+        role: 'tool',
+        content: [
+          {
+            type: 'tool-result',
+            toolCallId: 'ws_abc123',
+            toolName: 'web_search',
+            output: { type: 'text', value: 'result' },
+          },
+        ],
+      },
+    ];
+    const cases = [
+      {
+        rule: stripForeignProviderExecutedTools,
+        prompt: foreignToolPrompt,
+        model: { provider: 'anthropic.messages', modelId: 'claude-sonnet-4-5' },
+      },
+      {
+        rule: cerebrasStripReasoningContent,
+        prompt: promptWithReasoning(),
+        model: { provider: 'cerebras.chat', modelId: 'zai-glm-4.7' },
+      },
+      {
+        rule: anthropicStripEmptySignedReasoningContent,
+        prompt: emptySignedPrompt,
+        model: { provider: 'anthropic.messages', modelId: 'claude-sonnet-4-5' },
+      },
+      {
+        rule: anthropicStripForeignReasoningContent,
+        prompt: promptWithReasoning(),
+        model: { provider: 'anthropic.messages', modelId: 'claude-sonnet-4-5' },
+      },
+      {
+        rule: azureSystemReminderTransform,
+        prompt: azurePrompt,
+        model: { provider: 'azure-openai.chat', modelId: 'gpt-4o' },
+      },
+      {
+        rule: googleEnsureUserFirstTurn,
+        prompt: googlePrompt,
+        model: { provider: 'google.generative-ai', modelId: 'gemini-2.5-pro' },
+      },
+    ];
+
+    for (const { rule, prompt, model } of cases) {
+      const result = rule.applyToPrompt!({ prompt, model });
+      expect(result, rule.name).toBeDefined();
+      expect(rule.applyToPrompt!({ prompt: result!, model }), rule.name).toBeUndefined();
+    }
+  });
+
+  it('keeps provider-specific rules inactive for unrelated providers', () => {
+    const openai = { provider: 'openai.chat', modelId: 'gpt-4o' };
+    const assistantFirst: LanguageModelV2Prompt = [
+      { role: 'assistant', content: [{ type: 'text', text: 'assistant first' }] },
+    ];
+    const emptySigned: LanguageModelV2Prompt = [
+      {
+        role: 'assistant',
+        content: [
+          {
+            type: 'reasoning',
+            text: '',
+            providerOptions: { anthropic: { signature: 'sig-legacy' } },
+          },
+        ],
+      },
+    ];
+
+    expect(
+      cerebrasStripReasoningContent.applyToPrompt!({ prompt: promptWithReasoning(), model: openai }),
+    ).toBeUndefined();
+    expect(
+      anthropicStripEmptySignedReasoningContent.applyToPrompt!({ prompt: emptySigned, model: openai }),
+    ).toBeUndefined();
+    expect(
+      anthropicStripForeignReasoningContent.applyToPrompt!({ prompt: promptWithReasoning(), model: openai }),
+    ).toBeUndefined();
+    expect(
+      azureSystemReminderTransform.applyToPrompt!({
+        prompt: [{ role: 'user', content: [{ type: 'text', text: '<system-reminder>x</system-reminder>' }] }],
+        model: openai,
+      }),
+    ).toBeUndefined();
+    expect(googleEnsureUserFirstTurn.applyToPrompt!({ prompt: assistantFirst, model: openai })).toBeUndefined();
   });
 });
 
