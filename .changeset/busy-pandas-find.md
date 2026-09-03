@@ -3,4 +3,4 @@
 '@mastra/next': patch
 ---
 
-Update README to link new documentation
+Link the Next.js and TanStack Start adapter READMEs to their setup guides and API references.
