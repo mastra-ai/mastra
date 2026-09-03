@@ -997,7 +997,7 @@ export class AgentController<TState = {}> {
         this.queryThreads({ resourceId, includeForkedSubagents, metadata }),
       getById: ({ threadId }) => this.queryThreadById({ threadId }),
       listMessages: async ({ threadId, limit }) => {
-        if (limit) {
+        if (limit !== undefined) {
           const result = await this.queryThreadMessages({
             threadId,
             perPage: limit,
