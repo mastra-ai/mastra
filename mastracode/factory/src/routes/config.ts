@@ -37,6 +37,7 @@ import type {
 import type { ModelPackRecord, ModelPacksStorage } from '../storage/domains/model-packs/base.js';
 import type { FactoryProjectsStorage } from '../storage/domains/projects/base.js';
 import type { SourceControlStorageHandle } from '../storage/domains/source-control/base.js';
+import { seedPersonalOmDefaults } from './om-seed.js';
 import {
   getAuthProviderId,
   listTenantCredentialsForRequest,
@@ -771,6 +772,7 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
               // per-request, never written into process.env.
               await ctx.storage.setCredential(tenant, getAuthProviderId(provider), { type: 'api_key', key });
               onCredentialsChanged(tenant);
+              await seedPersonalOmDefaults({ memorySettings: options.memorySettings, tenant, provider });
               const records = await ctx.storage.listCredentials(ctx.orgId, ctx.userId);
               const providers = await listProviders({ controller, tenantCredentials: records });
               return c.json({ ok: true, provider: providers.find(p => p.provider === provider) });

@@ -8,6 +8,8 @@ import type { BoardStageId } from './stages';
 
 export interface CardPrimaryAction {
   label: string;
+  /** Spoken name when the pill's label is abbreviated to fit the actions row. */
+  ariaLabel?: string;
   start: () => void;
 }
 
@@ -36,9 +38,42 @@ export function resumeTarget(
   return action !== undefined ? { kind: 'run', action } : { kind: 'move', stage: FACTORY_ROLE_STAGES[deepest] };
 }
 
-/** A proposed run wins the primary slot: releasing it beats starting a rival run beside it. Resuming parked work comes next, for the same reason. */
+/**
+ * Triage classified the card as something other than a bug, so the rules hold
+ * it until a person moves it forward. The card then asks for that decision
+ * instead of offering a run that would only advance it as a side effect.
+ */
+export function awaitsTriageDecision(item: Pick<WorkItem, 'triageType' | 'acceptedAt'>, columnStage: BoardStageId) {
+  return (
+    (columnStage === 'intake' || columnStage === 'triage') &&
+    item.triageType !== null &&
+    item.triageType !== 'bug' &&
+    item.acceptedAt === null
+  );
+}
+
+export interface TriageDecision {
+  label: string;
+  stage: 'planning' | 'execute' | 'canceled';
+}
+
+/** The maintainer's choices for a held card, the likeliest first. */
+export const TRIAGE_DECISIONS: readonly TriageDecision[] = [
+  { label: 'Accept and plan', stage: 'planning' },
+  { label: 'Accept and build', stage: 'execute' },
+  { label: 'Close', stage: 'canceled' },
+];
+
+/**
+ * A held card's primary action is the maintainer's decision, ahead of
+ * everything else: a suggested or parked run would advance the card without
+ * that decision being made. Otherwise a proposed run wins the slot, since
+ * releasing it beats starting a rival run beside it, and resuming parked work
+ * comes next for the same reason.
+ */
 export function cardPrimaryAction({
   item,
+  columnStage,
   runSpec,
   runAction,
   resume,
@@ -51,6 +86,7 @@ export function cardPrimaryAction({
   onMove,
 }: {
   item: WorkItem;
+  columnStage?: BoardStageId;
   runSpec?: ItemRunSpec;
   runAction?: RunAction;
   resume?: ResumeTarget;
@@ -62,6 +98,11 @@ export function cardPrimaryAction({
   onCreateSession: (spec: { branch: string; threadTitle: string }) => void;
   onMove: (toStage: string) => void;
 }): CardPrimaryAction | undefined {
+  if (columnStage !== undefined && awaitsTriageDecision(item, columnStage)) {
+    // One word on the pill so it sits beside "Open session"; the menu spells out the alternatives.
+    const [accept] = TRIAGE_DECISIONS;
+    return { label: 'Accept', ariaLabel: accept.label, start: () => onMove(accept.stage) };
+  }
   if (proposal !== undefined) {
     const proposed = runSpec?.actions.find(action => action.role === proposal.role) ?? runAction;
     const label = proposed?.label ?? 'Start run';
@@ -90,4 +131,76 @@ export function cardPrimaryAction({
     label: 'Start session',
     start: () => onCreateSession(itemSessionSpec(item)),
   };
+}
+
+export type CardAction = { label: string; ariaLabel?: string; disabled?: boolean; urgent?: boolean } & (
+  | { href: string }
+  | { start: () => void }
+);
+
+export function sessionLink(href: string | undefined): CardAction | undefined {
+  return href === undefined ? undefined : { label: 'Open session', href };
+}
+
+export function retryButton({
+  decisionId,
+  retryingDecisionId,
+  onRetry,
+}: {
+  decisionId?: string;
+  retryingDecisionId?: string;
+  onRetry: (decisionId: string) => void;
+}): CardAction | undefined {
+  if (decisionId === undefined) return undefined;
+  const retrying = decisionId === retryingDecisionId;
+  return { label: retrying ? 'Retrying…' : 'Retry', disabled: retrying, start: () => onRetry(decisionId) };
+}
+
+export function runButton({
+  action,
+  pending,
+  disabled,
+  suggestion,
+}: {
+  action?: CardPrimaryAction;
+  pending: boolean;
+  disabled: boolean;
+  /** The waiting suggestion's label, so the button says which run it releases. */
+  suggestion?: string;
+}): CardAction | undefined {
+  if (action === undefined) return undefined;
+  return {
+    label: pending ? 'Starting…' : action.label,
+    ariaLabel: suggestion === undefined ? action.ariaLabel : `Start suggested run: ${suggestion}`,
+    disabled: disabled || pending,
+    start: action.start,
+  };
+}
+
+/** The card's buttons, the likeliest next click first; `urgent` marks the one the card waits on a person for. */
+export function cardActions({
+  running,
+  waiting,
+  attention,
+  session,
+  retry,
+  run,
+}: {
+  running: boolean;
+  /** The run is a parked suggestion or a held card's decision: it needs the user, so it outranks a running session. */
+  waiting: boolean;
+  /** The session asked for the user, so opening it is what unblocks the card. */
+  attention: boolean;
+  session?: CardAction;
+  retry?: CardAction;
+  run?: CardAction;
+}): CardAction[] {
+  // A running session owns the branch, so no rival run beside it; a waiting suggestion is still the user's to release.
+  const nextRun = running && !waiting ? undefined : run;
+  const main = retry ?? nextRun ?? session;
+  if (main === undefined) return [];
+  const rest = [session, nextRun].filter(action => action !== undefined).filter(action => action !== main);
+  const urgent = (action: CardAction) =>
+    action === retry || (waiting && action === run) || (attention && action === session);
+  return [main, ...rest].map(action => ({ ...action, urgent: urgent(action) }));
 }

@@ -1,7 +1,7 @@
 import { forwardRef } from 'react';
 import type { ComponentPropsWithoutRef } from 'react';
 import { DataListRowWrapperContext } from './data-list-row-wrapper-context';
-import { dataListRowOuterStyles } from './shared';
+import { dataListRowOuterStyles, dataListRowStateStyles } from './shared';
 import { cn } from '@/lib/utils';
 
 export type DataListRowWrapperProps = ComponentPropsWithoutRef<'div'>;
@@ -19,7 +19,16 @@ export const DataListRowWrapper = forwardRef<HTMLDivElement, DataListRowWrapperP
   ({ children, className, ...rest }, ref) => {
     return (
       <DataListRowWrapperContext.Provider value>
-        <div ref={ref} className={cn('grid grid-cols-subgrid gap-0', ...dataListRowOuterStyles, className)} {...rest}>
+        <div
+          ref={ref}
+          className={cn(
+            'grid grid-cols-subgrid gap-0',
+            ...dataListRowOuterStyles,
+            ...dataListRowStateStyles,
+            className,
+          )}
+          {...rest}
+        >
           {children}
         </div>
       </DataListRowWrapperContext.Provider>

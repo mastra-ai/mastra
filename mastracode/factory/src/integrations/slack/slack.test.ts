@@ -877,7 +877,7 @@ describe('session start (onSessionStart)', () => {
 
   // An ungated dispatch marks the session unresolved above every guard. Owner
   // recovery is the resolution, so it has to take the marker down with it —
-  // otherwise capture refuses for the life of the session over a stale flag.
+  // otherwise curation stays disabled for the life of the session over a stale flag.
   it('clears the unresolved marker when owner recovery resolves the organization', async () => {
     const deps = makeStartDeps();
     const session = makeSession();
@@ -888,7 +888,7 @@ describe('session start (onSessionStart)', () => {
     expect(session.state.set).toHaveBeenCalledWith({ factoryOrgId: 'org-1', factoryOrgUnresolved: false });
   });
 
-  // The org rung knowledge capture scopes on. `gateDispatch` stamps it on the
+  // The org rung knowledge curation scopes on. `gateDispatch` stamps it on the
   // request context before the session exists, so it is in hand above every
   // guard below — and seeding it must not cost a storage read.
   const orgContext = (organizationId: unknown) => ({

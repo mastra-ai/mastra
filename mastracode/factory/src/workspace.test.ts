@@ -8,6 +8,10 @@ import type { LocalFilesystem } from '@mastra/core/workspace';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
+  /** Whether the mock VM already carries a matching setup marker (warm template image). */
+  markerPresent: false,
+  /** The marker probe the setup hook runs before materializing. */
+  isMarkerProbe: (command: string) => command.includes('.mastra-sandbox/setup') && command.includes('test -f'),
   projects: [] as any[],
   sessions: [] as any[],
   updates: [] as Array<{ set: Record<string, unknown>; where: unknown }>,
@@ -59,6 +63,8 @@ const mocks = vi.hoisted(() => ({
         await sandbox.ensureRunning();
         // The workdir resolver probes the VM's default cwd (its home dir).
         if (command === 'pwd') return { exitCode: 0, stdout: '/home/user\n', stderr: '' };
+        // A fresh VM carries no setup marker unless a test plants one.
+        if (mocks.isMarkerProbe(command)) return { exitCode: mocks.markerPresent ? 0 : 1, stdout: '', stderr: '' };
         return { exitCode: 0, stdout: '', stderr: '' };
       }),
       setEnv: mocks.setEnv,
@@ -107,7 +113,12 @@ import {
   hasFailedSetupCommand,
   recordFailedSetupCommand,
 } from './sandbox/session-sandbox.js';
-import { createWorkspaceFactory, FactoryWorkspaceRegistry } from './workspace.js';
+import {
+  createWorkspaceFactory,
+  FactorySkillSource,
+  FactoryWorkspaceRegistry,
+  resolveLocalFactorySkillsPath,
+} from './workspace.js';
 
 const tempDirs: string[] = [];
 
@@ -130,6 +141,7 @@ afterEach(async () => {
   mocks.updates.splice(0);
   mocks.createSandbox.mockClear();
   mocks.localRoot = null;
+  mocks.markerPresent = false;
   __clearSessionSandboxesForTests();
   mocks.materializeRepo.mockClear();
   mocks.checkoutSessionBranch.mockClear();
@@ -773,6 +785,42 @@ describe('GitHub session workspace preparation', () => {
     expect(mocks.sessions.find(session => session.id === 'session-b')?.sandboxWorkdir).toBe(workdirB);
   });
 
+  it('skips the setup command on a VM that already carries the marker, but still materializes and checks out', async () => {
+    const { workspace } = await createLocalFactory();
+    addProject({ setupCommand: 'pnpm i' });
+    addSession({ id: 'session-a' });
+    mocks.markerPresent = true;
+
+    await workspace({ requestContext: createGithubRequestContext('project-1', 'session-a') });
+    expect(mocks.materializeRepo).toHaveBeenCalledTimes(1);
+    expect(mocks.checkoutSessionBranch).toHaveBeenCalledTimes(1);
+    expect(mocks.runSetupCommand).not.toHaveBeenCalled();
+  });
+
+  it('writes the digest marker only after the setup command succeeds', async () => {
+    const { workspace } = await createLocalFactory();
+    addProject({ setupCommand: 'pnpm i' });
+    addSession({ id: 'session-a' });
+    mocks.runSetupCommand.mockRejectedValueOnce(new SetupCommandError('Setup command failed (exit 1)', 'setup-failed'));
+
+    await expect(workspace({ requestContext: createGithubRequestContext('project-1', 'session-a') })).rejects.toThrow(
+      /setup-failed|Setup command failed/,
+    );
+    const exec = (mocks.createSandbox.mock.results[0]!.value as { executeCommand: ReturnType<typeof vi.fn> })
+      .executeCommand;
+    const markerWrites = () =>
+      exec.mock.calls.filter(([command]) => String(command).includes("printf '%s' 'sha256:")).length;
+    expect(markerWrites()).toBe(0);
+
+    // A session whose setup succeeds records the marker exactly once.
+    mocks.createSandbox.mockClear();
+    addSession({ id: 'session-b' });
+    await workspace({ requestContext: createGithubRequestContext('project-1', 'session-b') });
+    const exec2 = (mocks.createSandbox.mock.results[0]!.value as { executeCommand: ReturnType<typeof vi.fn> })
+      .executeCommand;
+    expect(exec2.mock.calls.filter(([command]) => String(command).includes("printf '%s' 'sha256:")).length).toBe(1);
+  });
+
   it('resolves bundled Factory skills without waiting on sandbox materialization (kickoff path stays lazy)', async () => {
     const { resolver } = await createLocalFactory();
     addProject();
@@ -810,7 +858,17 @@ describe('GitHub session workspace preparation', () => {
 
     // With the sandbox live, the guarded fallback must pass skill discovery
     // through to the checkout instead of reporting empty roots.
-    await workspace.skills?.refresh();
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      await workspace.skills?.refresh();
+      // A mis-wired filesystem (e.g. a SandboxFilesystem that cannot take the
+      // lazy workdir resolver) must fail on its own message rather than be
+      // reported as an inaccessible skills path. Assert before mockRestore(),
+      // which clears the recorded calls.
+      expect(warnSpy).not.toHaveBeenCalledWith(expect.stringContaining('Cannot access skills path'));
+    } finally {
+      warnSpy.mockRestore();
+    }
     expect(sandbox.executeCommand).toHaveBeenCalled();
   });
 
@@ -931,19 +989,6 @@ describe('GitHub session workspace preparation', () => {
    * sandbox mock answers exit 0 to every probe. Force the marker probe to
    * report "absent" so reconnect starts exercise the real re-run path.
    */
-  function forceMarkerAbsent() {
-    const sandboxInstance = mocks.createSandbox.mock.results[0]!.value as {
-      executeCommand: ReturnType<typeof vi.fn>;
-    };
-    const baseExec = sandboxInstance.executeCommand.getMockImplementation()!;
-    sandboxInstance.executeCommand.mockImplementation(async (command: string) => {
-      if (command.includes('.mastra-factory/bootstrap') && command.includes('test -f')) {
-        return { exitCode: 1, stdout: '', stderr: '' };
-      }
-      return baseExec(command);
-    });
-  }
-
   it('recovers on the next attempt after the setup command itself fails', async () => {
     const { workspace } = await createLocalFactory();
     addProject({ setupCommand: 'pnpm install' });
@@ -956,8 +1001,6 @@ describe('GitHub session workspace preparation', () => {
     await expect(workspace({ requestContext: createGithubRequestContext('project-1', 'session-a') })).rejects.toThrow(
       /skipped for the rest of the session/,
     );
-    forceMarkerAbsent();
-
     // Second attempt skips the known-bad command instead of wedging the
     // session behind a permanently failing start.
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
@@ -1801,6 +1844,121 @@ describe('GitHub session workspace preparation', () => {
     expect(result).toBeUndefined();
   });
 
+  describe('sandboxStart', () => {
+    async function createFactory(sandboxStart?: 'lazy' | 'eager') {
+      const root = await fs.mkdtemp(path.join(os.tmpdir(), 'mastracode-web-sandbox-start-'));
+      tempDirs.push(root);
+      mocks.localRoot = root;
+      return createWorkspaceFactory({
+        sandbox: mocks.createSandbox as any,
+        github: fakeGithubIntegration() as any,
+        workItems: { findRunBindingBySession: mocks.findRunBindingBySession } as any,
+        ...(sandboxStart !== undefined ? { sandboxStart } : {}),
+      });
+    }
+
+    const constructedSandbox = () => mocks.createSandbox.mock.results[0]!.value as { start: ReturnType<typeof vi.fn> };
+
+    /** The eager path is fire-and-forget; give its microtasks a chance to run. */
+    const settle = () => new Promise(resolve => setTimeout(resolve, 20));
+
+    it("starts the sandbox right after resolution when set to 'eager'", async () => {
+      const resolver = await createFactory('eager');
+      addProject();
+      addSession({ id: 'session-1' });
+
+      const workspace = await resolver({ requestContext: createGithubRequestContext('project-1', 'session-1') });
+
+      expect(workspace?.id).toContain('project-1-session-1');
+      await vi.waitFor(() => expect(constructedSandbox().start).toHaveBeenCalledTimes(1));
+      // The eager start ran the full session setup, so the first command
+      // finds a prepared checkout, not just a booted VM.
+      await vi.waitFor(() => expect(mocks.materializeRepo).toHaveBeenCalledTimes(1));
+    });
+
+    it.each([undefined, 'lazy'] as const)('leaves the sandbox lazy when sandboxStart is %s', async sandboxStart => {
+      const resolver = await createFactory(sandboxStart);
+      addProject();
+      addSession({ id: 'session-1' });
+
+      await resolver({ requestContext: createGithubRequestContext('project-1', 'session-1') });
+      await settle();
+
+      expect(constructedSandbox().start).not.toHaveBeenCalled();
+      expect(mocks.materializeRepo).not.toHaveBeenCalled();
+    });
+
+    it('starts only after the resolver finished, even when pinning state is slow', async () => {
+      const resolver = await createFactory('eager');
+      addProject();
+      addSession({ id: 'session-1' });
+      const requestContext = createGithubRequestContext('project-1', 'session-1');
+      const controller = requestContext.get('controller') as {
+        setState: (u: Record<string, unknown>) => Promise<void>;
+      };
+      const pinned = controller.setState;
+      let releasePin!: () => void;
+      let pinEntered!: () => void;
+      const pinEnteredPromise = new Promise<void>(resolve => {
+        pinEntered = resolve;
+      });
+      controller.setState = async updates => {
+        pinEntered();
+        await new Promise<void>(resolve => {
+          releasePin = resolve;
+        });
+        await pinned(updates);
+      };
+
+      const resolving = resolver({ requestContext });
+      await pinEnteredPromise;
+      await settle();
+      // The sandbox is constructed by now, but must not have started.
+      expect(constructedSandbox().start).not.toHaveBeenCalled();
+
+      releasePin();
+      const workspace = await resolving;
+
+      expect(workspace?.id).toContain('project-1-session-1');
+      await vi.waitFor(() => expect(constructedSandbox().start).toHaveBeenCalledTimes(1));
+      await vi.waitFor(() => expect(mocks.materializeRepo).toHaveBeenCalledTimes(1));
+    });
+
+    it('starts once per constructed instance, not per resolution', async () => {
+      const resolver = await createFactory('eager');
+      addProject();
+      addSession({ id: 'session-1' });
+
+      await resolver({ requestContext: createGithubRequestContext('project-1', 'session-1') });
+      await resolver({ requestContext: createGithubRequestContext('project-1', 'session-1') });
+      await settle();
+
+      expect(constructedSandbox().start).toHaveBeenCalledTimes(1);
+    });
+
+    it('surfaces a failed eager start as a warning while the lazy path stays intact', async () => {
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      try {
+        // First start (the eager one) fails inside setup; the record it leaves
+        // must not stop a later lazy start from retrying materialization.
+        mocks.materializeRepo.mockRejectedValueOnce(new MaterializeError('exec', 'clone flaked'));
+        const resolver = await createFactory('eager');
+        addProject();
+        addSession({ id: 'session-1' });
+
+        const workspace = await resolver({ requestContext: createGithubRequestContext('project-1', 'session-1') });
+        await vi.waitFor(() => expect(warn).toHaveBeenCalled());
+
+        expect(workspace?.id).toContain('project-1-session-1');
+        // The lazy path retries in full and succeeds.
+        await (workspace as any).sandbox.getInfo();
+        expect(mocks.materializeRepo).toHaveBeenCalledTimes(2);
+      } finally {
+        warn.mockRestore();
+      }
+    });
+  });
+
   // The factory used to construct a Workspace and return it without ever
   // adding it to the Mastra registry, so any HTTP handler that resolved the
   // workspace synchronously via `mastra.getWorkspaceById(id)` (file tree,
@@ -1962,5 +2120,92 @@ describe('GitHub session workspace preparation', () => {
       expect(mocks.createSandbox).toHaveBeenCalledTimes(1);
       expect(mocks.materializeRepo).toHaveBeenCalledTimes(1);
     });
+  });
+});
+
+describe('FactorySkillSource layering', () => {
+  const mount = path.resolve(path.parse(process.cwd()).root, '__mastracode_factory_skills__');
+  const fallbackStub = {
+    exists: async () => false,
+    stat: async () => {
+      throw new Error('not used');
+    },
+    readFile: async () => {
+      throw new Error('not used');
+    },
+    readdir: async () => [],
+  } as any;
+
+  let tmpDir: string | undefined;
+  afterEach(async () => {
+    if (tmpDir) await fs.rm(tmpDir, { recursive: true, force: true });
+    tmpDir = undefined;
+  });
+
+  async function makeLocalRoot(skills: Record<string, string>): Promise<string> {
+    tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'factory-local-skills-'));
+    for (const [name, content] of Object.entries(skills)) {
+      await fs.mkdir(path.join(tmpDir, name), { recursive: true });
+      await fs.writeFile(path.join(tmpDir, name, 'SKILL.md'), content);
+    }
+    return tmpDir;
+  }
+
+  it('serves repo-local skills alongside bundled skills, with local overriding on collision', async () => {
+    const localRoot = await makeLocalRoot({
+      'my-custom-skill': '---\ndescription: custom\n---\n# My Custom Skill\n',
+      'factory-triage': '---\ndescription: override\n---\n# Overridden Triage\n',
+    });
+    const source = new FactorySkillSource(fallbackStub, [], localRoot);
+
+    const names = (await source.readdir(mount)).map(entry => entry.name).sort();
+    expect(names).toContain('my-custom-skill');
+    expect(names).toContain('factory-plan');
+    // Collision listed once.
+    expect(names.filter(name => name === 'factory-triage')).toHaveLength(1);
+
+    // Custom skill resolvable via the mount.
+    const customPath = path.join(mount, 'my-custom-skill', 'SKILL.md');
+    expect(await source.exists(customPath)).toBe(true);
+    expect(String(await source.readFile(customPath))).toContain('My Custom Skill');
+    expect((await source.stat(customPath)).type).toBe('file');
+
+    // Local overrides bundled content for a built-in name.
+    const triage = String(await source.readFile(path.join(mount, 'factory-triage', 'SKILL.md')));
+    expect(triage).toContain('Overridden Triage');
+
+    // Bundled skills without a local counterpart still resolve.
+    const plan = String(await source.readFile(path.join(mount, 'factory-plan', 'SKILL.md')));
+    expect(plan).toContain('# Factory Plan');
+  });
+
+  it('behaves bundled-only when no local root exists', async () => {
+    const source = new FactorySkillSource(fallbackStub, [], undefined);
+    const names = (await source.readdir(mount)).map(entry => entry.name).sort();
+    expect(names).toEqual([
+      'configure-factory-rules',
+      'factory-complete-issue',
+      'factory-plan',
+      'factory-rereview',
+      'factory-review',
+      'factory-triage',
+    ]);
+    expect(await source.exists(path.join(mount, 'my-custom-skill', 'SKILL.md'))).toBe(false);
+    await expect(source.readdir(path.join(mount, 'missing-skill'))).rejects.toThrow('ENOENT');
+  });
+
+  it('resolveLocalFactorySkillsPath handles the dev-server cwd variants', async () => {
+    tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'factory-local-cwd-'));
+    const skillsDir = path.join(tmpDir, 'src', 'mastra', 'public', 'factory-skills');
+    await fs.mkdir(skillsDir, { recursive: true });
+
+    // cwd = repo root
+    expect(resolveLocalFactorySkillsPath(tmpDir)).toBe(skillsDir);
+    // cwd = src/mastra (mastra dir)
+    expect(resolveLocalFactorySkillsPath(path.join(tmpDir, 'src', 'mastra'))).toBe(skillsDir);
+    // cwd = src/mastra/public (mastra factory dev --dir src/mastra)
+    expect(resolveLocalFactorySkillsPath(path.join(tmpDir, 'src', 'mastra', 'public'))).toBe(skillsDir);
+    // No local root anywhere.
+    expect(resolveLocalFactorySkillsPath(path.join(tmpDir, 'src'))).toBeUndefined();
   });
 });

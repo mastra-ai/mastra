@@ -24,6 +24,9 @@ catalogs:
     date-fns:
       specifier: 4.4.0
       version: 4.4.0
+    lucide-react:
+      specifier: ^1.37.0
+      version: 1.37.0
     oxfmt:
       specifier: 0.59.0
       version: 0.59.0
@@ -207,7 +210,7 @@ overrides:
   which-typed-array: npm:@socketregistry/which-typed-array@^1
   yocto-spinner: npm:@socketregistry/yocto-spinner@^1
 
-packageExtensionsChecksum: sha256-4rXAlG0oCaaXL4u3L49F1Sh+3V8qmX+NBNej3BwSFdA=
+packageExtensionsChecksum: sha256-pu63kFH/Y1URbA7UvB6TmgMprwa8XlmczsWFUBJ81jc=
 
 patchedDependencies:
   '@ai-sdk/provider-utils@3.0.31': b013703c9b8c0bd8727a10737e7c1a1b587587f8595b7fa390d61cc07f8dcbd1
@@ -245,6 +248,9 @@ importers:
       '@types/node':
         specifier: 22.19.15
         version: 22.19.15
+      '@types/semver':
+        specifier: ^7.7.1
+        version: 7.7.1
       '@vitest/coverage-v8':
         specifier: 'catalog:'
         version: 4.1.10(vitest@4.1.10)
@@ -365,7 +371,7 @@ importers:
     devDependencies:
       '@anthropic-ai/claude-agent-sdk':
         specifier: ^0.3.220
-        version: 0.3.220(@anthropic-ai/sdk@0.112.3(zod@4.4.3))(@modelcontextprotocol/sdk@1.29.0(@cfworker/json-schema@4.1.1)(supports-color@10.2.2)(zod@4.4.3))(zod@4.4.3)
+        version: 0.3.220(@anthropic-ai/sdk@0.112.3(zod@4.4.3))(@modelcontextprotocol/sdk@1.30.0(@cfworker/json-schema@4.1.1)(supports-color@10.2.2)(zod@4.4.3))(zod@4.4.3)
       '@internal/lint':
         specifier: workspace:*
         version: link:../../packages/_config
@@ -1305,8 +1311,8 @@ importers:
         specifier: ^2.3.6
         version: 2.3.6(supports-color@10.2.2)
       lucide-react:
-        specifier: ^0.522.0
-        version: 0.522.0(react@19.2.7)
+        specifier: 'catalog:'
+        version: 1.37.0(react@19.2.7)
       shiki:
         specifier: ^1.29.2
         version: 1.29.2
@@ -1764,10 +1770,10 @@ importers:
         version: 0.9.10(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
       '@mastra/docusaurus-plugin-algolia':
         specifier: ^1.1.2
-        version: 1.1.2(@docusaurus/types@3.10.2(@swc/core@1.16.0(@swc/helpers@0.5.17))(clean-css@5.3.3)(csso@5.0.5)(esbuild@0.28.1)(lightningcss@1.32.0)(postcss@8.5.23)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(supports-color@10.2.2)(uglify-js@3.19.3))(@types/react-dom@19.2.3(@types/react@19.2.17))(@types/react@19.2.17)(clsx@2.1.1)(lucide-react@1.23.0(react@19.2.7))(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
+        version: 1.1.2(@docusaurus/types@3.10.2(@swc/core@1.16.0(@swc/helpers@0.5.17))(clean-css@5.3.3)(csso@5.0.5)(esbuild@0.28.1)(lightningcss@1.32.0)(postcss@8.5.23)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(supports-color@10.2.2)(uglify-js@3.19.3))(@types/react-dom@19.2.3(@types/react@19.2.17))(@types/react@19.2.17)(clsx@2.1.1)(lucide-react@1.37.0(react@19.2.7))(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
       '@mastra/docusaurus-plugin-kapa':
         specifier: ^1.2.1
-        version: 1.2.1(079a9066ee545f5e5a6c0098edc18b70)
+        version: 1.2.1(c90a0c26edd650767fd3de35604d64c3)
       '@mdx-js/react':
         specifier: ^3.1.1
         version: 3.1.1(@types/react@19.2.17)(react@19.2.7)
@@ -1817,8 +1823,8 @@ importers:
         specifier: ^10.1.2
         version: 10.1.2
       lucide-react:
-        specifier: ^1.23.0
-        version: 1.23.0(react@19.2.7)
+        specifier: ^1.37.0
+        version: 1.37.0(react@19.2.7)
       mermaid:
         specifier: ^11.16.1
         version: 11.16.1
@@ -2397,6 +2403,9 @@ importers:
       '@internal/types-builder':
         specifier: workspace:*
         version: link:../../packages/_types-builder
+      '@internal/workspace':
+        specifier: workspace:*
+        version: link:../../packages/_internals/workspace
       '@mastra/libsql':
         specifier: workspace:*
         version: link:../../stores/libsql
@@ -2458,8 +2467,8 @@ importers:
         specifier: 'catalog:'
         version: 4.4.0
       lucide-react:
-        specifier: ^0.474.0
-        version: 0.474.0(react@19.2.7)
+        specifier: 'catalog:'
+        version: 1.37.0(react@19.2.7)
       react:
         specifier: 'catalog:'
         version: 19.2.7
@@ -3082,7 +3091,7 @@ importers:
         version: link:../mastra
       deepeval:
         specifier: ^0.1.32
-        version: 0.1.32(@anthropic-ai/sdk@0.112.3(zod@4.4.3))(@aws-sdk/client-bedrock-runtime@3.1104.0)(@aws-sdk/credential-provider-node@3.972.78)(@google/genai@1.52.0(@modelcontextprotocol/sdk@1.29.0(@cfworker/json-schema@4.1.1)(supports-color@10.2.2)(zod@4.4.3))(bufferutil@4.1.0)(supports-color@10.2.2))(@mastra/core@packages+core)(@mastra/observability@observability+mastra)(@opentelemetry/exporter-trace-otlp-http@0.221.0(@opentelemetry/api@1.9.1))(@smithy/hash-node@4.4.6)(@smithy/signature-v4@5.6.12)(ai@7.0.51(zod@4.4.3))(chokidar@3.6.0)(debug@4.4.3(supports-color@10.2.2))(rxjs@7.8.2)(supports-color@10.2.2)(ws@8.21.0(bufferutil@4.1.0))
+        version: 0.1.32(@anthropic-ai/sdk@0.112.3(zod@4.4.3))(@aws-sdk/client-bedrock-runtime@3.1104.0)(@aws-sdk/credential-provider-node@3.972.78)(@google/genai@1.52.0(@modelcontextprotocol/sdk@1.30.0(@cfworker/json-schema@4.1.1)(supports-color@10.2.2)(zod@4.4.3))(bufferutil@4.1.0)(supports-color@10.2.2))(@mastra/core@packages+core)(@mastra/observability@observability+mastra)(@opentelemetry/exporter-trace-otlp-http@0.221.0(@opentelemetry/api@1.9.1))(@smithy/hash-node@4.4.6)(@smithy/signature-v4@5.6.12)(ai@7.0.51(zod@4.4.3))(chokidar@3.6.0)(debug@4.4.3(supports-color@10.2.2))(rxjs@7.8.2)(supports-color@10.2.2)(ws@8.21.0(bufferutil@4.1.0))
     devDependencies:
       '@internal/lint':
         specifier: workspace:*
@@ -3830,6 +3839,30 @@ importers:
         specifier: 'catalog:'
         version: 4.4.3
 
+  packages/_internals/workspace:
+    devDependencies:
+      '@internal/lint':
+        specifier: workspace:*
+        version: link:../../_config
+      '@internal/types-builder':
+        specifier: workspace:*
+        version: link:../../_types-builder
+      '@types/node':
+        specifier: 22.19.15
+        version: 22.19.15
+      eslint:
+        specifier: ^10.7.0
+        version: 10.7.0(jiti@2.7.0)(supports-color@10.2.2)
+      tsdown:
+        specifier: 0.22.9
+        version: 0.22.9(@volar/typescript@2.4.23(typescript@7.0.2))(oxc-resolver@11.20.0)(tsx@4.23.1)(typescript@7.0.2)
+      typescript:
+        specifier: 'catalog:'
+        version: 7.0.2
+      vitest:
+        specifier: 'catalog:'
+        version: 4.1.10(@opentelemetry/api@1.9.1)(@types/node@22.19.15)(@vitest/coverage-v8@4.1.10)(@vitest/ui@4.1.10)(jsdom@27.4.0(@noble/hashes@2.2.0)(bufferutil@4.1.0)(supports-color@10.2.2))(msw@2.14.6(@types/node@22.19.15)(typescript@7.0.2))(vite@7.3.6(@types/node@22.19.15)(jiti@2.7.0)(lightningcss@1.32.0)(terser@5.44.1)(tsx@4.23.1)(yaml@2.9.0))
+
   packages/_llm-recorder:
     dependencies:
       diff:
@@ -4504,9 +4537,6 @@ importers:
       '@a2a-js/sdk-v1':
         specifier: npm:@a2a-js/sdk@~1.0.1
         version: '@a2a-js/sdk@1.0.1(@bufbuild/protobuf@2.12.1)(@grpc/grpc-js@1.14.4)(express@5.2.1(supports-color@10.2.2))'
-      '@ai-sdk/provider-utils-v5':
-        specifier: npm:@ai-sdk/provider-utils@3.0.30
-        version: '@ai-sdk/provider-utils@3.0.30(zod@4.4.3)'
       '@ai-sdk/provider-utils-v6':
         specifier: npm:@ai-sdk/provider-utils@4.0.40
         version: '@ai-sdk/provider-utils@4.0.40(zod@4.4.3)'
@@ -5295,6 +5325,9 @@ importers:
       '@mendable/firecrawl-js':
         specifier: ^1.29.3
         version: 1.29.3(debug@4.4.3(supports-color@10.2.2))(supports-color@10.2.2)
+      '@modelcontextprotocol/server-filesystem':
+        specifier: 2026.8.31
+        version: 2026.8.31(@cfworker/json-schema@4.1.1)(supports-color@10.2.2)
       '@types/node':
         specifier: 22.19.15
         version: 22.19.15
@@ -5647,8 +5680,8 @@ importers:
         specifier: ^2.19.2
         version: 2.20.0(@types/dom-mediacapture-record@1.0.22)
       lucide-react:
-        specifier: ^0.522.0
-        version: 0.522.0(react@19.2.7)
+        specifier: 'catalog:'
+        version: 1.37.0(react@19.2.7)
       nanoid:
         specifier: 5.1.16
         version: 5.1.16
@@ -5848,9 +5881,6 @@ importers:
       date-fns:
         specifier: 'catalog:'
         version: 4.4.0
-      lucide-react:
-        specifier: ^0.474.0
-        version: 0.474.0(react@19.2.7)
       prettier:
         specifier: ^3.9.5
         version: 3.9.5
@@ -5972,6 +6002,9 @@ importers:
       jsdom:
         specifier: ^26.1.0
         version: 26.1.0(bufferutil@4.1.0)(supports-color@10.2.2)
+      lucide-react:
+        specifier: 'catalog:'
+        version: 1.37.0(react@19.2.7)
       msw:
         specifier: ^2.12.11
         version: 2.14.6(@types/node@22.19.15)(typescript@7.0.2)
@@ -8689,7 +8722,7 @@ importers:
     dependencies:
       '@google/genai':
         specifier: ^1.52.0
-        version: 1.52.0(@modelcontextprotocol/sdk@1.29.0(@cfworker/json-schema@4.1.1)(supports-color@10.2.2)(zod@4.4.3))(bufferutil@4.1.0)(supports-color@10.2.2)
+        version: 1.52.0(@modelcontextprotocol/sdk@1.30.0(@cfworker/json-schema@4.1.1)(supports-color@10.2.2)(zod@4.4.3))(bufferutil@4.1.0)(supports-color@10.2.2)
       '@mastra/schema-compat':
         specifier: workspace:*
         version: link:../../packages/schema-compat
@@ -9793,6 +9826,9 @@ importers:
       '@internal/types-builder':
         specifier: workspace:*
         version: link:../../packages/_types-builder
+      '@internal/workspace':
+        specifier: workspace:*
+        version: link:../../packages/_internals/workspace
       '@internal/workspace-test-utils':
         specifier: workspace:*
         version: link:../_test-utils
@@ -9883,7 +9919,7 @@ importers:
     dependencies:
       files-sdk:
         specifier: ^1.9.0
-        version: 1.9.0(4c5e98b69509dfe6be9a7915fd67dc25)
+        version: 1.9.0(84bb8c73cc984b4923ad40a36747360b)
     devDependencies:
       '@internal/lint':
         specifier: workspace:*
@@ -10081,6 +10117,9 @@ importers:
       '@internal/types-builder':
         specifier: workspace:*
         version: link:../../packages/_types-builder
+      '@internal/workspace':
+        specifier: workspace:*
+        version: link:../../packages/_internals/workspace
       '@mastra/core':
         specifier: workspace:*
         version: link:../../packages/core
@@ -16023,6 +16062,20 @@ packages:
     peerDependenciesMeta:
       '@cfworker/json-schema':
         optional: true
+
+  '@modelcontextprotocol/sdk@1.30.0':
+    resolution: {integrity: sha512-xKd8OIzlqNzcqcNumGAa6g+PW2kjD5vrpcKOnfldAUPP3j7lnqMPwlTXQm8gF+UwH72z0lqaRbjr9hqGz0eITA==}
+    engines: {node: '>=18'}
+    peerDependencies:
+      '@cfworker/json-schema': ^4.1.1
+      zod: ^3.25 || ^4.0
+    peerDependenciesMeta:
+      '@cfworker/json-schema':
+        optional: true
+
+  '@modelcontextprotocol/server-filesystem@2026.8.31':
+    resolution: {integrity: sha512-kKaFkyAh6oipvc9+EAbJ552JafnMnOq5nzmzWkp1jJdBhTAAGpmIpWihUG1+rfNhmEFM98gUZDdCHCDD4v6a7Q==}
+    hasBin: true
 
   '@modelcontextprotocol/server-legacy@2.0.0':
     resolution: {integrity: sha512-LnffC1BSqFMHtMQxEz92lqDpHWma+ErV3ghdHDgdkCyYzVcCYKcUT5loq4kflty+Bf9C9qjJqbnphyBWyCqo8Q==}
@@ -27423,18 +27476,8 @@ packages:
     resolution: {integrity: sha512-DqC6n3QQ77zdFpCMASA1a3Jlb64Hv2N2DciFGkO/4L9+q/IpIAuRlKOvCXabtRW6cQf8usbmM6BE/TOPysCdIA==}
     engines: {bun: '>=1.0.0', deno: '>=1.30.0', node: '>=8.0.0'}
 
-  lucide-react@0.474.0:
-    resolution: {integrity: sha512-CmghgHkh0OJNmxGKWc0qfPJCYHASPMVSyGY8fj3xgk4v84ItqDg64JNKFZn5hC6E0vHi6gxnbCgwhyVB09wQtA==}
-    peerDependencies:
-      react: ^16.5.1 || ^17.0.0 || ^18.0.0 || ^19.0.0
-
-  lucide-react@0.522.0:
-    resolution: {integrity: sha512-jnJbw974yZ7rQHHEFKJOlWAefG3ATSCZHANZxIdx8Rk/16siuwjgA4fBULpXEAWx/RlTs3FzmKW/udWUuO0aRw==}
-    peerDependencies:
-      react: ^16.5.1 || ^17.0.0 || ^18.0.0 || ^19.0.0
-
-  lucide-react@1.23.0:
-    resolution: {integrity: sha512-38BpJcD0JhFosxHApP/BYsBetLpQFRoTRzEzstM/XCc3jsAG7wqaY1lgVwxiUe3xqYE+lNxo2PkCmYwXWrwwIw==}
+  lucide-react@1.37.0:
+    resolution: {integrity: sha512-LPsB4rD1TD6wZu1djKOf9vUnS1jTNaHbolXebXDgiTdb6jeA1agIJhJsIybCmjKmQClcOaal1o1OaiYahEftyQ==}
     peerDependencies:
       react: ^16.5.1 || ^17.0.0 || ^18.0.0 || ^19.0.0
 
@@ -33846,10 +33889,10 @@ snapshots:
   '@anthropic-ai/claude-agent-sdk-win32-x64@0.3.220':
     optional: true
 
-  '@anthropic-ai/claude-agent-sdk@0.3.220(@anthropic-ai/sdk@0.112.3(zod@4.4.3))(@modelcontextprotocol/sdk@1.29.0(@cfworker/json-schema@4.1.1)(supports-color@10.2.2)(zod@4.4.3))(zod@4.4.3)':
+  '@anthropic-ai/claude-agent-sdk@0.3.220(@anthropic-ai/sdk@0.112.3(zod@4.4.3))(@modelcontextprotocol/sdk@1.30.0(@cfworker/json-schema@4.1.1)(supports-color@10.2.2)(zod@4.4.3))(zod@4.4.3)':
     dependencies:
       '@anthropic-ai/sdk': 0.112.3(zod@4.4.3)
-      '@modelcontextprotocol/sdk': 1.29.0(@cfworker/json-schema@4.1.1)(supports-color@10.2.2)(zod@4.4.3)
+      '@modelcontextprotocol/sdk': 1.30.0(@cfworker/json-schema@4.1.1)(supports-color@10.2.2)(zod@4.4.3)
       zod: 4.4.3
     optionalDependencies:
       '@anthropic-ai/claude-agent-sdk-darwin-arm64': 0.3.220
@@ -39067,6 +39110,19 @@ snapshots:
       - supports-color
       - utf-8-validate
 
+  '@google/genai@1.52.0(@modelcontextprotocol/sdk@1.30.0(@cfworker/json-schema@4.1.1)(supports-color@10.2.2)(zod@4.4.3))(bufferutil@4.1.0)(supports-color@10.2.2)':
+    dependencies:
+      google-auth-library: 10.9.1(supports-color@10.2.2)
+      p-retry: 4.6.2
+      protobufjs: 7.6.5
+      ws: 8.21.0(bufferutil@4.1.0)
+    optionalDependencies:
+      '@modelcontextprotocol/sdk': 1.30.0(@cfworker/json-schema@4.1.1)(supports-color@10.2.2)(zod@4.4.3)
+    transitivePeerDependencies:
+      - bufferutil
+      - supports-color
+      - utf-8-validate
+
   '@graphql-typed-document-node/core@3.2.0(graphql@16.14.0)':
     dependencies:
       graphql: 16.14.0
@@ -40334,14 +40390,14 @@ snapshots:
 
   '@marijn/find-cluster-break@1.0.2': {}
 
-  '@mastra/docusaurus-plugin-algolia@1.1.2(@docusaurus/types@3.10.2(@swc/core@1.16.0(@swc/helpers@0.5.17))(clean-css@5.3.3)(csso@5.0.5)(esbuild@0.28.1)(lightningcss@1.32.0)(postcss@8.5.23)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(supports-color@10.2.2)(uglify-js@3.19.3))(@types/react-dom@19.2.3(@types/react@19.2.17))(@types/react@19.2.17)(clsx@2.1.1)(lucide-react@1.23.0(react@19.2.7))(react-dom@19.2.7(react@19.2.7))(react@19.2.7)':
+  '@mastra/docusaurus-plugin-algolia@1.1.2(@docusaurus/types@3.10.2(@swc/core@1.16.0(@swc/helpers@0.5.17))(clean-css@5.3.3)(csso@5.0.5)(esbuild@0.28.1)(lightningcss@1.32.0)(postcss@8.5.23)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(supports-color@10.2.2)(uglify-js@3.19.3))(@types/react-dom@19.2.3(@types/react@19.2.17))(@types/react@19.2.17)(clsx@2.1.1)(lucide-react@1.37.0(react@19.2.7))(react-dom@19.2.7(react@19.2.7))(react@19.2.7)':
     dependencies:
       '@docusaurus/types': 3.10.2(@swc/core@1.16.0(@swc/helpers@0.5.17))(clean-css@5.3.3)(cssnano@6.1.2(postcss@8.5.23))(csso@5.0.5)(esbuild@0.28.1)(html-minifier-terser@7.2.0)(lightningcss@1.32.0)(postcss@8.5.23)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(supports-color@10.2.2)(uglify-js@3.19.3)
       '@radix-ui/react-dialog': 1.1.19(@types/react-dom@19.2.3(@types/react@19.2.17))(@types/react@19.2.17)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
       '@tanstack/react-virtual': 3.14.5(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
       algoliasearch: 5.55.2
       clsx: 2.1.1
-      lucide-react: 1.23.0(react@19.2.7)
+      lucide-react: 1.37.0(react@19.2.7)
       react: 19.2.7
       react-dom: 19.2.7(react@19.2.7)
       react-hotkeys-hook: 5.3.3(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
@@ -40349,14 +40405,14 @@ snapshots:
       - '@types/react'
       - '@types/react-dom'
 
-  '@mastra/docusaurus-plugin-kapa@1.2.1(079a9066ee545f5e5a6c0098edc18b70)':
+  '@mastra/docusaurus-plugin-kapa@1.2.1(c90a0c26edd650767fd3de35604d64c3)':
     dependencies:
       '@docusaurus/theme-common': 3.10.2(@docusaurus/plugin-content-docs@3.10.2(@docusaurus/faster@3.10.2(@docusaurus/types@3.10.2(@swc/core@1.16.0(@swc/helpers@0.5.17))(clean-css@5.3.3)(csso@5.0.5)(esbuild@0.28.1)(lightningcss@1.32.0)(postcss@8.5.23)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(supports-color@10.2.2)(uglify-js@3.19.3))(@swc/helpers@0.5.17)(clean-css@5.3.3)(csso@5.0.5)(esbuild@0.28.1)(postcss@8.5.23)(uglify-js@3.19.3))(@mdx-js/react@3.1.1(@types/react@19.2.17)(react@19.2.7))(@rspack/core@1.7.12(@swc/helpers@0.5.17))(@swc/core@1.16.0(@swc/helpers@0.5.17))(bufferutil@4.1.0)(clean-css@5.3.3)(csso@5.0.5)(debug@4.4.3(supports-color@10.2.2))(esbuild@0.28.1)(lightningcss@1.32.0)(postcss@8.5.23)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(supports-color@10.2.2)(typescript@5.9.3)(uglify-js@3.19.3))(@swc/core@1.16.0(@swc/helpers@0.5.17))(clean-css@5.3.3)(csso@5.0.5)(esbuild@0.28.1)(lightningcss@1.32.0)(postcss@8.5.23)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(supports-color@10.2.2)(uglify-js@3.19.3)
       '@docusaurus/types': 3.10.2(@swc/core@1.16.0(@swc/helpers@0.5.17))(clean-css@5.3.3)(cssnano@6.1.2(postcss@8.5.23))(csso@5.0.5)(esbuild@0.28.1)(html-minifier-terser@7.2.0)(lightningcss@1.32.0)(postcss@8.5.23)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(supports-color@10.2.2)(uglify-js@3.19.3)
       '@kapaai/react-sdk': 0.9.10(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
       '@streamdown/code': 1.1.1(react@19.2.7)
       clsx: 2.1.1
-      lucide-react: 1.23.0(react@19.2.7)
+      lucide-react: 1.37.0(react@19.2.7)
       react: 19.2.7
       react-dom: 19.2.7(react@19.2.7)
       streamdown: 2.5.0(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(supports-color@10.2.2)
@@ -40630,6 +40686,65 @@ snapshots:
     optionalDependencies:
       '@cfworker/json-schema': 4.1.1
     transitivePeerDependencies:
+      - supports-color
+
+  '@modelcontextprotocol/sdk@1.30.0(@cfworker/json-schema@4.1.1)(supports-color@10.2.2)(zod@3.25.76)':
+    dependencies:
+      '@hono/node-server': 1.19.15(hono@4.12.34)
+      ajv: 8.20.0
+      ajv-formats: 3.0.1(ajv@8.20.0)
+      content-type: 1.0.5
+      cors: 2.8.6
+      cross-spawn: 7.0.6
+      eventsource: 3.0.7
+      eventsource-parser: 3.0.8
+      express: 5.2.1(supports-color@10.2.2)
+      express-rate-limit: 8.5.1(express@5.2.1(supports-color@10.2.2))
+      hono: 4.12.34
+      jose: 6.2.3
+      json-schema-typed: 8.0.2
+      pkce-challenge: 5.0.0
+      raw-body: 3.0.2
+      zod: 3.25.76
+      zod-to-json-schema: 3.25.2(zod@3.25.76)
+    optionalDependencies:
+      '@cfworker/json-schema': 4.1.1
+    transitivePeerDependencies:
+      - supports-color
+
+  '@modelcontextprotocol/sdk@1.30.0(@cfworker/json-schema@4.1.1)(supports-color@10.2.2)(zod@4.4.3)':
+    dependencies:
+      '@hono/node-server': 1.19.15(hono@4.12.34)
+      ajv: 8.20.0
+      ajv-formats: 3.0.1(ajv@8.20.0)
+      content-type: 1.0.5
+      cors: 2.8.6
+      cross-spawn: 7.0.6
+      eventsource: 3.0.7
+      eventsource-parser: 3.0.8
+      express: 5.2.1(supports-color@10.2.2)
+      express-rate-limit: 8.5.1(express@5.2.1(supports-color@10.2.2))
+      hono: 4.12.34
+      jose: 6.2.3
+      json-schema-typed: 8.0.2
+      pkce-challenge: 5.0.0
+      raw-body: 3.0.2
+      zod: 4.4.3
+      zod-to-json-schema: 3.25.2(zod@4.4.3)
+    optionalDependencies:
+      '@cfworker/json-schema': 4.1.1
+    transitivePeerDependencies:
+      - supports-color
+
+  '@modelcontextprotocol/server-filesystem@2026.8.31(@cfworker/json-schema@4.1.1)(supports-color@10.2.2)':
+    dependencies:
+      '@modelcontextprotocol/sdk': 1.30.0(@cfworker/json-schema@4.1.1)(supports-color@10.2.2)(zod@3.25.76)
+      diff: 8.0.4
+      glob: 13.0.6
+      minimatch: 10.2.5
+      zod: 3.25.76
+    transitivePeerDependencies:
+      - '@cfworker/json-schema'
       - supports-color
 
   '@modelcontextprotocol/server-legacy@2.0.0(express@5.2.1(supports-color@10.2.2))':
@@ -49502,7 +49617,7 @@ snapshots:
 
   deep-is@0.1.4: {}
 
-  deepeval@0.1.32(@anthropic-ai/sdk@0.112.3(zod@4.4.3))(@aws-sdk/client-bedrock-runtime@3.1104.0)(@aws-sdk/credential-provider-node@3.972.78)(@google/genai@1.52.0(@modelcontextprotocol/sdk@1.29.0(@cfworker/json-schema@4.1.1)(supports-color@10.2.2)(zod@4.4.3))(bufferutil@4.1.0)(supports-color@10.2.2))(@mastra/core@packages+core)(@mastra/observability@observability+mastra)(@opentelemetry/exporter-trace-otlp-http@0.221.0(@opentelemetry/api@1.9.1))(@smithy/hash-node@4.4.6)(@smithy/signature-v4@5.6.12)(ai@7.0.51(zod@4.4.3))(chokidar@3.6.0)(debug@4.4.3(supports-color@10.2.2))(rxjs@7.8.2)(supports-color@10.2.2)(ws@8.21.0(bufferutil@4.1.0)):
+  deepeval@0.1.32(@anthropic-ai/sdk@0.112.3(zod@4.4.3))(@aws-sdk/client-bedrock-runtime@3.1104.0)(@aws-sdk/credential-provider-node@3.972.78)(@google/genai@1.52.0(@modelcontextprotocol/sdk@1.30.0(@cfworker/json-schema@4.1.1)(supports-color@10.2.2)(zod@4.4.3))(bufferutil@4.1.0)(supports-color@10.2.2))(@mastra/core@packages+core)(@mastra/observability@observability+mastra)(@opentelemetry/exporter-trace-otlp-http@0.221.0(@opentelemetry/api@1.9.1))(@smithy/hash-node@4.4.6)(@smithy/signature-v4@5.6.12)(ai@7.0.51(zod@4.4.3))(chokidar@3.6.0)(debug@4.4.3(supports-color@10.2.2))(rxjs@7.8.2)(supports-color@10.2.2)(ws@8.21.0(bufferutil@4.1.0)):
     dependencies:
       '@opentelemetry/api': 1.9.1
       '@opentelemetry/exporter-trace-otlp-grpc': 0.207.0(@opentelemetry/api@1.9.1)
@@ -49527,7 +49642,7 @@ snapshots:
     optionalDependencies:
       '@anthropic-ai/sdk': 0.112.3(zod@4.4.3)
       '@aws-sdk/client-bedrock-runtime': 3.1104.0
-      '@google/genai': 1.52.0(@modelcontextprotocol/sdk@1.29.0(@cfworker/json-schema@4.1.1)(supports-color@10.2.2)(zod@4.4.3))(bufferutil@4.1.0)(supports-color@10.2.2)
+      '@google/genai': 1.52.0(@modelcontextprotocol/sdk@1.30.0(@cfworker/json-schema@4.1.1)(supports-color@10.2.2)(zod@4.4.3))(bufferutil@4.1.0)(supports-color@10.2.2)
       '@mastra/core': link:packages/core
       '@mastra/observability': link:observability/mastra
       ai: 7.0.51(zod@4.4.3)
@@ -50904,12 +51019,12 @@ snapshots:
   file-uri-to-path@1.0.0:
     optional: true
 
-  files-sdk@1.9.0(4c5e98b69509dfe6be9a7915fd67dc25):
+  files-sdk@1.9.0(84bb8c73cc984b4923ad40a36747360b):
     dependencies:
       commander: 15.0.0
       picomatch: 4.0.5
     optionalDependencies:
-      '@anthropic-ai/claude-agent-sdk': 0.3.220(@anthropic-ai/sdk@0.112.3(zod@4.4.3))(@modelcontextprotocol/sdk@1.29.0(@cfworker/json-schema@4.1.1)(supports-color@10.2.2)(zod@4.4.3))(zod@4.4.3)
+      '@anthropic-ai/claude-agent-sdk': 0.3.220(@anthropic-ai/sdk@0.112.3(zod@4.4.3))(@modelcontextprotocol/sdk@1.30.0(@cfworker/json-schema@4.1.1)(supports-color@10.2.2)(zod@4.4.3))(zod@4.4.3)
       '@aws-sdk/client-s3': 3.1104.0
       '@aws-sdk/lib-storage': 3.997.0(@aws-sdk/client-s3@3.1104.0)
       '@azure/core-auth': 1.10.1(supports-color@10.2.2)
@@ -53132,15 +53247,7 @@ snapshots:
 
   lru.min@1.1.4: {}
 
-  lucide-react@0.474.0(react@19.2.7):
-    dependencies:
-      react: 19.2.7
-
-  lucide-react@0.522.0(react@19.2.7):
-    dependencies:
-      react: 19.2.7
-
-  lucide-react@1.23.0(react@19.2.7):
+  lucide-react@1.37.0(react@19.2.7):
     dependencies:
       react: 19.2.7
 

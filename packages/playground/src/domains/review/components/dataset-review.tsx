@@ -76,12 +76,14 @@ export function DatasetReview({
   const { data: dataset } = useDataset(datasetId);
   const { data: reviewItemsRaw, isLoading: isLoadingReview } = useDatasetReviewItems(datasetId);
   const { data: completedItemsRaw, isLoading: isLoadingCompleted } = useDatasetCompletedItems(datasetId);
+  // Keep `undefined` while loading: the hydration effect below treats a defined
+  // value as "server data arrived", so coercing to [] here would lock in an empty queue.
   const reviewItems = useMemo(
-    () => (experimentId ? (reviewItemsRaw ?? []).filter(i => i.experimentId === experimentId) : reviewItemsRaw),
+    () => (experimentId ? reviewItemsRaw?.filter(i => i.experimentId === experimentId) : reviewItemsRaw),
     [reviewItemsRaw, experimentId],
   );
   const completedItems = useMemo(
-    () => (experimentId ? (completedItemsRaw ?? []).filter(i => i.experimentId === experimentId) : completedItemsRaw),
+    () => (experimentId ? completedItemsRaw?.filter(i => i.experimentId === experimentId) : completedItemsRaw),
     [completedItemsRaw, experimentId],
   );
   const { updateExperimentResult } = useDatasetMutations();
@@ -210,6 +212,7 @@ export function DatasetReview({
               feedbackSource: 'studio',
               feedbackType: 'rating',
               value: rating === 'positive' ? 1 : -1,
+              reviewStatus: 'reviewed',
               experimentId: item.experimentId ?? undefined,
               sourceId: item.id,
             },
@@ -242,6 +245,7 @@ export function DatasetReview({
               feedbackType: 'comment',
               value: comment,
               comment,
+              reviewStatus: 'reviewed',
               experimentId: item.experimentId ?? undefined,
               sourceId: item.id,
             },
@@ -448,7 +452,7 @@ export function DatasetReview({
       ? () => setFeaturedItemId(displayItems[featuredIndex + 1].id)
       : undefined;
 
-  const gridColumns = 'auto minmax(15rem,1fr) 10rem 8rem 6rem 6rem';
+  const gridColumns = 'auto minmax(0,1fr) minmax(0,10rem) minmax(0,8rem) 6rem 6rem';
 
   const { containerRef, getRowProps } = useDataListKeyboard({ count: displayItems.length });
 
@@ -801,7 +805,7 @@ export function DatasetReview({
               />
             </div>
           ) : (
-            <DataList columns={gridColumns} className="min-w-0" scrollRef={containerRef}>
+            <DataList columns={gridColumns} fit="container" className="min-w-0" scrollRef={containerRef}>
               <DataList.Top hasLeadingCell>
                 {!showCompleted ? (
                   <DataList.TopSelectCell

@@ -1,122 +1,26 @@
 # @mastra/tavily
 
-Tavily web search, extract, crawl, and map tools for [Mastra](https://mastra.ai) agents.
-
+Add Tavily search, extract, crawl, and map tools to Mastra agents with shared configuration, typed Zod schemas, and structured web results.
 ## Installation
 
 ```bash
-npm install @mastra/tavily @tavily/core zod
+npm install @mastra/tavily
 ```
 
-## Quick Start
+## Usage
 
-Use `createTavilyTools()` to get all four tools with a shared configuration:
+
+Set `TAVILY_API_KEY` before creating the tools.
 
 ```typescript
 import { Agent } from '@mastra/core/agent';
-import { createTavilyTools } from '@mastra/tavily';
+import { createTavilyExtractTool, createTavilySearchTool } from '@mastra/tavily';
 
-const tools = createTavilyTools();
-// Or pass an explicit API key:
-// const tools = createTavilyTools({ apiKey: 'tvly-...' });
-
-const agent = new Agent({
-  id: 'realtime-information-agent',
-  name: 'Realtime Information Agent',
-  instructions:
-    'You are a realtime information agent that can search the web for the latest information and provide it to the user.',
-  model: 'anthropic/claude-sonnet-4-6',
-  tools,
-});
-```
-
-By default, the tools read `TAVILY_API_KEY` from your environment. You can also pass `{ apiKey }` explicitly.
-
-## Individual Tools
-
-Each tool can be created independently:
-
-```typescript
-import { createTavilySearchTool, createTavilyExtractTool } from '@mastra/tavily';
-
-const searchTool = createTavilySearchTool({ apiKey: 'tvly-...' });
-const extractTool = createTavilyExtractTool(); // uses TAVILY_API_KEY env var
-```
-
-### Search
-
-```typescript
-import { createTavilySearchTool } from '@mastra/tavily';
-
-const searchTool = createTavilySearchTool();
-
-// When called by an agent, accepts:
-// - query (required)
-// - searchDepth: 'basic' | 'advanced'
-// - maxResults: 1-20
-// - includeAnswer: boolean | 'basic' | 'advanced'
-// - includeImages, includeImageDescriptions, includeRawContent
-// - includeDomains, excludeDomains
-// - timeRange: 'day' | 'week' | 'month' | 'year'
-```
-
-### Extract
-
-```typescript
-import { createTavilyExtractTool } from '@mastra/tavily';
-
-const extractTool = createTavilyExtractTool();
-
-// Accepts: urls (1-20), extractDepth, includeImages, format ('markdown' | 'text')
-// Returns: results[] + failedResults[]
-```
-
-### Crawl
-
-```typescript
-import { createTavilyCrawlTool } from '@mastra/tavily';
-
-const crawlTool = createTavilyCrawlTool();
-
-// Accepts: url, maxDepth, maxBreadth, limit, instructions,
-//          selectPaths, selectDomains, excludePaths, excludeDomains,
-//          allowExternal, extractDepth, includeImages, format
-// Returns: baseUrl + results[]
-```
-
-### Map
-
-```typescript
-import { createTavilyMapTool } from '@mastra/tavily';
-
-const mapTool = createTavilyMapTool();
-
-// Accepts: url, maxDepth, maxBreadth, limit, instructions,
-//          selectPaths, selectDomains, excludePaths, excludeDomains, allowExternal
-// Returns: baseUrl + discovered URL strings
-```
-
-## Configuration
-
-| Option   | Type     | Default                      | Description         |
-| -------- | -------- | ---------------------------- | ------------------- |
-| `apiKey` | `string` | `process.env.TAVILY_API_KEY` | Your Tavily API key |
-
-All tools accept `TavilyClientOptions` from `@tavily/core` (includes `apiKey`, `proxies`, `apiBaseURL`, `clientName`, `projectId`). If no API key is found, the tool throws a clear error at execution time. `clientName` defaults to `'mastra'` and is sent in the `X-Client-Name` header.
-
-## RAG Pairing Example
-
-Combine search and extract for retrieval-augmented generation:
-
-```typescript
-import { Agent } from '@mastra/core/agent';
-import { createTavilySearchTool, createTavilyExtractTool } from '@mastra/tavily';
-
-const agent = new Agent({
-  id: 'rag-agent',
-  name: 'Research Assistant',
-  model: 'anthropic/claude-sonnet-4-6',
-  instructions: `You are a research assistant. Use tavily-search to find relevant pages, then use tavily-extract to get full content from the best results.`,
+export const researchAgent = new Agent({
+  id: 'research-agent',
+  name: 'Research Agent',
+  model: 'openai/gpt-5.6-sol',
+  instructions: 'Search for relevant pages, then extract the best sources before answering.',
   tools: {
     search: createTavilySearchTool(),
     extract: createTavilyExtractTool(),
@@ -124,6 +28,14 @@ const agent = new Agent({
 });
 ```
 
-## License
+## Documentation
 
-Apache-2.0
+- [Tavily](https://mastra.ai/integrations/tools/tavily)
+
+## Changelog
+
+See the [package changelog](https://github.com/mastra-ai/mastra/blob/main/integrations/tavily/CHANGELOG.md) for version history and release notes.
+
+## Support
+
+We have an [open community Discord](https://discord.gg/mastra-ai). Come and say hello and let us know if you have any questions or need any help getting things running.

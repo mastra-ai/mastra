@@ -15,7 +15,7 @@ export const workspaceCommandsScenario: McE2eScenario = {
     runtime.printScreen('after startup', terminal);
 
     terminal.submit('/skills');
-    await runtime.waitForScreenText(/No (skills configured|user-invokable skills found)|Skills \(/i, terminal);
+    await runtime.waitForOutputText(/No (skills configured|user-invokable skills found)|Skills \(/i, terminal);
     await runtime.waitForScreenText(/SKILL\.md|Skills are automatically activated|Install skills/i, terminal);
     runtime.printScreen('after /skills', terminal);
 

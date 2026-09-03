@@ -2,74 +2,28 @@
 
 Access Mastra's documentation via [Model Context Protocol (MCP)](https://modelcontextprotocol.io/docs/getting-started/intro). Works with Cursor, Windsurf, Cline, Claude Code, VS Code, Codex, or any MCP-compatible tool.
 
+## Installation
+
+```bash
+npm install @mastra/mcp-docs-server
+```
+
 ## Usage
 
-Follow the [official installation](https://mastra.ai/reference/build-with-ai#mcp-docs-server) instructions.
+Start the server from an MCP client configuration or the command line.
 
-## Tools
+```bash
+npx @mastra/mcp-docs-server
+```
 
-### `mastraDocs`
+## Documentation
 
-Fetch documentation from mastra.ai by path. Supports guides and API references.
+- [MCP docs server setup](https://mastra.ai/reference/build-with-ai#mcp-docs-server)
 
-### `mastraMigration`
+## Changelog
 
-Navigate migration guides for version upgrades. Supports directory browsing, section listing, and keyword search.
+See the [package changelog](https://github.com/mastra-ai/mastra/blob/main/packages/mcp-docs-server/CHANGELOG.md) for version history and release notes.
 
-Read docs from installed `@mastra/*` packages in `node_modules`. All tools require `projectPath` parameter.
+## Support
 
-### `getMastraHelp`
-
-Entry point showing all available documentation tools and recommended workflows.
-
-### `listMastraPackages`
-
-List installed `@mastra/*` packages with embedded documentation.
-
-### `getMastraExports`
-
-Explore package API surface - all classes, functions, types, and constants.
-
-### `getMastraExportDetails`
-
-Get TypeScript type definitions and optionally implementation source code for a specific export.
-
-### `readMastraDocs`
-
-Read topic-based guides and examples (agents, tools, workflows, memory, etc.).
-
-### `searchMastraDocs`
-
-Full-text search across all embedded documentation.
-
-## Interactive Course
-
-### `startMastraCourse`
-
-Start or resume the interactive Mastra course. Requires email registration.
-
-### `getMastraCourseStatus`
-
-View course progress including completed lessons and steps.
-
-### `startMastraCourseLesson`
-
-Jump to a specific lesson by name.
-
-### `nextMastraCourseStep`
-
-Advance to the next step in the current lesson.
-
-### `clearMastraCourseHistory`
-
-Reset all course progress.
-
-## Prompts
-
-### `upgrade-to-v1`
-
-Guided migration workflow from Mastra v0.x to v1.0. Optionally focus on a specific area (agent, tools, workflows, etc.).
-
-### `migration-checklist`
-
-Comprehensive checklist of all breaking changes for v1.0 migration.
+We have an [open community Discord](https://discord.gg/mastra-ai). Come and say hello and let us know if you have any questions or need any help getting things running.

@@ -223,6 +223,7 @@ function issueOpened(context: FactoryGithubRuleContext) {
     metadata: {
       githubRepositoryId: context.repository.id,
       githubIssueNumber: context.issue.number,
+      ...(context.issue.createdAt ? { sourceCreatedAt: context.issue.createdAt } : {}),
       ...(githubActorLogin(context) ? { author: githubActorLogin(context) } : {}),
       authorTrusted: trustedGithubActor(context),
       autoStartCandidate:
@@ -276,6 +277,7 @@ function pullRequestOpened(context: FactoryGithubRuleContext) {
     metadata: {
       githubRepositoryId: context.repository.id,
       githubPullRequestNumber: context.pullRequest.number,
+      ...(context.pullRequest.createdAt ? { sourceCreatedAt: context.pullRequest.createdAt } : {}),
       factoryAuthored,
       authorTrusted: trustedGithubActor(context),
       autoStartCandidate,
@@ -483,6 +485,7 @@ function linearIssueObserved(context: FactoryLinearRuleContext) {
     metadata: {
       linearIssueId: context.issue.id,
       identifier: context.issue.identifier,
+      sourceCreatedAt: context.issue.createdAt,
       linearState: context.issue.state,
       linearStateType: context.issue.stateType,
       linearPriority: context.issue.priorityLabel,

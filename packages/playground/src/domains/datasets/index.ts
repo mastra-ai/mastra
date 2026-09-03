@@ -49,10 +49,8 @@ export type { DatasetVersionsProps } from './components/dataset-versions';
 // Dataset detail components
 export { DatasetHeader } from './components/dataset-detail/dataset-header';
 export type { DatasetHeaderProps } from './components/dataset-detail/dataset-header';
-export { DatasetPageTabs } from './components/dataset-detail/dataset-page-tabs';
-export type { TabValue as DatasetTabValue } from './components/dataset-detail/dataset-page-tabs';
+export { DatasetItemsView } from './components/dataset-detail/dataset-items-view';
 export { DatasetItemsList } from './components/items/dataset-items-list';
-export { DatasetExperiments } from './components/experiments/dataset-experiments';
 export { ActionsMenu } from './components/dataset-detail/items-list-actions';
 export { AddItemDialog } from './components/add-item-dialog';
 
@@ -78,7 +76,10 @@ export { TargetSelector, type TargetType } from './components/experiment-trigger
 export { ScorerSelector } from './components/experiment-trigger/scorer-selector';
 
 // Experiment components
-export { ExperimentPageTabs, type ExperimentPageTabsProps } from '../experiments/components/experiment-page-tabs';
+export {
+  ExperimentResultsSection,
+  type ExperimentResultsSectionProps,
+} from '../experiments/components/experiment-results-section';
 export { ExperimentStats, type ExperimentStatsProps } from '../experiments/components/experiment-stats';
 export {
   ExperimentResultTracePanel,
@@ -88,10 +89,6 @@ export {
   ExperimentResultSpanPane,
   type ExperimentResultSpanPaneProps,
 } from '../experiments/components/experiment-result-span-pane';
-
-// Comparison components
-export { DatasetExperimentsComparison } from './components/experiments/dataset-experiments-comparison';
-export { ScoreDelta } from './components/experiments/score-delta';
 
 // Versions components
 export { DatasetVersionsPanel } from './components/items/dataset-versions-panel';

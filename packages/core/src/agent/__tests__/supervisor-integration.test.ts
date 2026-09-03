@@ -354,7 +354,7 @@ describe('Supervisor Pattern Integration Tests', () => {
       ]);
     });
 
-    it('should expose finishReason on the onDelegationComplete result (stream)', async () => {
+    it('should report an unsuccessful delegation when stream finishes with an error reason', async () => {
       let capturedContext: DelegationCompleteContext | undefined;
 
       const subAgent = new Agent({
@@ -372,7 +372,11 @@ describe('Supervisor Pattern Integration Tests', () => {
               { type: 'text-start', id: 'text-1' },
               { type: 'text-delta', id: 'text-1', delta: 'Streamed sub-agent answer' },
               { type: 'text-end', id: 'text-1' },
-              { type: 'finish', finishReason: 'stop', usage: { inputTokens: 5, outputTokens: 10, totalTokens: 15 } },
+              {
+                type: 'finish',
+                finishReason: 'error',
+                usage: { inputTokens: 5, outputTokens: 10, totalTokens: 15 },
+              },
             ]),
           }),
         }),
@@ -439,7 +443,9 @@ describe('Supervisor Pattern Integration Tests', () => {
 
       expect(capturedContext).toBeDefined();
       expect(capturedContext!.result.text).toBe('Streamed sub-agent answer');
-      expect(capturedContext!.result.finishReason).toBe('stop');
+      expect(capturedContext!.result.finishReason).toBe('error');
+      expect(capturedContext!.success).toBe(false);
+      expect(capturedContext!.error).toBeUndefined();
     });
 
     it('should let onDelegationComplete replace the tool result the parent sees in the same run', async () => {
