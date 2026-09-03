@@ -1,6 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { Agent } from '../../../agent';
-import { ErrorCategory, ErrorDomain, MastraError } from '../../../error';
 import { RequestContext } from '../../../request-context';
 import type { Workflow } from '../../../workflows';
 import { executeTarget } from '../executor';
@@ -53,6 +52,7 @@ const createMockWorkflow = (result: Record<string, unknown>, resumeResults?: Rec
 describe('executeTarget', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(isSupportedLanguageModel).mockReturnValue(true);
   });
 
   describe('agent target', () => {
@@ -74,6 +74,8 @@ describe('executeTarget', () => {
       expect(mockAgent.generate).toHaveBeenCalledWith('Hello', {
         scorers: {},
         returnScorerData: true,
+        abortSignal: undefined,
+        tracingOptions: { traceId: expect.stringMatching(/^[0-9a-f]{32}$/) },
       });
     });
 
@@ -124,6 +126,8 @@ describe('executeTarget', () => {
       expect(mockAgent.generate).toHaveBeenCalledWith(messagesInput, {
         scorers: {},
         returnScorerData: true,
+        abortSignal: undefined,
+        tracingOptions: { traceId: expect.stringMatching(/^[0-9a-f]{32}$/) },
       });
     });
 
@@ -146,63 +150,95 @@ describe('executeTarget', () => {
       expect(mockAgent.generate).toHaveBeenCalledWith('', {
         scorers: {},
         returnScorerData: true,
+        abortSignal: undefined,
+        tracingOptions: { traceId: expect.stringMatching(/^[0-9a-f]{32}$/) },
       });
     });
 
-    it('captures error as string when agent throws without trace details', async () => {
-      const mockAgent = createMockAgent('', true);
+    it('returns the trace ID assigned to a failed agent invocation', async () => {
+      let assignedTraceId: string | undefined;
+      let tracingMetadata: Record<string, unknown> | undefined;
+      const mockAgent = {
+        ...createMockAgent(''),
+        generate: vi.fn().mockImplementation(async (_input: unknown, options: any) => {
+          assignedTraceId = options.tracingOptions.traceId;
+          tracingMetadata = options.tracingOptions.metadata;
+          throw new Error('Provider rejected request');
+        }),
+      } as unknown as Agent;
 
-      const result = await executeTarget(mockAgent, 'agent', {
-        id: 'item-4',
-        datasetId: 'ds-1',
-        input: 'Test',
-        groundTruth: null,
-        version: new Date(),
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      });
+      const result = await executeTarget(
+        mockAgent,
+        'agent',
+        {
+          id: 'item-4',
+          datasetId: 'ds-1',
+          input: 'Test',
+          groundTruth: null,
+          version: new Date(),
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+        { experimentId: 'experiment-1' },
+      );
 
+      expect(assignedTraceId).toMatch(/^[0-9a-f]{32}$/);
+      expect(tracingMetadata).toEqual({ experimentId: 'experiment-1' });
       expect(result.output).toBeNull();
-      expect(result.error).toEqual(expect.objectContaining({ message: 'Agent error' }));
-      expect(result.traceId).toBeNull();
+      expect(result.error).toEqual(expect.objectContaining({ message: 'Provider rejected request' }));
+      expect(result.traceId).toBe(assignedTraceId);
       expect(result.spanId).toBeUndefined();
     });
 
-    it('preserves trace details when agent generation fails', async () => {
-      const providerError = new Error('Provider rejected request');
-      const tracedError = new MastraError(
-        {
-          id: 'AGENT_GENERATE_FAILED',
-          domain: ErrorDomain.AGENT,
-          category: ErrorCategory.USER,
-          details: { traceId: 'trace-123', spanId: 'span-456' },
-        },
-        providerError,
+    it('retains the assigned trace ID when a timeout wins before generation settles', async () => {
+      let assignedTraceId: string | undefined;
+      const generate = vi.fn().mockImplementation(async (_input: unknown, options: any) => {
+        assignedTraceId = options.tracingOptions.traceId;
+        return new Promise(() => {});
+      });
+      const mockAgent = { ...createMockAgent(''), generate } as unknown as Agent;
+      const controller = new AbortController();
+
+      const execution = executeTarget(
+        mockAgent,
+        'agent',
+        { id: 'item-timeout', input: 'Test' },
+        { signal: controller.signal },
       );
+      await vi.waitFor(() => expect(generate).toHaveBeenCalledOnce());
+      controller.abort(new DOMException('Experiment item timed out.', 'TimeoutError'));
+
+      const result = await execution;
+      expect(result.error).toEqual(expect.objectContaining({ message: 'Experiment item timed out.' }));
+      expect(result.traceId).toBe(assignedTraceId);
+      expect(result.traceId).toMatch(/^[0-9a-f]{32}$/);
+    });
+
+    it('returns null trace ID when model resolution fails before agent invocation', async () => {
+      const generate = vi.fn();
       const mockAgent = {
         ...createMockAgent(''),
-        generate: vi.fn().mockRejectedValue(tracedError),
+        getModel: vi.fn().mockRejectedValue(new Error('Model resolution failed')),
+        generate,
       } as unknown as Agent;
 
-      const result = await executeTarget(mockAgent, 'agent', {
-        id: 'item-4-traced',
-        datasetId: 'ds-1',
-        input: 'Test',
-        groundTruth: null,
-        version: new Date(),
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      });
+      const result = await executeTarget(mockAgent, 'agent', { id: 'item-model-failure', input: 'Test' });
 
-      expect(result.output).toBeNull();
-      expect(result.error).toEqual(
-        expect.objectContaining({
-          message: 'Provider rejected request',
-          stack: tracedError.stack,
-        }),
-      );
-      expect(result.traceId).toBe('trace-123');
-      expect(result.spanId).toBe('span-456');
+      expect(generate).not.toHaveBeenCalled();
+      expect(result.error).toEqual(expect.objectContaining({ message: 'Model resolution failed' }));
+      expect(result.traceId).toBeNull();
+    });
+
+    it('uses the agent result trace ID on success', async () => {
+      const mockAgent = {
+        ...createMockAgent(''),
+        generate: vi.fn().mockResolvedValue({ text: 'done', traceId: 'result-trace-id' }),
+      } as unknown as Agent;
+
+      const result = await executeTarget(mockAgent, 'agent', { id: 'item-success', input: 'Test' });
+
+      expect(result.error).toBeNull();
+      expect(result.traceId).toBe('result-trace-id');
     });
 
     it('uses generateLegacy when model is not supported', async () => {
@@ -229,10 +265,27 @@ describe('executeTarget', () => {
       expect(mockAgent.generateLegacy).toHaveBeenCalledWith('Test', {
         scorers: {},
         returnScorerData: true,
+        abortSignal: undefined,
+        tracingOptions: { traceId: expect.stringMatching(/^[0-9a-f]{32}$/) },
       });
+    });
 
-      // Reset mock
-      vi.mocked(isSupportedLanguageModel).mockReturnValue(true);
+    it('returns the trace ID assigned to a failed legacy agent invocation', async () => {
+      vi.mocked(isSupportedLanguageModel).mockReturnValue(false);
+      let assignedTraceId: string | undefined;
+      const mockAgent = {
+        ...createMockAgent(''),
+        generateLegacy: vi.fn().mockImplementation(async (_input: unknown, options: any) => {
+          assignedTraceId = options.tracingOptions.traceId;
+          throw new Error('Legacy provider rejected request');
+        }),
+      } as unknown as Agent;
+
+      const result = await executeTarget(mockAgent, 'agent', { id: 'item-legacy-failure', input: 'Test' });
+
+      expect(assignedTraceId).toMatch(/^[0-9a-f]{32}$/);
+      expect(result.error).toEqual(expect.objectContaining({ message: 'Legacy provider rejected request' }));
+      expect(result.traceId).toBe(assignedTraceId);
     });
   });
 

@@ -58,33 +58,6 @@ import {
 
 const LEGACY_MEMORY_RUN_STATE_KEY = createRunScopeKey<MemoryRunState>('agent-legacy.memoryRunState');
 
-function getTraceDetails(traceId?: string, spanId?: string) {
-  return {
-    ...(traceId ? { traceId } : {}),
-    ...(spanId ? { spanId } : {}),
-  };
-}
-
-function preserveTraceDetails(error: unknown, traceId?: string, spanId?: string): unknown {
-  const traceDetails = getTraceDetails(traceId, spanId);
-  if (Object.keys(traceDetails).length === 0) return error;
-
-  if (error instanceof MastraError && error.details) {
-    Object.assign(error.details, traceDetails);
-    return error;
-  }
-
-  return new MastraError(
-    {
-      id: 'AGENT_GENERATE_FAILED',
-      domain: ErrorDomain.AGENT,
-      category: ErrorCategory.USER,
-      details: traceDetails,
-    },
-    error,
-  );
-}
-
 /**
  * Interface for accessing Agent methods needed by the legacy handler.
  * This allows the legacy handler to work with Agent without directly accessing private members.
@@ -1105,15 +1078,11 @@ export class AgentLegacyHandler {
     let finalOutputProcessors = mergedGenerateOptions.outputProcessors;
 
     if (!output || experimental_output) {
-      const result = await llmToUse
-        .__text<any, EXPERIMENTAL_OUTPUT>({
-          ...llmOptions,
-          ...observabilityContext,
-          experimental_output,
-        } as any)
-        .catch(error => {
-          throw preserveTraceDetails(error, traceId, spanId);
-        });
+      const result = await llmToUse.__text<any, EXPERIMENTAL_OUTPUT>({
+        ...llmOptions,
+        ...observabilityContext,
+        experimental_output,
+      } as any);
 
       // Add the response to the full message list before running output processors
       messageList.add(
@@ -1238,15 +1207,11 @@ export class AgentLegacyHandler {
       return result as any;
     }
 
-    const result = await llmToUse
-      .__textObject<NonNullable<OUTPUT>>({
-        ...llmOptions,
-        ...observabilityContext,
-        structuredOutput: output as NonNullable<OUTPUT>,
-      })
-      .catch(error => {
-        throw preserveTraceDetails(error, traceId, spanId);
-      });
+    const result = await llmToUse.__textObject<NonNullable<OUTPUT>>({
+      ...llmOptions,
+      ...observabilityContext,
+      structuredOutput: output as NonNullable<OUTPUT>,
+    });
 
     const outputText = JSON.stringify(result.object);
 

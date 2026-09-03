@@ -9,7 +9,6 @@
  */
 import { describe, it, expect, vi } from 'vitest';
 import type { Agent } from '../../agent';
-import { ErrorCategory, ErrorDomain, MastraError } from '../../error';
 import type { MastraScorer } from '../../evals/base';
 import type { Mastra } from '../../mastra';
 import type { MastraCompositeStore, StorageDomains } from '../../storage/base';
@@ -552,31 +551,27 @@ describe('runExperimentItem (mode 2: caller drives loop, Mastra runs items)', ()
     expect(listed.results).toHaveLength(2);
   });
 
-  it('persists agent errors with their trace ID instead of throwing', async () => {
-    const tracedError = new MastraError(
-      {
-        id: 'AGENT_GENERATE_FAILED',
-        domain: ErrorDomain.AGENT,
-        category: ErrorCategory.USER,
-        details: { traceId: 'failed-agent-trace', spanId: 'failed-agent-span' },
-      },
-      new Error('Agent error'),
-    );
+  it('persists agent errors with their assigned trace ID instead of throwing', async () => {
+    let assignedTraceId: string | undefined;
     const agent = {
       ...createMockAgent('unused'),
-      generate: vi.fn().mockRejectedValue(tracedError),
+      generate: vi.fn().mockImplementation(async (_input: unknown, options: any) => {
+        assignedTraceId = options.tracingOptions.traceId;
+        throw new Error('Agent error');
+      }),
     } as unknown as Agent;
     const { ds, itemIds } = await setup(THREE_ITEMS, { agent });
     const { experimentId } = await ds.createExperiment({ targetType: 'agent', targetId: 'test-agent' });
 
     const { result } = await ds.runExperimentItem({ experimentId, itemId: itemIds[0]! });
 
+    expect(assignedTraceId).toMatch(/^[0-9a-f]{32}$/);
     expect(result.error).toMatchObject({ message: expect.stringContaining('Agent error') });
     expect(result.output).toBeNull();
-    expect(result.traceId).toBe('failed-agent-trace');
+    expect(result.traceId).toBe(assignedTraceId);
 
     const listed = await ds.listExperimentResults({ experimentId });
-    expect(listed.results[0]?.traceId).toBe('failed-agent-trace');
+    expect(listed.results[0]?.traceId).toBe(assignedTraceId);
   });
 
   it('falls back to item scorerIds, then dataset scorerIds, when the experiment has no scorers', async () => {

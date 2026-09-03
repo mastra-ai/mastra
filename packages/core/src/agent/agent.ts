@@ -232,33 +232,6 @@ import type { AgentCapabilities } from './workflows/prepare-stream/schema';
 
 export type MastraLLM = MastraLLMV1 | MastraLLMVNext;
 
-function getTraceDetails(source: { traceId?: unknown; spanId?: unknown }) {
-  return {
-    ...(typeof source.traceId === 'string' ? { traceId: source.traceId } : {}),
-    ...(typeof source.spanId === 'string' ? { spanId: source.spanId } : {}),
-  };
-}
-
-function preserveTraceDetails(error: unknown, source: { traceId?: unknown; spanId?: unknown }): unknown {
-  const traceDetails = getTraceDetails(source);
-  if (Object.keys(traceDetails).length === 0) return error;
-
-  if (error instanceof MastraError && error.details) {
-    Object.assign(error.details, traceDetails);
-    return error;
-  }
-
-  return new MastraError(
-    {
-      id: 'AGENT_GENERATE_FAILED',
-      domain: ErrorDomain.AGENT,
-      category: ErrorCategory.USER,
-      details: traceDetails,
-    },
-    error,
-  );
-}
-
 // Structural shape of the lazily-built `DurableAgent` wrapper used by
 // `Agent`'s standalone-durable delegators. Declared as a concrete interface
 // (rather than `Record<string, Function>`) so that under
@@ -8083,7 +8056,6 @@ export class Agent<
             id: 'AGENT_GENERATE_FAILED',
             domain: ErrorDomain.AGENT,
             category: ErrorCategory.USER,
-            details: getTraceDetails(result),
           },
           // pass original error to preserve stack trace
           result.error,
@@ -8094,7 +8066,6 @@ export class Agent<
         domain: ErrorDomain.AGENT,
         category: ErrorCategory.USER,
         text: 'An unknown error occurred while streaming',
-        details: getTraceDetails(result),
       });
     }
 
@@ -8104,24 +8075,15 @@ export class Agent<
         domain: ErrorDomain.AGENT,
         category: ErrorCategory.SYSTEM,
         text: 'Execution workflow produced a result without getFullOutput',
-        details: getTraceDetails(result),
       });
     }
 
-    let fullOutput: Awaited<ReturnType<typeof result.result.getFullOutput>>;
-    try {
-      fullOutput = await result.result.getFullOutput();
-    } catch (error) {
-      throw preserveTraceDetails(error, result);
-    }
+    const fullOutput = await result.result.getFullOutput();
 
     const error = fullOutput.error;
 
     if (error) {
-      throw preserveTraceDetails(error, {
-        traceId: fullOutput.traceId ?? result.traceId,
-        spanId: fullOutput.spanId ?? result.spanId,
-      });
+      throw error;
     }
 
     return fullOutput;
@@ -9280,7 +9242,6 @@ export class Agent<
             id: 'AGENT_GENERATE_FAILED',
             domain: ErrorDomain.AGENT,
             category: ErrorCategory.USER,
-            details: getTraceDetails(result),
           },
           // pass original error to preserve stack trace
           result.error,
@@ -9291,7 +9252,6 @@ export class Agent<
         domain: ErrorDomain.AGENT,
         category: ErrorCategory.USER,
         text: 'An unknown error occurred while generating',
-        details: getTraceDetails(result),
       });
     }
 
@@ -9301,24 +9261,17 @@ export class Agent<
         domain: ErrorDomain.AGENT,
         category: ErrorCategory.SYSTEM,
         text: 'Execution workflow produced a result without getFullOutput',
-        details: getTraceDetails(result),
       });
     }
 
-    let fullOutput: Awaited<ReturnType<MastraModelOutput<OUTPUT>['getFullOutput']>>;
-    try {
-      fullOutput = (await result.result.getFullOutput()) as typeof fullOutput;
-    } catch (error) {
-      throw preserveTraceDetails(error, result);
-    }
+    const fullOutput = (await result.result.getFullOutput()) as Awaited<
+      ReturnType<MastraModelOutput<OUTPUT>['getFullOutput']>
+    >;
 
     const error = fullOutput.error;
 
     if (error) {
-      throw preserveTraceDetails(error, {
-        traceId: fullOutput.traceId ?? result.traceId,
-        spanId: fullOutput.spanId ?? result.spanId,
-      });
+      throw error;
     }
 
     return fullOutput;
