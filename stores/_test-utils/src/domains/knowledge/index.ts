@@ -19,6 +19,7 @@ export function createKnowledgeStorageTests(createStore: () => Promise<Knowledge
     beforeEach(async () => {
       store = await createStore();
       await store.init();
+      await store.dangerouslyClearAll();
       await store.createNode({ id: ORG_SCOPE_ID, name: 'Acme', isScope: true, scopeIds: [] });
       await store.createNode({ id: PROJECT_SCOPE_ID, name: 'Project scope', isScope: true, scopeIds: [ORG_SCOPE_ID] });
       await store.createNode({ id: OTHER_SCOPE_ID, name: 'Other', isScope: true, scopeIds: [] });
@@ -656,20 +657,60 @@ export function createKnowledgeStorageTests(createStore: () => Promise<Knowledge
       expect(restored.version).toBe(3);
     });
 
-    it('merges nodes while retaining records and memberships', async () => {
+    it('merges nodes while retaining records, memberships, and source addresses', async () => {
       const source = await store.createNode({ name: 'Source', scopeIds: [PROJECT_SCOPE_ID] });
       const target = await store.createNode({ name: 'Target', scopeIds: [PROJECT_SCOPE_ID] });
       const record = await store.createRecord({ node: source, text: 'Move me', scopeIds: [PROJECT_SCOPE_ID] });
+      const deletedRecord = await store.createRecord({
+        node: source,
+        text: 'Restore me',
+        scopeIds: [PROJECT_SCOPE_ID],
+      });
+      const deleted = await store.deleteRecord({
+        id: deletedRecord.id,
+        version: deletedRecord.version,
+        deletedBy: 'test',
+      });
+      const mentionOwner = await store.createNode({ name: 'Mention owner', scopeIds: [PROJECT_SCOPE_ID] });
+      const duplicateMention = await store.createRecord({
+        node: mentionOwner,
+        text: 'Connect [[Source]] with [[Target]].',
+        scopeIds: [PROJECT_SCOPE_ID],
+      });
+      await store.setNodeAddress({ source: 'github', address: 'source-address', nodeId: source.id });
 
-      await store.mergeNodes({
+      const merged = await store.mergeNodes({
         sourceId: source.id,
         targetId: target.id,
         sourceVersion: source.version,
         targetVersion: target.version,
       });
+      expect(merged.version).toBe(target.version);
       expect(
         (await store.listRecords({ node: target, scopeIds: [PROJECT_SCOPE_ID] })).records.map(item => item.id),
       ).toEqual([record.id]);
+      expect(
+        (await store.listMentioningRecords({ node: target, scopeIds: [PROJECT_SCOPE_ID] })).records.map(
+          item => item.id,
+        ),
+      ).toContain(duplicateMention.id);
+      await expect(store.listMentioningRecords({ node: source, scopeIds: [PROJECT_SCOPE_ID] })).resolves.toMatchObject({
+        records: [],
+      });
+      const movedDeleted = await store.getRecord({ id: deletedRecord.id, includeDeleted: true });
+      expect(movedDeleted).toMatchObject({ nodeId: target.id, version: deleted.version + 1 });
+      if (!movedDeleted) throw new Error('Expected merged deleted record');
+      await expect(store.restoreRecord({ id: deletedRecord.id, version: movedDeleted.version })).resolves.toMatchObject(
+        {
+          nodeId: target.id,
+        },
+      );
+      await expect(store.getNodeAddress({ source: 'github', address: 'source-address' })).resolves.toMatchObject({
+        nodeId: target.id,
+      });
+      await expect(store.listNodeAddresses({ source: 'github' })).resolves.toEqual(
+        expect.arrayContaining([expect.objectContaining({ address: 'source-address', nodeId: target.id })]),
+      );
       expect(await store.getNode(source.id)).toBeNull();
       expect(await store.getNodeScopeIds(source.id)).toEqual([]);
     });
@@ -1897,6 +1938,44 @@ export function createKnowledgeStorageTests(createStore: () => Promise<Knowledge
           entry => entry.documentId === documentId && entry.status !== 'completed',
         ),
       ).toEqual([]);
+    });
+
+    it('preserves deterministic randomized v2 parity', async () => {
+      let state = 0x4d415354;
+      const random = () => {
+        state = (Math.imul(state, 1_664_525) + 1_013_904_223) >>> 0;
+        return state / 0x1_0000_0000;
+      };
+      const expectedProjectIds: string[] = [];
+
+      for (let index = 0; index < 24; index += 1) {
+        const id = `20000000-0000-4000-8000-${String(index).padStart(12, '0')}`;
+        const scopeIds = random() < 0.5 ? [PROJECT_SCOPE_ID] : [OTHER_SCOPE_ID];
+        if (random() < 0.25) scopeIds.push(scopeIds[0] === PROJECT_SCOPE_ID ? OTHER_SCOPE_ID : PROJECT_SCOPE_ID);
+        if (scopeIds.includes(PROJECT_SCOPE_ID)) expectedProjectIds.push(id);
+        const node = await store.createNode({
+          id,
+          name: `Seeded ${String(index).padStart(2, '0')} %_${Math.floor(random() * 10_000)}`,
+          scopeIds,
+        });
+        await store.createRecord({
+          id: `record-randomized-${String(index).padStart(2, '0')}`,
+          node,
+          text: `Deterministic payload ${index}`,
+          scopeIds,
+        });
+      }
+
+      const projectNodes = await store.listNodes({ scopeIds: [PROJECT_SCOPE_ID], limit: 100 });
+      expect(projectNodes.map(node => node.id).sort()).toEqual(expectedProjectIds.sort());
+      for (const node of projectNodes) {
+        expect(await store.resolveNode({ name: node.name, scopeIds: [PROJECT_SCOPE_ID] })).toMatchObject({
+          id: node.id,
+          version: 1,
+        });
+        expect((await store.listRecords({ node, scopeIds: [PROJECT_SCOPE_ID] })).records).toHaveLength(1);
+      }
+      expect((await store.listNodes({ scopeIds: [MISSING_SCOPE_ID], limit: 100 })).map(node => node.id)).toEqual([]);
     });
 
     it('clears only canonical Knowledge state', async () => {
