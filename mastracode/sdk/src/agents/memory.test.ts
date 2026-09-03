@@ -1,15 +1,6 @@
-import fs, { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import path from 'node:path';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
-
-import { MACHINE_ID_FILE, localKnowledgeOrgId } from '../knowledge-scope.js';
-
-// Isolated home so the machine id under test never touches the real one.
-const TEST_HOME = mkdtempSync(path.join(tmpdir(), 'mastracode-memory-'));
-const knowledgeScope = { homeDir: TEST_HOME };
-afterAll(() => rmSync(TEST_HOME, { recursive: true, force: true }));
+import { LOCAL_KNOWLEDGE_ORG_ID } from '../knowledge-scope.js';
 
 const memoryConstructorMock = vi.fn();
 const getOmScopeMock = vi.fn();
@@ -122,7 +113,6 @@ async function createMemoryConfig(
   const memory = getDynamicMemory(
     storage as never,
     vector as never,
-    knowledgeScope,
   )({ requestContext: requestContext as never }) as unknown as {
     config: MemoryConfig;
   };
@@ -207,7 +197,7 @@ describe('getDynamicMemory', () => {
       maxScope: 'resource',
       pins: true,
     });
-    expect(requestContext.get('organizationId')).toBe(localKnowledgeOrgId(knowledgeScope));
+    expect(requestContext.get('organizationId')).toBe(LOCAL_KNOWLEDGE_ORG_ID);
     // Outside the factory there is no project id, so the knowledge scope is untouched.
     expect(requestContext.get('knowledgeResourceId')).toBeUndefined();
   });
@@ -227,17 +217,15 @@ describe('getDynamicMemory', () => {
     expect(requestContext.get('organizationId')).toBe('org-real');
   });
 
-  it('curates local (TUI/studio) knowledge under the machine org, never the per-checkout session owner', async () => {
+  it('curates local (TUI/studio) knowledge under the fixed local org, never the per-checkout session owner', async () => {
     process.env.MASTRACODE_EXPERIMENTAL_SUBCONSCIOUS = '1';
-    const { getDynamicMemory } = await import('./memory.js');
+    const { LOCAL_KNOWLEDGE_ORG_ID: exported } = await import('./memory.js');
 
     const { requestContext } = await createMemoryConfig({ projectPath: '/tmp/project' }, 'thread', { vector: true });
     const org = requestContext.get('organizationId');
-    expect(org).toBe(localKnowledgeOrgId(knowledgeScope));
-    expect(org).toMatch(/^mastracode-[0-9a-f]{12}$/);
+    expect(org).toBe('local');
+    expect(org).toBe(exported);
     expect(org).not.toBe('mastracode-owner');
-    expect(org).not.toBe('mastra-code');
-    expect(typeof getDynamicMemory).toBe('function');
   });
 
   it('refuses to curate for a factory session whose organization never resolved', async () => {
@@ -256,60 +244,6 @@ describe('getDynamicMemory', () => {
       expect(errorSpy.mock.calls[0]?.[0]).toContain('Knowledge curation disabled');
     } finally {
       errorSpy.mockRestore();
-    }
-  });
-
-  it('refuses to curate a local session whose machine id is unusable instead of curating under a substitute org', async () => {
-    process.env.MASTRACODE_EXPERIMENTAL_SUBCONSCIOUS = '1';
-    const homeDir = mkdtempSync(path.join(tmpdir(), 'mastracode-memory-corrupt-'));
-    const file = path.join(homeDir, '.mastracode', MACHINE_ID_FILE);
-    mkdirSync(path.dirname(file), { recursive: true });
-    writeFileSync(file, 'garbage\n');
-    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
-    try {
-      vi.resetModules();
-      memoryConstructorMock.mockClear();
-      getOmScopeMock.mockReturnValue('thread');
-      const { getDynamicMemory } = await import('./memory.js');
-      const requestContext = createRequestContext({ projectPath: '/tmp/project' }, 'corrupt-id-session');
-      const { config } = getDynamicMemory({ storage: true } as never, { vector: true } as never, { homeDir })({
-        requestContext: requestContext as never,
-      }) as unknown as { config: MemoryConfig };
-      expect(requestContext.set).not.toHaveBeenCalledWith('organizationId', expect.anything());
-      expect(config.options.observationalMemory.experimental_subconscious).toBeUndefined();
-      expect(errorSpy).toHaveBeenCalledTimes(1);
-      expect(errorSpy.mock.calls[0]?.[0]).toContain(file);
-    } finally {
-      errorSpy.mockRestore();
-      rmSync(homeDir, { recursive: true, force: true });
-    }
-  });
-
-  it('refuses to curate a local session when the machine id cannot be created (EACCES) rather than using a temporary org', async () => {
-    process.env.MASTRACODE_EXPERIMENTAL_SUBCONSCIOUS = '1';
-    const homeDir = mkdtempSync(path.join(tmpdir(), 'mastracode-memory-eacces-'));
-    const file = path.join(homeDir, '.mastracode', MACHINE_ID_FILE);
-    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
-    const mkdirSpy = vi.spyOn(fs, 'mkdirSync').mockImplementation(() => {
-      throw Object.assign(new Error('EACCES: permission denied'), { code: 'EACCES' });
-    });
-    try {
-      vi.resetModules();
-      memoryConstructorMock.mockClear();
-      getOmScopeMock.mockReturnValue('thread');
-      const { getDynamicMemory } = await import('./memory.js');
-      const requestContext = createRequestContext({ projectPath: '/tmp/project' }, 'eacces-session');
-      const { config } = getDynamicMemory({ storage: true } as never, { vector: true } as never, { homeDir })({
-        requestContext: requestContext as never,
-      }) as unknown as { config: MemoryConfig };
-      expect(requestContext.set).not.toHaveBeenCalledWith('organizationId', expect.anything());
-      expect(config.options.observationalMemory.experimental_subconscious).toBeUndefined();
-      expect(errorSpy.mock.calls[0]?.[0]).toContain('EACCES');
-      expect(fs.existsSync(file)).toBe(false);
-    } finally {
-      mkdirSpy.mockRestore();
-      errorSpy.mockRestore();
-      rmSync(homeDir, { recursive: true, force: true });
     }
   });
 
@@ -337,7 +271,7 @@ describe('getDynamicMemory', () => {
       vi.resetModules();
       getOmScopeMock.mockReturnValue('thread');
       const { getDynamicMemory } = await import('./memory.js');
-      const resolve = getDynamicMemory({ storage: true } as never, { vector: true } as never, knowledgeScope);
+      const resolve = getDynamicMemory({ storage: true } as never, { vector: true } as never);
       const requestContext = createRequestContext({ projectPath: '/tmp/project', factoryProjectId: 'project-1' });
 
       resolve({ requestContext: requestContext as never });
@@ -359,7 +293,7 @@ describe('getDynamicMemory', () => {
       vi.resetModules();
       getOmScopeMock.mockReturnValue('thread');
       const { getDynamicMemory } = await import('./memory.js');
-      const resolve = getDynamicMemory({ storage: true } as never, { vector: true } as never, knowledgeScope);
+      const resolve = getDynamicMemory({ storage: true } as never, { vector: true } as never);
       const state = { projectPath: '/tmp/project', factoryProjectId: 'project-1' };
 
       resolve({ requestContext: createRequestContext(state, 'session-same') as never });
@@ -385,7 +319,7 @@ describe('getDynamicMemory', () => {
       vi.resetModules();
       getOmScopeMock.mockReturnValue('thread');
       const { getDynamicMemory } = await import('./memory.js');
-      const resolve = getDynamicMemory({ storage: true } as never, { vector: true } as never, knowledgeScope);
+      const resolve = getDynamicMemory({ storage: true } as never, { vector: true } as never);
 
       const contexts: Record<string, RequestContextStub> = {
         refusing: createRequestContext({ projectPath: '/tmp/project', factoryProjectId: 'project-1' }, 'session-bad'),
@@ -447,7 +381,7 @@ describe('getDynamicMemory', () => {
     memoryConstructorMock.mockClear();
     getOmScopeMock.mockReturnValue('thread');
     const { getDynamicMemory } = await import('./memory.js');
-    const factory = getDynamicMemory({ storage: true } as never, { vector: true } as never, knowledgeScope);
+    const factory = getDynamicMemory({ storage: true } as never, { vector: true } as never);
     const nonFactoryMemory = factory({
       requestContext: createRequestContext({ projectPath: '/tmp/project' }) as never,
     });

@@ -3,4 +3,4 @@
 'mastracode': patch
 ---
 
-Default the local Subconscious knowledge org to a persisted per-machine id and read `/knowledge` from the same scope curation writes under. The id is generated once and stored at `~/.mastracode/machine-id` (honours a custom config dir). There is no fallback identity: if that file is corrupt or cannot be read or created, curation is disabled and `/knowledge` reports why, rather than writing knowledge under a temporary org that becomes unreachable once the real id resolves. Knowledge curated earlier under `org:local` is not migrated automatically; rescope it to `org:mastracode-<machine-id>` to keep it visible.
+Read `/knowledge` from the same scope the Subconscious writes under. The knowledge browser was building its org rung from the session owner id (a user id), while local curation writes under the fixed `local` org, so the browser always looked at an empty scope. Both the memory factory and the inspector now derive their org/resource rungs from one resolver, and the local org id is exported as `LOCAL_KNOWLEDGE_ORG_ID`. Factory sessions keep failing closed when their org is unresolved.

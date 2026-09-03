@@ -12,7 +12,6 @@ import type {
 } from '@mastra/core/storage';
 
 import { resolveKnowledgeScopeIdentity } from './knowledge-scope.js';
-import type { LocalKnowledgeOrgOptions } from './knowledge-scope.js';
 import type { MastraCodeState } from './schema.js';
 
 export type KnowledgeInspectorScopeLevel = 'org' | 'resource' | 'thread';
@@ -241,16 +240,10 @@ class ScopedKnowledgeInspector implements KnowledgeInspector {
   readonly #cursors = new Map<string, CursorEntry>();
   #fingerprint?: string;
   #identityKey = opaqueToken();
-  readonly #knowledgeScope: LocalKnowledgeOrgOptions;
 
-  constructor(input: {
-    knowledge: KnowledgeStorage;
-    session: Session<MastraCodeState>;
-    knowledgeScope?: LocalKnowledgeOrgOptions;
-  }) {
+  constructor(input: { knowledge: KnowledgeStorage; session: Session<MastraCodeState> }) {
     this.#knowledge = input.knowledge;
     this.#session = input.session;
-    this.#knowledgeScope = input.knowledgeScope ?? {};
     this.#session.subscribe(event => {
       if (event.type === 'thread_changed' || event.type === 'thread_created' || event.type === 'thread_deleted') {
         this.#invalidateIdnode();
@@ -468,7 +461,7 @@ class ScopedKnowledgeInspector implements KnowledgeInspector {
   async #binding(): Promise<Binding> {
     // Scope rungs come from the same resolver the subconscious writes under; an
     // owner id is a USER id and never names a knowledge org.
-    const identity = resolveKnowledgeScopeIdentity(this.#session.state.get(), this.#knowledgeScope);
+    const identity = resolveKnowledgeScopeIdentity(this.#session.state.get());
     const sessionResourceId = this.#session.identity.getResourceId();
     if (!identity.resolved) {
       // An unresolved org is its own identity: handles minted under the
@@ -796,10 +789,7 @@ class ScopedKnowledgeInspector implements KnowledgeInspector {
 export async function createKnowledgeInspector(input: {
   storage: MastraCompositeStore;
   session: Session<MastraCodeState>;
-  knowledgeScope?: LocalKnowledgeOrgOptions;
 }): Promise<KnowledgeInspector | undefined> {
   const knowledge = await input.storage.getStore('knowledge');
-  return knowledge
-    ? new ScopedKnowledgeInspector({ knowledge, session: input.session, knowledgeScope: input.knowledgeScope })
-    : undefined;
+  return knowledge ? new ScopedKnowledgeInspector({ knowledge, session: input.session }) : undefined;
 }

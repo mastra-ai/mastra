@@ -5,8 +5,7 @@ import type { MastraVector } from '@mastra/core/vector';
 import { fastembed } from '@mastra/fastembed';
 import { Memory, Subconscious } from '@mastra/memory';
 import { DEFAULT_OM_MODEL_ID, DEFAULT_OBS_THRESHOLD, DEFAULT_REF_THRESHOLD } from '../constants.js';
-import { resolveKnowledgeScopeIdentity } from '../knowledge-scope.js';
-import type { LocalKnowledgeOrgOptions } from '../knowledge-scope.js';
+import { LOCAL_KNOWLEDGE_ORG_ID, resolveKnowledgeScopeIdentity } from '../knowledge-scope.js';
 import type { MastraCodeState } from '../schema.js';
 import { getOmScope } from '../utils/project.js';
 import { resolveModel } from './model.js';
@@ -71,6 +70,8 @@ Don't say "Agent did x", say "did x". It will be assumed the agent did what was 
 
 Drop caveman for: security warnings, irreversible action confirmations, multi-step sequences where fragment order risks misread, user asks to clarify or repeats question, and anything that requires remembering verbatim content. Resume caveman after clear part done`;
 
+export { LOCAL_KNOWLEDGE_ORG_ID };
+
 // One error per session, not per memory resolution. Keyed on the session id
 // rather than the controller object: the controller is read off the request
 // context on every resolution, so it is a fresh object per request and would
@@ -104,11 +105,7 @@ function reportOrgUnresolved(
  * Reads OM thresholds from controller state via requestContext.
  * Model functions also read from requestContext (no mutable bridge needed).
  */
-export function getDynamicMemory(
-  storage: MastraCompositeStore,
-  vector?: MastraVector,
-  knowledgeScope: LocalKnowledgeOrgOptions = {},
-) {
+export function getDynamicMemory(storage: MastraCompositeStore, vector?: MastraVector) {
   // Cache is scoped per storage instance (per getDynamicMemory call) so a
   // Memory bound to one storage is never reused after storage changes.
   let cachedMemory: Memory | null = null;
@@ -121,13 +118,13 @@ export function getDynamicMemory(
     const factoryProjectId = state?.factoryProjectId;
     const isFactory = typeof factoryProjectId === 'string' && factoryProjectId.trim().length > 0;
 
-    // A session that could not resolve its org (Factory seed missing, or the
-    // local machine id unusable) refuses to curate: writing under a substituted
-    // identity produces knowledge the fail-closed read path can never see.
+    // A Factory-owned session that could not resolve its org refuses to curate:
+    // writing under a substituted identity produces knowledge the fail-closed
+    // read path can never see.
     let orgUnresolvedRefusal = false;
 
     if (subconsciousEnabled) {
-      const identity = resolveKnowledgeScopeIdentity(state, knowledgeScope);
+      const identity = resolveKnowledgeScopeIdentity(state);
       if (identity.resolved) {
         requestContext.set('organizationId', identity.organizationId);
       } else {

@@ -1,22 +1,15 @@
-import fs, { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import path from 'node:path';
 import type { AgentControllerEvent, Session } from '@mastra/core/agent-controller';
 import { InMemoryDB, InMemoryKnowledgeStorage, InMemoryStore, MastraCompositeStore } from '@mastra/core/storage';
 
-import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { createKnowledgeInspector, KnowledgeInspectorError } from './knowledge-inspector.js';
-import { MACHINE_ID_FILE, localKnowledgeOrgId } from './knowledge-scope.js';
+import { LOCAL_KNOWLEDGE_ORG_ID } from './knowledge-scope.js';
 import type { MastraCodeState } from './schema.js';
 
-// TUI/studio sessions curate under the machine org rung (see knowledge-scope.ts);
-// the inspector must read the same rung. Isolated to a temp home so the test
-// never touches the real machine id.
-const TEST_HOME = mkdtempSync(path.join(tmpdir(), 'mastracode-inspector-'));
-const knowledgeScope = { homeDir: TEST_HOME };
-afterAll(() => rmSync(TEST_HOME, { recursive: true, force: true }));
-const LOCAL_ORG = localKnowledgeOrgId(knowledgeScope);
+// TUI/studio sessions curate under the fixed local org rung (see knowledge-scope.ts);
+// the inspector must read the same rung.
+const LOCAL_ORG = LOCAL_KNOWLEDGE_ORG_ID;
 const orgScope = [`org:${LOCAL_ORG}`];
 const resourceScope = [...orgScope, 'resource:project-1'];
 const threadScope = [...resourceScope, 'thread:thread-1'];
@@ -79,7 +72,7 @@ async function createHarness(state: Partial<MastraCodeState> = {}) {
   const knowledge = new InMemoryKnowledgeStorage({ db: new InMemoryDB() });
   const storage = new MastraCompositeStore({ id: 'knowledge-inspector-test', domains: { knowledge } });
   const session = createSessionHarness(state);
-  const inspector = await createKnowledgeInspector({ storage, session: session.session, knowledgeScope });
+  const inspector = await createKnowledgeInspector({ storage, session: session.session });
   if (!inspector) throw new Error('Expected knowledge inspector');
   return { knowledge, storage, inspector, session };
 }
@@ -481,77 +474,6 @@ describe('KnowledgeInspector', () => {
     await expect(factory.inspector.listNodes({ level: 'org' })).rejects.toMatchObject({ code: 'unavailable' });
   });
 
-  it('fails closed when the local machine id is unusable instead of reading a substitute org', async () => {
-    const homeDir = mkdtempSync(path.join(tmpdir(), 'mastracode-inspector-corrupt-'));
-    const file = path.join(homeDir, '.mastracode', MACHINE_ID_FILE);
-    mkdirSync(path.dirname(file), { recursive: true });
-    writeFileSync(file, 'garbage\n');
-    try {
-      const knowledge = new InMemoryKnowledgeStorage({ db: new InMemoryDB() });
-      const storage = new MastraCompositeStore({ id: 'knowledge-inspector-corrupt', domains: { knowledge } });
-      const inspector = await createKnowledgeInspector({
-        storage,
-        session: createSessionHarness().session,
-        knowledgeScope: { homeDir },
-      });
-      if (!inspector) throw new Error('Expected knowledge inspector');
-      await expect(inspector.getScopeTree()).rejects.toMatchObject({
-        code: 'unavailable',
-        message: expect.stringContaining(file),
-      });
-      await expect(inspector.listNodes({ level: 'org' })).rejects.toMatchObject({ code: 'unavailable' });
-      // Repairing the file is enough; nothing was cached from the failed resolution.
-      writeFileSync(file, 'abcdef012345\n');
-      const tree = await inspector.getScopeTree();
-      expect(tree.roots).toContainEqual({ level: 'org', id: 'mastracode-abcdef012345', available: true });
-    } finally {
-      rmSync(homeDir, { recursive: true, force: true });
-    }
-  });
-
-  it('rejects before touching storage when the machine id cannot be created (EACCES)', async () => {
-    const homeDir = mkdtempSync(path.join(tmpdir(), 'mastracode-inspector-eacces-'));
-    const file = path.join(homeDir, '.mastracode', MACHINE_ID_FILE);
-    const knowledge = new InMemoryKnowledgeStorage({ db: new InMemoryDB() });
-    const storage = new MastraCompositeStore({ id: 'knowledge-inspector-eacces', domains: { knowledge } });
-    const inspector = await createKnowledgeInspector({
-      storage,
-      session: createSessionHarness().session,
-      knowledgeScope: { homeDir },
-    });
-    if (!inspector) throw new Error('Expected knowledge inspector');
-    // Seed a record under a hostname-style org: nothing may read it, and no reads may happen at all.
-    await knowledge.createNode({ scope: ['org:mastracode-temporary'], type: 'entity', name: 'leak' } as never);
-    const reads = [
-      'listNodes',
-      'getNode',
-      'getNodeByName',
-      'resolveNode',
-      'getKnowledge',
-      'listKnowledgeAbout',
-      'search',
-      'listActivity',
-    ]
-      .filter(name => typeof (knowledge as never as Record<string, unknown>)[name] === 'function')
-      .map(name => vi.spyOn(knowledge as never as Record<string, (...args: never[]) => unknown>, name));
-    const mkdirSpy = vi.spyOn(fs, 'mkdirSync').mockImplementation(() => {
-      throw Object.assign(new Error('EACCES: permission denied'), { code: 'EACCES' });
-    });
-    try {
-      await expect(inspector.getScopeTree()).rejects.toMatchObject({
-        code: 'unavailable',
-        message: expect.stringContaining('EACCES'),
-      });
-      await expect(inspector.listNodes({ level: 'org' })).rejects.toMatchObject({ code: 'unavailable' });
-      for (const spy of reads) expect(spy).not.toHaveBeenCalled();
-      expect(fs.existsSync(file)).toBe(false);
-    } finally {
-      mkdirSpy.mockRestore();
-      for (const spy of reads) spy.mockRestore();
-      rmSync(homeDir, { recursive: true, force: true });
-    }
-  });
-
   it('returns no capability when the composite has no knowledge domain', async () => {
     const storage = new MastraCompositeStore({
       id: 'without-knowledge',
@@ -559,7 +481,7 @@ describe('KnowledgeInspector', () => {
       domains: { knowledge: false },
     });
     await expect(
-      createKnowledgeInspector({ storage, session: createSessionHarness().session, knowledgeScope }),
+      createKnowledgeInspector({ storage, session: createSessionHarness().session }),
     ).resolves.toBeUndefined();
   });
 });

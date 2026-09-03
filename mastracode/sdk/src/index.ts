@@ -638,9 +638,7 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
     closeVector: vector instanceof LibSQLVector ? () => vector.close() : undefined,
   });
 
-  const knowledgeScope = { homeDir, configDirName: configDir };
-  const memory =
-    config?.memory === false ? undefined : (config?.memory ?? getDynamicMemory(storage, vector, knowledgeScope));
+  const memory = config?.memory === false ? undefined : (config?.memory ?? getDynamicMemory(storage, vector));
 
   // MCP
   const mcpManager = config?.disableMcp
@@ -1205,7 +1203,7 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
     storage,
     storageMaintenance,
     createKnowledgeInspector: (session: Session<MastraCodeState>) =>
-      createScopedKnowledgeInspector({ storage, session, knowledgeScope }),
+      createScopedKnowledgeInspector({ storage, session }),
     observability,
     memory,
     mcpManager,
@@ -1519,7 +1517,7 @@ export async function prepareAgentControllerMount(
  */
 export const createMastraCode = bootLocalAgentController;
 export * from './knowledge-inspector.js';
-export { localKnowledgeOrgId, localMachineId } from './knowledge-scope.js';
+export { LOCAL_KNOWLEDGE_ORG_ID } from './knowledge-scope.js';
 
 /**
  * Programmatic headless API. `runMC` runs an already-built controller/session
