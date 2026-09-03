@@ -196,8 +196,9 @@ The constructor accepts an `MCPServerConfig` object with the following propertie
     name: 'protocolVersion',
     type: "'2025-11-25' | '2026-07-28'",
     isOptional: true,
+    defaultValue: "'2026-07-28'",
     description:
-      "Opt-in MCP protocol revision. Omitted (or '2025-11-25') keeps the legacy behavior exactly. Set to '2026-07-28' to serve the stateless MCP revision. See the Protocol versions section for details.",
+      "MCP protocol revision. Omitted or '2026-07-28' serves the stateless modern revision with dual-era compatibility for legacy clients. Set to '2025-11-25' to retain the legacy sessionful server. See the Protocol versions section for details.",
   },
   {
     name: 'cacheHints',
@@ -211,28 +212,27 @@ The constructor accepts an `MCPServerConfig` object with the following propertie
 
 ## Protocol versions
 
-By default, `MCPServer` speaks the legacy (2025-era) MCP protocol: sessionful streamable HTTP with an `initialize` handshake. Set `protocolVersion: '2026-07-28'` to serve the stateless MCP revision instead:
+By default, `MCPServer` uses the stateless MCP 2026-07-28 revision:
 
-- HTTP and serverless requests go through a dual-era handler: clients that speak `2026-07-28` are served natively (stateless, per-request envelope), and legacy clients are served through a built-in stateless fallback on the same endpoint.
-- `startStdio()` serves both eras: the opening exchange selects the era for the connection.
-- Tool list, prompt list, resource list, and resource update notifications also reach `2026-07-28` clients through `subscriptions/listen`.
+- HTTP requests go through a dual-era handler. Modern clients receive native stateless, per-request behavior. Legacy clients use the built-in stateless compatibility path on the same endpoint.
+- `startStdio()` serves both eras. The opening exchange selects the era for the connection.
+- Tool list, prompt list, resource list, and resource update notifications reach modern clients through `subscriptions/listen`.
 - Tool log messages honor the caller's per-request `logLevel` opt-in instead of the session-level `logging/setLevel`.
 - Configured `cacheHints` are advertised on cacheable results such as `tools/list`.
-- Tool elicitation (`options.mcp.elicitation.sendRequest()`) works on both eras. On `2026-07-28` requests, it uses the protocol's multi round-trip mechanism. The tool call first returns an `input_required` result. After the client answers, the call retries with the answer attached. The `sendRequest()` promise API is unchanged, but the tool function re-executes from the top on each retry, so keep side effects idempotent (or place them after the last elicitation) and keep the order of `sendRequest()` calls deterministic for an input.
+- Tool elicitation (`options.mcp.elicitation.sendRequest()`) works on both eras. On modern requests, it uses the protocol's multi round-trip mechanism. The tool call first returns an `input_required` result. After the client answers, the tool runs again with the answer attached. Keep work before the final elicitation idempotent and keep `sendRequest()` calls in a deterministic order.
 
 ```typescript
 const server = new MCPServer({
   name: 'My Server',
   version: '1.0.0',
   tools: { weatherTool },
-  protocolVersion: '2026-07-28',
   cacheHints: {
     'tools/list': { ttlMs: 60_000, cacheScope: 'private' },
   },
 })
 ```
 
-Omitting `protocolVersion` keeps the current behavior unchanged.
+Set `protocolVersion: '2025-11-25'` to retain the v1 sessionful behavior. Legacy-only `startHTTP()` options, including `sessionIdGenerator` and serverless response settings, require this explicit pin. See [Migrate to `@mastra/mcp` v2](/docs/connections/mcp-v2-migration) for the full compatibility checklist.
 
 ## Exposing agents as tools
 
@@ -768,18 +768,18 @@ async close(): Promise<void>
 
 ### `getServerInfo()`
 
-The method returns the server's basic information.
+The method returns the server's basic information. The `protocol_version` field contains the effective protocol version: `2025-11-25` or `2026-07-28`.
 
 ```typescript oxfmt:false
-getServerInfo(): ServerInfo
+getServerInfo(): MCPServerInfo
 ```
 
 ### `getServerDetail()`
 
-The method returns details about the server's information.
+The method returns details about the server's information, including the effective `protocol_version`.
 
 ```typescript oxfmt:false
-getServerDetail(): ServerDetail
+getServerDetail(): MCPServerDetailInfo
 ```
 
 ### `getToolListInfo()`

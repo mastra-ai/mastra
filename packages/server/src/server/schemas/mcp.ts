@@ -34,10 +34,13 @@ export const versionDetailSchema = z.object({
   is_latest: z.boolean(),
 });
 
+const mcpProtocolVersionSchema = z.enum(['2025-11-25', '2026-07-28']);
+
 export const serverInfoSchema = z.object({
   id: z.string(),
   name: z.string(),
   version_detail: versionDetailSchema,
+  protocol_version: mcpProtocolVersionSchema.optional(),
 });
 
 export const listMcpServersResponseSchema = z.object({
@@ -51,6 +54,7 @@ export const serverDetailSchema = z.object({
   name: z.string(),
   description: z.string().optional(),
   version_detail: versionDetailSchema,
+  protocol_version: mcpProtocolVersionSchema.optional(),
   package_canonical: z.string().optional(),
   packages: z.array(z.unknown()).optional(),
   remotes: z.array(z.unknown()).optional(),

@@ -18,6 +18,30 @@ async function readPackageJson(url: URL): Promise<Record<string, any>> {
   return JSON.parse(await readFile(url, 'utf8'));
 }
 
+it('keeps the v2 package compatible with the existing core v1 peer range', async () => {
+  const pkg = await readPackageJson(new URL('package.json', packageRoot));
+
+  expect(pkg.peerDependencies?.['@mastra/core']).toBe('>=1.64.0-0 <2.0.0-0');
+});
+
+it('widens editor MCP compatibility without making the peer required', async () => {
+  const editorPkg = await readPackageJson(new URL('../editor/package.json', packageRoot));
+
+  expect(editorPkg.peerDependencies?.['@mastra/mcp']).toBe('>=1.0.0-0 <3.0.0-0');
+  expect(editorPkg.peerDependenciesMeta?.['@mastra/mcp']).toEqual({ optional: true });
+});
+
+it('keeps runtime consumers on legacy behavior without changing dev-only consumers', async () => {
+  const docsServerPkg = await readPackageJson(new URL('../mcp-docs-server/package.json', packageRoot));
+  const docsServerSource = await readFile(new URL('../mcp-docs-server/src/index.ts', packageRoot), 'utf8');
+  const registryPkg = await readPackageJson(new URL('../mcp-registry-registry/package.json', packageRoot));
+
+  expect(docsServerPkg.dependencies?.['@mastra/mcp']).toBe('workspace:^');
+  expect(docsServerSource).toContain("protocolVersion: '2025-11-25'");
+  expect(registryPkg.dependencies?.['@mastra/mcp']).toBeUndefined();
+  expect(registryPkg.devDependencies?.['@mastra/mcp']).toBe('workspace:^');
+});
+
 it('declares every required peer of its runtime dependencies (#21974)', async () => {
   const pkg = await readPackageJson(new URL('package.json', packageRoot));
   const problems: string[] = [];

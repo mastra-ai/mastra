@@ -81,7 +81,7 @@ type StartHTTPTransportOptions = NonNullable<Parameters<MCPServer['startHTTP']>[
 const requestServerWithOptions = async ({
   options,
   headers,
-  modernEra = true,
+  modernEra,
 }: {
   options: StartHTTPTransportOptions;
   headers?: Record<string, string>;
@@ -90,7 +90,9 @@ const requestServerWithOptions = async ({
   const server = new MCPServer({
     name: 'HTTP Option Test Server',
     version: '1.0.0',
-    ...(modernEra ? { protocolVersion: '2026-07-28' as const } : {}),
+    ...(modernEra === undefined
+      ? {}
+      : { protocolVersion: modernEra ? ('2026-07-28' as const) : ('2025-11-25' as const) }),
     tools: makeTools(),
   });
   let startError: unknown;
@@ -687,7 +689,48 @@ describe('MCPServer with protocolVersion 2026-07-28 (dual-era HTTP)', () => {
   });
 });
 
-describe('MCPServer without protocolVersion (legacy default)', () => {
+describe('MCPServer without protocolVersion (modern default)', () => {
+  it('rejects legacy session options', async () => {
+    const response = await requestServerWithOptions({
+      options: { sessionIdGenerator: () => 'legacy-session' },
+    });
+
+    expect(response.startError).toBeInstanceOf(Error);
+    expect((response.startError as Error).message).toMatch(/sessionIdGenerator/);
+  });
+
+  it('still serves an old 2025 client through the stateless fallback', async () => {
+    const server = new MCPServer({
+      name: 'Default Modern Test Server',
+      version: '1.0.0',
+      tools: makeTools(),
+    });
+    const httpServer = http.createServer(async (req, res) => {
+      await server.startHTTP({
+        url: new URL(req.url || '', 'http://localhost'),
+        httpPath: '/mcp',
+        req,
+        res,
+      });
+    });
+    const port = await listenOnFreePort(httpServer);
+    const client = new Client({ name: 'old-client', version: '1.0.0' }, { versionNegotiation: { mode: 'legacy' } });
+    const transport = new StreamableHTTPClientTransport(new URL(`http://localhost:${port}/mcp`));
+
+    try {
+      await client.connect(transport);
+      const tools = await client.listTools();
+      expect(tools.tools.map(tool => tool.name)).toContain('echoTool');
+      expect(transport.sessionId).toBeUndefined();
+    } finally {
+      await client.close().catch(() => {});
+      await server.close();
+      await new Promise<void>(resolve => httpServer.close(() => resolve()));
+    }
+  });
+});
+
+describe("MCPServer with explicit protocolVersion '2025-11-25'", () => {
   let server: MCPServer;
   let httpServer: http.Server;
   let baseUrl: URL;
@@ -696,6 +739,7 @@ describe('MCPServer without protocolVersion (legacy default)', () => {
     server = new MCPServer({
       name: 'Legacy Test Server',
       version: '1.0.0',
+      protocolVersion: '2025-11-25',
       tools: makeTools(),
     });
     httpServer = http.createServer(async (req, res) => {
@@ -762,7 +806,7 @@ describe('MCPServer without protocolVersion (legacy default)', () => {
   });
 });
 
-describe('MCPServer elicitation on the 2026-07-28 leg (multi-round-trip)', () => {
+describe('MCPServer default-modern elicitation (multi-round-trip)', () => {
   let server: MCPServer;
   let httpServer: http.Server;
   let baseUrl: URL;
@@ -772,7 +816,6 @@ describe('MCPServer elicitation on the 2026-07-28 leg (multi-round-trip)', () =>
     server = new MCPServer({
       name: 'MRTR Elicitation Server',
       version: '1.0.0',
-      protocolVersion: '2026-07-28',
       tools: {
         askTool: createTool({
           id: 'askTool',

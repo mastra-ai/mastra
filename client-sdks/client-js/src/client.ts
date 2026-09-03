@@ -1,5 +1,4 @@
 import type { ListScoresResponse, Trajectory } from '@mastra/core/evals';
-import type { ServerDetailInfo } from '@mastra/core/mcp';
 import type { RequestContext } from '@mastra/core/request-context';
 import type {
   PaginationInfo,
@@ -116,6 +115,7 @@ import type {
   ListWorkflowRunCountsResponse,
   SaveMessageToMemoryParams,
   SaveMessageToMemoryResponse,
+  McpServerDetailInfo,
   McpServerListResponse,
   McpServerToolListResponse,
   GetScorerResponse,
@@ -783,7 +783,7 @@ export class MastraClient extends BaseResource {
    * @param params - Optional parameters, e.g., specific version.
    * @returns Promise containing the detailed MCP server information.
    */
-  public getMcpServerDetails(serverId: string, params?: { version?: string }): Promise<ServerDetailInfo> {
+  public getMcpServerDetails(serverId: string, params?: { version?: string }): Promise<McpServerDetailInfo> {
     const searchParams = new URLSearchParams();
     if (params?.version) {
       searchParams.set('version', params.version);

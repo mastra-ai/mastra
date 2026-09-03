@@ -6,7 +6,6 @@ export function createConformanceServer() {
   return new MCPServer({
     name: 'Mastra MCP Conformance Server',
     version: '1.0.0',
-    protocolVersion: '2026-07-28',
     tools: {
       conformanceEcho: createTool({
         id: 'conformanceEcho',

@@ -468,14 +468,16 @@ export class InternalMastraMCPClient extends MastraBase {
       },
     };
 
-    // Opt-in protocol version negotiation. Omitted keeps the SDK default
-    // ('legacy'): the plain 2025 connect sequence, byte-identical to today.
-    // 'auto' probes with server/discover and falls back to initialize;
-    // '2026-07-28' pins that revision and fails loudly when unavailable.
-    const versionNegotiation =
-      server.protocolVersion === undefined
-        ? undefined
-        : { mode: server.protocolVersion === 'auto' ? ('auto' as const) : { pin: server.protocolVersion } };
+    // Omitted defaults to auto negotiation in @mastra/mcp v2. Explicit legacy
+    // remains available for clients that need the plain 2025 initialize sequence.
+    const versionNegotiation = {
+      mode:
+        server.protocolVersion === undefined || server.protocolVersion === 'auto'
+          ? ('auto' as const)
+          : server.protocolVersion === '2025-11-25'
+            ? ('legacy' as const)
+            : { pin: server.protocolVersion },
+    };
 
     this.client = new MastraMCPProtocolClient(
       {
@@ -570,6 +572,7 @@ export class InternalMastraMCPClient extends MastraBase {
    * On legacy connections, the client sends `notifications/roots/list_changed` so the
    * server can re-fetch the roots list. The notification was removed in MCP 2026-07-28.
    *
+   * @deprecated Roots are deprecated in MCP 2026-07-28. Use only with explicit legacy connections.
    * @param roots - New list of filesystem roots
    *
    * @example
@@ -591,6 +594,8 @@ export class InternalMastraMCPClient extends MastraBase {
    *
    * Clients that support legacy `listChanged` send this notification when the
    * roots change. MCP 2026-07-28 removed the notification.
+   *
+   * @deprecated Removed from MCP 2026-07-28. Use only with explicit legacy connections.
    */
   async sendRootsListChanged(): Promise<void> {
     if (!this.transport) {

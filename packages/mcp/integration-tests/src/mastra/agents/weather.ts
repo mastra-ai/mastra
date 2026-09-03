@@ -1,6 +1,6 @@
 import { createTool } from '@mastra/core/tools';
 import { Agent } from '@mastra/core/agent';
-import { z } from 'zod';
+import { z } from 'zod/v4';
 import { weatherTool } from '../tools/weather';
 import { MCPClient } from '@mastra/mcp';
 
@@ -9,7 +9,7 @@ const client = new MCPClient({
   servers: {
     weather: {
       // Note: The MCP server ID gets slugified, so 'myMcpServer' becomes 'my-mcp-server'
-      url: new URL(`http://localhost:4114/api/mcp/my-mcp-server/mcp`),
+      url: new URL(`http://localhost:${process.env.PORT ?? 4114}/api/mcp/my-mcp-server/mcp`),
     },
   },
 });

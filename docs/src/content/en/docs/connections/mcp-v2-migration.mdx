@@ -1,0 +1,94 @@
+---
+title: "Migrate to @mastra/mcp v2 | Connections"
+description: "Migrate MCP clients and servers from legacy protocol defaults to MCP 2026-07-28 negotiation in @mastra/mcp v2."
+packages:
+  - "@mastra/mcp"
+---
+
+# Migrate to `@mastra/mcp` v2
+
+`@mastra/mcp` v2 changes the protocol behavior selected when `protocolVersion` is omitted. Clients negotiate the newest supported protocol automatically. Servers use the MCP 2026-07-28 handler by default.
+
+Explicit legacy configuration remains available. Use it while migrating integrations that depend on sessions or APIs removed from MCP 2026-07-28.
+
+Version 2 requires `@mastra/core` 1.64.0 or newer in the core v1 release line.
+
+## Review the default changes
+
+| Configuration | v1 default | v2 default |
+| - | - | - |
+| `MCPClient` server entry | Legacy `initialize` handshake | Automatic negotiation. The client uses `server/discover` to prefer `2026-07-28`. It falls back to the legacy handshake when needed. |
+| `MCPServer` | Legacy sessionful server | `2026-07-28` server with stateless HTTP requests and dual-era compatibility for legacy clients |
+
+Pinning a client to `protocolVersion: '2026-07-28'` remains stricter than automatic negotiation. The connection fails if the server doesn't advertise that revision.
+
+## Keep legacy behavior temporarily
+
+Add `protocolVersion: '2025-11-25'` to each client or server that must keep its v1 behavior.
+
+```typescript title="src/mastra/mcp/client.ts"
+import { MCPClient } from '@mastra/mcp'
+
+export const mcpClient = new MCPClient({
+  servers: {
+    legacy: {
+      url: new URL('https://legacy.example.com/mcp'),
+      protocolVersion: '2025-11-25',
+    },
+  },
+})
+```
+
+```typescript title="src/mastra/mcp/server.ts"
+import { MCPServer } from '@mastra/mcp'
+
+export const server = new MCPServer({
+  name: 'Legacy MCP server',
+  version: '1.0.0',
+  protocolVersion: '2025-11-25',
+  tools,
+})
+```
+
+Remove the pin after the integration no longer relies on legacy behavior.
+
+## Update session-dependent HTTP servers
+
+Default v2 HTTP requests are stateless. Don't pass legacy `startHTTP()` options such as `sessionIdGenerator`, `serverless`, `serverlessStreaming`, or `enableJsonResponse` to a default-modern server. Either remove those options or set the server's `protocolVersion` to `'2025-11-25'` during migration.
+
+A legacy client can still call a default-modern server through the handler's compatibility path, but it doesn't restore server-managed session state. Test code that reads `mcp-session-id` or inspects per-session server instances needs an explicit legacy server.
+
+## Replace deprecated notifications and logging
+
+MCP 2026-07-28 replaces session push behavior with request-scoped mechanisms:
+
+- Resource subscriptions use one managed `subscriptions/listen` stream instead of `resources/subscribe` and `resources/unsubscribe` requests.
+- List and resource update notifications flow through the subscription stream.
+- Tool logs use the request's `logLevel` metadata instead of `logging/setLevel`.
+- Roots, Sampling, protocol Logging, Dynamic Client Registration (DCR), and HTTP+SSE are deprecated. Existing APIs remain available for explicit legacy connections during the migration window.
+
+`startSSE()` and `startHonoSSE()` remain in v2 because the `@mastra/core` v1 server contract requires them. Use `startHTTP()` for new servers.
+
+## Account for elicitation retries
+
+On `2026-07-28` connections, elicitation uses the protocol's multi round-trip request flow. A tool returns `input_required`, then Mastra runs the tool again after the client responds. Keep work before the final elicitation idempotent and call `sendRequest()` in a deterministic order.
+
+The promise-based `options.mcp.elicitation.sendRequest()` API doesn't change. Explicit legacy connections keep session-based elicitation.
+
+## Update OAuth client registration
+
+Prefer a Client ID Metadata Document URL for OAuth clients. Configure `clientMetadataUrl` and host a matching HTTPS metadata document with a non-root path. Dynamic Client Registration remains as a deprecated fallback when the authorization server doesn't advertise metadata-document support.
+
+Credential and token storage stays bound to the authorization-server issuer. Keep the existing URL allowlist policy for discovery and authorization endpoints.
+
+## Check structured results and tracing
+
+The modern protocol accepts JSON Schema 2020-12 tool schemas and any JSON value in `structuredContent`, including scalars and `null`. Consumers that assumed structured results were always objects need to handle the advertised output schema instead.
+
+Use the package-local `traceContext` option to forward W3C `traceparent`, `tracestate`, and `baggage` fields in request metadata. Treat incoming baggage as untrusted data. Don't use it for authorization.
+
+## Deferred and future work
+
+The official Tasks extension isn't available through the TypeScript SDK's 2026 protocol registry yet. `@mastra/mcp` v2 doesn't implement private `tasks/*` wire methods around that guard. Add low-level negotiated Tasks APIs after the SDK publishes an official extension surface, then evaluate workflow-backed task persistence separately.
+
+A later coordinated `@mastra/core` major can remove the core-owned SSE methods and option types after adapter migration. That release can also remove the 2025 session path. Connecting MCP trace metadata to core observability needs an explicit contract. The v1 MCP SDK can be removed after the MCP Apps dependency no longer requires it.

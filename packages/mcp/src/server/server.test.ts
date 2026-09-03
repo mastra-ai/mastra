@@ -309,6 +309,7 @@ describe('MCPServer', () => {
         name: 'TestServer',
         description: undefined,
         repository: undefined,
+        protocol_version: '2026-07-28',
         version_detail: {
           version: '1.0.0',
           release_date: mockDateISO,
@@ -327,6 +328,7 @@ describe('MCPServer', () => {
         repository,
         releaseDate: customReleaseDate,
         isLatest: false,
+        protocolVersion: '2025-11-25',
       };
       const server = new MCPServer(customConfig);
       const serverInfo = server.getServerInfo();
@@ -336,6 +338,7 @@ describe('MCPServer', () => {
         name: 'TestServer',
         description: 'Custom description',
         repository,
+        protocol_version: '2025-11-25',
         version_detail: {
           version: '1.0.0',
           release_date: customReleaseDate,
@@ -355,6 +358,7 @@ describe('MCPServer', () => {
         name: 'TestServer',
         description: undefined,
         repository: undefined,
+        protocol_version: '2026-07-28',
         version_detail: {
           version: '1.0.0',
           release_date: mockDateISO,
@@ -378,6 +382,7 @@ describe('MCPServer', () => {
         repository,
         releaseDate: customReleaseDate,
         isLatest: true,
+        protocolVersion: '2025-11-25',
         packageCanonical: 'docker',
         packages,
         remotes,
@@ -390,6 +395,7 @@ describe('MCPServer', () => {
         name: 'TestServer',
         description: 'Custom detail description',
         repository,
+        protocol_version: '2025-11-25',
         version_detail: {
           version: '1.0.0',
           release_date: customReleaseDate,
@@ -956,6 +962,7 @@ describe('MCPServer', () => {
       server = new MCPServer({
         name: 'Test MCP Server',
         version: '0.1.0',
+        protocolVersion: '2025-11-25',
         tools: { weatherTool: mockWeatherTool },
       });
 
@@ -1341,6 +1348,7 @@ describe('MCPServer', () => {
 
     it('should generate sessions by default when no sessionIdGenerator option is provided', async () => {
       sessionServer = new MCPServer({
+        protocolVersion: '2025-11-25',
         name: 'DefaultSessionServer',
         version: '1.0.0',
         tools: minimalTestTool,
@@ -1378,6 +1386,7 @@ describe('MCPServer', () => {
 
     it('should disable sessions when sessionIdGenerator is explicitly set to undefined', async () => {
       sessionServer = new MCPServer({
+        protocolVersion: '2025-11-25',
         name: 'NoSessionServer',
         version: '1.0.0',
         tools: minimalTestTool,
@@ -1417,6 +1426,7 @@ describe('MCPServer', () => {
 
     it('should run in serverless mode when serverless option is true', async () => {
       sessionServer = new MCPServer({
+        protocolVersion: '2025-11-25',
         name: 'ServerlessServer',
         version: '1.0.0',
         tools: minimalTestTool,
@@ -1465,6 +1475,7 @@ describe('MCPServer', () => {
       };
 
       sessionServer = new MCPServer({
+        protocolVersion: '2025-11-25',
         name: 'CustomSessionServer',
         version: '1.0.0',
         tools: minimalTestTool,
@@ -1504,6 +1515,7 @@ describe('MCPServer', () => {
     it('should allow user options to override default sessionIdGenerator', async () => {
       // This test verifies the core fix: user-provided options override defaults
       sessionServer = new MCPServer({
+        protocolVersion: '2025-11-25',
         name: 'OverrideTestServer',
         version: '1.0.0',
         tools: minimalTestTool,
@@ -1544,6 +1556,7 @@ describe('MCPServer', () => {
 
     it('should still return final tool results in serverless JSON response mode (default)', async () => {
       sessionServer = new MCPServer({
+        protocolVersion: '2025-11-25',
         name: 'ServerlessJsonServer',
         version: '1.0.0',
         tools: {
@@ -1587,6 +1600,7 @@ describe('MCPServer', () => {
 
     it('should deliver notifications/progress to an MCP client onprogress handler in serverless streaming mode', async () => {
       sessionServer = new MCPServer({
+        protocolVersion: '2025-11-25',
         name: 'ServerlessStreamingServer',
         version: '1.0.0',
         tools: {
@@ -1657,6 +1671,7 @@ describe('MCPServer', () => {
 
     it('should let an explicit enableJsonResponse override serverlessStreaming', async () => {
       sessionServer = new MCPServer({
+        protocolVersion: '2025-11-25',
         name: 'ServerlessExplicitJsonServer',
         version: '1.0.0',
         tools: {
@@ -1716,6 +1731,7 @@ describe('MCPServer', () => {
 
     it('should not require or persist an mcp-session-id in serverless streaming mode', async () => {
       sessionServer = new MCPServer({
+        protocolVersion: '2025-11-25',
         name: 'ServerlessNoSessionServer',
         version: '1.0.0',
         tools: minimalTestTool,
@@ -1753,6 +1769,7 @@ describe('MCPServer', () => {
 
     it('should return 404 when a stale session ID is provided', async () => {
       sessionServer = new MCPServer({
+        protocolVersion: '2025-11-25',
         name: 'StaleSessionServer',
         version: '1.0.0',
         tools: minimalTestTool,
@@ -2386,6 +2403,7 @@ describe('MCPServer - Elicitation', () => {
 
   beforeAll(async () => {
     elicitationServer = new MCPServer({
+      protocolVersion: '2025-11-25',
       name: 'ElicitationTestServer',
       version: '1.0.0',
       tools: {
@@ -2769,6 +2787,7 @@ describe('MCPServer - Elicitation', () => {
 
     let customTimeoutPort: number;
     const customTimeoutServer = new MCPServer({
+      protocolVersion: '2025-11-25',
       name: 'CustomTimeoutServer',
       version: '1.0.0',
       tools: toolWithCustomTimeout,
@@ -3438,6 +3457,7 @@ describe('MCPServer readJsonBody compatibility', () => {
 
     beforeAll(async () => {
       preParsedServer = new MCPServer({
+        protocolVersion: '2025-11-25',
         name: 'preParsedBodyTestServer',
         version: '1.0.0',
         tools: { echo: echoTool },

@@ -321,6 +321,11 @@ const sidebars = {
             },
             {
               type: 'doc',
+              id: 'connections/mcp-v2-migration',
+              label: 'Migrate to MCP v2',
+            },
+            {
+              type: 'doc',
               id: 'connections/a2a',
               label: 'A2A',
             },
