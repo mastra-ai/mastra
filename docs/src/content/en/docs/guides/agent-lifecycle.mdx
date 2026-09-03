@@ -17,14 +17,14 @@ If validation, dynamic models, instructions, tools, skills, processor factories,
 flowchart LR
   accTitle: Lifecycle of a Mastra agent run
   accDescr: A caller supplies request context, Mastra validates and prepares the run, then repeats model and tool work until a stop condition is reached before finalizing the response.
-  caller((agent call)) --> setup([validate and resolve<br/>dynamic setup])
-  setup --> prepare([prepare tools,<br/>memory, and input])
+  caller((agent call)) --> setup([validate context<br/>resolve setup])
+  setup --> prepare([prepare tools,<br/>memory and input])
   prepare --> model([run model step])
   model --> decision{continue?}
-  decision -->|tool call| tools([run tools and<br/>process results])
-  tools --> model
   decision -->|stop| final([final processors<br/>and persistence])
   final --> response((response))
+  decision -->|tool call| tools([run tools and<br/>process results])
+  tools --> model
 ```
 
 The diagram shows stable conceptual phases rather than internal workflow steps. Some preparation is concurrent, and durable execution places work across persistence boundaries differently from a regular in-process run.
@@ -78,7 +78,7 @@ const listAccounts = createTool({
   outputSchema: z.array(z.object({ id: z.string(), name: z.string() })),
   requestContextSchema,
   execute: async (_, { requestContext }) => {
-    const scope = requestContext?.get('toolScope')
+    const scope = requestContext.get('toolScope')
 
     if (!scope) throw new Error('Tool scope is missing')
 
