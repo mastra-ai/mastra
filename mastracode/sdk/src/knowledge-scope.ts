@@ -28,8 +28,8 @@ function readStoredMachineId(filePath: string): string | undefined {
 }
 
 const LOCK_WAIT_MS = 1_000;
-const LOCK_STALE_MS = 5_000;
 const LOCK_POLL_MS = 20;
+const warnedLocks = new Set<string>();
 
 function sleepSync(ms: number): void {
   Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
@@ -39,49 +39,36 @@ function sleepSync(ms: number): void {
  * Run `fn` while holding an exclusive lock directory next to the machine-id
  * file. `mkdirSync` without `recursive` is atomic, so exactly one process at a
  * time reads, validates, and (re)writes the file; nothing is ever raced or
- * overwritten. A lock older than LOCK_STALE_MS is presumed abandoned (crashed
- * holder) and broken; a holder only releases a lock it still owns (owner
- * token), so a stalled holder resuming cannot remove its replacement's lock.
- * Throws if the lock cannot be acquired in LOCK_WAIT_MS.
+ * overwritten. The critical section is one small synchronous read and write,
+ * so locks are never broken: a lock that cannot be taken within LOCK_WAIT_MS
+ * throws (caller falls back) and is warned about once, since the only way to
+ * leave one behind is a crash inside that section.
  */
 function withMachineIdLock<T>(filePath: string, fn: () => T): T {
   const lockDir = `${filePath}.lock`;
-  const ownerFile = path.join(lockDir, 'owner');
-  const token = randomBytes(8).toString('hex');
   const deadline = Date.now() + LOCK_WAIT_MS;
   for (;;) {
     try {
       fs.mkdirSync(lockDir);
-      fs.writeFileSync(ownerFile, token, 'utf-8');
       break;
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
-      let stale = false;
-      try {
-        stale = Date.now() - fs.statSync(lockDir).mtimeMs > LOCK_STALE_MS;
-      } catch {
-        continue; // holder released between our mkdir and stat; retry immediately
+      if (Date.now() >= deadline) {
+        if (!warnedLocks.has(lockDir)) {
+          warnedLocks.add(lockDir);
+          console.warn(
+            `[Subconscious] Could not take ${lockDir}; using a temporary hostname-derived knowledge org. Remove the directory if no other mastracode process is starting.`,
+          );
+        }
+        throw new Error(`Timed out waiting for ${lockDir}`);
       }
-      if (stale) {
-        fs.rmSync(lockDir, { recursive: true, force: true });
-        continue;
-      }
-      if (Date.now() >= deadline) throw new Error(`Timed out waiting for ${lockDir}`);
       sleepSync(LOCK_POLL_MS);
     }
   }
   try {
     return fn();
   } finally {
-    // Release only our own lock: if we stalled past LOCK_STALE_MS, another
-    // process may have broken it and taken a new one we must not remove.
-    let owner: string | undefined;
-    try {
-      owner = fs.readFileSync(ownerFile, 'utf-8');
-    } catch {
-      owner = undefined;
-    }
-    if (owner === token) fs.rmSync(lockDir, { recursive: true, force: true });
+    fs.rmdirSync(lockDir);
   }
 }
 

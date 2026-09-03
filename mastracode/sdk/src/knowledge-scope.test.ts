@@ -73,45 +73,21 @@ describe('localMachineId', () => {
     expect(fs.existsSync(`${file}.lock`)).toBe(false);
   });
 
-  it('breaks a stale lock left by a crashed process', () => {
-    const homeDir = tempHome();
-    const file = path.join(homeDir, '.mastracode', MACHINE_ID_FILE);
-    const lock = `${file}.lock`;
-    mkdirSync(lock, { recursive: true });
-    const old = new Date(Date.now() - 60_000);
-    fs.utimesSync(lock, old, old);
-    expect(localMachineId({ homeDir })).toMatch(/^[0-9a-f]{12}$/);
-    expect(fs.existsSync(lock)).toBe(false);
-  });
-
-  it('does not release a lock that was broken and re-taken by another process while it stalled', () => {
-    const homeDir = tempHome();
-    const file = path.join(homeDir, '.mastracode', MACHINE_ID_FILE);
-    const lock = `${file}.lock`;
-    // While we hold the lock, simulate the stall: another process breaks it and takes its own.
-    const write = vi.spyOn(fs, 'writeFileSync').mockImplementation((target, data, opts) => {
-      writeFileSync(target, data, opts as never);
-      if (String(target) === file) {
-        fs.rmSync(lock, { recursive: true, force: true });
-        mkdirSync(lock);
-        writeFileSync(path.join(lock, 'owner'), 'someone-else');
-      }
-    });
-    try {
-      expect(localMachineId({ homeDir })).toMatch(/^[0-9a-f]{12}$/);
-    } finally {
-      write.mockRestore();
-    }
-    expect(readFileSync(path.join(lock, 'owner'), 'utf-8')).toBe('someone-else');
-  });
-
-  it('does not write, cache, or break a live lock it cannot acquire; falls back to the hostname hash', () => {
+  it('does not write, cache, or break a lock it cannot acquire; warns once and falls back to the hostname hash', () => {
     const homeDir = tempHome();
     const file = path.join(homeDir, '.mastracode', MACHINE_ID_FILE);
     const lock = `${file}.lock`;
     mkdirSync(lock, { recursive: true });
     const hostHash = createHash('sha256').update(hostname()).digest('hex').slice(0, 12);
-    expect(localMachineId({ homeDir })).toBe(hostHash);
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      expect(localMachineId({ homeDir })).toBe(hostHash);
+      expect(localMachineId({ homeDir })).toBe(hostHash);
+      expect(warn).toHaveBeenCalledTimes(1);
+      expect(warn.mock.calls[0]?.[0]).toContain(lock);
+    } finally {
+      warn.mockRestore();
+    }
     expect(fs.existsSync(file)).toBe(false);
     expect(fs.existsSync(lock)).toBe(true);
     // Lock released: a real id is minted on the next call, nothing was cached.
