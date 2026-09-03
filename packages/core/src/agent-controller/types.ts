@@ -1,3 +1,4 @@
+import type { ObservabilityEntrypoint } from '@internal/observability';
 import type { Agent } from '../agent';
 import type { MastraDBMessage } from '../agent/message-list/state/types';
 import type { AgentInstructions, ToolsInput } from '../agent/types';
@@ -7,7 +8,6 @@ import type { PubSub } from '../events/pubsub';
 import type { MastraModelGatewayInterface } from '../llm/model/gateways';
 import type { LoopOptions } from '../loop/types';
 import type { MastraMemory } from '../memory/memory';
-import type { ObservabilityEntrypoint } from '../observability/types/core';
 import type { PublicSchema } from '../schema';
 import type { MastraCompositeStore } from '../storage/base';
 import type { GoalEvaluationPayload } from '../stream/types';

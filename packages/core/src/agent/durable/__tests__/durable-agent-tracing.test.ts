@@ -104,7 +104,7 @@ describe('DurableAgent observability tracing', () => {
   async function spyOnSpans() {
     const agentSpans: any[] = [];
     const agentSpanOpts: any[] = [];
-    const mod = await import('../../../observability/utils');
+    const mod = await import('@internal/observability');
     const spy = vi.spyOn(mod, 'getOrCreateSpan').mockImplementation((opts: any) => {
       // Honour tracingContext.currentSpan as the parent so findParent walks resolve.
       const parent = opts?.tracingContext?.currentSpan;

@@ -1,5 +1,6 @@
 import type { LanguageModelV2Prompt, LanguageModelV2CallWarning } from '@ai-sdk/provider-v5';
 import type { StepResult } from '@internal/ai-sdk-v5';
+import type { TracingContext } from '@internal/observability';
 import type { Agent } from '../agent';
 import type { MastraDBMessage, MessageInput } from '../agent/message-list';
 import { MessageList, messagesAreEqual } from '../agent/message-list';
@@ -21,7 +22,6 @@ import {
   resolveObservabilityContext,
 } from '../observability';
 import type { ObservabilityContext, Span } from '../observability';
-import type { TracingContext } from '../observability/types';
 import type { RequestContext } from '../request-context';
 import type { ChunkType } from '../stream';
 import type { MastraModelOutput } from '../stream/base/output';

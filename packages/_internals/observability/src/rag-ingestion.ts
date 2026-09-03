@@ -41,14 +41,14 @@ import { EntityType, SpanType } from './types';
 import type { GetOrCreateSpanOptions, ObservabilityContext, RagIngestionAttributes, Span } from './types';
 import { getOrCreateSpan } from './utils';
 
-export type StartRagIngestionOptions = Omit<GetOrCreateSpanOptions<SpanType.RAG_INGESTION>, 'type' | 'entityType'>;
+export type StartRagIngestionOptions = Omit<GetOrCreateSpanOptions<`${SpanType.RAG_INGESTION}`>, 'type' | 'entityType'>;
 
 export interface StartRagIngestionResult {
   /**
    * The RAG_INGESTION span. May be undefined if observability is disabled
    * or no Mastra instance / parent span is available.
    */
-  span: Span<SpanType.RAG_INGESTION> | undefined;
+  span: Span<`${SpanType.RAG_INGESTION}`> | undefined;
   /**
    * Full observability context to thread through chunk / embed / upsert calls.
    * Always defined; falls back to no-op when `span` is undefined.
@@ -80,7 +80,7 @@ export interface StartRagIngestionResult {
  * ```
  */
 export function startRagIngestion(options: StartRagIngestionOptions): StartRagIngestionResult {
-  const span = getOrCreateSpan<SpanType.RAG_INGESTION>({
+  const span = getOrCreateSpan<`${SpanType.RAG_INGESTION}`>({
     ...options,
     entityType: EntityType.RAG_INGESTION,
     type: SpanType.RAG_INGESTION,

@@ -1,5 +1,5 @@
+import { SpanType } from '@internal/observability';
 import { describe, it, expect } from 'vitest';
-import { SpanType } from '../../../observability/types';
 import {
   buildInputPreview,
   extractBranchSpans,

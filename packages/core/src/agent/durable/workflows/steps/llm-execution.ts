@@ -1,5 +1,6 @@
 import type { LanguageModelV2Prompt } from '@ai-sdk/provider-v5';
 import type { ToolChoice, ToolSet } from '@internal/ai-sdk-v5';
+import { getRootExportSpan, getStepAvailableToolNames } from '@internal/observability';
 import { z } from 'zod';
 import type { PubSub } from '../../../../events/pubsub';
 import { mergeProviderOptions } from '../../../../llm/model/provider-options';
@@ -23,7 +24,6 @@ import type {
   AnySpan,
 } from '../../../../observability';
 import { EntityType } from '../../../../observability';
-import { getRootExportSpan, getStepAvailableToolNames } from '../../../../observability/utils';
 import type { CachedLLMStepResponse } from '../../../../processors';
 import { PrepareStepProcessor } from '../../../../processors/processors/prepare-step';
 import { isMaybeAnthropicWithoutAssistantPrefill } from '../../../../processors/provider-history-compat';

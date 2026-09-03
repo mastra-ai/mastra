@@ -16,4 +16,4 @@ export {
   type ListLogsArgs,
   listLogsResponseSchema,
   type ListLogsResponse,
-} from '@internal/core/storage';
+} from '@internal/observability/storage';

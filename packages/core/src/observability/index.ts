@@ -1,15 +1,7 @@
 /**
- * Mastra Observability
+ * Public compatibility facade for Mastra observability.
  *
- * Core observability utilities and types. To use observability, install
- * @mastra/observability and pass an Observability instance to Mastra constructor.
+ * The implementation is bundled from the private internal package so consumer
+ * imports remain `@mastra/core/observability`.
  */
-
-// Re-export core types & entrypoint class
-export * from './types';
-export * from './no-op';
-export * from './utils';
-export { wrapMastra } from './context';
-export { createObservabilityContext, resolveObservabilityContext } from './context-factory';
-export { startRagIngestion, withRagIngestion } from './rag-ingestion';
-export type { StartRagIngestionOptions, StartRagIngestionResult } from './rag-ingestion';
+export * from '@internal/observability';

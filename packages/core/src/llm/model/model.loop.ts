@@ -1,5 +1,6 @@
 import { stepCountIs } from '@internal/ai-sdk-v5';
 import type { ModelMessage, ToolSet } from '@internal/ai-sdk-v5';
+import { executeWithContextSync } from '@internal/observability';
 import type { MastraPrimitives } from '../../action';
 import { MastraBase } from '../../base';
 import { MastraError, ErrorDomain, ErrorCategory } from '../../error';
@@ -7,7 +8,6 @@ import { loop } from '../../loop';
 import type { LoopOptions } from '../../loop/types';
 import type { Mastra } from '../../mastra';
 import { SpanType, resolveObservabilityContext } from '../../observability';
-import { executeWithContextSync } from '../../observability/utils';
 import { getToolDefinitionsForTracing } from '../../stream/aisdk/v5/compat/prepare-tools';
 import type { MastraModelOutput } from '../../stream/base/output';
 import type { ModelManagerModelConfig } from '../../stream/types';

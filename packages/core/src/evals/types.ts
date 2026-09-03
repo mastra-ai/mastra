@@ -2,7 +2,7 @@ import type { CoreMessage, CoreSystemMessage } from '@internal/ai-sdk-v4';
 import { z } from 'zod/v4';
 import type { MastraDBMessage } from '../agent';
 import { SpanType } from '../observability';
-import type { ObservabilityContext } from '../observability';
+import type { ObservabilityContext, SpanTypeValue } from '../observability';
 import type { SpanRecord } from '../storage/domains/observability/tracing';
 import { dbTimestamps, paginationInfoSchema } from '../storage/domains/shared';
 import type { StepResult } from '../workflows/types';
@@ -777,7 +777,7 @@ export function extractWorkflowTrajectory(
  * trace-to-trajectory conversion (internal implementation details, not
  * meaningful trajectory steps).
  */
-const SKIPPED_SPAN_TYPES = new Set([
+const SKIPPED_SPAN_TYPES: ReadonlySet<SpanTypeValue> = new Set([
   SpanType.SCORER_RUN,
   SpanType.SCORER_STEP,
   SpanType.GENERIC,
@@ -994,7 +994,7 @@ export function extractTrajectoryFromTrace(spans: SpanRecord[], rootSpanId?: str
   if (targetRoots.length === 1) {
     const root = targetRoots[0]!;
     // If root is a container span type, use its children as trajectory steps
-    const containerTypes = new Set([SpanType.WORKFLOW_RUN, SpanType.AGENT_RUN]);
+    const containerTypes: ReadonlySet<SpanTypeValue> = new Set([SpanType.WORKFLOW_RUN, SpanType.AGENT_RUN]);
     if (containerTypes.has(root.span.spanType)) {
       stepsToConvert = root.children;
     } else {

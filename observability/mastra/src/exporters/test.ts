@@ -38,7 +38,7 @@ import type {
   TracingEventType,
   AnyExportedSpan,
   ExportedSpan,
-  SpanType,
+  SpanTypeValue,
   LogEvent,
   MetricEvent,
   ScoreEvent,
@@ -498,7 +498,7 @@ export class TestExporter extends BaseExporter {
    * @param type - The SpanType to filter by
    * @returns Array of completed exported spans of the specified type
    */
-  getSpansByType<T extends SpanType>(type: T): ExportedSpan<T>[] {
+  getSpansByType<T extends SpanTypeValue>(type: T): ExportedSpan<T>[] {
     return Array.from(this.#spanStates.values())
       .filter(state => {
         if (!state.hasEnd) return false;

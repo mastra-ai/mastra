@@ -1,7 +1,7 @@
 import { buildLogRecordData } from '@internal/core/logger';
+import type { LoggerContext } from '@internal/observability';
+import { resolveCurrentSpan } from '@internal/observability';
 import type { MastraError } from '../error';
-import type { LoggerContext } from '../observability/types/logging';
-import { resolveCurrentSpan } from '../observability/utils';
 import type { LogLevel } from './constants';
 import type { IMastraLogger } from './logger';
 import type { BaseLogMessage, LoggerTransport } from './transport';

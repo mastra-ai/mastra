@@ -1,5 +1,5 @@
+import { EntityType, SpanType } from '@internal/observability';
 import { describe, expect, it } from 'vitest';
-import { EntityType, SpanType } from '../../../observability/types';
 import { InMemoryStore } from '../../mock';
 
 function makeRootSpan(traceId: string, startedAt: Date) {

@@ -1,3 +1,5 @@
+import type { CorrelationContext, EntityTypeValue } from '@internal/observability';
+import { EntityType } from '@internal/observability';
 import type {
   AnyExportedSpan,
   MetricEvent,
@@ -5,8 +7,6 @@ import type {
   ScoreEvent,
   FeedbackEvent,
 } from '../../../observability/index.js';
-import type { CorrelationContext } from '../../../observability/types/core.js';
-import { EntityType } from '../../../observability/types/tracing.js';
 import type { CreateFeedbackRecord } from './feedback.js';
 import type { CreateLogRecord } from './logs.js';
 import type { CreateMetricRecord } from './metrics.js';
@@ -17,12 +17,12 @@ import type { CreateSpanRecord, UpdateSpanRecord } from './tracing.js';
 // Shared helpers for extracting typed fields from untyped metadata/labels
 // ============================================================================
 
-const entityTypeValues = new Set(Object.values(EntityType));
+const entityTypeValues = new Set<EntityTypeValue>(Object.values(EntityType));
 
-/** Safely cast string to EntityType, returning null if invalid */
-export function toEntityType(value: string | undefined | null): EntityType | null {
-  if (value && entityTypeValues.has(value as EntityType)) {
-    return value as EntityType;
+/** Safely cast string to an entity type value, returning null if invalid */
+export function toEntityType(value: string | undefined | null): EntityTypeValue | null {
+  if (value && entityTypeValues.has(value as EntityTypeValue)) {
+    return value as EntityTypeValue;
   }
   return null;
 }

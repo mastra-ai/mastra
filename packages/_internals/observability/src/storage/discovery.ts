@@ -1,5 +1,5 @@
 import { z } from 'zod/v4';
-import { entityTypeField } from '../shared';
+import { entityTypeField } from './shared';
 
 // ============================================================================
 // Metric Discovery

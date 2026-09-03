@@ -1,6 +1,6 @@
 // packages/core/src/observability/types/scores.ts
 import type { CorrelationContext } from './core';
-import type { EntityType } from './tracing';
+import type { EntityTypeValue } from './tracing';
 
 // ============================================================================
 // ScoreInput (User Input)
@@ -44,7 +44,7 @@ export interface ScoreInput {
   scoreTraceId?: string;
 
   /** Entity type the scorer evaluated when known */
-  targetEntityType?: EntityType;
+  targetEntityType?: EntityTypeValue;
 
   /** Additional metadata specific to this score */
   metadata?: Record<string, unknown>;
@@ -108,7 +108,7 @@ export interface ExportedScore {
   scoreTraceId?: string;
 
   /** Entity type the scorer evaluated when known */
-  targetEntityType?: EntityType;
+  targetEntityType?: EntityTypeValue;
 
   /** Canonical correlation context for this score event */
   correlationContext?: CorrelationContext;

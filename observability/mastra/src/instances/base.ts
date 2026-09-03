@@ -3,12 +3,12 @@
  */
 
 import { MastraBase } from '@mastra/core/base';
-import type { RequestContext } from '@mastra/core/di';
 import type { IMastraLogger } from '@mastra/core/logger';
 import { RegisteredLogger } from '@mastra/core/logger';
 import { SpanType, TracingEventType, noOpLoggerContext } from '@mastra/core/observability';
 import type {
   Span,
+  SpanTypeValue,
   ObservabilityExporter,
   ObservabilityBridge,
   SpanOutputProcessor,
@@ -20,6 +20,7 @@ import type {
   CreateSpanOptions,
   ObservabilityInstance,
   CustomSamplerOptions,
+  RequestContextLike,
   ExportedSpan,
   AnyExportedSpan,
   TraceState,
@@ -205,7 +206,7 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
    * This ensures trace-level sampling: either all spans in a trace are sampled or none are.
    * See: https://github.com/mastra-ai/mastra/issues/11504
    */
-  startSpan<TType extends SpanType>(options: StartSpanOptions<TType>): Span<TType> {
+  startSpan<TType extends SpanTypeValue>(options: StartSpanOptions<TType>): Span<TType> {
     const { customSamplerOptions, requestContext, metadata, tracingOptions, ...rest } = options;
 
     // Determine sampling: inherit from parent or make new decision for root spans
@@ -314,7 +315,7 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
    * @param cached - The exported span data to rebuild from
    * @returns A span that can have lifecycle methods called on it
    */
-  rebuildSpan<TType extends SpanType>(cached: ExportedSpan<TType>): Span<TType> {
+  rebuildSpan<TType extends SpanTypeValue>(cached: ExportedSpan<TType>): Span<TType> {
     // Create span with existing IDs from cached data
     const span = this.createSpan<TType>({
       name: cached.name,
@@ -353,7 +354,7 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
    * - Wire span lifecycle callbacks
    * - Emit span_started event
    */
-  protected abstract createSpan<TType extends SpanType>(options: CreateSpanOptions<TType>): Span<TType>;
+  protected abstract createSpan<TType extends SpanTypeValue>(options: CreateSpanOptions<TType>): Span<TType>;
 
   // ============================================================================
   // Configuration Management
@@ -538,7 +539,7 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
    * Automatically wires up Observability lifecycle events for any span
    * This ensures all spans emit events regardless of implementation
    */
-  private wireSpanLifecycle<TType extends SpanType>(span: Span<TType>): void {
+  private wireSpanLifecycle<TType extends SpanTypeValue>(span: Span<TType>): void {
     // Skip wiring for filtered internal spans, except MODEL_GENERATION —
     // those need the wrap so captureModelUsageRollup can intercept usage
     // before originalEnd discards it. Other internal types (AGENT_RUN,
@@ -652,7 +653,7 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
    * Extract metadata from RequestContext using TraceState
    */
   protected extractMetadataFromRequestContext(
-    requestContext: RequestContext | undefined,
+    requestContext: RequestContextLike | undefined,
     explicitMetadata: Record<string, any> | undefined,
     traceState: TraceState | undefined,
   ): Record<string, any> | undefined {
@@ -675,7 +676,7 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
   /**
    * Extract specific keys from RequestContext
    */
-  protected extractKeys(requestContext: RequestContext, keys: string[]): Record<string, any> {
+  protected extractKeys(requestContext: RequestContextLike, keys: string[]): Record<string, any> {
     const result: Record<string, any> = {};
 
     for (const key of keys) {
@@ -872,7 +873,7 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
    * applies — non-MODEL_GENERATION spans, spans that will be exported, or
    * spans whose usage isn't available at end time.
    */
-  private captureModelUsageRollup<TType extends SpanType>(
+  private captureModelUsageRollup<TType extends SpanTypeValue>(
     span: Span<TType>,
     endOptions: EndSpanOptions<TType> | undefined,
   ): { ancestor: AnySpan; usage: UsageStats; provider?: string; model?: string } | undefined {
@@ -906,7 +907,7 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
    * usage from end options and provider/model from the creation-time stash so
    * token and cost metrics still emit even though the trace span is filtered out.
    */
-  private captureExcludedModelUsage<TType extends SpanType>(
+  private captureExcludedModelUsage<TType extends SpanTypeValue>(
     span: Span<TType>,
     endOptions: EndSpanOptions<TType> | undefined,
   ): { usage: UsageStats; provider?: string; model?: string } | undefined {

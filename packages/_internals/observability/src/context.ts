@@ -6,10 +6,6 @@
  * tracing context is automatically injected without requiring manual passing by users.
  */
 
-import type { MastraPrimitives } from '../action';
-import type { Agent } from '../agent';
-import type { Mastra } from '../mastra';
-import type { Workflow } from '../workflows';
 import { createObservabilityContext } from './context-factory';
 import type { TracingContext, AnySpan } from './types';
 
@@ -31,7 +27,7 @@ function isNoOpSpan(span: AnySpan): boolean {
  * Checks to see if a passed object is an actual instance of Mastra
  * (for the purposes of wrapping it for Tracing)
  */
-export function isMastra<T extends Mastra | (Mastra & MastraPrimitives) | MastraPrimitives>(mastra: T): boolean {
+export function isMastra<T extends object>(mastra: T): boolean {
   const hasAgentGetters = AGENT_GETTERS.every(method => typeof (mastra as any)?.[method] === 'function');
   const hasWorkflowGetters = WORKFLOW_GETTERS.every(method => typeof (mastra as any)?.[method] === 'function');
 
@@ -42,10 +38,7 @@ export function isMastra<T extends Mastra | (Mastra & MastraPrimitives) | Mastra
  * Creates a tracing-aware Mastra proxy that automatically injects
  * tracing context into agent and workflow method calls
  */
-export function wrapMastra<T extends Mastra | (Mastra & MastraPrimitives) | MastraPrimitives>(
-  mastra: T,
-  tracingContext: TracingContext,
-): T {
+export function wrapMastra<T extends object>(mastra: T, tracingContext: TracingContext): T {
   // Don't wrap if no current span or if using NoOp span
   if (!tracingContext.currentSpan || isNoOpSpan(tracingContext.currentSpan)) {
     return mastra;
@@ -95,7 +88,7 @@ export function wrapMastra<T extends Mastra | (Mastra & MastraPrimitives) | Mast
  * Creates a tracing-aware Agent proxy that automatically injects
  * tracing context into generation method calls
  */
-function wrapAgent<T extends Agent>(agent: T, tracingContext: TracingContext): T {
+function wrapAgent<T extends object>(agent: T, tracingContext: TracingContext): T {
   // Don't wrap if no current span or if using NoOp span
   if (!tracingContext.currentSpan || isNoOpSpan(tracingContext.currentSpan)) {
     return agent;
@@ -134,7 +127,7 @@ function wrapAgent<T extends Agent>(agent: T, tracingContext: TracingContext): T
  * Creates a tracing-aware Workflow proxy that automatically injects
  * tracing context into execution method calls
  */
-function wrapWorkflow<T extends Workflow>(workflow: T, tracingContext: TracingContext): T {
+function wrapWorkflow<T extends object>(workflow: T, tracingContext: TracingContext): T {
   // Don't wrap if no current span or if using NoOp span
   if (!tracingContext.currentSpan || isNoOpSpan(tracingContext.currentSpan)) {
     return workflow;

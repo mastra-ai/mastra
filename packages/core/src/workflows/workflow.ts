@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { ReadableStream, TransformStream } from 'node:stream/web';
 import type { CoreMessage } from '@internal/ai-sdk-v4';
+import { executeWithContext } from '@internal/observability';
 import { z } from 'zod/v4';
 import type { MastraPrimitives } from '../action';
 import type { Agent } from '../agent/agent';
@@ -30,7 +31,6 @@ import {
   getRootExportSpan,
   resolveObservabilityContext,
 } from '../observability';
-import { executeWithContext } from '../observability/utils';
 import type { OutputResult, Processor, ProcessorStreamWriter, ProcessorStreamWriterOptions } from '../processors';
 import { ProcessorRunner, ProcessorState } from '../processors/runner';
 import { createProcessorSendSignal } from '../processors/send-signal';

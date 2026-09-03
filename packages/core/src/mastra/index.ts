@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { resolveCurrentSpan } from '@internal/observability';
 import type { Agent } from '../agent';
 import { createDurableAgent } from '../agent/durable/create-durable-agent';
 import { getActiveDurableAgentWorkflowExecutions } from '../agent/durable/run-registry';
@@ -56,9 +57,8 @@ import type {
   MetricsContext,
   TracingContext,
 } from '../observability';
-import { NoOpObservability, noOpLoggerContext, noOpMetricsContext } from '../observability';
+import { isNoOpObservability, NoOpObservability, noOpLoggerContext, noOpMetricsContext } from '../observability';
 import { initContextStorage } from '../observability/context-storage';
-import { resolveCurrentSpan } from '../observability/utils';
 import type { Processor } from '../processors';
 import type { AgentScheduleHandler } from '../schedules/define';
 import { metadataEqual, targetsEqual } from '../schedules/row-diff';
@@ -1298,7 +1298,7 @@ export class Mastra<
     instance: ObservabilityInstance,
     entrypoint: ObservabilityEntrypoint,
   ): void {
-    if (this.#observability instanceof NoOpObservability) {
+    if (isNoOpObservability(this.#observability)) {
       this.#observability = entrypoint;
       this.#observability.setLogger({ logger: this.#observabilitySafeLogger() as unknown as TLogger });
       this.#observability.setMastraContext({ mastra: this });

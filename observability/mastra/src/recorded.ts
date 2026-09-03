@@ -7,7 +7,7 @@ import type {
   RecordedTrace,
   ScoreEvent,
   ScoreInput,
-  SpanType,
+  SpanTypeValue,
   SpanTypeMap,
 } from '@mastra/core/observability';
 import type { GetTraceResponse, SpanRecord } from '@mastra/core/storage';
@@ -200,7 +200,7 @@ export function buildRecordedFeedbackEventFromTrace(args: {
   });
 }
 
-class RecordedSpanImpl<TType extends SpanType = SpanType> implements RecordedSpan<TType> {
+class RecordedSpanImpl<TType extends SpanTypeValue = SpanTypeValue> implements RecordedSpan<TType> {
   public readonly id: string;
   public readonly traceId: string;
   public readonly name: string;

@@ -30,6 +30,9 @@ export enum EntityType {
   MEMORY = 'memory',
 }
 
+/** Primitive entity values accepted across embedded package boundaries. */
+export type EntityTypeValue = `${EntityType}`;
+
 /**
  * Common DB fields
  */
@@ -244,9 +247,9 @@ export const percentileField = z.number().describe('Percentile value');
 /** Shared field for percentile values within a time bucket. */
 export const percentileBucketValueField = z.number().describe('Percentile value at this bucket');
 
-export const entityTypeField = z
-  .nativeEnum(EntityType)
-  .describe(`Entity type (e.g., 'agent' | 'processor' | 'tool' | 'workflow')`);
+export const entityTypeField = (z.nativeEnum(EntityType) as z.ZodType<EntityTypeValue>).describe(
+  `Entity type (e.g., 'agent' | 'processor' | 'tool' | 'workflow')`,
+);
 
 export const entityIdField = z.string().describe('ID of the entity (e.g., "weatherAgent", "orderWorkflow")');
 
@@ -274,12 +277,16 @@ export const executionSourceField = z.string().describe(`Source of execution (e.
 export const serviceNameField = z.string().describe('Name of the service');
 
 // Parent entity hierarchy fields
-export const parentEntityTypeField = z.nativeEnum(EntityType).describe('Entity type of the parent entity');
+export const parentEntityTypeField = (z.nativeEnum(EntityType) as z.ZodType<EntityTypeValue>).describe(
+  'Entity type of the parent entity',
+);
 export const parentEntityIdField = z.string().describe('ID of the parent entity');
 export const parentEntityNameField = z.string().describe('Name of the parent entity');
 
 // Root entity hierarchy fields
-export const rootEntityTypeField = z.nativeEnum(EntityType).describe('Entity type of the root entity');
+export const rootEntityTypeField = (z.nativeEnum(EntityType) as z.ZodType<EntityTypeValue>).describe(
+  'Entity type of the root entity',
+);
 export const rootEntityIdField = z.string().describe('ID of the root entity');
 export const rootEntityNameField = z.string().describe('Name of the root entity');
 

@@ -25,8 +25,8 @@ import {
   spanIdField,
   traceIdField,
   metadataField,
-} from '../shared';
-import type { AggregationType } from '../shared';
+} from './shared';
+import type { AggregationType } from './shared';
 
 // ============================================================================
 // Field Schemas

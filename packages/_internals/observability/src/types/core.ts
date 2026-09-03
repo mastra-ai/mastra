@@ -6,9 +6,23 @@
  *
  * For tracing-specific types (spans, span types, attributes, etc.), see tracing.ts.
  */
-import type { IMastraLogger } from '../../logger';
-import type { Mastra } from '../../mastra';
-import type { RequestContext } from '../../request-context';
+import type { RequestContextLike } from '@internal/core/request-context';
+
+export type { RequestContextLike };
+
+/**
+ * Logger capabilities consumed by observability.
+ *
+ * This intentionally excludes logger transport and query APIs, whose concrete
+ * class-based return types are not safe to embed in observability declarations.
+ */
+export interface ObservabilityLogger {
+  debug(message: string, ...args: any[]): void;
+  info(message: string, ...args: any[]): void;
+  warn(message: string, ...args: any[]): void;
+  error(message: string, ...args: any[]): void;
+  trackException(error: Error, metadata?: Record<string, unknown>): void;
+}
 import type { ClientObservabilityProxy } from './client';
 import type { FeedbackEvent, FeedbackInput } from './feedback';
 import type { LoggerContext, LogEvent } from './logging';
@@ -19,12 +33,12 @@ import type {
   AnyExportedSpan,
   RecordedTrace,
   CreateSpanOptions,
-  EntityType,
+  EntityTypeValue,
   ExportedSpan,
   Span,
   SpanIds,
   SpanOutputProcessor,
-  SpanType,
+  SpanTypeValue,
   StartSpanOptions,
   TracingContext,
   TracingEvent,
@@ -47,15 +61,15 @@ export interface CorrelationContext {
    * @deprecated Use the signal's top-level `spanId` instead.
    */
   spanId?: string;
-  entityType?: EntityType;
+  entityType?: EntityTypeValue;
   entityId?: string;
   entityName?: string;
   entityVersionId?: string;
-  parentEntityType?: EntityType;
+  parentEntityType?: EntityTypeValue;
   parentEntityId?: string;
   parentEntityName?: string;
   parentEntityVersionId?: string;
-  rootEntityType?: EntityType;
+  rootEntityType?: EntityTypeValue;
   rootEntityId?: string;
   rootEntityName?: string;
   rootEntityVersionId?: string;
@@ -95,8 +109,8 @@ export interface CorrelationContext {
  * The short names (`tracing`, `loggerVNext`, `metrics`) read naturally at **usage sites**:
  * `tracing.createSpan()`, `loggerVNext.info()`, `metrics.record()`.
  *
- * `loggerVNext` uses the VNext suffix to distinguish from the existing `logger: IMastraLogger`
- * infrastructure logger used throughout the codebase (e.g. `MastraPrimitives.logger`).
+ * `loggerVNext` uses the VNext suffix to distinguish it from the infrastructure logger
+ * used throughout the codebase (for example, `MastraPrimitives.logger`).
  *
  * The `tracingContext` alias is preferred at **forwarding sites** where the "Context"
  * suffix clarifies that a structural context object is being passed, not a subsystem.
@@ -105,7 +119,7 @@ export interface ObservabilityContext {
   /** Tracing context for span creation and tree navigation. */
   tracing: TracingContext;
 
-  /** Logger derived from the current span — log entries are trace-correlated. Uses VNext suffix to avoid conflict with IMastraLogger. */
+  /** Logger derived from the current span — log entries are trace-correlated. */
   loggerVNext: LoggerContext;
 
   /** Metrics derived from the current span — data points are span-tagged. */
@@ -215,7 +229,7 @@ export interface ObservabilityInstance {
   /**
    * Get the logger instance (for exporters and other components)
    */
-  getLogger(): IMastraLogger;
+  getLogger(): ObservabilityLogger;
 
   /**
    * Get the bridge instance if configured
@@ -225,7 +239,7 @@ export interface ObservabilityInstance {
   /**
    * Start a new span of a specific SpanType
    */
-  startSpan<TType extends SpanType>(options: StartSpanOptions<TType>): Span<TType>;
+  startSpan<TType extends SpanTypeValue>(options: StartSpanOptions<TType>): Span<TType>;
 
   /**
    * Rebuild a span from exported data for lifecycle operations.
@@ -235,7 +249,7 @@ export interface ObservabilityInstance {
    * @param cached - The exported span data to rebuild from
    * @returns A span that can have end()/update()/error() called on it
    */
-  rebuildSpan<TType extends SpanType>(cached: ExportedSpan<TType>): Span<TType>;
+  rebuildSpan<TType extends SpanTypeValue>(cached: ExportedSpan<TType>): Span<TType>;
 
   /**
    * Force flush any buffered/queued spans from all exporters and the bridge
@@ -257,7 +271,7 @@ export interface ObservabilityInstance {
   /**
    * Override setLogger to add tracing specific initialization log
    */
-  __setLogger(logger: IMastraLogger): void;
+  __setLogger(logger: ObservabilityLogger): void;
 
   /**
    * Get a LoggerContext for this instance, optionally correlated to a span.
@@ -308,14 +322,23 @@ export interface ObservabilityInstance {
 // ObservabilityEntrypoint
 // ============================================================================
 
+/**
+ * Capabilities from Mastra consumed by observability. The full Mastra class
+ * remains in core; observability only requires its registry and environment.
+ */
+export interface MastraObservabilityContext {
+  observability?: ObservabilityEntrypoint;
+  getEnvironment?(): string | undefined;
+}
+
 export interface ObservabilityEntrypoint {
   flush(): Promise<void>;
 
   shutdown(): Promise<void>;
 
-  setMastraContext(options: { mastra: Mastra }): void;
+  setMastraContext(options: { mastra: MastraObservabilityContext }): void;
 
-  setLogger(options: { logger: IMastraLogger }): void;
+  setLogger(options: { logger: ObservabilityLogger }): void;
 
   getSelectedInstance(options: ConfigSelectorOptions): ObservabilityInstance | undefined;
 
@@ -394,20 +417,23 @@ export enum SamplingStrategyType {
   CUSTOM = 'custom',
 }
 
+/** Primitive sampling strategy values accepted across embedded package boundaries. */
+export type SamplingStrategyTypeValue = `${SamplingStrategyType}`;
+
 /**
  * Sampling strategy configuration
  */
 export type SamplingStrategy =
-  | { type: SamplingStrategyType.ALWAYS }
-  | { type: SamplingStrategyType.NEVER }
-  | { type: SamplingStrategyType.RATIO; probability: number }
-  | { type: SamplingStrategyType.CUSTOM; sampler: (options?: CustomSamplerOptions) => boolean };
+  | { type: `${SamplingStrategyType.ALWAYS}` }
+  | { type: `${SamplingStrategyType.NEVER}` }
+  | { type: `${SamplingStrategyType.RATIO}`; probability: number }
+  | { type: `${SamplingStrategyType.CUSTOM}`; sampler: (options?: CustomSamplerOptions) => boolean };
 
 /**
  * Options passed when using a custom sampler strategy
  */
 export interface CustomSamplerOptions {
-  requestContext?: RequestContext;
+  requestContext?: RequestContextLike;
   metadata?: Record<string, any>;
 }
 
@@ -474,7 +500,7 @@ export interface ObservabilityInstanceConfig {
    * excludeSpanTypes: [SpanType.MODEL_CHUNK, SpanType.MODEL_STEP]
    * ```
    */
-  excludeSpanTypes?: SpanType[];
+  excludeSpanTypes?: SpanTypeValue[];
   /**
    * Filter function to control which spans are exported. Return `true` to keep
    * the span, `false` to drop it. This runs after `excludeSpanTypes` and
@@ -530,7 +556,7 @@ export interface ObservabilityRegistryConfig {
  */
 export interface ConfigSelectorOptions {
   /** Request Context */
-  requestContext?: RequestContext;
+  requestContext?: RequestContextLike;
 }
 
 /**
@@ -546,14 +572,14 @@ export type ConfigSelector = (
 // Exporter and Bridge Interfaces
 // ============================================================================
 
-export interface InitExporterOptions {
-  mastra?: Mastra;
+export interface InitExporterOptions<TMastra extends MastraObservabilityContext = MastraObservabilityContext> {
+  mastra?: TMastra;
   config?: ObservabilityInstanceConfig;
   emitDropEvent?: (event: ObservabilityDropEvent) => void;
 }
 
-export interface InitBridgeOptions {
-  mastra?: Mastra;
+export interface InitBridgeOptions<TMastra extends MastraObservabilityContext = MastraObservabilityContext> {
+  mastra?: TMastra;
   config?: ObservabilityInstanceConfig;
 }
 
@@ -594,7 +620,7 @@ export interface ObservabilityExporter extends ObservabilityEvents {
   init?(options: InitExporterOptions): void;
 
   /** Sets logger instance on the exporter.  */
-  __setLogger?(logger: IMastraLogger): void;
+  __setLogger?(logger: ObservabilityLogger): void;
 
   addScoreToTrace?({
     traceId,
@@ -637,7 +663,7 @@ export interface ObservabilityBridge extends ObservabilityEvents {
   init?(options: InitBridgeOptions): void;
 
   /** Sets logger instance on the bridge  */
-  __setLogger?(logger: IMastraLogger): void;
+  __setLogger?(logger: ObservabilityLogger): void;
 
   /**
    * Execute an async function within the tracing context of a Mastra span.
@@ -668,7 +694,7 @@ export interface ObservabilityBridge extends ObservabilityEvents {
    * @param options - Span creation options from Mastra
    * @returns Span identifiers (spanId, traceId, parentSpanId) from bridge, or undefined if creation fails
    */
-  createSpan(options: CreateSpanOptions<SpanType>): SpanIds | undefined;
+  createSpan(options: CreateSpanOptions<SpanTypeValue>): SpanIds | undefined;
 
   /**
    * Release any state the bridge holds for a span that ended but will not be

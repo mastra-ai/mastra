@@ -5,22 +5,51 @@
  * For top-level observability infrastructure (instances, exporters, bridges, config),
  * see observability.ts.
  */
-import { EntityType } from '@internal/core/storage';
+import type { LanguageModelV2Usage } from '@ai-sdk/provider-v5';
+import { EntityType, type EntityTypeValue } from '../storage';
 
-import type { MastraError } from '../../error';
-import type { Mastra } from '../../mastra';
-import type { RequestContext } from '../../request-context';
-import type { LanguageModelUsage, ProviderMetadata, StepStartPayload } from '../../stream/types';
-import type { WorkflowRunStatus, WorkflowStepStatus } from '../../workflows';
 import type {
   CustomSamplerOptions,
   ObservabilityInstance,
   CorrelationContext,
   DefinitionSource,
+  MastraObservabilityContext,
+  RequestContextLike,
   ScorerScoreSource,
   ScorerStepType,
   ScorerTargetScope,
 } from './core';
+
+type JSONValue = null | string | number | boolean | { [key: string]: JSONValue } | JSONValue[];
+export type ProviderMetadata = Record<string, Record<string, JSONValue>>;
+export type LanguageModelUsage = LanguageModelV2Usage & {
+  reasoningTokens?: number;
+  cachedInputTokens?: number;
+  cacheCreationInputTokens?: number;
+  cacheCreationInputTokens5m?: number;
+  cacheCreationInputTokens1h?: number;
+  raw?: unknown;
+};
+export interface StepStartPayload {
+  messageId?: string;
+  request: { body?: string; [key: string]: unknown };
+  inputMessages?: unknown;
+  warnings?: unknown[];
+  [key: string]: unknown;
+}
+export type WorkflowRunStatus =
+  | 'running'
+  | 'success'
+  | 'failed'
+  | 'tripwire'
+  | 'suspended'
+  | 'waiting'
+  | 'pending'
+  | 'canceled'
+  | 'bailed'
+  | 'paused'
+  | 'skipped';
+export type WorkflowStepStatus = 'success' | 'failed' | 'suspended' | 'running' | 'waiting' | 'paused' | 'skipped';
 import type { FeedbackInput } from './feedback';
 import type { CostContext } from './metrics';
 import type { ScoreInput } from './scores';
@@ -110,7 +139,11 @@ export enum SpanType {
   SKILL_RESOLUTION = 'skill_resolution',
 }
 
+/** Primitive span values accepted across embedded package boundaries. */
+export type SpanTypeValue = `${SpanType}`;
+
 export { EntityType };
+export type { EntityTypeValue } from '../storage';
 
 // ============================================================================
 // Type-Specific Attributes Interfaces
@@ -170,7 +203,7 @@ export interface ScorerRunAttributes extends AIBaseAttributes {
   scorerName?: string;
   scoreSource?: ScorerScoreSource;
   targetScope?: ScorerTargetScope;
-  targetEntityType?: EntityType;
+  targetEntityType?: EntityTypeValue;
   scorerDefinition?: DefinitionSource;
 }
 
@@ -748,36 +781,36 @@ export interface GraphActionAttributes extends AIBaseAttributes {
  * AI-specific span types mapped to their attributes
  */
 export interface SpanTypeMap {
-  [SpanType.AGENT_RUN]: AgentRunAttributes;
-  [SpanType.SCORER_RUN]: ScorerRunAttributes;
-  [SpanType.SCORER_STEP]: ScorerStepAttributes;
-  [SpanType.WORKFLOW_RUN]: WorkflowRunAttributes;
-  [SpanType.MODEL_GENERATION]: ModelGenerationAttributes;
-  [SpanType.MODEL_STEP]: ModelStepAttributes;
-  [SpanType.MODEL_INFERENCE]: ModelInferenceAttributes;
-  [SpanType.MODEL_CHUNK]: ModelChunkAttributes;
-  [SpanType.TOOL_CALL]: ToolCallAttributes;
-  [SpanType.CLIENT_TOOL_CALL]: ClientToolCallAttributes;
-  [SpanType.PROVIDER_TOOL_CALL]: ProviderToolCallAttributes;
-  [SpanType.MCP_TOOL_CALL]: MCPToolCallAttributes;
-  [SpanType.PROCESSOR_RUN]: ProcessorRunAttributes;
-  [SpanType.WORKFLOW_STEP]: WorkflowStepAttributes;
-  [SpanType.WORKFLOW_CONDITIONAL]: WorkflowConditionalAttributes;
-  [SpanType.WORKFLOW_CONDITIONAL_EVAL]: WorkflowConditionalEvalAttributes;
-  [SpanType.WORKFLOW_PARALLEL]: WorkflowParallelAttributes;
-  [SpanType.WORKFLOW_LOOP]: WorkflowLoopAttributes;
-  [SpanType.WORKFLOW_SLEEP]: WorkflowSleepAttributes;
-  [SpanType.WORKFLOW_WAIT_EVENT]: WorkflowWaitEventAttributes;
-  [SpanType.WORKSPACE_ACTION]: WorkspaceActionAttributes;
-  [SpanType.GENERIC]: AIBaseAttributes;
-  [SpanType.MEMORY_OPERATION]: MemoryOperationAttributes;
-  [SpanType.RAG_INGESTION]: RagIngestionAttributes;
-  [SpanType.RAG_EMBEDDING]: RagEmbeddingAttributes;
-  [SpanType.RAG_VECTOR_OPERATION]: RagVectorOperationAttributes;
-  [SpanType.RAG_ACTION]: RagActionAttributes;
-  [SpanType.GRAPH_ACTION]: GraphActionAttributes;
-  [SpanType.MAPPING]: MappingAttributes;
-  [SpanType.SKILL_RESOLUTION]: SkillResolutionAttributes;
+  'agent_run': AgentRunAttributes;
+  'scorer_run': ScorerRunAttributes;
+  'scorer_step': ScorerStepAttributes;
+  'workflow_run': WorkflowRunAttributes;
+  'model_generation': ModelGenerationAttributes;
+  'model_step': ModelStepAttributes;
+  'model_inference': ModelInferenceAttributes;
+  'model_chunk': ModelChunkAttributes;
+  'tool_call': ToolCallAttributes;
+  'client_tool_call': ClientToolCallAttributes;
+  'provider_tool_call': ProviderToolCallAttributes;
+  'mcp_tool_call': MCPToolCallAttributes;
+  'processor_run': ProcessorRunAttributes;
+  'workflow_step': WorkflowStepAttributes;
+  'workflow_conditional': WorkflowConditionalAttributes;
+  'workflow_conditional_eval': WorkflowConditionalEvalAttributes;
+  'workflow_parallel': WorkflowParallelAttributes;
+  'workflow_loop': WorkflowLoopAttributes;
+  'workflow_sleep': WorkflowSleepAttributes;
+  'workflow_wait_event': WorkflowWaitEventAttributes;
+  'workspace_action': WorkspaceActionAttributes;
+  'generic': AIBaseAttributes;
+  'memory_operation': MemoryOperationAttributes;
+  'rag_ingestion': RagIngestionAttributes;
+  'rag_embedding': RagEmbeddingAttributes;
+  'rag_vector_operation': RagVectorOperationAttributes;
+  'rag_action': RagActionAttributes;
+  'graph_action': GraphActionAttributes;
+  'mapping': MappingAttributes;
+  'skill_resolution': SkillResolutionAttributes;
 }
 
 /**
@@ -805,7 +838,7 @@ export interface SpanErrorInfo {
 /**
  * Base Span interface
  */
-interface BaseSpan<TType extends SpanType> {
+interface BaseSpan<TType extends SpanTypeValue> {
   /** Unique span identifier */
   id: string;
   /** OpenTelemetry-compatible trace ID (32 hex chars) - present on all spans */
@@ -815,7 +848,7 @@ interface BaseSpan<TType extends SpanType> {
   /** Type of the span */
   type: TType;
   /** Entity type that created the span */
-  entityType?: EntityType;
+  entityType?: EntityTypeValue;
   /** Entity id that created the span */
   entityId?: string;
   /** Entity name that created the span */
@@ -845,7 +878,7 @@ interface BaseSpan<TType extends SpanType> {
 /**
  * Span interface, used internally for tracing
  */
-export interface Span<TType extends SpanType> extends BaseSpan<TType> {
+export interface Span<TType extends SpanTypeValue> extends BaseSpan<TType> {
   /** Is an internal span? (spans internal to the operation of mastra) */
   isInternal: boolean;
   /** Tracing policy for this span (inherited from parent or explicitly set) */
@@ -871,11 +904,11 @@ export interface Span<TType extends SpanType> extends BaseSpan<TType> {
   update(options: UpdateSpanOptions<TType>): void;
 
   /** Create child span - can be any span type independent of parent */
-  createChildSpan(options: ChildSpanOptions<SpanType.MODEL_GENERATION>): AIModelGenerationSpan;
-  createChildSpan<TChildType extends SpanType>(options: ChildSpanOptions<TChildType>): Span<TChildType>;
+  createChildSpan(options: ChildSpanOptions<`${SpanType.MODEL_GENERATION}`>): AIModelGenerationSpan;
+  createChildSpan<TChildType extends SpanTypeValue>(options: ChildSpanOptions<TChildType>): Span<TChildType>;
 
   /** Create event span - can be any span type independent of parent */
-  createEventSpan<TChildType extends SpanType>(options: ChildEventOptions<TChildType>): Span<TChildType>;
+  createEventSpan<TChildType extends SpanTypeValue>(options: ChildEventOptions<TChildType>): Span<TChildType>;
 
   /** Returns `TRUE` if the span is the root span of a trace */
   get isRootSpan(): boolean;
@@ -897,7 +930,7 @@ export interface Span<TType extends SpanType> extends BaseSpan<TType> {
   getExportedSpanId?(): string | undefined;
 
   /** Find the closest parent span of a specific type by walking up the parent chain */
-  findParent<T extends SpanType>(spanType: T): Span<T> | undefined;
+  findParent<T extends SpanTypeValue>(spanType: T): Span<T> | undefined;
 
   /**
    * Optional hook for implementations that expose canonical correlation
@@ -995,7 +1028,7 @@ export interface BridgeSpanContext {
  * Specialized span interface for MODEL_GENERATION spans
  * Provides access to creating a ModelSpanTracker for tracking MODEL_STEP and MODEL_CHUNK spans
  */
-export interface AIModelGenerationSpan extends Span<SpanType.MODEL_GENERATION> {
+export interface AIModelGenerationSpan extends Span<`${SpanType.MODEL_GENERATION}`> {
   /** Create a ModelSpanTracker for tracking model execution steps and chunks */
   createTracker(): IModelSpanTracker | undefined;
 }
@@ -1008,7 +1041,7 @@ export interface AIModelGenerationSpan extends Span<SpanType.MODEL_GENERATION> {
  * - ExportedSpan: span data sent to exporters
  * - RecordedSpan: span data loaded from storage with annotation methods
  */
-export interface SpanData<TType extends SpanType> extends BaseSpan<TType> {
+export interface SpanData<TType extends SpanTypeValue> extends BaseSpan<TType> {
   /** Parent span id reference — a span Mastra created within this trace (undefined for root spans) */
   parentSpanId?: string;
   /** Parent from an external tracing system (ambient OTel / dd-trace) that Mastra did not create; carried for external correlation, not Mastra's own parentage */
@@ -1026,12 +1059,12 @@ export interface SpanData<TType extends SpanType> extends BaseSpan<TType> {
  * Exported Span interface, used for tracing exporters.
  * This is the format sent to ObservabilityExporter implementations.
  */
-export interface ExportedSpan<TType extends SpanType> extends SpanData<TType> {}
+export interface ExportedSpan<TType extends SpanTypeValue> extends SpanData<TType> {}
 
 /**
  * Options for ending a model generation span
  */
-export interface EndGenerationOptions extends EndSpanOptions<SpanType.MODEL_GENERATION> {
+export interface EndGenerationOptions extends EndSpanOptions<`${SpanType.MODEL_GENERATION}`> {
   /** Raw usage data from AI SDK - will be converted to UsageStats with cache token details */
   usage?: LanguageModelUsage;
   /** Provider-specific metadata for extracting cache tokens */
@@ -1056,9 +1089,9 @@ export interface ModelInferenceContext {
 /** Tracks model execution steps and streaming chunks within a MODEL_GENERATION span. */
 export interface IModelSpanTracker {
   getTracingContext(): TracingContext;
-  reportGenerationError(options: ErrorSpanOptions<SpanType.MODEL_GENERATION>): void;
+  reportGenerationError(options: ErrorSpanOptions<`${SpanType.MODEL_GENERATION}`>): void;
   endGeneration(options?: EndGenerationOptions): void;
-  updateGeneration(options: UpdateSpanOptions<SpanType.MODEL_GENERATION>): void;
+  updateGeneration(options: UpdateSpanOptions<`${SpanType.MODEL_GENERATION}`>): void;
   wrapStream<T extends { pipeThrough: Function }>(stream: T): T;
   startStep(payload?: StepStartPayload): void;
   updateStep?(payload?: StepStartPayload): void;
@@ -1090,7 +1123,7 @@ export interface IModelSpanTracker {
    * Export the current step span for later rebuilding (durable execution).
    * Returns undefined if no step span is active.
    */
-  exportCurrentStep(): ExportedSpan<SpanType.MODEL_STEP> | undefined;
+  exportCurrentStep(): ExportedSpan<`${SpanType.MODEL_STEP}`> | undefined;
 
   /**
    * Get the pending step finish payload (captured when defer mode is enabled).
@@ -1141,7 +1174,7 @@ export type AnyExportedSpan = ExportedSpan<keyof SpanTypeMap>;
  * durable serialized state. Persist `traceId` / `spanId` and rehydrate, or use
  * top-level observability annotation APIs after resume.
  */
-export interface RecordedSpan<TType extends SpanType> extends SpanData<TType> {
+export interface RecordedSpan<TType extends SpanTypeValue> extends SpanData<TType> {
   /** Parent span reference (undefined for root spans) */
   readonly parent?: AnyRecordedSpan;
 
@@ -1214,7 +1247,7 @@ export interface RecordedTrace {
 // Span Create/Update/Error Option Types
 // ============================================================================
 
-interface CreateBaseOptions<TType extends SpanType> {
+interface CreateBaseOptions<TType extends SpanTypeValue> {
   /** Span attributes */
   attributes?: SpanTypeMap[TType];
   /** Span metadata */
@@ -1224,7 +1257,7 @@ interface CreateBaseOptions<TType extends SpanType> {
   /** Span type */
   type: TType;
   /** Entity type that created the span */
-  entityType?: EntityType;
+  entityType?: EntityTypeValue;
   /** Entity id that created the span */
   entityId?: string;
   /** Entity name that created the span */
@@ -1232,13 +1265,13 @@ interface CreateBaseOptions<TType extends SpanType> {
   /** Policy-level tracing configuration */
   tracingPolicy?: TracingPolicy;
   /** Request Context for metadata extraction */
-  requestContext?: RequestContext;
+  requestContext?: RequestContextLike;
 }
 
 /**
  * Options for creating new spans
  */
-export interface CreateSpanOptions<TType extends SpanType> extends CreateBaseOptions<TType> {
+export interface CreateSpanOptions<TType extends SpanTypeValue> extends CreateBaseOptions<TType> {
   /** Input data */
   input?: any;
   /** Output data (for event spans) */
@@ -1286,7 +1319,7 @@ export interface CreateSpanOptions<TType extends SpanType> extends CreateBaseOpt
 /**
  * Options for starting new spans
  */
-export interface StartSpanOptions<TType extends SpanType> extends CreateSpanOptions<TType> {
+export interface StartSpanOptions<TType extends SpanTypeValue> extends CreateSpanOptions<TType> {
   /**
    * Options passed when using a custom sampler strategy
    */
@@ -1298,7 +1331,7 @@ export interface StartSpanOptions<TType extends SpanType> extends CreateSpanOpti
 /**
  * Options for new child spans
  */
-export interface ChildSpanOptions<TType extends SpanType> extends CreateBaseOptions<TType> {
+export interface ChildSpanOptions<TType extends SpanTypeValue> extends CreateBaseOptions<TType> {
   /** Input data */
   input?: any;
   /**
@@ -1313,12 +1346,12 @@ export interface ChildSpanOptions<TType extends SpanType> extends CreateBaseOpti
  * Options for new child events
  * Event spans have no input, and no endTime
  */
-export interface ChildEventOptions<TType extends SpanType> extends CreateBaseOptions<TType> {
+export interface ChildEventOptions<TType extends SpanTypeValue> extends CreateBaseOptions<TType> {
   /** Output data */
   output?: any;
 }
 
-interface UpdateBaseOptions<TType extends SpanType> {
+interface UpdateBaseOptions<TType extends SpanTypeValue> {
   /** Span attributes */
   attributes?: Partial<SpanTypeMap[TType]>;
   /** Span metadata */
@@ -1326,13 +1359,13 @@ interface UpdateBaseOptions<TType extends SpanType> {
 }
 
 /** Options for ending a span, with optional final attributes and output. */
-export interface EndSpanOptions<TType extends SpanType> extends UpdateBaseOptions<TType> {
+export interface EndSpanOptions<TType extends SpanTypeValue> extends UpdateBaseOptions<TType> {
   /** Output data */
   output?: any;
 }
 
 /** Options for updating a span's attributes, input, or output mid-flight. */
-export interface UpdateSpanOptions<TType extends SpanType> extends UpdateBaseOptions<TType> {
+export interface UpdateSpanOptions<TType extends SpanTypeValue> extends UpdateBaseOptions<TType> {
   /** Span name override */
   name?: string;
   /** Input data */
@@ -1342,18 +1375,18 @@ export interface UpdateSpanOptions<TType extends SpanType> extends UpdateBaseOpt
 }
 
 /** Options for recording an error on a span. */
-export interface ErrorSpanOptions<TType extends SpanType> extends UpdateBaseOptions<TType> {
+export interface ErrorSpanOptions<TType extends SpanTypeValue> extends UpdateBaseOptions<TType> {
   /** The error associated with the issue */
-  error: MastraError | Error;
+  error: Error;
   /** End the span when true */
   endSpan?: boolean;
 }
 
 /** Options for retrieving an existing span or creating a new one from a tracing context. */
-export interface GetOrCreateSpanOptions<TType extends SpanType> {
+export interface GetOrCreateSpanOptions<TType extends SpanTypeValue> {
   type: TType;
   name: string;
-  entityType?: EntityType;
+  entityType?: EntityTypeValue;
   entityId?: string;
   entityName?: string;
   input?: any;
@@ -1362,8 +1395,8 @@ export interface GetOrCreateSpanOptions<TType extends SpanType> {
   tracingPolicy?: TracingPolicy;
   tracingOptions?: TracingOptions;
   tracingContext?: TracingContext;
-  requestContext?: RequestContext;
-  mastra?: Mastra;
+  requestContext?: RequestContextLike;
+  mastra?: MastraObservabilityContext;
   /**
    * Span id of the suspended span a resumed run links back to. It is a Mastra
    * span within the trace, so it becomes the new root span's parent.
@@ -1404,7 +1437,7 @@ export interface TracingPolicy {
    * a workflow or agent execution. Internal spans are hidden by
    * default in exported traces.
    */
-  internal?: InternalSpans;
+  internal?: number;
 }
 
 /**
@@ -1515,13 +1548,16 @@ export enum TracingEventType {
   SPAN_ENDED = 'span_ended',
 }
 
+/** Primitive tracing event values accepted across embedded package boundaries. */
+export type TracingEventTypeValue = `${TracingEventType}`;
+
 /**
  * Tracing events that can be exported
  */
 export type TracingEvent =
-  | { type: TracingEventType.SPAN_STARTED; exportedSpan: AnyExportedSpan }
-  | { type: TracingEventType.SPAN_UPDATED; exportedSpan: AnyExportedSpan }
-  | { type: TracingEventType.SPAN_ENDED; exportedSpan: AnyExportedSpan };
+  | { type: `${TracingEventType.SPAN_STARTED}`; exportedSpan: AnyExportedSpan }
+  | { type: `${TracingEventType.SPAN_UPDATED}`; exportedSpan: AnyExportedSpan }
+  | { type: `${TracingEventType.SPAN_ENDED}`; exportedSpan: AnyExportedSpan };
 
 /**
  * Interface for span processors

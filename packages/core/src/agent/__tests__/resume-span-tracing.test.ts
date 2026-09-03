@@ -233,7 +233,7 @@ describe('resumed AGENT_RUN span input and trace continuity', () => {
 
   async function spyOnAgentRunSpans() {
     const agentRunCalls: any[] = [];
-    const mod = await import('../../observability/utils');
+    const mod = await import('@internal/observability');
     const spy = vi.spyOn(mod, 'getOrCreateSpan').mockImplementation((opts: any) => {
       const span = createMockSpan(opts.type ?? opts.name ?? 'unknown');
       if (opts.type === 'agent_run') {

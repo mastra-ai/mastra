@@ -5,19 +5,24 @@
  * including tracing configs, sampling strategies, and registry setup.
  */
 
-import type { RequestContext } from '@mastra/core/di';
 import type {
-  ObservabilityInstance,
-  ObservabilityExporter,
-  ObservabilityBridge,
-  SpanOutputProcessor,
-  ConfigSelector,
-  SerializationOptions,
-  CardinalityConfig,
-  LogLevel,
   AnyExportedSpan,
+  CardinalityConfig,
+  ConfigSelector,
+  CustomSamplerOptions as CoreCustomSamplerOptions,
+  LogLevel,
+  ObservabilityBridge,
+  ObservabilityExporter,
+  ObservabilityInstance,
+  SerializationOptions,
+  SamplingStrategy as CoreSamplingStrategy,
+  SpanOutputProcessor,
+  SpanTypeValue,
 } from '@mastra/core/observability';
-import { SpanType } from '@mastra/core/observability';
+import { SamplingStrategyType, SpanType } from '@mastra/core/observability';
+
+export { SamplingStrategyType } from '@mastra/core/observability';
+export type { SamplingStrategyTypeValue } from '@mastra/core/observability';
 import { z } from 'zod/v4';
 import type { SensitiveDataFilterOptions } from './span_processors';
 
@@ -25,36 +30,15 @@ import type { SensitiveDataFilterOptions } from './span_processors';
 // Sampling Strategy Types
 // ============================================================================
 
-/**
- * Sampling strategy types
- */
-export enum SamplingStrategyType {
-  ALWAYS = 'always',
-  NEVER = 'never',
-  RATIO = 'ratio',
-  CUSTOM = 'custom',
-}
-
 const functionSchema = z.custom<(...args: any[]) => unknown>(value => typeof value === 'function', {
   message: 'Expected function',
 });
 
-/**
- * Options passed when using a custom sampler strategy
- */
-export interface CustomSamplerOptions {
-  requestContext?: RequestContext;
-  metadata?: Record<string, any>;
-}
+/** Options passed when using a custom sampler strategy. */
+export type CustomSamplerOptions = CoreCustomSamplerOptions;
 
-/**
- * Sampling strategy configuration
- */
-export type SamplingStrategy =
-  | { type: SamplingStrategyType.ALWAYS }
-  | { type: SamplingStrategyType.NEVER }
-  | { type: SamplingStrategyType.RATIO; probability: number }
-  | { type: SamplingStrategyType.CUSTOM; sampler: (options?: CustomSamplerOptions) => boolean };
+/** Sampling strategy configuration shared with the embedded observability contract. */
+export type SamplingStrategy = CoreSamplingStrategy;
 
 // ============================================================================
 // Observability Configuration Types
@@ -88,7 +72,7 @@ export interface ObservabilityInstanceConfig {
    * excludeSpanTypes: [SpanType.MODEL_CHUNK, SpanType.MODEL_STEP]
    * ```
    */
-  excludeSpanTypes?: SpanType[];
+  excludeSpanTypes?: SpanTypeValue[];
   /**
    * Filter function to control which spans are exported. Return `true` to keep
    * the span, `false` to drop it. This runs after `excludeSpanTypes` and

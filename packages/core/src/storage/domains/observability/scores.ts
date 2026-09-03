@@ -37,4 +37,4 @@ export {
   type GetScorePercentilesArgs,
   getScorePercentilesResponseSchema,
   type GetScorePercentilesResponse,
-} from '@internal/core/storage';
+} from '@internal/observability/storage';

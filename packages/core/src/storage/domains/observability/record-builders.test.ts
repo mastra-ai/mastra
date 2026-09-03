@@ -1,6 +1,6 @@
+import { EntityType } from '@internal/observability';
 import { describe, expect, it } from 'vitest';
 import type { FeedbackEvent, LogEvent, MetricEvent, ScoreEvent } from '../../../observability';
-import { EntityType } from '../../../observability/types/tracing';
 import { buildFeedbackRecord, buildLogRecord, buildMetricRecord, buildScoreRecord } from './record-builders';
 
 describe('record-builders', () => {

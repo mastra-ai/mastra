@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { executeWithContext } from '@internal/observability';
 import type { ActorSignal } from '../../auth/ee';
 import type { RequestContext } from '../../di';
 import { MastraError, ErrorDomain, ErrorCategory, getErrorFromUnknown } from '../../error';
@@ -13,7 +14,6 @@ import {
   resolveObservabilityContext,
 } from '../../observability';
 import type { ObservabilityContext, Span } from '../../observability';
-import { executeWithContext } from '../../observability/utils';
 import { ToolStream } from '../../tools/stream';
 import type { DynamicArgument } from '../../types';
 import { PUBSUB_SYMBOL, STREAM_FORMAT_SYMBOL } from '../constants';

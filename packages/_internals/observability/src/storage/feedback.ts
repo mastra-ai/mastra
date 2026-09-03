@@ -25,7 +25,7 @@ import {
   sortDirectionSchema,
   spanIdField,
   traceIdField,
-} from '../shared';
+} from './shared';
 
 // ============================================================================
 // Field Schemas

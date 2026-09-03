@@ -1,5 +1,6 @@
 export {
   EntityType,
+  type EntityTypeValue,
   createdAtField,
   updatedAtField,
   dbTimestamps,
@@ -47,4 +48,4 @@ export {
   commonFilterFields,
   traceIdField,
   spanIdField,
-} from '@internal/core/storage';
+} from '@internal/observability/storage';

@@ -1,6 +1,6 @@
 import { MastraError } from '@mastra/core/error';
 import type {
-  SpanType,
+  SpanTypeValue,
   ObservabilityInstance,
   EndSpanOptions,
   ErrorSpanOptions,
@@ -10,7 +10,7 @@ import type {
 import { BaseSpan } from './base';
 import { deepClean } from './serialization';
 
-export class DefaultSpan<TType extends SpanType> extends BaseSpan<TType> {
+export class DefaultSpan<TType extends SpanTypeValue> extends BaseSpan<TType> {
   public id: string;
   public traceId: string;
 
@@ -259,7 +259,7 @@ function isValidSpanId(spanId: string): boolean {
   return /^[0-9a-f]{1,16}$/i.test(spanId);
 }
 
-function getOrCreateTraceId(options: CreateSpanOptions<SpanType>): string {
+function getOrCreateTraceId(options: CreateSpanOptions<SpanTypeValue>): string {
   if (options.traceId) {
     if (isValidTraceId(options.traceId)) {
       return options.traceId;

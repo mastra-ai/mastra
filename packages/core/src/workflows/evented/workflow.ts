@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { ReadableStream } from 'node:stream/web';
 import type { CoreMessage } from '@internal/ai-sdk-v4';
+import { executeWithContext } from '@internal/observability';
 import { z } from 'zod/v4';
 import type { Agent } from '../../agent/agent';
 import { MessageList, messagesAreEqual } from '../../agent/message-list';
@@ -27,7 +28,6 @@ import {
   resolveObservabilityContext,
 } from '../../observability';
 import type { ObservabilityContext, TracingContext, TracingPolicy } from '../../observability';
-import { executeWithContext } from '../../observability/utils';
 import type { OutputResult, Processor, ProcessorStreamWriter } from '../../processors';
 import {
   ProcessorRunner,

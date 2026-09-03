@@ -1,5 +1,3 @@
-import type { Mastra } from '..';
-import type { IMastraLogger } from '../logger';
 import type {
   CorrelationContext,
   ConfigSelector,
@@ -9,9 +7,11 @@ import type {
   Gauge,
   Histogram,
   LoggerContext,
+  MastraObservabilityContext,
   MetricsContext,
   ObservabilityEntrypoint,
   ObservabilityInstance,
+  ObservabilityLogger,
   RecordedTrace,
   ScoreInput,
   TracingContext,
@@ -85,79 +85,93 @@ export const noOpMetricsContext: MetricsContext = {
 // No-Op Observability
 // ============================================================================
 
-/** No-op observability entrypoint that silently discards all operations. */
-export class NoOpObservability implements ObservabilityEntrypoint {
-  setMastraContext(_options: { mastra: Mastra }): void {
-    return;
-  }
+const noOpObservabilityMarker = Symbol.for('@mastra/observability.no-op');
 
-  setLogger(_options: { logger: IMastraLogger }): void {
-    return;
-  }
+/** No-op observability entrypoint that silently discards all operations. */
+export interface NoOpObservability extends ObservabilityEntrypoint {}
+
+/** Constructor shape retained for `new NoOpObservability()` and subclass compatibility. */
+export interface NoOpObservabilityConstructor {
+  new (): NoOpObservability;
+  readonly prototype: NoOpObservability;
+}
+
+const noOpObservabilityPrototype: ObservabilityEntrypoint = {
+  setMastraContext(_options: { mastra: MastraObservabilityContext }): void {},
+
+  setLogger(_options: { logger: ObservabilityLogger }): void {},
 
   getSelectedInstance(_options: ConfigSelectorOptions): ObservabilityInstance | undefined {
-    return;
-  }
+    return undefined;
+  },
 
   async getRecordedTrace(_args: { traceId: string }): Promise<RecordedTrace | null> {
     return null;
-  }
+  },
 
   async addScore(_args: {
     traceId?: string;
     spanId?: string;
     correlationContext?: CorrelationContext;
     score: ScoreInput;
-  }): Promise<void> {
-    return;
-  }
+  }): Promise<void> {},
 
   async addFeedback(_args: {
     traceId?: string;
     spanId?: string;
     correlationContext?: CorrelationContext;
     feedback: FeedbackInput;
-  }): Promise<void> {
-    return;
-  }
+  }): Promise<void> {},
 
-  registerInstance(_name: string, _instance: ObservabilityInstance, _isDefault = false): void {
-    return;
-  }
+  registerInstance(_name: string, _instance: ObservabilityInstance, _isDefault = false): void {},
 
   getInstance(_name: string): ObservabilityInstance | undefined {
-    return;
-  }
+    return undefined;
+  },
 
   getDefaultInstance(): ObservabilityInstance | undefined {
-    return;
-  }
+    return undefined;
+  },
 
   listInstances(): ReadonlyMap<string, ObservabilityInstance> {
     return new Map();
-  }
+  },
 
   unregisterInstance(_name: string): boolean {
     return false;
-  }
+  },
 
   hasInstance(_name: string): boolean {
     return false;
-  }
+  },
 
-  setConfigSelector(_selector: ConfigSelector): void {
-    return;
-  }
+  setConfigSelector(_selector: ConfigSelector): void {},
 
-  clear(): void {
-    return;
-  }
+  clear(): void {},
 
-  async flush(): Promise<void> {
-    return;
-  }
+  async flush(): Promise<void> {},
 
-  async shutdown(): Promise<void> {
-    return;
-  }
+  async shutdown(): Promise<void> {},
+};
+
+type MutableNoOpObservabilityConstructor = {
+  new (): NoOpObservability;
+  prototype: NoOpObservability;
+};
+
+const noOpObservabilityConstructor = function NoOpObservability(this: NoOpObservability): void {
+  Object.defineProperty(this, noOpObservabilityMarker, { value: true });
+} as unknown as MutableNoOpObservabilityConstructor;
+
+noOpObservabilityConstructor.prototype = noOpObservabilityPrototype;
+
+export const NoOpObservability: NoOpObservabilityConstructor = noOpObservabilityConstructor;
+
+/** Identifies no-op observability instances across separately embedded package copies. */
+export function isNoOpObservability(value: unknown): value is NoOpObservability {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    (value as Record<PropertyKey, unknown>)[noOpObservabilityMarker] === true
+  );
 }
