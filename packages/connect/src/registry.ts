@@ -1,5 +1,6 @@
 import type { ToolsInput } from '@mastra/core/agent';
 
+import { createAnthropicTools } from './providers/anthropic.js';
 import { createCloudflareTools } from './providers/cloudflare.js';
 import { createGitlabTools } from './providers/gitlab.js';
 import { createJiraTools } from './providers/jira.js';
@@ -68,6 +69,11 @@ export const PROVIDERS: Partial<Record<ProviderKey, ProviderRegistration>> = {
     integrationId: 'resend',
     envVar: 'MASTRA_RESEND_CONNECTION_ID',
     createTools: createResendTools,
+  },
+  anthropic: {
+    integrationId: 'anthropic',
+    envVar: 'MASTRA_ANTHROPIC_CONNECTION_ID',
+    createTools: createAnthropicTools,
   },
   snowflake: {
     integrationId: 'snowflake',
