@@ -1,5 +1,34 @@
 # @mastra/client-js
 
+## 1.44.0-alpha.1
+
+### Minor Changes
+
+- Added `updateDatasetExperiment()` to rename an experiment or change its description and metadata. ([#22924](https://github.com/mastra-ai/mastra/pull/22924))
+
+  ```typescript
+  const experiment = await client.updateDatasetExperiment({
+    datasetId: 'dataset-id',
+    experimentId: 'exp-id',
+    name: 'Baseline vs. new prompt',
+  });
+  ```
+
+### Patch Changes
+
+- Regenerated route types: workflow step-graph entries now expose optional `id`, `description`, and `metadata` fields. ([#22633](https://github.com/mastra-ai/mastra/pull/22633))
+
+  ```typescript
+  const workflow = await client.getWorkflow('my-workflow').details();
+  for (const entry of workflow.stepGraph) {
+    // id, description, and metadata are now typed on every entry
+    console.log(entry.id, entry.description, entry.metadata);
+  }
+  ```
+
+- Updated dependencies [[`b72c747`](https://github.com/mastra-ai/mastra/commit/b72c747a1a698c829c7c1d42e75f72c6d1808dde), [`89f2486`](https://github.com/mastra-ai/mastra/commit/89f2486028ce25c5db19d1f361d5f65cd3ff93e5), [`1778103`](https://github.com/mastra-ai/mastra/commit/17781034204a151a1ff910e9d11d21effe22a9e0), [`2801d26`](https://github.com/mastra-ai/mastra/commit/2801d26b69bbe8929d302abd09619a68b4cc0d98), [`ffc6440`](https://github.com/mastra-ai/mastra/commit/ffc6440d13b9392b3cf1ff309d3b9cde4a791038), [`f31c3fa`](https://github.com/mastra-ai/mastra/commit/f31c3fae16a0710f9e52dba9bccc0018f9da2ac1), [`9d647e2`](https://github.com/mastra-ai/mastra/commit/9d647e25b51cd246ef974d9cad6b05dfdd37126e)]:
+  - @mastra/core@1.65.0-alpha.1
+
 ## 1.43.1-alpha.0
 
 ### Patch Changes
