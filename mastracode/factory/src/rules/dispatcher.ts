@@ -184,6 +184,7 @@ interface DispatcherSession extends SkillSession {
     switch(input: { threadId: string }): Promise<unknown>;
     listActiveMessages(): Promise<Array<{ id: string }>>;
   };
+  stream: { isActive(): boolean };
   abort(): void;
   sendSignal(
     input: { id: string; type: 'user'; tagName: 'user'; contents: string },
@@ -714,7 +715,7 @@ export class FactoryDecisionDispatcher {
           { orgId: record.orgId, factoryProjectId: record.factoryProjectId, workItemId: record.workItemId },
           resolved.message,
         );
-        if (decision.cancelInFlight) session.abort();
+        if (decision.cancelInFlight && session.stream.isActive()) session.abort();
         const precedingMessage = decision.precedingMessage;
         if (precedingMessage) {
           await awaitNotification(() =>

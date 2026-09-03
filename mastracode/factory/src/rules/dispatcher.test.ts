@@ -59,6 +59,7 @@ function createSession(
     suspendsOnTool?: string;
     /** The resumed run writes another plan, so an uncapped gate would never end. */
     replansAfterApproval?: boolean;
+    streamActive?: boolean;
   },
 ) {
   let threadId = 'thread-1';
@@ -136,6 +137,7 @@ function createSession(
       requireId: vi.fn(() => threadId),
       listActiveMessages: vi.fn(async () => [...deliveredSignals].map(id => ({ id }))),
     },
+    stream: { isActive: vi.fn(() => options?.streamActive ?? false) },
     abort,
     getWorkspace: () => ({
       skills: {
@@ -1212,7 +1214,7 @@ describe('FactoryDecisionDispatcher', () => {
       idempotencyKey: 'skill-cancel-1',
       cancelInFlight: true,
     });
-    const { controller, session, abort } = createSession();
+    const { controller, session, abort } = createSession(undefined, { streamActive: true });
     await storage.prepareRunStart({
       orgId: 'org-1',
       userId: 'user-1',
