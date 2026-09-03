@@ -76,6 +76,7 @@ export function combineKnowledgeLensPages(pages: KnowledgeGraphPayload[]): Knowl
   const nodes = new Map(pages.flatMap(page => page.nodes).map(node => [node.id, node]));
   const edges = new Map(pages.flatMap(page => page.edges).map(edge => [edge.id, edge]));
   const records = new Map(pages.flatMap(page => page.records).map(record => [record.id, record]));
+  const terminalBounds = [...new Set(pages.flatMap(page => page.page.terminalBounds))];
   return {
     ...first,
     nodes: [...nodes.values()],
@@ -83,8 +84,8 @@ export function combineKnowledgeLensPages(pages: KnowledgeGraphPayload[]): Knowl
     records: [...records.values()],
     page: {
       ...last.page,
-      truncated: Boolean(last.page.nextCursor || pages.some(page => page.page.incomplete)),
-      incomplete: pages.some(page => page.page.incomplete),
+      truncated: Boolean(last.page.nextCursor),
+      terminalBounds,
     },
     version: last.version ?? first.version,
   };

@@ -135,7 +135,7 @@ export interface KnowledgeGraphPayload {
   page: {
     nextCursor?: string;
     truncated: boolean;
-    incomplete: boolean;
+    terminalBounds: Array<'record-window' | 'edge-window' | 'wikilink-resolution-window'>;
   };
   limits: {
     maxNodes: number;

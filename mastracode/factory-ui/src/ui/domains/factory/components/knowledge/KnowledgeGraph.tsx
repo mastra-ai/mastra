@@ -282,19 +282,17 @@ export interface KnowledgeGraphProps {
   labelAll?: boolean;
 }
 
-function TruncationBanner({ payload, outOfWindowCount }: { payload: KnowledgeGraphPayload; outOfWindowCount: number }) {
-  const parts: string[] = [];
-  if (payload.truncated) parts.push(`showing the newest ${payload.nodes.length} nodes`);
-  if (outOfWindowCount > 0) parts.push(`${outOfWindowCount} linked nodes outside the window`);
-  if ((payload.unresolvedCapped?.count ?? 0) > 0)
-    parts.push(`${payload.unresolvedCapped?.count ?? 0} links unresolved (capped)`);
-  if (parts.length === 0) return null;
+function TruncationBanner({ payload }: { payload: KnowledgeGraphPayload }) {
+  if (!payload.page.truncated && payload.page.terminalBounds.length === 0) return null;
+  const terminalDetail = payload.page.terminalBounds.length
+    ? ' Relationship data reached a terminal server bound; Load more only loads additional nodes.'
+    : '';
   return (
     <div
       data-testid="knowledge-truncation-banner"
       className="border-surface5 bg-surface3/90 text-icon4 pointer-events-none absolute top-2 left-1/2 z-10 -translate-x-1/2 rounded-md border px-3 py-1 text-xs"
     >
-      Bounded lens — showing {payload.nodes.length} nodes and {payload.edges.length} edges
+      Bounded lens — showing {payload.nodes.length} nodes and {payload.edges.length} edges.{terminalDetail}
     </div>
   );
 }
@@ -394,7 +392,7 @@ function KnowledgeGraphInner({
     return () => cancelAnimationFrame(frame);
   }, [focusedId, reactFlow]);
 
-  const { nodes, edges, outOfWindowCount } = useMemo(() => {
+  const { nodes, edges } = useMemo(() => {
     // A11: records are the connection source of truth when the payload
     // carries them; logical owner→target pairs drive filters/ego/sizing.
     // Authorized boundary summaries become muted endpoints, and matching
@@ -574,7 +572,7 @@ function KnowledgeGraphInner({
           stroke: rgba(196, 181, 253, 0.9) !important;
         }
       `}</style>
-      <TruncationBanner payload={payload} outOfWindowCount={outOfWindowCount} />
+      <TruncationBanner payload={payload} />
       <div className="absolute top-3 left-3 z-10 flex items-center gap-2">
         <FilterChip
           label="Pinned"
