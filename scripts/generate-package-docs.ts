@@ -97,20 +97,36 @@ function parseIndexExports(indexPath: string): Map<string, { chunk: string; expo
   }
 
   const content = fs.readFileSync(indexPath, 'utf-8');
-
-  // Parse: export { Agent, TripWire } from '../chunk-IDD63DWQ.js';
-  const regex = /export\s*\{\s*([^}]+)\s*\}\s*from\s*['"]([^'"]+)['"]/g;
+  const importedChunks = new Map<string, string>();
+  const importRegex = /import\s*\{\s*([^}]+)\s*\}\s*from\s*['"]([^'"]+)['"]/g;
   let match;
 
-  while ((match = regex.exec(content)) !== null) {
-    const names = match[1].split(',').map(n => n.trim().split(' as ')[0].trim());
-    const chunkPath = match[2];
-    const chunk = path.basename(chunkPath);
+  while ((match = importRegex.exec(content)) !== null) {
+    const chunk = path.basename(match[2]);
+    for (const specifier of match[1].split(',')) {
+      const parts = specifier.trim().split(/\s+as\s+/);
+      const localName = parts.at(-1);
+      if (localName) importedChunks.set(localName, chunk);
+    }
+  }
 
-    for (const name of names) {
-      if (name) {
-        exports.set(name, { chunk, exportName: name });
-      }
+  // Parse direct re-exports: export { Agent, TripWire } from '../chunk-IDD63DWQ.js';
+  const reExportRegex = /export\s*\{\s*([^}]+)\s*\}\s*from\s*['"]([^'"]+)['"]/g;
+  while ((match = reExportRegex.exec(content)) !== null) {
+    const chunk = path.basename(match[2]);
+    for (const specifier of match[1].split(',')) {
+      const [localName, exportedName = localName] = specifier.trim().split(/\s+as\s+/);
+      if (exportedName) exports.set(exportedName, { chunk, exportName: exportedName });
+    }
+  }
+
+  // Parse the import-then-export form emitted by current package builds.
+  const exportRegex = /export\s*\{\s*([^}]+)\s*\}(?!\s*from)/g;
+  while ((match = exportRegex.exec(content)) !== null) {
+    for (const specifier of match[1].split(',')) {
+      const [localName, exportedName = localName] = specifier.trim().split(/\s+as\s+/);
+      const chunk = importedChunks.get(localName);
+      if (chunk && exportedName) exports.set(exportedName, { chunk, exportName: exportedName });
     }
   }
 
@@ -159,6 +175,7 @@ function generateSourceMap(packageRoot: string): SourceMap {
     'tools',
     'workflows',
     'memory',
+    'knowledge',
     'stream',
     'llm',
     'mastra',

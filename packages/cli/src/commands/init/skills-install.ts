@@ -9,7 +9,7 @@ export async function installMastraSkills({
 }): Promise<{ success: boolean; error?: string; agents: string[] }> {
   try {
     // Build args: --agent takes space-separated agent names
-    const args = ['skills', 'add', 'mastra-ai/skills', '--agent', ...agents, '-y'];
+    const args = ['skills', 'add', 'mastra-ai/skills', '--skill', 'mastra', '--agent', ...agents, '-y'];
 
     await execa('npx', args, {
       cwd: directory,
