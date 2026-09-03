@@ -47,6 +47,7 @@ import {
   resolveFactoryPullRequestParentWorkItemId,
 } from './integrations/github/provenance.js';
 import type { FactoryPullRequestProvenanceData } from './integrations/github/provenance.js';
+import { isValidGitRef } from './integrations/github/sandbox.js';
 import { PlatformGithubIntegration } from './integrations/platform/github/integration.js';
 import { PlatformLinearIntegration } from './integrations/platform/linear/integration.js';
 import { createCustomProvidersPrimer, registerCustomProvidersSource } from './routes/custom-provider-source.js';
@@ -595,6 +596,31 @@ export class MastraFactory {
       versionControlIntegrationIds: integrations
         .filter(integration => integration.versionControl)
         .map(integration => integration.id),
+      ...(githubIntegration
+        ? {
+            resolveRepository: async ({ integrationId, orgId, installationId, externalId, slug }) => {
+              if (integrationId !== githubIntegration.id) return null;
+              const installation = await githubIntegration.sourceControlStorage.installations.get({
+                orgId,
+                id: installationId,
+              });
+              if (!installation) return null;
+              const repositories = await githubIntegration.listInstallationRepos(Number(installation.externalId));
+              const selected = repositories.find(repo => repo.id.toString() === externalId && repo.fullName === slug);
+              if (!selected) return null;
+              return githubIntegration.sourceControlStorage.repositories.upsert({
+                orgId,
+                input: {
+                  installationId,
+                  externalId,
+                  slug: selected.fullName,
+                  defaultBranch: isValidGitRef(selected.defaultBranch) ? selected.defaultBranch : 'main',
+                  providerMetadata: { private: selected.private, owner: selected.owner },
+                },
+              });
+            },
+          }
+        : {}),
       ...(sessionRetirement ? { sessionRetirement } : {}),
       ...(workItemsReady ? { workItems: workItemsStorage } : {}),
     });
@@ -821,7 +847,7 @@ export class MastraFactory {
                 prepareBinding,
                 feedReader: new FactoryFeedReader(workItemCommentsStorage),
                 primeCredentials: tenant => primeTenantCredentials({ tenant, credentials: modelCredentialsStorage }),
-                resolveLinkedWorkItemParentId: async ({ orgId, decision }) => {
+                resolveLinkedWorkItemParentId: async ({ orgId, factoryProjectId, decision }) => {
                   if (decision.source !== 'github-pr') return null;
                   const repositoryId = decision.metadata?.githubRepositoryId;
                   const pullRequestNumber = decision.metadata?.githubPullRequestNumber;
@@ -832,7 +858,7 @@ export class MastraFactory {
                       Record<string, unknown>,
                       FactoryPullRequestProvenanceData
                     >('github'),
-                    { orgId, repositoryId, pullRequestNumber },
+                    { orgId, factoryProjectId, repositoryId, pullRequestNumber },
                   );
                 },
               });

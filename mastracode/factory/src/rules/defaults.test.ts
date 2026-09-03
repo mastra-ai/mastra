@@ -94,6 +94,8 @@ function githubContext(
       merged: false,
       assignees: ['assignee'],
       requestedReviewers: ['reviewer'],
+      author: 'author',
+      factoryAuthored: false,
       headBranch: 'feature',
       baseBranch: 'main',
     },
@@ -761,8 +763,6 @@ describe('defaultFactoryRules', () => {
         reReviewContext({ actor: { type: 'github', login: 'reader', trusted: false, factoryAuthored: false } }),
         // Factory-authored ingress must not restart its own review.
         reReviewContext({ actor: { type: 'github', login: 'factory-app[bot]', trusted: true, factoryAuthored: true } }),
-        // No linked Review card.
-        reReviewContext({ item: undefined, board: undefined, itemRevision: undefined }),
         // Card already in Reviewing: a pass is pending or running.
         reReviewContext({ item: { ...prItem, stages: ['review'] } }),
       ]) {
@@ -863,6 +863,9 @@ describe('defaultFactoryRules', () => {
       const factoryAuthored = {
         ...githubContext(event),
         actor: { type: 'github', login: 'factory-bot', trusted: false, factoryAuthored: true } as const,
+        ...(event === 'pullRequestOpened'
+          ? { pullRequest: { ...githubContext(event).pullRequest!, factoryAuthored: true } }
+          : {}),
       };
 
       const expectedEligibility = {

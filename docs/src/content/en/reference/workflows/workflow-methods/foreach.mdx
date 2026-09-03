@@ -29,13 +29,31 @@ workflow.foreach(step1, { concurrency: 2 })
     name: 'opts',
     type: 'object',
     description:
-      'Optional configuration for the loop. The concurrency option controls how many iterations can run in parallel (default: 1)',
+      'Optional configuration for the loop. The concurrency option controls how many iterations can run in parallel (default: 1). The identity and display fields are preserved through serialization and storage and have no effect on execution.',
     isOptional: true,
     properties: [
       {
         name: 'concurrency',
         type: 'number',
         description: 'The number of concurrent iterations allowed (default: 1)',
+        isOptional: true,
+      },
+      {
+        name: 'id',
+        type: 'string',
+        description: 'Stable entry id that editors and tools can use to address this entry across edits',
+        isOptional: true,
+      },
+      {
+        name: 'description',
+        type: 'string',
+        description: 'Human-readable description of this control-flow operation',
+        isOptional: true,
+      },
+      {
+        name: 'metadata',
+        type: 'Record<string, unknown>',
+        description: 'JSON-serializable metadata, for example a display title for visual editors',
         isOptional: true,
       },
     ],

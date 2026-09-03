@@ -107,6 +107,58 @@ describe('AutoExtractedMetrics', () => {
     });
   });
 
+  // Processor duration is keyed off the entity type rather than PROCESSOR_RUN
+  // alone, because a processor may declare a domain span type. These pin the
+  // boundary of that rule.
+  describe('processor duration', () => {
+    it('emits for a plain PROCESSOR_RUN span', () => {
+      setup();
+      const span = createMockSpan({
+        type: SpanType.PROCESSOR_RUN,
+        entityType: EntityType.INPUT_STEP_PROCESSOR,
+        entityName: 'moderation',
+        attributes: { processorExecutor: 'legacy', processorIndex: 0 },
+        endTime: new Date('2026-01-01T00:00:00.020Z'),
+      } as Partial<AnySpan>);
+
+      emitAutoExtractedMetrics(span, createMetricsContext(span));
+
+      expect(emittedMetrics.map(m => m.metric.name)).toContain('mastra_processor_duration_ms');
+    });
+
+    it('emits for a processor that declared a domain span type', () => {
+      setup();
+      const span = createMockSpan({
+        type: SpanType.SKILL_ACTION,
+        entityType: EntityType.INPUT_STEP_PROCESSOR,
+        entityName: 'Skills Processor',
+        attributes: { operation: 'inject', processorExecutor: 'legacy', processorIndex: 2 },
+        endTime: new Date('2026-01-01T00:00:00.020Z'),
+      } as Partial<AnySpan>);
+
+      emitAutoExtractedMetrics(span, createMetricsContext(span));
+
+      expect(emittedMetrics.map(m => m.metric.name)).toContain('mastra_processor_duration_ms');
+    });
+
+    it('does not emit for a span that only borrows a processor entity type', () => {
+      // Observational memory used to wrap its model passes in a GENERIC span
+      // tagged OUTPUT_STEP_PROCESSOR. Counting those model-call durations as
+      // processor overhead would swamp the metric.
+      setup();
+      const span = createMockSpan({
+        type: SpanType.GENERIC,
+        entityType: EntityType.OUTPUT_STEP_PROCESSOR,
+        entityName: 'Observer',
+        endTime: new Date('2026-01-01T00:00:04Z'),
+      } as Partial<AnySpan>);
+
+      emitAutoExtractedMetrics(span, createMetricsContext(span));
+
+      expect(emittedMetrics.map(m => m.metric.name)).not.toContain('mastra_processor_duration_ms');
+    });
+  });
+
   it('should emit duration metric for tool spans', () => {
     setup();
     const span = createMockSpan({
