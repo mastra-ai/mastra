@@ -197,8 +197,9 @@ function checkoutHint(item: FactoryRuleItemContext): string {
     number === undefined
       ? 'Check out the PR in this worktree first.'
       : `Check out the PR in this worktree first with \`gh pr checkout ${number}\`.`;
+  // Backticked because a branch name is written by whoever opened the PR: it stays a quoted value, not a sentence.
   const headBranch =
-    typeof item.metadata?.headBranch === 'string' ? ` Expected head branch: ${item.metadata.headBranch}.` : '';
+    typeof item.metadata?.headBranch === 'string' ? ` Expected head branch: \`${item.metadata.headBranch}\`.` : '';
   return `${checkout}${headBranch}`;
 }
 
