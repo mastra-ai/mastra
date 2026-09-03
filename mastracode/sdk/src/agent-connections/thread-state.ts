@@ -9,6 +9,8 @@ import {
 
 export const AGENT_CONNECTIONS_REQUEST_CONTEXT_KEY = 'mastracode.agentConnections';
 
+const stateWriteQueues = new WeakMap<object, Map<string, Promise<void>>>();
+
 export type ResolvedAgentConnectionStore = {
   getState<T = unknown>(args: { threadId: string; type: string }): Promise<T | undefined>;
   setState<T = unknown>(args: { threadId: string; type: string; value: T }): Promise<void>;
@@ -113,13 +115,8 @@ export async function writeAgentConnections(
   context: AgentConnectionContext,
   peers: ConnectedAgentPeer[],
 ): Promise<void> {
-  const store = await resolveAgentConnectionStore(context);
-  const threadId = context.agent?.threadId;
-  if (!store || !threadId) return;
-  const current = await readAgentConnectionsState(context);
-  const state = { ...current, peers: sortConnectedPeers(peers) };
-  await store.setState({ threadId, type: AGENT_CONNECTIONS_STATE_TYPE, value: state });
-  context.requestContext?.set(AGENT_CONNECTIONS_REQUEST_CONTEXT_KEY, state.peers);
+  await updateAgentConnectionsState(context, current => ({ ...current, peers: sortConnectedPeers(peers) }));
+  context.requestContext?.set(AGENT_CONNECTIONS_REQUEST_CONTEXT_KEY, sortConnectedPeers(peers));
 }
 
 export async function readSentAgentSignals(context: AgentConnectionContext): Promise<SentAgentSignal[]> {
@@ -130,15 +127,47 @@ export async function writeSentAgentSignals(
   context: AgentConnectionContext,
   sentSignals: SentAgentSignal[],
 ): Promise<void> {
+  await updateAgentConnectionsState(context, current => {
+    const byMessageId = new Map((current.sentSignals ?? []).map(signal => [signal.messageId, signal]));
+    for (const signal of sentSignals) byMessageId.set(signal.messageId, signal);
+    return {
+      ...current,
+      sentSignals: [...byMessageId.values()].sort((a, b) => a.sentAt - b.sentAt).slice(-100),
+    };
+  });
+}
+
+async function updateAgentConnectionsState(
+  context: AgentConnectionContext,
+  update: (current: AgentConnectionsState) => AgentConnectionsState,
+): Promise<void> {
   const store = await resolveAgentConnectionStore(context);
   const threadId = context.agent?.threadId;
   if (!store || !threadId) return;
-  const current = await readAgentConnectionsState(context);
-  await store.setState({
-    threadId,
-    type: AGENT_CONNECTIONS_STATE_TYPE,
-    value: { ...current, sentSignals: sentSignals.slice(-100) },
-  });
+
+  const queueOwner = context.mastra ?? store;
+  let queues = stateWriteQueues.get(queueOwner);
+  if (!queues) {
+    queues = new Map();
+    stateWriteQueues.set(queueOwner, queues);
+  }
+  const previous = queues.get(threadId) ?? Promise.resolve();
+  const pending = previous
+    .catch(() => {})
+    .then(async () => {
+      const state = await store.getState<AgentConnectionsState>({ threadId, type: AGENT_CONNECTIONS_STATE_TYPE });
+      await store.setState({
+        threadId,
+        type: AGENT_CONNECTIONS_STATE_TYPE,
+        value: update(normalizeAgentConnectionsState(state)),
+      });
+    });
+  queues.set(threadId, pending);
+  try {
+    await pending;
+  } finally {
+    if (queues.get(threadId) === pending) queues.delete(threadId);
+  }
 }
 
 export function getCarriedAgentConnections(

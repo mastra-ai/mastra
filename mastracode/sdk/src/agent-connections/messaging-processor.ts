@@ -89,20 +89,21 @@ export function findUnansweredExpectedReplies(messages: MastraDBMessage[]): Expe
   for (const message of messages) {
     const expectedReply = readExpectedReplyObligation(message);
     if (expectedReply) {
-      obligations.set(expectedReply.messageId, expectedReply);
+      obligations.set(expectedReplyKey(expectedReply.peerId, expectedReply.messageId), expectedReply);
       continue;
     }
 
     for (const outboundReply of readOutboundReplies(message)) {
       if (!outboundReply.replyTo || !isSuccessfullyRouted(outboundReply.routingAction)) continue;
-      const obligation = obligations.get(outboundReply.replyTo);
-      if (obligation?.peerId === outboundReply.targetId) {
-        obligations.delete(outboundReply.replyTo);
-      }
+      obligations.delete(expectedReplyKey(outboundReply.targetId, outboundReply.replyTo));
     }
   }
 
   return [...obligations.values()];
+}
+
+function expectedReplyKey(peerId: string, messageId: string): string {
+  return `${peerId.length}:${peerId}${messageId}`;
 }
 
 function readExpectedReplyObligation(message: MastraDBMessage): ExpectedReplyObligation | undefined {

@@ -28,6 +28,7 @@ import { clipboardImagePasteScenario } from './clipboard-image-paste.js';
 import { commitAttributionPromptScenario } from './commit-attribution-prompt.js';
 import { connectCommandScenario } from './connect-command.js';
 import { controllerApiConfigScenario } from './controller-api-config.js';
+import { crossAgentSettingsScenario } from './cross-agent-settings.js';
 import { ctrlfQueuedCustomSlashScenario } from './ctrlf-queued-custom-slash.js';
 import { ctrlfQueuedImageFollowupScenario } from './ctrlf-queued-image-followup.js';
 import { customConfigDirScenario } from './custom-config-dir.js';
@@ -317,6 +318,7 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'profile-command': profileCommandScenario,
   'prune-command': pruneCommandScenario,
   'prune-render-state': pruneRenderStateScenario,
+  'cross-agent-settings': crossAgentSettingsScenario,
   'quiet-settings': quietSettingsScenario,
   'web-search-provider-settings': webSearchProviderSettingsScenario,
   'quiet-streaming-preview-height': quietStreamingPreviewHeightScenario,

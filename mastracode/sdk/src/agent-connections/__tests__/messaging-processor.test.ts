@@ -124,6 +124,16 @@ describe('CrossAgentMessagingExpectedReplyProcessor', () => {
     expect(unanswered).toEqual([{ messageId: 'request-2', peerId: 'code-agent:r:t', summary: 'Second' }]);
   });
 
+  it('tracks the same message id from different peers independently', () => {
+    const unanswered = findUnansweredExpectedReplies([
+      notificationMessage({ messageId: 'shared-request', returnPeerId: 'code-agent:r:one', summary: 'First' }),
+      notificationMessage({ messageId: 'shared-request', returnPeerId: 'code-agent:r:two', summary: 'Second' }),
+      outboundSignalMessage({ targetId: 'code-agent:r:one', replyTo: 'shared-request', routingAction: 'deliver' }),
+    ]);
+
+    expect(unanswered).toEqual([{ messageId: 'shared-request', peerId: 'code-agent:r:two', summary: 'Second' }]);
+  });
+
   it('injects a correlated reactive reminder and retries when an expected reply is missing at idle', async () => {
     const processor = new CrossAgentMessagingExpectedReplyProcessor();
     const sendSignal = vi.fn();
@@ -153,6 +163,24 @@ describe('CrossAgentMessagingExpectedReplyProcessor', () => {
       retry: true,
       metadata: { peerIds: ['code-agent:r:t'], messageIds: ['request-1'] },
     });
+  });
+
+  it('reminds without retrying after the first watchdog attempt', async () => {
+    const processor = new CrossAgentMessagingExpectedReplyProcessor();
+    const sendSignal = vi.fn();
+    const abort = vi.fn();
+
+    await processor.processOutputStep({
+      finishReason: 'stop',
+      toolCalls: [],
+      messageList: messageList([notificationMessage(REQUEST)]),
+      retryCount: 1,
+      sendSignal,
+      abort,
+    } as any);
+
+    expect(sendSignal).toHaveBeenCalledWith(expect.objectContaining({ tagName: 'expected-reply-reminder' }));
+    expect(abort).not.toHaveBeenCalled();
   });
 
   it('does not retry when there are tool calls or no unanswered expected replies', async () => {

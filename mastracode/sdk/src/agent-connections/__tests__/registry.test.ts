@@ -164,6 +164,20 @@ describe('AgentConnectionRegistry', () => {
     expect(peers.map(peer => peer.id)).toEqual(['code-agent:resource-2:thread-2']);
   });
 
+  it('keeps a different agent on the current resource and thread visible', async () => {
+    const registry = new AgentConnectionRegistry({
+      now: () => 20,
+      listPeers: () => [
+        { agentId: 'code-agent', resourceId: 'resource-1', threadId: 'thread-1' },
+        { agentId: 'review-agent', resourceId: 'resource-1', threadId: 'thread-1' },
+      ],
+    });
+
+    const peers = await registry.listPeers(createContext());
+
+    expect(peers.map(peer => peer.id)).toEqual(['review-agent:resource-1:thread-1']);
+  });
+
   it('discovers peers through the core agent pubsub discovery API', async () => {
     const registry = new AgentConnectionRegistry({ now: () => 30_000 });
     const peers = await registry.listPeers({

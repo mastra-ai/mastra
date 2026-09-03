@@ -42,6 +42,7 @@ export type ScenarioName =
   | 'custom-provider-management'
   | 'custom-provider-modal-validation'
   | 'custom-provider-model-selector'
+  | 'cross-agent-settings'
   | 'custom-slash-command'
   | 'ctrlf-queued-custom-slash'
   | 'ctrlf-queued-image-followup'

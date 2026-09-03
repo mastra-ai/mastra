@@ -192,7 +192,11 @@ function isPeerLike(value: unknown): boolean {
 }
 
 function isSelf(peer: AgentPeerIdentity, context: AgentConnectionContext): boolean {
-  return peer.resourceId === context.agent?.resourceId && peer.threadId === context.agent?.threadId;
+  return (
+    (peer.agentId ?? 'code-agent') === (context.agent?.agentId ?? 'code-agent') &&
+    peer.resourceId === context.agent?.resourceId &&
+    peer.threadId === context.agent?.threadId
+  );
 }
 
 function comparePeers(a: { id: string }, b: { id: string }): number {

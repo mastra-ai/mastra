@@ -1,11 +1,9 @@
+import { createOpenAI } from '@ai-sdk/openai';
+import { Agent } from '@mastra/core/agent';
+
+import { getRequestBodies } from './agent-connections-e2e-utils.js';
 import { expect } from './expect.js';
 import type { McE2eScenario } from './types.js';
-
-function getRequestBodies(requests: unknown[]): unknown[] {
-  return requests.map(request =>
-    typeof request === 'object' && request !== null && 'body' in request ? request.body : undefined,
-  );
-}
 
 const peerId = 'code-agent:mc-e2e-peer-resource:mc-e2e-peer-thread';
 const peerThreadId = 'mc-e2e-peer-thread';
@@ -15,6 +13,7 @@ type PeerAdvertisement = { unsubscribe: () => void };
 
 let peerAdvertisement: PeerAdvertisement | undefined;
 let advertisePeer: (() => Promise<void>) | undefined;
+let advertisePeerPending = false;
 let advertisingEnabled = true;
 
 export const agentConnectionsToolFlowScenario = {
@@ -26,6 +25,7 @@ export const agentConnectionsToolFlowScenario = {
   async inProcessApp({ startMastraCodeApp }) {
     peerAdvertisement = undefined;
     advertisePeer = undefined;
+    advertisePeerPending = false;
     advertisingEnabled = true;
     let timer: ReturnType<typeof setInterval> | undefined;
     const app = await startMastraCodeApp({
@@ -33,32 +33,49 @@ export const agentConnectionsToolFlowScenario = {
         crossAgentSignals: true,
       },
       onCreated: result => {
+        let peerAgent: Agent | undefined;
         advertisePeer = async () => {
-          peerAdvertisement = await (
-            result.controller.getMastra()?.getAgentById('code-agent') as unknown as {
-              claimThreadOwnership(options: {
-                resourceId: string;
-                threadId: string;
-                peer?: {
-                  label?: string;
-                  title?: string;
-                  metadata?: Record<string, unknown>;
-                };
-              }): Promise<PeerAdvertisement>;
-            }
-          )?.claimThreadOwnership({
-            resourceId: peerResourceId,
-            threadId: peerThreadId,
-            peer: {
-              label: 'Peer Reviewer',
-              title: 'Peer Reviewer',
-              metadata: { mode: 'build', projectName: 'Peer Reviewer' },
-            },
-          });
+          if (advertisePeerPending || peerAdvertisement) return;
+          advertisePeerPending = true;
+          try {
+            const mastra = result.controller.getMastra();
+            const agent = mastra?.getAgentById('code-agent');
+            if (!mastra || !agent) return;
+            peerAgent ??= new Agent({
+              id: 'code-agent',
+              name: 'Peer Reviewer',
+              instructions: 'A peer agent used by the Mastra Code E2E harness.',
+              model: createOpenAI({
+                baseURL: process.env.OPENAI_BASE_URL,
+                apiKey: process.env.OPENAI_API_KEY,
+              })('gpt-5.4-mini'),
+              pubsub: mastra.pubsub,
+            });
+            peerAdvertisement = await peerAgent.claimThreadOwnership({
+              resourceId: peerResourceId,
+              threadId: peerThreadId,
+              streamOptions: {},
+              peer: {
+                label: 'Peer Reviewer',
+                title: 'Peer Reviewer',
+                metadata: { mode: 'build', projectName: 'Peer Reviewer' },
+              },
+            });
+          } finally {
+            advertisePeerPending = false;
+          }
         };
         timer = setInterval(() => {
           const threadId = result.session.thread.getId();
-          if (!advertisingEnabled || peerAdvertisement || !threadId || !result.session.stream.isActive()) return;
+          if (
+            !advertisingEnabled ||
+            peerAdvertisement ||
+            advertisePeerPending ||
+            !threadId ||
+            !result.session.stream.isActive()
+          ) {
+            return;
+          }
           void advertisePeer?.();
         }, 25);
       },
@@ -101,7 +118,7 @@ export const agentConnectionsToolFlowScenario = {
     terminal.submit('Reconnect to the peer reviewer agent.');
     await runtime.waitForScreenText(/Peer reviewer reconnected/i, terminal, 20_000);
 
-    terminal.submit('Send a low-priority confirmation signal to the reconnected peer.');
+    terminal.submit('Send a high-priority confirmation signal to the reconnected peer.');
     await runtime.waitForScreenText(/agent_signal_send .*✓/i, terminal, 20_000);
     await runtime.waitForScreenText(/Agent connection tool flow completed after disconnect/i, terminal, 20_000);
     await expect(

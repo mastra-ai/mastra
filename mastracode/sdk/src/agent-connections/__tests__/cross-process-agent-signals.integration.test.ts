@@ -1,6 +1,6 @@
 import { spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import { readdirSync, rmSync } from 'node:fs';
+import { existsSync, readdirSync, rmSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
 import { afterEach, describe, expect, it } from 'vitest';
@@ -129,6 +129,9 @@ describe.skipIf(process.platform === 'win32')('cross-agent signals over Unix soc
     const senderSend = await sender.waitFor('send-result');
     const senderReply = await sender.waitFor('reply');
     await sender.waitFor('pass');
+
+    expect(existsSync(socketDir)).toBe(true);
+    expect(readdirSync(socketDir).some(name => name.endsWith('.sock'))).toBe(true);
 
     owner.child.stdin.write('close\n');
     owner.child.stdin.end();

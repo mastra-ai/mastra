@@ -265,6 +265,7 @@ async function main() {
 
 main().catch(async error => {
   emit('fatal', { message: error instanceof Error ? error.message : String(error) });
+  commandLines.close();
   await pubsub.close().catch(() => {});
   process.exitCode = 1;
 });

@@ -284,8 +284,42 @@ describe('agent connection tools', () => {
         dedupeKey: 'agent-signal:code-agent:resource-1:thread-1:request-1',
         attributes: { expectsReply: true, messageId: 'request-1', returnPeerId: 'code-agent:resource-1:thread-1' },
       }),
-      expect.objectContaining({ resourceId: 'resource-2', threadId: 'thread-2', ifIdle: { behavior: 'wake' } }),
+      expect.objectContaining({
+        resourceId: 'resource-2',
+        threadId: 'thread-2',
+        ifIdle: { behavior: 'wake', requireClaimedOwner: true },
+      }),
     );
+  });
+
+  it('reports unacknowledged delivery as retryable and does not record sent history', async () => {
+    const sendNotificationSignal = vi.fn(async () => ({
+      record: { id: 'notification-1', lastDeliveryError: 'owner acceptance timed out' },
+      decision: { action: 'deliver' as const },
+    }));
+    const tools = createAgentConnectionTools({
+      registry: createRegistry(),
+      getAgent: () => ({ sendNotificationSignal }),
+    });
+    const { context, getStored } = createContext([savedPeer()]);
+
+    await expect(
+      (tools.agent_signal_send as any).execute(
+        {
+          targetId: PEER_ID,
+          summary: 'Try again if unconfirmed',
+          priority: 'medium',
+          expectsReply: false,
+          messageId: 'unconfirmed-message',
+        },
+        context,
+      ),
+    ).resolves.toMatchObject({
+      isError: true,
+      messageId: 'unconfirmed-message',
+      content: 'Failed to send agent signal: owner acceptance timed out',
+    });
+    expect(getStored().sentSignals).toBeUndefined();
   });
 
   it('awaits persisted signals and reports the routing outcome', async () => {
@@ -331,6 +365,30 @@ describe('agent connection tools', () => {
       routingAction: 'persist',
       content: 'Persisted low signal for Peer One to process later: Read this later',
     });
+  });
+
+  it('merges concurrent successful sends into bounded sender history', async () => {
+    const sendNotificationSignal = createSignalRuntime();
+    const tools = createAgentConnectionTools({
+      registry: createRegistry(),
+      getAgent: () => ({ sendNotificationSignal }),
+    });
+    const { context, getStored } = createContext([savedPeer()]);
+
+    await Promise.all(
+      ['concurrent-1', 'concurrent-2'].map(messageId =>
+        (tools.agent_signal_send as any).execute(
+          { targetId: PEER_ID, summary: messageId, priority: 'medium', expectsReply: false, messageId },
+          context,
+        ),
+      ),
+    );
+
+    expect(
+      getStored()
+        .sentSignals?.map(signal => signal.messageId)
+        .sort(),
+    ).toEqual(['concurrent-1', 'concurrent-2']);
   });
 
   it('reuses recorded sequential sends by message id and rejects conflicting reuse', async () => {

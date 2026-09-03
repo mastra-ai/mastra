@@ -396,15 +396,26 @@ The target must already be saved and freshly advertise the same exact thread end
           {
             resourceId: target.resourceId,
             threadId: target.threadId,
-            ifIdle: priority === 'low' ? { behavior: 'persist' } : { behavior: 'wake' },
+            ifIdle: priority === 'low' ? { behavior: 'persist' } : { behavior: 'wake', requireClaimedOwner: true },
           },
         )) as SendAgentNotificationSignalResult;
         const accepted = notification.accepted ? await notification.accepted : undefined;
-        if (accepted?.action === 'persist') await notification.persisted;
-        const routingAction = accepted?.action;
-        const runId = accepted && 'runId' in accepted ? accepted.runId : undefined;
+        if (!accepted) {
+          return {
+            content: `Failed to send agent signal: ${notification.record.lastDeliveryError ?? 'delivery was not acknowledged by the target thread owner'}`,
+            target,
+            priority: priority as AgentSignalPriority,
+            expectsReply,
+            messageId,
+            replyTo,
+            returnPeerId,
+            isError: true,
+          };
+        }
+        if (accepted.action === 'persist') await notification.persisted;
+        const routingAction = accepted.action;
+        const runId = 'runId' in accepted ? accepted.runId : undefined;
         await writeSentAgentSignals(agentContext, [
-          ...sentSignals,
           {
             messageId,
             fingerprint,
@@ -424,7 +435,6 @@ The target must already be saved and freshly advertise the same exact thread end
             summary,
             priority: priority as AgentSignalPriority,
             accepted,
-            notification,
           }),
           target,
           priority: priority as AgentSignalPriority,
@@ -434,7 +444,6 @@ The target must already be saved and freshly advertise the same exact thread end
           returnPeerId,
           routingAction,
           runId,
-          notification,
           isError: false,
         };
       } catch (error) {
@@ -512,13 +521,11 @@ function formatSignalResult({
   summary,
   priority,
   accepted,
-  notification,
 }: {
   target: AgentPeerView;
   summary: string;
   priority: AgentSignalPriority;
-  accepted?: SendAgentSignalAccepted;
-  notification: SendAgentNotificationSignalResult;
+  accepted: SendAgentSignalAccepted;
 }): string {
   const label = target.label ?? target.title ?? target.id;
   switch (accepted?.action) {
@@ -533,7 +540,7 @@ function formatSignalResult({
     case 'blocked':
       return `The ${priority} signal to ${label} was blocked because thread ${target.threadId} is suspended: ${summary}`;
     default:
-      return `Notification policy chose ${notification.decision.action} for ${label}; no signal routing outcome was produced: ${summary}`;
+      return `No signal routing outcome was produced for ${label}: ${summary}`;
   }
 }
 

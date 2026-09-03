@@ -8120,6 +8120,9 @@ export class Agent<
     );
   }
 
+  /**
+   * @experimental Agent signals are experimental and may change in a future release.
+   */
   async discoverThreadPeers(
     options?: import('./types').DiscoverAgentThreadPeersOptions,
   ): Promise<import('./types').AgentThreadPeerAdvertisement[]> {

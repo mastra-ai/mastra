@@ -103,7 +103,6 @@ export interface AgentSignalSendResult {
   returnPeerId?: string;
   routingAction?: AgentSignalRoutingAction;
   runId?: string;
-  notification?: unknown;
   duplicate?: boolean;
   isError?: boolean;
 }

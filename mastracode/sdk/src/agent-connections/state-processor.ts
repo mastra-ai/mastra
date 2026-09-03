@@ -71,30 +71,40 @@ export class AgentConnectionsStateProcessor {
     if (carried !== undefined) {
       savedPeers = carried;
     } else {
-      const store = await this.#resolveStore();
-      const stored = store
-        ? await store.getState<{ peers?: ConnectedAgentPeer[] }>({
-            threadId: args.threadId,
-            type: AGENT_CONNECTIONS_STATE_TYPE,
-          })
-        : undefined;
-      savedPeers = Array.isArray(stored?.peers)
-        ? normalizeConnectedPeers(stored.peers)
-        : savedPeersFromViews(priorPeers);
+      try {
+        const store = await this.#resolveStore();
+        const stored = store
+          ? await store.getState<{ peers?: ConnectedAgentPeer[] }>({
+              threadId: args.threadId,
+              type: AGENT_CONNECTIONS_STATE_TYPE,
+            })
+          : undefined;
+        savedPeers = Array.isArray(stored?.peers)
+          ? normalizeConnectedPeers(stored.peers)
+          : savedPeersFromViews(priorPeers);
+      } catch {
+        savedPeers = savedPeersFromViews(priorPeers);
+      }
     }
 
-    const currentPeers =
-      savedPeers.length > 0
-        ? await this.#registry.connectedPeers(
-            {
-              agent: { threadId: args.threadId, resourceId: args.resourceId },
-              requestContext: args.requestContext,
-              mastra: this.mastra,
-              runtimeAgent: this.#getAgent?.() ?? getRuntimeAgent(args.requestContext),
-            },
-            savedPeers,
-          )
-        : [];
+    let currentPeers: AgentPeerView[];
+    if (savedPeers.length === 0) {
+      currentPeers = [];
+    } else {
+      try {
+        currentPeers = await this.#registry.connectedPeers(
+          {
+            agent: { threadId: args.threadId, resourceId: args.resourceId },
+            requestContext: args.requestContext,
+            mastra: this.mastra,
+            runtimeAgent: this.#getAgent?.() ?? getRuntimeAgent(args.requestContext),
+          },
+          savedPeers,
+        );
+      } catch {
+        currentPeers = priorPeers.length > 0 ? priorPeers : savedPeersToAbsentViews(savedPeers);
+      }
+    }
     if (savedPeers.length > 0) args.requestContext?.set(AGENT_CONNECTIONS_REQUEST_CONTEXT_KEY, savedPeers);
 
     if (currentPeers.length === 0 && priorPeers.length === 0) return;
@@ -274,6 +284,17 @@ function normalizePeerViews(peers: unknown[]): AgentPeerView[] {
     });
   }
   return [...byId.values()].sort((a, b) => a.id.localeCompare(b.id));
+}
+
+function savedPeersToAbsentViews(peers: ConnectedAgentPeer[]): AgentPeerView[] {
+  return peers.map(peer => ({
+    ...peer,
+    agentId: peer.agentId ?? 'code-agent',
+    relationship: 'saved',
+    presence: 'absent',
+    displayStatus: 'saved',
+    canAttemptSend: false,
+  }));
 }
 
 function savedPeersFromViews(peers: AgentPeerView[]): ConnectedAgentPeer[] {

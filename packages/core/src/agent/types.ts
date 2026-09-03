@@ -160,6 +160,8 @@ export type AgentSignalIfIdleOptions<OUTPUT = unknown> = {
   behavior?: AgentSignalIdleBehavior;
   streamOptions?: AgentExecutionOptions<OUTPUT>;
   attributes?: AgentSignalAttributes;
+  /** Reject the wake unless an advertised thread owner acknowledges it. */
+  requireClaimedOwner?: boolean;
 };
 
 /**

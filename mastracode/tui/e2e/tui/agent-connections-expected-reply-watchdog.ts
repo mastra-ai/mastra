@@ -1,14 +1,13 @@
+import { createOpenAI } from '@ai-sdk/openai';
+import { Agent } from '@mastra/core/agent';
+
+import { getRequestBodies } from './agent-connections-e2e-utils.js';
 import { expect } from './expect.js';
 import type { McE2eInProcessApp, McE2eScenario } from './types.js';
 
 const peerId = 'code-agent:mc-e2e-expected-reply-peer-resource:mc-e2e-expected-reply-peer-thread';
 const messageId = 'expected-reply-request';
 const peerSummary = 'Expected reply watchdog e2e: choose whether to acknowledge this peer update';
-function getRequestBodies(requests: unknown[]): unknown[] {
-  return requests.map(request =>
-    typeof request === 'object' && request !== null && 'body' in request ? request.body : undefined,
-  );
-}
 
 let shouldSendExpectedReplySignal = false;
 
@@ -36,6 +35,8 @@ export const agentConnectionsExpectedReplyWatchdogScenario = {
     shouldSendExpectedReplySignal = false;
     let sent = false;
     let timer: ReturnType<typeof setInterval> | undefined;
+    let peerClaim: Awaited<ReturnType<Agent['claimThreadOwnership']>> | undefined;
+    let claimPromise: Promise<void> | undefined;
     const app = await startMastraCodeApp({
       config: {
         disableHooks: true,
@@ -44,6 +45,26 @@ export const agentConnectionsExpectedReplyWatchdogScenario = {
         crossAgentSignals: true,
       },
       onCreated: result => {
+        claimPromise = (async () => {
+          const mastra = result.controller.getMastra();
+          const agent = mastra?.getAgentById('code-agent');
+          if (!mastra || !agent) return;
+          const peerAgent = new Agent({
+            id: 'code-agent',
+            name: 'Expected Reply Peer',
+            instructions: 'A peer agent used by the Mastra Code E2E harness.',
+            model: createOpenAI({
+              baseURL: process.env.OPENAI_BASE_URL,
+              apiKey: process.env.OPENAI_API_KEY,
+            })('gpt-5.4-mini'),
+            pubsub: mastra.pubsub,
+          });
+          peerClaim = await peerAgent.claimThreadOwnership({
+            resourceId: 'mc-e2e-expected-reply-peer-resource',
+            threadId: 'mc-e2e-expected-reply-peer-thread',
+            streamOptions: {},
+          });
+        })();
         timer = setInterval(() => {
           const threadId = result.session.thread.getId();
           if (sent || !shouldSendExpectedReplySignal || !threadId || !result.session.stream.isActive()) return;
@@ -80,11 +101,13 @@ export const agentConnectionsExpectedReplyWatchdogScenario = {
         timer.unref?.();
       },
     });
+    await claimPromise;
 
     return {
       stop: async () => {
         shouldSendExpectedReplySignal = false;
         if (timer) clearInterval(timer);
+        peerClaim?.unsubscribe();
         await app.stop?.();
       },
     };

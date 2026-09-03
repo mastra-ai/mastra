@@ -1207,24 +1207,27 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
             peer: {
               label: `${project.name} (${threadId})`,
               title: project.name,
-              metadata: {
-                projectName: project.name,
-                projectPath: project.rootPath,
-                gitBranch: project.gitBranch,
-              },
             },
           }),
         );
 
+        const claimThreadOwnership = async (threadId: string) => {
+          try {
+            await threadOwnership.claim(threadId);
+          } catch (error) {
+            console.error(`Failed to claim cross-agent thread ownership for ${threadId}`, error);
+          }
+        };
         const unsubscribeSession = session.subscribe(event => {
-          if (event.type === 'thread_changed') void threadOwnership.claim(event.threadId);
-          else if (event.type === 'thread_created') void threadOwnership.claim(event.thread.id);
+          if (event.type === 'thread_changed') void claimThreadOwnership(event.threadId);
+          else if (event.type === 'thread_created') void claimThreadOwnership(event.thread.id);
         });
         sessionPeerCleanup.set(session, () => {
           unsubscribeSession();
           threadOwnership.close();
         });
-        await threadOwnership.claim(session.thread.getId());
+        const initialThreadId = session.thread.getId();
+        if (initialThreadId) await claimThreadOwnership(initialThreadId);
       },
       { blocking: true },
     );

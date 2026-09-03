@@ -184,7 +184,7 @@
       "match": {
         "model": "gpt-5.4-mini",
         "endpoint": "chat",
-        "userMessage": "Send a low-priority confirmation signal to the reconnected peer.",
+        "userMessage": "Send a high-priority confirmation signal to the reconnected peer.",
         "sequenceIndex": 0
       },
       "response": {
@@ -195,7 +195,7 @@
             "arguments": {
               "targetId": "code-agent:mc-e2e-peer-resource:mc-e2e-peer-thread",
               "summary": "Reconnected peer confirmation.",
-              "priority": "low",
+              "priority": "high",
               "expectsReply": false,
               "messageId": "agent-connections-tool-flow-reconnect"
             }

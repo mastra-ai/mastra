@@ -1,5 +1,5 @@
 import { RequestContext } from '@mastra/core/request-context';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import { AgentConnectionsStateProcessor } from '../state-processor.js';
 import { AGENT_CONNECTIONS_REQUEST_CONTEXT_KEY } from '../thread-state.js';
@@ -212,6 +212,40 @@ describe('AgentConnectionsStateProcessor', () => {
       },
       value: { peers: [expect.objectContaining({ displayStatus: 'connected', lastSeenAt: 50_000 })] },
     });
+  });
+
+  it('loads saved peers from thread state when request context is not carried', async () => {
+    const processor = new AgentConnectionsStateProcessor();
+    const getState = vi.fn(async () => ({ peers: [SAVED_PEER] }));
+    processor.__registerMastra({
+      getStorage: () => ({ getStore: () => ({ getState, setState: vi.fn() }) }),
+    } as any);
+
+    const result = await processor.computeStateSignal(createArgs({ hasSnapshot: false }));
+
+    expect(getState).toHaveBeenCalledWith({ threadId: THREAD_ID, type: 'agent_connection' });
+    expect(result).toMatchObject({
+      mode: 'snapshot',
+      value: { peers: [expect.objectContaining({ id: SAVED_PEER.id, displayStatus: 'saved' })] },
+    });
+  });
+
+  it('preserves the prior snapshot when storage or discovery fails', async () => {
+    const processor = new AgentConnectionsStateProcessor({
+      getAgent: () => ({ discoverThreadPeers: async () => Promise.reject(new Error('discovery failed')) }),
+    });
+    processor.__registerMastra({
+      getStorage: () => ({
+        getStore: () => ({
+          getState: async () => Promise.reject(new Error('storage failed')),
+          setState: vi.fn(),
+        }),
+      }),
+    } as any);
+
+    const result = await processor.computeStateSignal(createArgs({ lastSnapshotPeers: [CONNECTED_VIEW] }));
+
+    expect(result).toBeUndefined();
   });
 
   it('compacts to a snapshot after enough deltas', async () => {
