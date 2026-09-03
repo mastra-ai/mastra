@@ -31,10 +31,33 @@ describe('TracesLayout', () => {
     expect(container.querySelector('[aria-hidden]')).toBeTruthy();
   });
 
-  it('widens the overlay when sidePanelWide is set', () => {
-    render(<TracesLayout listSlot={list} tracePanelSlot={<div>trace</div>} sidePanelWide />);
+  describe('sidePanelWidth', () => {
+    const listGrid = (container: HTMLElement) => container.firstElementChild as HTMLElement;
 
-    expect(screen.getByRole('dialog').className).toContain('w-4/5');
+    it('defaults to half of the frame', () => {
+      const { container } = render(<TracesLayout listSlot={list} tracePanelSlot={<div>trace</div>} />);
+
+      expect(screen.getByRole('dialog').className).toContain('w-1/2');
+      expect(listGrid(container).className).toContain('grid-cols-[1fr_1fr]');
+    });
+
+    it('widens the overlay to 4/5 when wide', () => {
+      const { container } = render(
+        <TracesLayout listSlot={list} tracePanelSlot={<div>trace</div>} sidePanelWidth="wide" />,
+      );
+
+      expect(screen.getByRole('dialog').className).toContain('w-4/5');
+      expect(listGrid(container).className).toContain('grid-cols-[1fr_4fr]');
+    });
+
+    it('covers the whole frame when full', () => {
+      const { container } = render(
+        <TracesLayout listSlot={list} tracePanelSlot={<div>trace</div>} sidePanelWidth="full" />,
+      );
+
+      expect(screen.getByRole('dialog').className).toContain('w-full');
+      expect(listGrid(container).className).toContain('grid-cols-[1fr_4fr]');
+    });
   });
 
   it('stacks the score panel inside the overlay', () => {

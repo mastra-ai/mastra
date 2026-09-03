@@ -76,35 +76,35 @@ const renderPanel = (props: Partial<TraceSpanPanelProps> & { initialSpanId?: str
   );
 
 describe('TraceSpanPanel', () => {
-  describe('when partial thread is enabled for an agent trace with a thread id', () => {
-    it('renders the selected trace as a chat turn in the Messages tab', async () => {
+  describe('given partial thread is enabled for an agent trace with a thread id', () => {
+    it('when rendered, then the Messages column shows the chat turn without any tab click', async () => {
       installHandlers();
       const { queryClient } = renderPanel({ showPartialThread: true });
 
-      fireEvent.click(await screen.findByRole('tab', { name: 'Messages' }));
-
+      expect(await screen.findByRole('heading', { name: 'Messages' })).not.toBeNull();
+      expect(screen.queryByRole('tab', { name: 'Messages' })).toBeNull();
       expect(await screen.findByText('Will it rain?')).not.toBeNull();
       expect(screen.getByText('No rain is expected.')).not.toBeNull();
       await waitFor(() => expect(queryClient.isFetching()).toBe(0));
     });
   });
 
-  describe('when partial thread is enabled without a complete agent thread context', () => {
-    it('hides the tab for a trace without a thread id', () => {
+  describe('given partial thread is enabled without a complete agent thread context', () => {
+    it('when the trace has no thread id, then the Messages column is absent', () => {
       installHandlers();
       renderPanel({
         showPartialThread: true,
         spans: panelTraceSpans.spans.map(span => (span.parentSpanId == null ? { ...span, threadId: null } : span)),
       });
 
-      expect(screen.queryByRole('tab', { name: 'Messages' })).toBeNull();
+      expect(screen.queryByRole('heading', { name: 'Messages' })).toBeNull();
     });
 
-    it('hides the tab for a branch view', () => {
+    it('when viewing a branch, then the Messages column is absent', () => {
       installHandlers();
       renderPanel({ showPartialThread: true, anchorSpanId: 'span-root' });
 
-      expect(screen.queryByRole('tab', { name: 'Messages' })).toBeNull();
+      expect(screen.queryByRole('heading', { name: 'Messages' })).toBeNull();
     });
   });
 

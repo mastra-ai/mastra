@@ -12,9 +12,21 @@ export interface TracesLayoutProps {
   scorePanelSlot?: ReactNode;
   /** When the trace panel is collapsed, the side panel's grid-rows squash the trace row to `auto`. */
   traceCollapsed?: boolean;
-  /** Widens the side panel (e.g. when the span detail is shown inside the trace panel). */
-  sidePanelWide?: boolean;
+  /**
+   * Side panel width, driven by how many columns the trace panel shows:
+   * `half` (trace only), `wide` (trace + one side column), `full` (messages + trace + span —
+   * covers the whole positioned ancestor, i.e. stops at the main nav).
+   */
+  sidePanelWidth?: TracesSidePanelWidth;
 }
+
+export type TracesSidePanelWidth = 'half' | 'wide' | 'full';
+
+const SIDE_PANEL_WIDTH_CLASS: Record<TracesSidePanelWidth, string> = {
+  half: 'w-1/2',
+  wide: 'w-4/5',
+  full: 'w-full',
+};
 
 /**
  * Layout shell for the traces page. Owns no state and fetches no data — pass slots in.
@@ -31,16 +43,17 @@ export function TracesLayout({
   spanPanelSlot,
   scorePanelSlot,
   traceCollapsed,
-  sidePanelWide,
+  sidePanelWidth = 'half',
 }: TracesLayoutProps) {
   const hasSidePanel = !!tracePanelSlot;
+  const isHalf = sidePanelWidth === 'half';
 
   return (
     <>
       <div
         className={cn(
           'grid h-full min-h-0 items-start gap-4 transition-[grid-template-columns] duration-300 ease-in-out',
-          hasSidePanel ? (sidePanelWide ? 'grid-cols-[1fr_4fr]' : 'grid-cols-[1fr_1fr]') : 'grid-cols-[1fr]',
+          hasSidePanel ? (isHalf ? 'grid-cols-[1fr_1fr]' : 'grid-cols-[1fr_4fr]') : 'grid-cols-[1fr]',
         )}
       >
         {listSlot}
@@ -57,7 +70,7 @@ export function TracesLayout({
             // rendered later in the DOM, paints above it while body-level portals stay on top.
             'absolute inset-y-0 right-0 z-50 min-w-0 p-3',
             'transition-[width] duration-300 ease-in-out',
-            sidePanelWide ? 'w-4/5' : 'w-1/2',
+            SIDE_PANEL_WIDTH_CLASS[sidePanelWidth],
             'grid gap-4 overflow-auto [&>*]:rounded-lg [&>*]:bg-surface3 [&>*]:shadow-lg',
             scorePanelSlot
               ? traceCollapsed
