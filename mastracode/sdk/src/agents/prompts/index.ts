@@ -28,6 +28,7 @@ import { buildToolGuidance } from './tool-guidance.js';
 export interface PromptContext extends Omit<BasePromptContext, 'toolGuidance'> {
   modeId: string;
   state?: any;
+  hostInstructions?: string;
   currentDate: string;
   workingDir: string;
 }
@@ -182,8 +183,11 @@ export function buildFullPromptSections(ctx: PromptContext): PromptSection[] {
     };
   });
 
+  const hostInstructions = ctx.hostInstructions?.trim() ?? '';
+
   return [
     { id: 'base-prompt', label: 'Base system prompt', content: base },
+    { id: 'host-instructions', label: 'Host instructions', content: hostInstructions },
     ...instructionSections,
     { id: 'model-prompt', label: 'Model-specific prompt', detail: ctx.modelId, content: modelSpecific.trim() },
     { id: 'mode-prompt', label: 'Mode prompt', detail: ctx.modeId, content: modeSpecific.trim() },
