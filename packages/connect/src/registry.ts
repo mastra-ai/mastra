@@ -1,6 +1,7 @@
 import type { ToolsInput } from '@mastra/core/agent';
 
 import { createLinearTools } from './providers/linear.js';
+import { createNotionTools } from './providers/notion.js';
 import type { ProviderToolsOptions } from './toolset.js';
 
 export type ProviderKey =
@@ -31,6 +32,11 @@ export const PROVIDERS: Partial<Record<ProviderKey, ProviderRegistration>> = {
     integrationId: 'linear',
     envVar: 'MASTRA_LINEAR_CONNECTION_ID',
     createTools: createLinearTools,
+  },
+  notion: {
+    integrationId: 'notion',
+    envVar: 'MASTRA_NOTION_CONNECTION_ID',
+    createTools: createNotionTools,
   },
 };
 
