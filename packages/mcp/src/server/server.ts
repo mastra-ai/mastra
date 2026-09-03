@@ -425,8 +425,8 @@ export class MCPServer extends MCPServerBase {
       /**
        * Cache hints (`ttlMs` / `cacheScope`) advertised on cacheable results of the
        * `2026-07-28` protocol revision, keyed by operation (e.g. `'tools/list'`).
-       * Only applied when `protocolVersion: '2026-07-28'` is set; legacy responses
-       * are never affected.
+       * Applied by the default modern server or when `protocolVersion: '2026-07-28'`
+       * is set explicitly. Legacy responses are never affected.
        *
        * @example
        * ```typescript

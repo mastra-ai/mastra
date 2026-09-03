@@ -81,7 +81,7 @@ type StartHTTPTransportOptions = NonNullable<Parameters<MCPServer['startHTTP']>[
 const requestServerWithOptions = async ({
   options,
   headers,
-  modernEra = true,
+  modernEra,
 }: {
   options: StartHTTPTransportOptions;
   headers?: Record<string, string>;
@@ -90,7 +90,9 @@ const requestServerWithOptions = async ({
   const server = new MCPServer({
     name: 'HTTP Option Test Server',
     version: '1.0.0',
-    ...(modernEra ? { protocolVersion: '2026-07-28' as const } : {}),
+    ...(modernEra === undefined
+      ? {}
+      : { protocolVersion: modernEra ? ('2026-07-28' as const) : ('2025-11-25' as const) }),
     tools: makeTools(),
   });
   let startError: unknown;
@@ -690,7 +692,6 @@ describe('MCPServer with protocolVersion 2026-07-28 (dual-era HTTP)', () => {
 describe('MCPServer without protocolVersion (modern default)', () => {
   it('rejects legacy session options', async () => {
     const response = await requestServerWithOptions({
-      modernEra: false,
       options: { sessionIdGenerator: () => 'legacy-session' },
     });
 

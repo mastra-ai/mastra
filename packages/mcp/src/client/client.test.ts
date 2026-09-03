@@ -471,6 +471,7 @@ describe('MastraMCPClient with Streamable HTTP', () => {
         name: 'test-stateful-client',
         server: {
           url: testServer.baseUrl,
+          protocolVersion: '2025-11-25',
         },
       });
       await client.connect();
