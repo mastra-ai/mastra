@@ -668,6 +668,7 @@ const sidebars = {
           type: 'doc',
           id: 'voice/gladia',
           label: 'Gladia',
+          customProps: { icon: '/img/integrations/gladia.svg', customCSS: 'dark:invert' },
         },
         {
           type: 'doc',
@@ -700,6 +701,7 @@ const sidebars = {
           type: 'doc',
           id: 'voice/modelslab',
           label: 'ModelsLab',
+          customProps: { icon: '/img/integrations/modelslab.svg' },
         },
         { type: 'doc', id: 'voice/murf', label: 'Murf', customProps: { icon: '/img/integrations/murf.svg' } },
         {
