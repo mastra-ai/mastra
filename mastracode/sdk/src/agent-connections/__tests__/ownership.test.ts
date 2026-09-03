@@ -50,7 +50,13 @@ describe('createThreadOwnershipManager', () => {
       const manager = createThreadOwnershipManager(claimThread);
 
       await expect(manager.claim('thread-1')).resolves.toBe(false);
-      await vi.advanceTimersByTimeAsync(500);
+      await vi.advanceTimersByTimeAsync(249);
+      expect(claimThread).toHaveBeenCalledTimes(1);
+      await vi.advanceTimersByTimeAsync(1);
+      expect(claimThread).toHaveBeenCalledTimes(2);
+      await vi.advanceTimersByTimeAsync(499);
+      expect(claimThread).toHaveBeenCalledTimes(2);
+      await vi.advanceTimersByTimeAsync(1);
 
       expect(claimThread).toHaveBeenCalledTimes(3);
       manager.close();

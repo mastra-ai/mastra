@@ -289,7 +289,7 @@ type AgentThreadStreamRuntimeEvent =
       requestId: string;
       replyTopic: string;
       targetSourceId: string;
-      expiresAt: number;
+      timeoutMs: number;
     };
 
 type AgentThreadIdleSignalAcceptanceEvent =
@@ -747,7 +747,7 @@ export class AgentThreadStreamRuntime {
           owner,
           data.runId,
           createSignal(data.signal),
-          data.expiresAt,
+          Date.now() + data.timeoutMs,
           () => active && state.claimedThreadOwners.get(key)?.unsubscribe === unsubscribe,
         );
         if (!active || state.claimedThreadOwners.get(key)?.unsubscribe !== unsubscribe) return;
@@ -972,12 +972,15 @@ export class AgentThreadStreamRuntime {
     state.threadKeysByRunId.set(runId, key);
     const lease = await this.#acquireOrTransferThreadLease(pubsub, key, runId);
     const ownerActive = isOwnerActive();
-    if (!lease.acquired || !ownerActive) {
+    const expired = Date.now() >= expiresAt;
+    if (!lease.acquired || !ownerActive || expired) {
       state.activeThreadRunIds.delete(key);
       state.threadKeysByRunId.delete(runId);
-      if (lease.acquired) this.#releaseThreadLease(pubsub, key, runId);
-      await this.#drainPendingIdleSignals(state, pubsub, key);
-      return ownerActive ? undefined : { runId, error: `Claimed thread owner was released for ${key}` };
+      const drained = await this.#drainPendingIdleSignals(state, pubsub, key, lease.acquired ? runId : undefined);
+      if (lease.acquired && !drained) this.#releaseThreadLease(pubsub, key, runId);
+      if (!ownerActive) return { runId, error: `Claimed thread owner was released for ${key}` };
+      if (expired) return { runId, error: `Claimed thread owner acceptance expired for ${key}` };
+      return undefined;
     }
 
     try {
@@ -986,9 +989,6 @@ export class AgentThreadStreamRuntime {
         runId,
         memory: withThreadMemory(streamOptions?.memory, owner.resourceId, owner.threadId),
       });
-      if (!isOwnerActive()) {
-        return { runId, error: `Claimed thread owner was released for ${key}` };
-      }
       return { runId };
     } catch (error) {
       const message = getErrorFromUnknown(error).message;
@@ -1032,7 +1032,6 @@ export class AgentThreadStreamRuntime {
   ): Promise<string> {
     const requestId = randomUUID();
     const replyTopic = `${this.#threadTopic(key)}.idle-acceptance.${requestId}`;
-    const expiresAt = Date.now() + AGENT_THREAD_OWNER_ACCEPTANCE_TIMEOUT_MS;
 
     return new Promise<string>((resolve, reject) => {
       let settled = false;
@@ -1071,7 +1070,7 @@ export class AgentThreadStreamRuntime {
             requestId,
             replyTopic,
             targetSourceId,
-            expiresAt,
+            timeoutMs: AGENT_THREAD_OWNER_ACCEPTANCE_TIMEOUT_MS,
           }),
         )
         .catch(error => finish({ error: getErrorFromUnknown(error) }));
@@ -2347,18 +2346,18 @@ export class AgentThreadStreamRuntime {
     // otherwise two processes could each start a competing idle run.
     const owns = await this.#acquireOrTransferThreadLease(pubsub, key, pendingIdle.runId, fromRunId);
     const ownerActive = pendingIdle.isOwnerActive?.() ?? true;
-    if (!owns.acquired || !ownerActive) {
-      // Lost the wake race or the owning claim was released. Roll back the optimistic local reservation. A remote
-      // claimed-owner request must reject instead of acknowledging transport-only
-      // forwarding; local queued work can still be handed to the winning run.
+    const expired = pendingIdle.expiresAt !== undefined && Date.now() >= pendingIdle.expiresAt;
+    if (!owns.acquired || !ownerActive || expired) {
+      // Lost the wake race, the owning claim was released, or its admission deadline expired. Roll back the
+      // optimistic local reservation. A remote claimed-owner request must reject instead of acknowledging
+      // transport-only forwarding; local queued work can still be handed to the winning run.
       if (state.activeThreadRunIds.get(key) === pendingIdle.runId) {
         state.activeThreadRunIds.delete(key);
       }
       state.threadKeysByRunId.delete(pendingIdle.runId);
       state.preRunSignalsByThread.delete(key);
-      if (owns.acquired) this.#releaseThreadLease(pubsub, key, pendingIdle.runId);
       if (pendingIdle.admission) {
-        const reason = ownerActive ? 'lost the execution lease' : 'was released';
+        const reason = !ownerActive ? 'was released' : expired ? 'acceptance expired' : 'lost the execution lease';
         pendingIdle.admission.reject(new Error(`Claimed thread owner ${reason} for ${key}`));
       } else if (owns.owner) {
         await this.#publishAndWait(pubsub, key, {
@@ -2368,8 +2367,14 @@ export class AgentThreadStreamRuntime {
           sourceId: this.#getSourceId(),
         }).catch(() => {});
       }
-      await this.#drainPendingIdleSignals(state, pubsub, key, fromRunId);
-      return true;
+      const drained = await this.#drainPendingIdleSignals(
+        state,
+        pubsub,
+        key,
+        owns.acquired ? pendingIdle.runId : fromRunId,
+      );
+      if (owns.acquired && !drained) this.#releaseThreadLease(pubsub, key, pendingIdle.runId);
+      return drained || owns.acquired;
     }
 
     try {
@@ -2378,11 +2383,7 @@ export class AgentThreadStreamRuntime {
         runId: pendingIdle.runId,
         memory: withThreadMemory(pendingIdle.streamOptions?.memory, pendingIdle.resourceId, pendingIdle.threadId),
       });
-      if (pendingIdle.isOwnerActive && !pendingIdle.isOwnerActive()) {
-        pendingIdle.admission?.reject(new Error(`Claimed thread owner was released for ${key}`));
-      } else {
-        pendingIdle.admission?.resolve(output.runId);
-      }
+      pendingIdle.admission?.resolve(output.runId);
 
       if ((idleQueue?.length ?? 0) > 0) {
         const nextRecord = state.threadRunsById.get(output.runId);

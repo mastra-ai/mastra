@@ -1944,6 +1944,62 @@ describe('Agent signals', () => {
     claim.unsubscribe();
   });
 
+  it('does not start a claimed-owner run when lease acquisition completes after the admission deadline', async () => {
+    const now = vi.spyOn(Date, 'now').mockReturnValue(1_000);
+    try {
+      const pubsub = new ControlledLeasePubSub();
+      const ownerRuntime = new AgentThreadStreamRuntime();
+      const senderRuntime = new AgentThreadStreamRuntime();
+      let releaseAcquire!: () => void;
+      let markAcquireStarted!: () => void;
+      pubsub.acquireLeaseWait = new Promise<void>(resolve => {
+        releaseAcquire = resolve;
+      });
+      const acquireStarted = new Promise<void>(resolve => {
+        markAcquireStarted = resolve;
+      });
+      pubsub.onAcquireLease = markAcquireStarted;
+      const ownerAgent = {
+        id: 'expired-admission-owner',
+        stream: vi.fn(),
+      } as unknown as Agent;
+      const senderAgent = new Agent({
+        id: 'expired-admission-sender',
+        name: 'Expired Admission Sender',
+        instructions: 'Test',
+        model: createTextStreamModel('sender response'),
+        pubsub,
+      });
+      const claim = await ownerRuntime.claimThreadOwnership(
+        ownerAgent,
+        { resourceId: 'expired-admission-user', threadId: 'expired-admission-thread' },
+        pubsub,
+      );
+
+      const signal = senderRuntime.sendSignal(
+        senderAgent,
+        { type: 'user-message', contents: 'expire while acquiring the lease' },
+        {
+          resourceId: 'expired-admission-user',
+          threadId: 'expired-admission-thread',
+          ifIdle: { behavior: 'wake' },
+        },
+        pubsub,
+      );
+      await acquireStarted;
+      now.mockReturnValue(6_001);
+      releaseAcquire();
+
+      await expect(signal.accepted).rejects.toThrow('acceptance expired');
+      expect(ownerAgent.stream).not.toHaveBeenCalled();
+      expect(pubsub.owners.size).toBe(0);
+
+      claim.unsubscribe();
+    } finally {
+      now.mockRestore();
+    }
+  });
+
   it('uses the thread lease to fence simultaneous claimed owners before acknowledging delivery', async () => {
     const pubsub = new ControlledLeasePubSub();
     const firstRuntime = new AgentThreadStreamRuntime();
