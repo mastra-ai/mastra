@@ -97,7 +97,7 @@ function hasBalancedParens(s: string): boolean {
   for (let i = 0; i < s.length; i++) {
     const c = s[i];
     if (quote) {
-      if (c === '\\' && quote === "'") i++;
+      if (c === '\\') i++;
       else if (c === quote) quote = undefined;
       continue;
     }
@@ -210,7 +210,7 @@ function rewriteEngineClauses(sql: string, replication: ClickhouseReplicationCon
       for (let i = argsStart; i < sql.length; i++) {
         const char = sql[i];
         if (quote) {
-          if (char === '\\' && quote === "'") i++;
+          if (char === '\\') i++;
           else if (char === quote) quote = undefined;
           continue;
         }

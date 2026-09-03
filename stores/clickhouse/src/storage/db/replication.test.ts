@@ -161,15 +161,18 @@ ENGINE = ReplicatedReplacingMergeTree('/clickhouse/tables/{shard}/{database}/{ta
 ORDER BY id`);
   });
 
-  it('rewrites engine args containing quoted identifiers with parentheses', () => {
+  it.each([
+    ['backtick', '`updated\\`)At`'],
+    ['double quote', '"updated\\")At"'],
+  ])('rewrites engine args containing escaped %s identifiers', (_, identifier) => {
     const ddl = `CREATE TABLE IF NOT EXISTS mastra_threads (
-  \`updated)At\` DateTime64(3)
+  ${identifier} DateTime64(3)
 )
-ENGINE = ReplacingMergeTree(\`updated)At\`)
+ENGINE = ReplacingMergeTree(${identifier})
 ORDER BY id`;
 
     expect(applyReplicationToDDL(ddl, {})).toContain(
-      "ENGINE = ReplicatedReplacingMergeTree('/clickhouse/tables/{shard}/{database}/{table}', '{replica}', `updated)At`)\nORDER BY id",
+      `ENGINE = ReplicatedReplacingMergeTree('/clickhouse/tables/{shard}/{database}/{table}', '{replica}', ${identifier})\nORDER BY id`,
     );
   });
 
