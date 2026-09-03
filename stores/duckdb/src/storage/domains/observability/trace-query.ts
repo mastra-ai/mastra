@@ -32,8 +32,21 @@ const TRACE_FIELDS = {
 } satisfies FieldRegistry<TraceQueryField>;
 
 const SPAN_FIELDS = {
+  name: { sql: 's.name', parameterType: 'scalar' },
   spanType: { sql: 's.spanType', parameterType: 'scalar' },
+  model: { sql: 's.model', parameterType: 'scalar' },
+  provider: { sql: 's.provider', parameterType: 'scalar' },
+  startedAt: { sql: 's.startedAt', parameterType: 'timestamp' },
+  endedAt: { sql: 's.endedAt', parameterType: 'timestamp' },
+  durationMs: { sql: 's.durationMs', parameterType: 'scalar' },
+  status: { sql: 's.status', parameterType: 'scalar' },
   error: { sql: 's.error', parameterType: 'scalar' },
+  entityType: { sql: 's.entityType', parameterType: 'scalar' },
+  entityId: { sql: 's.entityId', parameterType: 'scalar' },
+  entityName: { sql: 's.entityName', parameterType: 'scalar' },
+  entityVersionId: { sql: 's.entityVersionId', parameterType: 'scalar' },
+  parentEntityVersionId: { sql: 's.parentEntityVersionId', parameterType: 'scalar' },
+  rootEntityVersionId: { sql: 's.rootEntityVersionId', parameterType: 'scalar' },
 } satisfies FieldRegistry<TraceQuerySpanField>;
 
 const SCORE_FIELDS = {
@@ -223,18 +236,43 @@ export function compileDuckDBTraceQuery(plan: TrustedTraceQueryPlan): CompiledDu
   ];
 
   if (relatedCollections.has('spans')) {
-    ctes.push(`current_spans AS (
-      SELECT * EXCLUDE (currentRank)
-      FROM (
-        SELECT
-          e.*,
-          row_number() OVER (
-            PARTITION BY e.traceId, e.spanId
-            ORDER BY CASE WHEN e.endedAt IS NULL THEN 1 ELSE 0 END ASC, e.cursorId DESC
-          ) AS currentRank
-        FROM span_events e
-        INNER JOIN root_scope roots ON roots.traceId = e.traceId
-      )
+    ctes.push(`current_span_rows AS (
+      SELECT
+        e.*,
+        coalesce(
+          min(e.timestamp) FILTER (WHERE e.eventType = 'start') OVER (PARTITION BY e.traceId, e.spanId),
+          min(e.timestamp) OVER (PARTITION BY e.traceId, e.spanId)
+        ) AS startedAt,
+        row_number() OVER (
+          PARTITION BY e.traceId, e.spanId
+          ORDER BY CASE WHEN e.endedAt IS NULL THEN 1 ELSE 0 END ASC, e.cursorId DESC
+        ) AS currentRank
+      FROM span_events e
+      INNER JOIN root_scope roots ON roots.traceId = e.traceId
+    ),
+    current_spans AS (
+      SELECT
+        traceId,
+        name,
+        spanType,
+        CASE
+          WHEN json_type(attributes, '$.model') = 'VARCHAR' THEN json_extract_string(attributes, '$.model')
+        END AS model,
+        CASE
+          WHEN json_type(attributes, '$.provider') = 'VARCHAR' THEN json_extract_string(attributes, '$.provider')
+        END AS provider,
+        startedAt,
+        endedAt,
+        date_diff('millisecond', startedAt, endedAt) AS durationMs,
+        CASE WHEN error IS NOT NULL THEN 'error' ELSE 'success' END AS status,
+        error,
+        entityType,
+        entityId,
+        entityName,
+        entityVersionId,
+        parentEntityVersionId,
+        rootEntityVersionId
+      FROM current_span_rows
       WHERE currentRank = 1
     )`);
   }

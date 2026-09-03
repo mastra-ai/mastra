@@ -35,8 +35,21 @@ const TRACE_FIELDS = {
 } satisfies FieldRegistry<TraceQueryField>;
 
 const SPAN_FIELDS = {
+  name: { sql: 's.name', parameterType: 'String' },
   spanType: { sql: 's.spanType', parameterType: 'String' },
+  model: { sql: 's.model', parameterType: 'String' },
+  provider: { sql: 's.provider', parameterType: 'String' },
+  startedAt: { sql: 's.startedAt', parameterType: "DateTime64(3, 'UTC')" },
+  endedAt: { sql: 's.endedAt', parameterType: "DateTime64(3, 'UTC')" },
+  durationMs: { sql: 's.durationMs', parameterType: 'Float64' },
+  status: { sql: 's.status', parameterType: 'String' },
   error: { sql: 's.error', parameterType: 'String' },
+  entityType: { sql: 's.entityType', parameterType: 'String' },
+  entityId: { sql: 's.entityId', parameterType: 'String' },
+  entityName: { sql: 's.entityName', parameterType: 'String' },
+  entityVersionId: { sql: 's.entityVersionId', parameterType: 'String' },
+  parentEntityVersionId: { sql: 's.parentEntityVersionId', parameterType: 'String' },
+  rootEntityVersionId: { sql: 's.rootEntityVersionId', parameterType: 'String' },
 } satisfies FieldRegistry<TraceQuerySpanField>;
 
 const SCORE_FIELDS = {
@@ -187,9 +200,26 @@ export function compileClickHouseTraceQuery(plan: TrustedTraceQueryPlan): Compil
 
   if (relationCollections.has('spans')) {
     ctes.push(`current_spans AS (
-    SELECT traceId, spanType, error
+    SELECT
+      traceId,
+      name,
+      spanType,
+      if(JSONType(attributes, 'model') = 'String', JSONExtractString(attributes, 'model'), NULL) AS model,
+      if(JSONType(attributes, 'provider') = 'String', JSONExtractString(attributes, 'provider'), NULL) AS provider,
+      startedAt,
+      endedAt,
+      dateDiff('millisecond', startedAt, endedAt) AS durationMs,
+      if(isNotNull(error), 'error', 'success') AS status,
+      error,
+      entityType,
+      entityId,
+      entityName,
+      entityVersionId,
+      parentEntityVersionId,
+      rootEntityVersionId
     FROM ${TABLE_SPAN_EVENTS}
-    WHERE traceId IN (SELECT traceId FROM root_scope)
+    WHERE isNotNull(traceId)
+      AND traceId IN (SELECT traceId FROM root_scope)
     ORDER BY dedupeKey
     LIMIT 1 BY dedupeKey
   )`);

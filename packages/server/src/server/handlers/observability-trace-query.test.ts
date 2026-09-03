@@ -97,6 +97,43 @@ describe('QUERY_TRACES', () => {
     );
   });
 
+  it('passes richer span predicates through without adding matching evidence', async () => {
+    const { mastra, observabilityStore } = createHarness();
+    const response = await QUERY_TRACES.handler(
+      params(mastra, {
+        timeRange: TIME_RANGE,
+        where: {
+          spans: {
+            some: {
+              op: 'and',
+              args: [
+                { op: 'eq', left: { path: 'name' }, right: { literal: 'medication_lookup' } },
+                { op: 'eq', left: { path: 'model' }, right: { literal: 'claude-sonnet-4-6' } },
+                { op: 'eq', left: { path: 'provider' }, right: { literal: 'anthropic' } },
+                { op: 'gt', left: { path: 'durationMs' }, right: { literal: 5000 } },
+                { op: 'exists', path: 'error' },
+              ],
+            },
+          },
+        },
+      }),
+    );
+
+    expect(observabilityStore.queryTraces).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          type: 'relation',
+          collection: 'spans',
+          quantifier: 'some',
+          predicate: expect.objectContaining({ type: 'boolean', operator: 'and' }),
+        }),
+      }),
+    );
+    expect(response).toEqual({ traces: [], page: { next: null } });
+    expect(response).not.toHaveProperty('spans');
+    expect(response).not.toHaveProperty('matches');
+  });
+
   it('preserves the shared canonical semantics and fixed response projections', async () => {
     const { mastra, observabilityStore } = createHarness();
     observabilityStore.queryTraces.mockImplementation(plan => evaluateTraceQuery(TRACE_QUERY_FIXTURE_DATA, plan));
@@ -156,6 +193,47 @@ describe('QUERY_TRACES', () => {
           params(mastra, {
             timeRange: TIME_RANGE,
             where: { scores: { some: testCase.predicate } },
+          }),
+        ),
+      );
+      expect(error.status).toBe(422);
+      const body = await error.getResponse().json();
+      expect(body).toMatchObject({ code: 'TRACE_QUERY_INVALID' });
+      expect(body.issues).toContainEqual(expect.objectContaining(testCase.issue));
+      expect(JSON.stringify(body)).not.toContain('sensitive');
+    }
+
+    expect(getStore).not.toHaveBeenCalled();
+    expect(observabilityStore.queryTraces).not.toHaveBeenCalled();
+  });
+
+  it('rejects invalid richer span operators and literals before touching storage', async () => {
+    const { mastra, observabilityStore, getStore } = createHarness();
+    const cases = [
+      {
+        predicate: { op: 'lt', left: { path: 'model' }, right: { literal: 'sensitive-model' } },
+        issue: { code: 'operator_not_allowed', path: ['where', 'spans', 'some', 'op'] },
+      },
+      {
+        predicate: { op: 'eq', left: { path: 'error' }, right: { literal: 'sensitive-error' } },
+        issue: { code: 'operator_not_allowed', path: ['where', 'spans', 'some', 'op'] },
+      },
+      {
+        predicate: { op: 'gt', left: { path: 'durationMs' }, right: { literal: '5000-sensitive' } },
+        issue: { code: 'invalid_literal', path: ['where', 'spans', 'some', 'right', 'literal'] },
+      },
+      {
+        predicate: { op: 'gte', left: { path: 'startedAt' }, right: { literal: 'sensitive-date' } },
+        issue: { code: 'invalid_literal', path: ['where', 'spans', 'some', 'right', 'literal'] },
+      },
+    ];
+
+    for (const testCase of cases) {
+      const error = await captureHttpException(
+        QUERY_TRACES.handler(
+          params(mastra, {
+            timeRange: TIME_RANGE,
+            where: { spans: { some: testCase.predicate } },
           }),
         ),
       );

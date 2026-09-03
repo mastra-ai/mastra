@@ -74,6 +74,42 @@ describe('ClickHouse advanced trace query', () => {
     expect(Object.values(compiled.query_params)).toContain('2026-01-01 12:00:00.000');
   });
 
+  it('projects canonical span values with guarded JSON strings and typed parameters', () => {
+    const compiled = compileClickHouseTraceQuery(
+      plan({
+        where: {
+          spans: {
+            some: {
+              op: 'and',
+              args: [
+                { op: 'eq', left: { path: 'name' }, right: { literal: 'medication_lookup' } },
+                { op: 'eq', left: { path: 'model' }, right: { literal: 'claude-sonnet-4-6' } },
+                { op: 'eq', left: { path: 'provider' }, right: { literal: 'anthropic' } },
+                {
+                  op: 'gte',
+                  left: { path: 'startedAt' },
+                  right: { literal: '2026-01-01T06:00:00-06:00' },
+                },
+                { op: 'gt', left: { path: 'durationMs' }, right: { literal: 5000 } },
+                { op: 'eq', left: { path: 'status' }, right: { literal: 'success' } },
+              ],
+            },
+          },
+        },
+      }),
+    );
+
+    expect(compiled.query.match(/FROM current_spans s/g)).toHaveLength(1);
+    expect(compiled.query).toContain(`JSONType(attributes, 'model') = 'String'`);
+    expect(compiled.query).toContain(`JSONExtractString(attributes, 'model')`);
+    expect(compiled.query).toContain(`JSONType(attributes, 'provider') = 'String'`);
+    expect(compiled.query).toContain(`dateDiff('millisecond', startedAt, endedAt) AS durationMs`);
+    expect(compiled.query).toMatch(/s\.startedAt >= \{trace_query_6:DateTime64\(3, 'UTC'\)\}/);
+    expect(compiled.query).toMatch(/s\.durationMs > \{trace_query_7:Float64\}/);
+    expect(Object.values(compiled.query_params)).toContain('2026-01-01 12:00:00.000');
+    expect(Object.values(compiled.query_params)).toContain(5000);
+  });
+
   it('deduplicates completed span deliveries without relying on background merges', () => {
     const compiled = compileClickHouseTraceQuery(
       plan({
