@@ -2,4 +2,4 @@
 '@mastra/server': patch
 ---
 
-Experiment item results now accept an optional `notScorable` field on each scorer result, set when the scorer declared the run not scorable.
+Added an optional `notScorable` field to each scorer result in experiment item results, set when the scorer declared the run not scorable.
