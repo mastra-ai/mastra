@@ -49,72 +49,35 @@ Preparation doesn't have one strictly linear order:
 
 This ordering is why caller-side or middleware enrichment is the reliable choice for authorization, tenant scope, feature flags, and other values that must be visible everywhere.
 
-## Populate RequestContext at the correct boundary
+## Choose the `RequestContext` boundary
 
-Perform authoritative backend checks before the agent call, then put the resulting scope in a new `RequestContext` for that request. Both the dynamic tool resolver and the selected tool can read it:
+A context value can only affect work that hasn't happened yet. Set each value at the earliest trusted boundary that needs it.
 
-```typescript title="src/mastra/run-support-agent.ts"
-import { Agent } from '@mastra/core/agent'
-import { RequestContext } from '@mastra/core/request-context'
-import { createTool } from '@mastra/core/tools'
-import { z } from 'zod'
-import { accounts, authorization } from './services'
+For example, an application may check a user's access and derive a tenant or account scope. Perform that check outside the agent, store the result in a new `RequestContext`, then pass the context to `generate()` or `stream()`. Dynamic configuration and tools can read the same trusted scope without performing the check again.
 
-const toolScopeSchema = z.object({
-  tenantId: z.string(),
-  accountIds: z.array(z.string()),
-})
-
-const requestContextSchema = z.object({
-  toolScope: toolScopeSchema,
-})
-
-type SupportRequestContext = z.infer<typeof requestContextSchema>
-
-const listAccounts = createTool({
-  id: 'list-accounts',
-  description: 'List accounts available to the current user',
-  inputSchema: z.object({}),
-  outputSchema: z.array(z.object({ id: z.string(), name: z.string() })),
-  requestContextSchema,
-  execute: async (_, { requestContext }) => {
-    const scope = requestContext.get('toolScope')
-
-    if (!scope) throw new Error('Tool scope is missing')
-
-    return accounts.list({
-      tenantId: scope.tenantId,
-      accountIds: scope.accountIds,
-    })
-  },
-})
-
-const supportAgent = new Agent({
-  id: 'support-agent',
-  name: 'Support Agent',
-  instructions: 'Help users with the accounts available to them.',
-  model: '__GATEWAY_OPENAI_MODEL__',
-  requestContextSchema,
-  tools: ({ requestContext }) => {
-    const scope = requestContext.get('toolScope')
-    return scope.accountIds.length > 0 ? { listAccounts } : {}
-  },
-})
-
-export async function runSupportAgent(userId: string, question: string) {
-  const toolScope = await authorization.getToolScope(userId)
-  const requestContext = new RequestContext<SupportRequestContext>()
-  requestContext.set('toolScope', toolScope)
-
-  return supportAgent.stream(question, { requestContext })
-}
+```mermaid
+flowchart LR
+  accTitle: Establish trusted context before an agent run
+  accDescr: An application checks access, derives a scope, and stores it in request context before the agent resolves dynamic setup and runs processors and tools.
+  request((request)) --> authorize([check access<br/>derive scope])
+  authorize --> context([populate<br/>request context])
+  context --> agent([start agent run])
+  agent --> setup([dynamic setup])
+  setup --> consumers([processors<br/>and tools])
 ```
 
-Create one context per independent request unless you intentionally want to share its values. See [Request context](/docs/server/request-context) for server middleware, schemas, and reserved identity values.
+The context carries the result of the authorization check. It doesn't replace authorization at the application boundary.
 
-`processInput` may still mutate the same live context for later processor hooks or tool execution. Use that for loop-downstream state, not for values required by initial validation, skills, already-resolved processor instances, or dynamic tools whose regular preparation may be running concurrently.
+| The value must affect | Establish it | Why |
+| - | - | - |
+| Validation, model, instructions, skills, workspace, input processors used by `processInput`, or dynamic tools | Before `generate()` or `stream()`, usually in server middleware or caller code | These consumers resolve before or concurrently with `processInput`. |
+| Later loop processor factories, processor hooks, or tool execution | Before `generate()` or `stream()` when practical, or in `processInput` | These consumers receive the same live context after input processing. |
+| Resumed durable work | At the trusted request or resume boundary | Initial input processors may not run again, and non-serializable values must be reconstructed. |
+| Model reasoning | In model-visible instructions or messages | `RequestContext` is runtime data and isn't automatically added to the prompt. |
 
-`RequestContext` is runtime data. The model doesn't see its values unless instructions, messages, a processor, or a tool explicitly puts them into model-visible content.
+Create one context per independent request unless you intentionally want to share its values. See [Request context](/docs/server/request-context) for schema and middleware guidance, including reserved identity values.
+
+`processInput` remains useful for message transformation and loop-downstream state. A mutation there can reach later processor hooks and tool execution. It can't change initial validation or completed skill and input-processor resolution, and dynamic tool preparation may already be running.
 
 ## Inside each model step
 
