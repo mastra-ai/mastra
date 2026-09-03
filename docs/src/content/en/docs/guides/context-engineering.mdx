@@ -1,6 +1,6 @@
 ---
 title: "Context engineering"
-description: "Learn how to choose, retrieve, persist, and control the context a Mastra agent receives."
+description: "Engineer the context Mastra agents receive by combining instructions, inline data, tools, RAG, filesystems, memory, and observational memory."
 packages:
   - "@mastra/core"
   - "@mastra/memory"
@@ -264,7 +264,7 @@ await result.accepted
 
 A processor can send a reactive signal during `processInputStep()`. This is useful for guidance that depends on the current step or a recent tool result. Set `transient: true` when the signal should reach only the current model call. Re-send it when needed instead of storing repeated reminders in conversation history.
 
-State signals represent context that changes over time. Mastra tracks snapshots and deltas for each state lane and can reinsert a fresh snapshot after the previous one leaves the active context window. Use `computeStateSignal()` when a processor owns the state. Working memory, browser context, and task lists can use this lane to stay available even after history or Observational Memory removes older messages.
+State signals represent context that changes over time. For each state lane, Mastra tracks snapshots and deltas so it can reinsert a fresh snapshot after the previous one leaves the active context window. Use `computeStateSignal()` when a processor owns the state. This lane can keep working memory and browser context available alongside task lists, even after history or Observational Memory removes older messages.
 
 Signals append changing context near the current turn instead of rewriting the agent's base instructions. Transient and state signals can therefore preserve a more stable prompt prefix while keeping current guidance and state visible to the model.
 

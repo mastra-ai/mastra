@@ -355,6 +355,35 @@ describe('FactoryPhaseStateProcessor', () => {
     expect(signal?.contents).toContain('Factory work phase: Building (execute)');
   });
 
+  it('tells a parked card`s agent to transition back before resuming, and only then', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const prepared = await prepare(storage);
+    const rules = defaultFactoryRules({ version: 'rules-v1' });
+    const service = new FactoryTransitionService({ rules, storage });
+    const processor = new FactoryPhaseStateProcessor({ rules, storage });
+
+    const working = await processor.computeStateSignal(stateArgs(requestContext()));
+    expect(working?.contents).not.toContain('rests in Intake');
+
+    const parked = await service.transition({
+      orgId: 'org-1',
+      factoryProjectId: PROJECT_ID,
+      workItemId: prepared.item.id,
+      board: 'work',
+      stage: 'intake',
+      expectedRevision: prepared.item.revision,
+      actor: { type: 'human', id: 'user-1' },
+      ingress: { type: 'human', identity: 'park-1' },
+      cause: 'board_drag',
+    });
+    expect(parked.status).toBe('accepted');
+
+    const resting = await processor.computeStateSignal(stateArgs(requestContext()));
+    expect(resting?.contents).toContain('Factory work phase: Intake (intake)');
+    expect(resting?.contents).toContain('rests in Intake');
+    expect(resting?.contents).toContain('request the transition into the working stage first');
+  });
+
   it('does nothing for sessions that were never Factory-bound', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const rules = defaultFactoryRules({ version: 'rules-v1' });

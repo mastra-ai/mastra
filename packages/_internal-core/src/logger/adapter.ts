@@ -11,8 +11,16 @@ import type { IMastraLogger } from './index';
 export interface TraceFields {
   /** 32-char lowercase hex W3C trace id */
   trace_id: string;
-  /** 16-char lowercase hex W3C span id */
-  span_id: string;
+  /**
+   * 16-char lowercase hex W3C span id.
+   *
+   * Optional, and omitted rather than emitted empty: the active span may be
+   * one observability never exports (an internal span, or one dropped by
+   * `excludeSpanTypes`), leaving no span id a consumer could look up. The
+   * trace is still addressable in that case, so the line keeps `trace_id` and
+   * drops only this field. Consumers must treat `span_id` as possibly absent.
+   */
+  span_id?: string;
 }
 
 /**

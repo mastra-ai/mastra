@@ -3,16 +3,12 @@ import { NoDataPageLayout, PageLayout } from '@mastra/playground-ui/components/P
 import { PermissionDenied } from '@mastra/playground-ui/components/PermissionDenied';
 import { SessionExpired } from '@mastra/playground-ui/components/SessionExpired';
 import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
-import { useCallback, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { DatasetsList, DatasetsToolbar, getDatasetTagOptions } from '@/domains/datasets';
 import { NoDatasetsInfo } from '@/domains/datasets/components/datasets-list/no-datasets-info';
-import { useDatasets } from '@/domains/datasets/hooks/use-datasets';
+import { useInfiniteDatasets } from '@/domains/datasets/hooks/use-datasets';
 import { useExperiments } from '@/domains/datasets/hooks/use-experiments';
-import { useReviewSummary } from '@/domains/review';
-import { buildReviewByDatasetMap } from '@/domains/review/review-maps';
-
-const DATASETS_PER_PAGE = 10;
 
 export default function Datasets() {
   const navigate = useNavigate();
@@ -20,49 +16,24 @@ export default function Datasets() {
   const [targetFilter, setTargetFilter] = useState('all');
   const [experimentFilter, setExperimentFilter] = useState('all');
   const [tagFilter, setTagFilter] = useState('all');
-  const [page, setPage] = useState(0);
 
   const {
-    data: datasetsData,
+    data: datasets = [],
     isLoading: isLoadingDatasets,
     error: errorDatasets,
-  } = useDatasets({ page, perPage: DATASETS_PER_PAGE });
+    isFetchingNextPage,
+    hasNextPage,
+    setEndOfListElement,
+  } = useInfiniteDatasets();
   const { data: experimentsData, isLoading: isLoadingExperiments, error: errorExperiments } = useExperiments();
-  const { data: reviewSummary } = useReviewSummary();
 
-  const datasets = useMemo(() => datasetsData?.datasets ?? [], [datasetsData?.datasets]);
-  const hasMore = datasetsData?.pagination?.hasMore ?? false;
   const experiments = useMemo(() => experimentsData?.experiments ?? [], [experimentsData?.experiments]);
   const datasetTagOptions = useMemo(() => getDatasetTagOptions(datasets), [datasets]);
-  const reviewByDataset = useMemo(
-    () => buildReviewByDatasetMap(reviewSummary, experiments),
-    [reviewSummary, experiments],
-  );
 
   const isLoading = isLoadingDatasets || isLoadingExperiments;
   const error = errorDatasets || errorExperiments;
 
   const openCreatePage = () => void navigate('/datasets/new');
-
-  const handleNextPage = useCallback(() => setPage(p => p + 1), []);
-  const handlePrevPage = useCallback(() => setPage(p => Math.max(0, p - 1)), []);
-
-  const handleSearchChange = useCallback((value: string) => {
-    setSearch(value);
-    setPage(0);
-  }, []);
-  const handleTargetFilterChange = useCallback((value: string) => {
-    setTargetFilter(value);
-    setPage(0);
-  }, []);
-  const handleExperimentFilterChange = useCallback((value: string) => {
-    setExperimentFilter(value);
-    setPage(0);
-  }, []);
-  const handleTagFilterChange = useCallback((value: string) => {
-    setTagFilter(value);
-    setPage(0);
-  }, []);
 
   if (error && is401UnauthorizedError(error)) {
     return (
@@ -88,7 +59,7 @@ export default function Datasets() {
     );
   }
 
-  if (datasets.length === 0 && !isLoading && page === 0) {
+  if (datasets.length === 0 && !isLoading) {
     return (
       <NoDataPageLayout>
         <NoDatasetsInfo onCreateClick={openCreatePage} />
@@ -103,21 +74,20 @@ export default function Datasets() {
     setTargetFilter('all');
     setExperimentFilter('all');
     setTagFilter('all');
-    setPage(0);
   };
 
   return (
-    <PageLayout>
+    <PageLayout height="full">
       <PageLayout.TopArea>
         <DatasetsToolbar
           search={search}
-          onSearchChange={handleSearchChange}
+          onSearchChange={setSearch}
           targetFilter={targetFilter}
-          onTargetFilterChange={handleTargetFilterChange}
+          onTargetFilterChange={setTargetFilter}
           experimentFilter={experimentFilter}
-          onExperimentFilterChange={handleExperimentFilterChange}
+          onExperimentFilterChange={setExperimentFilter}
           tagFilter={tagFilter}
-          onTagFilterChange={handleTagFilterChange}
+          onTagFilterChange={setTagFilter}
           tagOptions={datasetTagOptions}
           onReset={resetFilters}
           hasActiveFilters={hasFilters}
@@ -128,16 +98,14 @@ export default function Datasets() {
       <DatasetsList
         datasets={datasets}
         experiments={experiments}
-        reviewByDataset={reviewByDataset}
         isLoading={isLoading}
         search={search}
         targetFilter={targetFilter}
         experimentFilter={experimentFilter}
         tagFilter={tagFilter}
-        currentPage={page}
-        hasMore={hasMore}
-        onNextPage={handleNextPage}
-        onPrevPage={handlePrevPage}
+        isFetchingNextPage={isFetchingNextPage}
+        hasNextPage={hasNextPage}
+        setEndOfListElement={setEndOfListElement}
       />
     </PageLayout>
   );

@@ -999,6 +999,79 @@ describe('validateCustomRoutePaths', () => {
   });
 });
 
+describe('validateAuthResourceScoping', () => {
+  function createAdapterWithAuth({ serverAuth, studioAuth }: { serverAuth?: unknown; studioAuth?: unknown }) {
+    const warn = vi.fn();
+    const adapter = new TestMastraServer({
+      app: {},
+      mastra: {
+        getServer: () => (serverAuth === undefined ? undefined : { auth: serverAuth }),
+        getStudio: () => (studioAuth === undefined ? undefined : { auth: studioAuth }),
+        getLogger: () => ({ warn }),
+        setMastraServer: vi.fn(),
+      } as unknown as Mastra,
+    });
+    return { adapter, warn };
+  }
+
+  it('warns when server.auth has authenticateToken but no mapUserToResourceId', () => {
+    const { adapter, warn } = createAdapterWithAuth({
+      serverAuth: { authenticateToken: async () => ({ id: 'user-1' }) },
+    });
+
+    adapter.validateAuthResourceScoping();
+
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(warn.mock.calls[0]?.[0]).toContain('mapUserToResourceId');
+  });
+
+  it('does not warn when mapUserToResourceId is configured on a plain auth config', () => {
+    const { adapter, warn } = createAdapterWithAuth({
+      serverAuth: {
+        authenticateToken: async () => ({ id: 'user-1' }),
+        mapUserToResourceId: (user: { id: string }) => user.id,
+      },
+    });
+
+    adapter.validateAuthResourceScoping();
+
+    expect(warn).not.toHaveBeenCalled();
+  });
+
+  it('does not warn when an auth provider instance implements mapUserToResourceId', () => {
+    class Provider {
+      authenticateToken = async () => ({ id: 'user-1' });
+      authorizeUser = async () => true;
+      mapUserToResourceId(user: { id: string }) {
+        return user.id;
+      }
+    }
+    const { adapter, warn } = createAdapterWithAuth({ serverAuth: new Provider() });
+
+    adapter.validateAuthResourceScoping();
+
+    expect(warn).not.toHaveBeenCalled();
+  });
+
+  it('does not warn when no server auth is configured', () => {
+    const { adapter, warn } = createAdapterWithAuth({});
+
+    adapter.validateAuthResourceScoping();
+
+    expect(warn).not.toHaveBeenCalled();
+  });
+
+  it('does not warn for studio.auth without mapUserToResourceId', () => {
+    const { adapter, warn } = createAdapterWithAuth({
+      studioAuth: { authenticateToken: async () => ({ id: 'user-1' }) },
+    });
+
+    adapter.validateAuthResourceScoping();
+
+    expect(warn).not.toHaveBeenCalled();
+  });
+});
+
 describe('registerUserMiddleware default implementation', () => {
   function createAdapterWithMiddleware({
     configMiddleware,

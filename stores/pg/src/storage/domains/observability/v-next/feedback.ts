@@ -6,10 +6,12 @@
  * over `valueNumber` only; string-valued feedback is excluded.
  */
 
+import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { listFeedbackArgsSchema } from '@mastra/core/storage';
 import type {
   BatchCreateFeedbackArgs,
   CreateFeedbackArgs,
+  FeedbackRecord,
   GetFeedbackAggregateArgs,
   GetFeedbackAggregateResponse,
   GetFeedbackBreakdownArgs,
@@ -20,6 +22,7 @@ import type {
   GetFeedbackTimeSeriesResponse,
   ListFeedbackArgs,
   ListFeedbackResponse,
+  UpdateFeedbackReviewStatusArgs,
 } from '@mastra/core/storage';
 
 import type { DbClient } from '../../../client';
@@ -43,6 +46,7 @@ import {
   validatePercentiles,
 } from './olap';
 import { assertDeltaPollingEnabled, deltaPollingFeatureEnabled } from './polling';
+import { parseUpdateFeedbackReviewStatusArgs } from './review-status';
 import { FEEDBACK_TYPED_COLUMNS } from './signal-schema';
 import { buildInsert, FEEDBACK_SELECT_COLUMNS } from './sql';
 
@@ -63,6 +67,10 @@ function applyFeedbackFilters(
   if (filters?.feedbackUserId) {
     acc.conditions.push(`"feedbackUserId" = $${acc.next++}`);
     acc.params.push(filters.feedbackUserId);
+  }
+  if (filters?.reviewStatus) {
+    acc.conditions.push(`"reviewStatus" = $${acc.next++}`);
+    acc.params.push(filters.reviewStatus);
   }
 }
 
@@ -103,6 +111,31 @@ export async function batchCreateFeedback(
   const rows = args.feedbacks.map(feedbackRecordToRow);
   const insert = buildInsert(schema, TABLE_FEEDBACK_EVENTS, rows);
   if (insert) await client.query(insert.text, insert.values);
+}
+
+export async function updateFeedbackReviewStatus(
+  client: DbClient,
+  schema: string,
+  args: UpdateFeedbackReviewStatusArgs,
+): Promise<FeedbackRecord> {
+  const { feedbackId, reviewStatus } = parseUpdateFeedbackReviewStatusArgs(args);
+  const row = await client.oneOrNone<Record<string, any>>(
+    `UPDATE ${qualifiedTable(schema, TABLE_FEEDBACK_EVENTS)}
+     SET "reviewStatus" = $2
+     WHERE "feedbackId" = $1
+     RETURNING ${FEEDBACK_SELECT_COLUMNS}`,
+    [feedbackId, reviewStatus],
+  );
+  if (!row) {
+    throw new MastraError({
+      id: 'OBSERVABILITY_UPDATE_FEEDBACK_REVIEW_STATUS_NOT_FOUND',
+      domain: ErrorDomain.MASTRA_OBSERVABILITY,
+      category: ErrorCategory.USER,
+      text: 'Feedback record not found',
+      details: { feedbackId },
+    });
+  }
+  return rowToFeedbackRecord(row);
 }
 
 // ---------------------------------------------------------------------------

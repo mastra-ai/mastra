@@ -25,6 +25,8 @@ import {
   // Feedback
   feedbackFilterSchema,
   feedbackOrderBySchema,
+  feedbackRecordSchema,
+  feedbackReviewStatusSchema,
   listFeedbackResponseSchema,
   createFeedbackBodySchema,
   createFeedbackResponseSchema,
@@ -274,9 +276,24 @@ export const CREATE_FEEDBACK = createNewRoute(NEW_ROUTE_DEFS.CREATE_FEEDBACK, {
   handler: async ({ mastra, feedback }) => {
     const observabilityStore = await getObservabilityStore(mastra);
     await observabilityStore.createFeedback({
-      feedback: { ...feedback, feedbackId: feedback.feedbackId ?? generateSignalId(), timestamp: new Date() },
+      feedback: {
+        ...feedback,
+        feedbackId: feedback.feedbackId ?? generateSignalId(),
+        timestamp: new Date(),
+        reviewStatus: feedback.reviewStatus ?? 'needs-review',
+      },
     });
     return { success: true };
+  },
+});
+
+export const UPDATE_FEEDBACK_REVIEW_STATUS = createNewRoute(NEW_ROUTE_DEFS.UPDATE_FEEDBACK_REVIEW_STATUS, {
+  pathParamSchema: z.object({ feedbackId: z.string() }),
+  bodySchema: z.object({ reviewStatus: feedbackReviewStatusSchema }),
+  responseSchema: feedbackRecordSchema,
+  handler: async ({ mastra, feedbackId, reviewStatus }) => {
+    const observabilityStore = await getObservabilityStore(mastra);
+    return await observabilityStore.updateFeedbackReviewStatus({ feedbackId, reviewStatus });
   },
 });
 
@@ -486,6 +503,7 @@ export const NEW_ROUTES = {
   GET_SCORE_PERCENTILES,
   LIST_FEEDBACK,
   CREATE_FEEDBACK,
+  UPDATE_FEEDBACK_REVIEW_STATUS,
   GET_FEEDBACK_AGGREGATE,
   GET_FEEDBACK_BREAKDOWN,
   GET_FEEDBACK_TIME_SERIES,

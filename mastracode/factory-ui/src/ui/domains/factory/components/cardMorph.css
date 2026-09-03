@@ -1,79 +1,182 @@
 /* Unlayered so it beats the popover's stock zoom utilities. */
 
+/* The popup is a transparent stage over the card: the card's own rows in a box that
+ * widens over it, and beneath it a tray for what the card never carried. */
 .board-card-details[data-slot='popover-content'] {
-  --board-panel-w: min(28rem, calc(100vw - 1.5rem));
+  /* Widens to 1.5× the card, or as far as the edge allows. */
+  --board-copy-w: clamp(
+    var(--board-card-w, 20rem),
+    var(--available-width, 100vw),
+    calc(var(--board-card-w, 20rem) * 1.5)
+  );
+  --board-tray-inset: 0.5rem;
+  --board-tray-tuck: 1.25rem;
 
-  /* Replaced inline with the measured content height. The content is positioned, so `auto` here would be a 0px line. */
-  --board-panel-h: var(--board-card-h, 7rem);
+  width: var(--board-card-w, 20rem);
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
 
-  width: var(--board-panel-w);
-  height: var(--board-panel-h);
-
-  /* A description arriving after the fetch retunes the height: it grows into
-   * place instead of appearing at a new size. */
-  transition: height 200ms cubic-bezier(0.22, 1, 0.36, 1);
+  /* The boxes paint their own shadows; clipping here would shear them off. */
+  overflow: visible;
 }
 
-/* Both ends must be lengths: an intrinsic `to` has no interpolation and snaps to full size on the first frame. */
-@keyframes board-card-morph {
+/* The stage itself does not animate: the copy widens and the tray slides out. */
+.board-card-details[data-slot='popover-content'][data-open] {
+  animation: none;
+}
+
+/* base-ui waits on the popup's own animations before unmounting it, so the
+ * stage fades as a whole while the tray slides back under the copy. */
+.board-card-details[data-slot='popover-content'][data-closed] {
+  animation: board-stage-out 160ms cubic-bezier(0.4, 0, 1, 1) forwards;
+}
+
+/* Flipped above the card by base-ui when the room below runs out: the tray rides on top. */
+.board-card-details[data-side='top'] {
+  flex-direction: column-reverse;
+}
+
+.board-card-copy {
+  /* Its rows stay anchored at the card's corner while it widens. */
+  width: var(--board-copy-w);
+}
+
+.board-card-details[data-open] .board-card-copy {
+  animation: board-copy-grow 260ms cubic-bezier(0.22, 1, 0.36, 1) backwards;
+}
+
+.board-card-details[data-closed] .board-card-copy {
+  animation: board-copy-shrink 160ms cubic-bezier(0.4, 0, 1, 1) forwards;
+}
+
+.board-card-tray {
+  /* Narrower than the copy and tucked well under its edge, so the copy covers
+   * its top corners and it reads as pulled out from beneath. */
+  width: calc(var(--board-copy-w) - 2 * var(--board-tray-inset));
+  margin-left: var(--board-tray-inset);
+  margin-top: calc(-1 * var(--board-tray-tuck));
+  padding-top: var(--board-tray-tuck);
+
+  /* Opens at its full height whatever the stream holds, so nothing shifts once it loads:
+   * its own ceiling, or the room on its side of the card (base-ui's measure, the collision padding off). */
+  height: min(24rem, calc(var(--available-height, 100vh) - var(--board-card-h, 7rem) + var(--board-tray-tuck)));
+
+  /* Never shorter, which is what makes base-ui flip out of a short room. */
+  min-height: 12rem;
+}
+
+.board-card-details[data-side='top'] .board-card-tray {
+  margin-top: 0;
+  padding-top: 0;
+  margin-bottom: calc(-1 * var(--board-tray-tuck));
+  padding-bottom: var(--board-tray-tuck);
+}
+
+/* A beat after the copy starts widening, so it is seen coming out from under it. */
+.board-card-details[data-open] .board-card-tray {
+  animation: board-tray-in 260ms 120ms cubic-bezier(0.22, 1, 0.36, 1) backwards;
+}
+
+.board-card-details[data-closed] .board-card-tray {
+  animation: board-tray-out 160ms cubic-bezier(0.4, 0, 1, 1) forwards;
+}
+
+.board-card-details[data-side='top'][data-open] .board-card-tray {
+  animation-name: board-tray-in-up;
+}
+
+.board-card-details[data-side='top'][data-closed] .board-card-tray {
+  animation-name: board-tray-out-up;
+}
+
+@keyframes board-stage-out {
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes board-copy-grow {
   from {
     width: var(--board-card-w, 20rem);
-    height: var(--board-card-h, 7rem);
-  }
-
-  to {
-    width: var(--board-panel-w);
-    height: var(--board-panel-h);
   }
 }
 
-/* Its own name, not the entry's reversed: an animation only restarts when `animation-name` changes. */
-@keyframes board-card-unmorph {
-  from {
-    width: var(--board-panel-w);
-    height: var(--board-panel-h);
-  }
-
+@keyframes board-copy-shrink {
   to {
     width: var(--board-card-w, 20rem);
-    height: var(--board-card-h, 7rem);
   }
 }
 
-/* Everything the card never showed arrives once the box has room for it. */
+@keyframes board-tray-in {
+  from {
+    translate: 0 -1.5rem;
+    opacity: 0;
+  }
+}
+
+@keyframes board-tray-out {
+  to {
+    translate: 0 -1.5rem;
+    opacity: 0;
+  }
+}
+
+@keyframes board-tray-in-up {
+  from {
+    translate: 0 1.5rem;
+    opacity: 0;
+  }
+}
+
+@keyframes board-tray-out-up {
+  to {
+    translate: 0 1.5rem;
+    opacity: 0;
+  }
+}
+
+/* The buttons stack: each after the first is tucked under the one before it, its label kept clear. */
+.board-card-actions {
+  --board-pill-tuck: 1.25rem;
+}
+
+.board-card-actions > * {
+  position: relative;
+}
+
+.board-card-actions > * + * {
+  margin-left: calc(-1 * var(--board-pill-tuck));
+  /* The button's own sm padding, then the tuck. */
+  padding-left: calc(0.9em + var(--board-pill-tuck));
+}
+
+.board-card-actions > :nth-child(1) {
+  z-index: 3;
+}
+
+.board-card-actions > :nth-child(2) {
+  z-index: 2;
+}
+
+.board-card-actions > :nth-child(3) {
+  z-index: 1;
+}
+
+/* A button the card never showed slides out from under the one before it, a beat after the copy lands. */
 @keyframes board-card-reveal {
   from {
     opacity: 0;
-    translate: 0 -0.25rem;
-    filter: blur(2px);
+    translate: -0.75rem 0;
   }
-}
-
-@keyframes board-card-conceal {
-  to {
-    opacity: 0;
-    translate: 0 -0.25rem;
-    filter: blur(2px);
-  }
-}
-
-.board-card-details[data-slot='popover-content'][data-open] {
-  animation: board-card-morph 260ms cubic-bezier(0.22, 1, 0.36, 1);
-}
-
-.board-card-details[data-slot='popover-content'][data-closed] {
-  animation: board-card-unmorph 200ms cubic-bezier(0.4, 0, 1, 1) forwards;
 }
 
 .board-card-details[data-open] [data-card-morph='reveal'] {
   animation: board-card-reveal 200ms 60ms cubic-bezier(0.22, 1, 0.36, 1) backwards;
 }
 
-.board-card-details[data-closed] [data-card-morph='reveal'] {
-  animation: board-card-conceal 140ms cubic-bezier(0.4, 0, 1, 1) forwards;
-}
-
-/* Scrolled past its own card, the panel has nothing left to expand from.
+/* Scrolled past its own card, the panel has nothing left to sit on.
  * `visibility` rather than `opacity`: an invisible panel must leave the tab
  * order too, or Remove and Run stay reachable with nothing on screen. */
 [data-anchor-hidden] .board-card-details {
@@ -81,12 +184,31 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .board-card-details[data-slot='popover-content'],
-  .board-card-details[data-slot='popover-content'][data-open],
   .board-card-details[data-slot='popover-content'][data-closed],
-  .board-card-details[data-open] [data-card-morph],
-  .board-card-details[data-closed] [data-card-morph] {
+  .board-card-details[data-open] .board-card-copy,
+  .board-card-details[data-closed] .board-card-copy,
+  .board-card-details[data-open] .board-card-tray,
+  .board-card-details[data-closed] .board-card-tray,
+  .board-card-details[data-open] [data-card-morph] {
     animation: none;
-    transition: none;
+  }
+}
+
+/* The tray's contents land one after another once everything is in: `--i` is the row's turn. */
+.stream-landing {
+  animation: stream-landing 320ms cubic-bezier(0.22, 1, 0.36, 1) backwards;
+  animation-delay: calc(min(var(--i, 0), 6) * 45ms);
+}
+
+@keyframes stream-landing {
+  from {
+    opacity: 0;
+    translate: 0 0.375rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .stream-landing {
+    animation: none;
   }
 }

@@ -152,7 +152,9 @@ describe('hydrateSessionMemorySettings', () => {
   });
 
   it('applies stored thresholds and attachment preferences to session state', async () => {
-    const session = createSession();
+    // Org pre-seeded: the seed has its own cases, and these assert the exact
+    // settings write.
+    const session = createSession({ factoryOrgId: 'org-1' });
     const dependencies = createDependencies({
       settings: memorySettingsRow({ observationThreshold: 12_000, observeAttachments: false }),
     });
@@ -168,7 +170,7 @@ describe('hydrateSessionMemorySettings', () => {
 
   it('resets stale session state when the stored row has null knobs', async () => {
     const session = createSession(
-      { observationThreshold: 99_000 },
+      { observationThreshold: 99_000, factoryOrgId: 'org-1' },
       { observer: 'google/gemini-3.5-flash', reflector: 'google/gemini-3.5-flash' },
     );
     const dependencies = createDependencies();
@@ -181,13 +183,101 @@ describe('hydrateSessionMemorySettings', () => {
     });
   });
 
-  it('skips factory-run sessions, which hydrate through the start coordinator', async () => {
+  it('seeds the tenant org from the session row so knowledge curation is scoped to it', async () => {
+    // Without this seed the curation side falls back to the session owner id —
+    // the controller's own id for web chat sessions — and every curated node
+    // lands under an org rung the knowledge reader never queries.
+    const session = createSession();
+    const dependencies = createDependencies();
+
+    await hydrateSessionMemorySettings(session, dependencies);
+
+    expect(session.state.set).toHaveBeenCalledWith({ factoryOrgId: 'org-1' });
+  });
+
+  it('does not rewrite an org that already matches the row', async () => {
+    const session = createSession({ factoryOrgId: 'org-1' });
+    const dependencies = createDependencies();
+
+    await hydrateSessionMemorySettings(session, dependencies);
+
+    expect(session.state.set).not.toHaveBeenCalledWith({ factoryOrgId: 'org-1' });
+  });
+
+  it('overwrites a stale org with the row org, since the row is authoritative', async () => {
+    const session = createSession({ factoryOrgId: 'stale-org' });
+    const dependencies = createDependencies();
+
+    await hydrateSessionMemorySettings(session, dependencies);
+
+    expect(session.state.set).toHaveBeenCalledWith({ factoryOrgId: 'org-1' });
+  });
+
+  it('marks the session unresolved and does not throw when it has no source-control row', async () => {
+    // No row means no org. Staying silent here is what let a Factory session be
+    // mistaken for a local one and filed under a scope nothing can read.
+    const session = createSession();
+    const dependencies = createDependencies({ row: null });
+
+    await hydrateSessionMemorySettings(session, dependencies);
+
+    expect(session.state.set).toHaveBeenCalledWith({ factoryOrgUnresolved: true });
+    expect(session.state.set).not.toHaveBeenCalledWith(expect.objectContaining({ factoryOrgId: expect.anything() }));
+    expect(dependencies.memorySettings.get).not.toHaveBeenCalled();
+  });
+
+  it('marks the session unresolved when the row carries an empty org', async () => {
+    const session = createSession();
+    const dependencies = createDependencies({ row: { orgId: '  ', userId: 'user-1' } as never });
+
+    await hydrateSessionMemorySettings(session, dependencies);
+
+    expect(session.state.set).toHaveBeenCalledWith({ factoryOrgUnresolved: true });
+  });
+
+  it('re-resolves a tagged session whose stored org is blank', async () => {
+    // The coordinator-hydrated early return has to agree with the curation side,
+    // which trims: a blank org is unresolved, so this session still needs a seed.
+    const session = createSession({ factoryProjectId: 'project-1', factoryOrgId: '   ' });
+    const dependencies = createDependencies({ row: { orgId: 'org-1', userId: 'user-1' } as never });
+
+    await hydrateSessionMemorySettings(session, dependencies);
+
+    expect(session.state.set).toHaveBeenCalledWith(expect.objectContaining({ factoryOrgId: 'org-1' }));
+  });
+
+  it('marks the session unresolved when the row lookup rejects', async () => {
+    const session = createSession();
+    const dependencies = createDependencies();
+    dependencies.sourceControl.sessions.getBySessionId.mockRejectedValueOnce(new Error('storage down'));
+
+    await expect(hydrateSessionMemorySettings(session, dependencies)).resolves.toBeUndefined();
+
+    expect(session.state.set).toHaveBeenCalledWith({ factoryOrgUnresolved: true });
+  });
+
+  it('seeds the org on a tagged session that never went through the coordinator', async () => {
+    // A web chat session persists `factoryProjectId` from its browser seed, so on
+    // resume it carries the tag with no org. Skipping on the tag alone would leave
+    // it mis-scoped forever. Settings still belong to the coordinator.
     const session = createSession({ factoryProjectId: 'project-1' });
     const dependencies = createDependencies();
 
     await hydrateSessionMemorySettings(session, dependencies);
 
+    expect(session.state.set).toHaveBeenCalledExactlyOnceWith({ factoryOrgId: 'org-1' });
+    expect(dependencies.memorySettings.get).not.toHaveBeenCalled();
+    expect(session.om.observer.switchModel).not.toHaveBeenCalled();
+  });
+
+  it('skips fully hydrated factory-run sessions, which the start coordinator owns', async () => {
+    const session = createSession({ factoryProjectId: 'project-1', factoryOrgId: 'org-1' });
+    const dependencies = createDependencies();
+
+    await hydrateSessionMemorySettings(session, dependencies);
+
     expect(dependencies.sourceControl.sessions.getBySessionId).not.toHaveBeenCalled();
+    expect(session.state.set).not.toHaveBeenCalled();
     expect(session.om.observer.switchModel).not.toHaveBeenCalled();
   });
 
@@ -205,7 +295,7 @@ describe('hydrateSessionMemorySettings', () => {
     // A missing row must behave like the settings routes: stale persisted
     // session values reset to the built-in defaults instead of surviving.
     const session = createSession(
-      { observationThreshold: 99_000 },
+      { observationThreshold: 99_000, factoryOrgId: 'org-1' },
       { observer: 'openai/gpt-5-mini', reflector: 'openai/gpt-5-mini' },
     );
     const dependencies = createDependencies({ settings: null });

@@ -1,6 +1,6 @@
 ---
 title: "iMessage | Channels"
-description: "Configure a Mastra agent to receive iMessage messages through a channel adapter."
+description: "Connect a Mastra agent to iMessage direct and group conversations with Photon or BlueBubbles adapters, agent configuration, and webhook routing."
 packages:
   - "@mastra/core"
 ---
@@ -203,7 +203,7 @@ npm install @chat-adapter/state-redis
 
 `createRedisState()` reads the `REDIS_URL` environment variable:
 
-```typescript title="src/mastra/agents/imessage-agent.ts"
+```typescript title="src/mastra/agents/imessage-agent.ts" oxfmt:false
 import { createRedisState } from '@chat-adapter/state-redis'
 
 channels: {
@@ -231,7 +231,7 @@ The Photon adapter can hold an open connection and stream messages in real time 
 
 Mastra starts this listener during initialization and reconnects it if it drops, so no cron job or extra route is needed on a long-running server. Set `gateway: false` on the adapter config to turn it off when you use webhooks:
 
-```typescript title="src/mastra/agents/imessage-agent.ts"
+```typescript title="src/mastra/agents/imessage-agent.ts" oxfmt:false
 imessage: {
   adapter: createiMessageAdapter(),
   toolDisplay: 'text',

@@ -1,4 +1,5 @@
 import { Badge } from '@mastra/playground-ui/components/Badge';
+import type { BadgeVariant } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Input } from '@mastra/playground-ui/components/Input';
 import { SettingsRow } from '@mastra/playground-ui/components/SettingsRow';
@@ -45,15 +46,15 @@ const SOURCE_LABEL: Record<ProviderInfo['source'], string> = {
   none: 'Not set',
 };
 
-const SOURCE_VARIANT: Record<ProviderInfo['source'], 'success' | 'info' | 'default'> = {
-  oauth: 'success',
-  'oauth-user': 'success',
-  'oauth-org': 'info',
-  stored: 'success',
-  'stored-user': 'success',
-  'stored-org': 'info',
-  env: 'info',
-  none: 'default',
+const SOURCE_VARIANT: Record<ProviderInfo['source'], BadgeVariant> = {
+  oauth: 'green',
+  'oauth-user': 'green',
+  'oauth-org': 'blue',
+  stored: 'green',
+  'stored-user': 'green',
+  'stored-org': 'blue',
+  env: 'blue',
+  none: 'neutral',
 };
 
 interface ActiveOAuthSession {
@@ -78,7 +79,7 @@ function SourceBadges({ provider }: { provider: ProviderInfo }) {
         {SOURCE_LABEL[provider.source]}
       </Badge>
       {shadowedOrg && (
-        <Badge size="sm" variant="info">
+        <Badge size="sm" variant="blue">
           {provider.orgCredential === 'oauth' ? 'Org sign-in' : 'Org key'}
         </Badge>
       )}

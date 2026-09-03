@@ -130,7 +130,7 @@ export class E2BProcessManager extends SandboxProcessManager<E2BSandbox> {
       const e2bHandle = await e2b.commands.run(command, {
         background: true,
         stdin: true,
-        cwd: options.cwd,
+        cwd: options.cwd ?? this.sandbox.workingDirectory,
         envs,
         timeoutMs: options.timeout,
         onStdout: (data: string) => handle.emitStdout(data),

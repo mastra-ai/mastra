@@ -5,6 +5,7 @@
   "devDependencies": {
     "@changesets/cli": "^2.31.1",
     "@types/node": "22.20.1",
+    "@types/semver": "^7.7.1",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
     "changesets-changelog-github-local": "^1.0.1",
@@ -24,6 +25,7 @@
     "tsx": "catalog:",
     "turbo": "^2.10.5",
     "typescript": "catalog:",
+    "typescript-classic": "npm:typescript@^6.0.3",
     "vite": "^7.3.1",
     "vitest": "catalog:",
     "zod": "catalog:"
@@ -32,6 +34,7 @@
   "scripts": {
     "changeset": "pnpm --filter @internal/changeset-cli start",
     "changeset-cli": "changeset",
+    "check:core-imports": "tsx scripts/check-core-imports.ts",
     "ci:publish": "pnpm publish -r",
     "build": "pnpm turbo build --filter \"!./examples/*\" --filter \"!./examples/**/*\"",
     "build:server-adapters": "pnpm turbo build --filter \"./server-adapters/*\"",

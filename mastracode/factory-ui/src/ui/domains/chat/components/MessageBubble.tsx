@@ -1,13 +1,13 @@
 import type { PlanResume } from '@mastra/client-js';
-import { MarkdownRenderer, useRevealedText } from '@mastra/playground-ui/components/MarkdownRenderer';
+import { MarkdownRenderer } from '@mastra/playground-ui/components/MarkdownRenderer';
+import { useRevealedParts } from '@mastra/playground-ui/components/ai/message-reveal';
 import { Notice } from '@mastra/playground-ui/components/Notice';
+import { SlackIcon } from '@mastra/playground-ui/icons/SlackIcon';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { MessageFactory } from '@mastra/react/ui';
 import type { FilePart, MessageRoleRenderers, ReasoningPart, TextPart, ToolInvocationPart } from '@mastra/react/ui';
-import { Slack } from 'lucide-react';
 import { useState } from 'react';
 
-import { messageScript, revealedParts } from '../services/reveal';
 import type { MessageEntry, SuspensionPrompt } from '../services/transcript';
 import { Arriving } from '@mastra/playground-ui/components/Arrival';
 import { MESSAGE_HOVER, MessageMeta } from './MessageMeta';
@@ -62,7 +62,7 @@ export function ChannelOriginBadge({ origin }: { origin: { platform: string; aut
   const label = CHANNEL_PLATFORM_LABEL[origin.platform] ?? origin.platform;
   return (
     <div className="text-ui-xs text-icon3 mt-1 flex items-center gap-1" aria-label={`Sent from ${label}`}>
-      {origin.platform === 'slack' && <Slack className="size-3" aria-hidden="true" />}
+      {origin.platform === 'slack' && <SlackIcon className="size-3" aria-hidden="true" />}
       <span>
         via {label}
         {origin.authorName ? ` · ${origin.authorName}` : ''}
@@ -110,8 +110,7 @@ export function MessageBubble({
   onRespond: (toolCallId: string, resumeData: string | string[] | PlanResume, promptId: string) => void;
 }) {
   const written = renderableParts(entry);
-  const shown = useRevealedText(messageScript(written), Boolean(entry.streaming));
-  const parts = revealedParts(written, shown);
+  const parts = useRevealedParts(written, Boolean(entry.streaming));
   // Decided the first time the entry is drawn and never revisited: only calls already
   // there when the reader arrived may fold into a group. A call landing under them —
   // a live run being watched, or one restored mid-run — stays the row it played as.
@@ -229,7 +228,16 @@ export function MessageBubble({
     entry.message.role === 'user' && parts.length === 1 && parts[0].type === 'text'
       ? parseSkillActivation(parts[0].text)
       : undefined;
-  if (skillActivation) return <SkillMessage activation={skillActivation} />;
+  if (skillActivation) {
+    return skillActivation.feed === undefined ? (
+      <SkillMessage activation={skillActivation} />
+    ) : (
+      <div className="flex flex-col">
+        <SkillMessage activation={skillActivation} />
+        <SignalRow kind="reactive" label="Work item feed" message={skillActivation.feed} />
+      </div>
+    );
+  }
   if (isSkillNotificationSignal(entry)) return null;
 
   const notifications = notificationMetadata(entry);

@@ -1,13 +1,14 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
-import type { ReactNode } from 'react';
+import type { ReactElement, ReactNode } from 'react';
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import {
+  DataListActionsCell,
   DataListCell,
+  DataListCreatedCell,
   DataListDateCell,
   DataListDescriptionCell,
   DataListIdCell,
-  DataListMonoCell,
   DataListNameCell,
   DataListNumberCell,
   DataListRowHeaderCell,
@@ -15,6 +16,7 @@ import {
   DataListTextCell,
   DataListTimeCell,
 } from './data-list-cells';
+import { DataListTopSelectCell } from './data-list-top-cell';
 
 // jsdom ships no PointerEvent; Base UI's Checkbox constructs one to decide
 // whether a click came from a pointer or the keyboard.
@@ -43,16 +45,17 @@ describe('DataListCell', () => {
     expect(cellOf(container).tagName).toBe('LABEL');
   });
 
-  it('takes the roomier padding by default and the tighter one on request', () => {
-    const { container } = render(<DataListCell>content</DataListCell>);
-    expect(cellOf(container).classList.contains('py-2.5')).toBe(true);
-    expect(cellOf(container).classList.contains('py-1.5')).toBe(false);
+  it('leaves vertical space to the row, so no cell can make one row taller than the next', () => {
+    const verticalPaddingOf = (ui: ReactElement) => {
+      const { container } = render(ui);
+      const padding = [...cellOf(container).classList].filter(name => /^(py|p)-/.test(name));
+      cleanup();
+      return padding;
+    };
 
-    cleanup();
-
-    const compact = render(<DataListCell height="compact">content</DataListCell>);
-    expect(cellOf(compact.container).classList.contains('py-1.5')).toBe(true);
-    expect(cellOf(compact.container).classList.contains('py-2.5')).toBe(false);
+    expect(verticalPaddingOf(<DataListCell>content</DataListCell>)).toEqual([]);
+    expect(verticalPaddingOf(<DataListNumberCell>1,200</DataListNumberCell>)).toEqual([]);
+    expect(verticalPaddingOf(<DataListTextCell font="mono">abc</DataListTextCell>)).toEqual([]);
   });
 
   it('pins itself to the start edge only when asked to', () => {
@@ -80,7 +83,34 @@ describe('DataListCell', () => {
   });
 });
 
+describe('control visibility', () => {
+  it('keeps row and header selection checkboxes visible without hover', () => {
+    const row = render(<DataListSelectCell checked={false} onToggle={() => {}} />);
+    expect(row.container.firstElementChild?.classList.contains('opacity-0')).toBe(false);
+    cleanup();
+
+    const header = render(<DataListTopSelectCell checked={false} onToggle={() => {}} />);
+    expect(header.container.firstElementChild?.classList.contains('opacity-0')).toBe(false);
+  });
+
+  it('keeps row actions discreet but reachable on devices that cannot hover', () => {
+    const { container } = render(<DataListActionsCell>action</DataListActionsCell>);
+    const hidden = container.querySelector('.opacity-0');
+
+    expect(hidden).not.toBeNull();
+    expect(hidden?.classList.contains('pointer-coarse:opacity-100')).toBe(true);
+  });
+});
+
 describe('DataListTextCell', () => {
+  it('sets code text in mono, still truncating', () => {
+    const { container } = render(<DataListTextCell font="mono">a long identifier</DataListTextCell>);
+
+    expect(cellOf(container).classList.contains('font-mono')).toBe(true);
+    expect(container.querySelector('.truncate')).not.toBeNull();
+    expect(container.textContent).toBe('a long identifier');
+  });
+
   it('wraps bare text so it can truncate on its own', () => {
     const { container } = render(<DataListTextCell>a very long value</DataListTextCell>);
 
@@ -209,18 +239,11 @@ describe('DataListRowHeaderCell', () => {
 });
 
 describe('DataListNumberCell', () => {
-  it('sits tight and right-aligned by default', () => {
+  it('is right-aligned with tabular figures', () => {
     const { container } = render(<DataListNumberCell>1,200</DataListNumberCell>);
 
-    expect(cellOf(container).classList.contains('py-1.5')).toBe(true);
     expect(cellOf(container).classList.contains('text-right')).toBe(true);
     expect(cellOf(container).classList.contains('tabular-nums')).toBe(true);
-  });
-
-  it('takes the roomier padding when the caller asks', () => {
-    const { container } = render(<DataListNumberCell height="default">1,200</DataListNumberCell>);
-
-    expect(cellOf(container).classList.contains('py-2.5')).toBe(true);
   });
 
   it('stands out only when highlighted', () => {
@@ -281,6 +304,14 @@ describe('DataListSelectCell', () => {
     expect(onToggle).toHaveBeenCalledWith(true);
   });
 
+  it('marks the cell as selected so the host row can highlight itself', () => {
+    const { container, rerender } = render(<DataListSelectCell checked={false} onToggle={() => {}} />);
+    expect(container.querySelector('label')?.dataset.selected).toBeUndefined();
+
+    rerender(<DataListSelectCell checked onToggle={() => {}} />);
+    expect(container.querySelector('label')?.dataset.selected).toBe('true');
+  });
+
   it('keeps the click off the row behind it', () => {
     const onRowClick = vi.fn();
     render(
@@ -332,33 +363,6 @@ describe('DataListSelectCell', () => {
   });
 });
 
-describe('DataListMonoCell', () => {
-  it('sits tight by default and roomier on request', () => {
-    const { container } = render(<DataListMonoCell>abc</DataListMonoCell>);
-    expect(cellOf(container).classList.contains('py-1.5')).toBe(true);
-
-    cleanup();
-
-    const roomy = render(<DataListMonoCell height="default">abc</DataListMonoCell>);
-    expect(cellOf(roomy.container).classList.contains('py-2.5')).toBe(true);
-  });
-
-  it('sets its text in mono, truncated', () => {
-    const { container } = render(<DataListMonoCell>a long identifier</DataListMonoCell>);
-
-    const inner = container.querySelector('span > span');
-    expect(inner?.classList.contains('font-mono')).toBe(true);
-    expect(inner?.classList.contains('truncate')).toBe(true);
-    expect(container.textContent).toBe('a long identifier');
-  });
-
-  it('lets the caller swap the tone', () => {
-    const { container } = render(<DataListMonoCell className="text-neutral6">abc</DataListMonoCell>);
-
-    expect(container.querySelector('span > span')?.classList.contains('text-neutral6')).toBe(true);
-  });
-});
-
 describe('DataListDateCell', () => {
   it('says Today for today', () => {
     const { container } = render(<DataListDateCell timestamp={new Date()} />);
@@ -382,6 +386,26 @@ describe('DataListDateCell', () => {
     const { container } = render(<DataListDateCell timestamp="not a date" />);
 
     // The cell's own em-dash placeholder stands in, rather than "Invalid Date".
+    expect(container.textContent).toBe('');
+  });
+});
+
+describe('DataListCreatedCell', () => {
+  it('shows date and 12-hour time without milliseconds', () => {
+    const { container } = render(<DataListCreatedCell timestamp={new Date(2026, 7, 31, 13, 7, 47, 657)} />);
+
+    expect(container.textContent).toBe('Aug 31 1:07:47 pm');
+  });
+
+  it('reads a timestamp given as a string', () => {
+    const { container } = render(<DataListCreatedCell timestamp={new Date(2026, 4, 19, 9, 5, 3).toISOString()} />);
+
+    expect(container.textContent).toBe('May 19 9:05:03 am');
+  });
+
+  it('shows nothing for a date it cannot read', () => {
+    const { container } = render(<DataListCreatedCell timestamp="not a date" />);
+
     expect(container.textContent).toBe('');
   });
 });

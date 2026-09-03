@@ -10,7 +10,7 @@ import type { ReactNode } from 'react';
 import { Link, Outlet, useParams } from 'react-router';
 import { useDatasetExperiment, useDatasetExperimentResults } from '@/domains/datasets/hooks/use-dataset-experiments';
 import { useExperiments } from '@/domains/datasets/hooks/use-experiments';
-import { ExperimentPageTabs } from '@/domains/experiments/components/experiment-page-tabs';
+import { ExperimentResultsSection } from '@/domains/experiments/components/experiment-results-section';
 import { ExperimentTopArea } from '@/domains/experiments/components/experiment-top-area';
 import { ExperimentItemPanelProvider } from '@/domains/experiments/context/experiment-item-panel-context';
 
@@ -121,8 +121,8 @@ function ExperimentPage() {
         <PageLayout height="full">
           <ExperimentTopArea experiment={experiment!} />
 
-          <PageLayout.MainArea>
-            <ExperimentPageTabs
+          <PageLayout.MainArea className="overflow-visible">
+            <ExperimentResultsSection
               experimentId={experimentId}
               datasetId={datasetId}
               experimentStatus={experiment!.status}

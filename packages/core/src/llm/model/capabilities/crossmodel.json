@@ -1,6 +1,7 @@
 {
   "attachment": [
     "anthropic/claude-fable-5",
+    "anthropic/claude-fable-5-1",
     "anthropic/claude-haiku-4-5",
     "anthropic/claude-opus-4-7",
     "anthropic/claude-opus-4-8",
@@ -35,12 +36,14 @@
     "qwen/qwen3.6-plus",
     "qwen/qwen3.7-flash",
     "qwen/qwen3.7-plus",
+    "qwen/qwen3.8-flash",
     "qwen/qwen3.8-max",
     "x-ai/grok-4.3",
     "x-ai/grok-4.5",
     "x-ai/grok-4.6",
     "x-ai/grok-build-0.1",
-    "xiaomi/mimo-v2.5"
+    "xiaomi/mimo-v2.5",
+    "z-ai/glm-5.3-flash"
   ],
   "temperature": [
     "anthropic/claude-haiku-4-5",
@@ -61,6 +64,9 @@
     "minimax/minimax-m3",
     "moonshot/kimi-k2.6",
     "openai/gpt-4o-mini",
+    "openai/gpt-5.4",
+    "openai/gpt-5.4-mini",
+    "openai/gpt-5.4-nano",
     "qwen/qwen3.6-flash",
     "qwen/qwen3.6-plus",
     "qwen/qwen3.7-flash",
@@ -68,6 +74,7 @@
     "qwen/qwen3.7-plus",
     "qwen/qwen3.8-max",
     "tencent/hy3",
+    "tencent/hy4-preview",
     "x-ai/grok-4.3",
     "x-ai/grok-4.5",
     "x-ai/grok-4.6",
@@ -79,7 +86,8 @@
     "z-ai/glm-5-turbo",
     "z-ai/glm-5.1",
     "z-ai/glm-5.2",
-    "z-ai/glm-5.3"
+    "z-ai/glm-5.3",
+    "z-ai/glm-5.3-flash"
   ],
   "structuredOutput": [
     "anthropic/claude-fable-5",
@@ -121,6 +129,7 @@
     "qwen/qwen3.7-flash",
     "qwen/qwen3.7-max",
     "qwen/qwen3.7-plus",
+    "qwen/qwen3.8-flash",
     "qwen/qwen3.8-max",
     "tencent/hy3",
     "x-ai/grok-4.3",
@@ -134,6 +143,7 @@
     "z-ai/glm-5-turbo",
     "z-ai/glm-5.1",
     "z-ai/glm-5.2",
-    "z-ai/glm-5.3"
+    "z-ai/glm-5.3",
+    "z-ai/glm-5.3-flash"
   ]
 }

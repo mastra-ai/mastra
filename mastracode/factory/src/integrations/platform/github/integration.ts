@@ -38,7 +38,6 @@ import type {
   UpdateReviewersInput,
   VersionControl,
 } from '../../../capabilities/version-control.js';
-import { withBaseCheckpointWebhookTrigger } from '../../../sandbox/base-checkpoint-triggers.js';
 import type { IntegrationStorageHandle } from '../../../storage/domains/integrations/base.js';
 import type {
   SourceControlInstallation,
@@ -63,6 +62,7 @@ import {
   parseCreatedPullRequest,
   subscribeCurrentSessionToPullRequest,
 } from '../../github/session-subscriptions.js';
+import { settleOrAbort } from '../../github/settle-or-abort.js';
 import type { GithubSubscriptionStorage } from '../../github/subscriptions.js';
 import { parseAuthorizedBotsEnv } from '../../github/webhook.js';
 import {
@@ -173,6 +173,16 @@ const INSTALLATION_REPOS_CACHE_TTL_MS = 30_000;
  */
 const REPOSITORY_ACCESS_CACHE_TTL_MS = 5 * 60_000;
 /**
+ * How long a collaborator permission lookup may be reused. The reconcile
+ * sweep re-stamps every open card's author and the event tail gates every
+ * human-authored event on it, so one login can cost dozens of identical
+ * requests per cycle against the installation's REST budget. Revoked access
+ * reads as trusted for at most this long.
+ */
+const COLLABORATOR_PERMISSION_CACHE_TTL_MS = 30 * 60_000;
+/** Bound on the shared upstream lookup; callers race their own signal against it. */
+const COLLABORATOR_PERMISSION_LOOKUP_TIMEOUT_MS = 10_000;
+/**
  * Upper bound for both TTL caches. Entries expire lazily on re-access, so
  * without a hard cap keys that stop being queried would accumulate for the
  * integration's (long) lifetime. Insertion-order eviction — matches the
@@ -231,6 +241,13 @@ export class PlatformGithubIntegration implements FactoryIntegration {
   readonly #installationReposCache = new Map<number, { repos: RepoSummary[]; expiresAt: number }>();
   /** `orgId:repositoryId` → cached repository access (TTL-bounded). */
   readonly #repositoryAccessCache = new Map<string, { access: RepositoryAccess; expiresAt: number }>();
+  /** `owner/repo:login` → cached collaborator permission (TTL-bounded). */
+  readonly #collaboratorPermissionCache = new Map<
+    string,
+    { permission: GithubRepositoryPermission; expiresAt: number }
+  >();
+  /** Same key → lookup already in flight, so overlapping callers share one request. */
+  readonly #collaboratorPermissionInFlight = new Map<string, Promise<GithubRepositoryPermission | undefined>>();
 
   readonly intake: Intake = {
     resolveIntakeDispatch: input => this.#resolveIntakeDispatch(input),
@@ -572,14 +589,14 @@ export class PlatformGithubIntegration implements FactoryIntegration {
   }
 
   routes(ctx: IntegrationContext): ApiRoute[] {
-    const ingestFactoryEvent = withBaseCheckpointWebhookTrigger(attachGithubRules(this, ctx), ctx.baseCheckpoints);
+    const ingestFactoryEvent = attachGithubRules(this, ctx);
     return [
       this.#statusRoute(ctx),
       this.#connectRoute(ctx),
       this.#connectUserRoute(ctx),
       ...buildGithubRoutes({
         auth: ctx.auth,
-        fleet: ctx.fleet,
+        sandbox: ctx.sandbox,
         storage: ctx.factoryStorage,
         github: this as unknown as GithubIntegration,
         stateSigner: ctx.stateSigner,
@@ -589,6 +606,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
         projects: ctx.storage.projects,
         emitAudit: ctx.hooks?.emitAudit,
         ingestFactoryEvent,
+        ...(ctx.workItems ? { workItems: ctx.workItems } : {}),
       }).filter(
         route =>
           route.path !== '/web/github/status' &&
@@ -609,7 +627,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
         if (!tenant.orgId) {
           return c.json({
             enabled: true,
-            sandboxEnabled: ctx.fleet.enabled,
+            sandboxEnabled: !!ctx.sandbox,
             organizationRequired: true,
             connected: false,
             installations: [],
@@ -626,7 +644,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
         ]);
         return c.json({
           enabled: true,
-          sandboxEnabled: ctx.fleet.enabled,
+          sandboxEnabled: !!ctx.sandbox,
           connected: installations.length > 0,
           installations: installations.map(installation => ({
             installationId: Number(installation.externalId),
@@ -758,14 +776,13 @@ export class PlatformGithubIntegration implements FactoryIntegration {
         controller: ctx.controller,
         github: this,
         storage: ctx.storage.generic as unknown as PlatformGithubEventStorage,
-        ingestFactoryEvent: withBaseCheckpointWebhookTrigger(attachGithubRules(this, ctx), ctx.baseCheckpoints),
+        ingestFactoryEvent: attachGithubRules(this, ctx),
         reconcileFactoryState: this.#pullRequestReconcileEnabled
           ? attachGithubReconciler(this, ctx, input => this.fetchPullRequestState(input))
           : undefined,
         reconcileIssuesFactoryState: this.#issueReconcileEnabled
           ? attachGithubIssueReconciler(this, ctx, input => this.fetchIssueState(input))
           : undefined,
-        ...(ctx.baseCheckpoints ? { sweepBaseCheckpoints: () => ctx.baseCheckpoints!.sweep() } : {}),
         pollEventsEnabled: this.#pollingEnabled,
         intervalMs: this.#pollingIntervalMs,
         pullRequestReconcileIntervalMs: this.#pullRequestReconcileIntervalMs,
@@ -979,17 +996,35 @@ export class PlatformGithubIntegration implements FactoryIntegration {
     } catch {
       return undefined;
     }
-    try {
-      const result = await this.#client.request<{ permission: GithubRepositoryPermission }>(
-        'GET',
-        `${API_PREFIX}/github/repos/${encodeURIComponent(repository.owner)}/${encodeURIComponent(repository.repo)}/collaborators/${encodeURIComponent(username)}/permission`,
-        undefined,
-        { signal },
-      );
-      return result.permission;
-    } catch {
-      return undefined;
-    }
+    const cacheKey = `${repository.owner}/${repository.repo}:${username.toLowerCase()}`;
+    const cached = this.#collaboratorPermissionCache.get(cacheKey);
+    if (cached && cached.expiresAt > Date.now()) return cached.permission;
+    this.#collaboratorPermissionCache.delete(cacheKey);
+    const inFlight = this.#collaboratorPermissionInFlight.get(cacheKey);
+    if (inFlight) return settleOrAbort(inFlight, signal, undefined);
+    const lookup = (async () => {
+      try {
+        const result = await this.#client.request<{ permission: GithubRepositoryPermission }>(
+          'GET',
+          `${API_PREFIX}/github/repos/${encodeURIComponent(repository.owner)}/${encodeURIComponent(repository.repo)}/collaborators/${encodeURIComponent(username)}/permission`,
+          undefined,
+          { signal: AbortSignal.timeout(COLLABORATOR_PERMISSION_LOOKUP_TIMEOUT_MS) },
+        );
+        // Failures are not cached: a rate-limited or aborted lookup must retry
+        // on the next call rather than pin the login as unknown.
+        setBounded(this.#collaboratorPermissionCache, cacheKey, {
+          permission: result.permission,
+          expiresAt: Date.now() + COLLABORATOR_PERMISSION_CACHE_TTL_MS,
+        });
+        return result.permission;
+      } catch {
+        return undefined;
+      } finally {
+        this.#collaboratorPermissionInFlight.delete(cacheKey);
+      }
+    })();
+    this.#collaboratorPermissionInFlight.set(cacheKey, lookup);
+    return settleOrAbort(lookup, signal, undefined);
   }
 
   async listInstallationRepos(installationId: number): Promise<RepoSummary[]> {

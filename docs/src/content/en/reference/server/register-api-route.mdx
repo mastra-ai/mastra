@@ -1,6 +1,6 @@
 ---
 title: "Reference: registerApiRoute() | Server"
-description: "API reference for registerApiRoute() function used to define custom HTTP routes for the Mastra server."
+description: "The registerApiRoute() function creates custom HTTP routes that integrate with the Mastra server. Routes can include OpenAPI metadata to appear in the Swagger UI documentation."
 packages:
   - "@mastra/core"
 ---
@@ -23,7 +23,7 @@ import { registerApiRoute } from '@mastra/core/server'
 
 The URL path for the route. Supports path parameters using `:param` syntax.
 
-```typescript prettier:false
+```typescript oxfmt:false
 registerApiRoute("/items/:itemId", { ... })
 ```
 

@@ -1,6 +1,6 @@
 ---
 title: "Subagents"
-description: Learn how to coordinate multiple agents with delegation hooks, iteration monitoring, message filtering, and task completion scoring.
+description: "Build Mastra supervisor agents that delegate work to specialized subagents with hooks, request context, message filtering, and completion scoring."
 packages:
   - "@mastra/core"
   - "@mastra/memory"
@@ -150,7 +150,7 @@ Called after a delegation finishes. Use it to inspect results or provide feedbac
 - Return `{ feedback: '...' }`: Add feedback that gets saved to the parent agent's memory and is visible to subsequent iterations
 - Return `{ resultText: '...' }`: Replace the tool result text the parent model sees for this delegation, within the current run
 
-Use `resultText` when the subagent's own result would mislead the parent immediately. For example, a subagent that stops on a tool-calls step returns empty text. The parent model reads this as a successful but empty delegation. Unlike `feedback`, which only reaches the model on the next turn, `resultText` changes what the parent reasons on right away.
+Set `resultText` when the subagent's own result would give the parent a misleading signal. For example, empty text from a subagent stopped on a tool-calls step looks like a successful but empty delegation to the parent model. Unlike `feedback` on the next turn, `resultText` affects the parent's reasoning immediately.
 
 ```typescript title="src/mastra/agents/parent-agent.ts"
 const stream = await parentAgent.stream('Research AI trends', {
@@ -208,7 +208,7 @@ await parentAgent.generate('Research AI trends', { maxSteps: 10, requestContext 
 const hookErrors = requestContext.get('__mastra_delegationHookErrors') ?? []
 ```
 
-When `hookErrorStrategy` is `'throw'`, a throwing `onDelegationStart` blocks the subagent from running at all, and a throwing `messageFilter` or `onDelegationComplete` surfaces to the parent as a failed tool call. If `onDelegationComplete` throws while handling a failed delegation, the original delegation error is still what surfaces, and the hook is never re-invoked for its own failure.
+When `hookErrorStrategy` is `'throw'`, a throwing `onDelegationStart` blocks the subagent from running at all, and a throwing `messageFilter` or `onDelegationComplete` surfaces to the parent as a failed tool call. If `onDelegationComplete` throws while handling a failed delegation, the original delegation error remains the surfaced error. The hook isn't invoked again for its own failure.
 
 ## Message filtering
 

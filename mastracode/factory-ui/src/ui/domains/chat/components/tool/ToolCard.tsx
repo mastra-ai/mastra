@@ -55,7 +55,7 @@ function DiffView({ oldText, newText, path }: { oldText: string; newText: string
   const hidden = removed.hidden + added.hidden;
   return (
     <div
-      className="border-border1 bg-surface1 max-w-full min-w-0 overflow-x-auto rounded-md border font-mono text-xs leading-normal"
+      className="border-border1 bg-neutral6/5 max-w-full min-w-0 overflow-x-auto rounded-md border font-mono text-xs leading-normal"
       role="group"
       aria-label="File change"
     >

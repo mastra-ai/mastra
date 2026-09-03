@@ -188,12 +188,12 @@ export interface DaytonaSandboxOptions extends Omit<MastraSandboxOptions, 'proce
   /**
    * Computer-use (desktop) capability configuration.
    *
-   * When enabled (the default), the sandbox exposes the `computer` capability
-   * and workspaces emit the `mastra_workspace_computer_*` tools. The desktop
-   * processes (Xvfb, xfce4, x11vnc, noVNC) are started lazily on the first
-   * computer operation.
+   * Set to `true` or provide an options object to expose the `computer`
+   * capability and emit the `mastra_workspace_computer_*` workspace tools.
+   * The desktop processes (Xvfb, xfce4, x11vnc, noVNC) are started lazily on
+   * the first computer operation.
    *
-   * Set to `false` to disable the capability entirely.
+   * @default false
    */
   computerUse?:
     | boolean
@@ -287,9 +287,9 @@ export class DaytonaSandbox extends MastraSandbox {
    * Computer-use (desktop) capability: screenshot, mouse, and keyboard control
    * of the sandbox's desktop environment via Daytona's computer use API.
    *
-   * `undefined` when the sandbox was constructed with `computerUse: false`.
-   * Desktop processes are started lazily on the first operation (unless
-   * `computerUse.autoStart` is `false`).
+   * Available when the sandbox is constructed with `computerUse: true` or an
+   * options object. Desktop processes are started lazily on the first operation
+   * unless `computerUse.autoStart` is `false`.
    */
   declare readonly computer?: SandboxComputer;
 
@@ -298,7 +298,6 @@ export class DaytonaSandbox extends MastraSandbox {
   private _daytona: Daytona | null = null;
   private _sandbox: Sandbox | null = null;
   private _createdAt: Date | null = null;
-  private _workingDir: string | null = null;
   private _isRetrying = false;
   private _computerUseStarted: Promise<void> | null = null;
   private readonly computerUseAutoStart: boolean;
@@ -327,6 +326,15 @@ export class DaytonaSandbox extends MastraSandbox {
   private readonly connectionOpts: { apiKey?: string; apiUrl?: string; target?: string };
   private readonly _constructorOptions: DaytonaSandboxOptions;
 
+  /**
+   * The `workingDirectory` option as explicitly configured, as distinct from
+   * the probe-filled base field. The process manager's cwd fallback uses only
+   * this value so the runtime probe (which just reports the session home)
+   * never displaces the FUSE-mount default for relative paths.
+   * @internal
+   */
+  readonly explicitWorkingDirectory?: string;
+
   constructor(options: DaytonaSandboxOptions = {}) {
     super({
       ...options,
@@ -337,6 +345,7 @@ export class DaytonaSandbox extends MastraSandbox {
     });
 
     this.id = options.id ?? this.generateId();
+    this.explicitWorkingDirectory = options.workingDirectory;
     this.timeout = options.timeout ?? 300_000;
     this.language = options.language ?? 'typescript';
     this.resources = options.resources;
@@ -363,11 +372,11 @@ export class DaytonaSandbox extends MastraSandbox {
     };
     this._constructorOptions = { ...options };
 
-    const computerUseOption = options.computerUse ?? true;
+    const computerUseOption = options.computerUse;
     this.computerUseAutoStart = typeof computerUseOption === 'object' ? (computerUseOption.autoStart ?? true) : true;
     this.noVncPort =
       typeof computerUseOption === 'object' ? (computerUseOption.noVncPort ?? DEFAULT_NOVNC_PORT) : DEFAULT_NOVNC_PORT;
-    if (computerUseOption !== false) {
+    if (computerUseOption === true || typeof computerUseOption === 'object') {
       this.computer = this.createComputer();
     }
   }
@@ -648,8 +657,8 @@ export class DaytonaSandbox extends MastraSandbox {
     const mountInfo = mountCount > 0 ? ` ${mountCount} filesystem(s) mounted via FUSE.` : '';
     parts.push(`Cloud sandbox with isolated execution (${this.language} runtime).${mountInfo}`);
 
-    if (this._workingDir) {
-      parts.push(`Default working directory: ${this._workingDir}.`);
+    if (this.workingDirectory) {
+      parts.push(`Default working directory: ${this.workingDirectory}.`);
     }
 
     parts.push(`Command timeout: ${Math.ceil(this.timeout / 1000)}s.`);
@@ -1205,11 +1214,14 @@ export class DaytonaSandbox extends MastraSandbox {
    */
   private async detectWorkingDir(): Promise<void> {
     if (!this._sandbox) return;
+    // An explicit workingDirectory option wins; the probe only fills the
+    // default in when nothing was configured.
+    if (this.explicitWorkingDirectory !== undefined) return;
     try {
       const result = await runCommand(this._sandbox, 'pwd', { timeout: MOUNT_COMMAND_TIMEOUT_MS });
       const dir = result.output?.trim();
       if (dir) {
-        this._workingDir = dir;
+        this.setWorkingDirectory(dir);
         this.logger.debug(`${LOG_PREFIX} Detected working directory: ${dir}`);
       }
     } catch {

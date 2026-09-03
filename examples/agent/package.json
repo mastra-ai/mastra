@@ -79,6 +79,7 @@
     "hitl:approval": "npx tsx src/hitl-approval-recall.ts",
     "item-scorers:seed": "tsx src/seed-item-scorers.ts",
     "item-scorers:run": "tsx src/run-item-scorers.ts",
+    "test": "vitest run",
     "mastra:dev": "mastra dev",
     "mastra:build": "mastra build -s",
     "mastra:start": "mastra start",
@@ -93,6 +94,7 @@
   "devDependencies": {
     "concurrently": "^9.1.2",
     "msw": "^2.12.2",
-    "tsx": "^4"
+    "tsx": "^4",
+    "vitest": "^4.0.0"
   }
 }

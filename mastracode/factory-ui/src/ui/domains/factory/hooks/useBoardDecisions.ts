@@ -5,23 +5,27 @@ import type { FactoryDecisionStatus, FactoryDecisionSummary } from '../services/
 
 const BOARD_STATUSES: FactoryDecisionStatus[] = ['pending', 'proposed', 'leased', 'retry', 'failed'];
 
-/** Runs proposed on the board's cards, and the effects already in flight behind them. */
-export function useBoardDecisions(factoryProjectId: string) {
+/** Per card: the run proposed on it, and the effect already in flight or failed behind it. */
+export function useItemDecisions(factoryProjectId: string | undefined) {
   const status = useFactoryDecisionStatus(factoryProjectId, BOARD_STATUSES);
+  return useMemo(() => {
+    const proposalByItem = new Map<string, FactoryDecisionSummary>();
+    const effectByItem = new Map<string, FactoryDecisionSummary>();
+    for (const decision of status.data?.decisions ?? []) {
+      if (!decision.workItemId) continue;
+      const bucket = decision.status === 'proposed' ? proposalByItem : effectByItem;
+      if (!bucket.has(decision.workItemId)) bucket.set(decision.workItemId, decision);
+    }
+    return { proposalByItem, effectByItem };
+  }, [status.data]);
+}
+
+/** The board's decisions with the actions a person takes on them. */
+export function useBoardDecisions(factoryProjectId: string) {
+  const { proposalByItem, effectByItem } = useItemDecisions(factoryProjectId);
   const approve = useFactoryDecisionAction(factoryProjectId, 'approve');
   const dismiss = useFactoryDecisionAction(factoryProjectId, 'dismiss');
   const retry = useFactoryDecisionAction(factoryProjectId, 'retry');
-
-  const { proposalByItem, effectByItem } = useMemo(() => {
-    const proposals = new Map<string, FactoryDecisionSummary>();
-    const effects = new Map<string, FactoryDecisionSummary>();
-    for (const decision of status.data?.decisions ?? []) {
-      if (!decision.workItemId) continue;
-      const bucket = decision.status === 'proposed' ? proposals : effects;
-      if (!bucket.has(decision.workItemId)) bucket.set(decision.workItemId, decision);
-    }
-    return { proposalByItem: proposals, effectByItem: effects };
-  }, [status.data]);
 
   return {
     proposalByItem,
