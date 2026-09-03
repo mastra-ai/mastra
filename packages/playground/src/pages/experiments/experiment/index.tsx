@@ -7,12 +7,13 @@ import { SessionExpired } from '@mastra/playground-ui/components/SessionExpired'
 import { is401UnauthorizedError, is403ForbiddenError, is404NotFoundError } from '@mastra/playground-ui/utils/errors';
 import { ArrowLeft, PlayCircle } from 'lucide-react';
 import type { ReactNode } from 'react';
-import { Link, Outlet, useParams } from 'react-router';
+import { Link, Navigate, Outlet, useParams, useSearchParams } from 'react-router';
 import { useDatasetExperiment, useDatasetExperimentResults } from '@/domains/datasets/hooks/use-dataset-experiments';
 import { useExperiments } from '@/domains/datasets/hooks/use-experiments';
-import { ExperimentPageTabs } from '@/domains/experiments/components/experiment-page-tabs';
+import { ExperimentResultsSection } from '@/domains/experiments/components/experiment-results-section';
 import { ExperimentTopArea } from '@/domains/experiments/components/experiment-top-area';
 import { ExperimentItemPanelProvider } from '@/domains/experiments/context/experiment-item-panel-context';
+import { experimentReviewQueueLink } from '@/lib/app-routing';
 
 function ExperimentPageShell({ children }: { children?: ReactNode }) {
   return (
@@ -25,6 +26,8 @@ function ExperimentPageShell({ children }: { children?: ReactNode }) {
 
 function ExperimentPage() {
   const { experimentId } = useParams<{ experimentId: string }>();
+  const [searchParams] = useSearchParams();
+  const legacyReviewId = searchParams.get('review');
 
   // Resolve datasetId from experimentId (the URL has only the experiment id).
   const { data: experimentsData, isLoading: experimentsListLoading } = useExperiments();
@@ -50,6 +53,8 @@ function ExperimentPage() {
   });
 
   if (!experimentId) return null;
+  // Reviews moved to the Review Queue page; keep old `?review=` bookmarks working.
+  if (legacyReviewId) return <Navigate replace to={experimentReviewQueueLink(experimentId, legacyReviewId)} />;
   if (experimentsListLoading || experimentLoading) return null; // Avoid layout shift on initial load
 
   if (experimentError && is401UnauthorizedError(experimentError)) {
@@ -122,7 +127,7 @@ function ExperimentPage() {
           <ExperimentTopArea experiment={experiment!} />
 
           <PageLayout.MainArea className="overflow-visible">
-            <ExperimentPageTabs
+            <ExperimentResultsSection
               experimentId={experimentId}
               datasetId={datasetId}
               experimentStatus={experiment!.status}

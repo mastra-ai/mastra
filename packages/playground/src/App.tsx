@@ -71,6 +71,7 @@ import Experiments from './pages/experiments';
 import CompareExperimentsPage from './pages/experiments/compare';
 import ExperimentPage from './pages/experiments/experiment';
 import ExperimentItemPage from './pages/experiments/experiment/item';
+import ReviewQueuePage from './pages/experiments/review-queue';
 import InboxPage from './pages/inbox';
 import IntegrationsPage from './pages/integrations';
 import { Login } from './pages/login';
@@ -627,6 +628,13 @@ export const routes: RouteObject[] = [
               handle: {
                 crumbs: () => [navCrumb('/experiments'), { id: 'experiments-compare', label: 'Compare' }],
               },
+            },
+            {
+              path: '/experiments/review-queue',
+              element: <ReviewQueuePage />,
+              handle: {
+                crumbs: () => [navCrumb('/experiments'), navCrumb('/experiments/review-queue')],
+              } satisfies RouteHeaderHandle,
             },
             {
               path: '/experiments/:experimentId',

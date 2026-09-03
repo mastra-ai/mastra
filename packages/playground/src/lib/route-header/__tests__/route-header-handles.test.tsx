@@ -179,6 +179,20 @@ describe('route header handles', () => {
     expect(crumbs[3]).toMatchObject({ label: 'item-1' });
   });
 
+  it('review queue route yields Experiments / Review Queue with a linkable Experiments crumb', () => {
+    const handles = collectRouteHandles(getAppRoutes());
+    const handle = handles.find(({ path }) => path === '/experiments/review-queue')?.handle;
+
+    expect(handle?.crumbs).toBeTypeOf('function');
+    if (typeof handle?.crumbs !== 'function') return;
+
+    const crumbs = handle.crumbs({ params: {}, pathname: '/experiments/review-queue' });
+
+    expect(crumbs.map(c => c.id)).toEqual(['nav:/experiments', 'nav:/experiments/review-queue']);
+    expect(crumbs[0]).toMatchObject({ label: 'Experiments', to: '/experiments' });
+    expect(crumbs[1]).toMatchObject({ label: 'Review Queue' });
+  });
+
   it('dataset item route yields Datasets / {dataset} / Items / {itemId} with a non-clickable Items crumb', () => {
     const handles = collectRouteHandles(getAppRoutes());
     const parentHandle = handles.find(({ path }) => path === '/datasets/:datasetId')?.handle;
