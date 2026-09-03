@@ -202,16 +202,16 @@ describe('experiment item sub-route', () => {
   });
 
   describe('when the user opens a result trace and selects a span', () => {
-    it('shows trace feedback and anchor-span evaluations with badge counts', async () => {
+    it('shows trace feedback and anchor-span scores with badge counts', async () => {
       renderExperimentRoute(`/experiments/${EXPERIMENT_ID}/items/item-1`);
 
       await screen.findByRole('dialog');
       fireEvent.click(await screen.findByRole('button', { name: 'Trace' }));
 
-      const evaluationsTab = await screen.findByRole('tab', { name: /evaluations \(1\)/i });
+      const scoresTab = await screen.findByRole('tab', { name: /scores \(1\)/i });
       const feedbackTab = screen.getByRole('tab', { name: /feedback \(1\)/i });
 
-      fireEvent.click(evaluationsTab);
+      fireEvent.click(scoresTab);
       expect((await screen.findAllByText('Experiment relevance')).length).toBeGreaterThan(0);
 
       fireEvent.click(feedbackTab);
@@ -228,24 +228,24 @@ describe('experiment item sub-route', () => {
 
       await screen.findByRole('dialog');
       fireEvent.click(await screen.findByRole('button', { name: 'Trace' }));
-      fireEvent.click(await screen.findByRole('tab', { name: /evaluations \(1\)/i }));
+      fireEvent.click(await screen.findByRole('tab', { name: /scores \(1\)/i }));
       fireEvent.click(await screen.findByRole('button', { name: /0\.9Experiment relevance/i }));
 
       expect(await screen.findByText('Matches the experiment result score')).toBeDefined();
     });
 
-    it('keeps the trace evaluations open when a trace score has no experiment score match', async () => {
+    it('keeps the trace scores open when a trace score has no experiment score match', async () => {
       renderExperimentRoute(`/experiments/${EXPERIMENT_ID}/items/item-1`);
 
       await screen.findByRole('dialog');
       fireEvent.click(await screen.findByRole('button', { name: 'Trace' }));
-      const evaluationsTab = await screen.findByRole('tab', { name: /evaluations \(1\)/i });
-      fireEvent.click(evaluationsTab);
+      const scoresTab = await screen.findByRole('tab', { name: /scores \(1\)/i });
+      fireEvent.click(scoresTab);
       fireEvent.click(await screen.findByRole('button', { name: /0\.9Experiment relevance/i }));
 
-      expect(evaluationsTab.getAttribute('aria-selected')).toBe('true');
+      expect(scoresTab.getAttribute('aria-selected')).toBe('true');
       expect(screen.queryByText('Matches the experiment result score')).toBeNull();
-      expect(screen.getByRole('tab', { name: /evaluations \(1\)/i })).toBeDefined();
+      expect(screen.getByRole('tab', { name: /scores \(1\)/i })).toBeDefined();
     });
 
     it('shows selected-span feedback and widens the route overlay', async () => {
