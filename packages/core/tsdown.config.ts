@@ -183,16 +183,5 @@ export default defineConfig({
       fs.copyFileSync(srcDts, distDts);
       console.info('✓ Copied provider-types.generated.d.ts to dist/llm/model/');
     }
-
-    const knowledgeSkillDir = path.join(process.cwd(), 'src/knowledge/skill');
-    const distKnowledgeSkillDir = path.join(process.cwd(), 'dist/knowledge/skill');
-    if (fs.existsSync(knowledgeSkillDir)) {
-      fs.mkdirSync(distKnowledgeSkillDir, { recursive: true });
-      fs.copyFileSync(path.join(knowledgeSkillDir, 'SKILL.md'), path.join(distKnowledgeSkillDir, 'SKILL.md'));
-      fs.cpSync(path.join(knowledgeSkillDir, 'references'), path.join(distKnowledgeSkillDir, 'references'), {
-        recursive: true,
-      });
-      console.info('✓ Copied Knowledge skill to dist/knowledge/skill/');
-    }
   },
 });
