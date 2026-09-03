@@ -4,7 +4,7 @@ import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { Maximize2, Sparkles, TriangleAlert } from 'lucide-react';
+import { Hand, Maximize2, Sparkles, TriangleAlert } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { Link } from 'react-router';
 
@@ -56,6 +56,14 @@ export function CardStatus({ status }: { status: BoardCardStatus }) {
     return (
       <Badge size="xs" variant="orange" icon={<Sparkles aria-hidden />} role="status" aria-live="polite">
         Suggested: {status.label}
+      </Badge>
+    );
+  }
+
+  if (status.kind === 'held') {
+    return (
+      <Badge size="xs" variant="orange" icon={<Hand aria-hidden />} role="status">
+        {status.label}
       </Badge>
     );
   }

@@ -26,6 +26,9 @@ export const rootSpan = {
   entityType: 'agent',
   entityId: 'weather-agent',
   entityName: 'Weather Agent',
+  threadId: 'weather-thread',
+  input: { messages: [{ role: 'user', content: 'Will it rain?' }] },
+  output: { text: 'No rain is expected.' },
 };
 export const childSpanOne = {
   ...baseSpan,
