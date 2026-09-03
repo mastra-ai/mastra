@@ -696,6 +696,11 @@ const sidebars = {
           label: 'Mistral',
           customProps: { icon: 'https://cdn.simpleicons.org/mistralai?viewbox=auto&size=28' },
         },
+        {
+          type: 'doc',
+          id: 'voice/modelslab',
+          label: 'ModelsLab',
+        },
         { type: 'doc', id: 'voice/murf', label: 'Murf', customProps: { icon: '/img/integrations/murf.svg' } },
         {
           type: 'doc',
