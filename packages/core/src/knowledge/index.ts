@@ -123,6 +123,7 @@ export class Knowledge extends MastraBase {
     this.description = config.description?.trim() || undefined;
     this.#structure = config.structure ? validateKnowledgeStructurePlan(structuredClone(config.structure)) : undefined;
     this.#scopeTypes = validateKnowledgeScopeTypes(structuredClone(config.scopes));
+    // Built-in descriptions are placement guidance; only host-declared descriptions request compilation.
     this.#compiledScopeTypePatterns = new Set(
       Object.entries(config.scopes ?? {}).flatMap(([pattern, scope]) => (scope.description?.trim() ? [pattern] : [])),
     );

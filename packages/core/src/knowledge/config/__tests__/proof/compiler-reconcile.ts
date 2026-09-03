@@ -4,7 +4,11 @@ import { dirname, resolve } from 'node:path';
 import { InMemoryStore } from '../../../../storage/mock';
 import { Knowledge } from '../../../index';
 import { hashKnowledgeDescription } from '../../compiler';
-import type { KnowledgeReconcileGoalState } from '../../reconcile-goal';
+import {
+  runKnowledgeReconcileGoal,
+  type KnowledgeReconcileGoalState,
+  type KnowledgeReconcileGoalStore,
+} from '../../reconcile-goal';
 
 const outputFlag = process.argv.indexOf('--out');
 if (outputFlag === -1 || !process.argv[outputFlag + 1])
@@ -13,6 +17,43 @@ const output = resolve(process.argv[outputFlag + 1]!);
 const storage = new InMemoryStore({ id: 'compiler-proof' });
 const description = 'Create an organization root with shared and internal child scopes.';
 const injectedFailure = 'injected compiler process interruption';
+const compiledPlan = { scopes: [{ address: 'org:resume-proof', name: 'Resume proof' }] };
+const goalStates = new Map<string, KnowledgeReconcileGoalState>();
+const goalStore: KnowledgeReconcileGoalStore = {
+  load: async key => structuredClone(goalStates.get(key)),
+  save: async (key, state) => {
+    goalStates.set(key, structuredClone(state));
+  },
+};
+let applyAttempts = 0;
+const resumableGoal = {
+  key: 'proof-resume',
+  descriptionHash: 'proof-resume-hash',
+  store: goalStore,
+  compile: async () => compiledPlan,
+  apply: async () => {
+    applyAttempts += 1;
+    if (applyAttempts === 1) throw new Error(injectedFailure);
+    return {
+      scopes: { 'org:resume-proof': 'scope-resume-proof' },
+      createdScopeIds: ['scope-resume-proof'],
+      changed: true,
+      accessEpoch: 1,
+    };
+  },
+  inspectScope: async () => null,
+  judge: async (state: KnowledgeReconcileGoalState) =>
+    state.result?.scopes['org:resume-proof'] === 'scope-resume-proof',
+};
+let injectedFailureObserved = false;
+try {
+  await runKnowledgeReconcileGoal({ ...resumableGoal, maxAttempts: 1 });
+} catch (error) {
+  injectedFailureObserved = error instanceof Error && error.message === injectedFailure;
+}
+if (!injectedFailureObserved) throw new Error('Injected reconciliation failure was not observed');
+const resumedGoal = await runKnowledgeReconcileGoal({ ...resumableGoal, maxAttempts: 2 });
+
 const hash = hashKnowledgeDescription({ description, level: 'instance' });
 const threadState = await storage.getStore('threadState');
 await threadState!.setState({
@@ -99,7 +140,12 @@ const proof = {
   status: 'green',
   compiledPlan: goal.plan,
   checkpointProgression: goal.progression,
-  injectedFailure,
+  injectedFailure: {
+    message: injectedFailure,
+    observed: injectedFailureObserved,
+    applyAttempts,
+    resumedCheckpointProgression: resumedGoal.state.progression,
+  },
   resumedFromCheckpoint,
   graphStateJudge: { passed: goal.judgePassed },
   nonRetrofit,

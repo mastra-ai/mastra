@@ -37,7 +37,7 @@ export function validateCompiledKnowledgePlan(
   const siblingNames = new Set<string>();
 
   for (const scope of copy.scopes) {
-    const siblingKey = JSON.stringify([scope.name.toLocaleLowerCase(), [...(scope.parentAddresses ?? [])].sort()]);
+    const siblingKey = JSON.stringify([scope.name.toLowerCase(), [...(scope.parentAddresses ?? [])].sort()]);
     if (siblingNames.has(siblingKey)) {
       throw new Error(`Compiled Knowledge plan has an ambiguous sibling name: ${scope.name}`);
     }
