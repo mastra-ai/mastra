@@ -163,6 +163,7 @@ export interface KnowledgeCurationWorkItem {
   name: string;
   kind: string;
   version: number;
+  actions: { merge: boolean; discard: boolean };
   evidence: Array<{ source?: string; provenance?: string }>;
   evidenceCursor?: string;
   createdAt: string;
@@ -1344,13 +1345,18 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
               companionScopeId,
               contextScopeId: view.threadScopeId ?? view.resourceScopeId,
             });
-            const page = await curator.listWorklist({ cursor, limit });
+            const [page, access] = await Promise.all([
+              curator.listWorklist({ cursor, limit }),
+              view.knowledge.evaluateAccess(view.scopeIds),
+            ]);
+            const capabilities = access.scopes[companionScopeId];
             const items = page.items.map(({ node, records, recordsNextCursor }) => ({
               id: this.#mintHandle(view.projectId, view.perspectiveKey, 'node', node.id),
               reference: this.#mintReference(view.projectId, 'node', node.id),
               name: node.name,
               kind: node.kind ?? 'unknown',
               version: node.version,
+              actions: { merge: capabilities?.manageAccess ?? false, discard: capabilities?.delete ?? false },
               description: metadataString(node.metadata, 'description'),
               evidence: records.map(record => ({
                 source: record.source,

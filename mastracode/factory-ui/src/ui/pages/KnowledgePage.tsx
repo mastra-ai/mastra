@@ -178,33 +178,35 @@ function CurationItem({
         onChange={event => setDescription(event.target.value)}
         placeholder="Refined description"
       />
-      <div className="flex flex-col gap-1">
-        <Input
-          aria-label={`Find merge target for ${item.name}`}
-          value={mergeQuery}
-          onChange={event => {
-            setMergeQuery(event.target.value);
-            setMergeTargetId('');
-          }}
-          placeholder="Find an authorized merge target"
-        />
-        {mergeTargets.data?.targets
-          .filter(target => target.id !== item.id)
-          .map(target => (
-            <button
-              key={target.id}
-              type="button"
-              aria-pressed={target.id === mergeTargetId}
-              className="border-surface5 hover:bg-surface3 flex items-center justify-between rounded border px-2 py-1 text-left text-xs"
-              onClick={() => setMergeTargetId(target.id)}
-            >
-              <span>{target.name}</span>
-              <span className="text-icon3">
-                {target.kind} · v{target.version}
-              </span>
-            </button>
-          ))}
-      </div>
+      {item.actions.merge ? (
+        <div className="flex flex-col gap-1">
+          <Input
+            aria-label={`Find merge target for ${item.name}`}
+            value={mergeQuery}
+            onChange={event => {
+              setMergeQuery(event.target.value);
+              setMergeTargetId('');
+            }}
+            placeholder="Find an authorized merge target"
+          />
+          {mergeTargets.data?.targets
+            .filter(target => target.id !== item.id)
+            .map(target => (
+              <button
+                key={target.id}
+                type="button"
+                aria-pressed={target.id === mergeTargetId}
+                className="border-surface5 hover:bg-surface3 flex items-center justify-between rounded border px-2 py-1 text-left text-xs"
+                onClick={() => setMergeTargetId(target.id)}
+              >
+                <span>{target.name}</span>
+                <span className="text-icon3">
+                  {target.kind} · v{target.version}
+                </span>
+              </button>
+            ))}
+        </div>
+      ) : null}
       <div className="flex flex-wrap gap-2">
         <Button
           size="xs"
@@ -227,24 +229,26 @@ function CurationItem({
         >
           Promote
         </Button>
-        <Button
-          size="xs"
-          variant="outline"
-          onClick={() => {
-            if (!mergeTarget) return;
-            action.mutate({
-              action: 'merge',
-              scopeId,
-              nodeId: item.id,
-              version: item.version,
-              targetId: mergeTarget.id,
-              targetVersion: mergeTarget.version,
-            });
-          }}
-          disabled={!mergeTarget || action.isPending}
-        >
-          Merge
-        </Button>
+        {item.actions.merge ? (
+          <Button
+            size="xs"
+            variant="outline"
+            onClick={() => {
+              if (!mergeTarget) return;
+              action.mutate({
+                action: 'merge',
+                scopeId,
+                nodeId: item.id,
+                version: item.version,
+                targetId: mergeTarget.id,
+                targetVersion: mergeTarget.version,
+              });
+            }}
+            disabled={!mergeTarget || action.isPending}
+          >
+            Merge
+          </Button>
+        ) : null}
         <Button
           size="xs"
           variant="outline"
@@ -255,14 +259,16 @@ function CurationItem({
         >
           Retain
         </Button>
-        <Button
-          size="xs"
-          variant="destructive"
-          onClick={() => action.mutate({ action: 'discard', scopeId, nodeId: item.id, version: item.version })}
-          disabled={action.isPending}
-        >
-          Discard
-        </Button>
+        {item.actions.discard ? (
+          <Button
+            size="xs"
+            variant="destructive"
+            onClick={() => action.mutate({ action: 'discard', scopeId, nodeId: item.id, version: item.version })}
+            disabled={action.isPending}
+          >
+            Discard
+          </Button>
+        ) : null}
       </div>
       {action.isError ? (
         <Notice variant="destructive">

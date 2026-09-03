@@ -345,6 +345,7 @@ describe('KnowledgeRoutes', () => {
         id: string;
         name: string;
         version: number;
+        actions: { merge: boolean; discard: boolean };
         evidence: Array<{ source?: string; provenance?: string }>;
         evidenceCursor?: string;
       }>;
@@ -353,6 +354,7 @@ describe('KnowledgeRoutes', () => {
     expect(worklist.items).toHaveLength(2);
     expect(worklist.items.map(item => item.name).sort()).toEqual(['Operator-only finding', 'Provisional finding']);
     const provisionalItem = worklist.items.find(item => item.name === 'Provisional finding');
+    expect(provisionalItem?.actions).toEqual({ merge: false, discard: false });
     expect(provisionalItem?.evidence).toHaveLength(10);
     expect(provisionalItem?.evidence.some(entry => entry.source === 'github')).toBe(false);
     expect(provisionalItem?.evidenceCursor).toBeDefined();

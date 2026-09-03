@@ -189,6 +189,7 @@ function stubKnowledgeRoute(
             name: 'Provisional runbook',
             kind: 'document',
             version: 2,
+            actions: { merge: true, discard: true },
             description: 'Untrusted draft waiting for review.',
             evidence: [
               { source: 'customer-report', provenance: 'subconscious:capture' },
@@ -204,6 +205,7 @@ function stubKnowledgeRoute(
             name: 'Independent draft',
             kind: 'document',
             version: 1,
+            actions: { merge: false, discard: false },
             evidence: [],
             createdAt: '2026-08-13T03:01:00.000Z',
             updatedAt: '2026-08-13T03:01:00.000Z',
@@ -779,7 +781,14 @@ describe('KnowledgePage', () => {
     const mergeTarget = await primary.findByRole('button', { name: /Canonical runbook/ });
     await user.click(mergeTarget);
     expect(primary.getByRole('button', { name: 'Merge' })).toBeEnabled();
-    expect(independent.getByRole('button', { name: 'Merge' })).toBeDisabled();
+    expect(primary.getByRole('button', { name: 'Discard' })).toBeEnabled();
+    expect(
+      independent.queryByRole('textbox', { name: 'Find merge target for Independent draft' }),
+    ).not.toBeInTheDocument();
+    expect(independent.queryByRole('button', { name: 'Merge' })).not.toBeInTheDocument();
+    expect(independent.queryByRole('button', { name: 'Discard' })).not.toBeInTheDocument();
+    expect(independent.getByRole('button', { name: 'Promote' })).toBeEnabled();
+    expect(independent.getByRole('button', { name: 'Retain' })).toBeEnabled();
     await user.click(primary.getByRole('button', { name: 'Retain' }));
     expect(await primary.findByText('retained · unintegrated')).toBeInTheDocument();
     expect(independent.getByText('provisional')).toBeInTheDocument();
