@@ -13,7 +13,6 @@ import { getFactoryAuthOrgId, getFactoryAuthUserFromContext } from '../auth.js';
 import { hydrateFactorySession } from '../session/factory-session.js';
 import type { MemorySettingsStorage } from '../storage/domains/memory-settings/base.js';
 import type { FactoryProjectsStorage } from '../storage/domains/projects/base.js';
-import { SUPERVISOR_INSTRUCTIONS } from './instructions.js';
 import type { SupervisorScope } from './read-tools.js';
 
 const RESOURCE_PREFIX = 'factory-supervisor:';
@@ -73,7 +72,6 @@ export async function hydrateSupervisorSession(
   await session.state.set({
     factoryProjectId,
     factoryOrgId: project.orgId,
-    hostInstructions: SUPERVISOR_INSTRUCTIONS,
   });
   await hydrateFactorySession(session, {
     orgId: project.orgId,

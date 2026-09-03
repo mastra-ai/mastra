@@ -20,6 +20,8 @@
 
 import { MastraAuthStudio } from '@mastra/auth-studio';
 import { prepareAgentControllerMount } from '@mastra/code-sdk';
+import type { MastraCodeState } from '@mastra/code-sdk/schema';
+import type { AgentControllerRequestContext } from '@mastra/core/agent-controller';
 import { AgentControllerChannels } from '@mastra/core/channels';
 import { EventEmitterPubSub } from '@mastra/core/events';
 import type { PubSub } from '@mastra/core/events';
@@ -101,8 +103,9 @@ import { SourceControlStorage } from './storage/domains/source-control/base.js';
 import { WorkItemsStorage } from './storage/domains/work-items/base.js';
 import type { WorkItemRow } from './storage/domains/work-items/base.js';
 import { FactorySupervisorHealthWorker } from './supervisor/health-worker.js';
+import { SUPERVISOR_INSTRUCTIONS } from './supervisor/instructions.js';
 import { createFactorySupervisorReadTools } from './supervisor/read-tools.js';
-import { hydrateSupervisorSession, resolveSupervisorScope } from './supervisor/session.js';
+import { hydrateSupervisorSession, parseSupervisorResourceId, resolveSupervisorScope } from './supervisor/session.js';
 import { createFactorySupervisorWriteTools } from './supervisor/write-tools.js';
 import { timedPhase } from './timing.js';
 import { createWorkspaceFactory, FactoryWorkspaceRegistry } from './workspace.js';
@@ -705,6 +708,12 @@ export class MastraFactory {
         // Memory settings live in the factory's `memory-settings` app table (per
         // org/user), so the host machine's TUI settings.json must not seed them.
         disableSettingsOmSeed: true,
+        hostInstructions: ({ requestContext }) => {
+          const context = requestContext.get('controller') as
+            | AgentControllerRequestContext<MastraCodeState>
+            | undefined;
+          return parseSupervisorResourceId(context?.resourceId) ? SUPERVISOR_INSTRUCTIONS : undefined;
+        },
         // A factory reads the repository it works on and its skill, never the
         // ~/.claude instructions of whoever hosts the process. On the controller
         // rather than per session, so webhook-recreated sessions keep it too.

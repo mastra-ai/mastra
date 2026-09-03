@@ -2,7 +2,6 @@ import { RequestContext } from '@mastra/core/request-context';
 import { describe, expect, it, vi } from 'vitest';
 
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
-import { SUPERVISOR_INSTRUCTIONS } from './instructions.js';
 import {
   hydrateSupervisorSession,
   parseSupervisorResourceId,
@@ -92,7 +91,7 @@ describe('hydrateSupervisorSession', () => {
     };
   }
 
-  it('stamps the project, org and playbook and applies the factory default model', async () => {
+  it('stamps the project and org and applies the factory default model', async () => {
     const { projects, project } = await seedProject();
     const session = sessionDouble(supervisorResourceId(project.id));
 
@@ -101,7 +100,6 @@ describe('hydrateSupervisorSession', () => {
     expect(session.readState()).toMatchObject({
       factoryProjectId: project.id,
       factoryOrgId: 'org-1',
-      hostInstructions: SUPERVISOR_INSTRUCTIONS,
     });
     expect(session.model.switch).toHaveBeenCalledWith({ modelId: 'anthropic/claude-sonnet-4' });
   });
