@@ -94,8 +94,10 @@ const lastKnownHeads = new Map<string, string>();
  * what gets cloned and what the template is identified by can't drift — and
  * pins repositories to their current default-branch commit. Private repository
  * credentials are used for head resolution and sent to the provider as
- * transient build envs; they never enter the serialized definition. If the
- * repository or its head cannot be resolved, the resolver keeps `cpuCount` and
+ * transient build envs; they never enter the serialized definition. A failed
+ * head lookup reuses the last head resolved for the same clone URL in this
+ * process. If the repository cannot be resolved, or no head has been resolved
+ * yet, the resolver keeps `cpuCount` and
  * `memoryMB` in a resources-only template so the sandbox still boots at the
  * requested size, and the caller's runtime setup materializes the checkout.
  */
