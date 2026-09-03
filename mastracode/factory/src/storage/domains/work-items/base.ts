@@ -2181,21 +2181,23 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     { orgId, factoryProjectId, decisionId }: { orgId: string; factoryProjectId: string; decisionId: string },
     patch: Partial<GovernanceDbRow>,
   ): Promise<FactoryDeferredDecisionRecord | null> {
-    let settled = false;
-    const row = await this.#db.updateAtomic<GovernanceDbRow>(
-      'factory_deferred_decisions',
-      { id: decisionId, org_id: orgId, factory_project_id: factoryProjectId },
-      current => {
-        if (current.status !== 'proposed') return null;
-        settled = true;
-        return patch;
-      },
-    );
-    if (!settled || !row) return null;
-    await this.#db.deleteMany('factory_attention_receipts', proposalReceiptFilter(orgId, factoryProjectId, decisionId));
-    const record = toDeferredDecision(row);
-    this.#attentionChanged(record);
-    return record;
+    const settled = await this.storage.withTransaction(async ops => {
+      let updated = false;
+      const row = await ops.updateAtomic<GovernanceDbRow>(
+        'factory_deferred_decisions',
+        { id: decisionId, org_id: orgId, factory_project_id: factoryProjectId },
+        current => {
+          if (current.status !== 'proposed') return null;
+          updated = true;
+          return patch;
+        },
+      );
+      if (!updated || !row) return null;
+      await ops.deleteMany('factory_attention_receipts', proposalReceiptFilter(orgId, factoryProjectId, decisionId));
+      return toDeferredDecision(row);
+    });
+    if (settled) this.#attentionChanged(settled);
+    return settled;
   }
 
   async #resolveFailedDecision({

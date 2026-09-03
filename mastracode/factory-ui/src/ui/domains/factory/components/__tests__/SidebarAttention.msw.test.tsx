@@ -427,7 +427,7 @@ describe('Sidebar attention', () => {
   });
   it('the sidebar and the Overview preview share one attention query', async () => {
     const api = stubAttention([attentionItem()]);
-    renderWithProviders(
+    const { client } = renderWithProviders(
       <MemoryRouter initialEntries={[`/factories/${FACTORY_ID}/overview`]}>
         <MainSidebarProvider storageKey="sidebar-attention-shared" mobileBreakpoint={0}>
           <Routes>
@@ -453,6 +453,7 @@ describe('Sidebar attention', () => {
 
     await screen.findByRole('button', { name: 'Needs attention, 1 unread, 1 open' });
     expect(await screen.findByText('No active Factory binding for role work.')).toBeVisible();
+    await waitForMutationsIdle(client);
     expect(api.listed).toEqual(['?view=open&tier=badge&limit=25']);
   });
 
