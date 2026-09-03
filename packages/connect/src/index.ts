@@ -6,5 +6,6 @@ export type { MastraConnectErrorCode } from './errors.js';
 export type { ConnectClientOptions, ConnectionCredential, ProjectConnection } from './client.js';
 export type { ProviderKey } from './registry.js';
 export type { ProviderToolsOptions } from './toolset.js';
+export { createJiraTools } from './providers/jira.js';
 export { createLinearTools } from './providers/linear.js';
 export { createNotionTools } from './providers/notion.js';

@@ -1,5 +1,6 @@
 import type { ToolsInput } from '@mastra/core/agent';
 
+import { createJiraTools } from './providers/jira.js';
 import { createLinearTools } from './providers/linear.js';
 import { createNotionTools } from './providers/notion.js';
 import type { ProviderToolsOptions } from './toolset.js';
@@ -37,6 +38,11 @@ export const PROVIDERS: Partial<Record<ProviderKey, ProviderRegistration>> = {
     integrationId: 'notion',
     envVar: 'MASTRA_NOTION_CONNECTION_ID',
     createTools: createNotionTools,
+  },
+  jira: {
+    integrationId: 'jira',
+    envVar: 'MASTRA_JIRA_CONNECTION_ID',
+    createTools: createJiraTools,
   },
 };
 
