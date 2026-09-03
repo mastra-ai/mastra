@@ -47,6 +47,7 @@ import {
   resolveFactoryPullRequestParentWorkItemId,
 } from './integrations/github/provenance.js';
 import type { FactoryPullRequestProvenanceData } from './integrations/github/provenance.js';
+import { isValidGitRef } from './integrations/github/sandbox.js';
 import { PlatformGithubIntegration } from './integrations/platform/github/integration.js';
 import { PlatformLinearIntegration } from './integrations/platform/linear/integration.js';
 import { createCustomProvidersPrimer, registerCustomProvidersSource } from './routes/custom-provider-source.js';
@@ -534,7 +535,8 @@ export class MastraFactory {
     const factoryReady = storage.isDomainReady('projects') && storage.isDomainReady('work-items');
     const knowledgeEnabled = process.env.MASTRACODE_EXPERIMENTAL_SUBCONSCIOUS === '1';
     const githubIntegration = integrations.find(integration => integration.id === 'github') as
-      GithubIntegration | undefined;
+      | GithubIntegration
+      | undefined;
     const workItemsReady = storage.isDomainReady('work-items');
     const sessionRetirement =
       sandboxConfig && storage.isDomainReady('source-control')
@@ -612,7 +614,7 @@ export class MastraFactory {
                   installationId,
                   externalId,
                   slug: selected.fullName,
-                  defaultBranch: selected.defaultBranch,
+                  defaultBranch: isValidGitRef(selected.defaultBranch) ? selected.defaultBranch : 'main',
                   providerMetadata: { private: selected.private, owner: selected.owner },
                 },
               });
