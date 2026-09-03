@@ -64,15 +64,15 @@ function getDataListMask(mask: ScrollAreaMask | undefined): ScrollAreaMask {
 const dataListGridStyles = [
   'gap-y-px',
   // Rows are siblings of the header, so first/last are found via sibling combinators.
-  '[&_.data-list-row:not(.data-list-row~.data-list-row)]:rounded-t-[7px]',
-  '[&_.data-list-row:not(:has(~.data-list-row))]:rounded-b-[7px]',
-  '[&_.data-list-row:not(.data-list-row~.data-list-row)>.data-list-sticky-start]:rounded-tl-[7px]',
-  '[&_.data-list-row:not(:has(~.data-list-row))>.data-list-sticky-start]:rounded-bl-[7px]',
+  '[&_.data-list-row:not(.data-list-row~.data-list-row)]:rounded-t-lg',
+  '[&_.data-list-row:not(:has(~.data-list-row))]:rounded-b-lg',
+  '[&_.data-list-row:not(.data-list-row~.data-list-row)>.data-list-sticky-start]:rounded-tl-lg',
+  '[&_.data-list-row:not(:has(~.data-list-row))>.data-list-sticky-start]:rounded-bl-lg',
   // Subheaders split the rows into sections; each section gets its own rounded ends.
-  '[&_.data-list-subheader+.data-list-row]:rounded-t-[7px]',
-  '[&_.data-list-row:has(+.data-list-subheader)]:rounded-b-[7px]',
-  '[&_.data-list-subheader+.data-list-row>.data-list-sticky-start]:rounded-tl-[7px]',
-  '[&_.data-list-row:has(+.data-list-subheader)>.data-list-sticky-start]:rounded-bl-[7px]',
+  '[&_.data-list-subheader+.data-list-row]:rounded-t-lg',
+  '[&_.data-list-row:has(+.data-list-subheader)]:rounded-b-lg',
+  '[&_.data-list-subheader+.data-list-row>.data-list-sticky-start]:rounded-tl-lg',
+  '[&_.data-list-row:has(+.data-list-subheader)>.data-list-sticky-start]:rounded-bl-lg',
   '[&_.data-list-top]:bg-(--data-list-background)',
   '[&_.data-list-row>.data-list-sticky-start]:bg-surface2',
   '[&_.data-list-row>.data-list-sticky-start]:after:right-0',
@@ -131,13 +131,12 @@ export function DataListRoot({
       orientation="both"
       mask={getDataListMask(mask)}
       viewportRef={scrollRef}
-      // Container keeps the system rounded-xl (12px); rows use an arbitrary 7px so they sit
-      // just inside the concentric 8px (12px - 4px inset) and read slightly softer.
+      // Outer radius = row radius (8px) + 4px inset so the corners stay concentric.
       // Size to content but never exceed the parent. Flex (unlike grid `1fr`) lays
       // items out against the max-height-clamped container, so short lists stay
       // compact and long ones shrink the viewport and scroll.
       viewPortClassName="min-h-0 flex-1 basis-auto"
-      className={cn('flex max-h-full w-full flex-col rounded-lg px-1 pb-1', dataListVariantClasses[variant], className)}
+      className={cn('flex max-h-full w-full flex-col rounded-xl px-1 pb-1', dataListVariantClasses[variant], className)}
     >
       {grid}
     </ScrollArea>

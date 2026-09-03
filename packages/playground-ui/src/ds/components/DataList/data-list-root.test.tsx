@@ -46,8 +46,8 @@ describe('DataListRoot', () => {
       expect(container.firstElementChild?.className).toContain('rounded-xl');
       expect(container.firstElementChild?.className).toContain('bg-surface4');
       expect(grid?.className).toContain('gap-y-px');
-      expect(grid?.className).toContain('[&_.data-list-subheader+.data-list-row]:rounded-t-[7px]');
-      expect(grid?.className).toContain('[&_.data-list-row:has(+.data-list-subheader)]:rounded-b-[7px]');
+      expect(grid?.className).toContain('[&_.data-list-subheader+.data-list-row]:rounded-t-lg');
+      expect(grid?.className).toContain('[&_.data-list-row:has(+.data-list-subheader)]:rounded-b-lg');
       expect(grid?.className).not.toMatch(/border-|ring-/);
       expect(grid?.className).not.toContain('[&_.data-list-row]:even:bg-surface-overlay-soft');
     });
