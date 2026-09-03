@@ -1,7 +1,8 @@
 import { fireEvent, screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
-import { beforeAll, describe, expect, it } from 'vitest';
+import { beforeAll, describe, expect, it, vi } from 'vitest';
 
+import { feedbackRecord, listFeedbackResponse } from '../../hooks/__tests__/fixtures/trace-feedback';
 import { ThreadViewByTrace } from '../thread-view-by-trace';
 import {
   THREAD_ID,
@@ -33,6 +34,20 @@ const installHandlers = ({ list = newestFirstList }: { list?: typeof threadTrace
     http.get(`${TEST_BASE_URL}/api/observability/traces/:traceId`, ({ params }) =>
       HttpResponse.json(params.traceId === 'trace-b' ? traceBSpans : traceASpans),
     ),
+  );
+};
+
+const FEEDBACK_URL = `${TEST_BASE_URL}/api/observability/feedback`;
+
+const traceAFeedback = listFeedbackResponse([feedbackRecord({ feedbackId: 'trace-a-fb-1', traceId: 'trace-a' })]);
+
+const installFeedbackHandlers = (feedback = traceAFeedback) => {
+  server.use(
+    http.get(FEEDBACK_URL, () => HttpResponse.json(feedback)),
+    http.post(FEEDBACK_URL, async ({ request }) => {
+      const body = (await request.json()) as Record<string, unknown>;
+      return HttpResponse.json({ success: true, ...body });
+    }),
   );
 };
 
@@ -85,5 +100,51 @@ describe('ThreadViewByTrace', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /close/i }));
     await waitFor(() => expect(screen.queryByText(/cook pasta/)).toBeNull());
+  });
+
+  it('toggles an embed feedback panel from the icon button', async () => {
+    installHandlers();
+    installFeedbackHandlers();
+    renderView();
+
+    // Wait for traces to render.
+    await screen.findByText('Chef agent run');
+
+    // No feedback panel before clicking.
+    expect(screen.queryByPlaceholderText('Leave feedback...')).toBeNull();
+
+    // Click the feedback toggle icon button on the first trace row.
+    const feedbackButtons = screen.getAllByRole('button', { name: 'Toggle feedback' });
+    fireEvent.click(feedbackButtons[0]);
+
+    // The embed feedback panel appears with the composer.
+    expect(await screen.findByPlaceholderText('Leave feedback...')).not.toBeNull();
+  });
+
+  it('submits feedback from the embed panel', async () => {
+    installHandlers();
+    const onPost = vi.fn();
+    installFeedbackHandlers();
+    server.use(
+      http.post(FEEDBACK_URL, async ({ request }) => {
+        onPost((await request.json()) as Record<string, unknown>);
+        return HttpResponse.json({ success: true });
+      }),
+    );
+
+    renderView();
+
+    await screen.findByText('Chef agent run');
+    const feedbackButtons = screen.getAllByRole('button', { name: 'Toggle feedback' });
+    fireEvent.click(feedbackButtons[0]);
+
+    const input = await screen.findByPlaceholderText('Leave feedback...');
+    fireEvent.change(input, { target: { value: 'great turn' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Send feedback' }));
+
+    await waitFor(() => expect(onPost).toHaveBeenCalled());
+    expect(onPost.mock.calls[0][0]).toMatchObject({
+      feedback: { traceId: 'trace-a', value: 'great turn' },
+    });
   });
 });

@@ -1,3 +1,4 @@
+import { Button } from '@mastra/playground-ui/components/Button';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { formatHierarchicalSpans } from '@mastra/playground-ui/domains/traces/components/format-hierarchical-spans';
 import { SpanDataPanelView } from '@mastra/playground-ui/domains/traces/components/span-data-panel-view';
@@ -9,8 +10,10 @@ import { useTraceSpanNavigation } from '@mastra/playground-ui/domains/traces/hoo
 import { useTraceSpans } from '@mastra/playground-ui/domains/traces/hooks/use-trace-spans';
 import { useTraces } from '@mastra/playground-ui/domains/traces/hooks/use-traces';
 import { cn } from '@mastra/playground-ui/utils/cn';
+import { MessageSquare } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 
+import { TraceFeedbackTab } from '@/domains/traces/components/trace-feedback-tab';
 import { TraceThreadItemView } from '@/domains/traces/components/trace-thread-item-view';
 
 export interface ThreadViewByTraceProps {
@@ -113,13 +116,34 @@ function TraceThreadRow({ traceId, selectedSpanId, onSpanSelect }: TraceThreadRo
     }
   }, [hierarchicalSpans]);
 
+  const [showFeedback, setShowFeedback] = useState(false);
+
   return (
     <div
       className="group border-border1 grid grid-cols-[1fr_1fr] gap-4 border-b border-dashed px-4 py-4"
       data-trace-id={traceId}
     >
-      <div className="min-h-[240px] min-w-0">
-        <TraceThreadItemView traceId={traceId} />
+      <div className="relative flex min-h-[240px] min-w-0 flex-col gap-2">
+        <div className="z-30 flex justify-end">
+          <Button
+            size="icon-sm"
+            variant="ghost"
+            tooltip="Feedback"
+            aria-label="Toggle feedback"
+            className={cn('transition-opacity', showFeedback ? 'opacity-100' : 'opacity-0 group-hover:opacity-100')}
+            onClick={() => setShowFeedback(v => !v)}
+          >
+            <MessageSquare />
+          </Button>
+        </div>
+        <div className="min-h-0 flex-1">
+          <TraceThreadItemView traceId={traceId} />
+        </div>
+        {showFeedback && (
+          <div className="border-border1 bg-surface3 absolute top-8 right-0 z-20 max-h-[calc(100%-2rem)] w-80 overflow-y-auto rounded-lg border shadow-lg">
+            <TraceFeedbackTab key={traceId} traceId={traceId} variant="embed" />
+          </div>
+        )}
       </div>
       {/* The row height is driven by the messages column; the timeline is absolutely
           positioned so it fills that height and scrolls instead of stretching the row.
