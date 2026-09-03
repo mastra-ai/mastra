@@ -1,5 +1,6 @@
 import type { ToolsInput } from '@mastra/core/agent';
 
+import { createLinearTools } from './providers/linear.js';
 import type { ProviderToolsOptions } from './toolset.js';
 
 export type ProviderKey =
@@ -25,7 +26,13 @@ export interface ProviderRegistration {
  * Providers with shipped toolsets. Later segments add entries; `connect()`
  * warns and skips platform connections whose integrationId is not listed here.
  */
-export const PROVIDERS: Partial<Record<ProviderKey, ProviderRegistration>> = {};
+export const PROVIDERS: Partial<Record<ProviderKey, ProviderRegistration>> = {
+  linear: {
+    integrationId: 'linear',
+    envVar: 'MASTRA_LINEAR_CONNECTION_ID',
+    createTools: createLinearTools,
+  },
+};
 
 export function findProviderByIntegrationId(
   integrationId: string,

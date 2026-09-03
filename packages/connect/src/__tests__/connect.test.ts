@@ -8,6 +8,8 @@ const TOKEN = 'fake-test-token';
 
 const fakeTools = { linear_fake_tool: { id: 'linear_fake_tool' } } as never;
 
+const originalLinear = PROVIDERS.linear;
+
 function stubProvider(overrides?: Partial<ProviderRegistration>): { createTools: ReturnType<typeof vi.fn> } {
   const createTools = vi.fn().mockReturnValue(fakeTools);
   PROVIDERS.linear = {
@@ -47,7 +49,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
-  delete PROVIDERS.linear;
+  PROVIDERS.linear = originalLinear;
   vi.unstubAllEnvs();
   warnSpy.mockRestore();
 });
