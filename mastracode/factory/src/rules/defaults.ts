@@ -140,11 +140,10 @@ function completeIssue(context: FactoryStageRuleContext) {
 }
 
 function reviewPullRequest(context: FactoryStageRuleContext) {
-  // A re-entry into Review (from any post-intake stage) supersedes whichever
-  // review pass previously ran on this card: cancel any in-flight run before
-  // dispatching a fresh one so we don't burn tokens on the stale pass and race
-  // two agents on the same card. Cancellation is safe when nothing is in flight.
-  const supersedes = context.fromStage !== 'intake';
+  // Only a Review-to-Review re-entry can supersede an active pass. A card
+  // returning from Done has no live review to cancel; aborting its bound session
+  // would instead cancel the fresh re-review kickoff.
+  const supersedes = context.fromStage === 'review';
   // The re-review skill only applies when a prior review pass actually completed
   // (the card is returning from `done`). A cancelled first-time review that
   // re-enters Review from `review` itself still has no prior pass to reconcile —
