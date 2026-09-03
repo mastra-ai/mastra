@@ -3,6 +3,7 @@ title: "Storing embeddings in a vector database | RAG"
 description: Guide on vector storage options in Mastra, including embedded and dedicated vector databases for similarity search.
 packages:
   - "@mastra/astra"
+  - "@mastra/azure-ai-search"
   - "@mastra/chroma"
   - "@mastra/core"
   - "@mastra/couchbase"
@@ -288,6 +289,29 @@ After generating embeddings, you need to store them in a database that supports 
     For detailed setup instructions and best practices, see the [official Elasticsearch documentation](https://www.elastic.co/docs/solutions/search/get-started).
   </TabItem>
 
+  <TabItem value="azure-ai-search" label="Azure AI Search">
+    ```ts title="vector-store.ts"
+    import { AzureAISearchVector } from '@mastra/azure-ai-search'
+
+    const store = new AzureAISearchVector({
+      id: 'azure-search-vectors',
+      endpoint: process.env.AZURE_AI_SEARCH_ENDPOINT!,
+      credential: process.env.AZURE_AI_SEARCH_CREDENTIAL!,
+    })
+
+    await store.createIndex({
+      indexName: 'my-collection',
+      dimension: 1536,
+    })
+
+    await store.upsert({
+      indexName: 'my-collection',
+      vectors: embeddings,
+      metadata: chunks.map(chunk => ({ text: chunk.text })),
+    })
+    ```
+  </TabItem>
+
   <TabItem value="couchbase" label="Couchbase">
     ```ts title="vector-store.ts"
     import { CouchbaseVector } from '@mastra/couchbase'
@@ -520,6 +544,17 @@ Each vector database enforces specific naming conventions for indexes and collec
     - Example: `My_Index` is not valid (contains uppercase letters)
     - Example: `_myindex` is not valid (begins with underscore)
     - Example: `.myindex` is not valid (begins with dot, deprecated)
+  </TabItem>
+
+  <TabItem value="azure-ai-search" label="Azure AI Search">
+    Index names must:
+
+    - Use only lowercase letters, numbers, and dashes
+    - Start with a letter
+    - Not end with a dash or contain consecutive dashes
+    - Be 2-128 characters long
+    - Example: `my-index-123` is valid
+    - Example: `My_Index` is not valid (uppercase and underscore)
   </TabItem>
 
   <TabItem value="s3vectors" label="S3 Vectors">
