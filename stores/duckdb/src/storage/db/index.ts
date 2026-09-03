@@ -1,6 +1,6 @@
+import { DuckDBInstance, DuckDBTimestampValue, DuckDBTimestampTZValue } from '@duckdb/node-api';
+import type { DuckDBPreparedStatement } from '@duckdb/node-api';
 import { MastraBase } from '@mastra/core/base';
-import { DuckDBInstance, DuckDBTimestampValue, DuckDBTimestampTZValue } from '../../native';
-import type { DuckDBPreparedStatement } from '../../native';
 
 /**
  * Bind a single parameter to a prepared statement using explicit typed methods.
