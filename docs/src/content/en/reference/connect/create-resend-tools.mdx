@@ -1,0 +1,68 @@
+---
+title: "Reference: createResendTools() | Connect"
+description: "API reference for createResendTools() and the curated Resend toolset in @mastra/connect."
+packages:
+  - "@mastra/connect"
+---
+
+# createResendTools()
+
+Returns a curated Resend toolset that executes through the Mastra platform connection proxy. Tools never handle provider credentials directly.
+
+```typescript
+import { createResendTools } from '@mastra/connect'
+
+const tools = createResendTools()
+```
+
+The returned object is a `ToolsInput`: spread it into an agent's `tools`, or pass it through `toolsets`.
+
+## Parameters
+
+<PropertiesTable
+  content={[
+  {
+    name: 'options',
+    type: 'ProviderToolsOptions',
+    description: 'Optional connection, filtering, and client configuration.',
+    isOptional: true,
+    properties: [
+      {
+        type: 'ProviderToolsOptions',
+        parameters: [
+          {
+            name: 'connectionId',
+            type: 'string',
+            description: 'Connection to use. Falls back to MASTRA_RESEND_CONNECTION_ID at execute time.',
+            isOptional: true,
+          },
+          {
+            name: 'allowTools',
+            type: 'string[]',
+            description: 'Restrict the returned toolset to these tool keys. Unknown names throw immediately.',
+            isOptional: true,
+          },
+          {
+            name: 'client',
+            type: 'ConnectClientOptions',
+            description: 'Platform client overrides. See ConnectClientOptions in connect().',
+            isOptional: true,
+          },
+        ],
+      },
+    ],
+  },
+]}
+/>
+
+## Tools
+
+| Tool | Description |
+| - | - |
+| `resend_send_email` | Send an email. Requires plain text and/or HTML content |
+| `resend_get_email` | Get a previously sent email by id, including its content and last delivery event |
+| `resend_list_domains` | List the sending domains configured in Resend |
+| `resend_list_audiences` | List contact audiences (mailing lists) |
+| `resend_create_contact` | Add a contact to an audience |
+| `resend_list_contacts` | List the contacts of an audience |
+| `resend_list_broadcasts` | List email broadcasts (bulk sends) |

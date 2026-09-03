@@ -1,0 +1,128 @@
+---
+title: "Reference: connect() | Connect"
+description: "API reference for connect() in @mastra/connect: discover a project's platform connections and return a toolset per provider."
+packages:
+  - "@mastra/connect"
+---
+
+# connect()
+
+Discovers the connections available to a Mastra platform project and returns one toolset per connected provider, ready to pass to an agent's `toolsets` option.
+
+```typescript title="src/agent.ts"
+import { connect } from '@mastra/connect'
+
+const toolsets = await connect()
+
+const response = await agent.generate('Summarize my open Linear issues.', { toolsets })
+```
+
+Returns: `Promise<Record<string, ToolsInput>>` keyed by provider (`linear`, `notion`, `jira`, `gitlab`, `snowflake`, `neon`, `cloudflare`, `resend`, `anthropic`).
+
+See [Integrations](/docs/mastra-platform/integrations) for the concept overview.
+
+## Parameters
+
+<PropertiesTable
+  content={[
+  {
+    name: 'options',
+    type: 'ConnectOptions',
+    description: 'Optional discovery and client configuration.',
+    isOptional: true,
+    properties: [
+      {
+        type: 'ConnectOptions',
+        parameters: [
+          {
+            name: 'projectId',
+            type: 'string',
+            description: 'Project to list connections for. Falls back to MASTRA_PROJECT_ID.',
+            isOptional: true,
+          },
+          {
+            name: 'integrations',
+            type: 'Record<ProviderKey, { connectionId?: string; allowTools?: string[] } | boolean>',
+            description: 'Allowlist of providers to include. See Integrations allowlist below.',
+            isOptional: true,
+          },
+          {
+            name: 'client',
+            type: 'ConnectClientOptions',
+            description: 'Platform client overrides. See ConnectClientOptions below.',
+            isOptional: true,
+          },
+        ],
+      },
+    ],
+  },
+]}
+/>
+
+### ConnectClientOptions
+
+Every field falls back to an environment variable, so a fully env-configured app can pass nothing.
+
+<PropertiesTable
+  content={[
+  {
+    name: 'accessToken',
+    type: 'string',
+    description: 'Platform access token. Falls back to MASTRA_PLATFORM_ACCESS_TOKEN, then MASTRA_PLATFORM_SECRET_KEY.',
+    isOptional: true,
+  },
+  {
+    name: 'orgId',
+    type: 'string',
+    description: 'Organization id. Falls back to MASTRA_ORG_ID; sent as the x-organization-id header when present.',
+    isOptional: true,
+  },
+  {
+    name: 'baseUrl',
+    type: 'string',
+    description:
+      'Integrations service base URL. Falls back to MASTRA_INTEGRATIONS_API_URL, then the regional default from MASTRA_PLATFORM_REGION (us or eu), then https://integrations.mastra.ai.',
+    isOptional: true,
+  },
+  {
+    name: 'fetch',
+    type: 'typeof globalThis.fetch',
+    description: 'Fetch implementation, for testing or custom transports. Defaults to globalThis.fetch.',
+    isOptional: true,
+  },
+]}
+/>
+
+## Integrations allowlist
+
+When `integrations` is provided, only listed providers are returned:
+
+- `true` (or `{}`) includes the provider with defaults.
+- `false` excludes it.
+- An object configures it: `connectionId` picks a specific connection, `allowTools` restricts the toolset by tool key.
+
+A listed provider with no connection in the project throws `connection_not_found`. Without `integrations`, every connected provider is included.
+
+## Connection resolution
+
+For each provider present in the project's connections:
+
+1. An explicit `connectionId` (option or the provider's `MASTRA_<PROVIDER>_CONNECTION_ID` env var) wins.
+1. Otherwise, a single active connection is used automatically.
+1. Otherwise the provider is ambiguous: explicitly requested providers throw `multiple_connections`; in undirected calls the provider is skipped with a `console.warn` listing the candidates.
+
+Connections in `needs_reauth` status are never silently mapped: explicitly requested providers throw `needs_reauth`, undirected calls skip them with a warning. Connections whose integration has no toolset in this package are skipped with a warning.
+
+## Errors
+
+Throws `MastraConnectError` with a `code` property:
+
+| Code | When |
+| - | - |
+| `missing_access_token` | No platform token configured |
+| `missing_project_id` | No `projectId` option or `MASTRA_PROJECT_ID` |
+| `connection_not_found` | A requested provider has no connection, or a directed connection id 404s |
+| `multiple_connections` | A requested provider is ambiguous |
+| `needs_reauth` | A requested provider's connection needs reauthorization |
+| `unauthorized` | The platform rejected the token (401/403) |
+| `platform_error` | Any other platform request failure |

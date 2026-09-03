@@ -1,0 +1,70 @@
+---
+title: "Reference: createNotionTools() | Connect"
+description: "API reference for createNotionTools() and the curated Notion toolset in @mastra/connect."
+packages:
+  - "@mastra/connect"
+---
+
+# createNotionTools()
+
+Returns a curated Notion toolset that executes through the Mastra platform connection proxy. Tools never handle provider credentials directly. Requests pin `Notion-Version: 2022-06-28`.
+
+```typescript
+import { createNotionTools } from '@mastra/connect'
+
+const tools = createNotionTools()
+```
+
+The returned object is a `ToolsInput`: spread it into an agent's `tools`, or pass it through `toolsets`.
+
+## Parameters
+
+<PropertiesTable
+  content={[
+  {
+    name: 'options',
+    type: 'ProviderToolsOptions',
+    description: 'Optional connection, filtering, and client configuration.',
+    isOptional: true,
+    properties: [
+      {
+        type: 'ProviderToolsOptions',
+        parameters: [
+          {
+            name: 'connectionId',
+            type: 'string',
+            description: 'Connection to use. Falls back to MASTRA_NOTION_CONNECTION_ID at execute time.',
+            isOptional: true,
+          },
+          {
+            name: 'allowTools',
+            type: 'string[]',
+            description: 'Restrict the returned toolset to these tool keys. Unknown names throw immediately.',
+            isOptional: true,
+          },
+          {
+            name: 'client',
+            type: 'ConnectClientOptions',
+            description: 'Platform client overrides. See ConnectClientOptions in connect().',
+            isOptional: true,
+          },
+        ],
+      },
+    ],
+  },
+]}
+/>
+
+## Tools
+
+| Tool | Description |
+| - | - |
+| `notion_search` | Search pages and databases shared with the integration by title |
+| `notion_get_page` | Get a page by id, including its property values |
+| `notion_create_page` | Create a page under a parent page (provide `title`) or database (provide `properties` matching the database schema) |
+| `notion_update_page_properties` | Update property values of a page, or archive/unarchive it |
+| `notion_get_block_children` | List the child blocks of a page or block, with their plain-text content |
+| `notion_append_block_children` | Append plain-text paragraphs (or raw Notion blocks) to a page or block |
+| `notion_query_database` | Query pages in a database, optionally with a raw Notion filter and sorts |
+| `notion_get_database` | Get a database by id, including its title and column names/types |
+| `notion_create_comment` | Add a plain-text comment to a page or an existing discussion thread |

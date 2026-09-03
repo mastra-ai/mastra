@@ -1,0 +1,66 @@
+---
+title: "Reference: createAnthropicTools() | Connect"
+description: "API reference for createAnthropicTools() and the curated Anthropic toolset in @mastra/connect."
+packages:
+  - "@mastra/connect"
+---
+
+# createAnthropicTools()
+
+Returns a small curated Anthropic toolset over the Messages API that executes through the Mastra platform connection proxy. Tools never handle provider credentials directly. Every request pins `anthropic-version: 2023-06-01`.
+
+```typescript
+import { createAnthropicTools } from '@mastra/connect'
+
+const tools = createAnthropicTools()
+```
+
+The returned object is a `ToolsInput`: spread it into an agent's `tools`, or pass it through `toolsets`.
+
+Calling a model provider from inside an agent tool is a niche pattern, so this toolset stays intentionally small.
+
+## Parameters
+
+<PropertiesTable
+  content={[
+  {
+    name: 'options',
+    type: 'ProviderToolsOptions',
+    description: 'Optional connection, filtering, and client configuration.',
+    isOptional: true,
+    properties: [
+      {
+        type: 'ProviderToolsOptions',
+        parameters: [
+          {
+            name: 'connectionId',
+            type: 'string',
+            description: 'Connection to use. Falls back to MASTRA_ANTHROPIC_CONNECTION_ID at execute time.',
+            isOptional: true,
+          },
+          {
+            name: 'allowTools',
+            type: 'string[]',
+            description: 'Restrict the returned toolset to these tool keys. Unknown names throw immediately.',
+            isOptional: true,
+          },
+          {
+            name: 'client',
+            type: 'ConnectClientOptions',
+            description: 'Platform client overrides. See ConnectClientOptions in connect().',
+            isOptional: true,
+          },
+        ],
+      },
+    ],
+  },
+]}
+/>
+
+## Tools
+
+| Tool | Description |
+| - | - |
+| `anthropic_create_message` | Generate a message with an Anthropic model via the Messages API |
+| `anthropic_count_tokens` | Count the input tokens a Messages API request would consume, without generating |
+| `anthropic_list_models` | List the Anthropic models available with the connected API key |
