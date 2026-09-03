@@ -450,12 +450,20 @@ describe('QdrantVector', () => {
 
     describe('Special Cases', () => {
       it('handles regex patterns in queries', async () => {
-        const results = await qdrant.query({
+        // Qdrant has no native regex filtering: $regex is translated to a
+        // full-text match, which matches whole tokens rather than substrings.
+        // On indexed text fields this was always the case; since Qdrant
+        // v1.19.1 it also applies to unindexed payload fields
+        // (qdrant/qdrant#10341), so a partial token like 'item' no longer
+        // matches 'item1'..'item4'. Only assert whole-token matching, which
+        // behaves the same on all Qdrant versions.
+        const wholeTokenResults = await qdrant.query({
           indexName: testCollectionName,
           queryVector: [1, 0, 0],
-          filter: { name: { $regex: 'item' } },
+          filter: { name: { $regex: 'item2' } },
         });
-        expect(results.length).toBe(4);
+        expect(wholeTokenResults.length).toBe(1);
+        expect(wholeTokenResults[0]?.metadata?.name).toBe('item2');
       });
 
       it('handles array operators in queries', async () => {
