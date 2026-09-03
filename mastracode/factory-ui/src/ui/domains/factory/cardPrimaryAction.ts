@@ -1,12 +1,6 @@
-import { FACTORY_ROLE_STAGES, isFactoryRole } from '@mastra/factory/rules/types';
+import { FACTORY_ROLE_STAGES, isFactoryRole, needsApproval } from '@mastra/factory/rules/types';
 import type { FactoryRole, FactoryRuleStage } from '@mastra/factory/rules/types';
-import {
-  NEEDS_APPROVAL_LABEL,
-  hasLabel,
-  itemSessionSpec,
-  metadataLabels,
-  pullRequestStatusForItem,
-} from './boardItems';
+import { itemSessionSpec, pullRequestStatusForItem } from './boardItems';
 import type { WorkItem, WorkItemSessionRef } from './services/workItems';
 import type { BoardStageId } from './stages';
 
@@ -41,23 +35,9 @@ const PREPARE_APPROVAL: CardMove = {
 const REVIEW: CardMove = { label: 'Review', role: 'review', stage: 'review' };
 const RE_REVIEW: CardMove = { label: 'Re-review', role: 'review', stage: 'review' };
 
-/**
- * The `needs approval` label only holds a card at rest. Once a person accepts
- * it — or it sits in a working lane, which only a person could have put it in
- * before acceptance was recorded — the label is stale until the source catches
- * up, and the card offers its ordinary lanes again.
- */
-function approvalPending(item: MovableCard): boolean {
-  return (
-    hasLabel(metadataLabels(item.metadata), NEEDS_APPROVAL_LABEL) &&
-    !item.acceptedAt &&
-    (item.stages ?? ['intake']).every(stage => stage === 'intake' || stage === 'triage')
-  );
-}
-
 /** Where a card's button can send it, likeliest first; the lane's rule decides what runs there. */
 export function cardMoves(item: MovableCard, columnStage: BoardStageId): CardMove[] {
-  if (item.source === 'github-issue') return approvalPending(item) ? [PREPARE_APPROVAL] : [INVESTIGATE, BUILD];
+  if (item.source === 'github-issue') return needsApproval(item) ? [PREPARE_APPROVAL] : [INVESTIGATE, BUILD];
   if (item.source === 'linear-issue') return [INVESTIGATE, BUILD];
   if (item.source !== 'github-pr') return [];
   // A Done-lane PR that is still open likely picked up commits after its

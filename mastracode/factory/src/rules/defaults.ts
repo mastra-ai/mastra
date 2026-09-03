@@ -17,7 +17,7 @@ import type {
   FactoryToolResultRuleContext,
   FactoryToolRuleLeaf,
 } from './types.js';
-import { NEEDS_APPROVAL_LABEL } from './types.js';
+import { needsApproval } from './types.js';
 import { assertFactoryRules, FactoryRuleValidationError } from './validation.js';
 
 export const DEFAULT_FACTORY_RULE_VERSION = 'factory-default-v1';
@@ -48,15 +48,6 @@ function sourceRef(item: FactoryRuleItemContext): string {
   const number = workItemNumber(item);
   if (number === undefined) return item.url ? `${noun}${link}` : item.title;
   return `${noun} #${number}${link}`;
-}
-
-function labels(item: FactoryRuleItemContext): string[] {
-  const value = item.metadata?.labels;
-  return Array.isArray(value) ? value.filter((label): label is string => typeof label === 'string') : [];
-}
-
-function needsApproval(item: FactoryRuleItemContext): boolean {
-  return labels(item).some(label => label.toLowerCase() === NEEDS_APPROVAL_LABEL);
 }
 
 function invokeIssueInvestigation(context: FactoryStageRuleContext) {

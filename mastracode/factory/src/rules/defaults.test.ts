@@ -386,6 +386,23 @@ describe('defaultFactoryRules', () => {
     expect(decision).not.toHaveProperty('skillName');
   });
 
+  it('investigates an accepted issue whose needs-approval label has not caught up yet', async () => {
+    const rule = defaultFactoryRules({ version: 'deployment-7' }).work.triage?.issue?.onEnter;
+    const context = {
+      ...stageContext({ type: 'human', id: 'user-1' }, 'work'),
+      item: {
+        ...item,
+        acceptedAt: new Date('2026-08-30T00:00:00.000Z'),
+        metadata: { githubIssueNumber: 42, labels: ['Status: Needs Approval'] },
+      },
+      stage: 'triage',
+      fromStage: 'intake',
+      toStage: 'triage',
+    } as FactoryStageRuleContext;
+
+    expect(await rule?.(context)).toMatchObject({ skillName: 'factory-triage' });
+  });
+
   it('cleans up triage labels whenever a GitHub issue moves to Done', async () => {
     const rule = defaultFactoryRules({ version: 'deployment-7' }).work.done?.issue?.onEnter;
     const context = {
