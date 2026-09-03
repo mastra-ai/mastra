@@ -1735,6 +1735,7 @@ export class Workflow<
       onFinish: options.onFinish,
       onError: options.onError,
       sharePubsub: options.sharePubsub,
+      autoRestartActiveRuns: options.autoRestartActiveRuns,
     };
 
     if (!executionEngine) {
