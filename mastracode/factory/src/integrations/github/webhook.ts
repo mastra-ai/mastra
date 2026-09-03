@@ -223,15 +223,34 @@ function isFactoryManagedAuthoringSubscription(subscription: GithubSignalSubscri
   return subscription.data.source === 'auto-gh-pr-create' || subscription.data.source === 'factory-pr-create';
 }
 
+function isManagedInlineReviewNotification(
+  notification: GithubWebhookNotification,
+  subscription: GithubSignalSubscriptionRow,
+): boolean {
+  return notification.kind === 'review-comment-created' && isFactoryManagedAuthoringSubscription(subscription);
+}
+
 function notificationSummaryForSubscription(
   notification: GithubWebhookNotification,
   subscription: GithubSignalSubscriptionRow,
 ): string {
-  if (notification.kind !== 'review-comment-created' || !isFactoryManagedAuthoringSubscription(subscription)) {
-    return notification.summary;
-  }
+  if (!isManagedInlineReviewNotification(notification, subscription)) return notification.summary;
 
   return `Inspect all current review feedback on ${notification.metadata.repository}#${notification.metadata.pullRequestNumber}, validate and implement warranted fixes, run verification, commit and push. Explain any feedback intentionally left unchanged. Use the GitHub notification target URL to inspect the comments.`;
+}
+
+function notificationPayloadForSubscription(
+  notification: GithubWebhookNotification,
+  subscription: GithubSignalSubscriptionRow,
+): Record<string, unknown> {
+  if (!isManagedInlineReviewNotification(notification, subscription)) return notification.payload;
+
+  return {
+    action: notification.action,
+    repository: notification.metadata.repository,
+    pullRequestNumber: notification.metadata.pullRequestNumber,
+    sender: notification.metadata.sender,
+  };
 }
 
 function notificationTargetUrl(event: string, payload: Record<string, unknown>): string | undefined {
@@ -578,7 +597,7 @@ export async function dispatchGithubWebhook(
         kind: notification.kind,
         summary: notificationSummaryForSubscription(notification, subscription),
         priority: notification.priority,
-        payload: notification.payload,
+        payload: notificationPayloadForSubscription(notification, subscription),
         sourceId: parsed.deliveryId,
         dedupeKey: `${parsed.deliveryId}:${subscription.sessionId}:${subscription.threadId}`,
         coalesceKey: `github:${subscription.data.repositoryExternalId}:pull-request:${subscription.data.changeRequestId}`,

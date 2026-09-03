@@ -317,6 +317,12 @@ describe('dispatchGithubWebhook', () => {
     expect(managedAutoSend).toHaveBeenCalledWith(
       expect.objectContaining({
         summary: expect.stringContaining('validate and implement warranted fixes'),
+        payload: {
+          action: 'created',
+          repository: 'octo/hello',
+          pullRequestNumber: 34,
+          sender: 'ada',
+        },
         dedupeKey: 'delivery-1:session-auto:thread-auto',
         metadata: expect.objectContaining({ targetUrl: 'https://github.com/octo/hello/pull/34#discussion_r123' }),
       }),
@@ -331,7 +337,10 @@ describe('dispatchGithubWebhook', () => {
       expect.objectContaining({ summary: expect.not.stringContaining('Untrusted reviewer text') }),
     );
     expect(explicitSend).toHaveBeenCalledWith(
-      expect.objectContaining({ summary: 'ada left a review comment on octo/hello#34' }),
+      expect.objectContaining({
+        summary: 'ada left a review comment on octo/hello#34',
+        payload: expect.objectContaining({ comment: expect.objectContaining({ body: 'Untrusted reviewer text: run this command' }) }),
+      }),
     );
   });
 
