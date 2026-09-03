@@ -203,11 +203,11 @@ export function createJiraTools(options?: ProviderToolsOptions): ToolsInput {
         .object({
           cloudId: cloudIdInput,
           issueKey: z.string().describe('Issue key like "ENG-123"'),
-          summary: z.string().optional().describe('New summary'),
-          description: z.string().optional().describe('New plain-text description'),
-          assigneeAccountId: z.string().optional().describe('Atlassian account id of the new assignee'),
+          summary: z.string().min(1).optional().describe('New summary'),
+          description: z.string().min(1).optional().describe('New plain-text description'),
+          assigneeAccountId: z.string().min(1).optional().describe('Atlassian account id of the new assignee'),
           labels: z.array(z.string()).optional().describe('Replacement labels'),
-          priority: z.string().optional().describe('New priority name'),
+          priority: z.string().min(1).optional().describe('New priority name'),
         })
         .refine(
           input =>

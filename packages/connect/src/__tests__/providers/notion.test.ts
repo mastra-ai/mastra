@@ -158,11 +158,21 @@ describe('createNotionTools', () => {
       { parentDatabaseId: 'db-1' },
       {} as never,
     );
+    const pageParentWithProperties = await tool(tools, 'notion_create_page').execute(
+      { parentPageId: 'a', title: 'X', properties: { Foo: {} } },
+      {} as never,
+    );
+    const dbParentWithTitle = await tool(tools, 'notion_create_page').execute(
+      { parentDatabaseId: 'db-1', title: 'X', properties: { Name: {} } },
+      {} as never,
+    );
     expect(fetchMock).not.toHaveBeenCalled();
     expect(neither).toMatchObject({ error: true });
     expect(both).toMatchObject({ error: true });
     expect(pageParentNoTitle).toMatchObject({ error: true });
     expect(dbParentNoProperties).toMatchObject({ error: true });
+    expect(pageParentWithProperties).toMatchObject({ error: true });
+    expect(dbParentWithTitle).toMatchObject({ error: true });
   });
 
   it('PATCHes page properties and archived state', async () => {
@@ -183,7 +193,12 @@ describe('createNotionTools', () => {
     const fetchMock = vi.fn();
     const tools = makeTools(fetchMock);
     const result = await tool(tools, 'notion_update_page_properties').execute({ pageId: 'page-uuid-1' }, {} as never);
+    const emptyProperties = await tool(tools, 'notion_update_page_properties').execute(
+      { pageId: 'page-uuid-1', properties: {} },
+      {} as never,
+    );
     expect(result).toMatchObject({ error: true });
+    expect(emptyProperties).toMatchObject({ error: true });
     expect(fetchMock).not.toHaveBeenCalled();
   });
 

@@ -155,7 +155,7 @@ export function createNotionTools(options?: ProviderToolsOptions): ToolsInput {
     notion_create_page: defineProxyTool(context, {
       id: 'notion_create_page',
       description:
-        'Create a Notion page under a parent page or database. For a page parent, provide title and optional plain-text paragraphs; for a database parent, provide properties matching the database schema (including its title column).',
+        'Create a Notion page under a parent page or database. For a page parent, provide title (and optional plain-text paragraphs); for a database parent, provide properties matching the database schema (including its title column). Content paragraphs are appended as children for both parent kinds.',
       inputSchema: z
         .object({
           parentPageId: z.string().optional().describe('Parent page id (exactly one parent is required)'),
@@ -177,6 +177,12 @@ export function createNotionTools(options?: ProviderToolsOptions): ToolsInput {
         })
         .refine(input => !input.parentDatabaseId || Object.keys(input.properties ?? {}).length > 0, {
           message: 'properties (matching the database schema) are required when the parent is a database.',
+        })
+        .refine(input => !input.parentPageId || input.properties === undefined, {
+          message: 'properties only apply to database parents; page parents take title.',
+        })
+        .refine(input => !input.parentDatabaseId || input.title === undefined, {
+          message: 'title only applies to page parents; for database parents set the title column inside properties.',
         }),
       outputSchema: z.object({ page: pageSchema }),
       request: input => {
@@ -206,9 +212,12 @@ export function createNotionTools(options?: ProviderToolsOptions): ToolsInput {
           properties: z.record(z.string(), z.unknown()).optional().describe('Raw Notion properties object to set'),
           archived: z.boolean().optional().describe('Set true to archive the page, false to restore it'),
         })
-        .refine(input => input.properties !== undefined || input.archived !== undefined, {
-          message: 'Provide properties and/or archived to update.',
-        }),
+        .refine(
+          input =>
+            (input.properties !== undefined && Object.keys(input.properties).length > 0) ||
+            input.archived !== undefined,
+          { message: 'Provide non-empty properties and/or archived to update.' },
+        ),
       outputSchema: z.object({ page: pageSchema }),
       request: input => ({
         method: 'PATCH',

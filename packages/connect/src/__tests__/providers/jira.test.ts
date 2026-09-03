@@ -90,7 +90,7 @@ describe('createJiraTools', () => {
     expect(url).toBe('https://example.test/v2/connections/c_jir1/proxy/oauth/token/accessible-resources');
   });
 
-  it('searches issues via GET search/jql under the ex/jira/{cloudId} prefix', async () => {
+  it('searches issues via POST search/jql under the ex/jira/{cloudId} prefix', async () => {
     const fetchMock = vi.fn().mockResolvedValue(Response.json({ issues: [issueObject], nextPageToken: 'tok1' }));
     const tools = makeTools(fetchMock);
     const result = await tool(tools, 'jira_search_issues').execute(
@@ -182,7 +182,12 @@ describe('createJiraTools', () => {
       { cloudId: CLOUD_ID, issueKey: 'ENG-123' },
       {} as never,
     );
+    const emptyString = await tool(tools, 'jira_update_issue').execute(
+      { cloudId: CLOUD_ID, issueKey: 'ENG-123', summary: '' },
+      {} as never,
+    );
     expect(result).toMatchObject({ error: true });
+    expect(emptyString).toMatchObject({ error: true });
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
