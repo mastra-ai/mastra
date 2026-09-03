@@ -70,16 +70,16 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 1
   },
   {
-    "model": "tinfoil/glm-5-2",
-    "imageInput": false,
+    "model": "tinfoil/glm-5-3-flash",
+    "imageInput": true,
     "audioInput": false,
-    "videoInput": false,
+    "videoInput": true,
     "toolUsage": true,
     "reasoning": true,
-    "contextWindow": 393216,
+    "contextWindow": 1048576,
     "maxOutput": 131072,
-    "inputCost": 1.5,
-    "outputCost": 5.25
+    "inputCost": 0.4,
+    "outputCost": 1.25
   },
   {
     "model": "tinfoil/gpt-oss-120b",
