@@ -182,6 +182,26 @@ Each memory feature is added to either the system messages or the conversation m
 
 Conversation messages are ordered by timestamp and deduplicated by message ID, so recalled older messages appear before recent history. Context messages passed at call time are stamped with the current time, which places them after history and recall but before your new message. To inspect the exact context for a real request, use [Tracing](/docs/observability/tracing/overview) and open the LLM call spans, see [Observability](#observability) below.
 
+### Scope branched conversation history
+
+Store multiple conversation branches in one thread and pass the active path's message IDs for each request. Mastra recalls only those raw transcript messages. Observational Memory observations remain available because they are condensed memory rather than raw history.
+
+```typescript
+const response = await memoryAgent.stream('Continue this branch.', {
+  memory: {
+    resource: 'user-123',
+    thread: 'conversation-123',
+    options: {
+      selectMessages: {
+        ids: ['root-message', 'active-branch-message'],
+      },
+    },
+  },
+})
+```
+
+Build the ID list from your application's branch model, such as a `parentMessageId` chain. Pass the selection on every request that must exclude sibling branches.
+
 ## Memory in multi-agent systems
 
 When a [supervisor agent](/docs/subagents) delegates to a subagent, Mastra isolates subagent memory automatically. No flag enables this as it happens on every delegation. Understanding how this scoping works lets you decide what stays private and what to share intentionally.

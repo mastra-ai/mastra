@@ -1,5 +1,5 @@
 import type { MessageList } from '@mastra/core/agent';
-import type { MemoryRunState } from '@mastra/core/memory';
+import type { MemoryConfigInternal, MemoryRunState } from '@mastra/core/memory';
 import type { ObservabilityContext } from '@mastra/core/observability';
 import type { ProcessorContext, ProcessorStreamWriter } from '@mastra/core/processors';
 import type { RequestContext } from '@mastra/core/request-context';
@@ -137,7 +137,11 @@ export class ObservationTurn {
    * If a MemoryContextProvider is passed, loads historical messages and adds
    * them to the MessageList. Without a provider, only fetches/caches the record.
    */
-  async start(memory?: MemoryContextProvider, runState?: MemoryRunState): Promise<TurnContext> {
+  async start(
+    memory?: MemoryContextProvider,
+    runState?: MemoryRunState,
+    memoryConfig?: MemoryConfigInternal,
+  ): Promise<TurnContext> {
     if (this._started) throw new Error('Turn already started');
     this._started = true;
 
@@ -152,6 +156,7 @@ export class ObservationTurn {
         messageList: this.messageList,
         threadId: this.threadId,
         resourceId: this.resourceId,
+        memoryConfig,
         runState,
       });
 

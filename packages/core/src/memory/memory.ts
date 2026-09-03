@@ -809,6 +809,7 @@ https://mastra.ai/en/docs/memory/overview`,
           new MessageHistory({
             storage: memoryStore,
             lastMessages: typeof lastMessages === 'number' ? lastMessages : undefined,
+            selectMessages: effectiveConfig.selectMessages,
           }),
         );
       }

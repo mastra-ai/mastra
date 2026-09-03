@@ -671,6 +671,7 @@ export class Memory extends MastraMemory {
       }
 
       let usage: { tokens: number } | undefined;
+      const memoryStore = await this.getMemoryStore();
 
       // If history is disabled and there's no semantic recall to perform, return empty immediately
       if (historyDisabledByConfig && (!config.semanticRecall || !vectorSearchString || !this.vector)) {
@@ -684,6 +685,63 @@ export class Memory extends MastraMemory {
         };
         span?.end({ output: { success: true }, attributes: { messageCount: 0 } });
         return result;
+      }
+
+      if (config.selectMessages) {
+        const selectedIds = config.selectMessages.ids;
+        const selectedResult = selectedIds.length
+          ? await memoryStore.listMessagesById({ messageIds: selectedIds })
+          : { messages: [] };
+        const dateRange = filter?.dateRange;
+        const selectedMessages = selectedResult.messages.filter(message => {
+          if (message.threadId !== threadId || (resourceId && message.resourceId !== resourceId)) {
+            return false;
+          }
+          if (dateRange?.start) {
+            const startsAfter = dateRange.startExclusive
+              ? message.createdAt > dateRange.start
+              : message.createdAt >= dateRange.start;
+            if (!startsAfter) return false;
+          }
+          if (dateRange?.end) {
+            const endsBefore = dateRange.endExclusive
+              ? message.createdAt < dateRange.end
+              : message.createdAt <= dateRange.end;
+            if (!endsBefore) return false;
+          }
+          return true;
+        });
+
+        const direction = effectiveOrderBy?.direction ?? 'ASC';
+        selectedMessages.sort((left, right) => {
+          const comparison = left.createdAt.getTime() - right.createdAt.getTime();
+          return direction === 'DESC' ? -comparison : comparison;
+        });
+
+        const resultPage = page ?? 0;
+        const resultPerPage = perPage ?? false;
+        const offset = resultPerPage === false ? 0 : resultPage * resultPerPage;
+        const pageMessages =
+          resultPerPage === false ? selectedMessages : selectedMessages.slice(offset, offset + resultPerPage);
+        const rawMessages = shouldGetNewestAndReverse ? pageMessages.reverse() : pageMessages;
+        const list = new MessageList({ threadId, resourceId }).add(rawMessages, 'memory');
+        const messages = filterSystemReminderMessages(list.get.all.db(), includeSystemReminders);
+        const total = selectedMessages.length;
+        const hasMore = resultPerPage === false ? false : offset + resultPerPage < total;
+        const recallResult = {
+          messages,
+          usage,
+          total,
+          page: resultPage,
+          perPage: resultPerPage,
+          hasMore,
+        };
+
+        span?.end({
+          output: { success: true },
+          attributes: { messageCount: messages.length },
+        });
+        return recallResult;
       }
 
       if (config?.semanticRecall && vectorSearchString && this.vector) {
@@ -720,9 +778,6 @@ export class Memory extends MastraMemory {
       const threshold = semanticConfig?.threshold;
       const filteredVectorResults =
         threshold !== undefined ? vectorResults.filter(r => r.score >= threshold) : vectorResults;
-
-      // Get raw messages from storage
-      const memoryStore = await this.getMemoryStore();
 
       // When history is disabled by config, use perPage: 0 so only semantic recall
       // include results are returned (not the full message history)
@@ -1724,6 +1779,32 @@ ${workingMemory}`;
     const { threadId, resourceId, memoryConfig, runState } = opts;
     const config = this.getMergedThreadConfig(memoryConfig);
     const memoryStore = await this.getMemoryStore();
+    const selectedMessageIds = config.selectMessages?.ids;
+
+    const loadSelectedMessages = async ({
+      resourceScope = false,
+      after,
+    }: {
+      resourceScope?: boolean;
+      after?: Date;
+    }): Promise<MastraDBMessage[]> => {
+      if (!selectedMessageIds?.length) {
+        return [];
+      }
+
+      const result = await memoryStore.listMessagesById({
+        messageIds: selectedMessageIds,
+      });
+
+      return result.messages
+        .filter(message => {
+          const belongsToScope = resourceScope
+            ? message.resourceId === resourceId
+            : message.threadId === threadId && (!resourceId || message.resourceId === resourceId);
+          return belongsToScope && (!after || message.createdAt > after);
+        })
+        .sort((left, right) => left.createdAt.getTime() - right.createdAt.getTime());
+    };
 
     // Build system message parts
     const systemParts: string[] = [];
@@ -1734,7 +1815,8 @@ ${workingMemory}`;
     let continuationMessage: MastraDBMessage | undefined;
     let otherThreadsContext: string | undefined;
 
-    const omEngine = await this.omEngine;
+    const omEnabled = Boolean(normalizeObservationalMemoryConfig(config.observationalMemory));
+    const omEngine = omEnabled ? await this.omEngine : null;
     if (omEngine) {
       const loadOmRecord = () => omEngine.getRecord(threadId, resourceId);
       omRecord = runState
@@ -1798,17 +1880,27 @@ ${workingMemory}`;
 
     // 3. Load messages — unobserved if OM is active, or recent N
     let messages: MastraDBMessage[];
-    if (omEngine && omRecord) {
+    if (config.lastMessages === false) {
+      messages = [];
+    } else if (omEngine && omRecord) {
       // OM is active: load unobserved messages.
       // When lastObservedAt exists, load only messages after the boundary.
       // When lastObservedAt is NULL (no observations yet), load ALL messages
       // so the threshold check can fire on the full context.
-      const dateFilter = omRecord.lastObservedAt
-        ? { dateRange: { start: new Date(new Date(omRecord.lastObservedAt).getTime() + 1) } }
-        : undefined;
+      const after = omRecord.lastObservedAt ? new Date(new Date(omRecord.lastObservedAt).getTime() + 1) : undefined;
+      const dateFilter = after ? { dateRange: { start: after } } : undefined;
 
       const boundary = omRecord.lastObservedAt ? new Date(omRecord.lastObservedAt).toISOString() : '';
-      if (omEngine.scope === 'resource' && resourceId) {
+      if (selectedMessageIds) {
+        const resourceScope = omEngine.scope === 'resource' && Boolean(resourceId);
+        const loadMessages = () => loadSelectedMessages({ resourceScope, after });
+        messages = runState
+          ? await runState.load(
+              `observational-memory:messages:selected:${threadId}:${resourceId ?? ''}:${boundary}:${selectedMessageIds.join(',')}`,
+              loadMessages,
+            )
+          : await loadMessages();
+      } else if (omEngine.scope === 'resource' && resourceId) {
         const loadMessages = async () => {
           const result = await memoryStore.listMessagesByResourceId({
             resourceId,
@@ -1838,8 +1930,12 @@ ${workingMemory}`;
     } else {
       // No OM: load recent messages
       const lastMessages = config.lastMessages;
-      if (lastMessages === false) {
-        messages = [];
+      if (selectedMessageIds) {
+        const selectedMessages = await loadSelectedMessages({});
+        messages =
+          typeof lastMessages === 'number'
+            ? selectedMessages.slice(Math.max(0, selectedMessages.length - lastMessages))
+            : selectedMessages;
       } else {
         const result = await memoryStore.listMessages({
           threadId,
@@ -3386,14 +3482,8 @@ Notes:
     // (e.g. workflow agent steps) are handled at runtime: the processor no-ops
     // when `getThreadContext` resolves no thread.
     const runtimeMemory = context?.get('MastraMemory') as { memoryConfig?: RuntimeMemoryConfig } | undefined;
-    const runtimeObservationalMemory = normalizeObservationalMemoryConfig(
-      runtimeMemory?.memoryConfig?.observationalMemory,
-    );
-    const threadConfig = runtimeObservationalMemory
-      ? this.getMergedThreadConfig({
-          ...runtimeMemory?.memoryConfig,
-          observationalMemory: runtimeObservationalMemory,
-        } as MemoryConfigInternal)
+    const threadConfig = runtimeMemory?.memoryConfig
+      ? this.getMergedThreadConfig(runtimeMemory.memoryConfig as MemoryConfigInternal)
       : this.threadConfig;
 
     const effectiveConfig = normalizeObservationalMemoryConfig(threadConfig.observationalMemory);

@@ -170,6 +170,51 @@ describe('MessageHistory', () => {
       expect(resultMessages[2].id).toBe('msg-4');
     });
 
+    it('loads only selected messages without letting siblings consume the history window', async () => {
+      mockStorage.setMessages([
+        {
+          id: 'root',
+          role: 'user',
+          content: { format: 2, parts: [{ type: 'text', text: 'Root' }] },
+          threadId: 'thread-1',
+          resourceId: 'resource-1',
+          createdAt: new Date('2026-01-01T00:00:00Z'),
+        },
+        {
+          id: 'active',
+          role: 'assistant',
+          content: { format: 2, parts: [{ type: 'text', text: 'Active path' }] },
+          threadId: 'thread-1',
+          resourceId: 'resource-1',
+          createdAt: new Date('2026-01-01T00:01:00Z'),
+        },
+        {
+          id: 'sibling',
+          role: 'assistant',
+          content: { format: 2, parts: [{ type: 'text', text: 'Sibling path' }] },
+          threadId: 'thread-1',
+          resourceId: 'resource-1',
+          createdAt: new Date('2026-01-01T00:02:00Z'),
+        },
+      ]);
+      processor = new MessageHistory({
+        storage: mockStorage,
+        lastMessages: 2,
+        selectMessages: { ids: ['root', 'active'] },
+      });
+      const messageList = new MessageList();
+
+      const result = await processor.processInput({
+        messages: [],
+        messageList,
+        abort: mockAbort,
+        requestContext: createRuntimeContextWithMemory('thread-1', 'resource-1'),
+      });
+
+      const resultMessages = result instanceof MessageList ? result.get.all.db() : result;
+      expect(resultMessages.map(message => message.id)).toEqual(['root', 'active']);
+    });
+
     it('reuses the same history read within a memory run', async () => {
       mockStorage.setMessages([
         {

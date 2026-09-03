@@ -14,6 +14,9 @@ import type { MemoryStorage } from '../../storage';
 export interface MessageHistoryOptions {
   storage: MemoryStorage;
   lastMessages?: number;
+  selectMessages?: {
+    ids: string[];
+  };
 }
 
 /**
@@ -29,10 +32,12 @@ export class MessageHistory implements Processor {
   readonly name = 'MessageHistory';
   private storage: MemoryStorage;
   private lastMessages?: number;
+  private selectedMessageIds?: string[];
 
   constructor(options: MessageHistoryOptions) {
     this.storage = options.storage;
     this.lastMessages = options.lastMessages;
+    this.selectedMessageIds = options.selectMessages?.ids;
   }
 
   /**
@@ -112,8 +117,26 @@ export class MessageHistory implements Processor {
 
     try {
       // 1. Fetch historical messages from storage (as DB format)
-      const cacheKey = `history:${threadId}:${resourceId ?? ''}:${this.lastMessages ?? 'all'}`;
+      const selectionKey = this.selectedMessageIds?.slice().sort().join(',') ?? 'all';
+      const cacheKey = `history:${threadId}:${resourceId ?? ''}:${this.lastMessages ?? 'all'}:${selectionKey}`;
       const loadMessages = async () => {
+        if (this.selectedMessageIds) {
+          if (this.selectedMessageIds.length === 0) {
+            return [];
+          }
+
+          const result = await this.storage.listMessagesById({
+            messageIds: this.selectedMessageIds,
+          });
+          const selectedMessages = result.messages
+            .filter(message => message.threadId === threadId && (!resourceId || message.resourceId === resourceId))
+            .sort((left, right) => right.createdAt.getTime() - left.createdAt.getTime());
+
+          return typeof this.lastMessages === 'number'
+            ? selectedMessages.slice(0, this.lastMessages)
+            : selectedMessages;
+        }
+
         const result = await this.storage.listMessages({
           threadId,
           resourceId,
