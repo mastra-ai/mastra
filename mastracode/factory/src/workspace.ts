@@ -455,7 +455,7 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
     const fireEagerStart = () => {
       if (!startEagerly) return;
       startEagerly = false;
-      sessionEntry.sandbox.start?.().catch(error => {
+      void Promise.resolve(sessionEntry.sandbox.start?.()).catch((error: unknown) => {
         console.warn(`[factory] Eager sandbox start for session ${session.id} failed:`, error);
       });
     };
