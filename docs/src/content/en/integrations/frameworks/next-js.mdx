@@ -323,7 +323,7 @@ In a separate terminal, verify the adapter by asking the weather agent a questio
 curl -X POST http://localhost:3000/api/agents/weather-agent/generate -H "Content-Type: application/json" -d "{\"messages\":[{\"role\":\"user\",\"content\":\"What is the weather like in Seoul?\"}]}"
 ```
 
-The endpoint returns a streamed JSON response from the agent. Keep the AI SDK UI route for the streaming chat interface, and use the catch-all route to expose the full Mastra API. The adapter is documented in full on the [Next.js adapter](/reference/server/next-adapter) reference page.
+The endpoint returns a complete JSON response from the agent. Keep the AI SDK UI route for the streaming chat interface, and use the catch-all route to expose the full Mastra API. The adapter is documented in full on the [Next.js adapter](/reference/server/next-adapter) reference page.
 
 ## Next steps
 
