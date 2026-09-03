@@ -1,5 +1,39 @@
 # @mastra/code-sdk
 
+## 1.7.0-alpha.3
+
+### Patch Changes
+
+- Read `/knowledge` from the same scope the Subconscious writes under. The knowledge browser was building its org rung from the session owner id (a user id), while local curation writes under the fixed `local` org, so the browser always looked at an empty scope. Both the memory factory and the inspector now derive their org/resource rungs from one resolver, and the local org id is exported as `LOCAL_KNOWLEDGE_ORG_ID`. Factory sessions keep failing closed when their org is unresolved. ([#22944](https://github.com/mastra-ai/mastra/pull/22944))
+
+- Updated dependencies [[`ae375e6`](https://github.com/mastra-ai/mastra/commit/ae375e6799af20820d90e30f63a084ba1507b771), [`7f107dd`](https://github.com/mastra-ai/mastra/commit/7f107dd68c9d1d3906cb31db7fcd222991281b5b), [`c66e628`](https://github.com/mastra-ai/mastra/commit/c66e6284421eabaca23029c2089a070ffd914678), [`6827484`](https://github.com/mastra-ai/mastra/commit/6827484382bb2a4d0781ed9c76a432cdbd75e50a)]:
+  - @mastra/core@1.65.0-alpha.2
+  - @mastra/pg@1.23.0-alpha.0
+  - @mastra/memory@1.28.3-alpha.1
+  - @mastra/duckdb@1.7.0-alpha.0
+
+## 1.7.0-alpha.2
+
+### Minor Changes
+
+- Added host-provided session instructions so workspace-free agent sessions can receive purpose-specific guidance. ([#23001](https://github.com/mastra-ai/mastra/pull/23001))
+
+  ```ts
+  createMastraCodeAgentController({
+    hostInstructions: 'Help operators inspect and repair Factory state.',
+  });
+  ```
+
+## 1.6.1-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [[`b72c747`](https://github.com/mastra-ai/mastra/commit/b72c747a1a698c829c7c1d42e75f72c6d1808dde), [`89f2486`](https://github.com/mastra-ai/mastra/commit/89f2486028ce25c5db19d1f361d5f65cd3ff93e5), [`1778103`](https://github.com/mastra-ai/mastra/commit/17781034204a151a1ff910e9d11d21effe22a9e0), [`2801d26`](https://github.com/mastra-ai/mastra/commit/2801d26b69bbe8929d302abd09619a68b4cc0d98), [`2801d26`](https://github.com/mastra-ai/mastra/commit/2801d26b69bbe8929d302abd09619a68b4cc0d98), [`2801d26`](https://github.com/mastra-ai/mastra/commit/2801d26b69bbe8929d302abd09619a68b4cc0d98), [`ffc6440`](https://github.com/mastra-ai/mastra/commit/ffc6440d13b9392b3cf1ff309d3b9cde4a791038), [`f31c3fa`](https://github.com/mastra-ai/mastra/commit/f31c3fae16a0710f9e52dba9bccc0018f9da2ac1), [`9d647e2`](https://github.com/mastra-ai/mastra/commit/9d647e25b51cd246ef974d9cad6b05dfdd37126e)]:
+  - @mastra/core@1.65.0-alpha.1
+  - @mastra/observability@1.17.6-alpha.0
+  - @mastra/memory@1.28.3-alpha.0
+  - @mastra/mcp@1.17.3
+
 ## 1.6.1-alpha.0
 
 ### Patch Changes

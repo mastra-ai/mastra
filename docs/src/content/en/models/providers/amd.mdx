@@ -7,7 +7,7 @@ description: "Browse AMD model IDs, capabilities, context windows, and pricing. 
 
 # <img src="https://models.dev/logos/amd.svg" alt="AMD logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />AMD
 
-Access 2 AMD models through Mastra's model router. Authentication is handled automatically using the `AMD_API_KEY` environment variable.
+Access 4 AMD models through Mastra's model router. Authentication is handled automatically using the `AMD_API_KEY` environment variable.
 
 Learn more in the [AMD documentation](https://developer.amd.com.cn/radeon/tokenfactory).
 
@@ -56,6 +56,30 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 384000,
     "inputCost": 0.14,
     "outputCost": 0.28
+  },
+  {
+    "model": "amd/DeepSeek-V4-Flash-Vision-Exp",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1000000,
+    "maxOutput": 384000,
+    "inputCost": 0.14,
+    "outputCost": 0.28
+  },
+  {
+    "model": "amd/MiniCPM5-1B",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 131072,
+    "maxOutput": 131072,
+    "inputCost": 0.124,
+    "outputCost": 0.7425
   },
   {
     "model": "amd/Qwen3.8-Flash-Next",

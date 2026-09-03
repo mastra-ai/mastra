@@ -235,6 +235,8 @@ export interface FactoryGithubRuleContext extends FactoryRuleContextBase {
   };
   /** Present on `pullRequestReviewRequested`: who review was (re-)requested from. */
   reviewRequest?: { reviewer: string; factoryReviewer: boolean };
+  /** Present when a PR comment uses Factory's exact review command. */
+  reviewCommand?: { command: 'review' | 're-review'; target: string };
   /** Present on `pullRequestReviewSubmitted`: the review that was just posted. */
   review?: { id: number; state: string; url: string };
 }

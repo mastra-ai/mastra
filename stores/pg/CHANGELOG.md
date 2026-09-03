@@ -1,5 +1,16 @@
 # @mastra/pg
 
+## 1.23.0-alpha.0
+
+### Minor Changes
+
+- Added portable advanced trace-query execution with parameterized PostgreSQL plans, bounded reusable relation scopes, completed-root filtering before pagination, current-row conformance, and a configurable 15-second transaction-local execution timeout. ([#22727](https://github.com/mastra-ai/mastra/pull/22727))
+
+### Patch Changes
+
+- Updated dependencies [[`ae375e6`](https://github.com/mastra-ai/mastra/commit/ae375e6799af20820d90e30f63a084ba1507b771)]:
+  - @mastra/core@1.65.0-alpha.2
+
 ## 1.22.3
 
 ### Patch Changes

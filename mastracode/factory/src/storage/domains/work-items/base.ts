@@ -14,6 +14,7 @@ import { FactoryStorageDomain, UniqueViolationError } from '@mastra/core/storage
 import type { CollectionSchema, CollectionWhere, FactoryStorageOps } from '@mastra/core/storage';
 import { isTerminalFactoryRuleStage } from '../../../rules/types.js';
 import type { FactoryTriageType } from '../../../rules/types.js';
+import type { FactoryHealthFinding } from '../../../supervisor/health.js';
 import {
   WORK_ITEM_ACTIVITY_SCHEMA,
   WORK_ITEM_COMMENT_MENTIONS_SCHEMA,
@@ -226,8 +227,20 @@ export interface FactoryDeferredDecisionRecord {
   updatedAt: Date;
 }
 
-export type FactoryAttentionKind = 'automation-failed' | 'mention' | 'activity';
+export type FactoryAttentionKind = 'automation-failed' | 'mention' | 'activity' | 'supervisor-finding';
 export type FactoryAttentionReceiptState = 'read' | 'archived';
+
+export interface FactorySupervisorFindingRecord {
+  id: string;
+  orgId: string;
+  factoryProjectId: string;
+  findingKey: string;
+  occurrence: number;
+  finding: Record<string, unknown>;
+  openedAt: Date;
+  updatedAt: Date;
+  resolvedAt: Date | null;
+}
 export type FactoryAttentionReceiptAction = 'read' | 'archive' | 'restore';
 
 export interface FactoryAttentionIdentity {
@@ -271,6 +284,13 @@ export function factoryMentionAttentionIdentity(commentId: string): FactoryAtten
 /** Collapsed per work item, so the occurrence is what a new comment bumps. */
 export function factoryActivityAttentionIdentity(workItemId: string, occurrence: number): FactoryAttentionIdentity {
   return { kind: 'activity', sourceId: workItemId, occurrence };
+}
+
+export function factorySupervisorFindingAttentionIdentity(
+  findingKey: string,
+  occurrence: number,
+): FactoryAttentionIdentity {
+  return { kind: 'supervisor-finding', sourceId: findingKey, occurrence };
 }
 
 export function factoryAttentionKey(factoryProjectId: string, identity: FactoryAttentionIdentity): string {
@@ -844,6 +864,32 @@ const FACTORY_GOVERNANCE_SCHEMAS: CollectionSchema[] = [
     ],
   },
   {
+    name: 'factory_supervisor_findings',
+    columns: {
+      id: { type: 'uuid-pk' },
+      org_id: { type: 'text' },
+      factory_project_id: { type: 'text' },
+      finding_key: { type: 'text' },
+      occurrence: { type: 'integer' },
+      finding: { type: 'json' },
+      opened_at: { type: 'timestamp' },
+      updated_at: { type: 'timestamp' },
+      resolved_at: { type: 'timestamp', nullable: true },
+    },
+    uniqueIndexes: [
+      {
+        name: 'factory_supervisor_findings_project_key_unique',
+        columns: ['org_id', 'factory_project_id', 'finding_key'],
+      },
+    ],
+    indexes: [
+      {
+        name: 'factory_supervisor_findings_project_open_idx',
+        columns: ['org_id', 'factory_project_id', 'resolved_at', 'updated_at', 'id'],
+      },
+    ],
+  },
+  {
     name: 'factory_attention_receipts',
     columns: {
       id: { type: 'uuid-pk' },
@@ -998,8 +1044,24 @@ function toDeferredDecision(row: GovernanceDbRow): FactoryDeferredDecisionRecord
   };
 }
 function attentionReceiptKind(value: unknown): FactoryAttentionKind {
-  if (value === 'automation-failed' || value === 'mention' || value === 'activity') return value;
+  if (value === 'automation-failed' || value === 'mention' || value === 'activity' || value === 'supervisor-finding') {
+    return value;
+  }
   throw new Error(`Unsupported attention receipt kind '${String(value)}'.`);
+}
+
+function toSupervisorFinding(row: GovernanceDbRow): FactorySupervisorFindingRecord {
+  return {
+    id: row.id,
+    orgId: String(row.org_id),
+    factoryProjectId: String(row.factory_project_id),
+    findingKey: String(row.finding_key),
+    occurrence: Number(row.occurrence),
+    finding: row.finding as Record<string, unknown>,
+    openedAt: row.opened_at as Date,
+    updatedAt: row.updated_at as Date,
+    resolvedAt: (row.resolved_at as Date | null) ?? null,
+  };
 }
 
 function attentionReceiptState(value: unknown): FactoryAttentionReceiptState {
@@ -1105,6 +1167,99 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     const count = this.#db.count;
     if (!count) throw new Error('[WorkItemsStorage] storage backend does not support collection counts.');
     return count.call(this.#db, collection, where);
+  }
+
+  async syncSupervisorFindings(input: {
+    orgId: string;
+    factoryProjectId: string;
+    findings: FactoryHealthFinding[];
+    now: Date;
+  }): Promise<void> {
+    const changed = await this.#withProjectRelationTransaction(input.orgId, input.factoryProjectId, async ops => {
+      let changed = false;
+      const existingOpen = await ops.findMany<GovernanceDbRow>('factory_supervisor_findings', {
+        org_id: input.orgId,
+        factory_project_id: input.factoryProjectId,
+        resolved_at: null,
+      });
+      const currentKeys = new Set(input.findings.map(finding => finding.id));
+      for (const row of existingOpen) {
+        if (!currentKeys.has(String(row.finding_key))) {
+          await ops.updateAtomic<GovernanceDbRow>(
+            'factory_supervisor_findings',
+            { id: row.id, resolved_at: null },
+            () => ({ resolved_at: input.now, updated_at: input.now }),
+          );
+          changed = true;
+        }
+      }
+      const openByKey = new Map(existingOpen.map(row => [String(row.finding_key), row]));
+      for (const finding of input.findings) {
+        const row =
+          openByKey.get(finding.id) ??
+          (await ops.findOne<GovernanceDbRow>('factory_supervisor_findings', {
+            org_id: input.orgId,
+            factory_project_id: input.factoryProjectId,
+            finding_key: finding.id,
+          }));
+        if (!row) {
+          await ops.insertOne<GovernanceDbRow>('factory_supervisor_findings', {
+            org_id: input.orgId,
+            factory_project_id: input.factoryProjectId,
+            finding_key: finding.id,
+            occurrence: 0,
+            finding,
+            opened_at: input.now,
+            updated_at: input.now,
+            resolved_at: null,
+          });
+          changed = true;
+          continue;
+        }
+        const reopening = row.resolved_at !== null;
+        const findingChanged = stableJson(row.finding) !== stableJson(finding);
+        if (!reopening && !findingChanged) continue;
+        await ops.updateAtomic<GovernanceDbRow>('factory_supervisor_findings', { id: row.id }, current => ({
+          finding,
+          occurrence: Number(current.occurrence) + (current.resolved_at !== null ? 1 : 0),
+          opened_at: current.resolved_at !== null ? input.now : current.opened_at,
+          updated_at: input.now,
+          resolved_at: null,
+        }));
+        changed = true;
+      }
+      return changed;
+    });
+    if (changed) this.#attentionChanged?.({ orgId: input.orgId, factoryProjectId: input.factoryProjectId });
+  }
+
+  async listSupervisorFindingPage(input: {
+    orgId: string;
+    factoryProjectId: string;
+    before?: { occurredAt: Date; id: string };
+    limit: number;
+  }): Promise<{ rows: FactorySupervisorFindingRecord[]; hasMore: boolean }> {
+    const rows = await this.#db.findMany<GovernanceDbRow>(
+      'factory_supervisor_findings',
+      { org_id: input.orgId, factory_project_id: input.factoryProjectId, resolved_at: null },
+      {
+        orderBy: [
+          ['updated_at', 'desc'],
+          ['id', 'desc'],
+        ],
+        limit: input.limit + 1,
+        ...(input.before ? { cursor: { values: [input.before.occurredAt, input.before.id] } } : {}),
+      },
+    );
+    return { rows: rows.slice(0, input.limit).map(toSupervisorFinding), hasMore: rows.length > input.limit };
+  }
+
+  async countOpenSupervisorFindings(input: { orgId: string; factoryProjectId: string }): Promise<number> {
+    return this.#countRows('factory_supervisor_findings', {
+      org_id: input.orgId,
+      factory_project_id: input.factoryProjectId,
+      resolved_at: null,
+    });
   }
 
   async #withProjectRelationTransaction<T>(
@@ -1892,6 +2047,16 @@ export class WorkItemsStorage extends FactoryStorageDomain {
         occurrence: identity.occurrence,
       });
       return activity !== null;
+    }
+    if (identity.kind === 'supervisor-finding') {
+      const finding = await ops.findOne('factory_supervisor_findings', {
+        org_id: orgId,
+        factory_project_id: factoryProjectId,
+        finding_key: identity.sourceId,
+        occurrence: identity.occurrence,
+        resolved_at: null,
+      });
+      return finding !== null;
     }
     if (identity.occurrence !== 0) return false;
     const mention = await ops.findOne('work_item_comment_mentions', {

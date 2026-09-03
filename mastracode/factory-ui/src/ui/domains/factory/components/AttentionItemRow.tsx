@@ -6,6 +6,7 @@ import { cn } from '@mastra/playground-ui/utils/cn';
 import {
   Archive,
   ArchiveRestore,
+  Brain,
   MailOpen,
   MessageSquare,
   MessagesSquare,
@@ -13,9 +14,10 @@ import {
   TriangleAlert,
 } from 'lucide-react';
 import { createElement, type ReactElement, type ReactNode } from 'react';
-import { Link } from 'react-router';
+import { Link, useNavigate } from 'react-router';
 
 import { relativeTime } from '../../../../lib/date/relativeTime';
+import { attentionPrompt, supervisorAskPath } from '../../supervisor/services/supervisor';
 import { attentionAuthorName, factoryAttentionTargetPath } from '../services/attention';
 import type { FactoryAttentionItem } from '../services/attention';
 import { TIMESTAMP } from './panel';
@@ -26,6 +28,7 @@ const KIND = {
   mention: { glyph: MessageSquare, label: 'mention', tone: 'text-accent1', badge: 'green' },
   activity: { glyph: MessagesSquare, label: 'comment', tone: 'text-icon3', badge: 'neutral' },
   'automation-failed': { glyph: TriangleAlert, label: 'failed', tone: 'text-error', badge: 'red' },
+  'supervisor-finding': { glyph: Brain, label: 'finding', tone: 'text-accent1', badge: 'blue' },
 } satisfies Record<
   FactoryAttentionItem['kind'],
   { glyph: typeof MessageSquare; label: string; tone: string; badge: BadgeVariant }
@@ -98,6 +101,7 @@ export function AttentionItemRow({
   onArchive: () => void;
   onRestore: () => void;
 }) {
+  const navigate = useNavigate();
   const author = attentionAuthorName(item);
 
   return (
@@ -125,6 +129,18 @@ export function AttentionItemRow({
             {relativeTime(item.occurredAt)}
           </time>
           <span className={REVEAL_ACTIONS}>
+            <Button
+              variant="ghost"
+              size="icon-xs"
+              tooltip="Ask supervisor"
+              aria-label={`Ask supervisor about ${item.title}`}
+              onClick={() => {
+                onOpen?.();
+                void navigate(supervisorAskPath(factoryId, attentionPrompt(item)));
+              }}
+            >
+              <Brain aria-hidden />
+            </Button>
             {onRetry ? (
               <RowAction
                 tooltip="Retry"

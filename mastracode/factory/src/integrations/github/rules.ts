@@ -73,6 +73,23 @@ function labelNames(value: unknown): string[] {
   });
 }
 
+function parseFactoryReviewCommand(
+  body: string | undefined,
+  target: string | undefined,
+): { command: 'review' | 're-review'; target: string } | undefined {
+  if (!body || !target) return undefined;
+  const firstLine = body
+    .split('\n')
+    .map(line => line.trim())
+    .find(line => line.length > 0)
+    ?.toLowerCase();
+  if (!firstLine) return undefined;
+  const mention = `@${target.toLowerCase().replace(/\[bot\]$/, '')}`;
+  if (firstLine === `${mention} review`) return { command: 'review', target };
+  if (firstLine === `${mention} re-review`) return { command: 're-review', target };
+  return undefined;
+}
+
 function eventName(parsed: ParsedGithubWebhook): FactoryGithubEventName | undefined {
   const action = string(parsed.payload.action);
   if (parsed.event === 'issues' && action === 'opened') return 'issueOpened';
@@ -262,6 +279,13 @@ export class GithubRules {
     return login.toLowerCase() === `${slug.toLowerCase()}[bot]`;
   }
 
+  #factoryMentionTarget(): string | undefined {
+    const identity = this.options.github.identity;
+    if (identity?.known) return identity.login;
+    const slug = this.options.github.slug?.trim();
+    return slug ? `${slug.toLowerCase()}[bot]` : undefined;
+  }
+
   async ingest(parsed: ParsedGithubWebhook): Promise<{ status: 'ignored' | 'committed' | 'replayed' | 'missing' }> {
     const event = eventName(parsed);
     const repository = object(parsed.payload.repository);
@@ -331,6 +355,11 @@ export class GithubRules {
     // sender is whoever clicked re-request, so a Factory-authored PR must not
     // brand a human requester as factory-authored.
     const reviewRequested = event === 'pullRequestReviewRequested';
+    const reviewCommand =
+      event === 'pullRequestCommentCreated'
+        ? parseFactoryReviewCommand(string(issueComment?.body), this.#factoryMentionTarget())
+        : undefined;
+    const reviewEntryRequested = reviewRequested || reviewCommand !== undefined;
     // Provenance proves the *pull request* came from Factory, which is not the
     // same as the sender of this event. For events where the sender is whoever
     // reacted to the PR — re-requesting review, commenting, submitting a review
@@ -338,11 +367,11 @@ export class GithubRules {
     // bot as Factory. Only the app login identifies Factory for those.
     const senderIsResponder =
       reviewRequested || event === 'pullRequestCommentCreated' || event === 'pullRequestReviewSubmitted';
-    const reReviewEvent = reviewRequested || event === 'pullRequestUpdated';
+    const reReviewEvent = reviewEntryRequested || event === 'pullRequestUpdated';
     const requestedReviewer = string(object(parsed.payload.requested_reviewer)?.login);
     const pullRequestAuthor = string(object(pullRequest?.user)?.login);
     const pullRequestFactoryAuthored = provenance !== null || this.#isFactoryLogin(pullRequestAuthor);
-    const relatedItem = await this.#relatedItem(
+    const resolvedItem = await this.#relatedItem(
       project.orgId,
       project.factoryProjectId,
       repositoryId,
@@ -351,8 +380,12 @@ export class GithubRules {
       pullRequestNumber,
       string(object(pullRequest?.head)?.ref),
       reReviewEvent ? null : provenance,
-      senderIsResponder && !reviewRequested,
+      senderIsResponder && !reviewEntryRequested,
     );
+    // A review-entry request must never treat a branch-matched authoring Work
+    // card as the PR's Review card. A missing Review card is materialized below.
+    const relatedItem =
+      reviewEntryRequested && resolvedItem?.externalSource?.type !== 'pull-request' ? undefined : resolvedItem;
     const actor = await githubActor(this.options.github, {
       installationId,
       repository: repositoryName,
@@ -473,6 +506,7 @@ export class GithubRules {
               },
             }
           : {}),
+        ...(reviewCommand ? { reviewCommand } : {}),
         ...(object(parsed.payload.review)
           ? {
               review: {

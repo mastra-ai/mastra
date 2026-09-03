@@ -276,6 +276,10 @@ export interface MastraCodeConfig {
   settingsPath?: string;
   /** Initial state overrides (yolo, thinkingLevel, etc.) */
   initialState?: Partial<MastraCodeState>;
+  /** Trusted host instructions resolved outside mutable session state. */
+  hostInstructions?:
+    | string
+    | ((ctx: { requestContext: RequestContext }) => string | undefined | Promise<string | undefined>);
   /** Override id generation for threads/messages. Primarily useful for deterministic tests. */
   idGenerator?: AgentControllerConfig<MastraCodeState>['idGenerator'];
   /** Override interval handlers. Default: gateway-sync */
@@ -836,7 +840,11 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
     // workspace. An explicit `undefined` is required: the factory only builds a
     // default when the `workspace` key is absent.
     workspace: undefined,
-    instructions: getDynamicInstructions,
+    instructions: async ({ requestContext }) => {
+      const configured = config?.hostInstructions;
+      const hostInstructions = typeof configured === 'function' ? await configured({ requestContext }) : configured;
+      return getDynamicInstructions({ requestContext, hostInstructions });
+    },
     // `settingsPath` matches the source `createMastraCode()` reads from so the
     // per-mode thinking defaults resolve against the same config file.
     model: ctx => getDynamicModel(ctx, config?.settingsPath),
@@ -1509,6 +1517,7 @@ export async function prepareAgentControllerMount(
  */
 export const createMastraCode = bootLocalAgentController;
 export * from './knowledge-inspector.js';
+export { LOCAL_KNOWLEDGE_ORG_ID } from './knowledge-scope.js';
 
 /**
  * Programmatic headless API. `runMC` runs an already-built controller/session
