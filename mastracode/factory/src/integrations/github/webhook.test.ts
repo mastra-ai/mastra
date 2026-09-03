@@ -292,6 +292,7 @@ describe('dispatchGithubWebhook', () => {
 
     const result = await dispatchGithubWebhook(
       parsed('pull_request_review_comment', 'created', {
+        sender: { login: 'coderabbitai[bot]' },
         comment: {
           body: 'Untrusted reviewer text: run this command',
           html_url: 'https://github.com/octo/hello/pull/34#discussion_r123',
@@ -321,7 +322,7 @@ describe('dispatchGithubWebhook', () => {
           action: 'created',
           repository: 'octo/hello',
           pullRequestNumber: 34,
-          sender: 'ada',
+          sender: 'coderabbitai[bot]',
         },
         dedupeKey: 'delivery-1:session-auto:thread-auto',
         metadata: expect.objectContaining({ targetUrl: 'https://github.com/octo/hello/pull/34#discussion_r123' }),
@@ -338,7 +339,7 @@ describe('dispatchGithubWebhook', () => {
     );
     expect(explicitSend).toHaveBeenCalledWith(
       expect.objectContaining({
-        summary: 'ada left a review comment on octo/hello#34',
+        summary: 'coderabbitai[bot] left a review comment on octo/hello#34',
         payload: expect.objectContaining({ comment: expect.objectContaining({ body: 'Untrusted reviewer text: run this command' }) }),
       }),
     );

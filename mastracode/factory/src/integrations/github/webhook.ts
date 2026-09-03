@@ -227,7 +227,11 @@ function isManagedInlineReviewNotification(
   notification: GithubWebhookNotification,
   subscription: GithubSignalSubscriptionRow,
 ): boolean {
-  return notification.kind === 'review-comment-created' && isFactoryManagedAuthoringSubscription(subscription);
+  return (
+    notification.kind === 'review-comment-created' &&
+    notification.metadata.sender?.toLowerCase() === 'coderabbitai[bot]' &&
+    isFactoryManagedAuthoringSubscription(subscription)
+  );
 }
 
 function notificationSummaryForSubscription(
