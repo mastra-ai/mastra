@@ -186,7 +186,7 @@ export function getSignalKind(message: MastraDBMessage): SignalKind {
   if (type === 'state') return 'state';
   if (type === 'reactive' && tagName === 'system-reminder') return 'reminder';
   if (type === 'notification' && tagName === 'notification-summary') return 'notification-summary';
-  if (type === 'notification' && tagName === 'notification') return 'notification';
+  if (type === 'notification') return 'notification';
   if (type === 'reactive') return 'reactive';
   return 'user';
 }
@@ -321,6 +321,64 @@ export function getReactiveSignalView(message: MastraDBMessage): ReactiveSignalV
   return {
     tagName: asString(signal.tagName),
     message: contentsToText(signal.contents),
+  };
+}
+
+export interface BackgroundWorkLifecycleView {
+  tagName: 'work-deferred' | 'work-awaited' | 'work-completed' | 'work-failed' | 'work-cancelled';
+  originToolCallId: string;
+  taskId?: string;
+  status?: string;
+}
+
+const BACKGROUND_WORK_TAGS = new Set([
+  'work-deferred',
+  'work-awaited',
+  'work-completed',
+  'work-failed',
+  'work-cancelled',
+]);
+
+/** Correlation fields for a background-work lifecycle signal. */
+export function getBackgroundWorkLifecycleView(message: MastraDBMessage): BackgroundWorkLifecycleView | undefined {
+  const signal = getSignalView(message);
+  const tagName = asString(signal.tagName);
+  if (!tagName || !BACKGROUND_WORK_TAGS.has(tagName)) return undefined;
+
+  const metadata = asRecord(signal.metadata) ?? {};
+  const originToolCallId = asString(metadata.originToolCallId);
+  if (!originToolCallId) return undefined;
+
+  return {
+    tagName: tagName as BackgroundWorkLifecycleView['tagName'],
+    originToolCallId,
+    taskId: asString(metadata.taskId),
+    status: asString(metadata.status),
+  };
+}
+
+export interface BackgroundCompletionView {
+  taskId: string;
+  originToolCallId: string;
+  toolName?: string;
+  status?: string;
+  argsSummary?: string;
+  errorSummary?: string;
+}
+
+export function getBackgroundCompletionView(message: MastraDBMessage): BackgroundCompletionView | undefined {
+  const metadata = asRecord(getSignalView(message).metadata) ?? {};
+  const completion = asRecord(metadata.backgroundCompletion);
+  const taskId = asString(completion?.taskId);
+  const originToolCallId = asString(completion?.originToolCallId);
+  if (!taskId || !originToolCallId) return undefined;
+  return {
+    taskId,
+    originToolCallId,
+    toolName: asString(completion?.toolName),
+    status: asString(completion?.status),
+    argsSummary: asString(completion?.argsSummary),
+    errorSummary: asString(completion?.errorSummary),
   };
 }
 

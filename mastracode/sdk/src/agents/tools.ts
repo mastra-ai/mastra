@@ -29,6 +29,39 @@ export type ToolLike = {
   execute?: (...args: any[]) => Promise<unknown> | unknown;
 } & Record<string, any>;
 
+const BACKGROUND_ELIGIBLE_PLUGIN_TOOLS = new Set(['mastra_expert']);
+let alexandriaExecutionTail = Promise.resolve();
+
+async function executeAlexandriaSerially(tool: ToolLike, args: any[]): Promise<unknown> {
+  const previous = alexandriaExecutionTail;
+  let release!: () => void;
+  const current = new Promise<void>(resolve => {
+    release = resolve;
+  });
+  alexandriaExecutionTail = previous.then(
+    () => current,
+    () => current,
+  );
+
+  await previous.catch(() => undefined);
+  try {
+    return await tool.execute?.apply(tool, args);
+  } finally {
+    release();
+  }
+}
+
+function configurePluginTool(name: string, tool: ToolLike): ToolLike {
+  if (!BACKGROUND_ELIGIBLE_PLUGIN_TOOLS.has(name)) return tool;
+  return {
+    ...tool,
+    // Eligible for backgrounding, but the agent must opt in per call — a plain
+    // expert question should stay a normal awaited foreground call.
+    background: { enabled: true, defaultDisposition: 'foreground' },
+    execute: (...args: any[]) => executeAlexandriaSerially(tool, args),
+  };
+}
+
 export class LazyNotificationsStorage extends NotificationsStorage {
   constructor(private readonly storage: MastraCompositeStore) {
     super();
@@ -181,7 +214,7 @@ export function createDynamicTools(
       if (pluginTools) {
         for (const [name, tool] of Object.entries(pluginTools)) {
           if (!(name in tools)) {
-            tools[name] = tool;
+            tools[name] = configurePluginTool(name, tool);
           }
         }
       }

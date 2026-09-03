@@ -10,6 +10,12 @@ export interface NotificationOptions {
   kind?: string;
   priority?: string;
   status?: string;
+  backgroundCompletion?: {
+    taskId: string;
+    toolName?: string;
+    argsSummary?: string;
+    errorSummary?: string;
+  };
 }
 
 function priorityColor(priority?: string): string {
@@ -74,16 +80,37 @@ function wrapText(value: string, maxWidth: number): string[] {
 
 export class NotificationComponent extends WidthAwareContainer {
   private readonly options: NotificationOptions;
+  private expanded = false;
 
   constructor(options: NotificationOptions) {
     super();
     this.options = options;
   }
 
+  setExpanded(expanded: boolean): void {
+    this.expanded = expanded;
+    this.rebuild();
+  }
+
   protected rebuildForWidth(width: number): void {
     this.clear();
 
     const options = this.options;
+    if (options.backgroundCompletion && !this.expanded) {
+      const completion = options.backgroundCompletion;
+      const failed = options.status === 'failed';
+      const cancelled = options.status === 'cancelled';
+      const icon = cancelled ? theme.fg('muted', '■') : failed ? theme.fg('error', '✗') : theme.fg('success', '✓');
+      const toolName = theme.fg('toolTitle', completion.toolName ?? 'background task');
+      const status = cancelled
+        ? 'cancelled in background'
+        : failed
+          ? 'failed in background'
+          : 'completed in background';
+      const taskId = theme.fg('muted', ` · ${completion.taskId}`);
+      this.addChild(new Text(`${icon} ${toolName} ${status}${taskId}`, BOX_INDENT, 0));
+      return;
+    }
     const titleText = options.source ? `notification from ${options.source}` : 'notification';
     const details = [options.priority, options.kind, options.status].filter(Boolean).join(' · ');
     const message = options.message.trim();
@@ -94,7 +121,20 @@ export class NotificationComponent extends WidthAwareContainer {
     const titleLines = wrapText(titleText, maxContentWidth);
     const detailLines = details ? wrapText(details, maxContentWidth) : [];
     const messageLines = message ? wrapText(message, maxContentWidth) : [];
-    const allLines = [...titleLines, ...detailLines, ...messageLines];
+    const backgroundDetailLines = options.backgroundCompletion
+      ? [
+          `task · ${options.backgroundCompletion.taskId}`,
+          options.backgroundCompletion.argsSummary
+            ? `invocation · ${options.backgroundCompletion.argsSummary}`
+            : undefined,
+          options.backgroundCompletion.errorSummary
+            ? `failure · ${options.backgroundCompletion.errorSummary}`
+            : undefined,
+        ]
+          .filter((line): line is string => Boolean(line))
+          .flatMap(line => wrapText(line, maxContentWidth))
+      : [];
+    const allLines = [...titleLines, ...detailLines, ...messageLines, ...backgroundDetailLines];
     const contentWidth = Math.max(...allLines.map(line => visibleWidth(line)), 1);
     const borderColor = chalk.hex(mastra.blue);
     const top = `╭${'─'.repeat(contentWidth + 2)}╮`;
@@ -123,6 +163,16 @@ export class NotificationComponent extends WidthAwareContainer {
 
     for (const line of messageLines) {
       this.addChild(new Text(`${borderColor('│')} ${padLine(line, contentWidth)} ${borderColor('│')}`, BOX_INDENT, 0));
+    }
+
+    for (const line of backgroundDetailLines) {
+      this.addChild(
+        new Text(
+          `${borderColor('│')} ${theme.fg('dim', padLine(line, contentWidth))} ${borderColor('│')}`,
+          BOX_INDENT,
+          0,
+        ),
+      );
     }
 
     this.addChild(new Text(borderColor(bottom), BOX_INDENT, 0));
