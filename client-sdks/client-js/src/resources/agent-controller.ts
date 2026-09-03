@@ -65,7 +65,8 @@ type AgentControllerLegacyPagedListMessagesOptions = {
 
 /** Pagination, ordering, filtering, and include options for an Agent Controller thread's messages. */
 export type AgentControllerListMessagesOptions =
-  AgentControllerModernListMessagesOptions | AgentControllerLegacyPagedListMessagesOptions;
+  | AgentControllerModernListMessagesOptions
+  | AgentControllerLegacyPagedListMessagesOptions;
 
 /** A page of hydrated Agent Controller thread messages. */
 export type AgentControllerListMessagesResult = StorageListMessagesOutput;
@@ -358,50 +359,6 @@ export class AgentControllerSession extends BaseResource {
    * `subscribe()` themselves and keep cancellation control.
    */
   async subscribe(options: SubscribeAgentControllerSessionOptions): Promise<AgentControllerSubscription> {
-    // const requestStream = async (): Promise<Response> => {
-    //   const response = (await this.request(this.url(`${this.base()}/stream`), { stream: true })) as Response;
-    //   if (!response.body) {
-    //     throw new Error('No response body for agent controller session stream');
-    //   }
-
-    //   return response;
-    // };
-
-    // const response = await requestStream();
-    // const reader = response.body!.getReader();
-    // const decoder = new TextDecoder();
-    // let buffer = '';
-
-    // setTimeout(async () => {
-    //   while (true) {
-    //     const { done, value } = await reader.read();
-    //     if (done) break;
-    //     buffer += decoder.decode(value, { stream: true });
-    //     for (const line of buffer.split(/\r\n|\n|\r/)) {
-    //       if (!line.startsWith('data:')) continue;
-    //       const data = line.slice(5).trim();
-    //       if (!data) continue;
-    //       let event: AgentControllerEvent;
-    //       try {
-    //         event = hydrateEventTimestamps(JSON.parse(data));
-    //       } catch (err) {
-    //         continue;
-    //       }
-    //       try {
-    //         console.log('onEvent', event);
-    //         options.onEvent(event);
-    //       } catch (err) {
-    //         options.onError?.(err);
-    //       }
-    //     }
-    //   }
-    // }, 0);
-
-    // return {
-    //   unsubscribe: () => {
-    //     void reader.cancel().catch(() => {});
-    //   },
-    // };
     // Normalize reconnect knobs defensively: NaN/negative delays would produce
     // zero-delay timers and a NaN retry cap would never exhaust (`n >= NaN` is
     // always false), turning an outage into a hot retry loop.
@@ -787,11 +744,6 @@ export class AgentControllerSession extends BaseResource {
     }
 
     const query = queryParams.toString();
-    console.log(
-      'query',
-      options,
-      `${this.base()}/threads/${encodeURIComponent(threadId)}/messages${query ? `?${query}` : ''}`,
-    );
     const body = await this.request<SerializedAgentControllerListMessagesResult>(
       this.url(`${this.base()}/threads/${encodeURIComponent(threadId)}/messages${query ? `?${query}` : ''}`),
     );

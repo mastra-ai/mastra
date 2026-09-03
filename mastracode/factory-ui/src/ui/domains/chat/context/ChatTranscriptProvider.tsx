@@ -32,7 +32,6 @@ export function ChatTranscriptProvider({
   isLoadingMoreHistory?: boolean;
   loadMoreHistory?: () => void;
 }) {
-  console.log('initial messages', initialMessages);
   const transcriptApi = useAgentControllerTranscript({ initialThreadId: threadId, initialMessages });
   const [runtime, dispatchRuntime] = useReducer(runtimeReducer, initialChatRuntime);
   const onEvent = (event: Parameters<typeof transcriptApi.onEvent>[0]) => {
