@@ -1977,6 +1977,24 @@ export const API_ROUTE_METADATA = {
       "paginationProperty": "pagination"
     }
   },
+  "POST /observability/traces/query": {
+    "method": "POST",
+    "path": "/observability/traces/query",
+    "pathParams": [],
+    "queryParams": [],
+    "bodyParams": [
+      "group",
+      "orderBy",
+      "page",
+      "timeRange",
+      "where"
+    ],
+    "hasQuery": false,
+    "hasBody": true,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
   "GET /observability/metrics": {
     "method": "GET",
     "path": "/observability/metrics",

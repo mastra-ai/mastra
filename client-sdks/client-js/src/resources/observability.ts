@@ -7,6 +7,8 @@ import type {
   ListTracesArgs,
   ListTracesResponse,
   ListTracesLightResponse,
+  TraceQueryRequest,
+  TraceQueryResponse,
   ListBranchesArgs,
   ListBranchesResponse,
   GetBranchArgs,
@@ -227,6 +229,16 @@ export class Observability extends BaseResource {
   listTraces(params: ListTracesArgs = {}): Promise<ListTracesResponse> {
     const queryString = toQueryParams(params, ['filters', 'pagination', 'orderBy']);
     return this.request(`/observability/traces${queryString ? `?${queryString}` : ''}`);
+  }
+
+  /**
+   * Queries completed logical traces using recursive trace and related-record predicates.
+   *
+   * @param params - Advanced trace query, including its required time range
+   * @returns Matching lightweight traces or distinct thread groups
+   */
+  queryTraces(params: TraceQueryRequest): Promise<TraceQueryResponse> {
+    return this.request('/observability/traces/query', { method: 'POST', body: params });
   }
 
   /**
