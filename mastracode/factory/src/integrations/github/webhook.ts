@@ -219,6 +219,21 @@ function notificationSummary(metadata: GithubWebhookMetadata, label: string): st
   return `${actor}${label} on ${metadata.repository}#${metadata.pullRequestNumber}`;
 }
 
+function isFactoryManagedAuthoringSubscription(subscription: GithubSignalSubscriptionRow): boolean {
+  return subscription.data.source === 'auto-gh-pr-create' || subscription.data.source === 'factory-pr-create';
+}
+
+function notificationSummaryForSubscription(
+  notification: GithubWebhookNotification,
+  subscription: GithubSignalSubscriptionRow,
+): string {
+  if (notification.kind !== 'review-comment-created' || !isFactoryManagedAuthoringSubscription(subscription)) {
+    return notification.summary;
+  }
+
+  return `Inspect all current review feedback on ${notification.metadata.repository}#${notification.metadata.pullRequestNumber}, validate and implement warranted fixes, run verification, commit and push. Explain any feedback intentionally left unchanged. Use the GitHub notification target URL to inspect the comments.`;
+}
+
 function notificationTargetUrl(event: string, payload: Record<string, unknown>): string | undefined {
   if (event === 'issue_comment' || event === 'pull_request_review_comment') {
     return getString(getObject(payload.comment)?.html_url);
@@ -561,7 +576,7 @@ export async function dispatchGithubWebhook(
       const result = await session.sendNotificationSignal({
         source: 'github',
         kind: notification.kind,
-        summary: notification.summary,
+        summary: notificationSummaryForSubscription(notification, subscription),
         priority: notification.priority,
         payload: notification.payload,
         sourceId: parsed.deliveryId,
