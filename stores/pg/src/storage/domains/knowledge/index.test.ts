@@ -12,12 +12,15 @@ vi.setConfig({ testTimeout: 60_000, hookTimeout: 60_000 });
 const pool = new Pool({ connectionString });
 const schemas: string[] = [];
 let schemaCounter = 0;
+let canonicalSchemaName: string | undefined;
 
 createKnowledgeStorageTests(async () => {
-  const schemaName = `knowledge_canonical_${process.pid}_${schemaCounter++}`;
-  schemas.push(schemaName);
-  await pool.query(`CREATE SCHEMA "${schemaName}"`);
-  return new KnowledgePG({ pool, schemaName });
+  if (!canonicalSchemaName) {
+    canonicalSchemaName = `knowledge_canonical_${process.pid}_${schemaCounter++}`;
+    schemas.push(canonicalSchemaName);
+    await pool.query(`CREATE SCHEMA "${canonicalSchemaName}"`);
+  }
+  return new KnowledgePG({ pool, schemaName: canonicalSchemaName });
 });
 
 afterAll(async () => {

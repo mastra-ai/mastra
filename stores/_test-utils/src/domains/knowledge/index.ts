@@ -19,6 +19,7 @@ export function createKnowledgeStorageTests(createStore: () => Promise<Knowledge
     beforeEach(async () => {
       store = await createStore();
       await store.init();
+      await store.dangerouslyClearAll();
       await store.createNode({ id: ORG_SCOPE_ID, name: 'Acme', isScope: true, scopeIds: [] });
       await store.createNode({ id: PROJECT_SCOPE_ID, name: 'Project scope', isScope: true, scopeIds: [ORG_SCOPE_ID] });
       await store.createNode({ id: OTHER_SCOPE_ID, name: 'Other', isScope: true, scopeIds: [] });
@@ -1897,6 +1898,44 @@ export function createKnowledgeStorageTests(createStore: () => Promise<Knowledge
           entry => entry.documentId === documentId && entry.status !== 'completed',
         ),
       ).toEqual([]);
+    });
+
+    it('preserves deterministic randomized v2 parity', async () => {
+      let state = 0x4d415354;
+      const random = () => {
+        state = (Math.imul(state, 1_664_525) + 1_013_904_223) >>> 0;
+        return state / 0x1_0000_0000;
+      };
+      const expectedProjectIds: string[] = [];
+
+      for (let index = 0; index < 24; index += 1) {
+        const id = `20000000-0000-4000-8000-${String(index).padStart(12, '0')}`;
+        const scopeIds = random() < 0.5 ? [PROJECT_SCOPE_ID] : [OTHER_SCOPE_ID];
+        if (random() < 0.25) scopeIds.push(scopeIds[0] === PROJECT_SCOPE_ID ? OTHER_SCOPE_ID : PROJECT_SCOPE_ID);
+        if (scopeIds.includes(PROJECT_SCOPE_ID)) expectedProjectIds.push(id);
+        const node = await store.createNode({
+          id,
+          name: `Seeded ${String(index).padStart(2, '0')} %_${Math.floor(random() * 10_000)}`,
+          scopeIds,
+        });
+        await store.createRecord({
+          id: `record-randomized-${String(index).padStart(2, '0')}`,
+          node,
+          text: `Deterministic payload ${index}`,
+          scopeIds,
+        });
+      }
+
+      const projectNodes = await store.listNodes({ scopeIds: [PROJECT_SCOPE_ID], limit: 100 });
+      expect(projectNodes.map(node => node.id).sort()).toEqual(expectedProjectIds.sort());
+      for (const node of projectNodes) {
+        expect(await store.resolveNode({ name: node.name, scopeIds: [PROJECT_SCOPE_ID] })).toMatchObject({
+          id: node.id,
+          version: 1,
+        });
+        expect((await store.listRecords({ node, scopeIds: [PROJECT_SCOPE_ID] })).records).toHaveLength(1);
+      }
+      expect((await store.listNodes({ scopeIds: [MISSING_SCOPE_ID], limit: 100 })).map(node => node.id)).toEqual([]);
     });
 
     it('clears only canonical Knowledge state', async () => {
