@@ -159,9 +159,19 @@ export function createMapResultsStep<OUTPUT = undefined>({
         return bail(modelOutput);
       } catch (error) {
         // Record the error with tripwire context so failures aren't masked,
-        // then end the whole span tree
+        // then end the whole span tree. Rejections are not guaranteed to be
+        // Error instances; normalize so span reporting cannot itself throw.
+        const spanError =
+          error instanceof Error
+            ? error
+            : new Error(
+                typeof error === 'string'
+                  ? error
+                  : ((error as { message?: string } | null | undefined)?.message ??
+                      'Tripwire fallback rejected with a non-error value'),
+              );
         agentSpan?.error({
-          error: error as Error,
+          error: spanError,
           endTree: true,
           attributes: {
             tripwireAbort: {
