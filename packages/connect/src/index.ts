@@ -12,4 +12,5 @@ export { createJiraTools } from './providers/jira.js';
 export { createLinearTools } from './providers/linear.js';
 export { createNeonTools } from './providers/neon.js';
 export { createNotionTools } from './providers/notion.js';
+export { createResendTools } from './providers/resend.js';
 export { createSnowflakeTools } from './providers/snowflake.js';

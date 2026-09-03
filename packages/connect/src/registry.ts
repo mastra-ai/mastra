@@ -6,6 +6,7 @@ import { createJiraTools } from './providers/jira.js';
 import { createLinearTools } from './providers/linear.js';
 import { createNeonTools } from './providers/neon.js';
 import { createNotionTools } from './providers/notion.js';
+import { createResendTools } from './providers/resend.js';
 import { createSnowflakeTools } from './providers/snowflake.js';
 import type { ProviderToolsOptions } from './toolset.js';
 
@@ -62,6 +63,11 @@ export const PROVIDERS: Partial<Record<ProviderKey, ProviderRegistration>> = {
     integrationId: 'cloudflare',
     envVar: 'MASTRA_CLOUDFLARE_CONNECTION_ID',
     createTools: createCloudflareTools,
+  },
+  resend: {
+    integrationId: 'resend',
+    envVar: 'MASTRA_RESEND_CONNECTION_ID',
+    createTools: createResendTools,
   },
   snowflake: {
     integrationId: 'snowflake',
