@@ -229,7 +229,7 @@ export class ObservationStep {
         const newOutput = messageList.clear.response.db();
         const messagesToSave = [...newInput, ...newOutput];
         if (messagesToSave.length > 0) {
-          await om.persistMessages(messagesToSave, threadId, resourceId);
+          await om.persistClientInputMessages(newInput, newOutput, threadId, resourceId);
           for (const msg of messagesToSave) {
             messageList.add(msg, 'memory');
           }
@@ -242,9 +242,11 @@ export class ObservationStep {
         // starve them. Persisting alone is enough for post-observation cleanup to operate
         // on stored state; persistMessages is an upsert, so the step > 0 drain re-saving
         // these messages later is harmless.
-        const pending = [...messageList.get.input.db(), ...messageList.get.response.db()];
+        const pendingInput = messageList.get.input.db();
+        const pendingOutput = messageList.get.response.db();
+        const pending = [...pendingInput, ...pendingOutput];
         if (pending.length > 0) {
-          await om.persistMessages(pending, threadId, resourceId);
+          await om.persistClientInputMessages(pendingInput, pendingOutput, threadId, resourceId);
         }
         // The in-flight prompt was just observed, but the model still needs it to answer —
         // protect it (and everything else pending) from cleanup by identity rather than

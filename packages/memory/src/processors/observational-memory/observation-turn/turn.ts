@@ -215,9 +215,8 @@ export class ObservationTurn {
     // Save any unsaved messages from the last step
     const unsavedInput = this.messageList.get.input.db();
     const unsavedOutput = this.messageList.get.response.db();
-    const unsavedMessages = [...unsavedInput, ...unsavedOutput];
-    if (unsavedMessages.length > 0) {
-      await this.om.persistMessages(unsavedMessages, this.threadId, this.resourceId);
+    if (unsavedInput.length > 0 || unsavedOutput.length > 0) {
+      await this.om.persistClientInputMessages(unsavedInput, unsavedOutput, this.threadId, this.resourceId);
     }
 
     // When the agent goes idle, start buffering any unobserved messages in the background.
