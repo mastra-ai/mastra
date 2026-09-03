@@ -1111,6 +1111,10 @@ export class KnowledgePG extends KnowledgeStorage {
       );
       args.push(...membershipScopeIds);
     }
+    if (input.name) {
+      clauses.push('lower(n.name)=?');
+      args.push(canonicalName(input.name));
+    }
     if (input.namePrefix) {
       clauses.push("lower(n.name) LIKE ? ESCAPE '='");
       args.push(`${escapeLikePattern(canonicalName(input.namePrefix))}%`);
@@ -1122,6 +1126,7 @@ export class KnowledgePG extends KnowledgeStorage {
     if (input.isScope !== undefined) clauses.push(`n.isScope=${input.isScope ? 'TRUE' : 'FALSE'}`);
     if (input.cursor) {
       const cursor = parseKnowledgeNodeCursor(input.cursor, {
+        name: input.name,
         namePrefix: input.namePrefix,
         kind: input.kind,
         isScope: input.isScope,
