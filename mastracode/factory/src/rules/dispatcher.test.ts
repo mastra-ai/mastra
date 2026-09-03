@@ -1202,11 +1202,12 @@ describe('FactoryDecisionDispatcher', () => {
           releaseQuery = resolve;
         });
         vi.spyOn(storage, 'listRunBindings').mockImplementation(async (...args) => {
+          const bindings = await listRunBindings(...args);
           if (terminalEmitted) {
             queryStarted();
             await queryReleased;
           }
-          return listRunBindings(...args);
+          return bindings;
         });
         const { item, transitionService } = await queueDecision(storage, planSkill('plan-error-before-hand-on'));
         const { controller, emitAgentEnd, session } = createSession(undefined, {
@@ -1226,7 +1227,6 @@ describe('FactoryDecisionDispatcher', () => {
         terminalEmitted = true;
         emitAgentEnd('error');
         await terminalQueryStarted;
-        vi.setSystemTime(new Date('2030-01-01T00:00:01Z'));
         await bindRole(storage, item.id, 'work');
         releaseQuery();
         await tick;

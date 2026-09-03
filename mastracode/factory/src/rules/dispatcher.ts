@@ -68,19 +68,26 @@ function watchRun(
     timeoutMs,
     approvePlans,
     onParkedRun,
+    onAgentEnd,
     label,
-  }: { timeoutMs: number; approvePlans: boolean; onParkedRun: ParkedRunPolicy; label: string },
+  }: {
+    timeoutMs: number;
+    approvePlans: boolean;
+    onParkedRun: ParkedRunPolicy;
+    onAgentEnd?: () => Promise<boolean>;
+    label: string;
+  },
 ) {
   let resolveAgentEnd!: () => void;
   let agentEnd!: Promise<void>;
   let endReason: 'complete' | 'aborted' | 'error' | 'suspended' | undefined;
-  let endedAt: Date | undefined;
+  let supersededAtEnd: Promise<boolean> | undefined;
   let parked: { toolName: string; toolCallId: string } | undefined;
   // Re-armed before a redelivery so the second send waits on its own run's
   // ending rather than seeing the one that already resolved.
   const arm = () => {
     endReason = undefined;
-    endedAt = undefined;
+    supersededAtEnd = undefined;
     agentEnd = new Promise<void>(resolve => {
       resolveAgentEnd = resolve;
     });
@@ -89,7 +96,7 @@ function watchRun(
   const unsubscribe = session.subscribe(event => {
     if (event.type === 'agent_end') {
       endReason = event.reason;
-      endedAt = new Date();
+      supersededAtEnd = onAgentEnd?.();
       resolveAgentEnd();
       return;
     }
@@ -106,7 +113,7 @@ function watchRun(
   return {
     arm,
     wait,
-    endedAt: () => endedAt,
+    supersededAtEnd: () => supersededAtEnd,
     close: unsubscribe,
     /** The run's own verdict, thrown as what the dispatcher should record. */
     async settle(): Promise<void> {
@@ -715,6 +722,7 @@ export class FactoryDecisionDispatcher {
           timeoutMs: this.#skillCompletionObservationTimeoutMs,
           approvePlans: await this.#plansAreAutoApproved(record, item),
           onParkedRun: 'escalate',
+          onAgentEnd: () => this.#roleSuperseded(record, decision.role),
           label: 'Factory skill run',
         });
 
@@ -779,9 +787,10 @@ export class FactoryDecisionDispatcher {
             // Roles share one session. When this role handed the card on
             // mid-turn, the next role's kickoff was delivered onto the same
             // run and the turn never ended for us — its eventual verdict is
-            // the successor's to record, not ours. A hand-on committed after
-            // this terminal event cannot retroactively erase our own failure.
-            if (!(await this.#roleSuperseded(record, decision.role, run.endedAt()))) throw error;
+            // the successor's to record, not ours. Capture that state when the
+            // terminal event arrives so a later hand-on cannot erase our failure.
+            const superseded = (await run.supersededAtEnd()) ?? (await this.#roleSuperseded(record, decision.role));
+            if (!superseded) throw error;
           }
         } finally {
           run.close();
@@ -992,11 +1001,7 @@ export class FactoryDecisionDispatcher {
    * fresh decision for the role (the card came back to it) must still dispatch
    * even though an older revoked binding for that role is on record.
    */
-  async #roleSuperseded(
-    record: FactoryDeferredDecisionRecord,
-    role: string,
-    observedTerminalAt?: Date,
-  ): Promise<boolean> {
+  async #roleSuperseded(record: FactoryDeferredDecisionRecord, role: string): Promise<boolean> {
     if (!record.workItemId) return false;
     const bindings = await this.#storage.listRunBindings(record.orgId, record.factoryProjectId, record.workItemId);
     const own = bindings.filter(candidate => candidate.role === role);
@@ -1005,7 +1010,6 @@ export class FactoryDecisionDispatcher {
       revoked =>
         revoked.revokedAt !== null &&
         revoked.revokedAt.getTime() >= record.createdAt.getTime() &&
-        (observedTerminalAt === undefined || revoked.revokedAt.getTime() <= observedTerminalAt.getTime()) &&
         bindings.some(
           successor =>
             successor.role !== role &&
@@ -1013,8 +1017,7 @@ export class FactoryDecisionDispatcher {
             successor.resourceId === revoked.resourceId &&
             successor.sessionId === revoked.sessionId &&
             successor.threadId === revoked.threadId &&
-            successor.createdAt.getTime() >= revoked.revokedAt!.getTime() &&
-            (observedTerminalAt === undefined || successor.createdAt.getTime() <= observedTerminalAt.getTime()),
+            successor.createdAt.getTime() >= revoked.revokedAt!.getTime(),
         ),
     );
   }
