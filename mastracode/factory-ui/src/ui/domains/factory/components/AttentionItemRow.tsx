@@ -17,7 +17,7 @@ import { createElement, type ReactElement, type ReactNode } from 'react';
 import { Link, useNavigate } from 'react-router';
 
 import { relativeTime } from '../../../../lib/date/relativeTime';
-import { supervisorAskPath } from '../../supervisor/services/supervisor';
+import { attentionPrompt, supervisorAskPath } from '../../supervisor/services/supervisor';
 import { attentionAuthorName, factoryAttentionTargetPath } from '../services/attention';
 import type { FactoryAttentionItem } from '../services/attention';
 import { TIMESTAMP } from './panel';
@@ -136,9 +136,7 @@ export function AttentionItemRow({
               aria-label={`Ask supervisor about ${item.title}`}
               onClick={() => {
                 onOpen?.();
-                void navigate(
-                  supervisorAskPath(factoryId, `Explain this attention item: ${item.title}. ${item.detail}`),
-                );
+                void navigate(supervisorAskPath(factoryId, attentionPrompt(item)));
               }}
             >
               <Brain aria-hidden />
