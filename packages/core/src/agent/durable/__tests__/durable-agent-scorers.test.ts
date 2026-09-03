@@ -444,4 +444,47 @@ describe('DurableAgent scoringData propagation', () => {
     expect(second.scoringData).toBeDefined();
     expect(JSON.stringify(second.scoringData!.output)).toContain('Found: mastra');
   });
+
+  it('run-level returnScorerData survives resume when agent defaultOptions disable it', async () => {
+    const model = createToolCallThenTextModel('searchTool', { query: 'mastra' }, 'Found: mastra');
+    const searchTool = createTool({
+      id: 'searchTool',
+      description: 'Search for information',
+      inputSchema: z.object({ query: z.string() }),
+      execute: async () => ({ results: ['mastra'] }),
+    });
+
+    const baseAgent = new Agent({
+      id: 'scoring-data-defaults-agent',
+      name: 'Scoring Data Defaults Agent',
+      instructions: 'Use the search tool when asked.',
+      model: model as LanguageModelV2,
+      tools: { searchTool },
+      // Merged into resolvedOptions on resume — must NOT override the
+      // run-level opt-in persisted at prepare time.
+      defaultOptions: { returnScorerData: false },
+    });
+    const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
+
+    new Mastra({
+      logger: false,
+      storage: new MockStore(),
+      agents: { 'scoring-data-defaults-agent': durableAgent as any },
+    });
+
+    const first = await durableAgent.generate('search for mastra', {
+      requireToolApproval: true,
+      returnScorerData: true,
+    });
+
+    expect(first.finishReason).toBe('suspended');
+    expect(first.scoringData).toBeDefined();
+
+    const second = await durableAgent.resumeGenerate(first.runId!, { approved: true });
+
+    expect(second.text).toBe('Found: mastra');
+    expect(second.finishReason).toBe('stop');
+    expect(second.scoringData).toBeDefined();
+    expect(JSON.stringify(second.scoringData!.output)).toContain('Found: mastra');
+  });
 });
