@@ -18,41 +18,44 @@ test.describe('Datasets list infinite scroll', () => {
     test('loads the next page when scrolled to the bottom of the list', async ({ page }) => {
       // The API lists datasets newest-first with 20 per page, so the first page
       // holds "E2E Dataset 25".."E2E Dataset 06" and the remaining 5 load on scroll.
-      await seedDatasets(25);
+      const seededNames = await seedDatasets(25);
 
       await page.goto('/datasets');
 
-      await expect(page.getByRole('link', { name: /E2E Dataset 25/ })).toBeVisible();
-      await expect(page.getByRole('link', { name: /E2E Dataset 06/ })).toHaveCount(1);
-      await expect(page.getByRole('link', { name: /E2E Dataset 05/ })).toHaveCount(0);
-      await expect(page.getByRole('link', { name: /E2E Dataset/ })).toHaveCount(20);
+      const datasetLinks = page.getByRole('link', { name: /E2E Dataset/ });
+      await expect(datasetLinks).toHaveCount(20);
+      for (const name of seededNames.slice(5)) {
+        await expect(page.getByRole('link', { name: new RegExp(`^${name}\\b`) })).toHaveCount(1);
+      }
 
       // Scroll the last loaded row into view; the sentinel right below it
       // triggers fetching the next page.
       await page.getByRole('link', { name: /E2E Dataset 06/ }).scrollIntoViewIfNeeded();
 
-      await expect(page.getByRole('link', { name: /E2E Dataset 05/ })).toHaveCount(1);
       await page.getByRole('link', { name: /E2E Dataset 01/ }).scrollIntoViewIfNeeded();
-      await expect(page.getByRole('link', { name: /E2E Dataset 01/ })).toBeVisible();
-      await expect(page.getByRole('link', { name: /E2E Dataset/ })).toHaveCount(25);
+      await expect(datasetLinks).toHaveCount(25);
+      for (const name of seededNames) {
+        await expect(page.getByRole('link', { name: new RegExp(`^${name}\\b`) })).toHaveCount(1);
+      }
     });
   });
 
   test.describe('when a search term is entered', () => {
     test('filters the loaded datasets by name', async ({ page }) => {
-      await seedDatasets(12);
+      const seededNames = await seedDatasets(12);
 
       await page.goto('/datasets');
 
-      await expect(page.getByRole('link', { name: /E2E Dataset 12/ })).toBeVisible();
-      await expect(page.getByRole('link', { name: /E2E Dataset 01/ })).toBeVisible();
-      await expect(page.getByRole('link', { name: /E2E Dataset/ })).toHaveCount(12);
+      const datasetLinks = page.getByRole('link', { name: /E2E Dataset/ });
+      await expect(datasetLinks).toHaveCount(12);
+      for (const name of seededNames) {
+        await expect(page.getByRole('link', { name: new RegExp(`^${name}\\b`) })).toHaveCount(1);
+      }
 
       await page.getByPlaceholder('Filter by dataset name').fill('E2E Dataset 12');
 
-      await expect(page.getByRole('link', { name: /E2E Dataset 12/ })).toBeVisible();
-      await expect(page.getByRole('link', { name: /E2E Dataset 01/ })).toHaveCount(0);
-      await expect(page.getByRole('link', { name: /E2E Dataset/ })).toHaveCount(1);
+      await expect(datasetLinks).toHaveCount(1);
+      await expect(datasetLinks).toHaveText([/^E2E Dataset 12\b/]);
     });
   });
 });
