@@ -24,6 +24,7 @@ describe('batchDeleteTraces', () => {
 
     await batchDeleteTraces(db, 'TEST_SCHEMA', { traceIds: ['trace-1', 'trace-2'] });
 
+    expect(db.tx).toHaveBeenCalledTimes(1);
     expect(executeManyCalls).toHaveLength(3);
     expect(executeManyCalls.map(call => call.sql)).toEqual([
       'DELETE FROM "TEST_SCHEMA"."MASTRA_AI_SPANS" WHERE "traceId" = :traceId',
@@ -33,6 +34,47 @@ describe('batchDeleteTraces', () => {
     for (const call of executeManyCalls) {
       expect(call.binds).toEqual([{ traceId: 'trace-1' }, { traceId: 'trace-2' }]);
     }
+  });
+
+  it('still deletes spans and logs when the scorers table is not provisioned', async () => {
+    const { db, executeManyCalls } = createFakeDb();
+    const missingTable = new Error('ORA-00942: table or view does not exist') as Error & { errorNum: number };
+    missingTable.errorNum = 942;
+    let call = 0;
+    const client = {
+      executeMany: vi.fn(async (sql: string, binds: Record<string, unknown>[]) => {
+        call++;
+        if (sql.includes('MASTRA_SCORERS')) throw missingTable;
+        executeManyCalls.push({ sql, binds });
+      }),
+    } as unknown as OracleTxClient;
+    (db.tx as ReturnType<typeof vi.fn>).mockImplementation(async (cb: (c: OracleTxClient) => Promise<void>) =>
+      cb(client),
+    );
+
+    await expect(batchDeleteTraces(db, undefined, { traceIds: ['trace-1'] })).resolves.toBeUndefined();
+
+    expect(call).toBe(3);
+    expect(executeManyCalls.map(c => c.sql)).toEqual([
+      'DELETE FROM "MASTRA_AI_SPANS" WHERE "traceId" = :traceId',
+      'DELETE FROM "MASTRA_LOG_EVENTS" WHERE "traceId" = :traceId',
+    ]);
+  });
+
+  it('rethrows non-ORA-00942 errors from the scorer delete', async () => {
+    const { db } = createFakeDb();
+    const otherError = new Error('ORA-01031: insufficient privileges') as Error & { errorNum: number };
+    otherError.errorNum = 1031;
+    const client = {
+      executeMany: vi.fn(async (sql: string) => {
+        if (sql.includes('MASTRA_SCORERS')) throw otherError;
+      }),
+    } as unknown as OracleTxClient;
+    (db.tx as ReturnType<typeof vi.fn>).mockImplementation(async (cb: (c: OracleTxClient) => Promise<void>) =>
+      cb(client),
+    );
+
+    await expect(batchDeleteTraces(db, undefined, { traceIds: ['trace-1'] })).rejects.toThrow();
   });
 
   it('does not open a transaction for an empty trace batch', async () => {

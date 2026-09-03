@@ -93,14 +93,22 @@ function getEngineNameAndArgs(engine: string): { name: string; args: string } | 
 
 function hasBalancedParens(s: string): boolean {
   let depth = 0;
-  for (const c of s) {
-    if (c === '(') depth++;
+  let quote: string | undefined;
+  for (let i = 0; i < s.length; i++) {
+    const c = s[i];
+    if (quote) {
+      if (c === '\\' && quote === "'") i++;
+      else if (c === quote) quote = undefined;
+      continue;
+    }
+    if (c === '`' || c === '"' || c === "'") quote = c;
+    else if (c === '(') depth++;
     else if (c === ')') {
       depth--;
       if (depth < 0) return false;
     }
   }
-  return depth === 0;
+  return depth === 0 && quote === undefined;
 }
 
 export function buildReplicatedTableEngine(engine: string, replication?: ClickhouseReplicationConfig): string {
@@ -196,9 +204,19 @@ function rewriteEngineClauses(sql: string, replication: ClickhouseReplicationCon
     if (sql[argsStart] === '(') {
       let depth = 0;
       let closingParenEnd: number | undefined;
+      // Track quoted regions so parentheses inside quoted identifiers
+      // (`col)`, "col)") or string literals ('...)') do not affect depth.
+      let quote: string | undefined;
       for (let i = argsStart; i < sql.length; i++) {
         const char = sql[i];
-        if (char === '(') depth++;
+        if (quote) {
+          if (char === '\\' && quote === "'") i++;
+          else if (char === quote) quote = undefined;
+          continue;
+        }
+        if (char === '`' || char === '"' || char === "'") {
+          quote = char;
+        } else if (char === '(') depth++;
         else if (char === ')') {
           depth--;
           if (depth === 0) {

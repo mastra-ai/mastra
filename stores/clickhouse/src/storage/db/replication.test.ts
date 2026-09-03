@@ -161,6 +161,18 @@ ENGINE = ReplicatedReplacingMergeTree('/clickhouse/tables/{shard}/{database}/{ta
 ORDER BY id`);
   });
 
+  it('rewrites engine args containing quoted identifiers with parentheses', () => {
+    const ddl = `CREATE TABLE IF NOT EXISTS mastra_threads (
+  \`updated)At\` DateTime64(3)
+)
+ENGINE = ReplacingMergeTree(\`updated)At\`)
+ORDER BY id`;
+
+    expect(applyReplicationToDDL(ddl, {})).toContain(
+      "ENGINE = ReplicatedReplacingMergeTree('/clickhouse/tables/{shard}/{database}/{table}', '{replica}', `updated)At`)\nORDER BY id",
+    );
+  });
+
   it('rewrites table DDL engines with nested parentheses in engine args', () => {
     const ddl = `CREATE TABLE IF NOT EXISTS mastra_threads (
   id String
