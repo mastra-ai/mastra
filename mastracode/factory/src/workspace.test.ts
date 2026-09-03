@@ -883,6 +883,28 @@ describe('GitHub session workspace preparation', () => {
     expect(sandbox.executeCommand).toHaveBeenCalled();
   });
 
+  it('authorizes a workspace-free supervisor session before controller session creation', async () => {
+    const projects = { get: vi.fn().mockResolvedValue({ id: 'project-1', orgId: 'org-1' }) };
+    const resolver = createWorkspaceFactory({ projects: projects as any });
+    const requestContext = createGithubRequestContext('project-1', 'factory-supervisor:project-1');
+
+    await expect(resolver({ requestContext } as any)).resolves.toBeUndefined();
+    expect(projects.get).toHaveBeenCalledWith({ orgId: 'org-1', id: 'project-1' });
+  });
+
+  it('refuses a workspace-free supervisor session outside the caller organization', async () => {
+    const projects = { get: vi.fn().mockResolvedValue(null) };
+    const resolver = createWorkspaceFactory({ projects: projects as any });
+    const requestContext = createGithubRequestContext('project-1', 'factory-supervisor:project-1', {
+      organizationId: 'org-2',
+      workosId: 'user-1',
+    });
+
+    await expect(resolver({ requestContext } as any)).rejects.toThrow(
+      'Factory supervisor project-1 is not available to the current user',
+    );
+  });
+
   it('opens the session for a session-shaped auth user, whose org lives on the session half', async () => {
     const { root, workspace } = await createLocalFactory();
     addProject();

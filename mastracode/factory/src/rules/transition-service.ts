@@ -71,6 +71,7 @@ export interface FactoryTransitionServiceOptions {
     factoryProjectId: string;
     workItemId: string;
     stage: FactoryRuleStage;
+    revision: number;
   }) => Promise<void> | void;
   /** Upper bound on how long a committed transition waits for
    * `onTerminalStage` before returning (default 30s). The cleanup continues
@@ -491,6 +492,7 @@ export class FactoryTransitionService {
             factoryProjectId: request.factoryProjectId,
             workItemId: request.workItemId,
             stage: result.stage,
+            revision: result.revision,
           }),
         );
         // A late rejection after the timeout wins the race must not surface

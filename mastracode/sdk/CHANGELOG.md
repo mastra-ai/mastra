@@ -1,5 +1,17 @@
 # @mastra/code-sdk
 
+## 1.7.0-alpha.2
+
+### Minor Changes
+
+- Added host-provided session instructions so workspace-free agent sessions can receive purpose-specific guidance. ([#23001](https://github.com/mastra-ai/mastra/pull/23001))
+
+  ```ts
+  createMastraCodeAgentController({
+    hostInstructions: 'Help operators inspect and repair Factory state.',
+  });
+  ```
+
 ## 1.6.1-alpha.1
 
 ### Patch Changes

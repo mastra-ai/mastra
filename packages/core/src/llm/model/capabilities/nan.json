@@ -1,0 +1,5 @@
+{
+  "attachment": ["gemma4", "glm5.3-flash", "mimo-v2.5", "qwen3.6", "qwen3.8-flash"],
+  "temperature": ["deepseek-v4-flash", "gemma4", "glm5.2", "glm5.3-flash", "mimo-v2.5", "qwen3.6"],
+  "structuredOutput": ["deepseek-v4-flash", "gemma4", "glm5.2", "glm5.3-flash", "qwen3.6", "qwen3.8-flash"]
+}

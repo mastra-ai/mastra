@@ -7,10 +7,12 @@ import { buildFullPromptSections, joinPromptSections } from './prompts/index.js'
 
 export async function getDynamicInstructions({
   requestContext,
+  hostInstructions,
 }: {
   requestContext: { get(key: string): unknown };
+  hostInstructions?: string;
 }): Promise<string> {
-  return joinPromptSections(await getDynamicInstructionSections({ requestContext }));
+  return joinPromptSections(await getDynamicInstructionSections({ requestContext, hostInstructions }));
 }
 
 /**
@@ -20,8 +22,10 @@ export async function getDynamicInstructions({
  */
 export async function getDynamicInstructionSections({
   requestContext,
+  hostInstructions,
 }: {
   requestContext: { get(key: string): unknown };
+  hostInstructions?: string;
 }): Promise<PromptSection[]> {
   const agentControllerContext = requestContext.get('controller') as
     | AgentControllerRequestContext<MastraCodeComposedState>
@@ -47,6 +51,7 @@ export async function getDynamicInstructionSections({
     currentDate: new Date().toISOString().split('T')[0]!,
     workingDir: projectPath,
     state,
+    hostInstructions,
   };
 
   const promptSections = buildFullPromptSections(promptCtx);
