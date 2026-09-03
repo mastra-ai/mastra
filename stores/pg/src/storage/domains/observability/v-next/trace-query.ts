@@ -37,7 +37,14 @@ const SPAN_FIELDS = {
 
 const SCORE_FIELDS = {
   scorerId: 's."scorerId"',
+  scorerVersion: 's."scorerVersion"',
+  scoreSource: 's."scoreSource"',
   score: 's."score"',
+  timestamp: 's."timestamp"',
+  spanId: 's."spanId"',
+  entityVersionId: 's."entityVersionId"',
+  parentEntityVersionId: 's."parentEntityVersionId"',
+  rootEntityVersionId: 's."rootEntityVersionId"',
 } satisfies FieldRegistry<TraceQueryScoreField>;
 
 const TRACE_SELECT = `

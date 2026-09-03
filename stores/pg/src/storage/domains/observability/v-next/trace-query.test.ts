@@ -38,7 +38,18 @@ describe('Postgres advanced trace query', () => {
               op: 'and',
               args: [
                 { op: 'eq', left: { path: 'scorerId' }, right: { literal: "factuality' OR TRUE --" } },
+                { op: 'eq', left: { path: 'scorerVersion' }, right: { literal: 'v2' } },
+                { op: 'in', value: { path: 'scoreSource' }, set: ['automated'] },
+                {
+                  op: 'gte',
+                  left: { path: 'timestamp' },
+                  right: { literal: '2026-01-01T06:00:00-06:00' },
+                },
                 { op: 'lt', left: { path: 'score' }, right: { literal: 0.6 } },
+                { op: 'exists', path: 'spanId' },
+                { op: 'eq', left: { path: 'entityVersionId' }, right: { literal: 'entity-v2' } },
+                { op: 'exists', path: 'parentEntityVersionId' },
+                { op: 'notIn', value: { path: 'rootEntityVersionId' }, set: ['root-v2'] },
               ],
             },
           },
@@ -51,6 +62,14 @@ describe('Postgres advanced trace query', () => {
     expect(compiled.text.match(/EXISTS \(/g)).toHaveLength(3);
     expect(compiled.text).toContain('s."traceId" = r."traceId"');
     expect(compiled.text).toContain('newer."scoreId" = s."scoreId"');
+    expect(compiled.text).toContain('s."scorerVersion" IS NOT DISTINCT FROM');
+    expect(compiled.text).toContain('s."scoreSource" IS NOT NULL');
+    expect(compiled.text).toContain('s."timestamp" IS NOT NULL AND s."timestamp" >=');
+    expect(compiled.text).toContain('s."spanId" IS NOT NULL');
+    expect(compiled.text).toContain('s."entityVersionId" IS NOT DISTINCT FROM');
+    expect(compiled.text).toContain('s."parentEntityVersionId" IS NOT NULL');
+    expect(compiled.text).toContain('s."rootEntityVersionId" IS NULL OR s."rootEntityVersionId" NOT IN');
+    expect(compiled.values).toContain('2026-01-01T12:00:00.000Z');
   });
 
   it('emits only referenced relation scopes and reuses each current-record reconstruction', () => {

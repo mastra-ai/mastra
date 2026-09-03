@@ -38,7 +38,18 @@ describe('ClickHouse advanced trace query', () => {
               op: 'and',
               args: [
                 { op: 'eq', left: { path: 'scorerId' }, right: { literal: "factuality' OR 1" } },
+                { op: 'eq', left: { path: 'scorerVersion' }, right: { literal: 'v2' } },
+                { op: 'in', value: { path: 'scoreSource' }, set: ['automated'] },
+                {
+                  op: 'gte',
+                  left: { path: 'timestamp' },
+                  right: { literal: '2026-01-01T06:00:00-06:00' },
+                },
                 { op: 'lt', left: { path: 'score' }, right: { literal: 0.6 } },
+                { op: 'exists', path: 'spanId' },
+                { op: 'eq', left: { path: 'entityVersionId' }, right: { literal: 'entity-v2' } },
+                { op: 'exists', path: 'parentEntityVersionId' },
+                { op: 'notIn', value: { path: 'rootEntityVersionId' }, set: ['root-v2'] },
               ],
             },
           },
@@ -50,6 +61,17 @@ describe('ClickHouse advanced trace query', () => {
     expect(Object.values(compiled.query_params)).toContain("factuality' OR 1");
     expect(compiled.query.match(/EXISTS \(/g)).toHaveLength(1);
     expect(compiled.query).toContain('s.traceId = r.traceId');
+    expect(compiled.query).toContain('LIMIT 1 BY scoreId');
+    expect(compiled.query).toContain('scorerVersion,');
+    expect(compiled.query).toContain('scoreSource,');
+    expect(compiled.query).toContain('timestamp,');
+    expect(compiled.query).toContain('spanId,');
+    expect(compiled.query).toContain('entityVersionId,');
+    expect(compiled.query).toContain('parentEntityVersionId,');
+    expect(compiled.query).toContain('rootEntityVersionId');
+    expect(compiled.query).toMatch(/s\.timestamp >= \{trace_query_6:DateTime64\(3, 'UTC'\)\}/);
+    expect(compiled.query).toContain('isNotNull(s.spanId)');
+    expect(Object.values(compiled.query_params)).toContain('2026-01-01 12:00:00.000');
   });
 
   it('deduplicates completed span deliveries without relying on background merges', () => {
