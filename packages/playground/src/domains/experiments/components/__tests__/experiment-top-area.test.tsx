@@ -38,7 +38,7 @@ describe('ExperimentTopArea', () => {
     );
   });
 
-  it('titles the page with the run itself', async () => {
+  it('should render the experiment name as the title when present', async () => {
     const { queryClient } = renderWithProviders(
       <TestLinkProvider>
         <ExperimentTopArea experiment={namedExperiment} />
@@ -46,8 +46,23 @@ describe('ExperimentTopArea', () => {
       { router: true },
     );
 
-    // The run is the subject of the page; the dataset it ran on lives in the flow chain.
-    expect(await screen.findByText(`Experiment #${namedExperiment.id.slice(0, 8)}`)).toBeDefined();
+    expect(await screen.findByRole('heading', { name: namedExperiment.name! })).toBeDefined();
+    expect(screen.queryByText(`Experiment #${namedExperiment.id.slice(0, 8)}`)).toBeNull();
+
+    await waitForMutationsIdle(queryClient);
+  });
+
+  it('should fall back to the short id when the experiment has no name', async () => {
+    const { queryClient } = renderWithProviders(
+      <TestLinkProvider>
+        <ExperimentTopArea experiment={unnamedExperiment} />
+      </TestLinkProvider>,
+      { router: true },
+    );
+
+    expect(
+      await screen.findByRole('heading', { name: `Experiment #${unnamedExperiment.id.slice(0, 8)}` }),
+    ).toBeDefined();
 
     await waitForMutationsIdle(queryClient);
   });

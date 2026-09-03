@@ -5,6 +5,7 @@ import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { ExperimentFlowChain } from '@/domains/experiments/components/experiment-flow-chain';
 import { ExperimentMetaBar } from '@/domains/experiments/components/experiment-meta-bar';
 import { ExperimentStatusIcon } from '@/domains/experiments/components/experiment-stats';
+import { RenameExperimentButton } from '@/domains/experiments/components/rename-experiment-button';
 import { RerunExperimentButton } from '@/domains/experiments/components/rerun-experiment-button';
 import { useLinkComponent } from '@/lib/framework';
 
@@ -34,14 +35,17 @@ export function ExperimentTopArea({ experiment }: ExperimentTopAreaProps) {
             <ExperimentStatusIcon status={experiment.status} className="h-7" />
             <PageHeader>
               {/* The run is the subject of the page; what it ran on is spelled out by the chain below. */}
-              <PageHeader.Title>Experiment #{experiment.id.slice(0, 8)}</PageHeader.Title>
+              <PageHeader.Title>{experiment.name || `Experiment #${experiment.id.slice(0, 8)}`}</PageHeader.Title>
               {experiment.description && <PageHeader.Description>{experiment.description}</PageHeader.Description>}
               <ExperimentFlowChain experiment={experiment} className="mt-2" />
             </PageHeader>
           </div>
         </PageLayout.Column>
         <PageLayout.Column className="justify-items-end gap-3">
-          <RerunExperimentButton experiment={experiment} />
+          <div className="flex items-center gap-2">
+            <RenameExperimentButton experiment={experiment} />
+            <RerunExperimentButton experiment={experiment} />
+          </div>
           {experiment.agentVersion && (
             <DataKeysAndValues numOfCol={1}>
               <DataKeysAndValues.Key>Version</DataKeysAndValues.Key>
