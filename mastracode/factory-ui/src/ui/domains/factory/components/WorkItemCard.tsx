@@ -98,7 +98,9 @@ export function WorkItemCard({
   const sessions = item.sessions;
   const moves = cardMoves(item, columnStage);
   // The lane's own move first: clicking the button of the column a card sits in re-runs that lane.
-  const primaryMove = moves.find(move => move.stage === columnStage) ?? moves.find(move => move.stage !== columnStage);
+  // Then the first lane whose seat is still free, so a card never leads with a run it has already had.
+  const primaryMove =
+    moves.find(move => move.stage === columnStage) ?? moves.find(move => !(move.role in sessions)) ?? moves[0];
   const threadSession = itemThreadSession(sessions);
   const wickStatus = threadSession !== undefined ? sessionStatus : undefined;
   const sessionHref =

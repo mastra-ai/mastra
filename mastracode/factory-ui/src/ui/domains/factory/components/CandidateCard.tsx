@@ -31,7 +31,6 @@ export function CandidateCard({
   factoryProjectId: string;
   /** File the candidate and move it into the lane; `prompt` undefined = no typed guidance. */
   onRun: (move: CardMove, prompt?: string) => void;
-  /** File the candidate onto the board without moving it. */
   onFile: () => void;
 }) {
   const detailsTitleId = useId();

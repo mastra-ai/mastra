@@ -340,8 +340,8 @@ describe('Board card with a proposed run', () => {
     // Without the badge this card reads as a plain link to its session, so the
     // parked run is only discoverable by opening the menu on a hunch.
     const card = await screen.findByRole('article', { name: 'Fix login bug' });
-    expect(await within(card).findByText('Suggested: Investigate')).toBeVisible();
-    const release = within(card).getByRole('button', { name: 'Start suggested run: Investigate' });
+    expect(await within(card).findByText('Suggested: Build')).toBeVisible();
+    const release = within(card).getByRole('button', { name: 'Start suggested run: Build' });
     expect(release).toHaveAttribute('data-variant', 'primary');
     expect(within(card).getByRole('link', { name: 'Open session' })).toHaveAttribute('data-variant', 'outline');
 
