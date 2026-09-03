@@ -372,7 +372,13 @@ describe('mention attention items', () => {
   });
 });
 
-async function seedProposal(workItem: WorkItemRow, now: Date): Promise<FactoryDeferredDecisionRecord> {
+const PROPOSED_TRIAGE = { type: 'invokeSkill', role: 'triage', skillName: 'factory-triage' } as const;
+
+async function seedProposal(
+  workItem: WorkItemRow,
+  now: Date,
+  decision: Record<string, unknown> = PROPOSED_TRIAGE,
+): Promise<FactoryDeferredDecisionRecord> {
   await seed.workItems.commitRuleEvaluation({
     orgId: 'org1',
     factoryProjectId: PROJECT_ID,
@@ -382,14 +388,7 @@ async function seedProposal(workItem: WorkItemRow, now: Date): Promise<FactoryDe
     expectedRevision: (await seed.workItems.get({ orgId: 'org1', id: workItem.id }))?.revision ?? workItem.revision,
     actor: { type: 'system', id: 'rules' },
     outcome: { status: 'accepted' },
-    decisions: [
-      {
-        type: 'invokeSkill',
-        role: 'triage',
-        skillName: 'factory-triage',
-        idempotencyKey: `attention-proposal-${now.getTime()}`,
-      },
-    ],
+    decisions: [{ ...decision, idempotencyKey: `attention-proposal-${now.getTime()}` }],
     causalChain: [],
     now,
   });
@@ -450,6 +449,20 @@ describe('proposed attention items', () => {
         identities: [{ kind: 'automation-proposed', sourceId: proposal.id, occurrence: 0 }],
       }),
     ).resolves.toEqual([]);
+  });
+
+  it('says where a parked move goes instead of which role it runs', async () => {
+    const item = await seedWorkItem('Fix the login flow');
+    await seedProposal(item, new Date('2030-01-01T00:00:00.000Z'), {
+      type: 'transition',
+      board: 'work',
+      stage: 'planning',
+    });
+
+    const page = await (await request('GET', `/web/factory/projects/${PROJECT_ID}/attention?search=planning`)).json();
+    expect(page.items).toMatchObject([
+      { kind: 'automation-proposed', detail: 'Waiting for approval to move to planning', decisionType: 'transition' },
+    ]);
   });
 
   it('counts in the badge exactly the items it can list', async () => {

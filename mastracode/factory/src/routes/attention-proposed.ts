@@ -3,8 +3,10 @@ import type { FactoryDeferredDecisionRecord } from '../storage/domains/work-item
 import type { DecisionAttentionSpec } from './attention-providers.js';
 import { factoryDecisionType } from './attention-providers.js';
 
-function proposedRole(decision: FactoryDeferredDecisionRecord): string {
-  return typeof decision.decision.role === 'string' ? decision.decision.role.slice(0, 64) : 'automation';
+function proposedAction(decision: FactoryDeferredDecisionRecord): string {
+  const { type, stage, role } = decision.decision;
+  if (type === 'transition' && typeof stage === 'string') return `move to ${stage.slice(0, 64)}`;
+  return `run ${typeof role === 'string' ? role.slice(0, 64) : 'automation'}`;
 }
 
 export const proposedDecisionAttentionSpec: DecisionAttentionSpec = {
@@ -12,10 +14,10 @@ export const proposedDecisionAttentionSpec: DecisionAttentionSpec = {
   status: 'proposed',
   identity: decision => factoryProposalAttentionIdentity(decision.id),
   occurredAt: decision => decision.updatedAt,
-  title: (decision, item) => item?.title ?? `Waiting for approval to run ${proposedRole(decision)}`,
-  detail: decision => `Waiting for approval to run ${proposedRole(decision)}`,
+  title: (decision, item) => item?.title ?? `Waiting for approval to ${proposedAction(decision)}`,
+  detail: decision => `Waiting for approval to ${proposedAction(decision)}`,
   matches: (decision, item, search) =>
     item?.title.toLowerCase().includes(search) === true ||
-    proposedRole(decision).toLowerCase().includes(search) ||
+    proposedAction(decision).toLowerCase().includes(search) ||
     factoryDecisionType(decision).toLowerCase().includes(search),
 };
