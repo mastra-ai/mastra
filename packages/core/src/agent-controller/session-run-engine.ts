@@ -316,10 +316,43 @@ export class SessionRunEngine {
     message.content.metadata.errorMessage = errorMessage;
   }
 
-  private startCurrentMessage(state: StreamState): void {
-    if (state.messageStarted) return;
+  private startCurrentMessage(state: StreamState): boolean {
+    if (state.messageStarted) return false;
     this.#session.emit({ type: 'message_start', message: structuredClone(state.currentMessage) });
     state.messageStarted = true;
+    return true;
+  }
+
+  private emitMessagePart(state: StreamState, index: number): void {
+    if (this.startCurrentMessage(state)) return;
+    const part = state.currentMessage.content.parts[index];
+    if (!part) return;
+    this.#session.emit({
+      type: 'message_update',
+      id: state.currentMessage.id,
+      event: { type: 'part', index, part: structuredClone(part) },
+    });
+  }
+
+  private emitEmptyTextPart(state: StreamState, index: number): void {
+    const currentPart = state.currentMessage.content.parts[index];
+    if (!currentPart || currentPart.type !== 'text') return;
+
+    const part = { ...currentPart, text: '' };
+    if (!state.messageStarted) {
+      const message = structuredClone(state.currentMessage);
+      message.content.parts[index] = part;
+      state.messageIdObserved = true;
+      this.#session.emit({ type: 'message_start', message });
+      state.messageStarted = true;
+      return;
+    }
+
+    this.#session.emit({
+      type: 'message_update',
+      id: state.currentMessage.id,
+      event: { type: 'part', index, part },
+    });
   }
 
   private finishCurrentMessage(state: StreamState): void {
@@ -370,6 +403,7 @@ export class SessionRunEngine {
     const { toolCallId, toolName, result, isError, providerMetadata } = outcome;
     const toolIndex = state.toolPartById.get(toolCallId);
     const existing = toolIndex !== undefined ? state.currentMessage.content.parts[toolIndex] : undefined;
+    const partIndex = toolIndex ?? state.currentMessage.content.parts.length;
     if (existing && existing.type === 'tool-invocation') {
       existing.toolInvocation = Object.assign(existing.toolInvocation, {
         state: 'result' as const,
@@ -395,8 +429,9 @@ export class SessionRunEngine {
         toolInvocationPart.providerMetadata = providerMetadata;
       }
       state.currentMessage.content.parts.push(toolInvocationPart);
+      state.toolPartById.set(toolCallId, partIndex);
     }
-    this.startCurrentMessage(state);
+    this.emitMessagePart(state, partIndex);
     this.#session.emit({
       type: 'tool_end',
       toolCallId,
@@ -404,7 +439,6 @@ export class SessionRunEngine {
       isError,
       ...(providerMetadata ? { providerMetadata } : {}),
     });
-    // this.#session.emit({ type: 'message_update', message: state.currentMessage });
   }
 
   private abortForOmFailure({ operationType, stage, error }: { operationType: string; stage: string; error: string }) {
@@ -511,22 +545,27 @@ export class SessionRunEngine {
     }
 
     if (isSpanChunk(chunk)) {
-      const textDelta = chunk.type === 'text-delta' ? chunk.payload.text : undefined;
       const folded = state.spans.fold(state.currentMessage.content.parts, chunk);
-      if (folded?.created && folded.part.type === 'text' && !state.messageStarted) {
-        const startMessage = structuredClone(state.currentMessage);
-        const startPart = startMessage.content.parts.at(-1);
-        if (startPart?.type === 'text') startPart.text = '';
-        state.messageIdObserved = true;
-        this.#session.emit({ type: 'message_start', message: startMessage });
-        state.messageStarted = true;
-      }
-      if (textDelta !== undefined && folded) {
+      if (!folded) return undefined;
+
+      const index = state.currentMessage.content.parts.indexOf(folded.part);
+      if (index === -1) return undefined;
+
+      if (chunk.type === 'text-delta' && folded.part.type === 'text') {
+        if (folded.created) this.emitEmptyTextPart(state, index);
         this.#session.emit({
           type: 'message_update',
           id: state.currentMessage.id,
-          event: { type: 'text-delta', delta: textDelta },
+          event: { type: 'text-delta', delta: chunk.payload.text },
         });
+      } else if (chunk.type === 'reasoning-delta' && folded.part.type === 'reasoning' && !folded.created) {
+        this.#session.emit({
+          type: 'message_update',
+          id: state.currentMessage.id,
+          event: { type: 'reasoning-delta', index, delta: chunk.payload.text },
+        });
+      } else {
+        this.emitMessagePart(state, index);
       }
       return undefined;
     }
@@ -607,14 +646,13 @@ export class SessionRunEngine {
           },
         });
         state.toolPartById.set(toolCallId, toolIndex);
-        this.startCurrentMessage(state);
+        this.emitMessagePart(state, toolIndex);
         this.#session.emit({
           type: 'tool_start',
           toolCallId,
           toolName,
           args,
         });
-        // this.#session.emit({ type: 'message_update', message: state.currentMessage });
         break;
       }
 
@@ -667,14 +705,16 @@ export class SessionRunEngine {
           },
         };
 
+        const partIndex = toolIndex ?? state.currentMessage.content.parts.length;
         if (existing && existing.type === 'tool-invocation') {
           existing.toolInvocation = Object.assign(existing.toolInvocation, toolInvocation);
         } else {
           state.currentMessage.content.parts.push({ type: 'tool-invocation', toolInvocation });
+          state.toolPartById.set(toolCallId, partIndex);
         }
 
+        this.emitMessagePart(state, partIndex);
         this.#session.emit({ type: 'tool_end', toolCallId, result: reason, isError: false, denied: true });
-        // this.#session.emit({ type: 'message_update', message: state.currentMessage });
         break;
       }
 
@@ -1198,15 +1238,16 @@ export class SessionRunEngine {
 
     const toolIndex = state.toolPartById.get(toolCallId);
     const existing = toolIndex !== undefined ? state.currentMessage.content.parts[toolIndex] : undefined;
+    const partIndex = toolIndex ?? state.currentMessage.content.parts.length;
     if (existing && existing.type === 'tool-invocation') {
       existing.toolInvocation = Object.assign(existing.toolInvocation, toolInvocation);
     } else {
       state.currentMessage.content.parts.push({ type: 'tool-invocation', toolInvocation });
+      state.toolPartById.set(toolCallId, partIndex);
     }
 
-    this.startCurrentMessage(state);
+    this.emitMessagePart(state, partIndex);
     this.#session.emit({ type: 'tool_end', toolCallId, result: ABORTED_BY_USER_REASON, isError: false, denied: true });
-    // this.#session.emit({ type: 'message_update', message: state.currentMessage });
   }
 
   private finishStreamState(state: StreamState): { message: MastraDBMessage; suspended?: boolean } {

@@ -54,7 +54,8 @@ export function runtimeReducer(state: ChatRuntimeState, action: RuntimeAction): 
     case 'message_start':
       return state;
     case 'message_update':
-      if (event.event.delta.length === 0 || state._decodeStartedAt > 0) return state;
+      if (event.event.type !== 'text-delta' || event.event.delta.length === 0 || state._decodeStartedAt > 0)
+        return state;
       return { ...state, _decodeStartedAt: Date.now() };
     case 'usage_update': {
       const usage = event.usage;

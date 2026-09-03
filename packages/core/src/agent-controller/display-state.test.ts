@@ -192,6 +192,52 @@ describe('message streaming', () => {
     });
   });
 
+  it('applies reasoning and tool-part updates to the matching current message', () => {
+    emit(session, {
+      type: 'message_start',
+      message: {
+        ...msg1,
+        content: {
+          ...msg1.content,
+          parts: [
+            { type: 'reasoning', reasoning: '', details: [] },
+            {
+              type: 'tool-invocation',
+              toolInvocation: { state: 'call', toolCallId: 't1', toolName: 'read_file', args: {} },
+            },
+          ],
+        },
+      } as any,
+    });
+    emit(session, {
+      type: 'message_update',
+      id: 'm1',
+      event: { type: 'reasoning-delta', index: 0, delta: 'thinking' },
+    });
+    emit(session, {
+      type: 'message_update',
+      id: 'm1',
+      event: {
+        type: 'part',
+        index: 1,
+        part: {
+          type: 'tool-invocation',
+          toolInvocation: {
+            state: 'output-denied',
+            toolCallId: 't1',
+            toolName: 'read_file',
+            args: {},
+            approval: { id: 't1', approved: false },
+          },
+        },
+      },
+    });
+    expect(session.displayState.get().currentMessage?.content.parts).toMatchObject([
+      { type: 'reasoning', reasoning: 'thinking', details: [{ type: 'text', text: 'thinking' }] },
+      { type: 'tool-invocation', toolInvocation: { state: 'output-denied' } },
+    ]);
+  });
+
   it('ignores compact deltas for a different message id and id-only ends', () => {
     emit(session, { type: 'message_start', message: msg1 as any });
     emit(session, { type: 'message_update', id: 'other', event: { type: 'text-delta', delta: ' ignored' } });
@@ -1653,7 +1699,12 @@ describe('full lifecycle integration', () => {
     expect(ds.isRunning).toBe(true);
 
     // Message starts streaming
-    const msg = { id: 'm1', role: 'assistant' as const, content: { format: 2 as const, parts: [] }, createdAt: new Date() };
+    const msg = {
+      id: 'm1',
+      role: 'assistant' as const,
+      content: { format: 2 as const, parts: [] },
+      createdAt: new Date(),
+    };
     emit(session, { type: 'message_start', message: msg });
     expect(ds.currentMessage).toEqual(msg);
     expect(ds.currentMessage).not.toBe(msg);

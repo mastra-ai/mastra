@@ -64,8 +64,16 @@ describe('SessionRunEngine compact message lifecycle', () => {
     const context = new RequestContext();
 
     await engine.processStreamChunk(state, chunk({ type: 'text-start', payload: { id: 't1' } }), context);
-    await engine.processStreamChunk(state, chunk({ type: 'text-delta', payload: { id: 't1', text: 'Hello' } }), context);
-    await engine.processStreamChunk(state, chunk({ type: 'text-delta', payload: { id: 't1', text: ' world' } }), context);
+    await engine.processStreamChunk(
+      state,
+      chunk({ type: 'text-delta', payload: { id: 't1', text: 'Hello' } }),
+      context,
+    );
+    await engine.processStreamChunk(
+      state,
+      chunk({ type: 'text-delta', payload: { id: 't1', text: ' world' } }),
+      context,
+    );
     await engine.processStreamChunk(state, chunk({ type: 'text-end', payload: { id: 't1' } }), context);
 
     const [started] = assistantStarts(events);
@@ -93,18 +101,71 @@ describe('SessionRunEngine compact message lifecycle', () => {
     const context = new RequestContext();
 
     await engine.processStreamChunk(state, chunk({ type: 'text-start', payload: { id: 't1' } }), context);
-    await engine.processStreamChunk(state, chunk({ type: 'text-delta', payload: { id: 't1', text: 'first' } }), context);
+    await engine.processStreamChunk(
+      state,
+      chunk({ type: 'text-delta', payload: { id: 't1', text: 'first' } }),
+      context,
+    );
     await engine.processStreamChunk(state, chunk({ type: 'text-end', payload: { id: 't1' } }), context);
     await engine.processStreamChunk(state, chunk({ type: 'text-start', payload: { id: 't2' } }), context);
-    await engine.processStreamChunk(state, chunk({ type: 'text-delta', payload: { id: 't2', text: ' second' } }), context);
+    await engine.processStreamChunk(
+      state,
+      chunk({ type: 'text-delta', payload: { id: 't2', text: ' second' } }),
+      context,
+    );
     await engine.processStreamChunk(state, chunk({ type: 'data-user-message', data: { id: 'user-1' } }), context);
 
     expect(assistantStarts(events)).toHaveLength(1);
     expect(events.filter(event => event.type === 'message_update')).toEqual([
       { type: 'message_update', id: 'msg-1', event: { type: 'text-delta', delta: 'first' } },
+      { type: 'message_update', id: 'msg-1', event: { type: 'part', index: 1, part: { type: 'text', text: '' } } },
       { type: 'message_update', id: 'msg-1', event: { type: 'text-delta', delta: ' second' } },
     ]);
     expect(events.filter(event => event.type === 'message_end')).toContainEqual({ type: 'message_end', id: 'msg-1' });
+  });
+
+  it('sends compact part snapshots and reasoning deltas after the initial message start', async () => {
+    const { engine, events } = createHarness();
+    const state = engine.createStreamState();
+    const context = new RequestContext();
+
+    await engine.processStreamChunk(state, chunk({ type: 'text-start', payload: { id: 'text-1' } }), context);
+    await engine.processStreamChunk(state, chunk({ type: 'reasoning-start', payload: { id: 'reasoning-1' } }), context);
+    await engine.processStreamChunk(
+      state,
+      chunk({ type: 'reasoning-delta', payload: { id: 'reasoning-1', text: 'Checking the files.' } }),
+      context,
+    );
+    await engine.processStreamChunk(
+      state,
+      chunk({ type: 'tool-call', payload: { toolCallId: 'tool-1', toolName: 'view', args: { path: 'a.ts' } } }),
+      context,
+    );
+
+    expect(events.filter(event => event.type === 'message_update')).toEqual([
+      {
+        type: 'message_update',
+        id: 'msg-1',
+        event: { type: 'part', index: 1, part: { type: 'reasoning', reasoning: '', details: [] } },
+      },
+      {
+        type: 'message_update',
+        id: 'msg-1',
+        event: { type: 'reasoning-delta', index: 1, delta: 'Checking the files.' },
+      },
+      {
+        type: 'message_update',
+        id: 'msg-1',
+        event: {
+          type: 'part',
+          index: 2,
+          part: {
+            type: 'tool-invocation',
+            toolInvocation: { state: 'call', toolCallId: 'tool-1', toolName: 'view', args: { path: 'a.ts' } },
+          },
+        },
+      },
+    ]);
   });
 
   it('ends the active assistant before rotating to a new response id', async () => {
@@ -112,10 +173,22 @@ describe('SessionRunEngine compact message lifecycle', () => {
     const state = engine.createStreamState();
     const context = new RequestContext();
 
-    await engine.processStreamChunk(state, chunk({ type: 'step-start', payload: { messageId: 'response-1' } }), context);
+    await engine.processStreamChunk(
+      state,
+      chunk({ type: 'step-start', payload: { messageId: 'response-1' } }),
+      context,
+    );
     await engine.processStreamChunk(state, chunk({ type: 'text-start', payload: { id: 't1' } }), context);
-    await engine.processStreamChunk(state, chunk({ type: 'text-delta', payload: { id: 't1', text: 'first' } }), context);
-    await engine.processStreamChunk(state, chunk({ type: 'step-start', payload: { messageId: 'response-2' } }), context);
+    await engine.processStreamChunk(
+      state,
+      chunk({ type: 'text-delta', payload: { id: 't1', text: 'first' } }),
+      context,
+    );
+    await engine.processStreamChunk(
+      state,
+      chunk({ type: 'step-start', payload: { messageId: 'response-2' } }),
+      context,
+    );
     await engine.processStreamChunk(state, chunk({ type: 'text-start', payload: { id: 't2' } }), context);
 
     expect(events.filter(event => event.type === 'message_start').map(event => event.message.id)).toEqual([
@@ -146,7 +219,7 @@ describe('SessionRunEngine compact message lifecycle', () => {
     ]);
   });
 
-  it('starts tool-only assistant messages without creating invalid message updates', async () => {
+  it('streams tool-only assistant message part updates', async () => {
     const { engine, events } = createHarness();
     const state = engine.createStreamState();
     const context = new RequestContext();
@@ -164,7 +237,27 @@ describe('SessionRunEngine compact message lifecycle', () => {
     await engine.processStreamChunk(state, chunk({ type: 'data-user-message', data: { id: 'user-1' } }), context);
 
     expect(assistantStarts(events)).toHaveLength(1);
-    expect(events.filter(event => event.type === 'message_update')).toEqual([]);
+    expect(events.filter(event => event.type === 'message_update')).toEqual([
+      {
+        type: 'message_update',
+        id: 'msg-1',
+        event: {
+          type: 'part',
+          index: 0,
+          part: {
+            type: 'tool-invocation',
+            toolInvocation: {
+              state: 'result',
+              toolCallId: 'tool-1',
+              toolName: 'read',
+              args: { path: 'a.ts' },
+              result: 'ok',
+              isError: false,
+            },
+          },
+        },
+      },
+    ]);
     expect(events.filter(event => event.type === 'message_end')).toContainEqual({ type: 'message_end', id: 'msg-1' });
   });
 });
