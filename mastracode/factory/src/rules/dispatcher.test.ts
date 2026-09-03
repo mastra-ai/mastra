@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { AutomationFailedAttentionProvider } from '../routes/attention-providers.js';
 import { FactoryFeedReader } from '../storage/domains/comments/feed-context.js';
-import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
+import { FACTORY_RULE_MATERIALIZATION_KEY, type WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
 import { builtInFactoryRules, defaultFactoryRules } from './defaults.js';
 import { FACTORY_DISPATCH_CONSTANTS, FactoryDecisionDispatcher } from './dispatcher.js';
@@ -218,9 +218,9 @@ async function queueDecision(
     board: 'work',
     stage: 'execute',
     expectedRevision: item.revision,
-    actor: { type: 'human', id: 'user-1' },
-    ingress: { type: 'human', identity: options?.ingress ?? 'move-1' },
-    cause: 'test',
+    actor: { type: 'system', id: 'factory-rule-dispatcher' },
+    ingress: { type: 'rule', identity: options?.ingress ?? 'move-1' },
+    cause: 'rule_decision',
   });
   expect(result.status).toBe('accepted');
   return { item, transitionService };
@@ -1943,6 +1943,73 @@ describe('FactoryDecisionDispatcher', () => {
     expect(session.sendSignal).not.toHaveBeenCalled();
   });
 
+  it("runs the plan an agent's move queues on an externally authored card a person started", async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const item = (
+      await storage.upsert({
+        orgId: 'org-1',
+        userId: 'user-1',
+        factoryProjectId: PROJECT_ID,
+        input: {
+          externalSource: { integrationId: 'github', type: 'issue', externalId: 'github-issue:9' },
+          title: 'Outside report',
+          stages: ['triage'],
+          sessions: {},
+          metadata: { authorTrusted: false },
+        },
+      })
+    ).item;
+    await storage.armAutonomy({ orgId: 'org-1', id: item.id, now: new Date('2030-01-01T00:00:00Z') });
+    await bindWorkRun(storage, item.id);
+    const bound = await storage.get({ orgId: 'org-1', id: item.id });
+    const transitionService = new FactoryTransitionService({
+      storage,
+      rules: defaultFactoryRules({
+        version: 'rules-v1',
+        overrides: {
+          work: {
+            planning: {
+              issue: {
+                onEnter: () => ({
+                  type: 'invokeSkill',
+                  role: 'work',
+                  skillName: 'factory-plan',
+                  idempotencyKey: 'plan-1',
+                }),
+              },
+            },
+          },
+        },
+      }),
+    });
+    const planned = await transitionService.transition({
+      orgId: 'org-1',
+      factoryProjectId: PROJECT_ID,
+      workItemId: item.id,
+      board: 'work',
+      stage: 'planning',
+      expectedRevision: bound?.revision ?? item.revision,
+      actor: { type: 'agent', bindingId: 'binding-1', role: 'triage' },
+      ingress: { type: 'agent', identity: 'triage-verdict-1' },
+      cause: 'triage verdict',
+      triageType: 'bug',
+    });
+    expect(planned.status).toBe('accepted');
+    const { controller, session } = createSession();
+    const dispatcher = new FactoryDecisionDispatcher({
+      controller: controller as never,
+      transitionService,
+      storage,
+      ownerId: 'worker-1',
+      isAutoRunEnabled: async () => false,
+    });
+
+    await dispatcher.runOnce(new Date('2030-01-01T00:01:00Z'));
+
+    expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]?.status).toBe('succeeded');
+    expect(session.sendSignal).toHaveBeenCalledTimes(1);
+  });
+
   it('fails closed on a GitHub card missing its trust stamp, even armed with auto-run on', async () => {
     // Cards created before arrival stamps existed carry no `authorTrusted`;
     // absence must not read as trust, or a pre-stamp external PR slips the gate.
@@ -3164,9 +3231,148 @@ describe('FactoryDecisionDispatcher', () => {
     );
     expect(resolveLinkedWorkItemParentId).toHaveBeenCalledWith({
       orgId: 'org-1',
+      factoryProjectId: PROJECT_ID,
       decision: expect.objectContaining({ source: 'github-pr', sourceKey: 'github-pr:2' }),
     });
     expect(linked?.parentWorkItemId).toBe(parent.id);
+  });
+
+  it('does not parent a linked card to itself when a poll re-emits "opened" for an already-filed PR', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const { item: card } = await storage.upsert({
+      orgId: 'org-1',
+      userId: 'test',
+      factoryProjectId: PROJECT_ID,
+      input: {
+        externalSource: {
+          integrationId: 'github',
+          type: 'pull-request',
+          externalId: 'github-pr:3',
+          url: 'https://github.com/acme/repo/pull/3',
+        },
+        parentWorkItemId: null,
+        title: 'Linked PR',
+        stages: ['intake'],
+        sessions: {},
+        metadata: {},
+      },
+      reuseMode: 'preserve',
+    });
+    // The second evaluation resolves the PR card itself as the triggering item.
+    await storage.commitRuleEvaluation({
+      orgId: 'org-1',
+      factoryProjectId: PROJECT_ID,
+      workItemId: card.id,
+      ingress: { identity: 'poll:7:pull-request:3', triggerType: 'pull_request.opened' },
+      ruleSetVersion: 'rules-v1',
+      expectedRevision: card.revision,
+      actor: { type: 'system', id: 'rules' },
+      outcome: { status: 'accepted' },
+      decisions: [
+        {
+          type: 'upsertLinkedWorkItem',
+          idempotencyKey: 'linked-pr-polled-again',
+          board: 'review',
+          source: 'github-pr',
+          sourceKey: 'github-pr:3',
+          title: 'Linked PR',
+          url: 'https://github.com/acme/repo/pull/3',
+          stage: 'intake',
+          metadata: { githubRepositoryId: 7, githubPullRequestNumber: 3 },
+        },
+      ],
+      causalChain: [],
+      now: new Date('2030-01-01T00:00:00Z'),
+    });
+    const transitionService = new FactoryTransitionService({
+      storage,
+      rules: defaultFactoryRules({ version: 'rules-v1' }),
+    });
+    const { controller } = createSession();
+    const dispatcher = new FactoryDecisionDispatcher({
+      controller: controller as never,
+      isAutoRunEnabled: async () => true,
+      transitionService,
+      storage,
+      ownerId: 'worker-1',
+    });
+
+    await dispatcher.runOnce(new Date('2030-01-01T00:00:01Z'));
+
+    const pending = await storage.listDeferredDecisions('org-1', PROJECT_ID);
+    expect(pending.map(record => record.status)).toEqual(['succeeded']);
+    expect(await storage.list({ orgId: 'org-1', factoryProjectId: PROJECT_ID })).toHaveLength(1);
+    expect((await storage.get({ orgId: 'org-1', id: card.id }))?.parentWorkItemId).toBeNull();
+  });
+
+  it('backfills missing source metadata on an already-filed card without overwriting or adopting it', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const { item: card } = await storage.upsert({
+      orgId: 'org-1',
+      userId: 'test',
+      factoryProjectId: PROJECT_ID,
+      input: {
+        externalSource: {
+          integrationId: 'github',
+          type: 'pull-request',
+          externalId: 'github-pr:3',
+          url: 'https://github.com/acme/repo/pull/3',
+        },
+        parentWorkItemId: null,
+        title: 'Linked PR',
+        stages: ['review'],
+        sessions: {},
+        metadata: { author: 'human-edited' },
+      },
+      reuseMode: 'preserve',
+    });
+    await storage.commitRuleEvaluation({
+      orgId: 'org-1',
+      factoryProjectId: PROJECT_ID,
+      workItemId: card.id,
+      ingress: { identity: 'poll:7:pull-request:3', triggerType: 'pull_request.opened' },
+      ruleSetVersion: 'rules-v1',
+      expectedRevision: card.revision,
+      actor: { type: 'system', id: 'rules' },
+      outcome: { status: 'accepted' },
+      decisions: [
+        {
+          type: 'upsertLinkedWorkItem',
+          idempotencyKey: 'linked-pr-backfill',
+          board: 'review',
+          source: 'github-pr',
+          sourceKey: 'github-pr:3',
+          title: 'Linked PR',
+          url: 'https://github.com/acme/repo/pull/3',
+          stage: 'intake',
+          metadata: { author: 'octocat', sourceCreatedAt: '2029-12-01T00:00:00Z' },
+        },
+      ],
+      causalChain: [],
+      now: new Date('2030-01-01T00:00:00Z'),
+    });
+    const transitionService = new FactoryTransitionService({
+      storage,
+      rules: defaultFactoryRules({ version: 'rules-v1' }),
+    });
+    const { controller } = createSession();
+    const dispatcher = new FactoryDecisionDispatcher({
+      controller: controller as never,
+      isAutoRunEnabled: async () => true,
+      transitionService,
+      storage,
+      ownerId: 'worker-1',
+    });
+
+    await dispatcher.runOnce(new Date('2030-01-01T00:00:01Z'));
+
+    const pending = await storage.listDeferredDecisions('org-1', PROJECT_ID);
+    expect(pending.map(record => record.status)).toEqual(['succeeded']);
+    const updated = await storage.get({ orgId: 'org-1', id: card.id });
+    expect(updated?.metadata).toMatchObject({ author: 'human-edited', sourceCreatedAt: '2029-12-01T00:00:00Z' });
+    expect(updated?.metadata?.[FACTORY_RULE_MATERIALIZATION_KEY]).toBeUndefined();
+    // Preserved: not re-entered into intake.
+    expect(updated?.stages).toEqual(['review']);
   });
 
   it('recovers linked-item materialization after an upsert crash and fires Intake onEnter exactly once', async () => {

@@ -116,6 +116,7 @@ const sidebars = {
         { type: 'doc', id: 'auth/firebase', label: 'Firebase' },
         { type: 'doc', id: 'auth/google', label: 'Google' },
         { type: 'doc', id: 'auth/jwt', label: 'JSON Web Token' },
+        { type: 'doc', id: 'auth/neon', label: 'Neon' },
         { type: 'doc', id: 'auth/okta', label: 'Okta' },
         { type: 'doc', id: 'auth/supabase', label: 'Supabase' },
         { type: 'doc', id: 'auth/workos', label: 'WorkOS' },
@@ -140,6 +141,7 @@ const sidebars = {
       items: [
         { type: 'doc', id: 'channels/channel-provider', label: 'ChannelProvider' },
         { type: 'doc', id: 'channels/slack-provider', label: 'SlackProvider' },
+        { type: 'doc', id: 'channels/telegram-provider', label: 'TelegramProvider' },
       ],
     },
     {
@@ -373,6 +375,7 @@ const sidebars = {
               label: '.submitExperimentResult()',
             },
             { type: 'doc', id: 'datasets/update', label: '.update()' },
+            { type: 'doc', id: 'datasets/updateExperiment', label: '.updateExperiment()' },
             { type: 'doc', id: 'datasets/updateItem', label: '.updateItem()' },
           ],
         },
@@ -755,8 +758,10 @@ const sidebars = {
         { type: 'doc', id: 'server/koa-adapter', label: 'Koa Adapter' },
         { type: 'doc', id: 'server/mastra-server', label: 'MastraServer' },
         { type: 'doc', id: 'server/nestjs-adapter', label: 'NestJS Adapter' },
+        { type: 'doc', id: 'server/next-adapter', label: 'Next.js Adapter' },
         { type: 'doc', id: 'server/register-api-route', label: 'registerApiRoute()' },
         { type: 'doc', id: 'server/routes', label: 'Server Routes' },
+        { type: 'doc', id: 'server/tanstack-start-adapter', label: 'TanStack Start Adapter' },
       ],
     },
     {

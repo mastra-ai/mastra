@@ -48,6 +48,7 @@ function proposal(id: string, type: string, role: string, workItemId: string): F
     status: 'proposed',
     attempts: 0,
     failureOccurrence: 0,
+    source: null,
     failureCode: null,
     canRetry: false,
     lastError: null,

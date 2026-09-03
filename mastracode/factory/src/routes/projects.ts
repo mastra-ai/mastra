@@ -10,6 +10,7 @@ import type {
 } from '../storage/domains/projects/base.js';
 import type {
   ProjectRepository,
+  SourceControlRepository,
   SourceControlStorage,
   SourceControlStorageHandle,
   UpdateProjectRepositoryInput,
@@ -110,7 +111,8 @@ function parseOptionalString(
 }
 
 function parseRepositoryLinkInput(value: unknown): {
-  repositoryId: string;
+  repositoryId?: string;
+  repository?: { externalId: string; slug: string };
   branch: string | null;
   sandboxProvider: string;
   sandboxWorkdir: string;
@@ -119,7 +121,18 @@ function parseRepositoryLinkInput(value: unknown): {
 } | null {
   if (!value || typeof value !== 'object') return null;
   const input = value as Record<string, unknown>;
-  if (typeof input.repositoryId !== 'string' || !UUID_RE.test(input.repositoryId)) return null;
+  const repositoryId =
+    typeof input.repositoryId === 'string' && UUID_RE.test(input.repositoryId) ? input.repositoryId : undefined;
+  const repositoryInput = input.repository;
+  let repository: { externalId: string; slug: string } | undefined;
+  if (repositoryInput && typeof repositoryInput === 'object') {
+    const candidate = repositoryInput as Record<string, unknown>;
+    const externalId = parseOptionalString(candidate.externalId, { maxLength: MAX_NAME_LENGTH });
+    const slug = parseOptionalString(candidate.slug, { maxLength: MAX_NAME_LENGTH });
+    if (typeof externalId !== 'string' || typeof slug !== 'string') return null;
+    repository = { externalId, slug };
+  }
+  if (!repositoryId && !repository) return null;
   const branch = parseOptionalString(input.branch, { maxLength: MAX_BRANCH_LENGTH, nullable: true });
   const sandboxProvider = parseOptionalString(input.sandboxProvider, { maxLength: MAX_SANDBOX_PROVIDER_LENGTH });
   const sandboxWorkdir = parseOptionalString(input.sandboxWorkdir, { maxLength: MAX_SANDBOX_WORKDIR_LENGTH });
@@ -140,7 +153,8 @@ function parseRepositoryLinkInput(value: unknown): {
   )
     return null;
   return {
-    repositoryId: input.repositoryId,
+    ...(repositoryId ? { repositoryId } : {}),
+    ...(repository ? { repository } : {}),
     branch: branch ?? null,
     sandboxProvider,
     sandboxWorkdir,
@@ -189,6 +203,14 @@ export interface ProjectRoutesDeps extends RouteDependencies {
   sourceControl: SourceControlStorage;
   /** Integration ids allowed as source-control connection targets. */
   versionControlIntegrationIds?: string[];
+  /** Validate and persist a repository selected from a provider-backed listing. */
+  resolveRepository?: (input: {
+    integrationId: string;
+    orgId: string;
+    installationId: string;
+    externalId: string;
+    slug: string;
+  }) => Promise<SourceControlRepository | null>;
   /**
    * Fire-and-forget hook invoked after a repository is linked to a project —
    * kicks the initial base-checkpoint build. Must never throw.
@@ -467,14 +489,25 @@ export class ProjectRoutes extends Route<ProjectRoutesDeps> {
           if (!found) return context.json({ error: 'Source-control connection not found' }, 404);
           const input = parseRepositoryLinkInput(await readJson(context));
           if (!input) return context.json({ error: 'invalid_project_repository' }, 400);
-          const repository = await found.handle.repositories.get({ orgId: tenant.orgId, id: input.repositoryId });
+          const repository = input.repositoryId
+            ? await found.handle.repositories.get({ orgId: tenant.orgId, id: input.repositoryId })
+            : input.repository && this.deps.resolveRepository
+              ? await this.deps.resolveRepository({
+                  integrationId: found.connection.integrationId,
+                  orgId: tenant.orgId,
+                  installationId: found.connection.installationId,
+                  ...input.repository,
+                })
+              : null;
           if (!repository || repository.installationId !== found.connection.installationId)
             return context.json({ error: 'Source-control repository not found' }, 404);
+          const { repositoryId: _repositoryId, repository: _repository, ...linkInput } = input;
           const projectRepository = await found.handle.projectRepositories.link({
             orgId: tenant.orgId,
             connectionId,
             createdByUserId: tenant.userId,
-            ...input,
+            repositoryId: repository.id,
+            ...linkInput,
           });
           try {
             this.deps.onProjectRepositoryLinked?.({ orgId: tenant.orgId, projectRepository });

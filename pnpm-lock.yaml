@@ -210,7 +210,7 @@ overrides:
   which-typed-array: npm:@socketregistry/which-typed-array@^1
   yocto-spinner: npm:@socketregistry/yocto-spinner@^1
 
-packageExtensionsChecksum: sha256-4rXAlG0oCaaXL4u3L49F1Sh+3V8qmX+NBNej3BwSFdA=
+packageExtensionsChecksum: sha256-pu63kFH/Y1URbA7UvB6TmgMprwa8XlmczsWFUBJ81jc=
 
 patchedDependencies:
   '@ai-sdk/provider-utils@3.0.31': b013703c9b8c0bd8727a10737e7c1a1b587587f8595b7fa390d61cc07f8dcbd1
@@ -371,7 +371,7 @@ importers:
     devDependencies:
       '@anthropic-ai/claude-agent-sdk':
         specifier: ^0.3.220
-        version: 0.3.220(@anthropic-ai/sdk@0.112.3(zod@4.4.3))(@modelcontextprotocol/sdk@1.29.0(@cfworker/json-schema@4.1.1)(supports-color@10.2.2)(zod@4.4.3))(zod@4.4.3)
+        version: 0.3.220(@anthropic-ai/sdk@0.112.3(zod@4.4.3))(@modelcontextprotocol/sdk@1.30.0(@cfworker/json-schema@4.1.1)(supports-color@10.2.2)(zod@4.4.3))(zod@4.4.3)
       '@internal/lint':
         specifier: workspace:*
         version: link:../../packages/_config
@@ -3091,7 +3091,7 @@ importers:
         version: link:../mastra
       deepeval:
         specifier: ^0.1.32
-        version: 0.1.32(@anthropic-ai/sdk@0.112.3(zod@4.4.3))(@aws-sdk/client-bedrock-runtime@3.1104.0)(@aws-sdk/credential-provider-node@3.972.78)(@google/genai@1.52.0(@modelcontextprotocol/sdk@1.29.0(@cfworker/json-schema@4.1.1)(supports-color@10.2.2)(zod@4.4.3))(bufferutil@4.1.0)(supports-color@10.2.2))(@mastra/core@packages+core)(@mastra/observability@observability+mastra)(@opentelemetry/exporter-trace-otlp-http@0.221.0(@opentelemetry/api@1.9.1))(@smithy/hash-node@4.4.6)(@smithy/signature-v4@5.6.12)(ai@7.0.51(zod@4.4.3))(chokidar@3.6.0)(debug@4.4.3(supports-color@10.2.2))(rxjs@7.8.2)(supports-color@10.2.2)(ws@8.21.0(bufferutil@4.1.0))
+        version: 0.1.32(@anthropic-ai/sdk@0.112.3(zod@4.4.3))(@aws-sdk/client-bedrock-runtime@3.1104.0)(@aws-sdk/credential-provider-node@3.972.78)(@google/genai@1.52.0(@modelcontextprotocol/sdk@1.30.0(@cfworker/json-schema@4.1.1)(supports-color@10.2.2)(zod@4.4.3))(bufferutil@4.1.0)(supports-color@10.2.2))(@mastra/core@packages+core)(@mastra/observability@observability+mastra)(@opentelemetry/exporter-trace-otlp-http@0.221.0(@opentelemetry/api@1.9.1))(@smithy/hash-node@4.4.6)(@smithy/signature-v4@5.6.12)(ai@7.0.51(zod@4.4.3))(chokidar@3.6.0)(debug@4.4.3(supports-color@10.2.2))(rxjs@7.8.2)(supports-color@10.2.2)(ws@8.21.0(bufferutil@4.1.0))
     devDependencies:
       '@internal/lint':
         specifier: workspace:*
@@ -5325,6 +5325,9 @@ importers:
       '@mendable/firecrawl-js':
         specifier: ^1.29.3
         version: 1.29.3(debug@4.4.3(supports-color@10.2.2))(supports-color@10.2.2)
+      '@modelcontextprotocol/server-filesystem':
+        specifier: 2026.8.31
+        version: 2026.8.31(@cfworker/json-schema@4.1.1)(supports-color@10.2.2)
       '@types/node':
         specifier: 22.19.15
         version: 22.19.15
@@ -8719,7 +8722,7 @@ importers:
     dependencies:
       '@google/genai':
         specifier: ^1.52.0
-        version: 1.52.0(@modelcontextprotocol/sdk@1.29.0(@cfworker/json-schema@4.1.1)(supports-color@10.2.2)(zod@4.4.3))(bufferutil@4.1.0)(supports-color@10.2.2)
+        version: 1.52.0(@modelcontextprotocol/sdk@1.30.0(@cfworker/json-schema@4.1.1)(supports-color@10.2.2)(zod@4.4.3))(bufferutil@4.1.0)(supports-color@10.2.2)
       '@mastra/schema-compat':
         specifier: workspace:*
         version: link:../../packages/schema-compat
@@ -9916,7 +9919,7 @@ importers:
     dependencies:
       files-sdk:
         specifier: ^1.9.0
-        version: 1.9.0(4c5e98b69509dfe6be9a7915fd67dc25)
+        version: 1.9.0(84bb8c73cc984b4923ad40a36747360b)
     devDependencies:
       '@internal/lint':
         specifier: workspace:*
@@ -16059,6 +16062,20 @@ packages:
     peerDependenciesMeta:
       '@cfworker/json-schema':
         optional: true
+
+  '@modelcontextprotocol/sdk@1.30.0':
+    resolution: {integrity: sha512-xKd8OIzlqNzcqcNumGAa6g+PW2kjD5vrpcKOnfldAUPP3j7lnqMPwlTXQm8gF+UwH72z0lqaRbjr9hqGz0eITA==}
+    engines: {node: '>=18'}
+    peerDependencies:
+      '@cfworker/json-schema': ^4.1.1
+      zod: ^3.25 || ^4.0
+    peerDependenciesMeta:
+      '@cfworker/json-schema':
+        optional: true
+
+  '@modelcontextprotocol/server-filesystem@2026.8.31':
+    resolution: {integrity: sha512-kKaFkyAh6oipvc9+EAbJ552JafnMnOq5nzmzWkp1jJdBhTAAGpmIpWihUG1+rfNhmEFM98gUZDdCHCDD4v6a7Q==}
+    hasBin: true
 
   '@modelcontextprotocol/server-legacy@2.0.0':
     resolution: {integrity: sha512-LnffC1BSqFMHtMQxEz92lqDpHWma+ErV3ghdHDgdkCyYzVcCYKcUT5loq4kflty+Bf9C9qjJqbnphyBWyCqo8Q==}
@@ -33872,10 +33889,10 @@ snapshots:
   '@anthropic-ai/claude-agent-sdk-win32-x64@0.3.220':
     optional: true
 
-  '@anthropic-ai/claude-agent-sdk@0.3.220(@anthropic-ai/sdk@0.112.3(zod@4.4.3))(@modelcontextprotocol/sdk@1.29.0(@cfworker/json-schema@4.1.1)(supports-color@10.2.2)(zod@4.4.3))(zod@4.4.3)':
+  '@anthropic-ai/claude-agent-sdk@0.3.220(@anthropic-ai/sdk@0.112.3(zod@4.4.3))(@modelcontextprotocol/sdk@1.30.0(@cfworker/json-schema@4.1.1)(supports-color@10.2.2)(zod@4.4.3))(zod@4.4.3)':
     dependencies:
       '@anthropic-ai/sdk': 0.112.3(zod@4.4.3)
-      '@modelcontextprotocol/sdk': 1.29.0(@cfworker/json-schema@4.1.1)(supports-color@10.2.2)(zod@4.4.3)
+      '@modelcontextprotocol/sdk': 1.30.0(@cfworker/json-schema@4.1.1)(supports-color@10.2.2)(zod@4.4.3)
       zod: 4.4.3
     optionalDependencies:
       '@anthropic-ai/claude-agent-sdk-darwin-arm64': 0.3.220
@@ -39093,6 +39110,19 @@ snapshots:
       - supports-color
       - utf-8-validate
 
+  '@google/genai@1.52.0(@modelcontextprotocol/sdk@1.30.0(@cfworker/json-schema@4.1.1)(supports-color@10.2.2)(zod@4.4.3))(bufferutil@4.1.0)(supports-color@10.2.2)':
+    dependencies:
+      google-auth-library: 10.9.1(supports-color@10.2.2)
+      p-retry: 4.6.2
+      protobufjs: 7.6.5
+      ws: 8.21.0(bufferutil@4.1.0)
+    optionalDependencies:
+      '@modelcontextprotocol/sdk': 1.30.0(@cfworker/json-schema@4.1.1)(supports-color@10.2.2)(zod@4.4.3)
+    transitivePeerDependencies:
+      - bufferutil
+      - supports-color
+      - utf-8-validate
+
   '@graphql-typed-document-node/core@3.2.0(graphql@16.14.0)':
     dependencies:
       graphql: 16.14.0
@@ -40656,6 +40686,65 @@ snapshots:
     optionalDependencies:
       '@cfworker/json-schema': 4.1.1
     transitivePeerDependencies:
+      - supports-color
+
+  '@modelcontextprotocol/sdk@1.30.0(@cfworker/json-schema@4.1.1)(supports-color@10.2.2)(zod@3.25.76)':
+    dependencies:
+      '@hono/node-server': 1.19.15(hono@4.12.34)
+      ajv: 8.20.0
+      ajv-formats: 3.0.1(ajv@8.20.0)
+      content-type: 1.0.5
+      cors: 2.8.6
+      cross-spawn: 7.0.6
+      eventsource: 3.0.7
+      eventsource-parser: 3.0.8
+      express: 5.2.1(supports-color@10.2.2)
+      express-rate-limit: 8.5.1(express@5.2.1(supports-color@10.2.2))
+      hono: 4.12.34
+      jose: 6.2.3
+      json-schema-typed: 8.0.2
+      pkce-challenge: 5.0.0
+      raw-body: 3.0.2
+      zod: 3.25.76
+      zod-to-json-schema: 3.25.2(zod@3.25.76)
+    optionalDependencies:
+      '@cfworker/json-schema': 4.1.1
+    transitivePeerDependencies:
+      - supports-color
+
+  '@modelcontextprotocol/sdk@1.30.0(@cfworker/json-schema@4.1.1)(supports-color@10.2.2)(zod@4.4.3)':
+    dependencies:
+      '@hono/node-server': 1.19.15(hono@4.12.34)
+      ajv: 8.20.0
+      ajv-formats: 3.0.1(ajv@8.20.0)
+      content-type: 1.0.5
+      cors: 2.8.6
+      cross-spawn: 7.0.6
+      eventsource: 3.0.7
+      eventsource-parser: 3.0.8
+      express: 5.2.1(supports-color@10.2.2)
+      express-rate-limit: 8.5.1(express@5.2.1(supports-color@10.2.2))
+      hono: 4.12.34
+      jose: 6.2.3
+      json-schema-typed: 8.0.2
+      pkce-challenge: 5.0.0
+      raw-body: 3.0.2
+      zod: 4.4.3
+      zod-to-json-schema: 3.25.2(zod@4.4.3)
+    optionalDependencies:
+      '@cfworker/json-schema': 4.1.1
+    transitivePeerDependencies:
+      - supports-color
+
+  '@modelcontextprotocol/server-filesystem@2026.8.31(@cfworker/json-schema@4.1.1)(supports-color@10.2.2)':
+    dependencies:
+      '@modelcontextprotocol/sdk': 1.30.0(@cfworker/json-schema@4.1.1)(supports-color@10.2.2)(zod@3.25.76)
+      diff: 8.0.4
+      glob: 13.0.6
+      minimatch: 10.2.5
+      zod: 3.25.76
+    transitivePeerDependencies:
+      - '@cfworker/json-schema'
       - supports-color
 
   '@modelcontextprotocol/server-legacy@2.0.0(express@5.2.1(supports-color@10.2.2))':
@@ -49528,7 +49617,7 @@ snapshots:
 
   deep-is@0.1.4: {}
 
-  deepeval@0.1.32(@anthropic-ai/sdk@0.112.3(zod@4.4.3))(@aws-sdk/client-bedrock-runtime@3.1104.0)(@aws-sdk/credential-provider-node@3.972.78)(@google/genai@1.52.0(@modelcontextprotocol/sdk@1.29.0(@cfworker/json-schema@4.1.1)(supports-color@10.2.2)(zod@4.4.3))(bufferutil@4.1.0)(supports-color@10.2.2))(@mastra/core@packages+core)(@mastra/observability@observability+mastra)(@opentelemetry/exporter-trace-otlp-http@0.221.0(@opentelemetry/api@1.9.1))(@smithy/hash-node@4.4.6)(@smithy/signature-v4@5.6.12)(ai@7.0.51(zod@4.4.3))(chokidar@3.6.0)(debug@4.4.3(supports-color@10.2.2))(rxjs@7.8.2)(supports-color@10.2.2)(ws@8.21.0(bufferutil@4.1.0)):
+  deepeval@0.1.32(@anthropic-ai/sdk@0.112.3(zod@4.4.3))(@aws-sdk/client-bedrock-runtime@3.1104.0)(@aws-sdk/credential-provider-node@3.972.78)(@google/genai@1.52.0(@modelcontextprotocol/sdk@1.30.0(@cfworker/json-schema@4.1.1)(supports-color@10.2.2)(zod@4.4.3))(bufferutil@4.1.0)(supports-color@10.2.2))(@mastra/core@packages+core)(@mastra/observability@observability+mastra)(@opentelemetry/exporter-trace-otlp-http@0.221.0(@opentelemetry/api@1.9.1))(@smithy/hash-node@4.4.6)(@smithy/signature-v4@5.6.12)(ai@7.0.51(zod@4.4.3))(chokidar@3.6.0)(debug@4.4.3(supports-color@10.2.2))(rxjs@7.8.2)(supports-color@10.2.2)(ws@8.21.0(bufferutil@4.1.0)):
     dependencies:
       '@opentelemetry/api': 1.9.1
       '@opentelemetry/exporter-trace-otlp-grpc': 0.207.0(@opentelemetry/api@1.9.1)
@@ -49553,7 +49642,7 @@ snapshots:
     optionalDependencies:
       '@anthropic-ai/sdk': 0.112.3(zod@4.4.3)
       '@aws-sdk/client-bedrock-runtime': 3.1104.0
-      '@google/genai': 1.52.0(@modelcontextprotocol/sdk@1.29.0(@cfworker/json-schema@4.1.1)(supports-color@10.2.2)(zod@4.4.3))(bufferutil@4.1.0)(supports-color@10.2.2)
+      '@google/genai': 1.52.0(@modelcontextprotocol/sdk@1.30.0(@cfworker/json-schema@4.1.1)(supports-color@10.2.2)(zod@4.4.3))(bufferutil@4.1.0)(supports-color@10.2.2)
       '@mastra/core': link:packages/core
       '@mastra/observability': link:observability/mastra
       ai: 7.0.51(zod@4.4.3)
@@ -50930,12 +51019,12 @@ snapshots:
   file-uri-to-path@1.0.0:
     optional: true
 
-  files-sdk@1.9.0(4c5e98b69509dfe6be9a7915fd67dc25):
+  files-sdk@1.9.0(84bb8c73cc984b4923ad40a36747360b):
     dependencies:
       commander: 15.0.0
       picomatch: 4.0.5
     optionalDependencies:
-      '@anthropic-ai/claude-agent-sdk': 0.3.220(@anthropic-ai/sdk@0.112.3(zod@4.4.3))(@modelcontextprotocol/sdk@1.29.0(@cfworker/json-schema@4.1.1)(supports-color@10.2.2)(zod@4.4.3))(zod@4.4.3)
+      '@anthropic-ai/claude-agent-sdk': 0.3.220(@anthropic-ai/sdk@0.112.3(zod@4.4.3))(@modelcontextprotocol/sdk@1.30.0(@cfworker/json-schema@4.1.1)(supports-color@10.2.2)(zod@4.4.3))(zod@4.4.3)
       '@aws-sdk/client-s3': 3.1104.0
       '@aws-sdk/lib-storage': 3.997.0(@aws-sdk/client-s3@3.1104.0)
       '@azure/core-auth': 1.10.1(supports-color@10.2.2)
