@@ -9,7 +9,6 @@ import { describe, expect, it, vi } from 'vitest';
 import { Memory, Subconscious } from '../../../index';
 import { createCuratorHandler } from '../subconscious/curate';
 import { createKnowledgeCurationTools, resolveKnowledgeScopeIds } from '../subconscious/knowledge-tools';
-import { createKnowledgeWriteTools } from '../subconscious/knowledge-write-tools';
 import type { ResolvedSubconsciousConfig } from '../subconscious/types';
 const semanticInfrastructure = {
   vector: {} as MastraVector,
@@ -145,77 +144,39 @@ describe('Subconscious curator', () => {
     expect(prompt.indexOf(authorityMarker)).toBeLessThan(prompt.indexOf(cursorMarker));
   });
 
-  it('stamps canonical provenance, uses scope-node memberships and CAS, and only soft-deletes records', async () => {
+  it('does not expose pre-v2 direct write actions to the curator', async () => {
     const memory = createMemory();
-    const store = (await memory.storage.getStore('knowledge'))!;
     const scopeIds = await scopeIdsFor(memory);
-    const node = await store.createNode({ name: 'Project Atlas', kind: 'project', scopeIds: [scopeIds[1]!] });
-    const tools = createKnowledgeWriteTools(memory, {
-      scopeIds,
-      sourceThreadId: 'alpha',
+    const tools = createKnowledgeCurationTools(memory, {
+      profileId: 'subconscious',
+      companionScopeId: scopeIds[3]!,
+      contextScopeId: scopeIds[2]!,
+      destinationScopeIds: [scopeIds[1]!, scopeIds[2]!],
     });
 
-    const record = (await tools.knowledge_append!.execute?.(
-      { node: node.id, text: '[[Project Atlas]] launches soon.', scope: 'resource' },
-      {} as any,
-    )) as any;
-    expect(record).toMatchObject({
-      nodeId: node.id,
-      source: 'subconscious:curate',
-      metadata: { sourceThreadId: 'alpha' },
-    });
-    expect(await store.getRecordScopeIds(record.id)).toEqual([scopeIds[1]]);
-
-    await tools.knowledge_rescope!.execute?.({ recordId: record.id, scope: 'thread' }, {} as any);
-    expect(await store.getRecordScopeIds(record.id)).toEqual([scopeIds[2]]);
-    await expect(
-      tools.knowledge_update_node!.execute?.(
-        { node: node.id, expectedVersion: node.version + 1, name: 'Atlas' },
-        {} as any,
-      ),
-    ).rejects.toThrow('version');
-
-    await tools.knowledge_remove!.execute?.({ recordId: record.id }, {} as any);
-    expect(await store.getRecord({ id: record.id })).toBeNull();
-    expect(await store.getRecord({ id: record.id, includeDeleted: true })).toMatchObject({
-      deletedBy: 'subconscious:curate',
-    });
-    expect(tools).not.toHaveProperty('knowledge_restore_item');
+    for (const name of [
+      'knowledge_append',
+      'knowledge_remove',
+      'knowledge_update_node',
+      'knowledge_merge_nodes',
+      'knowledge_rescope',
+      'knowledge_write_node_description',
+      'knowledge_write_node_content',
+    ]) {
+      expect(tools).not.toHaveProperty(name);
+    }
   });
 
-  it('makes hidden and absent write targets indistinguishable', async () => {
+  it('makes hidden and absent Knowledge reads indistinguishable', async () => {
     const memory = createMemory();
     const store = (await memory.storage.getStore('knowledge'))!;
     const scopeIds = await scopeIdsFor(memory);
     const hiddenNode = await store.createNode({ name: 'Org secret', scopeIds: [scopeIds[0]!] });
-    const hiddenRecord = await store.createRecord({
-      node: hiddenNode,
-      text: 'Private record',
-      scopeIds: [scopeIds[0]!],
-      source: 'test',
-    });
-    const tools = createKnowledgeWriteTools(memory, { scopeIds, sourceThreadId: 'alpha' });
+    const knowledge = memory.getKnowledgeInstance()!;
+    const visibleScopeIds = [scopeIds[1]!, scopeIds[2]!];
 
-    const appendHidden = tools.knowledge_append!.execute?.({ node: hiddenNode.id, text: 'Probe' }, {} as any);
-    const appendAbsent = tools.knowledge_append!.execute?.({ node: 'missing-node', text: 'Probe' }, {} as any);
-    await expect(appendHidden).rejects.toThrow(`Knowledge node not found: ${hiddenNode.id}`);
-    await expect(appendAbsent).rejects.toThrow('Knowledge node not found: missing-node');
-
-    const removeHidden = tools.knowledge_remove!.execute?.({ recordId: hiddenRecord.id }, {} as any);
-    const removeAbsent = tools.knowledge_remove!.execute?.({ recordId: 'missing-record' }, {} as any);
-    await expect(removeHidden).rejects.toThrow(`KnowledgeRecord not found: ${hiddenRecord.id}`);
-    await expect(removeAbsent).rejects.toThrow('KnowledgeRecord not found: missing-record');
-
-    const mergeHidden = tools.knowledge_merge_nodes!.execute?.(
-      { sourceId: hiddenNode.id, targetId: 'missing-target', sourceVersion: hiddenNode.version, targetVersion: 1 },
-      {} as any,
-    );
-    const mergeAbsent = tools.knowledge_merge_nodes!.execute?.(
-      { sourceId: 'missing-source', targetId: 'missing-target', sourceVersion: 1, targetVersion: 1 },
-      {} as any,
-    );
-    await expect(mergeHidden).rejects.toThrow(`Knowledge node not found: ${hiddenNode.id}`);
-    await expect(mergeAbsent).rejects.toThrow('Knowledge node not found: missing-source');
+    await expect(knowledge.getNode({ id: hiddenNode.id, scopeIds: visibleScopeIds })).resolves.toBeNull();
+    await expect(knowledge.getNode({ id: 'missing-node', scopeIds: visibleScopeIds })).resolves.toBeNull();
   });
 
   it('advances its source-thread cursor only after a successful durable run', async () => {

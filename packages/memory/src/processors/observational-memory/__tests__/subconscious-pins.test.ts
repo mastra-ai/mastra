@@ -1,13 +1,7 @@
 import { InMemoryStore } from '@mastra/core/storage';
 import { describe, expect, it } from 'vitest';
 
-import {
-  createKnowledgeWriteTools,
-  createPinnedTools,
-  listPinnedKnowledge,
-  PINNED_NODE_NAME,
-  Subconscious,
-} from '../subconscious';
+import { createPinnedTools, listPinnedKnowledge, PINNED_NODE_NAME, Subconscious } from '../subconscious';
 
 const resourceScope = ['10000000-0000-4000-8000-000000000001', '10000000-0000-4000-8000-000000000002'];
 const threadScope = [...resourceScope, '10000000-0000-4000-8000-000000000003'];
@@ -195,24 +189,11 @@ describe('Subconscious pinned knowledge', () => {
     expect(pins).toHaveLength(2);
   });
 
-  it('stores a mixed-case reserved page name canonically so the guard and readers agree', async () => {
+  it('keeps pinned-state tools isolated from pre-v2 raw Knowledge writes', async () => {
     const memory = createMemory();
-    const tools = createKnowledgeWriteTools(memory as any, {
-      scopeIds: threadScope,
-      sourceThreadId: 'alpha',
-    });
-    await expect(
-      tools.knowledge_write_node_content!.execute!(
-        { name: 'Capture-Guidance', content: 'x'.repeat(8_001) } as any,
-        {} as any,
-      ),
-    ).rejects.toThrow(/capture-guidance is limited/);
-    const written = await tools.knowledge_write_node_content!.execute!(
-      { name: 'Capture-Guidance', content: 'be concise' } as any,
-      {} as any,
-    );
-    const store = await getStore(memory);
-    const byCanonicalName = await store.resolveNode({ name: 'capture-guidance', scopeIds: threadScope });
-    expect(byCanonicalName).toMatchObject({ id: written.nodeId, name: 'capture-guidance' });
+    const tools = createPinnedTools(memory as any, { scopeIds: threadScope, sourceThreadId: 'alpha' });
+
+    expect(Object.keys(tools).sort()).toEqual(['knowledge_edit_pin', 'knowledge_pin', 'knowledge_unpin']);
+    expect(tools).not.toHaveProperty('knowledge_write_node_content');
   });
 });

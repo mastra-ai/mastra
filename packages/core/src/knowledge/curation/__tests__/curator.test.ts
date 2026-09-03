@@ -282,20 +282,39 @@ describe('Knowledge curator', () => {
     await expect(value.curator.retain(source.id)).rejects.toBeInstanceOf(KnowledgeNotFoundError);
   });
 
-  it('reconciles changed host authority exactly before creating another curator', async () => {
+  it('rejects changed profile authority without replacing the registered grants', async () => {
     const value = await fixture();
-    const before = await value.knowledge.evaluateAccess([value.ids['principal:owner']!]);
-    expect(before.scopes[value.ids['scope:uncurated']!]?.manageAccess).toBe(true);
 
-    await value.knowledge.registerCuratorProfile({
-      id: 'owner',
-      identityScope: { address: 'principal:owner', contextualScopeAddress: 'principal:owner' },
-      grants: [{ scopeAddress: 'scope:curated', role: 'owner' }],
-    });
+    await expect(
+      value.knowledge.registerCuratorProfile({
+        id: 'owner',
+        identityScope: { address: 'principal:owner', contextualScopeAddress: 'principal:owner' },
+        grants: [{ scopeAddress: 'scope:curated', role: 'edit' }],
+      }),
+    ).rejects.toThrow('Knowledge curator profile owner is already registered with different authority');
 
-    const after = await value.knowledge.evaluateAccess([value.ids['principal:owner']!]);
-    expect(after.scopes[value.ids['scope:uncurated']!]).toBeUndefined();
-    expect(after.scopes[value.ids['scope:curated']!]?.manageAccess).toBe(true);
+    const access = await value.knowledge.evaluateAccess([value.ids['principal:owner']!]);
+    expect(access.scopes[value.ids['scope:uncurated']!]?.manageAccess).toBe(true);
+    expect(access.scopes[value.ids['scope:curated']!]?.manageAccess).toBe(true);
+    const reviewerAccess = await value.knowledge.evaluateAccess([value.ids['principal:reviewer']!]);
+    expect(reviewerAccess.scopes[value.ids['scope:uncurated']!]?.manageAccess).toBe(true);
+    expect(reviewerAccess.scopes[value.ids['scope:curated']!]?.manageAccess).toBe(true);
+  });
+
+  it('validates every grant target before materializing a new curator identity', async () => {
+    const value = await fixture();
+
+    await expect(
+      value.knowledge.registerCuratorProfile({
+        id: 'invalid',
+        identityScope: { address: 'principal:invalid', contextualScopeAddress: 'principal:invalid' },
+        grants: [{ scopeAddress: 'scope:missing', role: 'owner' }],
+      }),
+    ).rejects.toBeInstanceOf(KnowledgeNotFoundError);
+    await expect(value.storage.getScopeAddress('principal:invalid')).resolves.toBeNull();
+    expect(() => value.knowledge.createCurator({ profileId: 'invalid', companionScopeId: 'unused' })).toThrow(
+      'Knowledge curator profile is not registered: invalid',
+    );
   });
 
   it('reconstructs the ordinary-scope worklist after a runtime restart without a curator queue', async () => {

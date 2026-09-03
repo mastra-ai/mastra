@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 
 import { Agent } from '@mastra/core/agent';
+import type { Knowledge } from '@mastra/core/knowledge';
 import type { KnowledgeRecord, KnowledgeScopeIds, KnowledgeStorage } from '@mastra/core/storage';
 import type { ToolAction } from '@mastra/core/tools';
 import { createTool } from '@mastra/core/tools';
@@ -9,8 +10,12 @@ import type { JSONSchema7 } from 'json-schema';
 import type { Memory } from '../../..';
 import type { ObservationalMemoryModel, ReflectionCommittedContext } from '../types';
 import { publishSubconsciousActivity, publishSubconsciousError } from './activity';
-import { createKnowledgeTools, getKnowledgeStore, resolveKnowledgeScopeIds } from './knowledge-tools';
-import { createKnowledgeWriteTools } from './knowledge-write-tools';
+import {
+  createKnowledgeTools,
+  getKnowledgeInstance,
+  getKnowledgeStore,
+  resolveKnowledgeScopeIds,
+} from './knowledge-tools';
 import { resolveSubconsciousAgentModel } from './model';
 import type { ResolvedSubconsciousAgent, ResolvedSubconsciousConfig } from './types';
 
@@ -18,9 +23,9 @@ const LEARN_AGENT = 'learn';
 const ULID_ALPHABET = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';
 const DEFAULT_INSTRUCTIONS = `Learn reusable skills from the full pre-reflection observations and pending knowledge records.
 
-A skill is a repeatable procedure with ordered actions, a trigger or context, and a success or recovery outcome. Do not learn one-off events, isolated preferences, knowledge records, or procedures supported by fewer than two distinct pending knowledge records. Search existing kind:skill nodes by exact name before writing so updates extend one skill rather than creating duplicates.
+A skill is a repeatable procedure with ordered actions, a trigger or context, and a success or recovery outcome. Do not learn one-off events, isolated preferences, knowledge records, or procedures supported by fewer than two distinct pending knowledge records. Search existing resource-scoped kind:skill nodes by exact name before writing so updates extend one reusable skill rather than creating duplicates.
 
-Use knowledge_record_skill for every skill creation or evidence update. It validates the evidence frontier and writes retry-safe evidence. You may use the other scoped knowledge tools for research and maintenance, but never restore deleted records, invent provenance or versions, or write outside the source scope.
+Use knowledge_record_skill for every skill creation or evidence update. It validates the evidence frontier and writes retry-safe evidence. You may use the other scoped knowledge tools for research, but never restore deleted records, invent provenance or versions, or write outside the source scope.
 
 Process pending records in ID order. End with <learning-complete through="RECORD_ID" /> naming the last pending record you reviewed, even when no reusable skill was found. Acknowledge only records you fully reviewed.`;
 
@@ -29,11 +34,11 @@ type LearnerState = { recordedName?: string };
 /** Upper bound on records pulled into a single reflection prompt; `hasMore` signals truncation. */
 const MAX_WORKLIST_RECORDS = 1000;
 
-async function readWorklist(store: KnowledgeStorage, sourceThreadId: string, scope: KnowledgeScopeIds, after?: string) {
+async function readWorklist(knowledge: Knowledge, sourceThreadId: string, scope: KnowledgeScopeIds, after?: string) {
   const records: KnowledgeRecord[] = [];
   let cursor = after;
   do {
-    const page = await store.listRecordsBySource({
+    const page = await knowledge.listRecordsBySource({
       source: sourceThreadId,
       scopeIds: scope,
       after: cursor,
@@ -55,7 +60,7 @@ function evidenceRecordId(sourceRecordId: string, skillName: string, resourceSco
 }
 
 export function createLearnerRecordSkillTool(input: {
-  store: KnowledgeStorage;
+  knowledge: Knowledge;
   scopeIds: KnowledgeScopeIds;
   pendingRecords: KnowledgeRecord[];
   parentThreadId: string;
@@ -90,31 +95,38 @@ export function createLearnerRecordSkillTool(input: {
         throw new Error('The learner may record at most one skill per reflection.');
       }
       input.state.recordedName = normalizedName;
+      const vouchedScopeIds = input.scopeIds.slice(1);
       const nodeScopeIds = [input.scopeIds[1]!];
-      let node = await input.store.resolveNode({ name: normalizedName, scopeIds: input.scopeIds.slice(1) });
+      let node = await input.knowledge.resolveNode({ name: normalizedName, scopeIds: nodeScopeIds });
       if (node && node.kind !== 'skill') throw new Error(`Knowledge node is not a skill: ${normalizedName}`);
-      node ??= await input.store.createNode({ name: normalizedName, kind: 'skill', scopeIds: nodeScopeIds });
+      node ??= await input.knowledge.createNode({
+        name: normalizedName,
+        kind: 'skill',
+        scopeIds: nodeScopeIds,
+        vouchedScopeIds,
+      });
       const evidence = [];
       for (const sourceId of sourceIds) {
         const id = evidenceRecordId(sourceId, normalizedName, input.scopeIds[1]!);
-        const existing = await input.store.getVisibleRecord({ id, scopeIds: input.scopeIds.slice(1) });
+        const existing = await input.knowledge.getRecord({ id, scopeIds: vouchedScopeIds });
         if (existing) {
           evidence.push(existing);
           continue;
         }
-        const source = pending.get(sourceId)!;
         try {
           evidence.push(
-            await input.store.createRecord({
+            await input.knowledge.createRecord({
               id,
               node: node.id,
-              text: `Procedure: ${value.procedure.trim()} Evidence source: ${source.id}.`,
-              scopeIds: await input.store.getRecordScopeIds(source.id),
+              text: `Procedure: ${value.procedure.trim()} Evidence source: ${sourceId}.`,
+              scopeIds: nodeScopeIds,
               source: `subconscious:${input.parentThreadId}:learn`,
+              metadata: { sourceThreadId: input.parentThreadId },
+              vouchedScopeIds,
             }),
           );
         } catch (error) {
-          const raced = await input.store.getVisibleRecord({ id, scopeIds: input.scopeIds.slice(1) });
+          const raced = await input.knowledge.getRecord({ id, scopeIds: vouchedScopeIds });
           if (!raced) throw error;
           evidence.push(raced);
         }
@@ -156,8 +168,14 @@ export function createLearnerHandler(
         requestContext: context.requestContext,
       });
       store = await getKnowledgeStore(memory);
+      const knowledge = getKnowledgeInstance(memory);
       const cursor = await store.getCurationCursor({ sourceThreadId: context.parentThreadId, agent: LEARN_AGENT });
-      const worklist = await readWorklist(store, context.parentThreadId, scopeIds.slice(1), cursor?.lastKnowledgeId);
+      const worklist = await readWorklist(
+        knowledge,
+        context.parentThreadId,
+        scopeIds.slice(1),
+        cursor?.lastKnowledgeId,
+      );
       if (!worklist.records.length) return;
       const agent = await createLearnerAgent(
         memory,
@@ -223,7 +241,7 @@ async function createLearnerAgent(
     requestContext: context.requestContext,
   });
   if (!model) throw new Error('Subconscious learn requires the main agent to resolve its model.');
-  const store = await getKnowledgeStore(memory);
+  const knowledge = getKnowledgeInstance(memory);
   const state: LearnerState = {};
   return new Agent({
     id: `subconscious-learn-${context.parentThreadId}`,
@@ -233,12 +251,8 @@ async function createLearnerAgent(
     memory: learnerMemory,
     tools: {
       ...createKnowledgeTools(memory, scopeIds.slice(1)),
-      ...createKnowledgeWriteTools(memory, {
-        scopeIds,
-        sourceThreadId: context.parentThreadId,
-      }),
       knowledge_record_skill: createLearnerRecordSkillTool({
-        store,
+        knowledge,
         scopeIds,
         pendingRecords,
         parentThreadId: context.parentThreadId,

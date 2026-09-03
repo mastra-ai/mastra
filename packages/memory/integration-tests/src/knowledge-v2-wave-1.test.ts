@@ -27,7 +27,12 @@ const structure = {
     { address: 'repo:mastra', name: 'repo:mastra', parentAddresses: ['org:acme'] },
     { address: 'repo:mastra:issues', name: 'issues', parentAddresses: ['repo:mastra'] },
     { address: 'repo:mastra:prs', name: 'prs', parentAddresses: ['repo:mastra'] },
-    { address: 'resource:shipyard', name: 'Shipyard', parentAddresses: ['org:acme'] },
+    {
+      address: 'resource:shipyard',
+      name: 'Shipyard',
+      parentAddresses: ['org:acme'],
+      grants: [{ scopeRefAddress: 'org:acme', role: 'owner' as const }],
+    },
   ],
 };
 
@@ -329,6 +334,7 @@ describe(`Knowledge Wave 1 linked-workspace proof (${adapter})`, () => {
     const node = await runtime.knowledge.createNode({
       name: 'Disposable Knowledge',
       scopeIds: [resourceScopeId],
+      vouchedScopeIds: [reconciled.scopes['org:acme']!],
       isScope: false,
     });
     expect(await runtime.knowledge.getNodeInternal(node.id)).not.toBeNull();

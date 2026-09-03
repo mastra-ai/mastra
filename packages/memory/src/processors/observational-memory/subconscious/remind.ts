@@ -1,10 +1,16 @@
 import { Agent } from '@mastra/core/agent';
+import type { Knowledge } from '@mastra/core/knowledge';
 import type { KnowledgeScopeIds, KnowledgeStorage, SearchKnowledgeResult } from '@mastra/core/storage';
 
 import { Extractor } from '../extractor';
 import type { ObservationalMemoryModel } from '../types';
 import { publishSubconsciousActivity } from './activity';
-import { createKnowledgeTools, getKnowledgeStore, resolveKnowledgeScopeIds } from './knowledge-tools';
+import {
+  createKnowledgeTools,
+  getKnowledgeInstance,
+  getKnowledgeStore,
+  resolveKnowledgeScopeIds,
+} from './knowledge-tools';
 import { resolveSubconsciousAgentModel } from './model';
 import type { ResolvedSubconsciousAgent } from './types';
 
@@ -41,7 +47,7 @@ const REMINDER_QUERY_STOP_WORDS = new Set([
 ]);
 
 async function findReminderSources(
-  store: KnowledgeStorage,
+  knowledge: Knowledge,
   scope: KnowledgeScopeIds,
   observations: string,
 ): Promise<SearchKnowledgeResult[]> {
@@ -53,7 +59,9 @@ async function findReminderSources(
         .filter(term => !REMINDER_QUERY_STOP_WORDS.has(term)) ?? [],
     ),
   ].slice(0, 12);
-  const results = (await Promise.all(terms.map(query => store.search({ query, scopeIds: scope, limit: 5 })))).flat();
+  const results = (
+    await Promise.all(terms.map(query => knowledge.search({ query, scopeIds: scope, limit: 5 })))
+  ).flat();
   return [...new Map(results.map(result => [`${result.type}:${result.id}`, result])).values()].slice(0, 10);
 }
 
@@ -63,19 +71,24 @@ async function findReminderSources(
  * guard the reminder agent mostly echoes the session's own words back at it.
  */
 async function dropFreshOwnRecords(
-  store: KnowledgeStorage,
+  knowledge: Knowledge,
+  scopeIds: KnowledgeScopeIds,
   sources: SearchKnowledgeResult[],
   threadId: string,
 ): Promise<SearchKnowledgeResult[]> {
   const checks = await Promise.all(
     sources.map(async source => {
       if (source.type !== 'record') return true;
-      const record = await store.getRecord({ id: source.id }).catch(() => null);
+      const record = await knowledge.getRecord({ id: source.id, scopeIds }).catch(() => null);
       if (!record) return true;
       // KnowledgeRecords written by the thread's own subconscious sub-agents (curate, learn, capture)
       // carry a `subconscious:<threadId>:<agent>` source — they are this thread's too.
       const sourceThreadId = typeof record.metadata?.sourceThreadId === 'string' ? record.metadata.sourceThreadId : '';
-      const isOwnThread = sourceThreadId === threadId || sourceThreadId.startsWith(`subconscious:${threadId}:`);
+      const isOwnThread =
+        sourceThreadId === threadId ||
+        sourceThreadId.startsWith(`subconscious:${threadId}:`) ||
+        record.source === threadId ||
+        record.source?.startsWith(`subconscious:${threadId}:`) === true;
       const isFresh = Date.now() - record.createdAt.getTime() < FRESH_OWN_RECORD_WINDOW_MS;
       return !(isOwnThread && isFresh);
     }),
@@ -102,9 +115,12 @@ export class SubconsciousRemindExtractor extends Extractor<string> {
             requestContext: context.requestContext,
           });
           store = await getKnowledgeStore(context.memory);
+          const knowledge = getKnowledgeInstance(context.memory);
+          const readableScopeIds = scopeIds.slice(1);
           const sources = await dropFreshOwnRecords(
-            store,
-            await findReminderSources(store, scopeIds.slice(1), context.rawObservations),
+            knowledge,
+            readableScopeIds,
+            await findReminderSources(knowledge, readableScopeIds, context.rawObservations),
             context.threadId,
           );
           if (sources.length === 0) return;

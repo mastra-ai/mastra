@@ -99,15 +99,15 @@ describe('Subconscious remind', () => {
       builtIn: true,
     });
     const context = createContext('Project Atlas launches January 15.');
+    const knowledge = context.memory.getKnowledgeInstance();
+    const search = vi.spyOn(knowledge, 'search');
+    const getRecord = vi.spyOn(knowledge, 'getRecord');
     const store = await context.memory.storage.getStore('knowledge');
-    const companionScope = [
-      (
-        await resolveKnowledgeScopeIds(context.memory, {
-          agent: { threadId: context.threadId, resourceId: context.resourceId },
-          requestContext: context.requestContext,
-        })
-      )[3]!,
-    ];
+    const scopeIds = await resolveKnowledgeScopeIds(context.memory, {
+      agent: { threadId: context.threadId, resourceId: context.resourceId },
+      requestContext: context.requestContext,
+    });
+    const companionScope = [scopeIds[3]!];
     const node = await store.createNode({
       name: 'Project Atlas',
       kind: 'project',
@@ -132,6 +132,8 @@ describe('Subconscious remind', () => {
     });
 
     expect(result.failures).toBeUndefined();
+    expect(search).toHaveBeenCalled();
+    expect(getRecord).toHaveBeenCalledWith(expect.objectContaining({ id: record.id, scopeIds: scopeIds.slice(1) }));
     expect(context.sendSignal).toHaveBeenCalledOnce();
     expect(context.sendSignal).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -238,7 +240,7 @@ describe('Subconscious remind', () => {
     );
   });
 
-  it("does not echo the thread's own freshly captured records back as reminders", async () => {
+  it("does not echo the thread's own freshly captured or learned records back as reminders", async () => {
     const extractor = new SubconsciousRemindExtractor({
       name: 'remind',
       maxSteps: 3,
@@ -251,13 +253,12 @@ describe('Subconscious remind', () => {
       kind: 'program',
       scopeIds: await getResourceScopeIds(context),
     });
-    // Captured by THIS thread, moments ago: the reminder must not whisper it back.
+    // Learned by THIS thread moments ago without legacy source metadata: the reminder must not whisper it back.
     await store.createRecord({
       node: node.id,
       text: 'The launch happens January 15.',
       scopeIds: await getResourceScopeIds(context),
-      source: 'alpha',
-      metadata: { sourceThreadId: 'alpha' },
+      source: 'subconscious:alpha:learn',
     });
 
     const result = await applyExtractorHooks({

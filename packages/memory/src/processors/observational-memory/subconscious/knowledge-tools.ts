@@ -35,6 +35,12 @@ export function withCaptureCompanions(scopeIds: KnowledgeScopeIds): KnowledgeSco
   return scopeIds;
 }
 
+export function getKnowledgeInstance(memory: KnowledgeStoreMemory): Knowledge {
+  const knowledge = memory.getKnowledgeInstance?.();
+  if (!knowledge) throw new Error('Knowledge tools require a configured Knowledge instance.');
+  return knowledge;
+}
+
 export async function getKnowledgeStore(memory: KnowledgeStoreMemory): Promise<KnowledgeStorage> {
   if (!memory.getKnowledgeStore) throw new Error('Knowledge tools require a configured Knowledge instance.');
   return memory.getKnowledgeStore();
@@ -52,8 +58,7 @@ export async function resolveKnowledgeScopeIds(
   }
   if (!resourceId) throw new Error('Knowledge tools require an active resourceId.');
   if (!threadId) throw new Error('Knowledge tools require an active threadId.');
-  const knowledge = memory.getKnowledgeInstance?.();
-  if (!knowledge) throw new Error('Knowledge tools require a configured Knowledge instance.');
+  const knowledge = getKnowledgeInstance(memory);
 
   const orgAddress = `org:${organizationId}`;
   const resourceAddress = `resource:${resourceId}`;
