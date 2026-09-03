@@ -1244,6 +1244,7 @@ describe('FactoryDecisionDispatcher', () => {
 
     await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
 
+    expect(session.thread.switch).not.toHaveBeenCalled();
     expect(abort).toHaveBeenCalledTimes(1);
     expect(abort.mock.invocationCallOrder[0]!).toBeLessThan(session.sendSignal.mock.invocationCallOrder[0]!);
     expect(session.sendSignal).toHaveBeenCalledTimes(1);
