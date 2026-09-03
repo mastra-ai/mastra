@@ -118,7 +118,7 @@ describe('ClickHouse deletion lifecycle', () => {
     expect(insert).toHaveBeenCalledOnce();
   });
 
-  it('re-hides a review-status replacement when deletion starts during the update', async () => {
+  it('re-hides only the matching scope when deletion starts during a review-status update', async () => {
     const { client, insert, command, query } = createClient();
     const existingRow = feedbackRecordToRow({
       feedbackId: 'feedback-1',
@@ -146,8 +146,12 @@ describe('ClickHouse deletion lifecycle', () => {
 
     expect(insert).toHaveBeenCalledOnce();
     expect(command).toHaveBeenCalledWith({
-      query: `DELETE FROM ${TABLE_FEEDBACK_EVENTS} WHERE feedbackId IN ({fid_0:String})`,
-      query_params: { fid_0: 'feedback-1' },
+      query: `DELETE FROM ${TABLE_FEEDBACK_EVENTS} WHERE feedbackId IN ({fid_0:String}) AND organizationId = {delOrganizationId:String} AND resourceId = {delResourceId:String}`,
+      query_params: {
+        fid_0: 'feedback-1',
+        delOrganizationId: 'org-1',
+        delResourceId: 'resource-1',
+      },
       clickhouse_settings: { lightweight_deletes_sync: '2' },
     });
     expect(insert.mock.invocationCallOrder[0]).toBeLessThan(command.mock.invocationCallOrder[0]!);

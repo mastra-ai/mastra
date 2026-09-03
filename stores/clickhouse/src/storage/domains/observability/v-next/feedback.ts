@@ -317,7 +317,15 @@ export async function updateFeedbackReviewStatus(
   });
 
   if (await hasPendingFeedbackDeletion(client, feedbackId, existingRow.organizationId, existingRow.resourceId)) {
-    await hideFeedback(client, { feedbackIds: [feedbackId] }, replication);
+    await hideFeedback(
+      client,
+      {
+        feedbackIds: [feedbackId],
+        organizationId: existingRow.organizationId ?? undefined,
+        resourceId: existingRow.resourceId ?? undefined,
+      },
+      replication,
+    );
     throw feedbackNotFoundError(feedbackId);
   }
 
