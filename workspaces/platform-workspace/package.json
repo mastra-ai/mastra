@@ -1,6 +1,6 @@
 {
   "name": "@mastra/platform-workspace",
-  "version": "1.5.0-alpha.5",
+  "version": "1.5.0-alpha.6",
   "description": "Mastra Platform workspace sandbox and filesystem providers",
   "type": "module",
   "main": "dist/index.js",
