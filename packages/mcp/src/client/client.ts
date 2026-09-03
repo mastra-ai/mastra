@@ -26,6 +26,7 @@ import type {
   ReadResourceResult,
   ClientCapabilities,
   McpSubscription,
+  jsonSchemaValidator,
 } from '@modelcontextprotocol/client';
 import { getDefaultEnvironment, StdioClientTransport } from '@modelcontextprotocol/client/stdio';
 import { asyncExitHook, gracefulExit } from 'exit-hook';
@@ -76,6 +77,70 @@ type MCPToolListEntry = Awaited<ReturnType<Client['listTools']>>['tools'][0];
 
 const DEFAULT_SERVER_CONNECT_TIMEOUT_MSEC = 3000;
 const DEFAULT_INSTRUCTIONS_MAX_LENGTH = 512;
+const MAX_JSON_SCHEMA_DEPTH = 128;
+const MAX_JSON_SCHEMA_NODES = 10_000;
+
+function getJsonSchemaComplexityError(schema: unknown): string | undefined {
+  const seen = new Set<object>();
+  let nodes = 0;
+  const stack = [{ value: schema, depth: 0 }];
+  const schemaMapKeywords = [
+    '$defs',
+    'definitions',
+    'properties',
+    'patternProperties',
+    'dependentSchemas',
+    'dependencies',
+  ];
+  const schemaArrayKeywords = ['prefixItems', 'allOf', 'anyOf', 'oneOf', 'items'];
+  const schemaKeywords = [
+    'additionalProperties',
+    'unevaluatedProperties',
+    'additionalItems',
+    'unevaluatedItems',
+    'items',
+    'contains',
+    'propertyNames',
+    'not',
+    'if',
+    'then',
+    'else',
+    'contentSchema',
+  ];
+
+  while (stack.length > 0) {
+    const { value, depth } = stack.pop()!;
+    if (value === null || typeof value !== 'object' || Array.isArray(value) || seen.has(value)) continue;
+    seen.add(value);
+
+    nodes += 1;
+    if (depth > MAX_JSON_SCHEMA_DEPTH) {
+      return `JSON Schema exceeds the maximum depth of ${MAX_JSON_SCHEMA_DEPTH}`;
+    }
+    if (nodes > MAX_JSON_SCHEMA_NODES) {
+      return `JSON Schema exceeds the maximum node count of ${MAX_JSON_SCHEMA_NODES}`;
+    }
+
+    const record = value as Record<string, unknown>;
+    for (const keyword of schemaMapKeywords) {
+      const schemas = record[keyword];
+      if (schemas && typeof schemas === 'object' && !Array.isArray(schemas)) {
+        for (const child of Object.values(schemas)) stack.push({ value: child, depth: depth + 1 });
+      }
+    }
+    for (const keyword of schemaArrayKeywords) {
+      const schemas = record[keyword];
+      if (Array.isArray(schemas)) {
+        for (const child of schemas) stack.push({ value: child, depth: depth + 1 });
+      }
+    }
+    for (const keyword of schemaKeywords) {
+      if (record[keyword] !== undefined) stack.push({ value: record[keyword], depth: depth + 1 });
+    }
+  }
+
+  return undefined;
+}
 
 /**
  * OAuth authorization state of an MCP server connection.
@@ -325,6 +390,8 @@ export class InternalMastraMCPClient extends MastraBase {
   private hasElicitationCapability: boolean;
   private readonly requireToolApproval: RequireToolApproval | undefined;
   private readonly onToolError: 'throw' | 'return';
+  private jsonSchemaValidator?: jsonSchemaValidator;
+  private jsonSchemaValidatorPromise?: Promise<jsonSchemaValidator>;
 
   /** Provides access to resource operations (list, read, subscribe, etc.) */
   public readonly resources: ResourceClientActions;
@@ -354,6 +421,7 @@ export class InternalMastraMCPClient extends MastraBase {
     this.enableProgressTracking = !!server.enableProgressTracking;
     this.requireToolApproval = server.requireToolApproval;
     this.onToolError = server.onToolError ?? 'throw';
+    this.jsonSchemaValidator = server.jsonSchemaValidator;
 
     // Initialize roots from server config
     this._roots = server.roots ?? [];
@@ -1338,25 +1406,51 @@ export class InternalMastraMCPClient extends MastraBase {
     });
   }
 
+  private async getJsonSchemaValidator(): Promise<jsonSchemaValidator> {
+    if (this.jsonSchemaValidator) return this.jsonSchemaValidator;
+
+    this.jsonSchemaValidatorPromise ??= import('@modelcontextprotocol/client/validators/ajv').then(
+      ({ AjvJsonSchemaValidator }) => new AjvJsonSchemaValidator(),
+    );
+    this.jsonSchemaValidator = await this.jsonSchemaValidatorPromise;
+    return this.jsonSchemaValidator;
+  }
+
   private convertInputSchema(
     inputSchema: Awaited<ReturnType<Client['listTools']>>['tools'][0]['inputSchema'],
-  ): JSONSchema7 {
-    return ('jsonSchema' in inputSchema ? inputSchema.jsonSchema : inputSchema) as JSONSchema7;
+  ): StandardSchemaWithJSON {
+    const rawSchema = ('jsonSchema' in inputSchema ? inputSchema.jsonSchema : inputSchema) as JSONSchema7;
+    const schema = rawSchema.$schema
+      ? rawSchema
+      : { ...rawSchema, $schema: 'https://json-schema.org/draft/2020-12/schema' };
+    const standardSchema = toStandardSchema(schema);
+    const complexityError = getJsonSchemaComplexityError(schema);
+    if (!complexityError) return standardSchema;
+
+    return {
+      '~standard': {
+        ...standardSchema['~standard'],
+        validate: () => ({ issues: [{ message: complexityError }] }),
+      },
+    };
   }
 
   /**
    * Wraps the output schema with a validator that always succeeds. The tool's execute wrapper
    * returns the full CallToolResult envelope when there is no structuredContent (and for
    * in-band errors with `onToolError: 'return'`), which would never match the advertised
-   * outputSchema — so enforcement happens inside the execute wrapper, scoped to the
-   * structuredContent path (see buildToolFromListEntry). The JSON schema is surfaced here
-   * for documentation.
+   * outputSchema. Enforcement therefore happens inside the execute wrapper, scoped to the
+   * successful structuredContent path, so cached tools use the configured SDK validator too.
+   * The JSON schema is surfaced here for documentation.
    */
   private convertOutputSchema(
     outputSchema: Awaited<ReturnType<Client['listTools']>>['tools'][0]['outputSchema'],
   ): StandardSchemaWithJSON | undefined {
     if (!outputSchema) return outputSchema;
-    const schema = ('jsonSchema' in outputSchema ? outputSchema.jsonSchema : outputSchema) as JSONSchema7;
+    const rawSchema = ('jsonSchema' in outputSchema ? outputSchema.jsonSchema : outputSchema) as JSONSchema7;
+    const schema = rawSchema.$schema
+      ? rawSchema
+      : { ...rawSchema, $schema: 'https://json-schema.org/draft/2020-12/schema' };
     const standardSchema = toStandardSchema(schema)['~standard'];
     return {
       '~standard': {
@@ -1510,6 +1604,39 @@ export class InternalMastraMCPClient extends MastraBase {
         // Stamp serverId into _meta.ui so consumers can resolve app resources
         // back to the originating MCP server without scanning all servers.
         const toolMeta = rawMeta ? this.stampServerIdInMeta(rawMeta) : undefined;
+        const outputSchema = tool.outputSchema
+          ? 'jsonSchema' in tool.outputSchema
+            ? tool.outputSchema.jsonSchema
+            : tool.outputSchema
+          : undefined;
+        const outputSchemaComplexityError = outputSchema ? getJsonSchemaComplexityError(outputSchema) : undefined;
+        let outputValidationSchema: StandardSchemaWithJSON | undefined;
+        const getOutputValidationSchema = async () => {
+          if (!outputSchema) return undefined;
+          if (outputSchemaComplexityError) {
+            throw new MastraError({
+              id: 'MCP_CLIENT_OUTPUT_SCHEMA_TOO_COMPLEX',
+              domain: ErrorDomain.MCP,
+              category: ErrorCategory.THIRD_PARTY,
+              text: `MCP tool "${tool.name}" has a schema that is too complex: ${outputSchemaComplexityError}`,
+              details: { toolName: tool.name, serverName: this.name },
+            });
+          }
+          if (!outputValidationSchema) {
+            const validator = (await this.getJsonSchemaValidator()).getValidator(outputSchema);
+            const standardSchema = toStandardSchema(outputSchema)['~standard'];
+            outputValidationSchema = {
+              '~standard': {
+                ...standardSchema,
+                validate: value => {
+                  const result = validator(value);
+                  return result.valid ? { value: result.data } : { issues: [{ message: result.errorMessage }] };
+                },
+              },
+            };
+          }
+          return outputValidationSchema;
+        };
         const mcpToolProps =
           toolMeta || annotations
             ? {
@@ -1519,13 +1646,6 @@ export class InternalMastraMCPClient extends MastraBase {
                 },
               }
             : {};
-        // Real validator for structuredContent. Kept separate from the Tool's outputSchema
-        // (whose validator is a no-op — see convertOutputSchema) because only the
-        // structuredContent success path should be validated, not envelope returns.
-        const rawOutputSchema = tool.outputSchema
-          ? (('jsonSchema' in tool.outputSchema ? tool.outputSchema.jsonSchema : tool.outputSchema) as JSONSchema7)
-          : undefined;
-        const outputValidator = rawOutputSchema ? toStandardSchema(rawOutputSchema) : undefined;
         const mastraTool = createTool({
           id: `${this.name}_${tool.name}`,
           description: tool.description || '',
@@ -1614,8 +1734,9 @@ export class InternalMastraMCPClient extends MastraBase {
                   // return the same structured ValidationError shape createTool produces so
                   // the model can self-correct. Skipped for isError results, which are handled
                   // above / by the `onToolError: 'return'` envelope path.
-                  if (!res.isError && outputValidator) {
-                    const validation = validateToolOutput(outputValidator, res.structuredContent, tool.name);
+                  if (!res.isError && outputSchema) {
+                    const validationSchema = await getOutputValidationSchema();
+                    const validation = validateToolOutput(validationSchema, res.structuredContent, tool.name);
                     if (validation.error) {
                       this.log('debug', `Tool output failed schema validation: ${tool.name}`, {
                         message: validation.error.message,

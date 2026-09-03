@@ -2874,6 +2874,12 @@ describe('MCPServer with Tool Output Schema', () => {
         timestamp: mockDateISO,
       }),
     },
+    nullOutputTool: {
+      description: 'A tool that returns null structured output',
+      parameters: z.object({}),
+      outputSchema: z.null(),
+      execute: async () => null,
+    },
   };
 
   beforeAll(async () => {
@@ -2983,6 +2989,31 @@ describe('MCPServer with Tool Output Schema', () => {
     expect((result.content as Array<{ type: string; text: string }>)[0].text).not.toBe(
       JSON.stringify(expectedStructuredContent),
     );
+  });
+
+  it('validates null structured output as null instead of an empty object', async () => {
+    // @ts-expect-error - accessing internal for testing
+    const nullTool = serverWithOutputSchema.convertedTools.nullOutputTool;
+    const validate = vi.fn(value => ({ success: value === null, output: value }));
+    nullTool.outputSchema.validate = validate;
+
+    const serverInstance = serverWithOutputSchema.getServer();
+    // @ts-expect-error - accessing internal for testing
+    const callToolHandler = serverInstance._requestHandlers.get('tools/call');
+    // This direct invocation lacks modern request metadata, so the SDK's legacy result parser rejects null after our handler.
+    await expect(
+      callToolHandler!(
+        {
+          jsonrpc: '2.0' as const,
+          id: 'test-null-output',
+          method: 'tools/call' as const,
+          params: { name: 'nullOutputTool', arguments: {} },
+        },
+        makeMockExtra(),
+      ),
+    ).rejects.toBeInstanceOf(Error);
+
+    expect(validate).toHaveBeenCalledWith(null);
   });
 });
 

@@ -47,6 +47,13 @@ const makeTools = () => ({
     inputSchema: z.object({}),
     execute: async (_inputData, options) => options?.mcp?.extra?.authInfo?.clientId ?? 'missing',
   }),
+  nullTool: createTool({
+    id: 'nullTool',
+    description: 'Returns a null structured result',
+    inputSchema: z.object({}),
+    outputSchema: z.null(),
+    execute: async () => null,
+  }),
 });
 
 const authInfo: AuthInfo = {
@@ -174,6 +181,27 @@ describe('MCPServer with protocolVersion 2026-07-28 (dual-era HTTP)', () => {
     }
   });
 
+  it('preserves null structuredContent as a valid modern tool result', async () => {
+    const client = new Client(
+      { name: 'null-result-client', version: '1.0.0' },
+      { versionNegotiation: { mode: { pin: '2026-07-28' } } },
+    );
+    await client.connect(new StreamableHTTPClientTransport(baseUrl));
+    try {
+      const tools = await client.listTools();
+      expect(tools.tools.find(tool => tool.name === 'nullTool')?.outputSchema?.$schema).toBe(
+        'http://json-schema.org/draft-07/schema#',
+      );
+      const result = await client.callTool({ name: 'nullTool', arguments: {} });
+
+      expect(result.isError).not.toBe(true);
+      expect(result.structuredContent).toBeNull();
+      expect(result.content).toEqual([{ type: 'text', text: 'null' }]);
+    } finally {
+      await client.close();
+    }
+  });
+
   it('forwards Node request auth to modern-era tool execution', async () => {
     const client = new Client(
       { name: 'auth-client', version: '1.0.0' },
@@ -209,6 +237,7 @@ describe('MCPServer with protocolVersion 2026-07-28 (dual-era HTTP)', () => {
     try {
       const tools = await client.listTools();
       expect(tools.tools.map(t => t.name)).toContain('echoTool');
+      expect(tools.tools.find(tool => tool.name === 'nullTool')?.outputSchema?.$schema).toBeUndefined();
 
       const result = await client.callTool({ name: 'echoTool', arguments: { text: 'legacy' } });
       expect((result as any).content[0].text).toBe('echo: legacy');

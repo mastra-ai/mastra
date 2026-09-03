@@ -180,6 +180,97 @@ describe('serializable MCP tool definitions (issue #20527)', () => {
       const valid = await hydrated.execute!({ city: 'Berlin' } as any, {});
       expect(valid).toMatchObject({ celsius: 21 });
     });
+
+    it('preserves a 2020-12 schema exactly through catalog serialization and hydration', async () => {
+      const definitions = await client.toolDefinitions();
+      const schema2020 = {
+        $schema: 'https://json-schema.org/draft/2020-12/schema',
+        $id: 'https://example.test/schemas/measurement',
+        $defs: {
+          reading: {
+            anyOf: [{ type: 'number' }, { type: 'null' }],
+          },
+        },
+        type: 'object',
+        properties: {
+          readings: {
+            type: 'array',
+            prefixItems: [{ $ref: '#/$defs/reading' }],
+            items: false,
+          },
+        },
+        unevaluatedProperties: false,
+      };
+      definitions.measure.inputSchema = schema2020;
+      definitions.measure.outputSchema = schema2020;
+
+      const cached = JSON.parse(JSON.stringify(definitions.measure));
+      expect(cached.inputSchema).toEqual(schema2020);
+      expect(cached.outputSchema).toEqual(schema2020);
+
+      const hydrated = client.toolFromDefinition({ definition: cached });
+      expect(hydrated.inputSchema?.['~standard'].jsonSchema.input({ target: 'draft-2020-12' })).toEqual(schema2020);
+      expect(hydrated.outputSchema?.['~standard'].jsonSchema.output({ target: 'draft-2020-12' })).toEqual(schema2020);
+    });
+
+    it('enforces a cached output schema without requiring a tools/list request in the new process', async () => {
+      const definitions = await client.toolDefinitions();
+      const cached = JSON.parse(JSON.stringify(definitions.measure));
+      cached.outputSchema = { type: 'string' };
+
+      const coldClient = new InternalMastraMCPClient({ name: 'defs', server: { url: testServer.baseUrl } });
+      const hydrated = coldClient.toolFromDefinition({ definition: cached });
+
+      try {
+        await expect(hydrated.execute!({ city: 'Berlin' } as any, {})).resolves.toMatchObject({
+          error: true,
+          message: expect.stringMatching(/tool output validation failed for measure/i),
+        });
+      } finally {
+        await coldClient.disconnect().catch(() => {});
+      }
+    });
+
+    it('rejects an output schema that exceeds the composition-depth budget', async () => {
+      const definitions = await client.toolDefinitions();
+      const cached = JSON.parse(JSON.stringify(definitions.measure));
+      let deepSchema: Record<string, unknown> = { type: 'number' };
+      for (let depth = 0; depth < 150; depth++) {
+        deepSchema = { allOf: [deepSchema] };
+      }
+      cached.outputSchema = deepSchema;
+
+      const coldClient = new InternalMastraMCPClient({ name: 'defs', server: { url: testServer.baseUrl } });
+      const hydrated = coldClient.toolFromDefinition({ definition: cached });
+
+      try {
+        await expect(hydrated.execute!({ city: 'Berlin' } as any, {})).rejects.toThrow(/schema.*complex/i);
+      } finally {
+        await coldClient.disconnect().catch(() => {});
+      }
+    });
+
+    it('does not count deeply nested annotation data as schema depth', async () => {
+      const definitions = await client.toolDefinitions();
+      const cached = JSON.parse(JSON.stringify(definitions.measure));
+      let deepDefault: Record<string, unknown> = {};
+      for (let depth = 0; depth < 150; depth++) {
+        deepDefault = { nested: deepDefault };
+      }
+      cached.outputSchema = {
+        type: 'object',
+        properties: { celsius: { type: 'number', default: deepDefault } },
+      };
+
+      const coldClient = new InternalMastraMCPClient({ name: 'defs', server: { url: testServer.baseUrl } });
+      const hydrated = coldClient.toolFromDefinition({ definition: cached });
+
+      try {
+        await expect(hydrated.execute!({ city: 'Berlin' } as any, {})).resolves.toMatchObject({ celsius: 21 });
+      } finally {
+        await coldClient.disconnect().catch(() => {});
+      }
+    });
   });
 
   describe('MCPClient', () => {
