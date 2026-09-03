@@ -791,23 +791,10 @@ export class SessionRunEngine {
       case 'error': {
         const streamError = getErrorFromUnknown(getPayload(chunk).error);
         this.#session.emit({ type: 'error', error: streamError });
-
-        // A run that dies after emitting `tool_suspended` (e.g. persisting the
-        // suspended snapshot failed) leaves its parked suspensions unresumable:
-        // answering them would fail with a misleading "could not find a
-        // suspended run" error that masks this primary failure. Retract them so
-        // the UI dismisses the prompts and the user sees the real error.
-        const failedRunId = chunk.runId ?? this.#session.run.getRunId();
-        if (failedRunId) {
-          for (const { toolCallId, toolName } of this.#session.suspensions.deleteForRun({ runId: failedRunId })) {
-            this.#session.emit({
-              type: 'tool_suspension_cancelled',
-              toolCallId,
-              toolName,
-              reason: streamError.message,
-            });
-          }
-        }
+        this.retractFailedRunSuspensions({
+          runId: chunk.runId ?? this.#session.run.getRunId(),
+          reason: streamError.message,
+        });
         break;
       }
 
@@ -1247,11 +1234,26 @@ export class SessionRunEngine {
     await this.#session.drainFollowUpQueue();
   }
 
+  private retractFailedRunSuspensions({ runId, reason }: { runId: string | null; reason: string }): void {
+    if (!runId) return;
+
+    for (const { toolCallId, toolName } of this.#session.suspensions.deleteForRun({ runId })) {
+      this.#session.emit({
+        type: 'tool_suspension_cancelled',
+        toolCallId,
+        toolName,
+        reason,
+      });
+    }
+  }
+
   private async handleSubscribedStreamError(error: unknown): Promise<void> {
     if (error instanceof Error && error.name === 'AbortError') {
       await this.#session.finishAgentRun('aborted');
     } else {
-      this.#session.emit({ type: 'error', error: getErrorFromUnknown(error) });
+      const streamError = getErrorFromUnknown(error);
+      this.#session.emit({ type: 'error', error: streamError });
+      this.retractFailedRunSuspensions({ runId: this.#session.run.getRunId(), reason: streamError.message });
       await this.#session.finishAgentRun('error');
     }
     this.#session.stream.detach();
