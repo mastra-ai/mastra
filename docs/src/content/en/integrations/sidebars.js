@@ -666,6 +666,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'voice/gladia',
+          label: 'Gladia',
+        },
+        {
+          type: 'doc',
           id: 'voice/google',
           label: 'Google',
           customProps: { icon: 'https://svgl.app/library/google.svg' },
