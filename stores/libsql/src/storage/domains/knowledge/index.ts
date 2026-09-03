@@ -1060,6 +1060,7 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
       sourceId: string;
       targetId: string;
       sourceVersion: number;
+      targetVersion: number;
       importRunId?: string;
       contextScopeId?: string;
       expectedAccessEpoch?: number;
@@ -1071,6 +1072,7 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
     if (!source) throw new KnowledgeNotFoundError('node', input.sourceId);
     const target = await this.#getNode(tx, input.targetId);
     if (!target) throw new KnowledgeNotFoundError('node', input.targetId);
+    if (target.version !== input.targetVersion) throw new KnowledgeConflictError(input.targetId);
     const sourceScopeIds = await this.#getNodeScopeIds(tx, source.id);
     const now = new Date();
     const updated = await tx.execute({
@@ -1100,6 +1102,10 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
       args: [target.id, source.id],
     });
     await tx.execute({ sql: `DELETE FROM "${TABLE_KNOWLEDGE_MENTIONS}" WHERE targetNodeId=?`, args: [source.id] });
+    await tx.execute({
+      sql: `UPDATE "${TABLE_KNOWLEDGE_NODE_ADDRESSES}" SET nodeId=? WHERE nodeId=?`,
+      args: [target.id, source.id],
+    });
     await this.#activity(tx, 'merge', 'node', source.id, input.contextScopeId, input.importRunId, {
       targetId: target.id,
     });
