@@ -176,6 +176,27 @@ describe('connect', () => {
     });
   });
 
+  it('tolerates connections with unknown statuses: skips them in undirected mode', async () => {
+    stubProvider();
+    const result = await connect(clientFor([makeConnection({ status: 'pending' })]));
+    expect(result).toEqual({});
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('c_lin1: pending'));
+  });
+
+  it('throws connection_not_found when an explicitly requested provider only has unknown-status connections', async () => {
+    stubProvider();
+    await expect(
+      connect({ ...clientFor([makeConnection({ status: 'pending' })]), integrations: { linear: true } }),
+    ).rejects.toMatchObject({ code: 'connection_not_found' });
+  });
+
+  it('an unknown status on one connection does not break resolution of an active one', async () => {
+    const { createTools } = stubProvider();
+    const result = await connect(clientFor([makeConnection({ id: 'c_lin2', status: 'pending' }), makeConnection()]));
+    expect(Object.keys(result)).toEqual(['linear']);
+    expect(createTools).toHaveBeenCalledWith(expect.objectContaining({ connectionId: 'c_lin1' }));
+  });
+
   it('rejects unknown integration keys in options', async () => {
     stubProvider();
     await expect(

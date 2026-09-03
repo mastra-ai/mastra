@@ -152,8 +152,16 @@ function resolveProviderConnection(
       );
       return undefined;
     }
-    // No candidates at all: explicit requests were already rejected in
-    // buildRequests, so this only happens in undirected mode.
+    // No usable candidates (e.g. only connections in an unknown status).
+    if (request.explicit) {
+      throw new MastraConnectError(
+        'connection_not_found',
+        `No usable ${request.key} connection found in this project (${candidates.map(connection => `${connection.id}: ${connection.status}`).join(', ')}).`,
+      );
+    }
+    console.warn(
+      `[@mastra/connect] Skipping ${request.key}: no usable connection (${candidates.map(connection => `${connection.id}: ${connection.status}`).join(', ')}).`,
+    );
     return undefined;
   }
 

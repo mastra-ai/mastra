@@ -258,6 +258,19 @@ describe('proxyRequest', () => {
     });
   });
 
+  it('keeps a provider problem-shaped application/json 404 as proxy_error', async () => {
+    // A provider body that *looks* RFC-7807 (e.g. ASP.NET ProblemDetails) but
+    // is served as plain application/json must not map to connection_not_found.
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(Response.json({ title: 'Not Found', status: 404, detail: 'no such page' }, { status: 404 }));
+    const client = makeClient(fetchMock, { baseUrl: 'https://example.test' });
+    await expect(proxyRequest(client, 'c_1', { method: 'GET', path: 'pages/x' })).rejects.toMatchObject({
+      code: 'proxy_error',
+      status: 404,
+    });
+  });
+
   it('keeps a provider 401 as proxy_error', async () => {
     const fetchMock = vi.fn().mockResolvedValue(Response.json({ message: 'expired token' }, { status: 401 }));
     const client = makeClient(fetchMock, { baseUrl: 'https://example.test' });

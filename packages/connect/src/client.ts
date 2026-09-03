@@ -132,7 +132,10 @@ async function throwPlatformError(response: Response, context: string): Promise<
 export const connectionSchema = z.object({
   id: z.string(),
   integrationId: z.string(),
-  status: z.enum(['active', 'needs_reauth']),
+  // Lenient on purpose: an unknown future status must not fail the whole
+  // connection list — resolution treats anything but 'active'/'needs_reauth'
+  // as unusable.
+  status: z.string(),
   connectedByUserId: z.string().nullish(),
   connectedAt: z.string().nullish(),
   createdAt: z.string().nullish(),

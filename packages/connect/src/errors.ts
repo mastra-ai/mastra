@@ -47,15 +47,14 @@ export async function extractProblemDetail(
   response: Response,
 ): Promise<{ detail?: string; code?: string; isProblemJson: boolean }> {
   const contentType = response.headers.get('content-type') ?? '';
-  let isProblemJson = contentType.includes('application/problem+json');
+  // Platform-originated errors are identified strictly by the RFC-7807 content
+  // type. A provider error body that merely *looks* problem-shaped (e.g.
+  // ASP.NET ProblemDetails served as application/json) must not be
+  // misclassified as a platform error.
+  const isProblemJson = contentType.includes('application/problem+json');
   try {
     const data = (await response.clone().json()) as ProblemJson;
     if (data && typeof data === 'object') {
-      // RFC-7807 shape fallback: some platform responses use a plain JSON
-      // content type but still carry the problem structure.
-      if (!isProblemJson && typeof data.title === 'string' && typeof data.status === 'number') {
-        isProblemJson = true;
-      }
       const code = typeof data.code === 'string' ? data.code : undefined;
       for (const field of ['detail', 'title', 'error'] as const) {
         const value = data[field];
