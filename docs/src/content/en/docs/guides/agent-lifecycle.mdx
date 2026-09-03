@@ -19,7 +19,7 @@ Work happens at three levels:
 - **Loop iteration**: One pass through the agent loop. It starts with a model step. Requested tool work follows before Mastra decides whether to continue.
 - **Model step**: One request to the model provider and the response it produces. Input and output processors run around this request.
 
-A run contains one or more loop iterations. If the model returns a final answer, the run can stop after the current iteration. If the model requests a tool, Mastra processes the tool result and can begin another iteration so the model can use it.
+A run contains one or more loop iterations. It stops after the current iteration when the model returns a final answer, or processes the requested tool result and begins another iteration when the model requests a tool. An iteration commonly coincides with one model step, but treat that pairing as implementation behavior rather than a stable contract.
 
 ## Lifecycle overview
 
@@ -118,7 +118,7 @@ The [Processor interface](/reference/processors/processor-interface) documents c
 
 | Callback or operation | Frequency | Position and visibility |
 | - | - | - |
-| `processInput` | Once per initial request | During input preparation before the loop. Durable resume may skip it. |
+| `processInput` | Once per initial request | During input preparation before the loop. Resuming from a durable snapshot may skip it. |
 | `processInputStep` | Once per model step | Before the provider request. It sees messages and tool results accumulated so far. |
 | `processLLMRequest` | Once per provider call | Last processor stage for rewriting the provider-facing prompt. Its prompt changes aren't written back to the message list. |
 | `processOutputStream` | Per streamed chunk | Runs while model output arrives. Data chunks are included when the processor opts in. |
@@ -160,13 +160,13 @@ These checks work together rather than forming a public, exhaustive internal ord
 
 ## Finalization
 
-A normal stop moves the run into finalization. `processOutputResult` runs once on the completed result. During the same finalization pass, memory output processors run last so they can persist the final form. When finalization completes, `generate()` resolves or the stream closes.
+A stop moves the run into finalization. `processOutputResult` runs once per request on the final assistant message, whether the run completes normally or the provider throws. Configured output processors run first, then auto-attached memory output processors run after them so message history can persist the final form. Observational Memory manages its own persistence during its `processOutputStep` instead. When finalization completes, `generate()` resolves or the stream closes.
 
 Finalization is separate from a model step. It operates on the result of the whole run rather than the response from one provider call.
 
 ## Errors, retries, and aborts
 
-A provider API rejection can reach `processAPIError`. An error processor may change the request or messages and request another provider attempt. Error-processor retries have their own default budget. Set `maxProcessorRetries` explicitly when you need a specific limit.
+A provider API rejection can reach `processAPIError`. An error processor may change the request or messages and request another provider attempt. `processAPIError` retries and tripwire retries share the same `maxProcessorRetries` bound on the request. When error processors are configured and `maxProcessorRetries` is omitted, Mastra applies a default budget. Set `maxProcessorRetries` explicitly when you need a specific limit.
 
 Calling `abort()` from an input or output processor raises a tripwire. Set `retry: true` to let an eligible input-step or output-step check replay the model step with feedback. `maxProcessorRetries` bounds replay attempts. A tripwire without a retry stops normal execution and is included in the result or stream.
 
@@ -184,7 +184,11 @@ Durable execution also lets a run suspend, such as while a tool waits for approv
 
 Mastra snapshots serializable `RequestContext` entries for durable work. Functions, class instances, open connections, and similar non-serializable values shouldn't be expected to survive either suspension or transport into another process. Reconstruct them from stable identifiers at a trusted request or resume boundary.
 
-Initial `processInput` processing may be skipped when a durable run resumes because the conversation state already exists in the durable snapshot. Don't depend on a one-time `processInput` side effect running again. For authorization and tool scoping, repeat the authoritative enrichment step whenever an external request resumes a run and store only the serializable scope needed downstream.
+Resuming from a stored snapshot can skip initial `processInput` processing, while signal and schedule wakes run it again.
+
+- Repeat the authoritative enrichment step whenever an external request resumes a run.
+- Store only the serializable scope you need downstream.
+- Don't rely on a one-time `processInput` side effect.
 
 ## What to read next
 
