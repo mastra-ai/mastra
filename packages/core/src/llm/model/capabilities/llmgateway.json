@@ -110,7 +110,6 @@
     "qwen3.6-plus",
     "qwen3.7-flash",
     "qwen3.7-plus",
-    "qwen3.8-27b",
     "qwen3.8-flash",
     "qwen3.8-max",
     "qwen35-397b-a17b",
@@ -122,6 +121,7 @@
     "sonar-reasoning-pro"
   ],
   "temperature": [
+    "Qwen3.8-27B",
     "auto",
     "claude-haiku-4-5",
     "claude-haiku-4-5-20251001",
@@ -264,7 +264,6 @@
     "qwen3.7-flash",
     "qwen3.7-max",
     "qwen3.7-plus",
-    "qwen3.8-27b",
     "qwen3.8-max",
     "qwen35-397b-a17b",
     "seed-1-6-250615",
@@ -372,7 +371,6 @@
     "qwen3.5-9b",
     "qwen3.6-35b-a3b",
     "qwen3.6-flash",
-    "qwen3.8-27b",
     "qwen3.8-flash",
     "qwen35-397b-a17b",
     "seed-1-6-250615",

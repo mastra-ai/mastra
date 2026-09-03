@@ -140,11 +140,10 @@ function completeIssue(context: FactoryStageRuleContext) {
 }
 
 function reviewPullRequest(context: FactoryStageRuleContext) {
-  // A re-entry into Review (from any post-intake stage) supersedes whichever
-  // review pass previously ran on this card: cancel any in-flight run before
-  // dispatching a fresh one so we don't burn tokens on the stale pass and race
-  // two agents on the same card. Cancellation is safe when nothing is in flight.
-  const supersedes = context.fromStage !== 'intake';
+  // Only a Review-to-Review re-entry can supersede an active pass. A card
+  // returning from Done has no live review to cancel; aborting its bound session
+  // would instead cancel the fresh re-review kickoff.
+  const supersedes = context.fromStage === 'review';
   // The re-review skill only applies when a prior review pass actually completed
   // (the card is returning from `done`). A cancelled first-time review that
   // re-enters Review from `review` itself still has no prior pass to reconcile —
@@ -390,6 +389,10 @@ function requestsChangesVerdict(body: string | undefined): boolean {
 }
 
 function addressPullRequestComment(context: FactoryGithubRuleContext) {
+  // A validated Factory mention is a review-entry request, not feedback for the
+  // authoring Work session. Invalid or unrecognized comments retain the normal
+  // feedback route below.
+  if (context.reviewCommand) return reReviewRequestedPullRequest(context);
   if (!context.item || !context.pullRequest || !context.issueComment) return;
   // Provenance binds the comment to the Work item that authored the PR — the
   // only session that can act on it. A Review card must not react to comments
@@ -440,9 +443,10 @@ function pullRequestClosed(context: FactoryGithubRuleContext) {
 }
 
 function reReviewRequestedPullRequest(context: FactoryGithubRuleContext) {
-  // Only a review requested from Factory's own bot starts a Factory review —
-  // requesting a human reviewer is not Factory's signal.
-  if ((context.item && context.board !== 'review') || !context.reviewRequest?.factoryReviewer) return;
+  // GitHub reviewer requests and Factory's exact mention command are both
+  // explicit requests to enter the same Review lifecycle.
+  const factoryReviewEntry = context.reviewRequest?.factoryReviewer || context.reviewCommand !== undefined;
+  if ((context.item && context.board !== 'review') || !factoryReviewEntry) return;
   if (!context.pullRequest || context.pullRequest.state !== 'open' || context.pullRequest.merged) return;
   // Trusted (write/admin) requesters only: creating or re-entering review checks
   // out and executes PR code, the same bar pullRequestOpened applies to auto-review.
