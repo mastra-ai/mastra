@@ -511,6 +511,7 @@ export interface PromoteKnowledgeNodeInput extends KnowledgeMutationFence {
 export interface ListKnowledgeNodesInput {
   scopeIds: KnowledgeScopeIds;
   membershipScopeIds?: KnowledgeScopeIds;
+  name?: string;
   namePrefix?: string;
   kind?: string;
   isScope?: boolean;
@@ -524,7 +525,7 @@ export interface KnowledgeNodeCursor {
 }
 export function createKnowledgeNodeCursor(
   node: Pick<KnowledgeNode, 'updatedAt' | 'name' | 'id'>,
-  filters: { namePrefix?: string; kind?: string; isScope?: boolean } = {},
+  filters: { name?: string; namePrefix?: string; kind?: string; isScope?: boolean } = {},
 ): string {
   return encodeURIComponent(
     JSON.stringify({
@@ -533,6 +534,7 @@ export function createKnowledgeNodeCursor(
       updatedAt: node.updatedAt.toISOString(),
       name: node.name,
       id: node.id,
+      exactName: filters.name?.trim().toLocaleLowerCase() ?? null,
       namePrefix: filters.namePrefix?.toLocaleLowerCase() ?? null,
       kind: filters.kind ?? null,
       isScope: filters.isScope ?? null,
@@ -541,7 +543,7 @@ export function createKnowledgeNodeCursor(
 }
 export function parseKnowledgeNodeCursor(
   cursor: string,
-  filters: { namePrefix?: string; kind?: string; isScope?: boolean },
+  filters: { name?: string; namePrefix?: string; kind?: string; isScope?: boolean },
 ): KnowledgeNodeCursor {
   let value: unknown;
   try {
@@ -558,6 +560,7 @@ export function parseKnowledgeNodeCursor(
     typeof parsed.name !== 'string' ||
     typeof parsed.id !== 'string' ||
     Number.isNaN(updatedAt.getTime()) ||
+    parsed.exactName !== (filters.name?.trim().toLocaleLowerCase() ?? null) ||
     parsed.namePrefix !== (filters.namePrefix?.toLocaleLowerCase() ?? null) ||
     parsed.kind !== (filters.kind ?? null) ||
     parsed.isScope !== (filters.isScope ?? null)

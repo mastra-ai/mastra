@@ -109,7 +109,7 @@ const graphFixture: KnowledgeGraphPayload = {
     { id: 'record-2', nodeIds: ['ent-2', 'ent-1'], pinned: false, text: 'Runbook references the service.' },
     { id: 'record-3', nodeIds: ['ent-1'], pinned: false, text: 'Deploys run nightly.' },
   ],
-  page: { truncated: false, incomplete: false },
+  page: { truncated: false, terminalBounds: [] },
   limits: { maxNodes: 250, maxEdges: 500, maxBoundaryNodes: 100, boundaryHops: 1 },
   version: '01TESTVERSION',
 };
@@ -478,6 +478,7 @@ describe('KnowledgePage', () => {
           reference: 'reference-ent-3',
           name: 'Deploy Platform',
           kind: 'service',
+          rung: 'resource',
           pinned: false,
           recordCount: 0,
           boundary: { scope: boundaryScope },
@@ -702,15 +703,17 @@ describe('KnowledgePage', () => {
     }
   });
 
-  it('shows the bounded-lens banner when more authorized graph data is available', async () => {
+  it('explains when relationship data reached a terminal server bound', async () => {
     stubKnowledgeRoute({
       ...graphFixture,
-      page: { truncated: true, incomplete: true },
+      page: { truncated: false, terminalBounds: ['record-window'] },
     });
     renderRoute();
 
     const banner = await screen.findByTestId('knowledge-truncation-banner');
-    expect(banner).toHaveTextContent('Bounded lens — showing 2 nodes and 2 edges');
+    expect(banner).toHaveTextContent(
+      'Relationship data reached a terminal server bound; Load more only loads additional nodes.',
+    );
   });
 
   it('shows the sidebar Knowledge entry (brain icon) under Audit log', async () => {
@@ -729,7 +732,7 @@ describe('KnowledgePage', () => {
     stubKnowledgeRoute({ ...graphFixture, nodes: [], edges: [] });
     renderRoute();
 
-    expect(await screen.findByText(/No knowledge captured at project scope yet/)).toBeInTheDocument();
+    expect(await screen.findByText('No knowledge in this scope yet.')).toBeInTheDocument();
   });
 
   it('explains exact-scope visibility when a wider rung is empty', async () => {
