@@ -29,7 +29,10 @@ describe('official Knowledge skill synchronization', () => {
       sourceRoot: process.cwd(),
       targetRoot: '/tmp/skills',
       check: false,
+      release: false,
     });
+    expect(parseArgs(['--target', '/tmp/skills', '--release']).release).toBe(true);
+    expect(() => parseArgs(['--target', '--check'])).toThrow('--target requires a value');
   });
 
   it('keeps the embedded skill loader-valid with resolvable references', async () => {
@@ -77,6 +80,9 @@ describe('official Knowledge skill synchronization', () => {
 
     await syncOfficialSkills({ ...options, check: true });
     await writeFile(referencePath, `${first}\ndrift\n`);
+    await expect(syncOfficialSkills(options)).rejects.toThrow(
+      'Refusing to overwrite a manually edited official Knowledge reference',
+    );
     await expect(syncOfficialSkills({ ...options, check: true })).rejects.toThrow('Official skill drift detected');
   });
 });
