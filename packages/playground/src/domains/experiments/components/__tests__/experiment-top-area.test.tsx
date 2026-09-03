@@ -102,6 +102,38 @@ describe('ExperimentTopArea', () => {
     await waitForMutationsIdle(queryClient);
   });
 
+  it('places the rename icon button right next to the title', async () => {
+    const { queryClient } = renderWithProviders(
+      <TestLinkProvider>
+        <ExperimentTopArea experiment={namedExperiment} />
+      </TestLinkProvider>,
+      { router: true },
+    );
+
+    const heading = await screen.findByRole('heading', { name: namedExperiment.name! });
+    const rename = screen.getByRole('button', { name: 'Rename this experiment' });
+    expect(rename.textContent).toBe('');
+    expect(heading.parentElement).toBe(rename.parentElement);
+
+    await waitForMutationsIdle(queryClient);
+  });
+
+  it('links to the review queue for this experiment next to Rerun', async () => {
+    const { queryClient } = renderWithProviders(
+      <TestLinkProvider>
+        <ExperimentTopArea experiment={namedExperiment} />
+      </TestLinkProvider>,
+      { router: true },
+    );
+
+    const review = await screen.findByRole('link', { name: 'View items to review' });
+    expect(review.getAttribute('href')).toBe(`/experiments/review-queue?experiment=${namedExperiment.id}`);
+    const rerun = screen.getByRole('button', { name: /rerun/i });
+    expect(review.parentElement).toBe(rerun.parentElement);
+
+    await waitForMutationsIdle(queryClient);
+  });
+
   it('omits the description when the experiment has none', async () => {
     const { queryClient } = renderWithProviders(
       <TestLinkProvider>

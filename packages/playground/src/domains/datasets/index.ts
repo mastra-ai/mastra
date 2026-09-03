@@ -76,7 +76,10 @@ export { TargetSelector, type TargetType } from './components/experiment-trigger
 export { ScorerSelector } from './components/experiment-trigger/scorer-selector';
 
 // Experiment components
-export { ExperimentPageTabs, type ExperimentPageTabsProps } from '../experiments/components/experiment-page-tabs';
+export {
+  ExperimentResultsSection,
+  type ExperimentResultsSectionProps,
+} from '../experiments/components/experiment-results-section';
 export { ExperimentStats, type ExperimentStatsProps } from '../experiments/components/experiment-stats';
 export {
   ExperimentResultTracePanel,

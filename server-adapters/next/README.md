@@ -33,13 +33,8 @@ createNextRouteHandler({
 
 ## Documentation
 
-`createNextRouteHandler()` returns handlers for every HTTP method supported by the Mastra server. It initializes the underlying Hono adapter on the first request, so the handler object can be exported synchronously from the route module.
-
-The adapter reads the server configuration from the Mastra instance, including custom API routes, route authentication settings, MCP options, and `bodySizeLimit`. Next.js deployments default to a 4.5 MB request body limit unless the Mastra server configuration overrides it.
-
-Use the `tools` option to register additional server tools that are not already part of the Mastra instance. The `prefix` defaults to `/api` and must correspond to the URL segment before the App Router catch-all parameter.
-
-Authentication and custom route `requiresAuth` settings are forwarded to the shared Mastra Hono server adapter. An in-memory task store backs A2A task operations, so use this adapter with the lifecycle and persistence constraints of the target Next.js hosting environment in mind.
+- [Next.js reference](https://mastra.ai/reference/server/next-adapter)
+- [Guide](https://mastra.ai/integrations/frameworks/next-js)
 
 ## Changelog
 

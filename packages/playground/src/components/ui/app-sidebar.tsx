@@ -20,6 +20,7 @@ import { useInboxDatasetReviewCount } from '@/domains/review/hooks/use-inbox-rev
 import { useNavigationCommand } from '@/lib/command';
 import { useLinkComponent } from '@/lib/framework';
 import { useMastraPlatform } from '@/lib/mastra-platform/hooks/use-mastra-platform';
+import { getIsLinkActive } from '@/lib/nav/get-is-link-active';
 import { bottomNav, mainNav } from '@/lib/nav/nav-items';
 import type { NavItem } from '@/lib/nav/nav-items';
 
@@ -33,13 +34,6 @@ declare global {
 function toSidebarLink(item: NavItem): NavLink {
   const { Icon } = item;
   return { name: item.name, url: item.url, icon: <Icon /> };
-}
-
-function getIsLinkActive(item: NavItem, pathname: string): boolean {
-  // Exact match or sub-path match (with / boundary so sibling routes don't match by prefix)
-  const matches = (url: string) => pathname === url || pathname.startsWith(url + '/');
-  if (matches(item.url)) return true;
-  return item.activePaths?.some(matches) ?? false;
 }
 
 export function AppSidebar() {
@@ -212,7 +206,7 @@ export function AppSidebar() {
                     LinkComponent={Link}
                     state={state}
                     link={toSidebarLink(item)}
-                    isActive={getIsLinkActive(item, pathname)}
+                    isActive={getIsLinkActive(item, pathname, filtered)}
                   >
                     {item.url === '/inbox' && hasInboxItems && state !== 'collapsed' ? (
                       <Badge
