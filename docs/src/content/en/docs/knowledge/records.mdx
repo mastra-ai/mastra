@@ -1,24 +1,31 @@
-# Nodes and records
+---
+title: 'Knowledge nodes and records'
+description: 'Create, query, relate, version, and delete Knowledge nodes and records safely.'
+packages:
+  - '@mastra/core'
+---
 
-A node is the durable entity in the Knowledge graph. A record is append-only evidence owned by a node. Node memberships and record memberships are intentionally separate.
+# Knowledge nodes and records
+
+The Knowledge graph represents each durable entity as a node and its append-only evidence as owned records. Node memberships and record memberships are intentionally separate.
 
 ## Write through Knowledge
 
 Use public `Knowledge` operations rather than its storage internals. Supply host-vouched scopes and the current numeric version for mutations.
 
-```ts
+```typescript
 const node = await knowledge.createNode({
   name: 'Refund policy',
   scopeIds,
   vouchedScopeIds,
-});
+})
 
 const record = await knowledge.createRecord({
   node,
   text: 'Refunds are available within 30 days.',
   scopeIds,
   vouchedScopeIds,
-});
+})
 ```
 
 Inspect the installed `@mastra/core/knowledge` types for exact input signatures. APIs distinguish caller authority scopes from the memberships assigned to new or updated data.
@@ -27,8 +34,8 @@ Inspect the installed `@mastra/core/knowledge` types for exact input signatures.
 
 Keep every query bounded and continue only with returned opaque cursors. Exact-name lookup is distinct from prefix search. Search and mention queries authorize candidates before applying rank, counts, limits, or cursor shaping.
 
-```ts
-const page = await knowledge.listNodes({ scopeIds, limit: 50 });
+```typescript
+const page = await knowledge.listNodes({ scopeIds: vouchedScopeIds, limit: 50 })
 ```
 
 Don't infer hidden matches from missing list entries, score gaps, degree changes, boundary edges, or pagination behavior. Hydrate semantic-search results through authorized Knowledge reads instead of trusting vector metadata.

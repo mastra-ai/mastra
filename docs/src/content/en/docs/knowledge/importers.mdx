@@ -1,30 +1,38 @@
-# Importers
+---
+title: 'Knowledge importers'
+description: 'Build replayable static and agentic Knowledge imports with durable state and explicit removals.'
+packages:
+  - '@mastra/core'
+---
 
-Importers turn external systems into replayable Knowledge mutations. Design them for at-least-once execution: deterministic identity, durable checkpoints, idempotent writes, and explicit conflicts.
+# Knowledge importers
+
+Importers turn external systems into replayable Knowledge mutations. Design them for at-least-once execution with deterministic identity and durable checkpoints. Make writes idempotent and report conflicts explicitly.
 
 ## Bind an importer
 
 Register importer bindings in host configuration and map each binding to authorized target scopes. Keep source credentials and principal resolution outside model-generated content.
 
-An import run moves through guarded states such as queued, running, completed, failed, or skipped. Concurrent cron enqueues must produce one active run; other attempts are skipped rather than racing.
+An import run moves through guarded states such as queued, running, completed, failed, or skipped. Concurrent cron enqueues must produce one active run. Other attempts are skipped rather than racing.
 
 ## Preserve identity
 
 Give every source object a stable external address. Static importer operations resolve and upsert those addresses inside a transaction-bound run. Node merges rebind source addresses to the surviving target, preserving importer idempotency.
 
-```ts
+```typescript
 knowledge.registerImporter({
   id: 'notion',
   access: { 'project:$projectId': 'edit' },
   async handler({ importer, state }) {
-    const operations = await importer();
-    const cursor = await state.get('cursor');
+    const operations = await importer()
+    const cursor = await state.get('cursor')
+
     for (const page of await notion.pages({ after: cursor })) {
-      await operations.upsertNode(page.id, { name: page.title });
-      await state.set('cursor', page.id);
+      await operations.upsertNode(page.id, { name: page.title })
+      await state.set('cursor', page.id)
     }
   },
-});
+})
 ```
 
 Consult installed types for the exact importer APIs supported by your package version.
@@ -35,11 +43,11 @@ Use the importer's durable key-value state for cursors, high-water marks, source
 
 ## Handle conflicts
 
-Treat stale node/record versions, stale access epochs, and invalid state transitions as conflicts. Reread authorized state and retry deliberately. Don't turn duplicate-key or transaction errors into successful imports.
+Treat stale node or record versions, stale access epochs, and invalid state transitions as conflicts. Reread authorized state and retry deliberately. Don't turn duplicate-key or transaction errors into successful imports.
 
 ## Keep runs bounded
 
-Page external data and Knowledge reads. Enforce a maximum batch size and persist the next cursor. Search, counts, and deduplication must still authorize before shaping. Avoid loading an entire instance to reconcile one source page.
+Page external data alongside Knowledge reads, enforce a maximum batch size, and persist the next cursor. Search, counts, and deduplication must still authorize before shaping. Avoid loading an entire instance to reconcile one source page.
 
 ## Transaction guarantees
 
