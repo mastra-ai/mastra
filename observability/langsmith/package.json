@@ -37,6 +37,7 @@
   "devDependencies": {
     "@ai-sdk/openai": "^2.0.115",
     "@internal/lint": "workspace:*",
+    "@internal/observability": "workspace:*",
     "@internal/types-builder": "workspace:*",
     "@mastra/core": "workspace:*",
     "@observability/test-utils": "workspace:*",

@@ -1,4 +1,4 @@
-import type { UsageStats } from '@mastra/core/observability';
+import type { UsageStats } from '@internal/observability';
 import type tracer from 'dd-trace';
 
 type DatadogAnnotationMetrics = tracer.llmobs.AnnotationOptions['metrics'];

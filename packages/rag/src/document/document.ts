@@ -1,5 +1,5 @@
-import { SpanType } from '@mastra/core/observability';
-import type { ObservabilityContext } from '@mastra/core/observability';
+import { SpanType } from '@internal/observability';
+import type { ObservabilityContext } from '@internal/observability';
 import {
   TitleExtractor,
   SummaryExtractor,

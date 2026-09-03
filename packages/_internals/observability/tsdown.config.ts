@@ -2,7 +2,13 @@ import { generateTypes } from '@internal/types-builder';
 import { defineConfig } from 'tsdown';
 
 export default defineConfig({
-  entry: ['src/index.ts', 'src/context-storage.ts', 'src/storage/index.ts'],
+  entry: [
+    'src/index.ts',
+    'src/context-storage.ts',
+    'src/storage/index.ts',
+    'src/storage/tracing.ts',
+    'src/storage/record-builders.ts',
+  ],
   format: ['esm', 'cjs'],
   fixedExtension: false,
   nodeProtocol: 'strip',

@@ -1,4 +1,4 @@
-import type { EntityType } from '@mastra/core/observability';
+import type { EntityType } from '@internal/observability';
 import { Checkbox } from '@mastra/playground-ui/components/Checkbox';
 import { DateTimeRangePicker } from '@mastra/playground-ui/components/DateTimeRangePicker';
 import { Label } from '@mastra/playground-ui/components/Label';

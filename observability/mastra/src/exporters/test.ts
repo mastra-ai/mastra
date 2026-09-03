@@ -33,23 +33,8 @@ async function getSnapshotsDir(): Promise<string> {
   return _snapshotsDir;
 }
 
-import type {
-  TracingEvent,
-  TracingEventType,
-  AnyExportedSpan,
-  ExportedSpan,
-  SpanTypeValue,
-  LogEvent,
-  MetricEvent,
-  ScoreEvent,
-  FeedbackEvent,
-  ExportedLog,
-  ExportedMetric,
-  ExportedScore,
-  ExportedFeedback,
-  LogLevel,
-} from '@mastra/core/observability';
-import { TracingEventType as EventType } from '@mastra/core/observability';
+import type { TracingEvent, TracingEventType, AnyExportedSpan, ExportedSpan, SpanTypeValue, LogEvent, MetricEvent, ScoreEvent, FeedbackEvent, ExportedLog, ExportedMetric, ExportedScore, ExportedFeedback, LogLevel } from '@internal/observability';
+import { TracingEventType as EventType } from '@internal/observability';
 
 import { BaseExporter } from './base';
 import type { BaseExporterConfig } from './base';

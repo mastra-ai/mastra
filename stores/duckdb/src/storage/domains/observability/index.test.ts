@@ -1,10 +1,14 @@
-import { mkdtemp, rm } from 'node:fs/promises';
+import type {
+  mkdtemp,
+  rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createObservabilityVNextTests } from '@internal/storage-test-utils';
 import { coreFeatures } from '@mastra/core/features';
-import { EntityType, SpanType } from '@mastra/core/observability';
-import type { ObservabilityStorage } from '@mastra/core/storage';
+import { EntityType,
+  SpanType } from '@internal/observability';
+import type { ObservabilityStorage,
+ } from '@internal/observability/storage';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { DuckDBConnection } from '../../db/index';
 import { DuckDBStore } from '../../index';

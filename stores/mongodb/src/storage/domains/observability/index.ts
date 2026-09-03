@@ -1,35 +1,9 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import {
-  createStorageErrorId,
-  listTracesArgsSchema,
-  ObservabilityStorage,
-  TABLE_SPANS,
-  toTraceSpans,
-  TraceStatus,
-} from '@mastra/core/storage';
+import { listTracesArgsSchema, toTraceSpans, TraceStatus } from '@internal/observability/storage';
+import { createStorageErrorId, ObservabilityStorage, TABLE_SPANS } from '@mastra/core/storage';
 import type {
-  PruneOptions,
-  PruneResult,
-  RetentionTablesDescriptor,
-  TableRetentionPolicy,
-  SpanRecord,
-  UpdateSpanRecord,
-  ListTracesArgs,
-  ListTracesResponse,
-  TracingStorageStrategy,
-  UpdateSpanArgs,
-  BatchDeleteTracesArgs,
-  BatchCreateSpansArgs,
-  BatchUpdateSpansArgs,
-  CreateSpanArgs,
-  GetSpanArgs,
-  GetSpanResponse,
-  GetRootSpanArgs,
-  GetRootSpanResponse,
-  GetTraceArgs,
-  GetTraceResponse,
-  GetTraceLightResponse,
-} from '@mastra/core/storage';
+  SpanRecord, UpdateSpanRecord, ListTracesArgs, ListTracesResponse, TracingStorageStrategy, UpdateSpanArgs, BatchDeleteTracesArgs, BatchCreateSpansArgs, BatchUpdateSpansArgs, CreateSpanArgs, GetSpanArgs, GetSpanResponse, GetRootSpanArgs, GetRootSpanResponse, GetTraceArgs, GetTraceResponse, GetTraceLightResponse  } from '@internal/observability/storage';
+import type { PruneOptions, PruneResult, RetentionTablesDescriptor, TableRetentionPolicy } from '@mastra/core/storage';
 import { MongoBulkWriteError } from 'mongodb';
 import type { MongoDBConnector } from '../../connectors/MongoDBConnector';
 import { resolveMongoDBConfig } from '../../db';

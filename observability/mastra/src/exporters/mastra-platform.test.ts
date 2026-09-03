@@ -1,13 +1,5 @@
-import type {
-  TracingEvent,
-  AnyExportedSpan,
-  CreateSpanOptions,
-  LogEvent,
-  MetricEvent,
-  ScoreEvent,
-  FeedbackEvent,
-} from '@mastra/core/observability';
-import { EntityType, SpanType, TracingEventType } from '@mastra/core/observability';
+import type { TracingEvent, AnyExportedSpan, CreateSpanOptions, LogEvent, MetricEvent, ScoreEvent, FeedbackEvent } from '@internal/observability';
+import { EntityType, SpanType, TracingEventType } from '@internal/observability';
 
 import { fetchWithRetry } from '@mastra/core/utils';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';

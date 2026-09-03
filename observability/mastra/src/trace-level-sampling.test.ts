@@ -11,8 +11,8 @@
  * Related issue: https://github.com/mastra-ai/mastra/issues/11504
  */
 
-import { SpanType, SamplingStrategyType, TracingEventType } from '@mastra/core/observability';
-import type { TracingEvent, ObservabilityExporter } from '@mastra/core/observability';
+import { SpanType, SamplingStrategyType, TracingEventType } from '@internal/observability';
+import type { TracingEvent, ObservabilityExporter } from '@internal/observability';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { DefaultObservabilityInstance } from './instances';
 

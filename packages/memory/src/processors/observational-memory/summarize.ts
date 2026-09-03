@@ -1,6 +1,6 @@
 import type { MastraDBMessage } from '@mastra/core/agent';
 import type { Mastra } from '@mastra/core/mastra';
-import type { ObservabilityContext } from '@mastra/core/observability';
+import type { ObservabilityContext } from '@internal/observability';
 import type { RequestContext } from '@mastra/core/request-context';
 
 import type { Memory } from '../..';

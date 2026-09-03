@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import type { SpanOutputProcessor, AnySpan } from '@mastra/core/observability';
+import type { AnySpan,SpanOutputProcessor } from '@internal/observability';
 
 export type RedactionStyle = 'full' | 'partial' | 'indexed';
 

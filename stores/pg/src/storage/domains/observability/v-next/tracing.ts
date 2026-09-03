@@ -18,7 +18,7 @@ import type {
   GetTraceArgs,
   GetTraceResponse,
   GetTraceLightResponse,
-} from '@mastra/core/storage';
+} from '@internal/observability/storage';
 
 import type { DbClient } from '../../../client';
 import { qualifiedTable, TABLE_SPAN_EVENTS } from './ddl';

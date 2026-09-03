@@ -1,6 +1,9 @@
 import { coreFeatures } from '@mastra/core/features';
-import { EntityType, SpanType } from '@mastra/core/observability';
-import type { CreateSpanRecord, ObservabilityStorage } from '@mastra/core/storage';
+import { EntityType,
+  SpanType } from '@internal/observability';
+import type { CreateSpanRecord,
+ } from '@internal/observability/storage';
+import { ObservabilityStorage } from '@mastra/core/storage';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { VNEXT_BASE_DATE, makeSpan } from './data';
 

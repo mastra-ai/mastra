@@ -3,7 +3,7 @@ import type { MastraDBMessage } from '@mastra/core/agent';
 import { modelSupportsAttachments } from '@mastra/core/llm';
 import type { Mastra } from '@mastra/core/mastra';
 import type { MastraMemory } from '@mastra/core/memory';
-import type { ObservabilityContext } from '@mastra/core/observability';
+import type { ObservabilityContext } from '@internal/observability';
 import type { ProcessorContext } from '@mastra/core/processors';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { ProviderMetadata } from '@mastra/core/stream';

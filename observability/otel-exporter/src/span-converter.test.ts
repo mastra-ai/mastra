@@ -2,17 +2,8 @@
  * Tests for OTEL-compliant span conversion
  */
 
-import { SpanType } from '@mastra/core/observability';
-import type {
-  ExportedSpan,
-  ModelGenerationAttributes,
-  RagEmbeddingAttributes,
-  AgentRunAttributes,
-  ToolCallAttributes,
-  MCPToolCallAttributes,
-  WorkflowRunAttributes,
-  WorkflowStepAttributes,
-} from '@mastra/core/observability';
+import { SpanType } from '@internal/observability';
+import type { ExportedSpan, ModelGenerationAttributes, RagEmbeddingAttributes, AgentRunAttributes, ToolCallAttributes, MCPToolCallAttributes, WorkflowRunAttributes, WorkflowStepAttributes } from '@internal/observability';
 import { SpanKind } from '@opentelemetry/api';
 import { ATTR_SERVICE_NAME, ATTR_SERVICE_VERSION } from '@opentelemetry/semantic-conventions';
 import { describe, it, expect, beforeEach, vi } from 'vitest';

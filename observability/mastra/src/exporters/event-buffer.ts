@@ -1,6 +1,6 @@
-import { TracingEventType } from '@mastra/core/observability';
-import type { AnyExportedSpan, ObservabilityEvent } from '@mastra/core/observability';
-import type { CreateSpanRecord, ObservabilityStorageStrategy, UpdateSpanRecord } from '@mastra/core/storage';
+import { TracingEventType } from '@internal/observability';
+import type { AnyExportedSpan, ObservabilityEvent } from '@internal/observability';
+import type { CreateSpanRecord, ObservabilityStorageStrategy, UpdateSpanRecord } from '@internal/observability/storage';
 
 /** Mixin interface that tracks how many times a buffered event has been retried. */
 export interface RetryCount {

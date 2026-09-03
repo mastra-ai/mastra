@@ -1,4 +1,4 @@
-import type { UsageStats } from '@mastra/core/observability';
+import type { UsageStats } from '@internal/observability';
 import type { PricingMeter, PricingConditionOperator, PricingConditionField } from './types';
 
 export class PricingTier {

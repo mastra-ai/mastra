@@ -5,8 +5,8 @@
  * out-of-order span arrival via queuing, delayed cleanup, and memory management.
  */
 
-import { TracingEventType } from '@mastra/core/observability';
-import type { TracingEvent, AnyExportedSpan, SpanErrorInfo } from '@mastra/core/observability';
+import { TracingEventType } from '@internal/observability';
+import type { TracingEvent, AnyExportedSpan, SpanErrorInfo } from '@internal/observability';
 import type { BaseExporterConfig } from './base';
 import { BaseExporter } from './base';
 

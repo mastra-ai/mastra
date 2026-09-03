@@ -4,7 +4,7 @@
  * for the default local store, so it is covered here against a real database rather
  * than a mock.
  */
-import { SpanType } from '@mastra/core/observability';
+import { SpanType } from '@internal/observability';
 import { describe, expect, it } from 'vitest';
 import { LibSQLStore } from './index';
 

@@ -1,5 +1,11 @@
-import { listLogsArgsSchema } from '@mastra/core/storage';
-import type { BatchCreateLogsArgs, ListLogsArgs, ListLogsResponse } from '@mastra/core/storage';
+import {
+  listLogsArgsSchema,
+} from '@internal/observability/storage';
+import type {
+  BatchCreateLogsArgs,
+  ListLogsArgs,
+  ListLogsResponse,
+} from '@internal/observability/storage';
 import type { DuckDBConnection } from '../../db/index';
 import { buildWhereClause, buildOrderByClause, buildPaginationClause } from './filters';
 import { v, jsonV, toDate, parseJson, parseJsonArray } from './helpers';

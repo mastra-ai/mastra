@@ -50,6 +50,7 @@
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",
+    "@internal/observability": "workspace:*",
     "@internal/storage-test-utils": "workspace:*",
     "@internal/types-builder": "workspace:*",
     "@mastra/core": "workspace:*",

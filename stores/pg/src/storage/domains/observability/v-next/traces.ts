@@ -15,7 +15,7 @@ import {
   listTracesArgsSchema,
   TraceStatus,
   toTraceSpans,
-} from '@mastra/core/storage';
+} from '@internal/observability/storage';
 import type {
   GetRootSpanArgs,
   GetRootSpanResponse,
@@ -24,7 +24,7 @@ import type {
   ListTracesArgs,
   ListTracesResponse,
   SpanRecord,
-} from '@mastra/core/storage';
+} from '@internal/observability/storage';
 
 import type { DbClient } from '../../../client';
 import { qualifiedTable, TABLE_SPAN_EVENTS } from './ddl';

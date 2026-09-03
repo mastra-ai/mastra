@@ -19,8 +19,11 @@ import type {
   AggregationType,
   AggregationInterval,
   MetricDistinctColumn,
-} from '@mastra/core/storage';
-import { METRIC_DISTINCT_COLUMNS, listMetricsArgsSchema } from '@mastra/core/storage';
+} from '@internal/observability/storage';
+import {
+  METRIC_DISTINCT_COLUMNS,
+  listMetricsArgsSchema,
+} from '@internal/observability/storage';
 import { parseFieldKey } from '@mastra/core/utils';
 import type { DuckDBConnection } from '../../db/index';
 import { buildJsonPath, buildOrderByClause, buildPaginationClause, buildWhereClause } from './filters';

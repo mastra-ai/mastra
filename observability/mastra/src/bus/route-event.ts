@@ -7,18 +7,9 @@
  * the ObservabilityBus (for exporters) and BaseObservabilityInstance (for bridges).
  */
 
+import type { TracingEvent, LogEvent, MetricEvent, ScoreEvent, FeedbackEvent, ObservabilityEvent, ObservabilityDropEvent,ObservabilityEvents } from '@internal/observability';
+import { TracingEventType } from '@internal/observability';
 import type { IMastraLogger } from '@mastra/core/logger';
-import type {
-  ObservabilityEvents,
-  TracingEvent,
-  LogEvent,
-  MetricEvent,
-  ScoreEvent,
-  FeedbackEvent,
-  ObservabilityEvent,
-  ObservabilityDropEvent,
-} from '@mastra/core/observability';
-import { TracingEventType } from '@mastra/core/observability';
 
 /**
  * Any handler that can receive routed observability events.

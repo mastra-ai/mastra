@@ -1,12 +1,12 @@
-import { MastraError } from '@mastra/core/error';
 import type {
-  SpanTypeValue,
-  ObservabilityInstance,
+  CreateSpanOptions,
   EndSpanOptions,
   ErrorSpanOptions,
+  ObservabilityInstance,
+  SpanTypeValue,
   UpdateSpanOptions,
-  CreateSpanOptions,
-} from '@mastra/core/observability';
+} from '@internal/observability';
+import { MastraError } from '@mastra/core/error';
 import { BaseSpan } from './base';
 import { deepClean } from './serialization';
 

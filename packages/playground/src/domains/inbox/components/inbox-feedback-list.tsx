@@ -1,4 +1,4 @@
-import type { FeedbackRecord } from '@mastra/core/storage';
+import type { FeedbackRecord } from '@internal/observability/storage';
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { DataList, DataListSkeleton, useDataListKeyboard } from '@mastra/playground-ui/components/DataList';

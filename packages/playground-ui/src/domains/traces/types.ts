@@ -1,5 +1,5 @@
-import type { EntityType } from '@mastra/core/observability';
-import type { LightSpanRecord } from '@mastra/core/storage';
+import type { EntityType } from '@internal/observability';
+import type { LightSpanRecord } from '@internal/observability/storage';
 import type { ReactNode } from 'react';
 
 /**

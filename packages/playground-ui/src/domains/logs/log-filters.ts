@@ -1,5 +1,5 @@
-import type { EntityType } from '@mastra/core/observability';
-import type { ListLogsArgs } from '@mastra/core/storage';
+import type { EntityType } from '@internal/observability';
+import type { ListLogsArgs } from '@internal/observability/storage';
 import type { LogLevel } from './types';
 import type { PropertyFilterField, PropertyFilterToken } from '@/ds/components/PropertyFilter/types';
 

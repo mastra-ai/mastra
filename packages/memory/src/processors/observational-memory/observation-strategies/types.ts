@@ -1,5 +1,5 @@
 import type { MastraDBMessage, MessageList } from '@mastra/core/agent';
-import type { ObservabilityContext } from '@mastra/core/observability';
+import type { ObservabilityContext } from '@internal/observability';
 import type { ProcessorContext, ProcessorStreamWriter } from '@mastra/core/processors';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { ObservationalMemoryRecord } from '@mastra/core/storage';

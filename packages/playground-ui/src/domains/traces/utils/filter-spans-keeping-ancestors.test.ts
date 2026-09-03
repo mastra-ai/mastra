@@ -1,5 +1,5 @@
-import { SpanType } from '@mastra/core/observability';
-import type { LightSpanRecord } from '@mastra/core/storage';
+import { SpanType } from '@internal/observability';
+import type { LightSpanRecord } from '@internal/observability/storage';
 import { describe, expect, it, vi } from 'vitest';
 
 import { filterSpansKeepingAncestors } from './filter-spans-keeping-ancestors';

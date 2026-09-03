@@ -5,15 +5,8 @@
  * It also implements addScoreToTrace() to attach scorer results in Laminar.
  */
 
-import type {
-  AnyExportedSpan,
-  InitExporterOptions,
-  ModelGenerationAttributes,
-  ScoreEvent,
-  TracingEvent,
-  UsageStats,
-} from '@mastra/core/observability';
-import { SpanType, TracingEventType } from '@mastra/core/observability';
+import type { AnyExportedSpan, InitExporterOptions, ModelGenerationAttributes, ScoreEvent, TracingEvent, UsageStats } from '@internal/observability';
+import { SpanType, TracingEventType } from '@internal/observability';
 import { BaseExporter } from '@mastra/observability';
 import type { BaseExporterConfig } from '@mastra/observability';
 import { SpanKind, SpanStatusCode, TraceFlags } from '@opentelemetry/api';

@@ -69,6 +69,7 @@
     "@internal/ai-sdk-v5": "workspace:*",
     "@internal/ai-v6": "workspace:*",
     "@internal/lint": "workspace:*",
+    "@internal/observability": "workspace:*",
     "@internal/types-builder": "workspace:*",
     "@mastra/core": "workspace:*",
     "@types/json-schema": "^7.0.15",

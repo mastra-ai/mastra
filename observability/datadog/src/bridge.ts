@@ -15,19 +15,8 @@
  * fall back to the nearest active span (typically the request handler).
  */
 
-import type {
-  TracingEvent,
-  AnyExportedSpan,
-  ModelGenerationAttributes,
-  ModelInferenceAttributes,
-  ModelStepAttributes,
-  ObservabilityBridge,
-  CreateSpanOptions,
-  ScoreEvent,
-  SpanType,
-  SpanIds,
-} from '@mastra/core/observability';
-import { SpanType as SpanTypeEnum } from '@mastra/core/observability';
+import type { TracingEvent, AnyExportedSpan, ModelGenerationAttributes, ModelInferenceAttributes, ModelStepAttributes, ObservabilityBridge, CreateSpanOptions, ScoreEvent, SpanType, SpanIds } from '@internal/observability';
+import { SpanType as SpanTypeEnum } from '@internal/observability';
 import { omitKeys } from '@mastra/core/utils';
 import { BaseExporter, getExternalParentId } from '@mastra/observability';
 import type { BaseExporterConfig } from '@mastra/observability';

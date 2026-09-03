@@ -2,7 +2,7 @@
  * Tests for Datadog exporter utility functions
  */
 
-import { SpanType } from '@mastra/core/observability';
+import { SpanType } from '@internal/observability';
 import { afterEach, beforeEach, describe, it, expect } from 'vitest';
 import { __setObservabilityFeaturesForTest } from './features';
 import { formatInput, formatOutput, getSpanTypeToKind, kindFor, toDate, safeStringify } from './utils';

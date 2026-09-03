@@ -38,6 +38,7 @@
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",
+    "@internal/observability": "workspace:*",
     "@internal/types-builder": "workspace:*",
     "@mastra/core": "workspace:*",
     "@opentelemetry/sdk-logs": "^0.221.0",

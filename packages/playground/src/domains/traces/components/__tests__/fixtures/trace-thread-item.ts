@@ -1,6 +1,6 @@
+import { SpanType } from '@internal/observability';
+import { TraceStatus } from '@internal/observability/storage';
 import type { GetWorkflowResponse, ListWorkflowRunsResponse, MastraClient } from '@mastra/client-js';
-import { SpanType } from '@mastra/core/observability';
-import { TraceStatus } from '@mastra/core/storage';
 
 type GetTraceResponse = Awaited<ReturnType<MastraClient['getTrace']>>;
 

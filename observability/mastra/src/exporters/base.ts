@@ -7,14 +7,10 @@
  * - Graceful shutdown lifecycle
  */
 
+import type {
+  TracingEvent, ObservabilityExporter, InitExporterOptions, CustomSpanFormatter } from '@internal/observability';
 import { ConsoleLogger, LogLevel } from '@mastra/core/logger';
 import type { IMastraLogger } from '@mastra/core/logger';
-import type {
-  TracingEvent,
-  ObservabilityExporter,
-  InitExporterOptions,
-  CustomSpanFormatter,
-} from '@mastra/core/observability';
 
 /**
  * Base configuration that all exporters should support

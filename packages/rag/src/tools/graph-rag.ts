@@ -1,4 +1,4 @@
-import { createObservabilityContext, SpanType } from '@mastra/core/observability';
+import { createObservabilityContext, SpanType } from '@internal/observability';
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 

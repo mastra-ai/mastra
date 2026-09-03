@@ -1,6 +1,6 @@
+import { SpanType } from '@internal/observability';
+import { TraceStatus } from '@internal/observability/storage';
 import type { MastraClient } from '@mastra/client-js';
-import { SpanType } from '@mastra/core/observability';
-import { TraceStatus } from '@mastra/core/storage';
 
 type ListTracesLightResponse = Awaited<ReturnType<MastraClient['listTracesLight']>>;
 type ListTracesResponse = Awaited<ReturnType<MastraClient['listTraces']>>;

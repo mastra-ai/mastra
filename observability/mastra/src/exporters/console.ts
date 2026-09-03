@@ -1,5 +1,5 @@
-import { TracingEventType } from '@mastra/core/observability';
-import type { TracingEvent } from '@mastra/core/observability';
+import { TracingEventType } from '@internal/observability';
+import type { TracingEvent } from '@internal/observability';
 import { BaseExporter } from './base';
 import type { BaseExporterConfig } from './base';
 

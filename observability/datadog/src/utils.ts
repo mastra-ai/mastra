@@ -2,7 +2,7 @@
  * Utility functions for Datadog LLM Observability Exporter
  */
 
-import { SpanType } from '@mastra/core/observability';
+import { SpanType } from '@internal/observability';
 import tracer from 'dd-trace';
 import { isModelInferenceEnabled } from './features';
 

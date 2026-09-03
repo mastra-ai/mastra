@@ -1,5 +1,5 @@
 import { MastraError } from '@mastra/core/error';
-import { SpanType, EntityType } from '@mastra/core/observability';
+import { SpanType, EntityType } from '@internal/observability';
 import { MongoClient } from 'mongodb';
 import { describe, expect, it, beforeAll, afterAll } from 'vitest';
 import { MongoDBStore } from './index';

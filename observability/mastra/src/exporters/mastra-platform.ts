@@ -1,14 +1,7 @@
+import { TracingEventType,SpanType } from '@internal/observability';
+import type { TracingEvent, AnyExportedSpan, LogEvent, MetricEvent, ScoreEvent, FeedbackEvent } from '@internal/observability';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { LogLevel } from '@mastra/core/logger';
-import { SpanType, TracingEventType } from '@mastra/core/observability';
-import type {
-  TracingEvent,
-  AnyExportedSpan,
-  LogEvent,
-  MetricEvent,
-  ScoreEvent,
-  FeedbackEvent,
-} from '@mastra/core/observability';
 import { fetchWithRetry } from '@mastra/core/utils';
 import { AuthFailureCooldown, fetchWithAuthFailureHandling, isAuthFailureError } from './auth-failure-cooldown';
 import { BaseExporter } from './base';

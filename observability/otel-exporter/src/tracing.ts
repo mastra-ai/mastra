@@ -4,13 +4,8 @@
  * Exports traces and logs to any OTLP-compatible endpoint.
  */
 
-import type {
-  TracingEvent,
-  LogEvent,
-  InitExporterOptions,
-  ObservabilityInstanceConfig,
-} from '@mastra/core/observability';
-import { TracingEventType } from '@mastra/core/observability';
+import type { TracingEvent, LogEvent, InitExporterOptions, ObservabilityInstanceConfig } from '@internal/observability';
+import { TracingEventType } from '@internal/observability';
 import { BaseExporter } from '@mastra/observability';
 import { context as apiContext, diag, DiagConsoleLogger, DiagLogLevel, trace, TraceFlags } from '@opentelemetry/api';
 import type { Logger } from '@opentelemetry/api-logs';

@@ -3,7 +3,7 @@
  * Exposes internals and tracks method calls for verification.
  */
 
-import type { AnyExportedSpan, SpanErrorInfo } from '@mastra/core/observability';
+import type { AnyExportedSpan, SpanErrorInfo } from '@internal/observability';
 import type { TraceData, TrackingExporterConfig } from '@mastra/observability';
 import { TrackingExporter } from '@mastra/observability';
 

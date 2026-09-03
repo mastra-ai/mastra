@@ -1,4 +1,4 @@
-import { SpanType, TracingEventType } from '@mastra/core/observability';
+import { SpanType, TracingEventType } from '@internal/observability';
 import { describe, expect, it, vi } from 'vitest';
 import { ConsoleExporter } from './console';
 

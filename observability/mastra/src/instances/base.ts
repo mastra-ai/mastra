@@ -2,36 +2,11 @@
  * BaseObservability - Abstract base class for Observability implementations
  */
 
+import { TracingEventType, noOpLoggerContext,SpanType } from '@internal/observability';
+import type { Span, SpanTypeValue, ObservabilityExporter, ObservabilityBridge, SpanOutputProcessor, TracingEvent, AnySpan, EndSpanOptions, UpdateSpanOptions, StartSpanOptions, CreateSpanOptions, ObservabilityInstance, CustomSamplerOptions, ExportedSpan, AnyExportedSpan, TraceState, TracingOptions, CorrelationContext, LoggerContext, MetricsContext, ObservabilityEvent, ModelGenerationAttributes, UsageStats,RequestContextLike } from '@internal/observability';
 import { MastraBase } from '@mastra/core/base';
 import type { IMastraLogger } from '@mastra/core/logger';
 import { RegisteredLogger } from '@mastra/core/logger';
-import { SpanType, TracingEventType, noOpLoggerContext } from '@mastra/core/observability';
-import type {
-  Span,
-  SpanTypeValue,
-  ObservabilityExporter,
-  ObservabilityBridge,
-  SpanOutputProcessor,
-  TracingEvent,
-  AnySpan,
-  EndSpanOptions,
-  UpdateSpanOptions,
-  StartSpanOptions,
-  CreateSpanOptions,
-  ObservabilityInstance,
-  CustomSamplerOptions,
-  RequestContextLike,
-  ExportedSpan,
-  AnyExportedSpan,
-  TraceState,
-  TracingOptions,
-  CorrelationContext,
-  LoggerContext,
-  MetricsContext,
-  ObservabilityEvent,
-  ModelGenerationAttributes,
-  UsageStats,
-} from '@mastra/core/observability';
 import { getNestedValue, setNestedValue } from '@mastra/core/utils';
 import { ObservabilityBus } from '../bus';
 import type { ObservabilityInstanceConfig } from '../config';
@@ -605,11 +580,11 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
     switch (sampling?.type) {
       case undefined:
         return true;
-      case SamplingStrategyType.ALWAYS:
+      case 'always':
         return true;
-      case SamplingStrategyType.NEVER:
+      case 'never':
         return false;
-      case SamplingStrategyType.RATIO:
+      case 'ratio':
         if (sampling.probability === undefined || sampling.probability < 0 || sampling.probability > 1) {
           this.logger.warn(
             `Invalid sampling probability: ${sampling.probability}. Expected value between 0 and 1. Defaulting to no sampling.`,
@@ -617,7 +592,7 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
           return false;
         }
         return Math.random() < sampling.probability;
-      case SamplingStrategyType.CUSTOM:
+      case 'custom':
         return sampling.sampler(options);
       default:
         throw new Error(`Sampling strategy type not implemented: ${(sampling as any).type}`);

@@ -1,5 +1,5 @@
-import type { ObservabilityContext } from '@mastra/core/observability';
-import { SpanType } from '@mastra/core/observability';
+import type { ObservabilityContext } from '@internal/observability';
+import { SpanType } from '@internal/observability';
 import type { MastraVector, MastraEmbeddingModel, QueryResult, QueryVectorParams } from '@mastra/core/vector';
 import { embedV1, embedV2, embedV3 } from '@mastra/core/vector';
 import type { VectorFilter } from '@mastra/core/vector/filter';

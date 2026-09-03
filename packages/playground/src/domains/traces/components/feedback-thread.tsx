@@ -1,4 +1,4 @@
-import type { FeedbackRecord, ListFeedbackResponse } from '@mastra/core/storage';
+import type { FeedbackRecord, ListFeedbackResponse } from '@internal/observability/storage';
 import { Button } from '@mastra/playground-ui/components/Button';
 import {
   Comment,

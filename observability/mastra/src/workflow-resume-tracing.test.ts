@@ -1,6 +1,6 @@
+import { TracingEventType,SpanType } from '@internal/observability';
+import type { AnyExportedSpan } from '@internal/observability';
 import { Mastra } from '@mastra/core/mastra';
-import { SpanType, TracingEventType } from '@mastra/core/observability';
-import type { AnyExportedSpan } from '@mastra/core/observability';
 import { MockStore } from '@mastra/core/storage';
 import { createStep, createWorkflow } from '@mastra/core/workflows';
 import { beforeEach, describe, expect, it } from 'vitest';

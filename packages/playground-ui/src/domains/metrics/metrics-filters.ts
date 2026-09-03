@@ -1,4 +1,4 @@
-import type { EntityType } from '@mastra/core/observability';
+import type { EntityType } from '@internal/observability';
 import type { PropertyFilterField, PropertyFilterToken } from '@/ds/components/PropertyFilter/types';
 
 type EntityTypeValue = `${EntityType}`;

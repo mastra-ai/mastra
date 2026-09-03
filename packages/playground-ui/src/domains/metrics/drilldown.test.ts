@@ -1,4 +1,4 @@
-import { EntityType } from '@mastra/core/observability';
+import { EntityType } from '@internal/observability';
 import { describe, it, expect } from 'vitest';
 
 import { buildLogsDrilldownUrl, buildTracesDrilldownUrl, narrowWindowToBucket } from './drilldown';

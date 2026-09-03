@@ -38,6 +38,7 @@
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",
+    "@internal/observability": "workspace:*",
     "@internal/types-builder": "workspace:*",
     "@mastra/core": "workspace:*",
     "@types/node": "22.19.15",

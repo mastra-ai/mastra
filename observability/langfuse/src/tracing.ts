@@ -7,12 +7,11 @@
  * @see https://langfuse.com/docs/observability/sdk/typescript/overview
  */
 
+import { AnyExportedSpan, InitExporterOptions, ScoreEvent,SpanType,TracingEventType } from '@internal/observability';
 import { LangfuseClient } from '@langfuse/client';
 import { LangfuseSpanProcessor } from '@langfuse/otel';
-import type { TracingEvent, AnyExportedSpan, InitExporterOptions, ScoreEvent } from '@mastra/core/observability';
-import { SpanType, TracingEventType } from '@mastra/core/observability';
 import { BaseExporter } from '@mastra/observability';
-import type { BaseExporterConfig } from '@mastra/observability';
+import type { TracingEvent,BaseExporterConfig } from '@mastra/observability';
 import { SpanConverter } from '@mastra/otel-exporter';
 
 const LOG_PREFIX = '[LangfuseExporter]';

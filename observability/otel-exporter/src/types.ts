@@ -2,7 +2,7 @@
  * OtelExporter Types
  */
 
-import type { AnyExportedSpan } from '@mastra/core/observability';
+import type { AnyExportedSpan } from '@internal/observability';
 import type { BaseExporterConfig } from '@mastra/observability';
 import type { DetectedResourceAttributes } from '@opentelemetry/resources';
 import type { SpanExporter } from '@opentelemetry/sdk-trace-base';

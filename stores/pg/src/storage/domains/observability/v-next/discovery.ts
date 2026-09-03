@@ -14,7 +14,8 @@
  * frontends pointing at the same database and survives serverless restarts.
  */
 
-import type { IMastraLogger } from '@mastra/core/logger';
+import type {
+  IMastraLogger } from '@mastra/core/logger';
 import type {
   EntityType,
   GetEntityNamesArgs,
@@ -33,7 +34,7 @@ import type {
   GetServiceNamesResponse,
   GetTagsArgs,
   GetTagsResponse,
-} from '@mastra/core/storage';
+} from '@internal/observability/storage';
 
 import { parseSqlIdentifier } from '@mastra/core/utils';
 

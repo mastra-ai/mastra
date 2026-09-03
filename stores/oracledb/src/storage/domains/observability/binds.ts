@@ -1,4 +1,4 @@
-import type { CreateSpanRecord, LogRecord } from '@mastra/core/storage';
+import type { CreateSpanRecord, LogRecord } from '@internal/observability/storage';
 import oracledb from 'oracledb';
 
 import { jsonBindText } from '../../../shared/connection';

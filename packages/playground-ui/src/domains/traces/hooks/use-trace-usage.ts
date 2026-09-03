@@ -1,4 +1,4 @@
-import type { GetMetricBreakdownResponse } from '@mastra/core/storage';
+import type { GetMetricBreakdownResponse } from '@internal/observability/storage';
 import { useMastraClient } from '@mastra/react';
 import { useQuery } from '@tanstack/react-query';
 import type { TraceUsageSummary } from '../trace-list-columns';

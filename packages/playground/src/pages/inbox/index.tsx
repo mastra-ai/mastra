@@ -1,4 +1,4 @@
-import type { FeedbackRecord } from '@mastra/core/storage';
+import type { FeedbackRecord } from '@internal/observability/storage';
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { PageHeader } from '@mastra/playground-ui/components/PageHeader';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';

@@ -9,7 +9,7 @@
  */
 
 import { randomUUID } from 'node:crypto';
-import { SpanType } from '@mastra/core/observability';
+import { SpanType } from '@internal/observability';
 import { Pool } from 'pg';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 

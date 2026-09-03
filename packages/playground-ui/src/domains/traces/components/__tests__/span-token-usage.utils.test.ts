@@ -1,4 +1,4 @@
-import type { UsageStats } from '@mastra/core/observability';
+import type { UsageStats } from '@internal/observability';
 import { assert, describe, expect, it } from 'vitest';
 import { getTokenUsageView } from '../span-token-usage.utils';
 

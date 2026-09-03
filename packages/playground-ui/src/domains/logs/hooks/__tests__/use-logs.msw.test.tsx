@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import type { ListLogsResponse } from '@mastra/core/storage';
+import type { ListLogsResponse } from '@internal/observability/storage';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, renderHook, waitFor } from '@testing-library/react';

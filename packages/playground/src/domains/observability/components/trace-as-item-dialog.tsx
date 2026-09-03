@@ -1,6 +1,6 @@
 'use client';
 
-import type { SpanRecord } from '@mastra/core/storage';
+import type { SpanRecord } from '@internal/observability/storage';
 import { collectToolMocks } from '@mastra/core/utils/collect-tool-mocks';
 import { safeStringify } from '@mastra/core/utils/safe-stringify';
 import type { SideDialogRootProps } from '@mastra/playground-ui/components/SideDialog';

@@ -1,5 +1,5 @@
-import type { ObservabilityContext } from '@mastra/core/observability';
-import { createObservabilityContext, EntityType, getOrCreateSpan, SpanType } from '@mastra/core/observability';
+import type { ObservabilityContext } from '@internal/observability';
+import { createObservabilityContext, EntityType, getOrCreateSpan, SpanType } from '@internal/observability';
 import type { RequestContext } from '@mastra/core/request-context';
 
 import type { ModelByInputTokens } from './model-by-input-tokens';

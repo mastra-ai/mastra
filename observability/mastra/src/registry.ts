@@ -4,7 +4,7 @@
  * Provides registry for Observability instances.
  */
 
-import type { ObservabilityInstance, ConfigSelectorOptions, ConfigSelector } from '@mastra/core/observability';
+import type { ObservabilityInstance, ConfigSelectorOptions, ConfigSelector } from '@internal/observability';
 
 // ============================================================================
 // Observability Registry

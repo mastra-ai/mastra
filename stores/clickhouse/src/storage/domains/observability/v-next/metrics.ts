@@ -1,5 +1,8 @@
-import type { ClickHouseClient } from '@clickhouse/client';
-import { listMetricsArgsSchema, METRIC_DISTINCT_COLUMNS } from '@mastra/core/storage';
+import type {
+  ClickHouseClient } from '@clickhouse/client';
+import { listMetricsArgsSchema,
+  METRIC_DISTINCT_COLUMNS,
+} from '@internal/observability/storage';
 import type {
   AggregationInterval,
   AggregationType,
@@ -21,7 +24,7 @@ import type {
   GetMetricLabelValuesArgs,
   GetMetricLabelValuesResponse,
   MetricDistinctColumn,
-} from '@mastra/core/storage';
+} from '@internal/observability/storage';
 import { parseFieldKey } from '@mastra/core/utils';
 
 import { TABLE_METRIC_EVENTS, TABLE_METRIC_EVENTS_DELTA, TABLE_DISCOVERY_VALUES, TABLE_DISCOVERY_PAIRS } from './ddl';

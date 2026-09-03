@@ -1,5 +1,5 @@
+import type { PaginationInfo } from '@internal/observability/storage';
 import type { DatasetExperiment, DatasetExperimentResult } from '@mastra/client-js';
-import type { PaginationInfo } from '@mastra/core/storage';
 
 export const DATASET_ID = 'ds-1';
 export const EXPERIMENT_ID = 'exp-1';

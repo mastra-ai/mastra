@@ -2,8 +2,14 @@
  * Log operations for the v-next Postgres observability domain.
  */
 
-import { listLogsArgsSchema } from '@mastra/core/storage';
-import type { BatchCreateLogsArgs, ListLogsArgs, ListLogsResponse } from '@mastra/core/storage';
+import {
+  listLogsArgsSchema,
+} from '@internal/observability/storage';
+import type {
+  BatchCreateLogsArgs,
+  ListLogsArgs,
+  ListLogsResponse,
+} from '@internal/observability/storage';
 
 import type { DbClient } from '../../../client';
 import { qualifiedTable, TABLE_LOG_EVENTS } from './ddl';

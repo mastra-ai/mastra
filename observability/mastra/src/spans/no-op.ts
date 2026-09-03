@@ -2,14 +2,7 @@
  * NoOpSpan Implementation for Mastra Observability
  */
 
-import type {
-  ObservabilityInstance,
-  SpanTypeValue,
-  CreateSpanOptions,
-  EndSpanOptions,
-  UpdateSpanOptions,
-  ErrorSpanOptions,
-} from '@mastra/core/observability';
+import type { ObservabilityInstance, SpanTypeValue, CreateSpanOptions, EndSpanOptions, UpdateSpanOptions, ErrorSpanOptions } from '@internal/observability';
 import { BaseSpan } from './base';
 
 export class NoOpSpan<TType extends SpanTypeValue = any> extends BaseSpan<TType> {

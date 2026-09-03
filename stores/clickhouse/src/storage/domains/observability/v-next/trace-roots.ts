@@ -5,15 +5,18 @@
  * Reads from: trace_roots (populated by incremental MV from span_events)
  */
 
-import type { ClickHouseClient } from '@clickhouse/client';
-import { listTracesArgsSchema, toTraceSpans } from '@mastra/core/storage';
+import type {
+  ClickHouseClient } from '@clickhouse/client';
+import { listTracesArgsSchema,
+  toTraceSpans,
+} from '@internal/observability/storage';
 import type {
   GetRootSpanArgs,
   GetRootSpanResponse,
   ListTracesArgs,
   ListTracesLightResponse,
   ListTracesResponse,
-} from '@mastra/core/storage';
+} from '@internal/observability/storage';
 
 import { TABLE_SPAN_EVENTS, TABLE_TRACE_ROOTS, TABLE_TRACE_ROOTS_DELTA } from './ddl';
 import { buildTraceFilterConditions, buildTraceOrderByClause } from './filters';

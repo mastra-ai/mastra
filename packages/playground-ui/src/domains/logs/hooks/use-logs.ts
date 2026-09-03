@@ -1,4 +1,4 @@
-import type { ListLogsArgs, ListLogsResponse } from '@mastra/core/storage';
+import type { ListLogsArgs, ListLogsResponse } from '@internal/observability/storage';
 import { useMastraClient } from '@mastra/react';
 import { useInfiniteQuery } from '@tanstack/react-query';
 import { useEffect } from 'react';

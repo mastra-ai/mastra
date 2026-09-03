@@ -1,4 +1,4 @@
-import type { InputTokenDetails, OutputTokenDetails, UsageStats } from '@mastra/core/observability';
+import type { InputTokenDetails, OutputTokenDetails, UsageStats } from '@internal/observability';
 
 type TokenDetailsObject = InputTokenDetails | OutputTokenDetails;
 

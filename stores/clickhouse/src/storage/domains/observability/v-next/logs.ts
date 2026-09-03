@@ -1,6 +1,12 @@
-import type { ClickHouseClient } from '@clickhouse/client';
-import { listLogsArgsSchema } from '@mastra/core/storage';
-import type { BatchCreateLogsArgs, ListLogsArgs, ListLogsResponse } from '@mastra/core/storage';
+import type {
+  ClickHouseClient } from '@clickhouse/client';
+import { listLogsArgsSchema,
+} from '@internal/observability/storage';
+import type {
+  BatchCreateLogsArgs,
+  ListLogsArgs,
+  ListLogsResponse,
+} from '@internal/observability/storage';
 
 import { TABLE_LOG_EVENTS, TABLE_LOG_EVENTS_DELTA } from './ddl';
 import { buildLogsFilterConditions, buildPaginationClause, buildSignalOrderByClause } from './filters';

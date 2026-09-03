@@ -1,4 +1,4 @@
-import type { InitExporterOptions, TracingEvent } from '@mastra/core/observability';
+import type { InitExporterOptions, TracingEvent } from '@internal/observability';
 import { BaseExporter } from '@mastra/observability';
 import type { BaseExporterConfig } from '@mastra/observability';
 import {

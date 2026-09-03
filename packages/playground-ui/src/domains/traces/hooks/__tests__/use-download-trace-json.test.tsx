@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
-import { SpanType } from '@mastra/core/observability';
-import type { TraceRecord } from '@mastra/core/storage';
+import { SpanType } from '@internal/observability';
+import type { TraceRecord } from '@internal/observability/storage';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, cleanup, renderHook, waitFor } from '@testing-library/react';

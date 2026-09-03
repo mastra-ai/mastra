@@ -2,14 +2,8 @@
  * Emits metrics derived from live spans.
  */
 
-import { SpanType } from '@mastra/core/observability';
-import type {
-  AnySpan,
-  CostContext,
-  MetricsContext,
-  ModelGenerationAttributes,
-  UsageStats,
-} from '@mastra/core/observability';
+import { SpanType } from '@internal/observability';
+import type { AnySpan, CostContext, MetricsContext, ModelGenerationAttributes, UsageStats } from '@internal/observability';
 import { resolveModelId } from '../model-id';
 import { estimateCosts } from './estimator';
 import { TokenMetrics } from './types';

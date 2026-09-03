@@ -9,16 +9,8 @@
  * @see https://opentelemetry.io/docs/specs/semconv/registry/attributes/gen-ai/
  */
 
-import { SpanType } from '@mastra/core/observability';
-import type {
-  AgentRunAttributes,
-  AnyExportedSpan,
-  MCPToolCallAttributes,
-  ModelGenerationAttributes,
-  RagEmbeddingAttributes,
-  ToolCallAttributes,
-  UsageStats,
-} from '@mastra/core/observability';
+import { SpanType } from '@internal/observability';
+import type { AgentRunAttributes, AnyExportedSpan, MCPToolCallAttributes, ModelGenerationAttributes, RagEmbeddingAttributes, ToolCallAttributes, UsageStats } from '@internal/observability';
 import type { Attributes } from '@opentelemetry/api';
 import {
   ATTR_ERROR_MESSAGE,

@@ -1,38 +1,16 @@
-import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import {
-  createStorageErrorId,
   listTracesArgsSchema,
-  ObservabilityStorage,
-  TABLE_SCHEMAS,
-  TABLE_SPANS,
   toTraceSpans,
   TraceStatus,
-} from '@mastra/core/storage';
-import type {
-  SpanRecord,
-  TracingStorageStrategy,
-  ListTracesArgs,
-  ListTracesResponse,
-  UpdateSpanArgs,
-  BatchDeleteTracesArgs,
-  BatchUpdateSpansArgs,
-  BatchCreateSpansArgs,
-  CreateSpanArgs,
-  GetSpanArgs,
-  GetSpanResponse,
-  GetRootSpanArgs,
-  GetRootSpanResponse,
-  GetTraceArgs,
-  GetTraceResponse,
-  GetTraceLightResponse,
-  LightSpanRecord,
-  CreateIndexOptions,
-  PruneOptions,
-  PruneResult,
-  RetentionTablesDescriptor,
-  TableRetentionPolicy,
-  TABLE_NAMES,
-} from '@mastra/core/storage';
+} from '@internal/observability/storage';
+import type { BatchCreateSpansArgs, BatchDeleteTracesArgs, BatchUpdateSpansArgs, CreateSpanArgs, GetRootSpanArgs, GetRootSpanResponse, GetSpanArgs, GetSpanResponse, GetTraceArgs, GetTraceLightResponse, GetTraceResponse, LightSpanRecord, ListTracesArgs, ListTracesResponse, SpanRecord, TracingStorageStrategy, UpdateSpanArgs } from '@internal/observability/storage';
+import {
+  ErrorCategory,
+  ErrorDomain,
+  MastraError } from '@mastra/core/error';
+import { ObservabilityStorage,createStorageErrorId,TABLE_SCHEMAS,TABLE_SPANS } from '@mastra/core/storage';
+import type { CreateIndexOptions,
+  PruneOptions,PruneResult,RetentionTablesDescriptor,TableRetentionPolicy,TABLE_NAMES } from '@mastra/core/storage';
 import { parseSqlIdentifier } from '@mastra/core/utils';
 import { PgDB, resolvePgConfig, generateTableSQL, generateIndexSQL, generateTimestampTriggerSQL } from '../../db';
 import type { PgDomainConfig } from '../../db';

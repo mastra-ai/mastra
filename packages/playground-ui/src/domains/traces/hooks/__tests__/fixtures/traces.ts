@@ -1,6 +1,6 @@
-import { SpanType } from '@mastra/core/observability';
-import type { LightSpanRecord, ListTracesLightResponse, ListTracesResponse } from '@mastra/core/storage';
-import { TraceStatus } from '@mastra/core/storage';
+import { SpanType } from '@internal/observability';
+import type { LightSpanRecord, ListTracesLightResponse, ListTracesResponse } from '@internal/observability/storage';
+import { TraceStatus } from '@internal/observability/storage';
 
 const timestamp = new Date('2026-06-10T00:00:00.000Z');
 const laterTimestamp = new Date('2026-06-10T00:05:00.000Z');

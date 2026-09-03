@@ -1,16 +1,5 @@
-import type {
-  AnyRecordedSpan,
-  CorrelationContext,
-  FeedbackEvent,
-  FeedbackInput,
-  RecordedSpan,
-  RecordedTrace,
-  ScoreEvent,
-  ScoreInput,
-  SpanTypeValue,
-  SpanTypeMap,
-} from '@mastra/core/observability';
-import type { GetTraceResponse, SpanRecord } from '@mastra/core/storage';
+import type { AnyRecordedSpan, CorrelationContext, FeedbackEvent, FeedbackInput, RecordedSpan, RecordedTrace, ScoreEvent, ScoreInput, SpanTypeValue, SpanTypeMap } from '@internal/observability';
+import type { GetTraceResponse, SpanRecord } from '@internal/observability/storage';
 import { generateSignalId } from './ids';
 
 type RecordedAnnotationEvent = ScoreEvent | FeedbackEvent;

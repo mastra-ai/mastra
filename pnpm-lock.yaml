@@ -2863,6 +2863,9 @@ importers:
 
   observability/_test-utils:
     devDependencies:
+      '@internal/observability':
+        specifier: workspace:*
+        version: link:../../packages/_internals/observability
       '@mastra/core':
         specifier: workspace:*
         version: link:../../packages/core
@@ -2909,6 +2912,9 @@ importers:
       '@internal/lint':
         specifier: workspace:*
         version: link:../../packages/_config
+      '@internal/observability':
+        specifier: workspace:*
+        version: link:../../packages/_internals/observability
       '@internal/types-builder':
         specifier: workspace:*
         version: link:../../packages/_types-builder
@@ -2964,6 +2970,9 @@ importers:
       '@internal/lint':
         specifier: workspace:*
         version: link:../../packages/_config
+      '@internal/observability':
+        specifier: workspace:*
+        version: link:../../packages/_internals/observability
       '@internal/types-builder':
         specifier: workspace:*
         version: link:../../packages/_types-builder
@@ -3007,6 +3016,9 @@ importers:
       '@internal/lint':
         specifier: workspace:*
         version: link:../../packages/_config
+      '@internal/observability':
+        specifier: workspace:*
+        version: link:../../packages/_internals/observability
       '@internal/types-builder':
         specifier: workspace:*
         version: link:../../packages/_types-builder
@@ -3056,6 +3068,9 @@ importers:
       '@internal/lint':
         specifier: workspace:*
         version: link:../../packages/_config
+      '@internal/observability':
+        specifier: workspace:*
+        version: link:../../packages/_internals/observability
       '@internal/types-builder':
         specifier: workspace:*
         version: link:../../packages/_types-builder
@@ -3096,6 +3111,9 @@ importers:
       '@internal/lint':
         specifier: workspace:*
         version: link:../../packages/_config
+      '@internal/observability':
+        specifier: workspace:*
+        version: link:../../packages/_internals/observability
       '@internal/types-builder':
         specifier: workspace:*
         version: link:../../packages/_types-builder
@@ -3148,6 +3166,9 @@ importers:
       '@internal/lint':
         specifier: workspace:*
         version: link:../../packages/_config
+      '@internal/observability':
+        specifier: workspace:*
+        version: link:../../packages/_internals/observability
       '@internal/types-builder':
         specifier: workspace:*
         version: link:../../packages/_types-builder
@@ -3194,6 +3215,9 @@ importers:
       '@internal/lint':
         specifier: workspace:*
         version: link:../../packages/_config
+      '@internal/observability':
+        specifier: workspace:*
+        version: link:../../packages/_internals/observability
       '@internal/types-builder':
         specifier: workspace:*
         version: link:../../packages/_types-builder
@@ -3243,6 +3267,9 @@ importers:
       '@internal/lint':
         specifier: workspace:*
         version: link:../../packages/_config
+      '@internal/observability':
+        specifier: workspace:*
+        version: link:../../packages/_internals/observability
       '@internal/types-builder':
         specifier: workspace:*
         version: link:../../packages/_types-builder
@@ -3291,6 +3318,9 @@ importers:
       '@internal/lint':
         specifier: workspace:*
         version: link:../../packages/_config
+      '@internal/observability':
+        specifier: workspace:*
+        version: link:../../packages/_internals/observability
       '@internal/types-builder':
         specifier: workspace:*
         version: link:../../packages/_types-builder
@@ -3346,6 +3376,9 @@ importers:
       '@internal/lint':
         specifier: workspace:*
         version: link:../../packages/_config
+      '@internal/observability':
+        specifier: workspace:*
+        version: link:../../packages/_internals/observability
       '@internal/types-builder':
         specifier: workspace:*
         version: link:../../packages/_types-builder
@@ -3404,6 +3437,9 @@ importers:
       '@internal/lint':
         specifier: workspace:*
         version: link:../../packages/_config
+      '@internal/observability':
+        specifier: workspace:*
+        version: link:../../packages/_internals/observability
       '@internal/types-builder':
         specifier: workspace:*
         version: link:../../packages/_types-builder
@@ -3469,6 +3505,9 @@ importers:
       '@internal/lint':
         specifier: workspace:*
         version: link:../../packages/_config
+      '@internal/observability':
+        specifier: workspace:*
+        version: link:../../packages/_internals/observability
       '@internal/types-builder':
         specifier: workspace:*
         version: link:../../packages/_types-builder
@@ -3509,6 +3548,9 @@ importers:
       '@internal/lint':
         specifier: workspace:*
         version: link:../../packages/_config
+      '@internal/observability':
+        specifier: workspace:*
+        version: link:../../packages/_internals/observability
       '@internal/types-builder':
         specifier: workspace:*
         version: link:../../packages/_types-builder
@@ -5164,6 +5206,9 @@ importers:
       '@internal/llm-recorder':
         specifier: workspace:*
         version: link:../_llm-recorder
+      '@internal/observability':
+        specifier: workspace:*
+        version: link:../_internals/observability
       '@internal/test-utils':
         specifier: workspace:*
         version: link:../_test-utils
@@ -5353,6 +5398,9 @@ importers:
       '@internal/llm-recorder':
         specifier: workspace:*
         version: link:../_llm-recorder
+      '@internal/observability':
+        specifier: workspace:*
+        version: link:../_internals/observability
       '@internal/test-utils':
         specifier: workspace:*
         version: link:../_test-utils
@@ -5596,6 +5644,9 @@ importers:
       '@internal/lint':
         specifier: workspace:*
         version: link:../_config
+      '@internal/observability':
+        specifier: workspace:*
+        version: link:../_internals/observability
       '@internal/types-builder':
         specifier: workspace:*
         version: link:../_types-builder
@@ -5792,6 +5843,9 @@ importers:
       '@internal/lint':
         specifier: workspace:*
         version: link:../_config
+      '@internal/observability':
+        specifier: workspace:*
+        version: link:../_internals/observability
       '@mastra/memory':
         specifier: workspace:*
         version: link:../memory
@@ -5964,6 +6018,9 @@ importers:
       '@internal/lint':
         specifier: workspace:*
         version: link:../_config
+      '@internal/observability':
+        specifier: workspace:*
+        version: link:../_internals/observability
       '@mastra/client-js':
         specifier: workspace:^
         version: link:../../client-sdks/client-js
@@ -6121,6 +6178,9 @@ importers:
       '@internal/lint':
         specifier: workspace:*
         version: link:../_config
+      '@internal/observability':
+        specifier: workspace:*
+        version: link:../_internals/observability
       '@internal/types-builder':
         specifier: workspace:*
         version: link:../_types-builder
@@ -6273,6 +6333,9 @@ importers:
       '@internal/lint':
         specifier: workspace:*
         version: link:../_config
+      '@internal/observability':
+        specifier: workspace:*
+        version: link:../_internals/observability
       '@internal/storage-test-utils':
         specifier: workspace:*
         version: link:../../stores/_test-utils
@@ -7099,6 +7162,9 @@ importers:
         specifier: '*'
         version: 4.1.10(@opentelemetry/api@1.9.1)(@types/node@22.19.15)(@vitest/coverage-v8@4.1.10)(@vitest/ui@4.1.10)(jsdom@27.4.0(@noble/hashes@2.2.0)(bufferutil@4.1.0)(supports-color@10.2.2))(msw@2.14.6(@types/node@22.19.15)(typescript@7.0.2))(vite@7.3.6(@types/node@22.19.15)(jiti@2.7.0)(lightningcss@1.32.0)(terser@5.44.1)(tsx@4.23.1)(yaml@2.9.0))
     devDependencies:
+      '@internal/observability':
+        specifier: workspace:*
+        version: link:../../packages/_internals/observability
       '@mastra/core':
         specifier: workspace:*
         version: link:../../packages/core
@@ -7201,6 +7267,9 @@ importers:
       '@internal/lint':
         specifier: workspace:*
         version: link:../../packages/_config
+      '@internal/observability':
+        specifier: workspace:*
+        version: link:../../packages/_internals/observability
       '@internal/storage-test-utils':
         specifier: workspace:*
         version: link:../_test-utils
@@ -7492,6 +7561,9 @@ importers:
       '@internal/lint':
         specifier: workspace:*
         version: link:../../packages/_config
+      '@internal/observability':
+        specifier: workspace:*
+        version: link:../../packages/_internals/observability
       '@internal/storage-test-utils':
         specifier: workspace:*
         version: link:../_test-utils
@@ -7676,6 +7748,9 @@ importers:
       '@internal/lint':
         specifier: workspace:*
         version: link:../../packages/_config
+      '@internal/observability':
+        specifier: workspace:*
+        version: link:../../packages/_internals/observability
       '@internal/storage-test-utils':
         specifier: workspace:*
         version: link:../_test-utils
@@ -7725,6 +7800,9 @@ importers:
       '@internal/lint':
         specifier: workspace:*
         version: link:../../packages/_config
+      '@internal/observability':
+        specifier: workspace:*
+        version: link:../../packages/_internals/observability
       '@internal/storage-test-utils':
         specifier: workspace:*
         version: link:../_test-utils
@@ -7900,6 +7978,9 @@ importers:
       '@internal/lint':
         specifier: workspace:*
         version: link:../../packages/_config
+      '@internal/observability':
+        specifier: workspace:*
+        version: link:../../packages/_internals/observability
       '@internal/types-builder':
         specifier: workspace:*
         version: link:../../packages/_types-builder
@@ -7952,6 +8033,9 @@ importers:
       '@internal/lint':
         specifier: workspace:*
         version: link:../../packages/_config
+      '@internal/observability':
+        specifier: workspace:*
+        version: link:../../packages/_internals/observability
       '@internal/storage-test-utils':
         specifier: workspace:*
         version: link:../_test-utils

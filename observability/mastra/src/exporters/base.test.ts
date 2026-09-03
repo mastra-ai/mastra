@@ -2,8 +2,8 @@
  * Unit tests for BaseExporter and customSpanFormatter functionality.
  */
 
-import { SpanType, TracingEventType } from '@mastra/core/observability';
-import type { TracingEvent, AnyExportedSpan, CustomSpanFormatter } from '@mastra/core/observability';
+import { SpanType, TracingEventType } from '@internal/observability';
+import type { TracingEvent, AnyExportedSpan, CustomSpanFormatter } from '@internal/observability';
 import { describe, it, expect, vi } from 'vitest';
 import { BaseExporter } from './base';
 import type { BaseExporterConfig } from './base';

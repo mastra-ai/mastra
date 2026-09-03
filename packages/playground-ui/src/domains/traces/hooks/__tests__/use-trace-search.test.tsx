@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
-import { SpanType } from '@mastra/core/observability';
-import type { LightSpanRecord } from '@mastra/core/storage';
+import { SpanType } from '@internal/observability';
+import type { LightSpanRecord } from '@internal/observability/storage';
 import { act, renderHook } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 

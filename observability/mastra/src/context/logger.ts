@@ -5,7 +5,7 @@
  * metadata) is snapshotted at construction time.
  */
 
-import type { LogLevel, LoggerContext, ExportedLog, LogEvent, CorrelationContext } from '@mastra/core/observability';
+import type { LogLevel, LoggerContext, ExportedLog, LogEvent, CorrelationContext } from '@internal/observability';
 
 import type { ObservabilityBus } from '../bus';
 import { generateSignalId } from '../ids';

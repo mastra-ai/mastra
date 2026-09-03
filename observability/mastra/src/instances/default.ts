@@ -1,4 +1,4 @@
-import type { SpanTypeValue, Span, CreateSpanOptions } from '@mastra/core/observability';
+import type { SpanTypeValue, Span, CreateSpanOptions } from '@internal/observability';
 import type { ObservabilityInstanceConfig } from '../config';
 import { DefaultSpan } from '../spans';
 import { BaseObservabilityInstance } from './base';

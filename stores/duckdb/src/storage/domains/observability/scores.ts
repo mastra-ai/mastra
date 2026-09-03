@@ -14,8 +14,10 @@ import type {
   ScoreRecord,
   AggregationInterval,
   AggregationType,
-} from '@mastra/core/storage';
-import { listScoresArgsSchema } from '@mastra/core/storage';
+} from '@internal/observability/storage';
+import {
+  listScoresArgsSchema,
+} from '@internal/observability/storage';
 import { parseFieldKey } from '@mastra/core/utils';
 import type { DuckDBConnection } from '../../db/index';
 import { buildWhereClause, buildOrderByClause, buildPaginationClause } from './filters';

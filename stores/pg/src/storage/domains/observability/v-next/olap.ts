@@ -16,8 +16,14 @@
  * accessed with `jsonb ->>`.
  */
 
-import { METRIC_DISTINCT_COLUMNS } from '@mastra/core/storage';
-import type { AggregationInterval, AggregationType, MetricDistinctColumn } from '@mastra/core/storage';
+import {
+  METRIC_DISTINCT_COLUMNS,
+} from '@internal/observability/storage';
+import type {
+  AggregationInterval,
+  AggregationType,
+  MetricDistinctColumn,
+} from '@internal/observability/storage';
 import { parseFieldKey } from '@mastra/core/utils';
 
 import type { FilterAccumulator } from './filters';

@@ -1,4 +1,4 @@
-import type { EntityType } from '@mastra/core/observability';
+import type { EntityType } from '@internal/observability';
 import {
   LOGS_DATE_FROM_PARAM,
   LOGS_DATE_PRESET_PARAM,

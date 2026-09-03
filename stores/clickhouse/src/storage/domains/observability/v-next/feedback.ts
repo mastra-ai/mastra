@@ -1,6 +1,8 @@
-import type { ClickHouseClient } from '@clickhouse/client';
+import type {
+  ClickHouseClient } from '@clickhouse/client';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import { listFeedbackArgsSchema } from '@mastra/core/storage';
+import { listFeedbackArgsSchema,
+ } from '@internal/observability/storage';
 import type {
   AggregationInterval,
   AggregationType,
@@ -18,7 +20,7 @@ import type {
   GetFeedbackTimeSeriesResponse,
   GetFeedbackPercentilesArgs,
   GetFeedbackPercentilesResponse,
-} from '@mastra/core/storage';
+} from '@internal/observability/storage';
 import { parseFieldKey } from '@mastra/core/utils';
 
 import { TABLE_FEEDBACK_EVENTS, TABLE_FEEDBACK_EVENTS_DELTA } from './ddl';

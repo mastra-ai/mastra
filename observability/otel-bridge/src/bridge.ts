@@ -12,16 +12,8 @@
  * operations within Mastra spans maintain the correct hierarchy.
  */
 
-import type {
-  ObservabilityBridge,
-  TracingEvent,
-  LogEvent,
-  CreateSpanOptions,
-  SpanType,
-  SpanIds,
-  InitExporterOptions,
-} from '@mastra/core/observability';
-import { TracingEventType } from '@mastra/core/observability';
+import type { ObservabilityBridge, TracingEvent, LogEvent, CreateSpanOptions, SpanType, SpanIds, InitExporterOptions } from '@internal/observability';
+import { TracingEventType } from '@internal/observability';
 import { BaseExporter, getExternalParentId } from '@mastra/observability';
 import type { BaseExporterConfig } from '@mastra/observability';
 import { SpanConverter, convertLog, getSpanKind } from '@mastra/otel-exporter';

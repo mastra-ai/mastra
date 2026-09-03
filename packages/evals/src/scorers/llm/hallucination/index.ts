@@ -1,7 +1,7 @@
 import { compileSchema } from '@internal/types-builder/compile-zod';
 import { createScorer } from '@mastra/core/evals';
 import type { MastraModelConfig } from '@mastra/core/llm';
-import type { TracingContext } from '@mastra/core/observability';
+import type { TracingContext } from '@internal/observability';
 
 import { z } from 'zod/v4';
 import { getAssistantMessageFromRunOutput, getUserMessageFromRunInput, roundToTwoDecimals } from '../../utils';

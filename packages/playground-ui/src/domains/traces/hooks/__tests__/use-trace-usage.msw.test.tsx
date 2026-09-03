@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
+import { getMetricBreakdownArgsSchema } from '@internal/observability/storage';
 import type { MastraClient } from '@mastra/client-js';
-import { getMetricBreakdownArgsSchema } from '@mastra/core/storage';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, renderHook, waitFor } from '@testing-library/react';

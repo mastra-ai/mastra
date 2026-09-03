@@ -1,17 +1,7 @@
+import { SpanType, SamplingStrategyType, TracingEventType,InternalSpans } from '@internal/observability';
+import type { AnySpan, TracingEvent, ObservabilityExporter, ModelGenerationAttributes, ObservabilityInstance, ExportedSpan, LogEvent, MetricEvent, ObservabilityBridge } from '@internal/observability';
 import { RequestContext } from '@mastra/core/di';
 import { MastraError } from '@mastra/core/error';
-import { InternalSpans, SpanType, SamplingStrategyType, TracingEventType } from '@mastra/core/observability';
-import type {
-  AnySpan,
-  TracingEvent,
-  ObservabilityExporter,
-  ModelGenerationAttributes,
-  ObservabilityInstance,
-  ExportedSpan,
-  LogEvent,
-  MetricEvent,
-  ObservabilityBridge,
-} from '@mastra/core/observability';
 import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { DefaultObservabilityInstance } from './instances';
 

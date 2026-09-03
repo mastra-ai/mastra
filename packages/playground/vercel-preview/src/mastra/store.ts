@@ -1,4 +1,4 @@
-import { InMemoryStore } from '@mastra/core/storage';
+import { InMemoryStore } from '@internal/observability/storage';
 
 /**
  * Shared in-memory storage for the preview.

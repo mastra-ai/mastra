@@ -48,6 +48,7 @@
     "@ai-sdk/openai": "^1.3.24",
     "@internal/ai-sdk-v4": "workspace:*",
     "@internal/lint": "workspace:*",
+    "@internal/observability": "workspace:*",
     "@internal/types-builder": "workspace:*",
     "@mastra/core": "workspace:*",
     "@types/big.js": "^6.2.2",

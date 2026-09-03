@@ -1,6 +1,6 @@
-import { ErrorCategory, ErrorDomain, MastraError } from '../../../error';
-import { StorageDomain } from '../base';
 import type {
+  ObservabilityStorageContract,
+  ObservabilityStorageFeature as InternalObservabilityStorageFeature,
   GetEntityTypesArgs,
   GetEntityTypesResponse,
   GetEntityNamesArgs,
@@ -17,8 +17,6 @@ import type {
   GetMetricLabelKeysResponse,
   GetMetricLabelValuesArgs,
   GetMetricLabelValuesResponse,
-} from './discovery';
-import type {
   BatchCreateFeedbackArgs,
   CreateFeedbackArgs,
   ListFeedbackArgs,
@@ -32,10 +30,7 @@ import type {
   GetFeedbackPercentilesArgs,
   GetFeedbackPercentilesResponse,
   UpdateFeedbackReviewStatusArgs,
-  FeedbackRecord,
-} from './feedback';
-import type { BatchCreateLogsArgs, ListLogsArgs, ListLogsResponse } from './logs';
-import type {
+  FeedbackRecord,BatchCreateLogsArgs,ListLogsArgs,ListLogsResponse,
   BatchCreateMetricsArgs,
   ListMetricsArgs,
   ListMetricsResponse,
@@ -47,8 +42,6 @@ import type {
   GetMetricTimeSeriesResponse,
   GetMetricPercentilesArgs,
   GetMetricPercentilesResponse,
-} from './metrics';
-import type {
   BatchCreateScoresArgs,
   CreateScoreArgs,
   ListScoresArgs,
@@ -62,8 +55,6 @@ import type {
   GetScoreTimeSeriesResponse,
   GetScorePercentilesArgs,
   GetScorePercentilesResponse,
-} from './scores';
-import type {
   BatchCreateSpansArgs,
   BatchDeleteTracesArgs,
   BatchUpdateSpansArgs,
@@ -85,19 +76,20 @@ import type {
   ListTracesArgs,
   ListTracesLightResponse,
   ListTracesResponse,
-  UpdateSpanArgs,
-} from './tracing';
-import { extractBranchSpans, getBranchArgsSchema, toLightSpanRecord } from './tracing';
-import type { ObservabilityStorageStrategy, TracingStorageStrategy } from './types';
+  UpdateSpanArgs,ObservabilityStorageStrategy,TracingStorageStrategy
+} from '@internal/observability/storage';
+import { extractBranchSpans, getBranchArgsSchema, toLightSpanRecord } from '@internal/observability/storage/tracing';
+import { ErrorCategory, ErrorDomain, MastraError } from '../../../error';
+import { StorageDomain } from '../base';
 
-export type ObservabilityStorageFeature = 'delta-polling' | 'metrics' | 'logs';
+export type ObservabilityStorageFeature = InternalObservabilityStorageFeature;
 
 /**
  * Base storage class for observability data (traces, metrics, logs, scores, feedback).
  * Not abstract -- provides default implementations that throw "not implemented" errors.
  * Storage adapters override only the methods they support.
  */
-export class ObservabilityStorage extends StorageDomain {
+export class ObservabilityStorage extends StorageDomain implements ObservabilityStorageContract {
   constructor() {
     super({
       component: 'STORAGE',

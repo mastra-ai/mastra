@@ -5,7 +5,9 @@
   "private": true,
   "type": "module",
   "sideEffects": false,
-  "files": ["dist"],
+  "files": [
+    "dist"
+  ],
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "exports": {
@@ -37,6 +39,26 @@
       "require": {
         "types": "./dist/storage/index.d.ts",
         "default": "./dist/storage/index.cjs"
+      }
+    },
+    "./storage/tracing": {
+      "import": {
+        "types": "./dist/storage/tracing.d.ts",
+        "default": "./dist/storage/tracing.js"
+      },
+      "require": {
+        "types": "./dist/storage/tracing.d.ts",
+        "default": "./dist/storage/tracing.cjs"
+      }
+    },
+    "./storage/record-builders": {
+      "import": {
+        "types": "./dist/storage/record-builders.d.ts",
+        "default": "./dist/storage/record-builders.js"
+      },
+      "require": {
+        "types": "./dist/storage/record-builders.d.ts",
+        "default": "./dist/storage/record-builders.cjs"
       }
     },
     "./package.json": "./package.json"

@@ -1,8 +1,8 @@
+import { EntityType, SpanType } from '@internal/observability';
 import { Mastra } from '@mastra/core';
-import type { ObservabilityExporter } from '@mastra/core/observability';
-import { EntityType, SpanType } from '@mastra/core/observability';
 import { MockStore } from '@mastra/core/storage';
 import { describe, expect, it, vi } from 'vitest';
+import type { ObservabilityExporter } from '@mastra/observability';
 import { Observability } from './default';
 import { MastraStorageExporter } from './exporters/mastra-storage';
 import { hydrateRecordedTrace } from './recorded';

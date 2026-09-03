@@ -10,8 +10,13 @@
  * over the trace data -- since branches are conceptually a subset of traces.
  */
 
-import type { ClickHouseClient } from '@clickhouse/client';
-import { BRANCH_SPAN_TYPES, listBranchesArgsSchema, toTraceSpans, TraceStatus } from '@mastra/core/storage';
+import type {
+  ClickHouseClient } from '@clickhouse/client';
+import { BRANCH_SPAN_TYPES,
+  listBranchesArgsSchema,
+  toTraceSpans,
+  TraceStatus,
+} from '@internal/observability/storage';
 import type {
   BatchCreateSpansArgs,
   BatchDeleteTracesArgs,
@@ -27,7 +32,7 @@ import type {
   ListBranchesArgs,
   ListBranchesResponse,
   SpanRecord,
-} from '@mastra/core/storage';
+} from '@internal/observability/storage';
 
 import { TABLE_SPAN_EVENTS, TABLE_TRACE_BRANCHES, TABLE_TRACE_BRANCHES_DELTA, TABLE_TRACE_ROOTS } from './ddl';
 import { CH_SETTINGS, CH_INSERT_SETTINGS, spanRecordToRow, rowToSpanRecord } from './helpers';

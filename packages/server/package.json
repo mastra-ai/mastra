@@ -118,6 +118,7 @@
     "@ai-sdk/openai-v5": "npm:@ai-sdk/openai@2.0.115",
     "@internal/core": "workspace:*",
     "@internal/lint": "workspace:*",
+    "@internal/observability": "workspace:*",
     "@internal/storage-test-utils": "workspace:*",
     "@internal/test-utils": "workspace:*",
     "@internal/types-builder": "workspace:*",

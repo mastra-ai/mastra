@@ -9,7 +9,9 @@
  * without query rewrites.
  */
 
-import { listMetricsArgsSchema } from '@mastra/core/storage';
+import {
+  listMetricsArgsSchema,
+} from '@internal/observability/storage';
 import type {
   BatchCreateMetricsArgs,
   GetMetricAggregateArgs,
@@ -22,7 +24,7 @@ import type {
   GetMetricTimeSeriesResponse,
   ListMetricsArgs,
   ListMetricsResponse,
-} from '@mastra/core/storage';
+} from '@internal/observability/storage';
 
 import type { DbClient } from '../../../client';
 import { qualifiedTable, TABLE_METRIC_EVENTS } from './ddl';

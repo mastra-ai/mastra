@@ -1,4 +1,6 @@
-import type { DateRange } from '@mastra/core/storage';
+import type {
+  DateRange,
+} from '@internal/observability/storage';
 import { parseFieldKey } from '@mastra/core/utils';
 
 export function buildJsonPath(key: string): string {

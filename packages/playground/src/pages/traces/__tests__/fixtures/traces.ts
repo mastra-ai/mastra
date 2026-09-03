@@ -1,7 +1,7 @@
+import { SpanType } from '@internal/observability';
+import { TraceStatus } from '@internal/observability/storage';
 import type { GetScoresScorers_Response, GetSystemPackagesResponse, MastraClient } from '@mastra/client-js';
 import type { ListScoresResponse, ScoreRowData } from '@mastra/core/evals';
-import { SpanType } from '@mastra/core/observability';
-import { TraceStatus } from '@mastra/core/storage';
 
 type ListTracesResponse = Awaited<ReturnType<MastraClient['listTraces']>>;
 type ListBranchesResponse = Awaited<ReturnType<MastraClient['listBranches']>>;

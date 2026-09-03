@@ -15,7 +15,7 @@ export default defineConfig({
   treeshake: true,
   sourcemap: true,
   onSuccess: async () => {
-    await generateTypes(process.cwd());
+    await generateTypes(process.cwd(), new Set(['@internal/observability']));
 
     const srcData = path.join(process.cwd(), 'src', 'metrics', DATA_FILE_NAME);
     const distMetricsDir = path.join(process.cwd(), 'dist', 'metrics');

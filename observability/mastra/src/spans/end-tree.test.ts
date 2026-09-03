@@ -1,5 +1,5 @@
-import type { ObservabilityExporter, TracingEvent } from '@mastra/core/observability';
-import { SpanType, SamplingStrategyType, InternalSpans, TracingEventType } from '@mastra/core/observability';
+import type { ObservabilityExporter, TracingEvent } from '@internal/observability';
+import { SpanType, SamplingStrategyType, InternalSpans, TracingEventType } from '@internal/observability';
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import { DefaultObservabilityInstance } from '../instances';

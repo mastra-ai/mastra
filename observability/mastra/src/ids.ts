@@ -1,7 +1,7 @@
 /**
  * Signal and span id helpers.
  *
- * These two utilities also exist in `@mastra/core/observability`. This package
+ * These two utilities also exist in `@mastra/observability`. This package
  * deliberately keeps local copies rather than importing them.
  *
  * Importing a helper from core ties this package's real minimum core version to
@@ -22,7 +22,7 @@
  * minimum core version again.
  *
  * TODO(mastra-v2): delete this file and import both helpers from
- * `@mastra/core/observability` again.
+ * `@mastra/observability` again.
  *
  * The duplication exists only because a peer floor cannot be raised inside a
  * major version without breaking consumers pinned to an older core. A v2

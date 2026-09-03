@@ -14,18 +14,9 @@
  *    the observability bus so existing exporters pick them up.
  */
 
+import { EntityType, TracingEventType } from '@internal/observability';
+import type { AnySpan, ClientObservabilityCarrier, ClientObservabilityProxy, ClientObservabilityPayload, LogEvent, MetricEvent, ObservabilityInstance, TracingEvent } from '@internal/observability';
 import type { IMastraLogger } from '@mastra/core/logger';
-import { EntityType, TracingEventType } from '@mastra/core/observability';
-import type {
-  AnySpan,
-  ClientObservabilityCarrier,
-  ClientObservabilityProxy,
-  ClientObservabilityPayload,
-  LogEvent,
-  MetricEvent,
-  ObservabilityInstance,
-  TracingEvent,
-} from '@mastra/core/observability';
 
 import { BaseObservabilityInstance } from '../instances/base';
 import { generateClientSignalId } from './id';

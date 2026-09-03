@@ -1,4 +1,5 @@
-import { EntityType } from '@mastra/core/observability';
+import {
+  EntityType } from '@internal/observability';
 import type {
   GetEntityTypesArgs,
   GetEntityTypesResponse,
@@ -10,7 +11,7 @@ import type {
   GetEnvironmentsResponse,
   GetTagsArgs,
   GetTagsResponse,
-} from '@mastra/core/storage';
+} from '@internal/observability/storage';
 import type { DuckDBConnection } from '../../db/index';
 
 function unionDistinctQueries(selects: string[], orderBy: string): string {

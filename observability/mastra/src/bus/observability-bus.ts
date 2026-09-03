@@ -10,13 +10,7 @@
  * events of that type are silently skipped for that handler.
  */
 
-import type {
-  ObservabilityExporter,
-  ObservabilityBridge,
-  ObservabilityEvent,
-  ObservabilityDropEvent,
-  SerializationOptions,
-} from '@mastra/core/observability';
+import type { ObservabilityExporter, ObservabilityBridge, ObservabilityEvent, ObservabilityDropEvent, SerializationOptions } from '@internal/observability';
 
 import type { DeepCleanOptions } from '../spans/serialization';
 import { deepClean, mergeSerializationOptions } from '../spans/serialization';

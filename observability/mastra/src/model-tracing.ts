@@ -13,16 +13,9 @@
  */
 
 import { TransformStream } from 'node:stream/web';
+import { SpanType } from '@internal/observability';
+import type { Span, EndGenerationOptions, ErrorSpanOptions, ModelInferenceContext, TracingContext, UpdateSpanOptions } from '@internal/observability';
 import { coreFeatures } from '@mastra/core/features';
-import { SpanType } from '@mastra/core/observability';
-import type {
-  Span,
-  EndGenerationOptions,
-  ErrorSpanOptions,
-  ModelInferenceContext,
-  TracingContext,
-  UpdateSpanOptions,
-} from '@mastra/core/observability';
 import type { ChunkType, StepStartPayload, StepFinishPayload } from '@mastra/core/stream';
 
 /**

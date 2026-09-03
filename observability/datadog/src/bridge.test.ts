@@ -8,14 +8,8 @@
 
 /// <reference types="node" />
 
-import type {
-  TracingEvent,
-  AnyExportedSpan,
-  CreateSpanOptions,
-  ScoreEvent,
-  SpanType as SpanTypeGeneric,
-} from '@mastra/core/observability';
-import { SamplingStrategyType, SpanType, TracingEventType } from '@mastra/core/observability';
+import type { TracingEvent, AnyExportedSpan, CreateSpanOptions, ScoreEvent, SpanType as SpanTypeGeneric } from '@internal/observability';
+import { SamplingStrategyType, SpanType, TracingEventType } from '@internal/observability';
 import { DefaultObservabilityInstance } from '@mastra/observability';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 

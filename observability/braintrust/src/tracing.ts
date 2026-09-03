@@ -6,8 +6,8 @@
  * Events are handled as zero-duration spans with matching start/end times.
  */
 
-import type { AnyExportedSpan, ModelGenerationAttributes, ScoreEvent, SpanErrorInfo } from '@mastra/core/observability';
-import { SpanType } from '@mastra/core/observability';
+import type { AnyExportedSpan, ModelGenerationAttributes, ScoreEvent, SpanErrorInfo } from '@internal/observability';
+import { SpanType } from '@internal/observability';
 import { omitKeys } from '@mastra/core/utils';
 import { TrackingExporter } from '@mastra/observability';
 import type { TraceData, TrackingExporterConfig } from '@mastra/observability';

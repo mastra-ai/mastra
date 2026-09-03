@@ -1,4 +1,4 @@
-import type { LightSpanRecord } from '@mastra/core/storage';
+import type { LightSpanRecord } from '@internal/observability/storage';
 import { useMastraClient } from '@mastra/react';
 import { useQuery } from '@tanstack/react-query';
 import type { UseQueryResult } from '@tanstack/react-query';

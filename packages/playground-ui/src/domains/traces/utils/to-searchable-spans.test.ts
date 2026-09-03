@@ -1,4 +1,4 @@
-import type { LightSpanRecord } from '@mastra/core/storage';
+import type { LightSpanRecord } from '@internal/observability/storage';
 import { describe, expect, it } from 'vitest';
 
 import { selectSearchableSpans, toSearchableSpans } from './to-searchable-spans';

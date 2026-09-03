@@ -1,5 +1,4 @@
-import { coreFeatures } from '@mastra/core/features';
-import { generateSignalId } from '@mastra/core/observability';
+import { generateSignalId } from '@internal/observability';
 import {
   // Metrics list
   metricsFilterSchema,
@@ -63,7 +62,8 @@ import {
   getEnvironmentsResponseSchema,
   getTagsArgsSchema,
   getTagsResponseSchema,
-} from '@mastra/core/storage';
+} from '@internal/observability/storage';
+import { coreFeatures } from '@mastra/core/features';
 import { z } from 'zod/v4';
 import { HTTPException } from '../http-exception';
 import type { InferParams, ServerContext, ServerRouteHandler } from '../server-adapter/routes';

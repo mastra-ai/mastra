@@ -1,5 +1,5 @@
 import { MastraError } from '@mastra/core/error';
-import { SpanType } from '@mastra/core/observability';
+import { SpanType } from '@internal/observability';
 import {
   OLD_SPAN_SCHEMA,
   TABLE_SPANS,

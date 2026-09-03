@@ -18,8 +18,12 @@ import type {
   CreateScoreRecord,
   FeedbackRecord,
   CreateFeedbackRecord,
-} from '@mastra/core/storage';
-import { buildInputPreview, computeTraceStatus, EntityType } from '@mastra/core/storage';
+} from '@internal/observability/storage';
+import {
+  buildInputPreview,
+  computeTraceStatus,
+  EntityType,
+} from '@internal/observability/storage';
 import { coerceFeedbackReviewStatus } from './review-status';
 
 // ---------------------------------------------------------------------------

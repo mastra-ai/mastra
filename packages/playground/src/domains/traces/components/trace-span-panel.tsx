@@ -1,4 +1,4 @@
-import { SpanType } from '@mastra/core/observability';
+import { SpanType } from '@internal/observability';
 import { SpanDataPanelView } from '@mastra/playground-ui/domains/traces/components/span-data-panel-view';
 import type { TraceDataPanelView } from '@mastra/playground-ui/domains/traces/components/trace-data-panel-view';
 import { useSpanDetail } from '@mastra/playground-ui/domains/traces/hooks/use-span-detail';

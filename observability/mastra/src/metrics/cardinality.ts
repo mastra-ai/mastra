@@ -5,8 +5,8 @@
  * optionally blocks UUID-like values in labels.
  */
 
-import type { CardinalityConfig } from '@mastra/core/observability';
-import { DEFAULT_BLOCKED_LABELS } from '@mastra/core/observability';
+import type { CardinalityConfig } from '@internal/observability';
+import { DEFAULT_BLOCKED_LABELS } from '@internal/observability';
 
 /** Matches standard UUID v4 strings (case-insensitive). */
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;

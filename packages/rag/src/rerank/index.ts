@@ -1,6 +1,6 @@
 import type { MastraLanguageModel } from '@mastra/core/agent';
-import type { ObservabilityContext } from '@mastra/core/observability';
-import { SpanType } from '@mastra/core/observability';
+import type { ObservabilityContext } from '@internal/observability';
+import { SpanType } from '@internal/observability';
 import type { RelevanceScoreProvider } from '@mastra/core/relevance';
 import type { QueryResult } from '@mastra/core/vector';
 import { Big } from 'big.js';

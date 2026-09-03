@@ -1,5 +1,5 @@
 import type { MastraClient } from '@mastra/client-js';
-import { SpanType } from '@mastra/core/observability';
+import { SpanType } from '@internal/observability';
 
 type GetSpanResponse = Awaited<ReturnType<MastraClient['getSpan']>>;
 

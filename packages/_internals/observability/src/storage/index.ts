@@ -4,3 +4,8 @@ export * from './scores';
 export * from './feedback';
 export * from './metrics';
 export * from './discovery';
+export * from './types';
+export * from './contracts';
+export * from './score-row';
+export * from './tracing';
+export * from './record-builders';

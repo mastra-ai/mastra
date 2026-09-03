@@ -1,4 +1,4 @@
-import type { FeedbackRecord } from '@mastra/core/storage';
+import type { FeedbackRecord } from '@internal/observability/storage';
 
 /** Human-readable body of a feedback record: comment → string value → thumbs → raw JSON. */
 export function feedbackDisplayValue(feedback: Pick<FeedbackRecord, 'comment' | 'value' | 'feedbackType'>) {

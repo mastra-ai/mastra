@@ -26,7 +26,7 @@ export interface TraceFields {
 /**
  * Destination for log records derived from the logger's native record,
  * exported to Mastra observability. Structurally compatible with
- * `LoggerContext` from `@mastra/core/observability`.
+ * `LoggerContext` from `@mastra/observability`.
  */
 export interface AdapterLogSink {
   debug(message: string, data?: Record<string, unknown>): void;

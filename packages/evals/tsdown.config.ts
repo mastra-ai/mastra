@@ -59,10 +59,13 @@ export default defineConfig({
   dts: false,
   treeshake: true,
   sourcemap: true,
+  deps: {
+    alwaysBundle: ['@internal/observability'],
+  },
   inputOptions: {
     plugins: [adaptEsbuildOnLoadPlugin(esbuildCompileZod())],
   },
   onSuccess: async () => {
-    await generateTypes(process.cwd());
+    await generateTypes(process.cwd(), new Set(['@internal/observability']));
   },
 });

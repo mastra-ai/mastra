@@ -13,8 +13,8 @@
  * dependency tree (~hundreds of KB) for what amounts to a 100-line walker.
  */
 
-import { SpanType } from '@mastra/core/observability';
-import type { AnyExportedSpan, EntityType, ExportedLog, LogLevel } from '@mastra/core/observability';
+import { SpanType } from '@internal/observability';
+import type { AnyExportedSpan, EntityType, ExportedLog, LogLevel } from '@internal/observability';
 
 import { generateClientSignalId } from './id';
 

@@ -1,4 +1,4 @@
-import type { SpanRecord } from '@mastra/core/storage';
+import type { SpanRecord } from '@internal/observability/storage';
 import { describe, expect, it } from 'vitest';
 import {
   formatSpanDuration,

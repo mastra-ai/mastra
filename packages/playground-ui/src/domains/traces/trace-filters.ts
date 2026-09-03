@@ -1,5 +1,5 @@
-import type { EntityType } from '@mastra/core/observability';
-import type { ListTracesArgs } from '@mastra/core/storage';
+import type { EntityType } from '@internal/observability';
+import type { ListTracesArgs } from '@internal/observability/storage';
 import type { TraceDatePreset } from './types';
 import type { PropertyFilterField, PropertyFilterToken } from '@/ds/components/PropertyFilter/types';
 

@@ -1,5 +1,5 @@
+import { SpanType } from '@internal/observability';
 import type { RouteResponse } from '@mastra/client-js';
-import { SpanType } from '@mastra/core/observability';
 
 type SpanRecord = RouteResponse<'GET /observability/traces/:traceId/spans/:spanId'>['span'];
 

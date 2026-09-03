@@ -18,8 +18,8 @@ import type {
   MemoryConfig,
   MemoryRunState,
 } from '@mastra/core/memory';
-import { SpanType, EntityType } from '@mastra/core/observability';
-import type { ObservabilityContext, MemoryOperationAttributes } from '@mastra/core/observability';
+import { SpanType, EntityType } from '@internal/observability';
+import type { ObservabilityContext, MemoryOperationAttributes } from '@internal/observability';
 import type {
   InputProcessor,
   InputProcessorOrWorkflow,

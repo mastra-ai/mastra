@@ -6,7 +6,7 @@ import {
   createStoreIndexTests,
   createDomainIndexTests,
 } from '@internal/storage-test-utils';
-import { SpanType } from '@mastra/core/observability';
+import { SpanType } from '@internal/observability';
 import { TABLE_THREADS } from '@mastra/core/storage';
 import { MongoClient } from 'mongodb';
 import { describe, expect, it, test, beforeAll, afterAll, beforeEach, vi } from 'vitest';

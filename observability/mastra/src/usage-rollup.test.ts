@@ -14,14 +14,8 @@
  *      vanishing along with the hidden MODEL_GENERATION.
  */
 
-import { SpanType, SamplingStrategyType, InternalSpans } from '@mastra/core/observability';
-import type {
-  AnyExportedSpan,
-  MetricEvent,
-  ObservabilityExporter,
-  ProcessorRunAttributes,
-  TracingEvent,
-} from '@mastra/core/observability';
+import { SpanType, SamplingStrategyType, InternalSpans } from '@internal/observability';
+import type { AnyExportedSpan, MetricEvent, ObservabilityExporter, ProcessorRunAttributes, TracingEvent } from '@internal/observability';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { DefaultObservabilityInstance } from './instances';
 

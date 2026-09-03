@@ -2,8 +2,8 @@
  * Test that exporter packages can be imported without errors
  *
  * This catches issues like GitHub #9272 where an exporter's file
- * tries to import from '@mastra/core/observability/exporters' (which doesn't exist)
- * instead of '@mastra/core/observability'.
+ * tries to import from '@mastra/observability/exporters' (which doesn't exist)
+ * instead of '@mastra/observability'.
  */
 
 import { describe, it } from 'vitest';

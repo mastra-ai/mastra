@@ -9,13 +9,8 @@
  * - Braintrust-specific error handling
  */
 
-import type {
-  TracingEvent,
-  AnyExportedSpan,
-  ModelGenerationAttributes,
-  ToolCallAttributes,
-} from '@mastra/core/observability';
-import { SpanType, TracingEventType } from '@mastra/core/observability';
+import type { TracingEvent, AnyExportedSpan, ModelGenerationAttributes, ToolCallAttributes } from '@internal/observability';
+import { SpanType, TracingEventType } from '@internal/observability';
 import { initLogger, _exportsForTestingOnly } from 'braintrust';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { BraintrustExporter } from './tracing';

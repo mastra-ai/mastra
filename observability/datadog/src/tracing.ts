@@ -12,15 +12,8 @@
  * - Supports both agent and agentless modes
  */
 
-import type {
-  TracingEvent,
-  AnyExportedSpan,
-  ModelGenerationAttributes,
-  ModelInferenceAttributes,
-  ModelStepAttributes,
-  ScoreEvent,
-} from '@mastra/core/observability';
-import { SpanType } from '@mastra/core/observability';
+import type { TracingEvent, AnyExportedSpan, ModelGenerationAttributes, ModelInferenceAttributes, ModelStepAttributes, ScoreEvent } from '@internal/observability';
+import { SpanType } from '@internal/observability';
 import { omitKeys } from '@mastra/core/utils';
 import { BaseExporter } from '@mastra/observability';
 import type { BaseExporterConfig } from '@mastra/observability';

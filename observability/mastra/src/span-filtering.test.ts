@@ -1,6 +1,6 @@
+import { SamplingStrategyType, InternalSpans,SpanType } from '@internal/observability';
+import type { TracingEvent, MetricEvent, ObservabilityExporter, AnyExportedSpan } from '@internal/observability';
 import { RequestContext } from '@mastra/core/di';
-import { SpanType, SamplingStrategyType, InternalSpans } from '@mastra/core/observability';
-import type { TracingEvent, MetricEvent, ObservabilityExporter, AnyExportedSpan } from '@mastra/core/observability';
 import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { DefaultObservabilityInstance } from './instances';
 import { PricingRegistry } from './metrics/pricing-registry';

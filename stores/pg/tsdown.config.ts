@@ -11,9 +11,9 @@ export default defineConfig({
   treeshake: true,
   sourcemap: true,
   deps: {
-    alwaysBundle: ['@internal/storage-test-utils'],
+    alwaysBundle: ['@internal/observability', '@internal/storage-test-utils'],
   },
   onSuccess: async () => {
-    await generateTypes(process.cwd());
+    await generateTypes(process.cwd(), new Set(['@internal/observability']));
   },
 });

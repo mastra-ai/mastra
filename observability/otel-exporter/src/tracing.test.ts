@@ -1,5 +1,5 @@
-import { SpanType, TracingEventType } from '@mastra/core/observability';
-import type { AnyExportedSpan, LogEvent } from '@mastra/core/observability';
+import { SpanType, TracingEventType } from '@internal/observability';
+import type { AnyExportedSpan, LogEvent } from '@internal/observability';
 import { trace } from '@opentelemetry/api';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { OtelExporter } from './tracing';

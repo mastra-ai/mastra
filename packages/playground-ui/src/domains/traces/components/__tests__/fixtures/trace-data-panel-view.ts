@@ -1,5 +1,5 @@
+import { SpanType } from '@internal/observability';
 import type { MastraClient } from '@mastra/client-js';
-import { SpanType } from '@mastra/core/observability';
 
 import type { SearchableSpan } from '../../../types';
 import { toSearchableSpans } from '../../../utils';

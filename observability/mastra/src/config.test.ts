@@ -1,5 +1,5 @@
+import { SpanType } from '@internal/observability';
 import { MastraError } from '@mastra/core/error';
-import { SpanType } from '@mastra/core/observability';
 import { describe, it, expect } from 'vitest';
 import { SamplingStrategyType, observabilityConfigValueSchema, observabilityInstanceConfigSchema } from './config';
 import { Observability } from './default';

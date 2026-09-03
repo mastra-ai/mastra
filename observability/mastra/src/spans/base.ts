@@ -1,24 +1,5 @@
-import { SpanType, InternalSpans } from '@mastra/core/observability';
-import type {
-  Span,
-  SpanTypeValue,
-  SpanTypeMap,
-  AnySpan,
-  ChildSpanOptions,
-  ChildEventOptions,
-  EndSpanOptions,
-  ErrorSpanOptions,
-  UpdateSpanOptions,
-  CreateSpanOptions,
-  ObservabilityInstance,
-  ExportedSpan,
-  TraceState,
-  IModelSpanTracker,
-  AIModelGenerationSpan,
-  EntityTypeValue,
-  TracingPolicy,
-  CorrelationContext,
-} from '@mastra/core/observability';
+import { SpanType, InternalSpans } from '@internal/observability';
+import type { Span, SpanTypeValue, SpanTypeMap, AnySpan, ChildSpanOptions, ChildEventOptions, EndSpanOptions, ErrorSpanOptions, UpdateSpanOptions, CreateSpanOptions, ObservabilityInstance, ExportedSpan, TraceState, IModelSpanTracker, AIModelGenerationSpan, TracingPolicy, CorrelationContext,EntityTypeValue } from '@internal/observability';
 
 import { ModelSpanTracker } from '../model-tracing';
 import { isPlainRecord, mergeMetadata as mergeSpanMetadata } from './metadata';

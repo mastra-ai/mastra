@@ -1,37 +1,28 @@
 import type { CoreMessage, CoreSystemMessage } from '@internal/ai-sdk-v4';
+import { SpanType } from '@internal/observability';
+import {
+  scoreRowDataSchema,
+  scoringEntityTypeSchema,
+  scoringSourceSchema,
+  type ScoreRowData,
+  type ScoringEntityType,
+  type ScoringSource,
+} from '@internal/observability/storage';
 import { z } from 'zod/v4';
 import type { MastraDBMessage } from '../agent';
-import { SpanType } from '../observability';
 import type { ObservabilityContext, SpanTypeValue } from '../observability';
 import type { SpanRecord } from '../storage/domains/observability/tracing';
-import { dbTimestamps, paginationInfoSchema } from '../storage/domains/shared';
+import { paginationInfoSchema } from '../storage/domains/shared';
 import type { StepResult } from '../workflows/types';
+
+export { scoreRowDataSchema, scoringEntityTypeSchema, scoringSourceSchema };
+export type { ScoreRowData, ScoringEntityType, ScoringSource };
 
 // ============================================================================
 // Sampling Config
 // ============================================================================
 
 export type ScoringSamplingConfig = { type: 'none' } | { type: 'ratio'; rate: number };
-
-// ============================================================================
-// Scoring Source & Entity Type
-// ============================================================================
-
-export const scoringSourceSchema = z.enum(['LIVE', 'TEST']);
-
-export type ScoringSource = z.infer<typeof scoringSourceSchema>;
-
-export const scoringEntityTypeSchema = z.enum([
-  'AGENT',
-  'WORKFLOW',
-  'TRAJECTORY',
-  'STEP',
-  // Externally executed experiment items (targetType: 'external')
-  'EXTERNAL',
-  ...Object.values(SpanType),
-] as [string, string, ...string[]]);
-
-export type ScoringEntityType = z.infer<typeof scoringEntityTypeSchema>;
 
 // ============================================================================
 // Scoring Prompts
@@ -165,60 +156,6 @@ export type ScoringInputWithExtractStepResultAndScoreAndReason = z.infer<
 // ============================================================================
 // Score Row Data (stored in DB)
 // ============================================================================
-
-export const scoreRowDataSchema = z.object({
-  id: z.string(),
-  scorerId: z.string(),
-  entityId: z.string(),
-
-  // From ScoringInputWithExtractStepResultAndScoreAndReason
-  runId: z.string(),
-  input: z.unknown().optional(),
-  output: z.unknown(),
-  additionalContext: optionalRecordSchema,
-  requestContext: optionalRecordSchema,
-  extractStepResult: optionalRecordSchema,
-  extractPrompt: z.string().optional(),
-  score: z.number(),
-  analyzeStepResult: optionalRecordSchema,
-  analyzePrompt: z.string().optional(),
-  reason: z.string().optional(),
-  reasonPrompt: z.string().optional(),
-
-  // From ScoringHookInput
-  scorer: recordSchema,
-  metadata: optionalRecordSchema,
-  source: scoringSourceSchema,
-  entity: recordSchema,
-  entityType: scoringEntityTypeSchema.optional(),
-  structuredOutput: z.boolean().optional(),
-  traceId: z.string().optional(),
-  spanId: z.string().optional(),
-  resourceId: z.string().optional(),
-  threadId: z.string().optional(),
-  // Multi-tenant scope. `resourceId` is overloaded (memory end-user), so tenancy
-  // uses dedicated fields: organizationId (account) + projectId (project scope).
-  organizationId: z.string().nullish(),
-  projectId: z.string().nullish(),
-  // Batch handle shared across all per-trace scores produced by one batch scoring
-  // call. `runId` stays per-execution; `batchId` groups the batch.
-  batchId: z.string().nullish(),
-  // Dataset provenance: links a baseline score back to the curated dataset item it
-  // scored, so scores can join to ground truth without re-running the agent.
-  datasetId: z.string().nullish(),
-  datasetItemId: z.string().nullish(),
-
-  // Additional ScoreRowData fields
-  preprocessStepResult: optionalRecordSchema,
-  preprocessPrompt: z.string().optional(),
-  generateScorePrompt: z.string().optional(),
-  generateReasonPrompt: z.string().optional(),
-
-  // Timestamps
-  ...dbTimestamps,
-});
-
-export type ScoreRowData = z.infer<typeof scoreRowDataSchema>;
 
 // ============================================================================
 // Save Score Payload (for creating new scores)

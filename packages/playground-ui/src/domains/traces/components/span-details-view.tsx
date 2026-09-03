@@ -1,4 +1,4 @@
-import type { SpanRecord } from '@mastra/core/storage';
+import type { SpanRecord } from '@internal/observability/storage';
 import { BracesIcon, FileInputIcon, FileOutputIcon } from 'lucide-react';
 import { formatSpanDuration, formatSpanPanelTimestamp } from '../utils/span-utils';
 import { DataDetailsPanel } from '@/ds/components/DataDetailsPanel';

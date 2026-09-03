@@ -7,8 +7,8 @@
  * These unit tests focus on the bridge's core logic and API surface.
  */
 
-import type { CreateSpanOptions, LogEvent } from '@mastra/core/observability';
-import { InternalSpans, SamplingStrategyType, SpanType, TracingEventType } from '@mastra/core/observability';
+import type { CreateSpanOptions, LogEvent } from '@internal/observability';
+import { InternalSpans, SamplingStrategyType, SpanType, TracingEventType } from '@internal/observability';
 import { DefaultObservabilityInstance } from '@mastra/observability';
 import { context, isSpanContextValid, trace } from '@opentelemetry/api';
 import { logs as otelLogs, SeverityNumber } from '@opentelemetry/api-logs';

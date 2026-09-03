@@ -20,8 +20,8 @@
 /// <reference types="node" />
 
 import { createRequire } from 'node:module';
-import type { AnyExportedSpan, TracingEvent } from '@mastra/core/observability';
-import { SpanType, TracingEventType } from '@mastra/core/observability';
+import { TracingEvent,SpanType,TracingEventType } from '@internal/observability';
+import type { AnyExportedSpan } from '@mastra/observability';
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
 import { __setObservabilityFeaturesForTest } from './features';
 import type { DatadogExporter } from './tracing';

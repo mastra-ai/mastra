@@ -1,13 +1,8 @@
+import { EntityType, SpanType } from '@internal/observability';
+import type { GetTraceLightResponse, LightSpanRecord, SpanRecord, TraceRecord } from '@internal/observability/storage';
 import { createSampleScore } from '@internal/storage-test-utils';
 import type { Mastra } from '@mastra/core/mastra';
-import { EntityType, SpanType } from '@mastra/core/observability';
-import type {
-  MastraCompositeStore,
-  TraceRecord,
-  SpanRecord,
-  GetTraceLightResponse,
-  LightSpanRecord,
-} from '@mastra/core/storage';
+import type { MastraCompositeStore } from '@mastra/core/storage';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { HTTPException } from '../http-exception';
 import * as errorHandler from './error';

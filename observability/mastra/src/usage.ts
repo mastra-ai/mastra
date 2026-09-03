@@ -2,7 +2,7 @@
  * Usage extraction utilities for converting AI SDK usage to Mastra UsageStats
  */
 
-import type { InputTokenDetails, OutputTokenDetails, UsageStats } from '@mastra/core/observability';
+import type { InputTokenDetails, OutputTokenDetails, UsageStats } from '@internal/observability';
 import type { LanguageModelUsage, ProviderMetadata } from '@mastra/core/stream';
 
 /**

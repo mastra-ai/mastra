@@ -15,8 +15,10 @@
  * results unique regardless of merge timing.
  */
 
-import type { ClickHouseClient } from '@clickhouse/client';
-import { EntityType } from '@mastra/core/storage';
+import type {
+  ClickHouseClient } from '@clickhouse/client';
+import { EntityType,
+} from '@internal/observability/storage';
 import type {
   GetEntityTypesArgs,
   GetEntityTypesResponse,
@@ -28,7 +30,7 @@ import type {
   GetEnvironmentsResponse,
   GetTagsArgs,
   GetTagsResponse,
-} from '@mastra/core/storage';
+} from '@internal/observability/storage';
 
 import { TABLE_DISCOVERY_VALUES, TABLE_DISCOVERY_PAIRS } from './ddl';
 import { CH_SETTINGS } from './helpers';

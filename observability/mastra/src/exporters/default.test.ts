@@ -1,16 +1,7 @@
+import { TracingEventType, EntityType,SpanType } from '@internal/observability';
+import type { ModelGenerationAttributes, WorkflowStepAttributes, TracingEvent, AnyExportedSpan, MetricEvent, LogEvent, ScoreEvent, FeedbackEvent } from '@internal/observability';
+import { serializeSpanAttributes } from '@internal/observability/storage';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import { SpanType, TracingEventType, EntityType } from '@mastra/core/observability';
-import type {
-  ModelGenerationAttributes,
-  WorkflowStepAttributes,
-  TracingEvent,
-  AnyExportedSpan,
-  MetricEvent,
-  LogEvent,
-  ScoreEvent,
-  FeedbackEvent,
-} from '@mastra/core/observability';
-import { serializeSpanAttributes } from '@mastra/core/storage';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { DefaultExporter } from './default';
 

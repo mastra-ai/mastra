@@ -2,7 +2,7 @@
  * Utility functions for working with custom span formatters.
  */
 
-import type { AnyExportedSpan, CustomSpanFormatter } from '@mastra/core/observability';
+import type { AnyExportedSpan, CustomSpanFormatter } from '@internal/observability';
 
 /**
  * Chains multiple span formatters into a single formatter.

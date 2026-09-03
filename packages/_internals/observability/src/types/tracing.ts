@@ -6,7 +6,7 @@
  * see observability.ts.
  */
 import type { LanguageModelV2Usage } from '@ai-sdk/provider-v5';
-import { EntityType, type EntityTypeValue } from '../storage';
+import { EntityType, type EntityTypeValue } from '../storage/shared';
 
 import type {
   CustomSamplerOptions,

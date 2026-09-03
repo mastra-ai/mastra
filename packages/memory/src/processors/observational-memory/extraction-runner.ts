@@ -1,6 +1,6 @@
 import type { Agent, AgentMemoryOption } from '@mastra/core/agent';
 import { coreFeatures } from '@mastra/core/features';
-import type { ObservabilityContext } from '@mastra/core/observability';
+import type { ObservabilityContext } from '@internal/observability';
 import type { RequestContext } from '@mastra/core/request-context';
 import { z } from 'zod';
 

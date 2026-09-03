@@ -2,7 +2,7 @@
  * Unit tests for LoggerContextImpl
  */
 
-import type { LogEvent } from '@mastra/core/observability';
+import type { LogEvent } from '@internal/observability';
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { ObservabilityBus } from '../bus';
 import { LoggerContextImpl } from './logger';

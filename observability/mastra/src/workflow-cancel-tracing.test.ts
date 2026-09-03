@@ -1,7 +1,7 @@
+import { TracingEventType,SpanType } from '@internal/observability';
+import type { AnyExportedSpan } from '@internal/observability';
 import { EventEmitterPubSub } from '@mastra/core/events';
 import { Mastra } from '@mastra/core/mastra';
-import { SpanType, TracingEventType } from '@mastra/core/observability';
-import type { AnyExportedSpan } from '@mastra/core/observability';
 import { MockStore } from '@mastra/core/storage';
 import { createStep, createWorkflow } from '@mastra/core/workflows';
 import { createWorkflow as createEventedWorkflow } from '@mastra/core/workflows/evented';

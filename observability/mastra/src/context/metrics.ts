@@ -6,17 +6,7 @@
  * CorrelationContext and metadata are snapshotted at construction time.
  */
 
-import type {
-  MetricsContext,
-  Counter,
-  Gauge,
-  Histogram,
-  CorrelationContext,
-  CostContext,
-  ExportedMetric,
-  MetricEvent,
-  MetricEmitOptions,
-} from '@mastra/core/observability';
+import type { MetricsContext, Counter, Gauge, Histogram, CorrelationContext, CostContext, ExportedMetric, MetricEvent, MetricEmitOptions } from '@internal/observability';
 
 import type { ObservabilityBus } from '../bus';
 import { generateSignalId } from '../ids';

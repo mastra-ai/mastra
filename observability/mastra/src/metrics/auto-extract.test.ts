@@ -4,8 +4,8 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
-import { SpanType, EntityType } from '@mastra/core/observability';
-import type { AnySpan, MetricEvent } from '@mastra/core/observability';
+import { SpanType, EntityType } from '@internal/observability';
+import type { AnySpan, MetricEvent } from '@internal/observability';
 import { describe, it, expect, afterEach, vi } from 'vitest';
 import { ObservabilityBus } from '../bus';
 import { MetricsContextImpl } from '../context/metrics';

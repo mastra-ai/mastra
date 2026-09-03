@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { resolveCurrentSpan } from '@internal/observability';
+import { resolveCurrentSpan,isNoOpObservability } from '@internal/observability';
 import type { Agent } from '../agent';
 import { createDurableAgent } from '../agent/durable/create-durable-agent';
 import { getActiveDurableAgentWorkflowExecutions } from '../agent/durable/run-registry';
@@ -30,34 +30,23 @@ import type { MastraModelGatewayInterface } from '../llm/model/gateways';
 import { getGatewayId } from '../llm/model/gateways';
 import { defaultGateways } from '../llm/model/gateways/defaults';
 import {
-  LogLevel,
-  noopLogger,
-  ConsoleLogger,
-  DualLogger,
-  isAdaptableLogger,
-  resolveTraceFields,
-  isObservabilityExportSuppressed,
-  createExportSuppressedLogger,
-} from '../logger';
+  LogLevel, noopLogger, ConsoleLogger, DualLogger, isAdaptableLogger, resolveTraceFields, isObservabilityExportSuppressed, createExportSuppressedLogger, } from '../logger';
 import type { IMastraLogger, LoggerAdapterOptions } from '../logger';
 import type { MCPServerBase } from '../mcp';
 import type { MastraMemory } from '../memory';
 import type { NotificationDispatchConfig } from '../notifications/workflow';
 import {
-  buildNotificationDispatchSchedule,
-  createNotificationDispatchWorkflow,
-  NOTIFICATION_DISPATCH_SCHEDULE_ROW_ID,
-} from '../notifications/workflow';
+  buildNotificationDispatchSchedule, createNotificationDispatchWorkflow, NOTIFICATION_DISPATCH_SCHEDULE_ROW_ID, } from '../notifications/workflow';
+import { NoOpObservability, noOpLoggerContext, noOpMetricsContext } from '../observability';
 import type {
-  DefinitionSource,
+  LoggerContext,
+  MetricsContext,
   ObservabilityEntrypoint,
   ObservabilityExporter,
   ObservabilityInstance,
-  LoggerContext,
-  MetricsContext,
   TracingContext,
+  DefinitionSource
 } from '../observability';
-import { isNoOpObservability, NoOpObservability, noOpLoggerContext, noOpMetricsContext } from '../observability';
 import { initContextStorage } from '../observability/context-storage';
 import type { Processor } from '../processors';
 import type { AgentScheduleHandler } from '../schedules/define';
@@ -90,21 +79,13 @@ import { normalizeWorkflowBuilderDefinition } from '../workflows/builder';
 import type { WorkflowBuilderDefinitionInput } from '../workflows/builder';
 import type { DynamicWorkflowGraph, WorkflowRegistryIndex, WorkflowRegistrySchemas } from '../workflows/dynamic';
 import {
-  assertValidDynamicWorkflow,
-  collectNestedWorkflowIds,
-  rehydrateWorkflow,
-  toJsonSchemaOrUndefined,
-} from '../workflows/dynamic';
+  assertValidDynamicWorkflow, collectNestedWorkflowIds, rehydrateWorkflow, toJsonSchemaOrUndefined, } from '../workflows/dynamic';
 import { WorkflowEventProcessor } from '../workflows/evented/workflow-event-processor';
 import { computeNextFireAt, computeScheduleDefinitionHash } from '../workflows/scheduler';
 import type { WorkflowScheduleConfig, SchedulerConfig, Scheduler } from '../workflows/scheduler';
 import type { AnyWorkspace, RegisteredWorkspace, Workspace } from '../workspace';
 import {
-  declaredSchedulesOf,
-  findFsAgentScheduleHandler,
-  hasFsAgentSchedule,
-  syncFsAgentSchedules,
-} from './fs-agent-schedules';
+  declaredSchedulesOf, findFsAgentScheduleHandler, hasFsAgentSchedule, syncFsAgentSchedules, } from './fs-agent-schedules';
 import { createOnScorerHook } from './hooks';
 import { __registerMastraCtor } from './mastra-ctor-holder';
 import type { RunScope } from './run-scope';
@@ -127,19 +108,11 @@ function createUndefinedPrimitiveError(
     | 'mcp-server'
     | 'gateway'
     | 'memory'
-    | 'workspace',
-  value: null | undefined,
-  key?: string,
-): MastraError {
+    | 'workspace', value: null | undefined, key?: string, ): MastraError {
   const typeLabel = type === 'mcp-server' ? 'MCP server' : type;
   const errorId = `MASTRA_ADD_${type.toUpperCase().replace('-', '_')}_UNDEFINED` as Uppercase<string>;
   return new MastraError({
-    id: errorId,
-    domain: ErrorDomain.MASTRA,
-    category: ErrorCategory.USER,
-    text: `Cannot add ${typeLabel}: ${typeLabel} is ${value === null ? 'null' : 'undefined'}. This may occur if config was spread ({ ...config }) and the original object had getters or non-enumerable properties.`,
-    details: { status: 400, ...(key && { key }) },
-  });
+    id: errorId, domain: ErrorDomain.MASTRA, category: ErrorCategory.USER, text: `Cannot add ${typeLabel}: ${typeLabel} is ${value === null ? 'null' : 'undefined'}. This may occur if config was spread ({ ...config }) and the original object had getters or non-enumerable properties.`, details: { status: 400, ...(key && { key }) }, });
 }
 
 /**
@@ -241,37 +214,19 @@ function ownerWorkflowIdFromRowId(rowId: string): string | undefined {
  * const mastra = new Mastra({
  *   agents: {
  *     weatherAgent: new Agent({
- *       id: 'weather-agent',
- *       name: 'Weather Agent',
- *       instructions: 'You help with weather information',
- *       model: 'openai/gpt-5'
+ *       id: 'weather-agent', *       name: 'Weather Agent', *       instructions: 'You help with weather information', *       model: 'openai/gpt-5'
  *     })
- *   },
- *   storage: new LibSQLStore({ id: 'mastra-storage', url: ':memory:' }),
- *   logger: new PinoLogger({ name: 'MyApp' })
+ *   }, *   storage: new LibSQLStore({ id: 'mastra-storage', url: ':memory:' }), *   logger: new PinoLogger({ name: 'MyApp' })
  * });
  * ```
  */
 export interface Config<
-  TAgents extends Record<string, Agent<any>> = Record<string, Agent<any>>,
-  TWorkflows extends Record<string, AnyWorkflow> = Record<string, AnyWorkflow>,
-  TVectors extends Record<string, MastraVector<any>> = Record<string, MastraVector<any>>,
-  TTTS extends Record<string, MastraTTS> = Record<string, MastraTTS>,
-  TLogger extends IMastraLogger = IMastraLogger,
-  TMCPServers extends Record<string, MCPServerBase<any>> = Record<string, MCPServerBase<any>>,
-  TScorers extends Record<string, MastraScorer<any, any, any, any>> = Record<string, MastraScorer<any, any, any, any>>,
-  TTools extends Record<string, ToolAction<any, any, any, any, any, any>> = Record<
-    string,
-    ToolAction<any, any, any, any, any, any>
-  >,
-  TProcessors extends Record<string, Processor<any>> = Record<string, Processor<any>>,
-  TMemory extends Record<string, MastraMemory> = Record<string, MastraMemory>,
-  TChannels extends Record<string, ChannelProvider> = Record<string, ChannelProvider>,
-> {
+  TAgents extends Record<string, Agent<any>> = Record<string, Agent<any>>, TWorkflows extends Record<string, AnyWorkflow> = Record<string, AnyWorkflow>, TVectors extends Record<string, MastraVector<any>> = Record<string, MastraVector<any>>, TTTS extends Record<string, MastraTTS> = Record<string, MastraTTS>, TLogger extends IMastraLogger = IMastraLogger, TMCPServers extends Record<string, MCPServerBase<any>> = Record<string, MCPServerBase<any>>, TScorers extends Record<string, MastraScorer<any, any, any, any>> = Record<string, MastraScorer<any, any, any, any>>, TTools extends Record<string, ToolAction<any, any, any, any, any, any>> = Record<
+    string, ToolAction<any, any, any, any, any, any>
+  >, TProcessors extends Record<string, Processor<any>> = Record<string, Processor<any>>, TMemory extends Record<string, MastraMemory> = Record<string, MastraMemory>, TChannels extends Record<string, ChannelProvider> = Record<string, ChannelProvider>, > {
   /**
    * Agents are autonomous systems that can make decisions and take actions.
-   * Accepts Mastra Agent instances, AI SDK v6 ToolLoopAgent instances,
-   * and durable agent wrappers (e.g., InngestAgent from createInngestAgent).
+   * Accepts Mastra Agent instances, AI SDK v6 ToolLoopAgent instances, * and durable agent wrappers (e.g., InngestAgent from createInngestAgent).
    * ToolLoopAgent and durable agents are automatically handled during registration.
    */
   agents?: { [K in keyof TAgents]: TAgents[K] | ToolLoopAgentLike | DurableAgentLike };
@@ -314,8 +269,7 @@ export interface Config<
 
   /**
    * AgentControllers to host on this Mastra instance, keyed by id. Each
-   * registered AgentController uses this Mastra (its storage, agents, gateways,
-   * and observability) instead of building its own internal one, and is
+   * registered AgentController uses this Mastra (its storage, agents, gateways, * and observability) instead of building its own internal one, and is
    * reachable via {@link Mastra.getAgentController} /
    * {@link Mastra.listAgentControllers}. This is how a server exposes multiple
    * AgentControllers' sessions over HTTP.

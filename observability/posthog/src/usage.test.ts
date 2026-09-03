@@ -1,4 +1,4 @@
-import type { UsageStats } from '@mastra/core/observability';
+import type { UsageStats } from '@internal/observability';
 import { describe, it, expect } from 'vitest';
 import { formatUsageMetrics } from './tracing';
 

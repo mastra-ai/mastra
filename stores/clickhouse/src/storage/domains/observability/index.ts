@@ -1,14 +1,7 @@
 import type { ClickHouseClient } from '@clickhouse/client';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import {
-  createStorageErrorId,
-  listTracesArgsSchema,
-  ObservabilityStorage,
-  SPAN_SCHEMA,
-  TABLE_SPANS,
-  toTraceSpans,
-  TraceStatus,
-} from '@mastra/core/storage';
+import { listTracesArgsSchema, toTraceSpans, TraceStatus } from '@internal/observability/storage';
+import { createStorageErrorId, ObservabilityStorage, SPAN_SCHEMA, TABLE_SPANS } from '@mastra/core/storage';
 import type {
   SpanRecord,
   ListTracesArgs,
@@ -26,7 +19,7 @@ import type {
   GetTraceArgs,
   GetTraceResponse,
   GetTraceLightResponse,
-} from '@mastra/core/storage';
+} from '@internal/observability/storage';
 import { ClickhouseDB, resolveClickhouseConfig } from '../../db';
 import type { ClickhouseDomainConfig } from '../../db';
 import { TABLE_ENGINES, transformRows } from '../../db/utils';

@@ -1,4 +1,4 @@
-import { EntityType } from '@mastra/core/observability';
+import { EntityType } from '@internal/observability';
 import {
   OpenErrorsInLogsButton,
   OpenInTracesButton,

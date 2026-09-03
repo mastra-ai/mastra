@@ -6,8 +6,8 @@
 
 /// <reference types="node" />
 
-import type { TracingEvent, AnyExportedSpan } from '@mastra/core/observability';
-import { SpanType, TracingEventType } from '@mastra/core/observability';
+import type { TracingEvent, AnyExportedSpan } from '@internal/observability';
+import { SpanType, TracingEventType } from '@internal/observability';
 import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { __setObservabilityFeaturesForTest } from './features';
 

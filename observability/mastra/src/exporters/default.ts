@@ -1,19 +1,6 @@
-import type { Mastra } from '@mastra/core';
-import { MastraError, ErrorDomain } from '@mastra/core/error';
-import type { IMastraLogger } from '@mastra/core/logger';
-import type {
-  TracingEvent,
-  InitExporterOptions,
-  MetricEvent,
-  LogEvent,
-  ScoreEvent,
-  FeedbackEvent,
-  ObservabilityDropEvent,
-  ObservabilityDropReason,
-  ObservabilityDropSignal,
-} from '@mastra/core/observability';
-import { TracingEventType } from '@mastra/core/observability';
-import type { ObservabilityStorage, TracingStorageStrategy, MastraCompositeStore } from '@mastra/core/storage';
+import type { InitExporterOptions, MetricEvent, LogEvent, ScoreEvent, FeedbackEvent, ObservabilityDropEvent, ObservabilityDropReason, ObservabilityDropSignal,TracingEvent } from '@internal/observability';
+import { TracingEventType } from '@internal/observability';
+import type { TracingStorageStrategy } from '@internal/observability/storage';
 import {
   buildCreateSpanRecord,
   buildUpdateSpanRecord,
@@ -21,7 +8,11 @@ import {
   buildLogRecord,
   buildScoreRecord,
   buildFeedbackRecord,
-} from '@mastra/core/storage';
+} from '@internal/observability/storage';
+import type { Mastra } from '@mastra/core';
+import { MastraError, ErrorDomain } from '@mastra/core/error';
+import type { IMastraLogger } from '@mastra/core/logger';
+import type { ObservabilityStorage, MastraCompositeStore } from '@mastra/core/storage';
 import type { BaseExporterConfig } from './base';
 import { BaseExporter } from './base';
 import { EventBuffer } from './event-buffer';

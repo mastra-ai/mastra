@@ -3,7 +3,7 @@
  * Generates realistic trace data with configurable depth and breadth.
  */
 
-import { TracingEvent, AnyExportedSpan, TracingEventType, SpanType } from '@mastra/core/observability';
+import { TracingEvent, AnyExportedSpan, TracingEventType, SpanType } from '@internal/observability';
 
 export interface GenerateTraceOptions {
   /** Number of levels deep (default: 3) */

@@ -4,7 +4,7 @@ import type {
   ListBranchesResponse,
   ListTracesArgs,
   ListTracesLightResponse,
-} from '@mastra/core/storage';
+} from '@internal/observability/storage';
 import { useMastraClient } from '@mastra/react';
 import type { InfiniteData } from '@tanstack/react-query';
 import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query';

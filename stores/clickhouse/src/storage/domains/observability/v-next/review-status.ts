@@ -1,5 +1,7 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import type { FeedbackReviewStatus, UpdateFeedbackReviewStatusArgs } from '@mastra/core/storage';
+import type { FeedbackReviewStatus,
+  UpdateFeedbackReviewStatusArgs,
+ } from '@internal/observability/storage';
 
 // Local mirror of `feedbackReviewStatusSchema` / `updateFeedbackReviewStatusArgsSchema`
 // from `@mastra/core/storage`: this package's `@mastra/core` peer floor predates those

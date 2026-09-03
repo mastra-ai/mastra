@@ -1,4 +1,4 @@
-import { EntityType } from '@mastra/core/observability';
+import { EntityType } from '@internal/observability';
 import { OpenInTracesButton } from '@mastra/playground-ui/domains/metrics/components/card-action-buttons';
 import { LatencyCardView } from '@mastra/playground-ui/domains/metrics/components/latency-card-view';
 import type { LatencyTab } from '@mastra/playground-ui/domains/metrics/components/latency-card-view';

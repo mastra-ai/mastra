@@ -1,5 +1,8 @@
-import { EntityType, SpanType } from '@mastra/core/observability';
-import type { CreateSpanRecord } from '@mastra/core/storage';
+import {
+  EntityType,
+  SpanType } from '@internal/observability';
+import type { CreateSpanRecord,
+} from '@internal/observability/storage';
 
 /**
  * Default base date used across observability-vnext tests so timestamps are stable.

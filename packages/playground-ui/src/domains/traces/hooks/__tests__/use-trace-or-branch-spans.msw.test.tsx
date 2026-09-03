@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { SpanType } from '@mastra/core/observability';
+import { SpanType } from '@internal/observability';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, renderHook, waitFor } from '@testing-library/react';

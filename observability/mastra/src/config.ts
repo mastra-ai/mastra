@@ -5,24 +5,11 @@
  * including tracing configs, sampling strategies, and registry setup.
  */
 
-import type {
-  AnyExportedSpan,
-  CardinalityConfig,
-  ConfigSelector,
-  CustomSamplerOptions as CoreCustomSamplerOptions,
-  LogLevel,
-  ObservabilityBridge,
-  ObservabilityExporter,
-  ObservabilityInstance,
-  SerializationOptions,
-  SamplingStrategy as CoreSamplingStrategy,
-  SpanOutputProcessor,
-  SpanTypeValue,
-} from '@mastra/core/observability';
-import { SamplingStrategyType, SpanType } from '@mastra/core/observability';
+import type { AnyExportedSpan, CardinalityConfig, ConfigSelector, CustomSamplerOptions as CoreCustomSamplerOptions, LogLevel, ObservabilityBridge, ObservabilityExporter, ObservabilityInstance, SerializationOptions, SamplingStrategy as CoreSamplingStrategy, SpanOutputProcessor, SpanTypeValue } from '@internal/observability';
+import { SamplingStrategyType, SpanType } from '@internal/observability';
 
-export { SamplingStrategyType } from '@mastra/core/observability';
-export type { SamplingStrategyTypeValue } from '@mastra/core/observability';
+export { SamplingStrategyType } from '@internal/observability';
+export type { SamplingStrategyTypeValue } from '@internal/observability';
 import { z } from 'zod/v4';
 import type { SensitiveDataFilterOptions } from './span_processors';
 

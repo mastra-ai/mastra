@@ -5,7 +5,9 @@
  * that get AND-joined into WHERE clauses with parameterized values.
  */
 
-import { TraceStatus } from '@mastra/core/storage';
+import {
+  TraceStatus,
+} from '@internal/observability/storage';
 import type {
   ListTracesArgs,
   ListLogsArgs,
@@ -17,7 +19,7 @@ import type {
   metricsFilterSchema,
   scoresFilterSchema,
   feedbackFilterSchema,
-} from '@mastra/core/storage';
+} from '@internal/observability/storage';
 import type { z } from 'zod/v4';
 
 type TracesFilter = z.infer<typeof tracesFilterSchema>;

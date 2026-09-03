@@ -1,5 +1,5 @@
-import type { TracingEvent, ObservabilityExporter } from '@mastra/core/observability';
-import { SpanType, SamplingStrategyType } from '@mastra/core/observability';
+import type { TracingEvent, ObservabilityExporter } from '@internal/observability';
+import { SpanType, SamplingStrategyType } from '@internal/observability';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { DefaultObservabilityInstance } from '../instances';
 import { SensitiveDataFilter } from './sensitive-data-filter';

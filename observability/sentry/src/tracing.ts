@@ -8,17 +8,8 @@
  * MODEL_STEP and MODEL_CHUNK spans are skipped to simplify the trace hierarchy.
  */
 
-import type {
-  TracingEvent,
-  AnyExportedSpan,
-  ModelGenerationAttributes,
-  ToolCallAttributes,
-  AgentRunAttributes,
-  WorkflowRunAttributes,
-  WorkflowStepAttributes,
-  UsageStats,
-} from '@mastra/core/observability';
-import { SpanType, TracingEventType } from '@mastra/core/observability';
+import type { TracingEvent, AnyExportedSpan, ModelGenerationAttributes, ToolCallAttributes, AgentRunAttributes, WorkflowRunAttributes, WorkflowStepAttributes, UsageStats } from '@internal/observability';
+import { SpanType, TracingEventType } from '@internal/observability';
 import type { BaseExporterConfig } from '@mastra/observability';
 import { BaseExporter } from '@mastra/observability';
 import { getAttributes as getGenAIAttributes, getSpanName as getGenAISpanName } from '@mastra/otel-exporter';

@@ -2,7 +2,7 @@
  * Composable Tracing Options Builder
  */
 
-import type { TracingOptions } from '@mastra/core/observability';
+import type { TracingOptions } from '@internal/observability';
 
 /**
  * A function that updates TracingOptions.

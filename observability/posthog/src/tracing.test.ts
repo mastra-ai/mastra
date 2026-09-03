@@ -1,5 +1,5 @@
-import type { AnyExportedSpan, ExportedFeedback, FeedbackEvent } from '@mastra/core/observability';
-import { SpanType, TracingEventType } from '@mastra/core/observability';
+import type { AnyExportedSpan, ExportedFeedback, FeedbackEvent } from '@internal/observability';
+import { SpanType, TracingEventType } from '@internal/observability';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 import type { PosthogExporterConfig } from './tracing';

@@ -1,7 +1,7 @@
 import type { Mutable } from '@arizeai/openinference-genai/types';
 import { SemanticConventions } from '@arizeai/openinference-semantic-conventions';
-import { SpanType, TracingEventType } from '@mastra/core/observability';
-import type { AnyExportedSpan } from '@mastra/core/observability';
+import type { TracingEventType,AnyExportedSpan } from '@internal/observability';
+import { SpanType } from '@mastra/observability';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { ArizeExporter } from './tracing';
 

@@ -11,9 +11,9 @@ export default defineConfig({
   treeshake: true,
   sourcemap: true,
   deps: {
-    alwaysBundle: ['@internal/ai-sdk-v4', '@internal/ai-sdk-v5', '@internal/ai-v6'],
+    alwaysBundle: ['@internal/ai-sdk-v4', '@internal/ai-sdk-v5', '@internal/ai-v6', '@internal/observability'],
   },
   onSuccess: async () => {
-    await generateTypes(process.cwd(), new Set(['@internal/ai-sdk-v4', '@internal/ai-sdk-v5']));
+    await generateTypes(process.cwd(), new Set(['@internal/ai-sdk-v4', '@internal/ai-sdk-v5', '@internal/observability']));
   },
 });

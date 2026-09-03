@@ -2,18 +2,8 @@
  * Unit tests for ObservabilityBus - type-based event routing to exporters.
  */
 
-import { SpanType, TracingEventType } from '@mastra/core/observability';
-import type {
-  ObservabilityExporter,
-  ObservabilityBridge,
-  TracingEvent,
-  LogEvent,
-  MetricEvent,
-  ScoreEvent,
-  FeedbackEvent,
-  AnyExportedSpan,
-  ObservabilityDropEvent,
-} from '@mastra/core/observability';
+import { SpanType, TracingEventType } from '@internal/observability';
+import type { ObservabilityExporter, ObservabilityBridge, TracingEvent, LogEvent, MetricEvent, ScoreEvent, FeedbackEvent, AnyExportedSpan, ObservabilityDropEvent } from '@internal/observability';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { ObservabilityBus } from './observability-bus';
 

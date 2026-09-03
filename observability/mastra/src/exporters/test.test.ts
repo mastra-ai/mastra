@@ -2,19 +2,8 @@ import { existsSync } from 'node:fs';
 import { unlink } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { SpanType, TracingEventType } from '@mastra/core/observability';
-import type {
-  AnyExportedSpan,
-  TracingEvent,
-  LogEvent,
-  MetricEvent,
-  ScoreEvent,
-  FeedbackEvent,
-  ExportedLog,
-  ExportedMetric,
-  ExportedScore,
-  ExportedFeedback,
-} from '@mastra/core/observability';
+import { TracingEventType,SpanType } from '@internal/observability';
+import type { AnyExportedSpan, TracingEvent, LogEvent, MetricEvent, ScoreEvent, FeedbackEvent, ExportedLog, ExportedMetric, ExportedScore, ExportedFeedback } from '@internal/observability';
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { TestExporter } from './test';
 

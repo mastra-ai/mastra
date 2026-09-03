@@ -1,5 +1,5 @@
-import { SpanType } from '@mastra/core/observability';
-import type { AnySpan, ObservabilityEvent, ObservabilityInstance } from '@mastra/core/observability';
+import { SpanType } from '@internal/observability';
+import type { AnySpan, ObservabilityEvent, ObservabilityInstance } from '@internal/observability';
 import { describe, expect, it, vi } from 'vitest';
 
 import { BaseObservabilityInstance } from '../instances/base';

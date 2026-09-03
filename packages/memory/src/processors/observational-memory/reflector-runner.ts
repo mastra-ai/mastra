@@ -3,7 +3,7 @@ import type { MessageList } from '@mastra/core/agent';
 import type { Mastra } from '@mastra/core/mastra';
 import { getThreadOMMetadata, setThreadOMMetadata } from '@mastra/core/memory';
 import type { MastraMemory } from '@mastra/core/memory';
-import type { ObservabilityContext } from '@mastra/core/observability';
+import type { ObservabilityContext } from '@internal/observability';
 import type { ProcessorContext, ProcessorStreamWriter } from '@mastra/core/processors';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { MemoryStorage, ObservationalMemoryRecord } from '@mastra/core/storage';

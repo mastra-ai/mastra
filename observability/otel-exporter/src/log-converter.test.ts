@@ -1,4 +1,4 @@
-import type { ExportedLog } from '@mastra/core/observability';
+import type { ExportedLog } from '@internal/observability';
 import { SeverityNumber } from '@opentelemetry/api-logs';
 import { describe, it, expect } from 'vitest';
 

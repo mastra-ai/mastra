@@ -1,4 +1,5 @@
-import type { ClickHouseClient } from '@clickhouse/client';
+import type {
+  ClickHouseClient } from '@clickhouse/client';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type { IMastraLogger } from '@mastra/core/logger';
 import { createStorageErrorId } from '@mastra/core/storage';

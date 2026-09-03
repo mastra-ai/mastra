@@ -1,6 +1,11 @@
-import { randomUUID } from 'node:crypto';
-import { SpanType, EntityType } from '@mastra/core/observability';
-import type { CreateFeedbackRecord, CreateSpanRecord, SpanRecord } from '@mastra/core/storage';
+import {
+  randomUUID } from 'node:crypto';
+import { SpanType,
+  EntityType } from '@internal/observability';
+import type { CreateFeedbackRecord,
+  CreateSpanRecord,
+  SpanRecord,
+} from '@internal/observability/storage';
 
 /**
  * Default base date for testing - can be overridden

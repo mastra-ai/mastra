@@ -1,4 +1,4 @@
-import type { UsageStats } from '@mastra/core/observability';
+import type { UsageStats } from '@internal/observability';
 import { TokenMetrics } from './types';
 
 export interface TokenMetricSample {

@@ -1,23 +1,11 @@
+import type { CorrelationContext, ConfigSelector, ConfigSelectorOptions, FeedbackInput, FeedbackEvent, ObservabilityEntrypoint, ObservabilityDropEvent, ObservabilityInstance, RecordedTrace, ScoreInput, ScoreEvent,ClientObservabilityProxy } from '@internal/observability';
+import type { GetTraceResponse } from '@internal/observability/storage';
 import type { Mastra } from '@mastra/core';
 import { MastraBase } from '@mastra/core/base';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { RegisteredLogger } from '@mastra/core/logger';
 import type { IMastraLogger } from '@mastra/core/logger';
-import type {
-  ClientObservabilityProxy,
-  CorrelationContext,
-  ConfigSelector,
-  ConfigSelectorOptions,
-  FeedbackInput,
-  FeedbackEvent,
-  ObservabilityEntrypoint,
-  ObservabilityDropEvent,
-  ObservabilityInstance,
-  RecordedTrace,
-  ScoreInput,
-  ScoreEvent,
-} from '@mastra/core/observability';
-import type { GetTraceResponse, ObservabilityStorage } from '@mastra/core/storage';
+import type { ObservabilityStorage } from '@mastra/core/storage';
 import { routeToHandler } from './bus/route-event';
 import { createClientObservabilityProxy } from './client';
 import { SamplingStrategyType, observabilityRegistryConfigSchema, observabilityConfigValueSchema } from './config';

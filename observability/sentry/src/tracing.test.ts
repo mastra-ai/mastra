@@ -8,8 +8,8 @@
  * - Error handling
  */
 
-import type { TracingEvent, AnyExportedSpan, ToolCallAttributes } from '@mastra/core/observability';
-import { SpanType, TracingEventType } from '@mastra/core/observability';
+import type { TracingEvent, AnyExportedSpan, ToolCallAttributes } from '@internal/observability';
+import { SpanType, TracingEventType } from '@internal/observability';
 import * as Sentry from '@sentry/node';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { SentryExporter } from './tracing';

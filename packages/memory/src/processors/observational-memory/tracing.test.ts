@@ -1,4 +1,4 @@
-import type { ObservabilityContext } from '@mastra/core/observability';
+import type { ObservabilityContext } from '@internal/observability';
 import { describe, expect, it, vi } from 'vitest';
 
 import { withOmTracingSpan } from './tracing';

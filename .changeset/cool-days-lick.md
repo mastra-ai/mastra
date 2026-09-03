@@ -3,4 +3,4 @@
 '@mastra/core': patch
 ---
 
-Improved internal observability packaging by preserving existing `@mastra/core/observability` and `@mastra/core/storage` imports while making embedded observability contracts and no-op detection safe across independently bundled package copies.
+Improved observability storage and exporter compatibility by preserving existing `@mastra/core/observability` and `@mastra/core/storage` APIs while sharing schemas, utilities, and cross-bundle-safe contracts internally.

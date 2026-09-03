@@ -11,9 +11,9 @@ export default defineConfig({
   treeshake: true,
   sourcemap: true,
   deps: {
-    alwaysBundle: ['@mastra/schema-compat'],
+    alwaysBundle: ['@internal/observability', '@mastra/schema-compat'],
   },
   onSuccess: async () => {
-    await generateTypes(process.cwd(), new Set(['hono', 'hono-mcp-server-sse-transport']));
+    await generateTypes(process.cwd(), new Set(['@internal/observability', 'hono', 'hono-mcp-server-sse-transport']));
   },
 });

@@ -1,4 +1,4 @@
-import type { CostContext, UsageStats } from '@mastra/core/observability';
+import type { CostContext, UsageStats } from '@internal/observability';
 import type { PricingTier, PricingModel } from './pricing-model';
 import { PricingRegistry } from './pricing-registry';
 import { TokenMetrics, PricingMeter } from './types';

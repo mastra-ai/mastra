@@ -10,8 +10,8 @@
  * - Shutdown behavior
  */
 
-import type { TracingEvent, AnyExportedSpan, SpanErrorInfo } from '@mastra/core/observability';
-import { SpanType } from '@mastra/core/observability';
+import type { TracingEvent, AnyExportedSpan, SpanErrorInfo } from '@internal/observability';
+import { SpanType } from '@internal/observability';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { TrackingExporter } from './tracking';
 import type { TraceData, TrackingExporterConfig } from './tracking';

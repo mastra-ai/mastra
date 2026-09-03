@@ -16,8 +16,11 @@ import type {
   AggregationType,
   FeedbackRecord,
   UpdateFeedbackReviewStatusArgs,
-} from '@mastra/core/storage';
-import { feedbackRecordSchema, listFeedbackArgsSchema } from '@mastra/core/storage';
+ } from '@internal/observability/storage';
+import {
+  feedbackRecordSchema,
+  listFeedbackArgsSchema,
+} from '@internal/observability/storage';
 import { parseFieldKey } from '@mastra/core/utils';
 import type { DuckDBConnection } from '../../db/index';
 import { buildWhereClause, buildOrderByClause, buildPaginationClause } from './filters';

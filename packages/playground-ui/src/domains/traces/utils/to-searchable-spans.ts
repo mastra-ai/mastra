@@ -1,4 +1,4 @@
-import type { LightSpanRecord } from '@mastra/core/storage';
+import type { LightSpanRecord } from '@internal/observability/storage';
 import type { SearchableSpan } from '../types';
 import { flattenToSearchText } from './flatten-to-search-text';
 

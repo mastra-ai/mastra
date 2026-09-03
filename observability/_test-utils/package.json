@@ -12,6 +12,7 @@
     "test": "vitest run"
   },
   "devDependencies": {
+    "@internal/observability": "workspace:*",
     "@mastra/core": "workspace:*",
     "@mastra/observability": "workspace:*",
     "@vitest/coverage-v8": "catalog:",

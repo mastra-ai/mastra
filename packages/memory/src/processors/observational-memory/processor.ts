@@ -1,7 +1,7 @@
 import type { MastraDBMessage, MessageList } from '@mastra/core/agent';
 import { parseMemoryRequestContext } from '@mastra/core/memory';
 import type { MemoryRunState } from '@mastra/core/memory';
-import type { ObservabilityContext } from '@mastra/core/observability';
+import type { ObservabilityContext } from '@internal/observability';
 import type { Processor, ProcessInputStepArgs, ProcessOutputResultArgs } from '@mastra/core/processors';
 import type { ObservationalMemoryRecord } from '@mastra/core/storage';
 

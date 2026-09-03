@@ -2,8 +2,8 @@
  * Unit tests for MetricsContextImpl
  */
 
-import type { MetricEvent } from '@mastra/core/observability';
-import { EntityType } from '@mastra/core/observability';
+import type { MetricEvent } from '@internal/observability';
+import { EntityType } from '@internal/observability';
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { ObservabilityBus } from '../bus';
 import { CardinalityFilter } from '../metrics/cardinality';

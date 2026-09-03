@@ -1,4 +1,4 @@
-import { createObservabilityContext } from '@mastra/core/observability';
+import { createObservabilityContext } from '@internal/observability';
 import { createTool } from '@mastra/core/tools';
 import type { MastraEmbeddingModel } from '@mastra/core/vector';
 import { z } from 'zod';

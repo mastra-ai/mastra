@@ -1,36 +1,9 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import {
-  createStorageErrorId,
-  listTracesArgsSchema,
-  ObservabilityStorage,
-  SPAN_SCHEMA,
-  TABLE_SPANS,
-  toTraceSpans,
-  TraceStatus,
-} from '@mastra/core/storage';
+import { listTracesArgsSchema, toTraceSpans, TraceStatus } from '@internal/observability/storage';
+import { createStorageErrorId, ObservabilityStorage, SPAN_SCHEMA, TABLE_SPANS } from '@mastra/core/storage';
 import type {
-  SpanRecord,
-  ListTracesArgs,
-  ListTracesResponse,
-  TracingStorageStrategy,
-  UpdateSpanArgs,
-  BatchDeleteTracesArgs,
-  BatchUpdateSpansArgs,
-  BatchCreateSpansArgs,
-  CreateSpanArgs,
-  GetSpanArgs,
-  GetSpanResponse,
-  GetRootSpanArgs,
-  GetRootSpanResponse,
-  GetTraceArgs,
-  GetTraceResponse,
-  GetTraceLightResponse,
-  LightSpanRecord,
-  PruneOptions,
-  PruneResult,
-  RetentionTablesDescriptor,
-  TableRetentionPolicy,
-} from '@mastra/core/storage';
+  SpanRecord, ListTracesArgs, ListTracesResponse, TracingStorageStrategy, UpdateSpanArgs, BatchDeleteTracesArgs, BatchUpdateSpansArgs, BatchCreateSpansArgs, CreateSpanArgs, GetSpanArgs, GetSpanResponse, GetRootSpanArgs, GetRootSpanResponse, GetTraceArgs, GetTraceResponse, GetTraceLightResponse, LightSpanRecord  } from '@internal/observability/storage';
+import type { PruneOptions, PruneResult, RetentionTablesDescriptor, TableRetentionPolicy } from '@mastra/core/storage';
 import { parseSqlIdentifier } from '@mastra/core/utils';
 import { LibSQLDB, resolveClient } from '../../db';
 import type { LibSQLDomainConfig } from '../../db';

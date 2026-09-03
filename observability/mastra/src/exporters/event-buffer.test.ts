@@ -1,13 +1,6 @@
-import { SpanType, TracingEventType } from '@mastra/core/observability';
-import type {
-  TracingEvent,
-  AnyExportedSpan,
-  MetricEvent,
-  LogEvent,
-  ScoreEvent,
-  FeedbackEvent,
-} from '@mastra/core/observability';
-import type { CreateSpanRecord } from '@mastra/core/storage';
+import { SpanType, TracingEventType } from '@internal/observability';
+import type { TracingEvent, AnyExportedSpan, MetricEvent, LogEvent, ScoreEvent, FeedbackEvent } from '@internal/observability';
+import type { CreateSpanRecord } from '@internal/observability/storage';
 import { describe, it, expect } from 'vitest';
 import { EventBuffer } from './event-buffer';
 

@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
-import { EntityType } from '@mastra/core/observability';
-import { TraceStatus } from '@mastra/core/storage';
+import { EntityType } from '@internal/observability';
+import { TraceStatus } from '@internal/observability/storage';
 import { cleanup, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
 

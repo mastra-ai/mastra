@@ -1,10 +1,5 @@
-import { SpanType } from '@mastra/core/observability';
-import type {
-  AnyExportedSpan,
-  ModelGenerationAttributes,
-  RagEmbeddingAttributes,
-  UsageStats,
-} from '@mastra/core/observability';
+import { SpanType } from '@internal/observability';
+import type { AnyExportedSpan, ModelGenerationAttributes, RagEmbeddingAttributes, UsageStats } from '@internal/observability';
 import { describe, it, expect } from 'vitest';
 import { MODEL_TOKENS } from '../../../docs/src/plugins/remark-model-tokens/models';
 import { getAttributes, formatUsageMetrics } from './gen-ai-semantics';

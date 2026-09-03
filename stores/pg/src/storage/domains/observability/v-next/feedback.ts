@@ -7,7 +7,8 @@
  */
 
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import { listFeedbackArgsSchema } from '@mastra/core/storage';
+import { listFeedbackArgsSchema,
+ } from '@internal/observability/storage';
 import type {
   BatchCreateFeedbackArgs,
   CreateFeedbackArgs,
@@ -23,7 +24,7 @@ import type {
   ListFeedbackArgs,
   ListFeedbackResponse,
   UpdateFeedbackReviewStatusArgs,
-} from '@mastra/core/storage';
+} from '@internal/observability/storage';
 
 import type { DbClient } from '../../../client';
 import { qualifiedTable, TABLE_FEEDBACK_EVENTS } from './ddl';

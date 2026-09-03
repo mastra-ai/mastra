@@ -22,7 +22,7 @@ import {
   type MetricRecord,
   type ScoreRecord,
   type SpanRecord,
-} from '@mastra/core/storage';
+} from '@internal/observability/storage';
 import { coerceFeedbackReviewStatus } from './review-status';
 
 const PROMOTED_KEYS = new Set([

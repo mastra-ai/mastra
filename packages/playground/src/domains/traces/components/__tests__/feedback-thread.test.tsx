@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import type { ListFeedbackResponse } from '@mastra/core/storage';
+import type { ListFeedbackResponse } from '@internal/observability/storage';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 

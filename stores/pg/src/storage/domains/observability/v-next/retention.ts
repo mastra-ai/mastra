@@ -26,7 +26,8 @@
  */
 
 import { parseDuration } from '@mastra/core/storage';
-import type { PruneOptions, TableRetentionPolicy } from '@mastra/core/storage';
+import type {
+  PruneOptions, TableRetentionPolicy } from '@mastra/core/storage';
 
 import type { DbClient } from '../../../client';
 import { qualifiedName, qualifiedTable } from './ddl';

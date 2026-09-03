@@ -18,7 +18,7 @@ import type {
   BatchCreateSpansArgs,
   BatchDeleteTracesArgs,
   SpanRecord,
-} from '@mastra/core/storage';
+} from '@internal/observability/storage';
 import {
   BRANCH_SPAN_TYPES,
   buildInputPreview,
@@ -26,7 +26,7 @@ import {
   listBranchesArgsSchema,
   listTracesArgsSchema,
   toTraceSpans,
-} from '@mastra/core/storage';
+} from '@internal/observability/storage';
 import type { DuckDBConnection } from '../../db/index';
 import { buildWhereClause, buildOrderByClause, buildPaginationClause } from './filters';
 import { v, jsonV, parseJson, parseJsonArray, toDate, toDateOrNull } from './helpers';

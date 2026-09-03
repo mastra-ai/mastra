@@ -1,12 +1,5 @@
-import type {
-  AnyExportedSpan,
-  ExportedFeedback,
-  FeedbackEvent,
-  ModelGenerationAttributes,
-  SpanErrorInfo,
-  UsageStats,
-} from '@mastra/core/observability';
-import { SpanType } from '@mastra/core/observability';
+import type { AnyExportedSpan, ExportedFeedback, FeedbackEvent, ModelGenerationAttributes, SpanErrorInfo, UsageStats } from '@internal/observability';
+import { SpanType } from '@internal/observability';
 import type { TraceData, TrackingExporterConfig } from '@mastra/observability';
 import { TrackingExporter } from '@mastra/observability';
 import { PostHog } from 'posthog-node';

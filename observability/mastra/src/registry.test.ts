@@ -1,12 +1,6 @@
+import { SpanType, SamplingStrategyType, TracingEventType } from '@internal/observability';
+import type { Span, CreateSpanOptions, ConfigSelector, ConfigSelectorOptions, ObservabilityInstanceConfig } from '@internal/observability';
 import { ConsoleLogger, LogLevel } from '@mastra/core/logger';
-import { SpanType, SamplingStrategyType, TracingEventType } from '@mastra/core/observability';
-import type {
-  Span,
-  CreateSpanOptions,
-  ConfigSelector,
-  ConfigSelectorOptions,
-  ObservabilityInstanceConfig,
-} from '@mastra/core/observability';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Observability } from './default';
 import { MastraPlatformExporter, MastraStorageExporter, TestExporter } from './exporters';

@@ -1,5 +1,7 @@
-import type { ClickHouseClient } from '@clickhouse/client';
-import { listScoresArgsSchema } from '@mastra/core/storage';
+import type {
+  ClickHouseClient } from '@clickhouse/client';
+import { listScoresArgsSchema,
+} from '@internal/observability/storage';
 import type {
   AggregationInterval,
   AggregationType,
@@ -16,7 +18,7 @@ import type {
   GetScoreTimeSeriesResponse,
   GetScorePercentilesArgs,
   GetScorePercentilesResponse,
-} from '@mastra/core/storage';
+} from '@internal/observability/storage';
 import { parseFieldKey } from '@mastra/core/utils';
 
 import { TABLE_SCORE_EVENTS, TABLE_SCORE_EVENTS_DELTA } from './ddl';

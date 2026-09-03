@@ -10,11 +10,14 @@
  * Requires a running ClickHouse instance. Use `docker compose up -d` in the
  * clickhouse store directory, or set CLICKHOUSE_URL/CLICKHOUSE_USERNAME/CLICKHOUSE_PASSWORD.
  */
-import { createClient } from '@clickhouse/client';
+import type {
+  createClient } from '@clickhouse/client';
 import { createObservabilityVNextTests } from '@internal/storage-test-utils';
 import { coreFeatures } from '@mastra/core/features';
-import { EntityType, SpanType } from '@mastra/core/observability';
-import type { ObservabilityStorage } from '@mastra/core/storage';
+import { EntityType,
+  SpanType } from '@internal/observability';
+import type { ObservabilityStorage,
+ } from '@internal/observability/storage';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   ALL_MIGRATIONS,

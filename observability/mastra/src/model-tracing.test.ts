@@ -1,8 +1,9 @@
 import { ReadableStream } from 'node:stream/web';
+import type { TracingEvent, ExportedSpan, MetricEvent } from '@internal/observability';
+import { SpanType, SamplingStrategyType, TracingEventType } from '@internal/observability';
 import { coreFeatures } from '@mastra/core/features';
-import type { ObservabilityExporter, TracingEvent, ExportedSpan, MetricEvent } from '@mastra/core/observability';
-import { SpanType, SamplingStrategyType, TracingEventType } from '@mastra/core/observability';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import type { ObservabilityExporter } from '@mastra/observability';
 
 import { DefaultObservabilityInstance } from './instances';
 import { ModelSpanTracker } from './model-tracing';

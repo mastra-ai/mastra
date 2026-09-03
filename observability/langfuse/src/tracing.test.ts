@@ -1,5 +1,5 @@
-import { SpanType, TracingEventType } from '@mastra/core/observability';
-import type { AnyExportedSpan } from '@mastra/core/observability';
+import { SpanType, TracingEventType } from '@internal/observability';
+import type { AnyExportedSpan } from '@internal/observability';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { LangfuseExporter, LANGFUSE_DEFAULT_BASE_URL } from './tracing';
 

@@ -5,7 +5,9 @@
  * aggregate, breakdown, time series, and percentiles.
  */
 
-import { listScoresArgsSchema } from '@mastra/core/storage';
+import {
+  listScoresArgsSchema,
+} from '@internal/observability/storage';
 import type {
   BatchCreateScoresArgs,
   CreateScoreArgs,
@@ -20,7 +22,7 @@ import type {
   ListScoresArgs,
   ListScoresResponse,
   ScoreRecord,
-} from '@mastra/core/storage';
+} from '@internal/observability/storage';
 
 import type { DbClient } from '../../../client';
 import { qualifiedTable, TABLE_SCORE_EVENTS } from './ddl';

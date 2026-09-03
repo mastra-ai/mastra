@@ -1,4 +1,4 @@
-import type { InitExporterOptions } from '@mastra/core/observability';
+import type { InitExporterOptions } from '@internal/observability';
 import { OtelExporter } from '@mastra/otel-exporter';
 import type { OtelExporterConfig } from '@mastra/otel-exporter';
 

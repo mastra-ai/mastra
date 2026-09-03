@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { EntityType } from '@mastra/core/observability';
+import { EntityType } from '@internal/observability';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, renderHook, waitFor } from '@testing-library/react';

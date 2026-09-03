@@ -4,8 +4,8 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import type { TracingEvent } from '@mastra/core/observability';
-import { SpanType, TracingEventType } from '@mastra/core/observability';
+import type { TracingEvent } from '@mastra/observability';
+import { SpanType, TracingEventType } from '@internal/observability';
 import { generateTrace, reverseHierarchyOrder, sendWithDelays } from './trace-generator';
 
 /**

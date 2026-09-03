@@ -1,7 +1,9 @@
-import { randomUUID } from 'node:crypto';
+import type {
+  randomUUID } from 'node:crypto';
 import { coreFeatures } from '@mastra/core/features';
-import { SpanType } from '@mastra/core/observability';
-import { TraceStatus } from '@mastra/core/storage';
+import { SpanType } from '@internal/observability';
+import { TraceStatus,
+ } from '@internal/observability/storage';
 import { Pool } from 'pg';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 

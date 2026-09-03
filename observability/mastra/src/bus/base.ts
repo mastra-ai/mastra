@@ -11,9 +11,9 @@
  * own their own batching strategy.
  */
 
+import type { ObservabilityEventBus } from '@internal/observability';
 import { MastraBase } from '@mastra/core/base';
 import { RegisteredLogger } from '@mastra/core/logger';
-import type { ObservabilityEventBus } from '@mastra/core/observability';
 
 export class BaseObservabilityEventBus<TEvent> extends MastraBase implements ObservabilityEventBus<TEvent> {
   private subscribers: Set<(event: TEvent) => void> = new Set();

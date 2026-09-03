@@ -2,7 +2,7 @@
  * Convert Mastra ExportedLog to OpenTelemetry LogRecord format
  */
 
-import type { ExportedLog, LogLevel } from '@mastra/core/observability';
+import type { ExportedLog, LogLevel } from '@internal/observability';
 import type { HrTime } from '@opentelemetry/api';
 import type { LogAttributes } from '@opentelemetry/api-logs';
 import { SeverityNumber } from '@opentelemetry/api-logs';

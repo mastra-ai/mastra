@@ -1,5 +1,5 @@
-import { SpanType, TracingEventType } from '@mastra/core/observability';
-import type { AnyExportedSpan, TracingEvent } from '@mastra/core/observability';
+import { SpanType, TracingEventType } from '@internal/observability';
+import type { AnyExportedSpan, TracingEvent } from '@internal/observability';
 import { BaseExporter } from '@mastra/observability';
 import { describe, expect, it, vi } from 'vitest';
 

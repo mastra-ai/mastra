@@ -1,6 +1,6 @@
+import { SpanType } from '@internal/observability';
+import type { SpanRecord } from '@internal/observability/storage';
 import type { MastraDBMessage, MastraMessagePart } from '@mastra/core/agent/message-list';
-import { SpanType } from '@mastra/core/observability';
-import type { SpanRecord } from '@mastra/core/storage';
 import { formatHierarchicalSpans } from '@mastra/playground-ui/domains/traces/components/format-hierarchical-spans';
 import type { UISpan } from '@mastra/playground-ui/domains/traces/types';
 

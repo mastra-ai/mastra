@@ -1,4 +1,4 @@
-import type { SpanRecord } from '@mastra/core/storage';
+import type { SpanRecord } from '@internal/observability/storage';
 import { format } from 'date-fns';
 
 type MessageLike = { role?: string; content?: unknown };

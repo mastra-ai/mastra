@@ -3,8 +3,8 @@
  */
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { SpanType } from '@mastra/core/observability';
-import type { AnyExportedSpan } from '@mastra/core/observability';
+import { SpanType } from '@mastra/observability';
+import type { AnyExportedSpan } from '@internal/observability';
 import { SpanKind, SpanStatusCode, TraceFlags } from '@opentelemetry/api';
 import type { HrTime, Link, SpanContext, SpanStatus } from '@opentelemetry/api';
 import type { InstrumentationScope } from '@opentelemetry/core';
