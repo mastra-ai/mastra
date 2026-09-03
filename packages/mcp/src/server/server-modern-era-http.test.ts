@@ -280,6 +280,51 @@ describe('MCPServer with protocolVersion 2026-07-28 (dual-era HTTP)', () => {
     expect(wireMethods).not.toContain('resources/unsubscribe');
   });
 
+  it('serializes concurrent subscription mutations and replays only the final filter after reconnect', async () => {
+    const wireMethods: string[] = [];
+    const client = new InternalMastraMCPClient({
+      name: 'concurrent-resource-listen-client',
+      server: {
+        url: baseUrl,
+        protocolVersion: '2026-07-28',
+        fetch: async (url, init) => {
+          if (typeof init?.body === 'string') {
+            const message = JSON.parse(init.body) as { method?: string };
+            if (message.method) wireMethods.push(message.method);
+          }
+          return fetch(url, init);
+        },
+      },
+    });
+    const uris = Array.from({ length: 12 }, (_, index) => `test://concurrent/${index}`);
+    const retainedUris = uris.filter((_, index) => index % 2 === 1);
+    const removedUris = uris.filter((_, index) => index % 2 === 0);
+    const updatedUris: string[] = [];
+    client.setResourceUpdatedNotificationHandler(params => updatedUris.push(params.uri));
+
+    await client.connect();
+    try {
+      await Promise.all(uris.map(uri => client.subscribeResource(uri)));
+      await Promise.all(removedUris.map(uri => client.unsubscribeResource(uri)));
+      await client.forceReconnect();
+
+      await server.resources.notifyUpdated({ uri: removedUris[0]! });
+      await new Promise(resolve => setTimeout(resolve, 100));
+      expect(updatedUris).not.toContain(removedUris[0]);
+
+      await server.resources.notifyUpdated({ uri: retainedUris[0]! });
+      await vi.waitFor(() => expect(updatedUris).toContain(retainedUris[0]));
+    } finally {
+      await client.disconnect();
+    }
+
+    const listenCount = wireMethods.filter(method => method === 'subscriptions/listen').length;
+    expect(listenCount).toBeGreaterThan(0);
+    expect(wireMethods.filter(method => method === 'notifications/cancelled')).toHaveLength(listenCount);
+    expect(wireMethods).not.toContain('resources/subscribe');
+    expect(wireMethods).not.toContain('resources/unsubscribe');
+  });
+
   it('keeps the connection usable when restoring resource subscriptions fails', async () => {
     const client = new InternalMastraMCPClient({
       name: 'resource-listen-restore-failure-client',
