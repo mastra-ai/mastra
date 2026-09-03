@@ -694,6 +694,9 @@ export function createKnowledgeStorageTests(createStore: () => Promise<Knowledge
           item => item.id,
         ),
       ).toContain(duplicateMention.id);
+      await expect(store.listMentioningRecords({ node: source, scopeIds: [PROJECT_SCOPE_ID] })).resolves.toMatchObject({
+        records: [],
+      });
       const movedDeleted = await store.getRecord({ id: deletedRecord.id, includeDeleted: true });
       expect(movedDeleted).toMatchObject({ nodeId: target.id, version: deleted.version + 1 });
       if (!movedDeleted) throw new Error('Expected merged deleted record');
