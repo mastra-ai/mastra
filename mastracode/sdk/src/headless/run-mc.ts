@@ -43,7 +43,7 @@ interface MutableResult {
 function aggregate(event: AgentControllerEvent, acc: MutableResult): void {
   switch (event.type) {
     case 'message_update':
-      acc.text += event.event.delta;
+      if (event.event.type === 'text-delta') acc.text += event.event.delta;
       break;
     case 'tool_start':
       acc.toolCalls.push({ id: event.toolCallId, name: event.toolName, args: event.args });
