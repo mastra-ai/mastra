@@ -1,15 +1,17 @@
 ---
 title: "Agent lifecycle"
-description: "Understand agent execution order, processor callback timing, and when RequestContext changes become visible to dynamic configuration, tools, and the agent loop."
+description: "Follow an agent run from initial preparation to final response, including processor timing and how RequestContext values flow through each phase."
 packages:
   - "@mastra/core"
 ---
 
 # Agent lifecycle
 
-An agent run starts before the first model call. Initial setup covers request context validation and dynamic configuration. Mastra prepares the input and tools before entering the model loop. Finalization begins after the loop stops.
+The agent lifecycle describes what happens during an agent run. A run begins when you call `generate()` or `stream()` and ends after Mastra produces the final result. Mastra prepares the agent before calling the model. If the model requests a tool, Mastra runs it and may call the model again. This repeats until the run is complete.
 
-If validation, dynamic models, instructions, tools, skills, processor factories, or workspace configuration need a value, establish it in server middleware or immediately before calling `agent.generate()` or `agent.stream()`. Don't rely on `processInput` as universal setup middleware: some preparation has already completed, while regular tool preparation can run in parallel with it.
+Preparation, the model loop, and finalization form the three main phases described here. [Processor callbacks](/docs/agents/processors) can inspect or change the run within each phase. The timing also determines which parts of the run can use values from [`RequestContext`](/docs/server/request-context).
+
+Use this lifecycle as a mental model when you customize or debug an agent. The overview below shows the complete run before the following sections examine each phase in detail.
 
 ## Lifecycle overview
 
@@ -27,7 +29,7 @@ flowchart LR
   tools --> model
 ```
 
-The diagram shows stable conceptual phases rather than internal workflow steps. Some preparation is concurrent, and durable execution places work across persistence boundaries differently from a regular in-process run.
+The diagram shows the main phases, not internal workflow steps. Mastra may prepare tools while it prepares the input and memory. Durable runs can save and restore their state. Regular runs continue in the current process.
 
 ## Before the loop
 
