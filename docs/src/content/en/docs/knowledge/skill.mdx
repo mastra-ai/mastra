@@ -19,7 +19,7 @@ Projects created by `create-mastra` install the official skill by default. Pass 
 
 ## Package-local source
 
-The authoritative Knowledge skill source ships with `@mastra/core` under `dist/knowledge/skill/`. Coding agents can read `SKILL.md` there and follow its progressive-disclosure references without network access.
+The authoritative Knowledge skill source is included with `@mastra/core` under `dist/knowledge/skill/`. Coding agents can read `SKILL.md` there and follow its progressive-disclosure references without network access.
 
 The public `mastra-ai/skills` copy is generated from that package source during a release-gated sync. Its header records the exact Mastra source commit, commit date, source path, and source-content hash. The sync check fails when the public copy, skill link, or repository link drifts from the generated output.
 
