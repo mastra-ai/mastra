@@ -9,6 +9,7 @@ import type { ParsedRequestParams, ServerRoute } from '@mastra/server/server-ada
 import {
   MastraServer as MastraServerBase,
   checkRouteFGA,
+  getCustomHTTPExceptionResponse,
   isZodError,
   normalizeQueryParams,
   redactStreamChunk,
@@ -418,27 +419,32 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
     // Default prefix to this.prefix if not provided, or empty string
     const prefix = prefixParam ?? this.prefix ?? '';
 
-    // Determine if body limits should be applied
-    const shouldApplyBodyLimit =
-      this.bodyLimitOptions && ['POST', 'PUT', 'PATCH', 'DELETE'].includes(route.method.toUpperCase());
-
-    // Get the body size limit for this route (route-specific or default)
     const maxSize = route.maxBodySize ?? this.bodyLimitOptions?.maxSize;
+    const isBodyMethod = ['POST', 'PUT', 'PATCH', 'DELETE'].includes(route.method.toUpperCase());
 
     // Create middleware array
     const middlewares: Array<(req: Request, res: Response, next: NextFunction) => void> = [];
 
     // Add body limit middleware if needed
-    if (shouldApplyBodyLimit && maxSize && this.bodyLimitOptions) {
+    if (isBodyMethod && maxSize !== undefined) {
       const bodyLimitMiddleware = (req: Request, res: Response, next: NextFunction) => {
         const contentLength = req.headers['content-length'];
-        if (contentLength && parseInt(contentLength, 10) > maxSize) {
-          try {
-            const errorResponse = this.bodyLimitOptions!.onError({ error: 'Request body too large' });
-            return res.status(413).json(errorResponse);
-          } catch {
-            return res.status(413).json({ error: 'Request body too large' });
+        // A host-level parser may run before this route middleware, so this is a
+        // post-parse safeguard when Content-Length is unavailable.
+        const parsedLength =
+          contentLength === undefined && req.body !== undefined
+            ? Buffer.byteLength(JSON.stringify(req.body), 'utf8')
+            : 0;
+        if ((contentLength && parseInt(contentLength, 10) > maxSize) || parsedLength > maxSize) {
+          let errorResponse: unknown = { error: 'Request body too large' };
+          if (route.maxBodySize === undefined && this.bodyLimitOptions) {
+            try {
+              errorResponse = this.bodyLimitOptions.onError(errorResponse);
+            } catch {
+              // Fall back to the default response.
+            }
           }
+          return res.status(413).json(errorResponse);
         }
         next();
       };
@@ -596,6 +602,13 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
               method: route.method,
             });
           }
+          const customResponse = getCustomHTTPExceptionResponse(error);
+          if (customResponse) {
+            customResponse.headers.forEach((value, name) => res.setHeader(name, value));
+            res.status(customResponse.status).end(Buffer.from(await customResponse.arrayBuffer()));
+            return;
+          }
+
           // Check if it's an HTTPException or MastraError with a status code
           let status = 500;
           if (error && typeof error === 'object') {
