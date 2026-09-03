@@ -302,67 +302,65 @@ export function TraceDataPanelView({
           ) : !spans?.length ? (
             <DataPanel.NoData>No spans found for this trace.</DataPanel.NoData>
           ) : (
-            <DataPanel.Content>
-              {(() => {
-                const detailsBody = (
-                  <>
-                    {!isOnTracePage &&
-                      !onEvaluateTrace &&
-                      !onSaveAsDatasetItem &&
-                      !onAddTraceMocksToItem &&
-                      showUnavailableFeaturesMsg && (
-                        <Notice variant="info" className="mb-6">
-                          <Notice.Message>
-                            Evaluating traces and saving them as dataset items is available in Mastra Studio (local or
-                            deployed).
-                          </Notice.Message>
-                        </Notice>
-                      )}
+            (() => {
+              const detailsBody = (
+                <DataPanel.Content>
+                  {!isOnTracePage &&
+                    !onEvaluateTrace &&
+                    !onSaveAsDatasetItem &&
+                    !onAddTraceMocksToItem &&
+                    showUnavailableFeaturesMsg && (
+                      <Notice variant="info" className="mb-6">
+                        <Notice.Message>
+                          Evaluating traces and saving them as dataset items is available in Mastra Studio (local or
+                          deployed).
+                        </Notice.Message>
+                      </Notice>
+                    )}
 
-                    {/* The timeline stays mounted even with no results, because it
+                  {/* The timeline stays mounted even with no results, because it
                         hosts the search field: unmounting it would strand the user
                         with a query they can no longer clear. */}
-                    <TraceTimeline
-                      hierarchicalSpans={hierarchicalSpans}
-                      onSpanClick={handleSpanClick}
-                      selectedSpanId={selectedSpanId}
-                      expandedSpanIds={expandedSpanIds}
-                      setExpandedSpanIds={setExpandedSpanIds}
-                      chartWidth={timelineChartWidth}
-                      leadingSlot={
-                        <SearchFieldBlock
-                          name={searchFieldName}
-                          label="Search spans"
-                          labelIsHidden
-                          placeholder="Search spans..."
-                          value={query}
-                          onChange={e => setQuery(e.target.value)}
-                          onReset={() => setQuery('')}
-                          size="sm"
-                          variant="outline"
-                          className="w-full"
-                        />
-                      }
-                    />
-
-                    {hierarchicalSpans.length === 0 && <DataPanel.NoData>No spans match your search.</DataPanel.NoData>}
-                  </>
-                );
-
-                // No extra tab slots → render details directly without the Tabs wrapper.
-                if (!scoresTabSlot && !feedbackTabSlot) return detailsBody;
-
-                return (
-                  <Tabs<TraceDataPanelTab>
-                    defaultTab="details"
-                    value={activeTab}
-                    onValueChange={onTabChange}
-                    className={
-                      activeTab === 'scores' || activeTab === 'feedback'
-                        ? 'grid h-full min-h-0 grid-rows-[auto_1fr]'
-                        : undefined
+                  <TraceTimeline
+                    hierarchicalSpans={hierarchicalSpans}
+                    onSpanClick={handleSpanClick}
+                    selectedSpanId={selectedSpanId}
+                    expandedSpanIds={expandedSpanIds}
+                    setExpandedSpanIds={setExpandedSpanIds}
+                    chartWidth={timelineChartWidth}
+                    leadingSlot={
+                      <SearchFieldBlock
+                        name={searchFieldName}
+                        label="Search spans"
+                        labelIsHidden
+                        placeholder="Search spans..."
+                        value={query}
+                        onChange={e => setQuery(e.target.value)}
+                        onReset={() => setQuery('')}
+                        size="sm"
+                        variant="outline"
+                        className="w-full"
+                      />
                     }
-                  >
+                  />
+
+                  {hierarchicalSpans.length === 0 && <DataPanel.NoData>No spans match your search.</DataPanel.NoData>}
+                </DataPanel.Content>
+              );
+
+              // No extra tab slots → render details directly without the Tabs wrapper.
+              if (!scoresTabSlot && !feedbackTabSlot) return detailsBody;
+
+              // The tab list sits in a header row so it lines up with the Messages and
+              // span-detail headers in the neighbouring columns.
+              return (
+                <Tabs<TraceDataPanelTab>
+                  defaultTab="details"
+                  value={activeTab}
+                  onValueChange={onTabChange}
+                  className="grid h-full min-h-0 grid-rows-[auto_1fr]"
+                >
+                  <DataPanel.Header>
                     <TabList variant="pill-ghost" className="px-0">
                       <Tab value="details">Spans</Tab>
                       {feedbackTabSlot && (
@@ -372,22 +370,24 @@ export function TraceDataPanelView({
                         <Tab value="scores">Scores{scoresTabBadge != null && <> ({scoresTabBadge})</>}</Tab>
                       )}
                     </TabList>
+                  </DataPanel.Header>
 
-                    <TabContent value="details">{detailsBody}</TabContent>
-                    {feedbackTabSlot && (
-                      <TabContent value="feedback" className="h-full min-h-0">
-                        {feedbackTabSlot({ traceId })}
-                      </TabContent>
-                    )}
-                    {scoresTabSlot && (
-                      <TabContent value="scores" className="h-full min-h-0">
-                        {scoresTabSlot({ traceId, rootSpanId: rootSpan?.spanId })}
-                      </TabContent>
-                    )}
-                  </Tabs>
-                );
-              })()}
-            </DataPanel.Content>
+                  <TabContent value="details" className="min-h-0 py-0">
+                    {detailsBody}
+                  </TabContent>
+                  {feedbackTabSlot && (
+                    <TabContent value="feedback" className="h-full min-h-0 py-0">
+                      <DataPanel.Content>{feedbackTabSlot({ traceId })}</DataPanel.Content>
+                    </TabContent>
+                  )}
+                  {scoresTabSlot && (
+                    <TabContent value="scores" className="h-full min-h-0 py-0">
+                      <DataPanel.Content>{scoresTabSlot({ traceId, rootSpanId: rootSpan?.spanId })}</DataPanel.Content>
+                    </TabContent>
+                  )}
+                </Tabs>
+              );
+            })()
           )}
         </TracePanelColumns>
       )}
