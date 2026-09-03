@@ -83,6 +83,7 @@ const reportedOrgUnresolved = new Set<string>();
 function reportOrgUnresolved(
   controller: AgentControllerRequestContext<MastraCodeState> | undefined,
   factoryProjectId: string | undefined,
+  reason?: string,
 ) {
   const sessionId = controller?.session?.id;
   if (sessionId) {
@@ -94,7 +95,7 @@ function reportOrgUnresolved(
   }
   const session = controller?.session;
   console.error(
-    `[Subconscious] Knowledge curation disabled: no organization resolved for session ${session?.id ?? 'unknown'} (project ${factoryProjectId ?? 'none'}). Knowledge is not written rather than written where it cannot be read.`,
+    `[Subconscious] Knowledge curation disabled: no organization resolved for session ${session?.id ?? 'unknown'} (project ${factoryProjectId ?? 'none'})${reason ? `: ${reason}` : ''}. Knowledge is not written rather than written where it cannot be read.`,
   );
 }
 
@@ -120,9 +121,9 @@ export function getDynamicMemory(
     const factoryProjectId = state?.factoryProjectId;
     const isFactory = typeof factoryProjectId === 'string' && factoryProjectId.trim().length > 0;
 
-    // A Factory-owned session that could not resolve its org refuses to curate:
-    // writing under a substituted identity produces knowledge the fail-closed
-    // read path can never see.
+    // A session that could not resolve its org (Factory seed missing, or the
+    // local machine id unusable) refuses to curate: writing under a substituted
+    // identity produces knowledge the fail-closed read path can never see.
     let orgUnresolvedRefusal = false;
 
     if (subconsciousEnabled) {
@@ -131,7 +132,7 @@ export function getDynamicMemory(
         requestContext.set('organizationId', identity.organizationId);
       } else {
         orgUnresolvedRefusal = true;
-        reportOrgUnresolved(controller, identity.knowledgeResourceId);
+        reportOrgUnresolved(controller, identity.knowledgeResourceId, identity.reason);
       }
       if (identity.knowledgeResourceId) {
         requestContext.set('knowledgeResourceId', identity.knowledgeResourceId);

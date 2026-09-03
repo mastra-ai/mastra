@@ -476,7 +476,9 @@ class ScopedKnowledgeInspector implements KnowledgeInspector {
       this.#invalidateIdnode();
       throw new KnowledgeInspectorError(
         'unavailable',
-        'Knowledge inspection requires a resolved organization for this session.',
+        identity.reason
+          ? `Knowledge inspection unavailable: ${identity.reason}`
+          : 'Knowledge inspection requires a resolved organization for this session.',
       );
     }
     if (!sessionResourceId) {

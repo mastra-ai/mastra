@@ -1,6 +1,6 @@
-import { createHash, randomBytes } from 'node:crypto';
+import { randomBytes } from 'node:crypto';
 import fs from 'node:fs';
-import { homedir, hostname } from 'node:os';
+import { homedir } from 'node:os';
 import path from 'node:path';
 
 import { DEFAULT_CONFIG_DIR } from './constants.js';
@@ -18,58 +18,19 @@ export interface LocalKnowledgeOrgOptions {
 
 const machineIdCache = new Map<string, string>();
 
-function readStoredMachineId(filePath: string): string | undefined {
+export type LocalMachineId = { ok: true; id: string } | { ok: false; reason: string };
+
+function readStoredMachineId(filePath: string): LocalMachineId | undefined {
+  let stored: string;
   try {
-    const stored = fs.readFileSync(filePath, 'utf-8').trim();
-    return MACHINE_ID_PATTERN.test(stored) ? stored : undefined;
-  } catch {
-    return undefined;
+    stored = fs.readFileSync(filePath, 'utf-8').trim();
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return undefined;
+    return { ok: false, reason: `cannot read ${filePath}: ${(error as Error).message}` };
   }
-}
-
-const LOCK_WAIT_MS = 1_000;
-const LOCK_POLL_MS = 20;
-const warnedLocks = new Set<string>();
-
-function sleepSync(ms: number): void {
-  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
-}
-
-/**
- * Run `fn` while holding an exclusive lock directory next to the machine-id
- * file. `mkdirSync` without `recursive` is atomic, so exactly one process at a
- * time reads, validates, and (re)writes the file; nothing is ever raced or
- * overwritten. The critical section is one small synchronous read and write,
- * so locks are never broken: a lock that cannot be taken within LOCK_WAIT_MS
- * throws (caller falls back) and is warned about once, since the only way to
- * leave one behind is a crash inside that section.
- */
-function withMachineIdLock<T>(filePath: string, fn: () => T): T {
-  const lockDir = `${filePath}.lock`;
-  const deadline = Date.now() + LOCK_WAIT_MS;
-  for (;;) {
-    try {
-      fs.mkdirSync(lockDir);
-      break;
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
-      if (Date.now() >= deadline) {
-        if (!warnedLocks.has(lockDir)) {
-          warnedLocks.add(lockDir);
-          console.warn(
-            `[Subconscious] Could not take ${lockDir}; using a temporary hostname-derived knowledge org. Remove the directory if no other mastracode process is starting.`,
-          );
-        }
-        throw new Error(`Timed out waiting for ${lockDir}`);
-      }
-      sleepSync(LOCK_POLL_MS);
-    }
-  }
-  try {
-    return fn();
-  } finally {
-    fs.rmdirSync(lockDir);
-  }
+  return MACHINE_ID_PATTERN.test(stored)
+    ? { ok: true, id: stored }
+    : { ok: false, reason: `${filePath} does not contain a valid machine id; fix or remove it` };
 }
 
 /**
@@ -77,41 +38,44 @@ function withMachineIdLock<T>(filePath: string, fn: () => T): T {
  * `<homeDir>/<configDirName>/machine-id` on first use so that the local
  * knowledge org survives hostname changes (as long as the config dir does).
  *
- * Creation and corrupt-file replacement happen under an exclusive lock (see
- * {@link withMachineIdLock}), so concurrent first runs converge on one id. If
- * the file can neither be read nor written, or the lock cannot be taken, this
- * falls back to a hash of the hostname without persisting or caching it, so a
- * read-only home never blocks curation and a later fix takes effect on the
- * next call.
+ * The file is created with an exclusive open, so concurrent first runs
+ * converge on one id: the loser re-reads what the winner wrote. There is no
+ * fallback identity. If the file cannot be read, is corrupt, or cannot be
+ * created, the result is `ok: false` and the caller refuses to curate or
+ * inspect: knowledge written under a substitute org would be orphaned the
+ * moment the real id resolves. Nothing is cached on failure, so a repaired
+ * file takes effect on the next call. Never blocks or waits.
  */
-export function localMachineId(options: LocalKnowledgeOrgOptions = {}): string {
+export function localMachineId(options: LocalKnowledgeOrgOptions = {}): LocalMachineId {
   const filePath = path.join(
     options.homeDir ?? homedir(),
     options.configDirName ?? DEFAULT_CONFIG_DIR,
     MACHINE_ID_FILE,
   );
   const cached = machineIdCache.get(filePath);
-  if (cached) return cached;
+  if (cached) return { ok: true, id: cached };
 
-  let id = readStoredMachineId(filePath);
-  if (!id) {
+  let result = readStoredMachineId(filePath);
+  if (!result) {
+    const fresh = randomBytes(6).toString('hex');
     try {
       fs.mkdirSync(path.dirname(filePath), { recursive: true });
-      id = withMachineIdLock(filePath, () => {
-        // Re-read under the lock: another process may have just created it.
-        const existing = readStoredMachineId(filePath);
-        if (existing) return existing;
-        const fresh = randomBytes(6).toString('hex');
-        fs.writeFileSync(filePath, `${fresh}\n`, 'utf-8');
-        return fresh;
-      });
-    } catch {
-      return createHash('sha256').update(hostname()).digest('hex').slice(0, 12);
+      fs.writeFileSync(filePath, `${fresh}\n`, { encoding: 'utf-8', flag: 'wx' });
+      result = { ok: true, id: fresh };
+    } catch (error) {
+      result =
+        (error as NodeJS.ErrnoException).code === 'EEXIST'
+          ? // Lost the create race: adopt whatever the winner wrote.
+            (readStoredMachineId(filePath) ?? {
+              ok: false,
+              reason: `${filePath} vanished after another process created it`,
+            })
+          : { ok: false, reason: `cannot create ${filePath}: ${(error as Error).message}` };
     }
   }
 
-  machineIdCache.set(filePath, id);
-  return id;
+  if (result.ok) machineIdCache.set(filePath, result.id);
+  return result;
 }
 
 /**
@@ -124,10 +88,13 @@ export function localMachineId(options: LocalKnowledgeOrgOptions = {}): string {
  * hashes the project path, which would make "org" mean "this checkout" and
  * org-level knowledge would never span projects. Resolving a real org id
  * (config, shared store, login) is future work; when it lands, it replaces this
- * default here.
+ * default here. Throws when the machine id is unavailable; see
+ * {@link resolveKnowledgeScopeIdentity} for the fail-closed form.
  */
 export function localKnowledgeOrgId(options: LocalKnowledgeOrgOptions = {}): string {
-  return `mastracode-${localMachineId(options)}`;
+  const machine = localMachineId(options);
+  if (!machine.ok) throw new Error(`Local knowledge org unavailable: ${machine.reason}`);
+  return `mastracode-${machine.id}`;
 }
 
 export type KnowledgeScopeIdentity =
@@ -137,7 +104,7 @@ export type KnowledgeScopeIdentity =
       /** Set when the resource rung is anchored on something other than the session resource. */
       knowledgeResourceId?: string;
     }
-  | { resolved: false; knowledgeResourceId?: string };
+  | { resolved: false; knowledgeResourceId?: string; reason?: string };
 
 /**
  * The single source of truth for which org/resource rungs a session's knowledge
@@ -175,5 +142,8 @@ export function resolveKnowledgeScopeIdentity(
   if (factoryOwned) {
     return { resolved: false, knowledgeResourceId: isFactory ? factoryProjectId : undefined };
   }
-  return { resolved: true, organizationId: localKnowledgeOrgId(options) };
+  const local = localMachineId(options);
+  return local.ok
+    ? { resolved: true, organizationId: `mastracode-${local.id}` }
+    : { resolved: false, reason: local.reason };
 }

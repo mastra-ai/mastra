@@ -1,6 +1,5 @@
-import { createHash } from 'node:crypto';
 import fs, { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { hostname, tmpdir } from 'node:os';
+import { tmpdir } from 'node:os';
 import path from 'node:path';
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -25,11 +24,13 @@ afterEach(() => {
 describe('localMachineId', () => {
   it('generates a random id on first use and persists it under the config dir', () => {
     const homeDir = tempHome();
-    const id = localMachineId({ homeDir });
+    const first = localMachineId({ homeDir });
+    expect(first.ok).toBe(true);
+    const id = first.ok ? first.id : '';
     expect(id).toMatch(/^[0-9a-f]{12}$/);
     expect(readFileSync(path.join(homeDir, '.mastracode', MACHINE_ID_FILE), 'utf-8').trim()).toBe(id);
-    expect(localMachineId({ homeDir })).toBe(id);
-    expect(localMachineId({ homeDir: tempHome() })).not.toBe(id);
+    expect(localMachineId({ homeDir })).toEqual({ ok: true, id });
+    expect(localMachineId({ homeDir: tempHome() })).not.toEqual({ ok: true, id });
   });
 
   it('reads a previously persisted id rather than the hostname, so renames do not move the org', () => {
@@ -39,80 +40,77 @@ describe('localMachineId', () => {
     const stored = 'abcdef012345';
     mkdirSync(dir, { recursive: true });
     writeFileSync(path.join(dir, MACHINE_ID_FILE), `${stored}\n`);
-    expect(localMachineId({ homeDir, configDirName })).toBe(stored);
-    expect(stored).not.toBe(createHash('sha256').update(hostname()).digest('hex').slice(0, 12));
+    expect(localMachineId({ homeDir, configDirName })).toEqual({ ok: true, id: stored });
     expect(localKnowledgeOrgId({ homeDir, configDirName })).toBe(`mastracode-${stored}`);
   });
 
-  it('replaces a corrupt id file instead of trusting it', () => {
+  it('refuses a corrupt id file instead of replacing it or substituting another identity', () => {
     const homeDir = tempHome();
     const file = path.join(homeDir, '.mastracode', MACHINE_ID_FILE);
     mkdirSync(path.dirname(file), { recursive: true });
     writeFileSync(file, 'not a machine id\n');
-    const id = localMachineId({ homeDir });
-    expect(id).toMatch(/^[0-9a-f]{12}$/);
-    expect(readFileSync(file, 'utf-8').trim()).toBe(id);
+    const result = localMachineId({ homeDir });
+    expect(result.ok).toBe(false);
+    expect(result.ok ? '' : result.reason).toContain(file);
+    expect(readFileSync(file, 'utf-8')).toBe('not a machine id\n');
+    expect(() => localKnowledgeOrgId({ homeDir })).toThrow(file);
+    expect(resolveKnowledgeScopeIdentity(undefined, { homeDir })).toMatchObject({ resolved: false });
+    // Not cached: once repaired the stored id is used.
+    writeFileSync(file, 'abcdef012345\n');
+    expect(localMachineId({ homeDir })).toEqual({ ok: true, id: 'abcdef012345' });
   });
 
-  it('takes the winner’s id when another process creates the file before we hold the lock', () => {
+  it('takes the winner’s id when another process creates the file first', () => {
     const homeDir = tempHome();
     const file = path.join(homeDir, '.mastracode', MACHINE_ID_FILE);
     const winner = '0123456789ab';
-    // Simulate the race: the other process lands between our read-miss and our lock acquisition.
+    // Simulate the race: the other process lands between our read-miss and our exclusive create.
     const mkdir = vi.spyOn(fs, 'mkdirSync').mockImplementation((dir, opts) => {
       const result = mkdirSync(dir, opts as never);
-      if (String(dir).endsWith('.lock') && !fs.existsSync(file)) fs.writeFileSync(file, `${winner}\n`);
+      if (!fs.existsSync(file)) fs.writeFileSync(file, `${winner}\n`);
       return result;
     });
     try {
-      expect(localMachineId({ homeDir })).toBe(winner);
+      expect(localMachineId({ homeDir })).toEqual({ ok: true, id: winner });
       expect(readFileSync(file, 'utf-8').trim()).toBe(winner);
     } finally {
       mkdir.mockRestore();
     }
-    expect(fs.existsSync(`${file}.lock`)).toBe(false);
   });
 
-  it('does not write, cache, or break a lock it cannot acquire; warns once and falls back to the hostname hash', () => {
+  it('fails closed without persisting, caching, or substituting an identity when the config dir is unwritable', () => {
     const homeDir = tempHome();
     const file = path.join(homeDir, '.mastracode', MACHINE_ID_FILE);
-    const lock = `${file}.lock`;
-    mkdirSync(lock, { recursive: true });
-    const hostHash = createHash('sha256').update(hostname()).digest('hex').slice(0, 12);
-    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
-    try {
-      expect(localMachineId({ homeDir })).toBe(hostHash);
-      expect(localMachineId({ homeDir })).toBe(hostHash);
-      expect(warn).toHaveBeenCalledTimes(1);
-      expect(warn.mock.calls[0]?.[0]).toContain(lock);
-    } finally {
-      warn.mockRestore();
-    }
-    expect(fs.existsSync(file)).toBe(false);
-    expect(fs.existsSync(lock)).toBe(true);
-    // Lock released: a real id is minted on the next call, nothing was cached.
-    fs.rmdirSync(lock);
-    const id = localMachineId({ homeDir });
-    expect(id).toMatch(/^[0-9a-f]{12}$/);
-    expect(id).not.toBe(hostHash);
-  });
-
-  it('falls back to a hostname hash without persisting or caching when the config dir is unwritable', () => {
-    const homeDir = tempHome();
-    const hostHash = createHash('sha256').update(hostname()).digest('hex').slice(0, 12);
     const mkdir = vi.spyOn(fs, 'mkdirSync').mockImplementation(() => {
       throw Object.assign(new Error('EACCES'), { code: 'EACCES' });
     });
     try {
-      expect(localMachineId({ homeDir })).toBe(hostHash);
-      expect(fs.existsSync(path.join(homeDir, '.mastracode', MACHINE_ID_FILE))).toBe(false);
+      const result = localMachineId({ homeDir });
+      expect(result).toMatchObject({ ok: false });
+      expect(result.ok ? '' : result.reason).toContain('EACCES');
+      expect(resolveKnowledgeScopeIdentity(undefined, { homeDir })).toMatchObject({ resolved: false });
+      expect(fs.existsSync(file)).toBe(false);
     } finally {
       mkdir.mockRestore();
     }
     // Not cached: once the directory is writable again a real id is minted.
-    const id = localMachineId({ homeDir });
-    expect(id).toMatch(/^[0-9a-f]{12}$/);
-    expect(id).not.toBe(hostHash);
+    expect(localMachineId({ homeDir })).toMatchObject({ ok: true, id: expect.stringMatching(/^[0-9a-f]{12}$/) });
+  });
+
+  it('fails closed when the id file exists but cannot be read', () => {
+    const homeDir = tempHome();
+    const file = path.join(homeDir, '.mastracode', MACHINE_ID_FILE);
+    mkdirSync(path.dirname(file), { recursive: true });
+    writeFileSync(file, 'abcdef012345\n');
+    const read = vi.spyOn(fs, 'readFileSync').mockImplementation(() => {
+      throw Object.assign(new Error('EACCES'), { code: 'EACCES' });
+    });
+    try {
+      expect(localMachineId({ homeDir })).toMatchObject({ ok: false });
+    } finally {
+      read.mockRestore();
+    }
+    expect(localMachineId({ homeDir })).toEqual({ ok: true, id: 'abcdef012345' });
   });
 });
 

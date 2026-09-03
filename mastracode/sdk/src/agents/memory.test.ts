@@ -1,10 +1,10 @@
-import { mkdtempSync, rmSync } from 'node:fs';
+import fs, { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 
 import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { localKnowledgeOrgId } from '../knowledge-scope.js';
+import { MACHINE_ID_FILE, localKnowledgeOrgId } from '../knowledge-scope.js';
 
 // Isolated home so the machine id under test never touches the real one.
 const TEST_HOME = mkdtempSync(path.join(tmpdir(), 'mastracode-memory-'));
@@ -256,6 +256,60 @@ describe('getDynamicMemory', () => {
       expect(errorSpy.mock.calls[0]?.[0]).toContain('Knowledge curation disabled');
     } finally {
       errorSpy.mockRestore();
+    }
+  });
+
+  it('refuses to curate a local session whose machine id is unusable instead of curating under a substitute org', async () => {
+    process.env.MASTRACODE_EXPERIMENTAL_SUBCONSCIOUS = '1';
+    const homeDir = mkdtempSync(path.join(tmpdir(), 'mastracode-memory-corrupt-'));
+    const file = path.join(homeDir, '.mastracode', MACHINE_ID_FILE);
+    mkdirSync(path.dirname(file), { recursive: true });
+    writeFileSync(file, 'garbage\n');
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      vi.resetModules();
+      memoryConstructorMock.mockClear();
+      getOmScopeMock.mockReturnValue('thread');
+      const { getDynamicMemory } = await import('./memory.js');
+      const requestContext = createRequestContext({ projectPath: '/tmp/project' }, 'corrupt-id-session');
+      const { config } = getDynamicMemory({ storage: true } as never, { vector: true } as never, { homeDir })({
+        requestContext: requestContext as never,
+      }) as unknown as { config: MemoryConfig };
+      expect(requestContext.set).not.toHaveBeenCalledWith('organizationId', expect.anything());
+      expect(config.options.observationalMemory.experimental_subconscious).toBeUndefined();
+      expect(errorSpy).toHaveBeenCalledTimes(1);
+      expect(errorSpy.mock.calls[0]?.[0]).toContain(file);
+    } finally {
+      errorSpy.mockRestore();
+      rmSync(homeDir, { recursive: true, force: true });
+    }
+  });
+
+  it('refuses to curate a local session when the machine id cannot be created (EACCES) rather than using a temporary org', async () => {
+    process.env.MASTRACODE_EXPERIMENTAL_SUBCONSCIOUS = '1';
+    const homeDir = mkdtempSync(path.join(tmpdir(), 'mastracode-memory-eacces-'));
+    const file = path.join(homeDir, '.mastracode', MACHINE_ID_FILE);
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const mkdirSpy = vi.spyOn(fs, 'mkdirSync').mockImplementation(() => {
+      throw Object.assign(new Error('EACCES: permission denied'), { code: 'EACCES' });
+    });
+    try {
+      vi.resetModules();
+      memoryConstructorMock.mockClear();
+      getOmScopeMock.mockReturnValue('thread');
+      const { getDynamicMemory } = await import('./memory.js');
+      const requestContext = createRequestContext({ projectPath: '/tmp/project' }, 'eacces-session');
+      const { config } = getDynamicMemory({ storage: true } as never, { vector: true } as never, { homeDir })({
+        requestContext: requestContext as never,
+      }) as unknown as { config: MemoryConfig };
+      expect(requestContext.set).not.toHaveBeenCalledWith('organizationId', expect.anything());
+      expect(config.options.observationalMemory.experimental_subconscious).toBeUndefined();
+      expect(errorSpy.mock.calls[0]?.[0]).toContain('EACCES');
+      expect(fs.existsSync(file)).toBe(false);
+    } finally {
+      mkdirSpy.mockRestore();
+      errorSpy.mockRestore();
+      rmSync(homeDir, { recursive: true, force: true });
     }
   });
 
