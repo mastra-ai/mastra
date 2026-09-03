@@ -155,31 +155,41 @@ export function createNotionTools(options?: ProviderToolsOptions): ToolsInput {
     notion_create_page: defineProxyTool(context, {
       id: 'notion_create_page',
       description:
-        'Create a Notion page under a parent page or database. Provide title and optional plain-text paragraphs; pass raw Notion properties for database pages with typed columns.',
+        'Create a Notion page under a parent page or database. For a page parent, provide title and optional plain-text paragraphs; for a database parent, provide properties matching the database schema (including its title column).',
       inputSchema: z
         .object({
           parentPageId: z.string().optional().describe('Parent page id (exactly one parent is required)'),
           parentDatabaseId: z.string().optional().describe('Parent database id (exactly one parent is required)'),
-          title: z.string().describe('Page title'),
+          title: z.string().optional().describe('Page title (required when the parent is a page)'),
           content: z.array(z.string()).optional().describe('Plain-text paragraphs to add as page content'),
           properties: z
             .record(z.string(), z.unknown())
             .optional()
-            .describe('Raw Notion properties object (merged over the title) for database pages'),
+            .describe(
+              'Raw Notion properties object matching the database schema (required when the parent is a database)',
+            ),
         })
         .refine(input => !input.parentPageId !== !input.parentDatabaseId, {
           message: 'Provide exactly one of parentPageId or parentDatabaseId.',
+        })
+        .refine(input => !input.parentPageId || Boolean(input.title?.trim()), {
+          message: 'title is required when the parent is a page.',
+        })
+        .refine(input => !input.parentDatabaseId || Object.keys(input.properties ?? {}).length > 0, {
+          message: 'properties (matching the database schema) are required when the parent is a database.',
         }),
       outputSchema: z.object({ page: pageSchema }),
       request: input => {
-        const titleValue = [{ type: 'text', text: { content: input.title } }];
+        const properties = input.parentPageId
+          ? { title: { title: [{ type: 'text', text: { content: input.title } }] } }
+          : input.properties;
         return {
           method: 'POST',
           path: 'v1/pages',
           headers,
           body: {
             parent: input.parentPageId ? { page_id: input.parentPageId } : { database_id: input.parentDatabaseId },
-            properties: { title: { title: titleValue }, ...(input.properties ?? {}) },
+            properties,
             children: input.content?.map(paragraph),
           },
         };
@@ -190,11 +200,15 @@ export function createNotionTools(options?: ProviderToolsOptions): ToolsInput {
     notion_update_page_properties: defineProxyTool(context, {
       id: 'notion_update_page_properties',
       description: 'Update property values of a Notion page (raw Notion properties object), or archive/unarchive it.',
-      inputSchema: z.object({
-        pageId: z.string().describe('Page id (UUID)'),
-        properties: z.record(z.string(), z.unknown()).optional().describe('Raw Notion properties object to set'),
-        archived: z.boolean().optional().describe('Set true to archive the page, false to restore it'),
-      }),
+      inputSchema: z
+        .object({
+          pageId: z.string().describe('Page id (UUID)'),
+          properties: z.record(z.string(), z.unknown()).optional().describe('Raw Notion properties object to set'),
+          archived: z.boolean().optional().describe('Set true to archive the page, false to restore it'),
+        })
+        .refine(input => input.properties !== undefined || input.archived !== undefined, {
+          message: 'Provide properties and/or archived to update.',
+        }),
       outputSchema: z.object({ page: pageSchema }),
       request: input => ({
         method: 'PATCH',

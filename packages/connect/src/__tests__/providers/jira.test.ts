@@ -98,12 +98,14 @@ describe('createJiraTools', () => {
       {} as never,
     );
     expect(result).toEqual({ issues: [shapedIssue], nextPageToken: 'tok1' });
-    const [url] = fetchMock.mock.calls[0]!;
+    const [url, init] = fetchMock.mock.calls[0]!;
     const parsed = new URL(String(url));
     expect(parsed.pathname).toBe(`/v2/connections/c_jir1/proxy/ex/jira/${CLOUD_ID}/rest/api/3/search/jql`);
-    expect(parsed.searchParams.get('jql')).toBe('project = ENG');
-    expect(parsed.searchParams.get('maxResults')).toBe('10');
-    expect(parsed.searchParams.get('fields')).toContain('summary');
+    expect(init.method).toBe('POST');
+    const body = JSON.parse(init.body);
+    expect(body.jql).toBe('project = ENG');
+    expect(body.maxResults).toBe(10);
+    expect(body.fields).toContain('summary');
   });
 
   it('gets an issue and flattens its ADF description to plain text', async () => {
@@ -171,6 +173,17 @@ describe('createJiraTools', () => {
     const [, init] = fetchMock.mock.calls[0]!;
     expect(init.method).toBe('PUT');
     expect(JSON.parse(init.body).fields.summary).toBe('Renamed');
+  });
+
+  it('rejects an update_issue call with no fields to change', async () => {
+    const fetchMock = vi.fn();
+    const tools = makeTools(fetchMock);
+    const result = await tool(tools, 'jira_update_issue').execute(
+      { cloudId: CLOUD_ID, issueKey: 'ENG-123' },
+      {} as never,
+    );
+    expect(result).toMatchObject({ error: true });
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 
   it('lists transitions with their target statuses', async () => {

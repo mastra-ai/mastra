@@ -129,7 +129,23 @@ describe('createNotionTools', () => {
     ]);
   });
 
-  it('rejects create_page with both or neither parent via the input schema', async () => {
+  it('creates a database page with caller-supplied properties and no synthesized title', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(Response.json(pageObject));
+    const tools = makeTools(fetchMock);
+    await tool(tools, 'notion_create_page').execute(
+      {
+        parentDatabaseId: 'db-1',
+        properties: { Name: { title: [{ type: 'text', text: { content: 'Row' } }] } },
+      },
+      {} as never,
+    );
+    const body = JSON.parse(fetchMock.mock.calls[0]![1].body);
+    expect(body.parent).toEqual({ database_id: 'db-1' });
+    expect(body.properties).toEqual({ Name: { title: [{ type: 'text', text: { content: 'Row' } }] } });
+    expect(body.properties.title).toBeUndefined();
+  });
+
+  it('rejects create_page with both or neither parent, or missing required title/properties', async () => {
     const fetchMock = vi.fn();
     const tools = makeTools(fetchMock);
     const neither = await tool(tools, 'notion_create_page').execute({ title: 'X' }, {} as never);
@@ -137,9 +153,16 @@ describe('createNotionTools', () => {
       { parentPageId: 'a', parentDatabaseId: 'b', title: 'X' },
       {} as never,
     );
+    const pageParentNoTitle = await tool(tools, 'notion_create_page').execute({ parentPageId: 'a' }, {} as never);
+    const dbParentNoProperties = await tool(tools, 'notion_create_page').execute(
+      { parentDatabaseId: 'db-1' },
+      {} as never,
+    );
     expect(fetchMock).not.toHaveBeenCalled();
     expect(neither).toMatchObject({ error: true });
     expect(both).toMatchObject({ error: true });
+    expect(pageParentNoTitle).toMatchObject({ error: true });
+    expect(dbParentNoProperties).toMatchObject({ error: true });
   });
 
   it('PATCHes page properties and archived state', async () => {
@@ -154,6 +177,14 @@ describe('createNotionTools', () => {
     expect(url).toBe('https://example.test/v2/connections/c_not1/proxy/v1/pages/page-uuid-1');
     expect(init.method).toBe('PATCH');
     expect(JSON.parse(init.body)).toEqual({ archived: true });
+  });
+
+  it('rejects an update_page_properties call with nothing to update', async () => {
+    const fetchMock = vi.fn();
+    const tools = makeTools(fetchMock);
+    const result = await tool(tools, 'notion_update_page_properties').execute({ pageId: 'page-uuid-1' }, {} as never);
+    expect(result).toMatchObject({ error: true });
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 
   it('lists block children via query params and flattens rich text', async () => {

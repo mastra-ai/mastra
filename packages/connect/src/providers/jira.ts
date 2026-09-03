@@ -60,7 +60,7 @@ const issueSchema = z.object({
   updated: z.string(),
 });
 
-const ISSUE_FIELDS = 'summary,status,assignee,priority,issuetype,created,updated';
+const ISSUE_FIELDS = ['summary', 'status', 'assignee', 'priority', 'issuetype', 'created', 'updated'];
 
 function shapeIssue(issue: Record<string, unknown>) {
   const fields = asRecord(issue.fields);
@@ -120,9 +120,9 @@ export function createJiraTools(options?: ProviderToolsOptions): ToolsInput {
         nextPageToken: z.string().nullable(),
       }),
       request: input => ({
-        method: 'GET',
+        method: 'POST',
         path: jiraPath(input.cloudId, 'search/jql'),
-        query: {
+        body: {
           jql: input.jql,
           maxResults: input.limit ?? 25,
           nextPageToken: input.nextPageToken,
@@ -149,7 +149,7 @@ export function createJiraTools(options?: ProviderToolsOptions): ToolsInput {
       request: input => ({
         method: 'GET',
         path: jiraPath(input.cloudId, `issue/${encodeURIComponent(input.issueKey)}`),
-        query: { fields: `${ISSUE_FIELDS},description` },
+        query: { fields: `${ISSUE_FIELDS.join(',')},description` },
       }),
       transform: raw => {
         const issue = asRecord(raw);
@@ -162,7 +162,7 @@ export function createJiraTools(options?: ProviderToolsOptions): ToolsInput {
     jira_create_issue: defineProxyTool(context, {
       id: 'jira_create_issue',
       description:
-        'Create a Jira issue. The description is plain text and is wrapped into Atlassian Document Format automatically.',
+        'Create a Jira issue. The description is plain text and is wrapped into Atlassian Document Format automatically. Issue types are referenced by name, which works for classic projects; team-managed projects that require issue type ids are not supported.',
       inputSchema: z.object({
         cloudId: cloudIdInput,
         projectKey: z.string().describe('Project key (e.g. "ENG")'),
@@ -199,15 +199,25 @@ export function createJiraTools(options?: ProviderToolsOptions): ToolsInput {
       id: 'jira_update_issue',
       description:
         'Update fields of a Jira issue (summary, plain-text description, assignee, labels, or priority). Use jira_transition_issue to change status.',
-      inputSchema: z.object({
-        cloudId: cloudIdInput,
-        issueKey: z.string().describe('Issue key like "ENG-123"'),
-        summary: z.string().optional().describe('New summary'),
-        description: z.string().optional().describe('New plain-text description'),
-        assigneeAccountId: z.string().optional().describe('Atlassian account id of the new assignee'),
-        labels: z.array(z.string()).optional().describe('Replacement labels'),
-        priority: z.string().optional().describe('New priority name'),
-      }),
+      inputSchema: z
+        .object({
+          cloudId: cloudIdInput,
+          issueKey: z.string().describe('Issue key like "ENG-123"'),
+          summary: z.string().optional().describe('New summary'),
+          description: z.string().optional().describe('New plain-text description'),
+          assigneeAccountId: z.string().optional().describe('Atlassian account id of the new assignee'),
+          labels: z.array(z.string()).optional().describe('Replacement labels'),
+          priority: z.string().optional().describe('New priority name'),
+        })
+        .refine(
+          input =>
+            input.summary !== undefined ||
+            input.description !== undefined ||
+            input.assigneeAccountId !== undefined ||
+            input.labels !== undefined ||
+            input.priority !== undefined,
+          { message: 'Provide at least one field to update.' },
+        ),
       outputSchema: z.object({ updated: z.boolean() }),
       request: input => ({
         method: 'PUT',
