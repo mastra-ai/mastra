@@ -418,7 +418,9 @@ describe('workflow draft client tools', () => {
       expect(result.error).toContain('Provided arguments:');
       // The offending keys are named at their path, so the model can correct the
       // shape instead of guessing key names.
-      expect(result.error).toContain('graph.0: Unrecognized keys: "id", "items", "itemWorkflow"');
+      // `id` is a legitimate foreach key since control-flow entries gained
+      // identity fields (#22633), so only the truly wrong keys are flagged.
+      expect(result.error).toContain('graph.0: Unrecognized keys: "items", "itemWorkflow"');
       // A malformed submission never became a candidate, so it must not clobber
       // authoring state or the previously displayed draft.
       expect(store.state).toMatchObject({ revision: 0, lifecycle: 'untouched' });

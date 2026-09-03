@@ -20,7 +20,7 @@ export interface WorkflowDefinitionGraph {
 }
 
 function getStepId(step: WorkflowDraftStep, index: number): string {
-  return 'id' in step ? step.id : `${step.type}-${index}`;
+  return ('id' in step ? step.id : undefined) ?? `${step.type}-${index}`;
 }
 
 function getStepDetail(step: WorkflowDraftStep): string | undefined {
