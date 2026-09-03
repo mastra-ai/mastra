@@ -105,6 +105,31 @@ describe.for(
 // Native optional dependencies should not be bundled
 // =============================================================================
 
+describe('@mastra/core ESM-only runtime deps', () => {
+  const corePkg = allPackages.find(pkg => pkg.packageJson.name === '@mastra/core');
+  if (!corePkg) throw new Error('@mastra/core not found in workspace packages');
+  const coreDistDir = join(corePkg.dir, 'dist');
+
+  const escapeRegExp = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+  // Pure-ESM dependencies must be bundled into published CJS chunks. Top-level
+  // require() of these packages breaks Jest's default CommonJS runtime.
+  const esmOnlyRuntimeDeps = ['tokenx', 'p-map', '@sindresorhus/slugify'];
+
+  it.for(esmOnlyRuntimeDeps.map(dep => [dep]))('%s should not be required from CJS chunks', async ([dep]) => {
+    const jsFiles = await globby(join(coreDistDir, '**/*.cjs'));
+    expect(jsFiles.length).toBeGreaterThan(0);
+
+    for (const file of jsFiles) {
+      const content = await readFile(file, 'utf-8');
+      if (!content.includes(dep)) continue;
+
+      const staticRequire = new RegExp(`(?<!\\.)require\\(["']${escapeRegExp(dep)}["']\\)`, 'm');
+      expect(content, `${file} has a static require() of ${dep}`).not.toMatch(staticRequire);
+    }
+  });
+});
+
 describe('@mastra/core native optional deps', () => {
   const corePkg = allPackages.find(pkg => pkg.packageJson.name === '@mastra/core');
   if (!corePkg) throw new Error('@mastra/core not found in workspace packages');

@@ -121,6 +121,11 @@ export default defineConfig({
       '@internal/auth',
       '@internal/core',
       '@internal/voice',
+      // ESM-only runtime deps must be bundled into CJS output so Jest/CJS consumers
+      // don't hit top-level require() of packages with no CommonJS build.
+      '@sindresorhus/slugify',
+      'p-map',
+      'tokenx',
     ],
   },
   onSuccess: async () => {
