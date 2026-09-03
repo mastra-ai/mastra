@@ -43,7 +43,6 @@ const repo = {
   private: false,
   installationId: 7,
   installationStorageId: 'inst-7',
-  repositoryStorageId: 'repo-99',
   sandboxProvider: 'local',
   sandboxWorkdir: '/workspace/hello',
 };
@@ -584,7 +583,10 @@ function stubModelStepEndpoints(calls: string[], intakeConfig: Record<string, un
       `${TEST_BASE_URL}/web/factory/projects/fp-1/source-control-connections/conn-1/repositories`,
       async ({ request }) => {
         calls.push('link');
-        expect(await request.json()).toMatchObject({ repositoryId: 'repo-99', branch: 'main' });
+        expect(await request.json()).toMatchObject({
+          repository: { externalId: '99', slug: 'octo/hello' },
+          branch: 'main',
+        });
         return HttpResponse.json({ projectRepository: linkedRepository });
       },
     ),

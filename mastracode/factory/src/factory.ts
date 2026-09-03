@@ -534,8 +534,7 @@ export class MastraFactory {
     const factoryReady = storage.isDomainReady('projects') && storage.isDomainReady('work-items');
     const knowledgeEnabled = process.env.MASTRACODE_EXPERIMENTAL_SUBCONSCIOUS === '1';
     const githubIntegration = integrations.find(integration => integration.id === 'github') as
-      | GithubIntegration
-      | undefined;
+      GithubIntegration | undefined;
     const workItemsReady = storage.isDomainReady('work-items');
     const sessionRetirement =
       sandboxConfig && storage.isDomainReady('source-control')
@@ -595,6 +594,31 @@ export class MastraFactory {
       versionControlIntegrationIds: integrations
         .filter(integration => integration.versionControl)
         .map(integration => integration.id),
+      ...(githubIntegration
+        ? {
+            resolveRepository: async ({ integrationId, orgId, installationId, externalId, slug }) => {
+              if (integrationId !== githubIntegration.id) return null;
+              const installation = await githubIntegration.sourceControlStorage.installations.get({
+                orgId,
+                id: installationId,
+              });
+              if (!installation) return null;
+              const repositories = await githubIntegration.listInstallationRepos(Number(installation.externalId));
+              const selected = repositories.find(repo => repo.id.toString() === externalId && repo.fullName === slug);
+              if (!selected) return null;
+              return githubIntegration.sourceControlStorage.repositories.upsert({
+                orgId,
+                input: {
+                  installationId,
+                  externalId,
+                  slug: selected.fullName,
+                  defaultBranch: selected.defaultBranch,
+                  providerMetadata: { private: selected.private, owner: selected.owner },
+                },
+              });
+            },
+          }
+        : {}),
       ...(sessionRetirement ? { sessionRetirement } : {}),
       ...(workItemsReady ? { workItems: workItemsStorage } : {}),
     });
