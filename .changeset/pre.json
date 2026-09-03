@@ -186,5 +186,7 @@
     "@mastra/s3": "0.6.2",
     "@mastra/vercel": "1.5.0"
   },
-  "changesets": []
+  "changesets": [
+    "four-bags-melt"
+  ]
 }

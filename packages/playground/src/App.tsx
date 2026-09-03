@@ -8,6 +8,7 @@ import { AgentBuilderRootLayout } from './domains/agent-builder/layouts/agent-bu
 import { RoutePermissionGuard } from './domains/auth/components/route-permission-guard';
 import { RoutePermissionsGate } from './domains/auth/components/route-permissions-gate';
 import { DatasetCrumb } from './domains/datasets/dataset-crumb';
+import { ExperimentCrumb } from './domains/experiments/experiment-crumb';
 import { WorkflowLayout } from './domains/workflows/workflow-layout';
 import SignalsOverviewPage from './ee/signals';
 import { SignalsEntityCrumb } from './ee/signals/signals-entity-crumb';
@@ -70,6 +71,7 @@ import Experiments from './pages/experiments';
 import CompareExperimentsPage from './pages/experiments/compare';
 import ExperimentPage from './pages/experiments/experiment';
 import ExperimentItemPage from './pages/experiments/experiment/item';
+import ReviewQueuePage from './pages/experiments/review-queue';
 import InboxPage from './pages/inbox';
 import IntegrationsPage from './pages/integrations';
 import { Login } from './pages/login';
@@ -628,6 +630,13 @@ export const routes: RouteObject[] = [
               },
             },
             {
+              path: '/experiments/review-queue',
+              element: <ReviewQueuePage />,
+              handle: {
+                crumbs: () => [navCrumb('/experiments'), navCrumb('/experiments/review-queue')],
+              } satisfies RouteHeaderHandle,
+            },
+            {
               path: '/experiments/:experimentId',
               element: <ExperimentPage />,
               handle: {
@@ -637,7 +646,8 @@ export const routes: RouteObject[] = [
                   navCrumb('/experiments'),
                   {
                     id: 'experiment',
-                    label: truncateItemIdCrumb(params.experimentId),
+                    Component: ExperimentCrumb,
+                    heading: 'Experiment',
                     to: params.experimentId ? `/experiments/${encodeURIComponent(params.experimentId)}` : undefined,
                   },
                 ],

@@ -7,6 +7,7 @@ import { Inbox } from 'lucide-react';
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router';
 import type { InboxDatasetReviewItem } from '@/domains/review/hooks/use-inbox-review-items';
+import { experimentReviewQueueLink } from '@/lib/app-routing';
 
 const COLUMNS = 'minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr) auto';
 
@@ -60,7 +61,7 @@ export function InboxDatasetReviewList({ items, isLoading, error }: InboxDataset
       </div>
 
       <div className="min-h-0 overflow-hidden">
-        <DataList columns={COLUMNS} variant="striped" fit="container" scrollRef={containerRef}>
+        <DataList columns={COLUMNS} fit="container" scrollRef={containerRef}>
           <DataList.Top>
             <DataList.TopCell>Item</DataList.TopCell>
             <DataList.TopCell>Experiment</DataList.TopCell>
@@ -73,8 +74,7 @@ export function InboxDatasetReviewList({ items, isLoading, error }: InboxDataset
             <DataList.NoMatch message="No dataset items match your search" />
           ) : (
             filtered.map((item, index) => {
-              // Reviews live on the experiment page; `?review=` features this result on its Reviews tab.
-              const reviewHref = `/experiments/${encodeURIComponent(item.experimentId)}?review=${encodeURIComponent(item.id)}`;
+              const reviewHref = experimentReviewQueueLink(item.experimentId, item.id);
               return (
                 <DataList.RowWrapper key={item.id}>
                   <DataList.RowButton colEnd={-2} onClick={() => navigate(reviewHref)} {...getRowProps(index)}>

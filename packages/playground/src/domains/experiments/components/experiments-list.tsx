@@ -8,6 +8,7 @@ import { getShortId } from '@mastra/playground-ui/components/Text';
 import { useMemo } from 'react';
 import {
   EXPERIMENT_DATASET_COLUMN,
+  EXPERIMENT_DESCRIPTION_COLUMN,
   EXPERIMENT_DETAIL_COLUMNS,
   EXPERIMENT_NAME_COLUMN,
   experimentColumnLabels,
@@ -32,10 +33,11 @@ export interface ExperimentsListSelection {
   onToggleSelection: (experimentId: string) => void;
 }
 
-const COLUMNS = `${EXPERIMENT_NAME_COLUMN} ${EXPERIMENT_DATASET_COLUMN} ${EXPERIMENT_DETAIL_COLUMNS}`;
+const COLUMNS = `${EXPERIMENT_NAME_COLUMN} ${EXPERIMENT_DESCRIPTION_COLUMN} ${EXPERIMENT_DATASET_COLUMN} ${EXPERIMENT_DETAIL_COLUMNS}`;
 
 const columnHeaders = [
   { label: experimentColumnLabels.experiment },
+  { label: experimentColumnLabels.description },
   { label: experimentColumnLabels.dataset },
   { label: experimentColumnLabels.target },
   { label: experimentColumnLabels.status },
@@ -103,7 +105,7 @@ export function ExperimentsList({
   ));
 
   return (
-    <EntityList columns={gridColumns} variant="striped" scrollRef={containerRef}>
+    <EntityList columns={gridColumns} scrollRef={containerRef}>
       <EntityList.Top hasLeadingCell={isSelectionActive}>
         {isSelectionActive ? (
           <>

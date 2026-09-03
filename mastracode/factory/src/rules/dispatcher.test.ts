@@ -3507,6 +3507,7 @@ describe('FactoryDecisionDispatcher', () => {
     );
     expect(resolveLinkedWorkItemParentId).toHaveBeenCalledWith({
       orgId: 'org-1',
+      factoryProjectId: PROJECT_ID,
       decision: expect.objectContaining({ source: 'github-pr', sourceKey: 'github-pr:2' }),
     });
     expect(linked?.parentWorkItemId).toBe(parent.id);

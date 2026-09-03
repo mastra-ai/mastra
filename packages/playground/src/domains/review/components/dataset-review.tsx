@@ -32,7 +32,7 @@ import {
   XIcon,
 } from 'lucide-react';
 import { useState, useMemo, useCallback, useEffect } from 'react';
-import { useDatasetReviewItems, useDatasetCompletedItems } from '../hooks/use-dataset-review-items';
+import { useReviewItems, useCompletedItems } from '../hooks/use-dataset-review-items';
 import { ProposalTag } from './proposal-tag';
 import type { ReviewItem } from './review-item-card';
 import { ReviewItemPanel } from './review-item-panel';
@@ -53,8 +53,9 @@ function truncateInput(value: unknown, max: number): string {
 }
 
 export interface DatasetReviewProps {
-  datasetId: string;
-  /** When set, scopes the review (and completed) lists to items produced by this experiment. */
+  /** When set, the dataset's tags seed the tag vocabulary. Without it, tags come from the items only. */
+  datasetId?: string;
+  /** When set, scopes the review (and completed) lists to items produced by this experiment; otherwise project-wide. */
   experimentId?: string;
   /**
    * Optional request from the parent to auto-feature this item. Whenever this prop changes
@@ -73,19 +74,11 @@ export function DatasetReview({
   detailPanelVariant = 'inline',
 }: DatasetReviewProps) {
   const client = useMastraClient();
-  const { data: dataset } = useDataset(datasetId);
-  const { data: reviewItemsRaw, isLoading: isLoadingReview } = useDatasetReviewItems(datasetId);
-  const { data: completedItemsRaw, isLoading: isLoadingCompleted } = useDatasetCompletedItems(datasetId);
+  const { data: dataset } = useDataset(datasetId ?? '');
   // Keep `undefined` while loading: the hydration effect below treats a defined
   // value as "server data arrived", so coercing to [] here would lock in an empty queue.
-  const reviewItems = useMemo(
-    () => (experimentId ? reviewItemsRaw?.filter(i => i.experimentId === experimentId) : reviewItemsRaw),
-    [reviewItemsRaw, experimentId],
-  );
-  const completedItems = useMemo(
-    () => (experimentId ? completedItemsRaw?.filter(i => i.experimentId === experimentId) : completedItemsRaw),
-    [completedItemsRaw, experimentId],
-  );
+  const { data: reviewItems, isLoading: isLoadingReview } = useReviewItems({ experimentId });
+  const { data: completedItems, isLoading: isLoadingCompleted } = useCompletedItems({ experimentId });
   const { updateExperimentResult } = useDatasetMutations();
 
   // Local state
@@ -115,23 +108,13 @@ export function DatasetReview({
   >([]);
   const [showProposalDialog, setShowProposalDialog] = useState(false);
 
-  // Items in local state — null means "not hydrated yet", [] means "user cleared all"
-  const [localItems, setLocalItems] = useState<ReviewItem[] | null>(null);
-  const items = useMemo(() => localItems ?? reviewItems ?? [], [localItems, reviewItems]);
-
-  // Reset the local cache when the scope changes (different experiment or dataset)
-  // so it re-hydrates from the new queue below, instead of keeping the previous
-  // experiment's rows and running mutations against the wrong results.
-  useEffect(() => {
-    setLocalItems(null);
-  }, [datasetId, experimentId]);
-
-  // Sync server data to local on initial load (and after a scope reset above)
-  useEffect(() => {
-    if (reviewItems && localItems === null) {
-      setLocalItems(reviewItems);
-    }
-  }, [reviewItems, localItems]);
+  // Ratings are only sent as feedback, never stored on the result, so they live here.
+  // Everything else comes straight from the query; mutations invalidate it.
+  const [ratings, setRatings] = useState<Record<string, ReviewItem['rating']>>({});
+  const items = useMemo(
+    () => (reviewItems ?? []).map(i => (i.id in ratings ? { ...i, rating: ratings[i.id] } : i)),
+    [reviewItems, ratings],
+  );
 
   // Tag vocabulary from dataset + existing item tags
   const datasetTagVocabulary = useMemo(() => {
@@ -186,7 +169,6 @@ export function DatasetReview({
   // Item actions
   const setItemTags = useCallback(
     (itemId: string, tags: string[]) => {
-      setLocalItems(prev => (prev ?? []).map(i => (i.id === itemId ? { ...i, tags } : i)));
       const item = items.find(i => i.id === itemId);
       if (item?.experimentId && item?.datasetId) {
         updateExperimentResult.mutate({
@@ -219,7 +201,7 @@ export function DatasetReview({
           })
           .catch(() => {});
       }
-      setLocalItems(prev => (prev ?? []).map(i => (i.id === itemId ? { ...i, rating } : i)));
+      setRatings(prev => ({ ...prev, [itemId]: rating }));
     },
     [items, client],
   );
@@ -252,7 +234,6 @@ export function DatasetReview({
           })
           .catch(() => {});
       }
-      setLocalItems(prev => (prev ?? []).map(i => (i.id === itemId ? { ...i, comment } : i)));
     },
     [items, client, updateExperimentResult],
   );
@@ -260,7 +241,6 @@ export function DatasetReview({
   const removeItem = useCallback(
     (itemId: string) => {
       const item = items.find(i => i.id === itemId);
-      setLocalItems(prev => (prev ?? []).filter(i => i.id !== itemId));
       setSelectedItemIds(prev => {
         const next = new Set(prev);
         next.delete(itemId);
@@ -282,7 +262,6 @@ export function DatasetReview({
   const completeItem = useCallback(
     (itemId: string) => {
       const item = items.find(i => i.id === itemId);
-      setLocalItems(prev => (prev ?? []).filter(i => i.id !== itemId));
       setSelectedItemIds(prev => {
         const next = new Set(prev);
         next.delete(itemId);
@@ -452,7 +431,7 @@ export function DatasetReview({
       ? () => setFeaturedItemId(displayItems[featuredIndex + 1].id)
       : undefined;
 
-  const gridColumns = 'auto minmax(15rem,1fr) 10rem 8rem 6rem 6rem';
+  const gridColumns = 'auto minmax(0,20rem) minmax(0,1fr) minmax(0,8rem) 6rem 6rem';
 
   const { containerRef, getRowProps } = useDataListKeyboard({ count: displayItems.length });
 
@@ -805,7 +784,7 @@ export function DatasetReview({
               />
             </div>
           ) : (
-            <DataList columns={gridColumns} className="min-w-0" scrollRef={containerRef}>
+            <DataList columns={gridColumns} fit="container" className="min-w-0" scrollRef={containerRef}>
               <DataList.Top hasLeadingCell>
                 {!showCompleted ? (
                   <DataList.TopSelectCell
