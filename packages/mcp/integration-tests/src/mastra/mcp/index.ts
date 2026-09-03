@@ -1,6 +1,6 @@
 import { createTool } from '@mastra/core/tools';
 import { MCPServer } from '@mastra/mcp';
-import { z } from 'zod';
+import { z } from 'zod/v4';
 
 export const myMcpServer = new MCPServer({
   id: 'myMcpServer',

@@ -1,6 +1,6 @@
 import { createTool } from '@mastra/core/tools';
 import { Agent } from '@mastra/core/agent';
-import { z } from 'zod';
+import { z } from 'zod/v4';
 import { weatherTool } from '../tools/weather';
 import { MCPClient } from '@mastra/mcp';
 
