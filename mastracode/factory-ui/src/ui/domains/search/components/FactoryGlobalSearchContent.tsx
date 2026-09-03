@@ -6,6 +6,7 @@ import {
   CommandPaletteResults,
 } from '@mastra/playground-ui/components/CommandPalette';
 import { Kbd } from '@mastra/playground-ui/components/Kbd';
+import { toast } from '@mastra/playground-ui/components/Toaster';
 import { useState } from 'react';
 
 import { useFactoriesQuery } from '../../../../hooks/useFactories';
@@ -43,7 +44,12 @@ export function FactoryGlobalSearchContent({ factoryId, closeSearch }: { factory
   // Both boards read `repositories[0]`, so that is the repository whose intake feeds are searchable.
   const projectRepositoryId = activeFactory?.repositories[0]?.projectRepositoryId;
   const intake = useGlobalSearchIntake(projectRepositoryId);
-  const board = useBoardItems({ factoryProjectId: searchableFactoryId, kind: 'work' });
+  // The palette closes on select, so a failed move has no card left to carry its reason.
+  const board = useBoardItems({
+    factoryProjectId: searchableFactoryId,
+    kind: 'work',
+    onFailure: message => toast.error(message),
+  });
   const runs = useBoardRuns({ factoryProjectId: factoryId, refetchItems: workItems.refetch });
   const { selectPath } = useGlobalSearchNavigation(closeSearch);
   const [activeScope, setActiveScope] = useState<GlobalSearchScope>('all');
@@ -102,8 +108,15 @@ export function FactoryGlobalSearchContent({ factoryId, closeSearch }: { factory
                   return;
                 }
                 const [move] = cardMoves(target.item, 'intake');
-                if (move) board.move(target.item.id, move.stage);
-                else void runs.openOrCreateSession(target.item);
+                if (move) {
+                  board.move(target.item.id, move.stage);
+                  return;
+                }
+                void runs
+                  .openOrCreateSession(target.item)
+                  .catch(error =>
+                    toast.error(error instanceof Error ? error.message : 'The session could not be started.'),
+                  );
               }}
             />
           )}

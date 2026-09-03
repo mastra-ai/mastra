@@ -10,7 +10,7 @@ import { createMemoryRouter, RouterProvider } from 'react-router';
 import { describe, expect, it } from 'vitest';
 
 import { server } from '../../../e2e/ui/msw-server';
-import { renderWithProviders, TEST_BASE_URL } from '../../../e2e/ui/render';
+import { renderWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '../../../e2e/ui/render';
 import { createAppRoutes } from '../router';
 
 const FACTORY_ID = 'fp-1';
@@ -36,6 +36,17 @@ const issueWorkItem = {
   sessions: {},
   metadata: { number: 7 },
   revision: 1,
+  createdAt: '2026-07-18T00:00:00.000Z',
+  updatedAt: '2026-07-18T00:00:00.000Z',
+};
+
+const logoutIssue = {
+  number: 9,
+  title: 'Crash on logout',
+  url: 'https://github.com/acme/app/issues/9',
+  author: 'octocat',
+  labels: [],
+  comments: 0,
   createdAt: '2026-07-18T00:00:00.000Z',
   updatedAt: '2026-07-18T00:00:00.000Z',
 };
@@ -226,33 +237,50 @@ describe('Board card buttons move the card', () => {
 
   it('patches plansPreapproved hands-off, then transitions against the revision the patch returned', async () => {
     const { transitions, patches } = stubBoardEndpoints();
-    renderWorkBoard();
+    const { client } = renderWorkBoard();
     const user = userEvent.setup();
 
     await user.click(await screen.findByRole('button', { name: 'Actions for Fix login bug' }));
     await user.click(await screen.findByRole('menuitem', { name: 'Investigate hands-off' }));
 
     await waitFor(() => expect(transitions).toHaveLength(1));
+    await waitForMutationsIdle(client);
     expect(patches).toEqual([{ itemId: 'item-1', body: { plansPreapproved: true } }]);
     expect(transitions[0]?.body).toMatchObject({ stage: 'triage', cause: 'card_action', expectedRevision: 5 });
   });
 
+  it('stamps a card hands-off once when the menu item is clicked twice', async () => {
+    const { transitions, patches } = stubBoardEndpoints();
+    let releasePatch = () => {};
+    const patchInFlight = new Promise<void>(resolve => {
+      releasePatch = resolve;
+    });
+    server.use(
+      http.patch(`${TEST_BASE_URL}/web/factory/work-items/:itemId`, async ({ params, request }) => {
+        patches.push({ itemId: String(params.itemId), body: (await request.json()) as Record<string, unknown> });
+        await patchInFlight;
+        return HttpResponse.json({ workItem: { ...issueWorkItem, id: String(params.itemId), revision: 5 } });
+      }),
+    );
+    const { client } = renderWorkBoard();
+    const user = userEvent.setup();
+
+    await user.click(await screen.findByRole('button', { name: 'Actions for Fix login bug' }));
+    await user.click(await screen.findByRole('menuitem', { name: 'Investigate hands-off' }));
+    await user.click(await screen.findByRole('button', { name: 'Actions for Fix login bug' }));
+    await user.click(await screen.findByRole('menuitem', { name: 'Investigate hands-off' }));
+    releasePatch();
+
+    await waitFor(() => expect(transitions).toHaveLength(1));
+    await waitForMutationsIdle(client);
+    expect(patches).toHaveLength(1);
+  });
+
   it('files a candidate in Intake, posts its custom prompt as a comment, then moves it', async () => {
     const { transitions, created, comments } = stubBoardEndpoints({
-      issues: [
-        {
-          number: 9,
-          title: 'Crash on logout',
-          url: 'https://github.com/acme/app/issues/9',
-          author: 'octocat',
-          labels: [],
-          comments: 0,
-          createdAt: '2026-07-18T00:00:00.000Z',
-          updatedAt: '2026-07-18T00:00:00.000Z',
-        },
-      ],
+      issues: [logoutIssue],
     });
-    renderWorkBoard();
+    const { client } = renderWorkBoard();
 
     const user = userEvent.setup();
     await user.click(await screen.findByRole('button', { name: 'Details for Crash on logout' }));
@@ -264,11 +292,32 @@ describe('Board card buttons move the card', () => {
     await user.click(screen.getByRole('button', { name: 'Run' }));
 
     await waitFor(() => expect(transitions).toHaveLength(1));
+    await waitForMutationsIdle(client);
     expect(created).toEqual([expect.objectContaining({ title: 'Crash on logout', stages: ['intake'] })]);
     expect(comments).toEqual([
       { itemId: 'item-filed', body: expect.objectContaining({ body: 'Guidance for this run: Check the token TTL' }) },
     ]);
     expect(transitions[0]).toMatchObject({ itemId: 'item-filed', body: { stage: 'triage', cause: 'card_action' } });
+  });
+
+  it('reports the guidance that could not be posted, and leaves the card in Intake', async () => {
+    const { transitions } = stubBoardEndpoints({ issues: [logoutIssue] });
+    server.use(
+      http.post(`${TEST_BASE_URL}/web/factory/work-items/:itemId/comments`, () =>
+        HttpResponse.json({ error: 'The guidance could not be posted.' }, { status: 500 }),
+      ),
+    );
+    renderWorkBoard();
+
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole('button', { name: 'Details for Crash on logout' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Crash on logout' });
+    await user.click(within(dialog).getByRole('button', { name: 'Custom prompt…' }));
+    await user.type(await screen.findByRole('textbox', { name: 'Prompt for Crash on logout' }), 'Check the token TTL');
+    await user.click(screen.getByRole('button', { name: 'Run' }));
+
+    expect(await screen.findByText('The guidance could not be posted.')).toBeInTheDocument();
+    expect(transitions).toEqual([]);
   });
 
   it('offers no hands-off twin for Prepare approval, whose outcome is a maintainer decision', async () => {

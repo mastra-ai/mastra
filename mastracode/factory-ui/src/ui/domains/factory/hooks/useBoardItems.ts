@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 
 import { useApiConfig } from '../../../../api/config';
 import {
@@ -33,7 +33,16 @@ interface MoveOptions {
 }
 
 /** The board's persisted cards: the query behind them and the moves that rewrite them. */
-export function useBoardItems({ factoryProjectId, kind }: { factoryProjectId: string | undefined; kind: BoardKind }) {
+export function useBoardItems({
+  factoryProjectId,
+  kind,
+  onFailure,
+}: {
+  factoryProjectId: string | undefined;
+  kind: BoardKind;
+  /** Where a failure goes when no card is on screen to carry it, e.g. the search palette. */
+  onFailure?: (message: string) => void;
+}) {
   const { baseUrl } = useApiConfig();
   const items = useWorkItemsQuery(factoryProjectId);
   const upsert = useUpsertWorkItemMutation(factoryProjectId);
@@ -41,55 +50,61 @@ export function useBoardItems({ factoryProjectId, kind }: { factoryProjectId: st
   const transition = useTransitionWorkItemMutation(factoryProjectId);
   const remove = useDeleteWorkItemMutation(factoryProjectId);
   const [transitionReasons, setTransitionReasons] = useState<Record<string, string>>({});
+  const [dropError, setDropError] = useState<Error>();
+  const movingRef = useRef<Set<string>>(new Set());
 
   const all = useMemo(() => items.data ?? [], [items.data]);
   const knownSourceKeys = useMemo(() => persistedSourceKeys(all), [all]);
   const visible = all.filter(item => belongsToBoard(item, kind)).sort(byNewest);
 
-  const requestTransition = (item: WorkItem, toStage: string, options: MoveOptions = {}) => {
+  const requestTransition = (item: WorkItem, toStage: string, options: MoveOptions = {}, onSettled?: () => void) => {
     setTransitionReasons(current => {
       if (!(item.id in current)) return current;
       const next = { ...current };
       delete next[item.id];
       return next;
     });
-    transition.mutate(
-      {
+    const refused = (reason: string) => {
+      setTransitionReasons(current => ({ ...current, [item.id]: reason }));
+      onFailure?.(reason);
+    };
+    // `mutateAsync`, because the search palette closes on select: react-query
+    // drops the callbacks passed to `mutate` once the caller unmounts.
+    void transition
+      .mutateAsync({
         item,
         board: belongsToBoard(item, 'review') ? 'review' : 'work',
         stage: toStage,
         cause: options.cause ?? 'card_action',
         ...(item.stages.length === 1 && item.stages[0] === toStage ? { reenter: true } : {}),
-      },
-      {
-        onSuccess: result => {
-          if (result.status !== 'rejected') return;
-          setTransitionReasons(current => ({ ...current, [item.id]: result.reason }));
-        },
-        onError: error => {
-          setTransitionReasons(current => ({
-            ...current,
-            [item.id]: error instanceof Error ? error.message : 'The transition could not be evaluated.',
-          }));
-        },
-      },
-    );
+      })
+      .then(result => {
+        if (result.status === 'rejected') refused(result.reason);
+      })
+      .catch(error => refused(error instanceof Error ? error.message : 'The transition could not be evaluated.'))
+      .finally(onSettled);
   };
 
   const move = (id: string, toStage: string, options: MoveOptions = {}) => {
     const item = all.find(candidate => candidate.id === id);
-    // Two clicks land in the same render, so the second one still reads the
-    // pre-click revision: the server would refuse it as stale.
-    if (!item || transition.pendingTransitions.some(pending => pending.itemId === id)) return;
+    // Held in a ref, not in mutation state: two clicks land in the same render
+    // and both read the pre-click state, so the hands-off patch would run twice
+    // and queue two runs.
+    if (!item || movingRef.current.has(id)) return;
+    movingRef.current.add(id);
+    const release = () => movingRef.current.delete(id);
     if (!options.preapprovePlans) {
-      requestTransition(item, toStage, options);
+      requestTransition(item, toStage, options, release);
       return;
     }
     // The patch bumps the revision, so the move has to ride the item it returned.
     void update
       .mutateAsync({ id, patch: { plansPreapproved: true } })
-      .then(patched => requestTransition(patched, toStage, options))
-      .catch(() => {});
+      .then(patched => requestTransition(patched, toStage, options, release))
+      .catch(error => {
+        release();
+        onFailure?.(error instanceof Error ? error.message : 'The card could not be stamped hands-off.');
+      });
   };
 
   const handleDrop = (payload: DragPayload, toStage: BoardStageId, cause = 'board_drag') => {
@@ -98,6 +113,7 @@ export function useBoardItems({ factoryProjectId, kind }: { factoryProjectId: st
       move(payload.id, toStage, { cause });
       return;
     }
+    setDropError(undefined);
     const { source, sourceKey, title, url, metadata, customPrompt } = payload.candidate;
     const parentWorkItemId = source === 'github-pr' ? inferredParentWorkItemId(metadata, all) : undefined;
     void (async () => {
@@ -115,8 +131,11 @@ export function useBoardItems({ factoryProjectId, kind }: { factoryProjectId: st
         await createWorkItemComment(baseUrl, item.id, { body: customPrompt, clientToken: crypto.randomUUID() });
       }
       if (toStage !== 'intake') requestTransition(item, toStage, { cause });
-      // swallow only — the failure already reaches the UI through `mutationError`
-    })().catch(() => {});
+    })().catch(error => {
+      const failure = error instanceof Error ? error : new Error('The card could not be filed.');
+      setDropError(failure);
+      onFailure?.(failure.message);
+    });
   };
 
   return {
@@ -125,7 +144,7 @@ export function useBoardItems({ factoryProjectId, kind }: { factoryProjectId: st
     knownSourceKeys,
     isPending: items.isPending,
     error: items.isError ? items.error : undefined,
-    mutationError: [upsert, update, transition, remove].find(mutation => mutation.isError)?.error,
+    mutationError: [upsert, update, transition, remove].find(mutation => mutation.isError)?.error ?? dropError,
     evaluatingStages: new Map(transition.pendingTransitions.map(({ itemId, stage }) => [itemId, stage])),
     transitionReasons,
     refetch: items.refetch,

@@ -1,3 +1,4 @@
+import { Toaster } from '@mastra/playground-ui/components/Toaster';
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
@@ -5,7 +6,7 @@ import { createMemoryRouter, RouterProvider } from 'react-router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { server } from '../../../../../e2e/ui/msw-server';
-import { renderWithProviders, TEST_BASE_URL } from '../../../../../e2e/ui/render';
+import { renderWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '../../../../../e2e/ui/render';
 import { queryKeys } from '../../../../api/keys';
 import { workspacesQueryOptions } from '../../../../hooks/useWorkspaces';
 import { createQueryClient } from '../../../../query-client';
@@ -263,7 +264,13 @@ function stubSearchApi(options: StubSearchOptions = {}): SearchRequestState {
 function renderSearchRoute(initialEntry = `/factories/${ACTIVE_FACTORY_ID}/settings/preferences`) {
   const router = createMemoryRouter(createAppRoutes(), { initialEntries: [initialEntry] });
   const client = createQueryClient();
-  renderWithProviders(<RouterProvider router={router} />, client);
+  renderWithProviders(
+    <>
+      <RouterProvider router={router} />
+      <Toaster position="bottom-right" />
+    </>,
+    client,
+  );
   return { router, client };
 }
 
@@ -539,6 +546,24 @@ describe('Global search', () => {
     expect(requests.createSessionRequests).toBe(0);
   });
 
+  it('toasts the reason when the move it fired is refused, after the palette has closed', async () => {
+    stubSearchApi();
+    server.use(
+      http.post(`${TEST_BASE_URL}/web/factory/projects/${ACTIVE_FACTORY_ID}/work-items/:itemId/transition`, () =>
+        HttpResponse.json({ result: { status: 'rejected', reason: 'Reviewing is paused for this repository.' } }),
+      ),
+    );
+    const user = userEvent.setup();
+    renderSearchRoute();
+    await openFromSidebar();
+    await screen.findByText('Review command palette PR');
+
+    await user.type(screen.getByRole('combobox', { name: 'Search MastraCode' }), '#4242');
+    await user.click(await screen.findByText('Bump the command palette dependencies'));
+
+    expect(await screen.findByText('Reviewing is paused for this repository.')).toBeInTheDocument();
+  });
+
   it('scopes results to board cards with no session', async () => {
     stubSearchApi();
     const user = userEvent.setup();
@@ -560,7 +585,7 @@ describe('Global search', () => {
   it('finds a pull request that has no card yet, files it, and moves it into its lane', async () => {
     const requests = stubSearchApi();
     const user = userEvent.setup();
-    renderSearchRoute();
+    const { client } = renderSearchRoute();
     const dialog = await openFromSidebar();
     await screen.findByText('Review command palette PR');
 
@@ -571,6 +596,7 @@ describe('Global search', () => {
     await user.click(candidate);
 
     await waitFor(() => expect(requests.transitions).toHaveLength(1));
+    await waitForMutationsIdle(client);
     expect(requests.created).toEqual([
       expect.objectContaining({ title: 'Harden the review board drop target', stages: ['intake'] }),
     ]);
