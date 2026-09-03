@@ -1,6 +1,6 @@
 {
   "name": "@mastra/modal",
-  "version": "0.6.0-alpha.1",
+  "version": "0.6.0",
   "description": "Modal cloud sandbox provider for Mastra workspaces",
   "type": "module",
   "main": "dist/index.js",

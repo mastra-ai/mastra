@@ -106,12 +106,7 @@ export class Scheduler extends MastraBase {
         });
       }, this.#config.tickIntervalMs);
 
-      // Don't keep the process alive just because the scheduler is polling.
-      // The process should be able to exit when all other work is done.
-      // Without .unref(), the setInterval prevents clean shutdown in
-      // scripts that create a Mastra instance (which auto-creates the
-      // notification dispatch workflow with a cron schedule) and exit
-      // after a single agent.generate() call.
+      // Don't keep the process alive solely because it has active schedules.
       // Optional call: on runtimes where setInterval returns a number
       // (e.g. Cloudflare Workers) there is no unref and nothing to release.
       this.#intervalHandle.unref?.();

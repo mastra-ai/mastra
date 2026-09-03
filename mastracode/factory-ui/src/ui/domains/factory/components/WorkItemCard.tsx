@@ -14,6 +14,7 @@ import { itemRunSpec } from '../boardRunSpecs';
 import type { ItemRunSpec, RunAction } from '../boardRunSpecs';
 import { itemStageLabel } from '../boardStages';
 import {
+  awaitsTriageDecision,
   cardActions,
   cardPrimaryAction,
   resumeTarget,
@@ -137,6 +138,7 @@ export function WorkItemCard({
       : `/factories/${factoryId}/workspaces/${threadSession.sessionId}/threads/${threadSession.threadId}`;
   const primaryAction = cardPrimaryAction({
     item,
+    columnStage,
     runSpec,
     runAction: defaultRunAction,
     resume: resumeTarget(columnStage, runSpec, sessions),
@@ -173,6 +175,7 @@ export function WorkItemCard({
     decision,
     transitionReason,
     sessionStatus,
+    heldAs: awaitsTriageDecision(item, columnStage) ? (item.triageType ?? undefined) : undefined,
   });
   const retryDecisionId = status.kind === 'error' ? status.retryDecisionId : undefined;
 
@@ -245,9 +248,11 @@ export function WorkItemCard({
     );
   };
 
+  // A held card's decision, like a parked suggestion, is the person's to
+  // release, so it stays on the card beside a finished triage session.
   const actions = cardActions({
     running: wickStatus !== undefined,
-    waiting: status.kind === 'waiting',
+    waiting: status.kind === 'waiting' || status.kind === 'held',
     attention: wickStatus === 'ready',
     session: sessionLink(sessionHref),
     retry: retryButton({ decisionId: retryDecisionId, retryingDecisionId, onRetry: onRetryDecision }),

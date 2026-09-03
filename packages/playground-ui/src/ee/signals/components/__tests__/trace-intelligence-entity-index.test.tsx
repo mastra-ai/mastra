@@ -11,7 +11,7 @@ import type { TraceSignalManagement } from '../../trace-intelligence-context';
 import { TraceIntelligenceProvider } from '../../trace-intelligence-provider';
 import { TraceIntelligenceEntityIndex } from '../trace-intelligence-entity-index';
 import type { TraceIntelligenceEntitySort, TraceIntelligenceEntityView } from '../trace-intelligence-entity-index';
-import { entityIndexResponse } from './fixtures/entity-index';
+import { customSignalEntityResponse, entityIndexResponse } from './fixtures/entity-index';
 
 beforeAll(() => {
   if (typeof window.PointerEvent === 'undefined') {
@@ -126,6 +126,20 @@ describe('TraceIntelligenceEntityIndex', () => {
   });
 
   describe('when enriched entities are available', () => {
+    it('explains the configured signals from the index header', async () => {
+      useEntityFixture(customSignalEntityResponse);
+      renderIndex();
+
+      await screen.findByText('custom-agent');
+      fireEvent.focus(screen.getByRole('button', { name: 'What is trace intelligence?' }));
+
+      const tooltip = await screen.findByRole('tooltip');
+      expect(tooltip.textContent).toContain('Tool usage');
+      expect(tooltip.textContent).toContain('How effectively the agent uses tools.');
+      expect(tooltip.textContent).toContain('Response quality');
+      expect(tooltip.textContent).toContain('How useful the final answer is.');
+    });
+
     it('renders entity metadata and canonical detail links', async () => {
       useEntityFixture();
       renderIndex();
