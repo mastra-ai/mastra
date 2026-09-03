@@ -167,7 +167,7 @@ function SupervisorEmptyState() {
   const { prefillComposer } = useChatCommands();
   return (
     <section
-      className="flex w-full min-w-0 max-w-full flex-1 flex-col items-center justify-center px-6 py-12 text-center"
+      className="flex w-full max-w-full min-w-0 flex-1 flex-col items-center justify-center px-6 py-12 text-center"
       aria-labelledby="supervisor-empty-title"
     >
       <Logo size="md" aria-label="Mastra Code" />
