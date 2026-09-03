@@ -309,6 +309,7 @@ describe('MCPServer', () => {
         name: 'TestServer',
         description: undefined,
         repository: undefined,
+        protocol_version: '2026-07-28',
         version_detail: {
           version: '1.0.0',
           release_date: mockDateISO,
@@ -327,6 +328,7 @@ describe('MCPServer', () => {
         repository,
         releaseDate: customReleaseDate,
         isLatest: false,
+        protocolVersion: '2025-11-25',
       };
       const server = new MCPServer(customConfig);
       const serverInfo = server.getServerInfo();
@@ -336,6 +338,7 @@ describe('MCPServer', () => {
         name: 'TestServer',
         description: 'Custom description',
         repository,
+        protocol_version: '2025-11-25',
         version_detail: {
           version: '1.0.0',
           release_date: customReleaseDate,
@@ -355,6 +358,7 @@ describe('MCPServer', () => {
         name: 'TestServer',
         description: undefined,
         repository: undefined,
+        protocol_version: '2026-07-28',
         version_detail: {
           version: '1.0.0',
           release_date: mockDateISO,
@@ -378,6 +382,7 @@ describe('MCPServer', () => {
         repository,
         releaseDate: customReleaseDate,
         isLatest: true,
+        protocolVersion: '2025-11-25',
         packageCanonical: 'docker',
         packages,
         remotes,
@@ -390,6 +395,7 @@ describe('MCPServer', () => {
         name: 'TestServer',
         description: 'Custom detail description',
         repository,
+        protocol_version: '2025-11-25',
         version_detail: {
           version: '1.0.0',
           release_date: customReleaseDate,

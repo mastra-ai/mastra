@@ -15,7 +15,7 @@ import type { BuilderModelPolicy, DefaultModelEntry, ProviderModelEntry } from '
 import type { MastraScorerEntry, ScoreRowData } from '@mastra/core/evals';
 import type { CoreMessage, Provider as ModelProviderId } from '@mastra/core/llm';
 import type { LogLevel } from '@mastra/core/logger';
-import type { MCPToolType, ServerInfo } from '@mastra/core/mcp';
+import type { MCPToolType, ServerDetailInfo, ServerInfo } from '@mastra/core/mcp';
 import type {
   AiMessageType,
   MastraMessageV1,
@@ -926,8 +926,18 @@ export interface LoopVNextNetworkResponse {
   steps: WorkflowResult<any, any, any, any>['steps'];
 }
 
+export type McpProtocolVersion = '2025-11-25' | '2026-07-28';
+
+export interface McpServerInfo extends ServerInfo {
+  protocol_version?: McpProtocolVersion;
+}
+
+export interface McpServerDetailInfo extends ServerDetailInfo {
+  protocol_version?: McpProtocolVersion;
+}
+
 export interface McpServerListResponse {
-  servers: ServerInfo[];
+  servers: McpServerInfo[];
   next: string | null;
   total_count: number;
 }

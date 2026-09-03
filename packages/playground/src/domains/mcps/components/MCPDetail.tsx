@@ -1,5 +1,4 @@
-import type { McpToolInfo } from '@mastra/client-js';
-import type { ServerInfo } from '@mastra/core/mcp';
+import type { McpServerInfo, McpToolInfo } from '@mastra/client-js';
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { CopyButton } from '@mastra/playground-ui/components/CopyButton';
 import {
@@ -14,14 +13,14 @@ import { Txt } from '@mastra/playground-ui/components/Txt';
 import { FolderIcon } from '@mastra/playground-ui/icons/FolderIcon';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { McpServerIcon } from '@mastra/playground-ui/icons/McpServerIcon';
-import { useEffect, useRef, useState } from 'react';
+import { useRef } from 'react';
 import { useMCPServerTools } from '../hooks/useMCPServerTools';
 import { ToolIconMap } from '@/domains/tools';
 import { useLinkComponent } from '@/lib/framework';
 
 export interface MCPDetailProps {
   isLoading: boolean;
-  server?: ServerInfo;
+  server?: McpServerInfo;
 }
 
 declare global {
@@ -32,29 +31,6 @@ declare global {
 }
 
 export const MCPDetail = ({ isLoading, server }: MCPDetailProps) => {
-  const [{ sseUrl, httpStreamUrl }, setUrls] = useState<{ sseUrl: string; httpStreamUrl: string }>({
-    sseUrl: '',
-    httpStreamUrl: '',
-  });
-
-  useEffect(() => {
-    if (!server) return;
-
-    const host = window.MASTRA_SERVER_HOST;
-    const port = window.MASTRA_SERVER_PORT;
-
-    let baseUrl = null;
-    if (host && port) {
-      baseUrl = `http://${host}:${port}`;
-    }
-
-    const effectiveBaseUrl = baseUrl || 'http://localhost:4111';
-    const sseUrl = `${effectiveBaseUrl}/api/mcp/${server.id}/sse`;
-    const httpStreamUrl = `${effectiveBaseUrl}/api/mcp/${server.id}/mcp`;
-
-    setUrls({ sseUrl, httpStreamUrl });
-  }, [server]);
-
   if (isLoading) return null;
 
   if (!server)
@@ -66,7 +42,13 @@ export const MCPDetail = ({ isLoading, server }: MCPDetailProps) => {
       </MainContentContent>
     );
 
+  const host = window.MASTRA_SERVER_HOST;
+  const port = window.MASTRA_SERVER_PORT;
+  const baseUrl = host && port ? `http://${host}:${port}` : 'http://localhost:4111';
+  const sseUrl = `${baseUrl}/api/mcp/${server.id}/sse`;
+  const httpStreamUrl = `${baseUrl}/api/mcp/${server.id}/mcp`;
   const commandLineConfig = `npx -y mcp-remote ${sseUrl}`;
+  const isModernServer = server.protocol_version === '2026-07-28';
 
   return (
     <MainContentContent isDivided={true}>
@@ -83,15 +65,16 @@ export const MCPDetail = ({ isLoading, server }: MCPDetailProps) => {
         </div>
 
         <Txt className="text-neutral3 pb-4">
-          This MCP server can be accessed through multiple transport methods. Choose the one that best fits your use
-          case.
+          {isModernServer
+            ? 'This MCP server uses the current Streamable HTTP transport.'
+            : 'This MCP server can be accessed through multiple transport methods. Choose the one that best fits your use case.'}
         </Txt>
 
         <div className="flex flex-col gap-4">
           {/* HTTP Stream */}
           <div className="border-border1 bg-surface3 rounded-lg border p-4">
             <Badge icon={<span className="text-accent1 mr-1 w-6 font-mono font-medium">HTTP</span>}>
-              Regular HTTP Endpoint
+              Streamable HTTP Endpoint
             </Badge>
 
             <Txt className="text-neutral3 pt-1 pb-2">Use for stateless HTTP transport with streamable responses.</Txt>
@@ -104,35 +87,39 @@ export const MCPDetail = ({ isLoading, server }: MCPDetailProps) => {
             </div>
           </div>
 
-          {/* SSE */}
-          <div className="border-border1 bg-surface3 rounded-lg border p-4">
-            <Badge icon={<span className="text-accent1 mr-1 w-6 font-mono font-medium">SSE</span>}>
-              Server-Sent Events
-            </Badge>
+          {!isModernServer && (
+            <>
+              <div className="border-border1 bg-surface3 rounded-lg border p-4">
+                <Badge icon={<span className="text-accent1 mr-1 w-6 font-mono font-medium">SSE</span>}>
+                  Server-Sent Events
+                </Badge>
 
-            <Txt className="text-neutral3 pt-1 pb-2">Use for real-time communication via SSE.</Txt>
+                <Txt className="text-neutral3 pt-1 pb-2">Use for real-time communication via SSE.</Txt>
 
-            <div className="flex items-start gap-2">
-              <Txt className="bg-surface4 rounded-lg px-2 py-1">{sseUrl}</Txt>
-              <div className="pt-1">
-                <CopyButton tooltip="Copy SSE URL" content={sseUrl} />
+                <div className="flex items-start gap-2">
+                  <Txt className="bg-surface4 rounded-lg px-2 py-1">{sseUrl}</Txt>
+                  <div className="pt-1">
+                    <CopyButton tooltip="Copy SSE URL" content={sseUrl} />
+                  </div>
+                </div>
               </div>
-            </div>
-          </div>
 
-          {/* Command Line */}
-          <div className="border-border1 bg-surface3 rounded-lg border p-4">
-            <Badge icon={<span className="text-accent1 mr-1 w-6 font-mono font-medium">CLI</span>}>Command Line</Badge>
+              <div className="border-border1 bg-surface3 rounded-lg border p-4">
+                <Badge icon={<span className="text-accent1 mr-1 w-6 font-mono font-medium">CLI</span>}>
+                  Command Line
+                </Badge>
 
-            <Txt className="text-neutral3 pt-1 pb-2">Use for local command-line access via npx and mcp-remote.</Txt>
+                <Txt className="text-neutral3 pt-1 pb-2">Use for local command-line access via npx and mcp-remote.</Txt>
 
-            <div className="flex items-start gap-2">
-              <Txt className="bg-surface4 rounded-lg px-2 py-1">{commandLineConfig}</Txt>
-              <div className="pt-1">
-                <CopyButton tooltip="Copy Command Line Config" content={commandLineConfig} />
+                <div className="flex items-start gap-2">
+                  <Txt className="bg-surface4 rounded-lg px-2 py-1">{commandLineConfig}</Txt>
+                  <div className="pt-1">
+                    <CopyButton tooltip="Copy Command Line Config" content={commandLineConfig} />
+                  </div>
+                </div>
               </div>
-            </div>
-          </div>
+            </>
+          )}
         </div>
       </div>
 
@@ -143,7 +130,7 @@ export const MCPDetail = ({ isLoading, server }: MCPDetailProps) => {
   );
 };
 
-const McpToolList = ({ server }: { server: ServerInfo }) => {
+const McpToolList = ({ server }: { server: McpServerInfo }) => {
   const { data: tools = {}, isLoading } = useMCPServerTools(server);
 
   if (isLoading) return null;

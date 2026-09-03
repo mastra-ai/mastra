@@ -38,4 +38,4 @@ const server = new MCPServer({
 })
 ```
 
-This default enables stateless requests, modern subscriptions, multi round-trip elicitation, JSON Schema 2020-12 results, and request metadata on compatible connections. Explicit legacy support remains available for session-dependent integrations and deprecated protocol features.
+This default enables stateless requests, modern subscriptions, multi round-trip elicitation, JSON Schema 2020-12 results, and request metadata on compatible connections. Server registry metadata now reports the effective protocol version so consumers can distinguish modern and legacy servers. Explicit legacy support remains available for session-dependent integrations and deprecated protocol features.

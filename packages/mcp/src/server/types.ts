@@ -1,3 +1,4 @@
+import type { ServerDetailInfo, ServerInfo } from '@mastra/core/mcp';
 import type { MCPServerContext } from '@mastra/core/tools';
 import type { McpUiResourceMeta } from '@modelcontextprotocol/ext-apps';
 import type {
@@ -26,6 +27,16 @@ import type {
  */
 export type MCPServerProtocolVersion = '2025-11-25' | '2026-07-28';
 
+/** Server registry metadata with Mastra's resolved MCP protocol era. */
+export interface MCPServerInfo extends ServerInfo {
+  protocol_version: MCPServerProtocolVersion;
+}
+
+/** Detailed server registry metadata with Mastra's resolved MCP protocol era. */
+export interface MCPServerDetailInfo extends ServerDetailInfo {
+  protocol_version: MCPServerProtocolVersion;
+}
+
 /**
  * The operations whose results are cacheable on the `2026-07-28` protocol revision.
  */
@@ -41,8 +52,8 @@ export type MCPServerCacheableMethod =
  * Cache hints (`ttlMs` / `cacheScope`) advertised on cacheable results of the
  * `2026-07-28` protocol revision, keyed by operation.
  *
- * Only used when `protocolVersion: '2026-07-28'` is set. Absent hints keep the SDK's
- * conservative defaults (`ttlMs: 0`, `cacheScope: 'private'`). Responses to legacy
+ * Used by the default modern server or when `protocolVersion: '2026-07-28'` is set explicitly.
+ * Absent hints keep the SDK's conservative defaults (`ttlMs: 0`, `cacheScope: 'private'`). Responses to legacy
  * (2025-era) requests are never affected.
  */
 export type MCPServerCacheHints = Partial<Record<MCPServerCacheableMethod, CacheHint>>;

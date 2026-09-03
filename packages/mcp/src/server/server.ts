@@ -8,8 +8,6 @@ import type {
   MCPAuthInfoToUserMapper,
   MCPServerFGAConfig,
   MCPServerConfig,
-  ServerInfo,
-  ServerDetailInfo,
   MCPServerHonoSSEOptions,
   MCPServerSSEOptions,
 } from '@mastra/core/mcp';
@@ -69,6 +67,8 @@ import type {
   AppResources,
   MCPServerProtocolVersion,
   MCPServerCacheHints,
+  MCPServerInfo,
+  MCPServerDetailInfo,
 } from './types';
 
 /**
@@ -2592,12 +2592,13 @@ export class MCPServer extends MCPServerBase {
    * // Output: My Weather Server v1.0.0
    * ```
    */
-  public getServerInfo(): ServerInfo {
+  public getServerInfo(): MCPServerInfo {
     return {
       id: this.id,
       name: this.name,
       description: this.description,
       repository: this.repository,
+      protocol_version: this.protocolVersion,
       version_detail: {
         version: this.version,
         release_date: this.releaseDate,
@@ -2621,7 +2622,7 @@ export class MCPServer extends MCPServerBase {
    * console.log(detail.packages); // Package installation info
    * ```
    */
-  public getServerDetail(): ServerDetailInfo {
+  public getServerDetail(): MCPServerDetailInfo {
     return {
       ...this.getServerInfo(),
       package_canonical: this.packageCanonical,

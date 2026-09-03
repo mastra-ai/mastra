@@ -768,18 +768,18 @@ async close(): Promise<void>
 
 ### `getServerInfo()`
 
-The method returns the server's basic information.
+The method returns the server's basic information. The `protocol_version` field contains the effective protocol version: `2025-11-25` or `2026-07-28`.
 
 ```typescript oxfmt:false
-getServerInfo(): ServerInfo
+getServerInfo(): MCPServerInfo
 ```
 
 ### `getServerDetail()`
 
-The method returns details about the server's information.
+The method returns details about the server's information, including the effective `protocol_version`.
 
 ```typescript oxfmt:false
-getServerDetail(): ServerDetail
+getServerDetail(): MCPServerDetailInfo
 ```
 
 ### `getToolListInfo()`
