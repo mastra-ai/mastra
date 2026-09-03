@@ -149,9 +149,7 @@
           "connection": "keep-alive",
           "content-type": "text/event-stream; charset=utf-8",
           "date": "Wed, 02 Sep 2026 22:23:59 GMT",
-          "openai-organization": "personal-1smmvi",
           "openai-processing-ms": "180",
-          "openai-project": "proj_i5xepL7AVq5Id7m6q2HKx0cV",
           "openai-version": "2020-10-01",
           "server": "cloudflare",
           "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
@@ -339,9 +337,7 @@
           "connection": "keep-alive",
           "content-type": "text/event-stream; charset=utf-8",
           "date": "Wed, 02 Sep 2026 22:24:00 GMT",
-          "openai-organization": "personal-1smmvi",
           "openai-processing-ms": "164",
-          "openai-project": "proj_i5xepL7AVq5Id7m6q2HKx0cV",
           "openai-version": "2020-10-01",
           "server": "cloudflare",
           "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
@@ -616,9 +612,7 @@
           "connection": "keep-alive",
           "content-type": "text/event-stream; charset=utf-8",
           "date": "Wed, 02 Sep 2026 22:24:01 GMT",
-          "openai-organization": "personal-1smmvi",
           "openai-processing-ms": "291",
-          "openai-project": "proj_i5xepL7AVq5Id7m6q2HKx0cV",
           "openai-version": "2020-10-01",
           "server": "cloudflare",
           "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
@@ -880,9 +874,7 @@
           "connection": "keep-alive",
           "content-type": "text/event-stream; charset=utf-8",
           "date": "Wed, 02 Sep 2026 22:24:02 GMT",
-          "openai-organization": "personal-1smmvi",
           "openai-processing-ms": "169",
-          "openai-project": "proj_i5xepL7AVq5Id7m6q2HKx0cV",
           "openai-version": "2020-10-01",
           "server": "cloudflare",
           "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
@@ -1043,7 +1035,7 @@
               "content": [
                 {
                   "type": "input_text",
-                  "text": "IMPORTANT: The following tool-call IDs completed successfully: call_N7Y3MPkMjht6Lc0RPH9O8iKj (research). Their results are now in the conversation. Do not call the same tool again — the result is already available."
+                  "text": "IMPORTANT: The following tool-call IDs completed successfully: call_N7Y3MPkMjht6Lc0RPH9O8iKj (research). Their results are now in the conversation. Do not call the same tool again \u2014 the result is already available."
                 }
               ]
             }
@@ -1167,9 +1159,7 @@
           "connection": "keep-alive",
           "content-type": "text/event-stream; charset=utf-8",
           "date": "Wed, 02 Sep 2026 22:24:03 GMT",
-          "openai-organization": "personal-1smmvi",
           "openai-processing-ms": "204",
-          "openai-project": "proj_i5xepL7AVq5Id7m6q2HKx0cV",
           "openai-version": "2020-10-01",
           "server": "cloudflare",
           "strict-transport-security": "max-age=31536000; includeSubDomains; preload",

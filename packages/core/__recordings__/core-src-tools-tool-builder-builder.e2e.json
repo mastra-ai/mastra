@@ -287,7 +287,7 @@
                     "id": "call_P3O1kwqP8tZgoCVE5zDuKLnq",
                     "function": {
                       "name": "testTool_manySchemas",
-                      "arguments": "{\"stringEmail\":\"example@example.com\",\"stringEmoji\":\"😊\",\"stringUrl\":\"https://www.example.com\",\"stringRegex\":\"test-sample\",\"number\":42,\"exampleArray\":[\"example1\",\"example2\",\"example3\"],\"arrayMax\":[\"item1\",\"item2\",\"item3\",\"item4\",\"item5\"],\"object\":{\"foo\":\"bar\",\"bar\":10},\"objectNested\":{\"user\":{\"name\":\"John\",\"age\":30}},\"objectPassthrough\":{\"key1\":\"value1\",\"key2\":2},\"optional\":null,\"nullable\":\"nullable value\",\"enum\":\"A\",\"nativeEnum\":\"B\",\"unionPrimitives\":\"sample text\",\"unionObjects\":{\"amount\":100,\"inventoryItemName\":\"item\"}}"
+                      "arguments": "{\"stringEmail\":\"example@example.com\",\"stringEmoji\":\"\ud83d\ude0a\",\"stringUrl\":\"https://www.example.com\",\"stringRegex\":\"test-sample\",\"number\":42,\"exampleArray\":[\"example1\",\"example2\",\"example3\"],\"arrayMax\":[\"item1\",\"item2\",\"item3\",\"item4\",\"item5\"],\"object\":{\"foo\":\"bar\",\"bar\":10},\"objectNested\":{\"user\":{\"name\":\"John\",\"age\":30}},\"objectPassthrough\":{\"key1\":\"value1\",\"key2\":2},\"optional\":null,\"nullable\":\"nullable value\",\"enum\":\"A\",\"nativeEnum\":\"B\",\"unionPrimitives\":\"sample text\",\"unionObjects\":{\"amount\":100,\"inventoryItemName\":\"item\"}}"
                     }
                   }
                 ]
@@ -308,8 +308,8 @@
             },
             "cost_details": {
               "upstream_inference_cost": 0.0001569,
-              "upstream_inference_prompt_cost": 0.0000645,
-              "upstream_inference_completions_cost": 0.0000924
+              "upstream_inference_prompt_cost": 6.45e-05,
+              "upstream_inference_completions_cost": 9.24e-05
             },
             "completion_tokens_details": {
               "reasoning_tokens": 0,
@@ -589,7 +589,7 @@
                     "id": "toolu_bdrk_016nakdmq4ZKgmAnAqhJkhsS",
                     "function": {
                       "name": "testTool_manySchemas",
-                      "arguments": "{\"stringEmail\": \"test@example.com\", \"stringEmoji\": \"😀\", \"stringUrl\": \"https://example.com\", \"stringRegex\": \"test-sample\", \"number\": 42, \"exampleArray\": [\"hello\",\"world\",\"test\"], \"arrayMax\": [\"one\",\"two\",\"three\"], \"object\": {\"foo\":\"bar\",\"bar\":123}, \"objectNested\": {\"user\":{\"name\":\"John\",\"age\":25}}, \"objectPassthrough\": {\"key1\":\"value1\",\"key2\":42}, \"nullable\": null, \"enum\": \"A\", \"nativeEnum\": \"B\", \"unionPrimitives\": \"sample text\", \"unionObjects\": {\"inventoryItemName\":\"widget\",\"amount\":10}}"
+                      "arguments": "{\"stringEmail\": \"test@example.com\", \"stringEmoji\": \"\ud83d\ude00\", \"stringUrl\": \"https://example.com\", \"stringRegex\": \"test-sample\", \"number\": 42, \"exampleArray\": [\"hello\",\"world\",\"test\"], \"arrayMax\": [\"one\",\"two\",\"three\"], \"object\": {\"foo\":\"bar\",\"bar\":123}, \"objectNested\": {\"user\":{\"name\":\"John\",\"age\":25}}, \"objectPassthrough\": {\"key1\":\"value1\",\"key2\":42}, \"nullable\": null, \"enum\": \"A\", \"nativeEnum\": \"B\", \"unionPrimitives\": \"sample text\", \"unionObjects\": {\"inventoryItemName\":\"widget\",\"amount\":10}}"
                     }
                   }
                 ]
@@ -877,7 +877,7 @@
                     "id": "tool_testTool_manySchemas_IIn5FtV1rvA9NZlzGGWx",
                     "function": {
                       "name": "testTool_manySchemas",
-                      "arguments": "{\"objectPassthrough\":{},\"stringRegex\":\"test-string\",\"enum\":\"A\",\"unionPrimitives\":\"string\",\"stringEmail\":\"test@example.com\",\"arrayMax\":[\"itemA\",\"itemB\"],\"nativeEnum\":\"A\",\"exampleArray\":[\"item1\",\"item2\"],\"unionObjects\":{\"amount\":1.23,\"inventoryItemName\":\"item\"},\"objectNested\":{\"user\":{\"age\":30,\"name\":\"John Doe\"}},\"stringUrl\":\"https://www.example.com\",\"number\":123.45,\"object\":{\"bar\":1.23,\"foo\":\"bar\"},\"nullable\":\"null\",\"stringEmoji\":\"😊\"}"
+                      "arguments": "{\"objectPassthrough\":{},\"stringRegex\":\"test-string\",\"enum\":\"A\",\"unionPrimitives\":\"string\",\"stringEmail\":\"test@example.com\",\"arrayMax\":[\"itemA\",\"itemB\"],\"nativeEnum\":\"A\",\"exampleArray\":[\"item1\",\"item2\"],\"unionObjects\":{\"amount\":1.23,\"inventoryItemName\":\"item\"},\"objectNested\":{\"user\":{\"age\":30,\"name\":\"John Doe\"}},\"stringUrl\":\"https://www.example.com\",\"number\":123.45,\"object\":{\"bar\":1.23,\"foo\":\"bar\"},\"nullable\":\"null\",\"stringEmoji\":\"\ud83d\ude0a\"}"
                     }
                   }
                 ]
@@ -1165,7 +1165,7 @@
                     "id": "call_115583",
                     "function": {
                       "name": "testTool_manySchemas",
-                      "arguments": "{\"stringRegex\":\"test-123\",\"unionObjects\":{\"amount\":5,\"inventoryItemName\":\"apple\"},\"stringEmail\":\"test@example.com\",\"enum\":\"A\",\"unionPrimitives\":100,\"exampleArray\":[\"example1\",\"example2\"],\"number\":42,\"objectNested\":{\"user\":{\"name\":\"John Doe\",\"age\":25}},\"arrayMax\":[\"item1\",\"item2\"],\"nullable\":null,\"stringUrl\":\"https://example.com\",\"nativeEnum\":\"B\",\"stringEmoji\":\"😊\",\"objectPassthrough\":{},\"object\":{\"foo\":\"test\",\"bar\":10}}"
+                      "arguments": "{\"stringRegex\":\"test-123\",\"unionObjects\":{\"amount\":5,\"inventoryItemName\":\"apple\"},\"stringEmail\":\"test@example.com\",\"enum\":\"A\",\"unionPrimitives\":100,\"exampleArray\":[\"example1\",\"example2\"],\"number\":42,\"objectNested\":{\"user\":{\"name\":\"John Doe\",\"age\":25}},\"arrayMax\":[\"item1\",\"item2\"],\"nullable\":null,\"stringUrl\":\"https://example.com\",\"nativeEnum\":\"B\",\"stringEmoji\":\"\ud83d\ude0a\",\"objectPassthrough\":{},\"object\":{\"foo\":\"test\",\"bar\":10}}"
                     }
                   }
                 ],
@@ -1476,7 +1476,7 @@
                     "id": "toolu_bdrk_01BDSyeAcPLq1NwKbavWHqzs",
                     "function": {
                       "name": "testTool_manySchemas",
-                      "arguments": "{\"stringEmail\": \"test@example.com\", \"stringEmoji\": \"😀\", \"stringUrl\": \"https://www.example.com\", \"stringRegex\": \"test-sample-string\", \"number\": 42, \"exampleArray\": [\"example1\",\"example2\",\"example3\"], \"arrayMax\": [\"item1\",\"item2\",\"item3\"], \"object\": {\"foo\":\"bar\",\"bar\":123}, \"objectNested\": {\"user\":{\"name\":\"John Doe\",\"age\":25}}, \"objectPassthrough\": {\"key1\":\"value1\",\"key2\":42,\"key3\":true}, \"nullable\": null, \"enum\": \"A\", \"nativeEnum\": \"B\", \"unionPrimitives\": \"Hello World\", \"unionObjects\": {\"amount\":100,\"inventoryItemName\":\"Widget\"}}"
+                      "arguments": "{\"stringEmail\": \"test@example.com\", \"stringEmoji\": \"\ud83d\ude00\", \"stringUrl\": \"https://www.example.com\", \"stringRegex\": \"test-sample-string\", \"number\": 42, \"exampleArray\": [\"example1\",\"example2\",\"example3\"], \"arrayMax\": [\"item1\",\"item2\",\"item3\"], \"object\": {\"foo\":\"bar\",\"bar\":123}, \"objectNested\": {\"user\":{\"name\":\"John Doe\",\"age\":25}}, \"objectPassthrough\": {\"key1\":\"value1\",\"key2\":42,\"key3\":true}, \"nullable\": null, \"enum\": \"A\", \"nativeEnum\": \"B\", \"unionPrimitives\": \"Hello World\", \"unionObjects\": {\"amount\":100,\"inventoryItemName\":\"Widget\"}}"
                     }
                   }
                 ]
@@ -1764,7 +1764,7 @@
                     "id": "tool_testTool_manySchemas_2Gijg283Ckgs8APnACLo",
                     "function": {
                       "name": "testTool_manySchemas",
-                      "arguments": "{\"stringEmail\":\"test@example.com\",\"exampleArray\":[\"a\",\"b\",\"c\"],\"number\":123.45,\"stringRegex\":\"test-string\",\"object\":{\"bar\":123,\"foo\":\"hello\"},\"arrayMax\":[\"a\",\"b\",\"c\",\"d\",\"e\"],\"stringUrl\":\"https://example.com\",\"unionObjects\":{\"amount\":10,\"inventoryItemName\":\"item\"},\"unionPrimitives\":\"hello\",\"nullable\":null,\"nativeEnum\":\"B\",\"objectPassthrough\":{},\"enum\":\"A\",\"objectNested\":{\"user\":{\"name\":\"John Doe\",\"age\":30}},\"stringEmoji\":\"👍\"}"
+                      "arguments": "{\"stringEmail\":\"test@example.com\",\"exampleArray\":[\"a\",\"b\",\"c\"],\"number\":123.45,\"stringRegex\":\"test-string\",\"object\":{\"bar\":123,\"foo\":\"hello\"},\"arrayMax\":[\"a\",\"b\",\"c\",\"d\",\"e\"],\"stringUrl\":\"https://example.com\",\"unionObjects\":{\"amount\":10,\"inventoryItemName\":\"item\"},\"unionPrimitives\":\"hello\",\"nullable\":null,\"nativeEnum\":\"B\",\"objectPassthrough\":{},\"enum\":\"A\",\"objectNested\":{\"user\":{\"name\":\"John Doe\",\"age\":30}},\"stringEmoji\":\"\ud83d\udc4d\"}"
                     }
                   }
                 ],
@@ -2062,9 +2062,7 @@
           "connection": "keep-alive",
           "content-type": "application/json",
           "date": "Thu, 03 Sep 2026 15:57:45 GMT",
-          "openai-organization": "personal-1smmvi",
           "openai-processing-ms": "4302",
-          "openai-project": "proj_i5xepL7AVq5Id7m6q2HKx0cV",
           "openai-version": "2020-10-01",
           "server": "cloudflare",
           "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
@@ -2095,7 +2093,7 @@
                     "type": "function",
                     "function": {
                       "name": "testTool_manySchemas",
-                      "arguments": "{\n  \"stringEmail\": \"example@test.com\",\n  \"stringEmoji\": \"😀\",\n  \"stringUrl\": \"https://example.com\",\n  \"stringRegex\": \"test-example\",\n  \"number\": 42,\n  \"exampleArray\": [\n    \"one\",\n    \"two\"\n  ],\n  \"arrayMax\": [\n    \"a\",\n    \"b\"\n  ],\n  \"object\": {\n    \"foo\": \"hello\",\n    \"bar\": 1\n  },\n  \"objectNested\": {\n    \"user\": {\n      \"name\": \"John\",\n      \"age\": 30\n    }\n  },\n  \"objectPassthrough\": {\n    \t\t\t\t\t   \t\t\t},\n  \"optional\": null,\n  \"nullable\": null,\n  \"enum\": \"A\",\n  \"nativeEnum\": \"B\",\n  \"unionPrimitives\": \"text\",\n  \"unionObjects\": {\n    \"amount\": 10,\n    \"inventoryItemName\": \"Item1\"\n  }\n}"
+                      "arguments": "{\n  \"stringEmail\": \"example@test.com\",\n  \"stringEmoji\": \"\ud83d\ude00\",\n  \"stringUrl\": \"https://example.com\",\n  \"stringRegex\": \"test-example\",\n  \"number\": 42,\n  \"exampleArray\": [\n    \"one\",\n    \"two\"\n  ],\n  \"arrayMax\": [\n    \"a\",\n    \"b\"\n  ],\n  \"object\": {\n    \"foo\": \"hello\",\n    \"bar\": 1\n  },\n  \"objectNested\": {\n    \"user\": {\n      \"name\": \"John\",\n      \"age\": 30\n    }\n  },\n  \"objectPassthrough\": {\n    \t\t\t\t\t   \t\t\t},\n  \"optional\": null,\n  \"nullable\": null,\n  \"enum\": \"A\",\n  \"nativeEnum\": \"B\",\n  \"unionPrimitives\": \"text\",\n  \"unionObjects\": {\n    \"amount\": 10,\n    \"inventoryItemName\": \"Item1\"\n  }\n}"
                     }
                   }
                 ],
@@ -2393,7 +2391,7 @@
                     "id": "toolu_bdrk_01KFArG3a8CA7pQCqBLvSXtf",
                     "function": {
                       "name": "testTool_manySchemas",
-                      "arguments": "{\"stringEmail\": \"test@example.com\", \"stringEmoji\": \"😊\", \"stringUrl\": \"https://www.example.com\", \"stringRegex\": \"test-sample\", \"number\": 42, \"exampleArray\": [\"example1\",\"example2\",\"example3\"], \"arrayMax\": [\"item1\",\"item2\",\"item3\"], \"object\": {\"foo\":\"bar\",\"bar\":123}, \"objectNested\": {\"user\":{\"name\":\"John Doe\",\"age\":25}}, \"objectPassthrough\": {\"key1\":\"value1\",\"key2\":123,\"key3\":true}, \"nullable\": null, \"enum\": \"A\", \"nativeEnum\": \"B\", \"unionPrimitives\": \"Hello World\", \"unionObjects\": {\"amount\":100,\"inventoryItemName\":\"Widget\"}}"
+                      "arguments": "{\"stringEmail\": \"test@example.com\", \"stringEmoji\": \"\ud83d\ude0a\", \"stringUrl\": \"https://www.example.com\", \"stringRegex\": \"test-sample\", \"number\": 42, \"exampleArray\": [\"example1\",\"example2\",\"example3\"], \"arrayMax\": [\"item1\",\"item2\",\"item3\"], \"object\": {\"foo\":\"bar\",\"bar\":123}, \"objectNested\": {\"user\":{\"name\":\"John Doe\",\"age\":25}}, \"objectPassthrough\": {\"key1\":\"value1\",\"key2\":123,\"key3\":true}, \"nullable\": null, \"enum\": \"A\", \"nativeEnum\": \"B\", \"unionPrimitives\": \"Hello World\", \"unionObjects\": {\"amount\":100,\"inventoryItemName\":\"Widget\"}}"
                     }
                   }
                 ]
@@ -2706,7 +2704,7 @@
                     "id": "call_Z6ccv219SbmNvthAhduKkUhM",
                     "function": {
                       "name": "testTool_manySchemas",
-                      "arguments": "{\"stringEmail\":\"example@test.com\",\"stringEmoji\":\"😀\",\"stringUrl\":\"https://example.com\",\"stringRegex\":\"test-sample\",\"number\":123,\"exampleArray\":[\"sample1\",\"sample2\",\"sample3\"],\"arrayMax\":[\"item1\",\"item2\"],\"object\":{\"foo\":\"bar\",\"bar\":42},\"objectNested\":{\"user\":{\"name\":\"John\",\"age\":30}},\"objectPassthrough\":{\"key1\":\"value1\",\"key2\":2},\"optional\":null,\"nullable\":\"nullable string\",\"enum\":\"A\",\"nativeEnum\":\"B\",\"unionPrimitives\":100,\"unionObjects\":{\"amount\":50,\"inventoryItemName\":\"Widget\"}}"
+                      "arguments": "{\"stringEmail\":\"example@test.com\",\"stringEmoji\":\"\ud83d\ude00\",\"stringUrl\":\"https://example.com\",\"stringRegex\":\"test-sample\",\"number\":123,\"exampleArray\":[\"sample1\",\"sample2\",\"sample3\"],\"arrayMax\":[\"item1\",\"item2\"],\"object\":{\"foo\":\"bar\",\"bar\":42},\"objectNested\":{\"user\":{\"name\":\"John\",\"age\":30}},\"objectPassthrough\":{\"key1\":\"value1\",\"key2\":2},\"optional\":null,\"nullable\":\"nullable string\",\"enum\":\"A\",\"nativeEnum\":\"B\",\"unionPrimitives\":100,\"unionObjects\":{\"amount\":50,\"inventoryItemName\":\"Widget\"}}"
                     }
                   }
                 ]
@@ -2727,8 +2725,8 @@
             },
             "cost_details": {
               "upstream_inference_cost": 0.0001503,
-              "upstream_inference_prompt_cost": 0.0000645,
-              "upstream_inference_completions_cost": 0.0000858
+              "upstream_inference_prompt_cost": 6.45e-05,
+              "upstream_inference_completions_cost": 8.58e-05
             },
             "completion_tokens_details": {
               "reasoning_tokens": 0,
@@ -3007,7 +3005,7 @@
                     "id": "toolu_bdrk_01NFxWWSxKFBSUWp72yev3x3",
                     "function": {
                       "name": "testTool_manySchemas",
-                      "arguments": "{\"stringEmail\": \"test@example.com\", \"stringEmoji\": \"😀\", \"stringUrl\": \"https://www.example.com\", \"stringRegex\": \"test-sample\", \"number\": 42, \"exampleArray\": [\"example1\",\"example2\",\"example3\"], \"arrayMax\": [\"item1\",\"item2\",\"item3\"], \"object\": {\"foo\":\"bar\",\"bar\":123}, \"objectNested\": {\"user\":{\"name\":\"John\",\"age\":25}}, \"objectPassthrough\": {\"key1\":\"value1\",\"key2\":\"value2\"}, \"nullable\": null, \"enum\": \"A\", \"nativeEnum\": \"B\", \"unionPrimitives\": \"hello\", \"unionObjects\": {\"amount\":100,\"inventoryItemName\":\"Widget\"}}"
+                      "arguments": "{\"stringEmail\": \"test@example.com\", \"stringEmoji\": \"\ud83d\ude00\", \"stringUrl\": \"https://www.example.com\", \"stringRegex\": \"test-sample\", \"number\": 42, \"exampleArray\": [\"example1\",\"example2\",\"example3\"], \"arrayMax\": [\"item1\",\"item2\",\"item3\"], \"object\": {\"foo\":\"bar\",\"bar\":123}, \"objectNested\": {\"user\":{\"name\":\"John\",\"age\":25}}, \"objectPassthrough\": {\"key1\":\"value1\",\"key2\":\"value2\"}, \"nullable\": null, \"enum\": \"A\", \"nativeEnum\": \"B\", \"unionPrimitives\": \"hello\", \"unionObjects\": {\"amount\":100,\"inventoryItemName\":\"Widget\"}}"
                     }
                   }
                 ]
@@ -3321,7 +3319,7 @@
                     "id": "call_6BZvAzUW0EuuF25FH5lV2pbm",
                     "function": {
                       "name": "testTool_manySchemas",
-                      "arguments": "{\"stringEmail\":\"example@test.com\",\"stringEmoji\":\"😊\",\"stringUrl\":\"https://example.com\",\"stringRegex\":\"test-123\",\"number\":42,\"exampleArray\":[\"one\",\"two\",\"three\"],\"arrayMax\":[\"a\",\"b\",\"c\"],\"object\":{\"foo\":\"bar\",\"bar\":10},\"objectNested\":{\"user\":{\"name\":\"John\",\"age\":30}},\"objectPassthrough\":{},\"optional\":null,\"nullable\":null,\"enum\":\"A\",\"nativeEnum\":\"B\",\"unionPrimitives\":\"sample text\",\"unionObjects\":{\"amount\":5,\"inventoryItemName\":\"item1\"}}"
+                      "arguments": "{\"stringEmail\":\"example@test.com\",\"stringEmoji\":\"\ud83d\ude0a\",\"stringUrl\":\"https://example.com\",\"stringRegex\":\"test-123\",\"number\":42,\"exampleArray\":[\"one\",\"two\",\"three\"],\"arrayMax\":[\"a\",\"b\",\"c\"],\"object\":{\"foo\":\"bar\",\"bar\":10},\"objectNested\":{\"user\":{\"name\":\"John\",\"age\":30}},\"objectPassthrough\":{},\"optional\":null,\"nullable\":null,\"enum\":\"A\",\"nativeEnum\":\"B\",\"unionPrimitives\":\"sample text\",\"unionObjects\":{\"amount\":5,\"inventoryItemName\":\"item1\"}}"
                     }
                   }
                 ]
@@ -3634,7 +3632,7 @@
                     "id": "call_Anyg3OwIX4LwrAFDWlFTvKpp",
                     "function": {
                       "name": "testTool_manySchemas",
-                      "arguments": "{\"stringEmail\": \"test@example.com\", \"stringEmoji\": \"😊\", \"stringUrl\": \"https://example.com\", \"stringRegex\": \"test-example\", \"number\": 12345, \"exampleArray\": [\"one\", \"two\", \"three\"], \"arrayMax\": [\"one\", \"two\"], \"object\": {\"foo\": \"bar\", \"bar\": 42}, \"objectNested\": {\"user\": {\"name\": \"Alice\", \"age\": 18}}, \"objectPassthrough\": {} , \"optional\": null, \"nullable\": \"not null\", \"enum\": \"A\", \"nativeEnum\": \"A\", \"unionPrimitives\": \"union value\", \"unionObjects\": {\"amount\": 100, \"inventoryItemName\": \"item1\"}}"
+                      "arguments": "{\"stringEmail\": \"test@example.com\", \"stringEmoji\": \"\ud83d\ude0a\", \"stringUrl\": \"https://example.com\", \"stringRegex\": \"test-example\", \"number\": 12345, \"exampleArray\": [\"one\", \"two\", \"three\"], \"arrayMax\": [\"one\", \"two\"], \"object\": {\"foo\": \"bar\", \"bar\": 42}, \"objectNested\": {\"user\": {\"name\": \"Alice\", \"age\": 18}}, \"objectPassthrough\": {} , \"optional\": null, \"nullable\": \"not null\", \"enum\": \"A\", \"nativeEnum\": \"A\", \"unionPrimitives\": \"union value\", \"unionObjects\": {\"amount\": 100, \"inventoryItemName\": \"item1\"}}"
                     }
                   }
                 ],
@@ -3956,7 +3954,7 @@
                     "id": "call_rtKOY8Br7BiMG0OKnvfUqv7z",
                     "function": {
                       "name": "testTool_manySchemas",
-                      "arguments": "{\n  \"stringEmail\": \"example@test.com\",\n  \"stringEmoji\": \"😀\",\n  \"stringUrl\": \"https://example.com\",\n  \"stringRegex\": \"test-123\",\n  \"number\": 42,\n  \"exampleArray\": [\"one\", \"two\", \"three\"],\n  \"arrayMax\": [\"a\", \"b\", \"c\"],\n  \"object\": {\n    \"foo\": \"bar\",\n    \"bar\": 10\n  },\n  \"objectNested\": {\n    \"user\": {\n      \"name\": \"Al\",\n      \"age\": 25\n    }\n  },\n  \"objectPassthrough\": {\n    \t}\n  ,\n  \"optional\": null,\n  \"nullable\": null,\n  \"enum\": \"A\",\n  \"nativeEnum\": \"B\",\n  \"unionPrimitives\": \"value\",\n  \"unionObjects\": {\n    \"amount\": 5,\n    \"inventoryItemName\": \"item1\"\n  }\n}"
+                      "arguments": "{\n  \"stringEmail\": \"example@test.com\",\n  \"stringEmoji\": \"\ud83d\ude00\",\n  \"stringUrl\": \"https://example.com\",\n  \"stringRegex\": \"test-123\",\n  \"number\": 42,\n  \"exampleArray\": [\"one\", \"two\", \"three\"],\n  \"arrayMax\": [\"a\", \"b\", \"c\"],\n  \"object\": {\n    \"foo\": \"bar\",\n    \"bar\": 10\n  },\n  \"objectNested\": {\n    \"user\": {\n      \"name\": \"Al\",\n      \"age\": 25\n    }\n  },\n  \"objectPassthrough\": {\n    \t}\n  ,\n  \"optional\": null,\n  \"nullable\": null,\n  \"enum\": \"A\",\n  \"nativeEnum\": \"B\",\n  \"unionPrimitives\": \"value\",\n  \"unionObjects\": {\n    \"amount\": 5,\n    \"inventoryItemName\": \"item1\"\n  }\n}"
                     }
                   }
                 ]
@@ -4239,9 +4237,7 @@
           "connection": "keep-alive",
           "content-type": "application/json",
           "date": "Thu, 03 Sep 2026 15:57:53 GMT",
-          "openai-organization": "personal-1smmvi",
           "openai-processing-ms": "11875",
-          "openai-project": "proj_i5xepL7AVq5Id7m6q2HKx0cV",
           "openai-version": "2020-10-01",
           "server": "cloudflare",
           "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
@@ -4272,7 +4268,7 @@
                     "type": "function",
                     "function": {
                       "name": "testTool_manySchemas",
-                      "arguments": "{\"stringEmail\":\"user@example.com\",\"stringEmoji\":\"😊\",\"stringUrl\":\"https://example.com\",\"stringRegex\":\"test-123\",\"number\":42,\"exampleArray\":[\"one\",\"two\",\"three\"],\"arrayMax\":[\"a\",\"b\",\"c\"],\"object\":{\"foo\":\"value\",\"bar\":10},\"objectNested\":{\"user\":{\"name\":\"Alice\",\"age\":30}},\"objectPassthrough\":{\t\t\t}, \"optional\":null,\"nullable\":null,\"enum\":\"A\",\"nativeEnum\":\"B\",\"unionPrimitives\":\"sample string\",\"unionObjects\":{\"amount\":10,\"inventoryItemName\":\"Widget\"}}"
+                      "arguments": "{\"stringEmail\":\"user@example.com\",\"stringEmoji\":\"\ud83d\ude0a\",\"stringUrl\":\"https://example.com\",\"stringRegex\":\"test-123\",\"number\":42,\"exampleArray\":[\"one\",\"two\",\"three\"],\"arrayMax\":[\"a\",\"b\",\"c\"],\"object\":{\"foo\":\"value\",\"bar\":10},\"objectNested\":{\"user\":{\"name\":\"Alice\",\"age\":30}},\"objectPassthrough\":{\t\t\t}, \"optional\":null,\"nullable\":null,\"enum\":\"A\",\"nativeEnum\":\"B\",\"unionPrimitives\":\"sample string\",\"unionObjects\":{\"amount\":10,\"inventoryItemName\":\"Widget\"}}"
                     }
                   }
                 ],
@@ -4556,7 +4552,7 @@
                     "id": "tool_testTool_manySchemas_UVv1EHSlP3hbGOI3YM6Z",
                     "function": {
                       "name": "testTool_manySchemas",
-                      "arguments": "{\"number\":123,\"enum\":\"A\",\"stringRegex\":\"test-string\",\"unionObjects\":{\"amount\":123,\"inventoryItemName\":\"test\"},\"nativeEnum\":\"A\",\"stringEmail\":\"test@example.com\",\"arrayMax\":[\"a\",\"b\",\"c\",\"d\",\"e\"],\"objectPassthrough\":{},\"object\":{\"foo\":\"bar\",\"bar\":123},\"nullable\":\"\",\"objectNested\":{\"user\":{\"age\":20,\"name\":\"test\"}},\"unionPrimitives\":123,\"exampleArray\":[\"a\",\"b\",\"c\"],\"stringUrl\":\"https://example.com\",\"stringEmoji\":\"👍\"}"
+                      "arguments": "{\"number\":123,\"enum\":\"A\",\"stringRegex\":\"test-string\",\"unionObjects\":{\"amount\":123,\"inventoryItemName\":\"test\"},\"nativeEnum\":\"A\",\"stringEmail\":\"test@example.com\",\"arrayMax\":[\"a\",\"b\",\"c\",\"d\",\"e\"],\"objectPassthrough\":{},\"object\":{\"foo\":\"bar\",\"bar\":123},\"nullable\":\"\",\"objectNested\":{\"user\":{\"age\":20,\"name\":\"test\"}},\"unionPrimitives\":123,\"exampleArray\":[\"a\",\"b\",\"c\"],\"stringUrl\":\"https://example.com\",\"stringEmoji\":\"\ud83d\udc4d\"}"
                     }
                   }
                 ],
@@ -4858,7 +4854,7 @@
                     "id": "call_105133",
                     "function": {
                       "name": "testTool_manySchemas",
-                      "arguments": "{\"stringEmail\":\"test@example.com\",\"nativeEnum\":\"B\",\"number\":42,\"stringRegex\":\"test-data\",\"stringUrl\":\"https://example.com\",\"stringEmoji\":\"😊\",\"objectPassthrough\":{},\"enum\":\"A\",\"unionPrimitives\":100,\"unionObjects\":{\"amount\":5,\"inventoryItemName\":\"Apple\"},\"object\":{\"bar\":10,\"foo\":\"test\"},\"arrayMax\":[\"item1\",\"item2\"],\"nullable\":null,\"objectNested\":{\"user\":{\"age\":25,\"name\":\"John Doe\"}},\"exampleArray\":[\"one\",\"two\"]}"
+                      "arguments": "{\"stringEmail\":\"test@example.com\",\"nativeEnum\":\"B\",\"number\":42,\"stringRegex\":\"test-data\",\"stringUrl\":\"https://example.com\",\"stringEmoji\":\"\ud83d\ude0a\",\"objectPassthrough\":{},\"enum\":\"A\",\"unionPrimitives\":100,\"unionObjects\":{\"amount\":5,\"inventoryItemName\":\"Apple\"},\"object\":{\"bar\":10,\"foo\":\"test\"},\"arrayMax\":[\"item1\",\"item2\"],\"nullable\":null,\"objectNested\":{\"user\":{\"age\":25,\"name\":\"John Doe\"}},\"exampleArray\":[\"one\",\"two\"]}"
                     }
                   }
                 ],
@@ -5154,7 +5150,7 @@
                     "id": "tool_testTool_manySchemas_u3SsVCL6w2s1VHH1AADN",
                     "function": {
                       "name": "testTool_manySchemas",
-                      "arguments": "{\"stringEmoji\":\"😊\",\"stringEmail\":\"test@example.com\",\"nullable\":\"null\",\"exampleArray\":[\"item1\",\"item2\"],\"unionObjects\":{\"inventoryItemName\":\"widget\",\"amount\":10.5},\"number\":123.45,\"arrayMax\":[\"itemA\",\"itemB\"],\"objectNested\":{\"user\":{\"name\":\"John Doe\",\"age\":30}},\"object\":{\"foo\":\"hello\",\"bar\":1.23},\"objectPassthrough\":{},\"stringRegex\":\"test-abc\",\"enum\":\"A\",\"nativeEnum\":\"A\",\"stringUrl\":\"https://www.example.com\",\"unionPrimitives\":\"hello\"}"
+                      "arguments": "{\"stringEmoji\":\"\ud83d\ude0a\",\"stringEmail\":\"test@example.com\",\"nullable\":\"null\",\"exampleArray\":[\"item1\",\"item2\"],\"unionObjects\":{\"inventoryItemName\":\"widget\",\"amount\":10.5},\"number\":123.45,\"arrayMax\":[\"itemA\",\"itemB\"],\"objectNested\":{\"user\":{\"name\":\"John Doe\",\"age\":30}},\"object\":{\"foo\":\"hello\",\"bar\":1.23},\"objectPassthrough\":{},\"stringRegex\":\"test-abc\",\"enum\":\"A\",\"nativeEnum\":\"A\",\"stringUrl\":\"https://www.example.com\",\"unionPrimitives\":\"hello\"}"
                     }
                   }
                 ]
@@ -5440,9 +5436,7 @@
           "connection": "keep-alive",
           "content-type": "application/json",
           "date": "Thu, 03 Sep 2026 15:57:58 GMT",
-          "openai-organization": "personal-1smmvi",
           "openai-processing-ms": "5689",
-          "openai-project": "proj_i5xepL7AVq5Id7m6q2HKx0cV",
           "openai-version": "2020-10-01",
           "server": "cloudflare",
           "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
@@ -5485,7 +5479,7 @@
               "id": "fc_0a2d4fa15b26f696006a999905cfc887d18d313389fb8ffbe2",
               "type": "function_call",
               "status": "completed",
-              "arguments": "{\"stringEmail\":\"test@example.com\",\"stringEmoji\":\"😀\",\"stringUrl\":\"https://www.example.com\",\"stringRegex\":\"test-123\",\"number\":42,\"exampleArray\":[\"apple\",\"banana\",\"cherry\"],\"arrayMax\":[\"one\",\"two\",\"three\"],\"object\":{\"foo\":\"hello\",\"bar\":7},\"objectNested\":{\"user\":{\"name\":\"Alice\",\"age\":30}},\"objectPassthrough\":{\"anyKey\":\"anyValue\",\"count\":10},\"optional\":null,\"nullable\":null,\"enum\":\"B\",\"nativeEnum\":\"C\",\"unionPrimitives\":\"Hello\",\"unionObjects\":{\"amount\":5,\"inventoryItemName\":\"item1\"}}",
+              "arguments": "{\"stringEmail\":\"test@example.com\",\"stringEmoji\":\"\ud83d\ude00\",\"stringUrl\":\"https://www.example.com\",\"stringRegex\":\"test-123\",\"number\":42,\"exampleArray\":[\"apple\",\"banana\",\"cherry\"],\"arrayMax\":[\"one\",\"two\",\"three\"],\"object\":{\"foo\":\"hello\",\"bar\":7},\"objectNested\":{\"user\":{\"name\":\"Alice\",\"age\":30}},\"objectPassthrough\":{\"anyKey\":\"anyValue\",\"count\":10},\"optional\":null,\"nullable\":null,\"enum\":\"B\",\"nativeEnum\":\"C\",\"unionPrimitives\":\"Hello\",\"unionObjects\":{\"amount\":5,\"inventoryItemName\":\"item1\"}}",
               "call_id": "call_fSQwrbnSnbZ6oildQxYXt0hB",
               "name": "testTool_manySchemas"
             }
@@ -6019,9 +6013,7 @@
           "connection": "keep-alive",
           "content-type": "application/json",
           "date": "Thu, 03 Sep 2026 15:57:59 GMT",
-          "openai-organization": "personal-1smmvi",
           "openai-processing-ms": "7323",
-          "openai-project": "proj_i5xepL7AVq5Id7m6q2HKx0cV",
           "openai-version": "2020-10-01",
           "server": "cloudflare",
           "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
@@ -6064,7 +6056,7 @@
               "id": "fc_01f3d580bae436fc006a999905c0cc87d1a7cabe8705b6deff",
               "type": "function_call",
               "status": "completed",
-              "arguments": "{\n  \"stringEmail\": \"test@example.com\",\n  \"stringEmoji\": \"😀\",\n  \"stringUrl\": \"https://example.com\",\n  \"stringRegex\": \"test-valid\",\n  \"number\": 123,\n  \"exampleArray\": [\n    \"one\",\n    \"two\"\n  ],\n  \"arrayMax\": [\n    \"alpha\",\n    \"beta\"\n  ],\n  \"object\": {\n    \"foo\": \"sample\",\n    \"bar\": 42\n  },\n  \"objectNested\": {\n    \"user\": {\n      \"name\": \"Anna\",\n      \"age\": 20\n    }\n  },\n  \"objectPassthrough\": {\n    \"custom\": \"data\",\n    \"count\": 10\n  },\n  \"optional\": \"optional value\",\n  \"nullable\": \"nullable sample\",\n  \"enum\": \"A\",\n  \"nativeEnum\": \"B\",\n  \"unionPrimitives\": 123,\n  \"unionObjects\": {\n    \"amount\": 100,\n    \"inventoryItemName\": \"Item 1\"\n  }\n}",
+              "arguments": "{\n  \"stringEmail\": \"test@example.com\",\n  \"stringEmoji\": \"\ud83d\ude00\",\n  \"stringUrl\": \"https://example.com\",\n  \"stringRegex\": \"test-valid\",\n  \"number\": 123,\n  \"exampleArray\": [\n    \"one\",\n    \"two\"\n  ],\n  \"arrayMax\": [\n    \"alpha\",\n    \"beta\"\n  ],\n  \"object\": {\n    \"foo\": \"sample\",\n    \"bar\": 42\n  },\n  \"objectNested\": {\n    \"user\": {\n      \"name\": \"Anna\",\n      \"age\": 20\n    }\n  },\n  \"objectPassthrough\": {\n    \"custom\": \"data\",\n    \"count\": 10\n  },\n  \"optional\": \"optional value\",\n  \"nullable\": \"nullable sample\",\n  \"enum\": \"A\",\n  \"nativeEnum\": \"B\",\n  \"unionPrimitives\": 123,\n  \"unionObjects\": {\n    \"amount\": 100,\n    \"inventoryItemName\": \"Item 1\"\n  }\n}",
               "call_id": "call_eytKvZmlJI6X9Sc2jwg5Kn4s",
               "name": "testTool_manySchemas"
             }
