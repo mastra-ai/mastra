@@ -331,6 +331,50 @@ describe('Workflow schema type inference', () => {
     });
   });
 
+  describe('function map output inference', () => {
+    const compatibleStep = createStep({
+      id: 'compatible-map-step',
+      inputSchema: z.object({ mappedValue: z.string() }),
+      outputSchema: z.object({ done: z.boolean() }),
+      execute: async ({ inputData }) => ({ done: inputData.mappedValue.length > 0 }),
+    });
+
+    const incompatibleStep = createStep({
+      id: 'incompatible-map-step',
+      inputSchema: z.object({ mappedValue: z.number() }),
+      outputSchema: z.object({ done: z.boolean() }),
+      execute: async ({ inputData }) => ({ done: inputData.mappedValue > 0 }),
+    });
+
+    const createMapWorkflow = () =>
+      createWorkflow({
+        id: 'map-output-workflow',
+        inputSchema: z.object({ value: z.string() }),
+        outputSchema: z.object({ done: z.boolean() }),
+      });
+
+    it('should preserve asynchronous map output for the next step', () => {
+      const mapped = createMapWorkflow().map(async ({ inputData }) => ({ mappedValue: inputData.value }));
+
+      const chained = mapped.then(compatibleStep).commit();
+      expectTypeOf(chained).not.toBeNever();
+    });
+
+    it('should preserve synchronous map output for the next step', () => {
+      const mapped = createMapWorkflow().map(({ inputData }) => ({ mappedValue: inputData.value }));
+
+      const chained = mapped.then(compatibleStep).commit();
+      expectTypeOf(chained).not.toBeNever();
+    });
+
+    it('should reject a next step with an incompatible input schema', () => {
+      const mapped = createMapWorkflow().map(async ({ inputData }) => ({ mappedValue: inputData.value }));
+
+      // @ts-expect-error - map output does not satisfy the next step input schema
+      mapped.then(incompatibleStep);
+    });
+  });
+
   // Regression: https://github.com/mastra-ai/mastra/issues/15989
   // foreach/dowhile/dountil dropped the TRequestContext generic on the step
   // parameter, causing typed requestContextSchema steps to be rejected even
@@ -762,11 +806,11 @@ describe('declarative builder input chaining', () => {
       .tool(numberTool);
   });
 
-  it('.tool() keeps the `.map()` (any output) escape hatch', () => {
-    const wf = createWorkflow({ id: 'wf', inputSchema: z.object({ value: z.number() }), outputSchema: z.any() })
-      .map(async () => ({ anything: 'goes' })) // map output is `any`
-      .tool(numberTool); // compiles via the `any` escape hatch
-    expectTypeOf(wf).not.toBeNever();
+  it('.tool() rejects a chain whose mapped output does not match the tool input', () => {
+    createWorkflow({ id: 'wf', inputSchema: z.object({ value: z.number() }), outputSchema: z.any() })
+      .map(async () => ({ anything: 'goes' }))
+      // @ts-expect-error - { anything: string } is not assignable to tool input { value: number }
+      .tool(numberTool);
   });
 
   it('.agent() accepts a chain whose prev output is { prompt: string }', () => {
