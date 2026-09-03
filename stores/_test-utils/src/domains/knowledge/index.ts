@@ -657,10 +657,21 @@ export function createKnowledgeStorageTests(createStore: () => Promise<Knowledge
       expect(restored.version).toBe(3);
     });
 
-    it('merges nodes while retaining records and memberships', async () => {
+    it('merges nodes while retaining records, memberships, and source addresses', async () => {
       const source = await store.createNode({ name: 'Source', scopeIds: [PROJECT_SCOPE_ID] });
       const target = await store.createNode({ name: 'Target', scopeIds: [PROJECT_SCOPE_ID] });
       const record = await store.createRecord({ node: source, text: 'Move me', scopeIds: [PROJECT_SCOPE_ID] });
+      const deletedRecord = await store.createRecord({
+        node: source,
+        text: 'Restore me',
+        scopeIds: [PROJECT_SCOPE_ID],
+      });
+      const deleted = await store.deleteRecord({
+        id: deletedRecord.id,
+        version: deletedRecord.version,
+        deletedBy: 'test',
+      });
+      await store.setNodeAddress({ source: 'github', address: 'source-address', nodeId: source.id });
 
       await store.mergeNodes({
         sourceId: source.id,
@@ -671,6 +682,17 @@ export function createKnowledgeStorageTests(createStore: () => Promise<Knowledge
       expect(
         (await store.listRecords({ node: target, scopeIds: [PROJECT_SCOPE_ID] })).records.map(item => item.id),
       ).toEqual([record.id]);
+      const movedDeleted = await store.getRecord({ id: deletedRecord.id, includeDeleted: true });
+      expect(movedDeleted).toMatchObject({ nodeId: target.id, version: deleted.version + 1 });
+      if (!movedDeleted) throw new Error('Expected merged deleted record');
+      await expect(store.restoreRecord({ id: deletedRecord.id, version: movedDeleted.version })).resolves.toMatchObject(
+        {
+          nodeId: target.id,
+        },
+      );
+      await expect(store.getNodeAddress({ source: 'github', address: 'source-address' })).resolves.toMatchObject({
+        nodeId: target.id,
+      });
       expect(await store.getNode(source.id)).toBeNull();
       expect(await store.getNodeScopeIds(source.id)).toEqual([]);
     });
