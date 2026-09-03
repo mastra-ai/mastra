@@ -22,7 +22,7 @@ const agent = new Agent({
   id: "my-agent",
   name: "My Agent",
   instructions: "You are a helpful assistant",
-  model: "llmgateway/auto"
+  model: "llmgateway/Qwen3.8-27B"
 });
 
 // Generate a response
@@ -1637,7 +1637,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "toolUsage": true,
     "reasoning": true,
     "contextWindow": 1048576,
-    "maxOutput": 32000,
+    "maxOutput": 131072,
     "inputCost": 1.25,
     "outputCost": 4.25
   },
@@ -2086,16 +2086,16 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 1.6
   },
   {
-    "model": "llmgateway/qwen3.8-27b",
-    "imageInput": true,
+    "model": "llmgateway/Qwen3.8-27B",
+    "imageInput": false,
     "audioInput": false,
-    "videoInput": true,
+    "videoInput": false,
     "toolUsage": true,
     "reasoning": true,
-    "contextWindow": 1000000,
+    "contextWindow": 32768,
     "maxOutput": 32768,
-    "inputCost": 0.42,
-    "outputCost": 3
+    "inputCost": 0.41,
+    "outputCost": 2.5
   },
   {
     "model": "llmgateway/qwen3.8-flash",
@@ -2232,7 +2232,7 @@ const agent = new Agent({
   name: "custom-agent",
   model: {
     url: "https://api.llmgateway.io/v1",
-    id: "llmgateway/auto",
+    id: "llmgateway/Qwen3.8-27B",
     apiKey: process.env.LLMGATEWAY_API_KEY,
     headers: {
       "X-Custom-Header": "value"
@@ -2251,7 +2251,7 @@ const agent = new Agent({
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
       ? "llmgateway/sonar-reasoning-pro"
-      : "llmgateway/auto";
+      : "llmgateway/Qwen3.8-27B";
   }
 });
 ```

@@ -1,12 +1,14 @@
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
-import { ArrowUpRight, CircleSlash, FastForward, Trash2 } from 'lucide-react';
+import { ArrowUpRight, CircleSlash, FastForward, ShieldCheck, Trash2 } from 'lucide-react';
 import type { ReactElement } from 'react';
+import { Link, useParams } from 'react-router';
 
 import type { FactoryRunPhase } from '../../../../hooks/useStartFactoryRun';
 import type { ItemRunSpec, RunAction } from '../boardRunSpecs';
-import { externalLinkLabel } from '../boardItems';
+import { externalLinkLabel, githubNumberForItem } from '../boardItems';
 import { itemStageOptions } from '../boardStages';
 import { TRIAGE_DECISIONS, awaitsTriageDecision } from '../cardPrimaryAction';
+import { workItemPrompt } from '../../supervisor/services/supervisor';
 import type { FactoryDecisionSummary } from '../services/decisions';
 import type { WorkItem } from '../services/workItems';
 import type { BoardStageId } from '../stages';
@@ -31,6 +33,16 @@ export interface WorkItemMenuProps {
   onDismissProposal: (decisionId: string) => void;
   onMove: (toStage: string) => void;
   onRemove: () => void;
+}
+
+/** Deep link into the Supervisor chat with a question about this card prefilled. */
+export function askSupervisorPath(
+  factoryId: string | undefined,
+  item: Pick<WorkItem, 'id' | 'source' | 'metadata' | 'title'>,
+) {
+  const number = githubNumberForItem(item);
+  const ask = workItemPrompt({ id: item.id, title: item.title, ...(number ? { number } : {}) });
+  return `/factories/${factoryId}/supervisor?ask=${encodeURIComponent(ask)}`;
 }
 
 /** An action's menu entries: the plain run and, unless a person must decide its outcome, a hands-off twin. */
@@ -81,6 +93,7 @@ export function WorkItemMenuItems({
   onMove,
   onRemove,
 }: WorkItemMenuProps): ReactElement {
+  const { factoryId } = useParams<{ factoryId: string }>();
   // A held card leads with the maintainer's decision. Nothing that starts,
   // restarts, or releases a run is offered until the card is accepted: every
   // one of those would advance it as a side effect. Dismissing a stale
@@ -129,6 +142,10 @@ export function WorkItemMenuItems({
           <span>{externalLinkLabel(item.source)}</span>
         </DropdownMenu.Item>
       )}
+      <DropdownMenu.Item render={<Link to={askSupervisorPath(factoryId, item)} />}>
+        <ShieldCheck aria-hidden />
+        <span>Ask supervisor</span>
+      </DropdownMenu.Item>
       {itemStageOptions(item)
         .filter(stage => stage.id !== columnStage)
         .filter(stage => !decision || !TRIAGE_DECISIONS.some(choice => choice.stage === stage.id))
