@@ -1,5 +1,6 @@
 import type { ToolsInput } from '@mastra/core/agent';
 
+import { createCloudflareTools } from './providers/cloudflare.js';
 import { createGitlabTools } from './providers/gitlab.js';
 import { createJiraTools } from './providers/jira.js';
 import { createLinearTools } from './providers/linear.js';
@@ -56,6 +57,11 @@ export const PROVIDERS: Partial<Record<ProviderKey, ProviderRegistration>> = {
     integrationId: 'neon',
     envVar: 'MASTRA_NEON_CONNECTION_ID',
     createTools: createNeonTools,
+  },
+  cloudflare: {
+    integrationId: 'cloudflare',
+    envVar: 'MASTRA_CLOUDFLARE_CONNECTION_ID',
+    createTools: createCloudflareTools,
   },
   snowflake: {
     integrationId: 'snowflake',
