@@ -100,7 +100,7 @@ export default function Datasets() {
   };
 
   return (
-    <PageLayout>
+    <PageLayout height="full">
       <PageLayout.TopArea>
         <DatasetsToolbar
           search={search}

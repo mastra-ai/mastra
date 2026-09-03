@@ -103,7 +103,7 @@ export function ExperimentsList({
   ));
 
   return (
-    <EntityList columns={gridColumns} variant="striped" scrollRef={containerRef}>
+    <EntityList columns={gridColumns} scrollRef={containerRef}>
       <EntityList.Top hasLeadingCell={isSelectionActive}>
         {isSelectionActive ? (
           <>

@@ -29,13 +29,7 @@ export function CSVPreviewTable({ headers, data, maxRows = 5 }: CSVPreviewTableP
   return (
     <div className="flex flex-col gap-2">
       {headers.length > 0 ? (
-        <DataList
-          columns={columns}
-          variant="striped"
-          className="border-border1 max-h-80 rounded-lg border"
-          mask={{ left: false }}
-          stickyHeaderBackground="tinted"
-        >
+        <DataList columns={columns} className="max-h-80" mask={{ left: false }}>
           <DataList.Top>
             {headers.map((header: string, index: number) => (
               <DataList.TopCell key={`${index}-${header}`} sticky={index === 0 ? 'start' : undefined}>

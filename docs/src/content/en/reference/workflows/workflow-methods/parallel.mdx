@@ -25,6 +25,33 @@ workflow.parallel([step1, step2])
     description: 'The step instances to execute in parallel',
     isOptional: false,
   },
+  {
+    name: 'options',
+    type: 'StepFlowEntryOptions',
+    description:
+      'Optional identity and display metadata for this graph entry. Preserved through serialization and storage; has no effect on execution.',
+    isOptional: true,
+    properties: [
+      {
+        name: 'id',
+        type: 'string',
+        description: 'Stable entry id that editors and tools can use to address this entry across edits',
+        isOptional: true,
+      },
+      {
+        name: 'description',
+        type: 'string',
+        description: 'Human-readable description of this control-flow operation',
+        isOptional: true,
+      },
+      {
+        name: 'metadata',
+        type: 'Record<string, unknown>',
+        description: 'JSON-serializable metadata, for example a display title for visual editors',
+        isOptional: true,
+      },
+    ],
+  },
 ]}
 />
 

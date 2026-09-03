@@ -93,3 +93,7 @@ om-reflector-fixture.json
 
 # Local git worktrees (scratch checkouts; never part of a commit)
 .worktrees/
+
+# Throwaway probe scripts
+*.local.mjs
+*.local.ts

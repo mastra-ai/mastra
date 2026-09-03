@@ -2,10 +2,21 @@ import { cleanup, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
 import { ExperimentNameLabel } from '../experiment-name-label';
 import { experiments } from './fixtures/experiments';
+import { getExperimentDisplayName } from '@/domains/experiments/utils/experiment-display-name';
 
 const base = experiments[0];
 
 afterEach(cleanup);
+
+describe('getExperimentDisplayName', () => {
+  it('returns the name when set', () => {
+    expect(getExperimentDisplayName({ id: 'abcdef1234567890', name: 'Baseline run' })).toBe('Baseline run');
+  });
+
+  it('falls back to a readable short id when unnamed', () => {
+    expect(getExperimentDisplayName({ id: 'abcdef1234567890', name: null })).toBe('Experiment #abcdef12');
+  });
+});
 
 describe('ExperimentNameLabel', () => {
   it('shows the name with the description underneath when both exist', () => {

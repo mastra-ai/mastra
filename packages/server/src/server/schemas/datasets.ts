@@ -340,6 +340,14 @@ export const updateItemBodySchema = z.object({
   source: datasetItemSourceSchema,
 });
 
+export const updateExperimentBodySchema = z
+  .object({
+    name: z.string().optional().describe('New name of the experiment'),
+    description: z.string().optional().describe('New description of the experiment'),
+    metadata: z.record(z.string(), z.unknown()).optional().describe('Replacement metadata for the experiment'),
+  })
+  .strict();
+
 export const triggerExperimentBodySchema = z.object({
   start: z
     .boolean()
