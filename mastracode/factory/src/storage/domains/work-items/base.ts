@@ -427,10 +427,6 @@ export interface PrepareFactoryRunStartInput {
   resourceId: string;
   kickoffKey: string;
   kickoffMessage: string | null;
-  /** Arm the item's autonomy in the same transaction that prepares the run. */
-  armAutonomy?: boolean;
-  /** Grant the item's plans auto-approval in the same transaction — the person chose a hands-off run. */
-  preapprovePlans?: boolean;
 }
 
 export interface PrepareFactoryRunStartResult {
@@ -505,6 +501,8 @@ export interface UpdateWorkItemInput {
   stages?: WorkItemStage[];
   sessions?: Record<string, WorkItemSessionInput>;
   metadata?: Record<string, unknown> | null;
+  /** The person chose a hands-off run: stamped once, so a second grant never moves it. */
+  plansPreapproved?: true;
 }
 
 export interface WorkItemPriorState {
@@ -740,6 +738,7 @@ function applyUpdate({
     ...(input.metadata !== undefined
       ? { metadata: input.metadata === null ? null : { ...(current.metadata ?? {}), ...input.metadata } }
       : {}),
+    ...(input.plansPreapproved && !current.plans_preapproved_at ? { plans_preapproved_at: now } : {}),
     revision: current.revision + 1,
     updated_at: now,
   };
@@ -2606,18 +2605,6 @@ export class WorkItemsStorage extends FactoryStorageDomain {
           });
           item = toRow(row);
         }
-        if (input.armAutonomy && !item.autonomyArmedAt) {
-          const armedRow = await ops.updateAtomic<WorkItemDbRow>('work_items', { id: item.id }, current =>
-            current.autonomy_armed_at ? null : { autonomy_armed_at: now },
-          );
-          if (armedRow) item = toRow(armedRow);
-        }
-        if (input.preapprovePlans && !item.plansPreapprovedAt) {
-          const grantedRow = await ops.updateAtomic<WorkItemDbRow>('work_items', { id: item.id }, current =>
-            current.plans_preapproved_at ? null : { plans_preapproved_at: now },
-          );
-          if (grantedRow) item = toRow(grantedRow);
-        }
         await ops.updateMany(
           'factory_run_bindings',
           {
@@ -2879,18 +2866,6 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     const candidate = await this.#db.findOne<WorkItemDbRow>('work_items', { org_id: orgId, id });
     if (!candidate) return null;
     return this.#withProjectRelationTransaction(orgId, candidate.factory_project_id, run);
-  }
-
-  /**
-   * Record that a person committed this item to the Factory. Only the first
-   * time counts: the timestamp marks when the item stopped needing permission,
-   * so later runs must not push it forward. Bumps no revision, because arming
-   * is not a change anyone is editing against.
-   */
-  async armAutonomy({ orgId, id, now }: { orgId: string; id: string; now: Date }): Promise<void> {
-    await this.#db.updateAtomic<WorkItemDbRow>('work_items', { org_id: orgId, id }, current =>
-      current.autonomy_armed_at ? null : { autonomy_armed_at: now },
-    );
   }
 
   /**

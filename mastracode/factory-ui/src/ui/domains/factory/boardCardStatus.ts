@@ -1,6 +1,4 @@
-import type { FactoryRunPhase } from '../../../hooks/useStartFactoryRun';
 import type { SessionRowStatus } from '../workspaces/services/sessionStatus';
-import { RUN_PHASE_LABELS } from './boardRunSpecs';
 import type { FactoryDecisionSummary } from './services/decisions';
 
 /** A card has one status row, so every announcement it could make resolves to one of these. */
@@ -17,9 +15,7 @@ export interface BoardCardStatusInput {
   proposal?: { label: string; decisionId: string };
   /** Destination of an in-flight stage move. */
   moving?: { stage: string; label: string };
-  /** Runs whose start mutation is in flight, newest intent first. */
-  runs?: ReadonlyArray<{ label: string; phase?: FactoryRunPhase }>;
-  /** Status text for the window between the click and the run mutation. */
+  /** Status text for the window between the click and the session mutation. */
   preparing?: string;
   /** Rule effect the server is still working through, or gave up on. */
   decision?: FactoryDecisionSummary;
@@ -116,10 +112,6 @@ export function boardCardStatus(input: BoardCardStatusInput): BoardCardStatus {
   const { moving, decision } = input;
   if (moving) {
     return { kind: 'busy', label: moving.stage === 'done' ? 'Marking done…' : `Moving to ${moving.label}…` };
-  }
-  const run = input.runs?.[0];
-  if (run) {
-    return { kind: 'busy', label: `${run.label} — ${run.phase ? RUN_PHASE_LABELS[run.phase] : 'starting…'}` };
   }
   if (input.preparing !== undefined) return { kind: 'busy', label: input.preparing };
   if (input.transitionReason !== undefined) return { kind: 'error', label: input.transitionReason };

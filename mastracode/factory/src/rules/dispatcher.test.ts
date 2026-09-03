@@ -6,7 +6,6 @@ import { FACTORY_RULE_MATERIALIZATION_KEY, type WorkItemsStorage } from '../stor
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
 import { builtInFactoryRules, defaultFactoryRules } from './defaults.js';
 import { FACTORY_DISPATCH_CONSTANTS, FactoryDecisionDispatcher } from './dispatcher.js';
-import { FactoryStartCoordinator } from './start-coordinator.js';
 import { FactoryTransitionService } from './transition-service.js';
 import type { FactoryCommitDecision } from './types.js';
 
@@ -227,9 +226,35 @@ async function queueDecision(
 }
 
 /** Give a card the live `work` session an `invokeSkill` effect kicks off into. */
+// Arming is a property of a committed transition, so tests arm the way the
+// board does: a same-lane commit carrying consent.
+let armCount = 0;
+async function armItem(storage: WorkItemsStorage, workItemId: string) {
+  const item = await storage.get({ orgId: 'org-1', id: workItemId });
+  if (!item) throw new Error('Expected the work item to arm');
+  armCount += 1;
+  await storage.commitTransition({
+    orgId: 'org-1',
+    factoryProjectId: PROJECT_ID,
+    workItemId,
+    expectedRevision: item.revision,
+    destinationStage: item.stages[0]!,
+    actorId: 'user-1',
+    ingress: { identity: `arm-${armCount}`, triggerType: 'human', transitionId: `arm-${armCount}` },
+    ruleSetVersion: 'rules-v1',
+    causalChain: [],
+    evaluation: { outcome: 'accepted', decisions: [] },
+    autonomy: 'arm',
+  });
+}
+
+async function preapprovePlans(storage: WorkItemsStorage, workItemId: string) {
+  await storage.update({ orgId: 'org-1', id: workItemId, userId: 'user-1', patch: { plansPreapproved: true } });
+}
+
 async function bindWorkRun(storage: WorkItemsStorage, workItemId: string, options?: { preapprovePlans?: boolean }) {
+  if (options?.preapprovePlans) await preapprovePlans(storage, workItemId);
   const prepared = await storage.prepareRunStart({
-    preapprovePlans: options?.preapprovePlans,
     orgId: 'org-1',
     userId: 'user-1',
     factoryProjectId: PROJECT_ID,
@@ -255,8 +280,8 @@ async function bindWorkRun(storage: WorkItemsStorage, workItemId: string, option
 /** A card whose run someone asked for: a pending start still waiting to be sent. */
 async function queueRunKickoff(storage: WorkItemsStorage, options?: { preapprovePlans?: boolean }) {
   const item = await createItem(storage);
+  if (options?.preapprovePlans) await preapprovePlans(storage, item.id);
   await storage.prepareRunStart({
-    preapprovePlans: options?.preapprovePlans,
     orgId: 'org-1',
     userId: 'user-1',
     factoryProjectId: PROJECT_ID,
@@ -740,7 +765,8 @@ describe('FactoryDecisionDispatcher', () => {
 
     expect(session.sendSignal).toHaveBeenCalledTimes(1);
     expect(session.sendSignal.mock.calls[0]?.[0]).toMatchObject({
-      contents: expect.stringContaining('Open a pull request when the work is ready for review.'),
+      contents:
+        'Implement a fix for Fix issue: investigate the root cause, make the change with tests, and open a pull request.',
     });
     const buildDecisions = (await storage.listDeferredDecisions('org-1', PROJECT_ID)).filter(
       decision => decision.decision.type === 'invokeSkill',
@@ -1748,7 +1774,7 @@ describe('FactoryDecisionDispatcher', () => {
       idempotencyKey: 'skill-on-armed-item',
     });
     await bindWorkRun(storage, item.id);
-    await storage.armAutonomy({ orgId: 'org-1', id: item.id, now: new Date('2030-01-01T00:00:00Z') });
+    await armItem(storage, item.id);
     const { controller, session } = createSession();
     const dispatcher = new FactoryDecisionDispatcher({
       controller: controller as never,
@@ -1821,7 +1847,7 @@ describe('FactoryDecisionDispatcher', () => {
   it('lets an external push move a card a person already handed over', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const item = await createPullRequestItem(storage);
-    await storage.armAutonomy({ orgId: 'org-1', id: item.id, now: new Date('2030-01-01T00:00:00Z') });
+    await armItem(storage, item.id);
     const armed = await storage.get({ orgId: 'org-1', id: item.id });
     const transitionService = new FactoryTransitionService({
       rules: defaultFactoryRules({ version: 'rules-v1' }),
@@ -1907,7 +1933,7 @@ describe('FactoryDecisionDispatcher', () => {
         },
       })
     ).item;
-    await storage.armAutonomy({ orgId: 'org-1', id: item.id, now: new Date('2030-01-01T00:00:00Z') });
+    await armItem(storage, item.id);
     const armed = await storage.get({ orgId: 'org-1', id: item.id });
     const transitionService = new FactoryTransitionService({
       rules: defaultFactoryRules({ version: 'rules-v1' }),
@@ -1959,7 +1985,7 @@ describe('FactoryDecisionDispatcher', () => {
         },
       })
     ).item;
-    await storage.armAutonomy({ orgId: 'org-1', id: item.id, now: new Date('2030-01-01T00:00:00Z') });
+    await armItem(storage, item.id);
     await bindWorkRun(storage, item.id);
     const bound = await storage.get({ orgId: 'org-1', id: item.id });
     const transitionService = new FactoryTransitionService({
@@ -2028,7 +2054,7 @@ describe('FactoryDecisionDispatcher', () => {
         },
       })
     ).item;
-    await storage.armAutonomy({ orgId: 'org-1', id: item.id, now: new Date('2030-01-01T00:00:00Z') });
+    await armItem(storage, item.id);
     const armed = await storage.get({ orgId: 'org-1', id: item.id });
     const transitionService = new FactoryTransitionService({
       rules: defaultFactoryRules({ version: 'rules-v1' }),
@@ -2133,7 +2159,7 @@ describe('FactoryDecisionDispatcher', () => {
     });
     const transitionService = new FactoryTransitionService({ storage, rules });
     const item = await createItem(storage);
-    await storage.armAutonomy({ orgId: 'org-1', id: item.id, now: new Date('2030-01-01T00:00:00Z') });
+    await armItem(storage, item.id);
     await bindWorkRun(storage, item.id);
     const bound = await storage.get({ orgId: 'org-1', id: item.id });
     const rested = await transitionService.transition({
@@ -2478,21 +2504,6 @@ describe('FactoryDecisionDispatcher', () => {
     expect(record).toMatchObject({ status: 'failed', failureCode: 'plan_awaiting_approval' });
   });
 
-  it('arms an item once, so the first commitment is the one that counts', async () => {
-    const storage = (await createFactoryStorageForTests()).workItems;
-    const { item } = await queueDecision(storage, {
-      type: 'invokeSkill',
-      role: 'work',
-      skillName: 'understand-issue',
-      idempotencyKey: 'skill-arm-once',
-    });
-    const armed = new Date('2030-01-01T00:00:00Z');
-    await storage.armAutonomy({ orgId: 'org-1', id: item.id, now: armed });
-    await storage.armAutonomy({ orgId: 'org-1', id: item.id, now: new Date('2030-06-01T00:00:00Z') });
-
-    expect(await storage.get({ orgId: 'org-1', id: item.id })).toMatchObject({ autonomyArmedAt: armed });
-  });
-
   it('never runs a dismissed proposal', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const { transitionService } = await queueDecision(storage, {
@@ -2614,7 +2625,7 @@ describe('FactoryDecisionDispatcher', () => {
 
     // The person answers by taking the item on, which arms it and emits a
     // second copy of the same run. The parked question is now moot.
-    await storage.armAutonomy({ orgId: 'org-1', id: item.id, now: new Date('2030-01-01T00:01:00Z') });
+    await armItem(storage, item.id);
     await bindWorkRun(storage, item.id);
     const current = await storage.get({ orgId: 'org-1', id: item.id });
     await transitionService.transition({
@@ -3728,41 +3739,16 @@ describe('FactoryDecisionDispatcher', () => {
   });
 
   /** Prepare a prompt-kickoff pending start bound to the stubbed session. */
-  async function preparePromptKickoff(storage: WorkItemsStorage, controller: unknown) {
-    const rules = defaultFactoryRules({ version: 'rules-v1' });
-    const transitionService = new FactoryTransitionService({ storage, rules });
-    const sourceControl = {
-      sessions: {
-        getBySessionId: async () => ({
-          id: 'source-session-1',
-          sessionId: 'session-1',
-          projectRepositoryId: 'project-repository-1',
-          orgId: 'org-1',
-          userId: 'user-1',
-          branch: 'factory/issue-1',
-          baseBranch: 'main',
-        }),
-      },
-      projectRepositories: { get: async ({ id }: { id: string }) => ({ id, connectionId: 'connection-1' }) },
-      connections: { get: async () => ({ factoryProjectId: PROJECT_ID }) },
-    };
-    const coordinator = new FactoryStartCoordinator(
-      controller as never,
-      storage,
-      transitionService,
-      sourceControl as never,
-    );
-    await coordinator.prepare({
+  // The kickoff queue outlived the start route that filled it: seed it the way
+  // `prepareRunStart` does, so the dispatch, redelivery and retry paths stay covered.
+  async function preparePromptKickoff(storage: WorkItemsStorage) {
+    const item = await createItem(storage);
+    await storage.prepareRunStart({
       orgId: 'org-1',
       userId: 'user-1',
       factoryProjectId: PROJECT_ID,
-      sessionId: 'session-1',
-      threadTitle: 'Fix issue',
-      kickoffKey: 'kickoff-1',
-      invocation: { type: 'prompt', prompt: 'Investigate the issue.' },
-      destinationStage: 'triage',
       workItem: {
-        role: 'work',
+        id: item.id,
         input: {
           externalSource: { integrationId: 'github', type: 'issue', externalId: 'github-issue:1' },
           title: 'Fix issue',
@@ -3771,14 +3757,24 @@ describe('FactoryDecisionDispatcher', () => {
           metadata: {},
         },
       },
+      role: 'work',
+      session: { sessionId: 'session-1', branch: 'factory/issue-1', threadId: 'thread-1' },
+      resourceId: PROJECT_ID,
+      kickoffKey: 'kickoff-1',
+      kickoffMessage: 'Investigate the issue.',
     });
-    return { transitionService };
+    return {
+      transitionService: new FactoryTransitionService({
+        storage,
+        rules: defaultFactoryRules({ version: 'rules-v1' }),
+      }),
+    };
   }
 
   it('recovers and dispatches a prepared kickoff after the coordinator returns', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const { controller, delivered, sendNotificationSignal } = createSession();
-    const { transitionService } = await preparePromptKickoff(storage, controller);
+    const { transitionService } = await preparePromptKickoff(storage);
     const primeCredentials = vi.fn(async () => {});
     const dispatcher = new FactoryDecisionDispatcher({
       controller: controller as never,
@@ -3817,7 +3813,7 @@ describe('FactoryDecisionDispatcher', () => {
     const { controller, delivered, getAgentEndListenerCount } = createSession(undefined, {
       notificationResponses: [{ action: 'deliver', endRun: true }, { action: 'wake' }],
     });
-    const { transitionService } = await preparePromptKickoff(storage, controller);
+    const { transitionService } = await preparePromptKickoff(storage);
     const dispatcher = new FactoryDecisionDispatcher({
       controller: controller as never,
       isAutoRunEnabled: async () => true,
@@ -3838,7 +3834,7 @@ describe('FactoryDecisionDispatcher', () => {
     const { controller } = createSession(undefined, {
       notificationResponses: [{ action: 'deliver' }],
     });
-    const { transitionService } = await preparePromptKickoff(storage, controller);
+    const { transitionService } = await preparePromptKickoff(storage);
     const dispatcher = new FactoryDecisionDispatcher({
       controller: controller as never,
       isAutoRunEnabled: async () => true,
@@ -3861,7 +3857,7 @@ describe('FactoryDecisionDispatcher', () => {
   it('fails a kickoff for retry when the woken run ends in error', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const { controller } = createSession(undefined, { agentEndReason: 'error' });
-    const { transitionService } = await preparePromptKickoff(storage, controller);
+    const { transitionService } = await preparePromptKickoff(storage);
     const dispatcher = new FactoryDecisionDispatcher({
       controller: controller as never,
       isAutoRunEnabled: async () => true,
@@ -3891,49 +3887,7 @@ describe('FactoryDecisionDispatcher', () => {
       );
     }
     const { controller, delivered } = createSession();
-    const rules = defaultFactoryRules({ version: 'rules-v1' });
-    const transitionService = new FactoryTransitionService({ storage, rules });
-    const sourceControl = {
-      sessions: {
-        getBySessionId: async () => ({
-          id: 'source-session-1',
-          sessionId: 'session-1',
-          projectRepositoryId: 'project-repository-1',
-          orgId: 'org-1',
-          userId: 'user-1',
-          branch: 'factory/issue-1',
-          baseBranch: 'main',
-        }),
-      },
-      projectRepositories: { get: async ({ id }: { id: string }) => ({ id, connectionId: 'connection-1' }) },
-      connections: { get: async () => ({ factoryProjectId: PROJECT_ID }) },
-    };
-    const coordinator = new FactoryStartCoordinator(
-      controller as never,
-      storage,
-      transitionService,
-      sourceControl as never,
-    );
-    await coordinator.prepare({
-      orgId: 'org-1',
-      userId: 'user-1',
-      factoryProjectId: PROJECT_ID,
-      sessionId: 'session-1',
-      threadTitle: 'Fix issue',
-      kickoffKey: 'kickoff-1',
-      invocation: { type: 'prompt', prompt: 'Investigate the issue.' },
-      destinationStage: 'triage',
-      workItem: {
-        role: 'work',
-        input: {
-          externalSource: { integrationId: 'github', type: 'issue', externalId: 'github-issue:1' },
-          title: 'Fix issue',
-          stages: ['intake'],
-          sessions: {},
-          metadata: {},
-        },
-      },
-    });
+    const { transitionService } = await preparePromptKickoff(storage);
     const dispatcher = new FactoryDecisionDispatcher({
       controller: controller as never,
       isAutoRunEnabled: async () => true,

@@ -2,6 +2,9 @@ import type { ExternalWorkItemSource } from '../storage/domains/work-items/base.
 
 export type WorkItemSource = 'github-issue' | 'github-pr' | 'linear-issue' | 'manual';
 
+/** The source label that holds an issue at rest until a maintainer decides; compared lowercased. */
+export const NEEDS_APPROVAL_LABEL = 'status: needs approval';
+
 export function workItemSource(source: ExternalWorkItemSource | null): WorkItemSource {
   if (!source) return 'manual';
   if (source.integrationId === 'linear') return 'linear-issue';

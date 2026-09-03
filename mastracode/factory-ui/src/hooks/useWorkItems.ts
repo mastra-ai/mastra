@@ -137,6 +137,7 @@ type TransitionWorkItemVariables = {
   board: FactoryBoard;
   stage: string;
   cause?: string;
+  reenter?: boolean;
 };
 
 function requireFactoryStage(stage: string): FactoryRuleStage {
@@ -151,13 +152,14 @@ export function useTransitionWorkItemMutation(factoryProjectId: string | undefin
   const mutationKey = ['factory', 'transition-work-item', factoryProjectId] as const;
   const mutation = useMutation({
     mutationKey,
-    mutationFn: ({ item, board, stage, cause = 'board_drag' }: TransitionWorkItemVariables) =>
+    mutationFn: ({ item, board, stage, cause = 'board_drag', reenter }: TransitionWorkItemVariables) =>
       transitionWorkItem(baseUrl, requireFactoryProjectId(factoryProjectId), item.id, {
         board,
         stage: requireFactoryStage(stage),
         expectedRevision: item.revision,
         requestId: crypto.randomUUID(),
         cause,
+        ...(reenter ? { reenter } : {}),
       }),
     onMutate: async ({ item, stage }) => {
       await queryClient.cancelQueries({ queryKey: listKey });
@@ -189,6 +191,9 @@ export function useTransitionWorkItemMutation(factoryProjectId: string | undefin
         }),
       );
       void queryClient.invalidateQueries({ queryKey: listKey });
+      // The lane's rule queues its run inside this commit; without this the card
+      // stays silent until the decisions poll comes round.
+      void queryClient.invalidateQueries({ queryKey: queryKeys.factoryDecisionsRoot(factoryProjectId) });
     },
   });
   const pendingTransitions = useMutationState({

@@ -34,15 +34,6 @@ describe('boardCardStatus', () => {
     ).toEqual({ kind: 'busy', label: 'Moving to Planning…' });
   });
 
-  it('keeps the started run visible while a rule effect fails in the background', () => {
-    expect(
-      boardCardStatus({
-        runs: [{ label: 'Review', phase: 'workspace' }],
-        decision: decision({ status: 'failed' }),
-      }),
-    ).toEqual({ kind: 'busy', label: 'Review — preparing workspace…' });
-  });
-
   it('keeps the click that is still resolving ahead of a rule effect queued behind it', () => {
     expect(boardCardStatus({ preparing: 'Preparing run…', decision: decision({ status: 'pending' }) })).toEqual({
       kind: 'busy',

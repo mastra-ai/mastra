@@ -1,7 +1,12 @@
 import { FACTORY_ROLE_STAGES, isFactoryRole } from '@mastra/factory/rules/types';
-import type { FactoryRuleStage } from '@mastra/factory/rules/types';
-import { itemSessionSpec } from './boardRunSpecs';
-import type { ItemRunSpec, RunAction } from './boardRunSpecs';
+import type { FactoryRole, FactoryRuleStage } from '@mastra/factory/rules/types';
+import {
+  NEEDS_APPROVAL_LABEL,
+  hasLabel,
+  itemSessionSpec,
+  metadataLabels,
+  pullRequestStatusForItem,
+} from './boardItems';
 import type { WorkItem, WorkItemSessionRef } from './services/workItems';
 import type { BoardStageId } from './stages';
 
@@ -12,29 +17,72 @@ export interface CardPrimaryAction {
   start: () => void;
 }
 
-export type ResumeTarget = { kind: 'run'; action: RunAction } | { kind: 'move'; stage: FactoryRuleStage };
+/** A lane the card can be moved into, named by what the lane's rule then runs. */
+export interface CardMove {
+  label: 'Investigate' | 'Build' | 'Prepare approval' | 'Review' | 'Re-review';
+  /** Session slot the lane's run fills on the card, e.g. `plan` or `work`. */
+  role: FactoryRole;
+  stage: FactoryRuleStage;
+  /** The run's outcome is a maintainer decision, so hands-off has nothing to remove. */
+  awaitsHumanDecision?: true;
+}
+
+/** A persisted card or a candidate feed entry: both are moved by the same lane rules. */
+export type MovableCard = Pick<WorkItem, 'source' | 'metadata'> & Partial<Pick<WorkItem, 'stages' | 'acceptedAt'>>;
+
+const INVESTIGATE: CardMove = { label: 'Investigate', role: 'triage', stage: 'triage' };
+const BUILD: CardMove = { label: 'Build', role: 'work', stage: 'execute' };
+const PREPARE_APPROVAL: CardMove = {
+  label: 'Prepare approval',
+  role: 'triage',
+  stage: 'triage',
+  awaitsHumanDecision: true,
+};
+const REVIEW: CardMove = { label: 'Review', role: 'review', stage: 'review' };
+const RE_REVIEW: CardMove = { label: 'Re-review', role: 'review', stage: 'review' };
+
+/**
+ * The `needs approval` label only holds a card at rest. Once a person accepts
+ * it — or it sits in a working lane, which only a person could have put it in
+ * before acceptance was recorded — the label is stale until the source catches
+ * up, and the card offers its ordinary lanes again.
+ */
+function approvalPending(item: MovableCard): boolean {
+  return (
+    hasLabel(metadataLabels(item.metadata), NEEDS_APPROVAL_LABEL) &&
+    !item.acceptedAt &&
+    (item.stages ?? ['intake']).every(stage => stage === 'intake' || stage === 'triage')
+  );
+}
+
+/** Where a card's button can send it, likeliest first; the lane's rule decides what runs there. */
+export function cardMoves(item: MovableCard, columnStage: BoardStageId): CardMove[] {
+  if (item.source === 'github-issue') return approvalPending(item) ? [PREPARE_APPROVAL] : [INVESTIGATE, BUILD];
+  if (item.source === 'linear-issue') return [INVESTIGATE, BUILD];
+  if (item.source !== 'github-pr') return [];
+  // A Done-lane PR that is still open likely picked up commits after its
+  // review; re-entering Review supersedes the pass that already ran.
+  const reviewed =
+    columnStage === 'done' &&
+    ['open', 'draft'].includes(pullRequestStatusForItem({ ...item, stages: item.stages ?? [] }));
+  return [reviewed ? RE_REVIEW : REVIEW];
+}
 
 function seatDepth(role: string): number {
   return Object.keys(FACTORY_ROLE_STAGES).indexOf(role);
 }
 
-/**
- * Resume re-enters the deepest used seat: startable seats restart their run,
- * rule-only seats (plan) re-enter their lane and let the entry rule dispatch.
- */
-export function resumeTarget(
+/** Resume re-enters the lane of the deepest seat the card has used, and lets that lane's rule dispatch. */
+export function resumeStage(
   columnStage: BoardStageId,
-  runSpec: ItemRunSpec | undefined,
   sessions: Record<string, WorkItemSessionRef>,
-): ResumeTarget | undefined {
+): FactoryRuleStage | undefined {
   if (columnStage !== 'intake') return undefined;
   const deepest = Object.keys(sessions)
     .filter(isFactoryRole)
     .sort((left, right) => seatDepth(left) - seatDepth(right))
     .at(-1);
-  if (deepest === undefined) return undefined;
-  const action = runSpec?.actions.find(candidate => candidate.role === deepest);
-  return action !== undefined ? { kind: 'run', action } : { kind: 'move', stage: FACTORY_ROLE_STAGES[deepest] };
+  return deepest === undefined ? undefined : FACTORY_ROLE_STAGES[deepest];
 }
 
 /**
@@ -73,28 +121,24 @@ export const TRIAGE_DECISIONS: readonly TriageDecision[] = [
 export function cardPrimaryAction({
   item,
   columnStage,
-  runSpec,
-  runAction,
-  resume,
+  move,
+  resumeStage,
   waiting,
   hasSession,
   onApproveProposal,
-  onStartRun,
-  onRestartRun,
   onCreateSession,
   onMove,
 }: {
   item: WorkItem;
   columnStage?: BoardStageId;
-  runSpec?: ItemRunSpec;
-  runAction?: RunAction;
-  resume?: ResumeTarget;
+  /** The lane the button sends the card to; undefined when the card has none to offer. */
+  move?: CardMove;
+  /** Lane a parked card goes back to, ahead of any move it also offers. */
+  resumeStage?: FactoryRuleStage;
   /** The card's own parked run, read from its status so the button says what the badge says. */
   waiting?: { label: string; decisionId: string };
   hasSession: boolean;
   onApproveProposal: (decisionId: string) => void;
-  onStartRun: (spec: ItemRunSpec, action: RunAction) => void;
-  onRestartRun: (spec: ItemRunSpec, action: RunAction) => void;
   onCreateSession: (spec: { branch: string; threadTitle: string }) => void;
   onMove: (toStage: string) => void;
 }): CardPrimaryAction | undefined {
@@ -106,24 +150,13 @@ export function cardPrimaryAction({
   if (waiting !== undefined) {
     return { label: waiting.label, start: () => onApproveProposal(waiting.decisionId) };
   }
-  if (resume?.kind === 'move') {
-    const stage = resume.stage;
-    return { label: 'Resume', start: () => onMove(stage) };
+  if (resumeStage !== undefined) {
+    return { label: 'Resume', start: () => onMove(resumeStage) };
   }
-  if (resume?.kind === 'run' && runSpec !== undefined) {
-    const action = resume.action;
-    return {
-      label: 'Resume',
-      start: () => onRestartRun(runSpec, action),
-    };
+  if (move !== undefined) {
+    return { label: move.label, start: () => onMove(move.stage) };
   }
-  if (runSpec !== undefined && runAction !== undefined) {
-    return {
-      label: runAction.label,
-      start: () => onStartRun(runSpec, runAction),
-    };
-  }
-  // Every run this card offers is already taken by a live session, so opening that session is the action.
+  // Every lane this card offers is already its own, so opening its session is the action.
   if (hasSession) return undefined;
   return {
     label: 'Start session',
@@ -157,12 +190,11 @@ export function retryButton({
 export function runButton({
   action,
   pending,
-  disabled,
   suggestion,
 }: {
   action?: CardPrimaryAction;
+  /** A session start the card is still resolving; a move needs none, it is optimistic. */
   pending: boolean;
-  disabled: boolean;
   /** The waiting suggestion's label, so the button says which run it releases. */
   suggestion?: string;
 }): CardAction | undefined {
@@ -170,7 +202,7 @@ export function runButton({
   return {
     label: pending ? 'Starting…' : action.label,
     ariaLabel: suggestion === undefined ? action.ariaLabel : `Start suggested run: ${suggestion}`,
-    disabled: disabled || pending,
+    disabled: pending,
     start: action.start,
   };
 }

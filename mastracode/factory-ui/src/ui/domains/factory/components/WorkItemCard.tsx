@@ -1,4 +1,3 @@
-import { FACTORY_ROLE_STAGES } from '@mastra/factory/rules/types';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import { cn } from '@mastra/playground-ui/utils/cn';
@@ -6,18 +5,16 @@ import { EllipsisVertical } from 'lucide-react';
 import type { ReactElement } from 'react';
 import { useParams } from 'react-router';
 
-import type { FactoryRunPhase } from '../../../../hooks/useStartFactoryRun';
 import { boardCardStatus } from '../boardCardStatus';
 import { setDragPayload } from '../boardDrag';
-import { itemThreadSession, pullRequestStatusForItem } from '../boardItems';
-import { itemRunSpec } from '../boardRunSpecs';
-import type { ItemRunSpec, RunAction } from '../boardRunSpecs';
+import { itemThreadSession } from '../boardItems';
 import { itemStageLabel } from '../boardStages';
 import {
   awaitsTriageDecision,
   cardActions,
+  cardMoves,
   cardPrimaryAction,
-  resumeTarget,
+  resumeStage,
   retryButton,
   runButton,
   sessionLink,
@@ -46,7 +43,6 @@ export function WorkItemCard({
   relatedItems,
   projectRepositoryId,
   activityPage,
-  runDisabled,
   preparing,
   evaluatingStage,
   transitionReason,
@@ -57,11 +53,8 @@ export function WorkItemCard({
   onApproveProposal,
   onDismissProposal,
   onRetryDecision,
-  pendingRunRoles,
   sessionStatus,
   onCreateSession,
-  onStartRun,
-  onRestartRun,
   onMove,
   onRemove,
 }: {
@@ -77,8 +70,7 @@ export function WorkItemCard({
   /** Repository id resolving GitHub descriptions in the detail panel. */
   projectRepositoryId: string;
   activityPage?: AuditEventPage;
-  runDisabled: boolean;
-  /** Status text while a run trigger is resolving, before the run mutation starts. */
+  /** Status text while a session start is resolving, before its mutation starts. */
   preparing?: string;
   /** Destination stage of an in-flight transition; undefined = not moving. */
   evaluatingStage?: string;
@@ -91,14 +83,11 @@ export function WorkItemCard({
   onApproveProposal: (decisionId: string) => void;
   onDismissProposal: (decisionId: string) => void;
   onRetryDecision: (decisionId: string) => void;
-  pendingRunRoles: ReadonlyMap<string, FactoryRunPhase | undefined>;
   /** Live status of the card's bound sessions, resolved once for the whole board. */
   sessionStatus?: SessionRowStatus;
-  /** Detail-panel fallback when the item has no run spec: open an empty session (no run). */
+  /** Fallback when the card offers no lane: open a session on it (no run). */
   onCreateSession: (spec: { branch: string; threadTitle: string }) => void;
-  onStartRun: (spec: ItemRunSpec, action: RunAction, options?: { preapprovePlans?: boolean }) => void;
-  onRestartRun: (spec: ItemRunSpec, action: RunAction, options?: { preapprovePlans?: boolean }) => void;
-  onMove: (toStage: string) => void;
+  onMove: (toStage: string, options?: { preapprovePlans?: boolean }) => void;
   onRemove: () => void;
 }) {
   const { factoryId = '' } = useParams<{ factoryId: string }>();
@@ -106,30 +95,10 @@ export function WorkItemCard({
 
   const evaluating = evaluatingStage !== undefined;
   const busyLabel = proposal !== undefined && approvingDecisionId === proposal.id ? 'Starting…' : preparing;
-  const runPending = pendingRunRoles.size > 0 || busyLabel !== undefined;
-  const runSpec = itemRunSpec(item);
   const sessions = item.sessions;
-  // Offer only runs whose session slot hasn't been used yet on this card.
-  const runActions = runSpec === undefined ? [] : runSpec.actions.filter(action => !(action.role in sessions));
-  const defaultRunAction = runActions.find(action => FACTORY_ROLE_STAGES[action.role] === columnStage) ?? runActions[0];
-  // A Done-lane PR that's still open likely picked up commits after its
-  // review; offer a manual re-review even though the review slot is used. The
-  // run re-enters Reviewing and follows up in the existing thread.
-  const reReviewAction =
-    columnStage === 'done' &&
-    item.source === 'github-pr' &&
-    ['open', 'draft'].includes(pullRequestStatusForItem(item)) &&
-    runSpec !== undefined
-      ? runSpec.actions.find(action => action.role === 'review' && action.role in sessions)
-      : undefined;
-  // A card can land in a lane without its run ever starting — an approved plan
-  // transitions to Building and writes the `work` session ref itself, so the
-  // slot looks used and `runActions` filters Build out. Offer the lane's own
-  // run from the menu so the card is never a dead end.
-  const laneAction =
-    runSpec !== undefined && reReviewAction === undefined
-      ? runSpec.actions.find(action => FACTORY_ROLE_STAGES[action.role] === columnStage && action.role in sessions)
-      : undefined;
+  const moves = cardMoves(item, columnStage);
+  // The lane's own move first: clicking the button of the column a card sits in re-runs that lane.
+  const primaryMove = moves.find(move => move.stage === columnStage) ?? moves.find(move => move.stage !== columnStage);
   const threadSession = itemThreadSession(sessions);
   const wickStatus = threadSession !== undefined ? sessionStatus : undefined;
   const sessionHref =
@@ -139,9 +108,7 @@ export function WorkItemCard({
   const proposedRunLabel =
     proposal === undefined
       ? undefined
-      : (runSpec?.actions.find(action => action.role === proposal.role)?.label ??
-        defaultRunAction?.label ??
-        'Start run');
+      : (moves.find(move => move.role === proposal.role)?.label ?? primaryMove?.label ?? 'Start run');
 
   const activity = workItemActivity(item, activityPage);
   const status = boardCardStatus({
@@ -153,10 +120,6 @@ export function WorkItemCard({
       evaluatingStage === undefined
         ? undefined
         : { stage: evaluatingStage, label: itemStageLabel(item, evaluatingStage) },
-    runs: [...pendingRunRoles].map(([role, phase]) => ({
-      label: runSpec?.actions.find(action => action.role === role)?.label ?? 'Starting run',
-      phase,
-    })),
     preparing: busyLabel,
     decision,
     transitionReason,
@@ -167,14 +130,11 @@ export function WorkItemCard({
   const primaryAction = cardPrimaryAction({
     item,
     columnStage,
-    runSpec,
-    runAction: defaultRunAction,
-    resume: resumeTarget(columnStage, runSpec, sessions),
+    move: primaryMove,
+    resumeStage: resumeStage(columnStage, sessions),
     waiting: status.kind === 'waiting' ? status : undefined,
     hasSession: threadSession !== undefined,
     onApproveProposal,
-    onStartRun,
-    onRestartRun,
     onCreateSession,
     onMove,
   });
@@ -182,17 +142,10 @@ export function WorkItemCard({
   const menu: WorkItemMenuProps = {
     item,
     columnStage,
-    runSpec,
-    runActions,
-    reReviewAction,
-    laneAction,
+    moves,
     proposal,
     proposedRunLabel,
-    pendingRunRoles,
-    runDisabled,
     approvingDecisionId,
-    onStartRun,
-    onRestartRun,
     onApproveProposal,
     onDismissProposal,
     onMove,
@@ -203,21 +156,13 @@ export function WorkItemCard({
   // Dismissing a suggested run is the one entry that leaves it open.
   const panelMenu: WorkItemMenuProps = {
     ...menu,
-    onStartRun: (spec, action, options) => {
-      morph.closeDetails();
-      onStartRun(spec, action, options);
-    },
-    onRestartRun: (spec, action, options) => {
-      morph.closeDetails();
-      onRestartRun(spec, action, options);
-    },
     onApproveProposal: decisionId => {
       morph.closeDetails();
       onApproveProposal(decisionId);
     },
-    onMove: toStage => {
+    onMove: (toStage, options) => {
       morph.closeDetails();
-      onMove(toStage);
+      onMove(toStage, options);
     },
     onRemove: () => {
       morph.closeDetails();
@@ -257,8 +202,7 @@ export function WorkItemCard({
     retry: retryButton({ decisionId: retryDecisionId, retryingDecisionId, onRetry: onRetryDecision }),
     run: runButton({
       action: primaryAction,
-      pending: runPending,
-      disabled: runDisabled,
+      pending: busyLabel !== undefined,
       suggestion: status.kind === 'waiting' ? status.label : undefined,
     }),
   });
@@ -269,7 +213,7 @@ export function WorkItemCard({
         ref={morph.cardRef}
         draggable={!evaluating}
         aria-label={item.title}
-        aria-busy={evaluating || runPending || undefined}
+        aria-busy={evaluating || busyLabel !== undefined || undefined}
         data-testid="work-item-card"
         data-related={relatedItems.length > 0 ? 'true' : undefined}
         data-highlighted={highlighted || undefined}
@@ -281,7 +225,7 @@ export function WorkItemCard({
           // `content-visibility` clips at the padding box, which the wick's ring has to reach past.
           wickStatus ? 'border-transparent' : '[content-visibility:auto] [contain-intrinsic-size:auto_9rem]',
           evaluating ? 'cursor-wait' : 'cursor-grab active:cursor-grabbing',
-          runPending && 'opacity-70',
+          busyLabel !== undefined && 'opacity-70',
           highlighted && 'border-warning1/40 bg-warning1/5 ring-1 ring-warning1/30',
         )}
       >
