@@ -17,7 +17,7 @@ export type DragPayload =
       };
     };
 
-/** The candidate as the board files it, with typed guidance already framed for the card's feed. */
+/** The candidate as the board files it; the run already knows which issue or PR it is about, so typed guidance travels alone. */
 export function candidatePayload(candidate: BoardCandidate, guidance?: string): DragPayload {
   return {
     kind: 'candidate',
@@ -27,7 +27,7 @@ export function candidatePayload(candidate: BoardCandidate, guidance?: string): 
       title: candidate.title,
       url: candidate.url,
       metadata: candidate.metadata,
-      ...(guidance === undefined ? {} : { customPrompt: candidate.customPrompt(guidance) }),
+      ...(guidance === undefined ? {} : { customPrompt: `Guidance for this run: ${guidance}` }),
     },
   };
 }

@@ -7,14 +7,6 @@ import type { WorkItem, WorkItemSource } from './services/workItems';
 import type { BoardStageId } from './stages';
 
 /**
- * The run the card's move starts already knows which issue or PR it is about,
- * so typed guidance travels alone.
- */
-function guidance(instructions: string): string {
-  return `Guidance for this run: ${instructions}`;
-}
-
-/**
  * Candidate feeds the Intake swimlane can browse. Only one paginated list is
  * shown at a time; a pill switcher inside the column picks the active feed
  * when more than one is available.
@@ -48,8 +40,6 @@ export interface BoardCandidate {
   meta: string;
   /** Column the candidate is offered in: everything starts in Intake (auto-triaged issues in Triage). */
   column: BoardStageId;
-  /** Frames typed guidance for the run the card's move will start; posted as the card's first comment. */
-  customPrompt: (instructions: string) => string;
   metadata: Record<string, unknown>;
 }
 
@@ -62,7 +52,6 @@ export function issueCandidate(issue: GithubIssue): BoardCandidate {
     url: issue.url,
     meta: `#${issue.number}${issue.author ? ` · ${issue.author}` : ''} · ${relativeTime(issue.createdAt)}`,
     column: hasLabel(labels, AUTO_TRIAGED_LABEL) ? 'triage' : 'intake',
-    customPrompt: guidance,
     metadata: { number: issue.number, author: issue.author, assignee: issue.assignee, labels },
   };
 }
@@ -75,7 +64,6 @@ export function pullRequestCandidate(pr: GithubPullRequest): BoardCandidate {
     url: pr.url,
     meta: `#${pr.number}${pr.author ? ` · ${pr.author}` : ''} · ${pr.headBranch} → ${pr.baseBranch}`,
     column: 'intake',
-    customPrompt: guidance,
     metadata: {
       number: pr.number,
       author: pr.author,
@@ -95,7 +83,6 @@ export function linearCandidate(issue: LinearIssue): BoardCandidate {
     url: issue.url,
     meta: `${issue.identifier} · ${issue.state}${issue.assignee ? ` · ${issue.assignee}` : ''}`,
     column: 'intake',
-    customPrompt: guidance,
     metadata: {
       identifier: issue.identifier,
       state: issue.state,
