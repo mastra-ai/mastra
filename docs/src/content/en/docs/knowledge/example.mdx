@@ -1,0 +1,62 @@
+---
+title: 'Knowledge example'
+description: 'Design one organization-wide Knowledge graph for product knowledge, source artifacts, and agent work.'
+packages:
+  - '@mastra/core'
+---
+
+# Knowledge example
+
+An engineering organization can use one Knowledge instance for product knowledge, repositories, meetings, and agent work. Subject scopes hold what knowledge is about. Source scopes hold where imported artifacts came from.
+
+## Structure
+
+```text
+Acme
+  Product
+    Authentication
+      Authentication internal
+  Organization internal
+  Areas
+
+Repository: app
+  Issues
+  Pull requests
+```
+
+The scopes use these conventions:
+
+- Shared product scopes are readable across the organization.
+- Private facts about shared subjects belong in explicit internal companion scopes.
+- Issue and pull request scopes are source artifacts. Membership relates them to the product scopes they concern.
+- Session capture is routed to uncurated companions of the resource scopes held by that session.
+
+Addresses are stable lookup keys. Scope membership edges define parent and cross-cutting placement.
+
+## Placement guidance
+
+Use the instance description to tell compilers and agents:
+
+1. Which roots exist and what each root contains.
+1. Who can read, append, edit, suggest, or own each area.
+1. Where private or provisional information belongs.
+1. Which importers can write each source or product scope.
+1. Which destination is safest when placement is uncertain.
+
+Use a direct `structure` plan when the initial graph must be deterministic. Use a `description` plus compiler when prose should produce the same validated structure-plan contract. Reconciliation adds missing structure without renaming, moving, pruning, or recreating explicitly deleted scopes.
+
+## Importers
+
+A static repository importer creates one bound node for each issue and pull request, then writes source records with explicit source references converted into wikilinks. It advances its durable cursor only after mutations commit.
+
+An agentic merged-pull-request importer reads a bounded source delta before integrating current truth into product scopes. It cites the source pull request nodes and writes private-source conclusions to internal companions. Importer state stores the last processed source revision.
+
+## Access
+
+- Session agents read curated product knowledge and suggest changes. They directly write only to authorized work or uncurated scopes.
+- Curators edit approved product destinations and own the uncurated companions assigned to their host-registered profiles.
+- Static importers own their source bindings and receive only the grants required by their registrations.
+- Agentic importers receive explicit read context and write destinations.
+- Human operators review governed proposals through the Approvals surface.
+
+This structure keeps source evidence replayable, provisional capture visible, and curated product knowledge worth reading without allowing content, wikilinks, or client-supplied IDs to widen authority.

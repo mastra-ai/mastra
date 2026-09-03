@@ -1,5 +1,6 @@
 ---
 '@mastra/core': minor
+'mastra': patch
 ---
 
-Ship progressive-disclosure Knowledge guidance with the core package and add a deterministic provenance-checked sync for the official Mastra skill.
+Ship version-matched Knowledge guidance through the core package's embedded documentation pipeline, route the official Mastra skill to it, and make automatic project setup select that skill explicitly.
