@@ -1,5 +1,26 @@
 # @mastra/loggers
 
+## 1.3.1-alpha.2
+
+### Patch Changes
+
+- Fixed Errors logged under the `error` key being recorded as an empty object. ([#22913](https://github.com/mastra-ai/mastra/pull/22913))
+
+  Pino only applies its error serializer to the `err` key, and an Error's `message` and `stack` are non-enumerable. So `logger.warn('...', { error })`, the convention used throughout Mastra, was written as `error: {}` and the real failure was lost. The most visible symptom was `Error listing tools for agent` with no details.
+
+  `PinoLogger` now applies Pino's standard error serializer to the `error` key as well, so the type, message, and stack are recorded. The built-in `err` key keeps working. Values under `error` that are not error-like (no string `message` property) are passed through unchanged. Error-like plain objects are normalized to the same `{ type, message, stack }` shape with their own fields preserved.
+
+  A new `serializers` option lets you override or extend the defaults:
+
+  ```ts
+  new PinoLogger({
+    serializers: { error: err => ({ message: err.message }) },
+  });
+  ```
+
+- Updated dependencies [[`7686114`](https://github.com/mastra-ai/mastra/commit/7686114e3802f4cea414377eaf10999524d670fa), [`50469b2`](https://github.com/mastra-ai/mastra/commit/50469b2d085fc8550579ca4b741eb359d1705abc), [`809e882`](https://github.com/mastra-ai/mastra/commit/809e882ee9c154ac642eaed396163df706db6ae4), [`74b21fd`](https://github.com/mastra-ai/mastra/commit/74b21fd9bbe88e770d9acf4e00e01c8bbb7c9e61), [`c5c9ffc`](https://github.com/mastra-ai/mastra/commit/c5c9ffc3b36bdc7b17d6f911be81e28ba02acfad)]:
+  - @mastra/core@1.64.0-alpha.9
+
 ## 1.3.1-alpha.1
 
 ### Patch Changes

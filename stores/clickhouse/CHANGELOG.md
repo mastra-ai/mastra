@@ -1,5 +1,19 @@
 # @mastra/clickhouse
 
+## 1.16.1-alpha.2
+
+### Patch Changes
+
+- Added `reviewStatus` support to observability feedback storage so feedback can be listed by review state and marked as reviewed. Existing rows default to `needs-review`; updates are append-only (a new row is inserted and reads use `FINAL`). ([#22805](https://github.com/mastra-ai/mastra/pull/22805))
+
+  ```ts
+  const { feedback } = await storage.listFeedback({ filters: { reviewStatus: 'needs-review' } });
+  await storage.updateFeedbackReviewStatus({ feedbackId: feedback[0].feedbackId, reviewStatus: 'reviewed' });
+  ```
+
+- Updated dependencies [[`7686114`](https://github.com/mastra-ai/mastra/commit/7686114e3802f4cea414377eaf10999524d670fa), [`50469b2`](https://github.com/mastra-ai/mastra/commit/50469b2d085fc8550579ca4b741eb359d1705abc), [`809e882`](https://github.com/mastra-ai/mastra/commit/809e882ee9c154ac642eaed396163df706db6ae4), [`74b21fd`](https://github.com/mastra-ai/mastra/commit/74b21fd9bbe88e770d9acf4e00e01c8bbb7c9e61), [`c5c9ffc`](https://github.com/mastra-ai/mastra/commit/c5c9ffc3b36bdc7b17d6f911be81e28ba02acfad)]:
+  - @mastra/core@1.64.0-alpha.9
+
 ## 1.16.1-alpha.1
 
 ### Patch Changes

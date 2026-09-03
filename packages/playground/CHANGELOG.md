@@ -1,5 +1,15 @@
 # @internal/playground
 
+## 1.27.3-alpha.10
+
+### Patch Changes
+
+- Updated dependencies [[`a224e33`](https://github.com/mastra-ai/mastra/commit/a224e33c187e257049c8b70902171697883d625d), [`7686114`](https://github.com/mastra-ai/mastra/commit/7686114e3802f4cea414377eaf10999524d670fa), [`50469b2`](https://github.com/mastra-ai/mastra/commit/50469b2d085fc8550579ca4b741eb359d1705abc), [`809e882`](https://github.com/mastra-ai/mastra/commit/809e882ee9c154ac642eaed396163df706db6ae4), [`7686114`](https://github.com/mastra-ai/mastra/commit/7686114e3802f4cea414377eaf10999524d670fa), [`74b21fd`](https://github.com/mastra-ai/mastra/commit/74b21fd9bbe88e770d9acf4e00e01c8bbb7c9e61), [`c5c9ffc`](https://github.com/mastra-ai/mastra/commit/c5c9ffc3b36bdc7b17d6f911be81e28ba02acfad), [`f761f56`](https://github.com/mastra-ai/mastra/commit/f761f56cbd727a325d02dbe89ca5caa33ff1bba1)]:
+  - @mastra/playground-ui@52.0.0-alpha.12
+  - @mastra/core@1.64.0-alpha.9
+  - @mastra/client-js@1.43.0-alpha.9
+  - @mastra/react@1.4.10-alpha.10
+
 ## 1.27.3-alpha.9
 
 ### Patch Changes
