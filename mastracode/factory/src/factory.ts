@@ -100,6 +100,10 @@ import { QueueHealthStorage } from './storage/domains/queue-health/base.js';
 import { SourceControlStorage } from './storage/domains/source-control/base.js';
 import { WorkItemsStorage } from './storage/domains/work-items/base.js';
 import type { WorkItemRow } from './storage/domains/work-items/base.js';
+import { FactorySupervisorHealthWorker } from './supervisor/health-worker.js';
+import { createFactorySupervisorReadTools } from './supervisor/read-tools.js';
+import { hydrateSupervisorSession, resolveSupervisorScope } from './supervisor/session.js';
+import { createFactorySupervisorWriteTools } from './supervisor/write-tools.js';
 import { timedPhase } from './timing.js';
 import { createWorkspaceFactory, FactoryWorkspaceRegistry } from './workspace.js';
 import type { FactorySandboxStart } from './workspace.js';
@@ -757,6 +761,65 @@ export class MastraFactory {
                         : {}),
                     }),
                   );
+                  // The supervisor session has no seat, so it never gets the
+                  // transition tool above; it gets the read surface instead,
+                  // and only once the caller's org is shown to own the project.
+                  const supervisorScope = await resolveSupervisorScope({
+                    requestContext,
+                    projects: factoryProjectsStorage,
+                  });
+                  if (supervisorScope) {
+                    const userId = getFactoryAuthUserId(getFactoryAuthUserFromContext(requestContext));
+                    mergeTools(
+                      'factory-supervisor',
+                      createFactorySupervisorReadTools({
+                        scope: supervisorScope,
+                        workItems: workItemsStorage,
+                        comments: workItemCommentsStorage,
+                        audit: auditStorage,
+                        messageReader: {
+                          listMessages: async input => {
+                            const memory = await storage.getMastraStorage().getStore('memory');
+                            return memory ? memory.listMessages(input) : { messages: [], hasMore: false };
+                          },
+                        },
+                      }),
+                    );
+                    if (userId) {
+                      mergeTools(
+                        'factory-supervisor-write',
+                        createFactorySupervisorWriteTools({
+                          scope: supervisorScope,
+                          userId,
+                          workItems: workItemsStorage,
+                          audit: auditStorage,
+                          transitionService,
+                          ...(githubIntegration
+                            ? {
+                                reconcileAcceptanceLabels: (args: {
+                                  orgId: string;
+                                  factoryProjectId: string;
+                                  item: WorkItemRow;
+                                }) =>
+                                  reconcileGithubAcceptanceLabels(
+                                    githubIntegration,
+                                    sourceControlStorage.forIntegration(githubIntegration.id),
+                                    args,
+                                  ),
+                              }
+                            : {}),
+                          signalSession: async ({ sessionId, message }) => {
+                            const session = await prepared.base.controller.getSessionByResource(sessionId);
+                            if (!session) throw new Error('The worker session is not currently available.');
+                            await session.sendMessage({
+                              content: message,
+                              ...(requestContext ? { requestContext } : {}),
+                            });
+                          },
+                        }),
+                      );
+                    }
+                  }
                 }
                 for (const { integration, ready, ensureReady } of toolIntegrations) {
                   if (!ready && ensureReady) {
@@ -938,6 +1001,22 @@ export class MastraFactory {
       });
     });
 
+    // Supervisor sessions carry their project in the resourceId; re-stamp
+    // scope, instructions and factory defaults on every (re)creation so a
+    // restarted server heals the in-memory state.
+    prepared.base.controller.onSessionCreated(
+      session =>
+        hydrateSupervisorSession(session, {
+          projects: factoryProjectsStorage,
+          memorySettings: memorySettingsStorage,
+        }).catch(error => {
+          console.warn('[Factory Supervisor] Failed to hydrate supervisor session', {
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }),
+      { blocking: true },
+    );
+
     // Blocking: `createSession` awaits this seed, so when hydration succeeds
     // a session's first run starts with the owner's stored OM settings.
     // Best-effort — failures are logged inside the helper, never thrown, and
@@ -1016,30 +1095,33 @@ export class MastraFactory {
     // workers and `finalize()`'s `startWorkers()` starts them alongside the
     // built-ins. Never passed for the disabled/not-ready case — a worker for
     // an unavailable integration must not run.
-    const integrationWorkers = integrationRegistrations
-      .filter(({ integration, ready }) => ready && integration.workers)
-      .flatMap(({ integration }) =>
-        integration.workers!(
-          buildIntegrationContext(
-            {
-              controller: prepared.base.controller,
-              publicOrigin,
-              auth: routeAuth,
-              stateSigner,
-              sandbox: sandboxConfig,
-              factoryStorage: storage,
-              integrationStorage,
-              sourceControlStorage,
-              rules,
-              factoryReady,
-              domains,
-              feed: commentsDomain,
-              ...(githubIntegration ? { sourceControlOwnerId: 'github' } : {}),
-            },
-            integration.id,
+    const integrationWorkers = [
+      new FactorySupervisorHealthWorker({ projects: factoryProjectsStorage, workItems: workItemsStorage }),
+      ...integrationRegistrations
+        .filter(({ integration, ready }) => ready && integration.workers)
+        .flatMap(({ integration }) =>
+          integration.workers!(
+            buildIntegrationContext(
+              {
+                controller: prepared.base.controller,
+                publicOrigin,
+                auth: routeAuth,
+                stateSigner,
+                sandbox: sandboxConfig,
+                factoryStorage: storage,
+                integrationStorage,
+                sourceControlStorage,
+                rules,
+                factoryReady,
+                domains,
+                feed: commentsDomain,
+                ...(githubIntegration ? { sourceControlOwnerId: 'github' } : {}),
+              },
+              integration.id,
+            ),
           ),
         ),
-      );
+    ];
 
     return {
       ...prepared.mastraArgs,

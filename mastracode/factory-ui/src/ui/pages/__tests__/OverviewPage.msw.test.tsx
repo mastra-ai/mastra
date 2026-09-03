@@ -37,9 +37,12 @@ function card(stageHistory: WorkItemStageEntry[], overrides: Record<string, unkn
   };
 }
 
-function stubBoard(workItems: unknown[], runningSessionIds: string[] = []) {
+function stubBoard(workItems: unknown[], runningSessionIds: string[] = [], findings: unknown[] = []) {
   server.use(
     http.get('*/web/factory/projects/:id/work-items', () => HttpResponse.json({ workItems, runningSessionIds })),
+    http.get('*/web/factory/projects/:id/supervisor/health', () =>
+      HttpResponse.json({ generatedAt: new Date().toISOString(), findings }),
+    ),
   );
 }
 
@@ -108,6 +111,16 @@ describe('Overview', () => {
     expect(await screen.findAllByText('Nobody is on this')).not.toHaveLength(0);
     expect(screen.getByText('1 waiting')).toBeInTheDocument();
     expect(screen.getByText('1 running · 2 in the pipeline')).toBeInTheDocument();
+  });
+
+  it('shows the supervisor finding count beside work needing attention', async () => {
+    stubBoard([], [], [{ id: 'finding-1' }, { id: 'finding-2' }]);
+    renderOverview();
+
+    expect(await screen.findByRole('link', { name: '2 supervisor findings' })).toHaveAttribute(
+      'href',
+      `/factories/${FACTORY_ID}/supervisor`,
+    );
   });
 
   it('says a Factory has no repository rather than waiting on commits that cannot arrive', async () => {

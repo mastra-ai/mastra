@@ -51,6 +51,12 @@ export interface MastraCodeState {
    * inherits the machine owner's personal configuration.
    */
   skipGlobalInstructions?: boolean;
+  /**
+   * Instructions the hosting process supplies for a session that has no
+   * workspace to load AGENTS.md from (e.g. a Factory supervisor). Rendered
+   * as its own system-prompt section, after the base prompt.
+   */
+  hostInstructions?: string;
   configDir: string;
   homeDir?: string;
   gitBranch?: string;
@@ -125,6 +131,8 @@ export const stateSchema = z.object({
   baseRef: z.string().optional(),
   // Skip the operator machine's home-directory instruction files.
   skipGlobalInstructions: z.boolean().optional(),
+  // Host-supplied instructions for workspace-less sessions.
+  hostInstructions: z.string().optional(),
   configDir: z.string().default(DEFAULT_CONFIG_DIR),
   homeDir: z.string().optional(),
   gitBranch: z.string().optional(),
