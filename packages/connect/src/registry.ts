@@ -3,6 +3,7 @@ import type { ToolsInput } from '@mastra/core/agent';
 import { createJiraTools } from './providers/jira.js';
 import { createLinearTools } from './providers/linear.js';
 import { createNotionTools } from './providers/notion.js';
+import { createSnowflakeTools } from './providers/snowflake.js';
 import type { ProviderToolsOptions } from './toolset.js';
 
 export type ProviderKey =
@@ -43,6 +44,11 @@ export const PROVIDERS: Partial<Record<ProviderKey, ProviderRegistration>> = {
     integrationId: 'jira',
     envVar: 'MASTRA_JIRA_CONNECTION_ID',
     createTools: createJiraTools,
+  },
+  snowflake: {
+    integrationId: 'snowflake',
+    envVar: 'MASTRA_SNOWFLAKE_CONNECTION_ID',
+    createTools: createSnowflakeTools,
   },
 };
 

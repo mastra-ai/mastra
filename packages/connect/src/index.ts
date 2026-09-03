@@ -9,3 +9,4 @@ export type { ProviderToolsOptions } from './toolset.js';
 export { createJiraTools } from './providers/jira.js';
 export { createLinearTools } from './providers/linear.js';
 export { createNotionTools } from './providers/notion.js';
+export { createSnowflakeTools } from './providers/snowflake.js';
