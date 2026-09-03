@@ -78,7 +78,8 @@ export function SpanDataPanelView({
 }: SpanDataPanelViewProps) {
   return (
     <DataPanel className={className}>
-      <DataPanel.Header>
+      {/* 32px buttons + border would overflow min-h-14 by 1px; keep this header level with its neighbours. */}
+      <DataPanel.Header className="py-2">
         <DataPanel.Heading className="whitespace-nowrap">
           Span <b># {truncateString(spanId, 12)}</b>
         </DataPanel.Heading>
