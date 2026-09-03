@@ -1114,6 +1114,282 @@ describe('FactoryDecisionDispatcher', () => {
     expect(getAgentEndListenerCount()).toBe(0);
   });
 
+  describe('a role handed past on a shared session', () => {
+    /** Seat `role` on the one session every role of a card shares. */
+    async function bindRole(
+      storage: WorkItemsStorage,
+      workItemId: string,
+      role: string,
+      kickoffKey?: string,
+      resourceId = PROJECT_ID,
+    ) {
+      const prepared = await storage.prepareRunStart({
+        orgId: 'org-1',
+        userId: 'user-1',
+        factoryProjectId: PROJECT_ID,
+        workItem: {
+          id: workItemId,
+          input: {
+            externalSource: { integrationId: 'github', type: 'issue', externalId: 'github-issue:1' },
+            title: 'Fix issue',
+            stages: ['execute'],
+            sessions: {},
+            metadata: {},
+          },
+        },
+        role,
+        session: { sessionId: 'session-1', branch: 'factory/issue-1', threadId: 'thread-1' },
+        resourceId,
+        kickoffKey: kickoffKey ?? `kickoff-${role}-${workItemId}`,
+        kickoffMessage: null,
+      });
+      await storage.markPendingStart(prepared.binding.id, 'sent');
+      return prepared.binding;
+    }
+
+    const planSkill = (idempotencyKey: string): FactoryCommitDecision => ({
+      type: 'invokeSkill',
+      role: 'plan',
+      skillName: 'understand-issue',
+      idempotencyKey,
+    });
+
+    it('credits the plan decision when its turn was taken over by Build and later ended in error', async () => {
+      // Roles share one session. The plan agent moves the card on mid-turn;
+      // preparing the work seat revokes the plan seat and the build kickoff is
+      // delivered onto the same run. When that run finally dies, the verdict
+      // is the work decision's — the plan did what it was for.
+      const storage = (await createFactoryStorageForTests()).workItems;
+      const { item, transitionService } = await queueDecision(storage, planSkill('plan-handed-on'));
+      const { controller, emitAgentEnd, session } = createSession(undefined, {
+        // The kickoff wakes a run that keeps going; this test ends it by hand.
+        signalAccepted: Promise.resolve({ accepted: true, action: 'wake' }),
+      });
+      await bindRole(storage, item.id, 'plan');
+      const dispatcher = new FactoryDecisionDispatcher({
+        controller: controller as never,
+        isAutoRunEnabled: async () => true,
+        transitionService,
+        storage,
+        ownerId: 'worker-1',
+      });
+
+      const tick = dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
+      await vi.waitFor(() => expect(session.sendSignal).toHaveBeenCalledTimes(1));
+      await bindRole(storage, item.id, 'work');
+      emitAgentEnd('error');
+      await tick;
+
+      expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]).toMatchObject({
+        status: 'succeeded',
+        attempts: 1,
+      });
+    });
+
+    it('keeps an error that was observed before Build took over the session', async () => {
+      vi.useFakeTimers({ toFake: ['Date'] });
+      try {
+        vi.setSystemTime(new Date('2030-01-01T00:00:00Z'));
+        const storage = (await createFactoryStorageForTests()).workItems;
+        const listRunBindings = storage.listRunBindings.bind(storage);
+        let terminalEmitted = false;
+        let queryStarted!: () => void;
+        const terminalQueryStarted = new Promise<void>(resolve => {
+          queryStarted = resolve;
+        });
+        let releaseQuery!: () => void;
+        const queryReleased = new Promise<void>(resolve => {
+          releaseQuery = resolve;
+        });
+        vi.spyOn(storage, 'listRunBindings').mockImplementation(async (...args) => {
+          const bindings = await listRunBindings(...args);
+          if (terminalEmitted) {
+            queryStarted();
+            await queryReleased;
+          }
+          return bindings;
+        });
+        const { item, transitionService } = await queueDecision(storage, planSkill('plan-error-before-hand-on'));
+        const { controller, emitAgentEnd, session } = createSession(undefined, {
+          signalAccepted: Promise.resolve({ accepted: true, action: 'wake' }),
+        });
+        await bindRole(storage, item.id, 'plan');
+        const dispatcher = new FactoryDecisionDispatcher({
+          controller: controller as never,
+          isAutoRunEnabled: async () => true,
+          transitionService,
+          storage,
+          ownerId: 'worker-1',
+        });
+
+        const tick = dispatcher.runOnce(new Date());
+        await vi.waitFor(() => expect(session.sendSignal).toHaveBeenCalledTimes(1));
+        terminalEmitted = true;
+        emitAgentEnd('error');
+        await terminalQueryStarted;
+        await bindRole(storage, item.id, 'work');
+        releaseQuery();
+        await tick;
+
+        expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]).toMatchObject({
+          status: 'retry',
+          attempts: 1,
+          lastError: expect.stringContaining('ended in error'),
+        });
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('completes a retry for a plan seat that Build already replaced without minting a new seat', async () => {
+      const storage = (await createFactoryStorageForTests()).workItems;
+      const { item, transitionService } = await queueDecision(storage, planSkill('plan-stale-retry'));
+      const { controller, session } = createSession();
+      await bindRole(storage, item.id, 'plan');
+      await bindRole(storage, item.id, 'work');
+      const prepareBinding = vi.fn(async () => {});
+      const dispatcher = new FactoryDecisionDispatcher({
+        controller: controller as never,
+        isAutoRunEnabled: async () => true,
+        transitionService,
+        storage,
+        ownerId: 'worker-1',
+        prepareBinding,
+      });
+
+      await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
+
+      expect(prepareBinding).not.toHaveBeenCalled();
+      expect(session.sendSignal).not.toHaveBeenCalled();
+      expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]).toMatchObject({
+        status: 'succeeded',
+        attempts: 1,
+      });
+    });
+
+    it('does not treat a matching session on another resource as a successor', async () => {
+      const storage = (await createFactoryStorageForTests()).workItems;
+      const { item, transitionService } = await queueDecision(storage, planSkill('plan-other-resource'));
+      const stale = await bindRole(storage, item.id, 'plan');
+      await storage.revokeRunBinding({
+        orgId: 'org-1',
+        factoryProjectId: PROJECT_ID,
+        bindingId: stale.id,
+        revokedAt: new Date(),
+      });
+      await bindRole(storage, item.id, 'work', undefined, 'another-resource');
+      const { controller, session } = createSession();
+      const prepareBinding = vi.fn(async () => {
+        await bindRole(storage, item.id, 'plan', 'plan-after-other-resource');
+      });
+      const dispatcher = new FactoryDecisionDispatcher({
+        controller: controller as never,
+        isAutoRunEnabled: async () => true,
+        transitionService,
+        storage,
+        ownerId: 'worker-1',
+        prepareBinding,
+      });
+
+      await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
+
+      expect(prepareBinding).toHaveBeenCalledTimes(1);
+      expect(session.sendSignal).toHaveBeenCalledTimes(1);
+      expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]).toMatchObject({
+        status: 'succeeded',
+        attempts: 1,
+      });
+    });
+
+    it('still dispatches a plan decision queued after an earlier hand-on to Build', async () => {
+      // The card went plan -> work once already. A later plan decision (the
+      // card came back) must not be written off by that old handoff: its seat
+      // gets prepared and the kickoff goes out.
+      const storage = (await createFactoryStorageForTests()).workItems;
+      const { item, transitionService } = await queueDecision(storage, planSkill('plan-second-pass'));
+      // The earlier hand-on: plan seat revoked before this decision existed,
+      // work seat live on the shared session since.
+      const stale = await bindRole(storage, item.id, 'plan');
+      await storage.revokeRunBinding({
+        orgId: 'org-1',
+        factoryProjectId: PROJECT_ID,
+        bindingId: stale.id,
+        revokedAt: new Date('2020-01-01T00:00:00Z'),
+      });
+      await bindRole(storage, item.id, 'work');
+      const { controller, session } = createSession();
+      const prepareBinding = vi.fn(async () => {
+        await bindRole(storage, item.id, 'plan', 'plan-second-pass');
+      });
+      const dispatcher = new FactoryDecisionDispatcher({
+        controller: controller as never,
+        isAutoRunEnabled: async () => true,
+        transitionService,
+        storage,
+        ownerId: 'worker-1',
+        prepareBinding,
+      });
+
+      await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
+
+      expect(prepareBinding).toHaveBeenCalledTimes(1);
+      expect(session.sendSignal).toHaveBeenCalledTimes(1);
+      expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]).toMatchObject({
+        status: 'succeeded',
+        attempts: 1,
+      });
+    });
+
+    it('still fails when the plan seat was revoked with nobody taking the session over', async () => {
+      const storage = (await createFactoryStorageForTests()).workItems;
+      const { item, transitionService } = await queueDecision(storage, planSkill('plan-orphaned'));
+      const { controller } = createSession();
+      const binding = await bindRole(storage, item.id, 'plan');
+      await storage.revokeRunBinding({
+        orgId: 'org-1',
+        factoryProjectId: PROJECT_ID,
+        bindingId: binding.id,
+        revokedAt: new Date('2030-01-01T00:00:00Z'),
+      });
+      const dispatcher = new FactoryDecisionDispatcher({
+        controller: controller as never,
+        isAutoRunEnabled: async () => true,
+        transitionService,
+        storage,
+        ownerId: 'worker-1',
+      });
+
+      await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
+
+      expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]).toMatchObject({
+        status: 'retry',
+        failureCode: 'session_unavailable',
+        lastError: expect.stringContaining('No active Factory binding for role plan'),
+      });
+    });
+
+    it('still fails when the run ends in error with the plan seat intact', async () => {
+      const storage = (await createFactoryStorageForTests()).workItems;
+      const { item, transitionService } = await queueDecision(storage, planSkill('plan-real-error'));
+      const { controller } = createSession(undefined, { agentEndReason: 'error' });
+      await bindRole(storage, item.id, 'plan');
+      const dispatcher = new FactoryDecisionDispatcher({
+        controller: controller as never,
+        isAutoRunEnabled: async () => true,
+        transitionService,
+        storage,
+        ownerId: 'worker-1',
+      });
+
+      await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
+
+      expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]).toMatchObject({
+        status: 'retry',
+        lastError: expect.stringContaining('ended in error'),
+      });
+    });
+  });
+
   it('appends the work item feed to the invokeSkill kickoff', async () => {
     const seed = await createFactoryStorageForTests();
     const storage = seed.workItems;
