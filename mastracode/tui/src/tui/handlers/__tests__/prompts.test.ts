@@ -264,6 +264,31 @@ describe('handlePlanApproval regular approval', () => {
     expect(ctx.notify).not.toHaveBeenCalled();
   });
 
+  it('releases the event queue after starting the plan resume', async () => {
+    const projectPath = createTmpProjectWithPlan(PLAN_TITLE, 'Build the feature');
+    const { state, ctx } = createPlanApprovalCtx(projectPath);
+    let releaseResume!: () => void;
+    const resume = new Promise<void>(resolve => {
+      releaseResume = resolve;
+    });
+    state.session.respondToToolSuspension = vi.fn().mockReturnValue(resume);
+
+    const { promise, component } = await renderPlanApproval(ctx, state, PLAN_PATH);
+    const approval = (component as any).onApprove();
+
+    await vi.waitFor(() => expect(state.session.respondToToolSuspension).toHaveBeenCalledTimes(1));
+    let handlerResolved = false;
+    void promise.then(() => {
+      handlerResolved = true;
+    });
+    await new Promise(resolve => setTimeout(resolve, 0));
+    expect(handlerResolved).toBe(true);
+
+    releaseResume();
+    await approval;
+    await promise;
+  });
+
   it('approves the plan without sending a handoff signal', async () => {
     const projectPath = createTmpProjectWithPlan(PLAN_TITLE, 'Build the feature');
     const { state, ctx, sendSignal } = createPlanApprovalCtx(projectPath);
