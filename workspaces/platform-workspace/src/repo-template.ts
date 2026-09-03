@@ -81,6 +81,9 @@ export interface PlatformRepoTemplateOptions {
 
 export type PlatformRepoTemplateResolver = () => Promise<SandboxTemplateBuilder | undefined>;
 
+/** Last default-branch head resolved per clone URL, shared across resolvers in this process. */
+const lastKnownHeads = new Map<string, string>();
+
 /**
  * Create a lazy repository template definition for PlatformSandbox, mirroring
  * `@mastra/e2b`'s `createRepoTemplate`: pass the sandbox context through and a
@@ -131,17 +134,34 @@ export function createRepoTemplate(options: PlatformRepoTemplateOptions): Platfo
 
     const token = access.authorization?.token;
     let headError: unknown;
-    const sha = await (token ? resolveHead(cloneUrl, token) : resolveHead(cloneUrl)).catch(error => {
+    const resolved = await (token ? resolveHead(cloneUrl, token) : resolveHead(cloneUrl)).catch(error => {
       headError = error;
       return undefined;
     });
-    if (!sha || !SHA_PATTERN.test(sha)) {
-      console.warn('[platform-workspace] repo template skipped: could not resolve default-branch head', {
+    let sha: string;
+    if (resolved && SHA_PATTERN.test(resolved)) {
+      sha = resolved;
+      lastKnownHeads.set(cloneUrl, sha);
+    } else {
+      // A transient lookup failure (rate limit, timeout) must not drop the
+      // repo steps: an older pin still boots a warm family image, and the
+      // caller's checkout fetches the current tip regardless of the pin.
+      const lastKnown = lastKnownHeads.get(cloneUrl);
+      if (!lastKnown) {
+        console.warn('[platform-workspace] repo template skipped: could not resolve default-branch head', {
+          cloneUrl,
+          sha: resolved,
+          error: redactSecrets(headError),
+        });
+        return resourcesOnly();
+      }
+      console.warn('[platform-workspace] repo template pinned to the last known default-branch head', {
         cloneUrl,
-        sha,
+        sha: lastKnown,
+        resolved,
         error: redactSecrets(headError),
       });
-      return resourcesOnly();
+      sha = lastKnown;
     }
 
     const workingDirectory =
