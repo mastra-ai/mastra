@@ -31,8 +31,21 @@ const TRACE_FIELDS = {
 } satisfies FieldRegistry<TraceQueryField>;
 
 const SPAN_FIELDS = {
+  name: 's."name"',
   spanType: 's."spanType"',
+  model: 's."model"',
+  provider: 's."provider"',
+  startedAt: 's."startedAt"',
+  endedAt: 's."endedAt"',
+  durationMs: 's."durationMs"',
+  status: 's."status"',
   error: 's."error"',
+  entityType: 's."entityType"',
+  entityId: 's."entityId"',
+  entityName: 's."entityName"',
+  entityVersionId: 's."entityVersionId"',
+  parentEntityVersionId: 's."parentEntityVersionId"',
+  rootEntityVersionId: 's."rootEntityVersionId"',
 } satisfies FieldRegistry<TraceQuerySpanField>;
 
 const SCORE_FIELDS = {
@@ -224,7 +237,26 @@ export function compilePostgresTraceQuery(schema: string, plan: TrustedTraceQuer
 
   if (relationCollections.has('spans')) {
     ctes.push(`current_spans AS MATERIALIZED (
-    SELECT s."traceId", s."spanType", s."error"
+    SELECT
+      s."traceId",
+      s."name",
+      s."spanType",
+      CASE WHEN jsonb_typeof(s."attributes" -> 'model') = 'string' THEN s."attributes" ->> 'model' END AS "model",
+      CASE WHEN jsonb_typeof(s."attributes" -> 'provider') = 'string' THEN s."attributes" ->> 'provider' END AS "provider",
+      s."startedAt",
+      CASE WHEN s."isPending" THEN NULL ELSE s."endedAt" END AS "endedAt",
+      CASE
+        WHEN s."isPending" THEN NULL
+        ELSE EXTRACT(EPOCH FROM (s."endedAt" - s."startedAt")) * 1000
+      END AS "durationMs",
+      CASE WHEN s."error" IS NOT NULL THEN 'error' ELSE 'success' END AS "status",
+      s."error",
+      s."entityType",
+      s."entityId",
+      s."entityName",
+      s."entityVersionId",
+      s."parentEntityVersionId",
+      s."rootEntityVersionId"
     FROM ${spanTable} s
     WHERE s."traceId" IS NOT NULL
       AND s."traceId" IN (SELECT "traceId" FROM root_scope)
@@ -233,7 +265,17 @@ export function compilePostgresTraceQuery(schema: string, plan: TrustedTraceQuer
   }
   if (relationCollections.has('scores')) {
     ctes.push(`current_scores AS MATERIALIZED (
-    SELECT s."traceId", s."scorerId", s."score"
+    SELECT
+      s."traceId",
+      s."scorerId",
+      s."scorerVersion",
+      s."scoreSource",
+      s."score",
+      s."timestamp",
+      s."spanId",
+      s."entityVersionId",
+      s."parentEntityVersionId",
+      s."rootEntityVersionId"
     FROM ${scoreTable} s
     WHERE s."traceId" IS NOT NULL
       AND s."traceId" IN (SELECT "traceId" FROM root_scope)

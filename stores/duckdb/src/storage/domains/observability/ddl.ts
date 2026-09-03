@@ -50,6 +50,8 @@ CREATE TABLE IF NOT EXISTS span_events (
   entityId VARCHAR,
   entityName VARCHAR,
   entityVersionId VARCHAR,
+  parentEntityVersionId VARCHAR,
+  rootEntityVersionId VARCHAR,
 
   -- Context
   userId VARCHAR,
@@ -328,6 +330,8 @@ export const ALL_MIGRATIONS = [
   // bad default is detected in information_schema.
   `ALTER TABLE span_events ADD COLUMN IF NOT EXISTS cursorId BIGINT`,
   `ALTER TABLE span_events ADD COLUMN IF NOT EXISTS entityVersionId VARCHAR`,
+  `ALTER TABLE span_events ADD COLUMN IF NOT EXISTS parentEntityVersionId VARCHAR`,
+  `ALTER TABLE span_events ADD COLUMN IF NOT EXISTS rootEntityVersionId VARCHAR`,
 
   // Metrics. Legacy rows remain page-visible but are not part of delta polling.
   `ALTER TABLE metric_events ADD COLUMN IF NOT EXISTS cursorId BIGINT`,

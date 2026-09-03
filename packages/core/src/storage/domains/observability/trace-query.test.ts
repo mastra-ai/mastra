@@ -258,6 +258,115 @@ describe('planTraceQuery', () => {
     });
   });
 
+  it('plans richer span fields with strict same-span semantics', () => {
+    const plan = planTraceQuery(
+      parsed({
+        ...baseRequest,
+        where: {
+          spans: {
+            some: {
+              op: 'and',
+              args: [
+                { op: 'eq', left: { path: 'name' }, right: { literal: 'medication_lookup' } },
+                { op: 'in', value: { path: 'spanType' }, set: ['tool_call', 'mcp_tool_call'] },
+                { op: 'eq', left: { path: 'model' }, right: { literal: 'claude-sonnet-4-6' } },
+                { op: 'ne', left: { path: 'provider' }, right: { literal: 'openai' } },
+                {
+                  op: 'gte',
+                  left: { path: 'startedAt' },
+                  right: { literal: '2026-08-10T02:00:00+02:00' },
+                },
+                {
+                  op: 'lt',
+                  left: { path: 'endedAt' },
+                  right: { literal: '2026-08-11T00:00:00Z' },
+                },
+                { op: 'gt', left: { path: 'durationMs' }, right: { literal: 5000 } },
+                { op: 'eq', left: { path: 'status' }, right: { literal: 'success' } },
+                { op: 'eq', left: { path: 'entityType' }, right: { literal: 'tool' } },
+                { op: 'eq', left: { path: 'entityId' }, right: { literal: 'medication_lookup' } },
+                { op: 'eq', left: { path: 'entityName' }, right: { literal: 'Medication lookup' } },
+                { op: 'eq', left: { path: 'entityVersionId' }, right: { literal: 'tool-v2' } },
+                { op: 'notExists', path: 'parentEntityVersionId' },
+                { op: 'notIn', value: { path: 'rootEntityVersionId' }, set: ['agent-v1'] },
+              ],
+            },
+          },
+        },
+      }),
+    );
+
+    expect(plan.where).toMatchObject({
+      type: 'relation',
+      collection: 'spans',
+      quantifier: 'some',
+      predicate: {
+        type: 'boolean',
+        operator: 'and',
+        args: [
+          { type: 'comparison', field: 'name', operator: 'eq', value: 'medication_lookup' },
+          { type: 'membership', field: 'spanType', operator: 'in', values: ['tool_call', 'mcp_tool_call'] },
+          { type: 'comparison', field: 'model', operator: 'eq', value: 'claude-sonnet-4-6' },
+          { type: 'comparison', field: 'provider', operator: 'ne', value: 'openai' },
+          { type: 'comparison', field: 'startedAt', operator: 'gte', value: '2026-08-10T00:00:00.000Z' },
+          { type: 'comparison', field: 'endedAt', operator: 'lt', value: '2026-08-11T00:00:00.000Z' },
+          { type: 'comparison', field: 'durationMs', operator: 'gt', value: 5000 },
+          { type: 'comparison', field: 'status', operator: 'eq', value: 'success' },
+          { type: 'comparison', field: 'entityType', operator: 'eq', value: 'tool' },
+          { type: 'comparison', field: 'entityId', operator: 'eq', value: 'medication_lookup' },
+          { type: 'comparison', field: 'entityName', operator: 'eq', value: 'Medication lookup' },
+          { type: 'comparison', field: 'entityVersionId', operator: 'eq', value: 'tool-v2' },
+          { type: 'presence', field: 'parentEntityVersionId', operator: 'notExists' },
+          { type: 'membership', field: 'rootEntityVersionId', operator: 'notIn', values: ['agent-v1'] },
+        ],
+      },
+    });
+  });
+
+  it('rejects unapproved span fields and invalid span operators or literals', () => {
+    for (const field of ['attributes.model', 'toolType', 'mcpServer', 'serverVersion']) {
+      const error = validationError(() =>
+        planTraceQuery(parsed({ ...baseRequest, where: { spans: { some: { op: 'exists', path: field } } } })),
+      );
+      expect(error.issues[0]).toMatchObject({
+        code: 'field_not_allowed',
+        path: ['where', 'spans', 'some', 'path'],
+      });
+    }
+
+    const orderedName = validationError(() =>
+      planTraceQuery(
+        parsed({
+          ...baseRequest,
+          where: { spans: { some: { op: 'lt', left: { path: 'name' }, right: { literal: 'tool' } } } },
+        }),
+      ),
+    );
+    expect(orderedName.issues).toContainEqual(
+      expect.objectContaining({ code: 'operator_not_allowed', path: ['where', 'spans', 'some', 'op'] }),
+    );
+
+    for (const [field, literal] of [
+      ['durationMs', '5000'],
+      ['startedAt', 'August 10, 2026'],
+    ] as const) {
+      const error = validationError(() =>
+        planTraceQuery(
+          parsed({
+            ...baseRequest,
+            where: { spans: { some: { op: 'gte', left: { path: field }, right: { literal } } } },
+          }),
+        ),
+      );
+      expect(error.issues).toContainEqual(
+        expect.objectContaining({
+          code: 'invalid_literal',
+          path: ['where', 'spans', 'some', 'right', 'literal'],
+        }),
+      );
+    }
+  });
+
   it('rejects unapproved score fields and invalid score operator/type combinations', () => {
     for (const field of ['source', 'scorerName']) {
       const error = validationError(() =>

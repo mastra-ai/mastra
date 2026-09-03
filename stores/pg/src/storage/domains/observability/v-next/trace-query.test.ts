@@ -72,6 +72,44 @@ describe('Postgres advanced trace query', () => {
     expect(compiled.values).toContain('2026-01-01T12:00:00.000Z');
   });
 
+  it('projects canonical span values and compiles one richer same-span existence check', () => {
+    const compiled = compilePostgresTraceQuery(
+      'public',
+      plan({
+        where: {
+          spans: {
+            some: {
+              op: 'and',
+              args: [
+                { op: 'eq', left: { path: 'name' }, right: { literal: 'medication_lookup' } },
+                { op: 'eq', left: { path: 'model' }, right: { literal: 'claude-sonnet-4-6' } },
+                { op: 'eq', left: { path: 'provider' }, right: { literal: 'anthropic' } },
+                {
+                  op: 'gte',
+                  left: { path: 'startedAt' },
+                  right: { literal: '2026-01-01T06:00:00-06:00' },
+                },
+                { op: 'gt', left: { path: 'durationMs' }, right: { literal: 5000 } },
+                { op: 'eq', left: { path: 'status' }, right: { literal: 'success' } },
+                { op: 'exists', path: 'entityVersionId' },
+              ],
+            },
+          },
+        },
+      }),
+    );
+
+    expect(compiled.text.match(/FROM current_spans s/g)).toHaveLength(1);
+    expect(compiled.text).toContain(`jsonb_typeof(s."attributes" -> 'model') = 'string'`);
+    expect(compiled.text).toContain(`jsonb_typeof(s."attributes" -> 'provider') = 'string'`);
+    expect(compiled.text).toContain(`EXTRACT(EPOCH FROM (s."endedAt" - s."startedAt")) * 1000`);
+    expect(compiled.text).toContain(`CASE WHEN s."error" IS NOT NULL THEN 'error' ELSE 'success' END AS "status"`);
+    expect(compiled.text).toContain('s."startedAt" IS NOT NULL AND s."startedAt" >=');
+    expect(compiled.text).toContain('s."durationMs" IS NOT NULL AND s."durationMs" >');
+    expect(compiled.values).toContain('2026-01-01T12:00:00.000Z');
+    expect(compiled.values).toContain(5000);
+  });
+
   it('emits only referenced relation scopes and reuses each current-record reconstruction', () => {
     const spanClause = {
       spans: { some: { op: 'eq', left: { path: 'spanType' }, right: { literal: 'tool_call' } } },
