@@ -457,6 +457,10 @@ export class GeminiLiveVoice extends MastraVoice<
       return;
     }
 
+    // Dedup state must not leak across connections: ids used by a prior
+    // connection are valid again once a fresh one is opened.
+    this.processedToolCallIds.clear();
+
     // Store request context for tool execution
     this.requestContext = requestContext;
 
