@@ -1511,6 +1511,67 @@ describe('MastraMCPClient - outputSchema with structuredContent', () => {
     });
   });
 
+  it('enforces JSON Schema 2020-12 dependentSchemas, unevaluatedProperties, and contains bounds', async () => {
+    const sdkClient = (client as any).client as Client;
+    vi.spyOn(sdkClient, 'listTools').mockResolvedValue({
+      tools: [
+        {
+          name: 'dependent_tool',
+          inputSchema: { type: 'object' as const, properties: {} },
+          outputSchema: {
+            $schema: 'https://json-schema.org/draft/2020-12/schema',
+            type: 'object' as const,
+            properties: {
+              amount: { type: 'number' as const },
+              currency: { enum: ['USD', 'EUR'] },
+            },
+            required: ['amount'],
+            dependentSchemas: { amount: { required: ['currency'] } },
+            unevaluatedProperties: false,
+          },
+        },
+        {
+          name: 'contains_tool',
+          inputSchema: { type: 'object' as const, properties: {} },
+          outputSchema: {
+            $schema: 'https://json-schema.org/draft/2020-12/schema',
+            type: 'array' as const,
+            contains: { type: 'integer' as const },
+            minContains: 2,
+            maxContains: 2,
+          },
+        },
+      ],
+    });
+    vi.spyOn(sdkClient, 'callTool')
+      .mockResolvedValueOnce({
+        structuredContent: { amount: 10, currency: 'USD' },
+        content: [{ type: 'text', text: 'valid' }],
+        isError: false,
+      })
+      .mockResolvedValueOnce({
+        structuredContent: { amount: 10, unexpected: true },
+        content: [{ type: 'text', text: 'invalid' }],
+        isError: false,
+      })
+      .mockResolvedValueOnce({
+        structuredContent: [1, 'middle', 2],
+        content: [{ type: 'text', text: 'valid' }],
+        isError: false,
+      })
+      .mockResolvedValueOnce({
+        structuredContent: [1, 'only one integer'],
+        content: [{ type: 'text', text: 'invalid' }],
+        isError: false,
+      });
+
+    const tools = await client.tools();
+    await expect(tools.dependent_tool.execute?.({})).resolves.toEqual({ amount: 10, currency: 'USD' });
+    await expect(tools.dependent_tool.execute?.({})).resolves.toMatchObject({ error: true });
+    await expect(tools.contains_tool.execute?.({})).resolves.toEqual([1, 'middle', 2]);
+    await expect(tools.contains_tool.execute?.({})).resolves.toMatchObject({ error: true });
+  });
+
   it('validates output schemas that explicitly declare draft-07', async () => {
     const sdkClient = (client as any).client as Client;
     vi.spyOn(sdkClient, 'listTools').mockResolvedValue({
