@@ -124,9 +124,14 @@ export const openaiStrictSchemaScenario = {
       `Expected nested properties to be branch-local, received ${JSON.stringify(nested)}`,
     );
     check(nestedObjectBranch.additionalProperties === false, 'Expected nested additionalProperties false');
+    const nestedPropertyKeys = sortedKeys(nestedObjectBranch.properties);
     check(
-      JSON.stringify(requiredKeys(nestedObjectBranch)) === JSON.stringify(sortedKeys(nestedObjectBranch.properties)),
-      `Expected all nested properties to be required, received required=${JSON.stringify(nestedObjectBranch.required)} properties=${JSON.stringify(sortedKeys(nestedObjectBranch.properties))}`,
+      JSON.stringify(nestedPropertyKeys) === JSON.stringify(['count', 'enabled']),
+      `Expected nested properties count and enabled, received ${JSON.stringify(nestedPropertyKeys)}`,
+    );
+    check(
+      JSON.stringify(requiredKeys(nestedObjectBranch)) === JSON.stringify(nestedPropertyKeys),
+      `Expected all nested properties to be required, received required=${JSON.stringify(nestedObjectBranch.required)} properties=${JSON.stringify(nestedPropertyKeys)}`,
     );
   },
 } satisfies McE2eScenario;
