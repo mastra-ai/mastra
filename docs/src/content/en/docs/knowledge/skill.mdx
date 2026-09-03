@@ -1,0 +1,30 @@
+---
+title: 'Knowledge skill'
+description: 'Install and use the official Mastra Knowledge guidance for coding agents.'
+packages:
+  - '@mastra/core'
+---
+
+# Knowledge skill
+
+Mastra publishes canonical Knowledge guidance as part of the official `mastra` skill. It covers configuration, access, nodes and records, importers, capture, curation, and the Knowledge UI.
+
+Install the skill with:
+
+```bash
+npx skills add mastra-ai/skills --skill mastra
+```
+
+Projects created by `create-mastra` install the official skill by default. Pass `--no-skills` only when you intentionally don't want agent guidance installed.
+
+## Package-local source
+
+The authoritative Knowledge skill source ships with `@mastra/core` under `dist/knowledge/skill/`. Coding agents can read `SKILL.md` there and follow its progressive-disclosure references without network access.
+
+The public `mastra-ai/skills` copy is generated from that package source during a release-gated sync. Its header records the exact Mastra source commit, commit date, source path, and source-content hash. The sync check fails when the public copy, skill link, or repository link drifts from the generated output.
+
+## Update behavior
+
+A project keeps the skill version that was installed until you update it. Run `npx skills update mastra` to fetch current guidance after upgrading Mastra. Skill discovery may refresh at agent turn boundaries, so restart or begin a new turn if an updated reference isn't immediately visible.
+
+Use [Knowledge configuration](./configuration) for the runtime setup guide. The installed TypeScript types remain the authority for the exact APIs supported by your package version.

@@ -67,6 +67,8 @@
     "factory:build": "pnpm --dir mastracode/web run prebuild",
     "factory:dev": "tsx mastracode/web/src/factory-dev/cli.ts",
     "generate:integration": "tsx ./integration-generator/index.ts",
+    "sync:official-skills": "tsx ./scripts/sync-official-skills.ts",
+    "check:official-skills": "tsx ./scripts/sync-official-skills.ts --check",
     "test": "vitest run",
     "test:watch": "vitest watch",
     "test:watch:combined-stores": "pnpm --filter \"./stores/*\" test:watch",
