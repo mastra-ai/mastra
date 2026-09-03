@@ -1186,6 +1186,61 @@ describe('FactoryDecisionDispatcher', () => {
       });
     });
 
+    it('keeps an error that was observed before Build took over the session', async () => {
+      vi.useFakeTimers({ toFake: ['Date'] });
+      try {
+        vi.setSystemTime(new Date('2030-01-01T00:00:00Z'));
+        const storage = (await createFactoryStorageForTests()).workItems;
+        const listRunBindings = storage.listRunBindings.bind(storage);
+        let terminalEmitted = false;
+        let queryStarted!: () => void;
+        const terminalQueryStarted = new Promise<void>(resolve => {
+          queryStarted = resolve;
+        });
+        let releaseQuery!: () => void;
+        const queryReleased = new Promise<void>(resolve => {
+          releaseQuery = resolve;
+        });
+        vi.spyOn(storage, 'listRunBindings').mockImplementation(async (...args) => {
+          if (terminalEmitted) {
+            queryStarted();
+            await queryReleased;
+          }
+          return listRunBindings(...args);
+        });
+        const { item, transitionService } = await queueDecision(storage, planSkill('plan-error-before-hand-on'));
+        const { controller, emitAgentEnd, session } = createSession(undefined, {
+          signalAccepted: Promise.resolve({ accepted: true, action: 'wake' }),
+        });
+        await bindRole(storage, item.id, 'plan');
+        const dispatcher = new FactoryDecisionDispatcher({
+          controller: controller as never,
+          isAutoRunEnabled: async () => true,
+          transitionService,
+          storage,
+          ownerId: 'worker-1',
+        });
+
+        const tick = dispatcher.runOnce(new Date());
+        await vi.waitFor(() => expect(session.sendSignal).toHaveBeenCalledTimes(1));
+        terminalEmitted = true;
+        emitAgentEnd('error');
+        await terminalQueryStarted;
+        vi.setSystemTime(new Date('2030-01-01T00:00:01Z'));
+        await bindRole(storage, item.id, 'work');
+        releaseQuery();
+        await tick;
+
+        expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]).toMatchObject({
+          status: 'retry',
+          attempts: 1,
+          lastError: expect.stringContaining('ended in error'),
+        });
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
     it('completes a retry for a plan seat that Build already replaced without minting a new seat', async () => {
       const storage = (await createFactoryStorageForTests()).workItems;
       const { item, transitionService } = await queueDecision(storage, planSkill('plan-stale-retry'));
