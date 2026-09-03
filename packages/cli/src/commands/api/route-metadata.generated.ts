@@ -6230,7 +6230,12 @@ export const API_ROUTE_METADATA = {
       "threadId"
     ],
     "queryParams": [
+      "filter",
+      "include",
       "limit",
+      "orderBy",
+      "page",
+      "perPage",
       "sessionScope"
     ],
     "bodyParams": [],
@@ -6238,7 +6243,8 @@ export const API_ROUTE_METADATA = {
     "hasBody": false,
     "responseShape": {
       "kind": "object-property",
-      "listProperty": "messages"
+      "listProperty": "messages",
+      "paginationProperty": "page"
     }
   },
   "POST /agent-controller/:controllerId/sessions/:resourceId/messages": {

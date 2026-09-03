@@ -20760,6 +20760,26 @@ export type GetAgentControllerControllerIdSessionsResourceIdThreadsThreadIdMessa
 
 export type GetAgentControllerControllerIdSessionsResourceIdThreadsThreadIdMessages_QueryParams = {
   limit?: number | undefined;
+  page?: number | undefined;
+  perPage?: (false | number) | undefined;
+  orderBy?:
+    | (
+        | {
+            field?: 'createdAt' | undefined;
+            direction?: ('ASC' | 'DESC') | undefined;
+          }
+        | undefined
+      )
+    | undefined;
+  include?:
+    | {
+        id: string;
+        threadId?: string | undefined;
+        withPreviousMessages?: number | undefined;
+        withNextMessages?: number | undefined;
+      }[]
+    | undefined;
+  filter?: Shared_Type_66 | undefined;
   sessionScope?: string | undefined;
 };
 
@@ -20780,6 +20800,10 @@ export type GetAgentControllerControllerIdSessionsResourceIdThreadsThreadIdMessa
     resourceId?: string | undefined;
     type?: string | undefined;
   }[];
+  total: number;
+  page: number;
+  perPage: number | false;
+  hasMore: boolean;
 };
 
 export type GetAgentControllerControllerIdSessionsResourceIdThreadsThreadIdMessages_Request = Simplify<
