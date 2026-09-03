@@ -314,7 +314,7 @@ mastra-server:
 
 ## Background workers
 
-By default the Server runs Mastra's background workers in-process. The `mastra-workers` subchart moves them into their own Deployments — one per role — so workflow orchestration, scheduled workflows, and background tasks scale independently of the API. See [Workers](/docs/deployment/workers) for what each role does.
+By default, the server runs Mastra's background workers in-process. The `mastra-workers` subchart moves them into their own deployments (one per role) so workflow orchestration, scheduled workflows, and background tasks scale independently of the API. See [Workers](/docs/deployment/workers) for what each role does.
 
 Workers are **opt-in**: nothing is deployed unless you enable them.
 
