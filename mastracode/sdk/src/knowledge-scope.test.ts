@@ -84,6 +84,27 @@ describe('localMachineId', () => {
     expect(fs.existsSync(lock)).toBe(false);
   });
 
+  it('does not release a lock that was broken and re-taken by another process while it stalled', () => {
+    const homeDir = tempHome();
+    const file = path.join(homeDir, '.mastracode', MACHINE_ID_FILE);
+    const lock = `${file}.lock`;
+    // While we hold the lock, simulate the stall: another process breaks it and takes its own.
+    const write = vi.spyOn(fs, 'writeFileSync').mockImplementation((target, data, opts) => {
+      writeFileSync(target, data, opts as never);
+      if (String(target) === file) {
+        fs.rmSync(lock, { recursive: true, force: true });
+        mkdirSync(lock);
+        writeFileSync(path.join(lock, 'owner'), 'someone-else');
+      }
+    });
+    try {
+      expect(localMachineId({ homeDir })).toMatch(/^[0-9a-f]{12}$/);
+    } finally {
+      write.mockRestore();
+    }
+    expect(readFileSync(path.join(lock, 'owner'), 'utf-8')).toBe('someone-else');
+  });
+
   it('does not write, cache, or break a live lock it cannot acquire; falls back to the hostname hash', () => {
     const homeDir = tempHome();
     const file = path.join(homeDir, '.mastracode', MACHINE_ID_FILE);

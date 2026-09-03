@@ -40,14 +40,19 @@ function sleepSync(ms: number): void {
  * file. `mkdirSync` without `recursive` is atomic, so exactly one process at a
  * time reads, validates, and (re)writes the file; nothing is ever raced or
  * overwritten. A lock older than LOCK_STALE_MS is presumed abandoned (crashed
- * holder) and broken. Throws if the lock cannot be acquired in LOCK_WAIT_MS.
+ * holder) and broken; a holder only releases a lock it still owns (owner
+ * token), so a stalled holder resuming cannot remove its replacement's lock.
+ * Throws if the lock cannot be acquired in LOCK_WAIT_MS.
  */
 function withMachineIdLock<T>(filePath: string, fn: () => T): T {
   const lockDir = `${filePath}.lock`;
+  const ownerFile = path.join(lockDir, 'owner');
+  const token = randomBytes(8).toString('hex');
   const deadline = Date.now() + LOCK_WAIT_MS;
   for (;;) {
     try {
       fs.mkdirSync(lockDir);
+      fs.writeFileSync(ownerFile, token, 'utf-8');
       break;
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
@@ -68,7 +73,15 @@ function withMachineIdLock<T>(filePath: string, fn: () => T): T {
   try {
     return fn();
   } finally {
-    fs.rmSync(lockDir, { recursive: true, force: true });
+    // Release only our own lock: if we stalled past LOCK_STALE_MS, another
+    // process may have broken it and taken a new one we must not remove.
+    let owner: string | undefined;
+    try {
+      owner = fs.readFileSync(ownerFile, 'utf-8');
+    } catch {
+      owner = undefined;
+    }
+    if (owner === token) fs.rmSync(lockDir, { recursive: true, force: true });
   }
 }
 
