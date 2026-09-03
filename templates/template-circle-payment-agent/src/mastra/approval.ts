@@ -101,6 +101,27 @@ export function requiresUserTerminal(command: string): boolean {
   return matches(command, USER_ONLY);
 }
 
+/**
+ * The two blocked commands the login tools can complete without a terminal.
+ *
+ * Both halves of `circle wallet login` are non-interactive — `--init` asks for
+ * the code, `--request/--otp` spends it — so what has no terminal is the CLI's
+ * own prompt, not the login. A tool that suspends supplies the missing half.
+ *
+ * `circle wallet limit set` is deliberately not here. It confirms with a code
+ * too, but a spending cap the agent can raise is not a cap; that one stays the
+ * user's, in the user's terminal, whatever front end is attached.
+ */
+const SERVED_BY_TOOL: readonly RegExp[] = [
+  /\bcircle terms accept\b/,
+  /\bcircle wallet login\b/,
+];
+
+/** Whether a blocked `command` has a tool that can finish it in the conversation. */
+export function servedByLoginTool(command: string): boolean {
+  return matches(command, SERVED_BY_TOOL);
+}
+
 /** Whether `command` installs skills somewhere this agent would never find them. */
 export function installsSkillsElsewhere(command: string): boolean {
   return matches(command, WRONG_SKILL_STORE);

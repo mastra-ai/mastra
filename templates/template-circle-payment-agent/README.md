@@ -74,6 +74,26 @@ switch for handing a stranger your money, so there isn't one. Homes live under
 `~/.circle-agent/tenants/<user-id>` (`/tmp` if that is not writable, as in some
 containers) and survive a restart. See `src/mastra/tenancy.ts`.
 
+One caller cannot name itself. Mastra Studio is a console for whatever agent it
+is pointed at rather than a front end with users of its own, so it sends no
+`user-id` and every request it makes would be refused — the agent listed and
+unusable. `src/mastra/studio.ts` names it `studio` in middleware, and only when
+a request carrying no id arrives from Studio's own page: the deployment's
+`*.studio.mastra.cloud` subdomain, or the Studio this server hosts itself. A
+request that already names a caller is untouched, and everything else is refused
+exactly as before. `Origin` is a header the caller writes, so this is a
+convenience and not a boundary — cap the wallet with `circle wallet limit set`
+on anything strangers can reach.
+
+That caller also signs in differently. It has no terminal to paste a command
+into and no proxy in front of it calling the control plane, so it gets two tools
+instead: one that puts Circle's Terms to you as an approval, and one that takes
+your email, has Circle send the code, and suspends for you to type it — the same
+pause Studio already shows before a spend. Neither is something the agent can
+finish alone, and the code goes from the resume payload to the CLI without
+entering the model's context or the thread. Every other caller signs in through
+the front end calling `/circle/*`. See `src/mastra/login-tool.ts`.
+
 The cost is local convenience. The agent does not see the Circle session in your
 own `~/.circle-cli`, because that is not the home it opens — so you log in once
 per username, and the agent hands you the command with the right `HOME=` prefix

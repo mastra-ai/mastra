@@ -6,11 +6,18 @@ import type { RequestContext } from '@mastra/core/request-context';
 import { LocalFilesystem, LocalSandbox, WORKSPACE_TOOLS, Workspace } from '@mastra/core/workspace';
 import { Memory } from '@mastra/memory';
 
-import { installsSkillsElsewhere, requiresApproval, requiresUserTerminal } from '../approval';
+import {
+  installsSkillsElsewhere,
+  requiresApproval,
+  requiresUserTerminal,
+  servedByLoginTool,
+} from '../approval';
 import { cliPath, cliPrefix } from '../circle-cli';
 import { circleDocFetched, readCircleDoc } from '../circle-docs';
+import { loginTools } from '../login-tool';
 import { ClampedSkillSource } from '../skill-source';
 import { gitAvailable, installCircleSkills, installsCircleSkills } from '../skills-install';
+import { isStudioCaller } from '../studio';
 import { tenantHome } from '../tenancy';
 
 // The skills registry's global install directory, which `~/.claude/skills` and its equivalents
@@ -249,6 +256,22 @@ const workspace = new Workspace({
         const command = String((input as { command?: unknown })?.command ?? '');
         const home = callerHome(context);
         if (requiresUserTerminal(command)) {
+          // Where the chat is the front end, the answer is a tool rather than a terminal the user
+          // does not have. Still a refusal, and for the same reason — the agent does not accept
+          // Terms and does not handle a code — but it points at the door that exists here.
+          if (servedByLoginTool(command) && isStudioCaller(callerContext(context))) {
+            return {
+              proceed: false,
+              output:
+                `Blocked: \`${command}\` is not yours to run in a shell, and this deployment has no ` +
+                'terminal for the user to run it in either. Use the tools instead: ' +
+                '`circle-accept-terms` puts the Terms of Use to the user as an approval they grant ' +
+                'or refuse; `circle-wallet-login` takes their email and has Circle send a code; ' +
+                '`circle-submit-code` spends the code they paste back. Ask the user for their email ' +
+                'and then for the code, one at a time, and never guess either. Do not retry this ' +
+                'command or work around it.',
+            };
+          }
           return {
             proceed: false,
             output:
@@ -382,6 +405,12 @@ export const circlePaymentAgent = new Agent({
   },
   model: MODEL,
   workspace,
+  // Sign-in in the conversation, and only for the caller that has no other door. Studio has no
+  // terminal to paste a command into and no proxy in front of it calling the control plane, so
+  // these two tools are the only way it can reach a wallet. Every other caller arrived through a
+  // front end that does both — see `../control-plane` — and a second way to sign in is a second
+  // thing to keep in step with the first. Resolved per request, from the id `../studio` set.
+  tools: ({ requestContext }) => (isStudioCaller(requestContext) ? loginTools : {}),
   memory: new Memory({
     options: {
       generateTitle: true,

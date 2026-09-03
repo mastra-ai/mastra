@@ -1,10 +1,8 @@
 import { timingSafeEqual } from 'node:crypto';
-import { readFile, readdir } from 'node:fs/promises';
-import { join } from 'node:path';
 
 import { registerApiRoute } from '@mastra/core/server';
 
-import { circle, circleCliHome } from './circle-cli';
+import { circle, pendingLogin, termsAccepted } from './circle-cli';
 import { MissingIdentityError, tenantHomeFor } from './tenancy';
 
 /**
@@ -40,30 +38,6 @@ const TOKEN_HEADER = 'x-control-plane-token';
  */
 const NO_BROWSER = { origin: [] as string[] };
 
-/**
- * How long a `login-requests/<uuid>.json` file is worth reading.
- *
- * The CLI's own window, restated because this module picks the request to
- * complete and has to agree with the CLI about which ones are still live —
- * `loadLoginRequest` deletes anything older than this and reports it as
- * invalid, and offering the user a request the CLI will refuse is worse than
- * telling them up front that the code expired.
- */
-const LOGIN_REQUEST_TTL_MS = 10 * 60 * 1000;
-
-/** What the CLI writes for a login it has started but not finished. */
-type LoginRequest = {
-  requestId?: unknown;
-  email?: unknown;
-  timestamp?: unknown;
-  otpHead?: unknown;
-};
-
-/** The half of a login request that is safe to say out loud. */
-type PendingLogin = { requestId: string; email: string; otpHead?: string };
-
-type TermsRecord = { accepted?: unknown; acceptedAt?: unknown; acceptedVia?: unknown };
-
 type WalletStatus = {
   mainnet?: { email?: unknown; tokenStatus?: unknown; expiresIn?: unknown };
 };
@@ -89,69 +63,6 @@ function authorised(presented: string | undefined): boolean {
   const b = Buffer.from(presented);
 
   return a.length === b.length && timingSafeEqual(a, b);
-}
-
-/** Terms acceptance, read from the file the CLI records it in. */
-async function termsAccepted(home: string): Promise<boolean> {
-  try {
-    const raw = await readFile(join(circleCliHome(home), 'terms.json'), 'utf-8');
-    const record = JSON.parse(raw) as TermsRecord;
-
-    return record.accepted === true;
-  } catch {
-    return false;
-  }
-}
-
-/**
- * The most recent login this caller started and has not finished.
- *
- * Read from disk rather than held in memory here, because the CLI already
- * keeps it there and a second copy is a second thing to get out of sync — and
- * because memory does not survive the restart that a login, sitting between
- * two requests a minute apart, very much can.
- *
- * Only three fields come back. The same file holds the device token and the
- * encryption key the OTP is exchanged against, and those have no reason to
- * exist anywhere but on disk.
- */
-async function pendingLogin(home: string): Promise<PendingLogin | undefined> {
-  const dir = join(circleCliHome(home), 'login-requests');
-
-  let files: string[];
-  try {
-    files = await readdir(dir);
-  } catch {
-    return undefined;
-  }
-
-  const live: (PendingLogin & { at: number })[] = [];
-
-  for (const file of files) {
-    if (!file.endsWith('.json')) continue;
-
-    try {
-      const request = JSON.parse(await readFile(join(dir, file), 'utf-8')) as LoginRequest;
-      const at = typeof request.timestamp === 'number' ? request.timestamp : 0;
-
-      if (typeof request.requestId !== 'string' || typeof request.email !== 'string') continue;
-      if (Date.now() - at > LOGIN_REQUEST_TTL_MS) continue;
-
-      live.push({
-        at,
-        requestId: request.requestId,
-        email: request.email,
-        ...(typeof request.otpHead === 'string' ? { otpHead: request.otpHead } : {}),
-      });
-    } catch {
-      // A half-written or hand-edited file is not worth failing the whole
-      // request over; the user's next code request writes a fresh one.
-    }
-  }
-
-  live.sort((a, b) => b.at - a.at);
-
-  return live[0];
 }
 
 /** The caller's home, or the reason there isn't one. */

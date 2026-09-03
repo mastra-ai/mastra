@@ -9,6 +9,7 @@ import {
 } from '@mastra/observability';
 import { circlePaymentAgent } from './agents/circle-payment-agent';
 import { controlPlaneRoutes } from './control-plane';
+import { studioCallerMiddleware } from './studio';
 
 export const mastra = new Mastra({
   agents: { circlePaymentAgent },
@@ -20,6 +21,9 @@ export const mastra = new Mastra({
     // `CONTROL_PLANE_TOKEN` rather than the wide-open default. See
     // `./control-plane`.
     apiRoutes: controlPlaneRoutes,
+    // Studio sends no `user-id`, so every request it makes would be refused by
+    // `./tenancy`. This names one for it, and only for it. See `./studio`.
+    middleware: studioCallerMiddleware,
   },
   storage: new LibSQLStore({
     id: 'mastra-storage',

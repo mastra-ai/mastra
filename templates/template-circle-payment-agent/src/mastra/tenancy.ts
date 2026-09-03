@@ -5,7 +5,18 @@ import { join } from 'node:path';
 import type { RequestContext } from '@mastra/core/request-context';
 
 /** Where a caller's identity is read from. Our own proxy sends exactly this. */
-const IDENTITY_KEY = 'user-id';
+export const IDENTITY_KEY = 'user-id';
+
+/**
+ * The caller Studio's own chat is attributed to.
+ *
+ * Studio sends no `user-id` — it is a console for whatever agent it is pointed
+ * at, not a front end with users of its own — so `./studio` names one for it in
+ * middleware, before any of this runs. A constant rather than a setting because
+ * it is a name, not a policy: what decides whether a request gets it is the
+ * middleware's origin check, and that is where the argument belongs.
+ */
+export const STUDIO_CALLER = 'studio';
 
 /**
  * The directory every caller's home is created beneath.
