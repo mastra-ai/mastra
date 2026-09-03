@@ -390,6 +390,10 @@ function requestsChangesVerdict(body: string | undefined): boolean {
 }
 
 function addressPullRequestComment(context: FactoryGithubRuleContext) {
+  // A validated Factory mention is a review-entry request, not feedback for the
+  // authoring Work session. Invalid or unrecognized comments retain the normal
+  // feedback route below.
+  if (context.reviewCommand) return reReviewRequestedPullRequest(context);
   if (!context.item || !context.pullRequest || !context.issueComment) return;
   // Provenance binds the comment to the Work item that authored the PR — the
   // only session that can act on it. A Review card must not react to comments
@@ -440,9 +444,10 @@ function pullRequestClosed(context: FactoryGithubRuleContext) {
 }
 
 function reReviewRequestedPullRequest(context: FactoryGithubRuleContext) {
-  // Only a review requested from Factory's own bot starts a Factory review —
-  // requesting a human reviewer is not Factory's signal.
-  if ((context.item && context.board !== 'review') || !context.reviewRequest?.factoryReviewer) return;
+  // GitHub reviewer requests and Factory's exact mention command are both
+  // explicit requests to enter the same Review lifecycle.
+  const factoryReviewEntry = context.reviewRequest?.factoryReviewer || context.reviewCommand !== undefined;
+  if ((context.item && context.board !== 'review') || !factoryReviewEntry) return;
   if (!context.pullRequest || context.pullRequest.state !== 'open' || context.pullRequest.merged) return;
   // Trusted (write/admin) requesters only: creating or re-entering review checks
   // out and executes PR code, the same bar pullRequestOpened applies to auto-review.
