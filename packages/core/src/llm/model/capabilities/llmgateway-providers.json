@@ -293,6 +293,7 @@
     "cerebras/gpt-oss-120b",
     "cerebras/llama-3.3-70b-instruct",
     "cerebras/qwen3-235b-a22b-instruct-2507",
+    "consensusprotocol/Qwen3.8-27B",
     "consensusprotocol/deepseek-v4-flash",
     "consensusprotocol/gpt-oss-20b",
     "deepinfra/deepseek-v3.2",

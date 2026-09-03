@@ -1,5 +1,33 @@
 # @mastra/react
 
+## 1.4.11-alpha.1
+
+### Patch Changes
+
+- Added additive system context support to React agent requests so per-turn state can preserve configured agent instructions. ([#22315](https://github.com/mastra-ai/mastra/pull/22315))
+
+  ```tsx
+  import { useChat } from '@mastra/react';
+
+  function Chat() {
+    const { sendMessage } = useChat({ agentId: 'my-agent' });
+
+    // `system` is appended to the agent's configured instructions
+    // instead of replacing them like `instructions` does.
+    const send = () =>
+      sendMessage({
+        message: 'Continue',
+        modelSettings: { system: 'Current form state: ...' },
+      });
+
+    return <button onClick={send}>Send</button>;
+  }
+  ```
+
+- Updated dependencies [[`b72c747`](https://github.com/mastra-ai/mastra/commit/b72c747a1a698c829c7c1d42e75f72c6d1808dde), [`89f2486`](https://github.com/mastra-ai/mastra/commit/89f2486028ce25c5db19d1f361d5f65cd3ff93e5), [`1778103`](https://github.com/mastra-ai/mastra/commit/17781034204a151a1ff910e9d11d21effe22a9e0), [`2801d26`](https://github.com/mastra-ai/mastra/commit/2801d26b69bbe8929d302abd09619a68b4cc0d98), [`1778103`](https://github.com/mastra-ai/mastra/commit/17781034204a151a1ff910e9d11d21effe22a9e0), [`ffc6440`](https://github.com/mastra-ai/mastra/commit/ffc6440d13b9392b3cf1ff309d3b9cde4a791038), [`f31c3fa`](https://github.com/mastra-ai/mastra/commit/f31c3fae16a0710f9e52dba9bccc0018f9da2ac1), [`ffc6440`](https://github.com/mastra-ai/mastra/commit/ffc6440d13b9392b3cf1ff309d3b9cde4a791038), [`9d647e2`](https://github.com/mastra-ai/mastra/commit/9d647e25b51cd246ef974d9cad6b05dfdd37126e)]:
+  - @mastra/core@1.65.0-alpha.1
+  - @mastra/client-js@1.44.0-alpha.1
+
 ## 1.4.11-alpha.0
 
 ### Patch Changes

@@ -7,7 +7,7 @@ description: "Browse Meta model IDs, capabilities, context windows, and pricing.
 
 # <img src="https://models.dev/logos/meta.svg" alt="Meta logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Meta
 
-Access 3 Meta models through Mastra's model router. Authentication is handled automatically using the `META_MODEL_API_KEY` environment variable.
+Access 5 Meta models through Mastra's model router. Authentication is handled automatically using the `META_MODEL_API_KEY` environment variable.
 
 Learn more in the [Meta documentation](https://dev.meta.ai/docs).
 
@@ -53,7 +53,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "toolUsage": true,
     "reasoning": true,
     "contextWindow": 1048576,
-    "maxOutput": 32000,
+    "maxOutput": 131072,
     "inputCost": 1.25,
     "outputCost": 4.25
   },
@@ -71,6 +71,30 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
   },
   {
     "model": "meta/muse-spark-1.2-contributor",
+    "imageInput": true,
+    "audioInput": true,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 131072,
+    "inputCost": 0.1,
+    "outputCost": 0.2
+  },
+  {
+    "model": "meta/muse-spark-1.3",
+    "imageInput": true,
+    "audioInput": true,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 131072,
+    "inputCost": 1.25,
+    "outputCost": 4.25
+  },
+  {
+    "model": "meta/muse-spark-1.3-contributor",
     "imageInput": true,
     "audioInput": true,
     "videoInput": true,
@@ -114,7 +138,7 @@ const agent = new Agent({
   model: ({ requestContext }) => {
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
-      ? "meta/muse-spark-1.2-contributor"
+      ? "meta/muse-spark-1.3-contributor"
       : "meta/muse-spark-1.1";
   }
 });
