@@ -2,7 +2,7 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { syncOfficialSkills } from '../../../../../../scripts/sync-official-skills';
+import { parseArgs, syncOfficialSkills } from '../../../../../../scripts/sync-official-skills';
 
 const sourceRoot = resolve(import.meta.dirname, '../../../../../..');
 const temporaryDirectories: string[] = [];
@@ -24,6 +24,14 @@ afterEach(async () => {
 });
 
 describe('official Knowledge skill synchronization', () => {
+  it('defaults the source root when the CLI omits --source', () => {
+    expect(parseArgs(['--target', '/tmp/skills'])).toMatchObject({
+      sourceRoot: process.cwd(),
+      targetRoot: '/tmp/skills',
+      check: false,
+    });
+  });
+
   it('keeps the embedded skill loader-valid with resolvable references', async () => {
     const skillPath = join(sourceRoot, 'packages/core/src/knowledge/skill/SKILL.md');
     const skill = await readFile(skillPath, 'utf8');
