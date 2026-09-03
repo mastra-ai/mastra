@@ -79,7 +79,8 @@ for (const { key, model, host } of PROVIDERS) {
   const recordingsDir = join(getLLMRecordingsDir(__filename), defaultNameGenerator(__filename));
   const recordingName = `provider-acceptance-${key}`;
   const hasRecording = existsSync(join(recordingsDir, `${recordingName}.json`));
-  const canRun = MODE === 'replay' || MODE === 'auto' ? hasRecording || hasRealApiKey(key) : hasRealApiKey(key);
+  const canRun =
+    MODE === 'replay' ? hasRecording : MODE === 'auto' ? hasRecording || hasRealApiKey(key) : hasRealApiKey(key);
 
   describe.skipIf(!canRun)(`provider acceptance › ${key}`, () => {
     let mock: ReturnType<typeof createGatewayMock>;
@@ -90,7 +91,7 @@ for (const { key, model, host } of PROVIDERS) {
       mock = createGatewayMock({ name: recordingName, recordingsDir, exactMatch: true });
       await mock.start();
     });
-    afterAll(() => mock.saveAndStop());
+    afterAll(() => mock?.saveAndStop());
 
     beforeEach(() => {
       // Wrap fetch *after* the recorder has patched it so we observe the exact outbound body.
@@ -132,7 +133,7 @@ for (const { key, model, host } of PROVIDERS) {
         expect(turns[0]).toEqual(['user', '.']);
         expect(turns[1]?.[0]).toBe('assistant');
       } else {
-        // Every other provider gets the history exactly as stored — no fabricated user turn.
+        // No synthetic user turn is added for other providers.
         expect(turns[0]?.[0]).toBe('assistant');
         expect(turns.some(([, text]) => text === '.')).toBe(false);
       }

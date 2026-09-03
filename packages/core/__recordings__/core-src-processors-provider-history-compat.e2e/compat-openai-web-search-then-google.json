@@ -30,9 +30,7 @@
               ]
             }
           ],
-          "include": [
-            "web_search_call.action.sources"
-          ],
+          "include": ["web_search_call.action.sources"],
           "tools": [
             {
               "type": "web_search"
@@ -46,27 +44,7 @@
         "status": 200,
         "statusText": "OK",
         "headers": {
-          "access-control-expose-headers": "X-Request-ID, CF-Ray, CF-Ray",
-          "alt-svc": "h3=\":443\"; ma=86400",
-          "cf-cache-status": "DYNAMIC",
-          "cf-ray": "a352477efffecb9f-LAX",
-          "connection": "keep-alive",
-          "content-type": "application/json",
-          "date": "Thu, 03 Sep 2026 05:15:57 GMT",
-          "openai-organization": "mastra-qb2kpb",
-          "openai-processing-ms": "3407",
-          "openai-project": "proj_Cvw1JiXoxHTeEWgnnK3t9AYG",
-          "openai-version": "2020-10-01",
-          "server": "cloudflare",
-          "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
-          "x-content-type-options": "nosniff",
-          "x-ratelimit-limit-requests": "30000",
-          "x-ratelimit-limit-tokens": "150000000",
-          "x-ratelimit-remaining-requests": "29999",
-          "x-ratelimit-remaining-tokens": "149999652",
-          "x-ratelimit-reset-requests": "2ms",
-          "x-ratelimit-reset-tokens": "0s",
-          "x-request-id": "req_e50f18b4f5ce4a75a3dcfcccc67fd051"
+          "content-type": "application/json"
         },
         "body": {
           "id": "resp_036014d69fa5f16e006a99028a365487d083d0f0f111fbe19d",
@@ -93,9 +71,7 @@
               "status": "completed",
               "action": {
                 "type": "search",
-                "queries": [
-                  "who created TypeScript"
-                ],
+                "queries": ["who created TypeScript"],
                 "query": "who created TypeScript",
                 "sources": [
                   {
@@ -219,9 +195,7 @@
             {
               "type": "web_search",
               "return_token_budget": "default",
-              "search_content_types": [
-                "text"
-              ],
+              "search_content_types": ["text"],
               "search_context_size": "medium",
               "user_location": {
                 "type": "approximate",
@@ -300,16 +274,7 @@
         "status": 200,
         "statusText": "OK",
         "headers": {
-          "alt-svc": "h3=\":443\"; ma=2592000,h3-29=\":443\"; ma=2592000",
-          "content-type": "application/json; charset=UTF-8",
-          "date": "Thu, 03 Sep 2026 05:15:59 GMT",
-          "server": "scaffolding on HTTPServer2",
-          "server-timing": "gfet4t7; dur=1378",
-          "vary": "Origin, X-Origin, Referer",
-          "x-content-type-options": "nosniff",
-          "x-frame-options": "SAMEORIGIN",
-          "x-gemini-service-tier": "standard",
-          "x-xss-protection": "0"
+          "content-type": "application/json; charset=UTF-8"
         },
         "body": {
           "candidates": [

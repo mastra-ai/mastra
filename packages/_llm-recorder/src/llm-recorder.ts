@@ -339,9 +339,10 @@ export const LLM_API_HOSTS = [
 ];
 
 /**
- * Headers to skip when storing (sensitive + compression)
+ * Response headers required for replay. Provider responses can include account,
+ * request, tracing, routing, and rate-limit metadata that must not be recorded.
  */
-const SKIP_HEADERS = ['authorization', 'x-api-key', 'api-key', 'content-encoding', 'transfer-encoding', 'set-cookie'];
+const RESPONSE_HEADER_ALLOWLIST = new Set(['content-type']);
 
 /**
  * Module-scoped active recorder instance.
@@ -471,7 +472,7 @@ function isStreamingResponse(headers: Headers): boolean {
 function filterHeaders(headers: Headers): Record<string, string> {
   const filtered: Record<string, string> = {};
   headers.forEach((value, key) => {
-    if (!SKIP_HEADERS.includes(key.toLowerCase())) {
+    if (RESPONSE_HEADER_ALLOWLIST.has(key.toLowerCase())) {
       filtered[key] = value;
     }
   });

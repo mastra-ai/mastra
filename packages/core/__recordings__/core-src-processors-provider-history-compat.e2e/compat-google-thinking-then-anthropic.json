@@ -42,16 +42,7 @@
         "status": 200,
         "statusText": "OK",
         "headers": {
-          "alt-svc": "h3=\":443\"; ma=2592000,h3-29=\":443\"; ma=2592000",
-          "content-type": "application/json; charset=UTF-8",
-          "date": "Thu, 03 Sep 2026 05:16:02 GMT",
-          "server": "scaffolding on HTTPServer2",
-          "server-timing": "gfet4t7; dur=3559",
-          "vary": "Origin, X-Origin, Referer",
-          "x-content-type-options": "nosniff",
-          "x-frame-options": "SAMEORIGIN",
-          "x-gemini-service-tier": "standard",
-          "x-xss-protection": "0"
+          "content-type": "application/json; charset=UTF-8"
         },
         "body": {
           "candidates": [
@@ -142,32 +133,7 @@
         "status": 200,
         "statusText": "OK",
         "headers": {
-          "anthropic-organization-id": "a4b2106b-a1ab-4fd5-8d96-cdf4b3e9dc14",
-          "anthropic-ratelimit-input-tokens-limit": "10000000",
-          "anthropic-ratelimit-input-tokens-remaining": "10000000",
-          "anthropic-ratelimit-input-tokens-reset": "2026-09-03T05:16:03Z",
-          "anthropic-ratelimit-output-tokens-limit": "2000000",
-          "anthropic-ratelimit-output-tokens-remaining": "2000000",
-          "anthropic-ratelimit-output-tokens-reset": "2026-09-03T05:16:03Z",
-          "anthropic-ratelimit-requests-limit": "20000",
-          "anthropic-ratelimit-requests-remaining": "19999",
-          "anthropic-ratelimit-requests-reset": "2026-09-03T05:16:02Z",
-          "anthropic-ratelimit-tokens-limit": "12000000",
-          "anthropic-ratelimit-tokens-remaining": "12000000",
-          "anthropic-ratelimit-tokens-reset": "2026-09-03T05:16:03Z",
-          "anthropic-workspace-id": "redacted",
-          "cf-cache-status": "DYNAMIC",
-          "cf-ray": "a35247b4dd282bbd-LAX",
-          "connection": "keep-alive",
-          "content-security-policy": "default-src 'none'; frame-ancestors 'none'",
-          "content-type": "application/json",
-          "date": "Thu, 03 Sep 2026 05:16:03 GMT",
-          "request-id": "req_011CefwLKNAcQ1dqoWYeJHUK",
-          "server": "cloudflare",
-          "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
-          "traceresponse": "00-7a3b227bd527557eb5045f9c5493aeb9-597591e3dec30e0b-01",
-          "vary": "Accept-Encoding",
-          "x-robots-tag": "none"
+          "content-type": "application/json"
         },
         "body": {
           "model": "claude-haiku-4-5-20251001",

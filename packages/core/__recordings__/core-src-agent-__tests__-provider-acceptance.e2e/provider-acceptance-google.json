@@ -53,16 +53,7 @@
         "status": 200,
         "statusText": "OK",
         "headers": {
-          "alt-svc": "h3=\":443\"; ma=2592000,h3-29=\":443\"; ma=2592000",
-          "content-type": "application/json; charset=UTF-8",
-          "date": "Thu, 03 Sep 2026 04:37:08 GMT",
-          "server": "scaffolding on HTTPServer2",
-          "server-timing": "gfet4t7; dur=1667",
-          "vary": "Origin, X-Origin, Referer",
-          "x-content-type-options": "nosniff",
-          "x-frame-options": "SAMEORIGIN",
-          "x-gemini-service-tier": "standard",
-          "x-xss-protection": "0"
+          "content-type": "application/json; charset=UTF-8"
         },
         "body": {
           "candidates": [
@@ -138,16 +129,7 @@
         "status": 200,
         "statusText": "OK",
         "headers": {
-          "alt-svc": "h3=\":443\"; ma=2592000,h3-29=\":443\"; ma=2592000",
-          "content-type": "application/json; charset=UTF-8",
-          "date": "Thu, 03 Sep 2026 04:37:11 GMT",
-          "server": "scaffolding on HTTPServer2",
-          "server-timing": "gfet4t7; dur=2261",
-          "vary": "Origin, X-Origin, Referer",
-          "x-content-type-options": "nosniff",
-          "x-frame-options": "SAMEORIGIN",
-          "x-gemini-service-tier": "standard",
-          "x-xss-protection": "0"
+          "content-type": "application/json; charset=UTF-8"
         },
         "body": {
           "candidates": [
@@ -231,16 +213,7 @@
         "status": 200,
         "statusText": "OK",
         "headers": {
-          "alt-svc": "h3=\":443\"; ma=2592000,h3-29=\":443\"; ma=2592000",
-          "content-type": "application/json; charset=UTF-8",
-          "date": "Thu, 03 Sep 2026 04:37:12 GMT",
-          "server": "scaffolding on HTTPServer2",
-          "server-timing": "gfet4t7; dur=1260",
-          "vary": "Origin, X-Origin, Referer",
-          "x-content-type-options": "nosniff",
-          "x-frame-options": "SAMEORIGIN",
-          "x-gemini-service-tier": "standard",
-          "x-xss-protection": "0"
+          "content-type": "application/json; charset=UTF-8"
         },
         "body": {
           "candidates": [

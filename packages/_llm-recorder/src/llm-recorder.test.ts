@@ -339,6 +339,38 @@ describe('recording file format', () => {
     expect(replayBytes).toEqual(payload);
   });
 
+  it('records only response headers required for replay', async () => {
+    const name = 'safe-response-headers';
+    const filePath = path.join(tempDir, `${name}.json`);
+
+    process.env.LLM_TEST_MODE = 'record';
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(JSON.stringify({ id: 'response' }), {
+        status: 200,
+        headers: {
+          'content-type': 'application/json',
+          'openai-organization': 'org-sensitive',
+          'openai-project': 'project-sensitive',
+          'x-request-id': 'request-sensitive',
+          'x-ratelimit-remaining-requests': '99',
+        },
+      }),
+    );
+
+    const recorder = setupLLMRecording({ name, recordingsDir: tempDir });
+    recorder.start();
+    await fetch('https://api.openai.com/v1/responses', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ model: 'gpt-4o', input: 'hello' }),
+    });
+    await recorder.save();
+    recorder.stop();
+
+    const parsed = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+    expect(parsed.recordings[0].response.headers).toEqual({ 'content-type': 'application/json' });
+  });
+
   it('loads legacy array recording format in replay mode', () => {
     const legacyName = 'legacy-array-format';
     const filePath = path.join(tempDir, `${legacyName}.json`);
