@@ -3,6 +3,15 @@ type RecordToTuple<T> = {
 }[keyof T][];
 
 /**
+ * Minimal read-only request-context contract for internal consumers that must
+ * not expose RequestContext's private implementation details in their APIs.
+ */
+export interface RequestContextLike {
+  get(key: string): unknown;
+  size(): number;
+}
+
+/**
  * Reserved key for setting resourceId from middleware.
  * When set in RequestContext, this takes precedence over client-provided values
  * for security (prevents attackers from hijacking another user's memory).
@@ -202,7 +211,7 @@ function isPlainObjectOrArray(value: unknown): boolean {
 let _probeBudgetActive = false;
 let _probeBudgetRemaining = 0;
 
-export class RequestContext<Values extends Record<string, any> | unknown = unknown> {
+export class RequestContext<Values extends Record<string, any> | unknown = unknown> implements RequestContextLike {
   private registry = new Map<string, unknown>();
 
   constructor(

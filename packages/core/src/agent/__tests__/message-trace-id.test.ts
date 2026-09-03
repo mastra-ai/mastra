@@ -69,7 +69,7 @@ function createMockSpan(name: string, parentSpan?: any) {
 }
 
 async function mockTracedSpans() {
-  const mod = await import('../../observability/utils');
+  const mod = await import('@internal/observability');
   return vi.spyOn(mod, 'getOrCreateSpan').mockImplementation((opts: any) => {
     return createMockSpan(opts.type ?? opts.name ?? 'unknown') as any;
   });

@@ -1,7 +1,7 @@
+import { executeWithContext } from '@internal/observability';
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { Mastra } from '../mastra';
 import { NoOpObservability } from '../observability';
-import { executeWithContext } from '../observability/utils';
 import {
   resolveTraceFields,
   isAdaptableLogger,

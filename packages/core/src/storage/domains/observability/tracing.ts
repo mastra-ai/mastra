@@ -1,6 +1,6 @@
+import { SpanType, type SpanTypeValue } from '@internal/observability';
 import { z } from 'zod/v4';
 import { scoreRowDataSchema } from '../../../evals/types';
-import { SpanType } from '../../../observability/types';
 import {
   deltaLimitSchema,
   deltaInfoSchema,
@@ -39,7 +39,9 @@ const createOmitKeys = <T extends z.ZodRawShape>(shape: T): { [K in keyof T]: tr
 
 const spanNameField = z.string().describe('Human-readable span name');
 const parentSpanIdField = z.string().describe('Parent span reference (null = root span)');
-const spanTypeField = z.nativeEnum(SpanType).describe('Span type (e.g., WORKFLOW_RUN, AGENT_RUN, TOOL_CALL, etc.)');
+const spanTypeField = (z.nativeEnum(SpanType) as z.ZodType<SpanTypeValue>).describe(
+  'Span type (e.g., WORKFLOW_RUN, AGENT_RUN, TOOL_CALL, etc.)',
+);
 const attributesField = z
   .record(z.string(), z.unknown())
   .describe('Span-type specific attributes (e.g., model, tokens, tools)');
@@ -716,10 +718,10 @@ export const BRANCH_SPAN_TYPES = [
   SpanType.TOOL_CALL,
   SpanType.MCP_TOOL_CALL,
   SpanType.PROVIDER_TOOL_CALL,
-] as const satisfies readonly SpanType[];
+] as const satisfies readonly SpanTypeValue[];
 
 /** Set form of {@link BRANCH_SPAN_TYPES} for fast membership checks. */
-export const BRANCH_SPAN_TYPE_SET: ReadonlySet<SpanType> = new Set(BRANCH_SPAN_TYPES);
+export const BRANCH_SPAN_TYPE_SET: ReadonlySet<SpanTypeValue> = new Set(BRANCH_SPAN_TYPES);
 
 /** Schema for filtering branch anchor spans in list queries. */
 export const branchesFilterSchema = z

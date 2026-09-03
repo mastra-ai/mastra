@@ -3726,6 +3726,30 @@ export class Session<TState = unknown> {
       });
     } catch (error) {
       const err = getErrorFromUnknown(error);
+      // resumeToolCall() drops its selected suspension before attempting the
+      // agent resume. If it is still present, a plan-mode transition failed
+      // before the resume and the prompt remains actionable.
+      const resumeFailed = suspension && !this.suspensions.get({ toolCallId: resolvedToolCallId });
+      if (resumeFailed) {
+        const cancelledSuspensions = new Map<string, string>([
+          [resolvedToolCallId, suspension.toolName],
+          ...this.suspensions
+            .deleteForRun({ runId: suspension.runId })
+            .map(({ toolCallId: cancelledToolCallId, toolName }) => [cancelledToolCallId, toolName] as const),
+        ]);
+        for (const [cancelledToolCallId, toolName] of cancelledSuspensions) {
+          this.emit({
+            type: 'tool_suspension_cancelled',
+            toolCallId: cancelledToolCallId,
+            toolName,
+            reason: err.message,
+          });
+        }
+        // The subscribed stream still considers this suspended run active after
+        // sendStreamResume() rejects. Tear down its subscription and reset its
+        // abort controller so the next user message starts a fresh run.
+        this.thread.cleanupSubscription();
+      }
       this.emit({ type: 'error', error: err });
       await this.finishAgentRun('error');
     }

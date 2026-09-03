@@ -8,20 +8,21 @@
  *   - Timestamps are sent as ISO strings; the pg driver coerces them.
  */
 
-import type {
-  CreateFeedbackRecord,
-  CreateLogRecord,
-  CreateMetricRecord,
-  CreateScoreRecord,
-  CreateSpanRecord,
-  FeedbackRecord,
-  LightSpanRecord,
-  LogRecord,
-  MetricRecord,
-  ScoreRecord,
-  SpanRecord,
+import {
+  EntityType,
+  type CreateFeedbackRecord,
+  type CreateLogRecord,
+  type CreateMetricRecord,
+  type CreateScoreRecord,
+  type CreateSpanRecord,
+  type EntityTypeValue,
+  type FeedbackRecord,
+  type LightSpanRecord,
+  type LogRecord,
+  type MetricRecord,
+  type ScoreRecord,
+  type SpanRecord,
 } from '@mastra/core/storage';
-import { EntityType } from '@mastra/core/storage';
 import { coerceFeedbackReviewStatus } from './review-status';
 
 const PROMOTED_KEYS = new Set([
@@ -50,10 +51,10 @@ function nullableString(value: unknown): string | null {
   return String(value);
 }
 
-function nullableEntityType(value: unknown): EntityType | null {
+function nullableEntityType(value: unknown): EntityTypeValue | null {
   const normalized = nullableString(value);
   if (!normalized) return null;
-  return Object.values(EntityType).includes(normalized as EntityType) ? (normalized as EntityType) : null;
+  return Object.values(EntityType).includes(normalized as EntityType) ? (normalized as EntityTypeValue) : null;
 }
 
 export function normalizeTags(tags: unknown): string[] {
@@ -183,15 +184,15 @@ function rowToCommonContext(row: Record<string, any>) {
 
 interface CommonContextWritable {
   experimentId?: string | null;
-  entityType?: EntityType | null;
+  entityType?: EntityTypeValue | null;
   entityId?: string | null;
   entityName?: string | null;
   entityVersionId?: string | null;
-  parentEntityType?: EntityType | null;
+  parentEntityType?: EntityTypeValue | null;
   parentEntityId?: string | null;
   parentEntityName?: string | null;
   parentEntityVersionId?: string | null;
-  rootEntityType?: EntityType | null;
+  rootEntityType?: EntityTypeValue | null;
   rootEntityId?: string | null;
   rootEntityName?: string | null;
   rootEntityVersionId?: string | null;

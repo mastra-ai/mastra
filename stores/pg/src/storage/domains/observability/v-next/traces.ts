@@ -575,7 +575,8 @@ async function listBranchesPage(
   orderField: 'startedAt' | 'endedAt',
   orderDir: 'ASC' | 'DESC',
 ): Promise<ListBranchesResponse> {
-  const built = buildListBranchesFilters(filters, filters?.spanType, span, 1);
+  const spanType = typeof filters?.spanType === 'string' ? filters.spanType : undefined;
+  const built = buildListBranchesFilters(filters, spanType, span, 1);
   if (!built) {
     // Caller asked for a non-branch spanType — nothing matches by definition.
     const deltaCursor = deltaPollingFeatureEnabled()
@@ -638,7 +639,8 @@ async function listBranchesDelta(
     return { branches: [], delta: { limit, hasMore: false }, deltaCursor };
   }
 
-  const built = buildListBranchesFilters(filters, filters?.spanType, span, 1);
+  const spanType = typeof filters?.spanType === 'string' ? filters.spanType : undefined;
+  const built = buildListBranchesFilters(filters, spanType, span, 1);
   if (!built) {
     return {
       branches: [],

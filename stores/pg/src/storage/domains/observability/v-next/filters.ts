@@ -2,7 +2,7 @@
  * Shared WHERE-clause builder for the v-next Postgres observability domain.
  *
  * Translates the cross-signal `commonFilterFields` (defined in
- * @internal/core/storage/shared) into parameterized SQL conditions.
+ * `@internal/observability/storage`) into parameterized SQL conditions.
  * Signal-specific extensions (e.g. log `level`, metric `name`,
  * trace `status`) are added by the caller.
  */

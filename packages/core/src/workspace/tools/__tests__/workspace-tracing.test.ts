@@ -1,10 +1,10 @@
 import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 
-import { SpanType } from '../../../observability/types/tracing';
-import type { AnySpan, WorkspaceActionAttributes } from '../../../observability/types/tracing';
+import { SpanType } from '@internal/observability';
+import type { AnySpan, WorkspaceActionAttributes } from '@internal/observability';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { WORKSPACE_TOOLS } from '../../constants';
 import { LocalFilesystem } from '../../filesystem';
 import { Workspace } from '../../workspace';

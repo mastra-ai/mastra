@@ -5,7 +5,7 @@
  * or filesystem paths, without needing a full Workspace with filesystem/sandbox.
  */
 
-import type { TracingContext } from '../observability/types';
+import type { TracingContext } from '@internal/observability';
 import type { RequestContext } from '../request-context';
 import type { Skill, SkillMetadata, SkillFormat, WorkspaceSkills } from '../workspace/skills/types';
 

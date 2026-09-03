@@ -15,7 +15,7 @@ import {
   spanIdField,
   tagsField,
   traceIdField,
-} from '../shared';
+} from './shared';
 
 // ============================================================================
 // Field Schemas

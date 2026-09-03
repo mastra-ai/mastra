@@ -5,6 +5,7 @@ import type {
   StreamObjectOnFinishCallback,
   StreamTextOnFinishCallback,
 } from '@internal/ai-sdk-v4';
+import { executeWithContext, executeWithContextSync } from '@internal/observability';
 import {
   AnthropicSchemaCompatLayer,
   applyCompatLayer,
@@ -22,7 +23,6 @@ import { MastraBase } from '../../base';
 import { MastraError, ErrorDomain, ErrorCategory } from '../../error';
 import type { Mastra } from '../../mastra';
 import { SpanType, resolveObservabilityContext } from '../../observability';
-import { executeWithContext, executeWithContextSync } from '../../observability/utils';
 import { toStandardSchema, standardSchemaToJSONSchema, isStandardSchemaWithJSON } from '../../schema';
 import type { ZodSchema } from '../../schema';
 import { convertV4Usage } from '../../stream/aisdk/v4/usage';

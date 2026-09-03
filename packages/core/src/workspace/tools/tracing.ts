@@ -11,8 +11,8 @@
  * - `attributes`: span metadata (category, workspaceId, provider, success)
  */
 
-import type { AnySpan, WorkspaceActionAttributes } from '../../observability/types/tracing';
-import { SpanType } from '../../observability/types/tracing';
+import type { AnySpan, WorkspaceActionAttributes } from '@internal/observability';
+import { SpanType } from '@internal/observability';
 import type { ToolExecutionContext } from '../../tools/types';
 import type { Workspace } from '../workspace';
 

@@ -1,6 +1,7 @@
 import { SpanType, InternalSpans } from '@mastra/core/observability';
 import type {
   Span,
+  SpanTypeValue,
   SpanTypeMap,
   AnySpan,
   ChildSpanOptions,
@@ -14,7 +15,7 @@ import type {
   TraceState,
   IModelSpanTracker,
   AIModelGenerationSpan,
-  EntityType,
+  EntityTypeValue,
   TracingPolicy,
   CorrelationContext,
 } from '@mastra/core/observability';
@@ -35,7 +36,7 @@ type AnyBaseSpan = AnySpan & {
  * Determines if a span type should be considered internal based on flags.
  * Returns false if flags are undefined.
  */
-function isSpanInternal(spanType: SpanType, flags?: InternalSpans): boolean {
+function isSpanInternal(spanType: SpanTypeValue, flags?: number): boolean {
   if (flags === undefined || flags === InternalSpans.NONE) {
     return false;
   }
@@ -115,7 +116,7 @@ export function getExternalParentId(options: CreateSpanOptions<any>): string | u
   return parent.id;
 }
 
-export abstract class BaseSpan<TType extends SpanType = any> implements Span<TType> {
+export abstract class BaseSpan<TType extends SpanTypeValue = any> implements Span<TType> {
   public abstract id: string;
   public abstract traceId: string;
 
@@ -145,7 +146,7 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
   public tags?: string[];
   public traceState?: TraceState;
   /** Entity type that created the span (e.g., agent, workflow) */
-  public entityType?: EntityType;
+  public entityType?: EntityTypeValue;
   /** Entity ID that created the span */
   public entityId?: string;
   /** Entity name that created the span */
@@ -319,12 +320,12 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
   /** Update span attributes */
   abstract update(options: UpdateSpanOptions<TType>): void;
 
-  createChildSpan(options: ChildSpanOptions<SpanType.MODEL_GENERATION>): AIModelGenerationSpan;
-  createChildSpan<TChildType extends SpanType>(options: ChildSpanOptions<TChildType>): Span<TChildType> {
+  createChildSpan(options: ChildSpanOptions<`${SpanType.MODEL_GENERATION}`>): AIModelGenerationSpan;
+  createChildSpan<TChildType extends SpanTypeValue>(options: ChildSpanOptions<TChildType>): Span<TChildType> {
     return this.observabilityInstance.startSpan<TChildType>({ ...options, parent: this, isEvent: false });
   }
 
-  createEventSpan<TChildType extends SpanType>(options: ChildEventOptions<TChildType>): Span<TChildType> {
+  createEventSpan<TChildType extends SpanTypeValue>(options: ChildEventOptions<TChildType>): Span<TChildType> {
     return this.observabilityInstance.startSpan<TChildType>({ ...options, parent: this, isEvent: true });
   }
 
@@ -338,7 +339,7 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
       return undefined;
     }
 
-    return new ModelSpanTracker(this as Span<SpanType.MODEL_GENERATION>);
+    return new ModelSpanTracker(this as Span<`${SpanType.MODEL_GENERATION}`>);
   }
 
   /** Returns `TRUE` if the span is the root span of a trace */
@@ -418,7 +419,7 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
   }
 
   /** Find the closest parent span of a specific type by walking up the parent chain */
-  public findParent<T extends SpanType>(spanType: T): Span<T> | undefined {
+  public findParent<T extends SpanTypeValue>(spanType: T): Span<T> | undefined {
     let current: AnySpan | undefined = this.parent;
 
     while (current) {

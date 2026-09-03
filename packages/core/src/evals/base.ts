@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { executeWithContext } from '@internal/observability';
 import { z } from 'zod/v4';
 import { Agent, isSupportedLanguageModel } from '../agent';
 import type { MastraDBMessage, MastraMessagePart, MastraToolInvocationPart } from '../agent/message-list';
@@ -21,13 +22,13 @@ import {
 import type {
   CorrelationContext,
   DefinitionSource,
+  EntityTypeValue,
   ObservabilityContext,
   ScorerScoreSource,
   ScorerStepType,
   ScorerTargetScope,
   Span,
 } from '../observability';
-import { executeWithContext } from '../observability/utils';
 import type {
   ErrorProcessorOrWorkflow,
   InputProcessorOrWorkflow,
@@ -217,7 +218,7 @@ interface ScorerRun<TInput = any, TOutput = any> {
   targetScope?: ScorerTargetScope;
 
   /** Entity type of the scored target when known. */
-  targetEntityType?: EntityType;
+  targetEntityType?: EntityTypeValue;
 
   /** Trace anchor for the target being scored when available. */
   targetTraceId?: string;

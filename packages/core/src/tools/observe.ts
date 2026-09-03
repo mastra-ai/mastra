@@ -1,6 +1,5 @@
-import { createObservabilityContext, SpanType } from '../observability';
+import { createObservabilityContext, executeWithContext, SpanType } from '../observability';
 import type { AnySpan, AIBaseAttributes } from '../observability';
-import { executeWithContext } from '../observability/utils';
 import type { ToolObserve } from './types';
 import { noopObserve } from './types';
 

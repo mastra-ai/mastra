@@ -1,5 +1,5 @@
 import type { IMastraLogger, TraceFields } from '@internal/core/logger';
-import { resolveCurrentSpan, resolveExportedSpanId } from '../observability/utils';
+import { resolveCurrentSpan, resolveExportedSpanId } from '@internal/observability';
 
 export {
   isAdaptableLogger,

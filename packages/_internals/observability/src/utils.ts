@@ -7,17 +7,31 @@
  */
 
 import { EntityType, SpanType } from './types';
-import type { Span, GetOrCreateSpanOptions, AnySpan } from './types';
+import type { AnySpan, EntityTypeValue, GetOrCreateSpanOptions, Span, SpanTypeValue } from './types';
 
-const entityTypeValues = new Set<EntityType>(Object.values(EntityType));
-let currentSpanResolver: (() => AnySpan | undefined) | undefined;
+const entityTypeValues = new Set<EntityTypeValue>(Object.values(EntityType));
+const contextRegistryKey = Symbol.for('@mastra/core.observability.context-registry');
+
+type ExecuteWithContextFn = <T>(params: { span?: AnySpan; fn: () => Promise<T> }) => Promise<T>;
+type ExecuteWithContextSyncFn = <T>(params: { span?: AnySpan; fn: () => T }) => T;
+
+type ContextRegistry = {
+  currentSpanResolver?: () => AnySpan | undefined;
+  executeWithContext?: ExecuteWithContextFn;
+  executeWithContextSync?: ExecuteWithContextSyncFn;
+};
+
+function getContextRegistry(): ContextRegistry {
+  const globalScope = globalThis as typeof globalThis & { [key: symbol]: ContextRegistry | undefined };
+  return (globalScope[contextRegistryKey] ??= {});
+}
 
 export function setCurrentSpanResolver(resolver: (() => AnySpan | undefined) | undefined): void {
-  currentSpanResolver = resolver;
+  getContextRegistry().currentSpanResolver = resolver;
 }
 
 export function resolveCurrentSpan(): AnySpan | undefined {
-  return currentSpanResolver?.();
+  return getContextRegistry().currentSpanResolver?.();
 }
 
 /** Generate a unique id for an observability signal (log, metric, score, feedback). */
@@ -51,21 +65,15 @@ export function getStepAvailableToolNames(
 
 // --- Lazy resolvers for executeWithContext / executeWithContextSync ---
 // The real implementations live in context-storage.ts (which imports AsyncLocalStorage).
-// context-storage.ts registers them at import time so that consumer code can call these
-// browser-safe wrappers without pulling async_hooks into shared chunks.
-
-type ExecuteWithContextFn = <T>(params: { span?: AnySpan; fn: () => Promise<T> }) => Promise<T>;
-type ExecuteWithContextSyncFn = <T>(params: { span?: AnySpan; fn: () => T }) => T;
-
-let executeWithContextImpl: ExecuteWithContextFn | undefined;
-let executeWithContextSyncImpl: ExecuteWithContextSyncFn | undefined;
+// initContextStorage() explicitly registers them so browser-safe consumers do not pull
+// async_hooks into their shared chunks.
 
 export function setExecuteWithContext(impl: ExecuteWithContextFn): void {
-  executeWithContextImpl = impl;
+  getContextRegistry().executeWithContext = impl;
 }
 
 export function setExecuteWithContextSync(impl: ExecuteWithContextSyncFn): void {
-  executeWithContextSyncImpl = impl;
+  getContextRegistry().executeWithContextSync = impl;
 }
 
 /**
@@ -73,6 +81,7 @@ export function setExecuteWithContextSync(impl: ExecuteWithContextSyncFn): void 
  * Falls back to direct execution if no context-storage implementation is registered or no span exists.
  */
 export async function executeWithContext<T>(params: { span?: AnySpan; fn: () => Promise<T> }): Promise<T> {
+  const { executeWithContext: executeWithContextImpl } = getContextRegistry();
   if (executeWithContextImpl) {
     return executeWithContextImpl(params);
   }
@@ -88,6 +97,7 @@ export async function executeWithContext<T>(params: { span?: AnySpan; fn: () => 
  * Falls back to direct execution if no context-storage implementation is registered or no span exists.
  */
 export function executeWithContextSync<T>(params: { span?: AnySpan; fn: () => T }): T {
+  const { executeWithContextSync: executeWithContextSyncImpl } = getContextRegistry();
   if (executeWithContextSyncImpl) {
     return executeWithContextSyncImpl(params);
   }
@@ -130,7 +140,7 @@ export function resolveExportedSpanId(
  * @param options - Configuration object for span creation
  * @returns The created Span or undefined if tracing is disabled
  */
-export function getOrCreateSpan<T extends SpanType>(options: GetOrCreateSpanOptions<T>): Span<T> | undefined {
+export function getOrCreateSpan<T extends SpanTypeValue>(options: GetOrCreateSpanOptions<T>): Span<T> | undefined {
   const { type, attributes, tracingContext, requestContext, tracingOptions, resumedFromSpanId, ...rest } = options;
 
   // tracingOptions.metadata takes precedence, but a key it merely names with
@@ -207,10 +217,10 @@ export function getRootExportSpan(span?: AnySpan): AnySpan | undefined {
  */
 export function getEntityTypeForSpan(span: {
   entityType?: string | null;
-  spanType?: SpanType | string | null;
-}): EntityType | undefined {
-  if (span.entityType && entityTypeValues.has(span.entityType as EntityType)) {
-    return span.entityType as EntityType;
+  spanType?: string | null;
+}): EntityTypeValue | undefined {
+  if (span.entityType && entityTypeValues.has(span.entityType as EntityTypeValue)) {
+    return span.entityType as EntityTypeValue;
   }
 
   switch (span.spanType) {

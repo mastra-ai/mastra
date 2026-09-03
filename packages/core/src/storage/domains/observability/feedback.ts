@@ -41,4 +41,4 @@ export {
   type GetFeedbackPercentilesArgs,
   getFeedbackPercentilesResponseSchema,
   type GetFeedbackPercentilesResponse,
-} from '@internal/core/storage';
+} from '@internal/observability/storage';

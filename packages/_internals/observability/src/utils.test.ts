@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import type { Span } from './types';
 import { SpanType } from './types';
@@ -16,6 +16,21 @@ describe('getEntityTypeForSpan', () => {
         spanType: SpanType.GENERIC,
       }),
     ).toBe('rag_ingestion');
+  });
+});
+
+describe('context resolver registry', () => {
+  it('shares resolver registration after a module reload', async () => {
+    const firstCopy = await import('./utils');
+    const span = { id: 'span', traceId: 'trace' } as any;
+
+    firstCopy.setCurrentSpanResolver(() => span);
+    vi.resetModules();
+
+    const secondCopy = await import('./utils');
+    expect(secondCopy.resolveCurrentSpan()).toBe(span);
+
+    secondCopy.setCurrentSpanResolver(undefined);
   });
 });
 

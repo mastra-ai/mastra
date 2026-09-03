@@ -42,4 +42,4 @@ export {
   type GetMetricPercentilesArgs,
   getMetricPercentilesResponseSchema,
   type GetMetricPercentilesResponse,
-} from '@internal/core/storage';
+} from '@internal/observability/storage';

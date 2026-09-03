@@ -335,6 +335,124 @@ describe('AgentController: tool suspension and resumption', () => {
     expect(ds.pendingSuspensions.size).toBe(0);
   });
 
+  it('should cancel an unresumable suspension so the next message starts a fresh run', async () => {
+    const confirmTool = createTool({
+      id: 'confirm-action',
+      description: 'Confirms an action with the user',
+      inputSchema: z.object({ action: z.string() }),
+      execute: async (input: { action: string }, context?: any) => {
+        const resumeData = context?.agent?.resumeData ?? context?.workflow?.resumeData ?? context?.resumeData;
+        if (resumeData) {
+          return { result: `Action "${input.action}" confirmed`, resumed: resumeData };
+        }
+        const suspend = context?.suspend ?? context?.agent?.suspend;
+        if (!suspend) throw new Error('suspend not available in context');
+        await suspend({ action: input.action });
+        return { result: `Action "${input.action}" confirmed` };
+      },
+    });
+    const agent = new Agent({
+      id: 'test-agent-unresumable',
+      name: 'Test Agent Unresumable',
+      instructions: 'You confirm actions.',
+      model: new MastraLanguageModelV2Mock({
+        doStream: (() => {
+          let callCount = 0;
+          return async () => {
+            callCount++;
+            return { stream: callCount === 1 ? createToolCallStream() : createTextStream() };
+          };
+        })(),
+      }),
+      tools: { confirmAction: confirmTool },
+    });
+    const storage = new InMemoryStore();
+    const mastra = new Mastra({
+      agents: { 'test-agent-unresumable': agent },
+      logger: false,
+      storage,
+    });
+    const registeredAgent = mastra.getAgent('test-agent-unresumable');
+    const controller = new AgentController({
+      workspace: createMockWorkspace(),
+      id: 'test-controller-unresumable',
+      storage,
+      modes: [{ id: 'default', name: 'Default', default: true, agent: registeredAgent }],
+      initialState: { yolo: true } as any,
+    });
+    await controller.init();
+    const session = await controller.createSession({ id: 'test-session', ownerId: 'test-owner' });
+    const events: any[] = [];
+    session.subscribe(event => {
+      events.push(event);
+    });
+    await session.thread.create();
+    await session.sendMessage({ content: 'Deploy to production' });
+
+    const suspensionEvent = events.find(event => event.type === 'tool_suspended');
+    expect(suspensionEvent).toBeDefined();
+    const threadId = session.thread.getId()!;
+    const resourceId = session.identity.getResourceId();
+    const suspension = session.suspensions.get({ toolCallId: suspensionEvent.toolCallId })!;
+    session.suspensions.register({
+      toolCallId: 'same-run-sibling',
+      runId: suspension.runId,
+      toolName: 'ask_user',
+    });
+    session.emit({
+      type: 'tool_suspended',
+      toolCallId: 'same-run-sibling',
+      toolName: 'ask_user',
+      args: {},
+      suspendPayload: {},
+      resumeSchema: undefined,
+    });
+    const sendStreamResumeSpy = vi.spyOn(registeredAgent, 'sendStreamResume');
+
+    // Simulate the first response completing on the server after its HTTP client
+    // timed out. The agent consumes the suspended run, but the controller still
+    // has the stale prompt until the retry below fails.
+    await registeredAgent.sendStreamResume({
+      threadId,
+      resourceId,
+      runId: suspension.runId,
+      toolCallId: suspensionEvent.toolCallId,
+      resumeData: { confirmed: true },
+      streamOptions: { memory: { thread: threadId, resource: resourceId } },
+    });
+    await vi.waitFor(() => {
+      expect(events.some(event => event.type === 'agent_end' && event.reason === 'complete')).toBe(true);
+    });
+    events.length = 0;
+
+    await session.respondToToolSuspension({ toolCallId: suspensionEvent.toolCallId, resumeData: { confirmed: true } });
+
+    const resumeError = events.find(event => event.type === 'error')?.error;
+    expect(resumeError?.message).toContain(`could not find a suspended run "${suspension.runId}"`);
+    expect(events).toContainEqual({
+      type: 'tool_suspension_cancelled',
+      toolCallId: suspensionEvent.toolCallId,
+      toolName: 'confirmAction',
+      reason: resumeError.message,
+    });
+    expect(events).toContainEqual({
+      type: 'tool_suspension_cancelled',
+      toolCallId: 'same-run-sibling',
+      toolName: 'ask_user',
+      reason: resumeError.message,
+    });
+    expect(session.suspensions.hasPending()).toBe(false);
+    expect(session.displayState.get().pendingSuspensions.size).toBe(0);
+
+    events.length = 0;
+    await session.sendMessage({ content: 'Continue with a fresh run' });
+
+    expect(sendStreamResumeSpy).toHaveBeenCalledTimes(2);
+    expect(events.some(event => event.type === 'agent_start')).toBe(true);
+    expect(events.some(event => event.type === 'agent_end' && event.reason === 'complete')).toBe(true);
+    expect(events.some(event => event.type === 'error')).toBe(false);
+  });
+
   it('should forward requireToolApproval=false to sendStreamResume when controller is in yolo mode', async () => {
     const confirmTool = createTool({
       id: 'confirm-action',

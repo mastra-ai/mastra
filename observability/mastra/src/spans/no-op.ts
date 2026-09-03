@@ -4,7 +4,7 @@
 
 import type {
   ObservabilityInstance,
-  SpanType,
+  SpanTypeValue,
   CreateSpanOptions,
   EndSpanOptions,
   UpdateSpanOptions,
@@ -12,7 +12,7 @@ import type {
 } from '@mastra/core/observability';
 import { BaseSpan } from './base';
 
-export class NoOpSpan<TType extends SpanType = any> extends BaseSpan<TType> {
+export class NoOpSpan<TType extends SpanTypeValue = any> extends BaseSpan<TType> {
   public id: string;
   public traceId: string;
 

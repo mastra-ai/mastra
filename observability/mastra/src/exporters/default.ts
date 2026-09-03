@@ -1,3 +1,4 @@
+import type { Mastra } from '@mastra/core';
 import { MastraError, ErrorDomain } from '@mastra/core/error';
 import type { IMastraLogger } from '@mastra/core/logger';
 import type {
@@ -124,7 +125,7 @@ export class DefaultExporter extends BaseExporter {
   /**
    * Initialize the exporter (called after all dependencies are ready)
    */
-  async init(options: InitExporterOptions): Promise<void> {
+  async init(options: InitExporterOptions<Mastra>): Promise<void> {
     try {
       this.#isInitializing = true;
       this.#emitDropEvent = options.emitDropEvent;

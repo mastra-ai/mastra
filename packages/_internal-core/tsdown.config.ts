@@ -2,7 +2,6 @@ import { defineConfig } from 'tsdown';
 
 export default defineConfig({
   entry: [
-    'src/storage/index.ts',
     'src/base/index.ts',
     'src/error/index.ts',
     'src/logger/index.ts',

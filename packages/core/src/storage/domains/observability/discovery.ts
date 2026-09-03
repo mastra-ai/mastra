@@ -31,4 +31,4 @@ export {
   type GetTagsArgs,
   getTagsResponseSchema,
   type GetTagsResponse,
-} from '@internal/core/storage';
+} from '@internal/observability/storage';

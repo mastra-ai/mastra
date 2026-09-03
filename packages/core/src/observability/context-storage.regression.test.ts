@@ -14,7 +14,7 @@
  */
 import { describe, it, expect } from 'vitest';
 import { Mastra } from '../mastra';
-import { executeWithContext, resolveCurrentSpan } from './utils';
+import { executeWithContext, resolveCurrentSpan } from './index';
 
 // Instantiate Mastra — this is the production path that triggers initContextStorage().
 new Mastra();

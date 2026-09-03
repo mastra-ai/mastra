@@ -326,10 +326,10 @@ function extractStepInput(payload?: StepStartPayload): StepInputPreview {
  * all streaming steps (including after tool calls).
  */
 export class ModelSpanTracker {
-  #modelSpan?: Span<SpanType.MODEL_GENERATION>;
-  #currentStepSpan?: Span<SpanType.MODEL_STEP>;
-  #currentInferenceSpan?: Span<SpanType.MODEL_INFERENCE>;
-  #currentChunkSpan?: Span<SpanType.MODEL_CHUNK>;
+  #modelSpan?: Span<`${SpanType.MODEL_GENERATION}`>;
+  #currentStepSpan?: Span<`${SpanType.MODEL_STEP}`>;
+  #currentInferenceSpan?: Span<`${SpanType.MODEL_INFERENCE}`>;
+  #currentChunkSpan?: Span<`${SpanType.MODEL_CHUNK}`>;
   #currentChunkType?: string;
   #accumulator: Record<string, any> = {};
   #stepIndex: number = 0;
@@ -343,7 +343,7 @@ export class ModelSpanTracker {
   /** Static request-side context applied to every MODEL_INFERENCE span */
   #inferenceContext?: ModelInferenceContext;
 
-  constructor(modelSpan?: Span<SpanType.MODEL_GENERATION>) {
+  constructor(modelSpan?: Span<`${SpanType.MODEL_GENERATION}`>) {
     this.#modelSpan = modelSpan;
   }
 
@@ -380,7 +380,7 @@ export class ModelSpanTracker {
    * MODEL_INFERENCE / MODEL_STEP children so a fatal error before step-finish
    * doesn't leave them dangling. No-op if they were already closed.
    */
-  reportGenerationError(options: ErrorSpanOptions<SpanType.MODEL_GENERATION>): void {
+  reportGenerationError(options: ErrorSpanOptions<`${SpanType.MODEL_GENERATION}`>): void {
     if (this.#currentInferenceSpan) {
       this.#currentInferenceSpan.error({ error: options.error, endSpan: true });
       this.#currentInferenceSpan = undefined;
@@ -413,7 +413,7 @@ export class ModelSpanTracker {
   /**
    * Update the generation span
    */
-  updateGeneration(options: UpdateSpanOptions<SpanType.MODEL_GENERATION>): void {
+  updateGeneration(options: UpdateSpanOptions<`${SpanType.MODEL_GENERATION}`>): void {
     this.#modelSpan?.update(options);
   }
 
@@ -430,7 +430,7 @@ export class ModelSpanTracker {
    * Export the current step span for later rebuilding (durable execution).
    * Returns undefined if no step span is active.
    */
-  exportCurrentStep(): ReturnType<Span<SpanType.MODEL_STEP>['exportSpan']> | undefined {
+  exportCurrentStep(): ReturnType<Span<`${SpanType.MODEL_STEP}`>['exportSpan']> | undefined {
     return this.#currentStepSpan?.exportSpan();
   }
 
@@ -645,7 +645,7 @@ export class ModelSpanTracker {
    * (the provider call) when available, falling back to MODEL_STEP only if
    * startStep() was bypassed.
    */
-  #chunkParent(): Span<SpanType.MODEL_INFERENCE> | Span<SpanType.MODEL_STEP> | undefined {
+  #chunkParent(): Span<`${SpanType.MODEL_INFERENCE}`> | Span<`${SpanType.MODEL_STEP}`> | undefined {
     return this.#currentInferenceSpan ?? this.#currentStepSpan;
   }
 

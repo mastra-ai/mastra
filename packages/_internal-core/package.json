@@ -8,16 +8,6 @@
     "dist"
   ],
   "exports": {
-    "./storage": {
-      "import": {
-        "types": "./dist/storage/index.d.ts",
-        "default": "./dist/storage/index.js"
-      },
-      "require": {
-        "types": "./dist/storage/index.d.cts",
-        "default": "./dist/storage/index.cjs"
-      }
-    },
     "./base": {
       "import": {
         "types": "./dist/base/index.d.ts",

@@ -5,7 +5,7 @@ import { MastraError, MastraNonRetryableError, ErrorDomain, ErrorCategory } from
 import type { SerializedError } from '../error';
 import { getErrorFromUnknown } from '../error/utils.js';
 import type { PubSub } from '../events/pubsub';
-import type { ObservabilityContext, Span, SpanType, TracingPolicy } from '../observability';
+import type { ObservabilityContext, Span, SpanTypeValue, TracingPolicy } from '../observability';
 import { createObservabilityContext, resolveExportedSpanId } from '../observability';
 import { MASTRA_AUTH_TOKEN_KEY } from '../request-context';
 import { deepEqual } from '../utils/deep-equal';
@@ -290,7 +290,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       requestContext: RequestContext;
       actor?: ActorSignal;
       outputWriter?: OutputWriter;
-      stepSpan?: Span<SpanType.WORKFLOW_STEP>;
+      stepSpan?: Span<'workflow_step'>;
       perStep?: boolean;
     },
   ): Promise<StepResult<any, any, any, any> | null> {
@@ -315,12 +315,12 @@ export class DefaultExecutionEngine extends ExecutionEngine {
    * @returns The created span, or undefined if no parent span or tracing disabled
    */
   async createStepSpan(params: {
-    parentSpan: Span<SpanType> | undefined;
+    parentSpan: Span<SpanTypeValue> | undefined;
     stepId: string;
     operationId: string;
     options: {
       name: string;
-      type: SpanType;
+      type: SpanTypeValue;
       input?: unknown;
       entityType?: string;
       entityId?: string;
@@ -328,7 +328,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       requestContext?: RequestContext;
     };
     executionContext: ExecutionContext;
-  }): Promise<Span<SpanType> | undefined> {
+  }): Promise<Span<SpanTypeValue> | undefined> {
     // Default: create span directly (no durability)
     return params.parentSpan?.createChildSpan(params.options as any);
   }
@@ -342,7 +342,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
    * @param params - Parameters for ending the span
    */
   async endStepSpan(params: {
-    span: Span<SpanType> | undefined;
+    span: Span<SpanTypeValue> | undefined;
     operationId: string;
     endOptions: {
       output?: unknown;
@@ -362,7 +362,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
    * @param params - Parameters for recording the error
    */
   async errorStepSpan(params: {
-    span: Span<SpanType> | undefined;
+    span: Span<SpanTypeValue> | undefined;
     operationId: string;
     errorOptions: {
       error: Error;
@@ -383,17 +383,17 @@ export class DefaultExecutionEngine extends ExecutionEngine {
    * @returns The created span, or undefined if no parent span or tracing disabled
    */
   async createChildSpan(params: {
-    parentSpan: Span<SpanType> | undefined;
+    parentSpan: Span<SpanTypeValue> | undefined;
     operationId: string;
     options: {
       name: string;
-      type: SpanType;
+      type: SpanTypeValue;
       input?: unknown;
       attributes?: Record<string, unknown>;
       tracingPolicy?: TracingPolicy;
     };
     executionContext: ExecutionContext;
-  }): Promise<Span<SpanType> | undefined> {
+  }): Promise<Span<SpanTypeValue> | undefined> {
     // Default: create span directly (no durability)
     return params.parentSpan?.createChildSpan(params.options as any);
   }
@@ -407,7 +407,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
    * @param params - Parameters for ending the span
    */
   async endChildSpan(params: {
-    span: Span<SpanType> | undefined;
+    span: Span<SpanTypeValue> | undefined;
     operationId: string;
     endOptions?: {
       output?: unknown;
@@ -427,7 +427,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
    * @param params - Parameters for recording the error
    */
   async errorChildSpan(params: {
-    span: Span<SpanType> | undefined;
+    span: Span<SpanTypeValue> | undefined;
     operationId: string;
     errorOptions: {
       error: Error;
@@ -454,7 +454,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     params: {
       retries: number;
       delay: number;
-      stepSpan?: Span<SpanType>;
+      stepSpan?: Span<SpanTypeValue>;
       workflowId: string;
       runId: string;
     },
@@ -767,7 +767,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     };
     requestContext: RequestContext;
     actor?: ActorSignal;
-    workflowSpan?: Span<SpanType.WORKFLOW_RUN>;
+    workflowSpan?: Span<'workflow_run'>;
     abortController: AbortController;
     outputWriter?: OutputWriter;
     format?: 'legacy' | 'vnext' | undefined;

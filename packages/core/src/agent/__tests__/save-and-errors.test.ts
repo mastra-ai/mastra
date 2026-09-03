@@ -2129,7 +2129,7 @@ describe('AGENT_RUN span must be ended on LLM errors', () => {
   async function mockGetOrCreateSpan() {
     let agentRunSpan: any;
 
-    const mod = await import('../../observability/utils');
+    const mod = await import('@internal/observability');
     const spy = vi.spyOn(mod, 'getOrCreateSpan').mockImplementation((opts: any) => {
       const span = createMockSpan(opts.type ?? opts.name ?? 'unknown');
       if (opts.type === 'agent_run') {
