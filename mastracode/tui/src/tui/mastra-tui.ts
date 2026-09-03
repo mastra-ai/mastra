@@ -6,6 +6,7 @@ import { spawn } from 'node:child_process';
 import type { ChildProcess } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import type { Component } from '@earendil-works/pi-tui';
+import type { BackgroundCompletionEvent } from '@mastra/code-sdk/agents/background-completion-events';
 import { getOAuthProviders } from '@mastra/code-sdk/auth/storage';
 import {
   getAvailableModePacks,
@@ -32,12 +33,20 @@ import {
 import type { AgentControllerEvent, MastraDBMessage } from '@mastra/core/agent-controller';
 import type { Workspace } from '@mastra/core/workspace';
 import { disposeAssistantRenderState } from './assistant-render-registry.js';
+import {
+  clearCompletedBackgroundActivitiesForTarget,
+  compareBackgroundActivities,
+  completeBackgroundActivity,
+  getBackgroundActivitiesForTarget,
+} from './background-activity.js';
+import type { BackgroundActivity } from './background-activity.js';
 import { insertChatComponentWithBoundarySpacing } from './chat-boundary-reconciliation.js';
 import { dispatchSlashCommand } from './command-dispatch.js';
 import { startGoalWithDefaults } from './commands/goal.js';
 
 import type { SlashCommandContext } from './commands/types.js';
 import { AskQuestionInlineComponent } from './components/ask-question-inline.js';
+import { BackgroundActivitySelectorComponent } from './components/background-activity-selector.js';
 import { LoginDialogComponent } from './components/login-dialog.js';
 import { promptAuthMode } from './components/login-mode-selector.js';
 import { ModelSelectorComponent } from './components/model-selector.js';
@@ -152,6 +161,8 @@ export class MastraTUI {
   private cleanupKeyHandlers?: () => void;
   private cleanupPluginReloadListener?: () => void;
   private cleanupPluginUpdateListener?: () => void;
+  private cleanupBackgroundCompletionListener?: () => void;
+  private backgroundNoticeQueue = Promise.resolve();
   private lastStreamError: string | null = null;
   private stopped = false;
   /**
@@ -256,6 +267,58 @@ export class MastraTUI {
       exit: exitCode => this.exit(exitCode),
       doubleCtrlCMs: MastraTUI.DOUBLE_CTRL_C_MS,
       queueFollowUpMessage: text => this.queueFollowUpMessage(text),
+      openBackgroundActivityCenter: () => this.showBackgroundActivityCenter(),
+      clearFinishedBackgroundActivities: () => this.clearFinishedBackgroundActivity(),
+    });
+  }
+
+  private getCurrentThreadBackgroundActivities(): BackgroundActivity[] {
+    return getBackgroundActivitiesForTarget(
+      this.state.backgroundActivities,
+      this.state.session.identity.getResourceId(),
+      this.state.pendingNewThread ? null : this.state.session.thread.getId(),
+    );
+  }
+
+  private refreshBackgroundActivity(): void {
+    this.state.globalBackgroundNotice.setActivities(this.getCurrentThreadBackgroundActivities());
+    flushRender(this.state);
+  }
+
+  private clearFinishedBackgroundActivity(): void {
+    clearCompletedBackgroundActivitiesForTarget(
+      this.state.backgroundActivities,
+      this.state.session.identity.getResourceId(),
+      this.state.pendingNewThread ? null : this.state.session.thread.getId(),
+    );
+    this.refreshBackgroundActivity();
+  }
+
+  private showBackgroundActivityCenter(): void {
+    const activities = this.getCurrentThreadBackgroundActivities().sort(compareBackgroundActivities);
+    if (activities.length === 0) return;
+
+    const selector = new BackgroundActivitySelectorComponent({
+      tui: this.state.ui,
+      activities,
+      onCancel: () => this.state.ui.hideOverlay(),
+      onAbort: activity => void this.abortBackgroundActivity(activity),
+    });
+    showModalOverlay(this.state.ui, selector, { maxHeight: '80%' });
+    selector.focused = true;
+  }
+
+  private async abortBackgroundActivity(activity: BackgroundActivity): Promise<void> {
+    const manager = this.state.controller.getMastra()?.backgroundTaskManager;
+    if (!manager) return;
+    await manager.cancel(activity.taskId);
+    this.state.ui.hideOverlay();
+  }
+
+  private handleBackgroundCompletion(event: BackgroundCompletionEvent): void {
+    this.backgroundNoticeQueue = this.backgroundNoticeQueue.then(() => {
+      completeBackgroundActivity(this.state.backgroundActivities, event);
+      this.refreshBackgroundActivity();
     });
   }
 
@@ -575,6 +638,11 @@ export class MastraTUI {
       this.cleanupPluginUpdateListener = undefined;
     }
 
+    if (this.cleanupBackgroundCompletionListener) {
+      this.cleanupBackgroundCompletionListener();
+      this.cleanupBackgroundCompletionListener = undefined;
+    }
+
     if (this.state.unsubscribe) {
       this.state.unsubscribe();
     }
@@ -650,6 +718,9 @@ export class MastraTUI {
 
     // Subscribe to controller events
     subscribeToAgentController(this.state, event => this.handleEvent(event));
+    this.cleanupBackgroundCompletionListener = this.state.options.backgroundCompletionEvents?.subscribe(event =>
+      this.handleBackgroundCompletion(event),
+    );
     // Restore escape-as-cancel setting from persisted state
     const escState = this.state.session.state.get() as any;
     if (escState?.escapeAsCancel === false) {
@@ -811,6 +882,7 @@ export class MastraTUI {
       if (event.type === 'thread_created') {
         await this.syncThreadActivePackMetadata(event.thread);
       } else if (event.type === 'thread_changed') {
+        this.refreshBackgroundActivity();
         await this.syncThreadActivePackMetadata();
       }
 

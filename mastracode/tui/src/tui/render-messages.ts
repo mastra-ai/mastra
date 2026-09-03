@@ -41,6 +41,8 @@ import { ToolExecutionComponentEnhanced } from './components/tool-execution-enha
 import { PendingUserMessageComponent, UserMessageComponent } from './components/user-message.js';
 import {
   getAssistantRenderParts,
+  getBackgroundCompletionView,
+  getBackgroundWorkLifecycleView,
   getMessageText,
   getNotificationSummaryView,
   getNotificationView,
@@ -52,7 +54,12 @@ import {
   isSignalMessage,
 } from './db-message-parts.js';
 import type { AssistantRenderPart } from './db-message-parts.js';
-import { formatToolResult, isTaskMutationTool } from './handlers/tool.js';
+import {
+  formatToolResult,
+  getBackgroundToolTaskId,
+  isBackgroundToolPlaceholder,
+  isTaskMutationTool,
+} from './handlers/tool.js';
 import { pruneChatContainer } from './prune-chat.js';
 import type { TUIState } from './state.js';
 import { BOX_INDENT, getMarkdownTheme, theme } from './theme.js';
@@ -541,14 +548,58 @@ export function renderSignalMessage(state: TUIState, message: MastraDBMessage): 
   }
 
   if (kind === 'notification') {
+    const backgroundWork = getBackgroundWorkLifecycleView(message);
+    if (backgroundWork) {
+      const component = state.pendingTools.get(backgroundWork.originToolCallId);
+      const subagentComponent = state.pendingSubagents.get(backgroundWork.originToolCallId);
+      if (backgroundWork.taskId) {
+        component?.setBackgroundTaskId?.(backgroundWork.taskId);
+        subagentComponent?.setBackgroundTaskId(backgroundWork.taskId);
+      }
+      if (backgroundWork.tagName === 'work-cancelled') {
+        component?.cancelBackground?.();
+        subagentComponent?.cancel();
+        state.pendingSubagents.delete(backgroundWork.originToolCallId);
+      } else if (
+        component &&
+        (backgroundWork.tagName === 'work-completed' || backgroundWork.tagName === 'work-failed')
+      ) {
+        const status =
+          backgroundWork.tagName === 'work-completed'
+            ? 'Completed in background; reconciling result…'
+            : 'Background execution failed; reconciling error…';
+        component.updateResult({ content: [{ type: 'text', text: status }], isError: false }, true);
+        state.ui.requestRender();
+      }
+      return true;
+    }
+
     const notification = getNotificationView(message);
+    const backgroundCompletion = getBackgroundCompletionView(message);
+    if (backgroundCompletion?.status === 'cancelled') {
+      const toolComponent = state.pendingTools.get(backgroundCompletion.originToolCallId);
+      const subagentComponent = state.pendingSubagents.get(backgroundCompletion.originToolCallId);
+      toolComponent?.setBackgroundTaskId?.(backgroundCompletion.taskId);
+      toolComponent?.updateResult(
+        { content: [{ type: 'text', text: 'Background execution cancelled.' }], isError: true },
+        true,
+      );
+      toolComponent?.cancelBackground?.();
+      subagentComponent?.setBackgroundTaskId(backgroundCompletion.taskId);
+      subagentComponent?.cancel();
+      state.pendingSubagents.delete(backgroundCompletion.originToolCallId);
+    }
     const component = new NotificationComponent({
       message: notification.message,
       source: notification.source,
       kind: notification.kind,
       priority: notification.priority,
       status: notification.status,
+      backgroundCompletion,
     });
+    if (backgroundCompletion) {
+      state.allToolComponents.push(component as any);
+    }
     addChildBeforeFollowUps(state, component);
     state.messageComponentsById.set(message.id, component);
     state.ui.requestRender();
@@ -572,8 +623,16 @@ export function renderSignalMessage(state: TUIState, message: MastraDBMessage): 
   return false;
 }
 
+function isPersistedBackgroundCompletionDirective(message: MastraDBMessage): boolean {
+  if (message.role !== 'user' && message.role !== 'signal') return false;
+  const text = isSignalMessage(message) ? getUserSignalView(message).message : getMessageText(message);
+  return /^IMPORTANT: The following tool-call IDs (?:completed successfully|failed|were cancelled by the user before completion|are suspended):/.test(
+    text.trim(),
+  );
+}
+
 export function addUserMessage(state: TUIState, message: MastraDBMessage, options?: { label?: string }): void {
-  if (state.messageComponentsById.has(message.id)) {
+  if (state.messageComponentsById.has(message.id) || isPersistedBackgroundCompletionDirective(message)) {
     return;
   }
 
@@ -863,12 +922,23 @@ export async function renderExistingMessages(state: TUIState): Promise<void> {
   state.chatContainer.clear();
   state.pendingTools.clear();
   state.pendingTaskToolIds?.clear();
+  state.pendingSubagents.clear();
+  state.followUpComponents = [];
   state.allToolComponents = [];
   state.allSlashCommandComponents = [];
   state.allSystemReminderComponents = [];
   state.messageComponentsById.clear();
   state.pendingSignalMessageComponentsById.clear();
   state.allShellComponents = [];
+
+  const backgroundTasksByToolCallId = new Map<string, string>();
+  for (const message of messages) {
+    if (message.role !== 'signal') continue;
+    const completion = getBackgroundCompletionView(message);
+    if (completion) {
+      backgroundTasksByToolCallId.set(completion.originToolCallId, completion.taskId);
+    }
+  }
 
   // Local accumulator for detecting task clears during visible history reconstruction.
   // Startup only replays task state from the bounded message window. If no task
@@ -906,6 +976,7 @@ export async function renderExistingMessages(state: TUIState): Promise<void> {
           const hasResult = part.hasResult;
           const resultValue = part.result;
           const resultIsError = part.isError;
+          const isBackgroundPlaceholder = hasResult && !resultIsError && isBackgroundToolPlaceholder(resultValue);
 
           // Render subagent tool calls with dedicated component
           if (toolName === 'subagent') {
@@ -987,7 +1058,16 @@ export async function renderExistingMessages(state: TUIState): Promise<void> {
                 icons: pluginRenderConfig.icons,
               },
             );
-            subComponent.finish(isErr ?? false, 0, rawResult);
+            const backgroundTaskId =
+              getBackgroundToolTaskId(resultValue) ?? backgroundTasksByToolCallId.get(part.toolCallId);
+            if (backgroundTaskId) {
+              subComponent.setBackgroundTaskId(backgroundTaskId);
+            }
+            if (isBackgroundPlaceholder) {
+              state.pendingSubagents.set(part.toolCallId, subComponent);
+            } else {
+              subComponent.finish(isErr ?? false, 0, rawResult);
+            }
             insertChatComponentWithBoundarySpacing(state.chatContainer, subComponent);
             state.allToolComponents.push(subComponent as any);
             continue;
@@ -1003,6 +1083,11 @@ export async function renderExistingMessages(state: TUIState): Promise<void> {
             },
             state.ui,
           );
+          const backgroundTaskId =
+            getBackgroundToolTaskId(resultValue) ?? backgroundTasksByToolCallId.get(part.toolCallId);
+          if (backgroundTaskId) {
+            toolComponent.setBackgroundTaskId(backgroundTaskId);
+          }
 
           if (hasResult) {
             toolComponent.updateResult(
@@ -1010,13 +1095,17 @@ export async function renderExistingMessages(state: TUIState): Promise<void> {
                 content: [
                   {
                     type: 'text',
-                    text: formatToolResult(resultValue),
+                    text: isBackgroundPlaceholder ? 'Running in background…' : formatToolResult(resultValue),
                   },
                 ],
                 isError: resultIsError,
               },
-              false,
+              isBackgroundPlaceholder,
             );
+          }
+
+          if (isBackgroundPlaceholder) {
+            state.pendingTools.set(part.toolCallId, toolComponent);
           }
 
           // Successful task transition tools render through the pinned task UI,

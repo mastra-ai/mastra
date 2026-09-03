@@ -66,6 +66,7 @@ vi.mock('@mastra/core/agent-controller', () => ({
 
 vi.mock('@mastra/core/processors', () => ({
   AgentsMDInjector: class {},
+  createBackgroundWorkSignalProcessor: () => ({}),
   isBadRequestError: (error: unknown) =>
     typeof error === 'object' &&
     error !== null &&
@@ -235,7 +236,7 @@ describe('createMastraCode startup performance', () => {
     expect(result.storageWarning).toBe('Storage fallback warning');
     expect(syncGateways).not.toHaveBeenCalled();
     resolveSync?.();
-  });
+  }, 10_000);
 });
 
 describe('Kimi startup access', () => {

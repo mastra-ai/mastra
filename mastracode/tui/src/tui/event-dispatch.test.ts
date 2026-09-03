@@ -14,7 +14,7 @@ function createMockAgentController(initialState: Record<string, unknown> = {}, p
     state,
     loadOMProgress: vi.fn().mockResolvedValue(undefined),
     session: {
-      thread: { list: vi.fn().mockResolvedValue([]), getId: vi.fn(() => 'thread-1') },
+      thread: { getId: vi.fn(() => 'current-thread'), list: vi.fn().mockResolvedValue([]) },
       state: {
         get: () => ({ ...state }),
         set: setState,
@@ -66,6 +66,7 @@ function createMockEctx(): EventHandlerContext {
     renderClearedTasksInline: vi.fn(),
     renderCompletedTasksInline: vi.fn(),
     renderTaskDeltaInline: vi.fn(),
+    addUserMessage: vi.fn(),
     updateStatusLine: vi.fn(),
   } as unknown as EventHandlerContext;
 }
@@ -86,9 +87,68 @@ describe('dispatchEvent thread lifecycle', () => {
     ectx = createMockEctx();
   });
 
+  it('ignores live messages targeted at a different thread', async () => {
+    await dispatchEvent(
+      {
+        type: 'message_start',
+        message: {
+          id: 'origin-thread-signal',
+          threadId: 'origin-thread',
+          role: 'user',
+          createdAt: new Date('2026-07-27T11:47:32.908Z'),
+          content: { format: 2, parts: [{ type: 'text', text: 'thread-scoped message' }] },
+        },
+      } as any,
+      ectx,
+      state,
+    );
+
+    expect(ectx.addUserMessage).not.toHaveBeenCalled();
+  });
+
+  it('renders live messages targeted at the current thread', async () => {
+    await dispatchEvent(
+      {
+        type: 'message_start',
+        message: {
+          id: 'current-thread-signal',
+          threadId: 'current-thread',
+          role: 'user',
+          createdAt: new Date('2026-07-27T11:47:32.908Z'),
+          content: { format: 2, parts: [{ type: 'text', text: 'thread-scoped message' }] },
+        },
+      } as any,
+      ectx,
+      state,
+    );
+
+    expect(ectx.addUserMessage).toHaveBeenCalledOnce();
+  });
+
+  it('ignores thread-scoped live messages while waiting to create a new thread', async () => {
+    state.pendingNewThread = true;
+
+    await dispatchEvent(
+      {
+        type: 'message_start',
+        message: {
+          id: 'stale-current-thread-signal',
+          threadId: 'current-thread',
+          role: 'user',
+          createdAt: new Date('2026-07-27T11:47:32.908Z'),
+          content: { format: 2, parts: [{ type: 'text', text: 'origin-thread completion' }] },
+        },
+      } as any,
+      ectx,
+      state,
+    );
+
+    expect(ectx.addUserMessage).not.toHaveBeenCalled();
+  });
+
   it('updates the active and terminal titles when a generated title arrives', async () => {
     await dispatchEvent(
-      { type: 'thread_title_updated', threadId: 'thread-1', title: 'Generated demo title' } as any,
+      { type: 'thread_title_updated', threadId: 'current-thread', title: 'Generated demo title' } as any,
       ectx,
       state,
     );
@@ -113,7 +173,7 @@ describe('dispatchEvent thread lifecycle', () => {
     await dispatchEvent(
       {
         type: 'thread_title_updated',
-        threadId: 'thread-1',
+        threadId: 'current-thread',
         title: 'Safe\x07\x1b]0;unsafe\x07Visible \x1b[31mRed\x1b[0m',
       } as any,
       ectx,
@@ -126,7 +186,6 @@ describe('dispatchEvent thread lifecycle', () => {
 
   it('clears per-thread state on thread_changed', async () => {
     state.latestRequestPromptTokens = 90_000;
-
     await dispatchEvent(
       { type: 'thread_changed', threadId: 'new-thread', previousThreadId: 'old-thread' } as any,
       ectx,

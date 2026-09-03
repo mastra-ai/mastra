@@ -21,6 +21,7 @@ import { Mastra } from '@mastra/core/mastra';
 import { defaultNotificationDeliveryDecision } from '@mastra/core/notifications';
 import {
   AgentsMDInjector,
+  createBackgroundWorkSignalProcessor,
   isBadRequestError,
   PrefillErrorHandler,
   ProviderHistoryCompat,
@@ -49,6 +50,8 @@ import { PostgresStore } from '@mastra/pg';
 import { createThreadOwnershipManager } from './agent-connections/ownership.js';
 import { AgentConnectionsSignalProvider } from './agent-connections/signal-provider.js';
 import type { AgentConnectionsSignalProviderOptions } from './agent-connections/signal-provider.js';
+import { createBackgroundCompletionEvents } from './agents/background-completion-events.js';
+import { createBackgroundCompletionCallbacks } from './agents/background-completion.js';
 import { hasCredentialStoreProvider } from './agents/credential-resolver.js';
 import { getDynamicInstructions } from './agents/instructions.js';
 import { getDynamicMemory, hasSubconsciousTools } from './agents/memory.js';
@@ -784,6 +787,7 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
   const mastraCodeInputProcessors: InputProcessor[] = [
     ...(config?.inputProcessors ?? []),
     new PlanRejectionAbortProcessor(),
+    createBackgroundWorkSignalProcessor(),
     new AgentsMDInjector({
       // Untrusted checkouts (review sessions on PR branches) must not have
       // the working tree's instruction files injected as system reminders —
@@ -1169,10 +1173,17 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
   }
 
   const typedStateSchema = stateSchema as PublicSchema<MastraCodeState>;
-  const controller: AgentController<MastraCodeState> = new AgentController<MastraCodeState>({
+  const backgroundCompletionEvents = createBackgroundCompletionEvents();
+  let controller: AgentController<MastraCodeState>;
+  controller = new AgentController<MastraCodeState>({
     id: 'mastra-code',
     resourceId: project.resourceId,
     storage,
+    backgroundTasks: {
+      enabled: true,
+      recoverStaleTasksOnStart: false,
+      ...createBackgroundCompletionCallbacks(() => controller, backgroundCompletionEvents),
+    },
     observability,
     memory,
     pubsub: signalsPubSub,
@@ -1327,6 +1338,7 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
     builtinOmPacks,
     effectiveDefaults,
     githubSignals,
+    backgroundCompletionEvents,
     // Identity for the single local session (Case 3). Servers ignore these and
     // mint per-request sessions with client-supplied resourceIds instead.
     sessionId,
@@ -1589,6 +1601,7 @@ export async function prepareAgentControllerMount(
   const mastraArgs = {
     agentControllers: { [controllerId]: controller },
     storage,
+    backgroundTasks: { enabled: true, recoverStaleTasksOnStart: false },
     // Mirror the controller's internal-Mastra construction (which passes
     // `config.pubsub` through): the server-owned Mastra must run its event
     // bus on the same transport so streams/workflows/signals stay

@@ -34,6 +34,8 @@ export function setupKeyboardShortcuts(
     exit?: (exitCode: number) => void;
     doubleCtrlCMs: number;
     queueFollowUpMessage: (text: string) => void;
+    openBackgroundActivityCenter: () => void;
+    clearFinishedBackgroundActivities: () => void;
   },
 ): void {
   // Ctrl+C / Escape - abort if running, clear input if idle, double-tap always exits
@@ -144,6 +146,9 @@ export function setupKeyboardShortcuts(
     }
     state.ui.requestRender();
   });
+
+  state.editor.onAction('openBackgroundActivityCenter', callbacks.openBackgroundActivityCenter);
+  state.editor.onAction('clearFinishedBackgroundActivities', callbacks.clearFinishedBackgroundActivities);
 
   // Shift+Tab - cycle controller modes
   state.editor.onAction('cycleMode', async () => {
@@ -282,6 +287,7 @@ export function buildLayout(state: TUIState, refreshModelAuthStatus: () => Promi
   state.taskProgress = new TaskProgressComponent();
   state.taskProgress.setQuietMode(state.quietMode);
   state.ui.addChild(state.taskProgress);
+  state.ui.addChild(state.globalBackgroundNoticeContainer);
   state.ui.addChild(state.editorContainer);
   state.idleCounter = new IdleCounterComponent();
   state.editorContainer.addChild(state.idleCounter);
@@ -676,6 +682,7 @@ export function subscribeToAgentController(state: TUIState, handleEvent: (event:
     });
     return eventQueue;
   };
+  state.waitForAgentControllerEvents = () => eventQueue;
   state.unsubscribe = state.session.subscribe(listener);
 }
 
