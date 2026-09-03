@@ -11,8 +11,8 @@ import {
 } from './format.js';
 import type { RunMCResult } from './types.js';
 
-function textMessage(text: string) {
-  return { role: 'assistant' as const, content: { format: 2 as const, parts: [{ type: 'text' as const, text }] } };
+function textMessage(text: string, id = 'assistant-1') {
+  return { id, role: 'assistant' as const, content: { format: 2 as const, parts: [{ type: 'text' as const, text }] } };
 }
 
 describe('truncate', () => {
@@ -26,55 +26,31 @@ describe('truncate', () => {
 });
 
 describe('formatHuman', () => {
-  it('streams only newly-appended assistant text via the state cursor', () => {
+  it('streams compact assistant text deltas', () => {
     const state = createHumanFormatState();
-    const first = formatHuman({ type: 'message_update', message: textMessage('Hello') } as AgentControllerEvent, state);
-    expect(first).toEqual({ stdout: 'Hello' });
-
-    const second = formatHuman(
-      { type: 'message_update', message: textMessage('Hello world') } as AgentControllerEvent,
-      state,
-    );
-    expect(second).toEqual({ stdout: ' world' });
+    formatHuman({ type: 'message_start', message: textMessage('', 'assistant-1') } as AgentControllerEvent, state);
+    expect(formatHuman({ type: 'message_update', id: 'assistant-1', event: { type: 'text-delta', delta: 'Hello' } }, state)).toEqual({ stdout: 'Hello' });
+    expect(formatHuman({ type: 'message_update', id: 'assistant-1', event: { type: 'text-delta', delta: ' world' } }, state)).toEqual({ stdout: ' world' });
   });
 
-  it('emits nothing when the text has not grown', () => {
+  it('ignores deltas for another message', () => {
     const state = createHumanFormatState();
-    formatHuman({ type: 'message_update', message: textMessage('Hi') } as AgentControllerEvent, state);
-    const repeat = formatHuman({ type: 'message_update', message: textMessage('Hi') } as AgentControllerEvent, state);
-    expect(repeat).toEqual({});
+    formatHuman({ type: 'message_start', message: textMessage('', 'assistant-1') } as AgentControllerEvent, state);
+    expect(formatHuman({ type: 'message_update', id: 'assistant-2', event: { type: 'text-delta', delta: 'Hi' } }, state)).toEqual({});
   });
 
-  it('resets the cursor and emits a trailing newline on message_end', () => {
+  it('resets the cursor and emits a trailing newline on matching message_end', () => {
     const state = createHumanFormatState();
-    formatHuman({ type: 'message_update', message: textMessage('Hi') } as AgentControllerEvent, state);
-    expect(formatHuman({ type: 'message_end', message: textMessage('Hi') } as AgentControllerEvent, state)).toEqual({
-      stdout: '\n',
-    });
+    formatHuman({ type: 'message_start', message: textMessage('', 'assistant-1') } as AgentControllerEvent, state);
+    formatHuman({ type: 'message_update', id: 'assistant-1', event: { type: 'text-delta', delta: 'Hi' } }, state);
+    expect(formatHuman({ type: 'message_end', id: 'assistant-1' }, state)).toEqual({ stdout: '\n' });
     expect(state.lastTextLength).toBe(0);
   });
 
-  it('ignores non-assistant message_end (e.g. echoed user prompt) so it never reaches stdout', () => {
+  it('ignores message_end events for a different message', () => {
     const state = createHumanFormatState();
-    const userEcho = {
-      type: 'message_end' as const,
-      message: {
-        role: 'user' as const,
-        content: { format: 2 as const, parts: [{ type: 'text' as const, text: 'Do the thing.' }] },
-      },
-    };
-    expect(formatHuman(userEcho as AgentControllerEvent, state)).toEqual({});
-    // The cursor must remain untouched so a subsequent assistant turn streams correctly.
-    expect(state.lastTextLength).toBe(0);
-  });
-
-  it('flushes trailing assistant text on message_end when message_update never streamed it', () => {
-    const state = createHumanFormatState();
-    const out = formatHuman(
-      { type: 'message_end', message: textMessage('Final answer') } as AgentControllerEvent,
-      state,
-    );
-    expect(out).toEqual({ stdout: 'Final answer\n' });
+    formatHuman({ type: 'message_start', message: textMessage('', 'assistant-1') } as AgentControllerEvent, state);
+    expect(formatHuman({ type: 'message_end', id: 'user-1' }, state)).toEqual({});
     expect(state.lastTextLength).toBe(0);
   });
 

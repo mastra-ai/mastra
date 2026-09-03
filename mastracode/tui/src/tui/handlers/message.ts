@@ -131,8 +131,8 @@ export function handleMessageStart(ctx: EventHandlerContext, message: MastraDBMe
     // Clear tool component references when starting a new assistant message
     state.lastAskUserComponent = undefined;
     state.lastSubmitPlanComponent = undefined;
+    state.streamingMessage = message;
     if (!state.streamingComponent) {
-      state.streamingMessage = message;
       ensureAssistantRenderSegment(state, message.id, ctx.addChildBeforeFollowUps);
       state.assistantRenderRegistry.queueActive(message.id, withParts(message, getTrailingParts(message)), () => {
         reconcileChatBoundarySpacers(state.chatContainer);

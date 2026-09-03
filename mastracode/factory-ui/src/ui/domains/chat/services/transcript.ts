@@ -295,26 +295,52 @@ function applyEvent(state: TranscriptState, event: AgentControllerEvent, viewerI
       return { ...state, pending: false, _decodeStartedAt: 0 };
 
     case 'message_start':
+      return upsertMessage(state, event.message, true, viewerId);
+
     case 'message_update': {
-      const message = event.message;
-      const next = upsertMessage(state, message, true, viewerId);
+      if (event.event.delta.length === 0) return state;
+      const entryIndex = state.entries.findIndex(
+        entry => entry.kind === 'message' && (entry.id === event.id || entry.message.id === event.id),
+      );
+      const entry = state.entries[entryIndex];
+      if (!entry || entry.kind !== 'message') return state;
+
+      const partIndex = entry.message.content.parts.findLastIndex(part => part.type === 'text');
+      if (partIndex === -1) return state;
+      const part = entry.message.content.parts[partIndex];
+      if (!part || part.type !== 'text') return state;
+
+      const message = {
+        ...entry.message,
+        content: {
+          ...entry.message.content,
+          parts: entry.message.content.parts.map((candidate, index) =>
+            index === partIndex ? { ...candidate, text: part.text + event.event.delta } : candidate,
+          ),
+        },
+      };
+      const entries = state.entries.map((candidate, index) =>
+        index === entryIndex ? { ...entry, message, streaming: true } : candidate,
+      );
+      const next = { ...state, entries };
       if (message.role !== 'assistant') return next;
-      // Only streamed assistant content opens the decode window — empty or
-      // tool-only updates must not count toward tokens/sec.
-      if (!hasAssistantText(next)) {
-        return next;
-      }
-      // Mark the start of decoding for the current step on the first streamed
-      // content delta, so tokens/sec is measured over decode time only (it
-      // excludes TTFT before this point and tool gaps between steps). usage_update
-      // at step-finish closes this window and re-arms it for the next step.
-      const decoded = next._decodeStartedAt > 0 ? next : { ...next, _decodeStartedAt: Date.now() };
-      // First streamed assistant content clears the "thinking" pending state.
-      return { ...decoded, pending: false };
+      return {
+        ...next,
+        pending: false,
+        _decodeStartedAt: next._decodeStartedAt > 0 ? next._decodeStartedAt : Date.now(),
+      };
     }
     case 'message_end': {
-      const next = upsertMessage(state, event.message, false, viewerId);
-      return event.message.role === 'assistant' ? { ...next, pending: false } : next;
+      const entryIndex = state.entries.findIndex(
+        entry => entry.kind === 'message' && (entry.id === event.id || entry.message.id === event.id),
+      );
+      const entry = state.entries[entryIndex];
+      if (!entry || entry.kind !== 'message') return state;
+
+      const entries = state.entries.map((candidate, index) =>
+        index === entryIndex ? { ...entry, streaming: false } : candidate,
+      );
+      return entry.message.role === 'assistant' ? { ...state, entries, pending: false } : { ...state, entries };
     }
 
     case 'tool_input_start':

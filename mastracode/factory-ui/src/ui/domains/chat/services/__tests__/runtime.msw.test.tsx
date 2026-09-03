@@ -53,11 +53,8 @@ describe('chat runtime reducer', () => {
 
     const streaming = runtimeReducer(initialChatRuntime, {
       type: 'message_update',
-      message: {
-        id: 'assistant-1',
-        role: 'assistant',
-        content: { format: 2, parts: [{ type: 'text', text: 'Working' }] },
-      },
+      id: 'assistant-1',
+      event: { type: 'text-delta', delta: 'Working' },
     });
     vi.advanceTimersByTime(1000);
     const measured = runtimeReducer(streaming, {
@@ -74,15 +71,12 @@ describe('chat runtime reducer', () => {
     vi.useRealTimers();
   });
 
-  it('accepts persisted messages whose content uses the format-2 parts envelope', () => {
+  it('opens decode timing on the first non-empty text delta', () => {
     const event = {
-      type: 'message_update',
-      message: {
-        id: 'assistant-2',
-        role: 'assistant',
-        content: { format: 2, parts: [{ type: 'text', text: 'Working' }] },
-      },
-    } as Parameters<typeof runtimeReducer>[1];
+      type: 'message_update' as const,
+      id: 'assistant-2',
+      event: { type: 'text-delta' as const, delta: 'Working' },
+    };
 
     expect(runtimeReducer(initialChatRuntime, event)._decodeStartedAt).toBeGreaterThan(0);
   });
