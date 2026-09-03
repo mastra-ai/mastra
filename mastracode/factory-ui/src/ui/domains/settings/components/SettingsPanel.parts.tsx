@@ -7,33 +7,22 @@ import type {
 } from '@mastra/client-js';
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
-import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
 import { Input } from '@mastra/playground-ui/components/Input';
 import { Switch } from '@mastra/playground-ui/components/Switch';
-import type { Theme } from '@mastra/playground-ui/components/ThemeProvider';
+import { ThemeToggle } from '@mastra/playground-ui/components/ThemeToggle';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { Check } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 
-import { DONE_SOUND_OPTIONS, loadDoneSound, playDoneSound, saveDoneSound } from '../services/doneSound';
+import { loadDoneSound, playDoneSound, saveDoneSound } from '../services/doneSound';
 import type { DoneSound } from '../services/doneSound';
 import { SettingsRow } from '@mastra/playground-ui/components/SettingsRow';
 import { SettingsCard } from './SettingsCard';
 import { SettingsSubsection } from './SettingsSubsection';
-import { Select, SelectContent, SelectItem, SelectTrigger } from '@mastra/playground-ui/components/Select';
+import { Segmented, SoundPicker, ThinkingLevelPicker } from './SettingsFields';
 
-type ThinkingLevel = NonNullable<AgentControllerSessionSettings['thinkingLevel']>;
 type NotificationMode = AgentControllerSessionSettings['notifications'];
-
-export const THINKING_LEVELS: { value: ThinkingLevel; label: string }[] = [
-  { value: 'off', label: 'Off' },
-  { value: 'low', label: 'Low' },
-  { value: 'medium', label: 'Medium' },
-  { value: 'high', label: 'High' },
-  { value: 'xhigh', label: 'Extra high' },
-  { value: 'max', label: 'Max' },
-];
 const NOTIFICATION_MODES: { value: NotificationMode; label: string }[] = [
   { value: 'off', label: 'Off' },
   { value: 'bell', label: 'Bell' },
@@ -41,12 +30,7 @@ const NOTIFICATION_MODES: { value: NotificationMode; label: string }[] = [
   { value: 'both', label: 'Both' },
 ];
 
-interface GeneralSettingsProps {
-  theme: Theme;
-  onThemeChange: (theme: Theme) => void;
-}
-
-export function GeneralSettings({ theme, onThemeChange }: GeneralSettingsProps) {
+export function GeneralSettings() {
   const [doneSound, setDoneSound] = useState<DoneSound>(() => loadDoneSound());
   const changeDoneSound = (next: DoneSound) => {
     setDoneSound(next);
@@ -55,31 +39,17 @@ export function GeneralSettings({ theme, onThemeChange }: GeneralSettingsProps) 
     playDoneSound(next);
   };
   return (
-    <SettingsSubsection title="General">
+    <SettingsSubsection scope="personal" title="General" description="Stored in this browser.">
       <SettingsCard>
         <SettingsRow variant="factory" label="Theme" description="Color scheme for the interface">
-          <Segmented
-            ariaLabel="Theme"
-            value={theme}
-            options={[
-              { value: 'system', label: 'System' },
-              { value: 'light', label: 'Light' },
-              { value: 'dark', label: 'Dark' },
-            ]}
-            onChange={onThemeChange}
-          />
+          <ThemeToggle />
         </SettingsRow>
         <SettingsRow
           variant="factory"
           label="Completion sound"
           description="Played when an agent run finishes in a workspace"
         >
-          <Segmented
-            ariaLabel="Completion sound"
-            value={doneSound}
-            options={DONE_SOUND_OPTIONS}
-            onChange={changeDoneSound}
-          />
+          <SoundPicker value={doneSound} onChange={changeDoneSound} />
         </SettingsRow>
       </SettingsCard>
     </SettingsSubsection>
@@ -88,39 +58,29 @@ export function GeneralSettings({ theme, onThemeChange }: GeneralSettingsProps) 
 
 interface ModelSettingsProps {
   settings: AgentControllerSessionSettings | null;
-  updating: boolean;
-  onBehaviorChange: (updates: Partial<AgentControllerSessionSettings>) => void;
+  onBehaviorChange: (updates: Partial<AgentControllerSessionSettings>) => Promise<unknown>;
 }
 
-export function ModelSettings({ settings, updating, onBehaviorChange }: ModelSettingsProps) {
+export function ModelSettings({ settings, onBehaviorChange }: ModelSettingsProps) {
   return (
-    <SettingsRow variant="factory" label="Thinking level" description="Extended-reasoning budget for the agent">
-      <div className="w-full lg:hidden">
-        <SegmentedSelect
-          ariaLabel="Thinking level"
-          value={settings?.thinkingLevel ?? 'off'}
-          disabled={!settings || updating}
-          options={THINKING_LEVELS}
-          onChange={v => onBehaviorChange({ thinkingLevel: v })}
-        />
-      </div>
-      <div className="hidden lg:block">
-        <Segmented
-          ariaLabel="Thinking level"
-          value={settings?.thinkingLevel ?? 'off'}
-          disabled={!settings || updating}
-          options={THINKING_LEVELS}
-          onChange={v => onBehaviorChange({ thinkingLevel: v })}
-        />
-      </div>
+    <SettingsRow
+      variant="factory"
+      label="Thinking level"
+      description="Reasoning budget for your chats — overrides the Factory defaults"
+    >
+      <ThinkingLevelPicker
+        ariaLabel="Thinking level"
+        value={settings?.thinkingLevel ?? 'off'}
+        disabled={!settings}
+        onChange={level => onBehaviorChange({ thinkingLevel: level ?? 'off' })}
+      />
     </SettingsRow>
   );
 }
 
 interface BehaviorSettingsProps {
   settings: AgentControllerSessionSettings | null;
-  updating: boolean;
-  onBehaviorChange: (updates: Partial<AgentControllerSessionSettings>) => void;
+  onBehaviorChange: (updates: Partial<AgentControllerSessionSettings>) => Promise<unknown>;
   permissions: PermissionRules | null;
   pendingPermissionCategory: ToolCategory | null;
   setPermissionForCategory: (category: ToolCategory, policy: PermissionPolicy) => Promise<void>;
@@ -128,7 +88,6 @@ interface BehaviorSettingsProps {
 
 export function BehaviorSettings({
   settings,
-  updating,
   onBehaviorChange,
   permissions,
   pendingPermissionCategory,
@@ -137,13 +96,17 @@ export function BehaviorSettings({
   const notificationMode = settings?.notifications ?? 'off';
   return (
     <div className="flex flex-col gap-8">
-      <SettingsSubsection title="General">
+      <SettingsSubsection
+        scope="factory"
+        title="General"
+        description="Shared by everyone working in this Factory. Auto-approve and smart editing reset when the server restarts."
+      >
         <SettingsCard>
           <SettingsRow variant="factory" label="Auto-approve tools" description="Run tool calls without asking (YOLO)">
             <Toggle
               ariaLabel="Auto-approve tools"
               checked={!!settings?.yolo}
-              disabled={!settings || updating}
+              disabled={!settings}
               onChange={v => onBehaviorChange({ yolo: v })}
             />
           </SettingsRow>
@@ -151,7 +114,7 @@ export function BehaviorSettings({
             <Toggle
               ariaLabel="Smart editing"
               checked={!!settings?.smartEditing}
-              disabled={!settings || updating}
+              disabled={!settings}
               onChange={v => onBehaviorChange({ smartEditing: v })}
             />
           </SettingsRow>
@@ -159,7 +122,7 @@ export function BehaviorSettings({
             <Segmented
               ariaLabel="Notifications"
               value={notificationMode}
-              disabled={!settings || updating}
+              disabled={!settings}
               options={NOTIFICATION_MODES}
               onChange={v => onBehaviorChange({ notifications: v })}
             />
@@ -199,8 +162,9 @@ function PermissionsSection({
 
   return (
     <SettingsSubsection
+      scope="factory"
       title="Tool permissions"
-      description="“Allow” runs without asking, “Ask” prompts you, “Deny” blocks it. Auto-approve above sets every category to Allow."
+      description="“Allow” runs without asking, “Ask” prompts you, “Deny” blocks it. Auto-approve above sets every category to Allow. Shared by everyone working in this Factory, and reset when the server restarts."
     >
       <SettingsCard>
         {TOOL_CATEGORIES.map(({ value, label, hint }) => (
@@ -374,57 +338,6 @@ function ModelPicker({
         </div>
       )}
     </div>
-  );
-}
-
-interface SegmentedProps<T extends string> {
-  value: T;
-  options: { value: T; label: string }[];
-  ariaLabel: string;
-  disabled?: boolean;
-  onChange: (value: T) => void;
-}
-
-export function Segmented<T extends string>({ value, options, ariaLabel, disabled, onChange }: SegmentedProps<T>) {
-  return (
-    <ButtonsGroup spacing="close" role="group" aria-label={ariaLabel}>
-      {options.map(o => (
-        <Button
-          key={o.value}
-          variant={value === o.value ? 'primary' : 'outline'}
-          size="sm"
-          aria-pressed={value === o.value}
-          disabled={disabled}
-          onClick={() => onChange(o.value)}
-        >
-          {o.label}
-        </Button>
-      ))}
-    </ButtonsGroup>
-  );
-}
-
-/** Select rendering of the same choice — callers decide which variant shows at which breakpoint. */
-export function SegmentedSelect<T extends string>({
-  value,
-  options,
-  ariaLabel,
-  disabled,
-  onChange,
-}: SegmentedProps<T>) {
-  return (
-    <Select value={value} disabled={disabled} onValueChange={v => onChange(v as T)}>
-      <SelectTrigger variant="outline" size="sm" aria-label={ariaLabel} className="w-full">
-        {options.find(o => o.value === value)?.label ?? value}
-      </SelectTrigger>
-      <SelectContent>
-        {options.map(o => (
-          <SelectItem key={o.value} value={o.value}>
-            {o.label}
-          </SelectItem>
-        ))}
-      </SelectContent>
-    </Select>
   );
 }
 
