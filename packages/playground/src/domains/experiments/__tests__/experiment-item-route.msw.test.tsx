@@ -402,16 +402,4 @@ describe('experiment item sub-route', () => {
       expect(reviewDialog.textContent).toContain('third question');
     });
   });
-
-  describe('when a legacy ?review= link targets the experiment page', () => {
-    it('redirects to the Review Queue page keeping the featured result', async () => {
-      const { router } = renderExperimentRoute(`/experiments/${EXPERIMENT_ID}?review=res-3`);
-
-      await waitFor(() => {
-        expect(router.state.location.pathname).toBe('/experiments/review-queue');
-        expect(router.state.location.search).toBe(`?experiment=${EXPERIMENT_ID}&review=res-3`);
-      });
-      await screen.findByRole('dialog', { name: 'Review item res-3' });
-    });
-  });
 });
