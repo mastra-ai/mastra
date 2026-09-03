@@ -909,10 +909,16 @@ export type ProcessorSpanType = Exclude<
   }[keyof SpanTypeMap],
   // `ProcessorPipelineAttributes` is all-optional, so the check above is
   // structural rather than nominal: a span type satisfies it by not
-  // conflicting with it, not by mixing it in. `AGENT_RUN` passes that way,
-  // and a processor labelling its span as the agent run that contains it
-  // would reparent the trace's own root. Exclude it explicitly.
-  SpanType.AGENT_RUN
+  // conflicting with it, not by mixing it in. Two types pass that way and are
+  // excluded explicitly.
+  //
+  // `AGENT_RUN`, because a processor labelling its span as the agent run that
+  // contains it would reparent the trace's own root.
+  //
+  // `SKILL_RESOLUTION`, because it is deprecated and no longer emitted; it
+  // stays in `SpanTypeMap` so stored traces keep resolving, but nothing new
+  // should declare it. Declare `SKILL_ACTION` with `operation: 'resolve'`.
+  SpanType.AGENT_RUN | SpanType.SKILL_RESOLUTION
 >;
 
 // ============================================================================
