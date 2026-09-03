@@ -5,6 +5,7 @@ import { GithubIcon } from '@mastra/playground-ui/icons/GithubIcon';
 import { Settings2 } from 'lucide-react';
 
 import { useGithubReposQuery } from '../../../../../hooks/useGithubRepos';
+import { useDebouncedValue } from '../../../../lib/hooks/useDebouncedValue';
 import { useGithubStatusQuery } from '../../../../../hooks/useGithubStatus';
 import { SkeletonRows } from '../../../../ui/SkeletonRows';
 import type { GithubRepo, GithubStatus } from '../../services/github';
@@ -91,7 +92,8 @@ function RepositoryResults({
   query,
   onSelectRepository,
 }: Pick<CreateFactoryRepositoryRowsProps, 'query' | 'onSelectRepository'>) {
-  const repos = useGithubReposQuery(query || undefined, true);
+  const debouncedQuery = useDebouncedValue(query, 750);
+  const repos = useGithubReposQuery(debouncedQuery || undefined, true);
 
   if (repos.isPending) {
     return <SkeletonRows label="Loading repositories" rows={3} rowClassName="mx-2 my-1 h-12 rounded-xl" />;

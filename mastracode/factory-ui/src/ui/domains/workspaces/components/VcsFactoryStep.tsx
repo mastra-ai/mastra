@@ -7,6 +7,7 @@ import { useState } from 'react';
 
 import { useGithubReposQuery } from '../../../../hooks/useGithubRepos';
 import { useGithubStatusQuery } from '../../../../hooks/useGithubStatus';
+import { useDebouncedValue } from '../../../lib/hooks/useDebouncedValue';
 import type { GithubRepo, GithubStatus } from '../services/github';
 import { SearchIcon } from '../../../ui/icons';
 import { SkeletonRows } from '../../../ui/SkeletonRows';
@@ -31,9 +32,10 @@ export function VcsFactoryStep({
   onSelectRepository,
 }: VcsFactoryStepProps) {
   const [query, setQuery] = useState('');
+  const debouncedQuery = useDebouncedValue(query, 750);
   const githubStatus = useGithubStatusQuery();
   const connected = githubStatus.data?.connected === true;
-  const repos = useGithubReposQuery(query || undefined, connected);
+  const repos = useGithubReposQuery(debouncedQuery || undefined, connected);
 
   return (
     <section
