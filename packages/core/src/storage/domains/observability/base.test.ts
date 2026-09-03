@@ -224,6 +224,11 @@ describe('ObservabilityStorage base class', () => {
     await expect(callThunk()).rejects.toThrow(expectedMessage);
   });
 
+  it('treats empty score and feedback deletion requests as no-ops', async () => {
+    await expect(storage.deleteScores({ scoreIds: [] })).resolves.toBeUndefined();
+    await expect(storage.deleteFeedback({ feedbackIds: [] })).resolves.toBeUndefined();
+  });
+
   describe('getStructure / getTraceLight bidirectional forwarding', () => {
     const fakeResponse = {
       traceId: 't1',

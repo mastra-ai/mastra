@@ -668,7 +668,9 @@ export class ObservabilityStorage extends StorageDomain {
    * empty ids array is a no-op. When `organizationId`/`resourceId` are provided,
    * only scores matching that tenant scope are deleted.
    */
-  async deleteScores(_args: DeleteScoresArgs): Promise<void> {
+  async deleteScores(args: DeleteScoresArgs): Promise<void> {
+    if (args.scoreIds.length === 0) return;
+
     throw new MastraError({
       id: 'OBSERVABILITY_STORAGE_DELETE_SCORES_NOT_IMPLEMENTED',
       domain: ErrorDomain.MASTRA_OBSERVABILITY,
@@ -767,7 +769,9 @@ export class ObservabilityStorage extends StorageDomain {
    * an empty ids array is a no-op. When `organizationId`/`resourceId` are
    * provided, only feedback matching that tenant scope is deleted.
    */
-  async deleteFeedback(_args: DeleteFeedbackArgs): Promise<void> {
+  async deleteFeedback(args: DeleteFeedbackArgs): Promise<void> {
+    if (args.feedbackIds.length === 0) return;
+
     throw new MastraError({
       id: 'OBSERVABILITY_STORAGE_DELETE_FEEDBACK_NOT_IMPLEMENTED',
       domain: ErrorDomain.MASTRA_OBSERVABILITY,
