@@ -12,6 +12,7 @@ import type {
   KnowledgeActivityAction,
   KnowledgeNode,
   KnowledgeRecord,
+  KnowledgeScopeAddress,
   KnowledgeScopeIds,
   KnowledgeStorage,
 } from '@mastra/core/storage';
@@ -33,11 +34,19 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 
 export interface KnowledgeRouteLimits {
   maxNodes: number;
+  maxEdges: number;
+  maxBoundaryNodes: number;
   maxRecords: number;
   maxFallbackLookups: number;
 }
 
-const DEFAULT_LIMITS: KnowledgeRouteLimits = { maxNodes: 500, maxRecords: 2000, maxFallbackLookups: 100 };
+const DEFAULT_LIMITS: KnowledgeRouteLimits = {
+  maxNodes: 250,
+  maxEdges: 500,
+  maxBoundaryNodes: 100,
+  maxRecords: 1000,
+  maxFallbackLookups: 100,
+};
 
 export interface KnowledgeAccessProfile {
   id: string;
@@ -85,6 +94,9 @@ export interface KnowledgeGraphNode {
   description?: string;
   pinned: boolean;
   recordCount: number;
+  boundary?: {
+    scope: KnowledgeScopeTreeNode;
+  };
   createdAt: string;
   updatedAt: string;
 }
@@ -95,6 +107,7 @@ export interface KnowledgeGraphEdge {
   target: string;
   type: 'wikilink';
   recordId: string;
+  boundary?: boolean;
   pinned?: boolean;
 }
 
@@ -123,15 +136,22 @@ export interface KnowledgeScopeTreePayload {
 
 export interface KnowledgeGraphPayload {
   view: 'project' | 'thread';
-  scopeId: string;
+  scope: KnowledgeScopeTreeNode;
   nodes: KnowledgeGraphNode[];
   edges: KnowledgeGraphEdge[];
   records: KnowledgeGraphRecord[];
-  truncated: boolean;
-  outOfWindow: Array<{ id: string; name: string }>;
-  unresolvedCapped: { count: number; names: string[] };
-  pinCensus: { resource: number; thread: number | null };
-  version: string | null;
+  page: {
+    nextCursor?: string;
+    truncated: boolean;
+    terminalBounds: Array<'record-window' | 'edge-window' | 'wikilink-resolution-window'>;
+  };
+  limits: {
+    maxNodes: number;
+    maxEdges: number;
+    maxBoundaryNodes: number;
+    boundaryHops: 1;
+  };
+  version?: string;
 }
 
 export interface KnowledgeNodeRecordPayload {
@@ -436,38 +456,22 @@ function boundedDate(value: string | undefined): Date | undefined {
 }
 
 class WikilinkResolver {
-  readonly #inWindow = new Map<string, KnowledgeNode>();
-  readonly #windowIds = new Set<string>();
-  readonly #fallbackCache = new Map<string, KnowledgeNode | null>();
-  #fallbackLookups = 0;
-  readonly #knowledge: Knowledge;
-  readonly #store: KnowledgeStorage;
-  readonly #maxFallbackLookups: number;
-  readonly outOfWindow = new Map<string, { id: string; name: string }>();
-  readonly cappedNames: string[] = [];
-  readonly #cappedSeen = new Set<string>();
+  readonly #windowIds: Set<string>;
+  readonly #cache = new Map<string, KnowledgeNode | null>();
+  #lookups = 0;
+  #capped = false;
 
-  private constructor(knowledge: Knowledge, store: KnowledgeStorage, maxFallbackLookups: number) {
-    this.#knowledge = knowledge;
-    this.#store = store;
-    this.#maxFallbackLookups = maxFallbackLookups;
+  private constructor(
+    readonly knowledge: Knowledge,
+    nodes: KnowledgeNode[],
+    readonly selectedScopeId: string,
+    readonly maxLookups: number,
+  ) {
+    this.#windowIds = new Set(nodes.map(node => node.id));
   }
 
-  static async create(
-    knowledge: Knowledge,
-    store: KnowledgeStorage,
-    nodes: KnowledgeNode[],
-    maxFallbackLookups: number,
-  ) {
-    const resolver = new WikilinkResolver(knowledge, store, maxFallbackLookups);
-    await Promise.all(
-      nodes.map(async node => {
-        const scopeIds = await store.getNodeScopeIds(node.id);
-        resolver.#inWindow.set(`${knowledgeScopeIdsKey(scopeIds)}\u0000${node.name.trim().toLocaleLowerCase()}`, node);
-        resolver.#windowIds.add(node.id);
-      }),
-    );
-    return resolver;
+  static create(knowledge: Knowledge, nodes: KnowledgeNode[], selectedScopeId: string, maxLookups: number) {
+    return new WikilinkResolver(knowledge, nodes, selectedScopeId, maxLookups);
   }
 
   inWindowId(id: string): boolean {
@@ -475,31 +479,33 @@ class WikilinkResolver {
   }
 
   async resolve(name: string, scopeIds: KnowledgeScopeIds): Promise<KnowledgeNode | null> {
-    const lower = name.trim().toLocaleLowerCase();
-    const exact = this.#inWindow.get(`${knowledgeScopeIdsKey(scopeIds)}\u0000${lower}`);
-    if (exact) return exact;
-    const cacheKey = `${knowledgeScopeIdsKey(scopeIds)}\u0000${lower}`;
-    if (this.#fallbackCache.has(cacheKey)) return this.#track(this.#fallbackCache.get(cacheKey) ?? null);
-    if (this.#fallbackLookups >= this.#maxFallbackLookups) {
-      if (!this.#cappedSeen.has(lower)) {
-        this.#cappedSeen.add(lower);
-        if (this.cappedNames.length < 100) this.cappedNames.push(name.trim());
-      }
+    const cacheKey = `${knowledgeScopeIdsKey(scopeIds)}\u0000${name.trim().toLocaleLowerCase()}`;
+    if (this.#cache.has(cacheKey)) return this.#cache.get(cacheKey) ?? null;
+    if (this.#lookups >= this.maxLookups) {
+      this.#capped = true;
       return null;
     }
-    this.#fallbackLookups += 1;
-    const resolved = await this.#knowledge.getNodeByName({ name, scopeIds }).catch(() => null);
-    this.#fallbackCache.set(cacheKey, resolved);
-    return this.#track(resolved);
-  }
-
-  #track(node: KnowledgeNode | null): KnowledgeNode | null {
-    if (node && !this.#windowIds.has(node.id)) this.outOfWindow.set(node.id, { id: node.id, name: node.name });
-    return node;
+    this.#lookups += 1;
+    const localMatches = await this.knowledge
+      .listNodes({
+        scopeIds,
+        membershipScopeIds: [this.selectedScopeId],
+        namePrefix: name,
+        isScope: false,
+        limit: 2,
+      })
+      .catch(() => []);
+    const exactLocalMatches = localMatches.filter(
+      node => node.name.toLocaleLowerCase() === name.trim().toLocaleLowerCase(),
+    );
+    const exactLocal = exactLocalMatches.length === 1 ? exactLocalMatches.at(0) : undefined;
+    const resolved = exactLocal ?? (await this.knowledge.getNodeByName({ name, scopeIds }).catch(() => null));
+    this.#cache.set(cacheKey, resolved ?? null);
+    return resolved ?? null;
   }
 
   get cappedCount(): number {
-    return this.#cappedSeen.size;
+    return this.#capped ? 1 : 0;
   }
 }
 
@@ -515,6 +521,7 @@ type KnowledgeSurfaceHandleKind =
   | 'import-runs-cursor'
   | 'import-activity-cursor'
   | 'proposal-cursor'
+  | 'lens-cursor'
   | 'curation-cursor'
   | 'curation-record-cursor';
 
@@ -637,24 +644,46 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
   async #resolveAccessProfile(input: {
     c: Context;
     knowledge: Knowledge;
-    store: KnowledgeStorage;
     orgId: string;
     userId: string;
     projectId: string;
-    orgScopeId: string;
-    resourceScopeId: string;
     threadId?: string;
-    threadScopeId?: string;
   }): Promise<
     | {
         scopeIds: KnowledgeScopeIds;
         rootScopeId: string;
+        orgScopeId: string;
+        resourceScopeId: string;
+        threadScopeId?: string;
         perspectiveKey: string;
         curatorProfileId?: string;
         curationScopeIds: KnowledgeScopeIds;
       }
     | undefined
   > {
+    const builtInScopes: KnowledgeAccessProfileInput['builtInScopes'] = {
+      org: {
+        address: `org:${input.orgId}`,
+        contextualScopeAddress: `org:${input.orgId}`,
+        parameters: { orgId: input.orgId },
+      },
+      resource: {
+        address: `resource:${input.projectId}`,
+        parentAddresses: [`org:${input.orgId}`],
+        contextualScopeAddress: `org:${input.orgId}`,
+        parameters: { resourceId: input.projectId },
+      },
+      ...(input.threadId
+        ? {
+            thread: {
+              address: `resource:${input.projectId}:thread:${input.threadId}`,
+              parentAddresses: [`resource:${input.projectId}`],
+              contextualScopeAddress: `resource:${input.projectId}`,
+              parameters: { resourceId: input.projectId, threadId: input.threadId },
+            },
+          }
+        : {}),
+    };
     const profile = await this.deps.accessProfile({
       request: input.c.req.raw,
       knowledge: input.knowledge,
@@ -662,82 +691,77 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
       userId: input.userId,
       projectId: input.projectId,
       threadId: input.threadId,
-      builtInScopes: {
-        org: {
-          address: `org:${input.orgId}`,
-          contextualScopeAddress: `org:${input.orgId}`,
-          parameters: { orgId: input.orgId },
-        },
-        resource: {
-          address: `resource:${input.projectId}`,
-          contextualScopeAddress: `org:${input.orgId}`,
-          parameters: { resourceId: input.projectId },
-        },
-        ...(input.threadId
-          ? {
-              thread: {
-                address: `resource:${input.projectId}:thread:${input.threadId}`,
-                contextualScopeAddress: `resource:${input.projectId}`,
-                parameters: { resourceId: input.projectId, threadId: input.threadId },
-              },
-            }
-          : {}),
-      },
+      builtInScopes,
     });
     if (!profile?.id.trim()) return undefined;
-    const scopesByAddress = new Map(
+    const profileScopesByAddress = new Map(
       [...profile.baselineScopes, ...(profile.intakeScopes ?? [])].map(scope => [scope.address, scope]),
     );
-    if (scopesByAddress.size === 0 || !scopesByAddress.has(profile.rootScopeAddress)) return undefined;
+    if (profileScopesByAddress.size === 0 || !profileScopesByAddress.has(profile.rootScopeAddress)) return undefined;
+    const scopesByAddress = new Map(
+      [
+        builtInScopes.org,
+        builtInScopes.resource,
+        ...(builtInScopes.thread ? [builtInScopes.thread] : []),
+        ...profileScopesByAddress.values(),
+      ].map(scope => [scope.address, scope]),
+    );
+    const entries = [...scopesByAddress.entries()];
+    let resolvedScopes: Array<KnowledgeScopeAddress | null>;
     try {
       const existingScopes = await Promise.all(
-        [...scopesByAddress.keys()].map(address => input.store.getScopeAddress(address)),
+        entries.map(([address]) => input.knowledge.resolveScopeAddress(address)),
       );
       await Promise.all(
-        [...scopesByAddress.values()]
-          .filter((_, index) => !existingScopes[index])
-          .map(scope => input.knowledge.materializeScope(scope)),
+        entries.flatMap(([, scope], index) => (existingScopes[index] ? [] : [input.knowledge.materializeScope(scope)])),
       );
+      resolvedScopes = await Promise.all(entries.map(([address]) => input.knowledge.resolveScopeAddress(address)));
     } catch {
       return undefined;
     }
-    const resolvedScopes = await Promise.all(
-      [...scopesByAddress.keys()].map(address => input.store.getScopeAddress(address)),
-    );
-    if (resolvedScopes.some(scope => !scope)) return undefined;
+    const resolvedByAddress = new Map<string, string>();
+    entries.forEach(([address], index) => {
+      const resolved = resolvedScopes[index];
+      if (resolved) resolvedByAddress.set(address, resolved.scopeNodeId);
+    });
     const curationScopeAddresses = new Set(profile.curationScopeAddresses ?? []);
     const vouchedScopeAddresses = new Set(
       profile.vouchedScopeAddresses ??
-        [...scopesByAddress.keys()].filter(address => !curationScopeAddresses.has(address)),
+        [...profileScopesByAddress.keys()].filter(address => !curationScopeAddresses.has(address)),
     );
-    if ([...vouchedScopeAddresses].some(address => !scopesByAddress.has(address))) return undefined;
-    const scopeIds = [...scopesByAddress.keys()]
-      .map((address, index) => ({ address, scope: resolvedScopes[index] }))
-      .filter(({ address }) => vouchedScopeAddresses.has(address))
-      .map(({ scope }) => scope!.scopeNodeId)
-      .sort();
-    const rootScope = await input.store.getScopeAddress(profile.rootScopeAddress);
-    if (!rootScope) return undefined;
-    const curationScopeIds: string[] = [];
-    for (const address of profile.curationScopeAddresses ?? []) {
-      if (!scopesByAddress.has(address)) return undefined;
-      const scope = await input.store.getScopeAddress(address);
-      if (!scope) return undefined;
-      curationScopeIds.push(scope.scopeNodeId);
+    if ([...vouchedScopeAddresses, ...curationScopeAddresses].some(address => !resolvedByAddress.has(address))) {
+      return undefined;
     }
+    const scopeIds = [...vouchedScopeAddresses]
+      .flatMap(address => {
+        const scopeId = resolvedByAddress.get(address);
+        return scopeId ? [scopeId] : [];
+      })
+      .toSorted();
+    const rootScopeId = resolvedByAddress.get(profile.rootScopeAddress);
+    const orgScopeId = resolvedByAddress.get(`org:${input.orgId}`);
+    const resourceScopeId = resolvedByAddress.get(`resource:${input.projectId}`);
+    const threadScopeId = input.threadId
+      ? resolvedByAddress.get(`resource:${input.projectId}:thread:${input.threadId}`)
+      : undefined;
+    if (!rootScopeId || !orgScopeId || !resourceScopeId || (input.threadId && !threadScopeId)) return undefined;
+    const curationScopeIds = [...curationScopeAddresses].flatMap(address => {
+      const scopeId = resolvedByAddress.get(address);
+      return scopeId ? [scopeId] : [];
+    });
     return {
       scopeIds,
-      rootScopeId: rootScope.scopeNodeId,
+      rootScopeId,
+      orgScopeId,
+      resourceScopeId,
+      ...(threadScopeId ? { threadScopeId } : {}),
       perspectiveKey: `${input.projectId}\u0000${input.userId}\u0000${profile.id}\u0000${knowledgeScopeIdsKey(scopeIds)}`,
       curatorProfileId: profile.curatorProfileId?.trim() || undefined,
       curationScopeIds: [...new Set(curationScopeIds)].sort(),
     };
   }
 
-  async #resolveView(
-    c: Context,
-    preflight: { scopeId?: string; nodeId?: string } = {},
-  ): Promise<ResolvedView | { response: Response }> {
+  async #resolveView(c: Context): Promise<ResolvedView | { response: Response }> {
     await this.deps.auth.ensureUser(c);
     const tenant = this.deps.auth.tenant(c);
     if (!tenant) return { response: c.json({ error: 'unauthorized' }, 401) };
@@ -777,64 +801,23 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
     const requestedThreadId = c.req.query('threadId');
     const threadId = boundedThreadId(requestedThreadId);
     if (requestedThreadId !== undefined && !threadId) return { response: c.json({ error: 'thread_not_found' }, 404) };
-    const threadAddress = threadId ? `resource:${projectId}:thread:${threadId}` : undefined;
-    const thread = threadAddress ? await store.getScopeAddress(threadAddress) : undefined;
-    if (threadAddress && !thread) return { response: c.json({ error: 'thread_not_found' }, 404) };
-
-    const orgAddress = `org:${tenant.orgId}`;
-    const resourceAddress = `resource:${projectId}`;
-    const [existingOrg, existingResource] = await Promise.all([
-      store.getScopeAddress(orgAddress),
-      store.getScopeAddress(resourceAddress),
+    const [existingOrg, existingResource, existingThread] = await Promise.all([
+      knowledge.resolveScopeAddress(`org:${tenant.orgId}`),
+      knowledge.resolveScopeAddress(`resource:${projectId}`),
+      threadId ? knowledge.resolveScopeAddress(`resource:${projectId}:thread:${threadId}`) : undefined,
     ]);
     if (!existingOrg || !existingResource) return { response: c.json({ error: 'knowledge_not_found' }, 404) };
-    if (preflight.scopeId || preflight.nodeId) {
-      const visibleScopeIds = [
-        existingOrg.scopeNodeId,
-        existingResource.scopeNodeId,
-        ...(thread ? [thread.scopeNodeId] : []),
-      ];
-      if (preflight.scopeId) {
-        if (!UUID_RE.test(preflight.scopeId)) return { response: c.json({ error: 'scope_not_found' }, 404) };
-        const scope = await store.getNode(preflight.scopeId);
-        if (!scope?.isScope || scope.deletedAt) return { response: c.json({ error: 'scope_not_found' }, 404) };
-        const frontier = new Set(visibleScopeIds);
-        const pending = [scope.id];
-        const visited = new Set<string>();
-        let reachable = false;
-        while (pending.length > 0 && visited.size <= this.#limits.maxNodes) {
-          const current = pending.pop()!;
-          if (frontier.has(current)) {
-            reachable = true;
-            break;
-          }
-          if (visited.has(current)) continue;
-          visited.add(current);
-          pending.push(...(await store.getNodeScopeIds(current)));
-        }
-        if (!reachable) return { response: c.json({ error: 'scope_not_found' }, 404) };
-      }
-      if (preflight.nodeId && !UUID_RE.test(preflight.nodeId)) {
-        return { response: c.json({ error: 'node_not_found' }, 404) };
-      }
-    }
-
-    const orgScopeId = existingOrg.scopeNodeId;
-    const resourceScopeId = existingResource.scopeNodeId;
-    const threadScopeId = thread?.scopeNodeId;
+    if (threadId && !existingThread) return { response: c.json({ error: 'thread_not_found' }, 404) };
     const profile = await this.#resolveAccessProfile({
       c,
       knowledge,
-      store,
       orgId: tenant.orgId,
       userId: tenant.userId,
       projectId,
-      orgScopeId,
-      resourceScopeId,
       ...(threadId ? { threadId } : {}),
-      ...(threadScopeId ? { threadScopeId } : {}),
     });
     if (!profile) return { response: c.json({ error: 'knowledge_profile_unavailable' }, 503) };
+    const { orgScopeId, resourceScopeId, threadScopeId } = profile;
     const frontier = await knowledge.evaluateAccess(profile.scopeIds);
     const perspectiveKey = `${profile.perspectiveKey}\u0000${frontier.accessEpoch}`;
     const readableScopeIds = Object.entries(frontier.scopes)
@@ -894,7 +877,8 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
         await view.knowledge.listNodes({
           scopeIds: view.scopeIds,
           membershipScopeIds: [scopeId],
-          limit: this.#limits.maxNodes,
+          name: PINNED_NODE_NAME,
+          limit: 1,
         })
       ).find(candidate => candidate.name === PINNED_NODE_NAME);
       if (node) out.push({ level, scopeId, id: node.id });
@@ -916,29 +900,39 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
     return out;
   }
 
-  async #resolveSelectedScope(
-    view: ResolvedView,
-    rawScopeId: string | undefined,
-    requireReadable = false,
-  ): Promise<KnowledgeNode | null> {
+  async #resolveSelectedScope(view: ResolvedView, rawScopeId: string | undefined): Promise<KnowledgeNode | null> {
     const scopeId = rawScopeId ?? view.threadScopeId ?? view.resourceScopeId;
     if (!UUID_RE.test(scopeId)) return null;
-    const scope = await view.store.getNode(scopeId);
+    const scope = await view.knowledge.getScope({ id: scopeId, scopeIds: view.scopeIds });
     if (!scope?.isScope || scope.deletedAt) return null;
     const roots = new Set([view.orgScopeId, view.resourceScopeId, ...(view.threadScopeId ? [view.threadScopeId] : [])]);
     const pending = [scope.id];
     const visited = new Set<string>();
     while (pending.length > 0 && visited.size <= this.#limits.maxNodes) {
       const current = pending.pop()!;
-      if (roots.has(current)) {
-        if (!requireReadable || view.readableScopeIds.includes(scope.id)) return scope;
-        return view.knowledge.getNode({ id: scope.id, scopeIds: view.scopeIds });
-      }
+      if (roots.has(current)) return scope;
       if (visited.has(current)) continue;
       visited.add(current);
-      pending.push(...(await view.store.getNodeScopeIds(current)));
+      const parents = await view.knowledge.getNodeScopes({ id: current, scopeIds: view.scopeIds });
+      pending.push(...parents.map(parent => parent.id));
     }
     return null;
+  }
+
+  async #lensTargetScope(
+    view: ResolvedView,
+    nodeId: string,
+    selectedScopeId: string,
+  ): Promise<KnowledgeNode | undefined> {
+    const memberships = (await view.knowledge.getNodeScopes({ id: nodeId, scopeIds: view.scopeIds })).toSorted(
+      (left, right) => left.id.localeCompare(right.id),
+    );
+    const selected = memberships.find(scope => scope.id === selectedScopeId);
+    if (selected) return selected;
+    for (const scope of memberships) {
+      if (await this.#resolveSelectedScope(view, scope.id)) return scope;
+    }
+    return undefined;
   }
 
   #scopeTreeNode(
@@ -1331,7 +1325,7 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
           if (!companionScopeId || !view.curationScopeIds.includes(companionScopeId)) {
             return c.json({ error: 'scope_not_found' }, 404);
           }
-          const selected = await this.#resolveSelectedScope(view, companionScopeId, true);
+          const selected = await this.#resolveSelectedScope(view, companionScopeId);
           if (!selected) return c.json({ error: 'scope_not_found' }, 404);
           const cursorHandle = c.req.query('cursor');
           const cursor = this.#resolveHandle(view.projectId, view.perspectiveKey, 'curation-cursor', cursorHandle);
@@ -1504,7 +1498,7 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
           if (!companionScopeId || !view.curationScopeIds.includes(companionScopeId) || !nodeId) {
             return c.json({ error: 'curation_not_found' }, 404);
           }
-          if (!(await this.#resolveSelectedScope(view, companionScopeId, true))) {
+          if (!(await this.#resolveSelectedScope(view, companionScopeId))) {
             return c.json({ error: 'curation_not_found' }, 404);
           }
           const version =
@@ -1550,7 +1544,7 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
                 'scope',
                 typeof input.destinationScopeId === 'string' ? input.destinationScopeId : undefined,
               );
-              if (!destinationScopeId || !(await this.#resolveSelectedScope(view, destinationScopeId, true))) {
+              if (!destinationScopeId || !(await this.#resolveSelectedScope(view, destinationScopeId))) {
                 return c.json({ error: 'curation_not_found' }, 404);
               }
               result = await curator.promote({
@@ -1627,7 +1621,7 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
           if ('response' in view) return view.response;
           const scopeId = this.#resolveResource(projectId, view.perspectiveKey, 'scope', scopeHandle);
           if (scopeHandle && !scopeId) return loose(c).json({ error: 'scope_not_found' }, 404);
-          const selected = await this.#resolveSelectedScope(view, scopeId, true);
+          const selected = await this.#resolveSelectedScope(view, scopeId);
           if (!selected) return loose(c).json({ error: 'scope_not_found' }, 404);
           const cursorHandle = loose(c).req.query('cursor');
           const cursor = this.#resolveHandle(projectId, view.perspectiveKey, 'scope-cursor', cursorHandle);
@@ -1673,91 +1667,143 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
       registerApiRoute('/web/factory/projects/:id/knowledge/subgraph', {
         method: 'GET',
         requiresAuth: false,
-        handler: async c => {
-          const projectId = loose(c).req.param('id')!;
-          const scopeHandle = loose(c).req.query('scopeId');
-          if (!isKnowledgeHandle(scopeHandle)) return loose(c).json({ error: 'scope_not_found' }, 404);
-          const view = await this.#resolveView(loose(c));
+        handler: async raw => {
+          const c = loose(raw);
+          const projectId = c.req.param('id')!;
+          const scopeHandle = c.req.query('scopeId');
+          if (!isKnowledgeHandle(scopeHandle)) return c.json({ error: 'scope_not_found' }, 404);
+          const view = await this.#resolveView(c);
           if ('response' in view) return view.response;
           const scopeId = this.#resolveResource(projectId, view.perspectiveKey, 'scope', scopeHandle);
-          if (scopeHandle && !scopeId) return loose(c).json({ error: 'scope_not_found' }, 404);
-          const selected = await this.#resolveSelectedScope(view, scopeId, true);
-          if (!selected) return loose(c).json({ error: 'scope_not_found' }, 404);
-          const { store } = view;
-          const scopeIds = [selected.id];
-          const resolutionScopeIds = view.scopeIds;
+          if (scopeHandle && !scopeId) return c.json({ error: 'scope_not_found' }, 404);
+          const selected = await this.#resolveSelectedScope(view, scopeId);
+          if (!selected) return c.json({ error: 'scope_not_found' }, 404);
+
+          const requestedLimit = Number(c.req.query('limit') ?? this.#limits.maxNodes);
+          const limit = Number.isInteger(requestedLimit)
+            ? Math.min(Math.max(requestedLimit, 1), this.#limits.maxNodes)
+            : this.#limits.maxNodes;
+          const cursorHandle = c.req.query('cursor');
+          const cursorPayload = this.#resolveHandle(projectId, view.perspectiveKey, 'lens-cursor', cursorHandle);
+          if (cursorHandle && !cursorPayload) return c.json({ error: 'cursor_not_found' }, 404);
+          let cursor: string | undefined;
+          if (cursorPayload) {
+            try {
+              const parsed: unknown = JSON.parse(cursorPayload);
+              if (
+                !Array.isArray(parsed) ||
+                parsed.length !== 3 ||
+                parsed[0] !== selected.id ||
+                parsed[1] !== limit ||
+                typeof parsed[2] !== 'string'
+              ) {
+                return c.json({ error: 'cursor_not_found' }, 404);
+              }
+              cursor = parsed[2];
+            } catch {
+              return c.json({ error: 'cursor_not_found' }, 404);
+            }
+          }
+
           const selectedView: ResolvedView = {
             ...view,
             pinScopes: view.pinScopes.filter(level => level.scopeId === selected.id),
           };
-          const fetched = await view.knowledge.listNodes({
-            scopeIds: view.scopeIds,
-            membershipScopeIds: scopeIds,
-            isScope: false,
-            limit: this.#limits.maxNodes + 1,
-          });
-          let truncated = fetched.length > this.#limits.maxNodes;
           const pinnedNodeIds = await this.#pinnedNodeIds(selectedView);
           const pinnedNodeIdSet = new Set(pinnedNodeIds.map(value => value.id));
-          const nodes = fetched.slice(0, this.#limits.maxNodes).filter(node => !pinnedNodeIdSet.has(node.id));
+          const fetched: KnowledgeNode[] = [];
+          const fetchTarget = limit + pinnedNodeIdSet.size + 1;
+          let nodeCursor = cursor;
+          while (fetched.length < fetchTarget) {
+            const batchLimit = Math.min(100, fetchTarget - fetched.length);
+            const batch = await view.knowledge.listNodes({
+              scopeIds: view.scopeIds,
+              membershipScopeIds: [selected.id],
+              isScope: false,
+              ...(nodeCursor ? { cursor: nodeCursor } : {}),
+              limit: batchLimit,
+            });
+            fetched.push(...batch);
+            const batchLast = batch.at(-1);
+            if (batch.length < batchLimit || !batchLast) break;
+            nodeCursor = createKnowledgeNodeCursor(batchLast, { isScope: false });
+          }
+          const eligible = fetched.filter(node => !pinnedNodeIdSet.has(node.id));
+          const nodes = eligible.slice(0, limit);
+          const last = eligible.length > limit ? nodes.at(-1) : undefined;
+
           const recordWindow: KnowledgeRecord[] = [];
+          let recordsTruncated = false;
           for (const node of nodes) {
-            if (recordWindow.length > this.#limits.maxRecords) break;
+            if (recordWindow.length >= this.#limits.maxRecords) {
+              recordsTruncated = true;
+              break;
+            }
             const result = await view.knowledge.listRecords({
               node: node.id,
               scopeIds: view.scopeIds,
-              membershipScopeIds: scopeIds,
-              limit: this.#limits.maxRecords + 1 - recordWindow.length,
+              membershipScopeIds: [selected.id],
+              limit: Math.min(100, this.#limits.maxRecords - recordWindow.length + 1),
             });
-            recordWindow.push(...result.records);
+            if (result.nextCursor || result.records.length + recordWindow.length > this.#limits.maxRecords) {
+              recordsTruncated = true;
+            }
+            recordWindow.push(...result.records.slice(0, this.#limits.maxRecords - recordWindow.length));
+          }
+          const recordIds = new Set(recordWindow.map(record => record.id));
+          for (const node of nodes) {
+            if (recordWindow.length >= this.#limits.maxRecords) {
+              recordsTruncated = true;
+              break;
+            }
+            const result = await view.knowledge.listMentioningRecords({
+              node: node.id,
+              scopeIds: view.scopeIds,
+              membershipScopeIds: [selected.id],
+              limit: Math.min(100, this.#limits.maxRecords - recordWindow.length + 1),
+            });
+            if (result.nextCursor) recordsTruncated = true;
+            for (const record of result.records) {
+              if (recordIds.has(record.id)) continue;
+              if (recordWindow.length >= this.#limits.maxRecords) {
+                recordsTruncated = true;
+                break;
+              }
+              recordIds.add(record.id);
+              recordWindow.push(record);
+            }
           }
           recordWindow.sort((a, b) => b.id.localeCompare(a.id));
-          if (recordWindow.length > this.#limits.maxRecords) {
-            truncated = true;
-            recordWindow.length = this.#limits.maxRecords;
-          }
-          const resolver = await WikilinkResolver.create(view.knowledge, store, nodes, this.#limits.maxFallbackLookups);
-          const edges: KnowledgeGraphEdge[] = [];
-          const boundaryNodes = new Map<string, KnowledgeNode>();
-          const edgeSeen = new Set<string>();
-          const recordCounts = new Map<string, number>();
-          for (const record of recordWindow) {
-            recordCounts.set(record.nodeId, (recordCounts.get(record.nodeId) ?? 0) + 1);
-            const nodeIds = [record.nodeId];
-            for (const name of parseKnowledgeWikilinks(record.text)) {
-              const target = await resolver.resolve(name, resolutionScopeIds);
-              if (!target || target.id === record.nodeId) continue;
-              if (!resolver.inWindowId(target.id)) {
-                if (!boundaryNodes.has(target.id) && nodes.length + boundaryNodes.size >= this.#limits.maxNodes)
-                  continue;
-                boundaryNodes.set(target.id, target);
-              }
-              if (!nodeIds.includes(target.id)) nodeIds.push(target.id);
-              const key = `${record.nodeId}\u0000${target.id}`;
-              if (edgeSeen.has(key)) continue;
-              edgeSeen.add(key);
-              edges.push({
-                id: `wikilink:${record.nodeId}:${target.id}`,
-                source: record.nodeId,
-                target: target.id,
-                type: 'wikilink',
-                recordId: record.id,
-              });
-            }
-          }
+
+          const resolver = WikilinkResolver.create(view.knowledge, nodes, selected.id, this.#limits.maxFallbackLookups);
           const pinnedRecords = await this.#pinnedRecords(selectedView, pinnedNodeIds);
           const accented = new Set<string>();
+          const edges: KnowledgeGraphEdge[] = [];
+          const boundaryNodes = new Map<string, { node: KnowledgeNode; scope?: KnowledgeNode }>();
+          const edgeSeen = new Set<string>();
+          let edgesTruncated = false;
           for (const { record } of pinnedRecords) {
             const targets: string[] = [];
+            let targetsTruncated = false;
             for (const name of parseKnowledgeWikilinks(record.text)) {
-              const target = await resolver.resolve(name, resolutionScopeIds);
-              if (target && resolver.inWindowId(target.id) && !targets.includes(target.id)) targets.push(target.id);
+              const target = await resolver.resolve(name, view.scopeIds);
+              if (!target) continue;
+              if (!resolver.inWindowId(target.id)) {
+                edgesTruncated = true;
+                targetsTruncated = true;
+                continue;
+              }
+              if (!targets.includes(target.id)) targets.push(target.id);
             }
-            if (targets.length === 1) accented.add(targets[0]!);
+            if (targets.length === 1 && !targetsTruncated) accented.add(targets[0]!);
             for (let a = 0; a < targets.length; a++) {
               for (let b = a + 1; b < targets.length; b++) {
                 const key = `${targets[a]}\u0000${targets[b]}\u0000pin`;
                 if (edgeSeen.has(key)) continue;
+                if (edges.length >= this.#limits.maxEdges) {
+                  edgesTruncated = true;
+                  continue;
+                }
                 edgeSeen.add(key);
                 edges.push({
                   id: `pin:${record.id}:${targets[a]}:${targets[b]}`,
@@ -1770,12 +1816,64 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
               }
             }
           }
+          const recordCounts = new Map<string, number>();
+          for (const record of recordWindow) {
+            recordCounts.set(record.nodeId, (recordCounts.get(record.nodeId) ?? 0) + 1);
+            if (!resolver.inWindowId(record.nodeId)) {
+              edgesTruncated = true;
+              continue;
+            }
+            for (const name of parseKnowledgeWikilinks(record.text)) {
+              const target = await resolver.resolve(name, view.scopeIds);
+              if (!target || target.id === record.nodeId) continue;
+              const outsideWindow = !resolver.inWindowId(target.id);
+              let boundary = false;
+              if (outsideWindow) {
+                const existing = boundaryNodes.get(target.id);
+                if (existing) {
+                  boundary = Boolean(existing.scope);
+                } else {
+                  const targetScope = await this.#lensTargetScope(view, target.id, selected.id);
+                  if (!targetScope) continue;
+                  if (targetScope.id === selected.id) {
+                    edgesTruncated = true;
+                    continue;
+                  }
+                  if (boundaryNodes.size >= this.#limits.maxBoundaryNodes) {
+                    edgesTruncated = true;
+                    continue;
+                  }
+                  boundary = true;
+                  boundaryNodes.set(target.id, { node: target, scope: targetScope });
+                }
+              }
+              const key = `${record.nodeId}\u0000${target.id}`;
+              if (edgeSeen.has(key)) continue;
+              if (edges.length >= this.#limits.maxEdges) {
+                edgesTruncated = true;
+                continue;
+              }
+              edgeSeen.add(key);
+              edges.push({
+                id: `wikilink:${record.nodeId}:${target.id}`,
+                source: record.nodeId,
+                target: target.id,
+                type: 'wikilink',
+                recordId: record.id,
+                ...(boundary ? { boundary: true } : {}),
+              });
+            }
+          }
+
           const activity = await view.knowledge.listActivity({
             scopeIds: view.scopeIds,
             membershipScopeIds: [selected.id],
             limit: 1,
           });
-          const graphNodes = [...nodes, ...boundaryNodes.values()].map(node => {
+          const graphNodes = [
+            ...nodes.map(node => ({ node, boundaryScope: undefined })),
+            ...[...boundaryNodes.values()].map(value => ({ node: value.node, boundaryScope: value.scope })),
+          ].map(({ node, boundaryScope }) => {
             const description = metadataString(node.metadata, 'description');
             return {
               id: this.#mintHandle(projectId, view.perspectiveKey, 'node', node.id),
@@ -1785,13 +1883,26 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
               ...(description ? { description } : {}),
               pinned: accented.has(node.id),
               recordCount: recordCounts.get(node.id) ?? 0,
+              ...(boundaryScope
+                ? { boundary: { scope: this.#scopeTreeNode(projectId, view.perspectiveKey, boundaryScope) } }
+                : {}),
               createdAt: node.createdAt.toISOString(),
               updatedAt: node.updatedAt.toISOString(),
-            };
+            } satisfies KnowledgeGraphNode;
           });
+          const terminalBounds: KnowledgeGraphPayload['page']['terminalBounds'] = [
+            ...(recordsTruncated ? ['record-window' as const] : []),
+            ...(edgesTruncated ? ['edge-window' as const] : []),
+            ...(resolver.cappedCount ? ['wikilink-resolution-window' as const] : []),
+          ];
           const payload: KnowledgeGraphPayload = {
             view: view.view,
-            scopeId: this.#mintHandle(projectId, view.perspectiveKey, 'scope', selected.id),
+            scope: this.#scopeTreeNode(
+              projectId,
+              view.perspectiveKey,
+              selected,
+              view.curationScopeIds.includes(selected.id),
+            ),
             nodes: graphNodes,
             edges: edges.map(edge => ({
               ...edge,
@@ -1801,20 +1912,29 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
               recordId: this.#mintHandle(projectId, view.perspectiveKey, 'record', edge.recordId),
             })),
             records: [],
-            truncated,
-            outOfWindow: [...resolver.outOfWindow.values()].map(node => ({
-              id: this.#mintHandle(projectId, view.perspectiveKey, 'node', node.id),
-              reference: this.#mintReference(projectId, 'node', node.id),
-              name: node.name,
-            })),
-            unresolvedCapped: { count: resolver.cappedCount, names: resolver.cappedNames },
-            pinCensus: {
-              resource: pinnedRecords.filter(value => value.level === 'resource').length,
-              thread: view.view === 'thread' ? pinnedRecords.filter(value => value.level === 'thread').length : null,
+            page: {
+              truncated: Boolean(last),
+              terminalBounds,
+              ...(last
+                ? {
+                    nextCursor: this.#mintHandle(
+                      projectId,
+                      view.perspectiveKey,
+                      'lens-cursor',
+                      JSON.stringify([selected.id, limit, createKnowledgeNodeCursor(last, { isScope: false })]),
+                    ),
+                  }
+                : {}),
             },
-            version: activity[0]
-              ? this.#mintHandle(projectId, view.perspectiveKey, 'activity-cursor', activity[0].id)
-              : null,
+            limits: {
+              maxNodes: limit,
+              maxEdges: this.#limits.maxEdges,
+              maxBoundaryNodes: this.#limits.maxBoundaryNodes,
+              boundaryHops: 1,
+            },
+            ...(activity[0]
+              ? { version: this.#mintHandle(projectId, view.perspectiveKey, 'activity-cursor', activity[0].id) }
+              : {}),
           };
           return c.json(payload);
         },
@@ -1834,7 +1954,7 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
           if (scopeHandle && !scopeId) return c.json({ error: 'scope_not_found' }, 404);
           const nodeId = this.#resolveResource(projectId, view.perspectiveKey, 'node', nodeHandle);
           if (!nodeId) return c.json({ error: 'node_not_found' }, 404);
-          const selected = await this.#resolveSelectedScope(view, scopeId, true);
+          const selected = await this.#resolveSelectedScope(view, scopeId);
           if (!selected) return loose(c).json({ error: 'scope_not_found' }, 404);
           const node = await view.knowledge.getNode({
             id: nodeId,
@@ -1912,7 +2032,7 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
           if ('response' in view) return view.response;
           const scopeId = this.#resolveResource(projectId, view.perspectiveKey, 'scope', scopeHandle);
           if (scopeHandle && !scopeId) return c.json({ error: 'scope_not_found' }, 404);
-          const selected = await this.#resolveSelectedScope(view, scopeId, true);
+          const selected = await this.#resolveSelectedScope(view, scopeId);
           if (!selected) return c.json({ error: 'scope_not_found' }, 404);
 
           const rawAction = c.req.query('action');

@@ -18,6 +18,8 @@ import type {
   KnowledgeImportRunStatus,
   KnowledgeProposalStatus,
   KnowledgeActivityAction,
+  KnowledgeNode,
+  KnowledgeScopeAddress,
   KnowledgeScopeIds,
   KnowledgeSemanticOutboxEntry,
   KnowledgeStructurePlan,
@@ -38,6 +40,21 @@ import { assertKnowledgeScopeCapabilities, assertKnowledgeTargetCapability } fro
 import { getKnowledgeReadableScopeIds, isKnowledgeReadVisible } from './access/read-filter';
 import type { KnowledgeAccessFrontier } from './access/types';
 import type { KnowledgeConfig } from './config';
+import {
+  hashKnowledgeDescription,
+  instantiateKnowledgeScopeTypePlan,
+  validateCompiledKnowledgePlan,
+  type KnowledgeDescriptionCompiler,
+  type KnowledgeDescriptionCompilerInput,
+} from './config/compiler';
+export * from './config/compiler';
+import {
+  judgeKnowledgeStructurePlan,
+  runKnowledgeReconcileGoal,
+  type KnowledgeReconcileGoalState,
+  type KnowledgeReconcileGoalStore,
+} from './config/reconcile-goal';
+export * from './config/reconcile-goal';
 import { KnowledgeCurator } from './curation/curator';
 import type { CreateKnowledgeCuratorInput, RegisterKnowledgeCuratorProfileInput } from './curation/types';
 export * from './curation/curator';
@@ -69,6 +86,7 @@ export * from './governance/scopes';
 
 import {
   materializeKnowledgeScopePlan,
+  resolveKnowledgeScopeType,
   validateKnowledgeScopeTypes,
   validateKnowledgeStructurePlan,
   type KnowledgeScopeTypesConfig,
@@ -86,6 +104,9 @@ export class Knowledge extends MastraBase {
   #storagePromise?: Promise<KnowledgeStorage>;
   #structure?: KnowledgeStructurePlan;
   #scopeTypes?: KnowledgeScopeTypesConfig;
+  #compiledScopeTypePatterns = new Set<string>();
+  #descriptionCompiler?: KnowledgeDescriptionCompiler;
+  #descriptionCompilePromises = new Map<string, Promise<KnowledgeStructurePlan>>();
   #curatorInstructions?: string;
   #curatorProfiles = new Map<string, { registration: RegisterKnowledgeCuratorProfileInput; identityScopeId: string }>();
   #importers = new KnowledgeImporterRegistry();
@@ -94,17 +115,19 @@ export class Knowledge extends MastraBase {
   #proposalLifecycle?: KnowledgeProposalLifecycle;
   #scopeGovernance?: KnowledgeScopeGovernance;
   #reconcilePromise?: Promise<KnowledgeStructureReconcileResult>;
-  #materializePromises = new Map<
-    string,
-    { plan: KnowledgeStructurePlan; promise: Promise<KnowledgeStructureReconcileResult> }
-  >();
+  #materializePromises = new Map<string, { plan: unknown; promise: Promise<KnowledgeStructureReconcileResult> }>();
 
   constructor(config: KnowledgeConfig = {}) {
     super({ component: 'STORAGE', name: config.name ?? config.id ?? 'Knowledge' });
     this.id = config.id ?? randomUUID();
-    this.description = config.description;
+    this.description = config.description?.trim() || undefined;
     this.#structure = config.structure ? validateKnowledgeStructurePlan(structuredClone(config.structure)) : undefined;
     this.#scopeTypes = validateKnowledgeScopeTypes(structuredClone(config.scopes));
+    // Built-in descriptions are placement guidance; only host-declared descriptions request compilation.
+    this.#compiledScopeTypePatterns = new Set(
+      Object.entries(config.scopes ?? {}).flatMap(([pattern, scope]) => (scope.description?.trim() ? [pattern] : [])),
+    );
+    this.#descriptionCompiler = config.compiler;
     this.#curatorInstructions = config.curation?.instructions?.trim() || undefined;
     for (const importer of config.importers ?? []) {
       this.registerImporter(importer);
@@ -120,7 +143,7 @@ export class Knowledge extends MastraBase {
   __registerMastra(_mastra: Mastra): void {
     queueMicrotask(() => {
       void (async () => {
-        if (this.#structure) await this.reconcile();
+        if (this.#structure || (this.description && this.#descriptionCompiler)) await this.reconcile();
         if (this.#importers.list().length > 0) await this.#importerRunner.start();
       })().catch(error => {
         this.logger.warn('Knowledge startup reconciliation failed; durable importer runs remain recoverable', {
@@ -424,16 +447,20 @@ export class Knowledge extends MastraBase {
   }
 
   async reconcile(): Promise<KnowledgeStructureReconcileResult> {
-    if (!this.#structure) {
+    const plan = this.#structure;
+    if (!plan && (!this.description || !this.#descriptionCompiler)) {
       const accessEpoch = await (await this.#getStorage()).getAccessEpoch();
       return { scopes: {}, createdScopeIds: [], changed: false, accessEpoch };
     }
     if (!this.#reconcilePromise) {
-      const promise = this.#getStorage()
-        .then(storage => storage.reconcileStructure(this.#structure!))
-        .finally(() => {
-          if (this.#reconcilePromise === promise) this.#reconcilePromise = undefined;
-        });
+      const promise = (async () => {
+        if (plan) return (await this.#getStorage()).reconcileStructure(plan);
+        return (
+          await this.#runDescriptionGoal({ description: this.description!, level: 'instance' }, compiled => compiled)
+        ).result;
+      })().finally(() => {
+        if (this.#reconcilePromise === promise) this.#reconcilePromise = undefined;
+      });
       this.#reconcilePromise = promise;
     }
     return this.#reconcilePromise;
@@ -442,17 +469,64 @@ export class Knowledge extends MastraBase {
   /** @internal Host-only lazy scope materialization. Agent-created scopes must use createScope(). */
   async materializeScope(input: MaterializeKnowledgeScopeInput): Promise<KnowledgeStructureReconcileResult> {
     const snapshot = structuredClone(input);
-    const plan = materializeKnowledgeScopePlan(this.#scopeTypes, snapshot);
+    const basePlan = materializeKnowledgeScopePlan(this.#scopeTypes, snapshot);
+    const resolvedType = resolveKnowledgeScopeType(this.#scopeTypes, snapshot);
+    const compilerInput: KnowledgeDescriptionCompilerInput | undefined =
+      this.#descriptionCompiler &&
+      this.#compiledScopeTypePatterns.has(resolvedType.pattern) &&
+      resolvedType.config.description?.trim()
+        ? { description: resolvedType.config.description, level: 'scope-type', scopeType: resolvedType.pattern }
+        : undefined;
+    const planIdentity = compilerInput
+      ? { basePlan, descriptionHash: hashKnowledgeDescription(compilerInput) }
+      : basePlan;
     const existing = this.#materializePromises.get(snapshot.address);
     if (existing) {
-      if (!isDeepStrictEqual(existing.plan, plan)) {
+      if (!isDeepStrictEqual(existing.plan, planIdentity)) {
         throw new Error(`Conflicting materialization is already in progress for Knowledge scope ${snapshot.address}`);
       }
       return existing.promise;
     }
 
-    const promise = this.#getStorage()
-      .then(storage => storage.reconcileStructure(plan))
+    const promise = (async () => {
+      const storage = await this.#getStorage();
+      if (!compilerInput) return storage.reconcileStructure(basePlan);
+
+      const goalStore = await this.#getReconcileGoalStore();
+      const descriptionHash = hashKnowledgeDescription(compilerInput);
+      const goalKey = `scope:${snapshot.address}:${descriptionHash}`;
+      const priorGoal = await goalStore.load(goalKey);
+      const existingRoot = await storage.getScopeAddress(snapshot.address);
+      if (priorGoal?.checkpoint === 'complete' && !existingRoot) {
+        throw new Error(`Knowledge scope ${snapshot.address} was explicitly deleted and cannot be recreated lazily`);
+      }
+      if (existingRoot && !priorGoal) {
+        return {
+          scopes: { [snapshot.address]: existingRoot.scopeNodeId },
+          createdScopeIds: [],
+          changed: false,
+          accessEpoch: await storage.getAccessEpoch(),
+        };
+      }
+
+      const goal = await this.#runDescriptionGoal(
+        compilerInput,
+        compiled => ({
+          scopes: [
+            ...basePlan.scopes,
+            ...instantiateKnowledgeScopeTypePlan({
+              plan: compiled,
+              address: snapshot.address,
+              contextualScopeAddress: snapshot.contextualScopeAddress,
+              parentAddresses: snapshot.parentAddresses,
+              parameters: resolvedType.parameters,
+            }).scopes,
+          ],
+        }),
+        goalKey,
+      );
+      return goal.result;
+    })()
       .then(result => {
         if (result.deletedScopeAddresses?.includes(snapshot.address)) {
           throw new Error(`Knowledge scope ${snapshot.address} was explicitly deleted and cannot be recreated lazily`);
@@ -464,8 +538,119 @@ export class Knowledge extends MastraBase {
           this.#materializePromises.delete(snapshot.address);
         }
       });
-    this.#materializePromises.set(snapshot.address, { plan, promise });
+    this.#materializePromises.set(snapshot.address, { plan: planIdentity, promise });
     return promise;
+  }
+
+  async #runDescriptionGoal(
+    compilerInput: KnowledgeDescriptionCompilerInput,
+    instantiate: (plan: KnowledgeStructurePlan) => KnowledgeStructurePlan,
+    key = `instance:${hashKnowledgeDescription(compilerInput)}`,
+  ) {
+    const descriptionHash = hashKnowledgeDescription(compilerInput);
+    const store = await this.#getReconcileGoalStore();
+    const storage = await this.#getStorage();
+    return runKnowledgeReconcileGoal({
+      key,
+      descriptionHash,
+      store,
+      compile: async () => validateKnowledgeStructurePlan(instantiate(await this.#compileDescription(compilerInput))),
+      apply: plan => storage.reconcileStructure(plan),
+      inspectScope: async address => {
+        const resolved = await storage.getScopeAddress(address);
+        if (!resolved) return null;
+        const node = await storage.getNode(resolved.scopeNodeId);
+        return node ? { id: node.id, deleted: Boolean(node.deletedAt) } : null;
+      },
+      judge: state => judgeKnowledgeStructurePlan({ storage, state }),
+    });
+  }
+
+  async #compileDescription(input: KnowledgeDescriptionCompilerInput): Promise<KnowledgeStructurePlan> {
+    if (!this.#descriptionCompiler) throw new Error('Knowledge description compilation requires a compiler');
+    const hash = hashKnowledgeDescription(input);
+    const stateStore = await this.#getThreadStateStore();
+    const threadId = `knowledge:${this.id}`;
+    const type = `description-plan:${hash}`;
+    const persisted = await stateStore.getState<{
+      version: 1;
+      attempts: number;
+      checkpoint?: unknown;
+      plan?: KnowledgeStructurePlan;
+      lastError?: string;
+    }>({ threadId, type });
+    if (persisted?.plan) return validateCompiledKnowledgePlan(persisted.plan, input);
+    if ((persisted?.attempts ?? 0) >= 2) {
+      throw new Error(
+        `Knowledge description compiler exhausted its retry budget${persisted?.lastError ? `: ${persisted.lastError}` : ''}`,
+      );
+    }
+
+    let pending = this.#descriptionCompilePromises.get(hash);
+    if (!pending) {
+      const compiler = this.#descriptionCompiler;
+      pending = (async () => {
+        let checkpoint = persisted?.checkpoint;
+        let attempts = persisted?.attempts ?? 0;
+        let lastError: unknown;
+        while (attempts < 2) {
+          attempts += 1;
+          await stateStore.setState({ threadId, type, value: { version: 1, attempts, checkpoint } });
+          try {
+            const plan = validateCompiledKnowledgePlan(
+              await compiler.compile(structuredClone(input), {
+                checkpoint,
+                saveCheckpoint: async value => {
+                  checkpoint = structuredClone(value);
+                  await stateStore.setState({ threadId, type, value: { version: 1, attempts, checkpoint } });
+                },
+              }),
+              input,
+            );
+            await stateStore.setState({ threadId, type, value: { version: 1, attempts, plan } });
+            return plan;
+          } catch (error) {
+            lastError = error;
+            await stateStore.setState({
+              threadId,
+              type,
+              value: {
+                version: 1,
+                attempts,
+                checkpoint,
+                lastError: error instanceof Error ? error.message : String(error),
+              },
+            });
+          }
+        }
+        throw lastError;
+      })().finally(() => {
+        if (this.#descriptionCompilePromises.get(hash) === pending) this.#descriptionCompilePromises.delete(hash);
+      });
+      this.#descriptionCompilePromises.set(hash, pending);
+    }
+    return pending;
+  }
+
+  async #getThreadStateStore() {
+    await this.#getStorage();
+    const store = await this.#storage?.getStore('threadState');
+    if (!store) throw new Error('Knowledge description compilation requires thread-state storage');
+    return store;
+  }
+
+  async #getReconcileGoalStore(): Promise<KnowledgeReconcileGoalStore> {
+    const stateStore = await this.#getThreadStateStore();
+    const threadId = `knowledge:${this.id}`;
+    return {
+      load: key => stateStore.getState<KnowledgeReconcileGoalState>({ threadId, type: `reconcile-goal:${key}` }),
+      save: (key, state) => stateStore.setState({ threadId, type: `reconcile-goal:${key}`, value: state }),
+    };
+  }
+
+  /** Host-only canonical address resolution. */
+  async resolveScopeAddress(address: string): Promise<KnowledgeScopeAddress | null> {
+    return this.#getStorage().then(storage => storage.getScopeAddress(address));
   }
 
   registerImporter<TPayload = unknown>(definition: KnowledgeImporterDefinition<TPayload>) {
@@ -633,6 +818,28 @@ export class Knowledge extends MastraBase {
     if (input.membershipScopeIds && !input.membershipScopeIds.some(scopeId => nodeScopeIds.includes(scopeId)))
       return null;
     return node;
+  }
+
+  async getScope(input: { id: string; scopeIds: KnowledgeScopeIds }) {
+    const storage = await this.#getStorage();
+    const readableScopeIds = await this.#resolveReadScopeIds(input.scopeIds);
+    const scope = await storage.getNode(input.id);
+    if (!scope?.isScope || scope.deletedAt) return null;
+    if (readableScopeIds.includes(scope.id)) return scope;
+    const memberships = await storage.getNodeScopeIds(scope.id);
+    return isKnowledgeReadVisible(memberships, readableScopeIds) ? scope : null;
+  }
+
+  async getNodeScopes(input: { id: string; scopeIds: KnowledgeScopeIds }) {
+    const storage = await this.#getStorage();
+    const scopeIds = await this.#resolveReadScopeIds(input.scopeIds);
+    const node = await storage.getNode(input.id);
+    if (!node || node.deletedAt) return [];
+    const nodeScopeIds = await storage.getNodeScopeIds(node.id);
+    if (!isKnowledgeReadVisible(nodeScopeIds, scopeIds)) return [];
+    const visibleScopeIds = nodeScopeIds.filter(scopeId => scopeIds.includes(scopeId));
+    const scopes = await Promise.all(visibleScopeIds.map(scopeId => storage.getNode(scopeId)));
+    return scopes.filter((scope): scope is KnowledgeNode => Boolean(scope?.isScope && !scope.deletedAt));
   }
 
   /** @internal */

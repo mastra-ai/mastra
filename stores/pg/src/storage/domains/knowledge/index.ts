@@ -991,6 +991,7 @@ export class KnowledgePG extends KnowledgeStorage {
       const nodeScopeIds = await this.#getNodeScopeIds(this.#executor, node.id);
       if (!isKnowledgeNodeVisible(node, nodeScopeIds, scopeIds)) continue;
       if (input.membershipScopeIds && !isKnowledgeScopeVisible(nodeScopeIds, input.membershipScopeIds)) continue;
+      if (input.name && node.name.trim().toLocaleLowerCase() !== input.name.trim().toLocaleLowerCase()) continue;
       if (input.namePrefix && !node.name.toLocaleLowerCase().startsWith(input.namePrefix.toLocaleLowerCase())) continue;
       if (input.kind && node.kind !== input.kind) continue;
       if (input.isScope !== undefined && node.isScope !== input.isScope) continue;
@@ -1005,6 +1006,7 @@ export class KnowledgePG extends KnowledgeStorage {
     let start = 0;
     if (input.cursor) {
       const cursor = parseKnowledgeNodeCursor(input.cursor, {
+        name: input.name,
         namePrefix: input.namePrefix,
         kind: input.kind,
         isScope: input.isScope,

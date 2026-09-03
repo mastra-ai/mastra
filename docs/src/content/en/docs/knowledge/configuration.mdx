@@ -1,0 +1,122 @@
+---
+title: 'Knowledge configuration'
+description: 'Configure Knowledge descriptions, deterministic structure plans, and scope templates.'
+packages:
+  - '@mastra/core'
+---
+
+# Knowledge configuration
+
+A `Knowledge` instance can create its initial scope structure from a direct plan or from a prose description. Direct plans provide deterministic configuration. Description compilation adds a persisted, resumable step before Mastra applies the same plan contract.
+
+## Configure description compilation
+
+Pass a compiler that returns a `KnowledgeStructurePlan`. The compiler can call a model or another planning service. Mastra validates and persists the returned plan before applying it.
+
+```typescript title="src/mastra/knowledge.ts"
+import { Knowledge } from '@mastra/core/knowledge'
+import { LibSQLStore } from '@mastra/libsql'
+
+export const knowledge = new Knowledge({
+  id: 'mastra',
+  storage: new LibSQLStore({
+    id: 'knowledge-storage',
+    url: 'file:./mastra.db',
+  }),
+  description: `
+    Create an "org:acme" root with two children:
+    - "org:acme:shared" for shared product knowledge
+    - "org:acme:internal" for internal planning
+  `,
+  compiler: {
+    async compile(input, context) {
+      // Call your model or planning service with input.description.
+      // Save resumable service progress when the compiler supports it.
+      await context.saveCheckpoint({ stage: 'planned' })
+
+      return {
+        scopes: [
+          { address: 'org:acme', name: 'Acme' },
+          {
+            address: 'org:acme:shared',
+            name: 'Shared',
+            parentAddresses: ['org:acme'],
+          },
+          {
+            address: 'org:acme:internal',
+            name: 'Internal',
+            parentAddresses: ['org:acme'],
+          },
+        ],
+      }
+    },
+  },
+})
+
+await knowledge.reconcile()
+```
+
+The persisted cache key includes the normalized description, compilation level, and scope type. An unchanged description reuses its plan after a restart. Concurrent calls to `reconcile()` on one `Knowledge` instance await the same active goal.
+
+The graph-state judge verifies newly created scope memberships and grants after plan application. A compiler or apply failure gets one retry. A later `reconcile()` resumes the persisted compiler or apply checkpoint instead of discarding completed work.
+
+## Use direct plans
+
+Set `structure` when the host must control the exact plan without a compiler. A direct plan takes precedence when both `structure` and `description` are present. The description remains available as agent placement context.
+
+```typescript
+const knowledge = new Knowledge({
+  description: 'Shared product knowledge for the Acme organization.',
+  structure: {
+    scopes: [{ address: 'org:acme', name: 'Acme' }],
+  },
+})
+```
+
+Reconciliation is additive and idempotent:
+
+- Missing scopes are created by canonical address.
+- Existing scopes aren't renamed, moved, or pruned.
+- Explicitly deleted scopes aren't recreated.
+- A changed instance description can add structure but can't rewrite existing structure.
+- Plans create structure, not knowledge records.
+
+## Compile scope-type descriptions
+
+A configured scope type can compile child structure once and apply it when a new concrete scope is materialized. Only descriptions declared in the host's `scopes` configuration request compilation; built-in descriptions remain placement guidance. Use `$scope` for the new scope, `$self` for the caller's contextual write scope, and `$parent` when the concrete scope has exactly one parent.
+
+```typescript
+const knowledge = new Knowledge({
+  compiler,
+  scopes: {
+    'project:$projectId': {
+      access: [{ principal: 'self', role: 'owner' }],
+      description: 'Each new project starts with decisions and docs child scopes.',
+    },
+  },
+})
+```
+
+For that description, the compiler returns a template such as:
+
+```typescript
+{
+  scopes: [
+    {
+      address: '$scope:decisions',
+      name: 'Decisions',
+      parentAddresses: ['$scope'],
+      grants: [{ scopeRefAddress: '$self', role: 'owner' }],
+    },
+    {
+      address: '$scope:docs',
+      name: 'Docs',
+      parentAddresses: ['$scope'],
+    },
+  ],
+}
+```
+
+Scope-type plans use copy-on-create semantics. Changing the description affects future scope creation only. Mastra doesn't retrofit new child structure or access rules onto an existing concrete scope.
+
+Description compilation requires thread-state storage. Configure a durable storage provider when compiled plans and checkpoints must survive process restarts.

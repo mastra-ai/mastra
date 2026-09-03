@@ -334,6 +334,13 @@ export function createKnowledgeStorageTests(createStore: () => Promise<Knowledge
       expect(matches.filter(node => node.name.toLowerCase() === 'concurrent topic')).toHaveLength(1);
     });
 
+    it('filters nodes by exact canonical name before applying the limit', async () => {
+      const exact = await store.createNode({ name: 'pinned', scopeIds: [PROJECT_SCOPE_ID] });
+      await store.createNode({ name: 'pinned newer candidate', scopeIds: [PROJECT_SCOPE_ID] });
+
+      expect(await store.listNodes({ scopeIds: [PROJECT_SCOPE_ID], name: ' PINNED ', limit: 1 })).toEqual([exact]);
+    });
+
     it('rejects duplicate sibling names when memberships overlap', async () => {
       const existing = await store.createNode({ name: 'Shared topic', scopeIds: [PROJECT_SCOPE_ID] });
 
