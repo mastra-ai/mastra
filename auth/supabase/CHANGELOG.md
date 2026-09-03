@@ -1,5 +1,13 @@
 # @mastra/auth-supabase
 
+## 1.1.4
+
+### Patch Changes
+
+- Update README to include accurate, up-to-date information ([#22858](https://github.com/mastra-ai/mastra/pull/22858))
+
+- Remove `CHANGELOG.md` from distributed npm files resulting in reduced package size ([#22737](https://github.com/mastra-ai/mastra/pull/22737))
+
 ## 1.1.4-alpha.1
 
 ### Patch Changes
