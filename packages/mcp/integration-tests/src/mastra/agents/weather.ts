@@ -9,7 +9,7 @@ const client = new MCPClient({
   servers: {
     weather: {
       // Note: The MCP server ID gets slugified, so 'myMcpServer' becomes 'my-mcp-server'
-      url: new URL(`http://localhost:4114/api/mcp/my-mcp-server/mcp`),
+      url: new URL(`http://localhost:${process.env.PORT ?? 4114}/api/mcp/my-mcp-server/mcp`),
     },
   },
 });

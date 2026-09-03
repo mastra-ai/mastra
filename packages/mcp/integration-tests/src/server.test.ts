@@ -2,19 +2,21 @@ import { spawn } from 'node:child_process';
 import { MCPClient } from '@mastra/mcp';
 import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
 import { ServerInfo } from '@mastra/core/mcp';
+import getPort from 'get-port';
 import path from 'node:path';
 
-vi.setConfig({ testTimeout: 20000, hookTimeout: 20000 });
+vi.setConfig({ testTimeout: 20000, hookTimeout: 120000 });
 
 describe('MCPServer through Mastra HTTP Integration (Subprocess)', () => {
   let mastraServer: ReturnType<typeof spawn>;
-  const port: number = 4114;
+  let port: number;
   // Note: The ID gets slugified in MCPServerBase constructor, so 'myMcpServer' becomes 'my-mcp-server'
   const mcpServerId = 'my-mcp-server';
   const testToolId = 'calculator';
   let client: MCPClient;
 
   beforeAll(async () => {
+    port = await getPort();
     mastraServer = spawn(
       'pnpm',
       [path.resolve(import.meta.dirname, `..`, `..`, `..`, `cli`, `dist`, `index.js`), 'dev'],
