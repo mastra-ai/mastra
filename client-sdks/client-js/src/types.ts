@@ -2943,6 +2943,14 @@ export interface GeneratedItem {
   groundTruth?: unknown;
 }
 
+export interface UpdateDatasetExperimentParams {
+  datasetId: string;
+  experimentId: string;
+  name?: string;
+  description?: string;
+  metadata?: Record<string, unknown>;
+}
+
 export interface TriggerDatasetExperimentParams {
   datasetId: string;
   targetType: 'agent' | 'workflow' | 'scorer';

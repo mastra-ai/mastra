@@ -205,8 +205,17 @@ interface FactoryPullRequestProvenanceData {
   workItemId: string;
 }
 
-function pullRequestProvenance(data: Record<string, unknown> | undefined): FactoryPullRequestProvenanceData | null {
+function pullRequestProvenance(
+  data: Record<string, unknown> | undefined,
+  factoryProjectId: string,
+): FactoryPullRequestProvenanceData | null {
   if (!data || data.kind !== 'factory-pr-provenance' || typeof data.workItemId !== 'string') return null;
+  // Provenance proves which Factory *project's* run authored the PR. A row
+  // written by a sibling project in the same org — or a legacy row without the
+  // project stamp — fails closed here: honoring it would brand the PR
+  // Factory-authored in a project that never touched it, and auto-start a
+  // review that checks out and executes the PR there.
+  if (data.factoryProjectId !== factoryProjectId) return null;
   return { kind: 'factory-pr-provenance', workItemId: data.workItemId };
 }
 
@@ -310,7 +319,11 @@ export class GithubRules {
               provenanceTarget(repositoryId, pullRequestNumber),
               { status: 'active' },
             )
-          ).find(subscription => subscription.orgId === project.orgId)?.data,
+          ).find(
+            subscription =>
+              subscription.orgId === project.orgId && subscription.data?.factoryProjectId === project.factoryProjectId,
+          )?.data,
+          project.factoryProjectId,
         )
       : null;
     // Re-review events target the PR's own Review card, not the Work item that
@@ -327,6 +340,8 @@ export class GithubRules {
       reviewRequested || event === 'pullRequestCommentCreated' || event === 'pullRequestReviewSubmitted';
     const reReviewEvent = reviewRequested || event === 'pullRequestUpdated';
     const requestedReviewer = string(object(parsed.payload.requested_reviewer)?.login);
+    const pullRequestAuthor = string(object(pullRequest?.user)?.login);
+    const pullRequestFactoryAuthored = provenance !== null || this.#isFactoryLogin(pullRequestAuthor);
     const relatedItem = await this.#relatedItem(
       project.orgId,
       project.factoryProjectId,
@@ -443,6 +458,8 @@ export class GithubRules {
                 assignees: actorLogins(pullRequest?.assignees),
                 requestedReviewers: actorLogins(pullRequest?.requested_reviewers),
                 labels: labelNames(pullRequest?.labels),
+                ...(pullRequestAuthor ? { author: pullRequestAuthor } : {}),
+                factoryAuthored: pullRequestFactoryAuthored,
                 headBranch: string(object(pullRequest?.head)?.ref) ?? '',
                 baseBranch: string(object(pullRequest?.base)?.ref) ?? '',
               },

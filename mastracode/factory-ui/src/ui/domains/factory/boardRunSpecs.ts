@@ -94,6 +94,20 @@ export function reviewRunAction(ref: string, checkout: string): RunAction {
 export const LINEAR_FETCH_HINT = `Start by fetching the issue's full details (description and comments) with the linear_get_issue tool.`;
 
 /**
+ * The `needs approval` label only holds a card at rest. Once a person accepts
+ * it — or it sits in a working lane, which only a person could have put it in
+ * before acceptance was recorded — the label is stale until the source
+ * catches up, and the card offers its ordinary runs again.
+ */
+function approvalPending(item: Pick<WorkItem, 'metadata' | 'stages' | 'acceptedAt'>): boolean {
+  return (
+    hasLabel(metadataLabels(item.metadata), NEEDS_APPROVAL_LABEL) &&
+    item.acceptedAt === null &&
+    item.stages.every(stage => stage === 'intake' || stage === 'triage')
+  );
+}
+
+/**
  * The runs a persisted card can start, derived from its source + metadata.
  * Issues can be investigated (→ Planning) or built (→ Building); PRs get a
  * review run. Manual cards (or cards missing the needed metadata) can't
@@ -103,7 +117,7 @@ export function itemRunSpec(item: WorkItem): ItemRunSpec | undefined {
   const meta = item.metadata;
   const githubNumber = githubNumberForItem(item);
   if (item.source === 'github-issue' && githubNumber !== undefined) {
-    const needsApproval = hasLabel(metadataLabels(meta), NEEDS_APPROVAL_LABEL);
+    const needsApproval = approvalPending(item);
     const ref = `GitHub issue #${githubNumber}${item.url ? ` (${item.url})` : ''}`;
     return {
       branch: workItemBranch(item),

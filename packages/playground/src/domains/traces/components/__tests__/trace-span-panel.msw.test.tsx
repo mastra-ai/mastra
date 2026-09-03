@@ -34,6 +34,10 @@ const installHandlers = () => {
       const detail = spanDetailById[spanId];
       return detail ? HttpResponse.json(detail) : HttpResponse.json({ error: 'not found' }, { status: 404 });
     }),
+    http.get(`${TEST_BASE_URL}/api/observability/traces/:traceId`, () => HttpResponse.json(panelTraceSpans)),
+    http.get(`${TEST_BASE_URL}/api/observability/feedback`, () =>
+      HttpResponse.json({ feedback: [], pagination: { page: 0, perPage: 10, total: 0, hasMore: false } }),
+    ),
   );
 };
 
@@ -72,6 +76,38 @@ const renderPanel = (props: Partial<TraceSpanPanelProps> & { initialSpanId?: str
   );
 
 describe('TraceSpanPanel', () => {
+  describe('when partial thread is enabled for an agent trace with a thread id', () => {
+    it('renders the selected trace as a chat turn in the Messages tab', async () => {
+      installHandlers();
+      const { queryClient } = renderPanel({ showPartialThread: true });
+
+      fireEvent.click(await screen.findByRole('tab', { name: 'Messages' }));
+
+      expect(await screen.findByText('Will it rain?')).not.toBeNull();
+      expect(screen.getByText('No rain is expected.')).not.toBeNull();
+      await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+    });
+  });
+
+  describe('when partial thread is enabled without a complete agent thread context', () => {
+    it('hides the tab for a trace without a thread id', () => {
+      installHandlers();
+      renderPanel({
+        showPartialThread: true,
+        spans: panelTraceSpans.spans.map(span => (span.parentSpanId == null ? { ...span, threadId: null } : span)),
+      });
+
+      expect(screen.queryByRole('tab', { name: 'Messages' })).toBeNull();
+    });
+
+    it('hides the tab for a branch view', () => {
+      installHandlers();
+      renderPanel({ showPartialThread: true, anchorSpanId: 'span-root' });
+
+      expect(screen.queryByRole('tab', { name: 'Messages' })).toBeNull();
+    });
+  });
+
   it('given a trace with spans, when it renders, then the trace header and span tree are shown', async () => {
     installHandlers();
     const { queryClient } = renderPanel();

@@ -71,8 +71,8 @@ test.afterEach(async () => {
 /**
  * FEATURE: Dataset experiment comparison
  * USER STORY: As a user, I want to select two experiments from a dataset so I can compare their results.
- * BEHAVIOR UNDER TEST: Selecting compare checkboxes must keep me on the experiments page until I explicitly trigger comparison,
- * then navigate to the comparison view with both experiment IDs encoded in the URL.
+ * BEHAVIOR UNDER TEST: Selecting compare checkboxes must keep me on the experiments page until I explicitly trigger
+ * comparison, then navigate to the comparison view with the dataset and both experiment IDs encoded in the URL.
  */
 test.describe('Dataset experiment comparison', () => {
   test.describe('when two experiments are selected in compare mode', () => {

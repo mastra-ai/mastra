@@ -30,6 +30,8 @@ const item: WorkItem = {
   stageHistory: [],
   sessions: {},
   metadata: {},
+  triageType: null,
+  acceptedAt: null,
   commentCount: 2,
   feedActivityAt: null,
   revision: 1,

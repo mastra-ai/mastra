@@ -391,6 +391,8 @@ export interface CommitFactoryTransitionInput {
   consentedBy?: string;
   /** Triage classification reported by an authenticated triage binding. */
   triageType?: FactoryTriageType;
+  /** Record the person's acceptance of this item in the same revision-checked update; a no-op once set. */
+  accept?: boolean;
 }
 
 export type CommitFactoryTransitionResult =
@@ -455,6 +457,12 @@ export interface WorkItemRow {
    * parked plans even while the project's Auto-approve plans switch is off.
    */
   plansPreapprovedAt: Date | null;
+  /**
+   * When a person first moved this item out of Intake/Triage into working
+   * stages. Non-bug items wait for that gesture; once it is recorded the
+   * agents may advance the item through Planning and Execute on their own.
+   */
+  acceptedAt: Date | null;
   /** Denormalized feed counters, maintained by the comments domain via recount. */
   commentCount: number;
   /** Bumps on every feed mutation (create/edit/delete) — the clients' change hint. */
@@ -510,6 +518,7 @@ export const WORK_ITEMS_SCHEMA: CollectionSchema = {
     triage_type: { type: 'text', nullable: true },
     autonomy_armed_at: { type: 'timestamp', nullable: true },
     plans_preapproved_at: { type: 'timestamp', nullable: true },
+    accepted_at: { type: 'timestamp', nullable: true },
     comment_count: { type: 'integer', default: 0 },
     feed_activity_at: { type: 'timestamp', nullable: true },
     revision: { type: 'integer', default: 1 },
@@ -556,6 +565,7 @@ interface WorkItemDbRow extends Record<string, unknown> {
   triage_type: FactoryTriageType | null;
   autonomy_armed_at: Date | null;
   plans_preapproved_at: Date | null;
+  accepted_at: Date | null;
   comment_count: number;
   feed_activity_at: Date | null;
   revision: number;
@@ -590,6 +600,7 @@ function toWorkItem(row: WorkItemDbRow): WorkItemRow {
     triageType: row.triage_type ?? null,
     autonomyArmedAt: row.autonomy_armed_at ?? null,
     plansPreapprovedAt: row.plans_preapproved_at ?? null,
+    acceptedAt: row.accepted_at ?? null,
     commentCount: row.comment_count ?? 0,
     feedActivityAt: row.feed_activity_at ?? null,
     revision: row.revision,
@@ -611,6 +622,7 @@ function patchColumns(changes: Partial<WorkItemRow>): Partial<WorkItemDbRow> {
     ...(changes.metadata !== undefined ? { metadata: changes.metadata } : {}),
     ...(changes.triageType !== undefined ? { triage_type: changes.triageType } : {}),
     ...(changes.autonomyArmedAt !== undefined ? { autonomy_armed_at: changes.autonomyArmedAt } : {}),
+    ...(changes.acceptedAt !== undefined ? { accepted_at: changes.acceptedAt } : {}),
     ...(changes.revision !== undefined ? { revision: changes.revision } : {}),
     ...(changes.updatedAt !== undefined ? { updated_at: changes.updatedAt } : {}),
   };
@@ -1373,15 +1385,17 @@ export class WorkItemsStorage extends FactoryStorageDomain {
             }
             const arm = input.autonomy === 'arm' && !existing.autonomyArmedAt;
             const disarm = input.autonomy === 'disarm' && existing.autonomyArmedAt !== null;
+            const accept = input.accept === true && !existing.acceptedAt;
             const triageType = existing.triageType ?? input.triageType ?? null;
             const classified = triageType !== existing.triageType;
             if (existing.stages.length === 1 && existing.stages[0] === input.destinationStage) {
               // Classification is part of a terminal handoff, so unlike an
               // autonomy flip alone it is a revisioned work-item change.
-              return arm || disarm || classified
+              return arm || disarm || accept || classified
                 ? patchColumns({
                     ...(arm ? { autonomyArmedAt: now } : {}),
                     ...(disarm ? { autonomyArmedAt: null } : {}),
+                    ...(accept ? { acceptedAt: now } : {}),
                     ...(classified ? { triageType, revision: existing.revision + 1, updatedAt: now } : {}),
                   })
                 : null;
@@ -1389,6 +1403,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
             return patchColumns({
               ...(arm ? { autonomyArmedAt: now } : {}),
               ...(disarm ? { autonomyArmedAt: null } : {}),
+              ...(accept ? { acceptedAt: now } : {}),
               ...(classified ? { triageType } : {}),
               stages: [input.destinationStage],
               stageHistory: applyStageTransition(

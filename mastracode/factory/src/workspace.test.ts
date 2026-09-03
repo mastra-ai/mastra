@@ -347,6 +347,17 @@ describe('bundled Factory skill assets', () => {
     expect(rereview).toContain('Review runtime: <model>, reasoning setting: <reasoning>.');
   });
 
+  it('guards the initial triage label when any status label is present', async () => {
+    const assetRoot = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'factory-skills');
+    const triage = await fs.readFile(path.join(assetRoot, 'factory-triage', 'SKILL.md'), 'utf8');
+    const phase1 = triage.slice(triage.indexOf('## Phase 1'), triage.indexOf('## Phase 2'));
+
+    expect(phase1).toContain('add `status: needs triage` only if no `status:` label is present');
+    expect(phase1).toContain('gh issue edit "$ISSUE" --add-label "status: needs triage"');
+    expect(phase1).toContain('For Linear issues, skip this GitHub-only label mutation.');
+    expect(triage).toContain('gh issue edit "$ISSUE" --remove-label "status: needs triage"');
+  });
+
   it('keeps the autonomous Factory skills on the terminal-handoff contract', async () => {
     const assetRoot = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'factory-skills');
     const read = (skillName: string) => fs.readFile(path.join(assetRoot, skillName, 'SKILL.md'), 'utf8');
@@ -1842,6 +1853,121 @@ describe('GitHub session workspace preparation', () => {
     const result = await resolver({ requestContext: createRequestContext(projectPath) });
 
     expect(result).toBeUndefined();
+  });
+
+  describe('sandboxStart', () => {
+    async function createFactory(sandboxStart?: 'lazy' | 'eager') {
+      const root = await fs.mkdtemp(path.join(os.tmpdir(), 'mastracode-web-sandbox-start-'));
+      tempDirs.push(root);
+      mocks.localRoot = root;
+      return createWorkspaceFactory({
+        sandbox: mocks.createSandbox as any,
+        github: fakeGithubIntegration() as any,
+        workItems: { findRunBindingBySession: mocks.findRunBindingBySession } as any,
+        ...(sandboxStart !== undefined ? { sandboxStart } : {}),
+      });
+    }
+
+    const constructedSandbox = () => mocks.createSandbox.mock.results[0]!.value as { start: ReturnType<typeof vi.fn> };
+
+    /** The eager path is fire-and-forget; give its microtasks a chance to run. */
+    const settle = () => new Promise(resolve => setTimeout(resolve, 20));
+
+    it("starts the sandbox right after resolution when set to 'eager'", async () => {
+      const resolver = await createFactory('eager');
+      addProject();
+      addSession({ id: 'session-1' });
+
+      const workspace = await resolver({ requestContext: createGithubRequestContext('project-1', 'session-1') });
+
+      expect(workspace?.id).toContain('project-1-session-1');
+      await vi.waitFor(() => expect(constructedSandbox().start).toHaveBeenCalledTimes(1));
+      // The eager start ran the full session setup, so the first command
+      // finds a prepared checkout, not just a booted VM.
+      await vi.waitFor(() => expect(mocks.materializeRepo).toHaveBeenCalledTimes(1));
+    });
+
+    it.each([undefined, 'lazy'] as const)('leaves the sandbox lazy when sandboxStart is %s', async sandboxStart => {
+      const resolver = await createFactory(sandboxStart);
+      addProject();
+      addSession({ id: 'session-1' });
+
+      await resolver({ requestContext: createGithubRequestContext('project-1', 'session-1') });
+      await settle();
+
+      expect(constructedSandbox().start).not.toHaveBeenCalled();
+      expect(mocks.materializeRepo).not.toHaveBeenCalled();
+    });
+
+    it('starts only after the resolver finished, even when pinning state is slow', async () => {
+      const resolver = await createFactory('eager');
+      addProject();
+      addSession({ id: 'session-1' });
+      const requestContext = createGithubRequestContext('project-1', 'session-1');
+      const controller = requestContext.get('controller') as {
+        setState: (u: Record<string, unknown>) => Promise<void>;
+      };
+      const pinned = controller.setState;
+      let releasePin!: () => void;
+      let pinEntered!: () => void;
+      const pinEnteredPromise = new Promise<void>(resolve => {
+        pinEntered = resolve;
+      });
+      controller.setState = async updates => {
+        pinEntered();
+        await new Promise<void>(resolve => {
+          releasePin = resolve;
+        });
+        await pinned(updates);
+      };
+
+      const resolving = resolver({ requestContext });
+      await pinEnteredPromise;
+      await settle();
+      // The sandbox is constructed by now, but must not have started.
+      expect(constructedSandbox().start).not.toHaveBeenCalled();
+
+      releasePin();
+      const workspace = await resolving;
+
+      expect(workspace?.id).toContain('project-1-session-1');
+      await vi.waitFor(() => expect(constructedSandbox().start).toHaveBeenCalledTimes(1));
+      await vi.waitFor(() => expect(mocks.materializeRepo).toHaveBeenCalledTimes(1));
+    });
+
+    it('starts once per constructed instance, not per resolution', async () => {
+      const resolver = await createFactory('eager');
+      addProject();
+      addSession({ id: 'session-1' });
+
+      await resolver({ requestContext: createGithubRequestContext('project-1', 'session-1') });
+      await resolver({ requestContext: createGithubRequestContext('project-1', 'session-1') });
+      await settle();
+
+      expect(constructedSandbox().start).toHaveBeenCalledTimes(1);
+    });
+
+    it('surfaces a failed eager start as a warning while the lazy path stays intact', async () => {
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      try {
+        // First start (the eager one) fails inside setup; the record it leaves
+        // must not stop a later lazy start from retrying materialization.
+        mocks.materializeRepo.mockRejectedValueOnce(new MaterializeError('exec', 'clone flaked'));
+        const resolver = await createFactory('eager');
+        addProject();
+        addSession({ id: 'session-1' });
+
+        const workspace = await resolver({ requestContext: createGithubRequestContext('project-1', 'session-1') });
+        await vi.waitFor(() => expect(warn).toHaveBeenCalled());
+
+        expect(workspace?.id).toContain('project-1-session-1');
+        // The lazy path retries in full and succeeds.
+        await (workspace as any).sandbox.getInfo();
+        expect(mocks.materializeRepo).toHaveBeenCalledTimes(2);
+      } finally {
+        warn.mockRestore();
+      }
+    });
   });
 
   // The factory used to construct a Workspace and return it without ever

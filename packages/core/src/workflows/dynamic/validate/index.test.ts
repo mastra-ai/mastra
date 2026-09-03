@@ -41,6 +41,97 @@ describe('validateDynamicWorkflow', () => {
       );
     });
 
+    it('flags duplicated container entry ids, including collisions with leaf ids', () => {
+      const issues = validateDynamicWorkflow(
+        def({
+          graph: [
+            { type: 'parallel', id: 'duplicate', steps: [{ type: 'tool', id: 'left', toolId: 'a' }] },
+            { type: 'parallel', id: 'duplicate', steps: [{ type: 'tool', id: 'right', toolId: 'b' }] },
+            {
+              type: 'foreach',
+              id: 'left',
+              step: { type: 'tool', id: 'body', toolId: 'c' },
+              opts: { concurrency: 1 },
+            },
+          ],
+        }),
+      );
+      expect(issues).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ code: 'duplicate-step-id', path: 'graph.1.id' }),
+          expect.objectContaining({ code: 'duplicate-step-id', path: 'graph.2.id' }),
+        ]),
+      );
+    });
+
+    it('rejects a supplied-but-empty container entry id', () => {
+      const issues = validateDynamicWorkflow(
+        def({
+          graph: [{ type: 'parallel', id: '', steps: [{ type: 'tool', id: 'left', toolId: 'a' }] }],
+        }),
+      );
+      expect(issues).toEqual(
+        expect.arrayContaining([expect.objectContaining({ code: 'missing-step-id', path: 'graph.0.id' })]),
+      );
+    });
+
+    it('flags a container id colliding with a sleep id regardless of graph order', () => {
+      const issues = validateDynamicWorkflow(
+        def({
+          graph: [
+            { type: 'parallel', id: 'same', steps: [{ type: 'tool', id: 'left', toolId: 'a' }] },
+            { type: 'sleep', id: 'same', duration: 5 },
+          ],
+        }),
+      );
+      expect(issues).toEqual(
+        expect.arrayContaining([expect.objectContaining({ code: 'duplicate-step-id', path: 'graph.0.id' })]),
+      );
+    });
+
+    it('flags the container id when the sleep comes first in the graph', () => {
+      const issues = validateDynamicWorkflow(
+        def({
+          graph: [
+            { type: 'sleep', id: 'same', duration: 5 },
+            { type: 'parallel', id: 'same', steps: [{ type: 'tool', id: 'left', toolId: 'a' }] },
+          ],
+        }),
+      );
+      expect(issues).toEqual(
+        expect.arrayContaining([expect.objectContaining({ code: 'duplicate-step-id', path: 'graph.1.id' })]),
+      );
+    });
+
+    it('still accepts pre-existing sleep-to-sleep duplicate ids (backward compatibility)', () => {
+      const issues = validateDynamicWorkflow(
+        def({
+          graph: [
+            { type: 'sleep', id: 'wait', duration: 5 },
+            { type: 'sleep', id: 'wait', duration: 10 },
+          ],
+        }),
+      );
+      expect(issues.filter(issue => issue.code === 'duplicate-step-id')).toEqual([]);
+    });
+
+    it('accepts unique container entry ids', () => {
+      const issues = validateDynamicWorkflow(
+        def({
+          graph: [
+            { type: 'parallel', id: 'fan-out', steps: [{ type: 'tool', id: 'left', toolId: 'a' }] },
+            {
+              type: 'foreach',
+              id: 'each-item',
+              step: { type: 'tool', id: 'body', toolId: 'b' },
+              opts: { concurrency: 1 },
+            },
+          ],
+        }),
+      );
+      expect(issues.filter(issue => issue.code === 'duplicate-step-id')).toEqual([]);
+    });
+
     it('rejects a mapping inside a container with exactly one issue', () => {
       const issues = validateDynamicWorkflow(
         def({

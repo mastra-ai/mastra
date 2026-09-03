@@ -33,6 +33,8 @@ console.log(transcript);
 
 ## Documentation
 
+See the [Gladia voice integration guide](https://mastra.ai/integrations/voice/gladia) and the [Mastra Voice overview](https://mastra.ai/reference/voice/overview).
+
 `GladiaVoice` is a listening-only `MastraVoice` provider. `listen()` buffers and uploads the supplied audio stream, starts a Gladia prerecorded-transcription job, polls until processing finishes, and returns the full transcript. Both `fileName` and `mimeType` are required.
 
 Diarization is enabled by default. Use `diarization_config` to set an exact, minimum, or maximum number of speakers. Translation can be enabled with the base or enhanced model and one or more target languages. The provider also supports automatic language detection and code switching for recordings that contain multiple languages.

@@ -33,10 +33,11 @@ describe('ExperimentsList', () => {
       expect(screen.getByText('entity-extraction / model-b')).toBeDefined();
     });
 
-    it('shows the description beneath a named experiment', () => {
+    it('shows the description in its own truncated column', () => {
       renderList(<ExperimentsList experiments={experiments} isLoading={false} />);
 
-      expect(screen.getByText('Entity extraction evaluation using Model B')).toBeDefined();
+      expect(screen.getByText('Description')).toBeDefined();
+      expect(screen.getByText('Entity extraction evaluation using Model B').className).toContain('truncate');
     });
 
     it('links each row to the experiment by its full id', () => {
@@ -44,7 +45,6 @@ describe('ExperimentsList', () => {
 
       const link = screen.getByRole('link', { name: /entity-extraction \/ model-a/ });
       expect(link.getAttribute('href')).toBe('/experiments/a1b2c3d4-0000-0000-0000-000000000001');
-      // The name and its description both live inside that one row link.
       expect(within(link).getByText(experiments[0].description!)).toBeDefined();
     });
   });
