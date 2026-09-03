@@ -14,6 +14,7 @@ import { FolderIcon } from '../../../ui/icons';
 import { SkeletonRows } from '../../../ui/SkeletonRows';
 import type { FactoryProject, GithubStatus } from '../services/github';
 import { connectGithub } from '../services/github';
+import { GITHUB_ORG_CHOICE_HINT, describeInstallations } from './githubConnectionCopy';
 
 /**
  * Repository linking for a server-backed Factory. One list: the factory's
@@ -45,6 +46,7 @@ export function ConnectRepositoriesPanel({ factory }: { factory: FactoryProject 
   const error = reposQuery.error ?? linkRepository.error ?? unlinkRepository.error;
   const busyRepoId = linkRepository.isPending ? linkRepository.variables?.repo.id : null;
   const unlinkingId = unlinkRepository.isPending ? unlinkRepository.variables?.projectRepositoryId : null;
+  const installedOn = describeInstallations(status?.installations ?? []);
 
   if (statusQuery.isPending) {
     return <SkeletonRows label="Loading GitHub status" rows={3} rowClassName="h-10 w-full rounded-xl" />;
@@ -64,15 +66,23 @@ export function ConnectRepositoriesPanel({ factory }: { factory: FactoryProject 
         status &&
         status.reason !== 'missing_config' &&
         status.reason !== 'organization_required' && (
-          <div className="px-4 py-3">
-            <Button variant="primary" onClick={() => connectGithub(baseUrl)}>
+          <div className="flex flex-col gap-2 px-4 py-3">
+            <Button variant="primary" className="self-start" onClick={() => connectGithub(baseUrl)}>
               <GithubIcon className="size-4" />
               Connect GitHub
             </Button>
+            <Txt as="p" variant="ui-sm" className="text-icon3 m-0 max-w-md">
+              {GITHUB_ORG_CHOICE_HINT}
+            </Txt>
           </div>
         )
       ) : (
         <>
+          {installedOn && (
+            <Txt as="p" variant="ui-xs" className="text-icon3 m-0 px-4 pt-2">
+              {installedOn}
+            </Txt>
+          )}
           <div className="px-4 py-2">
             <ListSearch label="Search repositories" placeholder="Search…" size="sm" value={query} onSearch={setQuery} />
           </div>
@@ -223,9 +233,12 @@ function StatusCallout({ status, connected, empty }: { status: GithubStatus; con
   if (connected && empty) {
     return (
       <div className={calloutClass}>
-        No repositories found. Your GitHub App installation may not have access to any repos. Check the installation's
-        repository access at <code className="text-icon4">https://github.com/settings/installations</code> and grant
-        access to at least one repo.
+        <p className="m-0 mb-1">
+          No repositories found. Your GitHub App installation may not have access to any repos. Check the
+          installation's repository access at <code className="text-icon4">https://github.com/settings/installations</code>{' '}
+          and grant access to at least one repo.
+        </p>
+        <p className="m-0">{GITHUB_ORG_CHOICE_HINT}</p>
       </div>
     );
   }

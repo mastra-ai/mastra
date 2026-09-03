@@ -8,6 +8,7 @@ import { useState } from 'react';
 import { useGithubReposQuery } from '../../../../hooks/useGithubRepos';
 import { useGithubStatusQuery } from '../../../../hooks/useGithubStatus';
 import type { GithubRepo, GithubStatus } from '../services/github';
+import { GITHUB_ORG_CHOICE_HINT, describeInstallations } from './githubConnectionCopy';
 import { SearchIcon } from '../../../ui/icons';
 import { SkeletonRows } from '../../../ui/SkeletonRows';
 
@@ -34,6 +35,7 @@ export function VcsFactoryStep({
   const githubStatus = useGithubStatusQuery();
   const connected = githubStatus.data?.connected === true;
   const repos = useGithubReposQuery(query || undefined, connected);
+  const installedOn = describeInstallations(githubStatus.data?.installations ?? []);
 
   return (
     <section
@@ -102,9 +104,16 @@ export function VcsFactoryStep({
               No repositories found.
             </Txt>
           )}
-          <Button variant="outline" size="sm" className="self-start" onClick={onManageConnection}>
-            Manage GitHub connection
-          </Button>
+          <div className="flex flex-wrap items-center gap-3">
+            <Button variant="outline" size="sm" onClick={onManageConnection}>
+              Manage GitHub connection
+            </Button>
+            {installedOn && (
+              <Txt as="p" variant="ui-xs" className="text-icon3 m-0">
+                {installedOn}
+              </Txt>
+            )}
+          </div>
         </div>
       )}
     </section>
@@ -142,10 +151,19 @@ function GithubConnection({
       descriptionSlot={message}
       actionSlot={
         !unavailable ? (
-          <Button variant="primary" disabled={isConnecting} onClick={onConnect}>
-            {isConnecting ? <Spinner size="sm" aria-label="Connecting to GitHub" /> : <GithubIcon className="size-4" />}
-            Connect GitHub
-          </Button>
+          <div className="flex max-w-md flex-col items-center gap-3">
+            <Button variant="primary" disabled={isConnecting} onClick={onConnect}>
+              {isConnecting ? (
+                <Spinner size="sm" aria-label="Connecting to GitHub" />
+              ) : (
+                <GithubIcon className="size-4" />
+              )}
+              Connect GitHub
+            </Button>
+            <Txt as="p" variant="ui-sm" className="text-icon3 m-0 text-center">
+              {GITHUB_ORG_CHOICE_HINT}
+            </Txt>
+          </div>
         ) : missingEnvVars.length > 0 ? (
           <div className="flex max-w-md flex-col items-center gap-2">
             <Txt as="p" variant="ui-sm" className="text-icon3 m-0 text-center">
