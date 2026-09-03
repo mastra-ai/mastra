@@ -26,10 +26,11 @@ async function startHttpServer() {
         res,
       });
     } catch (error) {
+      console.error('Conformance server request failed', error);
       if (!res.headersSent) {
         res.writeHead(500, { 'content-type': 'text/plain' });
       }
-      res.end(error instanceof Error ? error.message : String(error));
+      res.end('Internal server error');
     }
   });
 
