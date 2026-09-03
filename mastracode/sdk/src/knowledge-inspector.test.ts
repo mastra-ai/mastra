@@ -456,16 +456,49 @@ describe('KnowledgeInspector', () => {
 
     factory.session.setState({ factoryProjectId: 'proj-7', factoryOrgId: 'org-42' });
     await factory.knowledge.createNode({ name: 'Seeded', kind: 'concept', scope: ['org:org-42'] });
-    const first = await factory.inspector.listNodes({ level: 'org' });
-    expect(first.nodes.map(node => node.name)).toEqual(['Seeded']);
+    await factory.knowledge.createNode({ name: 'Seeded too', kind: 'concept', scope: ['org:org-42'] });
+    const first = await factory.inspector.listNodes({ level: 'org', limit: 1 });
+    expect(first.nodes).toHaveLength(1);
+    expect(first.nextCursor).toBeDefined();
     const handle = first.nodes[0]!.handle;
-    await expect(factory.inspector.getNode({ handle })).resolves.toMatchObject({ node: { name: 'Seeded' } });
+    await expect(factory.inspector.getNode({ handle })).resolves.toMatchObject({
+      node: { name: first.nodes[0]!.name },
+    });
+    const page2 = await factory.inspector.listNodes({ level: 'org', cursor: first.nextCursor, limit: 1 });
+    expect(page2.nodes).toHaveLength(1);
+    expect(page2.nodes[0]!.name).not.toBe(first.nodes[0]!.name);
 
     factory.session.setState({ factoryProjectId: 'proj-7', factoryOrgId: 'org-99' });
     await expect(factory.inspector.getNode({ handle })).rejects.toMatchObject({ code: 'invalid-handle' });
+    await expect(
+      factory.inspector.listNodes({ level: 'org', cursor: first.nextCursor, limit: 1 }),
+    ).rejects.toMatchObject({ code: 'invalid-cursor' });
     const second = await factory.inspector.listNodes({ level: 'org' });
     expect(second.identityKey).not.toBe(first.identityKey);
     expect(second.nodes).toEqual([]);
+  });
+
+  it('validates thread ownership against the session resource while reading under the Factory project', async () => {
+    const factory = await createHarness({ factoryOrgId: 'org-42', factoryProjectId: 'proj-7' });
+    // The session's own resource id (`project-1`) differs from the Factory
+    // project id; the active thread belongs to the session resource, not to
+    // `proj-7`, and must still be accepted as this session's thread rung.
+    expect(factory.session.session.identity.getResourceId()).not.toBe('proj-7');
+    await factory.knowledge.createNode({
+      name: 'Thread node',
+      kind: 'note',
+      scope: ['org:org-42', 'resource:proj-7', 'thread:thread-1'],
+    });
+
+    await expect(factory.inspector.getScopeTree()).resolves.toMatchObject({
+      roots: expect.arrayContaining([
+        { level: 'resource', id: 'proj-7', available: true },
+        { level: 'thread', id: 'thread-1', available: true },
+      ]),
+    });
+    await expect(factory.inspector.listNodes({ level: 'thread' })).resolves.toMatchObject({
+      nodes: [expect.objectContaining({ name: 'Thread node' })],
+    });
   });
 
   it('fails closed when a Factory-owned session has no resolved org', async () => {
