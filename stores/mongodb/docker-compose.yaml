@@ -5,6 +5,7 @@ services:
     # fleet runs. Do not bump back to 8.x until MongoDB ships a patched TCMalloc.
     image: mongo:7.0.37
     container_name: 'mongodb-storage-test-db'
+    command: ['mongod', '--replSet', 'rs0', '--bind_ip_all']
     ports:
       - '27017:27017'
     volumes:
@@ -12,7 +13,14 @@ services:
       # the old `mongodbdata` volume would fail on machines that ran 8.3.4.
       - mongodbdata-v7:/data/db
     healthcheck:
-      test: ['CMD', 'mongosh', '--eval', "db.adminCommand('ping')"]
+      test:
+        [
+          'CMD',
+          'mongosh',
+          '--quiet',
+          '--eval',
+          "try { quit(rs.status().ok ? 0 : 1) } catch (error) { quit(rs.initiate({_id:'rs0',members:[{_id:0,host:'localhost:27017'}]}).ok ? 0 : 1) }",
+        ]
       interval: 2s
       timeout: 2s
       retries: 15

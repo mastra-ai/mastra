@@ -12,7 +12,6 @@ vi.setConfig({ testTimeout: 60_000, hookTimeout: 60_000 });
 const pool = new Pool({ connectionString });
 const schemas: string[] = [];
 let schemaCounter = 0;
-
 createKnowledgeStorageTests(async reopen => {
   const schemaName = reopen ? schemas.at(-1)! : `knowledge_canonical_${process.pid}_${schemaCounter++}`;
   if (!reopen) {
