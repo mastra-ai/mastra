@@ -310,6 +310,11 @@ async function queueRunKickoff(storage: WorkItemsStorage, options?: { preapprove
   };
 }
 
+async function decisionByKey(storage: WorkItemsStorage, idempotencyKey: string) {
+  const rows = await storage.listDeferredDecisions('org-1', PROJECT_ID);
+  return rows.find(row => row.idempotencyKey === idempotencyKey);
+}
+
 describe('FactoryDecisionDispatcher', () => {
   it('reconciles persisted tool results before claiming each dispatch batch', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
@@ -1790,7 +1795,7 @@ describe('FactoryDecisionDispatcher', () => {
     expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]?.status).toBe('succeeded');
   });
 
-  async function createPullRequestItem(storage: WorkItemsStorage) {
+  async function createPullRequestItem(storage: WorkItemsStorage, authorTrusted = true) {
     return (
       await storage.upsert({
         orgId: 'org-1',
@@ -1801,7 +1806,7 @@ describe('FactoryDecisionDispatcher', () => {
           title: 'Fix change',
           stages: ['intake'],
           sessions: {},
-          metadata: { authorTrusted: true },
+          metadata: { authorTrusted },
         },
       })
     ).item;
@@ -1880,6 +1885,58 @@ describe('FactoryDecisionDispatcher', () => {
     const rows = await storage.listDeferredDecisions('org-1', PROJECT_ID);
     expect(rows.find(row => row.idempotencyKey === 're-review-2')?.status).toBe('succeeded');
     expect((await storage.get({ orgId: 'org-1', id: item.id }))?.stages).toEqual(['review']);
+  });
+
+  it('carries the approval of a parked external move into the run its lane queues', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const item = await createPullRequestItem(storage, false);
+    const transitionService = new FactoryTransitionService({
+      rules: defaultFactoryRules({ version: 'rules-v1' }),
+      storage,
+    });
+    await storage.commitRuleEvaluation({
+      orgId: 'org-1',
+      factoryProjectId: PROJECT_ID,
+      workItemId: item.id,
+      ingress: { identity: 'push-3', triggerType: 'github' },
+      ruleSetVersion: 'rules-v1',
+      expectedRevision: item.revision,
+      actor: { type: 'github', login: 'author', trusted: false, factoryAuthored: false },
+      outcome: { status: 'accepted' },
+      decisions: [{ type: 'transition', board: 'review', stage: 'review', idempotencyKey: 're-review-3' }],
+      causalChain: [],
+      now: new Date('2030-01-01T00:00:00Z'),
+    });
+    const { controller } = createSession();
+    const dispatcher = new FactoryDecisionDispatcher({
+      controller: controller as never,
+      transitionService,
+      storage,
+      ownerId: 'worker-1',
+      isAutoRunEnabled: async () => false,
+    });
+
+    await dispatcher.runOnce(new Date('2030-01-01T00:01:00Z'));
+    const parked = (await storage.listDeferredDecisions('org-1', PROJECT_ID)).find(
+      row => row.idempotencyKey === 're-review-3',
+    );
+    expect(parked?.status).toBe('proposed');
+    await storage.approveDeferredDecision(
+      'org-1',
+      PROJECT_ID,
+      parked?.id ?? '',
+      new Date('2030-01-01T00:02:00Z'),
+      'user-1',
+    );
+    await dispatcher.runOnce(new Date('2030-01-01T00:03:00Z'));
+
+    expect((await storage.get({ orgId: 'org-1', id: item.id }))?.stages).toEqual(['review']);
+    const queued = (await storage.listDeferredDecisions('org-1', PROJECT_ID)).filter(
+      row => row.decision.type === 'invokeSkill',
+    );
+    expect(queued).toHaveLength(1);
+    expect(queued[0]?.approvedBy).toBe('user-1');
+    expect(queued[0]?.status).not.toBe('proposed');
   });
 
   it('still mirrors an external close onto a resting lane without asking', async () => {
@@ -3451,7 +3508,7 @@ describe('FactoryDecisionDispatcher', () => {
     );
     expect(linked).toMatchObject({ parentWorkItemId: parent.id, stages: ['intake'] });
     expect(intakeEntered).toHaveBeenCalledTimes(1);
-    expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]?.status).toBe('succeeded');
+    expect(await decisionByKey(storage, 'linked-1')).toMatchObject({ status: 'succeeded' });
   });
 
   it('removes a newly materialized linked item when its initial Intake entry is rejected', async () => {
@@ -3511,7 +3568,7 @@ describe('FactoryDecisionDispatcher', () => {
         item => item.externalSource?.externalId === 'github-issue:2',
       ),
     ).toBeUndefined();
-    expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]).toMatchObject({
+    expect(await decisionByKey(storage, 'linked-rejected')).toMatchObject({
       status: 'retry',
       lastError: 'forbidden: Intake is closed.',
     });
@@ -3568,7 +3625,7 @@ describe('FactoryDecisionDispatcher', () => {
     await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
 
     expect(intakeEntered).not.toHaveBeenCalled();
-    expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]?.status).toBe('succeeded');
+    expect(await decisionByKey(storage, 'linked-1')).toMatchObject({ status: 'succeeded' });
   });
 
   it('rejects a chained effect at the bounded causal depth before external dispatch', async () => {
