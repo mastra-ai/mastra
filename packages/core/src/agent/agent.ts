@@ -457,7 +457,7 @@ function listProcessorWorkflowChildren(workflow: ProcessorWorkflow): unknown[] {
 }
 
 function hasConfiguredProcessor(
-  processors: InputProcessorOrWorkflow[],
+  processors: Array<InputProcessorOrWorkflow | OutputProcessorOrWorkflow | ErrorProcessorOrWorkflow>,
   predicate: (processor: Processor) => boolean,
 ): boolean {
   return processors.some(processor => {
@@ -1697,13 +1697,7 @@ export class Agent<
     // Resolve processors - overrides replace user-configured but auto-derived (memory, skills) are kept
     const inputProcessors = await this.listResolvedInputProcessors(requestContext, inputProcessorOverrides);
     const outputProcessors = await this.listResolvedOutputProcessors(requestContext, outputProcessorOverrides);
-    const errorProcessors =
-      errorProcessorOverrides ??
-      (this.#errorProcessors
-        ? typeof this.#errorProcessors === 'function'
-          ? await this.#errorProcessors({ requestContext: requestContext as RequestContext<TRequestContext> })
-          : this.#errorProcessors
-        : []);
+    const errorProcessors = await this.listResolvedErrorProcessors(requestContext, errorProcessorOverrides);
 
     return new ProcessorRunner({
       inputProcessors,
@@ -1863,6 +1857,29 @@ export class Agent<
     // Memory processors run last to persist the final form.
     const allProcessors = [...configuredProcessors, ...channelProcessors, ...memoryProcessors];
     return this.combineProcessorsIntoWorkflow(allProcessors, `${this.id}-output-processor`);
+  }
+
+  /**
+   * Resolves error processors from agent configuration.
+   * @internal
+   */
+  private async listResolvedErrorProcessors(
+    requestContext?: RequestContext,
+    configuredProcessorOverrides?: ErrorProcessorOrWorkflow[],
+  ): Promise<ErrorProcessorOrWorkflow[]> {
+    const configuredProcessors =
+      configuredProcessorOverrides ??
+      (this.#errorProcessors
+        ? typeof this.#errorProcessors === 'function'
+          ? await this.#errorProcessors({
+              requestContext: (requestContext || new RequestContext()) as RequestContext<TRequestContext>,
+            })
+          : this.#errorProcessors
+        : []);
+
+    return hasConfiguredProcessor(configuredProcessors, processor => processor.id === 'provider-history-compat')
+      ? configuredProcessors
+      : [...configuredProcessors, new ProviderHistoryCompat()];
   }
 
   /**
@@ -7464,13 +7481,7 @@ export class Agent<
       }: {
         requestContext: RequestContext;
         overrides?: ErrorProcessorOrWorkflow[];
-      }) =>
-        overrides ??
-        (this.#errorProcessors
-          ? typeof this.#errorProcessors === 'function'
-            ? await this.#errorProcessors({ requestContext: requestContext as RequestContext<TRequestContext> })
-            : this.#errorProcessors
-          : []),
+      }) => this.listResolvedErrorProcessors(requestContext, overrides),
       llm,
     };
 

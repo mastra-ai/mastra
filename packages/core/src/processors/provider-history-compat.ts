@@ -152,7 +152,7 @@ function rewriteToolIds(messages: MastraDBMessage[], idMap: Map<string, string>)
  */
 export const anthropicToolIdFormat: CompatRule = {
   name: 'anthropic-tool-id-format',
-  errorPatterns: [/tool_use\.id:.*should match pattern/i, /tool_call_id.*invalid/i],
+  errorPatterns: [/tool_use\.id.*should match pattern/i, /tool_call_id.*invalid/i],
   fix(messages) {
     const idMap = buildToolIdMap(messages);
     if (idMap.size === 0) return false;
@@ -241,12 +241,18 @@ function getModelProviderFamily(model: unknown): ProviderFamily | undefined {
   return undefined;
 }
 
-function getPartProviderFamily(part: { providerOptions?: unknown }): ProviderFamily | undefined {
-  if (!part.providerOptions || typeof part.providerOptions !== 'object') return undefined;
-  const providers = Object.keys(part.providerOptions);
-  if (providers.some(provider => provider === 'anthropic')) return 'anthropic';
-  if (providers.some(provider => provider === 'openai' || provider === 'azure')) return 'openai';
-  if (providers.some(provider => provider === 'google' || provider === 'vertex')) return 'google';
+function getPartProviderFamily(part: { providerOptions?: unknown; toolCallId?: string }): ProviderFamily | undefined {
+  if (part.providerOptions && typeof part.providerOptions === 'object') {
+    const providers = Object.keys(part.providerOptions);
+    if (providers.some(provider => provider === 'anthropic')) return 'anthropic';
+    if (providers.some(provider => provider === 'openai' || provider === 'azure')) return 'openai';
+    if (providers.some(provider => provider === 'google' || provider === 'vertex')) return 'google';
+  }
+
+  // Provider-executed tool metadata is not always preserved in persisted history,
+  // but provider-owned IDs retain stable prefixes.
+  if (part.toolCallId?.startsWith('srvtoolu_')) return 'anthropic';
+  if (part.toolCallId?.startsWith('ws_')) return 'openai';
   return undefined;
 }
 
@@ -279,7 +285,8 @@ export const stripForeignProviderExecutedTools: CompatRule = {
     for (const message of prompt) {
       if (message.role === 'assistant') {
         const content = message.content.filter(
-          part => part.type !== 'tool-call' || !foreignToolCallIds.has(part.toolCallId),
+          part =>
+            (part.type !== 'tool-call' && part.type !== 'tool-result') || !foreignToolCallIds.has(part.toolCallId),
         );
         if (content.length > 0) rewritten.push({ ...message, content });
         continue;

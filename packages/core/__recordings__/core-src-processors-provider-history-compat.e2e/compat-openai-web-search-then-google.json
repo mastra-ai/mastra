@@ -1,0 +1,350 @@
+{
+  "meta": {
+    "name": "compat-openai-web-search-then-google",
+    "testFile": "src/processors/provider-history-compat.e2e.test.ts",
+    "testName": "provider history compat › openai-web-search-then-google",
+    "model": "gpt-4o-mini",
+    "createdAt": "2026-09-03T04:57:41.436Z",
+    "updatedAt": "2026-09-03T05:15:59.063Z"
+  },
+  "recordings": [
+    {
+      "hash": "f8bb9d651beb4d33",
+      "request": {
+        "url": "https://api.openai.com/v1/responses",
+        "method": "POST",
+        "body": {
+          "model": "gpt-4o-mini",
+          "input": [
+            {
+              "role": "system",
+              "content": "Answer in at most ten words."
+            },
+            {
+              "role": "user",
+              "content": [
+                {
+                  "type": "input_text",
+                  "text": "Use the web_search tool to find who created TypeScript, then answer in one sentence."
+                }
+              ]
+            }
+          ],
+          "include": [
+            "web_search_call.action.sources"
+          ],
+          "tools": [
+            {
+              "type": "web_search"
+            }
+          ],
+          "tool_choice": "auto"
+        },
+        "timestamp": 1788412554061
+      },
+      "response": {
+        "status": 200,
+        "statusText": "OK",
+        "headers": {
+          "access-control-expose-headers": "X-Request-ID, CF-Ray, CF-Ray",
+          "alt-svc": "h3=\":443\"; ma=86400",
+          "cf-cache-status": "DYNAMIC",
+          "cf-ray": "a352477efffecb9f-LAX",
+          "connection": "keep-alive",
+          "content-type": "application/json",
+          "date": "Thu, 03 Sep 2026 05:15:57 GMT",
+          "openai-organization": "mastra-qb2kpb",
+          "openai-processing-ms": "3407",
+          "openai-project": "proj_Cvw1JiXoxHTeEWgnnK3t9AYG",
+          "openai-version": "2020-10-01",
+          "server": "cloudflare",
+          "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+          "x-content-type-options": "nosniff",
+          "x-ratelimit-limit-requests": "30000",
+          "x-ratelimit-limit-tokens": "150000000",
+          "x-ratelimit-remaining-requests": "29999",
+          "x-ratelimit-remaining-tokens": "149999652",
+          "x-ratelimit-reset-requests": "2ms",
+          "x-ratelimit-reset-tokens": "0s",
+          "x-request-id": "req_e50f18b4f5ce4a75a3dcfcccc67fd051"
+        },
+        "body": {
+          "id": "resp_036014d69fa5f16e006a99028a365487d083d0f0f111fbe19d",
+          "object": "response",
+          "created_at": 1788412554,
+          "status": "completed",
+          "background": false,
+          "billing": {
+            "payer": "developer"
+          },
+          "completed_at": 1788412557,
+          "error": null,
+          "frequency_penalty": 0,
+          "incomplete_details": null,
+          "instructions": null,
+          "max_output_tokens": null,
+          "max_tool_calls": null,
+          "model": "gpt-4o-mini-2024-07-18",
+          "moderation": null,
+          "output": [
+            {
+              "id": "ws_036014d69fa5f16e006a99028b3afc87d0bfe1f3ef181af915",
+              "type": "web_search_call",
+              "status": "completed",
+              "action": {
+                "type": "search",
+                "queries": [
+                  "who created TypeScript"
+                ],
+                "query": "who created TypeScript",
+                "sources": [
+                  {
+                    "type": "url",
+                    "url": "https://www.techtarget.com/searchapparchitecture/news/252488217/TypeScripts-co-creator-speaks-out-on-TypeScript-40?utm_source=openai"
+                  },
+                  {
+                    "type": "url",
+                    "url": "https://www.typescriptlang.org/?utm_source=openai"
+                  },
+                  {
+                    "type": "url",
+                    "url": "https://www.npmjs.com/package/ts-creator?utm_source=openai"
+                  },
+                  {
+                    "type": "url",
+                    "url": "https://www.codecademy.com/resources/docs/typescript/about-typescript?utm_source=openai"
+                  },
+                  {
+                    "type": "url",
+                    "url": "https://ts-aot.dev/?utm_source=openai"
+                  },
+                  {
+                    "type": "url",
+                    "url": "https://commandline.microsoft.com/typescript-7-0-anders-hejlsberg-peterman-pod/?utm_source=openai"
+                  },
+                  {
+                    "type": "url",
+                    "url": "https://www.xjavascript.com/blog/who-created-typescript/?utm_source=openai"
+                  },
+                  {
+                    "type": "url",
+                    "url": "https://codearchaeology.dev/languages/typescript/?utm_source=openai"
+                  },
+                  {
+                    "type": "url",
+                    "url": "https://www.skypack.dev/view/ts-creator?utm_source=openai"
+                  },
+                  {
+                    "type": "url",
+                    "url": "https://programmingandcoding.fandom.com/wiki/TypeScript?utm_source=openai"
+                  },
+                  {
+                    "type": "url",
+                    "url": "https://npm.io/package/ts-creator?utm_source=openai"
+                  },
+                  {
+                    "type": "url",
+                    "url": "https://scriptc.dev/?utm_source=openai"
+                  },
+                  {
+                    "type": "url",
+                    "url": "https://en.wikipedia.org/wiki/TypeScript?utm_source=openai"
+                  }
+                ]
+              }
+            },
+            {
+              "id": "msg_036014d69fa5f16e006a99028c861487d08280dded52362646",
+              "type": "message",
+              "status": "completed",
+              "content": [
+                {
+                  "type": "output_text",
+                  "annotations": [
+                    {
+                      "type": "url_citation",
+                      "end_index": 137,
+                      "start_index": 57,
+                      "title": "TypeScript",
+                      "url": "https://en.wikipedia.org/wiki/TypeScript?utm_source=openai"
+                    }
+                  ],
+                  "logprobs": [],
+                  "text": "TypeScript was created by Anders Hejlsberg at Microsoft. ([en.wikipedia.org](https://en.wikipedia.org/wiki/TypeScript?utm_source=openai)) "
+                }
+              ],
+              "role": "assistant"
+            }
+          ],
+          "parallel_tool_calls": true,
+          "presence_penalty": 0,
+          "previous_response_id": null,
+          "prompt_cache_key": null,
+          "prompt_cache_retention": "in_memory",
+          "reasoning": {
+            "context": null,
+            "effort": null,
+            "summary": null
+          },
+          "safety_identifier": null,
+          "service_tier": "default",
+          "store": true,
+          "temperature": 1,
+          "text": {
+            "format": {
+              "type": "text"
+            },
+            "verbosity": "medium"
+          },
+          "tool_choice": "auto",
+          "tool_usage": {
+            "image_gen": {
+              "input_tokens": 0,
+              "input_tokens_details": {
+                "image_tokens": 0,
+                "text_tokens": 0
+              },
+              "output_tokens": 0,
+              "output_tokens_details": {
+                "image_tokens": 0,
+                "text_tokens": 0
+              },
+              "total_tokens": 0
+            },
+            "web_search": {
+              "num_requests": 1
+            }
+          },
+          "tools": [
+            {
+              "type": "web_search",
+              "return_token_budget": "default",
+              "search_content_types": [
+                "text"
+              ],
+              "search_context_size": "medium",
+              "user_location": {
+                "type": "approximate",
+                "city": null,
+                "country": "US",
+                "region": null,
+                "timezone": null
+              }
+            }
+          ],
+          "top_logprobs": 0,
+          "top_p": 1,
+          "truncation": "disabled",
+          "usage": {
+            "input_tokens": 8174,
+            "input_tokens_details": {
+              "cache_write_tokens": 0,
+              "cached_tokens": 0
+            },
+            "output_tokens": 49,
+            "output_tokens_details": {
+              "reasoning_tokens": 0
+            },
+            "total_tokens": 8223
+          },
+          "user": null,
+          "metadata": {}
+        },
+        "isStreaming": false
+      }
+    },
+    {
+      "hash": "8e883938351b281e",
+      "request": {
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent",
+        "method": "POST",
+        "body": {
+          "generationConfig": {},
+          "contents": [
+            {
+              "role": "user",
+              "parts": [
+                {
+                  "text": "Use the web_search tool to find who created TypeScript, then answer in one sentence."
+                }
+              ]
+            },
+            {
+              "role": "model",
+              "parts": [
+                {
+                  "text": "TypeScript was created by Anders Hejlsberg at Microsoft. ([en.wikipedia.org](https://en.wikipedia.org/wiki/TypeScript?utm_source=openai)) "
+                }
+              ]
+            },
+            {
+              "role": "user",
+              "parts": [
+                {
+                  "text": "Say the word \"ready\" and nothing else."
+                }
+              ]
+            }
+          ],
+          "systemInstruction": {
+            "parts": [
+              {
+                "text": "Answer in at most ten words."
+              }
+            ]
+          }
+        },
+        "timestamp": 1788412557607
+      },
+      "response": {
+        "status": 200,
+        "statusText": "OK",
+        "headers": {
+          "alt-svc": "h3=\":443\"; ma=2592000,h3-29=\":443\"; ma=2592000",
+          "content-type": "application/json; charset=UTF-8",
+          "date": "Thu, 03 Sep 2026 05:15:59 GMT",
+          "server": "scaffolding on HTTPServer2",
+          "server-timing": "gfet4t7; dur=1378",
+          "vary": "Origin, X-Origin, Referer",
+          "x-content-type-options": "nosniff",
+          "x-frame-options": "SAMEORIGIN",
+          "x-gemini-service-tier": "standard",
+          "x-xss-protection": "0"
+        },
+        "body": {
+          "candidates": [
+            {
+              "content": {
+                "parts": [
+                  {
+                    "text": "ready",
+                    "thoughtSignature": "EqoFCqcFARFNMg+CIfq/WQZTrcMwl8b4eb951+ZGYTpb18tsDbEsollxkiWOt8EJ3FU1p7XZoHQtotgjaF+zlbP7JCClEIhM8x5LLx7UeiQ4n7XxQTQARIGus1zasMjdwClDpkEGw5bN4XQlQchVjWRFRsqUhEZYl9feg962RZOhtqQCTZikDbvAszOONCNq1sGV3OOIiWA9uOcRgGRQFmpWIw2OKNNXvi+7m5com5/2oCjuQT6HzGNB+m3ps2EYiP0GfWZjwbwHjpz2DXGA6aLZs1OEE5uYPK9x0r9MOFZXvXkFUzfgaUYdwCcNYEyNP67M70q45u7rnFI9MC0SpNitwF2nS5xowYUJZTPpO2qyR9L/jKyhNGaN2JtIdTqQx4hEnFt/SCsyfxrmM3dQGCuhOOZ+WSCFAcU+hxDGEOajVUwXtZ/rPjwUpbsnfwVTvt+XbbjaFVPIxwSTTNJSgHIOGZGEvhqUcCB7CxXOgY6SDi1EecNLbTyi6N5uO/G6ivfoIluNrdyoVtL7Y9q1kjGjftPiVSLgvKSI5SNTB6O+rNPSTXWkHdLGVXDKIxT/CRl2coTHqEiyYuYNoOjJKKBTNed3PPwEJlrnUhdlU22hrHRrZjovxqwoyrTMfPejSV/Uw3S3NjWmYU6w6S9LcegeQ5YpKHzog1/p5NybPoLLrUMao0ZTOnNycxjLl0PGgHYjln/pzoyZz9Mk6pIaN+FYOO1X1p3R5fIdIXlv3JE1dsIGx81hmOlYFDH5fjueqZeTOOziC6735ABZE8m9p8qwkvIvDvWnRx6GhpJYr76be7WeZg4fVROWzA/y5UvgXWb9wGL1s3Kj6cQRTed1RCXTAb6t/4t2h+gnF5hvO0KcsuyaD57rV982TKAaziEBNu2lWNHZfDFXXpjfpQ=="
+                  }
+                ],
+                "role": "model"
+              },
+              "finishReason": "STOP",
+              "index": 0
+            }
+          ],
+          "usageMetadata": {
+            "promptTokenCount": 76,
+            "candidatesTokenCount": 1,
+            "totalTokenCount": 243,
+            "promptTokensDetails": [
+              {
+                "modality": "TEXT",
+                "tokenCount": 76
+              }
+            ],
+            "thoughtsTokenCount": 166,
+            "serviceTier": "standard"
+          },
+          "modelVersion": "gemini-3.6-flash",
+          "responseId": "jQKZauDYLc63qtsPw5itqQ8"
+        },
+        "isStreaming": false
+      }
+    }
+  ]
+}
