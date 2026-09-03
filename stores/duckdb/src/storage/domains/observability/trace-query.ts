@@ -38,7 +38,14 @@ const SPAN_FIELDS = {
 
 const SCORE_FIELDS = {
   scorerId: { sql: 's.scorerId', parameterType: 'scalar' },
+  scorerVersion: { sql: 's.scorerVersion', parameterType: 'scalar' },
+  scoreSource: { sql: 's.scoreSource', parameterType: 'scalar' },
   score: { sql: 's.score', parameterType: 'scalar' },
+  timestamp: { sql: 's.timestamp', parameterType: 'timestamp' },
+  spanId: { sql: 's.spanId', parameterType: 'scalar' },
+  entityVersionId: { sql: 's.entityVersionId', parameterType: 'scalar' },
+  parentEntityVersionId: { sql: 's.parentEntityVersionId', parameterType: 'scalar' },
+  rootEntityVersionId: { sql: 's.rootEntityVersionId', parameterType: 'scalar' },
 } satisfies FieldRegistry<TraceQueryScoreField>;
 
 const TRACE_SELECT = `
