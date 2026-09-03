@@ -132,7 +132,7 @@ export async function executeTarget(
     unmockedToolPolicy?: UnmockedToolPolicy;
   },
 ): Promise<ExecutionResult> {
-  let assignedAgentTraceId: string | null = null;
+  let traceId: string | null = null;
 
   try {
     const signal = options?.signal;
@@ -154,8 +154,8 @@ export async function executeTarget(
           options?.versions,
           options?.toolMocks,
           options?.unmockedToolPolicy,
-          traceId => {
-            assignedAgentTraceId = traceId;
+          assignedTraceId => {
+            traceId = assignedTraceId;
           },
         );
         break;
@@ -185,7 +185,7 @@ export async function executeTarget(
         message: error instanceof Error ? error.message : String(error),
         stack: error instanceof Error ? error.stack : undefined,
       },
-      traceId: assignedAgentTraceId,
+      traceId,
     };
   }
 }
