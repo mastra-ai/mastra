@@ -2,7 +2,7 @@
 
 import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
-import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
 import { mkdir } from 'node:fs/promises';
 import { basename, join, relative, resolve } from 'node:path';
 import process from 'node:process';
@@ -81,8 +81,8 @@ export async function syncOfficialSkills(options: SyncOfficialSkillsOptions): Pr
       throw new Error('Commit the Mastra checkout before generating exact provenance.');
     }
 
-    const targetTopLevel = resolve(gitOutput(options.targetRoot, ['rev-parse', '--show-toplevel']));
-    if (targetTopLevel !== resolve(options.targetRoot)) {
+    const targetTopLevel = realpathSync(resolve(gitOutput(options.targetRoot, ['rev-parse', '--show-toplevel'])));
+    if (targetTopLevel !== realpathSync(resolve(options.targetRoot))) {
       throw new Error(`Target must be the official skills repository root: ${targetTopLevel}`);
     }
     const remote = gitOutput(options.targetRoot, ['remote', 'get-url', 'origin']);
