@@ -29,6 +29,7 @@ export type ErrorType =
   | 'timeout'
   | 'invalid_request'
   | 'server_error'
+  | 'provider_unavailable'
   | 'model_not_found'
   | 'context_length'
   | 'content_filter'
@@ -93,6 +94,23 @@ function extractRequestUrl(error: unknown): string | undefined {
   return undefined;
 }
 
+function extractStatusCode(error: unknown): number | undefined {
+  if (!error || typeof error !== 'object') return undefined;
+  const errorObj = error as Record<string, unknown>;
+  for (const candidate of [errorObj['statusCode'], errorObj['status']]) {
+    if (typeof candidate === 'number') return candidate;
+  }
+  return undefined;
+}
+
+/** Combine the HTTP status and the raw provider response into a single diagnostic line. */
+function describeHttpFailure(statusCode: number | undefined, detail: string | undefined): string | undefined {
+  const parts: string[] = [];
+  if (statusCode !== undefined) parts.push(`HTTP ${statusCode}`);
+  if (detail && !/^https?:\/\//.test(detail)) parts.push(detail);
+  return parts.length > 0 ? parts.join(': ') : undefined;
+}
+
 /** A flattened error crossing the wire: the server sends `{ name, message }`, not an `Error`. */
 function isSerializedError(value: unknown): value is { name: string; message: string } {
   return (
@@ -119,6 +137,7 @@ export function parseError(error: unknown): ParsedError {
   const errorObj = error as Record<string, unknown>;
   const detail = summarizeErrorDetail(error);
   const requestUrl = extractRequestUrl(error);
+  const statusCode = extractStatusCode(error);
 
   // Matched by name, not instance: the error may have crossed a serialization boundary.
   if (err.name === PROVIDER_AUTH_REQUIRED_ERROR) {
@@ -252,19 +271,37 @@ export function parseError(error: unknown): ParsedError {
     };
   }
 
-  // Check for server errors
+  // Check for a provider that is down or unreachable: gateway errors, overload,
+  // or an edge "Not Found" page served instead of the API during an outage.
   if (
-    message.includes('internal server') ||
-    message.includes('server error') ||
-    errorObj.statusCode === 500 ||
-    errorObj.status === 500 ||
-    errorObj.statusCode === 502 ||
-    errorObj.status === 502 ||
-    errorObj.statusCode === 503 ||
-    errorObj.status === 503
+    statusCode === 404 ||
+    statusCode === 502 ||
+    statusCode === 503 ||
+    statusCode === 504 ||
+    statusCode === 529 ||
+    /^not found\.?$/.test(message.trim()) ||
+    message.includes('bad gateway') ||
+    message.includes('service unavailable') ||
+    message.includes('gateway timeout') ||
+    message.includes('overloaded')
   ) {
     return {
+      message: 'Model provider unavailable. The provider may be down or unreachable right now.',
+      detail: describeHttpFailure(statusCode, detail),
+      requestUrl,
+      type: 'provider_unavailable',
+      retryable: true,
+      retryDelay: 5000,
+      originalError: err,
+    };
+  }
+
+  // Check for server errors
+  if (message.includes('internal server') || message.includes('server error') || statusCode === 500) {
+    return {
       message: 'Server error. The API may be experiencing issues.',
+      detail: describeHttpFailure(statusCode, detail),
+      requestUrl,
       type: 'server_error',
       retryable: true,
       retryDelay: 5000,
@@ -290,6 +327,8 @@ export function parseError(error: unknown): ParsedError {
   // Unknown error - try to extract useful info
   return {
     message: extractErrorDetail(err),
+    detail: statusCode !== undefined ? `HTTP ${statusCode}` : undefined,
+    requestUrl,
     type: 'unknown',
     retryable: false,
     originalError: err,

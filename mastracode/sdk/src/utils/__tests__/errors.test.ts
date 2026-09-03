@@ -50,6 +50,47 @@ describe('parseError', () => {
     expect(parsed.requestUrl).toBe('https://server.mastra.ai/v1/messages');
   });
 
+  it('treats a bare "Not Found" from a provider outage as provider unavailable', () => {
+    const parsed = parseError(new Error('Not Found'));
+
+    expect(parsed.type).toBe('provider_unavailable');
+    expect(parsed.message).toBe('Model provider unavailable. The provider may be down or unreachable right now.');
+    expect(parsed.detail).toBe('Not Found');
+    expect(parsed.retryable).toBe(true);
+  });
+
+  it('treats 404/502/503/504/529 status codes as provider unavailable with HTTP detail', () => {
+    for (const status of [404, 502, 503, 504, 529]) {
+      const parsed = parseError(
+        Object.assign(new Error('Not Found'), { statusCode: status, url: 'https://api.openai.com/v1/responses' }),
+      );
+
+      expect(parsed.type).toBe('provider_unavailable');
+      expect(parsed.detail).toBe(`HTTP ${status}: Not Found`);
+      expect(parsed.requestUrl).toBe('https://api.openai.com/v1/responses');
+    }
+  });
+
+  it('treats overloaded and gateway failures as provider unavailable', () => {
+    expect(parseError(new Error('Overloaded')).type).toBe('provider_unavailable');
+    expect(parseError(new Error('502 Bad Gateway')).type).toBe('provider_unavailable');
+    expect(parseError(new Error('Service Unavailable')).type).toBe('provider_unavailable');
+  });
+
+  it('still classifies model not found ahead of provider unavailable', () => {
+    const parsed = parseError(Object.assign(new Error('The model `gpt-99` does not exist'), { statusCode: 404 }));
+
+    expect(parsed.type).toBe('model_not_found');
+  });
+
+  it('adds HTTP status detail to unknown errors', () => {
+    const parsed = parseError(Object.assign(new Error('Teapot'), { statusCode: 418 }));
+
+    expect(parsed.type).toBe('unknown');
+    expect(parsed.message).toBe('Teapot');
+    expect(parsed.detail).toBe('HTTP 418');
+  });
+
   it('includes the request URL for access denied errors', () => {
     const error = Object.assign(new Error('forbidden'), {
       status: 403,
