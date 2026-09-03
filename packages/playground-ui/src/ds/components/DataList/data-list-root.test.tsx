@@ -43,11 +43,11 @@ describe('DataListRoot', () => {
       expect(grid).not.toBeNull();
       expect(grid).not.toBe(container.firstElementChild);
       expect(grid?.className).not.toContain('overflow-auto');
-      expect(container.firstElementChild?.className).toContain('rounded-xl');
+      expect(container.firstElementChild?.className).toContain('rounded-[10px]');
       expect(container.firstElementChild?.className).toContain('bg-surface4');
       expect(grid?.className).toContain('gap-y-px');
-      expect(grid?.className).toContain('[&_.data-list-subheader+.data-list-row]:rounded-t-lg');
-      expect(grid?.className).toContain('[&_.data-list-row:has(+.data-list-subheader)]:rounded-b-lg');
+      expect(grid?.className).toContain('[&_.data-list-subheader+.data-list-row]:rounded-t-md');
+      expect(grid?.className).toContain('[&_.data-list-row:has(+.data-list-subheader)]:rounded-b-md');
       expect(grid?.className).not.toMatch(/border-|ring-/);
       expect(grid?.className).not.toContain('[&_.data-list-row]:even:bg-surface-overlay-soft');
     });
@@ -62,7 +62,7 @@ describe('DataListRoot', () => {
       const root = container.firstElementChild as HTMLElement;
       const grid = container.querySelector<HTMLElement>('[style*="grid-template-columns"]');
       expect(root.className).not.toContain('bg-surface4');
-      expect(root.className).toContain('rounded-xl');
+      expect(root.className).toContain('rounded-[10px]');
       expect(root.getAttribute('variant')).toBeNull();
       expect(grid?.style.getPropertyValue('--data-list-background')).toBe('var(--surface1)');
       expect(grid?.className).toContain('[&_.data-list-top]:bg-(--data-list-background)');
