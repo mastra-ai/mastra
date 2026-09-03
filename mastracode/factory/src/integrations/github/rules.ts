@@ -327,6 +327,9 @@ export class GithubRules {
       reviewRequested || event === 'pullRequestCommentCreated' || event === 'pullRequestReviewSubmitted';
     const reReviewEvent = reviewRequested || event === 'pullRequestUpdated';
     const requestedReviewer = string(object(parsed.payload.requested_reviewer)?.login);
+    const pullRequestAuthor = string(object(pullRequest?.user)?.login);
+    const pullRequestFactoryAuthored =
+      provenance !== null || (pullRequestAuthor !== undefined && this.#isFactoryLogin(pullRequestAuthor));
     const relatedItem = await this.#relatedItem(
       project.orgId,
       project.factoryProjectId,
@@ -443,6 +446,8 @@ export class GithubRules {
                 assignees: actorLogins(pullRequest?.assignees),
                 requestedReviewers: actorLogins(pullRequest?.requested_reviewers),
                 labels: labelNames(pullRequest?.labels),
+                ...(pullRequestAuthor ? { author: pullRequestAuthor } : {}),
+                factoryAuthored: pullRequestFactoryAuthored,
                 headBranch: string(object(pullRequest?.head)?.ref) ?? '',
                 baseBranch: string(object(pullRequest?.base)?.ref) ?? '',
               },

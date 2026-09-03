@@ -721,6 +721,116 @@ describe('GithubRules', () => {
     );
   });
 
+  it('materializes and starts the first Review pass when a trusted maintainer requests Factory', async () => {
+    const { github, sourceControl, integrationStorage, workItems, projects, project } = await setup('write');
+    const rules = builtInFactoryRules();
+    const service = new GithubRules({
+      github,
+      sourceControl,
+      integrationStorage,
+      projects,
+      storage: workItems,
+      rules,
+    });
+    const dispatcher = new FactoryDecisionDispatcher({
+      controller: { getSessionByResource: vi.fn(async () => undefined) } as never,
+      transitionService: new FactoryTransitionService({ storage: workItems, rules }),
+      storage: workItems,
+      isAutoRunEnabled: async () => true,
+      ownerId: 'worker-1',
+    });
+    const reviewRequested = (deliveryId: string, reviewer = 'factory-app[bot]') => ({
+      event: 'pull_request',
+      deliveryId,
+      payload: {
+        action: 'review_requested',
+        installation: { id: 7 },
+        repository: { id: 10, full_name: 'acme/repo' },
+        sender: { login: 'maintainer' },
+        requested_reviewer: { login: reviewer },
+        pull_request: {
+          number: 17,
+          title: 'PR 17',
+          html_url: 'https://github.com/acme/repo/pull/17',
+          created_at: '2030-01-01T00:00:00Z',
+          state: 'open',
+          merged: false,
+          user: { login: 'pr-author' },
+          head: { ref: 'feature' },
+          base: { ref: 'main' },
+        },
+      },
+    });
+
+    await expect(service.ingest(reviewRequested('delivery-review-requested'))).resolves.toEqual({ status: 'committed' });
+    await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
+
+    const [card] = await workItems.list({ orgId: 'org-1', factoryProjectId: project.id });
+    expect(card).toMatchObject({
+      title: 'PR 17',
+      stages: ['intake'],
+      metadata: {
+        author: 'pr-author',
+        authorTrusted: true,
+        factoryAuthored: false,
+        autoStartCandidate: true,
+      },
+    });
+    expect(await workItems.listDeferredDecisions('org-1', project.id)).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          workItemId: card!.id,
+          decision: expect.objectContaining({ type: 'invokeSkill', skillName: 'factory-review', role: 'review' }),
+        }),
+      ]),
+    );
+
+    await expect(service.ingest(reviewRequested('delivery-review-requested'))).resolves.toEqual({ status: 'replayed' });
+    await expect(service.ingest(reviewRequested('delivery-review-requested-human', 'ada'))).resolves.toEqual({
+      status: 'committed',
+    });
+    expect(await workItems.list({ orgId: 'org-1', factoryProjectId: project.id })).toHaveLength(1);
+  });
+
+  it('does not materialize a Review card when an untrusted actor requests Factory', async () => {
+    const { github, sourceControl, integrationStorage, workItems, projects, project } = await setup('read');
+    const service = new GithubRules({
+      github,
+      sourceControl,
+      integrationStorage,
+      projects,
+      storage: workItems,
+      rules: builtInFactoryRules(),
+    });
+
+    await expect(
+      service.ingest({
+        event: 'pull_request',
+        deliveryId: 'delivery-review-requested-untrusted',
+        payload: {
+          action: 'review_requested',
+          installation: { id: 7 },
+          repository: { id: 10, full_name: 'acme/repo' },
+          sender: { login: 'contributor' },
+          requested_reviewer: { login: 'factory-app[bot]' },
+          pull_request: {
+            number: 17,
+            title: 'PR 17',
+            html_url: 'https://github.com/acme/repo/pull/17',
+            created_at: '2030-01-01T00:00:00Z',
+            state: 'open',
+            merged: false,
+            user: { login: 'pr-author' },
+            head: { ref: 'feature' },
+            base: { ref: 'main' },
+          },
+        },
+      }),
+    ).resolves.toEqual({ status: 'committed' });
+    expect(await workItems.list({ orgId: 'org-1', factoryProjectId: project.id })).toEqual([]);
+    expect(await workItems.listDeferredDecisions('org-1', project.id)).toEqual([]);
+  });
+
   it('commits a re-review transition when review is re-requested from the Factory bot', async () => {
     const { github, sourceControl, integrationStorage, workItems, projects, project } = await setup('write');
     const reviewed = await workItems.upsert({
