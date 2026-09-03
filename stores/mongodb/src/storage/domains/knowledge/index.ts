@@ -1394,13 +1394,32 @@ export class KnowledgeMongoDB extends KnowledgeStorage {
           session,
         );
       }
-      await (
-        await this.#collection(TABLE_KNOWLEDGE_MENTIONS)
-      ).updateMany(
-        { targetNodeId: input.sourceId },
-        { $set: { targetNodeId: input.targetId } },
-        sessionOptions(session),
-      );
+      const mentions = await this.#collection(TABLE_KNOWLEDGE_MENTIONS);
+      const sourceMentions = await mentions.find({ targetNodeId: input.sourceId }, sessionOptions(session)).toArray();
+      if (sourceMentions.length) {
+        const duplicateRecordIds = (
+          await mentions
+            .find(
+              {
+                targetNodeId: input.targetId,
+                recordId: { $in: sourceMentions.map(mention => mention.recordId) },
+              },
+              sessionOptions(session),
+            )
+            .toArray()
+        ).map(mention => mention.recordId);
+        if (duplicateRecordIds.length) {
+          await mentions.deleteMany(
+            { targetNodeId: input.sourceId, recordId: { $in: duplicateRecordIds } },
+            sessionOptions(session),
+          );
+        }
+        await mentions.updateMany(
+          { targetNodeId: input.sourceId },
+          { $set: { targetNodeId: input.targetId } },
+          sessionOptions(session),
+        );
+      }
       await (
         await this.#collection(TABLE_KNOWLEDGE_NODE_ADDRESSES)
       ).updateMany({ nodeId: input.sourceId }, { $set: { nodeId: input.targetId } }, sessionOptions(session));
@@ -1416,17 +1435,8 @@ export class KnowledgeMongoDB extends KnowledgeStorage {
         },
         { ...sessionOptions(session), returnDocument: 'after' },
       );
-      const targetResult = await (
-        await this.#collection(TABLE_KNOWLEDGE_NODES)
-      ).findOneAndUpdate(
-        { id: input.targetId, version: input.targetVersion, deletedAt: { $exists: false } },
-        { $set: { updatedAt: now }, $inc: { version: 1 } },
-        { ...sessionOptions(session), returnDocument: 'after' },
-      );
-      if (!sourceResult || !targetResult)
-        throw new KnowledgeConflictError(!sourceResult ? input.sourceId : input.targetId);
+      if (!sourceResult) throw new KnowledgeConflictError(input.sourceId);
       const sourceScopes = await this.#getNodeScopeIds(input.sourceId, session);
-      const targetScopes = await this.#getNodeScopeIds(input.targetId, session);
       await this.#activity(
         'merge',
         'node',
@@ -1437,11 +1447,10 @@ export class KnowledgeMongoDB extends KnowledgeStorage {
         session,
       );
       await this.#outbox('node', input.sourceId, 'delete', sourceScopes, Number(sourceResult.version), session);
-      await this.#outbox('node', input.targetId, 'upsert', targetScopes, Number(targetResult.version), session);
       await (
         await this.#collection(TABLE_KNOWLEDGE_NODE_SCOPES)
       ).deleteMany({ nodeId: input.sourceId }, sessionOptions(session));
-      return nodeFromDocument(targetResult);
+      return nodeFromDocument(targetRow);
     });
   }
 
