@@ -360,7 +360,8 @@ export function TraceDataPanelView({
                   onValueChange={onTabChange}
                   className="grid h-full min-h-0 grid-rows-[auto_1fr]"
                 >
-                  <DataPanel.Header>
+                  {/* Pill tabs carry their own p-1, so shrink the header padding to keep min-h-14. */}
+                  <DataPanel.Header className="py-2">
                     <TabList variant="pill-ghost" className="px-0">
                       <Tab value="details">Spans</Tab>
                       {feedbackTabSlot && (
