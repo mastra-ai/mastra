@@ -11,7 +11,7 @@ services:
     volumes:
       - pgdata:/var/lib/postgresql/data
   qdrant:
-    image: qdrant/qdrant
+    image: qdrant/qdrant:v1.19.0
     ports:
       - 6333:6333
   chroma:
