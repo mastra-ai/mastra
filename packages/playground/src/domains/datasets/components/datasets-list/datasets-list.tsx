@@ -107,7 +107,7 @@ export function DatasetsList({
   }
 
   return (
-    <EntityList columns={COLUMNS} variant="striped" scrollRef={containerRef}>
+    <EntityList columns={COLUMNS} scrollRef={containerRef}>
       <EntityList.Top>
         <EntityList.TopCell>Name</EntityList.TopCell>
         <EntityList.TopCell>Description</EntityList.TopCell>
