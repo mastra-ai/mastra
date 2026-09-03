@@ -1228,16 +1228,16 @@ describe('GithubRules', () => {
     expect(item).toMatchObject({ id: card.item.id, stages: ['review'] });
     const decisions = await workItems.listDeferredDecisions('org-1', project.id);
     expect(decisions.filter(entry => entry.decision.type === 'transition')).toHaveLength(1);
-    // The onEnter review rule sees a re-entry (from a post-intake stage) and dispatches
-    // factory-rereview, asking the dispatcher to cancel any in-flight review run first.
+    // A completed pass has no active run to supersede. Its re-entry dispatches
+    // factory-rereview without aborting the newly prepared session.
     const invocations = decisions.filter(entry => entry.decision.type === 'invokeSkill');
     expect(invocations).toHaveLength(1);
     expect(invocations[0]!.decision).toMatchObject({
       type: 'invokeSkill',
       skillName: 'factory-rereview',
       role: 'review',
-      cancelInFlight: true,
     });
+    expect(invocations[0]!.decision).not.toHaveProperty('cancelInFlight');
 
     // A follow-up push while the card is still Reviewing supersedes the pass it
     // just started, which is now reading code the push replaced. Re-entering
