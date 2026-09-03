@@ -902,7 +902,9 @@ describe('agent-controller routes', () => {
 
       expect(querySchema.parse({ limit: 2, page: 1 })).toMatchObject({ limit: 2, page: 1 });
       expect(querySchema.safeParse({ limit: 2, perPage: 1 }).success).toBe(false);
-      expect(querySchema.safeParse({ limit: 2, orderBy: { field: 'createdAt', direction: 'DESC' } }).success).toBe(false);
+      expect(querySchema.safeParse({ limit: 2, orderBy: { field: 'createdAt', direction: 'DESC' } }).success).toBe(
+        false,
+      );
       expect(querySchema.safeParse({ limit: 2, include: [{ id: 'message-1' }] }).success).toBe(false);
       expect(querySchema.safeParse({ limit: 2, filter: { metadata: { category: 'support' } } }).success).toBe(false);
       expect(querySchema.parse({ perPage: 'false' })).toMatchObject({ perPage: false });
@@ -1274,7 +1276,7 @@ describe('agent-controller routes', () => {
       ).rejects.toThrow('Thread not found');
     });
 
-    it('LIST messages rejects a thread owned by another resource', async () => {
+    it('LIST messages does not disclose a thread owned by another resource', async () => {
       const { victimThreadId } = await setupTwoSessions();
       await expect(
         LIST_AGENT_CONTROLLER_THREAD_MESSAGES_ROUTE.handler({
@@ -1283,7 +1285,7 @@ describe('agent-controller routes', () => {
           resourceId: 'attacker',
           threadId: victimThreadId,
         } as any),
-      ).rejects.toThrow('Access denied: thread belongs to a different resource');
+      ).rejects.toThrow('Thread not found');
     });
 
     it('SWITCH rejects a thread owned by another resource', async () => {

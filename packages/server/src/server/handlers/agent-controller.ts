@@ -1264,7 +1264,7 @@ export const LIST_AGENT_CONTROLLER_THREAD_MESSAGES_ROUTE = createRoute({
 
       const controller = getAgentControllerOrThrow(mastra, controllerId);
       const thread = await controller.queryThreadById({ threadId });
-      if (!thread) {
+      if (!thread || (resourceId && thread.resourceId && thread.resourceId !== resourceId)) {
         throw new HTTPException(404, { message: 'Thread not found' });
       }
       await enforceThreadAccess({
