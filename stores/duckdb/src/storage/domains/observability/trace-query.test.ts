@@ -177,6 +177,54 @@ describe('DuckDB advanced trace query', () => {
     expect(repeatedSpans.sql.match(/current_spans AS/g)).toHaveLength(1);
   });
 
+  it('compiles strict typed feedback relations and preserves legacy value presence', () => {
+    const compiled = compileDuckDBTraceQuery(
+      plan({
+        where: {
+          op: 'and',
+          args: [
+            {
+              feedback: {
+                some: {
+                  op: 'and',
+                  args: [
+                    { op: 'eq', left: { path: 'feedbackType' }, right: { literal: "rating' OR TRUE --" } },
+                    { op: 'lt', left: { path: 'value' }, right: { literal: 0 } },
+                    { op: 'gte', left: { path: 'timestamp' }, right: { literal: '2026-01-01T14:00:00+02:00' } },
+                    { op: 'exists', path: 'value' },
+                  ],
+                },
+              },
+            },
+            { feedback: { none: { op: 'in', value: { path: 'value' }, set: ['bad', 'worse'] } } },
+          ],
+        },
+      }),
+    );
+
+    expect(compiled.sql.match(/current_feedback AS/g)).toHaveLength(1);
+    expect(compiled.sql.match(/FROM current_feedback s/g)).toHaveLength(2);
+    expect(compiled.sql).toContain('s.traceId IS NOT NULL');
+    expect(compiled.sql).toContain('s.traceId = r.traceId');
+    expect(compiled.sql).toContain('s.valueNumber IS NOT NULL AND s.valueNumber < ?');
+    expect(compiled.sql).toContain('s.valueString IS NOT NULL AND s.valueString IN (?, ?)');
+    expect(compiled.sql).toContain('(s.valueString IS NOT NULL OR s.valueNumber IS NOT NULL OR s.value IS NOT NULL)');
+    expect(compiled.sql).not.toContain("rating' OR TRUE --");
+    expect(compiled.values).toContain("rating' OR TRUE --");
+    expect(compiled.values).toContain('2026-01-01T12:00:00.000Z');
+  });
+
+  it('emits feedback scope only when referenced', () => {
+    const traceOnly = compileDuckDBTraceQuery(plan()).sql;
+    const feedbackOnly = compileDuckDBTraceQuery(
+      plan({ where: { feedback: { some: { op: 'exists', path: 'value' } } } }),
+    ).sql;
+
+    expect(traceOnly).not.toContain('current_feedback AS');
+    expect(traceOnly).not.toContain('feedback_events');
+    expect(feedbackOnly.match(/current_feedback AS/g)).toHaveLength(1);
+  });
+
   it('uses total null semantics for negative predicates', () => {
     const compiled = compileDuckDBTraceQuery(
       plan({ where: { op: 'ne', left: { path: 'threadId' }, right: { literal: 'excluded' } } }),

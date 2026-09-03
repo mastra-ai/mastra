@@ -2167,6 +2167,61 @@ describe('ObservabilityStorageDuckDB', () => {
   // ==========================================================================
 
   describe('feedback', () => {
+    it('preserves numeric-looking strings and numeric values in separate typed columns', async () => {
+      await storage.batchCreateFeedback({
+        feedbacks: [
+          {
+            feedbackId: 'feedback-string-three',
+            timestamp: new Date('2026-01-01T00:00:00Z'),
+            traceId: 'trace-feedback-types',
+            feedbackSource: 'user',
+            feedbackType: 'rating',
+            value: '3',
+          },
+          {
+            feedbackId: 'feedback-number-three',
+            timestamp: new Date('2026-01-01T00:00:01Z'),
+            traceId: 'trace-feedback-types',
+            feedbackSource: 'user',
+            feedbackType: 'rating',
+            value: 3,
+          },
+        ],
+      });
+
+      const result = await storage.listFeedback({
+        filters: { traceId: 'trace-feedback-types' },
+        orderBy: { field: 'timestamp', direction: 'ASC' },
+      });
+      expect(result.feedback.map(feedback => feedback.value)).toEqual(['3', 3]);
+      expect(
+        await store.db.query<{ valueString: string | null; valueNumber: number | null }>(
+          `SELECT valueString, valueNumber FROM feedback_events WHERE traceId = ? ORDER BY timestamp`,
+          ['trace-feedback-types'],
+        ),
+      ).toEqual([
+        { valueString: '3', valueNumber: null },
+        { valueString: null, valueNumber: 3 },
+      ]);
+    });
+
+    it('keeps legacy untyped feedback values fail-closed as strings', async () => {
+      await store.db.execute(
+        `INSERT INTO feedback_events (feedbackId, timestamp, feedbackSource, feedbackType, value)
+         VALUES (?, ?, ?, ?, ?)`,
+        ['feedback-legacy-three', new Date('2026-01-01T00:00:00Z'), 'user', 'rating', '3'],
+      );
+
+      const result = await storage.listFeedback({ filters: { feedbackSource: 'user' } });
+      expect(result.feedback[0]!.value).toBe('3');
+      expect(
+        await store.db.query<{ valueString: string | null; valueNumber: number | null }>(
+          `SELECT valueString, valueNumber FROM feedback_events WHERE feedbackId = ?`,
+          ['feedback-legacy-three'],
+        ),
+      ).toEqual([{ valueString: null, valueNumber: null }]);
+    });
+
     it('accepts deprecated `source` filter for feedback (DuckDB-specific)', async () => {
       await storage.createFeedback({
         feedback: {

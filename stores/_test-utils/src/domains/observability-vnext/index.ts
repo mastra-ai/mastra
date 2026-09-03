@@ -100,6 +100,7 @@ function completionOnlyTraceQueryFixture() {
     spans: [...roots.values()].filter(root => !root.isPending),
     relatedSpans: [...spans.values()],
     scores: [...scores.values()],
+    feedback: TRACE_QUERY_FIXTURE_DATA.feedback,
   };
 }
 
@@ -151,6 +152,7 @@ export function createObservabilityVNextTests(options: CreateObservabilityVNextT
                 spans: TRACE_QUERY_FIXTURE_DATA.spans,
                 relatedSpans: [],
                 scores: TRACE_QUERY_FIXTURE_DATA.scores,
+                feedback: TRACE_QUERY_FIXTURE_DATA.feedback,
               };
         const records: CreateSpanRecord[] = [...fixture.spans, ...fixture.relatedSpans]
           .filter(span => span.traceId !== null)
@@ -200,6 +202,27 @@ export function createObservabilityVNextTests(options: CreateObservabilityVNextT
             };
           });
         for (const score of scores) await storage.createScore({ score });
+
+        for (const feedback of fixture.feedback) {
+          await storage.createFeedback({
+            feedback: {
+              feedbackId: feedback.feedbackId,
+              traceId: feedback.traceId,
+              spanId: null,
+              timestamp: new Date(feedback.timestamp),
+              feedbackType: feedback.feedbackType,
+              feedbackSource: feedback.feedbackSource,
+              feedbackUserId: feedback.feedbackUserId,
+              sourceId: feedback.sourceId,
+              value: feedback.value,
+              comment: feedback.comment,
+              entityVersionId: feedback.entityVersionId,
+              parentEntityVersionId: feedback.parentEntityVersionId,
+              rootEntityVersionId: feedback.rootEntityVersionId,
+              metadata: null,
+            },
+          });
+        }
 
         for (const testCase of TRACE_QUERY_CONFORMANCE_CASES) {
           const plan = planTraceQuery(parseTraceQueryRequest(testCase.request));
@@ -930,7 +953,7 @@ export function createObservabilityVNextTests(options: CreateObservabilityVNextT
             traceId: 'trace-4',
             feedbackType: 'rating',
             feedbackSource: 'user',
-            value: 'needs-review',
+            value: '3',
             entityName: 'agent-a',
           },
         ],

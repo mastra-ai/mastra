@@ -2,6 +2,7 @@ import type { ClickHouseClient } from '@clickhouse/client';
 import * as coreStorage from '@mastra/core/storage';
 import type {
   TraceQueryCanonicalField,
+  TraceQueryFeedbackField,
   TraceQueryField,
   TraceQueryPredicateField,
   TraceQueryResponse,
@@ -12,7 +13,7 @@ import type {
   TrustedTraceQueryScalarPredicate,
 } from '@mastra/core/storage';
 
-import { TABLE_SCORE_EVENTS, TABLE_SPAN_EVENTS, TABLE_TRACE_ROOTS } from './ddl';
+import { TABLE_FEEDBACK_EVENTS, TABLE_SCORE_EVENTS, TABLE_SPAN_EVENTS, TABLE_TRACE_ROOTS } from './ddl';
 import { CH_SETTINGS } from './helpers';
 
 type ClickHouseParameterType = 'String' | 'Float64' | 'UInt64' | "DateTime64(3, 'UTC')";
@@ -64,6 +65,18 @@ const SCORE_FIELDS = {
   parentEntityVersionId: { sql: 's.parentEntityVersionId', parameterType: 'String' },
   rootEntityVersionId: { sql: 's.rootEntityVersionId', parameterType: 'String' },
 } satisfies FieldRegistry<TraceQueryScoreField>;
+
+const FEEDBACK_FIELDS = {
+  feedbackType: { sql: 's.feedbackType', parameterType: 'String' },
+  feedbackSource: { sql: 's.feedbackSource', parameterType: 'String' },
+  feedbackUserId: { sql: 's.feedbackUserId', parameterType: 'String' },
+  sourceId: { sql: 's.sourceId', parameterType: 'String' },
+  entityVersionId: { sql: 's.entityVersionId', parameterType: 'String' },
+  parentEntityVersionId: { sql: 's.parentEntityVersionId', parameterType: 'String' },
+  rootEntityVersionId: { sql: 's.rootEntityVersionId', parameterType: 'String' },
+  timestamp: { sql: 's.timestamp', parameterType: "DateTime64(3, 'UTC')" },
+  comment: { sql: 's.comment', parameterType: 'String' },
+} satisfies FieldRegistry<Exclude<TraceQueryFeedbackField, 'value'>>;
 
 const TRACE_SELECT = `
   r.traceId AS traceId,
@@ -149,10 +162,32 @@ function compileScalarPredicate<TField extends string>(
   return `ifNull(${field.sql} ${operator} ${parameter}, ${predicate.operator === 'ne' ? '1' : '0'})`;
 }
 
+function compileFeedbackScalarPredicate(
+  predicate: TrustedTraceQueryScalarPredicate,
+  parameters: ParameterBuilder,
+): string {
+  if (predicate.type === 'boolean') {
+    const parts = predicate.args.map(arg => `(${compileFeedbackScalarPredicate(arg, parameters)})`);
+    return parts.join(predicate.operator === 'and' ? ' AND ' : ' OR ');
+  }
+  if (predicate.type === 'not') return `NOT (${compileFeedbackScalarPredicate(predicate.arg, parameters)})`;
+  if (predicate.field !== 'value') return compileScalarPredicate(predicate, FEEDBACK_FIELDS, parameters);
+  if (predicate.type === 'presence') {
+    const present = `(isNotNull(s.valueString) OR isNotNull(s.valueNumber))`;
+    return predicate.operator === 'exists' ? present : `NOT ${present}`;
+  }
+  const sample = predicate.type === 'membership' ? predicate.values[0] : predicate.value;
+  const field =
+    typeof sample === 'number'
+      ? { value: { sql: 's.valueNumber', parameterType: 'Float64' as const } }
+      : { value: { sql: 's.valueString', parameterType: 'String' as const } };
+  return compileScalarPredicate(predicate, field, parameters);
+}
+
 function collectRelationCollections(
   predicate: TrustedTraceQueryPredicate | undefined,
-  collections = new Set<'spans' | 'scores'>(),
-): Set<'spans' | 'scores'> {
+  collections = new Set<'spans' | 'scores' | 'feedback'>(),
+): Set<'spans' | 'scores' | 'feedback'> {
   if (!predicate) return collections;
   if (predicate.type === 'relation') {
     collections.add(predicate.collection);
@@ -166,12 +201,24 @@ function collectRelationCollections(
 
 function compilePredicate(predicate: TrustedTraceQueryPredicate, parameters: ParameterBuilder): string {
   if (predicate.type === 'relation') {
-    const registry = predicate.collection === 'spans' ? SPAN_FIELDS : SCORE_FIELDS;
-    const table = predicate.collection === 'spans' ? 'current_spans' : 'current_scores';
-    const nested = compileScalarPredicate(predicate.predicate, registry, parameters);
+    const table =
+      predicate.collection === 'spans'
+        ? 'current_spans'
+        : predicate.collection === 'scores'
+          ? 'current_scores'
+          : 'current_feedback';
+    const nested =
+      predicate.collection === 'feedback'
+        ? compileFeedbackScalarPredicate(predicate.predicate, parameters)
+        : compileScalarPredicate(
+            predicate.predicate,
+            predicate.collection === 'spans' ? SPAN_FIELDS : SCORE_FIELDS,
+            parameters,
+          );
     const existence = `EXISTS (
       SELECT 1 FROM ${table} s
-      WHERE s.traceId = r.traceId
+      WHERE isNotNull(s.traceId)
+        AND s.traceId = r.traceId
         AND (${nested})
     )`;
     return predicate.quantifier === 'some' ? existence : `NOT ${existence}`;
@@ -259,6 +306,26 @@ export function compileClickHouseTraceQuery(plan: TrustedTraceQueryPlan): Compil
       AND traceId IN (SELECT traceId FROM root_scope)
     ORDER BY scoreId, timestamp DESC
     LIMIT 1 BY scoreId
+  )`);
+  }
+  if (relationCollections.has('feedback')) {
+    ctes.push(`current_feedback AS (
+    SELECT
+      traceId,
+      feedbackType,
+      feedbackSource,
+      feedbackUserId,
+      sourceId,
+      valueString,
+      valueNumber,
+      comment,
+      timestamp,
+      entityVersionId,
+      parentEntityVersionId,
+      rootEntityVersionId
+    FROM ${TABLE_FEEDBACK_EVENTS} FINAL
+    WHERE isNotNull(traceId)
+      AND traceId IN (SELECT traceId FROM root_scope)
   )`);
   }
 

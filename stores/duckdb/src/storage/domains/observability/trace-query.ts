@@ -1,6 +1,7 @@
 import * as coreStorage from '@mastra/core/storage';
 import type {
   TraceQueryCanonicalField,
+  TraceQueryFeedbackField,
   TraceQueryField,
   TraceQueryPredicateField,
   TraceQueryResponse,
@@ -61,6 +62,18 @@ const SCORE_FIELDS = {
   parentEntityVersionId: { sql: 's.parentEntityVersionId', parameterType: 'scalar' },
   rootEntityVersionId: { sql: 's.rootEntityVersionId', parameterType: 'scalar' },
 } satisfies FieldRegistry<TraceQueryScoreField>;
+
+const FEEDBACK_FIELDS = {
+  feedbackType: { sql: 's.feedbackType', parameterType: 'scalar' },
+  feedbackSource: { sql: 's.feedbackSource', parameterType: 'scalar' },
+  feedbackUserId: { sql: 's.feedbackUserId', parameterType: 'scalar' },
+  sourceId: { sql: 's.sourceId', parameterType: 'scalar' },
+  entityVersionId: { sql: 's.entityVersionId', parameterType: 'scalar' },
+  parentEntityVersionId: { sql: 's.parentEntityVersionId', parameterType: 'scalar' },
+  rootEntityVersionId: { sql: 's.rootEntityVersionId', parameterType: 'scalar' },
+  timestamp: { sql: 's.timestamp', parameterType: 'timestamp' },
+  comment: { sql: 's.comment', parameterType: 'scalar' },
+} satisfies FieldRegistry<Exclude<TraceQueryFeedbackField, 'value'>>;
 
 const TRACE_SELECT = `
   r.traceId AS traceId,
@@ -163,11 +176,42 @@ function compileScalarPredicate<TField extends string>(
   };
 }
 
+function compileFeedbackScalarPredicate(predicate: TrustedTraceQueryScalarPredicate): SqlFragment {
+  if (predicate.type === 'boolean') {
+    const values: unknown[] = [];
+    const parts = predicate.args.map(arg => {
+      const compiled = compileFeedbackScalarPredicate(arg);
+      values.push(...compiled.values);
+      return `(${compiled.sql})`;
+    });
+    return { sql: parts.join(predicate.operator === 'and' ? ' AND ' : ' OR '), values };
+  }
+  if (predicate.type === 'not') {
+    const compiled = compileFeedbackScalarPredicate(predicate.arg);
+    return { sql: `NOT (${compiled.sql})`, values: compiled.values };
+  }
+  if (predicate.field !== 'value') return compileScalarPredicate(predicate, FEEDBACK_FIELDS);
+  if (predicate.type === 'presence') {
+    const present = `(s.valueString IS NOT NULL OR s.valueNumber IS NOT NULL OR s.value IS NOT NULL)`;
+    return { sql: predicate.operator === 'exists' ? present : `NOT ${present}`, values: [] };
+  }
+  const sample = predicate.type === 'membership' ? predicate.values[0] : predicate.value;
+  const field = typeof sample === 'number' ? 's.valueNumber' : 's.valueString';
+  return compileScalarPredicate(predicate, { value: { sql: field, parameterType: 'scalar' } });
+}
+
 function compilePredicate(predicate: TrustedTraceQueryPredicate): SqlFragment {
   if (predicate.type === 'relation') {
-    const registry = predicate.collection === 'spans' ? SPAN_FIELDS : SCORE_FIELDS;
-    const compiled = compileScalarPredicate(predicate.predicate, registry);
-    const table = predicate.collection === 'spans' ? 'current_spans' : 'current_scores';
+    const compiled =
+      predicate.collection === 'feedback'
+        ? compileFeedbackScalarPredicate(predicate.predicate)
+        : compileScalarPredicate(predicate.predicate, predicate.collection === 'spans' ? SPAN_FIELDS : SCORE_FIELDS);
+    const table =
+      predicate.collection === 'spans'
+        ? 'current_spans'
+        : predicate.collection === 'scores'
+          ? 'current_scores'
+          : 'current_feedback';
     const existence = `EXISTS (
       SELECT 1 FROM ${table} s
       WHERE s.traceId IS NOT NULL
@@ -200,8 +244,8 @@ function compilePredicate(predicate: TrustedTraceQueryPredicate): SqlFragment {
 
 function collectRelatedCollections(
   predicate: TrustedTraceQueryPredicate | undefined,
-  collections = new Set<'spans' | 'scores'>(),
-): Set<'spans' | 'scores'> {
+  collections = new Set<'spans' | 'scores' | 'feedback'>(),
+): Set<'spans' | 'scores' | 'feedback'> {
   if (!predicate) return collections;
   if (predicate.type === 'relation') {
     collections.add(predicate.collection);
@@ -308,6 +352,15 @@ export function compileDuckDBTraceQuery(plan: TrustedTraceQueryPlan): CompiledDu
       SELECT s.*
       FROM score_events s
       INNER JOIN root_scope roots ON roots.traceId = s.traceId
+    )`);
+  }
+
+  if (relatedCollections.has('feedback')) {
+    ctes.push(`current_feedback AS (
+      SELECT f.*
+      FROM feedback_events f
+      INNER JOIN root_scope roots ON roots.traceId = f.traceId
+      WHERE f.traceId IS NOT NULL
     )`);
   }
 
