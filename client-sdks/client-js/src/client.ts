@@ -195,6 +195,7 @@ import type {
   GenerateDatasetItemsParams,
   GeneratedItem,
   TriggerDatasetExperimentParams,
+  UpdateDatasetExperimentParams,
   CreateDatasetExperimentParams,
   CreateDatasetExperimentResponse,
   RunExperimentItemParams,
@@ -2162,6 +2163,17 @@ export class MastraClient extends BaseResource {
    */
   public getDatasetExperiment(datasetId: string, experimentId: string): Promise<DatasetExperiment> {
     return this.request(`/datasets/${encodeURIComponent(datasetId)}/experiments/${encodeURIComponent(experimentId)}`);
+  }
+
+  /**
+   * Updates a dataset experiment's name, description or metadata
+   */
+  public updateDatasetExperiment(params: UpdateDatasetExperimentParams): Promise<DatasetExperiment> {
+    const { datasetId, experimentId, ...body } = params;
+    return this.request(`/datasets/${encodeURIComponent(datasetId)}/experiments/${encodeURIComponent(experimentId)}`, {
+      method: 'PATCH',
+      body,
+    });
   }
 
   /**
