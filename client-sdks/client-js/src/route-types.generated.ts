@@ -8963,6 +8963,7 @@ export interface GetObservabilityTracesTraceIdTrajectory_RouteContract {
 // Route: POST /observability/traces/delete
 // ============================================================================
 export type PostObservabilityTracesDelete_Body = {
+  /** Trace IDs to delete (maximum 1000) */
   traceIds: string[];
 };
 

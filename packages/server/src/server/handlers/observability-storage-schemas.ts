@@ -59,7 +59,7 @@ const fallbackSchema = z.unknown();
 // The args fallback pre-declares `traceIds` because the route `.pick()`s it
 // at module-eval time.
 const fallbackDeleteTracesArgs = z.object({
-  traceIds: z.array(z.string()),
+  traceIds: z.array(z.string()).max(1000),
 });
 
 export const branchesFilterSchema: any = ns.branchesFilterSchema ?? fallbackEmptyObject;

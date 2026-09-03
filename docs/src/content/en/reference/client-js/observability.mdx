@@ -108,7 +108,7 @@ const result = await mastraClient.deleteTraces({
 console.log(result.success)
 ```
 
-Signals that aren't linked to a trace are preserved. Deletion also includes traces created by experiments.
+Each request accepts up to 1,000 trace IDs. Signals that aren't linked to a trace are preserved. Deletion also includes traces created by experiments.
 
 ## Scoring traces
 

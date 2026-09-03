@@ -396,6 +396,7 @@ export const DELETE_TRACES_ROUTE: ServerRoute = createRoute({
   responseType: 'json',
   bodySchema: batchDeleteTracesArgsSchema.pick({ traceIds: true }),
   responseSchema: batchDeleteTracesResponseSchema,
+  maxBodySize: 256 * 1024,
   summary: 'Delete traces',
   description:
     'Deletes traces by ID, cascading to all associated data: spans, trace roots/branches, and signal events (scores, feedback, metrics, logs) that reference the deleted traces. Signals without a trace ID are untouched. Experiment traces are deleted like any other trace. On ClickHouse-backed stores, deletes are lightweight and reads may briefly return deleted rows until the delete is fully applied.',

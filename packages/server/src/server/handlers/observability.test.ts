@@ -1077,7 +1077,11 @@ describe('Observability Handlers', () => {
       expect(schema.safeParse({ traceIds: ['trace-1', 'trace-2'] }).success).toBe(true);
       expect(schema.safeParse({}).success).toBe(false);
       expect(schema.safeParse({ traceIds: 'trace-1' }).success).toBe(false);
+      expect(schema.safeParse({ traceIds: Array.from({ length: 1001 }, (_, index) => `trace-${index}`) }).success).toBe(
+        false,
+      );
       expect(schema.parse({ traceIds: ['trace-1'], organizationId: 'org-1' })).toEqual({ traceIds: ['trace-1'] });
+      expect(DELETE_TRACES_ROUTE.maxBodySize).toBe(256 * 1024);
     });
 
     it('should delete traces and return success', async () => {

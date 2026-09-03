@@ -844,12 +844,18 @@ export const batchUpdateSpansArgsSchema = z
 /** Arguments for batch updating multiple spans */
 export type BatchUpdateSpansArgs = z.infer<typeof batchUpdateSpansArgsSchema>;
 
+/** Maximum number of trace IDs accepted by a single batch delete request. */
+export const BATCH_DELETE_TRACES_MAX_IDS = 1000;
+
 /**
  * Schema for batchDeleteTraces operation arguments
  */
 export const batchDeleteTracesArgsSchema = z
   .object({
-    traceIds: z.array(traceIdField),
+    traceIds: z
+      .array(traceIdField)
+      .max(BATCH_DELETE_TRACES_MAX_IDS)
+      .describe(`Trace IDs to delete (maximum ${BATCH_DELETE_TRACES_MAX_IDS})`),
     organizationId: organizationIdField
       .optional()
       .describe('Optional tenant scope: only delete rows belonging to this organization'),
