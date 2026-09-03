@@ -1,6 +1,6 @@
 import { DataListCell } from './data-list-cells';
 import { DataListRoot } from './data-list-root';
-import type { DataListFit } from './data-list-root';
+import type { DataListFit, DataListVariant } from './data-list-root';
 import { DataListTop } from './data-list-top';
 import { DataListTopCell } from './data-list-top-cell';
 import { dataListRowOuterStyles } from './shared';
@@ -13,6 +13,7 @@ export type DataListSkeletonProps = {
   columns?: string;
   numberOfRows?: number;
   fit?: DataListFit;
+  variant?: DataListVariant;
 };
 
 function SkeletonBar({ width, className }: { width: string; className?: string }) {
@@ -28,7 +29,12 @@ function SkeletonBar({ width, className }: { width: string; className?: string }
  * Loading placeholder mirroring the real list: same root, a sticky header
  * band with one placeholder label per column, then rows of placeholder cells.
  */
-export function DataListSkeleton({ columns = 'auto 1fr auto auto', numberOfRows = 3, fit }: DataListSkeletonProps) {
+export function DataListSkeleton({
+  columns = 'auto 1fr auto auto',
+  numberOfRows = 3,
+  fit,
+  variant,
+}: DataListSkeletonProps) {
   const columnParts = columns.trim().split(/\s+/);
   const columnCount = columnParts.length;
   const skeletonColumns = columnParts.map(col => (col === 'auto' ? 'minmax(6rem, auto)' : col)).join(' ');
@@ -39,7 +45,7 @@ export function DataListSkeleton({ columns = 'auto 1fr auto auto', numberOfRows 
   };
 
   return (
-    <DataListRoot columns={skeletonColumns} fit={fit}>
+    <DataListRoot columns={skeletonColumns} fit={fit} variant={variant}>
       <DataListTop>
         {Array.from({ length: columnCount }).map((_, colIdx) => (
           <DataListTopCell key={colIdx}>

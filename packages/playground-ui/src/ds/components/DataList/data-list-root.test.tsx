@@ -52,6 +52,22 @@ describe('DataListRoot', () => {
       expect(grid?.className).not.toContain('[&_.data-list-row]:even:bg-surface-overlay-soft');
     });
 
+    it('drops the panel background in the light variant but keeps the header opaque', () => {
+      const { container } = render(
+        <DataList columns="1fr 1fr" variant="light">
+          <Header />
+        </DataList>,
+      );
+
+      const root = container.firstElementChild as HTMLElement;
+      const grid = container.querySelector<HTMLElement>('[style*="grid-template-columns"]');
+      expect(root.className).not.toContain('bg-surface4');
+      expect(root.className).toContain('rounded-2xl');
+      expect(root.getAttribute('variant')).toBeNull();
+      expect(grid?.style.getPropertyValue('--data-list-background')).toBe('var(--surface1)');
+      expect(grid?.className).toContain('[&_.data-list-top]:bg-(--data-list-background)');
+    });
+
     it('only defines the background color on the root; sticky parts reuse it', () => {
       const { container } = render(
         <DataList columns="1fr 1fr">

@@ -14,11 +14,21 @@ import { cn } from '@/lib/utils';
  */
 export type DataListFit = 'content' | 'container';
 
+/**
+ * Surface treatment of the list.
+ *
+ * - `default`: rows sit on a rounded `surface4` panel.
+ * - `light`: no panel behind the rows; rows sit directly on the page.
+ */
+export type DataListVariant = 'default' | 'light';
+
 export type DataListRootProps = Omit<ScrollAreaProps, 'children' | 'orientation' | 'mask' | 'viewportRef'> & {
   children: ReactNode;
   columns: string;
   /** Grid width behavior; defaults to `content` (existing horizontal-scroll sizing). */
   fit?: DataListFit;
+  /** Surface treatment; defaults to `default` (rows on a `surface4` panel). */
+  variant?: DataListVariant;
   /**
    * Edge fades from the underlying ScrollArea. DataList keeps the top fade off
    * by default so it does not fade the sticky top header.
@@ -69,6 +79,18 @@ const dataListGridStyles = [
   '[&_.data-list-top>.data-list-sticky-start]:after:right-0',
 ] as const;
 
+const dataListVariantClasses: Record<DataListVariant, string> = {
+  default: 'bg-surface4',
+  light: '',
+};
+
+// The sticky header reads this so it stays opaque while scrolling: the panel
+// color by default, the page surface when there is no panel.
+const dataListVariantBackground: Record<DataListVariant, string> = {
+  default: 'var(--surface4)',
+  light: 'var(--surface1)',
+};
+
 const dataListFitClasses: Record<DataListFit, string> = {
   content: 'w-max max-w-none min-w-full',
   container: 'w-full max-w-full',
@@ -79,12 +101,13 @@ export function DataListRoot({
   columns,
   className,
   fit = 'content',
+  variant = 'default',
   mask,
   scrollRef,
   ...props
 }: DataListRootProps) {
   const gridStyle: DataListRootStyle = {
-    '--data-list-background': 'var(--surface4)',
+    '--data-list-background': dataListVariantBackground[variant],
     gridTemplateColumns: columns,
   };
 
@@ -112,7 +135,11 @@ export function DataListRoot({
       // items out against the max-height-clamped container, so short lists stay
       // compact and long ones shrink the viewport and scroll.
       viewPortClassName="min-h-0 flex-1 basis-auto"
-      className={cn('flex max-h-full w-full flex-col rounded-2xl bg-surface4 px-1 pb-1', className)}
+      className={cn(
+        'flex max-h-full w-full flex-col rounded-2xl px-1 pb-1',
+        dataListVariantClasses[variant],
+        className,
+      )}
     >
       {grid}
     </ScrollArea>

@@ -85,6 +85,20 @@ export const Default: Story = {
   ),
 };
 
+/** `light` drops the panel behind the rows so the list sits directly on the page. */
+export const Light: Story = {
+  render: () => (
+    <DataList columns={COLUMNS} variant="light">
+      <RunsHeader />
+      {SAMPLE_RUNS.map(run => (
+        <DataList.RowButton key={run.id} onClick={() => {}}>
+          <RunCells run={run} />
+        </DataList.RowButton>
+      ))}
+    </DataList>
+  ),
+};
+
 /** Semantic error and featured row states. */
 export const RowStates: Story = {
   render: () => (

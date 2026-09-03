@@ -17,3 +17,5 @@ Removed DataList visual variants and custom sticky header backgrounds in favor o
 ```tsx
 <DataList columns="1fr">{rows}</DataList>
 ```
+
+Added a `variant="light"` option to `DataList` (and `DataListSkeleton`) that removes the panel behind the rows so the list sits directly on the page.
