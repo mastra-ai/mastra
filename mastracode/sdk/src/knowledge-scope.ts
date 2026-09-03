@@ -49,22 +49,9 @@ export function localMachineId(options: LocalKnowledgeOrgOptions = {}): string {
 
   let id = readStoredMachineId(filePath);
   if (!id) {
-    const fresh = randomBytes(6).toString('hex');
     try {
       fs.mkdirSync(path.dirname(filePath), { recursive: true });
-      try {
-        fs.writeFileSync(filePath, `${fresh}\n`, { encoding: 'utf-8', flag: 'wx' });
-        id = fresh;
-      } catch (error) {
-        if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
-        // Another process created it first; take theirs. If what exists is
-        // corrupt (or unreadable but writable), replace it.
-        id = readStoredMachineId(filePath);
-        if (!id) {
-          fs.writeFileSync(filePath, `${fresh}\n`, 'utf-8');
-          id = fresh;
-        }
-      }
+      id = createMachineIdFile(filePath);
     } catch {
       return createHash('sha256').update(hostname()).digest('hex').slice(0, 12);
     }
@@ -72,6 +59,33 @@ export function localMachineId(options: LocalKnowledgeOrgOptions = {}): string {
 
   machineIdCache.set(filePath, id);
   return id;
+}
+
+/**
+ * Exclusive create; on EEXIST take what the other process wrote. If what exists
+ * is corrupt, move it aside atomically (rename) and try once more, so two
+ * processes recovering from the same corrupt file still converge on one id
+ * instead of both overwriting it.
+ */
+function createMachineIdFile(filePath: string): string {
+  const fresh = randomBytes(6).toString('hex');
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      fs.writeFileSync(filePath, `${fresh}\n`, { encoding: 'utf-8', flag: 'wx' });
+      return fresh;
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
+      const winner = readStoredMachineId(filePath);
+      if (winner) return winner;
+      try {
+        fs.renameSync(filePath, `${filePath}.corrupt-${fresh}`);
+      } catch (renameError) {
+        // Someone else already moved it aside; just retry the create.
+        if ((renameError as NodeJS.ErrnoException).code !== 'ENOENT') throw renameError;
+      }
+    }
+  }
+  throw new Error(`Unable to establish ${filePath}`);
 }
 
 /**

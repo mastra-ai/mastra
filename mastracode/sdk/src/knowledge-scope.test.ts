@@ -72,6 +72,29 @@ describe('localMachineId', () => {
     }
   });
 
+  it('converges on one id when two processes recover from the same corrupt file', () => {
+    const homeDir = tempHome();
+    const file = path.join(homeDir, '.mastracode', MACHINE_ID_FILE);
+    mkdirSync(path.dirname(file), { recursive: true });
+    writeFileSync(file, 'garbage\n');
+    const winner = 'fedcba987654';
+    // The other process moves the corrupt file aside and creates its id while we are between our EEXIST and our rename.
+    const rename = vi.spyOn(fs, 'renameSync').mockImplementationOnce((from, to) => {
+      fs.renameSync(from, to);
+      fs.writeFileSync(file, `${winner}\n`);
+      throw Object.assign(new Error('ENOENT'), { code: 'ENOENT' });
+    });
+    try {
+      expect(localMachineId({ homeDir })).toBe(winner);
+      expect(readFileSync(file, 'utf-8').trim()).toBe(winner);
+      expect(
+        fs.readdirSync(path.dirname(file)).filter(name => name.startsWith(`${MACHINE_ID_FILE}.corrupt-`)),
+      ).toHaveLength(1);
+    } finally {
+      rename.mockRestore();
+    }
+  });
+
   it('falls back to a hostname hash without persisting or caching when the config dir is unwritable', () => {
     const homeDir = tempHome();
     const hostHash = createHash('sha256').update(hostname()).digest('hex').slice(0, 12);
