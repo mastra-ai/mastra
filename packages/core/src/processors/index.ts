@@ -10,7 +10,7 @@ import type { ModelRouterModelId } from '../llm/model';
 import type { MastraLanguageModel, OpenAICompatibleConfig, SharedProviderOptions } from '../llm/model/shared.types';
 import type { Mastra } from '../mastra';
 import type { MastraMemory } from '../memory/memory';
-import type { ObservabilityContext } from '../observability';
+import type { ObservabilityContext, ProcessorSpanType, SpanTypeMap } from '../observability';
 import type { RequestContext } from '../request-context';
 import type { InferStandardSchemaOutput, StandardSchemaWithJSON } from '../schema';
 import type { ChunkType } from '../stream';
@@ -589,6 +589,21 @@ export interface ProcessorViolation<TDetail = unknown> {
   detail: TDetail;
 }
 
+/**
+ * Pipeline phase a processor span is created for. One value per site where the
+ * processor runner creates a span, so a processor that runs in more than one
+ * phase can name and describe each of them differently.
+ */
+export type ProcessorSpanPhase =
+  | 'input'
+  | 'inputStep'
+  | 'llmRequest'
+  | 'llmResponse'
+  | 'output'
+  | 'outputStep'
+  | 'toolResult'
+  | 'requestError';
+
 export interface Processor<TId extends string = string, TTripwireMetadata = unknown> {
   readonly id: TId;
   readonly name?: string;
@@ -598,6 +613,49 @@ export interface Processor<TId extends string = string, TTripwireMetadata = unkn
    * Agents use this to avoid adding eager skill context and overlapping skill tools.
    */
   readonly providesSkillDiscovery?: 'on-demand';
+  /**
+   * Span type the runner should use for this processor's span, instead of the
+   * default `PROCESSOR_RUN`.
+   *
+   * Processors Mastra derives from agent config (skills, workspace
+   * instructions, memory, task state) are an implementation detail of how a
+   * subsystem injects context — the user never wrote the word "processor". A
+   * declared span type labels the span with the subsystem it came from, so the
+   * trace shows where it originated instead of an anonymous processor entry.
+   *
+   * The runner keeps setting `entityType` (which phase the processor ran in)
+   * and the `ProcessorPipelineAttributes` fields either way, so retyping never
+   * loses the processor's position in the chain or its mutation log.
+   */
+  readonly spanType?: ProcessorSpanType;
+  /**
+   * Span name for this processor's span, instead of the runner's default
+   * `<phase> processor: <id>`. Pair this with `spanType` so the name matches
+   * the subsystem the span is labelled as.
+   *
+   * Pass a function to name each phase separately. A processor that runs in
+   * more than one phase usually does something different in each — the
+   * observational memory processor recalls context on the input step and
+   * persists observations on the output result — and one static name would
+   * describe both wrongly.
+   */
+  readonly spanName?: string | ((phase: ProcessorSpanPhase) => string);
+  /**
+   * Attributes the runner sets when it creates this processor's span.
+   *
+   * Needed because a declared `spanType` may have required attributes of its
+   * own — `WORKSPACE_ACTION.category`, `SKILL_ACTION.operation` — that only the
+   * processor knows. Setting them here means the span carries them from
+   * creation rather than being patched in later by the processor body.
+   *
+   * Note the pairing with `spanType` is not enforced by the type system: this
+   * accepts a partial of any processor-declarable attributes, so declaring
+   * `WORKSPACE_ACTION` alongside a `SKILL_ACTION` field will not be caught at
+   * compile time.
+   */
+  readonly spanAttributes?:
+    | Partial<SpanTypeMap[ProcessorSpanType]>
+    | ((phase: ProcessorSpanPhase) => Partial<SpanTypeMap[ProcessorSpanType]>);
   /** Index of this processor in the workflow (set at runtime when combining processors) */
   processorIndex?: number;
 

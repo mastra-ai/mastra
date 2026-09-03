@@ -2,14 +2,14 @@
 
 Mastra is a framework for building AI-powered applications and agents with a modern TypeScript stack.
 
-It includes everything you need to go from early prototypes to production-ready applications. Mastra integrates with frontend and backend frameworks like React, Next.js, and Node, or you can deploy it anywhere as a standalone server. It's the easiest way to build, tune, and scale reliable AI products.
+`create-mastra` is the recommended way to start a new Mastra application. It runs as a one-time project generator, so you do not need to install it before use.
 
-`create-mastra` is the **recommended** way to get started with Mastra. This CLI tool enables you to quickly start building a new Mastra application, with everything set up for you.
-
-## Usage
+## Installation
 
 > [!IMPORTANT]
 > Make sure that you have Node.js 22.13.0 or later installed on your system.
+
+Run the latest version directly with your package manager.
 
 Using npm:
 
@@ -17,7 +17,7 @@ Using npm:
 npx create-mastra@latest
 ```
 
-Using yarn:
+Using Yarn:
 
 ```bash
 yarn dlx create-mastra@latest
@@ -29,4 +29,22 @@ Using pnpm:
 pnpm create mastra
 ```
 
-Learn more about `create-mastra` in the [CLI reference documentation](https://mastra.ai/reference/cli/create-mastra).
+## Usage
+
+The interactive setup asks where to create the project and helps configure the initial Mastra directory, example agents, model provider, and optional development tools. Pass `--help` to see non-interactive options:
+
+```bash
+npx create-mastra@latest --help
+```
+
+## Documentation
+
+- [create-mastra CLI reference](https://mastra.ai/reference/cli/create-mastra)
+
+## Changelog
+
+See the [package changelog](https://github.com/mastra-ai/mastra/blob/main/packages/create-mastra/CHANGELOG.md) for version history and release notes.
+
+## Support
+
+We have an [open community Discord](https://discord.gg/mastra-ai). Come and say hello and let us know if you have any questions or need any help getting things running.

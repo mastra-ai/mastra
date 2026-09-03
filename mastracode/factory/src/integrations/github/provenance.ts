@@ -20,6 +20,7 @@ export interface FactoryPullRequestProvenanceData {
   kind: 'factory-pr-provenance';
   bindingId: string;
   workItemId: string;
+  factoryProjectId: string;
   repositoryId: number;
   pullRequestNumber: number;
   pullRequestUrl: string;
@@ -33,11 +34,17 @@ export async function resolveFactoryPullRequestParentWorkItemId(
     Record<string, unknown>,
     FactoryPullRequestProvenanceData
   >,
-  input: { orgId: string; repositoryId: number; pullRequestNumber: number },
+  input: { orgId: string; factoryProjectId: string; repositoryId: number; pullRequestNumber: number },
 ): Promise<string | null> {
   const targetKey = `factory-pr-provenance:${input.repositoryId}:${input.pullRequestNumber}`;
+  // Provenance is scoped to the Factory project whose run authored the PR.
+  // Rows from a sibling project in the same org — or legacy rows without the
+  // project stamp — fail closed rather than linking another project's card.
   const provenance = (await integrationStorage.subscriptions.listByTarget(targetKey, { status: 'active' })).find(
-    row => row.orgId === input.orgId && row.data?.kind === 'factory-pr-provenance',
+    row =>
+      row.orgId === input.orgId &&
+      row.data?.kind === 'factory-pr-provenance' &&
+      row.data.factoryProjectId === input.factoryProjectId,
   );
   return provenance?.data?.workItemId ?? null;
 }
@@ -102,8 +109,12 @@ export async function recordFactoryPullRequestProvenance(
     )
       return;
     const targetKey = `factory-pr-provenance:${repositoryId}:${pullRequestNumber}`;
+    // Dedupe within the authoring project only: a sibling project's row must
+    // not block this project from recording its own provenance.
     if (
-      (await integrationStorage.subscriptions.listByTarget(targetKey)).some(row => row.orgId === input.binding.orgId)
+      (await integrationStorage.subscriptions.listByTarget(targetKey)).some(
+        row => row.orgId === input.binding.orgId && row.data?.factoryProjectId === input.binding.factoryProjectId,
+      )
     ) {
       return;
     }
@@ -122,6 +133,7 @@ export async function recordFactoryPullRequestProvenance(
         kind: 'factory-pr-provenance',
         bindingId: input.binding.id,
         workItemId: input.item.id,
+        factoryProjectId: input.binding.factoryProjectId,
         repositoryId,
         pullRequestNumber,
         pullRequestUrl: url,

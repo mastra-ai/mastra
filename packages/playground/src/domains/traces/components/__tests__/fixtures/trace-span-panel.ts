@@ -18,7 +18,18 @@ const baseSpan = {
   status: TraceStatus.SUCCESS,
 };
 
-export const rootSpan = { ...baseSpan, spanId: 'span-root', name: 'Root agent run', parentSpanId: null };
+export const rootSpan = {
+  ...baseSpan,
+  spanId: 'span-root',
+  name: 'Root agent run',
+  parentSpanId: null,
+  entityType: 'agent',
+  entityId: 'weather-agent',
+  entityName: 'Weather Agent',
+  threadId: 'weather-thread',
+  input: { messages: [{ role: 'user', content: 'Will it rain?' }] },
+  output: { text: 'No rain is expected.' },
+};
 export const childSpanOne = {
   ...baseSpan,
   spanId: 'span-child-1',

@@ -25,6 +25,33 @@ workflow.map(async ({ inputData }) => `${inputData.value} - map`)
     description: 'Function that transforms input data and returns the mapped result',
     isOptional: false,
   },
+  {
+    name: 'stepOptions',
+    type: 'object',
+    description:
+      'Optional identity and display metadata for the mapping entry. Preserved through serialization and storage; has no effect on execution.',
+    isOptional: true,
+    properties: [
+      {
+        name: 'id',
+        type: 'string',
+        description: 'Stable entry id. Overrides the generated mapping id.',
+        isOptional: true,
+      },
+      {
+        name: 'description',
+        type: 'string',
+        description: 'Human-readable description of the mapping',
+        isOptional: true,
+      },
+      {
+        name: 'metadata',
+        type: 'Record<string, unknown>',
+        description: 'JSON-serializable metadata, for example a display title for visual editors',
+        isOptional: true,
+      },
+    ],
+  },
 ]}
 />
 

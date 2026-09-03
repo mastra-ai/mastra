@@ -1,0 +1,216 @@
+---
+title: "Gladia | Voice"
+description: "Add Gladia speech-to-text to Mastra for prerecorded audio with speaker diarization, translation, language detection, and code switching."
+packages:
+  - "@mastra/voice-gladia"
+---
+
+# Gladia
+
+Gladia provides speech-to-text (STT) only. The Mastra integration uploads prerecorded audio, waits for Gladia to finish transcribing it, and returns the combined transcript as a string.
+
+## Installation
+
+```bash npm2yarn
+npm install @mastra/voice-gladia@latest
+```
+
+## API key
+
+Set `GLADIA_API_KEY` or pass the key through `listeningModel.apiKey`. The constructor throws `GLADIA_API_KEY is not set.` when neither value is available.
+
+## Usage example
+
+Set `GLADIA_API_KEY` to use the default configuration:
+
+```typescript
+import { createReadStream } from 'node:fs'
+import { GladiaVoice } from '@mastra/voice-gladia'
+
+const voice = new GladiaVoice()
+const audio = createReadStream('./audio.m4a')
+
+const transcript = await voice.listen(audio, {
+  fileName: 'audio.m4a',
+  mimeType: 'audio/mp4',
+  options: {
+    diarization: true,
+    detect_language: true,
+  },
+})
+```
+
+You can also pass the API key directly:
+
+```typescript
+import { GladiaVoice } from '@mastra/voice-gladia'
+
+const voice = new GladiaVoice({
+  listeningModel: {
+    apiKey: process.env.GLADIA_API_KEY,
+  },
+})
+```
+
+## Constructor parameters
+
+<PropertiesTable
+  content={[
+  {
+    name: 'listeningModel',
+    type: 'GladiaConfig',
+    description: 'Configuration for speech-to-text.',
+    isOptional: true,
+    properties: [
+      {
+        type: 'GladiaConfig',
+        parameters: [
+          {
+            name: 'apiKey',
+            type: 'string',
+            description: 'Gladia API key. Falls back to the GLADIA_API_KEY environment variable.',
+            isOptional: true,
+          },
+        ],
+      },
+    ],
+  },
+]}
+/>
+
+## Methods
+
+### `listen()`
+
+Uploads prerecorded audio and returns the full transcript.
+
+<PropertiesTable
+  content={[
+  {
+    name: 'audioStream',
+    type: 'NodeJS.ReadableStream',
+    description: 'Audio stream to transcribe. The stream is buffered before it is uploaded.',
+    isOptional: false,
+  },
+  {
+    name: 'mimeType',
+    type: 'string',
+    description: 'MIME type of the audio file. The method throws an error if this value is missing.',
+    isOptional: false,
+  },
+  {
+    name: 'fileName',
+    type: 'string',
+    description: 'Name of the uploaded audio file. The method throws an error if this value is missing.',
+    isOptional: false,
+  },
+  {
+    name: 'options',
+    type: 'GladiaListenOptions',
+    description: 'Options for the prerecorded transcription job.',
+    isOptional: true,
+    properties: [
+      {
+        type: 'GladiaListenOptions',
+        parameters: [
+          {
+            name: 'diarization',
+            type: 'boolean',
+            description: 'Whether to identify different speakers in the recording.',
+            isOptional: true,
+            defaultValue: 'true',
+          },
+          {
+            name: 'diarization_config',
+            type: 'object',
+            description: 'Speaker-count settings for diarization.',
+            isOptional: true,
+            properties: [
+              {
+                type: 'object',
+                parameters: [
+                  {
+                    name: 'number_of_speakers',
+                    type: 'number',
+                    description: 'Exact number of speakers in the recording.',
+                    isOptional: true,
+                  },
+                  {
+                    name: 'min_speakers',
+                    type: 'number',
+                    description: 'Minimum number of speakers to detect.',
+                    isOptional: true,
+                  },
+                  {
+                    name: 'max_speakers',
+                    type: 'number',
+                    description: 'Maximum number of speakers to detect.',
+                    isOptional: true,
+                  },
+                ],
+              },
+            ],
+          },
+          {
+            name: 'translation',
+            type: 'boolean',
+            description: 'Whether to translate the transcript.',
+            isOptional: true,
+          },
+          {
+            name: 'translation_config',
+            type: 'object',
+            description: 'Translation model and target languages.',
+            isOptional: true,
+            properties: [
+              {
+                type: 'object',
+                parameters: [
+                  {
+                    name: 'model',
+                    type: "'base' | 'enhanced'",
+                    description: 'Translation model to use.',
+                    isOptional: true,
+                  },
+                  {
+                    name: 'target_languages',
+                    type: 'string[]',
+                    description: 'Languages to translate the transcript into.',
+                    isOptional: true,
+                  },
+                ],
+              },
+            ],
+          },
+          {
+            name: 'detect_language',
+            type: 'boolean',
+            description: 'Whether to detect the spoken language automatically.',
+            isOptional: true,
+          },
+          {
+            name: 'enable_code_switching',
+            type: 'boolean',
+            description: 'Whether to detect multiple languages within the recording.',
+            isOptional: true,
+          },
+        ],
+      },
+    ],
+  },
+]}
+/>
+
+Returns: `Promise<string>` containing the full transcript.
+
+### `speak()`
+
+Gladia doesn't support text-to-speech. Calling this method throws `Gladia does not support text-to-speech.`
+
+## Important notes
+
+- Gladia processes prerecorded audio through an upload and transcription job. It doesn't provide streaming transcription through this package.
+- The input stream is fully buffered before upload.
+- `listen()` returns only `full_transcript`. It doesn't return per-speaker segments or other response metadata.
+- The integration polls once per second until the job finishes or fails. It doesn't set a polling timeout.
+- A Gladia API key is required.

@@ -8,27 +8,15 @@ OpenAI Realtime Voice integration for Mastra, providing real-time voice interact
 npm install @mastra/voice-openai-realtime
 ```
 
-## Configuration
-
-The module requires an OpenAI API key, which can be provided through environment variables or directly in the configuration:
-
-```bash
-OPENAI_API_KEY=your_api_key
-```
-
 ## Usage
 
 ```typescript
 import { OpenAIRealtimeVoice } from '@mastra/voice-openai-realtime';
 import { getMicrophoneStream } from '@mastra/node-audio';
 
-// Create a voice instance with default configuration
-const voice = new OpenAIRealtimeVoice();
-
-// Create a voice instance with configuration
 const voice = new OpenAIRealtimeVoice({
-  apiKey: 'your-api-key', // Optional, can use OPENAI_API_KEY env var
-  model: 'gpt-4o-mini-realtime', // Optional, uses latest model by default
+  apiKey: process.env.OPENAI_API_KEY,
+  model: 'gpt-4o-mini-realtime',
 });
 
 voice.updateSession({
@@ -73,78 +61,14 @@ await voice.send(microphoneStream);
 voice.close();
 ```
 
-## Features
+## Documentation
 
-- Real-time voice interactions via WebSocket
-- Seamless speech to speech
-- Voice activity detection (VAD)
-- Multiple voice options
-- Event-based audio streaming
-- Tool integration support
+- [@mastra/voice-openai-realtime documentation](https://mastra.ai/integrations/voice/openai)
 
-## Voice Options
+## Changelog
 
-Available voices include:
+See the [package changelog](https://github.com/mastra-ai/mastra/blob/main/voice/openai-realtime-api/CHANGELOG.md) for version history and release notes.
 
-- alloy (Neutral)
-- ash (Balanced)
-- echo (Warm)
-- shimmer (Clear)
-- coral (Expressive)
-- sage (Professional)
-- ballad (Melodic)
-- verse (Dynamic)
+## Support
 
-## Events
-
-The voice instance emits several events:
-
-- `speaking`: Emitted while generating speech, provides Int16Array audio data
-- `writing`: Emitted when speech is transcribed to text
-- `error`: Emitted when an error occurs
-
-You can also listen to OpenAI Realtime [sdk utility events](https://github.com/openai/openai-realtime-api-beta/tree/main?tab=readme-ov-file#reference-client-utility-events) by prefixing with 'openAIRealtime:', such as:
-
-- `openAIRealtime:conversation.item.completed`
-- `openAIRealtime:conversation.updated`
-
-## Voice Activity Detection
-
-The realtime voice integration includes server-side VAD (Voice Activity Detection) with configurable parameters:
-
-```typescript
-voice.updateConfig({
-  voice: 'echo',
-  turn_detection: {
-    type: 'server_vad',
-    threshold: 0.5, // Speech detection sensitivity
-    silence_duration_ms: 1000, // Wait time before ending turn
-    prefix_padding_ms: 1000, // Audio padding before speech
-  },
-});
-```
-
-## Tool Integration
-
-You can add tools to the voice instance with tools that extend its capabilities:
-
-```typescript
-export const menuTool = createTool({
-  id: 'menuTool',
-  description: 'Get menu items',
-  inputSchema: z
-    .object({
-      query: z.string(),
-    })
-    .required(),
-  execute: async (inputData, context) => {
-    // Implement menu search functionality
-  },
-});
-
-voice.addTools(menuTool);
-```
-
-## API Reference
-
-For detailed API documentation, refer to the JSDoc comments in the source code or generate documentation using TypeDoc.
+We have an [open community Discord](https://discord.gg/mastra-ai). Come and say hello and let us know if you have any questions or need any help getting things running.

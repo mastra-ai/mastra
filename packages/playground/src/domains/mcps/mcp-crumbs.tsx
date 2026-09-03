@@ -6,7 +6,7 @@ export function McpServerCrumb() {
   const { serverId } = useParams<{ serverId: string }>();
   if (!serverId) return null;
 
-  return <MCPServerCombobox value={serverId} variant="ghost" />;
+  return <MCPServerCombobox value={serverId} variant="ghost" size="sm" />;
 }
 
 export function McpServerToolCrumb() {

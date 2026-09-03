@@ -90,7 +90,7 @@ export const AgentMetadata = ({ agentId }: AgentMetadataProps) => {
   return (
     <div className="flex flex-col gap-4" data-testid="agent-metadata">
       {agent.modelList && (
-        <Card elevation="elevated" className="bg-surface3">
+        <Card className="bg-surface3">
           <CardHeader>
             <CardTitle>Models</CardTitle>
           </CardHeader>
@@ -104,7 +104,7 @@ export const AgentMetadata = ({ agentId }: AgentMetadataProps) => {
         </Card>
       )}
 
-      <Card elevation="elevated" className="bg-surface3">
+      <Card className="bg-surface3">
         <CardHeader className="flex-row items-baseline gap-2 space-y-0">
           <CardTitle>Capabilities</CardTitle>
           <CardDescription>Everything this agent can call at runtime</CardDescription>
@@ -197,7 +197,7 @@ export const AgentMetadata = ({ agentId }: AgentMetadataProps) => {
         </CardContent>
       </Card>
 
-      <Card elevation="elevated" className="bg-surface3">
+      <Card className="bg-surface3">
         <CardHeader>
           <CardTitle>System Prompt</CardTitle>
         </CardHeader>

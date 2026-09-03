@@ -1,22 +1,16 @@
-import { Agent } from '@mastra/core/agent';
 import type { KnowledgeScope, KnowledgeStorage, SearchKnowledgeResult } from '@mastra/core/storage';
 import { canonicalizeKnowledgeScope } from '@mastra/core/storage';
 
 import { Extractor } from '../extractor';
+import { withOmInternalThreadId } from '../internal-request-context';
 import type { ObservationalMemoryModel } from '../types';
 import { publishSubconsciousActivity } from './activity';
-import { createKnowledgeTools } from './knowledge-tools';
 import { resolveSubconsciousAgentModel } from './model';
+import { createReminderAgent } from './remind-agent';
+import { ensureOwnedRemindThread, getRemindThreadId, REMIND_MESSAGE_METADATA_KEY } from './remind-protocol';
+import { createReplyToMemoryQuestionTool } from './remind-questions';
 import { resolveKnowledgeResourceId } from './scope';
 import type { ResolvedSubconsciousAgent } from './types';
-
-const NO_REMINDER = '<no-reminder />';
-const DEFAULT_INSTRUCTIONS = `Review the current observations and use the knowledge tools to find prior knowledge that is directly relevant now.
-
-Be selective. Treat future-dated records as relevant when their time is imminent or useful to the current task. When the observations show whether an earlier reminder was used, tune your selectivity accordingly without storing hit/miss counters.
-Never remind about knowledge that is already visible in the current observations or recent messages — a reminder is only valuable for knowledge the agent can no longer see. Echoing back what was just said or just captured is noise.
-If nothing is relevant, respond with exactly ${NO_REMINDER} and nothing else.
-If knowledge is relevant, return one concise reminder that explains why it matters and includes source node or record IDs. Do not invent knowledge and do not expose knowledge outside the tools' scoped results.`;
 
 /** Own-thread records younger than this are treated as still-in-context and excluded from reminder candidates. */
 const FRESH_OWN_RECORD_WINDOW_MS = 30 * 60 * 1000;
@@ -77,7 +71,7 @@ async function findReminderSources(
 }
 
 /**
- * Drop the current thread's own freshly captured KnowledgeRecords from the candidate list. They match the
+ * Drop the current thread's own freshly curated KnowledgeRecords from the candidate list. They match the
  * current observations almost perfectly (they were just distilled from them), so without this
  * guard the reminder agent mostly echoes the session's own words back at it.
  */
@@ -91,8 +85,8 @@ async function dropFreshOwnRecords(
       if (source.type !== 'record') return true;
       const record = await store.getKnowledge({ id: source.id }).catch(() => null);
       if (!record) return true;
-      // KnowledgeRecords written by the thread's own subconscious sub-agents (curate, learn, capture)
-      // carry a `subconscious:<threadId>:<agent>` source — they are this thread's too.
+      // KnowledgeRecords written by the thread's own subconscious sub-agents carry a
+      // `subconscious:<threadId>:<agent>` source — they are this thread's too.
       const isOwnThread =
         record.sourceThreadId === threadId || record.sourceThreadId.startsWith(`subconscious:${threadId}:`);
       const isFresh = Date.now() - new Date(record.capturedAt).getTime() < FRESH_OWN_RECORD_WINDOW_MS;
@@ -109,14 +103,13 @@ export class SubconsciousRemindExtractor extends Extractor<string> {
       mode: 'hook',
       metadataKeyPath: false,
       onExtracted: async context => {
-        if (!context.rawObservations?.trim() || !context.memory || !context.sendSignal) {
-          return;
-        }
+        if (!context.rawObservations?.trim() || !context.memory || !context.sendSignal) return;
 
         let scope: KnowledgeScope | undefined;
         let store: KnowledgeStorage | undefined;
         try {
           scope = resolveScope(context);
+          const resourceId = resolveKnowledgeResourceId(context.requestContext, context.resourceId)!;
           store = await context.memory.storage.getStore('knowledge');
           if (!store) throw new Error('Subconscious remind requires a configured knowledge storage domain.');
           const sources = await dropFreshOwnRecords(
@@ -132,49 +125,70 @@ export class SubconsciousRemindExtractor extends Extractor<string> {
             requestContext: context.requestContext,
           });
           if (!model) return;
-          const agent = new Agent({
-            id: `subconscious-remind-${context.threadId}`,
-            name: 'Subconscious Remind',
-            instructions: [DEFAULT_INSTRUCTIONS, config.instructions?.trim()].filter(Boolean).join('\n\n'),
-            model,
-            tools: createKnowledgeTools(context.memory, scope),
+
+          const remindMemory = context.memory.createSubconsciousMemory();
+          const remindThread = await ensureOwnedRemindThread({
+            memory: remindMemory,
+            parentThreadId: context.threadId,
+            resourceId,
           });
-          const recentMessagesSection = context.recentMessages?.trim()
-            ? `\n\nRecent conversation messages (already visible to the agent — never remind about anything present here):\n${context.recentMessages}`
-            : '';
-          const result = await agent.generate(
-            `Current time: ${new Date().toISOString()}\n\nScoped source candidates:\n${JSON.stringify(sources)}\n\nCurrent observations:\n${context.rawObservations}${recentMessagesSection}`,
+          const eventId = `subconscious:remind:${crypto.randomUUID()}:event`;
+          const createdAt = Date.now();
+          const candidateIds = [
+            ...new Set(
+              sources
+                .flatMap(source => [source.id, source.recordId])
+                .filter((id): id is string => typeof id === 'string'),
+            ),
+          ];
+          const recentMessages = context.recentMessages?.trim() || '(none)';
+          const replyTool = context.mainAgent
+            ? createReplyToMemoryQuestionTool({
+                parentAgent: context.mainAgent,
+                parentThreadId: context.threadId,
+                resourceId,
+              })
+            : undefined;
+          const agent = createReminderAgent({
+            model,
+            memory: remindMemory,
+            scope,
+            threadId: remindThread.id,
+            resourceId,
+            parentThreadId: context.threadId,
+            parentAgent: context.mainAgent,
+            fallbackSendSignal: context.sendSignal,
+            additionalTools: replyTool ? { reply_to_memory_question: replyTool } : undefined,
+            instructions: config.instructions,
+            maxSteps: config.maxSteps,
+          });
+          const delivery = agent.sendMessage(
             {
-              requestContext: context.requestContext,
-              abortSignal: context.abortSignal,
-              maxSteps: config.maxSteps,
+              contents: `Passive reminder check ${eventId}\n\nCurrent time: ${new Date(createdAt).toISOString()}\n\nScoped source candidates:\n${JSON.stringify(sources)}\n\nCurrent observations:\n${context.rawObservations}\n\nRecent conversation messages already visible to the parent agent:\n${recentMessages}`,
+              metadata: {
+                [REMIND_MESSAGE_METADATA_KEY]: { type: 'passive-check', eventId, candidateIds },
+              },
+            },
+            {
+              resourceId,
+              threadId: remindThread.id,
+              ifActive: { behavior: 'deliver' },
+              ifIdle: {
+                behavior: 'wake',
+                streamOptions: {
+                  memory: { thread: remindThread.id, resource: resourceId },
+                  requestContext: withOmInternalThreadId(context.requestContext, agent.id),
+                  abortSignal: context.abortSignal,
+                  maxSteps: config.maxSteps,
+                },
+              },
             },
           );
-          const reminder = result.text.trim();
-          if (!reminder || /^<no-reminder\s*\/>$/i.test(reminder)) {
-            return;
+          const accepted = await delivery.accepted;
+          if (accepted.action === 'wake') await accepted.output.consumeStream();
+          if (accepted.action !== 'wake' && accepted.action !== 'deliver') {
+            throw new Error(`Reminder event ${eventId} was not accepted for processing (${accepted.action}).`);
           }
-
-          const candidateIds = [...new Set(sources.flatMap(source => [source.id, source.recordId]))];
-          const sourceIds = candidateIds.filter(id => reminder.includes(id)).slice(0, 5);
-          if (sourceIds.length === 0) {
-            return;
-          }
-          const contents = `${reminder}\n\nSources: ${sourceIds.join(', ')}`;
-          await context.sendSignal({
-            id: `__subconscious_remembered_${crypto.randomUUID()}`,
-            type: 'reactive',
-            tagName: 'remembered',
-            contents,
-            createdAt: new Date(),
-            metadata: { origin: 'subconscious' },
-            attributes: {
-              source: 'subconscious',
-              sourceIds: sourceIds.join(','),
-              agent: 'remind',
-              threadId: context.threadId,
-            },
-          });
         } catch (error) {
           await context.writer?.custom({
             type: 'data-subconscious-error',

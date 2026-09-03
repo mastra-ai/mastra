@@ -228,6 +228,8 @@ export interface FactoryGithubRuleContext extends FactoryRuleContextBase {
     assignees?: string[];
     requestedReviewers?: string[];
     labels?: string[];
+    author?: string;
+    factoryAuthored: boolean;
     headBranch: string;
     baseBranch: string;
   };

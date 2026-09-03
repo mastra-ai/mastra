@@ -1,85 +1,40 @@
 # @mastra/auth-auth0
 
-A Mastra authentication provider for Auth0 integration. This package provides seamless authentication and authorization using Auth0's JWT tokens.
-
-## Requirements
-
-- Node.js 22.13.0 or later
-- Auth0 account and configured application
-- Valid Auth0 domain and API identifier
+`@mastra/auth-auth0` verifies Auth0 access tokens and makes the authenticated user available to Mastra's server authorization layer. Use it when Auth0 already issues JWTs for your application and you want Mastra endpoints protected by the same identity provider.
 
 ## Installation
 
 ```bash
 npm install @mastra/auth-auth0
-# or
-yarn add @mastra/auth-auth0
-# or
-pnpm add @mastra/auth-auth0
 ```
 
 ## Usage
 
+Set `AUTH0_DOMAIN` and `AUTH0_AUDIENCE`, or pass both values to the provider.
+
 ```typescript
-import { Mastra } from '@mastra/core/mastra';
 import { MastraAuthAuth0 } from '@mastra/auth-auth0';
+import { Mastra } from '@mastra/core/mastra';
 
-// Initialize with options
-const auth0Provider = new MastraAuthAuth0({
-  domain: 'your-tenant.auth0.com',
-  audience: 'your-api-identifier',
-});
-
-// Or use environment variables
-const auth0Provider = new MastraAuthAuth0();
-
-// Enable auth in Mastra
-const mastra = new Mastra({
-  ...
+export const mastra = new Mastra({
   server: {
-    auth: auth0Provider,
+    auth: new MastraAuthAuth0({
+      domain: process.env.AUTH0_DOMAIN,
+      audience: process.env.AUTH0_AUDIENCE,
+    }),
   },
 });
 ```
 
-## Configuration
+## Documentation
 
-The package can be configured either through constructor options or environment variables:
+- [Auth0 integration guide](https://mastra.ai/integrations/auth/auth0)
+- [Auth0 provider reference](https://mastra.ai/reference/auth/auth0)
 
-### Constructor Options
+## Changelog
 
-```typescript
-interface MastraAuthAuth0Options {
-  domain?: string; // Your Auth0 domain
-  audience?: string; // Your Auth0 API identifier
-}
-```
+See the [package changelog](https://github.com/mastra-ai/mastra/blob/main/auth/auth0/CHANGELOG.md) for version history and release notes.
 
-### Environment Variables
+## Support
 
-- `AUTH0_DOMAIN`: Your Auth0 domain (e.g., 'your-tenant.auth0.com')
-- `AUTH0_AUDIENCE`: Your Auth0 API identifier
-
-## Features
-
-- JWT token verification using Auth0's JWKS
-- Automatic token validation against Auth0's issuer
-- Audience validation
-- Type-safe user payload
-
-## Example
-
-```typescript
-import { MastraAuthAuth0 } from '@mastra/auth-auth0';
-
-const auth0Provider = new MastraAuthAuth0({
-  domain: 'your-tenant.auth0.com',
-  audience: 'your-api-identifier',
-});
-
-// Authenticate a token
-const user = await auth0Provider.authenticateToken('your-jwt-token');
-
-// Authorize a user
-const isAuthorized = await auth0Provider.authorizeUser(user);
-```
+We have an [open community Discord](https://discord.gg/mastra-ai). Come and say hello and let us know if you have any questions or need any help getting things running.

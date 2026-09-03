@@ -43,7 +43,11 @@ import {
   SourceControlConnectionNotFoundError,
   type SourceControlStorage,
 } from '../storage/domains/source-control/base.js';
-import type { FactoryDispatchFailureCode, WorkItemsStorage } from '../storage/domains/work-items/base.js';
+import {
+  isAgentActor,
+  type FactoryDispatchFailureCode,
+  type WorkItemsStorage,
+} from '../storage/domains/work-items/base.js';
 import { workItemBranch, workItemBranchSource } from '../work-item-branch.js';
 import { ConfigRoutes } from './config.js';
 import { invalidateCustomProvidersSnapshots } from './custom-provider-source.js';
@@ -235,6 +239,7 @@ export async function prepareFactoryRuleBinding(
     // land in the role's existing session: minting a replacement would repoint
     // the work item, flip the session's owner to the approver, and orphan the
     // previous sandbox.
+    const approver = input.record.approvedBy ?? undefined;
     const preparedSession =
       (await reuseBoundSession(github.sourceControlStorage, input)) ??
       (await ensureFactorySourceSession({
@@ -243,9 +248,9 @@ export async function prepareFactoryRuleBinding(
         factoryProjectId: input.record.factoryProjectId,
         repositorySlug,
         branch,
-        // A human-approved proposal has an interactive user: attribute the run to
-        // the approver, not the repo connector.
-        attributeToUserId: input.record.approvedBy ?? undefined,
+        // A person who approved the run is its interactive user: attribute it to
+        // them, not the repo connector. An agent's pre-approval names no person.
+        attributeToUserId: isAgentActor(approver) ? undefined : approver,
       }));
 
     await coordinator.prepare({
@@ -513,6 +518,7 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
       auth: deps.auth,
       authStorage: deps.authStorage,
       modelCredentials: deps.domains.modelCredentials,
+      memorySettings: deps.domains.memorySettings,
       onCredentialsChanged: invalidateTenantCredentialSnapshots,
     }).routes(),
     ...new SkillRoutes({

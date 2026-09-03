@@ -507,6 +507,15 @@ export interface WorkflowOptions {
    * workflows so inner step events reach the outer subscriber.
    */
   sharePubsub?: boolean;
+  /**
+   * Whether `Mastra.restartAllActiveWorkflowRuns()` (boot-time generic
+   * recovery) automatically restarts this workflow's active runs. Defaults to
+   * true. Set to false for workflows whose recovery is owned elsewhere or
+   * whose side effects must not be re-driven by a blanket restart — durable
+   * agent workflows set this to false because their recovery is owned by the
+   * dedicated opt-in path (`recovery.durableAgents: 'auto'`).
+   */
+  autoRestartActiveRuns?: boolean;
   shouldPersistSnapshot?: (params: {
     stepResults: Record<string, StepResult<any, any, any, any>>;
     workflowStatus: WorkflowRunStatus;
@@ -599,6 +608,22 @@ export type DefaultEngineType = {};
 export type MappingConfig = Record<string, any>;
 
 /**
+ * Optional identity and display metadata accepted by the control-flow builder
+ * methods (`.parallel()`, `.branch()`, `.dowhile()`, `.dountil()`, `.foreach()`,
+ * `.sleep()`, `.sleepUntil()`, `.map()`). Mirrors the `id` / `description` /
+ * `metadata` model that executable steps already have: `id` is a stable machine
+ * identity for addressing the entry across edits and serialization,
+ * `description` explains the intent of the control-flow operation, and
+ * `metadata` carries arbitrary JSON-serializable data (e.g. a display title
+ * for visual editors). None of these affect execution.
+ */
+export type StepFlowEntryOptions = {
+  id?: string;
+  description?: string;
+  metadata?: StepMetadata;
+};
+
+/**
  * The "single step-like" graph entries: a plain user step plus the declarative
  * variants that Mastra interprets at execution time (agent / tool / mapping).
  *
@@ -612,7 +637,13 @@ export type SingleStepEntry<TEngineType = DefaultEngineType> =
   | { type: 'step'; step: Step }
   | { type: 'agent'; id: string; agentId: string; agent?: any; options?: any }
   | { type: 'tool'; id: string; toolId: string; tool?: any; options?: any }
-  | { type: 'mapping'; id: string; mapConfig: MappingConfig | ExecuteFunction<any, any, any, any, any, TEngineType> };
+  | {
+      type: 'mapping';
+      id: string;
+      description?: string;
+      metadata?: StepMetadata;
+      mapConfig: MappingConfig | ExecuteFunction<any, any, any, any, any, TEngineType>;
+    };
 
 /** The `{ type: 'step' }` variant of {@link SingleStepEntry}: a plain live step. */
 export type StepEntry = Extract<SingleStepEntry, { type: 'step' }>;
@@ -628,14 +659,34 @@ export type MappingStepEntry<TEngineType = DefaultEngineType> = Extract<
 
 export type StepFlowEntry<TEngineType = DefaultEngineType> =
   | SingleStepEntry<TEngineType>
-  | { type: 'sleep'; id: string; duration?: number; fn?: ExecuteFunction<any, any, any, any, any, TEngineType> }
-  | { type: 'sleepUntil'; id: string; date?: Date; fn?: ExecuteFunction<any, any, any, any, any, TEngineType> }
+  | {
+      type: 'sleep';
+      id: string;
+      description?: string;
+      metadata?: StepMetadata;
+      duration?: number;
+      fn?: ExecuteFunction<any, any, any, any, any, TEngineType>;
+    }
+  | {
+      type: 'sleepUntil';
+      id: string;
+      description?: string;
+      metadata?: StepMetadata;
+      date?: Date;
+      fn?: ExecuteFunction<any, any, any, any, any, TEngineType>;
+    }
   | {
       type: 'parallel';
+      id?: string;
+      description?: string;
+      metadata?: StepMetadata;
       steps: SingleStepEntry<TEngineType>[];
     }
   | {
       type: 'conditional';
+      id?: string;
+      description?: string;
+      metadata?: StepMetadata;
       steps: SingleStepEntry<TEngineType>[];
       conditions: ConditionFunction<any, any, any, any, any, TEngineType>[];
       serializedConditions: { id: string; fn: string }[];
@@ -653,6 +704,9 @@ export type StepFlowEntry<TEngineType = DefaultEngineType> =
       // storable). The live step shape is aligned with `parallel` / `foreach`
       // so the builder can accept an Agent / Tool directly.
       type: 'loop';
+      id?: string;
+      description?: string;
+      metadata?: StepMetadata;
       step: SingleStepEntry<TEngineType>;
       condition: LoopConditionFunction<any, any, any, any, any, TEngineType>;
       serializedCondition: { id: string; fn: string };
@@ -666,6 +720,9 @@ export type StepFlowEntry<TEngineType = DefaultEngineType> =
     }
   | {
       type: 'foreach';
+      id?: string;
+      description?: string;
+      metadata?: StepMetadata;
       step: SingleStepEntry<TEngineType>;
       opts: ForeachOptions;
     };
@@ -746,7 +803,7 @@ export type SerializedSingleStepEntry =
       // looked up from the live Mastra instance at rehydration time.
       options?: SerializedStepOptions;
     }
-  | { type: 'mapping'; id: string; mapConfig: string }
+  | { type: 'mapping'; id: string; description?: string; metadata?: StepMetadata; mapConfig: string }
   /**
    * A nested workflow referenced by its registered id (code-defined or
    * another dynamic workflow). The referenced workflow must resolve on the
@@ -771,21 +828,31 @@ export type SerializedStepFlowEntry =
   | {
       type: 'sleep';
       id: string;
+      description?: string;
+      metadata?: StepMetadata;
       duration?: number;
       fn?: string;
     }
   | {
       type: 'sleepUntil';
       id: string;
+      description?: string;
+      metadata?: StepMetadata;
       date?: Date;
       fn?: string;
     }
   | {
       type: 'parallel';
+      id?: string;
+      description?: string;
+      metadata?: StepMetadata;
       steps: SerializedSingleStepEntry[];
     }
   | {
       type: 'conditional';
+      id?: string;
+      description?: string;
+      metadata?: StepMetadata;
       steps: SerializedSingleStepEntry[];
       serializedConditions: { id: string; fn: string }[];
       /**
@@ -801,6 +868,9 @@ export type SerializedStepFlowEntry =
     }
   | {
       type: 'loop';
+      id?: string;
+      description?: string;
+      metadata?: StepMetadata;
       step: SerializedSingleStepEntry;
       serializedCondition: { id: string; fn: string };
       loopType: 'dowhile' | 'dountil';
@@ -813,6 +883,9 @@ export type SerializedStepFlowEntry =
     }
   | {
       type: 'foreach';
+      id?: string;
+      description?: string;
+      metadata?: StepMetadata;
       step: SerializedSingleStepEntry;
       /**
        * Optional. When omitted, the engine defaults to `concurrency: 1`. Present
