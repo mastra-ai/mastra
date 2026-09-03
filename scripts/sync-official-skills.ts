@@ -146,8 +146,11 @@ export async function syncOfficialSkills(options: SyncOfficialSkillsOptions): Pr
   console.info(`Synchronized Knowledge guidance to ${basename(options.targetRoot)} (${sourceCommit.slice(0, 12)}).`);
 }
 
-function parseArgs(argv: string[]): SyncOfficialSkillsOptions {
-  const value = (name: string) => argv[argv.indexOf(name) + 1];
+export function parseArgs(argv: string[]): SyncOfficialSkillsOptions {
+  const value = (name: string) => {
+    const index = argv.indexOf(name);
+    return index === -1 ? undefined : argv[index + 1];
+  };
   const targetRoot = value('--target') ?? process.env.MASTRA_SKILLS_REPO;
   if (!targetRoot) throw new Error('Pass --target <mastra-ai/skills checkout> or set MASTRA_SKILLS_REPO.');
   return {
