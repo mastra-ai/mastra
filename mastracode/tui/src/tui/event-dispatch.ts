@@ -2,11 +2,10 @@
  * Event dispatcher: maps AgentControllerEvent types to extracted handler functions.
  */
 import { getCurrentGitBranchAsync } from '@mastra/code-sdk/utils/project';
-import type { AgentControllerEvent, AgentControllerThread } from '@mastra/core/agent-controller';
+import type { AgentControllerEvent, AgentControllerThread, MastraDBMessage } from '@mastra/core/agent-controller';
 import type { TaskItemSnapshot } from '@mastra/core/signals';
 import type { AskUserSelectionMode } from '@mastra/core/tools';
 
-import { getMessageText } from './db-message-parts.js';
 import {
   handleAgentStart,
   handleAgentEnd,
@@ -61,6 +60,24 @@ function trackInteractivePrompt(
   ectx.analytics?.trackInteractivePrompt(promptType, properties);
 }
 
+function appendTextDelta(message: MastraDBMessage, delta: string): MastraDBMessage | undefined {
+  if (message.role !== 'assistant' || typeof message.content === 'string') return undefined;
+
+  const textIndex = message.content.parts.findLastIndex(part => part.type === 'text');
+  const textPart = message.content.parts[textIndex];
+  if (!textPart || textPart.type !== 'text') return undefined;
+
+  return {
+    ...message,
+    content: {
+      ...message.content,
+      parts: message.content.parts.map((part, index) =>
+        index === textIndex ? { ...part, text: textPart.text + delta } : part,
+      ),
+    },
+  };
+}
+
 export async function dispatchEvent(
   event: AgentControllerEvent,
   ectx: EventHandlerContext,
@@ -113,23 +130,25 @@ export async function dispatchEvent(
       break;
 
     case 'message_update': {
-      // Only open the decode window when an assistant message carries actual
-      // streamed text — tool-result-only updates (e.g. plan approval resume) and
-      // user/system message updates must not count toward tokens/sec.
-      const hasAssistantText = event.message.role === 'assistant' && getMessageText(event.message).trim().length > 0;
-      if (hasAssistantText) {
-        state.agentRunLastStreamPartAt = Date.now();
-        if (state.decodeStartedAt === 0) {
-          state.decodeStartedAt = state.agentRunLastStreamPartAt;
-        }
+      const message = state.streamingMessage;
+      if (!message || message.id !== event.id) break;
+
+      const updated = appendTextDelta(message, event.event.delta);
+      if (!updated) break;
+
+      state.agentRunLastStreamPartAt = Date.now();
+      if (state.decodeStartedAt === 0) {
+        state.decodeStartedAt = state.agentRunLastStreamPartAt;
       }
       ectx.updateStatusLine();
-      handleMessageUpdate(ectx, event.message);
+      handleMessageUpdate(ectx, updated);
       break;
     }
 
     case 'message_end':
-      handleMessageEnd(ectx, event.message);
+      if (state.streamingMessage?.id === event.id) {
+        handleMessageEnd(ectx, state.streamingMessage);
+      }
       break;
 
     case 'tool_start':

@@ -87,169 +87,31 @@ describe('ACP Event Mapper', () => {
       expect(sessionUpdateSpy).toHaveBeenCalledTimes(2);
     });
 
-    it('preserves the cumulative assistant cursor across an interleaved signal', () => {
+    it('forwards compact assistant deltas across interleaved signals', () => {
       const state = createPromptState('session-1');
-      const assistant = {
-        id: 'assistant-1',
-        role: 'assistant' as const,
-        content: { format: 2 as const, parts: [{ type: 'text' as const, text: 'Before signal' }] },
-        createdAt: new Date('2026-07-15T10:00:00.000Z'),
-      };
-      const signal = createSignal({
-        id: 'reminder-1',
-        type: 'system-reminder',
-        tagName: 'system-reminder',
-        contents: 'Remember this.',
-        createdAt: new Date('2026-07-15T10:00:01.000Z'),
-      }).toDBMessage();
-
-      handleAgentControllerEvent({ type: 'message_update', message: assistant }, state, mockConnection, mockSession);
+      const assistant = { id: 'assistant-1', role: 'assistant' as const, content: { format: 2 as const, parts: [] } };
+      const signal = createSignal({ id: 'reminder-1', type: 'system-reminder', tagName: 'system-reminder', contents: 'Remember this.', createdAt: new Date() }).toDBMessage();
+      handleAgentControllerEvent({ type: 'message_start', message: assistant }, state, mockConnection, mockSession);
+      handleAgentControllerEvent({ type: 'message_update', id: assistant.id, event: { type: 'text-delta', delta: 'Before signal' } }, state, mockConnection, mockSession);
       handleAgentControllerEvent({ type: 'message_start', message: signal }, state, mockConnection, mockSession);
-      handleAgentControllerEvent({ type: 'message_end', message: signal }, state, mockConnection, mockSession);
-      expect(state.lastTextLength).toBe('Before signal'.length);
-
-      const updatedAssistant = {
-        ...assistant,
-        content: { format: 2 as const, parts: [{ type: 'text' as const, text: 'Before signal after' }] },
-      };
-      handleAgentControllerEvent(
-        { type: 'message_update', message: updatedAssistant },
-        state,
-        mockConnection,
-        mockSession,
-      );
-
-      expect(sessionUpdateSpy.mock.calls.map(([notification]) => notification.update.content.text)).toEqual([
-        'Before signal',
-        'Remember this.',
-        ' after',
-      ]);
-
-      handleAgentControllerEvent(
-        { type: 'message_end', message: updatedAssistant },
-        state,
-        mockConnection,
-        mockSession,
-      );
+      handleAgentControllerEvent({ type: 'message_end', id: signal.id }, state, mockConnection, mockSession);
+      handleAgentControllerEvent({ type: 'message_update', id: assistant.id, event: { type: 'text-delta', delta: ' after' } }, state, mockConnection, mockSession);
+      handleAgentControllerEvent({ type: 'message_end', id: assistant.id }, state, mockConnection, mockSession);
+      expect(sessionUpdateSpy.mock.calls.map(([notification]) => notification.update.content.text)).toEqual(['Before signal', 'Remember this.', ' after']);
       expect(state.lastTextLength).toBe(0);
     });
   });
 
-  describe('message_update - text delta computation', () => {
-    it('emits agent_message_chunk with delta text', () => {
+  describe('message_update - compact text deltas', () => {
+    it('emits only matching assistant text deltas', () => {
       const state = createPromptState('session-1');
-
-      // First message_update with "Hello"
-      const event1: Extract<AgentControllerEvent, { type: 'message_update' }> = {
-        type: 'message_update',
-        message: {
-          id: 'msg-1',
-          role: 'assistant',
-          content: { format: 2, parts: [{ type: 'text', text: 'Hello' }] },
-          createdAt: new Date(),
-        },
-      };
-
-      handleAgentControllerEvent(event1, state, mockConnection, mockSession);
-
-      expect(sessionUpdateSpy).toHaveBeenCalledWith({
-        sessionId: 'session-1',
-        update: {
-          sessionUpdate: 'agent_message_chunk',
-          content: { type: 'text', text: 'Hello' },
-        },
-      });
+      const assistant = { id: 'msg-1', role: 'assistant' as const, content: { format: 2 as const, parts: [] } };
+      handleAgentControllerEvent({ type: 'message_start', message: assistant }, state, mockConnection, mockSession);
+      handleAgentControllerEvent({ type: 'message_update', id: assistant.id, event: { type: 'text-delta', delta: 'Hello' } }, state, mockConnection, mockSession);
+      handleAgentControllerEvent({ type: 'message_update', id: 'other', event: { type: 'text-delta', delta: 'ignored' } }, state, mockConnection, mockSession);
+      expect(sessionUpdateSpy).toHaveBeenCalledWith({ sessionId: 'session-1', update: { sessionUpdate: 'agent_message_chunk', content: { type: 'text', text: 'Hello' } } });
+      expect(sessionUpdateSpy).toHaveBeenCalledTimes(1);
       expect(state.lastTextLength).toBe(5);
-    });
-
-    it('emits only delta for cumulative message_update', () => {
-      const state = createPromptState('session-1');
-      state.lastTextLength = 5; // Already seen "Hello"
-
-      // Second message_update with "Hello, world!"
-      const event: Extract<AgentControllerEvent, { type: 'message_update' }> = {
-        type: 'message_update',
-        message: {
-          id: 'msg-1',
-          role: 'assistant',
-          content: { format: 2, parts: [{ type: 'text', text: 'Hello, world!' }] },
-          createdAt: new Date(),
-        },
-      };
-
-      handleAgentControllerEvent(event, state, mockConnection, mockSession);
-
-      expect(sessionUpdateSpy).toHaveBeenCalledWith({
-        sessionId: 'session-1',
-        update: {
-          sessionUpdate: 'agent_message_chunk',
-          content: { type: 'text', text: ', world!' }, // Only the delta
-        },
-      });
-      expect(state.lastTextLength).toBe(13);
-    });
-
-    it('concatenates adjacent text parts without inserting a separator', () => {
-      const state = createPromptState('session-1');
-      const createdAt = new Date();
-
-      handleAgentControllerEvent(
-        {
-          type: 'message_update',
-          message: {
-            id: 'msg-1',
-            role: 'assistant',
-            content: { format: 2, parts: [{ type: 'text', text: 'Hello' }] },
-            createdAt,
-          },
-        },
-        state,
-        mockConnection,
-        mockSession,
-      );
-      handleAgentControllerEvent(
-        {
-          type: 'message_update',
-          message: {
-            id: 'msg-1',
-            role: 'assistant',
-            content: {
-              format: 2,
-              parts: [
-                { type: 'text', text: 'Hello' },
-                { type: 'text', text: 'world' },
-              ],
-            },
-            createdAt,
-          },
-        },
-        state,
-        mockConnection,
-        mockSession,
-      );
-
-      expect(sessionUpdateSpy.mock.calls.map(([notification]) => notification.update.content.text)).toEqual([
-        'Hello',
-        'world',
-      ]);
-      expect(state.lastTextLength).toBe('Helloworld'.length);
-    });
-
-    it('ignores non-assistant messages', () => {
-      const state = createPromptState('session-1');
-
-      const event: Extract<AgentControllerEvent, { type: 'message_update' }> = {
-        type: 'message_update',
-        message: {
-          id: 'msg-1',
-          role: 'user',
-          content: { format: 2, parts: [{ type: 'text', text: 'User message' }] },
-          createdAt: new Date(),
-        },
-      };
-
-      handleAgentControllerEvent(event, state, mockConnection, mockSession);
-      expect(sessionUpdateSpy).not.toHaveBeenCalled();
     });
   });
 

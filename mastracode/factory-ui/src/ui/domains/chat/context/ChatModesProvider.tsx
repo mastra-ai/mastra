@@ -16,6 +16,7 @@ const EMPTY_MODES: ChatModesApi['modes'] = [];
 
 export function ChatModesProvider({ children }: ChatModesProviderProps) {
   const { draftSessionId } = useChatSessionContext();
+  console.log('draftSessionId', draftSessionId);
   return draftSessionId ? (
     <DraftChatModesProvider>{children}</DraftChatModesProvider>
   ) : (

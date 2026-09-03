@@ -105,7 +105,7 @@ type NotificationEvent =
 /** The timestamps the SDK gives back as `Date`s. {@link hydrateKnownEvent} is typed against this, so the two cannot drift. */
 type Hydrated<T> = T extends { type: 'thread_created' }
   ? Omit<T, 'thread'> & { thread: AgentControllerThread }
-  : T extends { type: 'message_start' | 'message_update' | 'message_end' }
+  : T extends { type: 'message_start' }
     ? Omit<T, 'message'> & { message: MastraDBMessage }
     : T;
 
@@ -217,8 +217,6 @@ function isKnownParsedEvent(event: ParsedEvent): event is AgentControllerWireEve
 function hydrateKnownEvent(event: AgentControllerWireEvent | NotificationEvent): KnownAgentControllerEvent {
   switch (event.type) {
     case 'message_start':
-    case 'message_update':
-    case 'message_end':
       return { ...event, message: hydrateMessage(event.message) };
     case 'thread_created':
       return { ...event, thread: hydrateThread(event.thread) };
@@ -360,6 +358,50 @@ export class AgentControllerSession extends BaseResource {
    * `subscribe()` themselves and keep cancellation control.
    */
   async subscribe(options: SubscribeAgentControllerSessionOptions): Promise<AgentControllerSubscription> {
+    // const requestStream = async (): Promise<Response> => {
+    //   const response = (await this.request(this.url(`${this.base()}/stream`), { stream: true })) as Response;
+    //   if (!response.body) {
+    //     throw new Error('No response body for agent controller session stream');
+    //   }
+
+    //   return response;
+    // };
+
+    // const response = await requestStream();
+    // const reader = response.body!.getReader();
+    // const decoder = new TextDecoder();
+    // let buffer = '';
+
+    // setTimeout(async () => {
+    //   while (true) {
+    //     const { done, value } = await reader.read();
+    //     if (done) break;
+    //     buffer += decoder.decode(value, { stream: true });
+    //     for (const line of buffer.split(/\r\n|\n|\r/)) {
+    //       if (!line.startsWith('data:')) continue;
+    //       const data = line.slice(5).trim();
+    //       if (!data) continue;
+    //       let event: AgentControllerEvent;
+    //       try {
+    //         event = hydrateEventTimestamps(JSON.parse(data));
+    //       } catch (err) {
+    //         continue;
+    //       }
+    //       try {
+    //         console.log('onEvent', event);
+    //         options.onEvent(event);
+    //       } catch (err) {
+    //         options.onError?.(err);
+    //       }
+    //     }
+    //   }
+    // }, 0);
+
+    // return {
+    //   unsubscribe: () => {
+    //     void reader.cancel().catch(() => {});
+    //   },
+    // };
     // Normalize reconnect knobs defensively: NaN/negative delays would produce
     // zero-delay timers and a NaN retry cap would never exhaust (`n >= NaN` is
     // always false), turning an outage into a hot retry loop.
@@ -745,6 +787,11 @@ export class AgentControllerSession extends BaseResource {
     }
 
     const query = queryParams.toString();
+    console.log(
+      'query',
+      options,
+      `${this.base()}/threads/${encodeURIComponent(threadId)}/messages${query ? `?${query}` : ''}`,
+    );
     const body = await this.request<SerializedAgentControllerListMessagesResult>(
       this.url(`${this.base()}/threads/${encodeURIComponent(threadId)}/messages${query ? `?${query}` : ''}`),
     );

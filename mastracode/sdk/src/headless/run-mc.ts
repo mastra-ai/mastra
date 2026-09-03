@@ -10,20 +10,13 @@
  * {@link MCRun} is async-iterable over controller events and also resolves to a
  * final result via `result`.
  */
-import type { AgentControllerEvent, MastraDBMessage, MastraMessagePart, Session } from '@mastra/core/agent-controller';
+import type { AgentControllerEvent, Session } from '@mastra/core/agent-controller';
 
 import { GoalManager } from '../goal-manager.js';
 import { createGoalReminderSignal } from '../goal-signal.js';
 
 import { autoApprovePolicy } from './policy.js';
 import type { MCRun, ResolutionPolicy, RunMCOptions, RunMCResult, RunMCStatus } from './types.js';
-
-function extractAssistantText(message: MastraDBMessage): string {
-  return message.content.parts
-    .filter((p): p is MastraMessagePart & { text: string } => p.type === 'text' && typeof p.text === 'string')
-    .map(p => p.text)
-    .join('');
-}
 
 function exitCodeForStatus(status: RunMCStatus): number {
   switch (status) {
@@ -49,10 +42,8 @@ interface MutableResult {
 
 function aggregate(event: AgentControllerEvent, acc: MutableResult): void {
   switch (event.type) {
-    case 'message_end':
-      if (event.message.role === 'assistant') {
-        acc.text += extractAssistantText(event.message);
-      }
+    case 'message_update':
+      acc.text += event.event.delta;
       break;
     case 'tool_start':
       acc.toolCalls.push({ id: event.toolCallId, name: event.toolName, args: event.args });
@@ -171,6 +162,7 @@ export function runMC<TState extends Record<string, unknown>>(options: RunMCOpti
   let aborted = false;
   let maxTurnsExceeded = false;
   let assistantTurns = 0;
+  let activeAssistantMessageId: string | undefined;
   let settled = false;
   let unsubscribe: (() => void) | undefined;
   let resolveResult!: (r: RunMCResult) => void;
@@ -305,6 +297,10 @@ export function runMC<TState extends Record<string, unknown>>(options: RunMCOpti
         return;
       }
 
+      if (event.type === 'message_start' && event.message.role === 'assistant') {
+        activeAssistantMessageId = event.message.id;
+      }
+
       aggregate(event, acc);
       queue.push(event);
 
@@ -315,7 +311,8 @@ export function runMC<TState extends Record<string, unknown>>(options: RunMCOpti
 
       // Count agentic turns (one assistant response = one turn). When the cap is
       // reached, abort the run; agent_end then resolves as 'max_turns'.
-      if (event.type === 'message_end' && event.message.role === 'assistant' && options.maxTurns !== undefined) {
+      if (event.type === 'message_end' && event.id === activeAssistantMessageId && options.maxTurns !== undefined) {
+        activeAssistantMessageId = undefined;
         assistantTurns += 1;
         if (assistantTurns >= options.maxTurns && !maxTurnsExceeded) {
           maxTurnsExceeded = true;

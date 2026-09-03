@@ -506,9 +506,8 @@ function carriesError(event: AgentControllerEvent): event is ErrorCarryingAgentC
 
 /**
  * An `Error`'s `message`/`name` are non-enumerable, so flatten it before JSON
- * serialization. Streamed message events intentionally retain the controller's
- * live accumulated message; consumers requiring temporal isolation must copy or
- * serialize the value there.
+ * serialization. Compact message updates and ends are already JSON-safe and
+ * pass through unchanged; only `message_start` carries a message snapshot.
  */
 function toWireEvent(event: AgentControllerEvent): JsonReadyAgentControllerEvent {
   if ('displayState' in event) {
@@ -586,6 +585,7 @@ export const STREAM_AGENT_CONTROLLER_SESSION_ROUTE = createRoute({
               // Enqueue the raw event object. The server adapter is responsible
               // for SSE framing (`data: <json>\n\n`); enqueuing a pre-framed
               // string here would double-encode it.
+              console.log('event', event);
               controller.enqueue(toWireEvent(event));
               scheduleHeartbeat();
             } catch {

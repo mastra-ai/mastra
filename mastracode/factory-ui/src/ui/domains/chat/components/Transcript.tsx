@@ -27,6 +27,7 @@ import type { MessageEntry, NoticeEntry, SuspensionPrompt, TimelineEntry } from 
 export function Transcript({ tail }: { tail?: ReactNode }) {
   const { resourceId, sessionEnabled, projectPath, baseUrl } = useChatSessionContext();
   const { transcript, resolvePrompt, busy } = useChatTranscript();
+  const { entries } = transcript;
   const hookArgs = {
     agentControllerId: AGENT_CONTROLLER_ID,
     resourceId,
@@ -56,7 +57,7 @@ export function Transcript({ tail }: { tail?: ReactNode }) {
   return (
     <ArrivalScope>
       <TranscriptEntries
-        entries={transcript.entries}
+        entries={entries}
         restoredHistory
         isSubmitting={approving || responding}
         onApprove={onApprove}
@@ -87,6 +88,7 @@ export function TranscriptEntries({
   /** Rendered inside the live turn (the activity line), so the reserved room stays under it. */
   tail?: ReactNode;
 }) {
+
   const prompts = entries.flatMap(entry => (entry.kind === 'suspension' ? [entry] : []));
   // Keyed by the prompts on screen, not by the array holding them: a delta hands this
   // component a new `entries` every token, and a map rebuilt each time would be a new
@@ -97,8 +99,8 @@ export function TranscriptEntries({
     entries.flatMap(entry =>
       entry.kind === 'message'
         ? entry.message.content.parts.flatMap(part =>
-            part.type === 'tool-invocation' ? [part.toolInvocation.toolCallId] : [],
-          )
+          part.type === 'tool-invocation' ? [part.toolInvocation.toolCallId] : [],
+        )
         : [],
     ),
   );
@@ -136,9 +138,9 @@ export function TranscriptEntries({
         const reply = runningTurn
           ? undefined
           : steps
-              .map(step => messageText(renderableParts(step)))
-              .filter(Boolean)
-              .join('\n\n');
+            .map(step => messageText(renderableParts(step)))
+            .filter(Boolean)
+            .join('\n\n');
 
         return (
           <div

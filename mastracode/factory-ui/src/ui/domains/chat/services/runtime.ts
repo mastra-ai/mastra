@@ -83,8 +83,9 @@ export function runtimeReducer(state: ChatRuntimeState, event: AgentControllerEv
     case 'agent_end':
       return { ...state, _decodeStartedAt: 0 };
     case 'message_start':
+      return state;
     case 'message_update':
-      if (!hasAssistantText(event.message) || state._decodeStartedAt > 0) return state;
+      if (event.event.delta.length === 0 || state._decodeStartedAt > 0) return state;
       return { ...state, _decodeStartedAt: Date.now() };
     case 'usage_update': {
       const usage = event.usage;
@@ -135,19 +136,4 @@ export function runtimeReducer(state: ChatRuntimeState, event: AgentControllerEv
     default:
       return state;
   }
-}
-
-interface RuntimeMessagePart {
-  type: string;
-  text?: string;
-}
-
-interface RuntimeMessage {
-  role: string;
-  content: RuntimeMessagePart[] | { parts: RuntimeMessagePart[] };
-}
-
-function hasAssistantText(message: RuntimeMessage) {
-  const parts = Array.isArray(message.content) ? message.content : message.content.parts;
-  return message.role === 'assistant' && parts.some(part => part.type === 'text' && part.text?.trim());
 }

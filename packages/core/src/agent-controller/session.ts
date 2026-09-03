@@ -2345,15 +2345,36 @@ export class SessionDisplayState {
 
       // ── Message streaming ──────────────────────────────────────────────
       case 'message_start':
-        ds.currentMessage = event.message;
+        // The run engine keeps the source message mutable while it folds stream
+        // chunks. Display state applies compact deltas independently, so isolate
+        // text parts once here rather than appending each delta twice.
+        ds.currentMessage = {
+          ...event.message,
+          content: {
+            ...event.message.content,
+            parts: event.message.content.parts.map(part => (part.type === 'text' ? { ...part } : part)),
+          },
+        };
         break;
 
       case 'message_update':
-        ds.currentMessage = event.message;
+        if (ds.currentMessage?.id === event.id) {
+          const lastTextPart = ds.currentMessage.content.parts.findLast(p => p.type === 'text');
+          if (lastTextPart) {
+            lastTextPart.text += event.event.delta;
+          } else {
+            ds.currentMessage.content.parts.push({ type: 'text', text: event.event.delta });
+          }
+          ds.currentMessage = {
+            ...ds.currentMessage,
+            content: {
+              ...ds.currentMessage.content,
+            },
+          };
+        }
         break;
 
       case 'message_end':
-        ds.currentMessage = event.message;
         break;
 
       // ── Tool lifecycle ─────────────────────────────────────────────────
