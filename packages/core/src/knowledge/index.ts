@@ -235,17 +235,11 @@ export class Knowledge extends MastraBase {
     if (!registration.id.trim()) throw new Error('Knowledge curator profile id must not be empty.');
     const existing = this.#curatorProfiles.get(registration.id);
     if (existing && isDeepStrictEqual(existing.registration, registration)) return;
-    if (existing && existing.registration.identityScope.address !== registration.identityScope.address) {
-      throw new Error(`Knowledge curator profile ${registration.id} is already registered with a different identity`);
+    if (existing) {
+      throw new Error(`Knowledge curator profile ${registration.id} is already registered with different authority`);
     }
 
     const storage = await this.#getStorage();
-    let identityScope = await storage.getScopeAddress(registration.identityScope.address);
-    if (!identityScope) {
-      await this.materializeScope(registration.identityScope);
-      identityScope = await storage.getScopeAddress(registration.identityScope.address);
-    }
-    if (!identityScope) throw new KnowledgeNotFoundError('scope', registration.identityScope.address);
     const grants = await Promise.all(
       registration.grants.map(async grant => {
         const target = await storage.getScopeAddress(grant.scopeAddress);
@@ -253,6 +247,12 @@ export class Knowledge extends MastraBase {
         return { grant, target };
       }),
     );
+    let identityScope = await storage.getScopeAddress(registration.identityScope.address);
+    if (!identityScope) {
+      await this.materializeScope(registration.identityScope);
+      identityScope = await storage.getScopeAddress(registration.identityScope.address);
+    }
+    if (!identityScope) throw new KnowledgeNotFoundError('scope', registration.identityScope.address);
     await storage.reconcileScopeReferenceGrants({
       scopeRefId: identityScope.scopeNodeId,
       grants: grants.map(({ grant, target }) => ({
