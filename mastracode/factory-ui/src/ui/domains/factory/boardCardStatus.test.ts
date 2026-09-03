@@ -13,6 +13,7 @@ function decision(overrides: Partial<FactoryDecisionSummary> = {}): FactoryDecis
     status: 'leased',
     attempts: 1,
     failureOccurrence: 0,
+    source: null,
     failureCode: null,
     canRetry: true,
     lastError: null,
@@ -90,17 +91,36 @@ describe('boardCardStatus', () => {
     // board ends up showing failures nobody caused.
     expect(
       boardCardStatus({
-        decision: decision({ type: 'upsertLinkedWorkItem', status: 'retry', attempts: 0, lastError: null }),
+        decision: decision({
+          type: 'upsertLinkedWorkItem',
+          source: 'github-pr',
+          status: 'retry',
+          attempts: 0,
+          lastError: null,
+        }),
       }),
-    ).toEqual({ kind: 'busy', label: 'Filing a linked card…' });
+    ).toEqual({ kind: 'busy', label: 'Syncing GitHub pull request…' });
+  });
+
+  it('names the system a linked card is synced with', () => {
+    const sync = (source: FactoryDecisionSummary['source']) =>
+      boardCardStatus({ decision: decision({ type: 'upsertLinkedWorkItem', source, status: 'pending', attempts: 0 }) });
+    expect(sync('github-issue')).toEqual({ kind: 'busy', label: 'Syncing GitHub issue…' });
+    expect(sync('linear-issue')).toEqual({ kind: 'busy', label: 'Syncing Linear issue…' });
   });
 
   it('still reports an effect that has actually been tried and failed', () => {
     expect(
       boardCardStatus({
-        decision: decision({ type: 'upsertLinkedWorkItem', status: 'retry', attempts: 2, lastError: null }),
+        decision: decision({
+          type: 'upsertLinkedWorkItem',
+          source: 'github-issue',
+          status: 'retry',
+          attempts: 2,
+          lastError: null,
+        }),
       }),
-    ).toEqual({ kind: 'error', label: 'Linked card could not be filed — retrying…', detail: undefined });
+    ).toEqual({ kind: 'error', label: "Couldn't sync GitHub issue — retrying…", detail: undefined });
   });
 
   it('tells a run that is underway apart from one still waiting to start', () => {
@@ -151,6 +171,22 @@ describe('boardCardStatus', () => {
         decision: decision({ type: 'transition', status: 'pending' }),
       }),
     ).toEqual({ kind: 'busy', label: 'Moving this card automatically…' });
+  });
+
+  it('names the held classification so the card says why it waits on a person', () => {
+    expect(boardCardStatus({ heldAs: 'feature request' })).toEqual({
+      kind: 'held',
+      label: 'Feature request · needs your approval',
+    });
+    // A suggested run cannot start until the card is accepted, so the hold is the live question.
+    expect(
+      boardCardStatus({ heldAs: 'feature request', proposal: { label: 'Build', decisionId: 'decision-9' } }),
+    ).toEqual({ kind: 'held', label: 'Feature request · needs your approval' });
+    // Anything the server is doing outranks the standing hold.
+    expect(boardCardStatus({ heldAs: 'feature request', preparing: 'Starting…' })).toEqual({
+      kind: 'busy',
+      label: 'Starting…',
+    });
   });
 
   it('falls back to idle when nothing is in flight', () => {

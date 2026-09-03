@@ -31,6 +31,8 @@ import type {
   GetFeedbackTimeSeriesResponse,
   GetFeedbackPercentilesArgs,
   GetFeedbackPercentilesResponse,
+  UpdateFeedbackReviewStatusArgs,
+  FeedbackRecord,
 } from './feedback';
 import type { BatchCreateLogsArgs, ListLogsArgs, ListLogsResponse } from './logs';
 import type {
@@ -683,6 +685,15 @@ export class ObservabilityStorage extends StorageDomain {
       domain: ErrorDomain.MASTRA_OBSERVABILITY,
       category: ErrorCategory.SYSTEM,
       text: 'This storage provider does not support listing feedback',
+    });
+  }
+
+  async updateFeedbackReviewStatus(_args: UpdateFeedbackReviewStatusArgs): Promise<FeedbackRecord> {
+    throw new MastraError({
+      id: 'OBSERVABILITY_STORAGE_UPDATE_FEEDBACK_REVIEW_STATUS_NOT_IMPLEMENTED',
+      domain: ErrorDomain.MASTRA_OBSERVABILITY,
+      category: ErrorCategory.SYSTEM,
+      text: 'This storage provider does not support updating feedback review status',
     });
   }
 

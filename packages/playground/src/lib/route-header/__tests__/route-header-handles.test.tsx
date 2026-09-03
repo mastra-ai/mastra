@@ -9,6 +9,7 @@ import { getRouteHeaderHeading } from '../route-heading';
 import type { CrumbDef, RouteHeaderHandle } from '../types';
 import { useRouteHeader } from '../use-route-header';
 import { routes } from '@/App';
+import { ExperimentCrumb } from '@/domains/experiments/experiment-crumb';
 
 function getAppRoutes() {
   const rootRoute = routes.find(route => route.children?.some(child => child.path === '/agents'));
@@ -171,7 +172,8 @@ describe('route header handles', () => {
     const crumbs = [...parentHandle.crumbs(ctx), ...childHandle.crumbs(ctx)];
 
     expect(crumbs.map(c => c.id)).toEqual(['nav:/experiments', 'experiment', 'experiment-items', 'experiment-item']);
-    expect(crumbs[1]).toMatchObject({ label: 'exp-1', to: '/experiments/exp-1' });
+    // The experiment crumb is hook-driven (name with id fallback) but stays linkable.
+    expect(crumbs[1]).toMatchObject({ Component: ExperimentCrumb, to: '/experiments/exp-1' });
     expect(crumbs[2]).toMatchObject({ label: 'Items' });
     expect(crumbs[2].to).toBeUndefined();
     expect(crumbs[3]).toMatchObject({ label: 'item-1' });

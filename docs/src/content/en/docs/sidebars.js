@@ -626,22 +626,14 @@ const sidebars = {
               id: 'evals/evals-with-memory',
               label: 'Evals with Memory',
             },
-          ],
-        },
-        {
-          type: 'category',
-          label: 'Datasets',
-          link: {
-            type: 'doc',
-            id: 'datasets/overview',
-          },
-          customProps: {
-            contextualSidebar: true,
-          },
-          items: [
             {
               type: 'doc',
-              id: 'datasets/running-experiments',
+              id: 'evals/datasets',
+              label: 'Datasets',
+            },
+            {
+              type: 'doc',
+              id: 'evals/experiments',
               label: 'Experiments',
             },
           ],

@@ -25,6 +25,7 @@ import {
   addItemBodySchema,
   updateItemBodySchema,
   triggerExperimentBodySchema,
+  updateExperimentBodySchema,
   compareExperimentsBodySchema,
   batchInsertItemsBodySchema,
   batchDeleteItemsBodySchema,
@@ -966,6 +967,31 @@ export const GET_EXPERIMENT_ROUTE = createRoute({
         throw new HTTPException(getHttpStatusForMastraError(error.id) as StatusCode, { message: error.message });
       }
       return handleError(error, 'Error getting experiment');
+    }
+  },
+});
+
+export const UPDATE_EXPERIMENT_ROUTE = createRoute({
+  method: 'PATCH',
+  path: '/datasets/:datasetId/experiments/:experimentId',
+  responseType: 'json',
+  pathParamSchema: datasetAndExperimentIdPathParams,
+  bodySchema: updateExperimentBodySchema,
+  responseSchema: experimentResponseSchema,
+  summary: 'Update an experiment',
+  description: "Updates an experiment's name, description or metadata. Status and counts are managed by the server.",
+  tags: ['Datasets'],
+  requiresAuth: true,
+  handler: async ({ mastra, datasetId, experimentId, name, description, metadata }) => {
+    assertDatasetsAvailable();
+    try {
+      const ds = await mastra.datasets.get({ id: datasetId });
+      return await ds.updateExperiment({ experimentId, name, description, metadata });
+    } catch (error) {
+      if (error instanceof MastraError) {
+        throw new HTTPException(getHttpStatusForMastraError(error.id) as StatusCode, { message: error.message });
+      }
+      return handleError(error, 'Error updating experiment');
     }
   },
 });

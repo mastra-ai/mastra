@@ -2,7 +2,7 @@ import type { ClientScoreRowData, DatasetExperimentResult } from '@mastra/client
 import { DataList, DataListSkeleton, useDataListKeyboard } from '@mastra/playground-ui/components/DataList';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { ScorersIcon } from '@mastra/playground-ui/icons/ScorersIcon';
-import { AlertCircleIcon, ExternalLinkIcon } from 'lucide-react';
+import { AlertCircleIcon } from 'lucide-react';
 import { useLinkComponent } from '@/lib/framework';
 
 export type ExperimentResultsListProps = {
@@ -44,21 +44,18 @@ export function ExperimentResultsList({
 
   const { containerRef, getRowProps } = useDataListKeyboard({ count: results.length });
 
-  // Scorer columns get the scorers icon (matching the sidebar nav) plus an
-  // external link to the scorer page, so score columns are recognizable even
+  // Scorer columns get the scorers icon (matching the sidebar nav) plus a
+  // link to the scorer page, so score columns are recognizable even
   // when the scorer name isn't self-explanatory.
   const renderTopCell = (col: { name: string; label: string }) =>
     scorerIds?.includes(col.name) ? (
       <DataList.TopCell key={col.name}>
         <LinkComponent
           href={paths.scorerLink(col.name)}
-          target="_blank"
-          rel="noopener noreferrer"
           className="flex min-w-0 items-center gap-1.5 hover:underline [&>svg]:size-3.5 [&>svg]:shrink-0"
         >
           <ScorersIcon />
           <span className="min-w-0 truncate">{col.label}</span>
-          <ExternalLinkIcon className="text-neutral3" />
         </LinkComponent>
       </DataList.TopCell>
     ) : (
