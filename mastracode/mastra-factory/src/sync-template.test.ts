@@ -199,4 +199,24 @@ describe.skipIf(process.platform === 'win32')('sync-template.mjs', () => {
     expect(readme).toContain('npm create factory');
     expect(readme).not.toMatch(/\{\{[^}]+\}\}/);
   });
+  // Regression guard: the runtime dependency list is hand-maintained, so a new
+  // import in the web scaffold (@mastra/e2b, added by #22065) can ship a
+  // template whose package.json cannot resolve its own entrypoint. That failure
+  // only surfaces at runtime, in the Software Factory E2E dev-server boot.
+  it('declares every @mastra package the generated entrypoint imports', () => {
+    const result = runSync(['--out', outDir]);
+    expect(result.status).toBe(0);
+
+    const entrypoint = fs.readFileSync(path.join(outDir, 'src/mastra/index.ts'), 'utf8');
+    const imported = new Set<string>();
+    for (const match of entrypoint.matchAll(/from\s+'(@mastra\/[^'/]+)(?:\/[^']*)?'/g)) {
+      imported.add(match[1]!);
+    }
+    expect(imported.size).toBeGreaterThan(0);
+
+    const pkg = JSON.parse(fs.readFileSync(path.join(outDir, 'package.json'), 'utf8'));
+    const declared = new Set(Object.keys(pkg.dependencies ?? {}));
+    const missing = [...imported].filter(name => !declared.has(name)).sort();
+    expect(missing, 'generated template imports packages it does not depend on').toEqual([]);
+  });
 });

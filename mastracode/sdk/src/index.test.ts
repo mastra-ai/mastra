@@ -2,7 +2,9 @@ import { describe, expect, it, vi, beforeEach } from 'vitest';
 
 // Captures the createSession() args so tests can assert on wiring (e.g.
 // id/ownerId). Hoisted so the vi.mock factory can reference it.
-const createSessionCalls = vi.hoisted<Array<{ id?: string; ownerId?: string; resourceId?: string }>>(() => []);
+const createSessionCalls = vi.hoisted<
+  Array<{ id?: string; ownerId?: string; resourceId?: string; createInitialThread?: boolean }>
+>(() => []);
 
 // Captures the AgentController constructor initialState so tests can assert on
 // which settings.json values were seeded into session state.
@@ -44,8 +46,13 @@ vi.mock('@mastra/core/agent-controller', () => ({
       return undefined;
     }
 
-    async createSession(args?: { id?: string; ownerId?: string; resourceId?: string }) {
-      createSessionCalls.push({ id: args?.id, ownerId: args?.ownerId, resourceId: args?.resourceId });
+    async createSession(args?: { id?: string; ownerId?: string; resourceId?: string; createInitialThread?: boolean }) {
+      createSessionCalls.push({
+        id: args?.id,
+        ownerId: args?.ownerId,
+        resourceId: args?.resourceId,
+        createInitialThread: args?.createInitialThread,
+      });
       return {
         subscribe() {},
         thread: { getId: () => undefined },
@@ -398,6 +405,15 @@ describe('AgentController session id and ownerId wiring', () => {
     expect(call.id).toMatch(/^mastracode-session-/);
     expect(call.ownerId).toBeTruthy();
     expect(call.ownerId).toMatch(/^mastracode-/);
+  });
+
+  it('can defer initial thread creation during local boot', async () => {
+    const { createMastraCode } = await import('./index.js');
+
+    await createMastraCode({ cwd: '/tmp/project-deferred-thread', createInitialThread: false });
+
+    expect(createSessionCalls).toHaveLength(1);
+    expect(createSessionCalls[0]!.createInitialThread).toBe(false);
   });
 
   it('derives stable id and ownerId for the same cwd across calls', async () => {

@@ -21,6 +21,9 @@ const mocks = vi.hoisted(() => ({
   handleMastraGatewayCommand: vi.fn().mockResolvedValue(undefined),
   handlePluginsCommand: vi.fn().mockResolvedValue(undefined),
   handleProfileCommand: vi.fn().mockResolvedValue(undefined),
+  handleCloneCommand: vi.fn().mockResolvedValue(undefined),
+  handleThreadsCommand: vi.fn().mockResolvedValue(undefined),
+  handleNameCommand: vi.fn().mockResolvedValue(undefined),
   processSlashCommand: vi.fn().mockResolvedValue('custom output'),
   startGoalWithDefaults: vi.fn().mockResolvedValue(undefined),
   showError: vi.fn(),
@@ -34,7 +37,7 @@ vi.mock('../commands/index.js', () => ({
   handleYoloCommand: vi.fn(),
   handleThinkCommand: vi.fn(),
   handlePermissionsCommand: vi.fn(),
-  handleNameCommand: vi.fn(),
+  handleNameCommand: mocks.handleNameCommand,
   handleExitCommand: vi.fn(),
   handleHooksCommand: vi.fn(),
   handleMcpCommand: mocks.handleMcpCommand,
@@ -42,9 +45,10 @@ vi.mock('../commands/index.js', () => ({
   handleSkillCommand: mocks.handleSkillCommand,
   handleSkillsCommand: vi.fn(),
   handleNewCommand: vi.fn(),
+  handleCloneCommand: mocks.handleCloneCommand,
   handleResourceCommand: vi.fn(),
   handleDiffCommand: vi.fn(),
-  handleThreadsCommand: vi.fn(),
+  handleThreadsCommand: mocks.handleThreadsCommand,
   handleThreadTagDirCommand: vi.fn(),
   handleSandboxCommand: vi.fn(),
   handleModelCommand: mocks.handleModelCommand,
@@ -93,7 +97,7 @@ import { SlashCommandComponent } from '../components/slash-command.js';
 import { GOAL_JUDGE_INPUT_LOCK_MESSAGE } from '../goal-input-lock.js';
 import { createMockState } from './agent-controller-mock.js';
 
-describe('dispatchSlashCommand models routing', () => {
+describe('dispatchSlashCommand routing', () => {
   beforeEach(() => {
     mocks.handleModelCommand.mockClear();
     mocks.handleConnectCommand.mockClear();
@@ -112,6 +116,9 @@ describe('dispatchSlashCommand models routing', () => {
     mocks.handleMastraGatewayCommand.mockClear();
     mocks.handlePluginsCommand.mockClear();
     mocks.handleProfileCommand.mockClear();
+    mocks.handleCloneCommand.mockClear();
+    mocks.handleThreadsCommand.mockClear();
+    mocks.handleNameCommand.mockClear();
     mocks.processSlashCommand.mockClear();
     mocks.startGoalWithDefaults.mockClear();
     mocks.showError.mockClear();
@@ -169,6 +176,59 @@ describe('dispatchSlashCommand models routing', () => {
     expect(await dispatchSlashCommand('/packs', state, () => ctx)).toBe(true);
     expect(mocks.handleModelsPackCommand).toHaveBeenCalledTimes(2);
     expect(mocks.handleModelCommand).not.toHaveBeenCalled();
+  });
+
+  it('routes /fork and /clone to the thread clone handler', async () => {
+    const state = {
+      customSlashCommands: [],
+      session: {
+        identity: { getResourceId: vi.fn(() => 'resource-1') },
+        thread: { getId: vi.fn(() => 'thread-1') },
+        mode: { get: vi.fn(() => 'build') },
+      },
+    } as any;
+    const ctx = { analytics: { trackCommand: mocks.trackCommand } } as any;
+
+    expect(await dispatchSlashCommand('/fork', state, () => ctx)).toBe(true);
+    expect(await dispatchSlashCommand('/clone', state, () => ctx)).toBe(true);
+    expect(mocks.handleCloneCommand).toHaveBeenCalledTimes(2);
+    expect(mocks.handleCloneCommand).toHaveBeenNthCalledWith(1, ctx);
+    expect(mocks.handleCloneCommand).toHaveBeenNthCalledWith(2, ctx);
+  });
+
+  it('routes /resume and /threads to the thread selector', async () => {
+    const state = {
+      customSlashCommands: [],
+      session: {
+        identity: { getResourceId: vi.fn(() => 'resource-1') },
+        thread: { getId: vi.fn(() => 'thread-1') },
+        mode: { get: vi.fn(() => 'build') },
+      },
+    } as any;
+    const ctx = { analytics: { trackCommand: mocks.trackCommand } } as any;
+
+    expect(await dispatchSlashCommand('/resume', state, () => ctx)).toBe(true);
+    expect(await dispatchSlashCommand('/threads', state, () => ctx)).toBe(true);
+    expect(mocks.handleThreadsCommand).toHaveBeenCalledTimes(2);
+    expect(mocks.handleThreadsCommand).toHaveBeenNthCalledWith(1, ctx);
+    expect(mocks.handleThreadsCommand).toHaveBeenNthCalledWith(2, ctx);
+  });
+
+  it('routes /rename and /name to the thread name handler', async () => {
+    const state = {
+      customSlashCommands: [],
+      session: {
+        identity: { getResourceId: vi.fn(() => 'resource-1') },
+        thread: { getId: vi.fn(() => 'thread-1') },
+        mode: { get: vi.fn(() => 'build') },
+      },
+    } as any;
+    const ctx = { analytics: { trackCommand: mocks.trackCommand } } as any;
+
+    expect(await dispatchSlashCommand('/rename Demo thread', state, () => ctx)).toBe(true);
+    expect(await dispatchSlashCommand('/name Legacy title', state, () => ctx)).toBe(true);
+    expect(mocks.handleNameCommand).toHaveBeenNthCalledWith(1, ctx, ['Demo', 'thread']);
+    expect(mocks.handleNameCommand).toHaveBeenNthCalledWith(2, ctx, ['Legacy', 'title']);
   });
 
   it('routes /profile subcommands to handleProfileCommand', async () => {

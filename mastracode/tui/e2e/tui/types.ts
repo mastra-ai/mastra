@@ -229,7 +229,10 @@ export type McE2eStartMastraCodeAppOptions = {
   setupDebugLogging?: boolean;
   startupWarnings?: string[];
   tui?: Partial<
-    Pick<MastraTUIOptions, 'appName' | 'initialMessage' | 'inlineQuestions' | 'processMemoryDiagnostics' | 'verbose'>
+    Pick<
+      MastraTUIOptions,
+      'appName' | 'initialMessage' | 'inlineQuestions' | 'processMemoryDiagnostics' | 'resumeThreadId' | 'verbose'
+    >
   >;
 };
 
