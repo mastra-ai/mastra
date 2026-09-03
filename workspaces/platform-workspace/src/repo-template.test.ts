@@ -220,7 +220,7 @@ describe('createRepoTemplate', () => {
 
   it('returns undefined when a public head cannot be resolved so sandbox creation can fall back cold', async () => {
     const resolveTemplate = createRepoTemplate({
-      getRepositoryAccess: accessFor('https://github.com/acme/private-repo.git'),
+      getRepositoryAccess: accessFor('https://github.com/acme/no-head.git'),
       resolveHead: vi.fn().mockResolvedValue(undefined),
     })!;
 
@@ -229,11 +229,56 @@ describe('createRepoTemplate', () => {
 
   it('rejects a malformed resolved head instead of interpolating it into build commands', async () => {
     const resolveTemplate = createRepoTemplate({
-      getRepositoryAccess: accessFor('https://github.com/acme/widgets.git'),
+      getRepositoryAccess: accessFor('https://github.com/acme/malformed-head.git'),
       resolveHead: headOf('main; rm -rf /'),
     })!;
 
     await expect(resolveTemplate()).resolves.toBeUndefined();
+  });
+
+  it('pins to the last known head of the same clone URL when a later lookup fails', async () => {
+    const getRepositoryAccess = accessFor('https://github.com/acme/flaky-head.git');
+    const warm = await createRepoTemplate({ getRepositoryAccess, resolveHead: headOf(SHA_1) })!();
+    const rateLimited = await createRepoTemplate({
+      getRepositoryAccess,
+      resolveHead: vi.fn().mockRejectedValue(new Error('rate limited')),
+    })!();
+    const malformed = await createRepoTemplate({ getRepositoryAccess, resolveHead: headOf('main; rm -rf /') })!();
+
+    expect(serializeSandboxTemplate(rateLimited!)).toEqual(serializeSandboxTemplate(warm!));
+    expect(serializeSandboxTemplate(malformed!)).toEqual(serializeSandboxTemplate(warm!));
+    expect(serializeSandboxTemplate(warm!).operations).toContainEqual({
+      method: 'runCmd',
+      args: [`git -C "flaky-head" checkout ${SHA_1}`],
+    });
+  });
+
+  it('replaces the remembered head once a lookup succeeds again', async () => {
+    const getRepositoryAccess = accessFor('https://github.com/acme/moving-head.git');
+    await createRepoTemplate({ getRepositoryAccess, resolveHead: headOf(SHA_1) })!();
+    await createRepoTemplate({ getRepositoryAccess, resolveHead: headOf(SHA_2) })!();
+    const fallback = await createRepoTemplate({
+      getRepositoryAccess,
+      resolveHead: vi.fn().mockRejectedValue(new Error('rate limited')),
+    })!();
+
+    expect(serializeSandboxTemplate(fallback!).operations).toContainEqual({
+      method: 'runCmd',
+      args: [`git -C "moving-head" checkout ${SHA_2}`],
+    });
+  });
+
+  it('does not reuse a head remembered for a different clone URL', async () => {
+    await createRepoTemplate({
+      getRepositoryAccess: accessFor('https://github.com/acme/remembered.git'),
+      resolveHead: headOf(SHA_1),
+    })!();
+    const other = await createRepoTemplate({
+      getRepositoryAccess: accessFor('https://github.com/acme/never-resolved.git'),
+      resolveHead: vi.fn().mockRejectedValue(new Error('rate limited')),
+    })!();
+
+    expect(other).toBeUndefined();
   });
 
   it('keeps the requested resources when the repository template cannot be resolved', async () => {
@@ -248,7 +293,7 @@ describe('createRepoTemplate', () => {
 
     const noHead = await createRepoTemplate({
       ...sized,
-      getRepositoryAccess: accessFor('https://github.com/acme/widgets.git'),
+      getRepositoryAccess: accessFor('https://github.com/acme/unresolved.git'),
       resolveHead: vi.fn().mockRejectedValue(new Error('rate limited')),
     })!();
     expect(serializeSandboxTemplate(noHead!)).toEqual(expected);

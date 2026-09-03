@@ -272,7 +272,7 @@ describe('Traces side panel Scores tab', () => {
     const { queryClient } = renderPage('/traces?traceId=trace-a');
     await waitFor(() => expect(queryClient.isFetching()).toBe(0));
 
-    fireEvent.click(screen.getByRole('tab', { name: /evaluations/i }));
+    fireEvent.click(screen.getByRole('tab', { name: /scores/i }));
     return queryClient;
   };
 

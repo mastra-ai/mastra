@@ -51,7 +51,7 @@ export default function Tools() {
   }
 
   return (
-    <PageLayout>
+    <PageLayout height="full">
       <PageLayout.TopArea>
         <div className="max-w-120">
           <ListSearch onSearch={setSearch} label="Filter tools" placeholder="Filter by name" />

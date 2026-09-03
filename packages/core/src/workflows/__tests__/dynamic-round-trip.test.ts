@@ -1786,3 +1786,185 @@ describe('dynamic workflow schedules (#22756)', () => {
     await mastra.stopWorkers?.();
   });
 });
+
+describe('control-flow entry identity and display metadata', () => {
+  const displayed = {
+    parallel: { id: 'fan-out', description: 'Run both tone tools', metadata: { title: 'Fan out' } },
+    conditional: { id: 'route-by-value', description: 'Route on value', metadata: { title: 'Route' } },
+    loop: { id: 'bump-until-5', description: 'Increment to 5', metadata: { title: 'Bump' } },
+    foreach: { id: 'bump-each', description: 'Increment each item', metadata: { title: 'Bump each' } },
+    sleep: { id: 'wait-before-retry', description: 'Pause before retrying', metadata: { title: 'Wait' } },
+    sleepUntil: { id: 'wait-until-y2099', description: 'Hold until 2099', metadata: { title: 'Hold' } },
+    mapping: { id: 'normalize-results', description: 'Reshape output', metadata: { title: 'Normalize' } },
+  } as const;
+
+  function buildAnnotatedWorkflow() {
+    // Chained outputs deliberately don't type-flow into each other — these
+    // tests exercise the serialize/rehydrate pipeline, not execution.
+    return (
+      createWorkflow({
+        id: 'cf-fields-wf',
+        inputSchema: z.object({ value: z.number() }),
+        outputSchema: z.object({ value: z.number() }),
+      }) as any
+    )
+      .parallel([shoutStep, whisperStep], displayed.parallel)
+      .branch(
+        [
+          [{ predicate: { op: 'gt', left: { path: 'inputData.value' }, right: { literal: 10 } } }, shoutStep],
+          [{ predicate: { op: 'lte', left: { path: 'inputData.value' }, right: { literal: 10 } } }, whisperStep],
+        ],
+        displayed.conditional,
+      )
+      .dountil(
+        plusOneStep,
+        { predicate: { op: 'gte', left: { path: 'inputData.value' }, right: { literal: 5 } } },
+        displayed.loop,
+      )
+      .foreach(plusOneStep, { concurrency: 2, ...displayed.foreach })
+      .sleep(500, displayed.sleep)
+      .sleepUntil(new Date(Date.UTC(2099, 0, 1)), displayed.sleepUntil)
+      .map({ note: { template: 'v=${inputData.value}' } } as any, displayed.mapping)
+      .commit();
+  }
+
+  it('the fluent builder writes id/description/metadata onto serialized control-flow entries', () => {
+    const wf = buildAnnotatedWorkflow();
+    const graph = wf.serializedStepGraph as Array<Record<string, any>>;
+
+    expect(graph.map(e => e.type)).toEqual([
+      'parallel',
+      'conditional',
+      'loop',
+      'foreach',
+      'sleep',
+      'sleepUntil',
+      'mapping',
+    ]);
+    expect(graph[0]).toMatchObject(displayed.parallel);
+    expect(graph[1]).toMatchObject(displayed.conditional);
+    expect(graph[2]).toMatchObject(displayed.loop);
+    expect(graph[3]).toMatchObject(displayed.foreach);
+    expect(graph[4]).toMatchObject(displayed.sleep);
+    expect(graph[5]).toMatchObject(displayed.sleepUntil);
+    expect(graph[6]).toMatchObject(displayed.mapping);
+
+    // foreach identity fields live on the entry, not inside execution opts.
+    expect(graph[3]!.opts).toEqual({ concurrency: 2 });
+
+    // A caller-supplied sleep/mapping id also keys the synthesized step.
+    expect(wf.steps['wait-before-retry']).toBeDefined();
+    expect(wf.steps['wait-before-retry'].description).toBe(displayed.sleep.description);
+    expect(wf.steps['normalize-results']).toBeDefined();
+  });
+
+  it('identity fields survive store → rehydrate → re-store without drift', async () => {
+    const wf = buildAnnotatedWorkflow();
+    const stored = JSON.parse(JSON.stringify(toStorableGraph(wf.stepGraph)));
+
+    expect(stored[0]).toMatchObject(displayed.parallel);
+    expect(stored[6]).toMatchObject(displayed.mapping);
+
+    const mastra = new Mastra({
+      logger: false,
+      tools: {
+        'shout-tool': shoutTool,
+        'whisper-tool': whisperTool,
+        'plus-one': plusOneTool,
+      } as any,
+      storage: new InMemoryStore({ id: 'cf-fields' }),
+    });
+
+    const { workflow } = await rehydrateWorkflow(
+      {
+        id: 'cf-fields-wf',
+        inputSchema: { type: 'object', properties: { value: { type: 'number' } }, required: ['value'] },
+        outputSchema: { type: 'object', properties: { value: { type: 'number' } }, required: ['value'] },
+        graph: stored,
+      },
+      mastra,
+    );
+
+    // Fields land on the live entries (what a later re-serialize reads) …
+    const live = workflow.stepGraph as Array<Record<string, any>>;
+    expect(live[0]).toMatchObject(displayed.parallel);
+    expect(live[2]).toMatchObject(displayed.loop);
+    expect(live[4]).toMatchObject(displayed.sleep);
+
+    // … including the synthesized sleep placeholder in the steps map.
+    expect(workflow.steps['wait-before-retry']?.description).toBe(displayed.sleep.description);
+
+    // … and the full save → load → save loop is drift-free.
+    const restored = JSON.parse(JSON.stringify(toStorableGraph(workflow.stepGraph)));
+    expect(restored).toEqual(stored);
+  });
+
+  it('a foreach annotated without concurrency still stores a valid default and round-trips drift-free', async () => {
+    const wf = (
+      createWorkflow({
+        id: 'foreach-default-wf',
+        inputSchema: z.object({ value: z.number() }),
+        outputSchema: z.object({ value: z.number() }),
+      }) as any
+    )
+      .foreach(plusOneStep, { id: 'annotated-foreach', metadata: { title: 'Annotated foreach' } })
+      .commit();
+
+    // The live entry gets the engine default so its opts match the declared
+    // `ForeachOptions` shape, and the caller's object is left untouched.
+    expect(wf.stepGraph[0]).toMatchObject({ type: 'foreach', opts: { concurrency: 1 } });
+
+    const stored = JSON.parse(JSON.stringify(toStorableGraph(wf.stepGraph)));
+    expect(stored[0]).toMatchObject({
+      type: 'foreach',
+      id: 'annotated-foreach',
+      metadata: { title: 'Annotated foreach' },
+      opts: { concurrency: 1 },
+    });
+
+    const mastra = new Mastra({
+      logger: false,
+      tools: { 'plus-one': plusOneTool } as any,
+      storage: new InMemoryStore({ id: 'foreach-default' }),
+    });
+    const { workflow } = await rehydrateWorkflow(
+      {
+        id: 'foreach-default-wf',
+        inputSchema: { type: 'object', properties: { value: { type: 'number' } }, required: ['value'] },
+        outputSchema: { type: 'object', properties: { value: { type: 'number' } }, required: ['value'] },
+        graph: stored,
+      },
+      mastra,
+    );
+    const restored = JSON.parse(JSON.stringify(toStorableGraph(workflow.stepGraph)));
+    expect(restored).toEqual(stored);
+  });
+
+  it('display metadata has no effect on execution results', async () => {
+    const wf = createWorkflow({
+      id: 'cf-exec-wf',
+      inputSchema: z.object({ value: z.number() }),
+      outputSchema: z.object({ message: z.string() }),
+    })
+      .tool(doubleTool)
+      .sleep(1, { id: 'tiny-pause', description: 'breathe', metadata: { title: 'Pause' } })
+      .map(
+        { message: { template: 'Doubled value is ${stepResults.double-tool.doubled}' } },
+        { id: 'render-message', description: 'format the reply', metadata: { title: 'Render' } },
+      )
+      .commit();
+
+    const mastra = new Mastra({
+      logger: false,
+      tools: { 'double-tool': doubleTool } as any,
+      workflows: { 'cf-exec-wf': wf } as any,
+      storage: new InMemoryStore({ id: 'cf-exec' }),
+    });
+    wf.__registerMastra(mastra);
+
+    const run = await mastra.getWorkflow('cf-exec-wf').createRun();
+    const result = await run.start({ inputData: { value: 21 } });
+    expect(result.status).toBe('success');
+    expect((result as any).result).toEqual({ message: 'Doubled value is 42' });
+  });
+});
