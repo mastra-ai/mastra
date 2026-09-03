@@ -2,4 +2,4 @@
 '@mastra/client-js': patch
 ---
 
-Experiment item run responses now type the optional `notScorable` field on each scorer result.
+Added the optional `notScorable` field to the scorer result type in experiment item run responses.
