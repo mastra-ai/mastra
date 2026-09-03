@@ -144,14 +144,12 @@ export class PinnedStateProcessor implements Processor<typeof SUBCONSCIOUS_PINS_
     const organizationId = args.requestContext?.get?.('organizationId');
     if (typeof organizationId !== 'string' || !organizationId.trim() || !args.resourceId || !args.threadId)
       return undefined;
+    const store = await this.deps.getKnowledgeStore();
+    if (!store) return undefined;
     return resolveKnowledgeScopeIds(
       {
         getKnowledgeInstance: () => this.deps.getKnowledgeInstance(),
-        getKnowledgeStore: async () => {
-          const store = await this.deps.getKnowledgeStore();
-          if (!store) throw new Error('Knowledge tools require a configured knowledge storage domain.');
-          return store;
-        },
+        getKnowledgeStore: async () => store,
       },
       {
         agent: { threadId: args.threadId, resourceId: args.resourceId },

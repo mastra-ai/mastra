@@ -28,7 +28,12 @@ const structure = {
     { address: 'repo:mastra', name: 'repo:mastra', parentAddresses: ['org:acme'] },
     { address: 'repo:mastra:issues', name: 'issues', parentAddresses: ['repo:mastra'] },
     { address: 'repo:mastra:prs', name: 'prs', parentAddresses: ['repo:mastra'] },
-    { address: 'resource:shipyard', name: 'Shipyard', parentAddresses: ['org:acme'] },
+    {
+      address: 'resource:shipyard',
+      name: 'Shipyard',
+      parentAddresses: ['org:acme'],
+      grants: [{ scopeRefAddress: 'org:acme', role: 'owner' as const }],
+    },
   ],
 };
 
@@ -45,21 +50,21 @@ function message(threadId: string): MastraDBMessage {
 
 function deterministicObservationModel(curate = false) {
   let wrote = false;
+  let target: { nodeId: string; version: number; destinationScopeId: string; recordId: string } | undefined;
   const doStream = vi.fn(async () => ({
     stream: new ReadableStream({
       start(controller) {
         if (curate && !wrote) {
+          if (!target) throw new Error('Wave 1 proof requires a configured curation target.');
           wrote = true;
           controller.enqueue({
             type: 'tool-call',
-            toolCallId: 'wave-1-create',
-            toolName: 'knowledge_create',
+            toolCallId: 'wave-1-promote',
+            toolName: 'knowledge_curation_promote',
             input: JSON.stringify({
-              name: 'Atlas refund launch',
-              kind: 'feature',
-              text: '[[Maya Chen]] owns the [[Atlas refund launch]].',
-              nodeScope: 'resource',
-              scope: 'resource',
+              nodeId: target.nodeId,
+              version: target.version,
+              destinationScopeId: target.destinationScopeId,
             }),
           });
           controller.enqueue({
@@ -77,7 +82,10 @@ function deterministicObservationModel(curate = false) {
           {
             type: 'text-delta',
             id: 'wave-1-text',
-            delta: '<observations>\nMaya Chen owns the Atlas refund launch.\n</observations>',
+            delta:
+              curate && target
+                ? `<curation-complete through="${target.recordId}" />`
+                : '<observations>\nMaya Chen owns the Atlas refund launch.\n</observations>',
           },
           { type: 'text-end', id: 'wave-1-text' },
           { type: 'finish', finishReason: 'stop', usage: { inputTokens: 20, outputTokens: 8, totalTokens: 28 } },
@@ -91,7 +99,38 @@ function deterministicObservationModel(curate = false) {
     warnings: [],
   }));
   const doGenerate = vi.fn(async () => {
-    throw new Error('Wave 1 proof requires streaming observation-time curate, not structured capture extraction.');
+    if (!curate) {
+      throw new Error('Wave 1 proof requires streaming observation extraction.');
+    }
+    if (!target) throw new Error('Wave 1 proof requires a configured curation target.');
+    if (!wrote) {
+      wrote = true;
+      return {
+        content: [
+          {
+            type: 'tool-call' as const,
+            toolCallId: 'wave-1-promote',
+            toolName: 'knowledge_curation_promote',
+            input: JSON.stringify({
+              nodeId: target.nodeId,
+              version: target.version,
+              destinationScopeId: target.destinationScopeId,
+            }),
+          },
+        ],
+        finishReason: 'tool-calls' as const,
+        usage: { inputTokens: 20, outputTokens: 8, totalTokens: 28 },
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        warnings: [],
+      };
+    }
+    return {
+      content: [{ type: 'text' as const, text: `<curation-complete through="${target.recordId}" />` }],
+      finishReason: 'stop' as const,
+      usage: { inputTokens: 20, outputTokens: 8, totalTokens: 28 },
+      rawCall: { rawPrompt: null, rawSettings: {} },
+      warnings: [],
+    };
   });
   return {
     model: {
@@ -103,6 +142,9 @@ function deterministicObservationModel(curate = false) {
     },
     doGenerate,
     doStream,
+    setTarget(value: NonNullable<typeof target>) {
+      target = value;
+    },
   };
 }
 
@@ -148,7 +190,9 @@ function createRuntime(storage: MastraCompositeStore) {
       observationalMemory: {
         enabled: true,
         model,
-        experimental_subconscious: new Subconscious({ observation: [{ name: 'curate', model: curator.model }] }),
+        experimental_subconscious: new Subconscious({
+          observation: [{ name: 'curate', model: curator.model, curatorProfile: 'subconscious' }],
+        }),
         observation: { messageTokens: 1, bufferTokens: false, previousObserverTokens: 1_000 },
       },
     },
@@ -247,6 +291,51 @@ describe(`Knowledge v2 Wave 1 linked-workspace proof (${adapter})`, () => {
     await first.memory.saveMessages({ messages: [message(threadId)] });
     const requestContext = new RequestContext();
     requestContext.set('organizationId', 'acme');
+    const threadAddress = `resource:shipyard:thread:${threadId}`;
+    await first.knowledge.materializeScope({
+      address: threadAddress,
+      parentAddresses: ['resource:shipyard'],
+      contextualScopeAddress: threadAddress,
+      parameters: { orgId: 'acme', resourceId: 'shipyard', threadId },
+    });
+    const uncuratedAddress = `${threadAddress}:uncurated`;
+    const uncurated = await first.knowledge.materializeScope({
+      address: uncuratedAddress,
+      name: 'uncurated',
+      parentAddresses: [threadAddress],
+      contextualScopeAddress: threadAddress,
+      parameters: { orgId: 'acme', resourceId: 'shipyard', threadId },
+    });
+    await first.knowledge.registerCuratorProfile({
+      id: 'subconscious',
+      identityScope: {
+        address: 'curator:subconscious',
+        name: 'Subconscious curator',
+        contextualScopeAddress: 'curator:subconscious',
+      },
+      grants: [
+        { scopeAddress: uncuratedAddress, role: 'owner' },
+        { scopeAddress: 'resource:shipyard', role: 'owner' },
+      ],
+    });
+    const provisionalNode = await knowledgeStore.createNode({
+      name: 'Atlas refund launch',
+      kind: 'feature',
+      scopeIds: [uncurated.scopes[uncuratedAddress]!],
+    });
+    const provisionalRecord = await knowledgeStore.createRecord({
+      node: provisionalNode,
+      text: 'Maya Chen owns the Atlas refund launch.',
+      scopeIds: [uncurated.scopes[uncuratedAddress]!],
+      source: threadId,
+      metadata: { sourceThreadId: threadId },
+    });
+    first.curator.setTarget({
+      nodeId: provisionalNode.id,
+      version: provisionalNode.version,
+      destinationScopeId: reconciled.scopes['resource:shipyard']!,
+      recordId: provisionalRecord.id,
+    });
     const observed = await (await first.memory.omEngine)!.observe({
       threadId,
       resourceId: 'shipyard',
@@ -262,13 +351,13 @@ describe(`Knowledge v2 Wave 1 linked-workspace proof (${adapter})`, () => {
       },
     );
     expect(first.doGenerate).not.toHaveBeenCalled();
-    expect(first.curator.doGenerate).not.toHaveBeenCalled();
-    expect(first.curator.doStream).toHaveBeenCalled();
+    expect(first.curator.doGenerate).toHaveBeenCalled();
+    expect(first.curator.doStream).not.toHaveBeenCalled();
     const captured = await first.knowledge.resolveNode({ name: 'Atlas refund launch', scopeIds: visibleScopeIds });
     const records = await first.knowledge.listRecords({ node: captured!.id, scopeIds: visibleScopeIds });
     expect(records.records).toHaveLength(1);
     expect(records.records[0]).toMatchObject({
-      text: '[[Maya Chen]] owns the [[Atlas refund launch]].',
+      text: 'Maya Chen owns the Atlas refund launch.',
       metadata: { sourceThreadId: threadId },
     });
     expect(records.records[0]?.createdAt).toBeInstanceOf(Date);
@@ -347,6 +436,7 @@ describe(`Knowledge v2 Wave 1 linked-workspace proof (${adapter})`, () => {
     ).createNode({
       name: 'Disposable Knowledge',
       scopeIds: [resourceScopeId],
+      vouchedScopeIds: [reconciled.scopes['org:acme']!],
       isScope: false,
     });
     expect(await runtime.knowledge.getNodeInternal(node.id)).not.toBeNull();
