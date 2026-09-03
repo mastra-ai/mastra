@@ -585,7 +585,6 @@ export const STREAM_AGENT_CONTROLLER_SESSION_ROUTE = createRoute({
               // Enqueue the raw event object. The server adapter is responsible
               // for SSE framing (`data: <json>\n\n`); enqueuing a pre-framed
               // string here would double-encode it.
-              console.log('event', event);
               controller.enqueue(toWireEvent(event));
               scheduleHeartbeat();
             } catch {

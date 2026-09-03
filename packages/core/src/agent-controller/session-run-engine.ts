@@ -1312,7 +1312,6 @@ export class SessionRunEngine {
 
     const consume = async (): Promise<void> => {
       for await (const chunk of subscription.stream) {
-        console.log('chunk - res', chunk);
         if (bailed) return;
         if (!this.#session.stream.isCurrent({ subscription })) {
           subscription.unsubscribe();
