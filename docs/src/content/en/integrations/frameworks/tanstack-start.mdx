@@ -99,7 +99,7 @@ In a separate terminal window, use `curl` to ask the weather agent:
 curl -X POST http://localhost:3000/api/agents/weather-agent/generate -H "Content-Type: application/json" -d "{\"messages\":[{\"role\":\"user\",\"content\":\"What is the weather like in Seoul?\"}]}"
 ```
 
-The endpoint returns a streamed JSON response from the agent.
+The endpoint returns a complete JSON response from the agent.
 
 ## Next steps
 
