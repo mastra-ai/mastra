@@ -125,7 +125,8 @@ describe('Overview', () => {
 
   it('shows the supervisor finding count beside work needing attention', async () => {
     stubBoard([], [], [{ id: 'finding-1' }, { id: 'finding-2' }]);
-    renderOverview();
+    const { client } = renderOverview();
+    await waitForMutationsIdle(client);
 
     expect(await screen.findByRole('link', { name: '2 supervisor findings' })).toHaveAttribute(
       'href',
