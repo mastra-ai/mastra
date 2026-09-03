@@ -638,7 +638,9 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
     closeVector: vector instanceof LibSQLVector ? () => vector.close() : undefined,
   });
 
-  const memory = config?.memory === false ? undefined : (config?.memory ?? getDynamicMemory(storage, vector));
+  const knowledgeScope = { homeDir, configDirName: configDir };
+  const memory =
+    config?.memory === false ? undefined : (config?.memory ?? getDynamicMemory(storage, vector, knowledgeScope));
 
   // MCP
   const mcpManager = config?.disableMcp
@@ -1203,7 +1205,7 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
     storage,
     storageMaintenance,
     createKnowledgeInspector: (session: Session<MastraCodeState>) =>
-      createScopedKnowledgeInspector({ storage, session }),
+      createScopedKnowledgeInspector({ storage, session, knowledgeScope }),
     observability,
     memory,
     mcpManager,

@@ -1,5 +1,5 @@
 import { createHash, randomBytes } from 'node:crypto';
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import fs from 'node:fs';
 import { homedir, hostname } from 'node:os';
 import path from 'node:path';
 
@@ -18,13 +18,25 @@ export interface LocalKnowledgeOrgOptions {
 
 const machineIdCache = new Map<string, string>();
 
+function readStoredMachineId(filePath: string): string | undefined {
+  try {
+    const stored = fs.readFileSync(filePath, 'utf-8').trim();
+    return MACHINE_ID_PATTERN.test(stored) ? stored : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 /**
  * A durable, random identifier for this machine, persisted at
  * `<homeDir>/<configDirName>/machine-id` on first use so that the local
- * knowledge org survives hostname changes, reimages, and container moves.
+ * knowledge org survives hostname changes (as long as the config dir does).
  *
- * Falls back to a hash of the hostname (without persisting) when the file can
- * neither be read nor written, so a read-only home never blocks curation.
+ * Creation is exclusive (`wx`): when two processes race, the loser reads the
+ * winner's id back instead of overwriting it. A corrupt file is replaced. If the
+ * file can neither be read nor written, this falls back to a hash of the
+ * hostname without persisting or caching it, so a read-only home never blocks
+ * curation and a later permission fix takes effect on the next call.
  */
 export function localMachineId(options: LocalKnowledgeOrgOptions = {}): string {
   const filePath = path.join(
@@ -35,19 +47,27 @@ export function localMachineId(options: LocalKnowledgeOrgOptions = {}): string {
   const cached = machineIdCache.get(filePath);
   if (cached) return cached;
 
-  let id: string | undefined;
-  try {
-    if (existsSync(filePath)) {
-      const stored = readFileSync(filePath, 'utf-8').trim();
-      if (MACHINE_ID_PATTERN.test(stored)) id = stored;
+  let id = readStoredMachineId(filePath);
+  if (!id) {
+    const fresh = randomBytes(6).toString('hex');
+    try {
+      fs.mkdirSync(path.dirname(filePath), { recursive: true });
+      try {
+        fs.writeFileSync(filePath, `${fresh}\n`, { encoding: 'utf-8', flag: 'wx' });
+        id = fresh;
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
+        // Another process created it first; take theirs. If what exists is
+        // corrupt (or unreadable but writable), replace it.
+        id = readStoredMachineId(filePath);
+        if (!id) {
+          fs.writeFileSync(filePath, `${fresh}\n`, 'utf-8');
+          id = fresh;
+        }
+      }
+    } catch {
+      return createHash('sha256').update(hostname()).digest('hex').slice(0, 12);
     }
-    if (!id) {
-      id = randomBytes(6).toString('hex');
-      mkdirSync(path.dirname(filePath), { recursive: true });
-      writeFileSync(filePath, `${id}\n`, 'utf-8');
-    }
-  } catch {
-    id = createHash('sha256').update(hostname()).digest('hex').slice(0, 12);
   }
 
   machineIdCache.set(filePath, id);

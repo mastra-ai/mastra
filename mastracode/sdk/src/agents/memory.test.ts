@@ -1,6 +1,15 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
+
+import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { localKnowledgeOrgId } from '../knowledge-scope.js';
+
+// Isolated home so the machine id under test never touches the real one.
+const TEST_HOME = mkdtempSync(path.join(tmpdir(), 'mastracode-memory-'));
+const knowledgeScope = { homeDir: TEST_HOME };
+afterAll(() => rmSync(TEST_HOME, { recursive: true, force: true }));
 
 const memoryConstructorMock = vi.fn();
 const getOmScopeMock = vi.fn();
@@ -113,6 +122,7 @@ async function createMemoryConfig(
   const memory = getDynamicMemory(
     storage as never,
     vector as never,
+    knowledgeScope,
   )({ requestContext: requestContext as never }) as unknown as {
     config: MemoryConfig;
   };
@@ -197,7 +207,7 @@ describe('getDynamicMemory', () => {
       maxScope: 'resource',
       pins: true,
     });
-    expect(requestContext.get('organizationId')).toBe(localKnowledgeOrgId());
+    expect(requestContext.get('organizationId')).toBe(localKnowledgeOrgId(knowledgeScope));
     // Outside the factory there is no project id, so the knowledge scope is untouched.
     expect(requestContext.get('knowledgeResourceId')).toBeUndefined();
   });
@@ -223,7 +233,7 @@ describe('getDynamicMemory', () => {
 
     const { requestContext } = await createMemoryConfig({ projectPath: '/tmp/project' }, 'thread', { vector: true });
     const org = requestContext.get('organizationId');
-    expect(org).toBe(localKnowledgeOrgId());
+    expect(org).toBe(localKnowledgeOrgId(knowledgeScope));
     expect(org).toMatch(/^mastracode-[0-9a-f]{12}$/);
     expect(org).not.toBe('mastracode-owner');
     expect(org).not.toBe('mastra-code');
@@ -273,7 +283,7 @@ describe('getDynamicMemory', () => {
       vi.resetModules();
       getOmScopeMock.mockReturnValue('thread');
       const { getDynamicMemory } = await import('./memory.js');
-      const resolve = getDynamicMemory({ storage: true } as never, { vector: true } as never);
+      const resolve = getDynamicMemory({ storage: true } as never, { vector: true } as never, knowledgeScope);
       const requestContext = createRequestContext({ projectPath: '/tmp/project', factoryProjectId: 'project-1' });
 
       resolve({ requestContext: requestContext as never });
@@ -295,7 +305,7 @@ describe('getDynamicMemory', () => {
       vi.resetModules();
       getOmScopeMock.mockReturnValue('thread');
       const { getDynamicMemory } = await import('./memory.js');
-      const resolve = getDynamicMemory({ storage: true } as never, { vector: true } as never);
+      const resolve = getDynamicMemory({ storage: true } as never, { vector: true } as never, knowledgeScope);
       const state = { projectPath: '/tmp/project', factoryProjectId: 'project-1' };
 
       resolve({ requestContext: createRequestContext(state, 'session-same') as never });
@@ -321,7 +331,7 @@ describe('getDynamicMemory', () => {
       vi.resetModules();
       getOmScopeMock.mockReturnValue('thread');
       const { getDynamicMemory } = await import('./memory.js');
-      const resolve = getDynamicMemory({ storage: true } as never, { vector: true } as never);
+      const resolve = getDynamicMemory({ storage: true } as never, { vector: true } as never, knowledgeScope);
 
       const contexts: Record<string, RequestContextStub> = {
         refusing: createRequestContext({ projectPath: '/tmp/project', factoryProjectId: 'project-1' }, 'session-bad'),
@@ -383,7 +393,7 @@ describe('getDynamicMemory', () => {
     memoryConstructorMock.mockClear();
     getOmScopeMock.mockReturnValue('thread');
     const { getDynamicMemory } = await import('./memory.js');
-    const factory = getDynamicMemory({ storage: true } as never, { vector: true } as never);
+    const factory = getDynamicMemory({ storage: true } as never, { vector: true } as never, knowledgeScope);
     const nonFactoryMemory = factory({
       requestContext: createRequestContext({ projectPath: '/tmp/project' }) as never,
     });

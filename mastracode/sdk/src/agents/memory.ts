@@ -6,6 +6,7 @@ import { fastembed } from '@mastra/fastembed';
 import { Memory, Subconscious } from '@mastra/memory';
 import { DEFAULT_OM_MODEL_ID, DEFAULT_OBS_THRESHOLD, DEFAULT_REF_THRESHOLD } from '../constants.js';
 import { resolveKnowledgeScopeIdentity } from '../knowledge-scope.js';
+import type { LocalKnowledgeOrgOptions } from '../knowledge-scope.js';
 import type { MastraCodeState } from '../schema.js';
 import { getOmScope } from '../utils/project.js';
 import { resolveModel } from './model.js';
@@ -102,7 +103,11 @@ function reportOrgUnresolved(
  * Reads OM thresholds from controller state via requestContext.
  * Model functions also read from requestContext (no mutable bridge needed).
  */
-export function getDynamicMemory(storage: MastraCompositeStore, vector?: MastraVector) {
+export function getDynamicMemory(
+  storage: MastraCompositeStore,
+  vector?: MastraVector,
+  knowledgeScope: LocalKnowledgeOrgOptions = {},
+) {
   // Cache is scoped per storage instance (per getDynamicMemory call) so a
   // Memory bound to one storage is never reused after storage changes.
   let cachedMemory: Memory | null = null;
@@ -121,7 +126,7 @@ export function getDynamicMemory(storage: MastraCompositeStore, vector?: MastraV
     let orgUnresolvedRefusal = false;
 
     if (subconsciousEnabled) {
-      const identity = resolveKnowledgeScopeIdentity(state);
+      const identity = resolveKnowledgeScopeIdentity(state, knowledgeScope);
       if (identity.resolved) {
         requestContext.set('organizationId', identity.organizationId);
       } else {

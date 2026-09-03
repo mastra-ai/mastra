@@ -1,14 +1,22 @@
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
 import type { AgentControllerEvent, Session } from '@mastra/core/agent-controller';
 import { InMemoryDB, InMemoryKnowledgeStorage, InMemoryStore, MastraCompositeStore } from '@mastra/core/storage';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { createKnowledgeInspector, KnowledgeInspectorError } from './knowledge-inspector.js';
 import { localKnowledgeOrgId } from './knowledge-scope.js';
 import type { MastraCodeState } from './schema.js';
 
-// TUI/studio sessions curate under the fixed local org rung (see
-// knowledge-scope.ts); the inspector must read the same rung.
-const LOCAL_ORG = localKnowledgeOrgId();
+// TUI/studio sessions curate under the machine org rung (see knowledge-scope.ts);
+// the inspector must read the same rung. Isolated to a temp home so the test
+// never touches the real machine id.
+const TEST_HOME = mkdtempSync(path.join(tmpdir(), 'mastracode-inspector-'));
+const knowledgeScope = { homeDir: TEST_HOME };
+afterAll(() => rmSync(TEST_HOME, { recursive: true, force: true }));
+const LOCAL_ORG = localKnowledgeOrgId(knowledgeScope);
 const orgScope = [`org:${LOCAL_ORG}`];
 const resourceScope = [...orgScope, 'resource:project-1'];
 const threadScope = [...resourceScope, 'thread:thread-1'];
@@ -71,7 +79,7 @@ async function createHarness(state: Partial<MastraCodeState> = {}) {
   const knowledge = new InMemoryKnowledgeStorage({ db: new InMemoryDB() });
   const storage = new MastraCompositeStore({ id: 'knowledge-inspector-test', domains: { knowledge } });
   const session = createSessionHarness(state);
-  const inspector = await createKnowledgeInspector({ storage, session: session.session });
+  const inspector = await createKnowledgeInspector({ storage, session: session.session, knowledgeScope });
   if (!inspector) throw new Error('Expected knowledge inspector');
   return { knowledge, storage, inspector, session };
 }
@@ -480,7 +488,7 @@ describe('KnowledgeInspector', () => {
       domains: { knowledge: false },
     });
     await expect(
-      createKnowledgeInspector({ storage, session: createSessionHarness().session }),
+      createKnowledgeInspector({ storage, session: createSessionHarness().session, knowledgeScope }),
     ).resolves.toBeUndefined();
   });
 });

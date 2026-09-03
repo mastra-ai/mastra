@@ -1,9 +1,9 @@
 import { createHash } from 'node:crypto';
-import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import fs, { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { hostname, tmpdir } from 'node:os';
 import path from 'node:path';
 
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
   MACHINE_ID_FILE,
@@ -54,15 +54,40 @@ describe('localMachineId', () => {
     expect(readFileSync(file, 'utf-8').trim()).toBe(id);
   });
 
-  it('falls back to a hostname hash without persisting when the config dir is unwritable', () => {
-    if (process.getuid?.() === 0) return; // root ignores mode bits
+  it('takes the winner’s id when another process creates the file first', () => {
     const homeDir = tempHome();
-    chmodSync(homeDir, 0o500);
+    const file = path.join(homeDir, '.mastracode', MACHINE_ID_FILE);
+    const winner = '0123456789ab';
+    // Simulate the race: the other process lands between our read-miss and our exclusive create.
+    const mkdir = vi.spyOn(fs, 'mkdirSync').mockImplementationOnce((dir, opts) => {
+      const result = fs.mkdirSync(dir, opts);
+      fs.writeFileSync(file, `${winner}\n`);
+      return result;
+    });
     try {
-      expect(localMachineId({ homeDir })).toBe(createHash('sha256').update(hostname()).digest('hex').slice(0, 12));
+      expect(localMachineId({ homeDir })).toBe(winner);
+      expect(readFileSync(file, 'utf-8').trim()).toBe(winner);
     } finally {
-      chmodSync(homeDir, 0o700);
+      mkdir.mockRestore();
     }
+  });
+
+  it('falls back to a hostname hash without persisting or caching when the config dir is unwritable', () => {
+    const homeDir = tempHome();
+    const hostHash = createHash('sha256').update(hostname()).digest('hex').slice(0, 12);
+    const mkdir = vi.spyOn(fs, 'mkdirSync').mockImplementation(() => {
+      throw Object.assign(new Error('EACCES'), { code: 'EACCES' });
+    });
+    try {
+      expect(localMachineId({ homeDir })).toBe(hostHash);
+      expect(fs.existsSync(path.join(homeDir, '.mastracode', MACHINE_ID_FILE))).toBe(false);
+    } finally {
+      mkdir.mockRestore();
+    }
+    // Not cached: once the directory is writable again a real id is minted.
+    const id = localMachineId({ homeDir });
+    expect(id).toMatch(/^[0-9a-f]{12}$/);
+    expect(id).not.toBe(hostHash);
   });
 });
 
