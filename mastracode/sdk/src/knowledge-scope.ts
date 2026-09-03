@@ -68,20 +68,30 @@ export function localMachineId(options: LocalKnowledgeOrgOptions = {}): string {
  * instead of both overwriting it.
  */
 function createMachineIdFile(filePath: string): string {
-  const fresh = randomBytes(6).toString('hex');
-  for (let attempt = 0; attempt < 2; attempt++) {
+  let candidate = randomBytes(6).toString('hex');
+  for (let attempt = 0; attempt < 3; attempt++) {
     try {
-      fs.writeFileSync(filePath, `${fresh}\n`, { encoding: 'utf-8', flag: 'wx' });
-      return fresh;
+      fs.writeFileSync(filePath, `${candidate}\n`, { encoding: 'utf-8', flag: 'wx' });
+      return candidate;
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
       const winner = readStoredMachineId(filePath);
       if (winner) return winner;
+      const aside = `${filePath}.corrupt-${candidate}`;
       try {
-        fs.renameSync(filePath, `${filePath}.corrupt-${fresh}`);
+        fs.renameSync(filePath, aside);
       } catch (renameError) {
         // Someone else already moved it aside; just retry the create.
         if ((renameError as NodeJS.ErrnoException).code !== 'ENOENT') throw renameError;
+        continue;
+      }
+      // The rename is atomic but not conditional: between our corrupt read and
+      // the rename another process may have replaced the file with a valid id.
+      // If we displaced one, it is the winner; put it back instead of a fresh id.
+      const displaced = readStoredMachineId(aside);
+      if (displaced) {
+        candidate = displaced;
+        fs.rmSync(aside, { force: true });
       }
     }
   }

@@ -95,6 +95,28 @@ describe('localMachineId', () => {
     }
   });
 
+  it('restores a valid id it displaced when the other recoverer won between our read and our rename', () => {
+    const homeDir = tempHome();
+    const file = path.join(homeDir, '.mastracode', MACHINE_ID_FILE);
+    mkdirSync(path.dirname(file), { recursive: true });
+    writeFileSync(file, 'garbage\n');
+    const winner = '13579bdf2468';
+    // The other process finishes its whole recovery (move aside + create) before our rename runs,
+    // so our rename displaces the winner's valid file rather than the corrupt one.
+    const rename = vi.spyOn(fs, 'renameSync').mockImplementationOnce((from, to) => {
+      fs.renameSync(from, `${file}.corrupt-other`);
+      fs.writeFileSync(file, `${winner}\n`);
+      fs.renameSync(from, to);
+    });
+    try {
+      expect(localMachineId({ homeDir })).toBe(winner);
+      expect(readFileSync(file, 'utf-8').trim()).toBe(winner);
+      expect(fs.readdirSync(path.dirname(file)).sort()).toEqual([MACHINE_ID_FILE, `${MACHINE_ID_FILE}.corrupt-other`]);
+    } finally {
+      rename.mockRestore();
+    }
+  });
+
   it('falls back to a hostname hash without persisting or caching when the config dir is unwritable', () => {
     const homeDir = tempHome();
     const hostHash = createHash('sha256').update(hostname()).digest('hex').slice(0, 12);
