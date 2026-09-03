@@ -16,9 +16,8 @@ export function RenameExperimentButton({ experiment }: RenameExperimentButtonPro
 
   return (
     <>
-      <Button onClick={() => setOpen(true)} tooltip="Rename this experiment">
+      <Button onClick={() => setOpen(true)} tooltip="Rename this experiment" variant="ghost" size="icon-sm">
         <Pencil />
-        Rename
       </Button>
       {open && <RenameExperimentDialog experiment={experiment} open onOpenChange={setOpen} />}
     </>
