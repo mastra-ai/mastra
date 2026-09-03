@@ -14,13 +14,16 @@
  * Recordings are split per provider so a provider without a recording is a visible skip
  * rather than a silent pass. To (re)record one provider:
  *
- *   LLM_TEST_MODE=record ANTHROPIC_API_KEY=... pnpm vitest run provider-acceptance --project e2e
+ *   LLM_TEST_MODE=record ANTHROPIC_API_KEY=... pnpm vitest run provider-acceptance --project e2e:packages/core
+ *
+ * Identity-linked Anthropic keys additionally need ANTHROPIC_WORKSPACE_ID; ordinary keys don't.
  */
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { defaultNameGenerator, getLLMRecordingsDir, getLLMTestMode } from '@internal/llm-recorder';
 import { createGatewayMock, hasRealApiKey, setupDummyApiKeys } from '@internal/test-utils';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import type { OpenAICompatibleConfig } from '../../llm/model/shared.types';
 import { Agent } from '../agent';
 
 const MODE = getLLMTestMode();
@@ -28,10 +31,19 @@ setupDummyApiKeys(MODE, ['openai', 'anthropic', 'google']);
 
 type ProviderKey = 'openai' | 'anthropic' | 'google';
 
-const PROVIDERS: { key: ProviderKey; model: string; host: string }[] = [
-  { key: 'openai', model: 'openai/gpt-4o-mini', host: 'api.openai.com' },
-  { key: 'anthropic', model: 'anthropic/claude-haiku-4-5', host: 'api.anthropic.com' },
-  { key: 'google', model: 'google/gemini-3.6-flash', host: 'generativelanguage.googleapis.com' },
+const PROVIDERS: { key: ProviderKey; model: OpenAICompatibleConfig; host: string }[] = [
+  { key: 'openai', model: { id: 'openai/gpt-4o-mini' }, host: 'api.openai.com' },
+  {
+    key: 'anthropic',
+    model: {
+      id: 'anthropic/claude-haiku-4-5',
+      headers: process.env.ANTHROPIC_WORKSPACE_ID
+        ? { 'anthropic-workspace-id': process.env.ANTHROPIC_WORKSPACE_ID }
+        : undefined,
+    },
+    host: 'api.anthropic.com',
+  },
+  { key: 'google', model: { id: 'google/gemini-3.6-flash' }, host: 'generativelanguage.googleapis.com' },
 ];
 
 /** Extract `[role, text]` pairs from a provider request body, normalising provider dialects. */

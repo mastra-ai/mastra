@@ -1,0 +1,309 @@
+{
+  "meta": {
+    "name": "provider-acceptance-anthropic",
+    "testFile": "src/agent/__tests__/provider-acceptance.e2e.test.ts",
+    "testName": "provider acceptance › anthropic",
+    "model": "claude-haiku-4-5",
+    "createdAt": "2026-09-03T04:51:02.540Z"
+  },
+  "recordings": [
+    {
+      "hash": "05340a962e6df79c",
+      "request": {
+        "url": "https://api.anthropic.com/v1/messages",
+        "method": "POST",
+        "body": {
+          "model": "claude-haiku-4-5",
+          "max_tokens": 64000,
+          "system": [
+            {
+              "type": "text",
+              "text": "Answer in at most five words."
+            }
+          ],
+          "messages": [
+            {
+              "role": "assistant",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Hello! How can I help you today?"
+                }
+              ]
+            },
+            {
+              "role": "user",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Say the word \"ready\" and nothing else."
+                }
+              ]
+            }
+          ]
+        },
+        "timestamp": 1788411060325
+      },
+      "response": {
+        "status": 200,
+        "statusText": "OK",
+        "headers": {
+          "anthropic-organization-id": "a4b2106b-a1ab-4fd5-8d96-cdf4b3e9dc14",
+          "anthropic-ratelimit-input-tokens-limit": "10000000",
+          "anthropic-ratelimit-input-tokens-remaining": "10000000",
+          "anthropic-ratelimit-input-tokens-reset": "2026-09-03T04:51:01Z",
+          "anthropic-ratelimit-output-tokens-limit": "2000000",
+          "anthropic-ratelimit-output-tokens-remaining": "2000000",
+          "anthropic-ratelimit-output-tokens-reset": "2026-09-03T04:51:01Z",
+          "anthropic-ratelimit-requests-limit": "20000",
+          "anthropic-ratelimit-requests-remaining": "19999",
+          "anthropic-ratelimit-requests-reset": "2026-09-03T04:51:00Z",
+          "anthropic-ratelimit-tokens-limit": "12000000",
+          "anthropic-ratelimit-tokens-remaining": "12000000",
+          "anthropic-ratelimit-tokens-reset": "2026-09-03T04:51:01Z",
+          "anthropic-workspace-id": "redacted",
+          "cf-cache-status": "DYNAMIC",
+          "cf-ray": "a35223076bfe1ee0-LAX",
+          "connection": "keep-alive",
+          "content-security-policy": "default-src 'none'; frame-ancestors 'none'",
+          "content-type": "application/json",
+          "date": "Thu, 03 Sep 2026 04:51:01 GMT",
+          "request-id": "req_011CefuRaGWQvCGJE8XgMLbn",
+          "server": "cloudflare",
+          "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+          "traceresponse": "00-bcdd43ea2d6d830804b369195268e2f5-ec5ace14218d6ec3-01",
+          "vary": "Accept-Encoding",
+          "x-robots-tag": "none"
+        },
+        "body": {
+          "model": "claude-haiku-4-5-20251001",
+          "id": "msg_011CefuRb2QEvTZrZL7uN3HH",
+          "type": "message",
+          "role": "assistant",
+          "content": [
+            {
+              "type": "text",
+              "text": "ready"
+            }
+          ],
+          "stop_reason": "end_turn",
+          "stop_sequence": null,
+          "stop_details": null,
+          "usage": {
+            "input_tokens": 48,
+            "cache_creation_input_tokens": 0,
+            "cache_read_input_tokens": 0,
+            "cache_creation": {
+              "ephemeral_5m_input_tokens": 0,
+              "ephemeral_1h_input_tokens": 0
+            },
+            "output_tokens": 4,
+            "service_tier": "standard",
+            "inference_geo": "not_available"
+          }
+        },
+        "isStreaming": false
+      }
+    },
+    {
+      "hash": "ee109fd073d14d1f",
+      "request": {
+        "url": "https://api.anthropic.com/v1/messages",
+        "method": "POST",
+        "body": {
+          "model": "claude-haiku-4-5",
+          "max_tokens": 64000,
+          "system": [
+            {
+              "type": "text",
+              "text": "Answer in at most five words."
+            }
+          ],
+          "messages": [
+            {
+              "role": "user",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "I will ask a question next."
+                },
+                {
+                  "type": "text",
+                  "text": "Say the word \"ready\" and nothing else."
+                }
+              ]
+            }
+          ]
+        },
+        "timestamp": 1788411061108
+      },
+      "response": {
+        "status": 200,
+        "statusText": "OK",
+        "headers": {
+          "anthropic-organization-id": "a4b2106b-a1ab-4fd5-8d96-cdf4b3e9dc14",
+          "anthropic-ratelimit-input-tokens-limit": "10000000",
+          "anthropic-ratelimit-input-tokens-remaining": "10000000",
+          "anthropic-ratelimit-input-tokens-reset": "2026-09-03T04:51:01Z",
+          "anthropic-ratelimit-output-tokens-limit": "2000000",
+          "anthropic-ratelimit-output-tokens-remaining": "2000000",
+          "anthropic-ratelimit-output-tokens-reset": "2026-09-03T04:51:01Z",
+          "anthropic-ratelimit-requests-limit": "20000",
+          "anthropic-ratelimit-requests-remaining": "19999",
+          "anthropic-ratelimit-requests-reset": "2026-09-03T04:51:01Z",
+          "anthropic-ratelimit-tokens-limit": "12000000",
+          "anthropic-ratelimit-tokens-remaining": "12000000",
+          "anthropic-ratelimit-tokens-reset": "2026-09-03T04:51:01Z",
+          "anthropic-workspace-id": "redacted",
+          "cf-cache-status": "DYNAMIC",
+          "cf-ray": "a352230c0cb71ee0-LAX",
+          "connection": "keep-alive",
+          "content-security-policy": "default-src 'none'; frame-ancestors 'none'",
+          "content-type": "application/json",
+          "date": "Thu, 03 Sep 2026 04:51:01 GMT",
+          "request-id": "req_011CefuRdNYMAvu6X1C9u5TW",
+          "server": "cloudflare",
+          "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+          "traceresponse": "00-f2449b86d72b369bed068dda5cc6739f-0494470858614b37-01",
+          "vary": "Accept-Encoding",
+          "x-robots-tag": "none"
+        },
+        "body": {
+          "model": "claude-haiku-4-5-20251001",
+          "id": "msg_011CefuRdz14MYqi2dA5CX6G",
+          "type": "message",
+          "role": "assistant",
+          "content": [
+            {
+              "type": "text",
+              "text": "ready"
+            }
+          ],
+          "stop_reason": "end_turn",
+          "stop_sequence": null,
+          "stop_details": null,
+          "usage": {
+            "input_tokens": 31,
+            "cache_creation_input_tokens": 0,
+            "cache_read_input_tokens": 0,
+            "cache_creation": {
+              "ephemeral_5m_input_tokens": 0,
+              "ephemeral_1h_input_tokens": 0
+            },
+            "output_tokens": 4,
+            "service_tier": "standard",
+            "inference_geo": "not_available"
+          }
+        },
+        "isStreaming": false
+      }
+    },
+    {
+      "hash": "9a97afda49af8f14",
+      "request": {
+        "url": "https://api.anthropic.com/v1/messages",
+        "method": "POST",
+        "body": {
+          "model": "claude-haiku-4-5",
+          "max_tokens": 64000,
+          "system": [
+            {
+              "type": "text",
+              "text": "Answer in at most five words."
+            }
+          ],
+          "messages": [
+            {
+              "role": "user",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Hi."
+                }
+              ]
+            },
+            {
+              "role": "assistant",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Hello! How can I help you today?"
+                }
+              ]
+            },
+            {
+              "role": "user",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Say the word \"ready\" and nothing else."
+                }
+              ]
+            }
+          ]
+        },
+        "timestamp": 1788411061775
+      },
+      "response": {
+        "status": 200,
+        "statusText": "OK",
+        "headers": {
+          "anthropic-organization-id": "a4b2106b-a1ab-4fd5-8d96-cdf4b3e9dc14",
+          "anthropic-ratelimit-input-tokens-limit": "10000000",
+          "anthropic-ratelimit-input-tokens-remaining": "10000000",
+          "anthropic-ratelimit-input-tokens-reset": "2026-09-03T04:51:02Z",
+          "anthropic-ratelimit-output-tokens-limit": "2000000",
+          "anthropic-ratelimit-output-tokens-remaining": "2000000",
+          "anthropic-ratelimit-output-tokens-reset": "2026-09-03T04:51:02Z",
+          "anthropic-ratelimit-requests-limit": "20000",
+          "anthropic-ratelimit-requests-remaining": "19999",
+          "anthropic-ratelimit-requests-reset": "2026-09-03T04:51:01Z",
+          "anthropic-ratelimit-tokens-limit": "12000000",
+          "anthropic-ratelimit-tokens-remaining": "12000000",
+          "anthropic-ratelimit-tokens-reset": "2026-09-03T04:51:02Z",
+          "anthropic-workspace-id": "redacted",
+          "cf-cache-status": "DYNAMIC",
+          "cf-ray": "a35223102be01ee0-LAX",
+          "connection": "keep-alive",
+          "content-security-policy": "default-src 'none'; frame-ancestors 'none'",
+          "content-type": "application/json",
+          "date": "Thu, 03 Sep 2026 04:51:02 GMT",
+          "request-id": "req_011CefuRgFBXD6cncJByCS8F",
+          "server": "cloudflare",
+          "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+          "traceresponse": "00-f931b63a6c8dc401cb48dce38bfff4f7-51c95988ef1319b9-01",
+          "vary": "Accept-Encoding",
+          "x-robots-tag": "none"
+        },
+        "body": {
+          "model": "claude-haiku-4-5-20251001",
+          "id": "msg_011CefuRgst3LMBAxGEVdcoX",
+          "type": "message",
+          "role": "assistant",
+          "content": [
+            {
+              "type": "text",
+              "text": "Ready"
+            }
+          ],
+          "stop_reason": "end_turn",
+          "stop_sequence": null,
+          "stop_details": null,
+          "usage": {
+            "input_tokens": 41,
+            "cache_creation_input_tokens": 0,
+            "cache_read_input_tokens": 0,
+            "cache_creation": {
+              "ephemeral_5m_input_tokens": 0,
+              "ephemeral_1h_input_tokens": 0
+            },
+            "output_tokens": 4,
+            "service_tier": "standard",
+            "inference_geo": "not_available"
+          }
+        },
+        "isStreaming": false
+      }
+    }
+  ]
+}
