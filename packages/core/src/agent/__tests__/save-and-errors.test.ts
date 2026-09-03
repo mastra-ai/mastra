@@ -2175,9 +2175,9 @@ describe('AGENT_RUN span must be ended on LLM errors', () => {
       const agentRunSpan = getAgentRunSpan();
       expect(agentRunSpan).toBeDefined();
       expect(agentRunSpan.error).toHaveBeenCalledTimes(1);
-      expect(agentRunSpan.error.mock.calls[0][0]).toMatchObject({ endSpan: false });
+      expect(agentRunSpan.error.mock.calls[0][0]).toMatchObject({ endTree: true });
       expect(agentRunSpan.error.mock.calls[0][0].error.message).toBe('prepare step failed');
-      expect(agentRunSpan.endTree).toHaveBeenCalledTimes(1);
+      expect(agentRunSpan.endTree).not.toHaveBeenCalled();
     } finally {
       createRunSpy.mockRestore();
       spy.mockRestore();
@@ -2204,8 +2204,8 @@ describe('AGENT_RUN span must be ended on LLM errors', () => {
 
       const agentRunSpan = getAgentRunSpan();
       expect(agentRunSpan).toBeDefined();
-      expect(agentRunSpan.error).toHaveBeenCalledWith({ error: prepareError, endSpan: false });
-      expect(agentRunSpan.endTree).toHaveBeenCalledTimes(1);
+      expect(agentRunSpan.error).toHaveBeenCalledWith({ error: prepareError, endTree: true });
+      expect(agentRunSpan.endTree).not.toHaveBeenCalled();
     } finally {
       createRunSpy.mockRestore();
       spy.mockRestore();
@@ -2243,8 +2243,8 @@ describe('AGENT_RUN span must be ended on LLM errors', () => {
       const agentRunSpan = getAgentRunSpan();
       expect(agentRunSpan).toBeDefined();
       expect(agentRunSpan.error).toHaveBeenCalled();
-      expect(agentRunSpan.error.mock.calls[0][0]).toMatchObject({ endSpan: false });
-      expect(agentRunSpan.endTree).toHaveBeenCalledTimes(1);
+      expect(agentRunSpan.error.mock.calls[0][0]).toMatchObject({ endTree: true });
+      expect(agentRunSpan.endTree).not.toHaveBeenCalled();
     } finally {
       spy.mockRestore();
     }
@@ -2311,8 +2311,8 @@ describe('AGENT_RUN span must be ended on LLM errors', () => {
       const agentRunSpan = getAgentRunSpan();
       expect(agentRunSpan).toBeDefined();
       expect(agentRunSpan.error).toHaveBeenCalled();
-      expect(agentRunSpan.error.mock.calls[0][0]).toMatchObject({ endSpan: false });
-      expect(agentRunSpan.endTree).toHaveBeenCalledTimes(1);
+      expect(agentRunSpan.error.mock.calls[0][0]).toMatchObject({ endTree: true });
+      expect(agentRunSpan.endTree).not.toHaveBeenCalled();
       expect(agentRunSpan.error.mock.calls[0][0].error).toBeInstanceOf(MastraError);
       expect(agentRunSpan.error.mock.calls[0][0].error.message).toBe(
         'Agent stream finished with finishReason "error" but no error payload was provided',
@@ -2477,8 +2477,8 @@ describe('AGENT_RUN span must be ended on LLM errors', () => {
       const agentRunSpan = getAgentRunSpan();
       expect(agentRunSpan).toBeDefined();
       expect(agentRunSpan.error).toHaveBeenCalled();
-      expect(agentRunSpan.error.mock.calls[0][0]).toMatchObject({ endSpan: false });
-      expect(agentRunSpan.endTree).toHaveBeenCalledTimes(1);
+      expect(agentRunSpan.error.mock.calls[0][0]).toMatchObject({ endTree: true });
+      expect(agentRunSpan.endTree).not.toHaveBeenCalled();
     } finally {
       spy.mockRestore();
     }
@@ -2591,9 +2591,9 @@ describe('AGENT_RUN span must be ended on LLM errors', () => {
 
       const agentRunSpan = getAgentRunSpan();
       expect(agentRunSpan).toBeDefined();
-      expect(agentRunSpan.endTree).toHaveBeenCalled();
       expect(agentRunSpan.error).not.toHaveBeenCalled();
-      expect(agentRunSpan.update).toHaveBeenCalledWith({
+      expect(agentRunSpan.end).toHaveBeenCalledWith({
+        endTree: true,
         output: {
           status: 'suspended',
           reason: 'tool-call-approval',
@@ -2668,9 +2668,9 @@ describe('AGENT_RUN span must be ended on LLM errors', () => {
 
       const agentRunSpan = getAgentRunSpan();
       expect(agentRunSpan).toBeDefined();
-      expect(agentRunSpan.endTree).toHaveBeenCalled();
       expect(agentRunSpan.error).not.toHaveBeenCalled();
-      expect(agentRunSpan.update).toHaveBeenCalledWith({
+      expect(agentRunSpan.end).toHaveBeenCalledWith({
+        endTree: true,
         output: {
           status: 'aborted',
           reason: 'abort',

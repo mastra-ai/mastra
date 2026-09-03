@@ -7514,14 +7514,14 @@ export class Agent<
                     : ((raw as { message?: string } | null | undefined)?.message ??
                         'Agent prepare workflow failed without an error payload'),
                 );
-          agentSpan.error({ error, endSpan: false });
+          agentSpan.error({ error, endTree: true });
+        } else {
+          agentSpan.end({ endTree: true });
         }
-        agentSpan.endTree();
       }
       return result;
     } catch (error) {
-      agentSpan?.error({ error: error as Error, endSpan: false });
-      agentSpan?.endTree();
+      agentSpan?.error({ error: error as Error, endTree: true });
       throw error;
     }
   }

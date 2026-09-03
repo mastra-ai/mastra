@@ -305,6 +305,15 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
     this.end(options);
   }
 
+  /** Close any still-open descendant spans without applying options to them */
+  protected endOpenDescendants(): void {
+    if (this.#openChildren) {
+      for (const child of [...this.#openChildren]) {
+        child.endTree();
+      }
+    }
+  }
+
   /**
    * Release this span from its parent's open-child set once it has ended.
    * Children still open at that moment are handed to the nearest ancestor
