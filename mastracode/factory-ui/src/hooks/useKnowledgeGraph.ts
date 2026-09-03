@@ -24,6 +24,7 @@ import {
   runKnowledgeCurationAction,
   type KnowledgeActivityFilters,
   type KnowledgeCurationActionInput,
+  type KnowledgeGraphPayload,
   type KnowledgeProposalStatus,
 } from '../ui/domains/factory/services/knowledge';
 import { RequestError } from '../ui/domains/factory/services/request';
@@ -54,6 +55,28 @@ export function useKnowledgeScopes(
   });
 }
 
+export function combineKnowledgeLensPages(pages: KnowledgeGraphPayload[]): KnowledgeGraphPayload | undefined {
+  const first = pages[0];
+  const last = pages.at(-1);
+  if (!first || !last) return undefined;
+  const nodes = new Map(pages.flatMap(page => page.nodes).map(node => [node.id, node]));
+  const edges = new Map(pages.flatMap(page => page.edges).map(edge => [edge.id, edge]));
+  const records = new Map(pages.flatMap(page => page.records).map(record => [record.id, record]));
+  const terminalBounds = [...new Set(pages.flatMap(page => page.page.terminalBounds))];
+  return {
+    ...first,
+    nodes: [...nodes.values()],
+    edges: [...edges.values()],
+    records: [...records.values()],
+    page: {
+      ...last.page,
+      truncated: Boolean(last.page.nextCursor),
+      terminalBounds,
+    },
+    version: last.version ?? first.version,
+  };
+}
+
 export function useKnowledgeGraph(
   factoryProjectId: string | undefined,
   scopeId: string | undefined,
@@ -62,17 +85,24 @@ export function useKnowledgeGraph(
 ) {
   const { baseUrl } = useApiConfig();
   const paused = options?.paused ?? false;
-  return useQuery({
+  const query = useInfiniteQuery({
     queryKey: queryKeys.knowledgeSubgraph(factoryProjectId, scopeId, threadId),
-    queryFn:
-      factoryProjectId && scopeId
-        ? ({ signal }) => fetchKnowledgeGraph(baseUrl, factoryProjectId, scopeId, threadId, signal)
-        : skipToken,
+    queryFn: ({ pageParam, signal }) => {
+      if (!factoryProjectId || !scopeId) throw new Error('A Factory project and scope are required.');
+      return fetchKnowledgeGraph(baseUrl, factoryProjectId, scopeId, pageParam || undefined, threadId, signal);
+    },
+    initialPageParam: '',
+    getNextPageParam: page => page.page.nextCursor,
+    enabled: Boolean(factoryProjectId && scopeId),
     // Live: same 5s cadence as the board (useWorkItems precedent).
     refetchInterval: query => knowledgeRefetchInterval(query.state.error, paused),
     refetchOnWindowFocus: !paused,
     retry: (failureCount, error) => !(error instanceof RequestError && error.status === 404) && failureCount < 2,
   });
+  return {
+    ...query,
+    data: query.data ? combineKnowledgeLensPages(query.data.pages) : undefined,
+  };
 }
 
 export function useKnowledgeActivity(
