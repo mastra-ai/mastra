@@ -86,6 +86,52 @@ describe('UnixSocketPubSub', () => {
     expect(secondCb).toHaveBeenCalledTimes(1);
   });
 
+  it('treats an empty group name as a group', async () => {
+    const path = await socketPath();
+    const broker = new UnixSocketPubSub(path);
+    const client = new UnixSocketPubSub(path);
+    pubsubs.push(broker, client);
+
+    const brokerCb = vi.fn();
+    const clientCb = vi.fn();
+    await broker.subscribe('topic-a', brokerCb, { group: '' });
+    await client.subscribe('topic-a', clientCb, { group: '' });
+
+    for (let index = 0; index < 4; index++) {
+      await broker.publish('topic-a', makeEvent({ type: `event-${index}` }));
+    }
+
+    await waitFor(() => {
+      expect(brokerCb).toHaveBeenCalledTimes(2);
+      expect(clientCb).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  it('resets group rotation after the membership ends', async () => {
+    const path = await socketPath();
+    const pubsub = new UnixSocketPubSub(path);
+    pubsubs.push(pubsub);
+
+    const firstCb = vi.fn();
+    const secondCb = vi.fn();
+    await pubsub.subscribe('topic-a', firstCb, { group: 'workers' });
+    await pubsub.subscribe('topic-a', secondCb, { group: 'workers' });
+    await pubsub.publish('topic-a', makeEvent({ type: 'before-reset' }));
+    expect(firstCb).toHaveBeenCalledTimes(1);
+
+    await pubsub.unsubscribe('topic-a', firstCb);
+    await pubsub.unsubscribe('topic-a', secondCb);
+
+    const nextFirstCb = vi.fn();
+    const nextSecondCb = vi.fn();
+    await pubsub.subscribe('topic-a', nextFirstCb, { group: 'workers' });
+    await pubsub.subscribe('topic-a', nextSecondCb, { group: 'workers' });
+    await pubsub.publish('topic-a', makeEvent({ type: 'after-reset' }));
+
+    expect(nextFirstCb).toHaveBeenCalledTimes(1);
+    expect(nextSecondCb).not.toHaveBeenCalled();
+  });
+
   it('fans out to ungrouped subscribers and selects one process per group', async () => {
     const path = await socketPath();
     const broker = new UnixSocketPubSub(path);

@@ -328,12 +328,12 @@ export class UnixSocketPubSub extends PubSub {
     if (subscriptions!.size === 0) {
       this.#subscriptions.delete(topic);
     }
-    if (
-      !this.#hasLocalMembership(topic, subscription.group) &&
-      !this.#isBroker &&
-      this.#clientSocket &&
-      !this.#clientSocket.destroyed
-    ) {
+    const membershipEnded = !this.#hasLocalMembership(topic, subscription.group);
+    if (membershipEnded && subscription.group !== undefined) {
+      this.#localGroupCursors.delete(membershipKey(topic, subscription.group));
+      this.#evictBrokerGroupCursor(topic, subscription.group);
+    }
+    if (membershipEnded && !this.#isBroker && this.#clientSocket && !this.#clientSocket.destroyed) {
       await this.#sendToBroker({ type: 'unsubscribe', topic, group: subscription.group });
       await nextTick();
     }
@@ -352,7 +352,7 @@ export class UnixSocketPubSub extends PubSub {
       ...new Set(
         [...(this.#subscriptions.get(topic)?.values() ?? [])]
           .map(subscription => subscription.group)
-          .filter((group): group is string => Boolean(group)),
+          .filter((group): group is string => group !== undefined),
       ),
     ];
   }
@@ -669,6 +669,9 @@ export class UnixSocketPubSub extends PubSub {
           });
         } else if (clientFrame.type === 'unsubscribe') {
           client.subscriptions.delete(membershipKey(clientFrame.topic, clientFrame.group));
+          if (clientFrame.group !== undefined) {
+            this.#evictBrokerGroupCursor(clientFrame.topic, clientFrame.group);
+          }
         } else if (clientFrame.type === 'publish') {
           void this.#publishFromBroker(clientFrame.topic, clientFrame.event, client, clientFrame.localOnly);
         }
@@ -709,10 +712,22 @@ export class UnixSocketPubSub extends PubSub {
     void write.finally(() => this.#pendingWrites.delete(write));
   }
 
+  #evictBrokerGroupCursor(topic: string, group: string) {
+    const key = membershipKey(topic, group);
+    if (this.#hasLocalMembership(topic, group)) return;
+    if ([...this.#brokerClients.values()].some(client => client.subscriptions.has(key))) return;
+    this.#brokerGroupCursors.delete(key);
+  }
+
   #removeBrokerClient(client: BrokerClient) {
     if (this.#brokerClients.get(client.socket) !== client) return;
+    const subscriptions = [...client.subscriptions];
     this.#brokerClients.delete(client.socket);
     client.subscriptions.clear();
+    for (const subscription of subscriptions) {
+      const [topic, group] = JSON.parse(subscription) as [string, string | null];
+      if (group !== null) this.#evictBrokerGroupCursor(topic, group);
+    }
     client.queuedBytes = 0;
     client.writeChain = Promise.resolve();
     if (!client.socket.destroyed) {
@@ -728,7 +743,7 @@ export class UnixSocketPubSub extends PubSub {
     if (frame.type !== 'event') return;
     // `createdAt` is already a Date — the codec rehydrates it during JSON.parse
     // in `readFrames`. No ad-hoc conversion needed.
-    if (frame.group) {
+    if (frame.group !== undefined) {
       this.#deliverLocalGroup(frame.topic, frame.group, frame.event);
     } else {
       this.#deliverLocalFanout(frame.topic, frame.event);
@@ -770,7 +785,7 @@ export class UnixSocketPubSub extends PubSub {
     for (const client of this.#brokerClients.values()) {
       for (const subscription of client.subscriptions) {
         const [subscriptionTopic, group] = JSON.parse(subscription) as [string, string | null];
-        if (subscriptionTopic === topic && group) groups.add(group);
+        if (subscriptionTopic === topic && group !== null) groups.add(group);
       }
     }
 
@@ -802,7 +817,7 @@ export class UnixSocketPubSub extends PubSub {
 
   #deliverLocalFanout(topic: string, event: Event) {
     for (const subscription of this.#subscriptions.get(topic)?.values() ?? []) {
-      if (subscription.group) continue;
+      if (subscription.group !== undefined) continue;
       this.#invokeLocalCallback(topic, event, subscription.callback, subscription.group, 0);
     }
   }
