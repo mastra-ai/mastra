@@ -166,7 +166,14 @@ describe('SupervisorPage', () => {
 
       const composer = screen.getByRole('region', { name: 'Supervisor composer' });
       await waitFor(() =>
-        expect(within(composer).getByRole<HTMLTextAreaElement>('textbox').value).toContain('#22874 (dec-1)'),
+        expect(within(composer).getByRole<HTMLTextAreaElement>('textbox').value).toContain(
+          JSON.stringify({
+            id: 'dec-1',
+            kind: 'decision-failed',
+            title: 'Plan step could not start',
+            workItemNumber: 22874,
+          }),
+        ),
       );
     });
   });
