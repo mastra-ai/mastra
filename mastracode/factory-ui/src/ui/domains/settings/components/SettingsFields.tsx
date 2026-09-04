@@ -63,7 +63,8 @@ export function ThinkingLevelPicker({ value, ariaLabel, disabled, inherited, onC
     try {
       await onChange(level.value);
     } finally {
-      inFlight.current = undefined;
+      // A later release replaces the marker; clearing it there would let a blur resend that value.
+      if (inFlight.current === dragged) inFlight.current = undefined;
       setDragged(current => (current === dragged ? undefined : current));
     }
   };
