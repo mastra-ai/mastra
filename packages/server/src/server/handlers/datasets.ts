@@ -70,6 +70,21 @@ function assertDatasetsAvailable(): void {
 }
 
 /**
+ * Experiment deletion reaches core through `mastra.datasets.deleteExperiment`,
+ * which is newer than the `datasets` feature itself. A core that predates it
+ * satisfies `assertDatasetsAvailable` and would then fail at call time with
+ * "deleteExperiment is not a function", so gate the newer capability separately
+ * and report the version skew as a 501 rather than a 500.
+ */
+function assertExperimentDeletionAvailable(): void {
+  if (!coreFeatures.has('experiment-deletion')) {
+    throw new HTTPException(501, {
+      message: 'Experiment deletion requires a newer @mastra/core with experiment deletion support.',
+    });
+  }
+}
+
+/**
  * Recovers the caller-provided request context for a dataset item.
  *
  * Server adapters overwrite the body's `requestContext` field with the live
@@ -688,6 +703,7 @@ export const DELETE_ANY_EXPERIMENT_ROUTE = createRoute({
   requiresAuth: true,
   handler: async ({ mastra, experimentId, ...params }) => {
     assertDatasetsAvailable();
+    assertExperimentDeletionAvailable();
     try {
       const {
         organizationId,
@@ -1035,6 +1051,10 @@ export const DELETE_EXPERIMENT_ROUTE = createRoute({
   requiresAuth: true,
   handler: async ({ mastra, datasetId, experimentId, ...params }) => {
     assertDatasetsAvailable();
+    // An older core still exposes Dataset.deleteExperiment, but it predates the
+    // trace cascade and would silently ignore deleteTraces, returning success
+    // while the traces survive. Fail loudly instead.
+    assertExperimentDeletionAvailable();
     try {
       const { deleteTraces = true } = params as { deleteTraces?: boolean };
       const ds = await mastra.datasets.get({ id: datasetId });

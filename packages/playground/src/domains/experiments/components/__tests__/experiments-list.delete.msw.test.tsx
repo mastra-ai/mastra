@@ -62,6 +62,32 @@ describe('ExperimentsList delete action', () => {
     await waitFor(() => expect(screen.queryByText('Delete Experiment')).toBeNull());
   });
 
+  it('keeps the dialog open when the delete request fails', async () => {
+    const onDelete = vi.fn();
+    server.use(
+      http.delete(`${BASE_URL}/api/experiments/:experimentId`, () => {
+        onDelete();
+        return HttpResponse.json({ error: 'boom' }, { status: 500 });
+      }),
+    );
+
+    renderList();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Delete experiment entity-extraction / model-a' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Delete' }));
+
+    // Wait for the request to be served and the mutation to settle: the button
+    // reads "Deleting..." while pending, so seeing "Delete" again means the
+    // rejection has been handled. Asserting before that would pass even if the
+    // dialog closed later, and would leak the in-flight request into the next test.
+    await waitFor(() => expect(onDelete).toHaveBeenCalled());
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Delete' })).toBeDefined());
+
+    // The dialog must survive the failure so the user can retry; a closed dialog
+    // would leave the toast as the only trace of the failed deletion.
+    expect(screen.getByText('Delete Experiment')).toBeDefined();
+  });
+
   it('does not call the delete route when the dialog is cancelled', async () => {
     const onDelete = vi.fn();
     server.use(

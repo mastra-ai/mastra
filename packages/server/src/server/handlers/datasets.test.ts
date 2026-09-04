@@ -1,4 +1,5 @@
 import { Agent } from '@mastra/core/agent';
+import { coreFeatures } from '@mastra/core/features';
 import { Mastra } from '@mastra/core/mastra';
 import { SpanType } from '@mastra/core/observability';
 import { RequestContext } from '@mastra/core/request-context';
@@ -983,6 +984,50 @@ describe('Datasets Handlers', () => {
         expect(schema.parse({ deleteTraces: false }).deleteTraces).toBe(false);
       },
     );
+  });
+
+  describe('experiment-deletion feature guard', () => {
+    // The delete routes reach core through APIs newer than the `datasets`
+    // feature itself. Without this guard an older core produces a 500 from
+    // "deleteExperiment is not a function", or silently skips the trace
+    // cascade; the guard reports the skew as a 501 instead.
+    beforeEach(() => {
+      coreFeatures.delete('experiment-deletion');
+      return () => {
+        coreFeatures.add('experiment-deletion');
+      };
+    });
+
+    it('returns 501 from the top-level route when core lacks experiment deletion', async () => {
+      const error = await DELETE_ANY_EXPERIMENT_ROUTE.handler({
+        mastra,
+        experimentId: 'any-experiment',
+      } as any).catch((e: unknown) => e);
+
+      expect(error).toBeInstanceOf(HTTPException);
+      expect((error as HTTPException).status).toBe(501);
+      expect((error as HTTPException).message).toContain('Experiment deletion requires a newer @mastra/core');
+    });
+
+    it('returns 501 from the dataset-scoped route when core lacks experiment deletion', async () => {
+      const error = await DELETE_EXPERIMENT_ROUTE.handler({
+        mastra,
+        datasetId: 'any-dataset',
+        experimentId: 'any-experiment',
+      } as any).catch((e: unknown) => e);
+
+      expect(error).toBeInstanceOf(HTTPException);
+      expect((error as HTTPException).status).toBe(501);
+    });
+
+    it('does not reach storage while the feature is unavailable', async () => {
+      const getStorage = vi.spyOn(mastra, 'getStorage');
+
+      await DELETE_ANY_EXPERIMENT_ROUTE.handler({ mastra, experimentId: 'any-experiment' } as any).catch(() => {});
+
+      expect(getStorage).not.toHaveBeenCalled();
+      getStorage.mockRestore();
+    });
   });
 
   describe('experiment trace cascade', () => {
