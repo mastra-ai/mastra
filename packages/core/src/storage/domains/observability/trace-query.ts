@@ -373,43 +373,6 @@ const ORDERED_OPERATORS = new Set([...STRING_OPERATORS, 'lt', 'lte', 'gt', 'gte'
 const PRESENCE_OPERATORS = new Set(['exists', 'notExists']);
 const METADATA_FIELD_RULE: FieldRule = { type: 'string', operators: STRING_OPERATORS, nonEmpty: true };
 
-const PROMOTED_METADATA_KEYS = new Set([
-  'experimentId',
-  'entityType',
-  'entityId',
-  'entityName',
-  'entityVersionId',
-  'parentEntityVersionId',
-  'rootEntityVersionId',
-  'userId',
-  'organizationId',
-  'resourceId',
-  'runId',
-  'sessionId',
-  'threadId',
-  'requestId',
-  'environment',
-  'executionSource',
-  'serviceName',
-]);
-const SENSITIVE_METADATA_KEYS = new Set([
-  'password',
-  'token',
-  'secret',
-  'key',
-  'apikey',
-  'auth',
-  'authorization',
-  'bearer',
-  'bearertoken',
-  'jwt',
-  'credential',
-  'clientsecret',
-  'privatekey',
-  'refresh',
-  'ssn',
-]);
-
 const TRACE_FIELD_RULES: Record<TraceQueryField, FieldRule> = {
   traceId: { type: 'string', operators: STRING_OPERATORS },
   threadId: { type: 'string', operators: STRING_OPERATORS },
@@ -797,10 +760,6 @@ function getRule(
       });
       return undefined;
     }
-    if (PROMOTED_METADATA_KEYS.has(key) || SENSITIVE_METADATA_KEYS.has(normalizeMetadataKey(key))) {
-      state.issues.push({ code: 'field_not_allowed', path, message: 'The predicate field is not allowed here' });
-      return undefined;
-    }
     return METADATA_FIELD_RULE;
   }
   if (!Object.hasOwn(rules, field)) {
@@ -808,10 +767,6 @@ function getRule(
     return undefined;
   }
   return rules[field];
-}
-
-function normalizeMetadataKey(key: string): string {
-  return key.toLowerCase().replace(/[^a-z0-9]/g, '');
 }
 
 function addOperatorIssue(operator: string, field: string, path: Array<string | number>, state: PlannerState): void {

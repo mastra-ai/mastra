@@ -93,6 +93,8 @@ describe('Postgres advanced trace query', () => {
     expect(compiled.text).not.toContain(value);
     expect(compiled.text).toContain(`jsonb_typeof(r."metadataSearch" -> $3) = 'string'`);
     expect(compiled.text).toContain(`r."metadataSearch" ->> $3`);
+    expect(compiled.text).toContain(`jsonb_typeof(r."metadataRaw" -> $3) = 'string'`);
+    expect(compiled.text).toContain(`NULLIF(btrim(r."metadataRaw" ->> $3), '')`);
     expect(compiled.text).toContain('IS NOT DISTINCT FROM $4');
     expect(compiled.text).toContain('IS NULL OR');
     expect(compiled.values).toEqual([

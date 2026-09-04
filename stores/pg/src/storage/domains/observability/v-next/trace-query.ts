@@ -116,7 +116,10 @@ function compileScalarPredicate<TField extends string>(
   if (isMetadataField(predicate.field)) {
     if (!allowMetadata) throw new Error(`Unsupported trusted trace-query field: ${predicate.field}`);
     const keyParameter = `$${parameterOffset++}`;
-    field = `CASE WHEN jsonb_typeof(r."metadataSearch" -> ${keyParameter}) = 'string' THEN r."metadataSearch" ->> ${keyParameter} END`;
+    field = `COALESCE(
+      CASE WHEN jsonb_typeof(r."metadataSearch" -> ${keyParameter}) = 'string' THEN r."metadataSearch" ->> ${keyParameter} END,
+      CASE WHEN jsonb_typeof(r."metadataRaw" -> ${keyParameter}) = 'string' THEN NULLIF(btrim(r."metadataRaw" ->> ${keyParameter}), '') END
+    )`;
     fieldValues = [predicate.field.slice('metadata.'.length)];
   } else {
     field = fieldSql(registry, predicate.field);

@@ -243,19 +243,22 @@ describe('planTraceQuery', () => {
     });
   });
 
-  it('rejects invalid, promoted, sensitive, and non-string metadata predicates', () => {
+  it('accepts promoted and sensitive names as metadata keys', () => {
+    for (const field of ['metadata.requestId', 'metadata.api_key']) {
+      expect(planTraceQuery(parsed({ ...baseRequest, where: { op: 'exists', path: field } })).where).toEqual({
+        type: 'presence',
+        field,
+        operator: 'exists',
+      });
+    }
+  });
+
+  it('rejects invalid and non-string metadata predicates', () => {
     for (const field of ['metadata.', 'metadata.message.id']) {
       const error = validationError(() =>
         planTraceQuery(parsed({ ...baseRequest, where: { op: 'exists', path: field } })),
       );
       expect(error.issues[0]).toMatchObject({ code: 'invalid_metadata_key', path: ['where', 'path'] });
-    }
-
-    for (const field of ['metadata.requestId', 'metadata.api_key']) {
-      const error = validationError(() =>
-        planTraceQuery(parsed({ ...baseRequest, where: { op: 'exists', path: field } })),
-      );
-      expect(error.issues[0]).toMatchObject({ code: 'field_not_allowed', path: ['where', 'path'] });
     }
 
     for (const literal of [42, true, null, '', '   ']) {

@@ -93,7 +93,7 @@ describe('ClickHouse advanced trace query', () => {
     expect(compiled.query).not.toContain(key);
     expect(compiled.query).not.toContain(value);
     expect(compiled.query).toContain(
-      'if(mapContains(r.metadataSearch, {trace_query_3:String}), r.metadataSearch[{trace_query_3:String}], NULL)',
+      "coalesce(if(mapContains(r.metadataSearch, {trace_query_3:String}), r.metadataSearch[{trace_query_3:String}], NULL), nullIf(trim(JSONExtractString(r.metadataRaw, {trace_query_3:String})), ''))",
     );
     expect(compiled.query).toContain('ifNull(');
     expect(compiled.query_params).toMatchObject({

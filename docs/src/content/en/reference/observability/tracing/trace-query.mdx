@@ -143,7 +143,7 @@ const messageTrace = {
 }
 ```
 
-The key must name one top-level property. Empty keys and nested paths are rejected. Promoted metadata keys, such as `resourceId`, `threadId`, and `environment`, must use their canonical trace fields instead. Sensitive key names aren't queryable.
+The key must name one top-level property. Empty keys and nested paths are rejected. When metadata duplicates a canonical trace field, such as `resourceId`, `threadId`, or `environment`, prefer the canonical field because it uses the dedicated storage column. The `metadata.<key>` form remains available when you specifically need the value from the metadata object. Metadata and canonical values may differ.
 
 Metadata fields aren't available for grouping or field discovery.
 

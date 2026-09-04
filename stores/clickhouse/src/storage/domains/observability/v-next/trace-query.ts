@@ -127,7 +127,7 @@ function compileScalarPredicate<TField extends string>(
         if (!allowMetadata) throw new Error(`Unsupported trusted trace-query field: ${predicate.field}`);
         const key = parameters.add(predicate.field.slice('metadata.'.length), 'String');
         return {
-          sql: `if(mapContains(r.metadataSearch, ${key}), r.metadataSearch[${key}], NULL)`,
+          sql: `coalesce(if(mapContains(r.metadataSearch, ${key}), r.metadataSearch[${key}], NULL), nullIf(trim(JSONExtractString(r.metadataRaw, ${key})), ''))`,
           parameterType: 'String' as const,
         };
       })()
