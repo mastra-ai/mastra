@@ -11,6 +11,9 @@ const TOOL_SPAN_TYPES = new Set<string>([
   SpanType.PROVIDER_TOOL_CALL,
 ]);
 
+/** Top-level executions started by a tool call (e.g. a workflow tool running its workflow). */
+const TOOL_EXECUTION_SPAN_TYPES = new Set<string>([SpanType.WORKFLOW_RUN, SpanType.AGENT_RUN]);
+
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
 
@@ -109,6 +112,11 @@ const collectAssistantSpans = (
       if (TOOL_SPAN_TYPES.has(span.spanType)) {
         parts.push(toToolPart(span));
         spanIds.push(span.spanId);
+        // A tool that runs a workflow or an agent gets that top-level execution featured too,
+        // so the user can see what the tool call actually did without featuring every nested step.
+        for (const child of node.spans ?? []) {
+          if (TOOL_EXECUTION_SPAN_TYPES.has(child.type)) spanIds.push(child.id);
+        }
         continue;
       }
       if (isResponseChunkSpan(span)) spanIds.push(span.spanId);

@@ -30,13 +30,14 @@ describe('formatTraceThreadMessages', () => {
       expect(toolNames).toEqual(['workflow-tripPlanner', 'searchHotels', 'browser_location', 'web_search']);
     });
 
-    it('remembers which spans were used to build each message, including the text chunks but not reasoning', () => {
+    it('remembers which spans were used to build each message: tools, their top-level execution, and the text chunks but not reasoning', () => {
       const messages = formatTraceThreadMessages(agentTraceWithTools.spans);
 
       expect(messages[0]?.traceSpanIds).toEqual(['agent-root']);
       expect(messages[1]?.traceSpanIds).toEqual([
         'agent-root',
         'workflow-tool',
+        'workflow-run',
         'mcp-tool',
         'client-tool',
         'provider-tool',
