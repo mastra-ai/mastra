@@ -181,18 +181,9 @@ function decisionFailedEvidencePrefix(decision: FactoryDeferredDecisionRecord): 
   return `Decision ${decision.id} (${describeDecision(decision)}) failed after ${decision.attempts} attempt(s) at ${decision.updatedAt.toISOString()}`;
 }
 
-/**
- * Reads the failure code back out of a `decision-failed` evidence line the
- * helper above wrote. The code is the classification the supervisor reads
- * (a parked question vs a crash), and it must survive into a later re-ring
- * from the stored row; the finding shape itself stays as is. The match is
- * anchored at the start of the line over the whole generated prefix, so
- * nothing inside the error text (which follows the slot) can pass as a code.
- */
-export function decisionFailureCodeFromEvidence(evidence: string): string | undefined {
-  return /^Decision \S+ \([^()]*(?: \([^()]*\))?\) failed after \d+ attempt\(s\) at \d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z \[([a-z_]+)\]: /.exec(
-    evidence,
-  )?.[1];
+/** The decision a `decision-failed` finding key names, or undefined for any other key. */
+export function decisionIdFromFindingKey(findingKey: string): string | undefined {
+  return findingKey.startsWith('decision-failed:') ? findingKey.slice('decision-failed:'.length) : undefined;
 }
 
 export function computeFactoryHealth(

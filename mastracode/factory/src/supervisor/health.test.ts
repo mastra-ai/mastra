@@ -11,7 +11,7 @@ import { createFactoryStorageForTests } from '../storage/test-utils.js';
 import {
   computeFactoryHealth,
   DEFAULT_HEALTH_THRESHOLDS,
-  decisionFailureCodeFromEvidence,
+  decisionIdFromFindingKey,
   runFactoryHealthCheck,
 } from './health.js';
 
@@ -163,45 +163,8 @@ describe('computeFactoryHealth', () => {
     expect(report.findings[0]!.evidence).toContain('invokeSkill (plan)');
     expect(report.findings[0]!.evidence).toContain('[session_unavailable]');
     expect(report.findings[0]!.evidence).toContain('No active Factory binding');
-    // The code reads back out of the evidence the same helper wrote, even
-    // when the error text itself contains a bracketed lookalike.
-    expect(decisionFailureCodeFromEvidence(report.findings[0]!.evidence)).toBe('session_unavailable');
-    const lookalike = computeFactoryHealth(
-      {
-        ...empty,
-        decisions: [
-          decision({
-            id: 'd-2',
-            status: 'failed',
-            attempts: 1,
-            failureCode: 'run_awaiting_input',
-            lastError: 'worker said [not_a_code]: nope',
-          }),
-        ],
-      },
-      NOW,
-    );
-    expect(decisionFailureCodeFromEvidence(lookalike.findings[0]!.evidence)).toBe('run_awaiting_input');
-    // No real code, but a lookalike in the error text: still no code.
-    const codeless = computeFactoryHealth(
-      {
-        ...empty,
-        decisions: [
-          decision({
-            id: 'd-3',
-            status: 'failed',
-            attempts: 1,
-            failureCode: null,
-            // The error text reproduces the writer's whole slot shape.
-            lastError:
-              'nested d-9 (invokeSkill (plan)) failed after 1 attempt(s) at 2026-09-03T12:00:00.000Z [session_unavailable]: nope',
-          }),
-        ],
-      },
-      NOW,
-    );
-    expect(codeless.findings[0]!.evidence).toContain('[session_unavailable]: nope');
-    expect(decisionFailureCodeFromEvidence(codeless.findings[0]!.evidence)).toBeUndefined();
+    expect(decisionIdFromFindingKey(report.findings[0]!.id)).toBe('d-fail');
+    expect(decisionIdFromFindingKey('seat-missing:b-1')).toBeUndefined();
   });
 
   it('flags retry decisions the dispatcher never picked up, but not ones inside their backoff', () => {
