@@ -18,7 +18,7 @@ import { langfuseObservationsPageSchema, langfuseObservationSchema } from './pro
 import { MastraCollectorClient, resolveCollectorEndpoint } from './target/collector-client.js';
 import { collectorPublishBodySchema, type CollectorSpan } from './target/collector-schema.js';
 import { MastraQueryClient } from './target/query-client.js';
-import { assembleTraces } from './trace-assembler.js';
+import { assembleTraces, createSkippedTrace } from './trace-assembler.js';
 import {
   DEFAULT_RETENTION_DAYS,
   DEFAULT_VERIFICATION_MAX_ATTEMPTS,
@@ -28,17 +28,19 @@ import {
   DEFAULT_TARGET_BATCH_BYTES,
   DEFAULT_TARGET_BATCH_SIZE,
   MAX_TARGET_BATCH_SIZE,
+  TRACE_IMPORT_EXPAND_METADATA,
   TRACE_IMPORT_FIELDS,
   TRACE_IMPORT_SHARD_COUNT,
   type ImportBatchManifest,
+  type SkippedTrace,
   type TraceImportManifest,
   type TraceImportReport,
-  type TraceSkipReason,
 } from './types.js';
 
 const SOURCE_SPOOL = 'source-pages.jsonl';
 const BATCHES_DIRECTORY = 'batches';
 const SHARDS_DIRECTORY = 'shards';
+const MAX_SKIPPED_TRACE_SAMPLES = 50;
 const CONSISTENCY_WARNING =
   'Langfuse observations from older SDKs or direct OTLP exporters can take up to 15 minutes to appear. Re-run with an overlapping window if the source was still receiving traffic.';
 
@@ -108,6 +110,7 @@ function reportFromManifest(
     environment: manifest.target.environment,
     counts: manifest.counts,
     estimatedPayloadBytes: manifest.estimatedPayloadBytes,
+    skippedTraceSamples: manifest.skippedTraceSamples,
     status,
     verification: {
       status: manifest.verification.status,
@@ -183,6 +186,7 @@ async function stageSource(
       cutoffAt: manifest.cutoffAt,
       snapshotAt: manifest.snapshotAt,
       fields: manifest.fields,
+      expandMetadata: TRACE_IMPORT_EXPAND_METADATA,
       limit: DEFAULT_SOURCE_PAGE_SIZE,
       cursor: manifest.source.cursor,
       signal,
@@ -280,16 +284,20 @@ async function readShard(path: string, signal?: AbortSignal) {
   return observations;
 }
 
-function incrementSkip(counts: TraceImportManifest['counts'], reason: TraceSkipReason, observationCount: number): void {
-  counts.skippedTraces += 1;
-  counts.skippedSpans += observationCount;
-  counts.skipReasons[reason] = (counts.skipReasons[reason] ?? 0) + 1;
+function recordSkip(manifest: TraceImportManifest, skipped: SkippedTrace): void {
+  manifest.counts.skippedTraces += 1;
+  manifest.counts.skippedSpans += skipped.observationCount;
+  manifest.counts.skipReasons[skipped.reason] = (manifest.counts.skipReasons[skipped.reason] ?? 0) + 1;
+  if (manifest.skippedTraceSamples.length < MAX_SKIPPED_TRACE_SAMPLES) {
+    manifest.skippedTraceSamples.push(skipped);
+  }
 }
 
 const PLATFORM_FIELD_SIZE_BYTES = 1024 * 1024;
 const PLATFORM_FIELD_NAME_BYTES = 200;
 const PLATFORM_MAX_ARRAY_LENGTH = 1000;
 const PLATFORM_MAX_NESTING_DEPTH = 100;
+const EMPTY_BATCH_BYTES = Buffer.byteLength('{"spans":[]}');
 
 function exceedsPlatformStorageShape(value: unknown, depth = 0): boolean {
   if (depth > PLATFORM_MAX_NESTING_DEPTH) return true;
@@ -319,6 +327,7 @@ class BatchWriter {
   private current: CollectorSpan[] = [];
   private readonly manifests: ImportBatchManifest[] = [];
   private estimatedPayloadBytes = 0;
+  private currentBodyBytes = EMPTY_BATCH_BYTES;
 
   constructor(
     private readonly directory: string,
@@ -327,17 +336,17 @@ class BatchWriter {
   ) {}
 
   canFitSingle(span: CollectorSpan): boolean {
-    return Buffer.byteLength(JSON.stringify({ spans: [span] })) <= this.maxBytes;
+    return this.bytesForSingleSpan(span) <= this.maxBytes;
   }
 
   async add(spans: CollectorSpan[]): Promise<void> {
     for (const span of spans) {
-      const proposed = [...this.current, span];
-      const proposedBytes = Buffer.byteLength(JSON.stringify({ spans: proposed }));
-      if (this.current.length > 0 && (proposed.length > this.maxCount || proposedBytes > this.maxBytes)) {
+      const proposedBytes = this.bytesAfterAdding(span);
+      if (this.current.length > 0 && (this.current.length + 1 > this.maxCount || proposedBytes > this.maxBytes)) {
         await this.flush();
       }
       this.current.push(span);
+      this.currentBodyBytes = this.bytesAfterAdding(span, this.currentBodyBytes, this.current.length - 1);
     }
   }
 
@@ -366,6 +375,21 @@ class BatchWriter {
     });
     this.estimatedPayloadBytes += byteLength;
     this.current = [];
+    this.currentBodyBytes = EMPTY_BATCH_BYTES;
+  }
+
+  private bytesForSingleSpan(span: CollectorSpan): number {
+    return EMPTY_BATCH_BYTES + Buffer.byteLength(JSON.stringify(span));
+  }
+
+  private bytesAfterAdding(
+    span: CollectorSpan,
+    currentBodyBytes = this.currentBodyBytes,
+    currentCount = this.current.length,
+  ): number {
+    const spanBytes = Buffer.byteLength(JSON.stringify(span));
+    const commaBytes = currentCount > 0 ? 1 : 0;
+    return currentBodyBytes + commaBytes + spanBytes;
   }
 }
 
@@ -389,6 +413,7 @@ async function planBatches(
   manifest.counts.verifiedTraces = 0;
   manifest.counts.truncationRiskSpans = 0;
   manifest.counts.skipReasons = {};
+  manifest.skippedTraceSamples = [];
   manifest.verification = {
     status: 'not-performed',
     reason: 'Upload has not completed.',
@@ -407,7 +432,7 @@ async function planBatches(
       snapshotAt: manifest.snapshotAt,
     });
     for (const skipped of assembled.skipped) {
-      incrementSkip(manifest.counts, skipped.reason, skipped.observationCount);
+      recordSkip(manifest, skipped);
     }
     for (const trace of assembled.traces) {
       signal?.throwIfAborted();
@@ -418,7 +443,7 @@ async function planBatches(
       for (const type of normalized.unknownTypes) unknownObservationTypes.add(type);
       manifest.counts.truncationRiskSpans += normalized.spans.filter(mayBeTruncatedByPlatform).length;
       if (normalized.spans.some(span => !writer.canFitSingle(span))) {
-        incrementSkip(manifest.counts, 'oversized_span', trace.observations.length);
+        recordSkip(manifest, createSkippedTrace(trace.sourceTraceId, trace.observations, 'oversized_span'));
         continue;
       }
       manifest.counts.eligibleTraces += 1;

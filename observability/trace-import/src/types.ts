@@ -6,6 +6,7 @@ export const TRACE_IMPORT_MAPPER_VERSION = 'langfuse-api-v2@1';
 export const TRACE_IMPORT_ID_ALGORITHM_VERSION = 'langfuse-sha256-v1';
 export const TRACE_IMPORT_SHARD_COUNT = 64;
 export const TRACE_IMPORT_FIELDS = 'core,basic,time,io,metadata,model,usage,prompt,metrics,trace_context';
+export const TRACE_IMPORT_EXPAND_METADATA = '*';
 export const DEFAULT_SOURCE_PAGE_SIZE = 1000;
 export const DEFAULT_TARGET_BATCH_SIZE = 100;
 export const MAX_TARGET_BATCH_SIZE = 1000;
@@ -40,6 +41,11 @@ export interface SkippedTrace {
   observationCount: number;
   reason: TraceSkipReason;
   detail?: string;
+  observationIds: string[];
+  observationTypes: string[];
+  traceName?: string;
+  firstStartedAt?: string;
+  lastEndedAt?: string;
 }
 
 export interface TraceAssemblyResult {
@@ -115,6 +121,7 @@ export interface TraceImportManifest {
     skipReasons: Partial<Record<TraceSkipReason, number>>;
   };
   estimatedPayloadBytes: number;
+  skippedTraceSamples: SkippedTrace[];
   batches: ImportBatchManifest[];
   verification: TraceImportVerification;
   lastError?: {
@@ -136,6 +143,7 @@ export interface TraceImportReport {
   environment?: string;
   counts: TraceImportManifest['counts'];
   estimatedPayloadBytes: number;
+  skippedTraceSamples: SkippedTrace[];
   status: 'dry-run' | 'cancelled' | 'complete' | 'paused';
   verification: Omit<TraceImportVerification, 'samples'>;
   warnings: string[];

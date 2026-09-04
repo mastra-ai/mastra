@@ -1092,7 +1092,7 @@ Resume an interrupted or quota-paused import:
 mastra traces import --provider langfuse --resume <import-id> --yes
 ```
 
-The command preserves source span times. Platform's 30-day retention remains based on the original end time, not the import time. After upload, the CLI verifies the exact span IDs for a deterministic sample of up to 10 traces through the existing project-scoped light query API. The JSON report distinguishes `verified`, `partial`, `timed-out`, and `unavailable` query results from the separately acknowledged `enqueuedSpans` count. Exit status `2` means the import is safely paused and can be resumed. An interrupt uses status `130`.
+The command preserves source span times. When Langfuse returns a virtual root observation shaped like `t-<traceId>` without an end time, the CLI derives that root end time from the latest complete child and marks the span metadata. Platform's 30-day retention remains based on the original or derived source end time, not the import time. After upload, the CLI verifies the exact span IDs for a deterministic sample of up to 10 traces through the existing project-scoped light query API. The JSON report distinguishes `verified`, `partial`, `timed-out`, and `unavailable` query results from the separately acknowledged `enqueuedSpans` count. Exit status `2` means the import is safely paused and can be resumed. An interrupt uses status `130`.
 
 See [Import traces from Langfuse](/docs/mastra-platform/import-langfuse-traces) for the complete workflow, eligibility rules, security notes, and mapping behavior.
 

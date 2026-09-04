@@ -180,6 +180,8 @@ function buildMetadata(
       latency: observation.latency ?? undefined,
       timeToFirstToken: observation.timeToFirstToken ?? undefined,
       tags: observation.tags ?? undefined,
+      derivedEndTime: observation.mastraImportDerivedEndTime ?? undefined,
+      derivedEndTimeSourceObservationId: observation.mastraImportDerivedEndTimeSourceObservationId ?? undefined,
     }),
   });
 }

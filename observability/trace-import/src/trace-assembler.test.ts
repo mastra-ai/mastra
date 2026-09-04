@@ -85,6 +85,43 @@ describe('assembleTraces', () => {
     expect(result.skipped).toEqual([]);
   });
 
+  it('derives a missing Langfuse virtual-root end time from the latest child', () => {
+    const sourceTraceId = 'legacy-trace';
+    const result = assembleTraces(
+      [
+        observation({
+          id: 'child-early',
+          traceId: sourceTraceId,
+          parentObservationId: `t-${sourceTraceId}`,
+          startTime: '2026-08-20T10:00:01.000Z',
+          endTime: '2026-08-20T10:00:02.000Z',
+        }),
+        observation({
+          id: 'child-late',
+          traceId: sourceTraceId,
+          parentObservationId: `t-${sourceTraceId}`,
+          startTime: '2026-08-20T10:00:03.000Z',
+          endTime: '2026-08-20T10:00:05.000Z',
+        }),
+        observation({
+          id: `t-${sourceTraceId}`,
+          traceId: sourceTraceId,
+          endTime: null,
+          isRootObservation: true,
+        }),
+      ],
+      window,
+    );
+
+    expect(result.skipped).toEqual([]);
+    expect(result.traces[0]?.observations[0]).toMatchObject({
+      id: `t-${sourceTraceId}`,
+      endTime: '2026-08-20T10:00:05.000Z',
+      mastraImportDerivedEndTime: true,
+      mastraImportDerivedEndTimeSourceObservationId: 'child-late',
+    });
+  });
+
   it('accepts zero-duration spans and asynchronous child timing', () => {
     const root = observation({ endTime: '2026-08-20T10:00:00.000Z' });
     const lateChild = observation({
@@ -128,6 +165,33 @@ describe('assembleTraces', () => {
     const result = assembleTraces([observation({ traceId: '   ' })], window);
     expect(result.traces).toEqual([]);
     expect(result.skipped).toMatchObject([{ reason: 'missing_trace_id' }]);
+  });
+
+  it('includes safe source details for skipped traces', () => {
+    const result = assembleTraces(
+      [
+        observation({
+          id: 'child',
+          parentObservationId: 'absent',
+          type: 'TOOL',
+          traceName: 'support trace',
+          startTime: '2026-08-20T10:00:02.000Z',
+          endTime: '2026-08-20T10:00:03.000Z',
+        }),
+      ],
+      window,
+    );
+
+    expect(result.skipped[0]).toMatchObject({
+      sourceTraceId: 'trace-1',
+      observationCount: 1,
+      reason: 'missing_root',
+      observationIds: ['child'],
+      observationTypes: ['TOOL'],
+      traceName: 'support trace',
+      firstStartedAt: '2026-08-20T10:00:02.000Z',
+      lastEndedAt: '2026-08-20T10:00:03.000Z',
+    });
   });
 
   it('includes the cutoff boundary and excludes the snapshot boundary', () => {

@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import type { LangfuseObservation } from './providers/langfuse/schema.js';
-import type { AssembledTrace, TraceAssemblyResult, TraceSkipReason } from './types.js';
+import type { AssembledTrace, SkippedTrace, TraceAssemblyResult, TraceSkipReason } from './types.js';
 
 const sourceTimestampSchema = z.string().datetime({ offset: true });
 
@@ -10,13 +10,64 @@ function parseTimestamp(value: string | null | undefined): number | null {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
-function skip(
+function deriveVirtualRootEndTime(
+  sourceTraceId: string,
+  observations: LangfuseObservation[],
+  root: LangfuseObservation,
+): LangfuseObservation[] {
+  if (root.endTime || root.id !== `t-${sourceTraceId}`) return observations;
+
+  const childEnds = observations
+    .filter(observation => observation.id !== root.id)
+    .map(observation => ({
+      observation,
+      end: parseTimestamp(observation.endTime ?? (observation.type === 'EVENT' ? observation.startTime : undefined)),
+    }))
+    .filter((item): item is { observation: LangfuseObservation; end: number } => item.end !== null)
+    .sort((left, right) => right.end - left.end || left.observation.id.localeCompare(right.observation.id));
+
+  const latest = childEnds[0];
+  if (!latest) return observations;
+
+  return observations.map(observation =>
+    observation.id === root.id
+      ? {
+          ...observation,
+          endTime: new Date(latest.end).toISOString(),
+          mastraImportDerivedEndTime: true,
+          mastraImportDerivedEndTimeSourceObservationId: latest.observation.id,
+        }
+      : observation,
+  );
+}
+
+export function createSkippedTrace(
   sourceTraceId: string | null,
   observations: LangfuseObservation[],
   reason: TraceSkipReason,
   detail?: string,
-) {
-  return { sourceTraceId, observationCount: observations.length, reason, detail };
+): SkippedTrace {
+  const startedAt = observations
+    .map(observation => observation.startTime)
+    .filter((value): value is string => typeof value === 'string')
+    .sort();
+  const endedAt = observations
+    .map(observation => observation.endTime ?? observation.startTime)
+    .filter((value): value is string => typeof value === 'string')
+    .sort();
+  const traceName = observations.find(observation => observation.traceName)?.traceName ?? undefined;
+
+  return {
+    sourceTraceId,
+    observationCount: observations.length,
+    reason,
+    detail,
+    observationIds: observations.map(observation => observation.id).sort(),
+    observationTypes: [...new Set(observations.map(observation => observation.type))].sort(),
+    traceName,
+    firstStartedAt: startedAt[0],
+    lastEndedAt: endedAt.at(-1),
+  };
 }
 
 function validateAndOrderTrace(
@@ -24,17 +75,17 @@ function validateAndOrderTrace(
   observations: LangfuseObservation[],
   cutoffMs: number,
   snapshotMs: number,
-): { trace?: AssembledTrace; skipped?: ReturnType<typeof skip> } {
+): { trace?: AssembledTrace; skipped?: SkippedTrace } {
   const projectIds = new Set(observations.map(observation => observation.projectId));
   if (projectIds.size !== 1) {
-    return { skipped: skip(sourceTraceId, observations, 'mixed_project_ids') };
+    return { skipped: createSkippedTrace(sourceTraceId, observations, 'mixed_project_ids') };
   }
 
   const byId = new Map<string, LangfuseObservation>();
   for (const observation of observations) {
     if (byId.has(observation.id)) {
       return {
-        skipped: skip(sourceTraceId, observations, 'duplicate_observation_id', observation.id),
+        skipped: createSkippedTrace(sourceTraceId, observations, 'duplicate_observation_id', observation.id),
       };
     }
     byId.set(observation.id, observation);
@@ -45,51 +96,75 @@ function validateAndOrderTrace(
       !observation.parentObservationId ||
       (observation.isRootObservation === true && !byId.has(observation.parentObservationId)),
   );
-  if (roots.length === 0) return { skipped: skip(sourceTraceId, observations, 'missing_root') };
-  if (roots.length > 1) return { skipped: skip(sourceTraceId, observations, 'multiple_roots') };
-  const root = roots[0]!;
+  if (roots.length === 0) return { skipped: createSkippedTrace(sourceTraceId, observations, 'missing_root') };
+  if (roots.length > 1) return { skipped: createSkippedTrace(sourceTraceId, observations, 'multiple_roots') };
+  const rootCandidate = roots[0]!;
+  const normalizedObservations = deriveVirtualRootEndTime(sourceTraceId, observations, rootCandidate);
+  const normalizedById = new Map(normalizedObservations.map(observation => [observation.id, observation]));
+  const root = normalizedById.get(rootCandidate.id)!;
 
-  for (const observation of observations) {
-    if (observation !== root && observation.parentObservationId && !byId.has(observation.parentObservationId)) {
+  for (const observation of normalizedObservations) {
+    if (
+      observation !== root &&
+      observation.parentObservationId &&
+      !normalizedById.has(observation.parentObservationId)
+    ) {
       return {
-        skipped: skip(sourceTraceId, observations, 'missing_parent', observation.parentObservationId),
+        skipped: createSkippedTrace(
+          sourceTraceId,
+          normalizedObservations,
+          'missing_parent',
+          observation.parentObservationId,
+        ),
       };
     }
 
     const start = parseTimestamp(observation.startTime);
     if (start === null) {
-      return { skipped: skip(sourceTraceId, observations, 'invalid_timestamp', observation.id) };
+      return {
+        skipped: createSkippedTrace(sourceTraceId, normalizedObservations, 'invalid_timestamp', observation.id),
+      };
     }
 
     if (observation.type === 'EVENT') {
       if (observation.endTime && parseTimestamp(observation.endTime) === null) {
-        return { skipped: skip(sourceTraceId, observations, 'invalid_timestamp', observation.id) };
+        return {
+          skipped: createSkippedTrace(sourceTraceId, normalizedObservations, 'invalid_timestamp', observation.id),
+        };
       }
       continue;
     }
 
     if (!observation.endTime) {
-      return { skipped: skip(sourceTraceId, observations, 'incomplete_duration', observation.id) };
+      return {
+        skipped: createSkippedTrace(sourceTraceId, normalizedObservations, 'incomplete_duration', observation.id),
+      };
     }
     const end = parseTimestamp(observation.endTime);
     if (end === null) {
-      return { skipped: skip(sourceTraceId, observations, 'invalid_timestamp', observation.id) };
+      return {
+        skipped: createSkippedTrace(sourceTraceId, normalizedObservations, 'invalid_timestamp', observation.id),
+      };
     }
     if (end < start) {
-      return { skipped: skip(sourceTraceId, observations, 'invalid_timestamp', observation.id) };
+      return {
+        skipped: createSkippedTrace(sourceTraceId, normalizedObservations, 'invalid_timestamp', observation.id),
+      };
     }
     if (end > snapshotMs) {
-      return { skipped: skip(sourceTraceId, observations, 'completed_after_snapshot', observation.id) };
+      return {
+        skipped: createSkippedTrace(sourceTraceId, normalizedObservations, 'completed_after_snapshot', observation.id),
+      };
     }
   }
 
   const rootStart = parseTimestamp(root.startTime)!;
   if (rootStart < cutoffMs || rootStart >= snapshotMs) {
-    return { skipped: skip(sourceTraceId, observations, 'root_outside_window') };
+    return { skipped: createSkippedTrace(sourceTraceId, normalizedObservations, 'root_outside_window') };
   }
 
   const children = new Map<string, LangfuseObservation[]>();
-  for (const observation of observations) {
+  for (const observation of normalizedObservations) {
     if (observation === root || !observation.parentObservationId) continue;
     const siblings = children.get(observation.parentObservationId) ?? [];
     siblings.push(observation);
@@ -115,8 +190,8 @@ function validateAndOrderTrace(
     return true;
   };
 
-  if (!visit(root) || visited.size !== observations.length) {
-    return { skipped: skip(sourceTraceId, observations, 'cycle') };
+  if (!visit(root) || visited.size !== normalizedObservations.length) {
+    return { skipped: createSkippedTrace(sourceTraceId, normalizedObservations, 'cycle') };
   }
 
   return {
@@ -143,7 +218,7 @@ export function assembleTraces(
   for (const observation of observations) {
     const traceId = observation.traceId?.trim();
     if (!traceId) {
-      skipped.push(skip(null, [observation], 'missing_trace_id', observation.id));
+      skipped.push(createSkippedTrace(null, [observation], 'missing_trace_id', observation.id));
       continue;
     }
     const trace = grouped.get(traceId) ?? [];

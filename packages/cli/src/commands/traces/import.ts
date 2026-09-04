@@ -170,6 +170,9 @@ export async function traceImportAction(options: TraceImportCliOptions): Promise
       'MASTRA_PLATFORM_ACCESS_TOKEN must be an organization ingestion key beginning with "sk_"; the mastra auth login token is not accepted.',
     );
   }
+  if (!options.dryRun && !options.yes && (options.json || !process.stdin.isTTY || !process.stdout.isTTY)) {
+    throw new Error('Interactive confirmation is unavailable. Re-run with --yes or --dry-run.');
+  }
   const stateRoot = options.stateDir
     ? isAbsolute(options.stateDir)
       ? options.stateDir

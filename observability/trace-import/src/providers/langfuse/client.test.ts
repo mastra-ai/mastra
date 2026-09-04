@@ -29,6 +29,7 @@ describe('LangfuseObservationsClient', () => {
       cutoffAt: '2026-08-04T00:00:00.000Z',
       snapshotAt: '2026-09-03T00:00:00.000Z',
       fields: 'core,basic',
+      expandMetadata: '*',
       limit: 1000,
       cursor: 'next-page',
     });
@@ -38,6 +39,7 @@ describe('LangfuseObservationsClient', () => {
     expect(requestUrl.searchParams.get('fromStartTime')).toBe('2026-08-04T00:00:00.000Z');
     expect(requestUrl.searchParams.get('toStartTime')).toBe('2026-09-03T00:00:00.000Z');
     expect(requestUrl.searchParams.get('cursor')).toBe('next-page');
+    expect(requestUrl.searchParams.get('expandMetadata')).toBe('*');
     expect((init?.headers as Record<string, string>).Authorization).toBe(
       `Basic ${Buffer.from('pk-lf-test:sk-lf-test').toString('base64')}`,
     );

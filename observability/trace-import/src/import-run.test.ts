@@ -8,7 +8,7 @@ import {
   type RunTraceImportOptions,
 } from './import-run.js';
 import { readManifest } from './manifest.js';
-import { TRACE_IMPORT_FIELDS } from './types.js';
+import { TRACE_IMPORT_EXPAND_METADATA, TRACE_IMPORT_FIELDS } from './types.js';
 
 const roots: string[] = [];
 
@@ -67,6 +67,7 @@ const sourcePage = {
       parentObservationId: null,
       type: 'SPAN',
       name: 'running',
+      traceName: 'running trace',
       startTime: '2026-08-20T10:00:00.000Z',
       endTime: null,
     },
@@ -124,12 +125,24 @@ describe('runTraceImport', () => {
       enqueuedSpans: 0,
       skipReasons: { incomplete_duration: 1 },
     });
+    expect(report.skippedTraceSamples).toMatchObject([
+      {
+        sourceTraceId: 'trace-incomplete',
+        observationCount: 1,
+        reason: 'incomplete_duration',
+        detail: 'incomplete',
+        observationIds: ['incomplete'],
+        observationTypes: ['SPAN'],
+        traceName: 'running trace',
+      },
+    ]);
     expect(fetchMock).toHaveBeenCalledTimes(1);
     const sourceUrl = new URL(String(fetchMock.mock.calls[0]?.[0]));
     expect(sourceUrl.searchParams.get('fromStartTime')).toBe('2026-08-04T00:00:00.000Z');
     expect(sourceUrl.searchParams.get('toStartTime')).toBe('2026-09-03T00:00:00.000Z');
     expect(sourceUrl.searchParams.get('limit')).toBe('1000');
     expect(sourceUrl.searchParams.get('fields')).toBe(TRACE_IMPORT_FIELDS);
+    expect(sourceUrl.searchParams.get('expandMetadata')).toBe(TRACE_IMPORT_EXPAND_METADATA);
     expect((fetchMock.mock.calls[0]?.[1]?.headers as Record<string, string>).Authorization).toContain('Basic ');
     const manifest = await readManifest(report.stateDirectory);
     expect(manifest.phase).toBe('planned');
@@ -806,6 +819,51 @@ describe('runTraceImport', () => {
     expect(report.counts).toMatchObject({ eligibleTraces: 1, eligibleSpans: 2, skippedTraces: 0 });
     expect(manifest.batches.map(batch => batch.spanCount)).toEqual([1, 1]);
     expect(manifest.batches.every(batch => batch.byteLength <= 4096)).toBe(true);
+  });
+
+  it('records exact byte lengths for byte-bounded batches', async () => {
+    const root = await stateRoot();
+    const page = {
+      data: [
+        {
+          id: 'span-1',
+          traceId: 'trace-1',
+          projectId: 'langfuse-project',
+          parentObservationId: null,
+          type: 'SPAN',
+          name: 'x'.repeat(800),
+          startTime: '2026-08-20T10:00:00.000Z',
+          endTime: '2026-08-20T10:00:01.000Z',
+        },
+        {
+          id: 'span-2',
+          traceId: 'trace-2',
+          projectId: 'langfuse-project',
+          parentObservationId: null,
+          type: 'SPAN',
+          name: 'y'.repeat(800),
+          startTime: '2026-08-20T10:00:02.000Z',
+          endTime: '2026-08-20T10:00:03.000Z',
+        },
+      ],
+      meta: { cursor: null },
+    };
+
+    const report = await runTraceImport({
+      ...options(root),
+      dryRun: true,
+      keepState: true,
+      maxBatchBytes: 2500,
+      fetch: vi.fn<typeof fetch>().mockResolvedValue(Response.json(page)),
+    });
+    const manifest = await readManifest(report.stateDirectory);
+
+    expect(manifest.batches.map(batch => batch.spanCount)).toEqual([1, 1]);
+    for (const batch of manifest.batches) {
+      const actualBytes = (await stat(join(report.stateDirectory, 'batches', batch.file))).size;
+      expect(batch.byteLength).toBe(actualBytes);
+      expect(actualBytes).toBeLessThanOrEqual(2500);
+    }
   });
 
   it('skips a whole trace when one span cannot fit the byte ceiling', async () => {

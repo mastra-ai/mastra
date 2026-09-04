@@ -57,6 +57,7 @@ export class LangfuseObservationsClient {
     cutoffAt: string;
     snapshotAt: string;
     fields: string;
+    expandMetadata?: string;
     limit: number;
     cursor?: string;
     signal?: AbortSignal;
@@ -65,6 +66,7 @@ export class LangfuseObservationsClient {
     url.searchParams.set('fromStartTime', args.cutoffAt);
     url.searchParams.set('toStartTime', args.snapshotAt);
     url.searchParams.set('fields', args.fields);
+    if (args.expandMetadata) url.searchParams.set('expandMetadata', args.expandMetadata);
     url.searchParams.set('limit', String(args.limit));
     if (args.cursor) url.searchParams.set('cursor', args.cursor);
 

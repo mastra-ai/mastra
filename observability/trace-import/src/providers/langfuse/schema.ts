@@ -61,6 +61,8 @@ export const langfuseObservationSchema = z.object({
   tags: z.array(z.string()).nullable().optional(),
   release: nullableString,
   traceName: nullableString,
+  mastraImportDerivedEndTime: z.boolean().optional(),
+  mastraImportDerivedEndTimeSourceObservationId: nullableString,
 });
 
 export const langfuseObservationsPageSchema = z.object({

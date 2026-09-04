@@ -9,7 +9,7 @@ packages:
 
 The Mastra Command-Line Interface (CLI) imports completed Langfuse traces into [Mastra Platform Observability](/docs/mastra-platform/observability). Imported traces use the same Platform views and queries as live traces. This workflow runs entirely in the CLI and doesn't require a Studio or Server deployment.
 
-The command reads Langfuse observations, which are the individual events and spans inside a trace. It groups those observations by Langfuse trace ID before validating and importing the complete trace tree.
+The command reads Langfuse observations, which are the individual events and spans inside a trace. It groups those observations by Langfuse trace ID before validating and importing the complete trace tree. The importer requests the `io`, `metadata`, `usage`, `prompt`, `metrics`, and `trace_context` field groups from the Langfuse Observations API v2, and requests expanded metadata so source metadata is not truncated by Langfuse's default response shape.
 
 ## Prerequisites
 
@@ -98,7 +98,7 @@ Platform limits an individual stored JSON field to 1 MiB, arrays to 1,000 entrie
 
 ## Unusual and interrupted traces
 
-Langfuse doesn't expose a separate cancelled or aborted observation status. An operation that ended can carry `level: "ERROR"` and a status message such as `Request aborted by user`; the importer keeps it as a completed Mastra error span. A non-event observation without `endTime` may still be running or may never have been closed, so the importer skips its entire trace rather than inventing an end time.
+Langfuse doesn't expose a separate cancelled or aborted observation status. An operation that ended can carry `level: "ERROR"` and a status message such as `Request aborted by user`; the importer keeps it as a completed Mastra error span. A non-event observation without `endTime` may still be running or may never have been closed, so the importer skips its entire trace rather than inventing an end time. The exception is Langfuse's virtual root observation with an ID shaped like `t-<traceId>`: if its children are complete, the importer derives that root end time from the latest child and marks the span metadata with `langfuse.derivedEndTime`.
 
 | Source condition | Import behavior |
 | - | - |
@@ -106,6 +106,7 @@ Langfuse doesn't expose a separate cancelled or aborted observation status. An o
 | Completed `ERROR` observation | Import as an error span and retain the status message. |
 | `WARNING` or `DEBUG` observation | Import without classifying it as an error; retain the source level. |
 | Point-in-time `EVENT` without a duration | Import with `endedAt` equal to `startedAt`. |
+| Langfuse virtual root `t-<traceId>` without an end time and complete children | Import with `endedAt` derived from the latest child and mark `langfuse.derivedEndTime`. |
 | Non-event observation without `endTime` | Skip the complete trace as incomplete. |
 | Observation completed after the fixed snapshot | Skip the complete trace so a resumed import can't include work that wasn't complete at snapshot time. |
 | Missing physical root, missing parent, multiple roots, cycle, or duplicate observation ID | Skip the complete trace as structurally unsafe. |

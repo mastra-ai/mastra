@@ -87,6 +87,20 @@ describe('normalizeLangfuseTrace', () => {
     expect(span.tags).toEqual(['support']);
   });
 
+  it('marks derived virtual-root end times in metadata', () => {
+    const source = observation('SPAN', {
+      id: 't-trace-1',
+      mastraImportDerivedEndTime: true,
+      mastraImportDerivedEndTimeSourceObservationId: 'child-1',
+    });
+    const span = normalizeLangfuseTrace(trace(source), { importBatchId: crypto.randomUUID() }).spans[0]!;
+
+    expect(span.metadata.langfuse).toMatchObject({
+      derivedEndTime: true,
+      derivedEndTimeSourceObservationId: 'child-1',
+    });
+  });
+
   it('parses raw V2 JSON strings and tolerates non-string self-hosted I/O', () => {
     const parsedSpan = normalizeLangfuseTrace(
       trace(observation('SPAN', { input: '{"looks":"like-json"}', output: '42' })),

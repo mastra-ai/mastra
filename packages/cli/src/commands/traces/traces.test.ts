@@ -169,20 +169,15 @@ describe('traces import command', () => {
   });
 
   it('requires --yes when upload confirmation is unavailable', async () => {
-    vi.mocked(runTraceImport).mockImplementation(async options => {
-      await expect(options.confirm?.(report)).rejects.toThrow(
-        'Interactive confirmation is unavailable. Re-run with --yes or --dry-run.',
-      );
-      return { ...report, status: 'cancelled' };
-    });
+    await expect(
+      traceImportAction({
+        provider: 'langfuse',
+        project: '11111111-1111-4111-8111-111111111111',
+        json: true,
+      }),
+    ).rejects.toThrow('Interactive confirmation is unavailable. Re-run with --yes or --dry-run.');
 
-    await traceImportAction({
-      provider: 'langfuse',
-      project: '11111111-1111-4111-8111-111111111111',
-      json: true,
-    });
-
-    expect(runTraceImport).toHaveBeenCalledOnce();
+    expect(runTraceImport).not.toHaveBeenCalled();
   });
 
   it('rejects providers outside the V0 contract', async () => {

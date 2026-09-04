@@ -79,6 +79,18 @@ describe('trace import manifest', () => {
     await expect(readManifest(directory)).rejects.toThrow('manifest is invalid');
   });
 
+  it('loads manifests written before skipped trace samples were added', async () => {
+    const { directory } = await createState();
+    const path = join(directory, 'manifest.json');
+    const legacy = JSON.parse(await readFile(path, 'utf8')) as Record<string, unknown>;
+    delete legacy.skippedTraceSamples;
+    await writeFile(path, JSON.stringify(legacy));
+
+    await expect(readManifest(directory)).resolves.toMatchObject({
+      skippedTraceSamples: [],
+    });
+  });
+
   it('rejects path traversal in project and import identifiers', () => {
     expect(() =>
       resolveImportStateDirectory({ stateRoot: '/tmp/imports', projectId: '../outside', importId: 'safe' }),

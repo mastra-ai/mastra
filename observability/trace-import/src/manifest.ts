@@ -37,6 +37,33 @@ const countsSchema = z.object({
   skipReasons: z.record(z.string(), z.number().int().nonnegative()),
 });
 
+const skipReasonSchema = z.enum([
+  'missing_trace_id',
+  'mixed_project_ids',
+  'duplicate_observation_id',
+  'missing_root',
+  'multiple_roots',
+  'missing_parent',
+  'cycle',
+  'invalid_timestamp',
+  'incomplete_duration',
+  'completed_after_snapshot',
+  'root_outside_window',
+  'oversized_span',
+]);
+
+const skippedTraceSchema = z.object({
+  sourceTraceId: z.string().nullable(),
+  observationCount: z.number().int().nonnegative(),
+  reason: skipReasonSchema,
+  detail: z.string().optional(),
+  observationIds: z.array(z.string()),
+  observationTypes: z.array(z.string()),
+  traceName: z.string().optional(),
+  firstStartedAt: z.string().optional(),
+  lastEndedAt: z.string().optional(),
+});
+
 const manifestSchema = z.object({
   schemaVersion: z.literal(TRACE_IMPORT_SCHEMA_VERSION),
   mapperVersion: z.literal(TRACE_IMPORT_MAPPER_VERSION),
@@ -74,6 +101,7 @@ const manifestSchema = z.object({
   phase: z.enum(['reading', 'planned', 'uploading', 'complete', 'paused']),
   counts: countsSchema,
   estimatedPayloadBytes: z.number().int().nonnegative(),
+  skippedTraceSamples: z.array(skippedTraceSchema).default([]),
   batches: z.array(batchSchema),
   verification: z.object({
     status: z.enum(['not-performed', 'verified', 'partial', 'timed-out', 'unavailable']),
@@ -175,6 +203,7 @@ export async function initializeImportState(args: {
       skipReasons: {},
     },
     estimatedPayloadBytes: 0,
+    skippedTraceSamples: [],
     batches: [],
     verification: {
       status: 'not-performed',
