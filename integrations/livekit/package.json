@@ -78,7 +78,7 @@
     "@livekit/agents": "^1.4.0",
     "@livekit/agents-plugin-livekit": "^1.4.0",
     "@livekit/agents-plugin-silero": "^1.4.0",
-    "@mastra/core": ">=2.0.0-0 <3.0.0-0",
+    "@mastra/core": ">=1.0.0-0 <2.0.0-0",
     "zod": ">=3.0.0 || >=4.0.0"
   },
   "peerDependenciesMeta": {
