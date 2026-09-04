@@ -16,8 +16,8 @@ export type BoardPhaseDefinition<PhaseId extends string> = {
 };
 
 export interface BoardTransition<PhaseId extends string> {
-  outcome: string | null;
-  to: PhaseId;
+  readonly outcome: string | null;
+  readonly to: PhaseId;
 }
 
 export interface BoardDefinition<BoardId extends string, PhaseId extends string> {
@@ -57,8 +57,8 @@ export function defineBoard<
         throw new BoardDefinitionError(`Phase "${phaseId}" cannot define both next and outcomes.`);
       }
       const targets: BoardTransition<string>[] = phase.next
-        ? [{ outcome: null, to: phase.next }]
-        : Object.entries(phase.outcomes ?? {}).map(([outcome, to]) => ({ outcome, to }));
+        ? [Object.freeze({ outcome: null, to: phase.next })]
+        : Object.entries(phase.outcomes ?? {}).map(([outcome, to]) => Object.freeze({ outcome, to }));
       for (const { to } of targets) {
         if (!phaseIds.has(to)) {
           throw new BoardDefinitionError(`Phase "${phaseId}" targets undefined phase "${to}".`);

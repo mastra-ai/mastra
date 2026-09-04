@@ -24,6 +24,11 @@ describe('defineBoard', () => {
     expect(board.allowsTransition('prepare', 'verify')).toBe(true);
     expect(board.allowsTransition('prepare', 'done')).toBe(false);
     expect(board.allowsTransition('verify', 'verify')).toBe(true);
+
+    expect(Object.isFrozen(board.transitions.prepare[0])).toBe(true);
+    expect(Reflect.set(board.transitions.prepare[0]!, 'to', 'done')).toBe(false);
+    expect(board.allowsTransition('prepare', 'verify')).toBe(true);
+    expect(board.allowsTransition('prepare', 'done')).toBe(false);
   });
 
   it('rejects definitions whose transitions target missing phases', () => {
