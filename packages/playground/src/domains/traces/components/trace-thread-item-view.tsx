@@ -1,6 +1,6 @@
+import { QueryError } from '@mastra/playground-ui/components/QueryError';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { TracesErrorContent } from '@mastra/playground-ui/domains/traces/components/traces-error-content';
 import { useTraceSpans } from '@mastra/playground-ui/domains/traces/hooks/use-trace-spans';
 
 import { formatTraceThreadMessages } from './format-trace-thread-messages';
@@ -27,7 +27,7 @@ export function TraceThreadItemView({ traceId }: TraceThreadItemViewProps) {
   if (error) {
     return (
       <div className="flex h-full items-center justify-center p-4">
-        <TracesErrorContent error={error} resource="trace" errorTitle="Failed to load partial thread" />
+        <QueryError error={error} resource="trace" title="Failed to load partial thread" />
       </div>
     );
   }

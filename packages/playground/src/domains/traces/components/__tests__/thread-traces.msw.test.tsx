@@ -179,7 +179,7 @@ describe('ThreadTraces', () => {
     const { queryClient } = renderPanel();
 
     await waitFor(() => expect(queryClient.isFetching()).toBe(0));
-    // 403 renders TracesErrorContent's permission-denied variant.
+    // 403 renders QueryError's permission-denied arm.
     expect(await screen.findByText(/permission to access traces/i)).not.toBeNull();
   });
 });
