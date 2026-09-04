@@ -208,8 +208,9 @@ export function createFactorySupervisorActionTools(deps: SupervisorActionDepende
       }
       // The finding is what a woken supervisor reads: refresh it with the
       // new question BEFORE ringing, through the same derivation the sweep
-      // and the dispatcher use (same key, same evidence shape), with the
-      // notification stamp cleared so a ring that never lands is swept up.
+      // and the dispatcher use (same key, same evidence shape), as new
+      // content: stamp and escalation state reset, so a ring that never
+      // lands is swept up and an old escalation note never fronts a new question.
       const item = reparked.workItemId
         ? await deps.workItems.get({ orgId: deps.scope.orgId, id: reparked.workItemId })
         : null;
@@ -218,7 +219,7 @@ export function createFactorySupervisorActionTools(deps: SupervisorActionDepende
         factoryProjectId: deps.scope.factoryProjectId,
         finding: decisionFailedFinding(reparked, factoryHealthSubject(reparked.workItemId, item ?? undefined), now()),
         now: now(),
-        renotify: true,
+        newContent: true,
       });
       const rung = await ring({
         findingKey: finding.findingKey,
@@ -232,6 +233,8 @@ export function createFactorySupervisorActionTools(deps: SupervisorActionDepende
           findingKey: finding.findingKey,
           occurrence: finding.occurrence,
           notifiedAt: now(),
+          // Not if yet another question replaced this one while the ring was in flight.
+          ifFinding: finding.finding,
         });
       }
       return {

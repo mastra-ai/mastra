@@ -752,6 +752,67 @@ describe('supervisor finding notification stamps', () => {
     expect((await getRow(storage, 'decision-failed:item-1'))?.lastNotifiedAt?.getTime()).toBe(notifiedAt.getTime());
   });
 
+  it('openSupervisorFinding with newContent resets stamp and escalation state, and the stamp is content-safe', async () => {
+    const storage = await makeStorage();
+    const key = 'decision-failed:item-1';
+    const t0 = new Date('2030-01-01T00:00:00.000Z');
+    await openFinding(storage, key, t0);
+    await storage.markSupervisorFindingNotified({ ...scope, findingKey: key, occurrence: 0, notifiedAt: t0 });
+    await storage.escalateSupervisorFinding({
+      ...scope,
+      findingKey: key,
+      note: 'old question needs a person',
+      escalatedAt: t0,
+    });
+    expect(await getRow(storage, key)).toMatchObject({
+      status: 'escalated',
+      escalationNote: 'old question needs a person',
+    });
+
+    // Question two on the same run: new content, same occurrence.
+    const q2 = { ...finding(key), evidence: 'Parked on ask_user: "q2"' };
+    const t1 = new Date('2030-01-01T00:05:00.000Z');
+    const refreshed = await storage.openSupervisorFinding({ ...scope, finding: q2, now: t1, newContent: true });
+    expect(refreshed).toMatchObject({
+      occurrence: 0,
+      status: 'open',
+      escalatedAt: null,
+      escalationNote: null,
+      lastNotifiedAt: null,
+    });
+    expect((await storage.listUnnotifiedSupervisorFindings({ ...scope, limit: 10 })).map(r => r.findingKey)).toEqual([
+      key,
+    ]);
+
+    // Question three lands while question two's ring is still in flight.
+    const q3 = { ...finding(key), evidence: 'Parked on ask_user: "q3"' };
+    await storage.openSupervisorFinding({
+      ...scope,
+      finding: q3,
+      now: new Date('2030-01-01T00:06:00.000Z'),
+      newContent: true,
+    });
+    // Question two's ring landing must not mark the row (now question three) as notified.
+    await storage.markSupervisorFindingNotified({
+      ...scope,
+      findingKey: key,
+      occurrence: 0,
+      notifiedAt: new Date('2030-01-01T00:06:30.000Z'),
+      ifFinding: refreshed.finding,
+    });
+    expect((await getRow(storage, key))?.lastNotifiedAt).toBeNull();
+    // Question three's own ring does.
+    const current = (await getRow(storage, key))!;
+    await storage.markSupervisorFindingNotified({
+      ...scope,
+      findingKey: key,
+      occurrence: 0,
+      notifiedAt: new Date('2030-01-01T00:07:00.000Z'),
+      ifFinding: current.finding,
+    });
+    expect((await getRow(storage, key))?.lastNotifiedAt).toBeInstanceOf(Date);
+  });
+
   it('lists only open, un-stamped findings oldest first', async () => {
     const storage = await makeStorage();
     const t0 = new Date('2030-01-01T00:00:00.000Z');
