@@ -224,7 +224,14 @@ import type {
   RunScheduleResponse,
   AgentControllerInfo,
 } from './types';
-import { base64RequestContext, buildTenancyQuery, parseClientRequestContext, requestContextQueryString } from './utils';
+import {
+  appendQuery,
+  base64RequestContext,
+  buildDeleteTracesQuery,
+  buildTenancyQuery,
+  parseClientRequestContext,
+  requestContextQueryString,
+} from './utils';
 import { createSseJsonTransform } from './utils/stream-transforms';
 
 export class MastraClient extends BaseResource {
@@ -2175,12 +2182,24 @@ export class MastraClient extends BaseResource {
   }
 
   /**
-   * Deletes a dataset experiment and its results
+   * Deletes a dataset experiment and its results.
+   *
+   * By default the experiment's observability traces are deleted too, cascading to
+   * their spans and trace-linked scores, feedback, metrics and logs. Pass
+   * `{ deleteTraces: false }` to keep them.
    */
-  public deleteDatasetExperiment(datasetId: string, experimentId: string): Promise<{ success: boolean }> {
-    return this.request(`/datasets/${encodeURIComponent(datasetId)}/experiments/${encodeURIComponent(experimentId)}`, {
-      method: 'DELETE',
-    });
+  public deleteDatasetExperiment(
+    datasetId: string,
+    experimentId: string,
+    options?: { deleteTraces?: boolean },
+  ): Promise<{ success: boolean }> {
+    const qs = buildDeleteTracesQuery(options?.deleteTraces);
+    return this.request(
+      `/datasets/${encodeURIComponent(datasetId)}/experiments/${encodeURIComponent(experimentId)}${qs}`,
+      {
+        method: 'DELETE',
+      },
+    );
   }
 
   /**
@@ -2188,12 +2207,16 @@ export class MastraClient extends BaseResource {
    * (including experiments orphaned by dataset deletion). When tenancy fields
    * are supplied, the server only deletes the experiment if it belongs to the
    * given tenant (silent no-op otherwise).
+   *
+   * By default the experiment's observability traces are deleted too, cascading to
+   * their spans and trace-linked scores, feedback, metrics and logs. Pass
+   * `{ deleteTraces: false }` to keep them.
    */
   public deleteExperiment(
     experimentId: string,
-    tenancy?: { organizationId?: string; projectId?: string },
+    options?: { organizationId?: string; projectId?: string; deleteTraces?: boolean },
   ): Promise<{ success: boolean }> {
-    const qs = buildTenancyQuery(tenancy);
+    const qs = appendQuery(buildTenancyQuery(options), buildDeleteTracesQuery(options?.deleteTraces));
     return this.request(`/experiments/${encodeURIComponent(experimentId)}${qs}`, {
       method: 'DELETE',
     });

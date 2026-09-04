@@ -1,10 +1,16 @@
 import { Agent } from '@mastra/core/agent';
 import { Mastra } from '@mastra/core/mastra';
+import { SpanType } from '@mastra/core/observability';
 import { RequestContext } from '@mastra/core/request-context';
 import { InMemoryStore } from '@mastra/core/storage';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { HTTPException } from '../http-exception';
-import { listExperimentsQuerySchema, triggerExperimentBodySchema } from '../schemas/datasets';
+import {
+  deleteAnyExperimentQuerySchema,
+  deleteExperimentQuerySchema,
+  listExperimentsQuerySchema,
+  triggerExperimentBodySchema,
+} from '../schemas/datasets';
 import {
   ADD_ITEM_ROUTE,
   BATCH_INSERT_ITEMS_ROUTE,
@@ -964,6 +970,181 @@ describe('Datasets Handlers', () => {
 
       expect(result.success).toBe(true);
       expect(await experimentsStore.getExperimentById({ id: created.experimentId })).not.toBeNull();
+    });
+  });
+
+  describe('deleteTraces query parsing', () => {
+    it.each([deleteExperimentQuerySchema, deleteAnyExperimentQuerySchema])(
+      'defaults to true and accepts the query-string booleans',
+      schema => {
+        expect(schema.parse({}).deleteTraces).toBe(true);
+        expect(schema.parse({ deleteTraces: 'false' }).deleteTraces).toBe(false);
+        expect(schema.parse({ deleteTraces: 'true' }).deleteTraces).toBe(true);
+        expect(schema.parse({ deleteTraces: false }).deleteTraces).toBe(false);
+      },
+    );
+  });
+
+  describe('experiment trace cascade', () => {
+    async function seedTrace(traceId: string, overrides: Record<string, unknown> = {}) {
+      const observabilityStore = (await mockStorage.getStore('observability'))!;
+      await observabilityStore.batchCreateSpans({
+        records: [
+          {
+            traceId,
+            spanId: `${traceId}-root`,
+            parentSpanId: null,
+            name: 'experiment span',
+            spanType: SpanType.GENERIC,
+            entityType: null,
+            entityId: null,
+            entityName: null,
+            userId: null,
+            organizationId: null,
+            resourceId: null,
+            runId: null,
+            sessionId: null,
+            threadId: null,
+            requestId: null,
+            environment: null,
+            source: null,
+            serviceName: null,
+            scope: null,
+            attributes: null,
+            metadata: null,
+            tags: null,
+            links: null,
+            input: null,
+            output: null,
+            error: null,
+            requestContext: null,
+            isEvent: false,
+            startedAt: new Date('2024-01-01T00:00:00Z'),
+            endedAt: new Date('2024-01-01T00:01:00Z'),
+            ...overrides,
+          } as any,
+        ],
+      });
+      return observabilityStore;
+    }
+
+    /** Experiment with one result that recorded `traceId`, plus a seeded trace. */
+    async function createExperimentWithTrace(traceId: string, tenancy?: Record<string, string>) {
+      const dataset = await mastra.datasets.create({ name: 'Trace Cascade DS', ...tenancy } as any);
+      const item = await dataset.addItem({ input: { q: 'q1' } });
+      const created = (await TRIGGER_EXPERIMENT_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        datasetId: dataset.id,
+        start: false,
+      } as any)) as any;
+      await SUBMIT_EXPERIMENT_RESULT_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        datasetId: dataset.id,
+        experimentId: created.experimentId,
+        itemId: item.id,
+        output: { a: 'ok' },
+        traceId,
+      } as any);
+      const observabilityStore = await seedTrace(traceId, tenancy?.organizationId ? tenancy : {});
+      return { dataset, experimentId: created.experimentId as string, observabilityStore };
+    }
+
+    it('deletes the experiment traces by default', async () => {
+      const { dataset, experimentId, observabilityStore } = await createExperimentWithTrace('trace-cascade-1');
+      expect(await observabilityStore.getTrace({ traceId: 'trace-cascade-1' })).not.toBeNull();
+
+      await DELETE_EXPERIMENT_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        datasetId: dataset.id,
+        experimentId,
+      } as any);
+
+      expect(await observabilityStore.getTrace({ traceId: 'trace-cascade-1' })).toBeNull();
+    });
+
+    it('cascades trace-linked scores along with the trace', async () => {
+      const { dataset, experimentId, observabilityStore } = await createExperimentWithTrace('trace-cascade-scores');
+      await observabilityStore.createScore({
+        score: {
+          scoreId: 'score-linked-to-trace',
+          traceId: 'trace-cascade-scores',
+          spanId: 'trace-cascade-scores-root',
+          scorerId: 'scorer-1',
+          score: 1,
+          timestamp: new Date('2024-01-01T00:00:00Z'),
+        } as any,
+      });
+
+      await DELETE_EXPERIMENT_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        datasetId: dataset.id,
+        experimentId,
+      } as any);
+
+      expect(await observabilityStore.getTrace({ traceId: 'trace-cascade-scores' })).toBeNull();
+      expect(await observabilityStore.getScoreById('score-linked-to-trace')).toBeNull();
+    });
+
+    it('keeps the traces when deleteTraces is false', async () => {
+      const { dataset, experimentId, observabilityStore } = await createExperimentWithTrace('trace-cascade-2');
+      const experimentsStore = (await mockStorage.getStore('experiments'))!;
+
+      await DELETE_EXPERIMENT_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        datasetId: dataset.id,
+        experimentId,
+        deleteTraces: false,
+      } as any);
+
+      expect(await experimentsStore.getExperimentById({ id: experimentId })).toBeNull();
+      expect(await observabilityStore.getTrace({ traceId: 'trace-cascade-2' })).not.toBeNull();
+    });
+
+    it('leaves traces from other experiments untouched', async () => {
+      const { dataset, experimentId, observabilityStore } = await createExperimentWithTrace('trace-cascade-mine');
+      await createExperimentWithTrace('trace-cascade-theirs');
+
+      await DELETE_EXPERIMENT_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        datasetId: dataset.id,
+        experimentId,
+      } as any);
+
+      expect(await observabilityStore.getTrace({ traceId: 'trace-cascade-mine' })).toBeNull();
+      expect(await observabilityStore.getTrace({ traceId: 'trace-cascade-theirs' })).not.toBeNull();
+    });
+
+    it('deletes traces for an orphaned experiment via the top-level route', async () => {
+      const { dataset, experimentId, observabilityStore } = await createExperimentWithTrace('trace-cascade-orphan');
+      await DELETE_DATASET_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        datasetId: dataset.id,
+      } as any);
+
+      await DELETE_ANY_EXPERIMENT_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        experimentId,
+      } as any);
+
+      expect(await observabilityStore.getTrace({ traceId: 'trace-cascade-orphan' })).toBeNull();
+    });
+
+    it('keeps traces when a tenancy-scoped delete does not match the experiment', async () => {
+      const { experimentId, observabilityStore } = await createExperimentWithTrace('trace-cascade-tenant', {
+        organizationId: 'org_a',
+        projectId: 'proj_1',
+      });
+
+      const result = (await DELETE_ANY_EXPERIMENT_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        experimentId,
+        organizationId: 'org_b',
+      } as any)) as any;
+
+      expect(result.success).toBe(true);
+      const experimentsStore = (await mockStorage.getStore('experiments'))!;
+      expect(await experimentsStore.getExperimentById({ id: experimentId })).not.toBeNull();
+      expect(await observabilityStore.getTrace({ traceId: 'trace-cascade-tenant' })).not.toBeNull();
     });
   });
 

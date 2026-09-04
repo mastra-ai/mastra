@@ -279,6 +279,28 @@ export const tenancyQuerySchema = z.object({
   projectId: z.string().optional().describe('Restrict lookup to the given project'),
 });
 
+/**
+ * Shared `deleteTraces` toggle for the experiment delete routes.
+ *
+ * Accepts a boolean as well as the `"true"` / `"false"` strings a query string
+ * carries, so adapters that pre-coerce query values are handled too.
+ */
+const deleteTracesQueryField = z
+  .union([z.boolean(), z.stringbool()])
+  .optional()
+  .default(true)
+  .describe(
+    'When true (the default), also delete the observability traces this experiment produced, cascading to their spans and trace-linked scores, feedback, metrics and logs. Set to false to delete only the experiment and its results. Ignored by stores without an observability domain, which log a warning and keep the traces.',
+  );
+
+export const deleteExperimentQuerySchema = z.object({
+  deleteTraces: deleteTracesQueryField,
+});
+
+export const deleteAnyExperimentQuerySchema = tenancyQuerySchema.extend({
+  deleteTraces: deleteTracesQueryField,
+});
+
 export const listItemsQuerySchema = z.object({
   page: z.coerce.number().optional().default(0),
   perPage: z.coerce.number().optional().default(10),

@@ -5238,6 +5238,7 @@ export const API_ROUTE_METADATA = {
       "experimentId"
     ],
     "queryParams": [
+      "deleteTraces",
       "organizationId",
       "projectId"
     ],
@@ -5384,9 +5385,11 @@ export const API_ROUTE_METADATA = {
       "datasetId",
       "experimentId"
     ],
-    "queryParams": [],
+    "queryParams": [
+      "deleteTraces"
+    ],
     "bodyParams": [],
-    "hasQuery": false,
+    "hasQuery": true,
     "hasBody": false,
     "responseShape": {
       "kind": "single"

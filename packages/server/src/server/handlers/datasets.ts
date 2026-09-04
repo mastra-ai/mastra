@@ -1,4 +1,5 @@
 import { Agent } from '@mastra/core/agent';
+import { deleteExperimentTraces } from '@mastra/core/datasets';
 import { MastraError } from '@mastra/core/error';
 import { coreFeatures } from '@mastra/core/features';
 import { resolveModelConfig } from '@mastra/core/llm';
@@ -19,6 +20,8 @@ import {
   datasetItemVersionPathParams,
   paginationQuerySchema,
   tenancyQuerySchema,
+  deleteExperimentQuerySchema,
+  deleteAnyExperimentQuerySchema,
   listItemsQuerySchema,
   listExperimentsQuerySchema,
   createDatasetBodySchema,
@@ -677,17 +680,21 @@ export const DELETE_ANY_EXPERIMENT_ROUTE = createRoute({
   path: '/experiments/:experimentId',
   responseType: 'json',
   pathParamSchema: experimentIdPathParams,
-  queryParamSchema: tenancyQuerySchema,
+  queryParamSchema: deleteAnyExperimentQuerySchema,
   responseSchema: successResponseSchema,
   summary: 'Delete experiment',
   description:
-    'Deletes an experiment and its results regardless of dataset association (including experiments orphaned by dataset deletion)',
+    'Deletes an experiment and its results regardless of dataset association (including experiments orphaned by dataset deletion). By default this also deletes the traces the experiment produced, cascading to their spans and trace-linked scores, feedback, metrics and logs; pass deleteTraces=false to keep them.',
   tags: ['Experiments'],
   requiresAuth: true,
   handler: async ({ mastra, experimentId, ...params }) => {
     assertDatasetsAvailable();
     try {
-      const { organizationId, projectId } = params as { organizationId?: string; projectId?: string };
+      const {
+        organizationId,
+        projectId,
+        deleteTraces = true,
+      } = params as { organizationId?: string; projectId?: string; deleteTraces?: boolean };
       const storage = mastra.getStorage();
       if (!storage) {
         throw new HTTPException(500, { message: 'Storage not configured' });
@@ -706,6 +713,17 @@ export const DELETE_ANY_EXPERIMENT_ROUTE = createRoute({
         if (!existing) {
           throw new HTTPException(404, { message: `Experiment not found: ${experimentId}` });
         }
+      }
+      // Must run before the relational delete: that cascade removes the result
+      // rows carrying the trace ids.
+      if (deleteTraces) {
+        await deleteExperimentTraces({
+          storage,
+          experimentsStore,
+          experimentId,
+          ...(filters !== undefined ? { filters } : {}),
+          logger: mastra.getLogger(),
+        });
       }
       // Note: experiment-linked score_events are not cascaded here (tracked separately).
       await experimentsStore.deleteExperiment({ id: experimentId, filters });
@@ -1024,18 +1042,21 @@ export const DELETE_EXPERIMENT_ROUTE = createRoute({
   path: '/datasets/:datasetId/experiments/:experimentId',
   responseType: 'json',
   pathParamSchema: datasetAndExperimentIdPathParams,
+  queryParamSchema: deleteExperimentQuerySchema,
   responseSchema: successResponseSchema,
   summary: 'Delete experiment',
-  description: 'Deletes an experiment and its results',
+  description:
+    'Deletes an experiment and its results. By default this also deletes the traces the experiment produced, cascading to their spans and trace-linked scores, feedback, metrics and logs; pass deleteTraces=false to keep them.',
   tags: ['Datasets'],
   requiresAuth: true,
-  handler: async ({ mastra, datasetId, experimentId }) => {
+  handler: async ({ mastra, datasetId, experimentId, ...params }) => {
     assertDatasetsAvailable();
     try {
+      const { deleteTraces = true } = params as { deleteTraces?: boolean };
       const ds = await mastra.datasets.get({ id: datasetId });
       // deleteExperiment asserts the experiment belongs to this dataset and
       // throws EXPERIMENT_NOT_FOUND (mapped to 404) otherwise.
-      await ds.deleteExperiment({ experimentId });
+      await ds.deleteExperiment({ experimentId, deleteTraces });
       return { success: true };
     } catch (error) {
       if (error instanceof MastraError) {

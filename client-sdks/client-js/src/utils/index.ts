@@ -180,3 +180,22 @@ export function buildTenancyQuery(tenancy?: { organizationId?: string; projectId
   const queryString = searchParams.toString();
   return queryString ? `?${queryString}` : '';
 }
+
+/**
+ * Build a `?deleteTraces=false` query fragment for the deletion routes that
+ * cascade to observability traces by default. Only the opt-out is serialized —
+ * omitting the parameter already means "delete traces" on the server.
+ */
+export function buildDeleteTracesQuery(deleteTraces?: boolean): string {
+  return deleteTraces === false ? '?deleteTraces=false' : '';
+}
+
+/**
+ * Concatenate two query string fragments produced by the `build*Query` helpers,
+ * turning a leading `?` into `&` when the first fragment already opened the query.
+ */
+export function appendQuery(base: string, fragment: string): string {
+  if (!fragment) return base;
+  if (!base) return fragment;
+  return `${base}&${fragment.slice(1)}`;
+}
