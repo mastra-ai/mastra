@@ -27,7 +27,7 @@ export function TraceMessagesPanel({ traceId, className, fullThreadHref, onHighl
           {fullThreadHref && (
             <div className="flex justify-center px-3 pt-2">
               <Button as={Link} href={fullThreadHref} variant="default" size="xs">
-                Voir le thread complet
+                View full thread
               </Button>
             </div>
           )}
