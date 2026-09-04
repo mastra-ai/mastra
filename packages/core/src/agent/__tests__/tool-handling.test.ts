@@ -812,8 +812,9 @@ describe('webSearchTool agent resolution', () => {
     });
   });
 
-  it('uses the per-call model override when resolving web search during execution', async () => {
+  it('uses the per-call model override once when resolving web search during generation', async () => {
     let capturedTools: Record<string, any> | undefined;
+    const configuredModel = vi.fn(() => 'openai/gpt-5-mini' as const);
     const overrideModel = new MockLanguageModelV2({
       provider: 'anthropic',
       modelId: 'claude-sonnet-4-20250514',
@@ -831,7 +832,7 @@ describe('webSearchTool agent resolution', () => {
       id: 'web-search-agent',
       name: 'web-search-agent',
       instructions: 'Search the web.',
-      model: 'openai/gpt-5-mini',
+      model: configuredModel,
       tools: {
         searchTheWeb: webSearchTool,
       },
@@ -843,6 +844,59 @@ describe('webSearchTool agent resolution', () => {
       ? capturedTools.find(tool => tool.name === 'web_search')
       : capturedTools?.searchTheWeb;
 
+    expect(configuredModel).not.toHaveBeenCalled();
+    expect(capturedWebSearchTool).toMatchObject({
+      type: 'provider-defined',
+      id: 'anthropic.web_search_20250305',
+      name: 'web_search',
+    });
+  });
+
+  it('uses the per-call model override once when resolving web search during streaming', async () => {
+    let capturedTools: Record<string, any> | undefined;
+    const configuredModel = vi.fn(() => 'openai/gpt-5-mini' as const);
+    const overrideModel = new MockLanguageModelV2({
+      provider: 'anthropic',
+      modelId: 'claude-sonnet-4-20250514',
+      doStream: async ({ tools }) => {
+        capturedTools = tools;
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          warnings: [],
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            { type: 'response-metadata', id: 'id-0', modelId: 'mock', timestamp: new Date(0) },
+            { type: 'text-start', id: 'text-0' },
+            { type: 'text-delta', id: 'text-0', delta: 'ok' },
+            { type: 'text-end', id: 'text-0' },
+            {
+              type: 'finish',
+              finishReason: 'stop',
+              usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+            },
+          ]),
+        };
+      },
+    });
+    const agent = new Agent({
+      id: 'web-search-agent',
+      name: 'web-search-agent',
+      instructions: 'Search the web.',
+      model: configuredModel,
+      tools: {
+        searchTheWeb: webSearchTool,
+      },
+    });
+
+    await (
+      await agent.stream('search', { model: overrideModel })
+    ).text;
+
+    const capturedWebSearchTool = Array.isArray(capturedTools)
+      ? capturedTools.find(tool => tool.name === 'web_search')
+      : capturedTools?.searchTheWeb;
+
+    expect(configuredModel).not.toHaveBeenCalled();
     expect(capturedWebSearchTool).toMatchObject({
       type: 'provider-defined',
       id: 'anthropic.web_search_20250305',
