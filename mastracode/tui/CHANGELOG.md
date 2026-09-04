@@ -1,5 +1,11 @@
 # mastracode
 
+## 0.38.1-alpha.4
+
+### Patch Changes
+
+- Fixed resumed agent output failing to render after plan approval. ([#22993](https://github.com/mastra-ai/mastra/pull/22993))
+
 ## 0.38.1-alpha.3
 
 ### Patch Changes

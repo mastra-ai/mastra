@@ -76,35 +76,74 @@ const renderPanel = (props: Partial<TraceSpanPanelProps> & { initialSpanId?: str
   );
 
 describe('TraceSpanPanel', () => {
-  describe('when partial thread is enabled for an agent trace with a thread id', () => {
-    it('renders the selected trace as a chat turn in the Messages tab', async () => {
+  describe('given partial thread is enabled for an agent trace with a thread id', () => {
+    it('when rendered, then the Messages column shows the chat turn without any tab click', async () => {
       installHandlers();
       const { queryClient } = renderPanel({ showPartialThread: true });
 
-      fireEvent.click(await screen.findByRole('tab', { name: 'Messages' }));
-
+      expect(await screen.findByRole('heading', { name: 'Messages' })).not.toBeNull();
+      expect(screen.queryByRole('tab', { name: 'Messages' })).toBeNull();
       expect(await screen.findByText('Will it rain?')).not.toBeNull();
       expect(screen.getByText('No rain is expected.')).not.toBeNull();
       await waitFor(() => expect(queryClient.isFetching()).toBe(0));
     });
+
+    it('reports the spans behind each message when the highlight action is clicked', async () => {
+      installHandlers();
+      const onHighlightSpans = vi.fn();
+      const { queryClient } = renderPanel({ showPartialThread: true, onHighlightSpans });
+
+      await screen.findByText('No rain is expected.');
+
+      const [userAction, assistantAction] = screen.getAllByRole('button', { name: 'Highlight spans' });
+      if (!userAction || !assistantAction) throw new Error('expected one highlight action per message');
+
+      fireEvent.click(assistantAction);
+      expect(onHighlightSpans).toHaveBeenCalledWith(['span-root', 'span-child-1', 'span-child-2']);
+
+      fireEvent.click(userAction);
+      expect(onHighlightSpans).toHaveBeenLastCalledWith(['span-root']);
+      await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+    });
+
+    it('does not render the highlight action when no handler is provided', async () => {
+      installHandlers();
+      const { queryClient } = renderPanel({ showPartialThread: true });
+
+      await screen.findByText('No rain is expected.');
+
+      expect(screen.queryByRole('button', { name: 'Highlight spans' })).toBeNull();
+      await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+    });
   });
 
-  describe('when partial thread is enabled without a complete agent thread context', () => {
-    it('hides the tab for a trace without a thread id', () => {
+  it('fades timeline spans that are not featured', async () => {
+    installHandlers();
+    const { queryClient } = renderPanel({ featuredSpanIds: ['span-root'] });
+
+    await screen.findByLabelText('View details for span Root agent run');
+    expect(screen.getByLabelText('View details for span Root agent run').className).not.toContain('opacity-30');
+    expect(screen.getByLabelText('View details for span First tool call').className).toContain('opacity-30');
+    expect(screen.getByLabelText('View details for span Second tool call').className).toContain('opacity-30');
+    await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+  });
+
+  describe('given partial thread is enabled without a complete agent thread context', () => {
+    it('when the trace has no thread id, then the Messages column is absent', () => {
       installHandlers();
       renderPanel({
         showPartialThread: true,
         spans: panelTraceSpans.spans.map(span => (span.parentSpanId == null ? { ...span, threadId: null } : span)),
       });
 
-      expect(screen.queryByRole('tab', { name: 'Messages' })).toBeNull();
+      expect(screen.queryByRole('heading', { name: 'Messages' })).toBeNull();
     });
 
-    it('hides the tab for a branch view', () => {
+    it('when viewing a branch, then the Messages column is absent', () => {
       installHandlers();
       renderPanel({ showPartialThread: true, anchorSpanId: 'span-root' });
 
-      expect(screen.queryByRole('tab', { name: 'Messages' })).toBeNull();
+      expect(screen.queryByRole('heading', { name: 'Messages' })).toBeNull();
     });
   });
 
