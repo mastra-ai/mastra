@@ -13,6 +13,7 @@ function renderFilters(overrides: Partial<FiltersProps> = {}) {
     onParticipantChange: vi.fn(),
     onTypeChange: vi.fn(),
     onLabelChange: vi.fn(),
+    onSearchChange: vi.fn(),
     onReset: vi.fn(),
   };
 
@@ -23,6 +24,7 @@ function renderFilters(overrides: Partial<FiltersProps> = {}) {
       selectedTypes={new Set(BOARD_RELEVANCE_TYPES)}
       availableLabels={['bug', 'documentation', '@mastra/core']}
       selectedLabels={new Set()}
+      search=""
       {...callbacks}
       {...overrides}
     />,

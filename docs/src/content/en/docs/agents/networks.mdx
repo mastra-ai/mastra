@@ -1,6 +1,6 @@
 ---
 title: "Agent networks | Agents"
-description: Coordinate multiple agents, workflows, and tools using agent networks for complex, non-deterministic task execution.
+description: "Understand deprecated Mastra agent networks, including multi-agent routing, structured output, tool approvals, and migration to supervisor agents."
 packages:
   - "@mastra/core"
   - "@mastra/libsql"
@@ -11,7 +11,7 @@ packages:
 
 :::warning[Deprecated]
 
-Agent networks are deprecated and will be removed in a future major release. [Supervisor agents](../subagents) using `agent.stream()` or `agent.generate()` are now the recommended approach. It provides the same multi-agent coordination with better control, a simpler API, and easier debugging.
+Agent networks are deprecated and will be removed in a future major release. Replace them with [supervisor agents](../subagents) that use `agent.stream()` or `agent.generate()`. Supervisor agents provide the same multi-agent coordination through a simpler API that improves control and debugging.
 
 See the [migration guide](/reference/migrations/network-to-supervisor) to upgrade.
 

@@ -96,6 +96,8 @@ export interface DockerSandboxOptions extends Omit<MastraSandboxOptions, 'proces
   timeout?: number;
   /** Working directory inside the container
    * @default '/workspace'
+   * @deprecated Use `workingDirectory` (the base sandbox option) instead.
+   * When both are set, `workingDirectory` wins.
    */
   workingDir?: string;
   /** Container labels for filtering and identification */
@@ -184,10 +186,18 @@ export class DockerSandbox extends MastraSandbox {
   private readonly _securityOpt?: string[];
   private readonly _ulimits?: DockerSandboxUlimit[];
   private readonly _tmpfs?: DockerSandboxTmpfs;
-  private readonly _workingDir: string;
   private readonly _labels: Record<string, string>;
   private readonly _instructionsOverride?: InstructionsOption;
   private readonly _constructorOptions: DockerSandboxOptions;
+
+  /**
+   * The effective container working directory. Narrowed to `string`: the
+   * constructor always resolves a value (option, deprecated alias, or
+   * `/workspace`), so unlike the base getter this never returns `undefined`.
+   */
+  override get workingDirectory(): string {
+    return this._workingDirectory!;
+  }
 
   constructor(options: DockerSandboxOptions = {}) {
     const processManager = new DockerProcessManager({
@@ -221,7 +231,7 @@ export class DockerSandbox extends MastraSandbox {
     this._securityOpt = options.securityOpt;
     this._ulimits = options.ulimits;
     this._tmpfs = options.tmpfs;
-    this._workingDir = options.workingDir ?? '/workspace';
+    this.setWorkingDirectory(options.workingDirectory ?? options.workingDir ?? '/workspace');
     this._labels = {
       ...options.labels,
       'mastra.sandbox': 'true',
@@ -317,7 +327,7 @@ export class DockerSandbox extends MastraSandbox {
       Image: this._image,
       Cmd: this._command,
       Env: envArray,
-      WorkingDir: this._workingDir,
+      WorkingDir: this.workingDirectory,
       Labels: this._labels,
       HostConfig: {
         Binds: binds.length > 0 ? binds : undefined,
@@ -476,7 +486,7 @@ export class DockerSandbox extends MastraSandbox {
   getInstructions(opts?: { requestContext?: RequestContext }): string {
     const defaultInstructions = [
       `You are working inside a Docker container (image: ${this._image}).`,
-      `The working directory is ${this._workingDir}.`,
+      `The working directory is ${this.workingDirectory}.`,
       'You can execute shell commands using executeCommand().',
       'You can spawn background processes using processes.spawn().',
     ].join('\n');
@@ -499,7 +509,7 @@ export class DockerSandbox extends MastraSandbox {
       createdAt: new Date(),
       metadata: {
         image: this._image,
-        workingDir: this._workingDir,
+        workingDir: this.workingDirectory,
         labels: this._labels,
       },
     };

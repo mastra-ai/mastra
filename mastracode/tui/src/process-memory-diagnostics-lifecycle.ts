@@ -16,6 +16,15 @@ export async function startTuiProcessMemoryDiagnostics(
   return startConfiguredProcessMemoryDiagnostics(createSetup(env), warn);
 }
 
+export function createOneShotFatalErrorHandler(handle: (error: unknown) => void): (error: unknown) => void {
+  let handlingFatalError = false;
+  return error => {
+    if (handlingFatalError) return;
+    handlingFatalError = true;
+    handle(error);
+  };
+}
+
 export function createShutdownCoordinator(
   cleanup: () => Promise<void>,
   exit: (exitCode: number) => never,

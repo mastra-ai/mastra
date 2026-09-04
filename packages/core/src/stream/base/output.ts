@@ -440,6 +440,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                     tracingContext: options.tracingContext,
                     processorIndex,
                     createSpan: true,
+                    processor: structuredOutputProcessor,
                   });
                   structuredOutputProcessorState.customState = { controller };
                   processorStates.set(STRUCTURED_OUTPUT_PROCESSOR_NAME, structuredOutputProcessorState);
@@ -521,6 +522,12 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                 }
               }
             }
+          },
+          flush() {
+            processorRunner.endStreamProcessorSpans(processorStates);
+          },
+          cancel() {
+            processorRunner.endStreamProcessorSpans(processorStates);
           },
         }),
       );

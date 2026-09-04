@@ -20,7 +20,7 @@
 import type { MastraCodeConfig, MountedMastraCode } from '@mastra/code-sdk';
 import type { AgentControllerChannelsConfig, ChannelAdapterConfig } from '@mastra/core/channels';
 import type { RequestContext } from '@mastra/core/request-context';
-import type { ApiRoute } from '@mastra/core/server';
+import type { ApiRoute, IUserProvider } from '@mastra/core/server';
 import type { FactoryStorage } from '@mastra/core/storage';
 import type { MastraWorker } from '@mastra/core/worker';
 
@@ -28,13 +28,14 @@ import type { Intake } from '../capabilities/intake.js';
 import type { VersionControl } from '../capabilities/version-control.js';
 import type { RouteAuth } from '../routes/route.js';
 import type { FactoryRules } from '../rules/types.js';
-import type { BaseCheckpointTriggers } from '../sandbox/base-checkpoint-triggers.js';
-import type { SandboxFleet } from '../sandbox/fleet.js';
 import type { SessionRetirementCoordinator } from '../sandbox/session-retirement.js';
+import type { MastraFactorySandboxConfig } from '../sandbox/session-sandbox.js';
 import type { StateSigner } from '../state-signing.js';
 import type { AuditEventRow } from '../storage/domains/audit/base.js';
 import type { AuditEmitter } from '../storage/domains/audit/domain.js';
 import type { ChannelIdentityStorage } from '../storage/domains/channel-identity/base.js';
+import type { CommentsDomain } from '../storage/domains/comments/domain.js';
+import type { WorkItemFeedPublisher } from '../storage/domains/comments/feed-sync.js';
 import type { IntakeStorage } from '../storage/domains/intake/base.js';
 import type { IntegrationStorageHandle } from '../storage/domains/integrations/base.js';
 import type { MemorySettingsStorage } from '../storage/domains/memory-settings/base.js';
@@ -69,19 +70,14 @@ export interface IntegrationPostToolContext {
 export interface IntegrationContext {
   /** Host auth seam — integration routes resolve callers through this. */
   auth: RouteAuth;
+  /** Optional user directory for resolving persisted user ids to display profiles. */
+  users?: Pick<IUserProvider, 'getUser' | 'getUsers'>;
   /**
-   * Sandbox fleet for per-project sandboxes. Always constructed at boot; a
-   * fleet built without a machine config reports `enabled: false` and
-   * sandbox-backed routes respond 503.
+   * The deploy's sandbox callback for per-project and per-session
+   * sandboxes. Absent when no sandbox is configured — sandbox-backed
+   * routes respond 503.
    */
-  fleet: SandboxFleet;
-  /**
-   * Base-checkpoint trigger surface — present when the factory constructed a
-   * builder (fleet enabled + a source-control owner registered). Integrations
-   * feed webhook events and reconcile sweeps into it so connected repos keep
-   * a warm base checkpoint.
-   */
-  baseCheckpoints?: BaseCheckpointTriggers;
+  sandbox?: MastraFactorySandboxConfig;
   /**
    * Root factory storage backend and source of the `appDbConfigured`
    * diagnostic. Absent when the host runs without an application database.
@@ -98,6 +94,10 @@ export interface IntegrationContext {
   stateSigner?: StateSigner;
   /** Shared source-control session retirement lifecycle used by integration routes. */
   sessionRetirement?: SessionRetirementCoordinator;
+  /** Work-items domain slice — deleting a session strips the refs work items hold on it. */
+  workItems?: Pick<WorkItemsStorage, 'clearSessionReferences'>;
+  /** Feed slice for ingesting platform messages; present once work items are ready. */
+  feed?: Pick<CommentsDomain, 'createComment'>;
   /** Persistence handles pre-scoped to this integration's stable id. */
   storage: {
     generic: IntegrationStorageHandle;
@@ -240,6 +240,11 @@ export interface FactoryIntegration {
    * loser would silently never receive a message.
    */
   channels?(ctx: IntegrationContext): FactoryChannelsConfig;
+  /**
+   * Mirrors web feed comments to the platform thread a work item is bound to.
+   * Collected alongside `channels()`: a publisher posts through the channel SDK.
+   */
+  feedPublisher?(ctx: IntegrationContext): WorkItemFeedPublisher;
   /**
    * Non-secret config snapshot (booleans + names only, never values). The
    * factory merges it into system diagnostics/startup logs.

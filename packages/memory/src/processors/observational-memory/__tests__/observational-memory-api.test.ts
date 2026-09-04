@@ -45,6 +45,34 @@ function createTestMessage(
   };
 }
 
+function createWorkingMemoryStateSignal(id: string, createdAt = new Date()): MastraDBMessage {
+  return {
+    id,
+    role: 'signal',
+    type: 'working-memory',
+    createdAt,
+    content: {
+      format: 2,
+      parts: [{ type: 'text', text: '# User\n- responseFormat: format-a; format-b' }],
+      metadata: {
+        signal: {
+          id,
+          type: 'state',
+          tagName: 'working-memory',
+          createdAt: createdAt.toISOString(),
+          metadata: {
+            state: {
+              id: 'working-memory',
+              cacheKey: 'working-memory-cache-key',
+              mode: 'snapshot',
+            },
+          },
+        },
+      },
+    },
+  };
+}
+
 /** Generate N messages with padding to exceed token thresholds. */
 function createBulkMessages(count: number, threadId: string, startTime?: number): MastraDBMessage[] {
   const base = startTime ?? Date.now() - count * 1000;
@@ -879,6 +907,24 @@ describe('buffer()', () => {
 
     const result = await om.buffer({ threadId, messages });
     expect(result.buffered).toBe(true);
+  });
+
+  it('retries a transient database connection timeout while persisting buffered observations', async () => {
+    const om = createOM(storage, { messageTokens: 500, bufferTokens: 0.2 });
+    const messages = createBulkMessages(5, threadId);
+    const updateBufferedObservations = storage.updateBufferedObservations.bind(storage);
+    const updateSpy = vi.spyOn(storage, 'updateBufferedObservations').mockImplementationOnce(async input => {
+      await updateBufferedObservations(input);
+      throw new Error('Connection terminated due to connection timeout');
+    });
+
+    const result = await om.buffer({ threadId, messages });
+    expect(result.buffered).toBe(true);
+    await om.waitForBuffering(threadId, undefined, 5000);
+
+    expect(updateSpy).toHaveBeenCalledTimes(2);
+    const status = await om.getStatus({ threadId });
+    expect(status.bufferedChunkCount).toBe(1);
   });
 
   it('should not buffer when no unobserved messages exist', async () => {
@@ -2587,6 +2633,22 @@ describe('getOtherThreadsContext()', () => {
     }
   });
 
+  it('should exclude working memory state signals from other-thread context', async () => {
+    const om = createOM(storage, { scope: 'resource' });
+    const userMessage = { ...createTestMessage('Sibling user message', 'user', 'thread-b-user'), threadId: threadB };
+    const workingMemorySignal = {
+      ...createWorkingMemoryStateSignal('thread-b-working-memory'),
+      threadId: threadB,
+    };
+
+    await storage.saveMessages({ messages: [userMessage, workingMemorySignal] });
+
+    const result = await om.getOtherThreadsContext(resourceId, threadA);
+
+    expect(result).toContain('Sibling user message');
+    expect(result).not.toContain('responseFormat: format-a; format-b');
+  });
+
   it('falls back to the OM record lastObservedAt when sibling thread metadata is missing', async () => {
     const om = createOM(storage, { scope: 'resource' });
     const record = await om.getOrCreateRecord(threadA, resourceId);
@@ -2991,6 +3053,40 @@ describe('getUnobservedMessages filtering', () => {
 
     const unobserved = om.getUnobservedMessages(messages, record);
     expect(unobserved.length).toBe(5);
+  });
+
+  it('should exclude working memory state signals while preserving ordinary messages and signals', async () => {
+    const om = createOM(storage);
+    const record = await om.getOrCreateRecord(threadId);
+    const workingMemorySignal = createWorkingMemoryStateSignal('working-memory-signal');
+    const notificationSignal = createWorkingMemoryStateSignal('notification-signal');
+    notificationSignal.type = 'notification';
+    notificationSignal.content.metadata!.signal = {
+      id: 'notification-signal',
+      type: 'notification',
+      tagName: 'notification',
+      createdAt: new Date().toISOString(),
+    };
+    const messages = [createTestMessage('User message', 'user', 'user-1'), workingMemorySignal, notificationSignal];
+
+    const unobserved = om.getUnobservedMessages(messages, record);
+
+    expect(unobserved.map(message => message.id)).toEqual(['user-1', 'notification-signal']);
+  });
+
+  it('should exclude working memory state signals when loading messages from storage', async () => {
+    const om = createOM(storage);
+    const base = Date.now() - 10_000;
+    await storage.saveMessages({
+      messages: [
+        { ...createTestMessage('User message', 'user', 'stored-user-1', new Date(base)), threadId },
+        { ...createWorkingMemoryStateSignal('stored-working-memory-signal', new Date(base + 1000)), threadId },
+      ],
+    });
+
+    const loaded = await (om as any).loadMessagesFromStorage(threadId, undefined);
+
+    expect(loaded.map((message: MastraDBMessage) => message.id)).toEqual(['stored-user-1']);
   });
 
   it('should filter messages whose IDs are in observedMessageIds', async () => {

@@ -31,6 +31,8 @@ import type {
   GetFeedbackTimeSeriesResponse,
   GetFeedbackPercentilesArgs,
   GetFeedbackPercentilesResponse,
+  UpdateFeedbackReviewStatusArgs,
+  FeedbackRecord,
 } from './feedback';
 import type { BatchCreateLogsArgs, ListLogsArgs, ListLogsResponse } from './logs';
 import type {
@@ -61,6 +63,7 @@ import type {
   GetScorePercentilesArgs,
   GetScorePercentilesResponse,
 } from './scores';
+import type { TraceQueryResponse, TrustedTraceQueryPlan } from './trace-query';
 import type {
   BatchCreateSpansArgs,
   BatchDeleteTracesArgs,
@@ -88,7 +91,7 @@ import type {
 import { extractBranchSpans, getBranchArgsSchema, toLightSpanRecord } from './tracing';
 import type { ObservabilityStorageStrategy, TracingStorageStrategy } from './types';
 
-export type ObservabilityStorageFeature = 'delta-polling' | 'metrics' | 'logs';
+export type ObservabilityStorageFeature = 'delta-polling' | 'metrics' | 'logs' | 'trace-query';
 
 /**
  * Base storage class for observability data (traces, metrics, logs, scores, feedback).
@@ -339,6 +342,18 @@ export class ObservabilityStorage extends StorageDomain {
   async listTracesLight(args: ListTracesArgs): Promise<ListTracesLightResponse> {
     const { spans, ...rest } = await this.listTraces(args);
     return { ...rest, spans: spans.map(toLightSpanRecord) };
+  }
+
+  /**
+   * Executes a validated advanced trace-query plan.
+   */
+  async queryTraces(_plan: TrustedTraceQueryPlan): Promise<TraceQueryResponse> {
+    throw new MastraError({
+      id: 'OBSERVABILITY_STORAGE_QUERY_TRACES_NOT_IMPLEMENTED',
+      domain: ErrorDomain.MASTRA_OBSERVABILITY,
+      category: ErrorCategory.SYSTEM,
+      text: 'This storage provider does not support advanced trace queries',
+    });
   }
 
   /**
@@ -683,6 +698,15 @@ export class ObservabilityStorage extends StorageDomain {
       domain: ErrorDomain.MASTRA_OBSERVABILITY,
       category: ErrorCategory.SYSTEM,
       text: 'This storage provider does not support listing feedback',
+    });
+  }
+
+  async updateFeedbackReviewStatus(_args: UpdateFeedbackReviewStatusArgs): Promise<FeedbackRecord> {
+    throw new MastraError({
+      id: 'OBSERVABILITY_STORAGE_UPDATE_FEEDBACK_REVIEW_STATUS_NOT_IMPLEMENTED',
+      domain: ErrorDomain.MASTRA_OBSERVABILITY,
+      category: ErrorCategory.SYSTEM,
+      text: 'This storage provider does not support updating feedback review status',
     });
   }
 

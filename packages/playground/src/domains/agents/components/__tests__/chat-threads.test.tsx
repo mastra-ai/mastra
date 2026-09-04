@@ -28,8 +28,8 @@ const paths = {
   agentsLink: () => '/agents',
   agentToolLink: (agentId: string, toolId: string) => `/agents/${agentId}/tools/${toolId}`,
   agentSkillLink: (agentId: string, skillName: string) => `/agents/${agentId}/skills/${skillName}`,
-  agentThreadLink: (agentId: string, threadId: string) => `/agents/${agentId}/chat/${threadId}`,
-  agentNewThreadLink: (agentId: string) => `/agents/${agentId}/chat/new`,
+  agentThreadLink: (agentId: string, threadId: string) => `/agents/${agentId}/threads/${threadId}`,
+  agentNewThreadLink: (agentId: string) => `/agents/${agentId}/threads/new`,
   workflowsLink: () => '/workflows',
   workflowLink: (workflowId: string) => `/workflows/${workflowId}`,
   schedulesLink: () => '/schedules',
@@ -58,8 +58,8 @@ const paths = {
   workflowRunLink: (workflowId: string, runId: string) => `/workflows/${workflowId}/runs/${runId}`,
   datasetLink: (datasetId: string) => `/datasets/${datasetId}`,
   datasetItemLink: (datasetId: string, itemId: string) => `/datasets/${datasetId}/items/${itemId}`,
-  datasetExperimentLink: (datasetId: string, experimentId: string) =>
-    `/datasets/${datasetId}/experiments/${experimentId}`,
+  datasetItemCompareLink: (datasetId: string, itemId: string, secondItemId: string) =>
+    `/datasets/${datasetId}/items/${itemId}/compare/${secondItemId}`,
   experimentLink: (experimentId: string) => `/experiments/${experimentId}`,
 } satisfies LinkComponentProviderProps['paths'];
 

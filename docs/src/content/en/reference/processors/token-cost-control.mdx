@@ -1,6 +1,6 @@
 ---
 title: "Reference: TokenCostControl | Processors"
-description: "API reference for TokenCostControl, a processor that enforces monetary cost limits on agent runs."
+description: "The TokenCostControl enforces monetary cost limits across the agentic loop, blocking or warning when a configurable cost threshold is exceeded."
 packages:
   - "@mastra/core"
 ---
@@ -214,12 +214,12 @@ Numbers interpolated into violation messages are normalized to at most 6 decimal
 | `organization` | Yes | `organizationId` + time window | `organizationId` key in `RequestContext` |
 | `session` | Yes | `sessionId` + time window | `sessionId` key in `RequestContext` |
 
-All scopes require observability storage with `getMetricAggregate` support. If the Mastra instance doesn't have observability storage configured, an error is thrown at registration time.
+All scopes require observability storage with `getMetricAggregate` support; without configured observability storage, the Mastra instance throws an error at registration time.
 
 For `run` scope, the processor reads the trace ID from the current span's tracing context. If no tracing context is available, the check is skipped (fail-open).
 
 For all other scopes, if the required context ID is missing at runtime, the check is skipped. Observability query failures are handled with a fail-open strategy: if a query fails, a warning is logged through the Mastra logger and the step proceeds.
 
-> **The `user`, `organization`, and `session` scopes require annotated traces.** These scopes match metric records by their `userId`, `organizationId`, and `sessionId` fields, which are populated from span metadata on the trace (for example, via tracing options metadata). If your traces don't carry the matching metadata, these scopes match zero records and the guard never trips. Setting the RequestContext key alone isn't enough: both the RequestContext key (for scope resolution) and the span metadata (for cost attribution) must be present.
+> **The `user`, `organization`, and `session` scopes require annotated traces.** These scopes match metric records by their `userId`, `organizationId`, and `sessionId` fields, which are populated from span metadata on the trace (for example, via tracing options metadata). Without matching trace metadata, these scopes match zero records and the guard never trips, because setting the RequestContext key alone isn't enough: both the RequestContext key (for scope resolution) and the span metadata (for cost attribution) must be present.
 
 > **Note on metric persistence delay.** The observability pipeline uses buffered exporters that flush metrics asynchronously. A short delay exists between when an LLM call completes and when its cost metrics are available for query. During high-frequency agent execution, the cost control may not detect a limit breach until one or more steps after the actual cost exceeded the threshold.

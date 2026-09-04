@@ -1,6 +1,6 @@
 ---
 title: 'Reference: Observational Memory | Memory'
-description: 'API reference for Observational Memory in Mastra: a three-tier memory system that uses Observer and Reflector agents to maintain long-term memory across conversations.'
+description: "Observational Memory (OM) is Mastra's memory system for long-context agentic memory. An Observer watches conversations and creates observations."
 packages:
   - '@mastra/core'
   - '@mastra/memory'
@@ -10,7 +10,7 @@ packages:
 
 **Added in:** `@mastra/memory@1.1.0`
 
-Observational Memory (OM) is Mastra's memory system for long-context agentic memory. An **Observer** watches conversations and creates observations. A **Reflector** restructures those observations by combining related items and condensing overarching patterns. Together, they maintain an observation log that replaces raw message history as it grows.
+Observational Memory (OM) is Mastra's memory system for long-context agentic memory. An **Observer** watches conversations and creates observations, which a **Reflector** restructures by combining related items and condensing overarching patterns. Together, they maintain an observation log that replaces raw message history as it grows.
 
 ## Usage
 
@@ -568,7 +568,7 @@ export const agent = new Agent({
 
 ### Shared token budget
 
-When `shareTokenBudget` is enabled, the total budget is `observation.messageTokens + reflection.observationTokens` (100k in this example). If observations only use 30k tokens, messages can expand to use up to 70k. If messages are short, observations have more room before triggering reflection.
+When `shareTokenBudget` is enabled, the total budget is `observation.messageTokens + reflection.observationTokens`, which is 100k in this example. Observations that use only 30k tokens leave up to 70k for messages, while short messages give observations more room before reflection starts.
 
 ```typescript title="src/mastra/agents/agent.ts"
 import { Memory } from '@mastra/memory'
@@ -685,7 +685,7 @@ export const agent = new Agent({
 
 Async buffering is **enabled by default**. It pre-computes observations in the background as the conversation grows: when the `messageTokens` threshold is reached, buffered observations activate instantly with no blocking LLM call.
 
-The lifecycle follows **buffer → activate → remove messages → repeat**. Background Observer calls run at `bufferTokens` intervals, each producing a chunk of observations. At threshold, chunks activate: observations move into the log, raw messages are removed from context. Above the `blockAfter` threshold, activation may overshoot the retention target instead of activating fewer chunks. If the threshold is reached and no buffered chunk activates, a synchronous observation runs instead.
+The lifecycle follows **buffer → activate → remove messages → repeat**. Background Observer calls run at `bufferTokens` intervals and produce chunks of observations. At the threshold, activation moves observations into the log and removes raw messages from context. Above `blockAfter`, activation may overshoot the retention target instead of activating fewer chunks. A synchronous observation runs if the threshold is reached without activating a buffered chunk.
 
 Default settings:
 
@@ -733,7 +733,7 @@ export const agent = new Agent({
 
 To disable async buffering entirely:
 
-```typescript prettier:false
+```typescript oxfmt:false
 observationalMemory: {
   model: "google/gemini-2.5-flash",
   observation: {
@@ -1170,7 +1170,7 @@ The standalone `ObservationalMemory` class accepts all the same options as the `
 
 ## Recall tool
 
-When `retrieval` is set (any truthy value), a `recall` tool is registered so the agent can page through raw messages behind observation group ranges. By default (scope `'resource'`), the tool supports listing threads (`mode: "threads"`), browsing other threads (`threadId`), and cross-thread search. With `retrieval: { vector: true }`, semantic search is available (`mode: "search"`). Set `scope: 'thread'` to restrict the tool to the current thread only. The tool is automatically added to the agent's tool list.
+When `retrieval` is truthy, Mastra registers a `recall` tool that pages through raw messages behind observation group ranges. With the default resource scope, the tool can list threads (`mode: "threads"`) and browse another thread through `threadId`. It also supports cross-thread search. Set `retrieval: { vector: true }` for semantic search (`mode: "search"`), or use `scope: 'thread'` to restrict the tool to the current thread. The tool is automatically added to the agent.
 
 Mastra also injects scope-aware usage instructions into the agent's context. For resource scope with `vector: true`, these cover routing between `search`, `threads`, and `messages`, including fallback to thread discovery when search results are unsuitable. Without `vector: true`, the instructions only cover `threads` and `messages` browsing, so the agent isn't steered toward a search mode that isn't configured. Resource-scoped instructions are injected even before any observation group exists, so the agent can browse other threads from the first message. Use `retrieval: { instructions: '...' }` to append application-specific guidance after the built-in instructions.
 

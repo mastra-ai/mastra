@@ -125,8 +125,8 @@ async function validateAllPrimitives() {
   console.log('-'.repeat(40));
 
   // Test getScorer (by key)
-  await testMethod('Scorer: getScorer("testScorer")', () => {
-    const scorer = mastra.getScorer('testScorer');
+  await testMethod('Scorer: getScorer("alwaysPassScorer")', () => {
+    const scorer = mastra.getScorer('alwaysPassScorer');
     return { id: scorer.id, name: scorer.name };
   });
 
@@ -140,7 +140,7 @@ async function validateAllPrimitives() {
 
   // Test getScorerById
   await testMethod('Scorer: getScorerById() with valid ID', () => {
-    const scorer = mastra.getScorer('testScorer');
+    const scorer = mastra.getScorer('alwaysPassScorer');
     const scorerById = mastra.getScorerById(scorer.id);
     return { id: scorerById.id, name: scorerById.name };
   });
@@ -148,7 +148,7 @@ async function validateAllPrimitives() {
   await testMethod(
     'Scorer: getScorerById("nonExistentId")',
     () => {
-      return mastra.getScorerById('nonExistentId');
+      return mastra.getScorerById('nonExistentId' as any);
     },
     false,
   );

@@ -10,6 +10,7 @@ const PAGE_TITLES: Record<string, string> = {
   overview: 'Overview',
   review: 'Review',
   rules: 'Rules',
+  supervisor: 'Supervisor',
   work: 'Work',
 };
 

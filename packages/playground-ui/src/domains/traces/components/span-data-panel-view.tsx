@@ -14,6 +14,7 @@ import { DataKeysAndValues } from '@/ds/components/DataKeysAndValues';
 import { DataPanel } from '@/ds/components/DataPanel';
 import { Notice } from '@/ds/components/Notice';
 import { Tab, TabContent, TabList, Tabs } from '@/ds/components/Tabs';
+import { truncateString } from '@/lib/truncate-string';
 
 function buildDialogTitle(sectionTitle: string, icon: ReactNode, span: { spanId: string; traceId: string }) {
   return (
@@ -44,13 +45,6 @@ export interface SpanDataPanelViewProps {
   activeTab?: string;
   onTabChange?: (tab: string) => void;
   /**
-   * When provided, a "Scoring" tab appears; the slot receives the loaded span and renders
-   * whatever scoring UI the consumer wants. When undefined, only the "Details" tab renders.
-   */
-  scoringTabSlot?: (args: { span: SpanRecord; traceId: string; spanId: string }) => ReactNode;
-  /** Optional count shown in the "Scoring" tab label (e.g. number of scores). */
-  scoringTabBadge?: ReactNode;
-  /**
    * When provided, a "Feedback" tab appears; the slot receives the loaded span and renders
    * whatever feedback UI the consumer wants.
    */
@@ -63,6 +57,8 @@ export interface SpanDataPanelViewProps {
    * to `span.parentSpanId == null` (trace case) when omitted.
    */
   isAnchor?: boolean;
+  /** Extra classes for the panel root (e.g. flattening the card when nested in the trace panel). */
+  className?: string;
 }
 
 export function SpanDataPanelView({
@@ -75,17 +71,17 @@ export function SpanDataPanelView({
   onNext,
   activeTab,
   onTabChange,
-  scoringTabSlot,
-  scoringTabBadge,
   feedbackTabSlot,
   feedbackTabBadge,
   isAnchor,
+  className,
 }: SpanDataPanelViewProps) {
   return (
-    <DataPanel>
-      <DataPanel.Header>
-        <DataPanel.Heading>
-          Span <b># {spanId}</b>
+    <DataPanel className={className}>
+      {/* 32px buttons + border would overflow min-h-14 by 1px; keep this header level with its neighbours. */}
+      <DataPanel.Header className="py-2">
+        <DataPanel.Heading className="whitespace-nowrap">
+          Span <b># {truncateString(spanId, 12)}</b>
         </DataPanel.Heading>
         <ButtonsGroup className="ml-auto shrink-0">
           <DataPanel.NextPrevNav
@@ -109,8 +105,6 @@ export function SpanDataPanelView({
           spanId={spanId}
           activeTab={activeTab}
           onTabChange={onTabChange}
-          scoringTabSlot={scoringTabSlot}
-          scoringTabBadge={scoringTabBadge}
           feedbackTabSlot={feedbackTabSlot}
           feedbackTabBadge={feedbackTabBadge}
           isAnchor={isAnchor}
@@ -126,8 +120,6 @@ function SpanDataPanelContent({
   spanId,
   activeTab,
   onTabChange,
-  scoringTabSlot,
-  scoringTabBadge,
   feedbackTabSlot,
   feedbackTabBadge,
   isAnchor,
@@ -137,8 +129,6 @@ function SpanDataPanelContent({
   spanId: string;
   activeTab?: string;
   onTabChange?: (tab: string) => void;
-  scoringTabSlot?: (args: { span: SpanRecord; traceId: string; spanId: string }) => ReactNode;
-  scoringTabBadge?: ReactNode;
   feedbackTabSlot?: (args: { span: SpanRecord; traceId: string; spanId: string }) => ReactNode;
   feedbackTabBadge?: ReactNode;
   isAnchor?: boolean;
@@ -322,24 +312,20 @@ function SpanDataPanelContent({
   );
 
   // No extra tab slots → render details directly without the Tabs/TabList wrapper.
-  if (!scoringTabSlot && !feedbackTabSlot) {
+  if (!feedbackTabSlot) {
     return <DataPanel.Content>{detailsBody}</DataPanel.Content>;
   }
 
   return (
     <DataPanel.Content>
       <Tabs defaultTab="details" value={activeTab} onValueChange={onTabChange}>
-        <TabList>
+        <TabList variant="pill-ghost" className="px-0">
           <Tab value="details">Details</Tab>
-          {scoringTabSlot && <Tab value="scoring">Scoring {scoringTabBadge != null && <>({scoringTabBadge})</>}</Tab>}
-          {feedbackTabSlot && (
-            <Tab value="feedback">Feedback {feedbackTabBadge != null && <>({feedbackTabBadge})</>}</Tab>
-          )}
+          <Tab value="feedback">Feedback {feedbackTabBadge != null && <>({feedbackTabBadge})</>}</Tab>
         </TabList>
 
         <TabContent value="details">{detailsBody}</TabContent>
-        {scoringTabSlot && <TabContent value="scoring">{scoringTabSlot({ span, traceId, spanId })}</TabContent>}
-        {feedbackTabSlot && <TabContent value="feedback">{feedbackTabSlot({ span, traceId, spanId })}</TabContent>}
+        <TabContent value="feedback">{feedbackTabSlot({ span, traceId, spanId })}</TabContent>
       </Tabs>
     </DataPanel.Content>
   );

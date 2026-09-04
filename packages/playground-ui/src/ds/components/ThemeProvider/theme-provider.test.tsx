@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
-import { act, cleanup, render, renderHook } from '@testing-library/react';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { act, cleanup, fireEvent, render, renderHook } from '@testing-library/react';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { ThemeToggle } from '../ThemeToggle/theme-toggle';
 import { ThemeProvider, useTheme } from './theme-provider';
 
 type SystemPreference = {
@@ -347,5 +348,105 @@ describe('ThemeProvider — remembering the choice', () => {
       );
     });
     expect(result.current.theme).toBe('dark');
+  });
+});
+
+describe('ThemeToggle', () => {
+  beforeAll(() => {
+    if (typeof window.PointerEvent === 'undefined') {
+      Object.defineProperty(window, 'PointerEvent', { configurable: true, value: window.MouseEvent });
+    }
+  });
+
+  it('renders the default options and accessible label', () => {
+    const { getByRole } = render(<ThemeToggle value="dark" onChange={() => undefined} />);
+
+    expect(getByRole('radiogroup', { name: 'Theme' })).toBeTruthy();
+    expect(getByRole('radio', { name: 'System' }).getAttribute('aria-checked')).toBe('false');
+    expect(getByRole('radio', { name: 'Light' }).getAttribute('aria-checked')).toBe('false');
+    expect(getByRole('radio', { name: 'Dark' }).getAttribute('aria-checked')).toBe('true');
+  });
+
+  it('selects the system option when controlled with the default value', () => {
+    const { getByRole } = render(<ThemeToggle value="system" onChange={() => undefined} />);
+
+    expect(getByRole('radio', { name: 'System' }).getAttribute('aria-checked')).toBe('true');
+  });
+
+  it('renders safely without options', () => {
+    const { queryAllByRole } = render(<ThemeToggle options={[]} value="dark" onChange={() => undefined} />);
+
+    expect(queryAllByRole('radio')).toHaveLength(0);
+  });
+
+  it('calls the controlled change handler for a selected option', () => {
+    const onChange = vi.fn();
+    const { getByRole } = render(<ThemeToggle value="system" onChange={onChange} />);
+
+    fireEvent.click(getByRole('radio', { name: 'Light' }));
+
+    expect(onChange).toHaveBeenCalledTimes(1);
+    expect(onChange).toHaveBeenCalledWith('light');
+  });
+
+  it('emits the system value from the default option', () => {
+    const onChange = vi.fn();
+    const { getByRole } = render(<ThemeToggle value="dark" onChange={onChange} />);
+
+    fireEvent.click(getByRole('radio', { name: 'System' }));
+
+    expect(onChange).toHaveBeenCalledWith('system');
+  });
+
+  it('falls back to the first available option', () => {
+    const options = [{ value: 'light', label: 'Only light', icon: <span /> }] as const;
+    const { getByRole } = render(<ThemeToggle options={options} value="dark" onChange={() => undefined} />);
+
+    expect(getByRole('radio', { name: 'Only light' }).getAttribute('aria-checked')).toBe('true');
+  });
+
+  it('uses medium segment measurements and interaction styles', () => {
+    const { getAllByRole, getByRole } = render(<ThemeToggle size="md" value="dark" onChange={() => undefined} />);
+    const group = getByRole('radiogroup');
+    const indicator = group.querySelector<HTMLSpanElement>(':scope > span[aria-hidden="true"]');
+    const radios = getAllByRole('radio');
+
+    expect(group.classList.contains('gap-0.5')).toBe(true);
+    expect(indicator?.classList.contains('bg-surface5')).toBe(true);
+    expect(indicator?.style.width).toBe('28px');
+    expect(indicator?.style.transform).toBe('translateX(60px)');
+    expect(radios.every(radio => radio.style.width === '28px')).toBe(true);
+    expect(radios.every(radio => radio.classList.contains('rounded-full'))).toBe(true);
+    expect(radios.every(radio => radio.classList.contains('data-[checked]:text-icon6'))).toBe(true);
+    expect(radios.every(radio => radio.classList.contains('focus-visible:outline-hidden'))).toBe(true);
+    expect(radios.every(radio => radio.classList.contains('active:scale-90'))).toBe(true);
+  });
+
+  it('uses extra-small segment measurements at the extra-small size', () => {
+    const { getAllByRole, getByRole } = render(<ThemeToggle size="xs" value="dark" onChange={() => undefined} />);
+    const group = getByRole('radiogroup');
+    const indicator = group.querySelector<HTMLSpanElement>(':scope > span[aria-hidden="true"]');
+
+    expect(group.classList.contains('gap-px')).toBe(true);
+    expect(group.classList.contains('p-px')).toBe(true);
+    expect(indicator?.classList.contains('inset-y-px')).toBe(true);
+    expect(indicator?.style.width).toBe('20px');
+    expect(indicator?.style.transform).toBe('translateX(42px)');
+    expect(getAllByRole('radio').every(radio => radio.style.width === '20px')).toBe(true);
+    expect(getAllByRole('radio').every(radio => radio.classList.contains('h-4'))).toBe(true);
+  });
+
+  it('uses compact segment measurements at the small size', () => {
+    const { getAllByRole, getByRole } = render(<ThemeToggle size="sm" value="dark" onChange={() => undefined} />);
+    const group = getByRole('radiogroup');
+    const indicator = group.querySelector<HTMLSpanElement>(':scope > span[aria-hidden="true"]');
+
+    expect(group.classList.contains('gap-px')).toBe(true);
+    expect(group.classList.contains('p-px')).toBe(true);
+    expect(indicator?.classList.contains('inset-y-px')).toBe(true);
+    expect(indicator?.style.width).toBe('24px');
+    expect(indicator?.style.transform).toBe('translateX(50px)');
+    expect(getAllByRole('radio').every(radio => radio.style.width === '24px')).toBe(true);
+    expect(getAllByRole('radio').every(radio => radio.classList.contains('h-5'))).toBe(true);
   });
 });

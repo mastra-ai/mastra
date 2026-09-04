@@ -6,7 +6,6 @@ import { execFileSync } from 'node:child_process';
 import { CombinedAutocompleteProvider, Spacer, Text } from '@earendil-works/pi-tui';
 import type { SlashCommand } from '@earendil-works/pi-tui';
 import { THINK_COMMAND_DESCRIPTOR } from '@mastra/code-sdk/thinking';
-import { getUserId } from '@mastra/code-sdk/utils/project';
 import { loadCustomCommands } from '@mastra/code-sdk/utils/slash-command-loader';
 import { ThreadLockError } from '@mastra/code-sdk/utils/thread-lock';
 import type { AgentControllerEventListener } from '@mastra/core/agent-controller';
@@ -257,7 +256,6 @@ export function buildLayout(state: TUIState, refreshModelAuthStatus: () => Promi
     `Resource ID: ${state.projectInfo.resourceId}`,
     state.projectInfo.gitBranch ? `Branch: ${state.projectInfo.gitBranch}` : null,
     state.projectInfo.isWorktree ? `Worktree of: ${state.projectInfo.mainRepoPath}` : null,
-    `User: ${getUserId(state.projectInfo.rootPath)}`,
   ]
     .filter(Boolean)
     .map(line => theme.fg('muted', line as string))
@@ -366,13 +364,16 @@ export function setupAutocomplete(state: TUIState): void {
     { name: 'thread', description: 'Show current thread info' },
     { name: 'threads', description: 'Switch between threads' },
     { name: 'models', description: 'Switch model pack' },
+    { name: 'packs', description: 'Alias for /models' },
+    { name: 'model', description: 'Change the current mode model' },
     { name: 'custom-providers', description: 'Manage custom providers and models' },
     { name: 'subagents', description: 'Configure subagent model defaults' },
     { name: 'memory', description: 'Configure Observational Memory' },
     { name: 'om', description: 'Alias for /memory' },
     ...(isSubconsciousEnabled() ? [{ name: 'knowledge', description: 'Browse scoped Subconscious knowledge' }] : []),
     THINK_COMMAND_DESCRIPTOR,
-    { name: 'login', description: 'Login with OAuth provider' },
+    { name: 'connect', description: 'Connect a provider account or API key' },
+    { name: 'login', description: 'Sign in with a provider account' },
     { name: 'skills', description: 'List available skills' },
     { name: 'skill/', description: 'Activate a skill by name' },
     { name: 'cost', description: 'Show token usage and estimated costs' },
@@ -676,16 +677,6 @@ export function subscribeToAgentController(state: TUIState, handleEvent: (event:
     return eventQueue;
   };
   state.unsubscribe = state.session.subscribe(listener);
-}
-
-// =============================================================================
-// Terminal Title
-// =============================================================================
-
-export function updateTerminalTitle(state: TUIState): void {
-  const appName = state.options.appName || 'Mastra Code';
-  const cwd = process.cwd().split('/').pop() || '';
-  state.ui.terminal.setTitle(`${appName} - ${cwd}`);
 }
 
 // =============================================================================

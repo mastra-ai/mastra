@@ -10,9 +10,10 @@ import {
 import { Input } from '@mastra/playground-ui/components/Input';
 import { MarkdownRenderer } from '@mastra/playground-ui/components/MarkdownRenderer';
 import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
+import { GithubIcon } from '@mastra/playground-ui/icons/GithubIcon';
 import { SkillIcon } from '@mastra/playground-ui/icons/SkillIcon';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { Search, Download, ExternalLink, Loader2, Package, Github, Check, Folder } from 'lucide-react';
+import { Search, Download, ExternalLink, Loader2, Package, Check, Folder } from 'lucide-react';
 import { useState, useCallback, useMemo } from 'react';
 import { useDebouncedCallback } from 'use-debounce';
 import { useSearchSkillsSh, usePopularSkillsSh, useSkillPreview, parseSkillSource } from '../hooks/use-skills-sh';
@@ -291,7 +292,7 @@ export function AddSkillDialog({
                           <h3 className="text-neutral6 truncate font-semibold">{selectedSkill.name}</h3>
                           <div className="text-neutral4 mt-1 flex items-center gap-3 text-xs">
                             <span className="flex items-center gap-1">
-                              <Github className="h-3 w-3" />
+                              <GithubIcon className="h-3 w-3" />
                               {selectedSkill.topSource}
                             </span>
                             <span className="flex items-center gap-1">

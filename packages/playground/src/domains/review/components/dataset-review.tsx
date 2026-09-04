@@ -1,7 +1,7 @@
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Checkbox } from '@mastra/playground-ui/components/Checkbox';
-import { DataList } from '@mastra/playground-ui/components/DataList';
+import { DataList, useDataListKeyboard } from '@mastra/playground-ui/components/DataList';
 import {
   Dialog,
   DialogContent,
@@ -11,6 +11,7 @@ import {
   DialogTitle,
 } from '@mastra/playground-ui/components/Dialog';
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
+import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { Label } from '@mastra/playground-ui/components/Label';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Textarea } from '@mastra/playground-ui/components/Textarea';
@@ -21,6 +22,7 @@ import { useMastraClient } from '@mastra/react';
 import {
   CheckCircle,
   ChevronDown,
+  ClipboardCheck,
   FilterIcon,
   GaugeIcon,
   Sparkles,
@@ -30,10 +32,11 @@ import {
   XIcon,
 } from 'lucide-react';
 import { useState, useMemo, useCallback, useEffect } from 'react';
-import { useDatasetReviewItems, useDatasetCompletedItems } from '../hooks/use-dataset-review-items';
+import { useReviewItems, useCompletedItems } from '../hooks/use-dataset-review-items';
 import { ProposalTag } from './proposal-tag';
 import type { ReviewItem } from './review-item-card';
 import { ReviewItemPanel } from './review-item-panel';
+import { RouteItemOverlay } from '@/components/route-item-overlay';
 import { useDatasetMutations } from '@/domains/datasets/hooks/use-dataset-mutations';
 import { useDataset } from '@/domains/datasets/hooks/use-datasets';
 import { LLMProviders, LLMModels } from '@/domains/llm';
@@ -50,8 +53,9 @@ function truncateInput(value: unknown, max: number): string {
 }
 
 export interface DatasetReviewProps {
-  datasetId: string;
-  /** When set, scopes the review (and completed) lists to items produced by this experiment. */
+  /** When set, the dataset's tags seed the tag vocabulary. Without it, tags come from the items only. */
+  datasetId?: string;
+  /** When set, scopes the review (and completed) lists to items produced by this experiment; otherwise project-wide. */
   experimentId?: string;
   /**
    * Optional request from the parent to auto-feature this item. Whenever this prop changes
@@ -60,21 +64,21 @@ export interface DatasetReviewProps {
    * to `null` when navigating away so a re-open of the same id retriggers selection).
    */
   featuredItemId?: string | null;
+  detailPanelVariant?: 'inline' | 'overlay';
 }
 
-export function DatasetReview({ datasetId, experimentId, featuredItemId: featuredItemIdRequest }: DatasetReviewProps) {
+export function DatasetReview({
+  datasetId,
+  experimentId,
+  featuredItemId: featuredItemIdRequest,
+  detailPanelVariant = 'inline',
+}: DatasetReviewProps) {
   const client = useMastraClient();
-  const { data: dataset } = useDataset(datasetId);
-  const { data: reviewItemsRaw, isLoading: isLoadingReview } = useDatasetReviewItems(datasetId);
-  const { data: completedItemsRaw, isLoading: isLoadingCompleted } = useDatasetCompletedItems(datasetId);
-  const reviewItems = useMemo(
-    () => (experimentId ? (reviewItemsRaw ?? []).filter(i => i.experimentId === experimentId) : reviewItemsRaw),
-    [reviewItemsRaw, experimentId],
-  );
-  const completedItems = useMemo(
-    () => (experimentId ? (completedItemsRaw ?? []).filter(i => i.experimentId === experimentId) : completedItemsRaw),
-    [completedItemsRaw, experimentId],
-  );
+  const { data: dataset } = useDataset(datasetId ?? '');
+  // Keep `undefined` while loading: the hydration effect below treats a defined
+  // value as "server data arrived", so coercing to [] here would lock in an empty queue.
+  const { data: reviewItems, isLoading: isLoadingReview } = useReviewItems({ experimentId });
+  const { data: completedItems, isLoading: isLoadingCompleted } = useCompletedItems({ experimentId });
   const { updateExperimentResult } = useDatasetMutations();
 
   // Local state
@@ -104,23 +108,13 @@ export function DatasetReview({ datasetId, experimentId, featuredItemId: feature
   >([]);
   const [showProposalDialog, setShowProposalDialog] = useState(false);
 
-  // Items in local state — null means "not hydrated yet", [] means "user cleared all"
-  const [localItems, setLocalItems] = useState<ReviewItem[] | null>(null);
-  const items = useMemo(() => localItems ?? reviewItems ?? [], [localItems, reviewItems]);
-
-  // Reset the local cache when the scope changes (different experiment or dataset)
-  // so it re-hydrates from the new queue below, instead of keeping the previous
-  // experiment's rows and running mutations against the wrong results.
-  useEffect(() => {
-    setLocalItems(null);
-  }, [datasetId, experimentId]);
-
-  // Sync server data to local on initial load (and after a scope reset above)
-  useEffect(() => {
-    if (reviewItems && localItems === null) {
-      setLocalItems(reviewItems);
-    }
-  }, [reviewItems, localItems]);
+  // Ratings are only sent as feedback, never stored on the result, so they live here.
+  // Everything else comes straight from the query; mutations invalidate it.
+  const [ratings, setRatings] = useState<Record<string, ReviewItem['rating']>>({});
+  const items = useMemo(
+    () => (reviewItems ?? []).map(i => (i.id in ratings ? { ...i, rating: ratings[i.id] } : i)),
+    [reviewItems, ratings],
+  );
 
   // Tag vocabulary from dataset + existing item tags
   const datasetTagVocabulary = useMemo(() => {
@@ -175,7 +169,6 @@ export function DatasetReview({ datasetId, experimentId, featuredItemId: feature
   // Item actions
   const setItemTags = useCallback(
     (itemId: string, tags: string[]) => {
-      setLocalItems(prev => (prev ?? []).map(i => (i.id === itemId ? { ...i, tags } : i)));
       const item = items.find(i => i.id === itemId);
       if (item?.experimentId && item?.datasetId) {
         updateExperimentResult.mutate({
@@ -201,13 +194,14 @@ export function DatasetReview({ datasetId, experimentId, featuredItemId: feature
               feedbackSource: 'studio',
               feedbackType: 'rating',
               value: rating === 'positive' ? 1 : -1,
+              reviewStatus: 'reviewed',
               experimentId: item.experimentId ?? undefined,
               sourceId: item.id,
             },
           })
           .catch(() => {});
       }
-      setLocalItems(prev => (prev ?? []).map(i => (i.id === itemId ? { ...i, rating } : i)));
+      setRatings(prev => ({ ...prev, [itemId]: rating }));
     },
     [items, client],
   );
@@ -233,13 +227,13 @@ export function DatasetReview({ datasetId, experimentId, featuredItemId: feature
               feedbackType: 'comment',
               value: comment,
               comment,
+              reviewStatus: 'reviewed',
               experimentId: item.experimentId ?? undefined,
               sourceId: item.id,
             },
           })
           .catch(() => {});
       }
-      setLocalItems(prev => (prev ?? []).map(i => (i.id === itemId ? { ...i, comment } : i)));
     },
     [items, client, updateExperimentResult],
   );
@@ -247,7 +241,6 @@ export function DatasetReview({ datasetId, experimentId, featuredItemId: feature
   const removeItem = useCallback(
     (itemId: string) => {
       const item = items.find(i => i.id === itemId);
-      setLocalItems(prev => (prev ?? []).filter(i => i.id !== itemId));
       setSelectedItemIds(prev => {
         const next = new Set(prev);
         next.delete(itemId);
@@ -269,7 +262,6 @@ export function DatasetReview({ datasetId, experimentId, featuredItemId: feature
   const completeItem = useCallback(
     (itemId: string) => {
       const item = items.find(i => i.id === itemId);
-      setLocalItems(prev => (prev ?? []).filter(i => i.id !== itemId));
       setSelectedItemIds(prev => {
         const next = new Set(prev);
         next.delete(itemId);
@@ -439,7 +431,9 @@ export function DatasetReview({ datasetId, experimentId, featuredItemId: feature
       ? () => setFeaturedItemId(displayItems[featuredIndex + 1].id)
       : undefined;
 
-  const gridColumns = 'auto minmax(15rem,1fr) 10rem 8rem 6rem 6rem';
+  const gridColumns = 'auto minmax(0,20rem) minmax(0,1fr) minmax(0,8rem) 6rem 6rem';
+
+  const { containerRef, getRowProps } = useDataListKeyboard({ count: displayItems.length });
 
   if (isLoadingReview) {
     return (
@@ -449,8 +443,37 @@ export function DatasetReview({ datasetId, experimentId, featuredItemId: feature
     );
   }
 
+  const detailPanel = featuredItem ? (
+    <ReviewItemPanel
+      className="h-full"
+      item={featuredItem}
+      isCompleted={showCompleted}
+      tagVocabulary={datasetTagVocabulary}
+      onRate={rating => rateItem(featuredItem.id, rating)}
+      onSetTags={tags => {
+        setItemTags(featuredItem.id, tags);
+        for (const tag of tags) {
+          if (!datasetTagVocabulary.includes(tag)) {
+            syncTagToDataset(tag);
+          }
+        }
+      }}
+      onComment={comment => commentItem(featuredItem.id, comment)}
+      onRemove={() => removeItem(featuredItem.id)}
+      onComplete={showCompleted ? undefined : () => completeItem(featuredItem.id)}
+      onPrevious={toPreviousItem}
+      onNext={toNextItem}
+      onClose={() => setFeaturedItemId(null)}
+    />
+  ) : null;
+
   return (
-    <div className="flex min-h-0 flex-1 overflow-hidden">
+    <div
+      className={cn(
+        'flex h-full min-h-0 flex-1',
+        detailPanelVariant === 'overlay' ? 'overflow-visible' : 'overflow-hidden',
+      )}
+    >
       {/* Analyze config dialog */}
       <Dialog open={showAnalyzeDialog} onOpenChange={setShowAnalyzeDialog}>
         <DialogContent>
@@ -570,202 +593,198 @@ export function DatasetReview({ datasetId, experimentId, featuredItemId: feature
 
       {/* Main layout: toolbar + List + Detail Panel */}
       <div
-        className={cn('grid w-full h-full grid-cols-1 gap-4 overflow-y-auto', featuredItem && 'grid-cols-[1fr_1fr]')}
+        className={cn(
+          'grid h-full min-h-0 w-full grid-cols-1 gap-4',
+          detailPanelVariant === 'overlay' ? 'overflow-visible' : 'overflow-hidden',
+          featuredItem && detailPanelVariant === 'inline' && 'grid-cols-[1fr_1fr]',
+        )}
       >
-        <div className="grid w-full content-start gap-8 overflow-y-auto">
-          <div className="flex w-full flex-wrap items-center justify-between gap-4 gap-x-6">
-            {/* Filters (left) */}
-            <div className="flex items-center gap-3">
-              <DropdownMenu>
-                <DropdownMenu.Trigger asChild>
-                  <Button variant="outline" size="md">
-                    <FilterIcon />
-                    Filter
-                    {activeFilterCount > 0 && (
-                      <span
-                        className={cn(
-                          'ml-0.5 inline-flex items-center justify-center rounded-full bg-accent1/50 text-neutral5 text-ui-sm w-5 h-5',
-                        )}
-                      >
-                        {activeFilterCount}
-                      </span>
-                    )}
-                  </Button>
-                </DropdownMenu.Trigger>
-                <DropdownMenu.Content align="start" className={cn('min-w-48')}>
-                  {/* Status */}
-                  <DropdownMenu.Sub>
-                    <DropdownMenu.SubTrigger>
-                      Status
-                      {showCompleted && <span className={cn('ml-auto text-ui-sm text-accent1')}>1</span>}
-                    </DropdownMenu.SubTrigger>
-                    <DropdownMenu.SubContent>
-                      <DropdownMenu.CheckboxItem
-                        checked={!showCompleted}
-                        onCheckedChange={() => {
-                          setShowCompleted(false);
-                          setFeaturedItemId(null);
-                        }}
-                        onSelect={e => e.preventDefault()}
-                      >
-                        Review Queue
-                      </DropdownMenu.CheckboxItem>
-                      <DropdownMenu.CheckboxItem
-                        checked={showCompleted}
-                        onCheckedChange={() => {
-                          setShowCompleted(true);
-                          setFeaturedItemId(null);
-                        }}
-                        onSelect={e => e.preventDefault()}
-                      >
-                        Completed
-                      </DropdownMenu.CheckboxItem>
-                    </DropdownMenu.SubContent>
-                  </DropdownMenu.Sub>
-
-                  {/* Tags */}
-                  <DropdownMenu.Sub>
-                    <DropdownMenu.SubTrigger>
-                      Tags
-                      {activeTagFilter && <span className={cn('ml-auto text-ui-sm text-accent1')}>1</span>}
-                    </DropdownMenu.SubTrigger>
-                    <DropdownMenu.SubContent>
-                      <DropdownMenu.CheckboxItem
-                        checked={!activeTagFilter}
-                        onCheckedChange={() => setActiveTagFilter(null)}
-                        onSelect={e => e.preventDefault()}
-                      >
-                        All
-                      </DropdownMenu.CheckboxItem>
-                      {untaggedCount > 0 && (
-                        <DropdownMenu.CheckboxItem
-                          checked={activeTagFilter === '__untagged__'}
-                          onCheckedChange={() =>
-                            setActiveTagFilter(activeTagFilter === '__untagged__' ? null : '__untagged__')
-                          }
-                          onSelect={e => e.preventDefault()}
-                        >
-                          Untagged
-                        </DropdownMenu.CheckboxItem>
-                      )}
-                      {tagCounts.length > 0 && <DropdownMenu.Separator />}
-                      {tagCounts.map(([tag]) => (
-                        <DropdownMenu.CheckboxItem
-                          key={tag}
-                          checked={activeTagFilter === tag}
-                          onCheckedChange={() => setActiveTagFilter(activeTagFilter === tag ? null : tag)}
-                          onSelect={e => e.preventDefault()}
-                        >
-                          {tag}
-                        </DropdownMenu.CheckboxItem>
-                      ))}
-                    </DropdownMenu.SubContent>
-                  </DropdownMenu.Sub>
-
-                  {/* Clear all */}
-                  {activeFilterCount > 0 && (
-                    <>
-                      <DropdownMenu.Separator />
-                      <DropdownMenu.Item
-                        onSelect={() => {
-                          setActiveTagFilter(null);
-                          setShowCompleted(false);
-                          setFeaturedItemId(null);
-                        }}
-                      >
-                        <XIcon />
-                        Clear all filters
-                      </DropdownMenu.Item>
-                    </>
-                  )}
-                </DropdownMenu.Content>
-              </DropdownMenu>
-
-              {activeFilterCount > 0 && (
-                <Button
-                  variant="outline"
-                  size="md"
-                  onClick={() => {
-                    setActiveTagFilter(null);
-                    setShowCompleted(false);
-                    setFeaturedItemId(null);
-                  }}
-                >
-                  <XIcon />
-                  Reset
-                </Button>
-              )}
-            </div>
-
-            {/* Actions (right) */}
-            {!showCompleted && selectedItemIds.size > 0 && (
-              <div className="flex items-center gap-2">
-                <BulkTagPicker
-                  selectedCount={selectedItemIds.size}
-                  vocabulary={datasetTagVocabulary}
-                  onApplyTag={handleBulkTag}
-                  onRemoveTag={handleBulkRemoveTag}
-                  onNewTag={tag => handleBulkTag(tag)}
-                />
-
+        <div className="grid min-h-0 w-full grid-rows-[auto_1fr] gap-3 overflow-hidden pt-3">
+          {(items.length > 0 || activeFilterCount > 0) && (
+            <div className="flex w-full flex-wrap items-center justify-start gap-3">
+              {/* Filters (left) */}
+              <div className="flex items-center gap-3">
                 <DropdownMenu>
                   <DropdownMenu.Trigger asChild>
-                    <Button disabled={isAnalyzing}>
-                      {isAnalyzing ? (
-                        <Spinner className="h-4 w-4" />
-                      ) : (
-                        <Icon size="sm">
-                          <ChevronDown />
-                        </Icon>
-                      )}
-                      Actions
+                    <Button size="sm">
+                      <FilterIcon />
+                      Filter
+                      {activeFilterCount > 0 && <Badge size="xs">{activeFilterCount}</Badge>}
                     </Button>
                   </DropdownMenu.Trigger>
-                  <DropdownMenu.Content align="end">
-                    <DropdownMenu.Item onSelect={handleBulkComplete}>
-                      <Icon size="sm">
-                        <CheckCircle />
-                      </Icon>
-                      Complete
-                    </DropdownMenu.Item>
-                    <DropdownMenu.Item onSelect={handleBulkRemove}>
-                      <Icon size="sm">
-                        <Trash2 />
-                      </Icon>
-                      Remove
-                    </DropdownMenu.Item>
-                    <DropdownMenu.Separator />
-                    <DropdownMenu.Item onSelect={openAnalyzeDialog}>
-                      <Icon size="sm">
-                        <Sparkles />
-                      </Icon>
-                      Analyze
-                    </DropdownMenu.Item>
+                  <DropdownMenu.Content align="start" className={cn('min-w-48')}>
+                    {/* Status */}
+                    <DropdownMenu.Sub>
+                      <DropdownMenu.SubTrigger>
+                        Status
+                        {showCompleted && <span className={cn('ml-auto text-ui-sm text-accent1')}>1</span>}
+                      </DropdownMenu.SubTrigger>
+                      <DropdownMenu.SubContent>
+                        <DropdownMenu.CheckboxItem
+                          checked={!showCompleted}
+                          onCheckedChange={() => {
+                            setShowCompleted(false);
+                            setFeaturedItemId(null);
+                          }}
+                          onSelect={e => e.preventDefault()}
+                        >
+                          Review Queue
+                        </DropdownMenu.CheckboxItem>
+                        <DropdownMenu.CheckboxItem
+                          checked={showCompleted}
+                          onCheckedChange={() => {
+                            setShowCompleted(true);
+                            setFeaturedItemId(null);
+                          }}
+                          onSelect={e => e.preventDefault()}
+                        >
+                          Completed
+                        </DropdownMenu.CheckboxItem>
+                      </DropdownMenu.SubContent>
+                    </DropdownMenu.Sub>
+
+                    {/* Tags */}
+                    <DropdownMenu.Sub>
+                      <DropdownMenu.SubTrigger>
+                        Tags
+                        {activeTagFilter && <span className={cn('ml-auto text-ui-sm text-accent1')}>1</span>}
+                      </DropdownMenu.SubTrigger>
+                      <DropdownMenu.SubContent>
+                        <DropdownMenu.CheckboxItem
+                          checked={!activeTagFilter}
+                          onCheckedChange={() => setActiveTagFilter(null)}
+                          onSelect={e => e.preventDefault()}
+                        >
+                          All
+                        </DropdownMenu.CheckboxItem>
+                        {untaggedCount > 0 && (
+                          <DropdownMenu.CheckboxItem
+                            checked={activeTagFilter === '__untagged__'}
+                            onCheckedChange={() =>
+                              setActiveTagFilter(activeTagFilter === '__untagged__' ? null : '__untagged__')
+                            }
+                            onSelect={e => e.preventDefault()}
+                          >
+                            Untagged
+                          </DropdownMenu.CheckboxItem>
+                        )}
+                        {tagCounts.length > 0 && <DropdownMenu.Separator />}
+                        {tagCounts.map(([tag]) => (
+                          <DropdownMenu.CheckboxItem
+                            key={tag}
+                            checked={activeTagFilter === tag}
+                            onCheckedChange={() => setActiveTagFilter(activeTagFilter === tag ? null : tag)}
+                            onSelect={e => e.preventDefault()}
+                          >
+                            {tag}
+                          </DropdownMenu.CheckboxItem>
+                        ))}
+                      </DropdownMenu.SubContent>
+                    </DropdownMenu.Sub>
+
+                    {/* Clear all */}
+                    {activeFilterCount > 0 && (
+                      <>
+                        <DropdownMenu.Separator />
+                        <DropdownMenu.Item
+                          onSelect={() => {
+                            setActiveTagFilter(null);
+                            setShowCompleted(false);
+                            setFeaturedItemId(null);
+                          }}
+                        >
+                          <XIcon />
+                          Clear all filters
+                        </DropdownMenu.Item>
+                      </>
+                    )}
                   </DropdownMenu.Content>
                 </DropdownMenu>
+
+                {activeFilterCount > 0 && (
+                  <Button
+                    size="sm"
+                    onClick={() => {
+                      setActiveTagFilter(null);
+                      setShowCompleted(false);
+                      setFeaturedItemId(null);
+                    }}
+                  >
+                    <XIcon />
+                    Reset
+                  </Button>
+                )}
               </div>
-            )}
-          </div>
+
+              {/* Actions (right) */}
+              {!showCompleted && selectedItemIds.size > 0 && (
+                <div className="flex items-center gap-2">
+                  <BulkTagPicker
+                    selectedCount={selectedItemIds.size}
+                    vocabulary={datasetTagVocabulary}
+                    onApplyTag={handleBulkTag}
+                    onRemoveTag={handleBulkRemoveTag}
+                    onNewTag={tag => handleBulkTag(tag)}
+                  />
+
+                  <DropdownMenu>
+                    <DropdownMenu.Trigger asChild>
+                      <Button size="sm" disabled={isAnalyzing}>
+                        {isAnalyzing ? (
+                          <Spinner className="h-4 w-4" />
+                        ) : (
+                          <Icon size="sm">
+                            <ChevronDown />
+                          </Icon>
+                        )}
+                        Actions
+                      </Button>
+                    </DropdownMenu.Trigger>
+                    <DropdownMenu.Content align="end">
+                      <DropdownMenu.Item onSelect={handleBulkComplete}>
+                        <Icon size="sm">
+                          <CheckCircle />
+                        </Icon>
+                        Complete
+                      </DropdownMenu.Item>
+                      <DropdownMenu.Item onSelect={handleBulkRemove}>
+                        <Icon size="sm">
+                          <Trash2 />
+                        </Icon>
+                        Remove
+                      </DropdownMenu.Item>
+                      <DropdownMenu.Separator />
+                      <DropdownMenu.Item onSelect={openAnalyzeDialog}>
+                        <Icon size="sm">
+                          <Sparkles />
+                        </Icon>
+                        Analyze
+                      </DropdownMenu.Item>
+                    </DropdownMenu.Content>
+                  </DropdownMenu>
+                </div>
+              )}
+            </div>
+          )}
 
           {isLoadingDisplay ? (
             <div className="flex flex-1 items-center justify-center">
               <Spinner className="h-6 w-6" />
             </div>
           ) : displayItems.length === 0 ? (
-            <div className="flex flex-1 items-center justify-center">
-              <div className="px-8 text-center">
-                <Txt variant="ui-sm" className="text-neutral3 block">
-                  {showCompleted ? 'No completed reviews yet' : 'No items to review'}
-                </Txt>
-                <Txt variant="ui-xs" className="text-neutral3 mt-2 block">
-                  {showCompleted
+            <div className="flex h-full items-center justify-center py-12">
+              <EmptyState
+                iconSlot={<ClipboardCheck className="text-neutral3 h-8 w-8" />}
+                titleSlot={showCompleted ? 'No completed reviews yet' : 'No items to review'}
+                descriptionSlot={
+                  showCompleted
                     ? 'Items marked as complete will appear here for auditing.'
-                    : 'When experiment results are flagged for review, they will appear here.'}
-                </Txt>
-              </div>
+                    : 'When experiment results are flagged for review, they will appear here.'
+                }
+              />
             </div>
           ) : (
-            <DataList columns={gridColumns} className="min-w-0">
+            <DataList columns={gridColumns} fit="container" className="min-w-0" scrollRef={containerRef}>
               <DataList.Top hasLeadingCell>
                 {!showCompleted ? (
                   <DataList.TopSelectCell
@@ -785,19 +804,19 @@ export function DatasetReview({ datasetId, experimentId, featuredItemId: feature
                 </DataList.TopCells>
               </DataList.Top>
 
-              {displayItems.map(item => {
+              {displayItems.map((item, index) => {
                 const scoreEntries = item.scores ? Object.entries(item.scores) : [];
                 const isFeatured = featuredItemId === item.id;
 
                 const rowCells = (
                   <>
                     {/* Input preview */}
-                    <DataList.Cell height="compact" className="text-neutral4 min-w-0">
+                    <DataList.Cell className="text-neutral4 min-w-0">
                       <span className="block truncate">{truncateInput(item.input, 200)}</span>
                     </DataList.Cell>
 
                     {/* Comment preview */}
-                    <DataList.Cell height="compact" className="min-w-0">
+                    <DataList.Cell className="min-w-0">
                       {item.comment ? (
                         <Txt variant="ui-xs" className="text-neutral3 truncate">
                           {item.comment}
@@ -810,7 +829,7 @@ export function DatasetReview({ datasetId, experimentId, featuredItemId: feature
                     </DataList.Cell>
 
                     {/* Tags */}
-                    <DataList.Cell height="compact" className="min-w-0">
+                    <DataList.Cell className="min-w-0">
                       {item.tags.length > 0 ? (
                         <Txt variant="ui-xs" className="text-neutral4 truncate">
                           {item.tags.join(', ')}
@@ -823,7 +842,7 @@ export function DatasetReview({ datasetId, experimentId, featuredItemId: feature
                     </DataList.Cell>
 
                     {/* Rating */}
-                    <DataList.Cell height="compact">
+                    <DataList.Cell>
                       {item.rating === 'positive' && (
                         <Icon size="sm" className="text-positive1">
                           <ThumbsUp />
@@ -842,7 +861,7 @@ export function DatasetReview({ datasetId, experimentId, featuredItemId: feature
                     </DataList.Cell>
 
                     {/* Scores */}
-                    <DataList.Cell height="compact">
+                    <DataList.Cell>
                       {scoreEntries.length > 0 ? (
                         <div className="flex items-center gap-1">
                           <Icon size="sm" className="text-neutral3">
@@ -851,7 +870,7 @@ export function DatasetReview({ datasetId, experimentId, featuredItemId: feature
                           <Txt variant="ui-xs" className="text-neutral4 font-mono">
                             {scoreEntries[0][1].toFixed(2)}
                           </Txt>
-                          {scoreEntries.length > 1 && <Badge variant="default">+{scoreEntries.length - 1}</Badge>}
+                          {scoreEntries.length > 1 && <Badge>+{scoreEntries.length - 1}</Badge>}
                         </div>
                       ) : (
                         <Txt variant="ui-xs" className="text-neutral2">
@@ -871,7 +890,7 @@ export function DatasetReview({ datasetId, experimentId, featuredItemId: feature
                         aria-label={`Select item ${item.id}`}
                       />
                     ) : (
-                      <DataList.Cell height="compact" className="justify-items-center px-4">
+                      <DataList.Cell className="justify-items-center px-4">
                         <div
                           role="img"
                           aria-label={item.error ? 'Error' : 'Success'}
@@ -881,10 +900,10 @@ export function DatasetReview({ datasetId, experimentId, featuredItemId: feature
                       </DataList.Cell>
                     )}
                     <DataList.RowButton
-                      flushLeft
                       colStart={2}
                       featured={isFeatured}
                       onClick={() => handleRowClick(item.id)}
+                      {...getRowProps(index)}
                     >
                       {rowCells}
                     </DataList.RowButton>
@@ -895,28 +914,12 @@ export function DatasetReview({ datasetId, experimentId, featuredItemId: feature
           )}
         </div>
 
-        {featuredItem && (
-          <ReviewItemPanel
-            item={featuredItem}
-            isCompleted={showCompleted}
-            tagVocabulary={datasetTagVocabulary}
-            onRate={rating => rateItem(featuredItem.id, rating)}
-            onSetTags={tags => {
-              setItemTags(featuredItem.id, tags);
-              for (const t of tags) {
-                if (!datasetTagVocabulary.includes(t)) {
-                  syncTagToDataset(t);
-                }
-              }
-            }}
-            onComment={comment => commentItem(featuredItem.id, comment)}
-            onRemove={() => removeItem(featuredItem.id)}
-            onComplete={showCompleted ? undefined : () => completeItem(featuredItem.id)}
-            onPrevious={toPreviousItem}
-            onNext={toNextItem}
-            onClose={() => setFeaturedItemId(null)}
-          />
-        )}
+        {detailPanel &&
+          (detailPanelVariant === 'overlay' ? (
+            <RouteItemOverlay label={`Review item ${featuredItem?.id ?? ''}`}>{detailPanel}</RouteItemOverlay>
+          ) : (
+            detailPanel
+          ))}
       </div>
     </div>
   );

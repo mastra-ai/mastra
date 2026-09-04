@@ -176,14 +176,13 @@ export interface LocalSandboxOptions extends Omit<MastraSandboxOptions, 'process
  * const result = await workspace.executeCommand('node', ['script.js']);
  * ```
  */
-export class LocalSandbox extends MastraSandbox {
+export class LocalSandbox extends MastraSandbox<string> {
   readonly id: string;
   readonly name = 'LocalSandbox';
   readonly provider = 'local';
 
   status: ProviderStatus = 'pending';
 
-  readonly workingDirectory: string;
   readonly isolation: IsolationBackend;
   declare readonly processes: LocalProcessManager;
   declare readonly mounts: MountManager;
@@ -217,6 +216,15 @@ export class LocalSandbox extends MastraSandbox {
   /** Chains snapshot() calls so concurrent captures never interleave. */
   private _snapshotChain: Promise<void> = Promise.resolve();
 
+  /**
+   * The effective working directory. Narrowed to `string`: the constructor
+   * always computes a value (the option, expanded, or `<cwd>/.sandbox`), so
+   * unlike the base getter this never returns `undefined`.
+   */
+  override get workingDirectory(): string {
+    return this._workingDirectory!;
+  }
+
   constructor(options: LocalSandboxOptions = {}) {
     // Validate isolation backend before super (fail fast)
     const requestedIsolation = options.isolation ?? 'none';
@@ -233,7 +241,7 @@ export class LocalSandbox extends MastraSandbox {
 
     this.id = options.id ?? this.generateId();
     this._createdAt = new Date();
-    this.workingDirectory = expandTilde(options.workingDirectory ?? path.join(process.cwd(), '.sandbox'));
+    this.setWorkingDirectory(expandTilde(options.workingDirectory ?? path.join(process.cwd(), '.sandbox')));
     this.env = options.env ?? {};
     this._nativeSandboxConfig = {
       ...options.nativeSandbox,
@@ -291,11 +299,40 @@ export class LocalSandbox extends MastraSandbox {
   // ---------------------------------------------------------------------------
 
   /**
-   * Start the local sandbox.
-   * Creates working directory and sets up seatbelt profile if using macOS isolation.
-   * Status management is handled by the base class.
+   * Acquisition primitives (base-orchestrated start): an existing working
+   * directory is the "found sandbox" — reattaching reports `outcome: 'connected'`,
+   * a missing directory means a fresh sandbox (`outcome: 'created'`).
+   *
+   * This stat and the `mkdir` in `create()` are not atomic, so `'created'` is
+   * best-effort: two processes starting on the same working directory can both
+   * report it. Keep onStart setup idempotent.
    */
-  async start(): Promise<void> {
+  protected override async find(): Promise<string | undefined> {
+    try {
+      await fs.stat(this.workingDirectory);
+      return this.workingDirectory;
+    } catch (err: unknown) {
+      if ((err as NodeJS.ErrnoException)?.code !== 'ENOENT') {
+        throw err;
+      }
+      return undefined;
+    }
+  }
+
+  protected override async connect(_handle: string): Promise<void> {
+    await this._prepareWorkspace();
+  }
+
+  protected override async create(): Promise<void> {
+    await this._prepareWorkspace();
+  }
+
+  /**
+   * Shared start body for both branches: ensure the working directory
+   * exists, seed it from a checkpoint when empty, and set up the seatbelt
+   * profile on macOS. Everything here is idempotent.
+   */
+  private async _prepareWorkspace(): Promise<void> {
     this.logger.debug('Starting sandbox', {
       workingDirectory: this.workingDirectory,
       isolation: this.isolation,

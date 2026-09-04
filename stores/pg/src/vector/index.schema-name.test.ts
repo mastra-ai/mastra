@@ -227,7 +227,7 @@ describe('PgVector custom schema sets search_path before index creation and quer
       }
 
       // For describeIndex - simulate a vector table exists
-      if (sql.includes('information_schema.columns') && sql.includes('udt_name')) {
+      if (sql.includes('pg_attribute') && sql.includes('udt_name')) {
         return { rows: [{ udt_name: 'vector' }] };
       }
 
@@ -428,7 +428,7 @@ describe('PgVector buildIndex uses correct operator class for halfvec', () => {
       }
 
       // For describeIndex - simulate a halfvec table exists
-      if (sql.includes('information_schema.columns') && sql.includes('udt_name')) {
+      if (sql.includes('pg_attribute') && sql.includes('udt_name')) {
         return { rows: [{ udt_name: 'halfvec' }] };
       }
 
@@ -480,5 +480,139 @@ describe('PgVector buildIndex uses correct operator class for halfvec', () => {
     // Should use halfvec_cosine_ops, not vector_cosine_ops
     expect(createIndexCall?.text ?? '').toContain('halfvec_cosine_ops');
     expect(createIndexCall?.text ?? '').not.toContain('vector_cosine_ops');
+  });
+});
+
+describe('PgVector catalog lookups resolve through search_path when schemaName is unset', () => {
+  // Regression for #22545: with a role whose "$user" schema exists, unqualified DDL lands in
+  // that schema while catalog lookups used to hard-code `public`. Catalog lookups must now be
+  // anchored on the same relation the DDL resolves to (to_regclass) or the effective
+  // search_path (current_schemas), never on a literal 'public'.
+  const queryHistory: QueryCall[] = [];
+  let listIndexesSpy: ReturnType<typeof vi.spyOn> | undefined;
+
+  const createStore = async (schemaName?: string) => {
+    const store = new PgVector({
+      connectionString: 'postgresql://postgres:postgres@localhost:5432/mastra',
+      id: 'pg-vector-search-path-lookup-test',
+      ...(schemaName ? { schemaName } : {}),
+    });
+    await (store as any).cacheWarmupPromise;
+    queryHistory.length = 0;
+    return store;
+  };
+
+  beforeEach(() => {
+    queryHistory.length = 0;
+    mockClient.query.mockImplementation(async (text: any, values?: any[]) => {
+      const sql = typeof text === 'string' ? text : text?.text || '';
+      queryHistory.push({ text: sql, values });
+
+      if (sql.includes('information_schema.schemata')) {
+        return { rows: [{ exists: true }] };
+      }
+      if (sql.includes('FROM pg_extension e')) {
+        return { rows: [{ schema_name: 'public', version: '0.8.0' }] };
+      }
+      if (sql.includes('pg_attribute') && sql.includes('udt_name')) {
+        return { rows: [{ udt_name: 'vector' }] };
+      }
+      if (sql.includes('pg_attribute') && sql.includes('atttypmod')) {
+        return { rows: [{ dimension: 384 }] };
+      }
+      if (sql.includes('COUNT(*)')) {
+        return { rows: [{ count: '0' }] };
+      }
+      if (sql.includes('pg_index') && sql.includes('pg_am')) {
+        return { rows: [] };
+      }
+      return { rows: [], rowCount: 0 };
+    });
+    mockClient.release.mockReset();
+    listIndexesSpy = vi.spyOn(PgVector.prototype, 'listIndexes').mockResolvedValue([]);
+  });
+
+  afterEach(() => {
+    listIndexesSpy?.mockRestore();
+    mockClient.query.mockReset();
+  });
+
+  it('describeIndex anchors catalog lookups on the unqualified relation instead of public', async () => {
+    const store = await createStore();
+    listIndexesSpy?.mockRestore();
+    listIndexesSpy = undefined;
+
+    await store.describeIndex({ indexName: 'memory_observations_384' });
+
+    expect(queryHistory.some(call => call.values?.includes('public'))).toBe(false);
+
+    const existsCall = queryHistory.find(call => call.text.includes('udt_name'));
+    expect(existsCall?.text).toContain('to_regclass($1)');
+    expect(existsCall?.values).toEqual(['"memory_observations_384"']);
+
+    const indexCall = queryHistory.find(call => call.text.includes('pg_index'));
+    expect(indexCall?.text).toContain('i.indrelid = to_regclass($2)');
+    expect(indexCall?.text).not.toContain('nspname');
+    expect(indexCall?.values).toEqual(['memory_observations_384_vector_idx', '"memory_observations_384"']);
+
+    await store.disconnect();
+  });
+
+  it('describeIndex keeps the explicit schema when schemaName is configured', async () => {
+    const store = await createStore('custom_schema');
+
+    await store.describeIndex({ indexName: 'memory_observations_384' });
+
+    const existsCall = queryHistory.find(call => call.text.includes('udt_name'));
+    expect(existsCall?.values).toEqual(['"custom_schema"."memory_observations_384"']);
+
+    const indexCall = queryHistory.find(call => call.text.includes('pg_index'));
+    expect(indexCall?.values).toEqual([
+      'memory_observations_384_vector_idx',
+      '"custom_schema"."memory_observations_384"',
+    ]);
+
+    await store.disconnect();
+  });
+
+  it('listIndexes searches the effective search_path when schemaName is unset', async () => {
+    const store = await createStore();
+    listIndexesSpy?.mockRestore();
+    listIndexesSpy = undefined;
+
+    await store.listIndexes();
+
+    const listCall = queryHistory.find(call => call.text.includes('information_schema.tables'));
+    expect(listCall?.text).toContain('current_schemas(false)');
+    expect(listCall?.values).toEqual([null]);
+
+    await store.disconnect();
+  });
+
+  it('listIndexes filters to the explicit schema when schemaName is configured', async () => {
+    const store = await createStore('custom_schema');
+    listIndexesSpy?.mockRestore();
+    listIndexesSpy = undefined;
+
+    await store.listIndexes();
+
+    const listCall = queryHistory.find(call => call.text.includes('information_schema.tables'));
+    expect(listCall?.values).toEqual(['custom_schema']);
+
+    await store.disconnect();
+  });
+
+  it('namespace migration checks the relation via to_regclass instead of public', async () => {
+    const store = await createStore();
+
+    await store.createIndex({ indexName: 'memory_observations_384', dimension: 384, buildIndex: false });
+
+    expect(queryHistory.some(call => call.values?.includes('public'))).toBe(false);
+
+    const vectorIdCheck = queryHistory.find(call => call.text.includes("attname = 'vector_id'"));
+    expect(vectorIdCheck?.text).toContain('to_regclass($1)');
+    expect(vectorIdCheck?.values).toEqual(['"memory_observations_384"']);
+
+    await store.disconnect();
   });
 });

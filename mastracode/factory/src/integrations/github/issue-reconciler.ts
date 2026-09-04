@@ -4,7 +4,9 @@ import {
   reconcilableIssueNumber,
   reconciledIssueClosedEvent,
   RECONCILE_ERROR_SAMPLE_LIMIT,
-  sameStrings,GithubRules
+  sameStrings,
+  sweepTrustLookup,
+  GithubRules,
 } from './rules.js';
 import type { GithubIssueFetcher, GithubRulesIntegration, GithubRulesOptions, ReconcileRepository } from './rules.js';
 
@@ -39,9 +41,20 @@ export function createGithubIssueReconciler(
       failed: 0,
       errors: [],
     };
+    const recordFailure = (repository: ReconcileRepository, error: unknown, issueNumber?: number) => {
+      summary.failed += 1;
+      if (summary.errors.length < RECONCILE_ERROR_SAMPLE_LIMIT) {
+        summary.errors.push({
+          repository: repository.fullName,
+          ...(issueNumber === undefined ? {} : { issueNumber }),
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    };
 
     for (const repository of repositories) {
       summary.repositories += 1;
+      const authorTrust = sweepTrustLookup(options.github, repository);
 
       try {
         const projects = await options.sourceControl.projectRepositories.listByExternalRepository({
@@ -99,10 +112,22 @@ export function createGithubIssueReconciler(
               ...(state.assignees === undefined ? {} : { assignees: state.assignees }),
               ...(state.labels === undefined ? {} : { labels: state.labels }),
             };
+            // Re-stamped on every sweep so revoked write access reads untrusted
+            // within one cycle; a failed lookup keeps the last stamp and retries.
+            let authorTrusted: boolean | undefined;
+            if (state.author !== undefined) {
+              try {
+                authorTrusted = await authorTrust(state.author);
+              } catch (error) {
+                recordFailure(repository, error, issueNumber);
+              }
+            }
 
             for (const item of items) {
               const current = item.metadata ?? {};
+              const trustStale = authorTrusted !== undefined && current.authorTrusted !== authorTrusted;
               const metadataChanged =
+                trustStale ||
                 current.githubRepositoryId !== desiredMetadata.githubRepositoryId ||
                 current.githubIssueNumber !== desiredMetadata.githubIssueNumber ||
                 current.state !== desiredMetadata.state ||
@@ -116,29 +141,16 @@ export function createGithubIssueReconciler(
                 orgId: item.orgId,
                 id: item.id,
                 userId: 'factory-rule-dispatcher',
-                patch: { metadata: { ...current, ...desiredMetadata } },
+                patch: { metadata: { ...current, ...desiredMetadata, ...(trustStale ? { authorTrusted } : {}) } },
               });
               summary.updated += 1;
             }
           } catch (error) {
-            summary.failed += 1;
-            if (summary.errors.length < RECONCILE_ERROR_SAMPLE_LIMIT) {
-              summary.errors.push({
-                repository: repository.fullName,
-                issueNumber,
-                error: error instanceof Error ? error.message : String(error),
-              });
-            }
+            recordFailure(repository, error, issueNumber);
           }
         }
       } catch (error) {
-        summary.failed += 1;
-        if (summary.errors.length < RECONCILE_ERROR_SAMPLE_LIMIT) {
-          summary.errors.push({
-            repository: repository.fullName,
-            error: error instanceof Error ? error.message : String(error),
-          });
-        }
+        recordFailure(repository, error);
       }
     }
 

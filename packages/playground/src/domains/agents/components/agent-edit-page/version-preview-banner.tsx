@@ -10,7 +10,7 @@ interface VersionIndicatorProps {
 export function VersionIndicator({ versionNumber, onClose }: VersionIndicatorProps) {
   return (
     <div className="flex items-center gap-1.5">
-      <Badge variant="info">Viewing v{versionNumber}</Badge>
+      <Badge variant="blue">Viewing v{versionNumber}</Badge>
       <Button variant="ghost" size="icon-sm" onClick={onClose} tooltip="Back to latest version">
         <X />
       </Button>

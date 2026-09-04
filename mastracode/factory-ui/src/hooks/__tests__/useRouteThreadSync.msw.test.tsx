@@ -21,6 +21,9 @@ const API = `${TEST_BASE_URL}/api/agent-controller/code`;
 const transcript: ChatTranscriptApi = {
   transcript: initialTranscript,
   busy: false,
+  phase: 'awaiting',
+  initializing: false,
+  historyInitializing: false,
   initialHistoryReady: true,
   localUser: vi.fn(),
   failLocalUser: vi.fn(),
@@ -38,7 +41,6 @@ function sessionValue(resourceId: string, sessionEnabled: boolean): ChatSessionC
     resourceReady: true,
     sandboxReady: sessionEnabled,
     sandboxPreparing: !sessionEnabled,
-    sandboxProgress: undefined,
     resourceEnabled: true,
     baseUrl: TEST_BASE_URL,
     kind: 'factory',

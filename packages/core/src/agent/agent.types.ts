@@ -16,6 +16,7 @@ import type { MCPToolExecutionContext, RequireToolApproval, ToolHooks, ToolPaylo
 import type { DynamicArgument } from '../types';
 import type { OutputWriter, WorkflowRunState } from '../workflows/types';
 import type { MessageListInput } from './message-list';
+import type { SubAgentGenerateResult } from './subagent';
 import type {
   AgentMemoryOption,
   ToolsetsInput,
@@ -155,6 +156,24 @@ export interface DelegationCompleteContext {
     text: string;
     subAgentThreadId?: string;
     subAgentResourceId?: string;
+    /**
+     * Why the sub-agent stopped generating (e.g. 'stop', 'tool-calls').
+     * Use this to detect a sub-agent that stopped on a tool-calls step and
+     * returned empty text. Populated on the generate and stream paths for
+     * v2 models; undefined on legacy (v1) paths.
+     */
+    finishReason?: SubAgentGenerateResult['finishReason'];
+    /**
+     * Results of the tools the sub-agent executed during the delegation.
+     * Always attached on the generate and stream paths for v2 models.
+     */
+    subAgentToolResults?: Array<{
+      toolName: string;
+      toolCallId: string;
+      result?: unknown;
+      args?: unknown;
+      isError?: boolean;
+    }>;
     /** Aggregate token usage from the sub-agent's execution */
     usage?: {
       inputTokens: number;

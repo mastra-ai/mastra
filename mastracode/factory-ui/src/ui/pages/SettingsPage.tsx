@@ -3,11 +3,11 @@ import type { ReactNode } from 'react';
 import { Navigate, useLocation, useParams } from 'react-router';
 
 import { Sidebar } from '../Sidebar';
-import { PageLayout } from '../layouts/PageLayout';
 import { ChatHeader } from '../domains/chat/components/ChatHeader';
 import { SettingsHeader } from '../domains/settings/components/SettingsHeader';
 import { SettingsPanel } from '../domains/settings/components/SettingsPanel';
 import { isSettingsSection } from '../domains/settings/settingsSections';
+import { AppShell } from '../layouts/AppShell';
 
 /**
  * Routed settings page (`/settings/:section`). Sections are URL-addressable;
@@ -46,11 +46,12 @@ export function SettingsPageLayout({ children }: { children: ReactNode }) {
     );
   }
   return (
-    <PageLayout
+    <AppShell
+      scroll="document"
       sidebar={<Sidebar />}
       header={<ChatHeader mobileContent={<SettingsHeader autoFocus placement="mobile" />} />}
     >
       {children}
-    </PageLayout>
+    </AppShell>
   );
 }
