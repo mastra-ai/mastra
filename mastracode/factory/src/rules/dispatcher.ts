@@ -18,6 +18,8 @@ import type {
   WorkItemsStorage,
 } from '../storage/domains/work-items/base.js';
 import { FACTORY_RULE_MATERIALIZATION_KEY } from '../storage/domains/work-items/base.js';
+import { decisionFailedFinding, factoryHealthSubject } from '../supervisor/health.js';
+import type { NotifySupervisorInput } from '../supervisor/notify.js';
 import { FactoryDispatchError, factoryDispatchFailureCode, factoryDispatchFailureMetadata } from './dispatch-errors.js';
 import type { FactoryTransitionService } from './transition-service.js';
 import type { FactoryCommitDecision, FactoryRuleActor, FactoryRuleCausalEntry } from './types.js';
@@ -268,6 +270,12 @@ export interface FactoryDecisionDispatcherOptions {
   reconcileIntervalMs?: number;
   /** How long to wait for a run's terminal event before failing for retry. Defaults to 10 minutes. */
   skillCompletionObservationTimeoutMs?: number;
+  /**
+   * Rings the supervisor the moment a decision fails terminally, instead of
+   * at the next health sweep. Optional: without it the finding row is still
+   * written and the sweep's null-stamp rule emits for it later.
+   */
+  notifySupervisor?: (input: NotifySupervisorInput) => Promise<void>;
 }
 
 function positiveMs(value: number | undefined, fallback: number): number {
@@ -385,6 +393,7 @@ export class FactoryDecisionDispatcher {
   readonly #primeCredentials?: (tenant: { orgId: string; userId: string }) => Promise<void>;
   readonly #feedReader?: FactoryFeedReader;
   readonly #resolveLinkedWorkItemParentId?: FactoryDecisionDispatcherOptions['resolveLinkedWorkItemParentId'];
+  readonly #notifySupervisor?: (input: NotifySupervisorInput) => Promise<void>;
   readonly #maxInFlight: number;
   readonly #staleBindingSweepIntervalMs: number;
   readonly #staleBindingTtlMs: number;
@@ -409,6 +418,7 @@ export class FactoryDecisionDispatcher {
     this.#primeCredentials = options.primeCredentials;
     this.#feedReader = options.feedReader;
     this.#resolveLinkedWorkItemParentId = options.resolveLinkedWorkItemParentId;
+    this.#notifySupervisor = options.notifySupervisor;
     const maxInFlight = options.maxInFlight ?? MAX_IN_FLIGHT;
     this.#maxInFlight = Number.isFinite(maxInFlight) && maxInFlight > 0 ? Math.floor(maxInFlight) : MAX_IN_FLIGHT;
     this.#staleBindingSweepIntervalMs = positiveMs(
@@ -572,15 +582,70 @@ export class FactoryDecisionDispatcher {
       if (!completed) throw new Error('Factory decision lease was lost before completion.');
     } catch (error) {
       const failureCode = factoryDispatchFailureCode(error);
-      await this.#storage.failDeferredDecision({
+      const terminal = isTerminalFailure(record.attempts, failureCode);
+      const failed = await this.#storage.failDeferredDecision({
         ...leaseIdentity(record, this.#ownerId),
         now: new Date(),
         availableAt: retryAt(now, record.attempts),
         lastError: sanitizeDispatchError(error),
         failureCode,
-        terminal: isTerminalFailure(record.attempts, failureCode),
+        terminal,
         advanceDeliveryGeneration: !executionCompleted,
       });
+      if (terminal && failed) await this.#raiseTerminalFailure(failed);
+    }
+  }
+
+  /**
+   * A terminal failure is a supervisor finding the moment it happens, not at
+   * the next sweep. Row FIRST (the sweep's own `decision-failed` derivation,
+   * so reconciliation recognizes it), then the high-priority doorbell with
+   * the failure code as the classification, then the notification stamp. A
+   * crash between row and stamp is covered by the sweep's null-stamp rule.
+   * Every terminal code rings, including the question-shaped ones
+   * (`run_awaiting_input`, `plan_awaiting_approval`): the woken supervisor
+   * tells a question it can answer from a crash by the code. Nothing here may
+   * undo the failure that was just recorded, so errors are logged, not thrown.
+   */
+  async #raiseTerminalFailure(decision: FactoryDeferredDecisionRecord): Promise<void> {
+    const scope = { orgId: decision.orgId, factoryProjectId: decision.factoryProjectId };
+    let finding: Awaited<ReturnType<WorkItemsStorage['openSupervisorFinding']>>;
+    try {
+      const item = decision.workItemId
+        ? await this.#storage.get({ orgId: decision.orgId, id: decision.workItemId })
+        : null;
+      finding = await this.#storage.openSupervisorFinding({
+        ...scope,
+        finding: decisionFailedFinding(
+          decision,
+          factoryHealthSubject(decision.workItemId, item ?? undefined),
+          new Date(),
+        ),
+        now: new Date(),
+      });
+    } catch (error) {
+      console.error('Factory terminal-failure finding write failed', sanitizeDispatchError(error));
+      return;
+    }
+    if (!this.#notifySupervisor || finding.lastNotifiedAt) return;
+    try {
+      await this.#notifySupervisor({
+        projectId: decision.factoryProjectId,
+        findingKey: finding.findingKey,
+        kind: 'decision-failed',
+        summary: String(finding.finding.evidence ?? finding.findingKey),
+        ...(decision.failureCode ? { failureCode: decision.failureCode } : {}),
+        priority: 'high',
+      });
+      await this.#storage.markSupervisorFindingNotified({
+        ...scope,
+        findingKey: finding.findingKey,
+        occurrence: finding.occurrence,
+        notifiedAt: new Date(),
+      });
+    } catch (error) {
+      // Row is open and un-stamped: the next sweep re-rings for it.
+      console.error('Factory terminal-failure supervisor notify failed', sanitizeDispatchError(error));
     }
   }
 

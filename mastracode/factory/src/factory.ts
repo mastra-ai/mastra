@@ -970,6 +970,9 @@ export class MastraFactory {
                 prepareBinding,
                 feedReader: new FactoryFeedReader(workItemCommentsStorage),
                 primeCredentials: tenant => primeTenantCredentials({ tenant, credentials: modelCredentialsStorage }),
+                // A terminal dispatch failure rings the supervisor right away
+                // through the same ensure-create-then-send helper the sweep uses.
+                notifySupervisor: input => notifySupervisor({ controller }, input),
                 resolveLinkedWorkItemParentId: async ({ orgId, factoryProjectId, decision }) => {
                   if (decision.source !== 'github-pr') return null;
                   const repositoryId = decision.metadata?.githubRepositoryId;
