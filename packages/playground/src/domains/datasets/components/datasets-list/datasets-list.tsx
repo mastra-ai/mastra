@@ -13,7 +13,7 @@ import { ScorersIcon } from '@mastra/playground-ui/icons/ScorersIcon';
 import { WorkflowIcon } from '@mastra/playground-ui/icons/WorkflowIcon';
 import { useMemo } from 'react';
 import type { DatasetTargetType } from '../target-type-options';
-import { getDatasetTargetTypes, matchesDatasetTargetFilter } from './helpers';
+import { getDatasetTargetTypes } from './helpers';
 import { useLinkComponent } from '@/lib/framework';
 
 export interface DatasetsListProps {
@@ -21,7 +21,6 @@ export interface DatasetsListProps {
   experiments: DatasetExperiment[];
   isLoading: boolean;
   search?: string;
-  targetFilter?: string;
   experimentFilter?: string;
   tagFilter?: string;
   isFetchingNextPage?: boolean;
@@ -64,7 +63,6 @@ export function DatasetsList({
   experiments,
   isLoading,
   search = '',
-  targetFilter = 'all',
   experimentFilter = 'all',
   tagFilter = 'all',
   isFetchingNextPage,
@@ -88,15 +86,14 @@ export function DatasetsList({
     const term = search.toLowerCase();
     return enrichedDatasets.filter(ds => {
       const matchesSearch = !term || ds.name.toLowerCase().includes(term);
-      const matchesTarget = matchesDatasetTargetFilter(ds.targetTypes, targetFilter);
       const matchesExperiment =
         experimentFilter === 'all' ||
         (experimentFilter === 'with' && ds.experimentCount > 0) ||
         (experimentFilter === 'without' && ds.experimentCount === 0);
       const matchesTag = tagFilter === 'all' || (Array.isArray(ds.tags) && (ds.tags as string[]).includes(tagFilter));
-      return matchesSearch && matchesTarget && matchesExperiment && matchesTag;
+      return matchesSearch && matchesExperiment && matchesTag;
     });
-  }, [enrichedDatasets, search, targetFilter, experimentFilter, tagFilter]);
+  }, [enrichedDatasets, search, experimentFilter, tagFilter]);
 
   const { containerRef, getRowProps } = useDataListKeyboard({ count: filteredData.length });
 
