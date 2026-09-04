@@ -819,6 +819,7 @@ export class ObservabilityStorageClickhouse extends ObservabilityStorage {
   }
 
   async batchDeleteTraces(args: BatchDeleteTracesArgs): Promise<void> {
+    this.assertUnscopedBatchDeleteTraces(args);
     try {
       if (args.traceIds.length === 0) return;
 

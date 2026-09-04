@@ -1,5 +1,23 @@
 # @mastra/factory
 
+## 0.13.0-alpha.5
+
+### Patch Changes
+
+- A run waiting for approval is now an item in Needs attention — the inbox, the sidebar popover and the Overview preview all list it, with Run it and Dismiss on the row. Marking everything read clears the badge while the dot keeps saying a run is parked. The separate approval panel is gone. `GET /web/factory/projects/:id/attention` no longer returns `approvalCount`; parked runs arrive as items of kind `automation-proposed`. ([#22945](https://github.com/mastra-ai/mastra/pull/22945))
+
+- A card's button now does exactly what dragging the card does: it moves the card, and the lane's rule decides which run starts there. The card moves as soon as you click and reports the run's state from the server, so a run started from a card is retried, superseded and reported like every other automated run instead of failing into a toast. The "X is ready" toast is gone; the session link arrives with the next poll. ([#22957](https://github.com/mastra-ai/mastra/pull/22957))
+
+  Investigate on a Linear issue now lands in Triage, the lane its rule lives in, instead of Planning. Re-review on a Done-lane pull request re-enters Review and runs the re-review skill. Runs started from a card carry the issue or pull request number, the `gh pr checkout` step with the expected head branch, and the Linear fetch hint. A candidate's custom prompt is posted as a comment on the card it files, so the run reads it from the card's feed. A card in Done or Canceled offers its session instead of a lane; only a Done-lane pull request that is still open keeps Re-review.
+
+- Approving a proposed move now carries your consent to the run that move queues: one click instead of two on cards from outside the write-access circle. Creating a card straight into a working lane, or moving it through the API, now counts as starting it, exactly like a drag. ([#22941](https://github.com/mastra-ai/mastra/pull/22941))
+
+- A board card announces an automated run once. While the run's session is live the card shows only its session marker, orange while the sandbox comes up and green once the agent is working; the "Automated run in progress…" row is gone, along with its copy that lingered on a card in Done until the dispatcher saw the run end. Sidebar rows read the same order, so a session whose sandbox is still materializing shows as initializing even after its run is registered. The sidebar lists a session the dispatcher created as soon as the run registry shows a run on it, instead of on the next reload. ([#23060](https://github.com/mastra-ai/mastra/pull/23060))
+
+- Updated dependencies [[`a8c1260`](https://github.com/mastra-ai/mastra/commit/a8c126036be106db9ee39c624df08341d56b95e1), [`f649ea0`](https://github.com/mastra-ai/mastra/commit/f649ea0f006436e7268c3b0fa45f9865a02130cc), [`18d99e7`](https://github.com/mastra-ai/mastra/commit/18d99e7b5687ea6a1cdb601fa5c4209a03b97c02), [`a0ad935`](https://github.com/mastra-ai/mastra/commit/a0ad9351eaf8527d1515051ddf3998ee258b9acd)]:
+  - @mastra/code-sdk@1.7.0-alpha.4
+  - @mastra/core@1.65.0-alpha.3
+
 ## 0.13.0-alpha.4
 
 ### Patch Changes

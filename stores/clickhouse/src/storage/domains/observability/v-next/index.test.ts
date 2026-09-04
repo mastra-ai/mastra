@@ -28,6 +28,7 @@ import {
   MV_DISCOVERY_VALUES,
   parseTtlExpression,
   TABLE_DISCOVERY_PAIRS,
+  TABLE_DELETION_REQUESTS,
   TABLE_DISCOVERY_VALUES,
   TABLE_SCORE_EVENTS,
   TABLE_SPAN_EVENTS,
@@ -1126,6 +1127,27 @@ LIMIT 1`,
         intervalMs: 100,
       });
       expect(disappeared).toBe(true);
+
+      const client = createClient({
+        url: process.env.CLICKHOUSE_URL || 'http://localhost:8123',
+        username: process.env.CLICKHOUSE_USERNAME || 'default',
+        password: process.env.CLICKHOUSE_PASSWORD || 'password',
+      });
+      try {
+        const result = await client.query({
+          query: `SELECT signal, predicateType, predicateValues FROM ${TABLE_DELETION_REQUESTS} WHERE signal = 'traces' AND has(predicateValues, 'trace-del') ORDER BY requestedAt DESC LIMIT 1`,
+          format: 'JSONEachRow',
+        });
+        await expect(result.json()).resolves.toEqual([
+          {
+            signal: 'traces',
+            predicateType: 'traceIds',
+            predicateValues: ['trace-del'],
+          },
+        ]);
+      } finally {
+        await client.close();
+      }
     });
   });
 

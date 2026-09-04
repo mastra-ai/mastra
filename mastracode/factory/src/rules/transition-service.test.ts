@@ -662,6 +662,21 @@ describe('FactoryTransitionService', () => {
     expect(await ruleDecisionKeys(storage, 'org-1')).toEqual(['notify-exit', 'message-enter']);
   });
 
+  it('rejects Review board moves outside its declared lifecycle', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const item = await createItem(storage, { source: 'github-pr', stages: ['review'] });
+    const service = new FactoryTransitionService({ rules: defaultFactoryRules({ version: 'rules-v1' }), storage });
+
+    const result = await service.transition(request(item, { board: 'review', stage: 'planning' }));
+
+    expect(result).toMatchObject({
+      status: 'rejected',
+      code: 'invalid_transition',
+      reason: 'The Review board does not allow moving from review to planning.',
+    });
+    expect((await storage.get({ orgId: 'org-1', id: item.id }))?.stages).toEqual(['review']);
+  });
+
   it('starts nothing when a person parks a card back in Intake', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const item = await createItem(storage, { source: 'github-pr', stages: ['review'] });

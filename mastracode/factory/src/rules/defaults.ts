@@ -1,3 +1,4 @@
+import { reviewBoard } from '../boards/review.js';
 import { workItemNumber } from '../work-item-branch.js';
 import type {
   FactoryBoardRuleLeaf,
@@ -180,40 +181,6 @@ function completeIssue(context: FactoryStageRuleContext) {
 
 const LINEAR_FETCH_HINT =
   "Start by fetching the issue's full details (description and comments) with the linear_get_issue tool.";
-
-/** The review agent lands in a bare worktree, so it needs the PR checked out and the branch it should expect. */
-function checkoutHint(item: FactoryRuleItemContext): string {
-  const number = workItemNumber(item);
-  const checkout =
-    number === undefined
-      ? 'Check out the PR in this worktree first.'
-      : `Check out the PR in this worktree first with \`gh pr checkout ${number}\`.`;
-  // Backticked because a branch name is written by whoever opened the PR: it stays a quoted value, not a sentence.
-  const headBranch =
-    typeof item.metadata?.headBranch === 'string' ? ` Expected head branch: \`${item.metadata.headBranch}\`.` : '';
-  return `${checkout}${headBranch}`;
-}
-
-function reviewPullRequest(context: FactoryStageRuleContext) {
-  // Only a Review-to-Review re-entry can supersede an active pass. A card
-  // returning from Done has no live review to cancel; aborting its bound session
-  // would instead cancel the fresh re-review kickoff.
-  const supersedes = context.fromStage === 'review';
-  // The re-review skill only applies when a prior review pass actually completed
-  // (the card is returning from `done`). A cancelled first-time review that
-  // re-enters Review from `review` itself still has no prior pass to reconcile —
-  // it gets the regular factory-review skill.
-  const priorReviewCompleted = context.fromStage === 'done';
-  const skillName = priorReviewCompleted ? 'factory-rereview' : 'factory-review';
-  return {
-    type: 'invokeSkill',
-    idempotencyKey: `${context.ingress.id}:${skillName}`,
-    role: 'review',
-    skillName,
-    arguments: `${sourceRef(context.item)}\n\n${checkoutHint(context.item)}`,
-    ...(supersedes ? { cancelInFlight: true } : {}),
-  } as const;
-}
 
 // Fires only on webhook materialization, so an item filed by hand or re-synced
 // from source never suggests its own run.
@@ -619,10 +586,7 @@ const BUILT_IN_DEFAULTS: FactoryRulesOverrides = {
       issue: { onEnter: completeIssue },
     },
   },
-  review: {
-    intake: { pullRequest: { onEnter: onArrival(reviewPullRequest) } },
-    review: { pullRequest: { onEnter: reviewPullRequest } },
-  },
+  review: reviewBoard.rules,
   tools: { submit_plan: { onResult: advanceApprovedPlan } },
   github: {
     issueOpened: { onEvent: issueOpened },

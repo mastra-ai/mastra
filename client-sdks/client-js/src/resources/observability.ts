@@ -314,6 +314,22 @@ export class Observability extends BaseResource {
     });
   }
 
+  /**
+   * Deletes traces by ID, cascading to all associated data: spans, trace
+   * roots/branches, and signal events (scores, feedback, metrics, logs) that
+   * reference the deleted traces. Signals without a trace ID are untouched.
+   * On ClickHouse-backed stores, reads may briefly return deleted rows until
+   * the lightweight delete is fully applied.
+   * @param params - IDs of the traces to delete
+   * @returns Promise resolving to `{ success: true }` once the delete is issued
+   */
+  deleteTraces(params: { traceIds: string[] }): Promise<{ success: true }> {
+    return this.request(`/observability/traces/delete`, {
+      method: 'POST',
+      body: { traceIds: params.traceIds },
+    });
+  }
+
   // --------------------------------------------------------------------------
   // Logs
   // --------------------------------------------------------------------------
