@@ -150,8 +150,7 @@ export function cardPrimaryAction({
 }
 
 export type CardAction = { label: string; ariaLabel?: string; disabled?: boolean; urgent?: boolean } & (
-  | { href: string }
-  | { start: () => void }
+  { href: string } | { start: () => void }
 );
 
 export function sessionLink(href: string | undefined): CardAction | undefined {
@@ -207,8 +206,8 @@ export function cardActions({
   retry?: CardAction;
   run?: CardAction;
 }): CardAction[] {
-  // A running session owns the branch, so no rival run beside it; a waiting suggestion is still the user's to release.
-  const nextRun = running && !waiting ? undefined : run;
+  // A running session owns the branch, so no rival run or parked suggestion can start beside it.
+  const nextRun = running ? undefined : run;
   const main = retry ?? nextRun ?? session;
   if (main === undefined) return [];
   const rest = [session, nextRun].filter(action => action !== undefined).filter(action => action !== main);

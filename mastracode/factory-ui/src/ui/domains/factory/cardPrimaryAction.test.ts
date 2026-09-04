@@ -205,10 +205,7 @@ describe('cardActions', () => {
     expect(labels(cardActions({ ...idle, session, run }))).toEqual(['Investigate', 'Open session']);
     expect(labels(cardActions({ ...idle, session, retry, run }))).toEqual(['Retry', 'Open session', 'Investigate']);
     expect(labels(cardActions({ ...idle, running: true, session, run }))).toEqual(['Open session']);
-    expect(labels(cardActions({ ...idle, running: true, waiting: true, session, run }))).toEqual([
-      'Investigate',
-      'Open session',
-    ]);
+    expect(labels(cardActions({ ...idle, running: true, waiting: true, session, run }))).toEqual(['Open session']);
     expect(cardActions(idle)).toEqual([]);
   });
 
@@ -217,6 +214,6 @@ describe('cardActions', () => {
     const lit = (actions: CardAction[]) => actions.filter(action => action.urgent).map(action => action.label);
     expect(lit(cardActions({ ...idle, session, run }))).toEqual([]);
     expect(lit(cardActions({ ...idle, session, retry, run }))).toEqual(['Retry']);
-    expect(lit(cardActions({ ...idle, running: true, waiting: true, session, run }))).toEqual(['Investigate']);
+    expect(lit(cardActions({ ...idle, running: true, waiting: true, session, run }))).toEqual([]);
   });
 });
