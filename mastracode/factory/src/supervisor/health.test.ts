@@ -167,6 +167,46 @@ describe('computeFactoryHealth', () => {
     expect(decisionIdFromFindingKey('seat-missing:b-1')).toBeUndefined();
   });
 
+  it('suggests an answer, never a retry, for a run parked on a question', () => {
+    for (const failureCode of ['run_awaiting_input', 'plan_awaiting_approval'] as const) {
+      const report = computeFactoryHealth(
+        {
+          ...empty,
+          items: [item({ id: 'item-1' })],
+          decisions: [
+            decision({
+              id: `d-${failureCode}`,
+              status: 'failed',
+              attempts: 1,
+              failureCode,
+              lastError: 'Factory run is waiting on ask_user for an answer.',
+              suspension: {
+                toolName: 'ask_user',
+                toolCallId: 'call-1',
+                question: 'Which database?',
+                options: ['postgres', 'libsql'],
+                session: { bindingId: 'b-1', resourceId: 'r-1', threadId: 't-1' },
+              },
+            }),
+          ],
+        },
+        NOW,
+      );
+      const parked = report.findings.find(finding => finding.id === `decision-failed:d-${failureCode}`)!;
+      expect(parked.suggestedRepair).toEqual({ action: 'answer-suspension', decisionId: `d-${failureCode}` });
+      expect(parked.evidence).toContain('Parked on ask_user: "Which database?". Options: postgres | libsql.');
+    }
+    // Any other failure keeps the retry suggestion.
+    const crashed = computeFactoryHealth(
+      {
+        ...empty,
+        decisions: [decision({ id: 'd-x', status: 'failed', attempts: 5, failureCode: 'session_unavailable' })],
+      },
+      NOW,
+    );
+    expect(crashed.findings[0]!.suggestedRepair).toEqual({ action: 'retry-decision', decisionId: 'd-x' });
+  });
+
   it('flags retry decisions the dispatcher never picked up, but not ones inside their backoff', () => {
     const report = computeFactoryHealth(
       {
