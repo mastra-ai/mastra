@@ -173,6 +173,7 @@ export function createObservabilityVNextTests(options: CreateObservabilityVNextT
             rootEntityVersionId: span.rootEntityVersionId,
             environment: span.environment,
             attributes: span.attributes,
+            metadata: span.metadata,
             error: span.error as CreateSpanRecord['error'],
           }));
         for (const span of records) await storage.createSpan({ span });
