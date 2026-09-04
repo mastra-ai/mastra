@@ -24,7 +24,7 @@ Preparation depends on runtime context and initial input processing:
 - [`RequestContext`](/docs/server/request-context) carries trusted runtime data, such as identity or tenant information, to dynamic configuration, processors, and tools, but its values aren't automatically included in the model prompt.
 - [`processInput`](/reference/processors/processor-interface#processinput) handles the initial messages before the loop begins, where it can transform those messages and establish state that later processor hooks and tools use.
 
-A run contains one or more loop iterations. It stops after the current iteration when the model returns a final answer, or processes the requested tool result and begins another iteration when the model requests a tool. An iteration commonly coincides with one model step, but treat that pairing as implementation behavior rather than a stable contract.
+A run contains one or more loop iterations. It stops after the current iteration when the model returns a final answer. When the model requests a tool, Mastra processes the result and may begin another iteration unless a configured [`stopWhen`](/reference/agents/generate#parameters) or terminal condition ends the run after tool work. An iteration commonly coincides with one model step, but treat that pairing as implementation behavior rather than a stable contract.
 
 ## Lifecycle overview
 
