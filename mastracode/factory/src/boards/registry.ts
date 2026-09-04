@@ -13,6 +13,7 @@ export interface BoardRegistry extends Iterable<[string, InstalledBoard]> {
 }
 
 export const defaultBoards = Object.freeze([workBoard, reviewBoard]) as readonly InstalledBoard[];
+const reservedBoardIds = new Set(defaultBoards.map(board => board.id));
 
 export function createBoardRegistry(
   options: {
@@ -22,6 +23,12 @@ export function createBoardRegistry(
 ): BoardRegistry {
   const installed = options.includeDefaultBoards === false ? [] : defaultBoards;
   const registry = new Map<string, InstalledBoard>();
+
+  for (const board of options.boards ?? []) {
+    if (reservedBoardIds.has(board.id)) {
+      throw new Error(`MastraFactory: board id '${board.id}' is reserved for a built-in board.`);
+    }
+  }
 
   for (const board of [...installed, ...(options.boards ?? [])]) {
     if (registry.has(board.id)) {

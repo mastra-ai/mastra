@@ -233,7 +233,7 @@ describe('MastraFactory constructor', () => {
           storage: fakeStorage(),
           boards: [createTestBoard({ id: 'work' })],
         }),
-    ).toThrow("duplicate board id 'work'");
+    ).toThrow("board id 'work' is reserved for a built-in board");
   });
 });
 

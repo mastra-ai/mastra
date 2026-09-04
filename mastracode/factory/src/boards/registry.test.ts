@@ -21,14 +21,19 @@ describe('createBoardRegistry', () => {
     expect(createBoardRegistry({ includeDefaultBoards: false }).size).toBe(0);
   });
 
-  it('rejects duplicate custom ids and attempts to override built-in boards', () => {
+  it('rejects duplicate custom ids and reserved built-in ids', () => {
     expect(() => createBoardRegistry({ boards: [customBoard, customBoard], includeDefaultBoards: false })).toThrow(
       "duplicate board id 'release'",
     );
-    expect(() =>
-      createBoardRegistry({
-        boards: [defineBoard({ id: 'work', title: 'Replacement', initialPhase: 'start', phases: { start: {} } })],
-      }),
-    ).toThrow("duplicate board id 'work'");
+    const replacement = defineBoard({
+      id: 'work',
+      title: 'Replacement',
+      initialPhase: 'start',
+      phases: { start: {} },
+    });
+    expect(() => createBoardRegistry({ boards: [replacement] })).toThrow("board id 'work' is reserved");
+    expect(() => createBoardRegistry({ boards: [replacement], includeDefaultBoards: false })).toThrow(
+      "board id 'work' is reserved",
+    );
   });
 });
