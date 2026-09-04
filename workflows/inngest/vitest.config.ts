@@ -2,6 +2,9 @@ import { defineConfig } from 'vitest/config';
 
 export default defineConfig({
   test: {
+    // e2e: these tests spawn an external `inngest-cli dev` server, so they
+    // must not run in the unit-test lanes.
+    name: 'e2e:workflows/inngest',
     globals: true,
     include: ['src/**/*.test.ts'],
     pool: 'forks',
