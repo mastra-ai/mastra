@@ -518,6 +518,25 @@ describe('Tracing', () => {
         expect((second.attributes as any).secret).toBe('[SECRET_1]');
       });
 
+      it('should keep the same token when a span is processed again', () => {
+        const processor = new SensitiveDataFilter({ redactionStyle: 'indexed' });
+
+        const span = makeSpan('trace-1', {
+          attributes: { apiKey: 'sk-live', nested: { password: 'hunter2' } },
+          input: JSON.stringify({ token: 'sk-live' }),
+        });
+
+        processor.process(span);
+        const again = processor.process(span)!;
+
+        expect((again.attributes as any).apiKey).toBe('[APIKEY_1]');
+        expect((again.attributes as any).nested.password).toBe('[PASSWORD_1]');
+        expect(JSON.parse(again.input as string).token).toBe('[APIKEY_1]');
+
+        const sibling = processor.process(makeSpan('trace-1', { attributes: { apiKey: 'sk-live' } }))!;
+        expect((sibling.attributes as any).apiKey).toBe('[APIKEY_1]');
+      });
+
       it('should number tokens independently per trace', () => {
         const processor = new SensitiveDataFilter({ redactionStyle: 'indexed' });
 
@@ -629,6 +648,35 @@ describe('Tracing', () => {
     });
 
     describe('as part of the default config', () => {
+      it('should keep indexed tokens stable across span events', () => {
+        const tracing = new DefaultObservabilityInstance({
+          serviceName: 'test-tracing',
+          name: 'test-instance',
+          sampling: { type: SamplingStrategyType.ALWAYS },
+          exporters: [testExporter],
+          spanOutputProcessors: [new SensitiveDataFilter({ redactionStyle: 'indexed' })],
+        });
+
+        const span = tracing.startSpan({
+          type: SpanType.AGENT_RUN,
+          name: 'test-agent',
+          attributes: { apiKey: 'sk-live' } as any,
+        });
+        span.update({ metadata: { step: 1 } });
+        const child = span.createChildSpan({
+          type: SpanType.TOOL_CALL,
+          name: 'test-tool',
+          attributes: { apiKey: 'sk-live' } as any,
+        });
+        child.end();
+        span.end();
+
+        expect(testExporter.events).toHaveLength(5);
+        for (const event of testExporter.events) {
+          expect((event.exportedSpan.attributes as any)?.['apiKey']).toBe('[APIKEY_1]');
+        }
+      });
+
       it('should automatically filter sensitive data in default tracing', () => {
         const tracing = new DefaultObservabilityInstance({
           serviceName: 'test-tracing',

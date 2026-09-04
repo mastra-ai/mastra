@@ -5,13 +5,15 @@ export type RedactionStyle = 'full' | 'partial' | 'indexed';
 
 /**
  * Per-trace state for indexed redaction: maps SHA-256 digests of values to
- * their assigned tokens and tracks the next index per token label.
+ * their assigned tokens, tracks the next index per token label, and remembers
+ * every issued token so re-processing an already redacted span is a no-op.
  * Keying on fixed-length digests keeps state size bounded and avoids
  * retaining raw sensitive values in memory.
  */
 interface IndexedRedactionState {
   tokensByValue: Map<string, string>;
   counters: Map<string, number>;
+  issuedTokens: Set<string>;
 }
 
 /**
@@ -136,7 +138,7 @@ export class SensitiveDataFilter implements SpanOutputProcessor {
     if (state) {
       this.traceStates.delete(traceId);
     } else {
-      state = { tokensByValue: new Map(), counters: new Map() };
+      state = { tokensByValue: new Map(), counters: new Map(), issuedTokens: new Set() };
     }
     this.traceStates.set(traceId, state);
     while (this.traceStates.size > MAX_TRACKED_TRACES) {
@@ -274,6 +276,9 @@ export class SensitiveDataFilter implements SpanOutputProcessor {
     }
 
     if (this.redactionStyle === 'indexed' && indexedState) {
+      if (typeof value === 'string' && indexedState.issuedTokens.has(value)) {
+        return value;
+      }
       const valueKey = createHash('sha256').update(String(value)).digest('hex');
       const existing = indexedState.tokensByValue.get(valueKey);
       if (existing) {
@@ -287,6 +292,7 @@ export class SensitiveDataFilter implements SpanOutputProcessor {
       indexedState.counters.set(label, count);
       const token = `[${label}_${count}]`;
       indexedState.tokensByValue.set(valueKey, token);
+      indexedState.issuedTokens.add(token);
       return token;
     }
 
