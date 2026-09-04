@@ -10,8 +10,11 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { builtInFactoryRules } from '../rules/defaults.js';
 import { FactoryTransitionService } from '../rules/transition-service.js';
 import type { FactoryDeferredDecisionRecord, WorkItemRow } from '../storage/domains/work-items/base.js';
+import { factorySupervisorFindingAttentionIdentity } from '../storage/domains/work-items/base.js';
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
 import type { FactoryStorageTestSeed } from '../storage/test-utils.js';
+import { SUPERVISOR_ATTENTION_FORCE_SURFACE_MS } from '../supervisor/health.js';
+import { SupervisorFindingAttentionProvider } from './attention-providers.js';
 import { fakeRouteAuth, mountApiRoutes } from './test-utils.js';
 import { WorkItemRoutes } from './work-items.js';
 
@@ -129,25 +132,47 @@ beforeEach(async () => {
   PROJECT_ID = project.id;
 });
 
+function stuckFinding(item: WorkItemRow) {
+  return {
+    id: `decision-stuck:${item.id}`,
+    kind: 'decision-stuck' as const,
+    workItemId: item.id,
+    workItemNumber: null,
+    title: 'A decision is stuck',
+    evidence: 'decision-1 has been retrying past its backoff.',
+    ageMs: 600_000,
+    suggestedRepair: { action: 'retry-decision' as const, decisionId: 'decision-1' },
+  };
+}
+
+function heldFinding(item: WorkItemRow) {
+  return {
+    id: `held-waiting:${item.id}`,
+    kind: 'held-waiting' as const,
+    workItemId: item.id,
+    workItemNumber: null,
+    title: 'A card is held for a person',
+    evidence: 'held since yesterday.',
+    ageMs: 86_400_000,
+    suggestedRepair: null,
+  };
+}
+
 describe('supervisor finding attention items', () => {
-  it('surfaces persisted findings in the badge and supports receipt actions', async () => {
+  it('surfaces escalated findings in the badge with the note and supports receipt actions', async () => {
     const item = await seedWorkItem('Repair stuck card');
     await seed.workItems.syncSupervisorFindings({
       orgId: 'org1',
       factoryProjectId: PROJECT_ID,
-      findings: [
-        {
-          id: `decision-stuck:${item.id}`,
-          kind: 'decision-stuck',
-          workItemId: item.id,
-          workItemNumber: null,
-          title: 'A decision is stuck',
-          evidence: 'decision-1 has been retrying past its backoff.',
-          ageMs: 600_000,
-          suggestedRepair: { action: 'retry-decision', decisionId: 'decision-1' },
-        },
-      ],
-      now: new Date('2030-01-01T00:00:00.000Z'),
+      findings: [stuckFinding(item)],
+      now: new Date(),
+    });
+    await seed.workItems.escalateSupervisorFinding({
+      orgId: 'org1',
+      factoryProjectId: PROJECT_ID,
+      findingKey: `decision-stuck:${item.id}`,
+      note: 'Retried twice; the worker needs a product decision on the API version.',
+      escalatedAt: new Date(),
     });
 
     const open = await (await request('GET', `/web/factory/projects/${PROJECT_ID}/attention`)).json();
@@ -158,6 +183,8 @@ describe('supervisor finding attention items', () => {
           findingKey: `decision-stuck:${item.id}`,
           findingTitle: 'A decision is stuck',
           evidence: 'decision-1 has been retrying past its backoff.',
+          status: 'escalated',
+          escalationNote: 'Retried twice; the worker needs a product decision on the API version.',
           workItemId: item.id,
           read: false,
         },
@@ -167,6 +194,7 @@ describe('supervisor finding attention items', () => {
       badgeCount: 1,
       latestOccurrenceUnread: true,
     });
+    expect(open.items[0].detail).toContain('needs a product decision');
 
     const receiptPath = `/web/factory/projects/${PROJECT_ID}/attention/supervisor-finding/${encodeURIComponent(`decision-stuck:${item.id}`)}/0`;
     expect((await request('POST', `${receiptPath}/read`)).status).toBe(200);
@@ -178,6 +206,118 @@ describe('supervisor finding attention items', () => {
     await expect((await request('GET', `/web/factory/projects/${PROJECT_ID}/attention`)).json()).resolves.toMatchObject(
       { items: [], openCount: 0 },
     );
+  });
+
+  it('hides an open supervisor-actionable finding from people until the supervisor escalates it', async () => {
+    const item = await seedWorkItem('Repair stuck card');
+    const scope = { orgId: 'org1', factoryProjectId: PROJECT_ID };
+    await seed.workItems.syncSupervisorFindings({ ...scope, findings: [stuckFinding(item)], now: new Date() });
+
+    const hidden = await (await request('GET', `/web/factory/projects/${PROJECT_ID}/attention`)).json();
+    expect(hidden).toMatchObject({ items: [], openCount: 0, unreadCount: 0, badgeCount: 0 });
+    expect(hidden.latestOccurrenceUnread).toBeFalsy();
+
+    await seed.workItems.escalateSupervisorFinding({
+      ...scope,
+      findingKey: `decision-stuck:${item.id}`,
+      note: 'needs you',
+      escalatedAt: new Date(),
+    });
+    const shown = await (await request('GET', `/web/factory/projects/${PROJECT_ID}/attention`)).json();
+    expect(shown).toMatchObject({
+      items: [{ findingKey: `decision-stuck:${item.id}`, status: 'escalated', escalationNote: 'needs you' }],
+      openCount: 1,
+      badgeCount: 1,
+    });
+  });
+
+  it('keeps human-facing kinds visible while open', async () => {
+    const item = await seedWorkItem('Held card');
+    await seed.workItems.syncSupervisorFindings({
+      orgId: 'org1',
+      factoryProjectId: PROJECT_ID,
+      findings: [heldFinding(item)],
+      now: new Date(),
+    });
+    await expect((await request('GET', `/web/factory/projects/${PROJECT_ID}/attention`)).json()).resolves.toMatchObject(
+      { items: [{ findingKey: `held-waiting:${item.id}`, status: 'open' }], openCount: 1 },
+    );
+  });
+
+  it('force-surfaces an open finding past the backstop even if never escalated', async () => {
+    const item = await seedWorkItem('Forgotten card');
+    const openedAt = new Date(Date.now() - SUPERVISOR_ATTENTION_FORCE_SURFACE_MS - 60_000);
+    await seed.workItems.syncSupervisorFindings({
+      orgId: 'org1',
+      factoryProjectId: PROJECT_ID,
+      findings: [stuckFinding(item)],
+      now: openedAt,
+    });
+    await expect((await request('GET', `/web/factory/projects/${PROJECT_ID}/attention`)).json()).resolves.toMatchObject(
+      { items: [{ findingKey: `decision-stuck:${item.id}`, status: 'open' }], openCount: 1, badgeCount: 1 },
+    );
+  });
+
+  it('never surfaces resolved findings, escalated or not', async () => {
+    const item = await seedWorkItem('Resolved card');
+    const scope = { orgId: 'org1', factoryProjectId: PROJECT_ID };
+    await seed.workItems.syncSupervisorFindings({ ...scope, findings: [stuckFinding(item)], now: new Date() });
+    await seed.workItems.escalateSupervisorFinding({
+      ...scope,
+      findingKey: `decision-stuck:${item.id}`,
+      note: 'n',
+      escalatedAt: new Date(),
+    });
+    await seed.workItems.syncSupervisorFindings({ ...scope, findings: [], now: new Date() });
+    await expect((await request('GET', `/web/factory/projects/${PROJECT_ID}/attention`)).json()).resolves.toMatchObject(
+      { items: [], openCount: 0 },
+    );
+  });
+
+  it('applies one visibility predicate to counts, latest, page and read-all', async () => {
+    const hiddenItem = await seedWorkItem('Newest, hidden');
+    const visibleItem = await seedWorkItem('Older, visible');
+    const scope = { orgId: 'org1', factoryProjectId: PROJECT_ID };
+    const t0 = new Date('2030-01-01T00:00:00.000Z');
+    const t1 = new Date('2030-01-01T00:05:00.000Z');
+    await seed.workItems.syncSupervisorFindings({ ...scope, findings: [heldFinding(visibleItem)], now: t0 });
+    await seed.workItems.syncSupervisorFindings({
+      ...scope,
+      findings: [heldFinding(visibleItem), stuckFinding(hiddenItem)],
+      now: t1,
+    });
+    const provider = new SupervisorFindingAttentionProvider({
+      workItems: seed.workItems,
+      now: () => new Date('2030-01-01T00:06:00.000Z'),
+    });
+    const attentionScope = { ...scope, userId: 'u1' };
+
+    expect(await provider.counts(attentionScope)).toEqual({ open: 1, unread: 1 });
+    // latest() skips the newest (hidden) row and reports the newest visible one.
+    await expect(provider.latest(attentionScope)).resolves.toMatchObject({ at: t0, unread: true });
+    const page = await provider.page(attentionScope, { view: 'open', limit: 10 });
+    expect(page.entries.map(entry => (entry.item as { findingKey: string }).findingKey)).toEqual([
+      `held-waiting:${visibleItem.id}`,
+    ]);
+
+    // Read-all leaves the hidden row untouched: it must arrive unread when it surfaces.
+    await provider.markAllRead(attentionScope, { now: new Date('2030-01-01T00:07:00.000Z') });
+    const receipts = await seed.workItems.listAttentionReceipts({
+      ...attentionScope,
+      identities: [
+        factorySupervisorFindingAttentionIdentity(`held-waiting:${visibleItem.id}`, 0),
+        factorySupervisorFindingAttentionIdentity(`decision-stuck:${hiddenItem.id}`, 0),
+      ],
+    });
+    expect(receipts.map(receipt => receipt.sourceId)).toEqual([`held-waiting:${visibleItem.id}`]);
+
+    // Past the backstop the same provider surfaces the hidden row without any row change.
+    const later = new SupervisorFindingAttentionProvider({
+      workItems: seed.workItems,
+      now: () => new Date(t1.getTime() + SUPERVISOR_ATTENTION_FORCE_SURFACE_MS),
+    });
+    expect(await later.counts(attentionScope)).toEqual({ open: 2, unread: 1 });
+    await expect(later.latest(attentionScope)).resolves.toMatchObject({ at: t1, unread: true });
   });
 });
 
