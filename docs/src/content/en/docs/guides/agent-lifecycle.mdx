@@ -97,7 +97,22 @@ Create one context per independent request unless you intentionally want to shar
 
 ## The agent loop
 
-The loop works with the messages accumulated so far. Each iteration gives those messages to the model. A final answer can end the loop. When the model requests a tool, Mastra runs it and adds the result to the conversation. The result can lead to another model step.
+The loop works with the messages accumulated so far.
+
+```mermaid
+flowchart LR
+  accTitle: Model and tool work inside the agent loop
+  accDescr: Mastra prepares the model input and processes the response. A final answer moves to finalization, while a tool call runs the tool, processes its result, and starts another iteration.
+  input([prepare<br/>model input]) --> model([call model])
+  model --> output([process<br/>model output])
+  output --> decision{tool call?}
+  decision -->|no| final([finalization])
+  decision -->|yes| tools([run tools])
+  tools --> results([process<br/>tool results])
+  results --> next([next iteration])
+```
+
+Tool results join the accumulated messages before another iteration, while a final answer leaves the loop for finalization.
 
 ### Around each model step
 
