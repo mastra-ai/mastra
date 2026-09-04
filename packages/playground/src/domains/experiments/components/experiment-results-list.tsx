@@ -39,7 +39,7 @@ export function ExperimentResultsList({
 }: ExperimentResultsListProps) {
   const { Link: LinkComponent, paths } = useLinkComponent();
   const hasSelection = Boolean(selectedIds && onToggleSelect);
-  const gridColumns = [hasSelection ? 'auto' : '', ...columns.map(c => c.size)].filter(Boolean).join(' ');
+  const gridColumns = [hasSelection ? '2rem' : '', ...columns.map(c => c.size)].filter(Boolean).join(' ');
   const hasInputColumn = columns.some(col => col.name === 'input');
 
   const { containerRef, getRowProps } = useDataListKeyboard({ count: results.length });
