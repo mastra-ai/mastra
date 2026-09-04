@@ -14,7 +14,6 @@ export interface TraceThreadItemViewProps {
   traceId: string;
   /** Called with the ids of the spans used to build a message when its "Highlight spans" action is clicked. */
   onHighlightSpans?: (spanIds: string[]) => void;
-  /** Overrides the root layout classes (by default the view fills and scrolls within its parent). */
   className?: string;
 }
 
@@ -51,7 +50,7 @@ export function TraceThreadItemView({ traceId, onHighlightSpans, className }: Tr
   }
 
   return (
-    <div className={cn('h-full min-h-0 overflow-y-auto p-4', className)}>
+    <div className={cn('p-4', className)}>
       <div className="mx-auto flex w-full max-w-3xl flex-col gap-4">
         <ToolCallProvider
           approveToolcall={noop}

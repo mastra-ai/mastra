@@ -125,6 +125,9 @@ export function ThreadViewByTrace({ threadId }: ThreadViewByTraceProps) {
               className="pointer-events-auto sticky top-1/2 -translate-y-1/2"
             />
           </div>
+          {/* Pages load older traces, and the list reads oldest-first, so the sentinel sits at the top.
+              Scroll anchoring keeps the viewport in place when a page is prepended. */}
+          <div ref={setEndOfListElement} />
           {traces.map(trace => (
             <TraceThreadRow
               key={trace.traceId}
@@ -135,12 +138,12 @@ export function ThreadViewByTrace({ threadId }: ThreadViewByTraceProps) {
               onHighlightSpans={spanIds => highlightSpans(trace.traceId, spanIds)}
             />
           ))}
-          <div ref={setEndOfListElement} />
         </div>
       </div>
       {selected && (
+        // Keyed by trace only: the panel's queries already follow `spanId`, so prev/next keep the DOM.
         <ThreadSpanPanel
-          key={`${selected.traceId}:${selected.spanId}`}
+          key={selected.traceId}
           traceId={selected.traceId}
           spanId={selected.spanId}
           onSpanSelect={spanId => selectSpan(selected.traceId, spanId)}
@@ -219,11 +222,7 @@ function TraceThreadRow({
             </Button>
           </div>
           <div className="min-h-0">
-            <TraceThreadItemView
-              traceId={traceId}
-              onHighlightSpans={onHighlightSpans}
-              className="h-auto overflow-visible"
-            />
+            <TraceThreadItemView traceId={traceId} onHighlightSpans={onHighlightSpans} />
           </div>
           {showFeedback && (
             <div className="border-border1 bg-surface3 absolute top-12 left-0 z-20 w-80 overflow-y-auto rounded-lg border shadow-lg">

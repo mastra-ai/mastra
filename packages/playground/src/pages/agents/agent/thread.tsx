@@ -74,13 +74,19 @@ function AgentThread() {
   // A new thread has no traces yet, so the advanced (trace-based) view falls back to the chat.
   const isAdvancedVariant = searchParams.get('variant') === 'advanced' && !isNewThread;
   const setAdvancedVariant = (enabled: boolean) => {
-    setSearchParams(params => {
-      const next = new URLSearchParams(params);
-      if (enabled) next.set('variant', 'advanced');
-      else next.delete('variant');
-      return next;
-    });
+    setSearchParams(
+      params => {
+        const next = new URLSearchParams(params);
+        if (enabled) next.set('variant', 'advanced');
+        else next.delete('variant');
+        return next;
+      },
+      // Toggling the view is not a navigation: don't stack history entries.
+      { replace: true },
+    );
   };
+  // Traces aside (chat view only). The column is keyed by thread, so this resets when switching threads.
+  const [tracesAside, setTracesAside] = useState<TracesAsideState>('closed');
   const suggestedPrompts = getAgentSuggestedPrompts(agent?.metadata);
 
   const defaultSettings = useMemo(() => buildAgentDefaultSettings(agent), [agent]);
@@ -146,13 +152,23 @@ function AgentThread() {
                               threadId={actualThreadId}
                               isLoading={isThreadsLoading}
                             />
-                            <div className="relative min-h-0">
+                            <div key={actualThreadId} className="relative min-h-0">
                               <div className="rounded-studio-frame border-border1 bg-surface2 shadow-main-frame m-1.5 flex h-[calc(100%-0.75rem)] min-h-0 flex-col overflow-hidden border [--studio-frame-inset:0.5rem] [--studio-frame-radius:1.5rem] lg:m-2 lg:ml-0 lg:h-[calc(100%-1rem)]">
                                 <Header>
                                   <HeaderTitle>Thread</HeaderTitle>
                                   {/* "new" is not a stored thread yet, so there is nothing to trace. */}
                                   {!isNewThread && (
                                     <HeaderAction>
+                                      {!isAdvancedVariant && (
+                                        <Button
+                                          variant="outline"
+                                          className="hidden lg:inline-flex"
+                                          onClick={() => setTracesAside(tracesAside === 'open' ? 'closing' : 'open')}
+                                        >
+                                          <ChartNoAxesGantt />
+                                          Traces
+                                        </Button>
+                                      )}
                                       <Switch
                                         id="thread-advanced-view"
                                         checked={isAdvancedVariant}
@@ -172,10 +188,9 @@ function AgentThread() {
                                   )}
                                 >
                                   {isAdvancedVariant ? (
-                                    <ThreadViewByTrace key={actualThreadId} threadId={actualThreadId} />
+                                    <ThreadViewByTrace threadId={actualThreadId} />
                                   ) : (
                                     <AgentChat
-                                      key={actualThreadId}
                                       agentId={agentId!}
                                       agentName={agent?.name}
                                       modelVersion={agent?.modelVersion}
@@ -191,11 +206,13 @@ function AgentThread() {
                                   )}
                                 </div>
                               </div>
-                              {!isNewThread &&
-                                !isAdvancedVariant && (
-                                  // Keyed by thread so the overlay state fully resets when switching threads.
-                                  <ThreadTracesOverlay key={actualThreadId} threadId={actualThreadId} />
-                                )}
+                              {!isNewThread && !isAdvancedVariant && tracesAside !== 'closed' && (
+                                <ThreadTracesAside
+                                  threadId={actualThreadId}
+                                  state={tracesAside}
+                                  onStateChange={setTracesAside}
+                                />
+                              )}
                             </div>
                           </div>
                         </MainSidebarProvider>
@@ -214,53 +231,41 @@ function AgentThread() {
 
 export default AgentThread;
 
-/** Top-right "Traces" button + slide-in aside overlay. State is colocated so a remount (via `key`) resets it. */
-const ThreadTracesOverlay = ({ threadId }: { threadId: string }) => {
-  // 'closing' keeps the aside mounted while the exit animation plays.
-  const [asideState, setAsideState] = useState<'closed' | 'open' | 'closing'>('closed');
+type TracesAsideState = 'closed' | 'open' | 'closing';
+
+/** Slide-in aside listing the thread traces. Mounted while `state !== 'closed'` so the exit animation can play. */
+const ThreadTracesAside = ({
+  threadId,
+  state,
+  onStateChange,
+}: {
+  threadId: string;
+  state: Exclude<TracesAsideState, 'closed'>;
+  onStateChange: (state: TracesAsideState) => void;
+}) => {
+  // Mirrored from ThreadTraces to drive the aside title/width; reset naturally when the aside unmounts.
   const [isTraceOpen, setIsTraceOpen] = useState(false);
   const [isTraceSpanOpen, setIsTraceSpanOpen] = useState(false);
 
-  // ThreadTraces unmounts once the aside is closed, so clear the mirrored flags on close
-  // to avoid reopening with a stale title/width.
-  const closeAside = () => {
-    setAsideState('closing');
-    setIsTraceOpen(false);
-    setIsTraceSpanOpen(false);
-  };
-
   return (
-    <>
-      {/* Below the Thread header (48px), which now holds the advanced-view switch on the right. */}
-      <div className="absolute top-[calc(0.75rem+3rem+0.5rem)] right-3 z-10 hidden lg:top-[calc(1rem+3rem+0.5rem)] lg:right-4 lg:block">
-        <Button variant="outline" onClick={() => (asideState === 'open' ? closeAside() : setAsideState('open'))}>
-          <ChartNoAxesGantt />
-          Traces
-        </Button>
-      </div>
-      {asideState !== 'closed' && (
-        <div
-          onAnimationEnd={e => {
-            if (e.target === e.currentTarget && asideState === 'closing') {
-              setAsideState('closed');
-            }
-          }}
-          className={`absolute top-3 right-3 bottom-3 z-20 hidden transition-[width] duration-300 ease-out lg:top-4 lg:right-4 lg:bottom-4 lg:block ${
-            asideState === 'closing'
-              ? 'animate-out fade-out-0 slide-out-to-right-full fill-mode-forwards'
-              : 'animate-in fade-in-0 slide-in-from-right-full'
-          } ${isTraceSpanOpen ? 'w-[70%]' : 'w-[40%]'}`}
-        >
-          <ThreadAside title={isTraceOpen ? undefined : 'Traces'} onClose={closeAside}>
-            <ThreadTraces
-              threadId={threadId}
-              onTraceOpenChange={setIsTraceOpen}
-              onSpanOpenChange={setIsTraceSpanOpen}
-            />
-          </ThreadAside>
-        </div>
+    <div
+      onAnimationEnd={e => {
+        if (e.target === e.currentTarget && state === 'closing') {
+          onStateChange('closed');
+        }
+      }}
+      className={cn(
+        'absolute top-3 right-3 bottom-3 z-20 hidden transition-[width] duration-300 ease-out lg:top-4 lg:right-4 lg:bottom-4 lg:block',
+        state === 'closing'
+          ? 'animate-out fade-out-0 slide-out-to-right-full fill-mode-forwards'
+          : 'animate-in fade-in-0 slide-in-from-right-full',
+        isTraceSpanOpen ? 'w-[70%]' : 'w-[40%]',
       )}
-    </>
+    >
+      <ThreadAside title={isTraceOpen ? undefined : 'Traces'} onClose={() => onStateChange('closing')}>
+        <ThreadTraces threadId={threadId} onTraceOpenChange={setIsTraceOpen} onSpanOpenChange={setIsTraceSpanOpen} />
+      </ThreadAside>
+    </div>
   );
 };
 

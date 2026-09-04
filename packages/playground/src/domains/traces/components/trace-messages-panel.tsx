@@ -1,5 +1,6 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { DataPanel } from '@mastra/playground-ui/components/DataPanel';
+import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
 import { cn } from '@mastra/playground-ui/utils/cn';
 
 import { TraceThreadItemView } from '@/domains/traces/components/trace-thread-item-view';
@@ -30,9 +31,9 @@ export function TraceMessagesPanel({ traceId, className, fullThreadHref, onHighl
               </Button>
             </div>
           )}
-          <div className="min-h-0 flex-1">
+          <ScrollArea className="min-h-0 flex-1">
             <TraceThreadItemView traceId={traceId} onHighlightSpans={onHighlightSpans} />
-          </div>
+          </ScrollArea>
         </div>
       </DataPanel.Content>
     </DataPanel>
