@@ -1289,14 +1289,15 @@ export class WorkItemsStorage extends FactoryStorageDomain {
   }
 
   /**
-   * Open findings whose notification stamp is null, oldest first, so a sweep
-   * can drain them page by page: stamped rows leave this set, so re-querying
-   * after each page never re-reads the same rows.
+   * Open findings whose notification stamp is null, oldest first, keyset
+   * paginated by `(opened_at, id)` so a sweep can walk them exactly once
+   * regardless of which rows it manages to stamp along the way.
    */
   async listUnnotifiedSupervisorFindings(input: {
     orgId: string;
     factoryProjectId: string;
     limit: number;
+    after?: { openedAt: Date; id: string };
   }): Promise<FactorySupervisorFindingRecord[]> {
     const rows = await this.#db.findMany<GovernanceDbRow>(
       'factory_supervisor_findings',
@@ -1312,6 +1313,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
           ['id', 'asc'],
         ],
         limit: input.limit,
+        ...(input.after ? { cursor: { values: [input.after.openedAt, input.after.id] } } : {}),
       },
     );
     return rows.map(toSupervisorFinding);

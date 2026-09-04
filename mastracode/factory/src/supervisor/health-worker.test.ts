@@ -191,6 +191,39 @@ describe('FactorySupervisorHealthWorker emit call site', () => {
     expect(unnotified).toEqual([]);
   });
 
+  it('attempts every row once per sweep even when an entire leading page fails', async () => {
+    const count = EMIT_PAGE_SIZE + 2;
+    const base = Date.now();
+    for (let i = 0; i < count; i += 1) {
+      await seedFailure(await seedWorkItem(), new Date(base + i));
+    }
+    // Every row on the first page fails; the two rows behind it must still be reached.
+    let calls = 0;
+    const notify = vi.fn(async (_input: NotifySupervisorInput) => {
+      calls += 1;
+      if (calls <= EMIT_PAGE_SIZE) throw new Error('storage down');
+    });
+    const worker = new FactorySupervisorHealthWorker({ projects: seed.projects, workItems: seed.workItems, notify });
+    await worker.init(createDeps());
+
+    await sweep(worker);
+
+    expect(notify).toHaveBeenCalledTimes(count);
+    const stillUnnotified = await seed.workItems.listUnnotifiedSupervisorFindings({
+      orgId: 'org1',
+      factoryProjectId: PROJECT_ID,
+      limit: count,
+    });
+    expect(stillUnnotified).toHaveLength(EMIT_PAGE_SIZE);
+    // Next sweep retries exactly the failed rows.
+    notify.mockImplementation(async () => {});
+    await sweep(worker);
+    expect(notify).toHaveBeenCalledTimes(count + EMIT_PAGE_SIZE);
+    expect(
+      await seed.workItems.listUnnotifiedSupervisorFindings({ orgId: 'org1', factoryProjectId: PROJECT_ID, limit: 5 }),
+    ).toEqual([]);
+  });
+
   it('sweeps cleanly with no notify handle wired', async () => {
     await seedFailure(await seedWorkItem(), new Date());
     const worker = new FactorySupervisorHealthWorker({ projects: seed.projects, workItems: seed.workItems });

@@ -106,12 +106,16 @@ export class FactorySupervisorHealthWorker extends MastraWorker {
    */
   async #emitUnnotified(scope: { orgId: string; factoryProjectId: string }): Promise<void> {
     if (!this.#notify) return;
-    // Drain page by page: stamped rows drop out of the query, so the next
-    // page is always fresh. A page that stamps nothing (every emit failed)
-    // ends the drain — those rows retry on the next sweep.
+    // Walk the un-notified rows once, oldest first, by keyset cursor: each
+    // row is attempted at most once per sweep and a failing row never blocks
+    // the rows behind it (it stays un-stamped and retries next sweep).
+    let after: { openedAt: Date; id: string } | undefined;
     for (;;) {
-      const rows = await this.#workItems.listUnnotifiedSupervisorFindings({ ...scope, limit: EMIT_PAGE_SIZE });
-      let stamped = 0;
+      const rows = await this.#workItems.listUnnotifiedSupervisorFindings({
+        ...scope,
+        limit: EMIT_PAGE_SIZE,
+        ...(after ? { after } : {}),
+      });
       for (const row of rows) {
         try {
           await this.#notify({
@@ -126,7 +130,6 @@ export class FactorySupervisorHealthWorker extends MastraWorker {
             occurrence: row.occurrence,
             notifiedAt: new Date(),
           });
-          stamped += 1;
         } catch (error) {
           this.deps?.logger.warn('Factory supervisor notify failed', {
             findingKey: row.findingKey,
@@ -134,7 +137,9 @@ export class FactorySupervisorHealthWorker extends MastraWorker {
           });
         }
       }
-      if (rows.length < EMIT_PAGE_SIZE || stamped === 0) return;
+      const last = rows[rows.length - 1];
+      if (rows.length < EMIT_PAGE_SIZE || !last) return;
+      after = { openedAt: last.openedAt, id: last.id };
     }
   }
 }

@@ -833,6 +833,21 @@ export class MastraFactory {
                         }),
                       );
                     }
+                    // A signal-woken supervisor turn has no human behind it:
+                    // its toolset is exactly the supervisor read tools (plus
+                    // the approval-free v1 tools as they land). Integration
+                    // tools scope by project, not by person, so they would
+                    // otherwise hand an unattributed turn external writes.
+                    if (supervisorScope.via === 'session-state') return tools;
+                  } else if (
+                    typeof requestContext?.get === 'function' &&
+                    parseSupervisorResourceId(
+                      (requestContext.get('controller') as { resourceId?: string } | undefined)?.resourceId,
+                    )
+                  ) {
+                    // A supervisor session that cannot prove its scope gets
+                    // nothing at all, integration tools included.
+                    return tools;
                   }
                 }
                 for (const { integration, ready, ensureReady } of toolIntegrations) {

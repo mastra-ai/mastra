@@ -613,7 +613,13 @@ describe('MastraFactory.prepare', () => {
    */
   it('registers supervisor read tools on a signal turn from trusted session state, never the human write tools', async () => {
     const storage = fakeStorage();
-    const config = await prepareFactory({ storage });
+    // A project-scoped integration tool (Linear-style) must reach the
+    // authenticated human turn but never the unattributed signal turn.
+    const integration = fakeIntegration({
+      id: 'custom',
+      agentTools: vi.fn(async () => ({ custom_write: { description: 'writes somewhere' } as never })),
+    });
+    const config = await prepareFactory({ storage, integrations: [integration] });
     const projects = storage.getDomain<FactoryProjectsStorage>('projects');
     const project = await projects.create({ orgId: 'org-1', userId: 'user-1', input: { name: 'p' } });
     const extraTools = config.extraTools as (args: {
@@ -643,7 +649,9 @@ describe('MastraFactory.prepare', () => {
     humanTurn.set('user', { workosId: 'user-1', organizationId: 'org-1' });
     humanTurn.set('controller', controller({ factoryProjectId: project.id, factoryOrgId: 'org-1' }));
     const humanTools = Object.keys(await extraTools({ requestContext: humanTurn }));
-    expect(humanTools.sort()).toEqual([...SUPERVISOR_READ_TOOLS, ...SUPERVISOR_HUMAN_WRITE_TOOLS].sort());
+    expect(humanTools.sort()).toEqual(
+      [...SUPERVISOR_READ_TOOLS, ...SUPERVISOR_HUMAN_WRITE_TOOLS, 'custom_write'].sort(),
+    );
   });
 
   /**
