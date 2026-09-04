@@ -116,7 +116,7 @@ Hono and Fastify enforce the request-body limit before JSON parsing. Express and
 
 Compose predicates with `{ op: 'and', args: [...] }`, `{ op: 'or', args: [...] }`, and `{ op: 'not', arg: ... }`. Comparison predicates place a field reference on the left and a literal on the right. Membership predicates use a field reference in `value` and a homogeneous literal array in `set`.
 
-String comparisons are exact and case-sensitive. Literals are never coerced: numeric score predicates require numbers, and timestamp predicates require ISO timestamp strings. Positive and ordered predicates don't match a missing value. The negative operators `ne` and `notIn` do match a missing value. Combine a negative predicate with `exists` when the field must also be present.
+String comparisons are exact and case-sensitive, and literals are never coerced. Numeric score predicates therefore require numbers, while timestamp predicates require ISO timestamp strings. A missing value satisfies neither positive nor ordered predicates, although it does satisfy the negative operators `ne` and `notIn`. Combine a negative predicate with `exists` when the field must also be present.
 
 ### Filter by score time
 
