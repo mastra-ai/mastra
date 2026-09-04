@@ -12,6 +12,7 @@ import { useTraces } from '@mastra/playground-ui/domains/traces/hooks/use-traces
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { MessageSquare } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
+import { Link } from 'react-router';
 
 import { TraceFeedbackTab } from '@/domains/traces/components/trace-feedback-tab';
 import { TraceThreadItemView } from '@/domains/traces/components/trace-thread-item-view';
@@ -164,23 +165,36 @@ function TraceThreadRow({
       {/* The messages column has no bottom border so consecutive turns read as one
           continuous conversation; the vertical border separates it from the trace. */}
       <div className="border-border1 relative flex min-h-[240px] min-w-0 flex-col gap-2 border-r py-4 pr-4">
-        <div className="z-30 flex justify-end">
+        <div
+          className={cn(
+            'z-30 flex items-center gap-1 transition-opacity',
+            showFeedback ? 'opacity-100' : 'opacity-0 group-hover:opacity-100',
+          )}
+        >
           <Button
             size="icon-sm"
             variant="ghost"
             tooltip="Feedback"
             aria-label="Toggle feedback"
-            className={cn('transition-opacity', showFeedback ? 'opacity-100' : 'opacity-0 group-hover:opacity-100')}
             onClick={() => setShowFeedback(v => !v)}
           >
             <MessageSquare />
+          </Button>
+          <Button
+            as={Link}
+            to={`/traces?traceId=${encodeURIComponent(traceId)}`}
+            variant="ghost"
+            size="xs"
+            className="font-mono"
+          >
+            {traceId}
           </Button>
         </div>
         <div className="min-h-0 flex-1">
           <TraceThreadItemView traceId={traceId} onHighlightSpans={onHighlightSpans} />
         </div>
         {showFeedback && (
-          <div className="border-border1 bg-surface3 absolute top-8 right-0 z-20 max-h-[calc(100%-2rem)] w-80 overflow-y-auto rounded-lg border shadow-lg">
+          <div className="border-border1 bg-surface3 absolute top-8 left-0 z-20 max-h-[calc(100%-2rem)] w-80 overflow-y-auto rounded-lg border shadow-lg">
             <TraceFeedbackTab key={traceId} traceId={traceId} variant="embed" />
           </div>
         )}

@@ -104,6 +104,15 @@ describe('ThreadViewByTrace', () => {
     await waitFor(() => expect(screen.queryByRole('button', { name: /close/i })).toBeNull());
   });
 
+  it('links each turn to its trace on the traces page', async () => {
+    installHandlers();
+    const { queryClient } = renderView();
+
+    const link = await screen.findByRole('link', { name: 'trace-a' });
+    expect(link.getAttribute('href')).toBe('/traces?traceId=trace-a');
+    await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+  });
+
   it('keeps the row of the selected span highlighted while its details are open', async () => {
     installHandlers();
     const { queryClient } = renderView();
