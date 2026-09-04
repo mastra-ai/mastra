@@ -2,4 +2,4 @@
 'mastra': patch
 ---
 
-Fixed CLI polling retries for transient network errors that expose their code directly.
+Fixed CLI polling retries for transient network errors with codes on the error or its cause.
