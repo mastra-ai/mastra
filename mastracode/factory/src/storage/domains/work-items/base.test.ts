@@ -1125,4 +1125,25 @@ describe('openSupervisorFinding (single-finding, non-reconciling)', () => {
       lastNotifiedAt: t0,
     });
   });
+
+  it('a sweep whose snapshot predates the call-site row does not auto-resolve it', async () => {
+    const storage = await makeStorage();
+    const snapshot = new Date('2030-01-01T00:00:00.000Z');
+    // Health was computed at `snapshot` (no failed decision yet); the
+    // dispatcher opens the row a moment later; the sweep's sync lands last.
+    await storage.openSupervisorFinding({
+      ...scope,
+      finding: finding('decision-failed:d1'),
+      now: new Date('2030-01-01T00:00:00.500Z'),
+    });
+    await storage.syncSupervisorFindings({ ...scope, findings: [], now: snapshot });
+
+    const open = await rows(storage);
+    expect(open.map(row => row.findingKey)).toEqual(['decision-failed:d1']);
+    expect(open[0]).toMatchObject({ occurrence: 0, resolvedAt: null });
+
+    // A sweep that genuinely post-dates the row and no longer derives it resolves it as before.
+    await storage.syncSupervisorFindings({ ...scope, findings: [], now: new Date('2030-01-01T00:05:00.000Z') });
+    expect(await rows(storage)).toEqual([]);
+  });
 });

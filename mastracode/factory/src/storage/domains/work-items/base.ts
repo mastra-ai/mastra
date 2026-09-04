@@ -1278,7 +1278,11 @@ export class WorkItemsStorage extends FactoryStorageDomain {
       });
       const currentKeys = new Set(input.findings.map(finding => finding.id));
       for (const row of existingOpen) {
-        if (!currentKeys.has(String(row.finding_key))) {
+        // A row opened after this snapshot was taken (the dispatcher raising a
+        // failure mid-sweep) is not "absent from health" — the snapshot simply
+        // predates it. Leave it for the next sweep to reconcile.
+        const openedAfterSnapshot = (row.opened_at as Date).getTime() > input.now.getTime();
+        if (!currentKeys.has(String(row.finding_key)) && !openedAfterSnapshot) {
           await ops.updateAtomic<GovernanceDbRow>(
             'factory_supervisor_findings',
             { id: row.id, resolved_at: null },

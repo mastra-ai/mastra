@@ -4391,6 +4391,39 @@ describe('FactoryDecisionDispatcher', () => {
       expect(row!.finding).toMatchObject({ workItemId: item.id, title: item.title });
     });
 
+    it('rings for a plan parked past review too (plan_awaiting_approval is terminal)', async () => {
+      const storage = (await createFactoryStorageForTests()).workItems;
+      const { item, transitionService } = await queueDecision(storage, {
+        type: 'invokeSkill',
+        role: 'work',
+        skillName: 'understand-issue',
+        idempotencyKey: 'skill-plan-parked',
+      });
+      await bindWorkRun(storage, item.id);
+      const { controller } = createSession(undefined, { suspendsOnPlan: true });
+      const notifySupervisor = vi.fn(async () => {});
+      const dispatcher = new FactoryDecisionDispatcher({
+        controller: controller as never,
+        transitionService,
+        storage,
+        ownerId: 'worker-1',
+        isAutoRunEnabled: async () => true,
+        autoApprovePlans: async () => false,
+        notifySupervisor,
+      });
+
+      await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
+
+      const [record] = await storage.listDeferredDecisions('org-1', PROJECT_ID);
+      expect(record).toMatchObject({ status: 'failed', failureCode: 'plan_awaiting_approval' });
+      expect(notifySupervisor).toHaveBeenCalledTimes(1);
+      expect(notifySupervisor.mock.calls[0]![0]).toMatchObject({
+        findingKey: `decision-failed:${record!.id}`,
+        failureCode: 'plan_awaiting_approval',
+        priority: 'high',
+      });
+    });
+
     it('leaves the row open and un-stamped when the emit fails, so the sweep re-rings', async () => {
       const storage = (await createFactoryStorageForTests()).workItems;
       const { item, transitionService } = await queueDecision(storage, {
@@ -4428,6 +4461,29 @@ describe('FactoryDecisionDispatcher', () => {
         lastNotifiedAt: null,
         resolvedAt: null,
       });
+
+      // The sweep's recovery ring carries the same classification.
+      const recovered = vi.fn(async () => {});
+      const worker = new FactorySupervisorHealthWorker({
+        projects: { listAll: async () => [{ id: PROJECT_ID, orgId: 'org-1' }] } as never,
+        workItems: storage,
+        notify: recovered,
+      });
+      await worker.init({
+        pubsub: {} as never,
+        storage: {} as never,
+        logger: { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() } as never,
+      });
+      await worker.start();
+      await new Promise(resolve => setTimeout(resolve, 0));
+      await worker.stop();
+      expect(recovered).toHaveBeenCalledTimes(1);
+      expect(recovered.mock.calls[0]![0]).toMatchObject({
+        findingKey: `decision-failed:${record!.id}`,
+        kind: 'decision-failed',
+        failureCode: 'run_awaiting_input',
+      });
+      expect((await openFindings(storage))[0]?.lastNotifiedAt).toBeInstanceOf(Date);
     });
 
     it('the sweep recognizes the call-site row: same key, no duplicate, no auto-resolve, no second ring', async () => {
@@ -4454,6 +4510,12 @@ describe('FactoryDecisionDispatcher', () => {
       const [before] = await openFindings(storage);
 
       const report = await runFactoryHealthCheck(storage, scope, { now: new Date('2030-01-01T00:05:00Z') });
+      // The sweep derives the SAME finding the call site wrote: only the
+      // time-dependent age differs. This is the shared-derivation guarantee.
+      const { ageMs: _sweepAge, ...sweepFinding } = report.findings.find(f => f.id === before!.findingKey)!;
+      const { ageMs: _rowAge, ...rowFinding } = before!.finding as typeof sweepFinding;
+      expect(rowFinding).toEqual(sweepFinding);
+      expect(rowFinding.failureCode).toBe('run_awaiting_input');
       await storage.syncSupervisorFindings({
         ...scope,
         findings: report.findings,
