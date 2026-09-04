@@ -1,5 +1,5 @@
 import { reviewBoard } from '../boards/review.js';
-import { workItemNumber } from '../work-item-branch.js';
+import { workBoard } from '../boards/work.js';
 import type {
   FactoryBoardRuleLeaf,
   FactoryBoardRules,
@@ -11,69 +11,21 @@ import type {
   FactoryLinearRuleLeaf,
   FactoryRules,
   FactoryRulesOverrides,
-  FactoryRuleItemContext,
   FactoryRuleSource,
   FactoryRuleStage,
-  FactoryStageRuleContext,
   FactoryToolResultRuleContext,
   FactoryToolRuleLeaf,
 } from './types.js';
-import { needsApproval } from './types.js';
 import { assertFactoryRules, FactoryRuleValidationError } from './validation.js';
 
 export const DEFAULT_FACTORY_RULE_VERSION = 'factory-default-v1';
 
-function trustedGithubActor(context: Pick<FactoryStageRuleContext, 'actor'>): boolean {
+function trustedGithubActor(context: Pick<FactoryGithubRuleContext, 'actor'>): boolean {
   return context.actor.type === 'github' && context.actor.trusted;
 }
 
-function githubActorLogin(context: Pick<FactoryStageRuleContext, 'actor'>): string | undefined {
+function githubActorLogin(context: Pick<FactoryGithubRuleContext, 'actor'>): string | undefined {
   return context.actor.type === 'github' ? context.actor.login : undefined;
-}
-
-// `sourceKey` reaches a rule as `linear:issue:linear:ENG-42`; the intake stamps the bare identifier.
-function linearIdentifier(item: FactoryRuleItemContext): string | undefined {
-  const identifier = item.metadata?.identifier;
-  return typeof identifier === 'string' ? identifier : undefined;
-}
-
-/** How a run names the card it is about: the noun, the provider number when the card carries one, the link. */
-function sourceRef(item: FactoryRuleItemContext): string {
-  const link = item.url ? ` (${item.url})` : '';
-  if (item.source === 'linear-issue') {
-    const identifier = linearIdentifier(item);
-    return identifier ? `Linear issue ${identifier}${link}` : `Linear issue ${item.title}${link}`;
-  }
-  if (item.source === 'manual') return item.url ? `Work item${link}` : item.title;
-  const noun = item.source === 'github-pr' ? 'GitHub pull request' : 'GitHub issue';
-  const number = workItemNumber(item);
-  if (number === undefined) return item.url ? `${noun}${link}` : item.title;
-  return `${noun} #${number}${link}`;
-}
-
-function invokeIssueInvestigation(context: FactoryStageRuleContext) {
-  return {
-    type: 'invokeSkill',
-    idempotencyKey: `${context.ingress.id}:factory-triage`,
-    role: 'triage',
-    skillName: 'factory-triage',
-    arguments: sourceRef(context.item),
-  } as const;
-}
-
-function prepareApproval(context: FactoryStageRuleContext) {
-  return {
-    type: 'invokeSkill',
-    idempotencyKey: `${context.ingress.id}:prepare-approval`,
-    role: 'triage',
-    prompt:
-      `Prepare approval for ${sourceRef(context.item)}. Review the existing triage comment and summarize ` +
-      'the decision needed before implementation or closure.',
-  } as const;
-}
-
-function triageIssueEntry(context: FactoryStageRuleContext) {
-  return needsApproval(context.item) ? prepareApproval(context) : invokeIssueInvestigation(context);
 }
 
 function retriageGithubIssue(context: FactoryGithubRuleContext) {
@@ -99,97 +51,6 @@ function retriageGithubIssue(context: FactoryGithubRuleContext) {
     skillName: 'factory-triage',
     arguments: `Re-triage GitHub issue (${context.item.url}) after ${reason}.`,
   } as const;
-}
-
-function investigateTriagedLinearIssue(context: FactoryStageRuleContext) {
-  return {
-    type: 'invokeSkill',
-    idempotencyKey: `${context.ingress.id}:factory-triage-linear`,
-    role: 'triage',
-    skillName: 'factory-triage',
-    arguments: `${sourceRef(context.item)}\n\n${LINEAR_FETCH_HINT}`,
-  } as const;
-}
-
-function planWorkItem(context: FactoryStageRuleContext) {
-  return {
-    type: 'invokeSkill',
-    idempotencyKey: `${context.ingress.id}:factory-plan`,
-    role: 'plan',
-    skillName: 'factory-plan',
-    arguments: context.item.url ? `Work item (${context.item.url})` : context.item.title,
-  } as const;
-}
-
-// A GitHub login is alphanumeric with interior hyphens — no underscores, no
-// spaces. Checking the grammar rejects the placeholder the issue poller stamps
-// when the reporter's account is gone (`__unknown__`), which would otherwise
-// become a trailer crediting an account that does not exist.
-const GITHUB_LOGIN = /^[a-zA-Z0-9](?:[a-zA-Z0-9]|-(?=[a-zA-Z0-9])){0,38}$/;
-
-/**
- * The reporter earns a `Co-Authored-By` trailer on the work their report caused.
- * Only a GitHub issue qualifies: Linear stamps a display name and a manual card
- * stamps nothing, and neither resolves to the GitHub identity a trailer needs.
- * Factory's own reports are skipped — crediting ourselves is noise.
- */
-function reporterCoAuthor(context: FactoryStageRuleContext) {
-  if (context.source !== 'issue') return undefined;
-  const author = context.item.metadata?.author;
-  if (typeof author !== 'string' || !author) return undefined;
-  if (author.endsWith('[bot]') || !GITHUB_LOGIN.test(author)) return undefined;
-  return author;
-}
-
-/**
- * Building carries a prompt rather than a skill. The approved plan is already
- * the specification, so there is nothing for a skill document to add, and the
- * handoff a skill would define is unnecessary here: Building ends by opening a
- * pull request, which arrives as its own event and raises the Review card.
- */
-function buildWorkItem(context: FactoryStageRuleContext) {
-  const ref = sourceRef(context.item);
-  const fromApprovedPlan = context.fromStage === 'planning';
-  const task = fromApprovedPlan
-    ? `Implement the approved plan for ${ref}. Open a pull request when the work is ready for review.`
-    : `Implement a fix for ${ref}: investigate the root cause, make the change with tests, and open a pull request.`;
-  const reporter = reporterCoAuthor(context);
-  // The trailer needs the reporter's numeric id, which intake does not stamp, so
-  // the agent resolves it from the same issue it is already reading.
-  const credit = reporter
-    ? ` The work was reported by @${reporter}: credit them on every commit with a ` +
-      `\`Co-Authored-By: ${reporter} <ID+${reporter}@users.noreply.github.com>\` trailer, ` +
-      `resolving ID with \`gh api users/${reporter} --jq .id\`.`
-    : '';
-  return {
-    type: 'invokeSkill',
-    idempotencyKey: `${context.ingress.id}:build`,
-    role: 'work',
-    prompt: `${task}${credit}`,
-  } as const;
-}
-
-function completeIssue(context: FactoryStageRuleContext) {
-  return {
-    type: 'invokeSkill',
-    idempotencyKey: `${context.ingress.id}:factory-complete-issue`,
-    role: 'triage',
-    skillName: 'factory-complete-issue',
-    arguments: context.item.url ? `GitHub issue (${context.item.url})` : context.item.title,
-  } as const;
-}
-
-const LINEAR_FETCH_HINT =
-  "Start by fetching the issue's full details (description and comments) with the linear_get_issue tool.";
-
-// Fires only on webhook materialization, so an item filed by hand or re-synced
-// from source never suggests its own run.
-function onArrival<Effect>(rule: (context: FactoryStageRuleContext) => Effect) {
-  return (context: FactoryStageRuleContext): Effect | undefined => {
-    if (context.cause !== 'linked_item_materialized') return;
-    if (context.item.metadata?.autoStartCandidate !== true) return;
-    return rule(context);
-  };
 }
 
 function resultContent(value: unknown): string | undefined {
@@ -566,26 +427,7 @@ function linearIssueClosed(context: FactoryLinearRuleContext) {
 }
 
 const BUILT_IN_DEFAULTS: FactoryRulesOverrides = {
-  work: {
-    intake: { issue: { onEnter: onArrival(triageIssueEntry) } },
-    triage: {
-      issue: { onEnter: triageIssueEntry },
-      linearIssue: { onEnter: investigateTriagedLinearIssue },
-    },
-    planning: {
-      issue: { onEnter: planWorkItem },
-      linearIssue: { onEnter: planWorkItem },
-      manual: { onEnter: planWorkItem },
-    },
-    execute: {
-      issue: { onEnter: buildWorkItem },
-      linearIssue: { onEnter: buildWorkItem },
-      manual: { onEnter: buildWorkItem },
-    },
-    done: {
-      issue: { onEnter: completeIssue },
-    },
-  },
+  work: workBoard.rules,
   review: reviewBoard.rules,
   tools: { submit_plan: { onResult: advanceApprovedPlan } },
   github: {
