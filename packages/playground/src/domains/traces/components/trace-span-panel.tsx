@@ -112,6 +112,12 @@ export function TraceSpanPanel({
   const entityHref = getEntityHref(rootSpan?.entityType, rootSpan?.entityId);
   const threadId = getTraceThreadId(rootSpan, anchorSpanId);
 
+  // Link to the advanced thread view (?variant=advanced) — needs the agent id and thread id.
+  const fullThreadHref =
+    rootSpan?.entityId && threadId
+      ? `/agents/${encodeURIComponent(rootSpan.entityId)}/threads/${encodeURIComponent(threadId)}?variant=advanced`
+      : undefined;
+
   return (
     <TraceDataPanel
       className={className}
@@ -139,7 +145,7 @@ export function TraceSpanPanel({
       featuredSpanIds={featuredSpanIds}
       messagesPanelSlot={
         showPartialThread && threadId ? (
-          <TraceMessagesPanel traceId={traceId} onHighlightSpans={onHighlightSpans} />
+          <TraceMessagesPanel traceId={traceId} fullThreadHref={fullThreadHref} onHighlightSpans={onHighlightSpans} />
         ) : undefined
       }
       scoresTabBadge={scoresTabBadge}
