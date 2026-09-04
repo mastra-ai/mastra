@@ -1,4 +1,5 @@
 import { Agent } from '@mastra/core/agent';
+import { coreFeatures } from '@mastra/core/features';
 import { Mastra } from '@mastra/core/mastra';
 import { RequestContext } from '@mastra/core/request-context';
 import { InMemoryStore } from '@mastra/core/storage';
@@ -1202,6 +1203,25 @@ describe('Datasets Handlers', () => {
   });
 
   describe('PURGE_ITEM_ROUTE', () => {
+    it('returns 501 when dataset item purge is unavailable in core', async () => {
+      coreFeatures.delete('dataset-item-purge');
+
+      try {
+        await expect(
+          PURGE_ITEM_ROUTE.handler({
+            ...createTestServerContext({ mastra }),
+            datasetId: 'dataset-id',
+            itemId: 'item-id',
+          } as any),
+        ).rejects.toMatchObject({
+          status: 501,
+          message: 'Dataset item purge requires a newer @mastra/core with dataset purge support.',
+        });
+      } finally {
+        coreFeatures.add('dataset-item-purge');
+      }
+    });
+
     it('purges item history after the item has been soft deleted', async () => {
       const dataset = await mastra.datasets.create({ name: 'Purge route dataset' });
       const item = await dataset.addItem({

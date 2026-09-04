@@ -581,6 +581,11 @@ export const PURGE_ITEM_ROUTE = createRoute({
   requiresAuth: true,
   handler: async ({ mastra, datasetId, itemId, ...params }) => {
     assertDatasetsAvailable();
+    if (!coreFeatures.has('dataset-item-purge')) {
+      throw new HTTPException(501, {
+        message: 'Dataset item purge requires a newer @mastra/core with dataset purge support.',
+      });
+    }
     try {
       const { organizationId, projectId } = params as { organizationId?: string; projectId?: string };
       const ds = await mastra.datasets.get({ id: datasetId, organizationId, projectId });
