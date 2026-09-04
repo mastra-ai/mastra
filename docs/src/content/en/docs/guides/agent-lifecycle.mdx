@@ -15,9 +15,14 @@ This guide breaks that work into preparation, loop execution, and finalization. 
 
 Work happens at three levels:
 
-- **Run**: One call to `generate()` or `stream()` and the work it starts. A run ends with a result or error, or it can suspend and resume when durable execution waits for external input.
-- **Loop iteration**: One pass through the agent loop. It starts with a model step. Requested tool work follows before Mastra decides whether to continue.
-- **Model step**: One request to the model provider and the response it produces. Input and output processors run around this request.
+- **Run**: All work started by one call to `generate()` or `stream()` through the final result or error, including any pause and resume while durable execution waits for external input.
+- **Loop iteration**: One pass through the agent loop, beginning with a model step and including any requested tool work before Mastra decides whether to continue.
+- **Model step**: One request to the model provider and its response, together with the input and output processors that run around that request.
+
+Preparation depends on runtime context and initial input processing:
+
+- [`RequestContext`](/docs/server/request-context) carries trusted runtime data, such as identity or tenant information, to dynamic configuration, processors, and tools, but its values aren't automatically included in the model prompt.
+- [`processInput`](/reference/processors/processor-interface#processinput) handles the initial messages before the loop begins, where it can transform those messages and establish state that later processor hooks and tools use.
 
 A run contains one or more loop iterations. It stops after the current iteration when the model returns a final answer, or processes the requested tool result and begins another iteration when the model requests a tool. An iteration commonly coincides with one model step, but treat that pairing as implementation behavior rather than a stable contract.
 
@@ -26,18 +31,14 @@ A run contains one or more loop iterations. It stops after the current iteration
 ```mermaid
 flowchart LR
   accTitle: Lifecycle of a Mastra agent run
-  accDescr: Mastra prepares an agent run, repeats model and tool work while needed, then finalizes and returns the result.
-  caller((agent call)) --> setup([validate context<br/>resolve setup])
-  setup --> prepare([prepare tools,<br/>memory and input])
-  prepare --> model([run model step])
-  model --> decision{continue?}
-  decision -->|stop| final([final processors<br/>and persistence])
-  final --> response((response))
-  decision -->|tool call| tools([run tools and<br/>process results])
-  tools --> model
+  accDescr: An agent run moves from preparation into a model and tool loop, then finalizes and returns the result.
+  caller((agent call)) --> prepare([prepare agent<br/>and input])
+  prepare --> loop([run model<br/>and tools])
+  loop --> final([finalize result])
+  final --> response((result))
 ```
 
-The diagram shows the public mental model, not internal workflow steps. Validation and dynamic setup are part of preparation, and tool preparation can overlap input and memory preparation. A regular run keeps working in the current process. A durable run can save its state and restore it later.
+The diagram shows the three main phases rather than internal workflow steps. Preparation creates the first model interaction. The loop may repeat model and tool work several times before finalization produces the result. A regular run keeps working in the current process, while a durable run can save its state and restore it later.
 
 ## Preparation
 
