@@ -120,6 +120,9 @@ import {
   parseTtlExpression,
 } from './ddl';
 import type { MigrationEntry, RetentionEntry, RetentionConfig } from './ddl';
+export { TABLE_DELETION_REQUESTS } from './ddl';
+export { recordDeletionRequest } from './deletion-requests';
+export type { DeletionRequestRow, RecordDeletionRequestArgs } from './deletion-requests';
 export type { RetentionConfig } from './ddl';
 
 /** Extended config for v-next observability, adding per-signal retention. */
@@ -1426,7 +1429,7 @@ export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
 
   override async batchDeleteTraces(args: BatchDeleteTracesArgs): Promise<void> {
     try {
-      await tracingOps.batchDeleteTraces(this.#client, args);
+      await tracingOps.batchDeleteTraces(this.#client, args, this.#replication);
     } catch (error) {
       if (error instanceof MastraError) throw error;
       throw new MastraError(

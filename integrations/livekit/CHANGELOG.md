@@ -1,5 +1,23 @@
 # @mastra/livekit
 
+## 0.3.2-alpha.0
+
+### Patch Changes
+
+- Add `options` to `MastraVoiceAgentMemory` so per-call memory config is forwarded by the in-process agent and remote reply generators. Setting `readOnly` keeps LiveKit's preemptive (speculative) turns from persisting partial user and assistant messages to the thread, so preemptive generation can stay on with memory; committed turns are then persisted by the caller. ([#22928](https://github.com/mastra-ai/mastra/pull/22928))
+
+  ```ts
+  new MastraLLM({
+    agent,
+    memory: { thread: 'thread-id', options: { readOnly: true } },
+  });
+  ```
+
+  Documents the recipe and corrects the worker/plugin notes on what discarded speculations persist.
+
+- Updated dependencies [[`f649ea0`](https://github.com/mastra-ai/mastra/commit/f649ea0f006436e7268c3b0fa45f9865a02130cc), [`18d99e7`](https://github.com/mastra-ai/mastra/commit/18d99e7b5687ea6a1cdb601fa5c4209a03b97c02), [`a0ad935`](https://github.com/mastra-ai/mastra/commit/a0ad9351eaf8527d1515051ddf3998ee258b9acd)]:
+  - @mastra/core@1.65.0-alpha.3
+
 ## 0.3.1
 
 ### Patch Changes

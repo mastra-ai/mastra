@@ -176,6 +176,7 @@ export class ObservabilityOracle extends ObservabilityStorage {
   }
 
   async batchDeleteTraces(args: BatchDeleteTracesArgs): Promise<void> {
+    this.assertUnscopedBatchDeleteTraces(args);
     return spansOps.batchDeleteTraces(this.db, this.schemaName, args);
   }
 

@@ -1955,6 +1955,20 @@ export const API_ROUTE_METADATA = {
       "kind": "single"
     }
   },
+  "POST /observability/traces/delete": {
+    "method": "POST",
+    "path": "/observability/traces/delete",
+    "pathParams": [],
+    "queryParams": [],
+    "bodyParams": [
+      "traceIds"
+    ],
+    "hasQuery": false,
+    "hasBody": true,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
   "POST /observability/traces/score": {
     "method": "POST",
     "path": "/observability/traces/score",
