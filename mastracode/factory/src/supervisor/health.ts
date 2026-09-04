@@ -80,6 +80,13 @@ export const DEFAULT_HEALTH_THRESHOLDS: FactoryHealthThresholds = {
   waitingOnPersonMs: 24 * 60 * 60_000,
 };
 
+/**
+ * Never-lose backstop for supervisor-first Attention: an open finding hidden
+ * from people while the supervisor works it is force-surfaced once it has
+ * been open this long, whatever its status.
+ */
+export const SUPERVISOR_ATTENTION_FORCE_SURFACE_MS = 30 * 60_000;
+
 const FINDING_KINDS: FactoryHealthFindingKind[] = [
   'decision-failed',
   'decision-stuck',

@@ -27,6 +27,7 @@ import {
   factorySupervisorFindingAttentionIdentity,
 } from '../storage/domains/work-items/base.js';
 import type { FactoryHealthFinding } from '../supervisor/health.js';
+import { isSupervisorFindingVisibleToHumans } from '../supervisor/visibility.js';
 
 export type FactoryAttentionView = 'open' | 'unread' | 'archived';
 
@@ -363,28 +364,48 @@ function supervisorFindingPayload(row: FactorySupervisorFindingRecord): FactoryH
 export class SupervisorFindingAttentionProvider implements AttentionProvider {
   readonly kind = 'supervisor-finding' as const;
   readonly #workItems: WorkItemsStorage;
+  readonly #now: () => Date;
 
-  constructor({ workItems }: { workItems: WorkItemsStorage }) {
+  constructor({ workItems, now }: { workItems: WorkItemsStorage; now?: () => Date }) {
     this.#workItems = workItems;
+    this.#now = now ?? (() => new Date());
+  }
+
+  /**
+   * Attention is the human's view of finding state, so every path below
+   * (counts, latest, page, bulk receipts) sees the same subset: the rows
+   * `isSupervisorFindingVisibleToHumans` admits. The scan cursor still
+   * advances over the raw rows, so hidden rows never stall pagination.
+   */
+  #visible(rows: FactorySupervisorFindingRecord[]): FactorySupervisorFindingRecord[] {
+    const now = this.#now();
+    return rows.filter(row => isSupervisorFindingVisibleToHumans(row, now));
+  }
+
+  #batches(scope: AttentionScope, before?: AttentionStreamPosition) {
+    return scanBatches<FactorySupervisorFindingRecord>(
+      cursor =>
+        this.#workItems.listSupervisorFindingPage({
+          ...scope,
+          ...(cursor ? { before: cursor } : {}),
+          limit: SCAN_PAGE_SIZE,
+        }),
+      row => ({ occurredAt: row.updatedAt, id: row.id }),
+      before,
+    );
   }
 
   async counts(scope: AttentionScope): Promise<AttentionCounts> {
     let open = 0;
     let unread = 0;
-    const batches = scanBatches<FactorySupervisorFindingRecord>(
-      before =>
-        this.#workItems.listSupervisorFindingPage({ ...scope, ...(before ? { before } : {}), limit: SCAN_PAGE_SIZE }),
-      row => ({ occurredAt: row.updatedAt, id: row.id }),
-    );
-    for await (const page of batches) {
-      const identities = page.rows.map(row =>
-        factorySupervisorFindingAttentionIdentity(row.findingKey, row.occurrence),
-      );
+    for await (const page of this.#batches(scope)) {
+      const rows = this.#visible(page.rows);
+      const identities = rows.map(row => factorySupervisorFindingAttentionIdentity(row.findingKey, row.occurrence));
       const receipts = await this.#workItems.listAttentionReceipts({ ...scope, identities });
       const byIdentity = new Map(
         receipts.map(receipt => [`${receipt.sourceId}\0${receipt.occurrence}`, receipt] as const),
       );
-      for (const row of page.rows) {
+      for (const row of rows) {
         const receipt = byIdentity.get(`${row.findingKey}\0${row.occurrence}`);
         if (receipt?.state === 'archived') continue;
         open += 1;
@@ -395,8 +416,12 @@ export class SupervisorFindingAttentionProvider implements AttentionProvider {
   }
 
   async latest(scope: AttentionScope): Promise<AttentionLatest | null> {
-    const page = await this.#workItems.listSupervisorFindingPage({ ...scope, limit: 1 });
-    const newest = page.rows[0];
+    // Newest VISIBLE row: a hidden newer finding must not blank the rail.
+    let newest: FactorySupervisorFindingRecord | undefined;
+    for await (const page of this.#batches(scope)) {
+      newest = this.#visible(page.rows)[0];
+      if (newest) break;
+    }
     if (!newest) return null;
     const identity = factorySupervisorFindingAttentionIdentity(newest.findingKey, newest.occurrence);
     const receipts = await this.#workItems.listAttentionReceipts({ ...scope, identities: [identity] });
@@ -408,76 +433,66 @@ export class SupervisorFindingAttentionProvider implements AttentionProvider {
   }
 
   page(scope: AttentionScope, args: AttentionPageArgs): Promise<AttentionPageResult> {
-    return collectPage(
-      scanBatches<FactorySupervisorFindingRecord>(
-        before =>
-          this.#workItems.listSupervisorFindingPage({ ...scope, ...(before ? { before } : {}), limit: SCAN_PAGE_SIZE }),
-        row => ({ occurredAt: row.updatedAt, id: row.id }),
-        args.before,
-      ),
-      args.limit,
-      async rows => {
-        const identities = rows.map(row => factorySupervisorFindingAttentionIdentity(row.findingKey, row.occurrence));
-        const receipts = await this.#workItems.listAttentionReceipts({ ...scope, identities });
-        const byIdentity = new Map(
-          receipts.map(receipt => [`${receipt.sourceId}\0${receipt.occurrence}`, receipt] as const),
-        );
-        return rows.flatMap(row => {
-          const finding = supervisorFindingPayload(row);
-          const receipt = byIdentity.get(`${row.findingKey}\0${row.occurrence}`);
-          if (!matchesView(args.view, receipt)) return [];
-          const text = `${finding.title} ${finding.evidence}`.toLowerCase();
-          if (args.search && !text.includes(args.search)) return [];
-          const identity = factorySupervisorFindingAttentionIdentity(row.findingKey, row.occurrence);
-          return [
-            {
+    return collectPage(this.#batches(scope, args.before), args.limit, async batchRows => {
+      const rows = this.#visible(batchRows);
+      const identities = rows.map(row => factorySupervisorFindingAttentionIdentity(row.findingKey, row.occurrence));
+      const receipts = await this.#workItems.listAttentionReceipts({ ...scope, identities });
+      const byIdentity = new Map(
+        receipts.map(receipt => [`${receipt.sourceId}\0${receipt.occurrence}`, receipt] as const),
+      );
+      return rows.flatMap(row => {
+        const finding = supervisorFindingPayload(row);
+        const receipt = byIdentity.get(`${row.findingKey}\0${row.occurrence}`);
+        if (!matchesView(args.view, receipt)) return [];
+        const text = `${finding.title} ${finding.evidence}`.toLowerCase();
+        if (args.search && !text.includes(args.search)) return [];
+        const identity = factorySupervisorFindingAttentionIdentity(row.findingKey, row.occurrence);
+        return [
+          {
+            key: factoryAttentionKey(scope.factoryProjectId, identity),
+            occurredAt: row.updatedAt,
+            resumeCursor: { occurredAt: row.updatedAt, id: row.id },
+            receipt,
+            item: {
               key: factoryAttentionKey(scope.factoryProjectId, identity),
-              occurredAt: row.updatedAt,
-              resumeCursor: { occurredAt: row.updatedAt, id: row.id },
-              receipt,
-              item: {
-                key: factoryAttentionKey(scope.factoryProjectId, identity),
-                kind: this.kind,
-                findingKey: row.findingKey,
-                occurrence: row.occurrence,
-                findingTitle: finding.title,
-                evidence: finding.evidence,
-                title: finding.title,
-                detail: finding.evidence,
-                ageMs: finding.ageMs,
-                suggestedRepair: finding.suggestedRepair,
-                workItemId: finding.workItemId,
-                occurredAt: row.updatedAt.toISOString(),
-                read: Boolean(receipt),
-                archived: receipt?.state === 'archived',
-                target: finding.workItemId
-                  ? { kind: 'work-item', workItemId: finding.workItemId, board: 'work' }
-                  : { kind: 'rules' },
-              },
+              kind: this.kind,
+              findingKey: row.findingKey,
+              occurrence: row.occurrence,
+              findingTitle: finding.title,
+              evidence: finding.evidence,
+              title: finding.title,
+              detail: row.escalationNote ? `${row.escalationNote}\n\n${finding.evidence}` : finding.evidence,
+              status: row.status,
+              escalatedAt: row.escalatedAt?.toISOString() ?? null,
+              escalationNote: row.escalationNote,
+              ageMs: finding.ageMs,
+              suggestedRepair: finding.suggestedRepair,
+              workItemId: finding.workItemId,
+              occurredAt: row.updatedAt.toISOString(),
+              read: Boolean(receipt),
+              archived: receipt?.state === 'archived',
+              target: finding.workItemId
+                ? { kind: 'work-item', workItemId: finding.workItemId, board: 'work' }
+                : { kind: 'rules' },
             },
-          ];
-        });
-      },
-    );
+          },
+        ];
+      });
+    });
   }
 
   markAllRead(
     scope: AttentionScope,
     args: { before?: AttentionStreamPosition; now: Date },
   ): Promise<{ hasMore: boolean; continuation?: AttentionStreamPosition }> {
-    return markScanRead(
-      scanBatches<FactorySupervisorFindingRecord>(
-        before =>
-          this.#workItems.listSupervisorFindingPage({ ...scope, ...(before ? { before } : {}), limit: SCAN_PAGE_SIZE }),
-        row => ({ occurredAt: row.updatedAt, id: row.id }),
-        args.before,
-      ),
-      rows =>
-        this.#workItems.markAttentionReceiptsRead({
-          ...scope,
-          identities: rows.map(row => factorySupervisorFindingAttentionIdentity(row.findingKey, row.occurrence)),
-          now: args.now,
-        }),
+    return markScanRead(this.#batches(scope, args.before), rows =>
+      this.#workItems.markAttentionReceiptsRead({
+        ...scope,
+        identities: this.#visible(rows).map(row =>
+          factorySupervisorFindingAttentionIdentity(row.findingKey, row.occurrence),
+        ),
+        now: args.now,
+      }),
     );
   }
 }
