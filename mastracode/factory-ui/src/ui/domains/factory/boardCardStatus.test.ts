@@ -114,30 +114,27 @@ describe('boardCardStatus', () => {
     ).toEqual({ kind: 'error', label: "Couldn't sync GitHub issue — retrying…", detail: undefined });
   });
 
-  it('tells a run that is underway apart from one still waiting to start', () => {
+  it('says a run is starting until the registry or the workspace record shows its session', () => {
     expect(boardCardStatus({ decision: decision({ status: 'pending', attempts: 0 }) })).toEqual({
       kind: 'busy',
       label: 'Starting an automated run…',
-    });
-    expect(boardCardStatus({ decision: decision({ status: 'leased' }), sessionStatus: 'working' })).toEqual({
-      kind: 'busy',
-      label: 'Automated run in progress…',
-    });
-  });
-
-  it('claims a run is in progress only while the run registry agrees', () => {
-    expect(boardCardStatus({ decision: decision({ status: 'leased' }), sessionStatus: 'initializing' })).toEqual({
-      kind: 'busy',
-      label: 'Preparing workspace…',
     });
     expect(boardCardStatus({ decision: decision({ status: 'leased' }) })).toEqual({
       kind: 'busy',
       label: 'Starting an automated run…',
     });
-    expect(boardCardStatus({ decision: decision({ status: 'leased' }), sessionStatus: 'ready' })).toEqual({
-      kind: 'busy',
-      label: 'Starting an automated run…',
+  });
+
+  it('leaves a leased run to the wick once its session is live', () => {
+    expect(boardCardStatus({ decision: decision({ status: 'leased' }), sessionStatus: 'working' })).toEqual({
+      kind: 'idle',
     });
+    expect(boardCardStatus({ decision: decision({ status: 'leased' }), sessionStatus: 'initializing' })).toEqual({
+      kind: 'idle',
+    });
+    expect(
+      boardCardStatus({ decision: decision({ type: 'transition', status: 'leased' }), sessionStatus: 'working' }),
+    ).toEqual({ kind: 'busy', label: 'Moving this card automatically…' });
   });
 
   it('describes a queued rule effect in terms of what it does, not the queue', () => {
