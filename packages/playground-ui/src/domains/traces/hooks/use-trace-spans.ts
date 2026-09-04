@@ -1,6 +1,6 @@
 import type { MastraClient } from '@mastra/client-js';
 import { useMastraClient } from '@mastra/react';
-import { queryOptions, useQuery } from '@tanstack/react-query';
+import { queryOptions, useQueries, useQuery } from '@tanstack/react-query';
 import type { UseQueryResult } from '@tanstack/react-query';
 import type { SearchableSpan } from '../types';
 import { selectSearchableSpans } from '../utils';
@@ -48,5 +48,30 @@ export function useTraceSpans(
     ...traceSpansQueryOptions(client, traceId),
     // Builds each span's search haystack once per fetch, cached with the query.
     select: selectSearchableSpans,
+  });
+}
+
+export type TraceSpansData = Awaited<ReturnType<MastraClient['getTrace']>>;
+
+/**
+ * Observes the `trace-spans` query of several traces at once and projects each one with `select`.
+ * Traces still loading (or failed) yield `fallback(traceId)` so the result always lines up with `traceIds`.
+ */
+export function useTraceSpansQueries<T>(
+  traceIds: string[],
+  select: (traceId: string, data: TraceSpansData) => T,
+  fallback: (traceId: string) => T,
+): T[] {
+  const client = useMastraClient();
+
+  return useQueries({
+    queries: traceIds.map(traceId => ({
+      ...traceSpansQueryOptions(client, traceId),
+      select: (data: TraceSpansData) => select(traceId, data),
+    })),
+    combine: results =>
+      results.map((result, index) =>
+        result.data === undefined ? fallback(traceIds[index] ?? '') : (result.data as T),
+      ),
   });
 }
