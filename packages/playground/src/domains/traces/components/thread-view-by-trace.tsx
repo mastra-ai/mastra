@@ -1,28 +1,25 @@
 import { Button } from '@mastra/playground-ui/components/Button';
-import { buildThreadRailTurns, ThreadRail } from '@mastra/playground-ui/components/ThreadRail';
-import type { ThreadRailTurn } from '@mastra/playground-ui/components/ThreadRail';
+import { ThreadRail } from '@mastra/playground-ui/components/ThreadRail';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { formatHierarchicalSpans } from '@mastra/playground-ui/domains/traces/components/format-hierarchical-spans';
 import { SpanDataPanelView } from '@mastra/playground-ui/domains/traces/components/span-data-panel-view';
 import { TraceTimeline } from '@mastra/playground-ui/domains/traces/components/trace-timeline';
 import { TracesErrorContent } from '@mastra/playground-ui/domains/traces/components/traces-error-content';
-import { getAllSpanIds } from '@mastra/playground-ui/domains/traces/hooks/get-all-span-ids';
 import { useSpanDetail } from '@mastra/playground-ui/domains/traces/hooks/use-span-detail';
 import { useTraceSpanNavigation } from '@mastra/playground-ui/domains/traces/hooks/use-trace-span-navigation';
 import { useTraceSpans } from '@mastra/playground-ui/domains/traces/hooks/use-trace-spans';
 import { useTraces } from '@mastra/playground-ui/domains/traces/hooks/use-traces';
 import { TraceIcon } from '@mastra/playground-ui/icons/TraceIcon';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { useMastraClient } from '@mastra/react';
-import { useQueries } from '@tanstack/react-query';
 import { MessageSquare } from 'lucide-react';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { Dispatch, RefObject, SetStateAction } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router';
 
-import { formatTraceThreadMessages } from '@/domains/traces/components/format-trace-thread-messages';
 import { TraceFeedbackTab } from '@/domains/traces/components/trace-feedback-tab';
 import { TraceThreadItemView } from '@/domains/traces/components/trace-thread-item-view';
+import { useExpandedSpanIds } from '@/domains/traces/hooks/use-expanded-span-ids';
+import { useThreadRailTurns } from '@/domains/traces/hooks/use-thread-rail-turns';
+import { useVisibleTraceRows } from '@/domains/traces/hooks/use-visible-trace-rows';
 
 export interface ThreadViewByTraceProps {
   threadId: string;
@@ -153,67 +150,6 @@ export function ThreadViewByTrace({ threadId }: ThreadViewByTraceProps) {
   );
 }
 
-const FALLBACK_TURN = (traceId: string): ThreadRailTurn => ({
-  key: traceId,
-  messageId: traceId,
-  prompt: 'Agent turn',
-  files: [],
-  hiddenFileCount: 0,
-});
-
-/**
- * One rail stop per trace, summarised from the turn its spans reconstruct. Shares the
- * `trace-spans` cache with the rows, so no extra request is made; the stop is keyed by the
- * trace id so the rail can track rows rather than message ids.
- */
-function useThreadRailTurns(traceIds: string[]): ThreadRailTurn[] {
-  const client = useMastraClient();
-
-  return useQueries({
-    queries: traceIds.map(traceId => ({
-      queryKey: ['trace-spans', traceId],
-      queryFn: () => client.getTrace(traceId),
-      select: (data: Awaited<ReturnType<typeof client.getTrace>>): ThreadRailTurn => {
-        const [turn] = buildThreadRailTurns(formatTraceThreadMessages(data?.spans ?? []));
-        return turn ? { ...turn, key: traceId, messageId: traceId } : FALLBACK_TURN(traceId);
-      },
-    })),
-    combine: results => results.map((result, index) => result.data ?? FALLBACK_TURN(traceIds[index]!)),
-  });
-}
-
-/** Which rows are on screen, and the topmost one, so the rail can mark them like the chat page does. */
-function useVisibleTraceRows(listRef: RefObject<HTMLDivElement | null>, traceIds: string[]) {
-  const [visibleSet, setVisibleSet] = useState<ReadonlySet<string>>(() => new Set());
-
-  useEffect(() => {
-    const root = listRef.current;
-    if (!root || typeof IntersectionObserver === 'undefined') return;
-
-    const observer = new IntersectionObserver(
-      entries => {
-        setVisibleSet(current => {
-          const next = new Set(current);
-          for (const entry of entries) {
-            const id = (entry.target as HTMLElement).dataset.traceId;
-            if (!id) continue;
-            if (entry.isIntersecting) next.add(id);
-            else next.delete(id);
-          }
-          return next;
-        });
-      },
-      { root, threshold: 0.1 },
-    );
-
-    root.querySelectorAll<HTMLElement>('[data-trace-id]').forEach(row => observer.observe(row));
-    return () => observer.disconnect();
-  }, [listRef, traceIds]);
-
-  const visibleTraceIds = useMemo(() => traceIds.filter(id => visibleSet.has(id)), [traceIds, visibleSet]);
-  return { visibleTraceIds, currentTraceId: visibleTraceIds[0] };
-}
-
 interface TraceThreadRowProps {
   traceId: string;
   selectedSpanId?: string;
@@ -234,13 +170,7 @@ function TraceThreadRow({
 
   const hierarchicalSpans = useMemo(() => formatHierarchicalSpans(data?.spans ?? []), [data]);
 
-  // Everything is expanded by default; `userExpandedSpanIds` only exists once the user toggles a node,
-  // so the default is derived from the data instead of synced with an effect.
-  const allSpanIds = useMemo(() => getAllSpanIds(hierarchicalSpans), [hierarchicalSpans]);
-  const [userExpandedSpanIds, setUserExpandedSpanIds] = useState<string[] | null>(null);
-  const expandedSpanIds = userExpandedSpanIds ?? allSpanIds;
-  const setExpandedSpanIds: Dispatch<SetStateAction<string[]>> = update =>
-    setUserExpandedSpanIds(current => (typeof update === 'function' ? update(current ?? allSpanIds) : update));
+  const { expandedSpanIds, setExpandedSpanIds } = useExpandedSpanIds(hierarchicalSpans);
 
   const [showFeedback, setShowFeedback] = useState(false);
 
