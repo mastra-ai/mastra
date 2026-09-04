@@ -17,7 +17,7 @@ import { useMastraClient } from '@mastra/react';
 import { useQueries } from '@tanstack/react-query';
 import { MessageSquare } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { RefObject } from 'react';
+import type { Dispatch, RefObject, SetStateAction } from 'react';
 import { Link } from 'react-router';
 
 import { formatTraceThreadMessages } from '@/domains/traces/components/format-trace-thread-messages';
@@ -234,12 +234,13 @@ function TraceThreadRow({
 
   const hierarchicalSpans = useMemo(() => formatHierarchicalSpans(data?.spans ?? []), [data]);
 
-  const [expandedSpanIds, setExpandedSpanIds] = useState<string[]>([]);
-  useEffect(() => {
-    if (hierarchicalSpans.length > 0) {
-      setExpandedSpanIds(getAllSpanIds(hierarchicalSpans));
-    }
-  }, [hierarchicalSpans]);
+  // Everything is expanded by default; `userExpandedSpanIds` only exists once the user toggles a node,
+  // so the default is derived from the data instead of synced with an effect.
+  const allSpanIds = useMemo(() => getAllSpanIds(hierarchicalSpans), [hierarchicalSpans]);
+  const [userExpandedSpanIds, setUserExpandedSpanIds] = useState<string[] | null>(null);
+  const expandedSpanIds = userExpandedSpanIds ?? allSpanIds;
+  const setExpandedSpanIds: Dispatch<SetStateAction<string[]>> = update =>
+    setUserExpandedSpanIds(current => (typeof update === 'function' ? update(current ?? allSpanIds) : update));
 
   const [showFeedback, setShowFeedback] = useState(false);
 
