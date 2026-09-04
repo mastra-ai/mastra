@@ -5,14 +5,7 @@ import * as p from '@clack/prompts';
 // flow and reuses persisted credentials + org resolution rather than duplicating
 // them here.
 import type { PosthogAnalytics } from 'mastra/dist/analytics/index.js';
-import {
-  fetchOrgs,
-  getToken,
-  loadCredentials,
-  LoginCancelledError,
-  resolveCurrentOrg,
-  saveProjectConfig,
-} from 'mastra/internal/auth';
+import { fetchOrgs, getToken, loadCredentials, LoginCancelledError, resolveCurrentOrg } from 'mastra/internal/auth';
 import color from 'picocolors';
 import { x } from 'tinyexec';
 
@@ -313,12 +306,6 @@ async function runPlatformProvisioning({
       throw err;
     }
     envAccumulator.MASTRA_PROJECT_ID = project.id;
-    await saveProjectConfig(projectPath, {
-      projectId: project.id,
-      projectName: project.name,
-      projectSlug: project.slug,
-      organizationId: orgId,
-    });
 
     // 4. Mint sk_ WorkOS org API key — becomes MASTRA_PLATFORM_SECRET_KEY.
     //    The platform shows this secret exactly once, so we record it into
