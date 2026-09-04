@@ -4,13 +4,13 @@
  *
  * `backwards`, not `both`: a settled transform would leave the row a containing
  * block for the actions it hangs over its own top edge. */
-.comment-arriving {
+.mastra-comment-arriving {
   animation:
-    comment-rise 420ms cubic-bezier(0.16, 1, 0.3, 1) backwards,
-    comment-fade 200ms linear backwards;
+    mastra-comment-rise 420ms cubic-bezier(0.16, 1, 0.3, 1) backwards,
+    mastra-comment-fade 200ms linear backwards;
 }
 
-@keyframes comment-rise {
+@keyframes mastra-comment-rise {
   from {
     transform: translateY(0.75rem);
   }
@@ -20,7 +20,7 @@
   }
 }
 
-@keyframes comment-fade {
+@keyframes mastra-comment-fade {
   from {
     opacity: 0;
   }
@@ -31,7 +31,7 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .comment-arriving {
+  .mastra-comment-arriving {
     animation: none;
   }
 }

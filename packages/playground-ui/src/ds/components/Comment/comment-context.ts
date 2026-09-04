@@ -1,6 +1,6 @@
 import { createContext, useContext } from 'react';
 
-export type CommentVariant = 'default' | 'embed';
+export type CommentVariant = 'default' | 'embed' | 'thread';
 
 export const CommentContext = createContext<CommentVariant | null>(null);
 
