@@ -148,15 +148,15 @@ function TraceThreadRow({
 
   const [showFeedback, setShowFeedback] = useState(false);
 
-  // The row stays highlighted while its span is open in the side panel, so the reader keeps
-  // track of which turn the details belong to without hovering.
+  // The whole row is dimmed until hovered, or while its span is open in the side panel, so the
+  // reader keeps track of which turn the details belong to without hovering.
   const isActive = selectedSpanId !== undefined;
 
   return (
     <div
       className={cn(
-        'group border-border1 grid grid-cols-[1fr_1fr] gap-4 border-b border-dashed px-4 py-4 transition-colors',
-        isActive && 'bg-surface2',
+        'group border-border1 grid grid-cols-[1fr_1fr] gap-4 border-b border-dashed px-4 py-4 transition-opacity hover:opacity-100',
+        isActive || showFeedback ? 'opacity-100' : 'opacity-50',
       )}
       data-trace-id={traceId}
       data-active={isActive || undefined}
@@ -184,14 +184,8 @@ function TraceThreadRow({
         )}
       </div>
       {/* The row height is driven by the messages column; the timeline is absolutely
-          positioned so it fills that height and scrolls instead of stretching the row.
-          The timeline is dimmed until the row is hovered or active so it reads as belonging to the message. */}
-      <div
-        className={cn(
-          'relative min-w-0 transition-opacity group-hover:opacity-100',
-          isActive ? 'opacity-100' : 'opacity-50',
-        )}
-      >
+          positioned so it fills that height and scrolls instead of stretching the row. */}
+      <div className="relative min-w-0">
         <div className="absolute inset-0 overflow-y-auto">
           <TraceTimeline
             hierarchicalSpans={hierarchicalSpans}
