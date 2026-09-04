@@ -1143,7 +1143,7 @@ Move a work item using its current revision:
 mastra api factory work-item transition <project-id> <work-item-id> '{"board":"work","stage":"planning","requestId":"00000000-0000-4000-8000-000000000000","cause":"manual","expectedRevision":1}'
 ```
 
-A project provisioned by `create-factory` contains a non-secret `.mastra-project.json` file. From that project directory, the CLI uses the file to find the hosted Factory instance and applies your Mastra CLI credentials automatically. Pass `--url` to target a specific local, remote, or self-hosted Factory server instead:
+After you deploy the project with `mastra deploy`, the resulting non-secret `.mastra-project.json` lets the CLI find the hosted Factory instance and apply your Mastra CLI credentials automatically. Before deployment, or to target a specific local, remote, or self-hosted Factory server, pass `--url` instead:
 
 ```bash
 mastra api --url http://localhost:4111 factory project list
