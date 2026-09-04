@@ -6,6 +6,7 @@ import { Mastra } from '../mastra';
 import { MockStore } from '../storage';
 import { BackgroundTaskManager } from './manager';
 import type { BackgroundTask } from './types';
+import { BACKGROUND_TASK_WORKFLOW_ID } from './workflow-id';
 
 function deferred<T = void>() {
   let resolve!: (value: T | PromiseLike<T>) => void;
@@ -370,13 +371,62 @@ describe('BackgroundTaskManager lifecycle', () => {
     await pubsub.close();
   });
 
+  it('does not start a pending task that is cancelled while dispatch is claiming it', async () => {
+    const pubsub = new CapturingPubSub();
+    const mastra = new Mastra({ logger: false, storage: new MockStore(), workers: false });
+    const manager = new BackgroundTaskManager({ enabled: true });
+    manager.__registerMastra(mastra);
+    await manager.init(pubsub);
+
+    const task = makeRunningTask({ status: 'pending', startedAt: undefined });
+    const storage = await manager.getStorage();
+    await storage.createTask(task);
+    const claimStarted = deferred();
+    const claimGate = deferred();
+    const originalUpdateTask = storage.updateTask.bind(storage);
+    vi.spyOn(storage, 'updateTask').mockImplementation(async (taskId, update, options) => {
+      if (update.status === 'running') {
+        claimStarted.resolve();
+        await claimGate.promise;
+      }
+      return originalUpdateTask(taskId, update, options);
+    });
+
+    const execute = vi.fn();
+    manager.registerTaskContext(task.id, { executor: { execute } });
+    const createRun = vi.spyOn(mastra.__getInternalWorkflow(BACKGROUND_TASK_WORKFLOW_ID), 'createRun');
+    const ack = vi.fn(async () => {});
+    const event: Event = {
+      type: 'task.dispatch',
+      id: 'event-1',
+      data: { taskId: task.id },
+      runId: task.id,
+      createdAt: new Date(),
+    };
+
+    const dispatchPromise = pubsub.dispatchCallback!(event, ack);
+    await claimStarted.promise;
+    await manager.cancel(task.id);
+    claimGate.resolve();
+    await dispatchPromise;
+
+    expect((await storage.getTask(task.id))!.status).toBe('cancelled');
+    expect(createRun).not.toHaveBeenCalled();
+    expect(execute).not.toHaveBeenCalled();
+    expect(ack).toHaveBeenCalledOnce();
+    await manager.shutdown();
+    await pubsub.close();
+    await mastra.shutdown();
+    mastra.__unregisterHooks();
+  });
+
   it('still restarts an explicitly restarted running task', async () => {
     const pubsub = new CapturingPubSub();
     const manager = new BackgroundTaskManager({ enabled: true });
     await manager.init(pubsub);
 
     const task = makeRunningTask();
-    const updateTask = vi.fn(async () => {});
+    const updateTask = vi.fn(async () => true);
     const start = vi.fn(async () => ({ status: 'success' }));
     const restart = vi.fn(async () => ({ status: 'success' }));
     const deleteWorkflowRunById = vi.fn(async () => {});
@@ -405,7 +455,9 @@ describe('BackgroundTaskManager lifecycle', () => {
 
     await pubsub.dispatchCallback!(event, ack);
 
-    expect(updateTask).toHaveBeenCalledWith(task.id, expect.objectContaining({ status: 'running' }));
+    expect(updateTask).toHaveBeenCalledWith(task.id, expect.objectContaining({ status: 'running' }), {
+      expectedStatus: 'running',
+    });
     expect(restart).toHaveBeenCalledOnce();
     expect(start).not.toHaveBeenCalled();
     expect(ack).toHaveBeenCalledOnce();
@@ -423,7 +475,7 @@ describe('BackgroundTaskManager lifecycle', () => {
     // the task running, so the redelivered event (deliveryAttempt: 2) finds
     // the task still pending. The retry budget must stay intact.
     const pendingTask = makeRunningTask({ status: 'pending', startedAt: undefined });
-    const updateTask = vi.fn(async () => {});
+    const updateTask = vi.fn(async () => true);
     const workflowRun = { start: vi.fn(async () => ({ status: 'success' })) };
     manager.__registerMastra({
       getStorage: () => ({
@@ -450,7 +502,9 @@ describe('BackgroundTaskManager lifecycle', () => {
 
     await pubsub.dispatchCallback!(event, ack);
 
-    expect(updateTask).toHaveBeenCalledWith('task-1', expect.objectContaining({ status: 'running', retryCount: 0 }));
+    expect(updateTask).toHaveBeenCalledWith('task-1', expect.objectContaining({ status: 'running', retryCount: 0 }), {
+      expectedStatus: 'pending',
+    });
     expect(ack).toHaveBeenCalled();
     await manager.shutdown();
     await pubsub.close();
@@ -462,7 +516,7 @@ describe('BackgroundTaskManager lifecycle', () => {
     await manager.init(pubsub);
 
     const crashedTask = makeRunningTask();
-    const updateTask = vi.fn(async () => {});
+    const updateTask = vi.fn(async () => true);
     const workflowRun = { start: vi.fn(async () => ({ status: 'success' })) };
     manager.__registerMastra({
       getStorage: () => ({
@@ -489,7 +543,9 @@ describe('BackgroundTaskManager lifecycle', () => {
 
     await pubsub.dispatchCallback!(event, ack);
 
-    expect(updateTask).toHaveBeenCalledWith('task-1', expect.objectContaining({ status: 'running', retryCount: 1 }));
+    expect(updateTask).toHaveBeenCalledWith('task-1', expect.objectContaining({ status: 'running', retryCount: 1 }), {
+      expectedStatus: 'running',
+    });
     expect(ack).toHaveBeenCalled();
     await manager.shutdown();
     await pubsub.close();

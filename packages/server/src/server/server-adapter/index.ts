@@ -22,6 +22,7 @@ import {
 } from '../constants';
 import type { MastraAuthMode } from '../constants';
 import { formatZodError } from '../handlers/error';
+import { HTTPException } from '../http-exception';
 export { isZodError, type ZodErrorLike } from '../handlers/error';
 import { normalizeRoutePath } from '../utils';
 import type { SetMcpRequestAuth } from './mcp-auth';
@@ -33,6 +34,7 @@ import { getBuiltInRouteFGAConfig } from './routes/fga-manifest';
 export * from './routes';
 export { applyMcpRequestAuth, buildMcpAuthInfoFromRequestContext } from './mcp-auth';
 export type { McpAuthInfo, SetMcpRequestAuth } from './mcp-auth';
+export { convertCustomRoutesToOpenAPIPaths } from './openapi-utils';
 export { redactStreamChunk } from './redact';
 export { serializeStreamChunk, type SerializedStreamChunk } from './serialize';
 export {
@@ -46,6 +48,15 @@ export {
 export type { MastraAuthMode } from '../constants';
 
 export { WorkflowRegistry, normalizeRoutePath } from '../utils';
+export { HTTPException };
+
+export function getCustomHTTPExceptionResponse(error: unknown): Response | undefined {
+  if (!(error instanceof HTTPException) || !error.res) {
+    return undefined;
+  }
+
+  return error.getResponse();
+}
 
 /**
  * Hono/adapter context key set by the framework-public middleware.
@@ -387,6 +398,15 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
         executionCtx?: ExecutionContext,
       ) => Promise<Response>)
     | null = null;
+
+  /**
+   * Whether custom (non-schema) API routes were registered. Adapters use this
+   * at request time to decide if they need to preserve a pristine copy of the
+   * request body for the custom-route bridge.
+   */
+  protected get hasCustomRouteHandler(): boolean {
+    return this.customRouteHandler !== null;
+  }
 
   constructor({
     app,
@@ -792,8 +812,6 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
       pattern: `${prefix}${r.path}`,
     }));
 
-    const customAuthConfig = this.customRouteAuthConfig;
-
     return (path: string, method: string): boolean => {
       const upperMethod = method.toUpperCase();
 
@@ -803,7 +821,11 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
         }
       }
 
-      return isCustomRoutePublic(path, upperMethod, customAuthConfig);
+      // Read `customRouteAuthConfig` at request time, not at matcher build
+      // time: adapters constructed without an explicit map only populate it
+      // later, in registerCustomApiRoutes(), after the context middleware has
+      // already built this matcher.
+      return isCustomRoutePublic(path, upperMethod, this.customRouteAuthConfig);
     };
   }
 
@@ -818,6 +840,8 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
   async init() {
     this.registerContextMiddleware();
     this.registerAuthMiddleware();
+    this.validateAuthResourceScoping();
+    this.registerUserMiddleware();
     this.registerHttpLoggingMiddleware();
     await this.validateEELicense();
     await this.validateAgentBuilderLicense();
@@ -895,6 +919,27 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
   }
 
   /**
+   * Warn when `server.auth` is configured without `mapUserToResourceId`.
+   *
+   * Without it, MASTRA_RESOURCE_ID_KEY is never set in the request context, so
+   * built-in routes fall back to the client-supplied resource ID (for example
+   * `memory.resource`) and ownership checks run against a caller-chosen value.
+   */
+  validateAuthResourceScoping(): void {
+    const auth = this.mastra.getServer()?.auth as { mapUserToResourceId?: unknown } | undefined;
+    if (!auth || typeof auth.mapUserToResourceId === 'function') return;
+
+    this.mastra
+      .getLogger()
+      ?.warn(
+        '[mastra/auth] server.auth is configured without mapUserToResourceId. ' +
+          'Memory, thread and workflow ownership checks will trust the resource ID supplied by the client ' +
+          "(e.g. memory.resource in the request body), so an authenticated user can read or write another user's threads. " +
+          'Configure server.auth.mapUserToResourceId to derive the resource ID from the authenticated user.',
+      );
+  }
+
+  /**
    * Validate route-level FGA policy coverage when an FGA provider opts into
    * startup checks.
    */
@@ -937,6 +982,31 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
       routes: routeList,
       count: missingRoutes.length,
     });
+  }
+
+  /**
+   * Register user-provided middleware from the Mastra config (`server.middleware`)
+   * and from `mastra.setServerMiddleware()`. Called by init() between
+   * registerAuthMiddleware() and registerHttpLoggingMiddleware().
+   *
+   * Mastra middleware handlers use Hono's `(c, next)` signature, so only
+   * Hono-based adapters can run them. Those adapters override this method and
+   * MUST wrap each handler with `skipIfFrameworkPublic` (exported by
+   * `@mastra/hono`) so user middleware cannot block framework-public routes.
+   * The default implementation warns when middleware is configured so the
+   * config is not silently ignored on adapters that cannot honor it.
+   */
+  registerUserMiddleware(): void {
+    const instanceMiddleware = this.mastra.getServerMiddleware?.() ?? [];
+    const configMiddleware = this.mastra.getServer()?.middleware;
+    const hasConfigMiddleware = Array.isArray(configMiddleware) ? configMiddleware.length > 0 : !!configMiddleware;
+    if (instanceMiddleware.length === 0 && !hasConfigMiddleware) return;
+
+    this.mastra
+      .getLogger()
+      ?.warn(
+        'Mastra server middleware (`server.middleware` or `setServerMiddleware()`) is configured, but this server adapter cannot run Hono middleware handlers. The configured middleware will not run — register middleware through your server framework instead.',
+      );
   }
 
   /**

@@ -340,6 +340,14 @@ export const updateItemBodySchema = z.object({
   source: datasetItemSourceSchema,
 });
 
+export const updateExperimentBodySchema = z
+  .object({
+    name: z.string().optional().describe('New name of the experiment'),
+    description: z.string().optional().describe('New description of the experiment'),
+    metadata: z.record(z.string(), z.unknown()).optional().describe('Replacement metadata for the experiment'),
+  })
+  .strict();
+
 export const triggerExperimentBodySchema = z.object({
   start: z
     .boolean()
@@ -546,6 +554,7 @@ export const experimentResultResponseSchema = z.object({
   input: z.unknown(),
   output: z.unknown().nullable(),
   groundTruth: z.unknown().nullable(),
+  metadata: z.record(z.string(), z.unknown()).optional().nullable(),
   expectedTrajectory: z.unknown().optional(),
   error: z
     .object({
@@ -632,6 +641,7 @@ export const experimentSummaryResponseSchema = z.object({
       input: z.unknown(),
       output: z.unknown().nullable(),
       groundTruth: z.unknown().nullable(),
+      metadata: z.record(z.string(), z.unknown()).optional().nullable(),
       error: z.string().nullable(),
       startedAt: z.coerce.date(),
       completedAt: z.coerce.date(),

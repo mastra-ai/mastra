@@ -308,6 +308,8 @@ export interface ItemResult {
   output: unknown | null;
   /** Expected output from the dataset item */
   groundTruth: unknown | null;
+  /** Metadata from the dataset item when it was executed */
+  metadata?: Record<string, unknown>;
   /** Structured error if execution failed */
   error: { message: string; stack?: string; code?: string } | null;
   /** When execution started */

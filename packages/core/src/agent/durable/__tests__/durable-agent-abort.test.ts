@@ -13,14 +13,17 @@
 
 import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
 import { MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
+import { MockMemory } from '../../../memory/mock';
 import { Agent } from '../../agent';
 import { createDurableAgent } from '../create-durable-agent';
 
-function createAbortableModel() {
+/** @param onCall - invoked as soon as the model starts streaming, to synchronize on a live run. */
+function createAbortableModel(onCall?: () => void) {
   return new MockLanguageModelV2({
     doStream: async ({ abortSignal }: { abortSignal?: AbortSignal }) => {
+      onCall?.();
       // If the caller already aborted before the call landed, fail fast with
       // the canonical AbortError name so the durable abort heuristic fires.
       if (abortSignal?.aborted) {
@@ -148,16 +151,157 @@ describe('DurableAgent abort signal', () => {
       },
     });
 
-    await new Promise(r => setTimeout(r, 10));
-    abort();
-
-    try {
-      await output.consumeStream();
-    } catch {
-      // The bridge errors the stream after firing onAbort; expected.
+    // Abort once the streamed text is observed, so the abort deterministically
+    // lands after the delta reached the collector.
+    for await (const chunk of output.fullStream as AsyncIterable<{ type: string }>) {
+      if (chunk.type === 'text-delta') abort();
     }
 
     expect(abortPayload?.text).toBe('Hello');
+
+    cleanup();
+  });
+
+  it('persists already-streamed assistant text to memory after abort (#22593)', async () => {
+    const mockMemory = new MockMemory();
+    const mockModel = new MockLanguageModelV2({
+      doStream: async ({ abortSignal }: { abortSignal?: AbortSignal }) => ({
+        stream: new ReadableStream({
+          start(controller) {
+            controller.enqueue({ type: 'stream-start', warnings: [] });
+            controller.enqueue({
+              type: 'response-metadata',
+              id: 'id-0',
+              modelId: 'mock-model-id',
+              timestamp: new Date(0),
+            });
+            controller.enqueue({ type: 'text-start', id: 'text-1' });
+            controller.enqueue({ type: 'text-delta', id: 'text-1', delta: 'Hello' });
+            abortSignal?.addEventListener(
+              'abort',
+              () => {
+                const err = new Error('Aborted');
+                err.name = 'AbortError';
+                controller.error(err);
+              },
+              { once: true },
+            );
+          },
+        }),
+        rawCall: { rawPrompt: null, rawSettings: {} },
+      }),
+    });
+    const baseAgent = new Agent({
+      id: 'abort-persist-agent',
+      name: 'Abort Persist Agent',
+      instructions: 'Test',
+      model: mockModel as LanguageModelV2,
+      memory: mockMemory,
+    });
+    const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
+
+    const threadId = 'thread-abort-persist';
+    const resourceId = 'resource-abort-persist';
+
+    let abortPayload: { steps: unknown[]; text?: string } | undefined;
+    const { output, abort, cleanup } = await durableAgent.stream('Go', {
+      memory: { thread: threadId, resource: resourceId },
+      onAbort: data => {
+        abortPayload = data;
+      },
+    });
+
+    // Abort once the streamed text is observed, so the abort deterministically
+    // lands after the delta reached the collector.
+    for await (const chunk of output.fullStream as AsyncIterable<{ type: string }>) {
+      if (chunk.type === 'text-delta') abort();
+    }
+
+    expect(abortPayload?.text).toBe('Hello');
+    const lastStep = abortPayload?.steps.at(-1) as { finishReason?: string } | undefined;
+    expect(lastStep?.finishReason).toBe('abort');
+
+    // Wait for the finalize-run flush to land in memory.
+    await vi.waitFor(async () => {
+      const recalled = await mockMemory.recall({ threadId, resourceId });
+      expect(recalled.messages.length).toBeGreaterThan(0);
+    });
+
+    const { messages } = await mockMemory.recall({ threadId, resourceId });
+    const assistantMessage = messages.find(message => message.role === 'assistant');
+    expect(assistantMessage, 'partial assistant message was not persisted to memory after abort').toBeDefined();
+    expect(JSON.stringify(assistantMessage?.content)).toContain('Hello');
+
+    cleanup();
+  });
+
+  it('persists streamed text when a response processor throws AbortError after streaming (#22593)', async () => {
+    const mockMemory = new MockMemory();
+    const mockModel = new MockLanguageModelV2({
+      doStream: async () => ({
+        stream: new ReadableStream({
+          start(controller) {
+            controller.enqueue({ type: 'stream-start', warnings: [] });
+            controller.enqueue({
+              type: 'response-metadata',
+              id: 'id-0',
+              modelId: 'mock-model-id',
+              timestamp: new Date(0),
+            });
+            controller.enqueue({ type: 'text-start', id: 'text-1' });
+            controller.enqueue({ type: 'text-delta', id: 'text-1', delta: 'Hello' });
+            controller.enqueue({ type: 'text-end', id: 'text-1' });
+            controller.enqueue({
+              type: 'finish',
+              finishReason: 'stop',
+              usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+            });
+            controller.close();
+          },
+        }),
+        rawCall: { rawPrompt: null, rawSettings: {} },
+      }),
+    });
+    // A non-TripWire AbortError from processLLMResponse is rethrown into the
+    // outer catch, which must still persist the already-streamed text.
+    const abortingProcessor = {
+      name: 'abort-on-response',
+      processLLMResponse: async () => {
+        const err = new Error('Aborted by processor');
+        err.name = 'AbortError';
+        throw err;
+      },
+    };
+    const baseAgent = new Agent({
+      id: 'processor-abort-agent',
+      name: 'Processor Abort Agent',
+      instructions: 'Test',
+      model: mockModel as LanguageModelV2,
+      memory: mockMemory,
+      inputProcessors: [abortingProcessor as any],
+    });
+    const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
+
+    const threadId = 'thread-processor-abort';
+    const resourceId = 'resource-processor-abort';
+
+    const { output, cleanup } = await durableAgent.stream('Go', {
+      memory: { thread: threadId, resource: resourceId },
+    });
+
+    for await (const _chunk of output.fullStream as AsyncIterable<unknown>) {
+      // drain until the run settles
+    }
+
+    await vi.waitFor(async () => {
+      const recalled = await mockMemory.recall({ threadId, resourceId });
+      expect(recalled.messages.length).toBeGreaterThan(0);
+    });
+
+    const { messages } = await mockMemory.recall({ threadId, resourceId });
+    const assistantMessage = messages.find(message => message.role === 'assistant');
+    expect(assistantMessage, 'partial assistant message was not persisted after processor abort').toBeDefined();
+    expect(JSON.stringify(assistantMessage?.content)).toContain('Hello');
 
     cleanup();
   });
@@ -193,6 +337,136 @@ describe('DurableAgent abort signal', () => {
     expect(finishReason).toBe('abort');
 
     source.cleanup();
+  });
+
+  it('abortRunStream() before stream() short-circuits the run', async () => {
+    const doStream = vi.fn(async ({ abortSignal }: { abortSignal?: AbortSignal }) => {
+      if (abortSignal?.aborted) {
+        const err = new Error('Aborted');
+        err.name = 'AbortError';
+        throw err;
+      }
+
+      return {
+        stream: new ReadableStream({
+          start(controller) {
+            controller.enqueue({ type: 'text-start', id: 'text-1' });
+            controller.enqueue({ type: 'text-delta', id: 'text-1', delta: 'completed' });
+            controller.enqueue({ type: 'text-end', id: 'text-1' });
+            controller.enqueue({
+              type: 'finish',
+              finishReason: 'stop',
+              usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+            });
+            controller.close();
+          },
+        }),
+        rawCall: { rawPrompt: null, rawSettings: {} },
+      };
+    });
+    const baseAgent = new Agent({
+      id: 'abort-before-start-agent',
+      name: 'Abort Before Start Agent',
+      instructions: 'Test',
+      model: new MockLanguageModelV2({ doStream }) as LanguageModelV2,
+    });
+    const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
+    const runId = 'abort-before-start-run';
+
+    durableAgent.abortRunStream(runId);
+
+    let abortPayload: unknown;
+    const { output, cleanup } = await durableAgent.stream('Go', {
+      runId,
+      onAbort: data => {
+        abortPayload = data;
+      },
+    });
+
+    try {
+      await output.consumeStream();
+    } catch {
+      // expected — the run starts with an already-aborted signal
+    }
+
+    expect(abortPayload).toBeDefined();
+    expect(doStream).not.toHaveBeenCalled();
+
+    cleanup();
+  });
+
+  it('abortThreadStream stops a durable run that is already executing', async () => {
+    // A durable run keeps its controller on the durable run registry, not in
+    // the thread runtime's prepared-run map, so the base implementation reaches
+    // neither: without the durable abort request the run streams on.
+    // Resolves when the model is actually streaming, so the abort below lands
+    // on a run under way rather than on one that has not started yet.
+    let streaming: () => void;
+    const modelCalled = new Promise<void>(resolve => {
+      streaming = resolve;
+    });
+    const baseAgent = new Agent({
+      id: 'abort-thread-stream-agent',
+      name: 'Abort Thread Stream Agent',
+      instructions: 'Test',
+      model: createAbortableModel(() => streaming()) as LanguageModelV2,
+    });
+    const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
+
+    const threadId = 'abort-thread-stream-thread';
+    const resourceId = 'abort-thread-stream-resource';
+
+    let abortPayload: { steps: { finishReason?: string }[] } | undefined;
+    const { output, cleanup } = await durableAgent.stream('Go', {
+      memory: { thread: threadId, resource: resourceId },
+      onAbort: data => {
+        abortPayload = data;
+      },
+    });
+
+    await modelCalled;
+    expect(durableAgent.abortThreadStream({ threadId, resourceId })).toBe(true);
+
+    // Awaited without a catch: the run has to end through the abort path,
+    // rather than by surfacing some unrelated stream failure.
+    await output.consumeStream();
+
+    expect(abortPayload?.steps.at(-1)?.finishReason).toBe('abort');
+
+    cleanup();
+  });
+
+  it('abortRunStream stops a durable run that is already executing', async () => {
+    let streaming: () => void;
+    const modelCalled = new Promise<void>(resolve => {
+      streaming = resolve;
+    });
+    const baseAgent = new Agent({
+      id: 'abort-run-stream-agent',
+      name: 'Abort Run Stream Agent',
+      instructions: 'Test',
+      model: createAbortableModel(() => streaming()) as LanguageModelV2,
+    });
+    const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
+
+    let abortPayload: { steps: { finishReason?: string }[] } | undefined;
+    const { output, runId, cleanup } = await durableAgent.stream('Go', {
+      memory: { thread: 'abort-run-stream-thread', resource: 'abort-run-stream-resource' },
+      onAbort: data => {
+        abortPayload = data;
+      },
+    });
+
+    await modelCalled;
+    expect(durableAgent.abortRunStream(runId)).toBe(true);
+
+    // Awaited without a catch: the run has to end through the abort path,
+    // rather than by surfacing some unrelated stream failure.
+    await output.consumeStream();
+
+    expect(abortPayload?.steps.at(-1)?.finishReason).toBe('abort');
+
+    cleanup();
   });
 
   it('pre-aborted external abortSignal short-circuits the run', async () => {

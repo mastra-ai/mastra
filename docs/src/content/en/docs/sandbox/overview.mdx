@@ -1,6 +1,6 @@
 ---
 title: 'Sandboxes'
-description: Give agents an isolated environment for working with files and running commands.
+description: "Run Mastra agents in isolated local or remote sandboxes with filesystem access, shell commands, code execution, and optional computer-use tools."
 packages:
   - '@mastra/core'
 ---
@@ -160,6 +160,10 @@ Mastra filesystems connect agents and sandboxes to provider-backed storage such 
 
 See [Filesystem](/docs/sandbox/filesystem) for providers, file tools, and mounts.
 
+## Computer use
+
+Supported desktop sandboxes give agents screenshot, mouse, and keyboard control. See [Computer](/docs/sandbox/computer) for supported sandboxes and configuration.
+
 ## Sandboxes per user or thread
 
 Use a **resolver** when each user, tenant, or thread needs a separate sandbox. Set `sandboxCacheKey` to the identity that owns the sandbox so later requests reuse the same live environment.
@@ -232,7 +236,7 @@ Your application owns sandboxes returned by a resolver. Destroy them and call `w
 
 With a static sandbox, Mastra knows which capabilities the backend supports and only gives the agent the corresponding tools. Application code should also check that an optional capability is available before using it.
 
-With a [resolver-backed sandbox](#sandboxes-per-user-or-thread), the backend isn't known until a request runs, so Mastra initially makes all sandbox tools available. If the resolved backend doesn't support the tool the agent calls, the call fails with `SandboxFeatureNotSupportedError`.
+Because a [resolver-backed sandbox](#sandboxes-per-user-or-thread) isn't known until request time, Mastra initially exposes every sandbox tool. Calling one unsupported by the resolved backend fails with `SandboxFeatureNotSupportedError`.
 
 ## Background processes
 

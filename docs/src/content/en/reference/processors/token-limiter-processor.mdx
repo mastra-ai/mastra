@@ -1,6 +1,6 @@
 ---
 title: "Reference: TokenLimiterProcessor | Processors"
-description: "Documentation for the TokenLimiterProcessor in Mastra, which limits the number of tokens in messages."
+description: "Use TokenLimiterProcessor to constrain message tokens during input, per-step input, or output processing with configurable limits and strategies."
 packages:
   - "@mastra/core"
   - "@mastra/memory"
@@ -141,7 +141,7 @@ As an output processor, only parts that carry generated output count against the
 
 With the default `truncate` strategy, the first time output is withheld the processor emits a transient `data-token-limit-reached` part on the stream:
 
-```typescript
+```typescript oxfmt:false
 for await (const part of stream.fullStream) {
   if (part.type === 'data-token-limit-reached') {
     console.log('output truncated at', part.data.limit, 'tokens')
@@ -151,7 +151,7 @@ for await (const part of stream.fullStream) {
 
 ## Media token counting
 
-Images and file attachments are estimated rather than tokenized. This applies to `file` message parts and to tool results shaped like `{ data, mediaType }`. Images use a flat per-image estimate, other media is estimated from its decoded byte size, and remote URLs or provider file ids use a flat fallback because their size isn't known locally. Encoded payloads such as base64 data are never counted as text, which would otherwise inflate the count by an order of magnitude and truncate history unnecessarily.
+Images and file attachments are estimated instead of tokenized, including `file` message parts and tool results shaped like `{ data, mediaType }`. Images use a flat per-image estimate; other media uses decoded byte size, while remote URLs and provider file ids use a flat fallback because their size isn't known locally. Encoded payloads such as base64 data are never counted as text, avoiding an inflated count that could truncate history unnecessarily.
 
 ## Error behavior
 

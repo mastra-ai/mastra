@@ -38,9 +38,7 @@ function createHarness() {
   });
 
   const machinery: SessionMachinery = {
-    getAgent: () => {
-      throw new Error('getAgent is not used by these stream-folding tests');
-    },
+    getAgent: () => ({ id: 'agent-stub' }) as unknown as ReturnType<SessionMachinery['getAgent']>,
     subscribeToThread: async () => {
       throw new Error('subscribeToThread is not used by these stream-folding tests');
     },
@@ -206,7 +204,13 @@ describe('SessionRunEngine — MastraDBMessage contract', () => {
       args: { path: 'a.ts' },
       approval: { id: 'approval-1', approved: false, reason: 'Not allowed' },
     });
-    expect(events).toContainEqual({ type: 'tool_end', toolCallId: 'tc1', result: 'Not allowed', isError: false });
+    expect(events).toContainEqual({
+      type: 'tool_end',
+      toolCallId: 'tc1',
+      result: 'Not allowed',
+      isError: false,
+      denied: true,
+    });
   });
 
   it('Given a tool-error carrying an Error instance, When it folds, Then the failure message survives JSON serialization', async () => {

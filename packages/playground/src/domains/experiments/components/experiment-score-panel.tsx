@@ -13,12 +13,14 @@ export type ExperimentScorePanelProps = {
   onNext?: () => void;
   onPrevious?: () => void;
   onClose: () => void;
-  /** When provided, a Trace button appears in the header; disabled when `score.traceId` is absent. */
+  /** When provided, a Trace button appears in the header; hidden when `score.traceId` is absent. */
   onShowTrace?: () => void;
   /** Controlled collapsed state. When omitted, the panel manages its own state. */
   collapsed?: boolean;
   /** When provided, the collapse button appears in the header and notifies the parent on toggle. */
   onCollapsedChange?: (collapsed: boolean) => void;
+  /** Extra classes applied to the panel root (e.g. when rendered inside the result panel split). */
+  className?: string;
 };
 
 function isCodeBasedScorer(score: ClientScoreRowData): boolean {
@@ -36,6 +38,7 @@ export function ExperimentScorePanel({
   onShowTrace,
   collapsed: controlledCollapsed,
   onCollapsedChange,
+  className,
 }: ExperimentScorePanelProps) {
   const [internalCollapsed, setInternalCollapsed] = useState(false);
   const collapsed = controlledCollapsed ?? internalCollapsed;
@@ -45,7 +48,7 @@ export function ExperimentScorePanel({
   const naText = isCodeBased ? 'N/A — code-based scorer' : 'N/A — step not configured';
 
   return (
-    <DataPanel collapsed={collapsed}>
+    <DataPanel collapsed={collapsed} className={className}>
       <DataPanel.Header>
         <DataPanel.Heading>
           Score <b>{score.scorerId}</b>
@@ -68,8 +71,8 @@ export function ExperimentScorePanel({
               nextLabel="Next score"
             />
           )}
-          {onShowTrace && (
-            <Button size="md" onClick={onShowTrace} disabled={!score.traceId}>
+          {onShowTrace && score.traceId && (
+            <Button size="md" onClick={onShowTrace}>
               <TraceIcon />
               Trace
             </Button>

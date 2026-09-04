@@ -51,18 +51,18 @@ export function EnvironmentVariablesEditorReadOnlyItem({
   return (
     <DataList.RowStatic className={cn('min-h-14', className)} {...props}>
       {showIcon && (
-        <DataList.Cell height="compact" className="justify-items-center overflow-visible">
+        <DataList.Cell className="justify-items-center overflow-visible">
           <span className="border-border1 text-neutral3 flex size-7 items-center justify-center rounded-full border [&>svg]:size-3.5">
             {leadingIcon}
           </span>
         </DataList.Cell>
       )}
 
-      <DataList.MonoCell height="compact" className="text-ui-sm text-neutral6">
+      <DataList.TextCell font="mono" className="text-ui-sm text-neutral6">
         {name}
-      </DataList.MonoCell>
+      </DataList.TextCell>
 
-      <DataList.Cell height="compact" className="min-w-0">
+      <DataList.Cell className="min-w-0">
         {value !== undefined && (
           <span className="flex min-w-0 items-center gap-2">
             <Button
@@ -101,7 +101,7 @@ export function EnvironmentVariablesEditorReadOnlyItem({
         )}
       </DataList.Cell>
 
-      <DataList.Cell height="compact" className="text-ui-xs text-neutral3 min-w-0 justify-items-end">
+      <DataList.Cell className="text-ui-xs text-neutral3 min-w-0 justify-items-end">
         {(updatedAt || actor) && (
           <span className="flex min-w-0 items-center gap-2">
             <span className="truncate">{updatedAt}</span>

@@ -1,6 +1,7 @@
 import { MockLanguageModelV1 } from '@internal/ai-sdk-v4/test';
 import { MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import type { IMastraLogger } from '../../logger';
 import { Mastra } from '../../mastra';
 import type { VersionOverrides } from '../../mastra/types';
 import { mergeVersionOverrides } from '../../mastra/types';
@@ -10,6 +11,20 @@ import { Agent } from '../agent';
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
+
+function createMockLogger() {
+  return {
+    debug: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+    trackException: vi.fn(),
+    getTransports: vi.fn().mockReturnValue(new Map()),
+  } as unknown as IMastraLogger & {
+    warn: ReturnType<typeof vi.fn>;
+    trackException: ReturnType<typeof vi.fn>;
+  };
+}
 
 function makeMockModel(responseText: string) {
   return new MockLanguageModelV2({
@@ -637,6 +652,30 @@ describe('direct agent call version resolution', () => {
     expect(result.text).toBe('code response');
   });
 
+  it('does not warn when a stamped defaultStatus meets a project without the editor', async () => {
+    const agent = new Agent({
+      id: 'my-agent',
+      name: 'my-agent',
+      instructions: 'code instructions',
+      model: makeMockModel('code response'),
+    });
+
+    const logger = createMockLogger();
+    new Mastra({ agents: { agent }, logger });
+
+    // The server stamps `defaultStatus: 'published'` on every agent request.
+    const ctx = new RequestContext();
+    ctx.set(MASTRA_VERSIONS_KEY, { defaultStatus: 'published' } as VersionOverrides);
+
+    const result = await agent.generate('hello', { requestContext: ctx });
+
+    expect(result.text).toBe('code response');
+    expect(logger.warn.mock.calls.map(([message]) => message)).not.toContain(
+      'Failed to resolve versioned agent for direct call, using code-defined default',
+    );
+    expect(logger.trackException).not.toHaveBeenCalled();
+  });
+
   it('resolves stored overrides exactly once (fork is marked, no recursion)', async () => {
     const agent = new Agent({
       id: 'my-agent',
@@ -658,5 +697,31 @@ describe('direct agent call version resolution', () => {
 
     expect(applyStoredOverrides).toHaveBeenCalledTimes(1);
     expect(result.text).toBe('code response');
+  });
+});
+
+describe('Mastra#resolveVersionedAgent without the editor', () => {
+  const makeAgent = () =>
+    new Agent({
+      id: 'my-agent',
+      name: 'my-agent',
+      instructions: 'code instructions',
+      model: makeMockModel('code response'),
+    });
+
+  it('returns the code-defined agent for a status selector', async () => {
+    const agent = makeAgent();
+    const mastra = new Mastra({ agents: { agent } });
+
+    await expect(mastra.resolveVersionedAgent(agent, { status: 'published' })).resolves.toBe(agent);
+  });
+
+  it('throws for an explicit versionId selector', async () => {
+    const agent = makeAgent();
+    const mastra = new Mastra({ agents: { agent } });
+
+    await expect(mastra.resolveVersionedAgent(agent, { versionId: 'v1' })).rejects.toMatchObject({
+      id: 'MASTRA_EDITOR_REQUIRED_FOR_VERSIONED_AGENT_LOOKUP',
+    });
   });
 });

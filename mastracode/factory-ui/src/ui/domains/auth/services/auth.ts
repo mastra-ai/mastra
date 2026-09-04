@@ -19,7 +19,7 @@ export interface FactoryAuthState {
   /** Whether the server has web auth configured (any provider). */
   authEnabled: boolean;
   authenticated: boolean;
-  user?: { userId?: string; email?: string; name?: string; organizationId?: string };
+  user?: { userId?: string; email?: string; name?: string; avatarUrl?: string; organizationId?: string };
   /** Active identity provider: 'workos' | 'better-auth' | custom adapter kind. */
   provider?: string;
   /** True when the provider hosts credential forms and sign-up is disabled. */

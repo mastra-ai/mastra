@@ -1,15 +1,14 @@
 {
   "name": "@mastra/playground-ui",
   "type": "module",
-  "version": "51.0.1-alpha.3",
+  "version": "53.0.0-alpha.2",
   "description": "Mastra Playground components",
   "sideEffects": [
     "**/*.css"
   ],
   "files": [
     "dist",
-    "theme.css",
-    "CHANGELOG.md"
+    "theme.css"
   ],
   "exports": {
     "./style.css": "./dist/style.css",
@@ -62,6 +61,16 @@
       "require": {
         "types": "./dist/primitives/*.d.ts",
         "default": "./dist/primitives/*.cjs.js"
+      }
+    },
+    "./keyboard/*": {
+      "import": {
+        "types": "./dist/keyboard/*.d.ts",
+        "default": "./dist/keyboard/*.es.js"
+      },
+      "require": {
+        "types": "./dist/keyboard/*.d.ts",
+        "default": "./dist/keyboard/*.cjs.js"
       }
     },
     "./resize/*": {
@@ -125,7 +134,7 @@
   "author": "Mastra",
   "license": "Apache-2.0",
   "dependencies": {
-    "@base-ui/react": "^1.5.0",
+    "@base-ui/react": "^1.7.0",
     "@codemirror/autocomplete": "^6.20.3",
     "@codemirror/lang-javascript": "^6.2.5",
     "@codemirror/lang-json": "^6.0.2",
@@ -162,7 +171,7 @@
     "@mastra/memory": ">=1.21.0-0 <2.0.0-0",
     "@mastra/react": "workspace:*",
     "@tanstack/react-query": "^5.90.21",
-    "lucide-react": "^0.474.0",
+    "lucide-react": "catalog:",
     "react": ">=19.0.0",
     "react-dom": ">=19.0.0",
     "tailwindcss": "^4.0.0"
@@ -197,6 +206,7 @@
     "eslint-plugin-storybook": "^10.5.0",
     "eslint-plugin-tailwindcss": "^4.1.0",
     "jsdom": "^26.1.0",
+    "lucide-react": "catalog:",
     "msw": "^2.12.11",
     "react": "catalog:",
     "react-dom": "catalog:",

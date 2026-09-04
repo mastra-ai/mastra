@@ -7,6 +7,7 @@
 import type { Mastra } from '../../mastra';
 import { cloneWorkflow, createWorkflow } from '../create';
 import { derivePredicateLabel } from '../predicate';
+import type { WorkflowScheduleConfig } from '../scheduler/types';
 import type { Step } from '../step';
 import { createStepFromAgent, createStepFromTool } from '../step-factories';
 import type { SerializedSingleStepEntry, SerializedStepOptions, SingleStepEntry, StepFlowEntry } from '../types';
@@ -15,6 +16,7 @@ import { mapVariable, predicateToCondition } from '../workflow';
 import { jsonSchemaToZod } from './json-schema-to-zod';
 import type { JsonSchema, JsonSchemaToZodOptions } from './json-schema-to-zod';
 import { parseMapConfig } from './mapping-config';
+import { entryOptionFields } from './serialize';
 import type { ValidatableStepFlowEntry } from './validate/types';
 
 /**
@@ -30,6 +32,13 @@ export interface DynamicWorkflowGraph {
   stateSchema?: JsonSchema;
   requestContextSchema?: JsonSchema;
   graph: ValidatableStepFlowEntry[];
+  /**
+   * Optional declarative schedule config(s), preserved through the storage
+   * round-trip so rehydrated workflows re-declare their schedules on boot —
+   * without this, boot-time declarative schedule sync would treat the
+   * persisted `wf_*` schedule rows as orphans and delete them.
+   */
+  schedule?: WorkflowScheduleConfig | WorkflowScheduleConfig[];
 }
 
 /**
@@ -60,7 +69,7 @@ export async function rehydrateWorkflow(
   const stateSchema = def.stateSchema ? jsonSchemaToZod(def.stateSchema, opts) : undefined;
   const requestContextSchema = def.requestContextSchema ? jsonSchemaToZod(def.requestContextSchema, opts) : undefined;
 
-  const wf = createWorkflow({
+  const baseParams = {
     id: def.id,
     description: def.description,
     metadata: def.metadata,
@@ -68,7 +77,26 @@ export async function rehydrateWorkflow(
     outputSchema: outputSchema as any,
     stateSchema: stateSchema as any,
     requestContextSchema: requestContextSchema as any,
-  });
+  };
+
+  let wf;
+  if (def.schedule === undefined) {
+    wf = createWorkflow(baseParams);
+  } else {
+    try {
+      // Presence of `schedule` promotes the workflow to the evented engine,
+      // which validates the cron expression(s) at construction time.
+      wf = createWorkflow({ ...baseParams, schedule: def.schedule as any });
+    } catch (error) {
+      // A bad stored schedule shouldn't sink the whole workflow: degrade to
+      // an unscheduled workflow and surface the problem.
+      if (opts?.onUnsupportedSchema !== 'warn') throw error;
+      opts.onUnsupported?.(
+        `Ignoring invalid stored schedule config: ${error instanceof Error ? error.message : String(error)}`,
+      );
+      wf = createWorkflow(baseParams);
+    }
+  }
 
   for (const entry of def.graph) {
     applyGraphEntry(wf, entry, mastra, opts);
@@ -92,7 +120,7 @@ function applyGraphEntry(
     case 'mapping': {
       const cfg = parseMapConfig(entry.mapConfig, entry.id);
       const live = rehydrateMapConfig(cfg, mastra);
-      wf.map(live, { id: entry.id });
+      wf.map(live, { id: entry.id, description: entry.description, metadata: entry.metadata });
       return;
     }
     case 'sleep': {
@@ -101,7 +129,12 @@ function applyGraphEntry(
       }
       // Push directly (not wf.sleep()) so the stored step id survives the
       // round-trip — the builder generates a fresh random id per call.
-      const live: StepFlowEntry = { type: 'sleep', id: entry.id, duration: entry.duration };
+      const live: StepFlowEntry = {
+        type: 'sleep',
+        ...entryOptionFields(entry),
+        id: entry.id,
+        duration: entry.duration,
+      };
       wf.__pushStepFlowEntry(live, live);
       return;
     }
@@ -113,13 +146,14 @@ function applyGraphEntry(
       if (Number.isNaN(date.getTime())) {
         throw new Error(`Stored sleepUntil "${entry.id}" has an unparseable date: ${String(entry.date)}`);
       }
-      const live: StepFlowEntry = { type: 'sleepUntil', id: entry.id, date };
-      wf.__pushStepFlowEntry(live, { type: 'sleepUntil', id: entry.id, date });
+      const live: StepFlowEntry = { type: 'sleepUntil', ...entryOptionFields(entry), id: entry.id, date };
+      wf.__pushStepFlowEntry(live, { type: 'sleepUntil', ...entryOptionFields(entry), id: entry.id, date });
       return;
     }
     case 'parallel': {
       const live: StepFlowEntry = {
         type: 'parallel',
+        ...entryOptionFields(entry),
         steps: entry.steps.map(s => rehydrateSingleEntry(s, mastra, schemaOpts)),
       };
       wf.__pushStepFlowEntry(live, entry);
@@ -133,6 +167,7 @@ function applyGraphEntry(
       }
       const live: StepFlowEntry = {
         type: 'foreach',
+        ...entryOptionFields(entry),
         step: rehydrateSingleEntry(entry.step, mastra, schemaOpts),
         opts: { concurrency: entry.opts?.concurrency ?? 1 },
       };
@@ -169,6 +204,7 @@ function applyGraphEntry(
         steps.map((s, i) => ({ id: `${getSingleStepEntryId(s)}-condition`, fn: derivePredicateLabel(predicates[i]!) }));
       const live: StepFlowEntry = {
         type: 'conditional',
+        ...entryOptionFields(entry),
         steps,
         conditions: predicates.map(p => predicateToCondition(p!)),
         serializedConditions,
@@ -191,6 +227,7 @@ function applyGraphEntry(
       };
       const live: StepFlowEntry = {
         type: 'loop',
+        ...entryOptionFields(entry),
         step,
         condition: predicateToCondition(predicate),
         loopType,

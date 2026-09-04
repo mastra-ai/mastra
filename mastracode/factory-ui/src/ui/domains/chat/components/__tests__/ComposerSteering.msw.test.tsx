@@ -1,9 +1,25 @@
-import { screen, waitFor } from '@testing-library/react';
+import { MainSidebarProvider } from '@mastra/playground-ui/components/MainSidebar';
+import {
+  MessageScrollerContent,
+  MessageScrollerProvider,
+  MessageScrollerViewport,
+} from '@mastra/playground-ui/components/MessageScroller';
+import { fireEvent, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
+import { MemoryRouter, Route, Routes } from 'react-router';
 
-import { waitForMutationsIdle } from '../../../../../../e2e/ui/render';
-import { releaseSession, renderThread, stubPreparingSession } from './composer-session-test-fixture';
+import { renderWithProviders, waitForMutationsIdle } from '../../../../../../e2e/ui/render';
+import { OverlaysProvider } from '../../../../lib/overlays';
+import { ChatSessionTestProvider } from '../../context/ChatSessionTestProvider';
+import { Composer } from '../Composer';
+import {
+  FACTORY_ID,
+  SESSION_ID,
+  releaseSession,
+  renderThread,
+  stubPreparingSession,
+} from './composer-session-test-fixture';
 
 const MESSAGE = 'Use the platform token, then continue';
 
@@ -74,5 +90,69 @@ describe('Composer steering', () => {
     expect(screen.getByText(/Sandbox is gone/)).toBeInTheDocument();
     expect(session.delivered).toEqual([]);
     expect(session.steerAttempts).toBe(0);
+  });
+});
+
+function renderSteerScroller() {
+  return renderWithProviders(
+    <MemoryRouter initialEntries={[`/factories/${FACTORY_ID}/user/threads/${SESSION_ID}`]}>
+      <Routes>
+        <Route
+          path="/factories/:factoryId/user/threads/:threadId"
+          element={
+            <MainSidebarProvider storageKey="steer-scroll-test">
+              <ChatSessionTestProvider threadId={SESSION_ID} userScoped deferUntilMessagesReady={false}>
+                <OverlaysProvider>
+                  <MessageScrollerProvider autoScroll>
+                    <MessageScrollerViewport data-testid="steer-viewport">
+                      <MessageScrollerContent />
+                      <Composer />
+                    </MessageScrollerViewport>
+                  </MessageScrollerProvider>
+                </OverlaysProvider>
+              </ChatSessionTestProvider>
+            </MainSidebarProvider>
+          }
+        />
+      </Routes>
+    </MemoryRouter>,
+  );
+}
+
+const setScrollMetrics = (
+  element: HTMLElement,
+  metrics: { scrollHeight: number; clientHeight: number; scrollTop: number },
+) => {
+  Object.defineProperty(element, 'scrollHeight', { configurable: true, value: metrics.scrollHeight });
+  Object.defineProperty(element, 'clientHeight', { configurable: true, value: metrics.clientHeight });
+  element.scrollTop = metrics.scrollTop;
+};
+
+describe('Composer steering scroll', () => {
+  it('carries a reader who scrolled away back to the live end when they steer', async () => {
+    const session = stubPreparingSession({ autoAgentEnd: false });
+    const user = userEvent.setup();
+    const { client } = renderSteerScroller();
+    await releaseSession(session.finishWorkspace, client);
+    await session.emit({ type: 'agent_start' });
+
+    const composer = await screen.findByRole('textbox', { name: 'Message' });
+    await waitFor(() => expect(composer).toHaveAttribute('placeholder', 'Steer the agent…'));
+
+    const viewport = screen.getByTestId('steer-viewport');
+    const scrollTo = vi.fn((options?: ScrollToOptions | number) => {
+      if (typeof options === 'object' && typeof options.top === 'number') viewport.scrollTop = options.top;
+    });
+    viewport.scrollTo = scrollTo;
+    setScrollMetrics(viewport, { scrollHeight: 1000, clientHeight: 400, scrollTop: 600 });
+    fireEvent.scroll(viewport);
+    setScrollMetrics(viewport, { scrollHeight: 1000, clientHeight: 400, scrollTop: 200 });
+    fireEvent.scroll(viewport);
+
+    await user.type(composer, MESSAGE);
+    await user.keyboard('{Enter}');
+
+    await waitFor(() => expect(scrollTo).toHaveBeenCalledWith({ top: 600, behavior: 'smooth' }));
+    await waitForMutationsIdle(client);
   });
 });

@@ -202,7 +202,7 @@ export function ModelPacksSection({ models }: { models: AvailableModelOption[] }
                   </Txt>
                   {p.custom && <Badge size="sm">Custom</Badge>}
                   {p.active && (
-                    <Badge size="sm" variant="success">
+                    <Badge size="sm" variant="green">
                       Default
                     </Badge>
                   )}
@@ -228,7 +228,7 @@ export function ModelPacksSection({ models }: { models: AvailableModelOption[] }
                   />
                 </div>
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex shrink-0 items-center gap-2">
                 {p.active ? (
                   <Button size="sm" disabled={busy} onClick={() => void clearDefault()}>
                     Clear default

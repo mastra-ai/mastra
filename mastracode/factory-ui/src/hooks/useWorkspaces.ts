@@ -12,14 +12,15 @@ import { useNavigate, useParams } from 'react-router';
 
 import { useApiConfig } from '../api/config';
 import { queryKeys } from '../api/keys';
+import { stripCachedSessionRefs } from './useWorkItems';
 import {
   createUserSession,
   deleteUserSession,
   getUserSession,
   listUserSessions,
   USER_SESSION_BRANCH_PREFIX,
-} from '../ui/domains/workspaces/services/github';
-import type { FactoryUserSession } from '../ui/domains/workspaces/services/github';
+} from '../ui/domains/workspaces/services/user-sessions';
+import type { FactoryUserSession } from '../ui/domains/workspaces/services/user-sessions';
 
 interface AgentControllerThreadsScope {
   agentControllerId?: string;
@@ -36,6 +37,11 @@ function splitSessions(sessions: FactoryUserSession[]): WorkspacesData {
     workspaces: sessions.filter(session => !session.branch.startsWith(USER_SESSION_BRANCH_PREFIX)),
     userSessions: sessions.filter(session => session.branch.startsWith(USER_SESSION_BRANCH_PREFIX)),
   };
+}
+
+/** Every session row of the repository, factory workspaces and user sessions alike. */
+export function allSessionRows(data: WorkspacesData | undefined): FactoryUserSession[] {
+  return [...(data?.workspaces ?? []), ...(data?.userSessions ?? [])];
 }
 
 async function loadWorkspaces(baseUrl: string, projectRepositoryId: string, signal?: AbortSignal) {
@@ -79,6 +85,36 @@ export function addCachedSession(queryClient: QueryClient, projectRepositoryId: 
   });
 }
 
+export async function updateCachedSessionTitle(
+  queryClient: QueryClient,
+  projectRepositoryId: string | undefined,
+  sessionId: string,
+  title: string,
+) {
+  const trimmedTitle = title.trim();
+  if (!trimmedTitle) return;
+
+  const queryKey = queryKeys.sessions(projectRepositoryId);
+  if (!queryClient.getQueryData<WorkspacesData>(queryKey)) return;
+
+  // an in-flight list fetch can still carry the branch-only row and overwrite this title
+  await queryClient.cancelQueries({ queryKey });
+  queryClient.setQueryData<WorkspacesData>(queryKey, current => {
+    if (!current) return current;
+
+    let changed = false;
+    const updateTitle = (session: FactoryUserSession) => {
+      if (session.sessionId !== sessionId || session.title === trimmedTitle) return session;
+      changed = true;
+      return { ...session, title: trimmedTitle };
+    };
+    const workspaces = current.workspaces.map(updateTitle);
+    const userSessions = current.userSessions.map(updateTitle);
+
+    return changed ? { ...current, workspaces, userSessions } : current;
+  });
+}
+
 function invalidateSessionQueries(
   queryClient: QueryClient,
   projectRepositoryId: string | undefined,
@@ -107,8 +143,9 @@ const UNMATERIALIZED_POLL_WINDOW_MS = 10 * 60_000;
 /**
  * Poll gently while any listed session has not been materialized yet. The
  * sidebar status dots derive "initializing" from `materializedAt`, which the
- * server stamps out-of-band (first agent exec, warm-up, another tab) — with no
- * poll the cached `null` never resolved and dots wedged on "initializing".
+ * server stamps out-of-band (the session's first command, or another tab) —
+ * with no poll the cached `null` never resolved and dots wedged on
+ * "initializing".
  */
 export function sessionsRefetchInterval(data: WorkspacesData | undefined, now = Date.now()): number | false {
   if (!data) return false;
@@ -190,6 +227,9 @@ export function useDeleteWorkspaceMutation(
     },
     onSuccess: workspace => {
       removeCachedSession(queryClient, projectRepositoryId, workspace.sessionId);
+      // The server strips the work-item refs with the row; mirror it in the cache
+      // so the board's cards drop their session links before the next poll.
+      if (factoryId) stripCachedSessionRefs(queryClient, factoryId, workspace.sessionId);
       invalidateSessionQueries(queryClient, projectRepositoryId, scope, workspace.sessionId);
       void queryClient.invalidateQueries({ queryKey: queryKeys.userSession(workspace.sessionId) });
       void queryClient.invalidateQueries({

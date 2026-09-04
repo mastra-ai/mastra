@@ -529,6 +529,27 @@ export class Dataset {
   }
 
   /**
+   * Update an experiment's user-facing label (name, description, metadata).
+   * Status and counters are owned by the runtime and cannot be changed here.
+   * Throws EXPERIMENT_NOT_FOUND for unknown or cross-dataset experiments.
+   */
+  async updateExperiment(args: {
+    experimentId: string;
+    name?: string;
+    description?: string;
+    metadata?: Record<string, unknown>;
+  }): Promise<Experiment> {
+    await this.#getOwnedExperiment(args.experimentId);
+    const experimentsStore = await this.#getExperimentsStore();
+    return experimentsStore.updateExperiment({
+      id: args.experimentId,
+      ...(args.name !== undefined ? { name: args.name } : {}),
+      ...(args.description !== undefined ? { description: args.description } : {}),
+      ...(args.metadata !== undefined ? { metadata: args.metadata } : {}),
+    });
+  }
+
+  /**
    * List results for a specific experiment, with optional filters and
    * pagination. All filters are pushed to the storage layer.
    *
@@ -956,6 +977,7 @@ export class Dataset {
       input: args.input !== undefined ? args.input : item.input,
       output: args.output ?? null,
       groundTruth: args.groundTruth !== undefined ? args.groundTruth : (item.groundTruth ?? null),
+      metadata: item.metadata,
       error: args.error ?? null,
       startedAt: args.startedAt ?? now,
       completedAt: args.completedAt ?? now,

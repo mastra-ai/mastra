@@ -16,6 +16,7 @@
     "Qwen/Qwen3.8-Max",
     "XiaomiMiMo/MiMo-V2.5",
     "XiaomiMiMo/MiMo-V2.5-Pro",
+    "deepseek-ai/DeepSeek-V4-Flash-Vision-Exp",
     "google/gemma-4-26B-A4B-it",
     "google/gemma-4-31B-it",
     "google/gemma-4-E4B-it",
@@ -28,7 +29,8 @@
     "nvidia/Nemotron-3-Nano-Omni-30B-A3B-Reasoning",
     "stepfun-ai/Step-3.7-Flash",
     "thinkingmachines/Inkling",
-    "thinkingmachines/Inkling-Small"
+    "thinkingmachines/Inkling-Small",
+    "zai-org/GLM-5.3-Flash"
   ],
   "temperature": [
     "ByteDance/Seed-2.0-code",
@@ -64,6 +66,7 @@
     "deepseek-ai/DeepSeek-V3.2",
     "deepseek-ai/DeepSeek-V4-Flash",
     "deepseek-ai/DeepSeek-V4-Flash-0731",
+    "deepseek-ai/DeepSeek-V4-Flash-Vision-Exp",
     "deepseek-ai/DeepSeek-V4-Pro",
     "deepseek-ai/DeepSeek-V4-Pro-0813",
     "google/gemma-4-26B-A4B-it",
@@ -85,7 +88,9 @@
     "zai-org/GLM-4.7-Flash",
     "zai-org/GLM-5",
     "zai-org/GLM-5.1",
-    "zai-org/GLM-5.2"
+    "zai-org/GLM-5.2",
+    "zai-org/GLM-5.3",
+    "zai-org/GLM-5.3-Flash"
   ],
   "structuredOutput": [
     "ByteDance/Seed-2.0-code",
@@ -119,6 +124,7 @@
     "deepseek-ai/DeepSeek-V3.2",
     "deepseek-ai/DeepSeek-V4-Flash",
     "deepseek-ai/DeepSeek-V4-Flash-0731",
+    "deepseek-ai/DeepSeek-V4-Flash-Vision-Exp",
     "deepseek-ai/DeepSeek-V4-Pro",
     "deepseek-ai/DeepSeek-V4-Pro-0813",
     "google/gemma-4-26B-A4B-it",
@@ -142,6 +148,8 @@
     "zai-org/GLM-4.7-Flash",
     "zai-org/GLM-5",
     "zai-org/GLM-5.1",
-    "zai-org/GLM-5.2"
+    "zai-org/GLM-5.2",
+    "zai-org/GLM-5.3",
+    "zai-org/GLM-5.3-Flash"
   ]
 }

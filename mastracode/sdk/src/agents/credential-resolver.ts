@@ -146,6 +146,23 @@ export function resolveTenantFromRequestContext(requestContext?: RequestContext)
 export function resolveCredentialStore(requestContext?: RequestContext): CredentialStore | undefined {
   if (!credentialStoreProvider) return undefined;
   const tenant = resolveTenantFromRequestContext(requestContext);
-  if (!tenant) return unavailableTenantCredentialStore;
-  return credentialStoreProvider(tenant) ?? unavailableTenantCredentialStore;
+  if (!tenant) {
+    const rawUser = requestContext?.get('user');
+    console.warn('[MastraCode] Tenant credential resolution failed closed', {
+      reason: rawUser === undefined ? 'missing-user-context' : 'invalid-principal-shape',
+      hasRequestContext: requestContext !== undefined,
+      factorySession: isFactorySessionContext(requestContext),
+    });
+    return unavailableTenantCredentialStore;
+  }
+  const store = credentialStoreProvider(tenant);
+  if (!store) {
+    console.warn('[MastraCode] Tenant credential resolution failed closed', {
+      reason: 'credential-store-unavailable',
+      hasOrganization: tenant.orgId !== undefined,
+      orgFirst: tenant.orgFirst === true,
+    });
+    return unavailableTenantCredentialStore;
+  }
+  return store;
 }

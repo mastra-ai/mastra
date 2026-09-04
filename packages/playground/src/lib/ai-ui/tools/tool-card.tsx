@@ -1,3 +1,4 @@
+import type { ToolCallStatus } from '@mastra/playground-ui/components/ai/tool-call';
 import { useQueryClient } from '@tanstack/react-query';
 import { useCallback, useContext, useEffect } from 'react';
 import { AskUserTool } from './ask-user-tool';
@@ -21,7 +22,7 @@ import { McpAppToolResult } from '@/domains/mcps/components/mcp-app-tool-result'
 import { useMcpAppTools } from '@/domains/mcps/hooks';
 import { WorkflowRunProvider } from '@/domains/workflows';
 import { WORKSPACE_TOOLS } from '@/domains/workspace/constants';
-import { ChatAgentContext, useChatSend } from '@/lib/ai-ui/chat/chat-context';
+import { ChatAgentContext, useChatRunning, useChatSend } from '@/lib/ai-ui/chat/chat-context';
 import type { MessageMetadata } from '@/lib/ai-ui/messages/message-metadata';
 
 /**
@@ -55,9 +56,18 @@ export interface ToolCardProps {
   metadata?: MessageMetadata;
   /** `data`-typed parts from the parent message, for badges that read live streaming metadata. */
   dataParts?: ReadonlyArray<DataMessagePart>;
+  /** Historical rendering mode: preserve presentation while suppressing executable actions and side effects. */
+  readOnly?: boolean;
 }
 
 const TASK_TOOL_NAMES = new Set(['task_write', 'task_update', 'task_complete', 'task_check']);
+
+/** A call neither settled nor carried by a live run reads as idle, so stale history never shimmers. */
+function badgeStatus(state: string | undefined, settled: boolean, chatRunning: boolean): ToolCallStatus {
+  if (state === 'output-error') return 'error';
+  if (settled || !chatRunning) return 'idle';
+  return 'running';
+}
 
 const hasSubmitPlanToolId = (value: unknown): boolean =>
   typeof value === 'object' && value !== null && 'toolId' in value && value.toolId === SUBMIT_PLAN_TOOL_ID;
@@ -70,7 +80,16 @@ export const ToolCard = (props: ToolCardProps) => {
   );
 };
 
-export const ToolCardInner = ({ toolName, input, output, toolCallId, state, metadata, dataParts }: ToolCardProps) => {
+export const ToolCardInner = ({
+  toolName,
+  input,
+  output,
+  toolCallId,
+  state,
+  metadata,
+  dataParts,
+  readOnly = false,
+}: ToolCardProps) => {
   // All hooks must run unconditionally before any conditional returns.
   const browserCtx = useBrowserToolCallsSafe();
   const isBrowser = isBrowserTool(toolName);
@@ -80,9 +99,12 @@ export const ToolCardInner = ({ toolName, input, output, toolCallId, state, meta
   const chatAgent = useContext(ChatAgentContext);
   const queryClient = useQueryClient();
 
+  const { isRunning } = useChatRunning();
+
   const args = input;
   const result = output;
   const isComplete = state === 'output-available' || state === 'result';
+  const status = badgeStatus(state, isComplete, isRunning);
 
   const handleMcpAppSendMessage = useCallback(
     (content: string) => {
@@ -92,7 +114,7 @@ export const ToolCardInner = ({ toolName, input, output, toolCallId, state, meta
   );
 
   useEffect(() => {
-    if (!isBrowser || !browserCtx) return;
+    if (readOnly || !isBrowser || !browserCtx) return;
 
     let status: 'pending' | 'complete' | 'error' = 'pending';
     if (result !== undefined) {
@@ -125,15 +147,16 @@ export const ToolCardInner = ({ toolName, input, output, toolCallId, state, meta
         return { ...prev, hasSession: true };
       });
     }
-  }, [isBrowser, toolCallId, toolName, args, result, browserCtx, queryClient]);
+  }, [readOnly, isBrowser, toolCallId, toolName, args, result, browserCtx, queryClient]);
 
   // Detect skill activation tool calls.
   useEffect(() => {
+    if (readOnly) return;
     if (toolName !== 'skill') return;
     if (!args?.name) return;
     if (!isComplete) return;
     activateSkill(args.name);
-  }, [toolName, args?.name, isComplete, activateSkill]);
+  }, [readOnly, toolName, args?.name, isComplete, activateSkill]);
 
   useWorkflowStream(result);
 
@@ -185,7 +208,7 @@ export const ToolCardInner = ({ toolName, input, output, toolCallId, state, meta
   }
 
   // ask_user tool renders a dedicated interactive component for answering questions.
-  if (toolName === 'ask_user') {
+  if (toolName === 'ask_user' && !readOnly) {
     return <AskUserTool toolName={toolName} toolCallId={toolCallId} output={output} metadata={metadata} />;
   }
 
@@ -222,6 +245,7 @@ export const ToolCardInner = ({ toolName, input, output, toolCallId, state, meta
         isNetwork={isNetwork}
         toolCalled={toolCalled}
         withoutArgs={isAgent || isWorkflow}
+        status={status}
       />
     );
   }
@@ -335,6 +359,7 @@ export const ToolCardInner = ({ toolName, input, output, toolCallId, state, meta
         suspendPayload={suspendedToolMetadata?.suspendPayload}
         isNetwork={isNetwork}
         toolCalled={toolCalled}
+        status={status}
       />
       {mcpAppInfo && result !== undefined && (
         <McpAppToolResult
@@ -342,6 +367,7 @@ export const ToolCardInner = ({ toolName, input, output, toolCallId, state, meta
           toolArgs={args}
           toolResult={result}
           onSendMessage={handleMcpAppSendMessage}
+          readOnly={readOnly}
         />
       )}
     </>

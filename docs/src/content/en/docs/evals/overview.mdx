@@ -1,6 +1,6 @@
 ---
 title: "Evals"
-description: Overview of evaluations and scorers in Mastra, including Quick Checks, live evaluations, and trace evaluations.
+description: "Evaluate Mastra agents and workflows with model-graded, rule-based, and programmatic scorers through live evaluations, trace scoring, and Quick Checks."
 packages:
   - "@mastra/core"
   - "@mastra/evals"
@@ -67,36 +67,36 @@ export const evaluatedAgent = new Agent({
 
 You can also add scorers to individual workflow steps to evaluate outputs at specific points in your process. Each scorer receives that step's own input and output, so you can measure quality at each step instead of only scoring the final answer:
 
-```typescript title="src/mastra/workflows/content-generation.ts" prettier:false
-import { createWorkflow, createStep } from "@mastra/core/workflows";
-import { z } from "zod";
-import { customStepScorer } from "../scorers/custom-step-scorer";
+```typescript title="src/mastra/workflows/content-generation.ts"
+import { createWorkflow, createStep } from '@mastra/core/workflows'
+import { z } from 'zod'
+import { customStepScorer } from '../scorers/custom-step-scorer'
 
 const contentStep = createStep({
-  id: "content-step",
+  id: 'content-step',
   inputSchema: z.object({ topic: z.string() }),
   outputSchema: z.object({ content: z.string() }),
   scorers: {
     customStepScorer: {
       scorer: customStepScorer(),
       sampling: {
-        type: "ratio",
+        type: 'ratio',
         rate: 1, // Score every step execution
       },
     },
   },
   execute: async ({ inputData }) => {
-    return { content: await generateContent(inputData.topic) };
+    return { content: await generateContent(inputData.topic) }
   },
-});
+})
 
 export const contentWorkflow = createWorkflow({
-  id: "content-workflow",
+  id: 'content-workflow',
   inputSchema: z.object({ topic: z.string() }),
   outputSchema: z.object({ content: z.string() }),
 })
   .then(contentStep)
-  .commit();
+  .commit()
 ```
 
 For the step-level `scorers` API, see the [Step class reference](/reference/workflows/step#scoring-step-output).
@@ -119,7 +119,7 @@ Sampling is deterministic per trace: the decision is derived from the trace ID, 
 
 When a run has no trace (observability not configured), the decision is derived from the run ID instead. If [trace sampling](../observability/tracing/overview) declined the trace, scorers skip that run entirely, so scores aren't created for traces that were never stored.
 
-**Eligibility filters**: The optional `filter` parameter restricts which runs a scorer is eligible for, using a declarative predicate over the run's context. Filters are evaluated before sampling, so `sampling.rate` applies only to runs that match the filter:
+**Eligibility filters**: The optional `filter` parameter uses a declarative predicate over the run context to restrict scorer eligibility. Because filtering occurs before sampling, `sampling.rate` applies only to matching runs:
 
 ```typescript title="src/mastra/agents/evaluated-agent.ts"
 export const myAgent = new Agent({
@@ -170,7 +170,7 @@ export const mastra = new Mastra({
 })
 ```
 
-The lookup only compares scorer IDs, so a registered instance can be configured differently from the one you evaluate with. Every `checks.calledTool()` instance has the id `check-called-tool`, so registering one covers all of them, whatever tool name you evaluate with.
+The lookup compares only scorer IDs, which allows the registered instance to use different configuration from the evaluated instance. Every `checks.calledTool()` instance uses the ID `check-called-tool`. Registering one therefore covers every tool name you evaluate.
 
 The arguments still shape the `description` stored alongside each score, which comes from the registered instance, not the one you evaluate with. `checks.calledTool('')` is accepted and persists scores fine, but stores `Checks that "" was called`, so pass a representative value.
 

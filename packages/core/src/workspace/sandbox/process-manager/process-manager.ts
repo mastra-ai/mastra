@@ -75,6 +75,20 @@ export abstract class SandboxProcessManager<TSandbox extends MastraSandbox = Mas
         validateMaxRetainedProcessOutputBytes(args[1].maxRetainedBytes);
       }
       await this.sandbox.ensureRunning();
+
+      // Merge the sandbox's runtime env into the spawn options.
+      // Read per spawn (never captured at construction) so values installed
+      // via setEnv() after construction reach every subsequent process.
+      // Per-call env wins over the sandbox env. When the sandbox env is
+      // empty, leave the args untouched — provider spawn implementations
+      // branch on `options.env !== undefined` and must not observe a new
+      // empty object. The optional call tolerates hand-rolled sandbox
+      // stubs (common in provider tests) that don't extend MastraSandbox.
+      const sandboxEnv = this.sandbox.getEnv?.();
+      if (sandboxEnv && Object.keys(sandboxEnv).length > 0) {
+        args[1] = { ...args[1], env: { ...sandboxEnv, ...args[1]?.env } };
+      }
+
       const handle = await impl.spawn(...args);
       this._dismissed.delete(handle.pid);
       handle.command = args[0];

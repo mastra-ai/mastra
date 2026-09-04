@@ -116,6 +116,7 @@ const sidebars = {
         { type: 'doc', id: 'auth/firebase', label: 'Firebase' },
         { type: 'doc', id: 'auth/google', label: 'Google' },
         { type: 'doc', id: 'auth/jwt', label: 'JSON Web Token' },
+        { type: 'doc', id: 'auth/neon', label: 'Neon' },
         { type: 'doc', id: 'auth/okta', label: 'Okta' },
         { type: 'doc', id: 'auth/supabase', label: 'Supabase' },
         { type: 'doc', id: 'auth/workos', label: 'WorkOS' },
@@ -140,6 +141,7 @@ const sidebars = {
       items: [
         { type: 'doc', id: 'channels/channel-provider', label: 'ChannelProvider' },
         { type: 'doc', id: 'channels/slack-provider', label: 'SlackProvider' },
+        { type: 'doc', id: 'channels/telegram-provider', label: 'TelegramProvider' },
       ],
     },
     {
@@ -156,6 +158,7 @@ const sidebars = {
       label: 'Client SDK',
       collapsed: true,
       items: [
+        { type: 'doc', id: 'client-js/agent-controller', label: 'Agent Controller API' },
         { type: 'doc', id: 'client-js/agents', label: 'Agents API' },
         { type: 'doc', id: 'client-js/conversations', label: 'Conversations API' },
         { type: 'doc', id: 'client-js/datasets', label: 'Datasets API' },
@@ -372,6 +375,7 @@ const sidebars = {
               label: '.submitExperimentResult()',
             },
             { type: 'doc', id: 'datasets/update', label: '.update()' },
+            { type: 'doc', id: 'datasets/updateExperiment', label: '.updateExperiment()' },
             { type: 'doc', id: 'datasets/updateItem', label: '.updateItem()' },
           ],
         },
@@ -566,6 +570,11 @@ const sidebars = {
               id: 'observability/metrics/automatic-metrics',
               label: 'Automatic Metrics',
             },
+            {
+              type: 'doc',
+              id: 'observability/metrics/queries',
+              label: 'Metric queries',
+            },
           ],
         },
         {
@@ -573,6 +582,7 @@ const sidebars = {
           label: 'Tracing',
           items: [
             { type: 'doc', id: 'observability/tracing/configuration', label: 'Configuration' },
+            { type: 'doc', id: 'observability/tracing/trace-query', label: 'Advanced trace queries' },
             { type: 'doc', id: 'observability/tracing/instances', label: 'Instances' },
             { type: 'doc', id: 'observability/tracing/interfaces', label: 'Interfaces' },
             { type: 'doc', id: 'observability/tracing/span-filtering', label: 'Span filtering' },
@@ -706,6 +716,7 @@ const sidebars = {
         { type: 'doc', id: 'pubsub/base', label: 'PubSub' },
         { type: 'doc', id: 'pubsub/redis-streams', label: 'RedisStreamsPubSub' },
         { type: 'doc', id: 'pubsub/unix-socket-pubsub', label: 'UnixSocketPubSub' },
+        { type: 'doc', id: 'pubsub/valkey-streams', label: 'ValkeyStreamsPubSub' },
       ],
     },
     {
@@ -741,14 +752,17 @@ const sidebars = {
       collapsed: true,
       items: [
         { type: 'doc', id: 'server/create-route', label: 'createRoute()' },
+        { type: 'doc', id: 'server/elysia-adapter', label: 'Elysia Adapter' },
         { type: 'doc', id: 'server/express-adapter', label: 'Express Adapter' },
         { type: 'doc', id: 'server/fastify-adapter', label: 'Fastify Adapter' },
         { type: 'doc', id: 'server/hono-adapter', label: 'Hono Adapter' },
         { type: 'doc', id: 'server/koa-adapter', label: 'Koa Adapter' },
         { type: 'doc', id: 'server/mastra-server', label: 'MastraServer' },
         { type: 'doc', id: 'server/nestjs-adapter', label: 'NestJS Adapter' },
+        { type: 'doc', id: 'server/next-adapter', label: 'Next.js Adapter' },
         { type: 'doc', id: 'server/register-api-route', label: 'registerApiRoute()' },
         { type: 'doc', id: 'server/routes', label: 'Server Routes' },
+        { type: 'doc', id: 'server/tanstack-start-adapter', label: 'TanStack Start Adapter' },
       ],
     },
     {
@@ -786,6 +800,7 @@ const sidebars = {
         { type: 'doc', id: 'storage/overview', label: 'Overview' },
         { type: 'doc', id: 'storage/composite', label: 'Composite Storage' },
         { type: 'doc', id: 'storage/retention', label: 'Retention (prune)' },
+        { type: 'doc', id: 'storage/turso', label: 'Turso Storage' },
       ],
     },
     {

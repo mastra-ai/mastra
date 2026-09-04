@@ -8,6 +8,7 @@ import {
   ComposerInput,
   ComposerRing,
 } from '@mastra/playground-ui/components/Composer';
+import { useOptionalMessageScroller } from '@mastra/playground-ui/components/MessageScroller';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { useQueryClient } from '@tanstack/react-query';
 import { ArrowUp, ImagePlus, Square } from 'lucide-react';
@@ -17,7 +18,6 @@ import { useMatch, useNavigate, useParams } from 'react-router';
 
 import { INITIAL_THREAD_MESSAGE_LIMIT, queryKeys } from '../../../../api/keys';
 import { useChatCommands } from '../context/ChatCommandsProvider';
-import { useChatMessagesInitializing } from '../context/useChatMessagesInitializing';
 import { useChatConnection } from '../context/useChatConnection';
 import { useChatModels } from '../context/useChatModels';
 import { useChatModes } from '../context/useChatModes';
@@ -31,11 +31,13 @@ import { useCreateAgentControllerThreadMutation } from '../../../../hooks/useAge
 import { usePreparingThreadId } from '../hooks/usePreparingThreadId';
 import { useCreateUserSessionFromDraft } from '../hooks/useCreateUserSessionFromDraft';
 import { usePendingPlanFeedback } from '../hooks/usePendingPlanFeedback';
-import { commandRequiresReadySession, matchCommands } from '../services/commands';
+import type { SlashCommand, SlashCommandOption } from '../services/commands';
+import { commandRequiresReadySession, matchCommandOptions, matchCommands } from '../services/commands';
 import { AGENT_CONTROLLER_ID } from '../services/constants';
 import { getModeColorClass } from './mode-colors';
 import { StatusLine } from './StatusLine';
 import { ComposerImageAttachments, ComposerSuggestions } from './ComposerParts';
+import type { ComposerSuggestionItem } from './ComposerParts';
 import { useComposerSpotlight } from './useComposerSpotlight';
 import { useComposerImages } from './useComposerImages';
 import type { PendingImage } from './useComposerImages';
@@ -48,6 +50,8 @@ const composerVariantClass: Record<ComposerVariant, string> = {
   textarea: 'min-h-28',
 };
 
+const composerInputTextClass = 'text-ui-md leading-ui-md font-[450] text-neutral4 placeholder:text-neutral2';
+
 const composerVariantMaxHeight: Record<ComposerVariant, string> = {
   inline: '13rem',
   textarea: '16rem',
@@ -57,21 +61,46 @@ type ComposerProps = {
   variant?: ComposerVariant;
 };
 
+type ComposerSuggestion =
+  | { kind: 'command'; command: SlashCommand }
+  | { kind: 'option'; command: SlashCommand; option: SlashCommandOption };
+
+function toComposerSuggestionItem(suggestion: ComposerSuggestion): ComposerSuggestionItem {
+  if (suggestion.kind === 'command') {
+    return {
+      id: `command:${suggestion.command.name}`,
+      label: `/${suggestion.command.name}`,
+      description: suggestion.command.description,
+    };
+  }
+  return {
+    id: `option:${suggestion.command.name}:${suggestion.option.value}`,
+    label: suggestion.option.label,
+    description: suggestion.option.description,
+    active: suggestion.option.active,
+  };
+}
+
 export function Composer({ variant = 'inline' }: ComposerProps) {
-  const { kind, resourceId, sessionEnabled, sandboxPreparing, projectPath, baseUrl, factorySessionState } =
-    useChatSessionContext();
-  const messagesInitializing = useChatMessagesInitializing();
-  const chatPreparing = sandboxPreparing || messagesInitializing;
+  const { kind, resourceId, sessionEnabled, projectPath, baseUrl, factorySessionState } = useChatSessionContext();
   const { factoryId } = useParams<{ factoryId: string }>();
   const onDraftComposer = useMatch('/factories/:factoryId/new') !== null;
   const onUserDraft = useMatch('/factories/:factoryId/user/new/:draftSessionId') !== null;
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { status } = useChatConnection();
-  const { busy, localUser, failLocalUser, reset, clearPending, pushNotice } = useChatTranscript();
+  const { busy, phase, localUser, failLocalUser, reset, clearPending, pushNotice } = useChatTranscript();
+  const chatPreparing = phase === 'initializing';
+  const scroller = useOptionalMessageScroller();
   const { modes, activeModeId, isLoading: modesLoading, error: modesError, setMode } = useChatModes();
   const { activeModelId, isLoading: modelLoading, error: modelError } = useChatModels();
-  const { composerDraft: draft, composerInputRef: inputRef, setComposerDraft, runComposerCommand } = useChatCommands();
+  const {
+    commands,
+    composerDraft: draft,
+    composerInputRef: inputRef,
+    setComposerDraft,
+    runComposerCommand,
+  } = useChatCommands();
   const modeColorClass = getModeColorClass(activeModeId ?? modes[0]?.id);
 
   const hookArgs = {
@@ -87,6 +116,8 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
   const planFeedback = usePendingPlanFeedback();
 
   const preparingThreadId = usePreparingThreadId();
+  // A queued kickoff echo reads as working before the session connects; steering needs the run itself.
+  const liveRun = phase === 'working' && !preparingThreadId;
   const createDraftSessionMutation = useCreateUserSessionFromDraft();
   const blocked = onUserDraft ? !factorySessionState : status !== 'ready' && !preparingThreadId;
   const draftConfigNotReady =
@@ -98,7 +129,12 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
   });
   const spotlightRef = useComposerSpotlight();
   const modeSwitchPendingRef = useRef(false);
-  const suggestions = planFeedback.pending ? [] : matchCommands(draft);
+  const optionMatch = planFeedback.pending ? undefined : matchCommandOptions(commands, draft);
+  const matchingCommands = planFeedback.pending || optionMatch ? [] : matchCommands(commands, draft);
+  const suggestions: ComposerSuggestion[] = optionMatch
+    ? optionMatch.options.map(option => ({ kind: 'option', command: optionMatch.command, option }))
+    : matchingCommands.map(command => ({ kind: 'command', command }));
+  const suggestionItems = suggestions.map(toComposerSuggestionItem);
   const showSuggestions = suggestions.length > 0;
   const [activeSuggestion, setActiveSuggestion] = useState(0);
   const composerDisabled = createDraftSessionMutation.isPending || blocked || planFeedback.isSubmitting;
@@ -107,7 +143,7 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
   const initializingPlaceholder = useInitializingPlaceholder(chatPreparing, draft.length === 0);
   const normalPlaceholder = planFeedback.pending
     ? 'Give feedback on this plan…'
-    : busy && !preparingThreadId
+    : liveRun
       ? 'Steer the agent…'
       : 'Ask Mastra Code…';
   const placeholder = initializingPlaceholder ?? normalPlaceholder;
@@ -118,8 +154,8 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
     setActiveSuggestion(0);
   };
 
-  const applyCommand = (name: string) => {
-    updateDraft(`/${name} `);
+  const applyCommand = (command: SlashCommand) => {
+    updateDraft(`/${command.name} `);
     inputRef.current?.focus();
   };
 
@@ -166,6 +202,8 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
   const steer = async (text: string) => {
     if (!text.trim()) return;
     const localId = localUser(text, true);
+    // A steer claims no room and no park, so it re-attaches the reader here instead.
+    scroller?.scrollToEnd({ behavior: 'smooth' });
     try {
       await sendMutation.mutateAsync({ text });
     } catch (error) {
@@ -174,17 +212,30 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
     }
   };
 
-  const onSubmit = (e: { preventDefault: () => void }) => {
-    e.preventDefault();
-    if (sendDisabled) return;
-    const text = draft.trim();
-    if ((!text && images.length === 0) || (planFeedback.pending && !text)) return;
+  const submitInput = (text: string) => {
     updateDraft('');
     void handleInput(text).catch(error => {
       if (planFeedback.pending) updateDraft(text);
       clearPending();
       pushNotice(error instanceof Error ? error.message : 'The message could not be sent.', 'error');
     });
+  };
+
+  const onSubmit = (e: { preventDefault: () => void }) => {
+    e.preventDefault();
+    if (sendDisabled) return;
+    const text = draft.trim();
+    if ((!text && images.length === 0) || (planFeedback.pending && !text)) return;
+    submitInput(text);
+  };
+
+  const selectSuggestion = (suggestion: ComposerSuggestion) => {
+    if (suggestion.kind === 'command') {
+      applyCommand(suggestion.command);
+      return;
+    }
+    if (sendDisabled) return;
+    submitInput(`/${suggestion.command.name} ${suggestion.option.value}`);
   };
 
   const onComposerKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -208,6 +259,11 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
       );
       return;
     }
+    if (e.key === 'Escape' && optionMatch) {
+      e.preventDefault();
+      updateDraft(`/${optionMatch.command.name}`);
+      return;
+    }
     if (showSuggestions) {
       const safeIndex = Math.min(activeSuggestion, suggestions.length - 1);
       const current = suggestions[safeIndex];
@@ -221,17 +277,21 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
         return;
       } else if (e.key === 'Tab') {
         e.preventDefault();
-        if (current) applyCommand(current.name);
+        if (current) selectSuggestion(current);
         return;
       } else if (e.key === 'Enter' && !e.shiftKey) {
-        const exact = !!current && draft.slice(1) === current.name && suggestions.length === 1;
-        if (exact) {
-          e.preventDefault();
+        e.preventDefault();
+        if (!current) return;
+        if (current.kind === 'option') {
+          selectSuggestion(current);
+          return;
+        }
+        const exact = draft.toLowerCase() === `/${current.command.name}` && suggestions.length === 1;
+        if (exact && !current.command.options?.length) {
           onSubmit(e);
           return;
         }
-        e.preventDefault();
-        if (current) applyCommand(current.name);
+        applyCommand(current.command);
         return;
       } else if (e.key === 'Escape') {
         e.preventDefault();
@@ -252,7 +312,7 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
       return;
     }
     if (onUserDraft && text.startsWith('/')) {
-      if (commandRequiresReadySession(text)) {
+      if (commandRequiresReadySession(commands, text)) {
         updateDraft(text);
         pushNotice('This command needs a session. Send a prompt to create one first.');
       } else {
@@ -269,13 +329,13 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
       }
       return;
     }
-    if (preparingThreadId && text.startsWith('/') && commandRequiresReadySession(text)) {
+    if (preparingThreadId && text.startsWith('/') && commandRequiresReadySession(commands, text)) {
       updateDraft(text);
       pushNotice('Commands run once the session is ready.');
       return;
     }
     if (await runComposerCommand(text)) return;
-    if (busy && !preparingThreadId) {
+    if (liveRun) {
       await steer(text);
       return;
     }
@@ -292,9 +352,21 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
   return (
     <ComposerRoot onSubmit={onSubmit} onDrop={onDrop} onDragOver={e => e.preventDefault()}>
       <ComposerRing busy={busy || chatPreparing} className={modeColorClass}>
-        <ComposerBox ref={spotlightRef} className={cn('composer-spotlight', modeColorClass)}>
-          <div aria-hidden="true" className="composer-spotlight-surface" />
-          <ComposerSuggestions suggestions={suggestions} activeIndex={activeSuggestion} onSelect={applyCommand} />
+        <ComposerBox ref={spotlightRef} className={cn('composer-spotlight isolate border-0', modeColorClass)}>
+          <div
+            aria-hidden="true"
+            className="composer-spotlight-surface pointer-events-none absolute inset-0 -z-10 overflow-hidden rounded-[inherit] bg-(--composer-surface)"
+          />
+          <ComposerSuggestions
+            items={suggestionItems}
+            activeIndex={activeSuggestion}
+            contextLabel={optionMatch ? `/${optionMatch.command.name}` : undefined}
+            onBack={optionMatch ? () => updateDraft(`/${optionMatch.command.name}`) : undefined}
+            onSelect={index => {
+              const suggestion = suggestions[index];
+              if (suggestion) selectSuggestion(suggestion);
+            }}
+          />
           <ComposerImageAttachments images={images} onRemove={removeImage} />
           <ComposerInput
             ref={inputRef}
@@ -305,7 +377,7 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
             placeholder={placeholder}
             disabled={textareaDisabled}
             maxHeight={composerVariantMaxHeight[variant]}
-            className={composerVariantClass[variant]}
+            className={cn(composerInputTextClass, composerVariantClass[variant])}
             aria-label="Message"
             aria-keyshortcuts="Shift+Tab"
           />
@@ -331,7 +403,7 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
               >
                 <ImagePlus size={14} />
               </Button>
-              {busy && !preparingThreadId && (
+              {liveRun && (
                 <Button
                   type="button"
                   variant="outline"

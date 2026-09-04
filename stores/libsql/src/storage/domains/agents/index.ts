@@ -1,4 +1,3 @@
-import type { Client, InValue } from '@libsql/client';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import {
   AgentsStorage,
@@ -25,6 +24,7 @@ import type {
 } from '@mastra/core/storage';
 import { LibSQLDB, resolveClient } from '../../db';
 import type { LibSQLDomainConfig } from '../../db';
+import type { SqliteClient as Client, SqliteInValue as InValue } from '../../db/client';
 import { buildSelectColumnsWithAlias } from '../../db/utils';
 
 export class AgentsLibSQL extends AgentsStorage {
@@ -743,6 +743,33 @@ export class AgentsLibSQL extends AgentsStorage {
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { versionId: id },
+        },
+        error,
+      );
+    }
+  }
+
+  async getVersions(ids: string[]): Promise<AgentVersion[]> {
+    if (ids.length === 0) {
+      return [];
+    }
+    try {
+      const rows = await this.#db.selectMany<Record<string, any>>({
+        tableName: TABLE_AGENT_VERSIONS,
+        whereClause: {
+          sql: `WHERE id IN (${ids.map(() => '?').join(', ')})`,
+          args: ids,
+        },
+      });
+      return (rows ?? []).map(row => this.parseVersionRow(row));
+    } catch (error) {
+      if (error instanceof MastraError) throw error;
+      throw new MastraError(
+        {
+          id: createStorageErrorId('LIBSQL', 'GET_VERSIONS', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { count: ids.length },
         },
         error,
       );

@@ -13,7 +13,10 @@ import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-
 import { Agent } from '@mastra/core/agent';
 import { createDurableAgent, createEventedAgent } from '@mastra/core/agent/durable';
 import { Mastra } from '@mastra/core/mastra';
+import { SpanType } from '@mastra/core/observability';
+import type { Processor, ProcessOutputStreamArgs } from '@mastra/core/processors';
 import { MockStore } from '@mastra/core/storage';
+import type { ChunkType } from '@mastra/core/stream';
 import { createTool } from '@mastra/core/tools';
 import { describe, it, expect, beforeEach } from 'vitest';
 import { z } from 'zod';
@@ -92,6 +95,39 @@ function errorModel() {
       warnings: [],
     }),
   });
+}
+
+/** Pass-through output processor that runs per-chunk via processOutputStream. */
+class PassThroughStreamProcessor implements Processor {
+  readonly id: string;
+  readonly name: string;
+
+  constructor(id: string) {
+    this.id = id;
+    this.name = `Stream: ${id}`;
+  }
+
+  async processOutputStream(args: ProcessOutputStreamArgs): Promise<ChunkType | null | undefined> {
+    return args.part;
+  }
+}
+
+/**
+ * Same per-chunk processor, but declaring the span type it should be traced
+ * as. The durable path builds this span in the `ProcessorState` constructor
+ * rather than at a runner call site, so it is the one place a declaration
+ * could be dropped while every other phase honours it.
+ */
+class DeclaringStreamProcessor implements Processor {
+  readonly id = 'declaring-stream';
+  readonly name = 'Declaring Stream';
+  readonly spanType = SpanType.MEMORY_OPERATION;
+  readonly spanName = 'memory: stream';
+  readonly spanAttributes = { operationType: 'recall' } as const;
+
+  async processOutputStream(args: ProcessOutputStreamArgs): Promise<ChunkType | null | undefined> {
+    return args.part;
+  }
 }
 
 const weatherTool = createTool({
@@ -201,6 +237,103 @@ describe('durable-agent observability — full span tree (real exporter)', () =>
     expect(testExporter.getSpansByType('agent_run' as any)).toHaveLength(1);
     // Regression guard for the durable-specific gap: MODEL_STEP + MODEL_INFERENCE
     // must close on error (reportGenerationError closes its open children).
+    expect(testExporter.getIncompleteSpans()).toHaveLength(0);
+  });
+
+  it('DurableAgent output stream processors: PROCESSOR_RUN spans parent under AGENT_RUN, never orphan roots', async () => {
+    const agent = new Agent({
+      id: 'a',
+      name: 'a',
+      instructions: 'x',
+      model: textModel('Hello') as any,
+      outputProcessors: [new PassThroughStreamProcessor('stream-a'), new PassThroughStreamProcessor('stream-b')],
+    });
+    const { wrapped } = buildMastra(testExporter, agent, 'durable');
+    await runToCompletion(wrapped, 'hi', testExporter);
+
+    // one trace, and the agent_run is the only span without a parentSpanId —
+    // processor spans must not export as extra root rows (stores label the
+    // trace by its latest parentless row)
+    expect(testExporter.getTraceIds()).toHaveLength(1);
+    const agentRuns = testExporter.getSpansByType('agent_run' as any);
+    expect(agentRuns).toHaveLength(1);
+    const parentless = testExporter.getAllSpans().filter((s: any) => !s.parentSpanId);
+    expect(parentless.map(idOf)).toEqual([idOf(agentRuns[0])]);
+
+    const processorSpans = testExporter
+      .getAllSpans()
+      .filter((s: any) => typeof s.name === 'string' && s.name.startsWith('output stream processor:'));
+    expect(processorSpans.map((s: any) => s.name).sort()).toEqual([
+      'output stream processor: stream-a',
+      'output stream processor: stream-b',
+    ]);
+    for (const span of processorSpans) {
+      expect(parentOf(span)).toBe(idOf(agentRuns[0]));
+      expect((span as any).traceId).toBe((agentRuns[0] as any).traceId);
+    }
+    expect(testExporter.getIncompleteSpans()).toHaveLength(0);
+  });
+
+  it('DurableAgent output stream processors honour a declared span type', async () => {
+    const agent = new Agent({
+      id: 'a',
+      name: 'a',
+      instructions: 'x',
+      model: textModel('Hello') as any,
+      outputProcessors: [new DeclaringStreamProcessor()],
+    });
+    const { wrapped } = buildMastra(testExporter, agent, 'durable');
+    await runToCompletion(wrapped, 'hi', testExporter);
+
+    const declared = testExporter.getAllSpans().filter((s: any) => s.name === 'memory: stream');
+    expect(declared.length).toBeGreaterThan(0);
+    for (const span of declared) {
+      expect((span as any).type).toBe(SpanType.MEMORY_OPERATION);
+      expect((span as any).attributes?.operationType).toBe('recall');
+      expect((span as any).entityId).toBe('declaring-stream');
+      // The executor's own pipeline facts still survive the retyping. These
+      // spans come from the processor workflow, so the executor reads
+      // 'workflow'; the legacy ProcessorState path is covered by a unit test
+      // in @mastra/core, since no agent-level run reaches it.
+      expect((span as any).attributes?.processorExecutor).toBe('workflow');
+    }
+
+    // The default label must be gone, not merely supplemented.
+    const defaults = testExporter
+      .getAllSpans()
+      .filter((s: any) => typeof s.name === 'string' && s.name.startsWith('output stream processor:'));
+    expect(defaults).toHaveLength(0);
+    expect(testExporter.getIncompleteSpans()).toHaveLength(0);
+  });
+
+  it('DurableAgent tool call with output stream processors: every PROCESSOR_RUN span has a parent on the agent trace', async () => {
+    const agent = new Agent({
+      id: 'a',
+      name: 'a',
+      instructions: 'use the tool',
+      model: toolThenTextModel('get_weather', { city: 'Paris' }, 'It is 21C in Paris.') as any,
+      tools: { get_weather: weatherTool },
+      outputProcessors: [new PassThroughStreamProcessor('stream-a')],
+    });
+    const { wrapped } = buildMastra(testExporter, agent, 'durable');
+    await runToCompletion(wrapped, 'weather in paris?', testExporter);
+
+    expect(testExporter.getTraceIds()).toHaveLength(1);
+    const agentRuns = testExporter.getSpansByType('agent_run' as any);
+    expect(agentRuns).toHaveLength(1);
+    const parentless = testExporter.getAllSpans().filter((s: any) => !s.parentSpanId);
+    expect(parentless.map(idOf)).toEqual([idOf(agentRuns[0])]);
+
+    // the tool-call step runs the same processors through its own state map, so
+    // more than one span per processor may exist — all must be parented on this trace
+    const processorSpans = testExporter
+      .getAllSpans()
+      .filter((s: any) => typeof s.name === 'string' && s.name.startsWith('output stream processor:'));
+    expect(processorSpans.length).toBeGreaterThanOrEqual(1);
+    for (const span of processorSpans) {
+      expect(parentOf(span)).toBe(idOf(agentRuns[0]));
+      expect((span as any).traceId).toBe((agentRuns[0] as any).traceId);
+    }
     expect(testExporter.getIncompleteSpans()).toHaveLength(0);
   });
 

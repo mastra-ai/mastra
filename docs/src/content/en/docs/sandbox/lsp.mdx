@@ -1,6 +1,6 @@
 ---
 title: "LSP inspection"
-description: Configure Language Server Protocol support for semantic inspection of project files.
+description: "Configure Language Server Protocol support in Mastra workspaces so agents can inspect symbols, definitions, references, diagnostics, and project structure."
 packages:
   - "@mastra/core"
 ---
@@ -98,7 +98,7 @@ Unavailable result fields are omitted. Definition and implementation locations i
 
 Set `lsp: true` to use the defaults. Replace it with an object when you need to control the root, server discovery, timeouts, or retained clients:
 
-```typescript
+```typescript oxfmt:false
 lsp: {
   root: projectPath,
   diagnosticTimeout: 4_000,
@@ -112,7 +112,7 @@ lsp: {
 },
 ```
 
-`binaryOverrides` maps a built-in server ID to its full startup command. `searchPaths` adds package roots whose `node_modules` may contain binaries or required modules. You can also set `packageRunner`, such as `pnpm dlx`, as a last-resort fallback. Package-runner fallback is disabled by default because it may install software or hang in some project layouts.
+`binaryOverrides` maps a built-in server ID to its full startup command. `searchPaths` adds package roots whose `node_modules` may contain required modules or binaries. As a last-resort fallback, you can set a `packageRunner` such as `pnpm dlx`. Package-runner fallback is disabled by default because it may install software or hang in some project layouts.
 
 `diagnosticTimeout` controls how long the direct `getDiagnostics()` and `getDiagnosticsMulti()` APIs wait for diagnostics. The agent inspection tool currently waits up to five seconds.
 
@@ -146,7 +146,7 @@ See the [tool configuration reference](/reference/workspace/workspace-class#tool
 
 Add a server under `lsp.servers` when a language isn't built in or when you need to replace a built-in definition:
 
-```typescript
+```typescript oxfmt:false
 lsp: {
   root: projectPath,
   servers: {

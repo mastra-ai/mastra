@@ -1,0 +1,300 @@
+---
+title: "Reference: Agent Controller API | Client SDK"
+description: "The Agent Controller API connects a UI in another process to an agent controller session over HTTP, streaming its events and sending messages, approvals, and suspension responses."
+packages:
+  - "@mastra/client-js"
+---
+
+# Agent Controller API
+
+The Agent Controller API reaches an [`AgentController`](/reference/agent-controller/agent-controller-class) registered on a Mastra instance over its HTTP routes. Use it from a browser or any other process that doesn't own the controller. A process that owns the controller uses the in-process [`Session`](/reference/agent-controller/session) instead.
+
+## Usage example
+
+```typescript
+import { MastraClient } from '@mastra/client-js'
+
+const client = new MastraClient({ baseUrl: 'http://localhost:4111' })
+const session = client.getAgentController('coding-controller').session('user-123')
+
+await session.create()
+
+const subscription = await session.subscribe({
+  onEvent: event => handleEvent(event),
+  onError: error => showDisconnected(error),
+  onReconnect: () => {
+    void session.state().then(resync).catch(showDisconnected)
+  },
+  reconnect: true,
+})
+
+await session.sendMessage('Summarize the open pull requests')
+
+// Call when the UI disconnects.
+subscription.unsubscribe()
+```
+
+## Listing agent controllers
+
+Retrieve the agent controllers hosted on the connected Mastra instance:
+
+```typescript
+const controllers = await client.listAgentControllers()
+```
+
+## Working with a specific agent controller
+
+Get an instance of an agent controller by the ID it's registered under:
+
+```typescript
+const controller = client.getAgentController('coding-controller')
+```
+
+### `listModes()`
+
+Lists the modes configured on the controller, such as `build` and `plan`.
+
+Returns: `Promise<AgentControllerModeInfo[]>`
+
+### `listModels()`
+
+Lists the models available on the controller, with their auth status and use counts.
+
+Returns: `Promise<AgentControllerAvailableModel[]>`
+
+### `listActiveRuns()`
+
+Lists the runs in flight on the controller across all resources.
+
+Returns: `Promise<AgentControllerActiveRun[]>`
+
+### `workspaceStatus()`
+
+Returns the controller's workspace status.
+
+Returns: `Promise<AgentControllerWorkspaceStatus>`
+
+### `session(resourceId, scope?)`
+
+Returns an `AgentControllerSession` bound to one resource. Sessions are get-or-create on the server, so calling `create()` on the same `resourceId` and `scope` resumes the existing conversation instead of forking it.
+
+Pass `scope` to address an independent session over the same `resourceId`. Sessions that share a `resourceId` but use different scopes each get their own run loop, thread binding, mode, model, and state. A common pattern is one session per git worktree with the worktree path as the scope. The scope travels on every request as a `sessionScope` query parameter.
+
+## Session methods
+
+### `create(options?)`
+
+Creates or resumes the session.
+
+<PropertiesTable
+  content={[
+  {
+    name: 'tags',
+    type: 'Record<string, string>',
+    isOptional: true,
+    description:
+      'Scopes initial thread selection. A thread is a resume candidate only when its metadata matches every tag.',
+  },
+  {
+    name: 'threadId',
+    type: 'string',
+    isOptional: true,
+    description: 'Binds the session to one exact thread, creating it with that ID when it does not exist.',
+  },
+]}
+/>
+
+Returns: `Promise<CreateAgentControllerSessionResponse>`
+
+### `subscribe(options)`
+
+Subscribes to the session's event stream over SSE. The promise resolves once the stream is established and rejects when it can't connect, so a rejected call leaves nothing running in the background. `reconnect` only governs re-establishing a stream that drops after it was established. To retry the initial connection, loop around `subscribe()`.
+
+<PropertiesTable
+  content={[
+  {
+    name: 'onEvent',
+    type: '(event: AgentControllerEvent) => void',
+    description: 'Called for each event received over the stream. See Events for the event types.',
+  },
+  {
+    name: 'onError',
+    type: '(error: unknown) => void',
+    isOptional: true,
+    description:
+      'Called when the stream errors or ends and no further reconnect will be attempted. The subscription is dead after this fires.',
+  },
+  {
+    name: 'onReconnect',
+    type: '() => void',
+    isOptional: true,
+    description:
+      'Called each time the stream is re-established after a drop. The server does not replay events missed while disconnected, so re-sync from here with `session.state()` and, for the message gap, `session.listMessages()`.',
+  },
+  {
+    name: 'reconnect',
+    type: 'boolean | { maxRetries?: number; delayMs?: number; maxDelayMs?: number }',
+    isOptional: true,
+    description:
+      'Re-establishes the stream after an established stream drops. Retries back off exponentially from `delayMs` (default `1000`) up to `maxDelayMs` (default `30000`). `maxRetries` (default `Infinity`) bounds the attempts per outage and resets once a connection is re-established. When retries are exhausted, `onError` fires.',
+  },
+]}
+/>
+
+Returns: `Promise<AgentControllerSubscription>`, an object with an `unsubscribe()` method that stops reading and releases the stream.
+
+### `sendMessage(message, options?)`
+
+Sends a user message to the session. Pass a string, or `{ content, files }` to attach base64-encoded files, where each file is `{ data, mediaType, filename? }`. The reply arrives as `message_*` events on the subscription, not as the return value of the call.
+
+Pass `options.requestContext` to merge custom context into the run's request context. Server-controlled keys win.
+
+### `steer(message, options?)`
+
+Injects a message into the in-flight run without starting a new turn.
+
+### `followUp(message, options?)`
+
+Queues a follow-up message. If the session is idle it sends immediately. If a run is active it queues for after the run completes.
+
+### `abort()`
+
+Aborts the in-flight run.
+
+### `approveTool(toolCallId, approved, options?)`
+
+Approves or declines a pending tool call raised by a `tool_approval_required` event.
+
+### `respondToToolSuspension(toolCallId, resumeData, options?)`
+
+Resumes a suspended interactive tool raised by a `tool_suspended` event. The `resumeData` shape depends on the tool: a `string` or `string[]` for `ask_user`, `"Yes"` or `"No"` for `request_access`, and a `PlanResume` for `submit_plan`.
+
+```typescript
+interface PlanResume {
+  action: 'approved' | 'rejected'
+  feedback?: string
+  path?: string
+  title?: string
+  plan?: string
+}
+```
+
+### `state(options?)`
+
+Returns the session's current mode, model, and thread for initial UI hydration and re-syncing after a reconnect. Pass `{ threadId }` to read the state for a specific thread.
+
+Returns: `Promise<AgentControllerSessionState>`
+
+### `setState(updates)`
+
+Merges key-value pairs into the session state. Existing keys not in the payload are preserved.
+
+### `switchMode(modeId)`
+
+Switches the active mode.
+
+### `switchModel(modelId, options?)`
+
+Switches the model. `options.scope` is `'thread'` (default) or `'global'`. `options.modeId` targets a specific mode.
+
+### `listThreads(options?)`
+
+Lists the session's threads, newest first. Pass `{ limit }` to cap the count and `{ tags }` to scope to threads matching every tag. A bare number is shorthand for `{ limit }`.
+
+Returns: `Promise<AgentControllerThreadInfo[]>`
+
+### `switchThread(threadId)`
+
+Switches the session to an existing thread and rebinds the stream and state.
+
+### `createThread(title?)`
+
+Creates a new thread and binds the session to it.
+
+Returns: `Promise<CreateAgentControllerThreadResponse>`
+
+### `cloneThread(options?)`
+
+Clones a thread and its messages, then binds the session to the clone. Accepts `{ sourceThreadId?, title? }`.
+
+Returns: `Promise<CreateAgentControllerThreadResponse>`
+
+### `renameThread(threadId, title)`
+
+Renames a thread.
+
+### `deleteThread(threadId)`
+
+Deletes a thread. If it's the active thread, the session unbinds.
+
+### `listMessages(threadId, limit?)`
+
+Lists the messages of a thread with `createdAt` hydrated to `Date`.
+
+Returns: `Promise<MastraDBMessage[]>`
+
+### `getGoal()`, `setGoal(objective, options?)`, `updateGoal(options)`, `clearGoal()`
+
+Read, set, update, and clear the goal for the session's thread. `setGoal` accepts `{ judgeModelId?, maxRuns? }`. `updateGoal` also accepts `status: 'active' | 'paused' | 'done'`. The agent's in-loop judge evaluates progress after each turn and reports it as `goal_evaluation` events.
+
+### `getPermissions()`, `setPermissionForCategory(category, policy)`, `setPermissionForTool(toolName, policy)`
+
+Read and set the per-category and per-tool approval policies.
+
+### `getResourceIds()`, `setResourceId(newResourceId)`
+
+Read the known resource IDs for the session and change the session's resource identity.
+
+### `getOMRecord()`
+
+Returns the observational memory record for the session's thread.
+
+### `sendNotification(input)`
+
+Sends a notification signal to the session. The agent's delivery policy decides whether the notification wakes an idle thread immediately or is held and summarised for later.
+
+Returns: `Promise<SendNotificationResult>`
+
+## Events
+
+`onEvent` receives every event the session emits, discriminated by `event.type`:
+
+| Group | Events |
+| - | - |
+| Run | `agent_start`, `agent_end`, `usage_update`, `goal_evaluation`, `follow_up_queued` |
+| Messages | `message_start`, `message_update`, `message_end` |
+| Tools | `tool_input_start`, `tool_input_delta`, `tool_input_end`, `tool_start`, `tool_update`, `tool_end`, `shell_output`, `command_exit`, `tool_approval_required`, `tool_suspended`, `tool_suspension_cancelled`, `task_updated` |
+| Session | `state_changed`, `display_state_changed`, `mode_changed`, `model_changed`, `thread_changed`, `thread_created`, `thread_deleted`, `thread_title_updated` |
+| Subagents | `subagent_start`, `subagent_text_delta`, `subagent_tool_start`, `subagent_tool_end`, `subagent_end`, `subagent_model_changed` |
+| Memory | `om_observation_start`, `om_observation_end`, `om_observation_failed`, `om_reflection_start`, `om_reflection_end`, `om_reflection_failed`, `om_buffering_start`, `om_buffering_end`, `om_buffering_failed`, `om_model_changed`, `om_activation`, `om_status`, `om_thread_title_updated` |
+| Workspace | `workspace_ready`, `workspace_error`, `workspace_status_changed` |
+| Notification | `notification`, `notification_summary`, `info`, `error` |
+
+`message_*` events carry a `MastraDBMessage` and `thread_created` carries a thread, with timestamps hydrated to `Date`.
+
+A controller can also emit events the SDK doesn't type. `AgentControllerEvent` is the union of `KnownAgentControllerEvent` and `OtherAgentControllerEvent`. Because `OtherAgentControllerEvent.type` is `string`, comparing `event.type` to a literal doesn't narrow the union. Narrow with `isKnownAgentControllerEvent(event)` first:
+
+```typescript
+import { isKnownAgentControllerEvent } from '@mastra/client-js'
+
+function handleEvent(event: AgentControllerEvent) {
+  if (!isKnownAgentControllerEvent(event)) return
+
+  switch (event.type) {
+    case 'message_update':
+      render(event.message)
+      break
+    case 'tool_approval_required':
+      showApproval(event.toolCallId)
+      break
+  }
+}
+```
+
+Use `agentControllerMessageText(message)` to pull the plain text out of a message's nested content parts.
+
+## Related
+
+- [Agent Controller](/docs/harness/agent-controller)
+- [`AgentController`](/reference/agent-controller/agent-controller-class)
+- [`Session`](/reference/agent-controller/session)

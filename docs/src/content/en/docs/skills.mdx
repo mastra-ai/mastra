@@ -1,6 +1,6 @@
 ---
 title: "Agent skills"
-description: "Give agents reusable skills directly in code, without a full workspace."
+description: "Attach reusable Agent Skills directly to Mastra agents using inline definitions, filesystem paths, dynamic loaders, and programmatic skill access."
 packages:
   - "@mastra/core"
 ---
@@ -9,7 +9,7 @@ packages:
 
 Skills are reusable instructions that teach agents how to perform specific tasks. They follow the [Agent Skills specification](https://agentskills.io).
 
-You can attach skills directly to an agent through its `skills` config, or configure them on a [workspace](/docs/sandbox/skills). Attach them to the agent when the skills belong to that specific agent and you want to define them in code with no workspace required. Use a workspace when you want skills discovered from the filesystem and shared across every agent that uses it. This page covers the agent-level approach, defining skills in code and loading them from files, plus resolving them per request.
+Attach skills directly through an agent's `skills` config, or configure them on a [workspace](/docs/sandbox/skills). Agent-level skills belong to one agent and can be defined in code without a workspace, while workspace skills are discovered from the filesystem and shared by every agent using that workspace. This page explains how to define and load agent-level skills with per-request resolution.
 
 ## When to use agent-level skills
 

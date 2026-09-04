@@ -1,4 +1,3 @@
-import type { Client, InValue } from '@libsql/client';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import {
   SkillsStorage,
@@ -27,6 +26,7 @@ import type {
 import { skillSnapshotFieldValuesEqual } from '@mastra/core/storage/domains/skills';
 import { LibSQLDB, resolveClient } from '../../db';
 import type { LibSQLDomainConfig } from '../../db';
+import type { SqliteClient as Client, SqliteInValue as InValue } from '../../db/client';
 import { buildSelectColumns, buildSelectColumnsWithAlias } from '../../db/utils';
 
 /**
@@ -514,6 +514,31 @@ export class SkillsLibSQL extends SkillsStorage {
           id: createStorageErrorId('LIBSQL', 'GET_SKILL_VERSION', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
+        },
+        error,
+      );
+    }
+  }
+
+  async getVersions(ids: string[]): Promise<SkillVersion[]> {
+    if (ids.length === 0) {
+      return [];
+    }
+    try {
+      const placeholders = ids.map(() => '?').join(', ');
+      const result = await this.#client.execute({
+        sql: `SELECT ${buildSelectColumns(TABLE_SKILL_VERSIONS)} FROM "${TABLE_SKILL_VERSIONS}" WHERE id IN (${placeholders})`,
+        args: ids,
+      });
+      return (result.rows ?? []).map(row => this.#parseVersionRow(row));
+    } catch (error) {
+      if (error instanceof MastraError) throw error;
+      throw new MastraError(
+        {
+          id: createStorageErrorId('LIBSQL', 'GET_SKILL_VERSIONS', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { count: ids.length },
         },
         error,
       );

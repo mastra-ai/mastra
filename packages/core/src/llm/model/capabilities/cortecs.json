@@ -20,6 +20,7 @@
     "gemma-3-27b-it",
     "gemma-4-26b-a4b-it",
     "gemma-4-31b-it",
+    "glm-5.3-flash",
     "glm-5v-turbo",
     "gpt-4.1",
     "gpt-4.1-mini",
@@ -45,7 +46,6 @@
     "mistral-7b-instruct-v0.2",
     "mistral-large-2402",
     "mistral-large-2512",
-    "mistral-medium-2508",
     "mistral-medium-3.5",
     "mistral-small-2503",
     "mistral-small-2603",
@@ -64,6 +64,7 @@
     "qwen3.6-27b",
     "qwen3.6-35b-a3b",
     "qwen3.8-27b",
+    "qwen3.8-flash-next",
     "voxtral-small-2507"
   ],
   "temperature": [
@@ -78,6 +79,7 @@
     "deepseek-v3.2",
     "deepseek-v4-flash-0731",
     "deepseek-v4-pro",
+    "deepseek-v4-pro-0813",
     "devstral-2512",
     "gemini-2.5-flash",
     "gemini-2.5-pro",
@@ -94,12 +96,16 @@
     "glm-5-turbo",
     "glm-5.1",
     "glm-5.2",
+    "glm-5.3",
+    "glm-5.3-flash",
     "glm-5v-turbo",
     "gpt-4.1",
     "gpt-4.1-mini",
     "gpt-4.1-nano",
     "gpt-4o",
     "gpt-4o-mini",
+    "gpt-5.1",
+    "gpt-5.4",
     "gpt-oss-120b",
     "gpt-oss-20b",
     "gpt-oss-safeguard-120b",
@@ -128,7 +134,8 @@
     "qwen3.6-27b",
     "qwen3.6-35b-a3b",
     "qwen3.8-2.4t-a95b",
-    "qwen3.8-27b"
+    "qwen3.8-27b",
+    "qwen3.8-flash-next"
   ],
   "structuredOutput": [
     "claude-4-5-sonnet",
@@ -145,6 +152,7 @@
     "cosmos3-super-reasoner",
     "deepseek-r1-0528",
     "deepseek-v3.2",
+    "deepseek-v4-pro-0813",
     "devstral-2512",
     "gemini-2.5-flash",
     "gemini-2.5-pro",
@@ -162,6 +170,8 @@
     "glm-5-turbo",
     "glm-5.1",
     "glm-5.2",
+    "glm-5.3",
+    "glm-5.3-flash",
     "glm-5v-turbo",
     "gpt-5.4",
     "gpt-5.6-luna",
@@ -192,7 +202,6 @@
     "mistral-7b-instruct-v0.3",
     "mistral-large-2402",
     "mistral-large-2512",
-    "mistral-medium-2508",
     "mistral-medium-3.5",
     "mistral-nemo-instruct-2407",
     "mistral-small-2503",
@@ -221,6 +230,7 @@
     "qwen3.6-35b-a3b",
     "qwen3.8-2.4t-a95b",
     "qwen3.8-27b",
+    "qwen3.8-flash-next",
     "voxtral-small-2507"
   ]
 }

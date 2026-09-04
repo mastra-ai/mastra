@@ -1,6 +1,6 @@
 ---
 title: "Semantic recall | Memory"
-description: "Learn how to use semantic recall in Mastra to retrieve relevant messages from past conversations using vector search and embeddings."
+description: "Retrieve relevant messages from past Mastra conversations with semantic recall, vector search, embeddings, metadata filters, and configurable storage."
 packages:
   - "@mastra/core"
   - "@mastra/fastembed"
@@ -30,7 +30,33 @@ Semantic recall is RAG-based search that helps agents maintain context across lo
 
 It uses vector embeddings of messages for similarity search and integrates with vector stores, plus has configurable context windows around retrieved messages.
 
-![Diagram showing Mastra Memory semantic recall](/img/semantic-recall.png)
+```mermaid
+flowchart LR
+  accTitle: Semantic recall before and after an LLM request
+  accDescr: The pre-LLM pipeline embeds a user prompt and queries the vector database. The results become the semantic recall part of the context messages, which feed the context window. The post-LLM pipeline embeds all new messages and inserts them into the vector database.
+
+  subgraph pre["RAG pipeline pre-LLM"]
+    direction TB
+    prompt(( user prompt )) --> queryEmbedding([create embeddings<br/>from user prompt])
+    queryEmbedding --> query@{ shape: cyl, label: "query vector DB" }
+  end
+
+  subgraph context["context"]
+    direction BT
+    contextWindow([context window])
+    messages[context messages<br/><br/>system instruction<br/>working memory<br/><strong>semantic recall</strong><br/>conversation history<br/>new user message]
+    messages --> contextWindow
+  end
+
+  subgraph post["RAG pipeline post-LLM"]
+    direction TB
+    llm([LLM request]) --> messageEmbedding([create embeddings<br/>from all new messages])
+    messageEmbedding --> insert@{ shape: cyl, label: "insert in<br/>vector DB" }
+  end
+
+  pre -- results --> context
+  context --> post
+```
 
 When it's enabled, new messages are used to query a vector DB for semantically similar messages.
 
@@ -353,6 +379,25 @@ const agent = new Agent({
   }),
 })
 ```
+
+FastEmbed also exposes the multilingual E5 model for non-English content. E5 is asymmetric, so it's exposed as two models: `multilingualE5LargePassage` for text you index and `multilingualE5LargeQuery` for search text.
+
+```ts {3,7}
+import { Memory } from '@mastra/memory'
+import { Agent } from '@mastra/core/agent'
+import { fastembed } from '@mastra/fastembed'
+
+const agent = new Agent({
+  id: 'agent',
+  memory: new Memory({
+    embedder: fastembed.multilingualE5LargePassage,
+  }),
+})
+```
+
+Memory uses a single embedder for both storing and recalling messages, so pick one of the two models and use it consistently. Use the paired `multilingualE5LargeQuery` model only where you control both sides of the pipeline, such as a RAG workflow that indexes with the passage model and searches with the query model.
+
+Multilingual E5 produces 1024-dimensional vectors. Your vector index must be created with matching dimensions, and E5 vectors can't be mixed with vectors from another embedder in the same index.
 
 ## PostgreSQL index optimization
 

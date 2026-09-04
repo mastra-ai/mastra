@@ -148,16 +148,19 @@ export class ConvexDB extends MastraBase {
     tableName,
     id,
     record,
+    expected,
   }: {
     tableName: ConvexStorageTable;
     id: string;
     record: Record<string, any>;
+    expected?: Record<string, any>;
   }): Promise<boolean> {
     return this.client.callStorage<boolean>({
       op: 'patch',
       tableName,
       id,
       record: this.normalizePatch(record),
+      expected,
     });
   }
 

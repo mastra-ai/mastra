@@ -28,8 +28,17 @@ import { LicenseClient } from '../license';
 import type { MastraModelGatewayInterface } from '../llm/model/gateways';
 import { getGatewayId } from '../llm/model/gateways';
 import { defaultGateways } from '../llm/model/gateways/defaults';
-import { LogLevel, noopLogger, ConsoleLogger, DualLogger } from '../logger';
-import type { IMastraLogger } from '../logger';
+import {
+  LogLevel,
+  noopLogger,
+  ConsoleLogger,
+  DualLogger,
+  isAdaptableLogger,
+  resolveTraceFields,
+  isObservabilityExportSuppressed,
+  createExportSuppressedLogger,
+} from '../logger';
+import type { IMastraLogger, LoggerAdapterOptions } from '../logger';
 import type { MCPServerBase } from '../mcp';
 import type { MastraMemory } from '../memory';
 import type { NotificationDispatchConfig } from '../notifications/workflow';
@@ -49,6 +58,7 @@ import type {
 } from '../observability';
 import { NoOpObservability, noOpLoggerContext, noOpMetricsContext } from '../observability';
 import { initContextStorage } from '../observability/context-storage';
+import { resolveCurrentSpan } from '../observability/utils';
 import type { Processor } from '../processors';
 import type { AgentScheduleHandler } from '../schedules/define';
 import { metadataEqual, targetsEqual } from '../schedules/row-diff';
@@ -64,6 +74,7 @@ import type { Schedule, ScheduleUpdate, SchedulesStorage } from '../storage/doma
 import { WorkflowsInMemory } from '../storage/domains/workflows/inmemory';
 import { augmentWithInit } from '../storage/storageWithInit';
 import type { StorageResolvedPromptBlockType } from '../storage/types';
+import { trackFeatureUsage } from '../telemetry/feature-telemetry';
 import type { ToolLoopAgentLike } from '../tool-loop-agent';
 import { isToolLoopAgentLike, toolLoopAgentToMastraAgent } from '../tool-loop-agent';
 import type { ToolAction, ToolPayloadTransformPolicy } from '../tools';
@@ -85,7 +96,7 @@ import {
   toJsonSchemaOrUndefined,
 } from '../workflows/dynamic';
 import { WorkflowEventProcessor } from '../workflows/evented/workflow-event-processor';
-import { computeNextFireAt } from '../workflows/scheduler';
+import { computeNextFireAt, computeScheduleDefinitionHash } from '../workflows/scheduler';
 import type { WorkflowScheduleConfig, SchedulerConfig, Scheduler } from '../workflows/scheduler';
 import type { AnyWorkspace, RegisteredWorkspace, Workspace } from '../workspace';
 import {
@@ -158,7 +169,17 @@ function collectWorkflowScheduleConfigs(workflow: unknown): WorkflowScheduleConf
  * ids are URL-encoded so delimiters in user-supplied ids cannot collide
  * across workflows (e.g. `foo__bar` single vs `foo` array-entry `bar`).
  */
+function encodeDeclarativeScheduleId(id: string): string {
+  return encodeURIComponent(id).replaceAll('_', '%5F');
+}
+
 function declarativeScheduleRowId(workflowId: string, scheduleId?: string): string {
+  const encodedWorkflow = encodeDeclarativeScheduleId(workflowId);
+  if (scheduleId === undefined) return `wf_${encodedWorkflow}`;
+  return `wf_${encodedWorkflow}__${encodeDeclarativeScheduleId(scheduleId)}`;
+}
+
+function legacyDeclarativeScheduleRowId(workflowId: string, scheduleId?: string): string {
   const encodedWorkflow = encodeURIComponent(workflowId);
   if (scheduleId === undefined) return `wf_${encodedWorkflow}`;
   return `wf_${encodedWorkflow}__${encodeURIComponent(scheduleId)}`;
@@ -171,8 +192,8 @@ function declarativeScheduleRowId(workflowId: string, scheduleId?: string): stri
  * `wf_<encoded(workflowId)>__` (array form). Returns undefined when no
  * registered workflow owns the row.
  */
-function ownerWorkflowIdForRow(rowId: string, byWorkflow: Map<string, Set<string>>): string | undefined {
-  for (const workflowId of byWorkflow.keys()) {
+function ownerWorkflowIdForRow(rowId: string, workflowIds: Iterable<string>): string | undefined {
+  for (const workflowId of workflowIds) {
     const prefix = `wf_${encodeURIComponent(workflowId)}`;
     if (rowId === prefix || rowId.startsWith(`${prefix}__`)) {
       return workflowId;
@@ -273,6 +294,18 @@ export interface Config<
    * @default `INFO` level in development, `WARN` in production.
    */
   logger?: TLogger | false;
+
+  /**
+   * How the configured logger integrates with Mastra observability.
+   *
+   * - `correlation` — inject `trace_id`/`span_id` into the logger's native
+   *   records (stdout, transports) when a span is active. Requires a logger
+   *   that supports adapters (e.g. `ConsoleLogger`, `PinoLogger`). Default: true.
+   * - `export` — export log records to Mastra observability storage/exporters.
+   *   Set to false to keep trace-correlated stdout without shipping logs.
+   *   Default: true.
+   */
+  loggerOptions?: Partial<LoggerAdapterOptions>;
 
   /**
    * Workflows provide type-safe, composable task execution with built-in error handling.
@@ -489,8 +522,11 @@ export interface Config<
    * Scheduler configuration for cron-driven workflow triggers.
    *
    * The scheduler is auto-enabled when any registered workflow declares a
-   * `schedule` config or when `scheduler.enabled` is true. It requires a
-   * storage adapter implementing the `schedules` domain (e.g. `@mastra/libsql`).
+   * `schedule` config, when schedule rows exist in storage, when a schedule is
+   * created at runtime (in this process or — via the shared pubsub — in
+   * another), or when `scheduler.enabled` is true. Apps that never schedule
+   * anything never poll storage. It requires a storage adapter implementing
+   * the `schedules` domain (e.g. `@mastra/libsql`).
    */
   scheduler?: SchedulerConfig;
 
@@ -538,8 +574,9 @@ export interface Config<
    * so they can be filtered by environment without passing
    * `tracingOptions.metadata.environment` on every call.
    *
-   * If unset, falls back to `process.env.NODE_ENV`. If neither is set the field
-   * is left undefined rather than guessed.
+   * If unset, resolves to `'development'` for `mastra dev` runs (detected via
+   * `MASTRA_DEV`), then falls back to `process.env.NODE_ENV`. If none of these
+   * are set the field is left undefined rather than guessed.
    *
    * Per-call `tracingOptions.metadata.environment` always takes precedence.
    *
@@ -652,6 +689,23 @@ export interface MastraRecoveryConfig {
  * });
  * ```
  */
+// Tracks which Mastra instance last attached observability to a logger, so
+// sharing one logger instance across multiple Mastras warns instead of
+// silently re-targeting the export (weak: never pins loggers or Mastras).
+// Keyed on the logger's attachment identity (`__observabilityAttachmentKey`,
+// e.g. PinoLogger's family-shared ref cell) so attaching a child of an
+// already-wired family also warns; falls back to the instance itself.
+const attachedLoggerOwners = new WeakMap<object, unknown>();
+
+/**
+ * Pubsub topic used to tell every process running the default worker set that
+ * a schedule now exists and the scheduler tick loop should start. Lets a
+ * standalone worker that booted with an empty schedules table discover
+ * schedules created later by the API process without continuously polling storage.
+ */
+const SCHEDULER_WAKE_TOPIC = 'scheduler';
+const SCHEDULER_WAKE_EVENT = 'scheduler.wake';
+
 export class Mastra<
   TAgents extends Record<string, Agent<any>> = Record<string, Agent<any>>,
   TWorkflows extends Record<string, AnyWorkflow> = Record<string, AnyWorkflow>,
@@ -671,6 +725,9 @@ export class Mastra<
   #vectors?: TVectors;
   #agents: TAgents;
   #logger: TLogger;
+  #loggerAdapterOptions: LoggerAdapterOptions = { correlation: true, export: true };
+  #wiredLoggers = new WeakSet<IMastraLogger>();
+  #fallbackWrappers = new WeakMap<IMastraLogger, DualLogger>();
   #loggerExplicit = false;
   #workflows: TWorkflows;
   #harnesses: Record<string, Harness<any>> = {};
@@ -717,10 +774,19 @@ export class Mastra<
    */
   #hasScheduledWorkflow = false;
   /**
+   * Ids of persisted dynamic workflow definitions that failed to rehydrate at
+   * boot. Their declarative `wf_*` schedule rows are exempt from orphan
+   * deletion — the workflow still exists in storage, so its schedules aren't
+   * orphans; deleting them would silently lose the user's schedules.
+   */
+  #failedDynamicWorkflowIds = new Set<string>();
+  /**
    * Set while a file-based agent schedule sync is queued, so registering a
    * batch of agents after startup triggers one sweep rather than one per agent.
    */
   #fsScheduleSyncPending = false;
+  /** Set once file-based agent usage has been reported for this Mastra instance. */
+  #fsAgentUsageTracked = false;
   /**
    * Set when an agent registers while a sweep is already in flight. That sweep
    * may have read the agent map before the agent landed, so it runs one more
@@ -798,6 +864,10 @@ export class Mastra<
     topic: string;
     cb: EventCallback;
   }> = [];
+  // Callback subscribed to SCHEDULER_WAKE_TOPIC while the scheduler is not
+  // running, so another process creating a schedule can start it here.
+  // Removed once the scheduler starts and in stopWorkers().
+  #schedulerWakeSubscription?: EventCallback;
 
   #events: {
     [topic: string]: ((event: Event) => Promise<void> | void)[];
@@ -943,8 +1013,8 @@ export class Mastra<
    * Returns the workflow scheduler owned by the SchedulerWorker,
    * or undefined if the scheduler is not enabled / not yet started.
    *
-   * The scheduler is created when `startWorkers()` initializes the
-   * SchedulerWorker (guarded by `#shouldEnableScheduler()`).
+   * It is created when worker startup detects scheduling work, or lazily when
+   * a schedule is created after boot.
    *
    * This is runtime plumbing (the cron tick loop). To create, list, pause,
    * resume, or delete schedules use `mastra.schedules` instead.
@@ -1074,9 +1144,10 @@ export class Mastra<
   }
 
   /**
-   * Returns the deployment environment name configured on this Mastra instance,
-   * falling back to `process.env.NODE_ENV` when unset, or `undefined` if neither
-   * is provided.
+   * Returns the deployment environment name configured on this Mastra instance.
+   * When unset, resolves to `'development'` for `mastra dev` runs (detected via
+   * `MASTRA_DEV`), then falls back to `process.env.NODE_ENV`, or `undefined` if
+   * none are provided.
    *
    * Observability automatically reads this and attaches it to all signals so
    * consumers can filter by environment without passing
@@ -1229,7 +1300,7 @@ export class Mastra<
   ): void {
     if (this.#observability instanceof NoOpObservability) {
       this.#observability = entrypoint;
-      this.#observability.setLogger({ logger: this.#logger });
+      this.#observability.setLogger({ logger: this.#observabilitySafeLogger() as unknown as TLogger });
       this.#observability.setMastraContext({ mastra: this });
       this.#observability.registerInstance('default', instance, true);
     }
@@ -1302,9 +1373,13 @@ export class Mastra<
     // Store global version overrides
     this.#versions = config?.versions;
 
-    // Resolve deployment environment: explicit config wins, else fall back to
-    // NODE_ENV. Leave undefined if neither is set rather than guessing.
-    this.#environment = config?.environment ?? process.env.NODE_ENV;
+    // Resolve deployment environment: explicit config wins. `mastra dev` spawns
+    // its server with NODE_ENV=production so dependencies run in production
+    // mode, but flags the run with MASTRA_DEV — treat that as development so
+    // Studio telemetry isn't tagged as production. Otherwise fall back to
+    // NODE_ENV, leaving undefined if unset rather than guessing.
+    this.#environment =
+      config?.environment ?? (process.env.MASTRA_DEV === 'true' ? 'development' : process.env.NODE_ENV);
     this.#toolPayloadTransform = normalizeToolPayloadTransformPolicy(
       config?.transform ?? (config as any)?.toolPayloadProjection,
     );
@@ -1366,9 +1441,7 @@ export class Mastra<
       if (pubsubModes.includes('pull')) {
         defaultWorkers.push(new OrchestrationWorker());
       }
-      // SchedulerWorker is added lazily in startWorkers() rather than here
-      // because workflows (and their schedule configs) are registered after
-      // this block runs, so #hasScheduledWorkflow is not yet set.
+      // SchedulerWorker is added lazily in startWorkers() once scheduling work exists.
       if (config?.backgroundTasks?.enabled) {
         defaultWorkers.push(new BackgroundTaskWorker(config.backgroundTasks));
       }
@@ -1428,7 +1501,7 @@ export class Mastra<
         this.#logger?.warn(
           'No `storage` configured on Mastra — falling back to an in-memory store. ' +
             'In-memory storage is not durable: all data is lost on restart, and it is not safe for production. ' +
-            'Configure a persistent storage adapter (e.g. @mastra/libsql, @mastra/pg, @mastra/cloudflare).',
+            'Configure a persistent storage adapter (e.g. @mastra/libsql, @mastra/pg, @mastra/cloudflare). See https://mastra.ai/docs/storage',
         );
       });
     }
@@ -1457,8 +1530,9 @@ export class Mastra<
       this.#observabilityExplicit = true;
       if (typeof config.observability.getDefaultInstance === 'function') {
         this.#observability = config.observability;
-        // Set logger early
-        this.#observability.setLogger({ logger: this.#logger });
+        // Set logger early (export-suppressed so observability's own logs
+        // never feed back into observability export once wiring completes)
+        this.#observability.setLogger({ logger: this.#observabilitySafeLogger() as unknown as TLogger });
       } else {
         this.#logger?.warn(
           'Observability configuration error: Expected an Observability instance, but received a config object. ' +
@@ -1472,13 +1546,15 @@ export class Mastra<
       this.#observability = new NoOpObservability();
     }
 
-    // Wrap the logger in a DualLogger so all existing this.logger.info(...) calls
-    // also forward to loggerVNext (observability structured logging).
-    // This is transparent — no call sites need to change.
-    // Uses a lazy getter so loggerVNext is always resolved at call time
-    // (observability may not be fully initialized yet at this point).
-    const dualLogger = new DualLogger(this.#logger, () => this.loggerVNext);
-    this.#logger = dualLogger as unknown as TLogger;
+    // Wire the logger into observability so all existing this.logger.info(...)
+    // calls get trace correlation and/or export. Adaptable loggers (ConsoleLogger,
+    // PinoLogger) are attached in place — trace fields land in their native
+    // records. Other loggers fall back to the deprecated DualLogger wrapper.
+    this.#loggerAdapterOptions = {
+      correlation: config?.loggerOptions?.correlation ?? true,
+      export: config?.loggerOptions?.export ?? true,
+    };
+    this.#logger = this.#wireLoggerObservability(this.#logger);
 
     this.#storage = storage;
 
@@ -1825,10 +1901,16 @@ export class Mastra<
    */
   #collectDeclarativeSchedules(): Array<{
     scheduleId: string;
+    legacyScheduleId: string;
     workflowId: string;
     cfg: WorkflowScheduleConfig;
   }> {
-    const out: Array<{ scheduleId: string; workflowId: string; cfg: WorkflowScheduleConfig }> = [];
+    const out: Array<{
+      scheduleId: string;
+      legacyScheduleId: string;
+      workflowId: string;
+      cfg: WorkflowScheduleConfig;
+    }> = [];
     const workflows = this.#workflows as Record<string, AnyWorkflow>;
     for (const workflow of Object.values(workflows ?? {})) {
       const configs = collectWorkflowScheduleConfigs(workflow);
@@ -1838,7 +1920,10 @@ export class Mastra<
         const scheduleId = isArrayForm
           ? declarativeScheduleRowId(workflow.id, cfg.id)
           : declarativeScheduleRowId(workflow.id);
-        out.push({ scheduleId, workflowId: workflow.id, cfg });
+        const legacyScheduleId = isArrayForm
+          ? legacyDeclarativeScheduleRowId(workflow.id, cfg.id)
+          : legacyDeclarativeScheduleRowId(workflow.id);
+        out.push({ scheduleId, legacyScheduleId, workflowId: workflow.id, cfg });
       }
     }
     return out;
@@ -1901,7 +1986,19 @@ export class Mastra<
    * @internal — public so SchedulerWorker can call it, not part of the user API.
    */
   async registerDeclarativeSchedules(schedulesStore: SchedulesStorage): Promise<void> {
-    const declared = this.#collectDeclarativeSchedules();
+    const allRows = await schedulesStore.listSchedules();
+    const rowsById = new Map(allRows.map(row => [row.id, row]));
+    const declared = this.#collectDeclarativeSchedules().map(entry => {
+      const legacyRow = rowsById.get(entry.legacyScheduleId);
+      if (
+        entry.legacyScheduleId !== entry.scheduleId &&
+        legacyRow?.target.type === 'workflow' &&
+        legacyRow.target.workflowId === entry.workflowId
+      ) {
+        return { ...entry, scheduleId: entry.legacyScheduleId };
+      }
+      return entry;
+    });
     const declaredIds = new Set(declared.map(d => d.scheduleId));
 
     // Group declared ids by workflow so we can detect orphans (rows that
@@ -1911,8 +2008,12 @@ export class Mastra<
     // have their old rows cleaned up.
     const declaredIdsByWorkflow = new Map<string, Set<string>>();
     const workflows = this.#workflows as Record<string, AnyWorkflow> | undefined;
+    // `#workflows` is keyed by registration key, which may differ from
+    // `workflow.id` — index by id for the definition-hash lookup below.
+    const workflowsById = new Map<string, AnyWorkflow>();
     for (const workflow of Object.values(workflows ?? {})) {
       declaredIdsByWorkflow.set(workflow.id, new Set());
+      workflowsById.set(workflow.id, workflow);
     }
     for (const { workflowId, scheduleId } of declared) {
       if (!declaredIdsByWorkflow.has(workflowId)) declaredIdsByWorkflow.set(workflowId, new Set());
@@ -1921,7 +2022,7 @@ export class Mastra<
 
     for (const { scheduleId, workflowId, cfg } of declared) {
       try {
-        const existing = await schedulesStore.getSchedule(scheduleId);
+        const existing = rowsById.get(scheduleId);
         const now = Date.now();
         const target: Schedule['target'] = {
           type: 'workflow',
@@ -1930,6 +2031,12 @@ export class Mastra<
           initialState: cfg.initialState,
           requestContext: cfg.requestContext,
         };
+        // Stamp the current build's step-graph hash so the scheduler can
+        // refuse to claim this row from an instance whose local workflow
+        // definition differs (stale-build fencing, #19169). `targetsEqual`
+        // below picks up hash changes and rewrites the row on redeploy.
+        const definitionHash = computeScheduleDefinitionHash(workflowsById.get(workflowId)?.serializedStepGraph);
+        if (definitionHash) target.definitionHash = definitionHash;
 
         if (!existing) {
           await schedulesStore.createSchedule({
@@ -1982,11 +2089,29 @@ export class Mastra<
     //      loops (see WorkflowEventProcessor#dispatch).
     // User-created schedules (via the schedules API) don't use the `wf_`
     // prefix, so they're untouched.
-    const allRows = await schedulesStore.listSchedules();
     for (const row of allRows) {
       if (declaredIds.has(row.id)) continue;
       if (!row.id.startsWith('wf_')) continue;
-      const ownerWorkflowId = ownerWorkflowIdForRow(row.id, declaredIdsByWorkflow) ?? ownerWorkflowIdFromRowId(row.id);
+      // A dynamic workflow that failed to rehydrate is not deleted — keep its
+      // schedule rows so a later successful boot picks them back up. Match by
+      // generated row-id prefix (not by decoding the row id): workflow ids may
+      // themselves contain `__`, which `encodeURIComponent` doesn't escape, so
+      // decoding the segment before the first `__` can recover the wrong id.
+      const targetWorkflowId = row.target.type === 'workflow' ? row.target.workflowId : undefined;
+      const failedOwnerId =
+        targetWorkflowId && this.#failedDynamicWorkflowIds.has(targetWorkflowId)
+          ? targetWorkflowId
+          : ownerWorkflowIdForRow(row.id, this.#failedDynamicWorkflowIds);
+      if (failedOwnerId !== undefined) {
+        this.#logger?.warn?.(
+          `Keeping declarative schedule "${row.id}": dynamic workflow "${failedOwnerId}" failed to load this boot.`,
+        );
+        continue;
+      }
+      const ownerWorkflowId =
+        targetWorkflowId ??
+        ownerWorkflowIdForRow(row.id, declaredIdsByWorkflow.keys()) ??
+        ownerWorkflowIdFromRowId(row.id);
       if (!ownerWorkflowId) continue;
       try {
         await schedulesStore.deleteSchedule(row.id);
@@ -2211,18 +2336,27 @@ export class Mastra<
   /**
    * Resolve a versioned variant of an agent by applying stored overrides from the editor.
    *
-   * Requires the editor package to be configured — throws
-   * `MASTRA_EDITOR_REQUIRED_FOR_VERSIONED_AGENT_LOOKUP` if it is not.
+   * Looking up a specific `versionId` requires the editor package to be
+   * configured — throws `MASTRA_EDITOR_REQUIRED_FOR_VERSIONED_AGENT_LOOKUP` if
+   * it is not. A `status` selector is a default rather than a request for a
+   * specific stored version (the server stamps one on every agent request), so
+   * without the editor there are no stored versions and the code-defined agent
+   * is returned as-is.
    *
    * @param agent - The code-defined agent to resolve a version for.
    * @param version - Selects a version by ID or publication status.
-   * @returns A forked agent instance with the stored overrides applied.
+   * @returns The code-defined agent for a status selector without an editor, otherwise a forked
+   *   agent instance with the stored overrides applied.
    */
   public async resolveVersionedAgent<TAgent extends Agent>(
     agent: TAgent,
     version: VersionSelector | { status?: 'draft' | 'published' },
   ): Promise<TAgent> {
     const editor = this.getEditor();
+
+    if (!editor && !('versionId' in version)) {
+      return agent;
+    }
 
     if (!editor) {
       const error = new MastraError({
@@ -2450,6 +2584,13 @@ export class Mastra<
       const durableWorkflows = durableAgent.getDurableWorkflows?.() ?? [];
       for (const workflow of durableWorkflows) {
         this.addWorkflow(workflow, workflow.id);
+        // Hide the agent's backing loop workflow from listWorkflows() — it is
+        // internal execution plumbing, not a user-runnable workflow. Identity
+        // guard: addWorkflow() no-ops on key collision, so a user workflow
+        // pre-registered under the same id must stay visible.
+        if ((this.#workflows as Record<string, unknown>)[workflow.id] === workflow) {
+          this.#hiddenWorkflowKeys.add(workflow.id);
+        }
       }
 
       // Register configured processor workflows from the agent
@@ -2678,7 +2819,7 @@ export class Mastra<
     if (declaredSchedulesOf(agent).length === 0) return;
 
     const worker = this.#findSchedulerWorker();
-    // Workers not started yet — SchedulerWorker.init() will sync these.
+    // SchedulerWorker.init() syncs these when the scheduler starts.
     if (!worker?.scheduler) return;
 
     // A sweep is already in flight. It may already have read the agent map, so
@@ -2733,6 +2874,7 @@ export class Mastra<
     }
 
     const agents = this.#agents as Record<string, Agent<any>>;
+    let registeredCount = 0;
     for (const [key, agent] of Object.entries(fsAgents)) {
       if (agent == null) {
         continue;
@@ -2744,6 +2886,12 @@ export class Mastra<
         continue;
       }
       this.addAgent(agent, key, { source: 'fs' });
+      registeredCount++;
+    }
+
+    if (registeredCount > 0 && !this.#fsAgentUsageTracked) {
+      this.#fsAgentUsageTracked = true;
+      trackFeatureUsage('file_based_agents', { fs_agent_count: registeredCount });
     }
   }
 
@@ -2866,10 +3014,9 @@ export class Mastra<
     }
 
     this.#observability = fsObservability;
-    // Pass the raw logger (not the DualLogger) to observability to avoid
-    // circular forwarding, mirroring setLogger().
-    const rawLogger = this.#logger instanceof DualLogger ? this.#logger.baseLogger : this.#logger;
-    this.#observability.setLogger({ logger: rawLogger as any });
+    // Pass an export-suppressed view of the logger to observability so its
+    // internal logs never feed back into observability export.
+    this.#observability.setLogger({ logger: this.#observabilitySafeLogger() as any });
     this.#observability.setMastraContext({ mastra: this as any });
   }
 
@@ -3472,6 +3619,28 @@ export class Mastra<
     }
   }
 
+  /**
+   * Whether this process consumes workflow-execution events itself, i.e.
+   * whether a `workflow.start` published here would be handled here.
+   *
+   * True when a local OrchestrationWorker is pulling the `workflows` topic,
+   * or when a push-only pubsub has `handleWorkflowEvent` wired directly
+   * (`#wirePushWorkflowSubscription`).
+   *
+   * The scheduler uses this to keep a scheduled fire on the instance that
+   * claimed it (#19169). Scheduler and execution workers start through
+   * separate paths (`#startSchedulingWorkers` / `#startExecutionWorkers`),
+   * so a scheduler-only process is a supported topology and must keep
+   * publishing to the shared topic instead of stranding the fire locally.
+   *
+   * @internal
+   */
+  __hasLocalWorkflowExecution(): boolean {
+    if (this.#pushSubscription) return true;
+    const orchestration = this.#workers.find(w => w.name === 'orchestration');
+    return !!orchestration?.isRunning;
+  }
+
   __hasInternalWorkflow(id: string, runId?: string): boolean {
     if (runId) {
       // Only the exact run-scoped entry or the genuinely-unscoped slot — never
@@ -3714,6 +3883,13 @@ export class Mastra<
     }
     for (const runSnapshot of activeRuns.runs) {
       const workflow = this.getWorkflowById(runSnapshot.workflowName);
+      if (workflow?.options?.autoRestartActiveRuns === false) {
+        this.#logger.debug('Skipping workflow run auto-restart; workflow opts out of generic recovery', {
+          workflow: runSnapshot.workflowName,
+          runId: runSnapshot.runId,
+        });
+        continue;
+      }
       try {
         const run = await workflow.createRun({ runId: runSnapshot.runId });
         await run.restart();
@@ -4769,8 +4945,7 @@ export class Mastra<
           }
         })();
       }
-      // If the worker doesn't exist yet (workers not started), schedules
-      // will be registered when SchedulerWorker.init() runs.
+      // SchedulerWorker.init() registers this schedule when the scheduler starts.
     }
   }
 
@@ -4787,6 +4962,12 @@ export class Mastra<
     (this.#workflows as Record<string, AnyWorkflow>)[key] = workflow;
     this.#hiddenWorkflowKeys.delete(key);
     this.registerStaticWorkflowScorers(workflow);
+    if (collectWorkflowScheduleConfigs(workflow).length > 0) {
+      this.#hasScheduledWorkflow = true;
+    }
+    // Declarative schedule (re-)registration happens in addDynamicWorkflows()
+    // after definition persistence succeeds, so a persistence failure can't
+    // leave schedule rows reflecting a rolled-back registry.
   }
 
   /**
@@ -4905,6 +5086,7 @@ export class Mastra<
         stateSchema: def.stateSchema,
         requestContextSchema: def.requestContextSchema,
         graph: def.graph,
+        schedule: def.schedule,
       }),
     }));
 
@@ -4984,12 +5166,33 @@ export class Mastra<
             stateSchema: normalized.stateSchema,
             requestContextSchema: normalized.requestContextSchema,
             graph: normalized.graph,
+            schedule: normalized.schedule,
           });
         }
       }
     } catch (error) {
       restoreRegistry();
       throw error;
+    }
+
+    // Synchronize declarative schedules only after every registry replacement
+    // and definition upsert has succeeded. Run for every replacement — a
+    // replacement that dropped its schedules must still sweep the old wf_*
+    // rows. A sync failure is logged, not thrown: the registry and persisted
+    // definitions are already consistent, and the next boot re-syncs.
+    const worker = this.#findSchedulerWorker();
+    if (worker?.scheduler) {
+      try {
+        const schedulesStore = await this.#storage?.getStore('schedules');
+        if (schedulesStore) {
+          await this.registerDeclarativeSchedules(schedulesStore);
+        }
+      } catch (error) {
+        this.#logger?.error('Failed to synchronize declarative schedules after dynamic workflow registration', {
+          workflowIds: ordered.map(({ normalized }) => normalized.id),
+          error,
+        });
+      }
     }
   }
 
@@ -5005,6 +5208,7 @@ export class Mastra<
     if (!store) return;
 
     const { definitions } = await store.list({ status: 'active' });
+    this.#failedDynamicWorkflowIds.clear();
 
     // Code-registered workflows win; storage is additive.
     const pending = definitions.filter(d => !(this.#workflows as Record<string, AnyWorkflow>)[d.id]);
@@ -5040,6 +5244,7 @@ export class Mastra<
               stateSchema: def.stateSchema as Record<string, any> | undefined,
               requestContextSchema: def.requestContextSchema as Record<string, any> | undefined,
               graph: def.graph,
+              schedule: def.schedule,
             },
             this,
             // Lenient at boot (save path is strict): degrade to z.any() + warn.
@@ -5051,11 +5256,13 @@ export class Mastra<
           this.addWorkflow(workflow as AnyWorkflow, def.id);
           loaded.add(def.id);
         } catch (error) {
+          this.#failedDynamicWorkflowIds.add(def.id);
           this.#logger?.error?.(`Failed to load dynamic workflow "${def.id}"`, { error });
         }
       }
     }
     if (remaining.size > 0) {
+      for (const id of remaining.keys()) this.#failedDynamicWorkflowIds.add(id);
       const stuck = Array.from(remaining.keys()).join(', ');
       this.#logger?.error?.(
         `Failed to load dynamic workflows (cycle or unresolved nested-workflow reference): ${stuck}`,
@@ -5079,18 +5286,100 @@ export class Mastra<
   }
 
   /**
+   * Publish a best-effort cross-process wake after the schedule row is durable.
+   * This also runs in producer-only (`workers: false`) processes.
+   *
+   * @internal
+   */
+  async __publishSchedulerWake(scheduleId: string): Promise<void> {
+    try {
+      await this.#pubsub.publish(SCHEDULER_WAKE_TOPIC, { type: SCHEDULER_WAKE_EVENT, runId: scheduleId, data: {} });
+    } catch (err) {
+      this.#logger?.warn?.('Failed to publish scheduler wake event', err as any);
+    }
+  }
+
+  /** Subscribe until this process's scheduling workers start. Idempotent. */
+  async #wireSchedulerWakeSubscription(): Promise<void> {
+    if (this.#schedulerWakeSubscription) return;
+    const cb: EventCallback = async (event, ack, nack) => {
+      try {
+        // Persistent backends require every delivery, including unknown event
+        // types, to be settled.
+        if (event.type !== SCHEDULER_WAKE_EVENT) {
+          await ack?.();
+          return;
+        }
+        this.#schedulerRequested = true;
+        // Mid-boot (subscribed before the worker start loop ran) the flag is
+        // enough: `startWorkers()` re-checks it before returning. Injecting
+        // here would race that loop and start the scheduler twice.
+        if (this.#workersStarted) {
+          await this.#ensureSchedulingWorkersStarted();
+        }
+        await ack?.();
+      } catch (err) {
+        await nack?.();
+        // Some PubSub backends invoke callbacks without observing returned
+        // promise rejections, so log after nacking instead of rethrowing.
+        this.#logger?.warn?.('Failed to start scheduling workers from wake event', err as any);
+      }
+    };
+    this.#schedulerWakeSubscription = cb;
+    try {
+      // Wake events are transient hints; the awaited boot probe below is the
+      // durable recovery path. Starting from latest avoids replaying retained
+      // wakes and starting the scheduler when no schedule rows remain.
+      await this.#pubsub.subscribe(SCHEDULER_WAKE_TOPIC, cb, { startFrom: 'latest' });
+    } catch (err) {
+      // Allow a later startWorkers() call to retry a transient subscribe error.
+      if (this.#schedulerWakeSubscription === cb) {
+        this.#schedulerWakeSubscription = undefined;
+      }
+      throw err;
+    }
+  }
+
+  async #unwireSchedulerWakeSubscription(): Promise<void> {
+    const cb = this.#schedulerWakeSubscription;
+    if (!cb) return;
+    this.#schedulerWakeSubscription = undefined;
+    await this.#pubsub.unsubscribe(SCHEDULER_WAKE_TOPIC, cb);
+  }
+
+  /**
+   * One-shot boot probe for persisted agent, workflow, or notification-dispatch
+   * schedules. Runtime discovery uses the wake subscription instead.
+   */
+  async #detectPersistedSchedulerWork(): Promise<void> {
+    if (!this.#storage) return;
+    try {
+      const schedulesStore = await this.#storage.getStore('schedules');
+      if (!schedulesStore) return;
+
+      const rows = await schedulesStore.listSchedules();
+      // A leftover dispatcher row must not wake the scheduler when dispatch
+      // has since been disabled — nothing would consume it.
+      const dispatchDisabled = this.#notificationDispatchConfig?.enabled === false;
+      const hasWork = rows.some(row => !dispatchDisabled || row.id !== NOTIFICATION_DISPATCH_SCHEDULE_ROW_ID);
+      if (hasWork) this.#schedulerRequested = true;
+    } catch (err) {
+      this.#logger?.warn?.('Failed to detect persisted scheduler work on boot', err as any);
+    }
+  }
+
+  /**
    * Signal that a deferred notification exists and the dispatcher schedule is
    * needed. Lazily upserts the dispatcher schedule row (imperative, non-`wf_`
    * id so declarative orphan-cleanup leaves it alone) and requests the
-   * scheduler — mirroring `__ensureScheduleRuntimeReady()`. Idle apps that
-   * never defer a notification never start the scheduler (see #18864).
+   * scheduler — mirroring `__ensureScheduleRuntimeReady()`. This also supports
+   * processes that publish notifications without running workers locally.
    *
    * @internal
    */
   async __ensureNotificationDispatchReady(): Promise<void> {
     if (this.#notificationDispatchReady) return;
     if (this.#notificationDispatchConfig?.enabled === false) return;
-    if (this.#schedulerDisabled()) return;
     if (!this.#storage) return;
 
     try {
@@ -5132,6 +5421,7 @@ export class Mastra<
     if (this.#workersStarted) {
       await this.#ensureSchedulingWorkersStarted();
     }
+    await this.__publishSchedulerWake(NOTIFICATION_DISPATCH_SCHEDULE_ROW_ID);
   }
 
   /**
@@ -5156,6 +5446,7 @@ export class Mastra<
   }
 
   async #startSchedulingWorkers(): Promise<void> {
+    if (this.#workerFilter && !this.#workerFilter.has('scheduler')) return;
     if (!this.#shouldEnableScheduler()) return;
     if (!this.#storage) return;
 
@@ -5166,58 +5457,34 @@ export class Mastra<
       mastra: this,
     };
 
-    if (!this.#findSchedulerWorker()) {
-      const sw = new SchedulerWorker(this.#schedulerConfig);
-      sw.__registerMastra(this);
-      this.#workers.push(sw);
-      await sw.init(deps);
-      await sw.start();
+    let schedulerWorker = this.#findSchedulerWorker();
+    if (!schedulerWorker) {
+      schedulerWorker = new SchedulerWorker(this.#schedulerConfig);
+      schedulerWorker.__registerMastra(this);
+      this.#workers.push(schedulerWorker);
+    }
+    if (!schedulerWorker.isRunning) {
+      await schedulerWorker.init(deps);
+      await schedulerWorker.start();
     }
 
-    if (!this.#findAgentScheduleWorker()) {
-      const { AgentScheduleWorker } = await import('../schedules/worker');
-      const asw = new AgentScheduleWorker();
-      asw.__registerMastra(this);
-      this.#workers.push(asw);
-      await asw.init(deps);
-      await asw.start();
-    }
-  }
-
-  /**
-   * Detect schedule rows that a previous process persisted, and flip the
-   * scheduler-requested flag that `#shouldEnableScheduler` reads. Without
-   * this, a fresh boot with only DB-side work would skip injecting the
-   * scheduler and agent-schedule workers entirely. Two rows count:
-   *
-   * - agent-schedule rows created imperatively through `schedules.create()`;
-   * - the notification dispatcher row that `__ensureNotificationDispatchReady()`
-   *   upserts when a deferred notification is created, so pending deferred
-   *   notifications still get dispatched after a restart.
-   *
-   * Callers must skip this probe when the scheduler can never start; see
-   * `#schedulerDisabled()`.
-   *
-   * @internal
-   */
-  async #detectPersistedSchedulerWork(): Promise<void> {
-    if (!this.#storage) return;
-    try {
-      const schedulesStore = await this.#storage.getStore('schedules');
-      if (!schedulesStore) return;
-
-      const agentSchedules = await schedulesStore.listSchedules({ ownerType: 'agent' });
-      if (agentSchedules.length > 0) {
-        this.#schedulerRequested = true;
-        return;
+    const agentScheduleSelected = !this.#workerFilter || this.#workerFilter.has('agent-schedule');
+    if (agentScheduleSelected) {
+      let agentScheduleWorker = this.#findAgentScheduleWorker();
+      if (!agentScheduleWorker) {
+        const { AgentScheduleWorker } = await import('../schedules/worker');
+        agentScheduleWorker = new AgentScheduleWorker();
+        agentScheduleWorker.__registerMastra(this);
+        this.#workers.push(agentScheduleWorker);
       }
-
-      if (this.#notificationDispatchConfig?.enabled === false) return;
-      const dispatchRow = await schedulesStore.getSchedule(NOTIFICATION_DISPATCH_SCHEDULE_ROW_ID);
-      if (dispatchRow) this.#schedulerRequested = true;
-    } catch (err) {
-      this.#logger?.warn?.('Failed to detect persisted scheduler work on boot', err as any);
+      if (!agentScheduleWorker.isRunning) {
+        await agentScheduleWorker.init(deps);
+        await agentScheduleWorker.start();
+      }
     }
+
+    // Startup is complete; further wake events have nothing to do.
+    await this.#unwireSchedulerWakeSubscription();
   }
 
   private registerStaticWorkflowScorers(workflow: AnyWorkflow): void {
@@ -5262,10 +5529,96 @@ export class Mastra<
     // will pick it up when startWorkers() is called.
   }
 
+  /**
+   * Wire a logger into observability. Adaptable loggers get trace
+   * correlation + export attached in place (native record path); other
+   * loggers are wrapped in the deprecated DualLogger fallback.
+   */
+  #wireLoggerObservability(logger: TLogger): TLogger {
+    const inner = logger as unknown as IMastraLogger;
+
+    if (isAdaptableLogger(inner)) {
+      // Idempotent: the constructor and setLogger() may both wire the same
+      // logger instance — attach only once.
+      if (this.#wiredLoggers.has(inner)) return logger;
+      this.#wiredLoggers.add(inner);
+      // __attachObservability mutates the logger instance: sharing one logger
+      // across Mastra instances means the last attach wins — earlier
+      // instances' logs export to the newest Mastra's observability (and the
+      // logger holds a strong reference to it). Surface this instead of
+      // silently clobbering.
+      const ownershipKey = inner.__observabilityAttachmentKey?.() ?? inner;
+      const previousOwner = attachedLoggerOwners.get(ownershipKey);
+      if (previousOwner && previousOwner !== this) {
+        try {
+          inner.warn(
+            'This logger instance is already wired to another Mastra instance; re-attaching. ' +
+              'Its observability export now targets the newest Mastra. ' +
+              'Create a separate logger per Mastra instance to keep exports isolated.',
+          );
+        } catch {
+          // A throwing logger must not break Mastra construction.
+        }
+      }
+      attachedLoggerOwners.set(ownershipKey, this);
+      inner.__attachObservability({
+        resolveTraceFields,
+        getLogSink: () => {
+          if (!this.#loggerAdapterOptions.export || isObservabilityExportSuppressed()) return undefined;
+          // Prefer the span-correlated logger context; fall back to the
+          // global one so non-span logs are still exported (uncorrelated).
+          const span = resolveCurrentSpan();
+          const correlated = span?.observabilityInstance?.getLoggerContext?.(span);
+          // Resolve the real logger context directly (not `loggerVNext`,
+          // which falls back to a truthy no-op) so adapters skip record
+          // derivation entirely when observability is not configured.
+          return correlated ?? this.#observability.getDefaultInstance()?.getLoggerContext?.();
+        },
+        options: this.#loggerAdapterOptions,
+      });
+      return logger;
+    }
+
+    // Already wrapped (e.g. setLogger() re-invoked with the wired logger, or
+    // another Mastra instance's wrapper passed in). Rewire the underlying
+    // logger for this instance so exports target this instance's
+    // observability; for our own wrapper this is idempotent via
+    // #fallbackWrappers.
+    if (inner instanceof DualLogger) {
+      return this.#wireLoggerObservability(inner.baseLogger as unknown as TLogger);
+    }
+
+    // Idempotent: the constructor wires the logger and then setLogger() is
+    // called with the same unwrapped instance — reuse the existing wrapper
+    // so the deprecation notice fires only once per logger instance.
+    const existing = this.#fallbackWrappers.get(inner);
+    if (existing) return existing as unknown as TLogger;
+
+    // Deprecated fallback: dual-write wrapper. Native records (stdout) do
+    // not receive trace correlation on this path.
+    try {
+      inner.debug?.(
+        'Configured logger does not support observability adapters; falling back to DualLogger (deprecated). ' +
+          'Implement __attachObservability() on your logger to get trace-correlated stdout.',
+      );
+    } catch {
+      // A throwing logger must not break Mastra construction.
+    }
+    // Resolve the real logger context directly (not `loggerVNext`, which
+    // falls back to a truthy no-op) so the fallback skips record derivation
+    // entirely when observability is not configured.
+    const wrapper = new DualLogger(
+      inner,
+      this.#loggerAdapterOptions.export
+        ? () => this.#observability.getDefaultInstance()?.getLoggerContext?.()
+        : undefined,
+    );
+    this.#fallbackWrappers.set(inner, wrapper);
+    return wrapper as unknown as TLogger;
+  }
+
   public setLogger({ logger }: { logger: TLogger }) {
-    // Wrap the new logger in a DualLogger to maintain dual-write to loggerVNext
-    const dualLogger = new DualLogger(logger, () => this.loggerVNext);
-    this.#logger = dualLogger as unknown as TLogger;
+    this.#logger = this.#wireLoggerObservability(logger);
 
     if (this.#agents) {
       Object.keys(this.#agents).forEach(key => {
@@ -5319,8 +5672,19 @@ export class Mastra<
       });
     }
 
-    // Pass the raw logger (not the DualLogger) to observability to avoid circular forwarding
-    this.#observability.setLogger({ logger });
+    // Pass an export-suppressed view of the logger to observability so its
+    // internal logs never feed back into observability export.
+    this.#observability.setLogger({ logger: this.#observabilitySafeLogger() as unknown as TLogger });
+  }
+
+  /**
+   * A view of the current logger safe to hand to observability internals:
+   * unwraps the DualLogger fallback and suppresses observability export.
+   */
+  #observabilitySafeLogger(): IMastraLogger {
+    const inner =
+      this.#logger instanceof DualLogger ? this.#logger.baseLogger : (this.#logger as unknown as IMastraLogger);
+    return createExportSuppressedLogger(inner);
   }
 
   /**
@@ -5923,36 +6287,37 @@ export class Mastra<
       await this.#storage.init();
     }
 
-    // Flip the scheduler-requested flag if schedule rows exist in storage from
-    // a previous boot. Without this, a process that boots with only DB-side
-    // work (no in-code declarative schedules and no imperative
-    // `schedules.create()` calls yet) would skip injecting the scheduler +
-    // agent-schedule workers entirely. This reads the schedules store, so it
-    // must run after storage.init() above.
-    //
-    // Skip the read when the flag cannot change the outcome: it is already
-    // set, the app opted out of the scheduler and nothing may start it, or an
-    // explicit worker filter already forces injection (see below). Reading the
-    // store anyway is a useless boot-time query, and storage adapters that
-    // need request/tenant context warn on it (see #20550).
-    const schedulerExplicitlyRequested = (this.#workerFilter?.has('scheduler') ?? false) && !this.#schedulerDisabled();
-    if (!name && !this.#schedulerRequested && !schedulerExplicitlyRequested && !this.#schedulerDisabled()) {
+    // Skip the boot probe when it cannot affect startup. Besides avoiding an
+    // unnecessary query, this preserves request-scoped storage behavior from
+    // #20550.
+    const schedulerSelected =
+      !this.#schedulerDisabled() && (!this.#workerFilter || this.#workerFilter.has('scheduler'));
+    const schedulerForcedByFilter = schedulerSelected && (this.#workerFilter?.has('scheduler') ?? false);
+
+    // Subscribe before probing so a schedule committed during boot cannot fall
+    // between the probe and subscription.
+    if (!name && schedulerSelected && this.#storage && !this.#findSchedulerWorker()?.isRunning) {
+      try {
+        await this.#wireSchedulerWakeSubscription();
+      } catch (err) {
+        // The wake subscription is a cross-process hint; the boot probe and
+        // `scheduler.enabled` remain the durable paths. Don't let a pubsub
+        // failure on this one topic keep every other worker from starting.
+        this.#logger?.warn?.(
+          'Failed to subscribe to scheduler wake events; scheduler will not wake on demand',
+          err as any,
+        );
+      }
+    }
+
+    if (!name && schedulerSelected && !this.#schedulerRequested && !schedulerForcedByFilter) {
       await this.#detectPersistedSchedulerWork();
     }
 
-    // Lazily inject the SchedulerWorker + AgentScheduleWorker if the
-    // scheduler should be enabled and they're not already registered.
-    // This runs after all workflows have been registered (unlike the
-    // constructor's default-workers block), so #hasScheduledWorkflow is
-    // accurate.
-    //
-    // An explicit worker filter naming the scheduler role (e.g.
-    // `MASTRA_WORKERS=scheduler` on a dedicated scheduler deployment) always
-    // injects it: a standalone scheduler process polls storage for rows
-    // created by *other* processes, so boot-time heuristics like
-    // #hasScheduledWorkflow or persisted-row probes can't see the work it
-    // exists to serve. Only `#schedulerDisabled()` overrides the request.
-    if (!name && (this.#shouldEnableScheduler() || schedulerExplicitlyRequested) && this.#storage) {
+    // Do not create the polling worker until work exists. An explicit
+    // MASTRA_WORKERS=scheduler filter remains an unconditional opt-in for
+    // dedicated scheduler processes.
+    if (!name && (this.#shouldEnableScheduler() || schedulerForcedByFilter) && this.#storage) {
       if (!this.#findSchedulerWorker()) {
         const sw = new SchedulerWorker(this.#schedulerConfig);
         sw.__registerMastra(this);
@@ -6047,6 +6412,18 @@ export class Mastra<
     // runtime signals (e.g. `mastra.schedules.create()`) know whether they need
     // to lazily inject + start additional workers themselves.
     this.#workersStarted = true;
+
+    // A wake event (or a local `schedules.create()`) that landed while this
+    // method was running only flipped the request flag, because injecting
+    // workers mid-boot would race the start loop above. Honor it now.
+    if (!name && this.#schedulerRequested && !this.#findSchedulerWorker()) {
+      await this.#ensureSchedulingWorkersStarted();
+    }
+
+    // The wake subscription is only needed while the scheduler is stopped.
+    if (this.#findSchedulerWorker()?.isRunning) {
+      await this.#unwireSchedulerWakeSubscription();
+    }
   }
 
   /**
@@ -6194,12 +6571,20 @@ export class Mastra<
    * Stop all running workers and unsubscribe event listeners.
    */
   public async stopWorkers(): Promise<void> {
-    // A background-task dispatch may have kicked off a lazy execution-worker
-    // start (`__ensureExecutionWorkersStarted`) that is still in flight. Wait
-    // for it so the teardown below covers what it started — otherwise the
-    // start finishes after this method returns, leaving workers running and
-    // subscriptions wired behind a "stopped" instance. Failures are already
-    // logged by the start path; here they just mean there is less to stop.
+    // Block new lazy starts immediately. Runtime signals that arrive during
+    // teardown still set their request flags, so a later startWorkers() can
+    // honor them, but they must not resurrect workers behind a stopped instance.
+    this.#workersStarted = false;
+
+    // A runtime signal may have kicked off a lazy worker start that is still in
+    // flight. Wait for it so the teardown below covers what it started —
+    // otherwise the start can finish after this method returns, leaving workers
+    // running and subscriptions wired behind a "stopped" instance. Failures are
+    // already logged by the start paths; here they just mean there is less to
+    // stop.
+    while (this.#schedulingWorkersStartPromise) {
+      await this.#schedulingWorkersStartPromise.catch(() => {});
+    }
     while (this.#executionWorkersStartPromise) {
       await this.#executionWorkersStartPromise.catch(() => {});
     }
@@ -6224,9 +6609,9 @@ export class Mastra<
       await this.#pubsub.unsubscribe(topic, cb);
     }
     this.#userEventSubscriptions = [];
+    await this.#unwireSchedulerWakeSubscription();
 
     await this.#pubsub.flush();
-    this.#workersStarted = false;
     this.#executionWorkersStarted = false;
   }
 

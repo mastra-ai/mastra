@@ -1,0 +1,247 @@
+/* Three markers, one grammar: the row's belt travels or breathes down the
+ * sidebar; the card's wick runs a lit head round its outline until the whole rim
+ * comes up under it. Working and ready differ by amplitude — travel, breath, fill — so a run
+ * finishing morphs instead of cutting; initializing is working in the setup hue,
+ * one 520ms colour slide away. The amplitudes rest on one rule: a rate has to be
+ * expressed as a distance, never as an `animation-duration`. Durations cannot
+ * cross-fade; lengths can. */
+
+@property --belt-pitch {
+  syntax: '<length>';
+  inherits: true;
+  initial-value: 9px;
+}
+
+@property --belt-sway {
+  syntax: '<number>';
+  inherits: true;
+  initial-value: 0;
+}
+
+@property --belt-hue {
+  syntax: '<color>';
+  inherits: true;
+  initial-value: currentcolor;
+}
+
+/* How much of the wick's rim is already lit behind the travelling head. The head
+ * never stops; at 1 the rim it is running on has caught up with it. */
+@property --wick-fill {
+  syntax: '<number>';
+  inherits: true;
+  initial-value: 0;
+}
+
+/* How much of the travelling head is drawn. At 0 the rim is all there is. */
+@property --wick-head {
+  syntax: '<number>';
+  inherits: true;
+  initial-value: 1;
+}
+
+/* One declaration of what each state means, read by whichever slot is drawing.
+ * Every off-diagonal is zero, so a handover is one amplitude fading out through
+ * zero while the next fades in. */
+
+/* There is no idle state here: a session merely attached is not a point in the
+ * lifecycle. Rows drop their belt, and a card shows its Open session button
+ * instead of running a marker. */
+
+.session-working {
+  --belt-pitch: 9px;
+  --belt-sway: 0;
+  --wick-fill: 0;
+  --wick-head: 1;
+  --belt-hue: var(--positive1);
+}
+
+/* Working's own motion in the setup hue: the sandbox coming up is the run
+ * already underway, and materializing is nothing but the colour arriving. */
+.session-initializing {
+  --belt-pitch: 9px;
+  --belt-sway: 0;
+  --wick-fill: 0;
+  --wick-head: 1;
+  --belt-hue: var(--warning1);
+}
+
+/* Travel drops to zero and one slow breath takes over on a clock four times
+ * longer: parked on you, not stuck. */
+.session-ready {
+  --belt-pitch: 0px;
+  --belt-sway: 1;
+  --wick-fill: 1;
+  --wick-head: 1;
+  --belt-hue: var(--accent3);
+}
+
+.session-belt {
+  --belt-beat: 1.4s;
+
+  transition:
+    --belt-pitch 700ms cubic-bezier(0.4, 0, 0.2, 1),
+    --belt-sway 700ms cubic-bezier(0.4, 0, 0.2, 1),
+    --belt-hue 520ms ease;
+}
+
+/* The row's left rail. Absolute against the row box rather than the trailing
+ * slot, which comes and goes with hover and would drag the belt with it. */
+.session-belt {
+  position: absolute;
+  inset-block: 4px;
+  left: 3px;
+  width: 6px;
+  overflow: hidden;
+  mask: linear-gradient(to bottom, transparent, #000 16%, #000 84%, transparent);
+}
+
+.session-belt-sway {
+  position: absolute;
+  inset: 0;
+  animation: session-belt-sway calc(var(--belt-beat) * 4) ease-in-out infinite;
+}
+
+.session-belt-sway i {
+  position: absolute;
+  top: calc(var(--belt-k) * 9px - 9px);
+  left: 50%;
+  width: 2px;
+  height: 6px;
+  margin-left: -1px;
+  border-radius: 999px;
+  background: var(--belt-hue);
+  animation: session-belt-flow calc(var(--belt-beat) * 0.9) linear infinite;
+}
+
+.session-belt-sway i:nth-child(1) {
+  --belt-k: 0;
+}
+
+.session-belt-sway i:nth-child(2) {
+  --belt-k: 1;
+}
+
+.session-belt-sway i:nth-child(3) {
+  --belt-k: 2;
+}
+
+.session-belt-sway i:nth-child(4) {
+  --belt-k: 3;
+}
+
+.session-belt-sway i:nth-child(5) {
+  --belt-k: 4;
+}
+
+/* Exactly one pitch per loop, so the last frame is the first frame with every
+ * pill in its neighbour's place and the belt never jumps. */
+@keyframes session-belt-flow {
+  to {
+    transform: translateY(var(--belt-pitch));
+  }
+}
+
+@keyframes session-belt-sway {
+  0%,
+  100% {
+    transform: translateY(calc(-3px * var(--belt-sway)));
+  }
+
+  50% {
+    transform: translateY(calc(3px * var(--belt-sway)));
+  }
+}
+
+/* The card's wick. The head never stops — an angle cannot cross-fade its sweep
+ * without snapping at the loop seam, so `--wick-fill` brings the rim up under
+ * it. */
+@property --wick-run {
+  syntax: '<angle>';
+  inherits: false;
+  initial-value: 0deg;
+}
+
+.session-wick {
+  --belt-beat: 1.4s;
+
+  /* Lap length, in belt beats. Long, because the head is crossing a whole card
+   * rather than a 6px rail: it has to read as travelling, not as spinning. */
+  --wick-lap: 6;
+
+  position: absolute;
+
+  /* The ring is the card's border, not a line inside it: the card turns its own
+   * 1px border transparent and the wick paints that exact strip — same box,
+   * same radius, same width, resting colour included. Reaching the border box
+   * means reaching out of the padding box, so a card carrying a wick drops
+   * `content-visibility`, whose clip stops there. The radius is inherited
+   * rather than named: the card owns it, and a guess is a corner that misses. */
+  inset: -1px;
+  border-radius: inherit;
+  padding: 1px;
+  pointer-events: none;
+  background:
+    conic-gradient(
+      from var(--wick-run),
+      transparent 0deg 120deg,
+      color-mix(in oklab, var(--belt-hue) calc(var(--wick-head) * 12%), transparent) 250deg,
+      color-mix(in oklab, var(--belt-hue) calc(var(--wick-head) * 45%), transparent) 330deg,
+      color-mix(in oklab, var(--belt-hue) calc(var(--wick-head) * 80%), transparent) 352deg,
+      color-mix(in oklab, var(--belt-hue) calc(var(--wick-head) * 100%), transparent) 358deg,
+      color-mix(in oklab, color-mix(in oklab, white 55%, var(--belt-hue)) calc(var(--wick-head) * 100%), transparent)
+        360deg
+    ),
+    linear-gradient(color-mix(in oklab, var(--belt-hue) calc(var(--wick-fill) * 62%), transparent) 0 0),
+    linear-gradient(color-mix(in oklab, var(--border1) 50%, transparent) 0 0);
+  mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  mask-composite: exclude;
+  transition:
+    --wick-fill 700ms cubic-bezier(0.4, 0, 0.2, 1),
+    --wick-head 700ms cubic-bezier(0.4, 0, 0.2, 1),
+    --belt-sway 700ms cubic-bezier(0.4, 0, 0.2, 1),
+    --belt-hue 520ms ease;
+  animation:
+    session-wick-run calc(var(--belt-beat) * var(--wick-lap)) linear infinite,
+    session-wick-breathe calc(var(--belt-beat) * 4) ease-in-out infinite;
+}
+
+@keyframes session-wick-run {
+  to {
+    --wick-run: 360deg;
+  }
+}
+
+/* The belt's slow breath, in opacity — off everywhere `--belt-sway` is 0, where
+ * both stops are 1 and the keyframe cannot show. */
+@keyframes session-wick-breathe {
+  0%,
+  100% {
+    opacity: calc(1 - 0.5 * var(--belt-sway));
+  }
+
+  50% {
+    opacity: 1;
+  }
+}
+
+/* The belt has nothing left once travel is off: its states collapse to the same
+ * still frame and only the colour tells them apart. The wick keeps reading —
+ * a parked head against a rim lit none, part or whole. */
+@media (prefers-reduced-motion: reduce) {
+  .session-wick,
+  .session-belt,
+  .session-belt-sway,
+  .session-belt-sway i {
+    transition: none;
+    animation: none;
+  }
+
+  /* Motion was what told working from initializing. With it off, the setup state
+   * takes the middle of the fill it already owns, so the rim reads at three
+   * coverages — none, part, whole — and never by hue alone. */
+  .session-wick.session-initializing {
+    --wick-fill: 0.4;
+  }
+}
