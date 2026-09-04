@@ -466,6 +466,8 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
               onPrevious={handlePreviousTrace}
               onNext={handleNextTrace}
               showPartialThread
+              featuredSpanIds={url.highlightSpanIdsParam}
+              onHighlightSpans={url.handleHighlightSpans}
               feedbackTabBadge={traceFeedbackData?.pagination?.total ?? undefined}
               feedbackTabSlot={({ traceId: tid }) => <TraceFeedbackTab traceId={tid} />}
               scoresTabBadge={spanScoresData?.pagination?.total ?? undefined}

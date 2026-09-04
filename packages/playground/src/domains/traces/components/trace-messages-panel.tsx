@@ -10,10 +10,12 @@ export interface TraceMessagesPanelProps {
   className?: string;
   /** Link to the advanced thread view showing every turn of the thread. */
   fullThreadHref?: string;
+  /** Called with the span ids behind a reconstructed message when the user asks to highlight them. */
+  onHighlightSpans?: (spanIds: string[]) => void;
 }
 
 /** The "Messages" column: the trace rendered as one reconstructed agent turn. */
-export function TraceMessagesPanel({ traceId, className, fullThreadHref }: TraceMessagesPanelProps) {
+export function TraceMessagesPanel({ traceId, className, fullThreadHref, onHighlightSpans }: TraceMessagesPanelProps) {
   return (
     <DataPanel data-testid="messages-panel" className={cn('h-full rounded-none border-0 bg-transparent', className)}>
       <DataPanel.Header>
@@ -29,7 +31,7 @@ export function TraceMessagesPanel({ traceId, className, fullThreadHref }: Trace
             </div>
           )}
           <div className="min-h-0 flex-1">
-            <TraceThreadItemView traceId={traceId} />
+            <TraceThreadItemView traceId={traceId} onHighlightSpans={onHighlightSpans} />
           </div>
         </div>
       </DataPanel.Content>

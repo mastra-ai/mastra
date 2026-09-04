@@ -43,6 +43,10 @@ export interface TraceSpanPanelProps {
   feedbackTabSlot?: TraceDataPanelViewProps['feedbackTabSlot'];
   /** Enables the "Messages" column (reconstructed turn) when the displayed root is a complete agent trace with a thread id. */
   showPartialThread?: boolean;
+  /** Span ids featured in the timeline (non-featured spans are faded). */
+  featuredSpanIds?: string[];
+  /** Called with the span ids behind a reconstructed message when the user asks to highlight them. */
+  onHighlightSpans?: (spanIds: string[]) => void;
   scoresTabBadge?: ReactNode;
   scoresTabSlot?: TraceDataPanelViewProps['scoresTabSlot'];
   usage?: TraceDataPanelViewProps['usage'];
@@ -82,6 +86,8 @@ export function TraceSpanPanel({
   feedbackTabBadge,
   feedbackTabSlot,
   showPartialThread,
+  featuredSpanIds,
+  onHighlightSpans,
   scoresTabBadge,
   scoresTabSlot,
   usage,
@@ -136,9 +142,10 @@ export function TraceSpanPanel({
       showUnavailableFeaturesMsg={showUnavailableFeaturesMsg}
       feedbackTabBadge={feedbackTabBadge}
       feedbackTabSlot={feedbackTabSlot}
+      featuredSpanIds={featuredSpanIds}
       messagesPanelSlot={
         showPartialThread && threadId ? (
-          <TraceMessagesPanel traceId={traceId} fullThreadHref={fullThreadHref} />
+          <TraceMessagesPanel traceId={traceId} fullThreadHref={fullThreadHref} onHighlightSpans={onHighlightSpans} />
         ) : undefined
       }
       scoresTabBadge={scoresTabBadge}

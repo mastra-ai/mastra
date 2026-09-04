@@ -87,6 +87,45 @@ describe('TraceSpanPanel', () => {
       expect(screen.getByText('No rain is expected.')).not.toBeNull();
       await waitFor(() => expect(queryClient.isFetching()).toBe(0));
     });
+
+    it('reports the spans behind each message when the highlight action is clicked', async () => {
+      installHandlers();
+      const onHighlightSpans = vi.fn();
+      const { queryClient } = renderPanel({ showPartialThread: true, onHighlightSpans });
+
+      await screen.findByText('No rain is expected.');
+
+      const [userAction, assistantAction] = screen.getAllByRole('button', { name: 'Highlight spans' });
+      if (!userAction || !assistantAction) throw new Error('expected one highlight action per message');
+
+      fireEvent.click(assistantAction);
+      expect(onHighlightSpans).toHaveBeenCalledWith(['span-root', 'span-child-1', 'span-child-2']);
+
+      fireEvent.click(userAction);
+      expect(onHighlightSpans).toHaveBeenLastCalledWith(['span-root']);
+      await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+    });
+
+    it('does not render the highlight action when no handler is provided', async () => {
+      installHandlers();
+      const { queryClient } = renderPanel({ showPartialThread: true });
+
+      await screen.findByText('No rain is expected.');
+
+      expect(screen.queryByRole('button', { name: 'Highlight spans' })).toBeNull();
+      await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+    });
+  });
+
+  it('fades timeline spans that are not featured', async () => {
+    installHandlers();
+    const { queryClient } = renderPanel({ featuredSpanIds: ['span-root'] });
+
+    await screen.findByLabelText('View details for span Root agent run');
+    expect(screen.getByLabelText('View details for span Root agent run').className).not.toContain('opacity-30');
+    expect(screen.getByLabelText('View details for span First tool call').className).toContain('opacity-30');
+    expect(screen.getByLabelText('View details for span Second tool call').className).toContain('opacity-30');
+    await waitFor(() => expect(queryClient.isFetching()).toBe(0));
   });
 
   describe('given partial thread is enabled without a complete agent thread context', () => {
