@@ -63,7 +63,7 @@ describe('commonjs', () => {
     `);
   });
 
-  it('executes dynamically loaded ESM-only dependencies from CommonJS', async () => {
+  it('executes bundled and deferred ESM-only dependencies from CommonJS', async () => {
     const { stdout } = await execa(process.execPath, [join(fixturePath, 'dist', 'runtime-check.js')], {
       cwd: fixturePath,
     });

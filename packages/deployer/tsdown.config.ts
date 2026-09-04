@@ -21,7 +21,7 @@ export default defineConfig({
   treeshake: true,
   sourcemap: true,
   deps: {
-    alwaysBundle: ['@hono/node-server', '@mastra/hono'],
+    alwaysBundle: ['@hono/node-server', '@mastra/hono', '@sindresorhus/slugify'],
   },
   onSuccess: async () => {
     await generateTypes(process.cwd(), new Set(['@hono/node-server', '@mastra/hono']));

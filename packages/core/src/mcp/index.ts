@@ -6,7 +6,7 @@ import { RegisteredLogger } from '../logger';
 import type { Mastra } from '../mastra';
 import type { RequestContext } from '../request-context';
 import type { InternalCoreTool, MCPToolType } from '../tools';
-import { loadSlugify } from '../utils/slugify';
+import { slugify } from '../utils/slugify';
 import type {
   MCPServerConfig,
   MCPServerHonoSSEOptions,
@@ -35,8 +35,6 @@ export abstract class MCPServerBase<TId extends string = string> extends MastraB
   public readonly version: string;
   /** Internal storage for the server's unique ID. */
   private _id: TId;
-  /** Resolves IDs supplied in config after ESM-only slugification has loaded. */
-  private idPromise: Promise<TId>;
   /** A description of what the MCP server does. */
   public readonly description?: string;
   /** Optional instructions describing how to use the server and its features. */
@@ -72,11 +70,6 @@ export abstract class MCPServerBase<TId extends string = string> extends MastraB
     return this._id;
   }
 
-  /** Resolves the normalized ID once the ESM-only slugifier has loaded. */
-  public getId(): Promise<TId> {
-    return this.idPromise;
-  }
-
   /**
    * Gets a read-only view of the registered tools.
    * @returns A readonly record of converted tools.
@@ -97,7 +90,6 @@ export abstract class MCPServerBase<TId extends string = string> extends MastraB
       return;
     }
     this._id = id;
-    this.idPromise = Promise.resolve(id);
     this.idWasSet = true;
   }
 
@@ -185,15 +177,10 @@ export abstract class MCPServerBase<TId extends string = string> extends MastraB
     // If user does not provide an ID, we will use the key from the Mastra config, but if user does not pass MCPServer
     // to Mastra, we will generate a random UUID as a backup.
     if (config.id) {
-      this._id = config.id;
-      this.idPromise = loadSlugify().then(slugify => {
-        this._id = slugify(config.id!) as TId;
-        return this._id;
-      });
+      this._id = slugify(config.id) as TId;
       this.idWasSet = true;
     } else {
       this._id = (this.mastra?.generateId() || randomUUID()) as TId;
-      this.idPromise = Promise.resolve(this._id);
     }
 
     this.description = config.description;
@@ -246,14 +233,14 @@ export abstract class MCPServerBase<TId extends string = string> extends MastraB
    * This information is suitable for listing multiple servers.
    * @returns ServerInfo object containing basic server metadata.
    */
-  public abstract getServerInfo(): Promise<ServerInfo>;
+  public abstract getServerInfo(): ServerInfo;
 
   /**
    * Gets detailed information about the server, conforming to the MCP Registry 'ServerDetail' schema.
    * This includes all information from `getServerInfo` plus package and remote details.
    * @returns ServerDetailInfo object containing comprehensive server metadata.
    */
-  public abstract getServerDetail(): Promise<ServerDetailInfo>;
+  public abstract getServerDetail(): ServerDetailInfo;
 
   /**
    * Gets a list of tools provided by this MCP server, including their schemas.

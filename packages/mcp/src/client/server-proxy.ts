@@ -206,9 +206,9 @@ export class MCPClientServerProxy extends MCPServerBase {
     this.cachedClient = null;
   }
 
-  public async getServerInfo(): Promise<ServerInfo> {
+  public getServerInfo(): ServerInfo {
     return {
-      id: await this.getId(),
+      id: this.id,
       name: this.name,
       description: this.description,
       version_detail: {
@@ -219,9 +219,9 @@ export class MCPClientServerProxy extends MCPServerBase {
     };
   }
 
-  public async getServerDetail(): Promise<ServerDetailInfo> {
+  public getServerDetail(): ServerDetailInfo {
     return {
-      ...(await this.getServerInfo()),
+      ...this.getServerInfo(),
       packages: this.packages ?? [],
       remotes: this.remotes ?? [],
     };

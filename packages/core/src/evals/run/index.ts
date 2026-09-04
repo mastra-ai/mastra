@@ -14,6 +14,7 @@ import type { ObservabilityContext } from '../../observability';
 import { EntityType, resolveObservabilityContext } from '../../observability';
 import type { RequestContext } from '../../request-context';
 import type { MastraCompositeStore } from '../../storage';
+import { pMap } from '../../utils/p-map';
 import type { WorkflowResult, WorkflowRunStartOptions, StepResult } from '../../workflows/types';
 import type { AnyWorkflow } from '../../workflows/workflow';
 import { Workflow } from '../../workflows/workflow';
@@ -335,7 +336,6 @@ export async function runEvals(config: RunEvalsAnyConfig): Promise<RunEvalsResul
   const mastra = (target as any).getMastraInstance?.() || (target as any).mastra;
   const storage = mastra?.getStorage();
 
-  const pMap = (await import('p-map')).default;
   await pMap(
     data,
     async (item: RunEvalsDataItem<any>) => {

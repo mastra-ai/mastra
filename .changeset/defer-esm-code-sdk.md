@@ -1,5 +1,5 @@
 ---
-'@mastra/code-sdk': major
+'@mastra/code-sdk': minor
 ---
 
 **Breaking:** Token estimation and context auditing now return promises.

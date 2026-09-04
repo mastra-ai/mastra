@@ -2,7 +2,7 @@ import { z } from 'zod/v4';
 import { ErrorCategory, ErrorDomain, MastraError } from '../../error';
 import { getEntityTypeForSpan, InternalSpans } from '../../observability';
 import type { SpanRecord, TraceRecord, MastraStorage } from '../../storage';
-import { loadPMap } from '../../utils/p-map';
+import { pMap } from '../../utils/p-map';
 import { createStep, createWorkflow } from '../../workflows/evented';
 import type { MastraScorer, ScorerRun } from '../base';
 import type { ScoreRowData } from '../types';
@@ -64,7 +64,6 @@ const getTraceStep = createStep({
       return;
     }
 
-    const { default: pMap } = await loadPMap();
     await pMap(
       inputData.targets,
       async target => {
@@ -320,7 +319,6 @@ export async function scoreTraceBatch({
   failedCount: number;
   results: ScoreTraceBatchResult[];
 }> {
-  const { default: pMap } = await loadPMap();
   const results = await pMap(
     targets,
     async (target, index): Promise<ScoreTraceBatchResult> => {

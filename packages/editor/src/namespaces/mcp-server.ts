@@ -66,7 +66,7 @@ export class EditorMCPServerNamespace extends CrudEditorNamespace<
       workflows,
     });
 
-    await this.mastra.addMCPServer(server, resolved.id);
+    this.mastra.addMCPServer(server, resolved.id);
 
     return server;
   }

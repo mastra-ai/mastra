@@ -84,7 +84,7 @@ describe('MCP Server FGA checks', () => {
         .mockRejectedValue(
           new FGADeniedError(
             { id: 'user-1' },
-            { type: 'tool', id: JSON.stringify([(await mcpServer.getServerInfo()).id, 'test-tool']) },
+            { type: 'tool', id: JSON.stringify([mcpServer.getServerInfo().id, 'test-tool']) },
             MastraFGAPermissions.TOOLS_EXECUTE,
           ),
         ),
@@ -103,13 +103,13 @@ describe('MCP Server FGA checks', () => {
     expect(mockFGAProvider.require).toHaveBeenCalledWith(
       { id: 'user-1' },
       expect.objectContaining({
-        resource: { type: 'tool', id: JSON.stringify([(await mcpServer.getServerInfo()).id, 'test-tool']) },
+        resource: { type: 'tool', id: JSON.stringify([mcpServer.getServerInfo().id, 'test-tool']) },
         permission: MastraFGAPermissions.TOOLS_EXECUTE,
         context: expect.objectContaining({
-          resourceId: JSON.stringify([(await mcpServer.getServerInfo()).id, 'test-tool']),
+          resourceId: JSON.stringify([mcpServer.getServerInfo().id, 'test-tool']),
           requestContext,
           metadata: expect.objectContaining({
-            mcpServerId: (await mcpServer.getServerInfo()).id,
+            mcpServerId: mcpServer.getServerInfo().id,
             mcpServerName: 'test-server',
             toolId: 'test-tool',
           }),
@@ -171,10 +171,10 @@ describe('MCP Server FGA checks', () => {
     const mockFGAProvider = {
       check: vi.fn(),
       require: vi.fn(async (_user: unknown, params: { resource: { id: string } }) => {
-        if (params.resource.id === JSON.stringify([(await mcpServer.getServerInfo()).id, 'denied'])) {
+        if (params.resource.id === JSON.stringify([mcpServer.getServerInfo().id, 'denied'])) {
           throw new FGADeniedError(
             { id: 'user-1' },
-            { type: 'tool', id: JSON.stringify([(await mcpServer.getServerInfo()).id, 'denied']) },
+            { type: 'tool', id: JSON.stringify([mcpServer.getServerInfo().id, 'denied']) },
             MastraFGAPermissions.TOOLS_EXECUTE,
           );
         }
@@ -333,7 +333,7 @@ describe('MCP Server FGA checks', () => {
     expect(mockFGAProvider.require).toHaveBeenCalledWith(
       { id: 'user-1', organizationMembershipId: 'org-member-1' },
       expect.objectContaining({
-        resource: { type: 'tool', id: JSON.stringify([(await mcpServer.getServerInfo()).id, 'test-tool']) },
+        resource: { type: 'tool', id: JSON.stringify([mcpServer.getServerInfo().id, 'test-tool']) },
         permission: MastraFGAPermissions.TOOLS_EXECUTE,
       }),
     );
@@ -392,7 +392,7 @@ describe('MCP Server FGA checks', () => {
     expect(mockFGAProvider.require).toHaveBeenCalledWith(
       { id: 'user-1', organizationMembershipId: 'org-member-1' },
       expect.objectContaining({
-        resource: { type: 'tool', id: JSON.stringify([(await mcpServer.getServerInfo()).id, 'test-tool']) },
+        resource: { type: 'tool', id: JSON.stringify([mcpServer.getServerInfo().id, 'test-tool']) },
         permission: MastraFGAPermissions.TOOLS_EXECUTE,
       }),
     );
@@ -436,7 +436,7 @@ describe('MCP Server FGA checks', () => {
     expect(result.tools.map(tool => tool.name)).toEqual(['test-tool']);
     expect(deriveId).toHaveBeenCalledWith({
       user: { id: 'user-1' },
-      resourceId: JSON.stringify([(await mcpServer.getServerInfo()).id, 'test-tool']),
+      resourceId: JSON.stringify([mcpServer.getServerInfo().id, 'test-tool']),
       requestContext,
     });
     expect(mockFGAProvider.require).toHaveBeenCalledWith(
@@ -488,7 +488,7 @@ describe('MCP Server FGA checks', () => {
     expect(execute).toHaveBeenCalledTimes(1);
     expect(deriveId).toHaveBeenCalledWith({
       user: { id: 'user-1' },
-      resourceId: JSON.stringify([(await mcpServer.getServerInfo()).id, 'test-tool']),
+      resourceId: JSON.stringify([mcpServer.getServerInfo().id, 'test-tool']),
       requestContext,
     });
     expect(mockFGAProvider.require).toHaveBeenCalledWith(

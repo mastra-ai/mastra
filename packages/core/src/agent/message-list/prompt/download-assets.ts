@@ -1,6 +1,7 @@
 import { isUrlSupported } from '@ai-sdk/provider-utils-v6';
 import { ErrorCategory, ErrorDomain, MastraError } from '../../../error';
 import { fetchWithRetry } from '../../../utils/fetchWithRetry';
+import { pMap } from '../../../utils/p-map';
 import type { AIV5Type } from '../types';
 
 /**
@@ -74,8 +75,6 @@ export async function downloadAssetsFromMessages({
   downloadRetries?: number;
   supportedUrls?: Record<string, RegExp[]>;
 }) {
-  const pMap = (await import('p-map')).default;
-
   const filesToDownload = messages
     .filter(message => message.role === 'user')
     .map(message => message.content)

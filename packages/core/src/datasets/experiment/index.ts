@@ -3,6 +3,7 @@ import type { MastraScorer } from '../../evals/base';
 import type { TrajectoryExpectation } from '../../evals/types';
 import type { Mastra } from '../../mastra';
 import type { DatasetRecord } from '../../storage/types';
+import { pMap } from '../../utils/p-map';
 import { ExperimentEventDispatcher, createItemCompletedEvent, toExperimentJsonValue } from './events';
 import { executeTarget } from './executor';
 import type { ExecutionResult } from './executor';
@@ -483,8 +484,6 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
       // item counted as skipped.
       await beforeAll(hookArgs);
     }
-
-    const pMap = (await import('p-map')).default;
 
     await pMap(
       items.map((item, idx) => ({ item, idx })),

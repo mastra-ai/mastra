@@ -1,6 +1,6 @@
 import { join, dirname } from 'node:path';
 import type { IMastraLogger } from '@mastra/core/logger';
-import type slugify from '@sindresorhus/slugify';
+import slugify from '@sindresorhus/slugify';
 import * as pkg from 'empathic/package';
 import { findWorkspaces, findWorkspacesRoot, createWorkspacesCache } from 'find-workspaces';
 import { ensureDir } from 'fs-extra';
@@ -46,11 +46,6 @@ type TransitiveDependencyResult = {
  * Create a shared cache for find-workspaces
  */
 const workspacesCache = createWorkspacesCache();
-
-let slugifyPromise: Promise<typeof slugify> | undefined;
-
-const loadSlugify = (): Promise<typeof slugify> =>
-  (slugifyPromise ??= import('@sindresorhus/slugify').then(module => module.default));
 
 /**
  * A utility function around find-workspaces to get information about:
@@ -105,7 +100,7 @@ export async function getWorkspaceInformation({
 /**
  * Collects all transitive workspace dependencies and their TGZ paths
  */
-export const collectTransitiveWorkspaceDependencies = async ({
+export const collectTransitiveWorkspaceDependencies = ({
   workspaceMap,
   initialDependencies,
   logger,
@@ -113,8 +108,7 @@ export const collectTransitiveWorkspaceDependencies = async ({
   workspaceMap: Map<string, WorkspacePackageInfo>;
   initialDependencies: Set<string>;
   logger: IMastraLogger;
-}): Promise<TransitiveDependencyResult> => {
-  const slugify = await loadSlugify();
+}): TransitiveDependencyResult => {
   const usedWorkspacePackages = new Set<string>();
   const queue: string[] = Array.from(initialDependencies);
   const resolutions: Record<string, string> = {};
@@ -178,7 +172,6 @@ export const packWorkspaceDependencies = async ({
 
   const depsService = new DepsService(root.location);
   depsService.__setLogger(logger);
-  const slugify = await loadSlugify();
 
   // package all workspace dependencies
   if (usedWorkspacePackages.size > 0) {

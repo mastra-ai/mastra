@@ -9,8 +9,8 @@ async function main() {
   const directory = join(process.cwd(), 'commonjs-runtime-check');
   await mkdir(directory, { recursive: true });
   await Promise.all([
-    writeFile(join(directory, 'first.txt'), 'CommonJS dynamic imports work.'),
-    writeFile(join(directory, 'second.txt'), 'ESM-only dependencies are deferred.'),
+    writeFile(join(directory, 'first.txt'), 'CommonJS bundled dependencies work.'),
+    writeFile(join(directory, 'second.txt'), 'Token utilities load when needed.'),
   ]);
 
   const workspace = new Workspace({
@@ -28,7 +28,7 @@ async function main() {
     prompt: 'Run the CommonJS runtime check.',
   });
 
-  const tokens = await new TokenCounter().countString('CommonJS dynamic imports work.');
+  const tokens = await new TokenCounter().countString('Token utilities load when needed.');
   await workspace.destroy();
 
   console.log(JSON.stringify({ indexed: results.length, scheduleId: schedule.id, tokens }));

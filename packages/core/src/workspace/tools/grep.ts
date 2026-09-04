@@ -1,6 +1,6 @@
 import { z } from 'zod/v4';
 import { createTool } from '../../tools';
-import { loadPMap } from '../../utils/p-map';
+import { pMap } from '../../utils/p-map';
 import { WORKSPACE_TOOLS } from '../constants';
 import { isTextFile } from '../filesystem/fs-utils';
 import { loadGitignore } from '../gitignore';
@@ -76,8 +76,6 @@ Usage:
     });
 
     try {
-      const { default: pMap } = await loadPMap();
-
       // Guard against excessively long patterns as a cheap ReDoS heuristic
       const MAX_PATTERN_LENGTH = 1000;
       if (pattern.length > MAX_PATTERN_LENGTH) {

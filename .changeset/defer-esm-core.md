@@ -1,19 +1,5 @@
 ---
-'@mastra/core': major
+'@mastra/core': patch
 ---
 
-**Breaking:** MCP ID lookups now return promises.
-
-Before:
-
-```ts
-const server = mastra.getMCPServerById('my-server');
-```
-
-After:
-
-```ts
-const server = await mastra.getMCPServerById('my-server');
-```
-
-CommonJS entry points now defer ESM-only runtime dependencies until they are needed.
+Fixed CommonJS entry points so `p-map` and `@sindresorhus/slugify` are bundled instead of being required as ESM-only runtime dependencies.

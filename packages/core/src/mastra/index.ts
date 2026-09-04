@@ -1701,10 +1701,7 @@ export class Mastra<
     if (config?.mcpServers) {
       Object.entries(config.mcpServers).forEach(([key, server]) => {
         if (server != null) {
-          server.setId(key);
-          server.__registerMastra(this);
-          server.__setLogger(this.getLogger());
-          (this.#mcpServers as Record<string, MCPServerBase>)[key] = server;
+          this.addMCPServer(server, key);
         }
       });
     }
@@ -6055,16 +6052,18 @@ export class Mastra<
    * mastra.addMCPServer(newServer, 'customKey'); // Uses custom key
    * ```
    */
-  public async addMCPServer<M extends MCPServerBase>(server: M, key?: string): Promise<void> {
+  public addMCPServer<M extends MCPServerBase>(server: M, key?: string): void {
     if (!server) {
       throw createUndefinedPrimitiveError('mcp-server', server, key);
     }
-    // The key becomes the ID only when no explicit ID was supplied by the user.
+    // If a key is provided, try to set it as the ID
+    // The setId method will only update if the ID wasn't explicitly set by the user
     if (key) {
       server.setId(key);
     }
 
-    const resolvedId = await server.getId();
+    // Now resolve the ID after potentially setting it
+    const resolvedId = server.id;
     if (!resolvedId) {
       const error = new MastraError({
         id: 'MASTRA_ADD_MCP_SERVER_MISSING_ID',
@@ -6083,6 +6082,7 @@ export class Mastra<
       return;
     }
 
+    // Initialize the server
     server.__registerMastra(this);
     server.__setLogger(this.getLogger());
     servers[serverKey] = server;
@@ -6140,20 +6140,17 @@ export class Mastra<
    * }
    * ```
    */
-  public async getMCPServerById<TMCPServerName extends keyof TMCPServers>(
-    serverId: string,
+  public getMCPServerById<TMCPServerName extends keyof TMCPServers>(
+    serverId: TMCPServers[TMCPServerName]['id'],
     version?: string,
-  ): Promise<TMCPServers[TMCPServerName] | undefined> {
+  ): TMCPServers[TMCPServerName] | undefined {
     if (!this.#mcpServers) {
       return undefined;
     }
 
     const allRegisteredServers = Object.values(this.#mcpServers || {});
-    const matchingLogicalIdServers = (
-      await Promise.all(
-        allRegisteredServers.map(async server => ((await server.getId()) === serverId ? server : undefined)),
-      )
-    ).filter((server): server is MCPServerBase => server !== undefined);
+
+    const matchingLogicalIdServers = allRegisteredServers.filter(server => server.id === serverId);
 
     if (matchingLogicalIdServers.length === 0) {
       this.#logger?.debug(`No MCP servers found with logical ID: ${serverId}`);

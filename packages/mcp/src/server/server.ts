@@ -2586,14 +2586,14 @@ export class MCPServer extends MCPServerBase {
    *
    * @example
    * ```typescript
-   * const info = await server.getServerInfo();
+   * const info = server.getServerInfo();
    * console.log(`${info.name} v${info.version_detail.version}`);
    * // Output: My Weather Server v1.0.0
    * ```
    */
-  public async getServerInfo(): Promise<ServerInfo> {
+  public getServerInfo(): ServerInfo {
     return {
-      id: await this.getId(),
+      id: this.id,
       name: this.name,
       description: this.description,
       repository: this.repository,
@@ -2615,14 +2615,14 @@ export class MCPServer extends MCPServerBase {
    *
    * @example
    * ```typescript
-   * const detail = await server.getServerDetail();
+   * const detail = server.getServerDetail();
    * console.log(detail.package_canonical); // 'npm'
    * console.log(detail.packages); // Package installation info
    * ```
    */
-  public async getServerDetail(): Promise<ServerDetailInfo> {
+  public getServerDetail(): ServerDetailInfo {
     return {
-      ...(await this.getServerInfo()),
+      ...this.getServerInfo(),
       package_canonical: this.packageCanonical,
       packages: this.packages,
       remotes: this.remotes,
@@ -2852,8 +2852,7 @@ export class MCPServer extends MCPServerBase {
 
     const { getMCPToolFGAResourceId, requireFGA, FGADeniedError, MastraFGAPermissions } =
       await import('@mastra/core/auth/ee');
-    const mcpServerId = await this.getId();
-    const resourceId = getMCPToolFGAResourceId(mcpServerId, toolId);
+    const resourceId = getMCPToolFGAResourceId(this.id, toolId);
     const user = await this.resolveMappedFGAUser(requestContext);
     if (!user) {
       throw new FGADeniedError({ id: 'unknown' }, { type: 'tool', id: resourceId }, MastraFGAPermissions.TOOLS_EXECUTE);
@@ -2875,7 +2874,7 @@ export class MCPServer extends MCPServerBase {
         resourceId,
       },
       metadata: {
-        mcpServerId,
+        mcpServerId: this.id,
         mcpServerName: this.name,
         toolId,
       },

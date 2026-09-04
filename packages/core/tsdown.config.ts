@@ -115,6 +115,8 @@ export default defineConfig({
     neverBundle: ['vite', 'vitest'],
     alwaysBundle: [
       '@ai-sdk/openai',
+      '@sindresorhus/slugify',
+      'p-map',
       '@internal/ai-sdk-v4',
       '@internal/ai-sdk-v5',
       '@internal/ai-v6',
@@ -137,6 +139,8 @@ export default defineConfig({
         '@internal/external-types',
         '@internal/core',
         '@internal/voice',
+        '@sindresorhus/slugify',
+        'p-map',
         'hono',
         'hono-openapi',
         '@internal/auth',

@@ -300,9 +300,9 @@ describe('MCPServer', () => {
   });
 
   describe('getServerInfo()', () => {
-    it('should return correct ServerInfo with default metadata', async () => {
+    it('should return correct ServerInfo with default metadata', () => {
       const server = new MCPServer(minimalConfig);
-      const serverInfo = await server.getServerInfo();
+      const serverInfo = server.getServerInfo();
 
       expect(serverInfo).toEqual({
         id: expect.any(String),
@@ -317,7 +317,7 @@ describe('MCPServer', () => {
       });
     });
 
-    it('should return correct ServerInfo with custom metadata', async () => {
+    it('should return correct ServerInfo with custom metadata', () => {
       const repository: Repository = { url: 'https://github.com/test/repo', source: 'github', id: 'repo-id' };
       const customReleaseDate = '2023-11-01T00:00:00.000Z';
       const customConfig: MCPServerConfig = {
@@ -329,7 +329,7 @@ describe('MCPServer', () => {
         isLatest: false,
       };
       const server = new MCPServer(customConfig);
-      const serverInfo = await server.getServerInfo();
+      const serverInfo = server.getServerInfo();
 
       expect(serverInfo).toEqual({
         id: 'custom-id-for-info',
@@ -346,9 +346,9 @@ describe('MCPServer', () => {
   });
 
   describe('getServerDetail()', () => {
-    it('should return correct ServerDetailInfo with default metadata', async () => {
+    it('should return correct ServerDetailInfo with default metadata', () => {
       const server = new MCPServer(minimalConfig);
-      const serverDetail = await server.getServerDetail();
+      const serverDetail = server.getServerDetail();
 
       expect(serverDetail).toEqual({
         id: expect.any(String),
@@ -366,7 +366,7 @@ describe('MCPServer', () => {
       });
     });
 
-    it('should return correct ServerDetailInfo with custom metadata', async () => {
+    it('should return correct ServerDetailInfo with custom metadata', () => {
       const repository: Repository = { url: 'https://github.com/test/repo', source: 'github', id: 'repo-id' };
       const packages: PackageInfo[] = [{ registry_name: 'npm', name: 'test-package', version: '1.0.0' }];
       const remotes: RemoteInfo[] = [{ transport_type: 'sse', url: 'https://test.com/sse' }];
@@ -383,7 +383,7 @@ describe('MCPServer', () => {
         remotes,
       };
       const server = new MCPServer(customConfig);
-      const serverDetail = await server.getServerDetail();
+      const serverDetail = server.getServerDetail();
 
       expect(serverDetail).toEqual({
         id: 'custom-id-for-detail',

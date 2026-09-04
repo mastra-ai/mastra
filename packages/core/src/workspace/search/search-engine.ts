@@ -5,7 +5,7 @@
  * semantic (vector), and combined hybrid search across indexed content.
  */
 
-import { loadPMap } from '../../utils/p-map';
+import { pMap } from '../../utils/p-map';
 import type { MastraVector, VectorFilter } from '../../vector';
 import type { LineRange } from '../line-utils';
 
@@ -416,7 +416,6 @@ export class SearchEngine {
   async indexMany(docs: IndexDocument[], options?: IndexManyOptions): Promise<void> {
     const stopOnError = options?.stopOnError;
     const concurrency = options?.concurrency ?? DEFAULT_INDEX_MANY_CONCURRENCY;
-    const { default: pMap } = await loadPMap();
 
     // A batch-capable embedder is only worth grouping for on the eager vector path. Lazy mode
     // already batches at flush time, and a single-text embedder gains nothing from grouping.
@@ -703,7 +702,6 @@ export class SearchEngine {
     }
     if (texts.length === 0) return [];
 
-    const { default: pMap } = await loadPMap();
     const { embedder } = this.#vectorConfig;
 
     if (isBatchEmbedder(embedder)) {
@@ -778,7 +776,6 @@ export class SearchEngine {
   async #flushVectorBatch(docs: IndexDocument[]): Promise<void> {
     if (!this.#vectorConfig || docs.length === 0) return;
 
-    const { default: pMap } = await loadPMap();
     const { embedder } = this.#vectorConfig;
 
     if (!isBatchEmbedder(embedder)) {
