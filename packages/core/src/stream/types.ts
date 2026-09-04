@@ -299,6 +299,22 @@ export interface StepStartPayload {
   };
   inputMessages?: LanguageModelV2Prompt;
   warnings?: LanguageModelV2CallWarning[];
+  /**
+   * Epoch milliseconds at which this step's model inference started, stamped
+   * at the same point that opens the MODEL_INFERENCE span (immediately before
+   * the provider call, after input processors and `prepareStep`).
+   *
+   * Consumers that measure time to first token need a start instant that is
+   * independent of when the chunk reaches them. Arrival time does not work:
+   * the durable engine emits `step-start` from inside its chunk loop, once the
+   * provider has already produced its first chunk, so the gap between
+   * `step-start` and the first content chunk is microseconds and the whole
+   * prefill window falls outside every bucket.
+   *
+   * Optional because a replayed or persisted stream can reach a consumer
+   * without it; fall back to arrival time in that case.
+   */
+  startedAt?: number;
   [key: string]: unknown;
 }
 

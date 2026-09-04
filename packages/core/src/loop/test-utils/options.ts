@@ -510,6 +510,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
               "payload": {
                 "messageId": "id-0",
                 "request": {},
+                "startedAt": 1704067200000,
                 "warnings": [],
               },
               "runId": "test-run-id",
@@ -940,6 +941,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
               "payload": {
                 "messageId": "id-0",
                 "request": {},
+                "startedAt": 1704067200000,
                 "warnings": [],
               },
               "runId": "test-run-id",
@@ -5068,7 +5070,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
           runId: 'test-run-id',
           from: 'AGENT',
           type: 'step-start',
-          payload: { request: {}, warnings: [], messageId: 'id-0' },
+          payload: { request: {}, warnings: [], messageId: 'id-0', startedAt: expect.any(Number) },
         },
         {
           type: 'error',
@@ -8276,6 +8278,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
               "payload": {
                 "messageId": "id-0",
                 "request": {},
+                "startedAt": 1704067200000,
                 "warnings": [],
               },
               "runId": "test-run-id",
@@ -8602,6 +8605,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
               "payload": {
                 "messageId": "msg-0",
                 "request": {},
+                "startedAt": 1704067200000,
                 "warnings": [],
               },
               "runId": "test-run-id",
@@ -8872,6 +8876,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
               "payload": {
                 "messageId": "msg-0",
                 "request": {},
+                "startedAt": 1704067200000,
                 "warnings": [],
               },
               "runId": "test-run-id",

@@ -949,6 +949,13 @@ Signals the start of a processing step.
             isOptional: true,
             description: 'Any warnings from the language model call',
           },
+          {
+            name: 'startedAt',
+            type: 'number',
+            isOptional: true,
+            description:
+              "Epoch milliseconds at which this step's model inference started, stamped immediately before the provider call. Use this rather than the time the chunk arrives when measuring time to first token: durable agents emit step-start after the provider's first chunk, so arrival time excludes the whole prefill window. Absent on a replayed or persisted stream, in which case fall back to arrival time.",
+          },
         ],
       },
     ],

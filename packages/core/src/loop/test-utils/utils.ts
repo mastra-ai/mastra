@@ -12,6 +12,13 @@ import { Mastra } from '../../mastra';
 import { InMemoryStore } from '../../storage';
 import { MastraLanguageModelV2Mock as MockLanguageModelV2 } from './MastraLanguageModelV2Mock';
 
+/**
+ * Keys whose value is a wall-clock instant from the run itself, so they differ
+ * on every execution and cannot live in a snapshot. `startedAt` is the
+ * inference start stamped onto `step-start`.
+ */
+const VOLATILE_TIMESTAMP_KEYS = new Set(['createdAt', 'startedAt']);
+
 export function stripMastraCreatedAt<T>(value: T): T {
   if (Array.isArray(value)) {
     return value.map(item => stripMastraCreatedAt(item)) as T;
@@ -23,7 +30,7 @@ export function stripMastraCreatedAt<T>(value: T): T {
 
   if (value && typeof value === 'object') {
     const normalizedEntries = Object.entries(value).map(([key, nestedValue]) => {
-      if (key === 'createdAt') {
+      if (VOLATILE_TIMESTAMP_KEYS.has(key)) {
         return null;
       }
 
