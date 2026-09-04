@@ -3818,6 +3818,7 @@ export class Agent<
     memoryConfig,
     autoResumeSuspendedTools,
     backgroundTaskEnabled,
+    getModel,
     ...rest
   }: {
     runId?: string;
@@ -3828,6 +3829,7 @@ export class Agent<
     memoryConfig?: MemoryConfigInternal;
     autoResumeSuspendedTools?: boolean;
     backgroundTaskEnabled?: boolean;
+    getModel: () => Promise<MastraLanguageModel | MastraLegacyLanguageModel>;
   } & Partial<ObservabilityContext>) {
     const observabilityContext = resolveObservabilityContext(rest);
     let convertedMemoryTools: Record<string, CoreTool> = {};
@@ -3863,7 +3865,7 @@ export class Agent<
           agentId: this.id,
           requestContext,
           ...observabilityContext,
-          model: await this.getModel({ requestContext }),
+          model: await getModel(),
           tracingPolicy: this.#options?.tracingPolicy,
           requireApproval: (toolObj as any).requireApproval,
           backgroundConfig: (toolObj as any).background,
@@ -3895,6 +3897,7 @@ export class Agent<
     mastraProxy,
     autoResumeSuspendedTools,
     backgroundTaskEnabled,
+    getModel,
     ...rest
   }: {
     runId?: string;
@@ -3904,6 +3907,7 @@ export class Agent<
     mastraProxy?: MastraUnion;
     autoResumeSuspendedTools?: boolean;
     backgroundTaskEnabled?: boolean;
+    getModel: () => Promise<MastraLanguageModel | MastraLegacyLanguageModel>;
   } & Partial<ObservabilityContext>) {
     const observabilityContext = resolveObservabilityContext(rest);
     let convertedWorkspaceTools: Record<string, CoreTool> = {};
@@ -3941,7 +3945,7 @@ export class Agent<
           agentId: this.id,
           requestContext,
           ...observabilityContext,
-          model: await this.getModel({ requestContext }),
+          model: await getModel(),
           tracingPolicy: this.#options?.tracingPolicy,
           requireApproval: (toolObj as any).requireApproval,
           backgroundConfig: (toolObj as any).background,
@@ -3978,6 +3982,7 @@ export class Agent<
     autoResumeSuspendedTools,
     backgroundTaskEnabled,
     suppressEagerSkillTools,
+    getModel,
     ...rest
   }: {
     runId?: string;
@@ -3988,6 +3993,7 @@ export class Agent<
     autoResumeSuspendedTools?: boolean;
     backgroundTaskEnabled?: boolean;
     suppressEagerSkillTools: boolean;
+    getModel: () => Promise<MastraLanguageModel | MastraLegacyLanguageModel>;
   } & Partial<ObservabilityContext>) {
     const observabilityContext = resolveObservabilityContext(rest);
     let convertedSkillTools: Record<string, CoreTool> = {};
@@ -4029,7 +4035,7 @@ export class Agent<
           agentId: this.id,
           requestContext,
           ...observabilityContext,
-          model: await this.getModel({ requestContext }),
+          model: await getModel(),
           tracingPolicy: this.#options?.tracingPolicy,
           requireApproval: false, // Skill tools never require approval
           backgroundConfig: (toolObj as any).background,
@@ -4061,6 +4067,7 @@ export class Agent<
     requestContext,
     autoResumeSuspendedTools,
     backgroundTaskEnabled,
+    getModel,
     ...rest
   }: {
     runId?: string;
@@ -4069,6 +4076,7 @@ export class Agent<
     requestContext: RequestContext;
     autoResumeSuspendedTools?: boolean;
     backgroundTaskEnabled?: boolean;
+    getModel: () => Promise<MastraLanguageModel | MastraLegacyLanguageModel>;
   } & Partial<ObservabilityContext>) {
     const observabilityContext = resolveObservabilityContext(rest);
     let convertedBrowserTools: Record<string, CoreTool> = {};
@@ -4103,7 +4111,7 @@ export class Agent<
           agentId: this.id,
           requestContext,
           ...observabilityContext,
-          model: await this.getModel({ requestContext }),
+          model: await getModel(),
           tracingPolicy: this.#options?.tracingPolicy,
           requireApproval: (toolObj as any).requireApproval,
           backgroundConfig: (toolObj as any).background,
@@ -4140,6 +4148,7 @@ export class Agent<
     autoResumeSuspendedTools,
     backgroundTaskEnabled,
     tools,
+    getModel,
     ...rest
   }: {
     processors: InputProcessorOrWorkflow[];
@@ -4157,6 +4166,7 @@ export class Agent<
     outputWriter?: OutputWriter;
     autoResumeSuspendedTools?: boolean;
     backgroundTaskEnabled?: boolean;
+    getModel: () => Promise<MastraLanguageModel | MastraLegacyLanguageModel>;
   } & Partial<ObservabilityContext>) {
     const observabilityContext = resolveObservabilityContext(rest);
     const convertedProcessorTools: Record<string, CoreTool> = {};
@@ -4181,7 +4191,7 @@ export class Agent<
 
       const workspace = await this.getWorkspace({ requestContext });
       const memory = await this.getMemory({ requestContext });
-      const model = await this.getModel({ requestContext });
+      const model = await getModel();
 
       for (const [toolName, tool] of Object.entries(loadedTools)) {
         if (isMastraTool(tool) || isProviderTool(tool)) {
@@ -4396,6 +4406,8 @@ export class Agent<
             ? createMastraProxy({ mastra: this.#mastra, logger: this.logger })
             : undefined;
           const convertedTools: Record<string, CoreTool> = {};
+          const resolvedModel =
+            Object.keys(result.tools).length > 0 ? await this.getModel({ requestContext }) : undefined;
 
           for (const [name, tool] of Object.entries(result.tools)) {
             if (isMastraTool(tool) || isProviderTool(tool)) {
@@ -4413,7 +4425,7 @@ export class Agent<
                   agentId: this.id,
                   requestContext,
                   ...observabilityContext,
-                  model: await this.getModel({ requestContext }),
+                  model: resolvedModel,
                   outputWriter,
                   tracingPolicy: this.#options?.tracingPolicy,
                   requireApproval: (tool as any).requireApproval,
@@ -4579,6 +4591,7 @@ export class Agent<
     autoResumeSuspendedTools,
     backgroundTaskEnabled,
     model: activeModel,
+    getModel,
     ...rest
   }: {
     runId?: string;
@@ -4590,6 +4603,7 @@ export class Agent<
     autoResumeSuspendedTools?: boolean;
     backgroundTaskEnabled?: boolean;
     model?: MastraLanguageModel | MastraLegacyLanguageModel;
+    getModel: () => Promise<MastraLanguageModel | MastraLegacyLanguageModel>;
   } & Partial<ObservabilityContext>) {
     const observabilityContext = resolveObservabilityContext(rest);
     let toolsForRequest: Record<string, CoreTool> = {};
@@ -4600,7 +4614,7 @@ export class Agent<
     const assignedTools = await this.listTools({ requestContext, resolveWebSearch: false });
 
     const assignedToolEntries = Object.entries(assignedTools || {});
-    const model = activeModel ?? (assignedToolEntries.length > 0 ? await this.getModel({ requestContext }) : undefined);
+    const model = activeModel ?? (assignedToolEntries.length > 0 ? await getModel() : undefined);
 
     const assignedCoreToolEntries = await Promise.all(
       assignedToolEntries.map(async ([k, tool]) => {
@@ -4660,6 +4674,7 @@ export class Agent<
     outputWriter,
     autoResumeSuspendedTools,
     backgroundTaskEnabled,
+    getModel,
     ...rest
   }: {
     runId?: string;
@@ -4671,6 +4686,7 @@ export class Agent<
     outputWriter?: OutputWriter;
     autoResumeSuspendedTools?: boolean;
     backgroundTaskEnabled?: boolean;
+    getModel: () => Promise<MastraLanguageModel | MastraLegacyLanguageModel>;
   } & Partial<ObservabilityContext>) {
     const observabilityContext = resolveObservabilityContext(rest);
     let toolsForRequest: Record<string, CoreTool> = {};
@@ -4699,7 +4715,7 @@ export class Agent<
             agentId: this.id,
             requestContext,
             ...observabilityContext,
-            model: await this.getModel({ requestContext }),
+            model: await getModel(),
             outputWriter,
             tracingPolicy: this.#options?.tracingPolicy,
             requireApproval: (toolObj as any).requireApproval,
@@ -4735,6 +4751,7 @@ export class Agent<
     autoResumeSuspendedTools,
     backgroundTaskEnabled,
     model: activeModel,
+    getModel,
     ...rest
   }: {
     runId?: string;
@@ -4746,6 +4763,7 @@ export class Agent<
     autoResumeSuspendedTools?: boolean;
     backgroundTaskEnabled?: boolean;
     model?: MastraLanguageModel | MastraLegacyLanguageModel;
+    getModel: () => Promise<MastraLanguageModel | MastraLegacyLanguageModel>;
   } & Partial<ObservabilityContext>) {
     const observabilityContext = resolveObservabilityContext(rest);
     let toolsForRequest: Record<string, CoreTool> = {};
@@ -4755,7 +4773,7 @@ export class Agent<
     if (clientToolsForInput.length > 0) {
       this.logger.debug('Adding client tools', { agent: this.name, tools: Object.keys(clientTools || {}), runId });
       for (const [toolName, tool] of clientToolsForInput) {
-        const model = activeModel ?? (await this.getModel({ requestContext }));
+        const model = activeModel ?? (await getModel());
         let toolToConvert: ToolToConvert;
         if (isWebSearchTool(tool)) {
           toolToConvert = createWebSearchProviderTool(normalizeWebSearchProvider(model));
@@ -4861,6 +4879,7 @@ export class Agent<
     autoResumeSuspendedTools,
     delegation,
     backgroundTaskEnabled,
+    getModel,
     ...rest
   }: {
     runId?: string;
@@ -4871,6 +4890,7 @@ export class Agent<
     autoResumeSuspendedTools?: boolean;
     delegation?: DelegationConfig;
     backgroundTaskEnabled?: boolean;
+    getModel: () => Promise<MastraLanguageModel | MastraLegacyLanguageModel>;
   } & Partial<ObservabilityContext>) {
     const observabilityContext = resolveObservabilityContext(rest);
     const convertedAgentTools: Record<string, CoreTool> = {};
@@ -5842,7 +5862,7 @@ export class Agent<
           agentName: this.name,
           agentId: this.id,
           requestContext,
-          model: await this.getModel({ requestContext }),
+          model: await getModel(),
           ...observabilityContext,
           tracingPolicy: this.#options?.tracingPolicy,
           backgroundConfig: subAgentBackgroundConfig,
@@ -5874,6 +5894,7 @@ export class Agent<
     methodType,
     autoResumeSuspendedTools,
     backgroundTaskEnabled,
+    getModel,
     ...rest
   }: {
     runId?: string;
@@ -5883,6 +5904,7 @@ export class Agent<
     methodType: AgentMethodType;
     autoResumeSuspendedTools?: boolean;
     backgroundTaskEnabled?: boolean;
+    getModel: () => Promise<MastraLanguageModel | MastraLegacyLanguageModel>;
   } & Partial<ObservabilityContext>) {
     const observabilityContext = resolveObservabilityContext(rest);
     const convertedWorkflowTools: Record<string, CoreTool> = {};
@@ -6117,7 +6139,7 @@ export class Agent<
           agentName: this.name,
           agentId: this.id,
           requestContext,
-          model: await this.getModel({ requestContext }),
+          model: await getModel(),
           ...observabilityContext,
           tracingPolicy: this.#options?.tracingPolicy,
           agentBackgroundConfig: this.#backgroundTasks,
@@ -6247,6 +6269,13 @@ export class Agent<
       mastraProxy = createMastraProxy({ mastra: this.#mastra, logger });
     }
 
+    // Resolve the effective model lazily, at most once per convertTools call, so every
+    // tool source shares a single snapshot instead of re-running the (possibly dynamic)
+    // resolver per tool. Sources without tools never resolve it, and a per-call `model`
+    // override (e.g. generate({ model })) wins over the configured model for all sources.
+    let modelSnapshot: Promise<MastraLanguageModel | MastraLegacyLanguageModel> | undefined;
+    const getResolvedModel = () => (modelSnapshot ??= Promise.resolve(model ?? this.getModel({ requestContext })));
+
     const assignedTools = await this.listAssignedTools({
       runId,
       resourceId,
@@ -6258,6 +6287,7 @@ export class Agent<
       autoResumeSuspendedTools,
       backgroundTaskEnabled,
       model,
+      getModel: getResolvedModel,
     });
 
     const memoryTools = await this.listMemoryTools({
@@ -6270,6 +6300,7 @@ export class Agent<
       memoryConfig,
       autoResumeSuspendedTools,
       backgroundTaskEnabled,
+      getModel: getResolvedModel,
     });
 
     const toolsetTools = await this.listToolsets({
@@ -6283,6 +6314,7 @@ export class Agent<
       outputWriter,
       autoResumeSuspendedTools,
       backgroundTaskEnabled,
+      getModel: getResolvedModel,
     });
 
     const clientSideTools = await this.listClientTools({
@@ -6296,6 +6328,7 @@ export class Agent<
       autoResumeSuspendedTools,
       backgroundTaskEnabled,
       model,
+      getModel: getResolvedModel,
     });
 
     // Preserve `onOutput` and `toModelOutput` from server-declared execute-less
@@ -6328,6 +6361,7 @@ export class Agent<
       autoResumeSuspendedTools,
       delegation,
       backgroundTaskEnabled,
+      getModel: getResolvedModel,
     });
 
     const workflowTools = await this.listWorkflowTools({
@@ -6339,6 +6373,7 @@ export class Agent<
       ...observabilityContext,
       autoResumeSuspendedTools,
       backgroundTaskEnabled,
+      getModel: getResolvedModel,
     });
 
     const workspaceTools = await this.listWorkspaceTools({
@@ -6350,6 +6385,7 @@ export class Agent<
       mastraProxy,
       autoResumeSuspendedTools,
       backgroundTaskEnabled,
+      getModel: getResolvedModel,
     });
 
     const configuredInputProcessors = inputProcessors ?? (await this.listConfiguredInputProcessors(requestContext));
@@ -6366,6 +6402,7 @@ export class Agent<
       autoResumeSuspendedTools,
       backgroundTaskEnabled,
       suppressEagerSkillTools: hasOnDemandProcessor && !hasSkillsProcessor,
+      getModel: getResolvedModel,
     });
 
     const browserTools = await this.listBrowserTools({
@@ -6376,6 +6413,7 @@ export class Agent<
       ...observabilityContext,
       autoResumeSuspendedTools,
       backgroundTaskEnabled,
+      getModel: getResolvedModel,
     });
 
     const requestResolvedTools = {
@@ -6402,6 +6440,7 @@ export class Agent<
       outputWriter,
       autoResumeSuspendedTools,
       backgroundTaskEnabled,
+      getModel: getResolvedModel,
     });
 
     const allTools = {

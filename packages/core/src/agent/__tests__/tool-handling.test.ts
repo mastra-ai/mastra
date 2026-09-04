@@ -58,6 +58,104 @@ function toolhandlingTests(version: 'v1' | 'v2' | 'v3' | 'v4') {
 
         expect(resolveModel).not.toHaveBeenCalled();
       });
+
+      function createNamedTool(name: string) {
+        return createTool({
+          id: name,
+          description: `${name} test tool.`,
+          inputSchema: z.object({}),
+          execute: async () => name,
+        });
+      }
+
+      it('resolves the model once for all tools in a toolset', async () => {
+        const resolveModel = vi.fn(() => dummyModel);
+        const agent = new Agent({
+          id: 'dynamic-model-toolset-agent',
+          name: 'dynamic-model-toolset-agent',
+          instructions: 'Use the toolset tools.',
+          model: resolveModel,
+        });
+
+        await agent.getToolsForExecution({
+          requestContext: new RequestContext(),
+          toolsets: {
+            testToolset: {
+              firstTool: createNamedTool('first-tool'),
+              secondTool: createNamedTool('second-tool'),
+              thirdTool: createNamedTool('third-tool'),
+            },
+          },
+        });
+
+        expect(resolveModel).toHaveBeenCalledTimes(1);
+      });
+
+      it('resolves the model once for all client tools', async () => {
+        const resolveModel = vi.fn(() => dummyModel);
+        const agent = new Agent({
+          id: 'dynamic-model-client-agent',
+          name: 'dynamic-model-client-agent',
+          instructions: 'Use the client tools.',
+          model: resolveModel,
+        });
+
+        await agent.getToolsForExecution({
+          requestContext: new RequestContext(),
+          clientTools: {
+            firstTool: createNamedTool('first-tool'),
+            secondTool: createNamedTool('second-tool'),
+            thirdTool: createNamedTool('third-tool'),
+          },
+        });
+
+        expect(resolveModel).toHaveBeenCalledTimes(1);
+      });
+
+      it('resolves the model once across tool sources', async () => {
+        const resolveModel = vi.fn(() => dummyModel);
+        const agent = new Agent({
+          id: 'dynamic-model-multi-source-agent',
+          name: 'dynamic-model-multi-source-agent',
+          instructions: 'Use the tools.',
+          model: resolveModel,
+          tools: {
+            assignedTool: createNamedTool('assigned-tool'),
+          },
+        });
+
+        await agent.getToolsForExecution({
+          requestContext: new RequestContext(),
+          toolsets: {
+            testToolset: {
+              toolsetTool: createNamedTool('toolset-tool'),
+            },
+          },
+          clientTools: {
+            clientTool: createNamedTool('client-tool'),
+          },
+        });
+
+        expect(resolveModel).toHaveBeenCalledTimes(1);
+      });
+
+      it('does not resolve the model when a tool source is empty', async () => {
+        const resolveModel = vi.fn(() => dummyModel);
+        const agent = new Agent({
+          id: 'dynamic-model-empty-toolset-agent',
+          name: 'dynamic-model-empty-toolset-agent',
+          instructions: 'No tools are available.',
+          model: resolveModel,
+        });
+
+        await agent.getToolsForExecution({
+          requestContext: new RequestContext(),
+          toolsets: {},
+          clientTools: {},
+        });
+
+        expect(resolveModel).not.toHaveBeenCalled();
+      });
     });
 
     it('should handle tool name collisions caused by formatting', async () => {
