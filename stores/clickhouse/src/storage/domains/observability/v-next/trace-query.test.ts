@@ -75,7 +75,7 @@ describe('ClickHouse advanced trace query', () => {
   });
 
   it('parameterizes metadata keys and values with total missing semantics', () => {
-    const key = `message'id`;
+    const key = ` message'id `;
     const value = `message' OR 1`;
     const compiled = compileClickHouseTraceQuery(
       plan({

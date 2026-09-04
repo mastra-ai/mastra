@@ -73,7 +73,7 @@ describe('Postgres advanced trace query', () => {
   });
 
   it('parameterizes metadata keys and values with total missing semantics', () => {
-    const key = `message'id`;
+    const key = ` message'id `;
     const value = `message' OR TRUE --`;
     const compiled = compilePostgresTraceQuery(
       'public',

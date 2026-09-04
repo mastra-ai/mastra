@@ -2,7 +2,7 @@
 '@mastra/core': minor
 ---
 
-Added portable top-level string metadata predicates to advanced trace queries. Metadata keys and values are validated before storage execution and work inside recursive Boolean predicates.
+Added portable top-level string metadata predicates to advanced trace queries. Invalid metadata keys and values are rejected consistently, and valid predicates work inside recursive Boolean expressions.
 
 ```ts
 where: { op: "eq", left: { path: "metadata.messageId" }, right: { literal: "message-123" } }

@@ -779,7 +779,13 @@ function addOperatorIssue(operator: string, field: string, path: Array<string | 
 
 function normalizePath(path: string): string {
   const match = /^\$\{([^}]+)\}$/.exec(path.trim());
-  return (match?.[1] ?? path).trim();
+  const unwrapped = match?.[1] ?? path;
+  const normalized = unwrapped.trim();
+  if (normalized.startsWith('metadata.')) {
+    const prefixIndex = unwrapped.indexOf('metadata.');
+    return `metadata.${unwrapped.slice(prefixIndex + 'metadata.'.length)}`;
+  }
+  return normalized;
 }
 
 function normalizeLiteral(value: TraceQueryLiteral, rule: FieldRule): string | number | undefined {

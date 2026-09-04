@@ -129,6 +129,8 @@ export const TRACE_QUERY_FIXTURE_DATA: TraceQueryFixtureData = {
         messageId: 'message-a',
         parentMessageId: 'message-parent',
         actorRole: 'assistant',
+        ' actorRole': 'leading-key',
+        'actorRole ': 'trailing-key',
         threadId: 'metadata-thread-1',
         api_key: 'metadata-api-key',
         protocolVersion: 'v2',
@@ -439,6 +441,28 @@ export const TRACE_QUERY_CONFORMANCE_CASES: TraceQueryConformanceCase[] = [
       },
     },
     expected: [{ traceId: 'trace-a' }],
+  },
+  {
+    name: 'preserves exact metadata keys containing whitespace',
+    request: {
+      timeRange: fullRange,
+      where: {
+        op: 'and',
+        args: [
+          { op: 'eq', left: { path: 'metadata. actorRole' }, right: { literal: 'leading-key' } },
+          { op: 'eq', left: { path: '${metadata.actorRole }' }, right: { literal: 'trailing-key' } },
+        ],
+      },
+    },
+    expected: [{ traceId: 'trace-a' }],
+  },
+  {
+    name: 'does not match an exact metadata key through its trimmed spelling',
+    request: {
+      timeRange: fullRange,
+      where: { op: 'eq', left: { path: 'metadata.actorRole' }, right: { literal: 'leading-key' } },
+    },
+    expected: [],
   },
   {
     name: 'uses total missing semantics for metadata predicates',

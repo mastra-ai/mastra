@@ -243,6 +243,34 @@ describe('planTraceQuery', () => {
     });
   });
 
+  it('preserves leading and trailing whitespace in metadata keys', () => {
+    const direct = planTraceQuery(
+      parsed({
+        ...baseRequest,
+        where: { op: 'eq', left: { path: 'metadata. actorRole' }, right: { literal: 'leading-key' } },
+      }),
+    );
+    expect(direct.where).toEqual({
+      type: 'comparison',
+      field: 'metadata. actorRole',
+      operator: 'eq',
+      value: 'leading-key',
+    });
+
+    const templated = planTraceQuery(
+      parsed({
+        ...baseRequest,
+        where: { op: 'eq', left: { path: '${metadata.actorRole }' }, right: { literal: 'trailing-key' } },
+      }),
+    );
+    expect(templated.where).toEqual({
+      type: 'comparison',
+      field: 'metadata.actorRole ',
+      operator: 'eq',
+      value: 'trailing-key',
+    });
+  });
+
   it('accepts promoted and sensitive names as metadata keys', () => {
     for (const field of ['metadata.requestId', 'metadata.api_key']) {
       expect(planTraceQuery(parsed({ ...baseRequest, where: { op: 'exists', path: field } })).where).toEqual({
