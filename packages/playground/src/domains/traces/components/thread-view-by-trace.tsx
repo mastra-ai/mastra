@@ -192,8 +192,12 @@ function TraceThreadRow({
             <TraceIcon />
           </Button>
         </div>
-        <div className="min-h-0 flex-1">
-          <TraceThreadItemView traceId={traceId} onHighlightSpans={onHighlightSpans} />
+        <div className="flex min-h-0 flex-1 flex-col justify-center">
+          <TraceThreadItemView
+            traceId={traceId}
+            onHighlightSpans={onHighlightSpans}
+            className="h-auto overflow-visible"
+          />
         </div>
         {showFeedback && (
           <div className="border-border1 bg-surface3 absolute top-8 left-0 z-20 max-h-[calc(100%-2rem)] w-80 overflow-y-auto rounded-lg border shadow-lg">
