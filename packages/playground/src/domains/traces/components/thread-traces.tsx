@@ -30,6 +30,8 @@ export function ThreadTraces({ threadId, onTraceOpenChange, onSpanOpenChange }: 
 
   const [featuredTraceId, setFeaturedTraceId] = useState<string | null>(null);
   const [featuredSpanId, setFeaturedSpanId] = useState<string | undefined>(undefined);
+  // No URL state in the aside — mirrors `highlightSpanIds` from the traces page locally.
+  const [highlightSpanIds, setHighlightSpanIds] = useState<string[]>([]);
 
   // Parent notifications happen in the event handlers (not effects) — "you don't need an effect".
   // Only notify on actual open/close transitions so the parent never sees spurious changes.
@@ -46,6 +48,7 @@ export function ThreadTraces({ threadId, onTraceOpenChange, onSpanOpenChange }: 
 
   const closeTrace = () => {
     selectSpan(undefined);
+    setHighlightSpanIds([]);
     setFeaturedTraceId(null);
     onTraceOpenChange?.(false);
   };
@@ -58,6 +61,7 @@ export function ThreadTraces({ threadId, onTraceOpenChange, onSpanOpenChange }: 
     null,
     traceId => {
       selectSpan(undefined);
+      setHighlightSpanIds([]);
       setFeaturedTraceId(traceId);
     },
   );
@@ -93,6 +97,11 @@ export function ThreadTraces({ threadId, onTraceOpenChange, onSpanOpenChange }: 
         onNext={handleNextTrace}
         traceHref={`/traces?traceId=${encodeURIComponent(featuredTraceId)}`}
         showPartialThread
+        featuredSpanIds={highlightSpanIds}
+        onHighlightSpans={spanIds => {
+          setHighlightSpanIds(spanIds);
+          selectSpan(spanIds[0]);
+        }}
       />
     );
   }

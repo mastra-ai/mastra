@@ -83,9 +83,13 @@ const toToolPart = (span: SpanRecord): MastraMessagePart => {
   };
 };
 
-const collectVisibleToolParts = (root: UISpan, spans: SpanRecord[]): MastraMessagePart[] => {
+const collectVisibleToolParts = (
+  root: UISpan,
+  spans: SpanRecord[],
+): { parts: MastraMessagePart[]; spanIds: string[] } => {
   const spanById = new Map(spans.map(span => [span.spanId, span]));
   const parts: MastraMessagePart[] = [];
+  const spanIds: string[] = [];
 
   const visit = (nodes: UISpan[]) => {
     for (const node of nodes) {
@@ -93,6 +97,7 @@ const collectVisibleToolParts = (root: UISpan, spans: SpanRecord[]): MastraMessa
       if (!span) continue;
       if (TOOL_SPAN_TYPES.has(span.spanType)) {
         parts.push(toToolPart(span));
+        spanIds.push(span.spanId);
         continue;
       }
       visit(node.spans ?? []);
@@ -100,13 +105,19 @@ const collectVisibleToolParts = (root: UISpan, spans: SpanRecord[]): MastraMessa
   };
 
   visit(root.spans ?? []);
-  return parts;
+  return { parts, spanIds };
 };
 
 const messageContent = (parts: MastraMessagePart[]) =>
   parts.flatMap(part => (part.type === 'text' && typeof part.text === 'string' ? [part.text] : [])).join('\n');
 
-export function formatTraceThreadMessages(spans: SpanRecord[]): MastraDBMessage[] {
+/** A `MastraDBMessage` reconstructed from trace spans, remembering which spans were used to build it. */
+export interface TraceViewMastraDBMessage extends MastraDBMessage {
+  /** Ids of the spans used to build this message, in visit order (root span first). */
+  traceSpanIds: string[];
+}
+
+export function formatTraceThreadMessages(spans: SpanRecord[]): TraceViewMastraDBMessage[] {
   const hierarchy = formatHierarchicalSpans(
     spans.map(span => ({
       spanId: span.spanId,
@@ -124,7 +135,7 @@ export function formatTraceThreadMessages(spans: SpanRecord[]): MastraDBMessage[
 
   const userParts = getUserParts(root.input);
   const responseText = getResponseText(root.output);
-  const assistantParts = collectVisibleToolParts(hierarchicalRoot, spans);
+  const { parts: assistantParts, spanIds: toolSpanIds } = collectVisibleToolParts(hierarchicalRoot, spans);
   if (responseText) assistantParts.push({ type: 'text', text: responseText });
 
   return [
@@ -134,6 +145,7 @@ export function formatTraceThreadMessages(spans: SpanRecord[]): MastraDBMessage[
       createdAt: new Date(root.startedAt),
       threadId: root.threadId ?? undefined,
       content: { format: 2, parts: userParts, content: messageContent(userParts) },
+      traceSpanIds: [root.spanId],
     },
     {
       id: `${root.traceId}:${root.spanId}:assistant`,
@@ -141,6 +153,7 @@ export function formatTraceThreadMessages(spans: SpanRecord[]): MastraDBMessage[
       createdAt: new Date(root.endedAt ?? root.startedAt),
       threadId: root.threadId ?? undefined,
       content: { format: 2, parts: assistantParts, content: responseText },
+      traceSpanIds: [root.spanId, ...toolSpanIds],
     },
   ];
 }

@@ -89,10 +89,15 @@ export interface TraceDataPanelViewProps {
   feedbackTabSlot?: (args: { traceId: string }) => ReactNode;
   /** Optional count shown in the "Feedback" tab label. */
   feedbackTabBadge?: ReactNode;
-  /** When provided, a "Messages" tab renders the trace as one reconstructed agent turn. */
-  partialThreadTabSlot?: (args: { traceId: string }) => ReactNode;
+  /**
+   * When provided, a "Messages" tab renders the trace as one reconstructed agent turn.
+   * `showDetailsTab` switches the panel back to the "Spans" tab (e.g. after highlighting spans).
+   */
+  partialThreadTabSlot?: (args: { traceId: string; showDetailsTab: () => void }) => ReactNode;
   activeTab?: TraceDataPanelTab;
   onTabChange?: (tab: TraceDataPanelTab) => void;
+  /** Span ids to feature in the timeline; every other span is faded. */
+  featuredSpanIds?: string[];
   /**
    * When provided, the panel splits into two columns inside the same card: the
    * trace content on the left, this slot (typically the span detail) on the right.
@@ -131,6 +136,7 @@ export function TraceDataPanelView({
   partialThreadTabSlot,
   activeTab,
   onTabChange,
+  featuredSpanIds,
   spanPanelSlot,
   className,
 }: TraceDataPanelViewProps) {
@@ -319,6 +325,7 @@ export function TraceDataPanelView({
                       selectedSpanId={selectedSpanId}
                       expandedSpanIds={expandedSpanIds}
                       setExpandedSpanIds={setExpandedSpanIds}
+                      featuredSpanIds={featuredSpanIds}
                       chartWidth={timelineChartWidth}
                       leadingSlot={
                         <SearchFieldBlock
@@ -368,7 +375,7 @@ export function TraceDataPanelView({
                     <TabContent value="details">{detailsBody}</TabContent>
                     {partialThreadTabSlot && (
                       <TabContent value="partial-thread" className="h-full min-h-0">
-                        {partialThreadTabSlot({ traceId })}
+                        {partialThreadTabSlot({ traceId, showDetailsTab: () => onTabChange?.('details') })}
                       </TabContent>
                     )}
                     {feedbackTabSlot && (

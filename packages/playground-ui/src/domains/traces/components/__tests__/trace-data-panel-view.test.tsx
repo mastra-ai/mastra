@@ -823,9 +823,45 @@ describe('TraceDataPanelView — trace-level tabs', () => {
         />,
       );
 
-      expect(partialThreadTabSlot).toHaveBeenCalledWith({ traceId: 'trace-1' });
+      expect(partialThreadTabSlot).toHaveBeenCalledWith(
+        expect.objectContaining({ traceId: 'trace-1', showDetailsTab: expect.any(Function) }),
+      );
       expect(screen.getByText('partial thread for trace-1')).toBeTruthy();
     });
+
+    it('lets the slot switch the panel back to the Spans tab', () => {
+      const onTabChange = vi.fn();
+
+      render(
+        <TraceDataPanelView
+          {...baseProps}
+          activeTab="partial-thread"
+          onTabChange={onTabChange}
+          partialThreadTabSlot={({ showDetailsTab }) => (
+            <button type="button" onClick={showDetailsTab}>
+              back to spans
+            </button>
+          )}
+        />,
+      );
+
+      fireEvent.click(screen.getByRole('button', { name: 'back to spans' }));
+
+      expect(onTabChange).toHaveBeenCalledWith('details');
+    });
+  });
+
+  it('fades timeline spans that are not featured', () => {
+    const rootSpan = nestedSpanFixture[0];
+    if (!rootSpan) throw new Error('fixture must have a root span');
+
+    render(<TraceDataPanelView {...baseProps} spans={nestedSpanFixture} featuredSpanIds={[rootSpan.spanId]} />);
+
+    const rows = screen.getAllByLabelText(/^View details for span/);
+    expect(rows.length).toBeGreaterThan(1);
+    const [featured, ...others] = rows;
+    expect(featured?.className).not.toContain('opacity-30');
+    others.forEach(row => expect(row.className).toContain('opacity-30'));
   });
 
   it('renders no tabs when no scores slot is provided', () => {

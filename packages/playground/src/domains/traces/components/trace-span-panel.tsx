@@ -43,6 +43,13 @@ export interface TraceSpanPanelProps {
   feedbackTabSlot?: TraceDataPanelViewProps['feedbackTabSlot'];
   /** Enables the reconstructed turn tab when the displayed root is a complete agent trace with a thread id. */
   showPartialThread?: boolean;
+  /** Span ids featured in the timeline (non-featured spans are faded). */
+  featuredSpanIds?: string[];
+  /**
+   * Called with the span ids behind a reconstructed message when the user asks to highlight them.
+   * The panel switches back to the Spans tab afterwards.
+   */
+  onHighlightSpans?: (spanIds: string[]) => void;
   scoresTabBadge?: ReactNode;
   scoresTabSlot?: TraceDataPanelViewProps['scoresTabSlot'];
   usage?: TraceDataPanelViewProps['usage'];
@@ -82,6 +89,8 @@ export function TraceSpanPanel({
   feedbackTabBadge,
   feedbackTabSlot,
   showPartialThread,
+  featuredSpanIds,
+  onHighlightSpans,
   scoresTabBadge,
   scoresTabSlot,
   usage,
@@ -132,9 +141,22 @@ export function TraceSpanPanel({
       showUnavailableFeaturesMsg={showUnavailableFeaturesMsg}
       feedbackTabBadge={feedbackTabBadge}
       feedbackTabSlot={feedbackTabSlot}
+      featuredSpanIds={featuredSpanIds}
       partialThreadTabSlot={
         canShowPartialThread
-          ? ({ traceId: selectedTraceId }) => <TraceThreadItemView traceId={selectedTraceId} />
+          ? ({ traceId: selectedTraceId, showDetailsTab }) => (
+              <TraceThreadItemView
+                traceId={selectedTraceId}
+                onHighlightSpans={
+                  onHighlightSpans
+                    ? spanIds => {
+                        onHighlightSpans(spanIds);
+                        showDetailsTab();
+                      }
+                    : undefined
+                }
+              />
+            )
           : undefined
       }
       scoresTabBadge={scoresTabBadge}

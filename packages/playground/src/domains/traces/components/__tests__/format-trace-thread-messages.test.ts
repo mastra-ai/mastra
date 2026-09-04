@@ -29,6 +29,21 @@ describe('formatTraceThreadMessages', () => {
 
       expect(toolNames).toEqual(['workflow-tripPlanner', 'searchHotels', 'browser_location', 'web_search']);
     });
+
+    it('remembers which spans were used to build each message', () => {
+      const messages = formatTraceThreadMessages(agentTraceWithTools.spans);
+
+      expect(messages[0]?.traceSpanIds).toEqual(['agent-root']);
+      expect(messages[1]?.traceSpanIds).toEqual([
+        'agent-root',
+        'workflow-tool',
+        'mcp-tool',
+        'client-tool',
+        'provider-tool',
+      ]);
+      expect(messages[0]?.content.metadata).toBeUndefined();
+      expect(messages[1]?.content.metadata).toBeUndefined();
+    });
   });
 
   describe('when the user input contains persisted message parts', () => {
