@@ -1142,6 +1142,14 @@ describe('openSupervisorFinding (single-finding, non-reconciling)', () => {
     expect(open.map(row => row.findingKey)).toEqual(['decision-failed:d1']);
     expect(open[0]).toMatchObject({ occurrence: 0, resolvedAt: null });
 
+    // Same millisecond as the snapshot: the snapshot cannot have seen it either.
+    await storage.openSupervisorFinding({ ...scope, finding: finding('decision-failed:d2'), now: snapshot });
+    await storage.syncSupervisorFindings({ ...scope, findings: [], now: snapshot });
+    expect((await rows(storage)).map(row => row.findingKey).sort()).toEqual([
+      'decision-failed:d1',
+      'decision-failed:d2',
+    ]);
+
     // A sweep that genuinely post-dates the row and no longer derives it resolves it as before.
     await storage.syncSupervisorFindings({ ...scope, findings: [], now: new Date('2030-01-01T00:05:00.000Z') });
     expect(await rows(storage)).toEqual([]);

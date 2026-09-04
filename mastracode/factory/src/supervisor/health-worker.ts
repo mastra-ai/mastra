@@ -145,13 +145,14 @@ export class FactorySupervisorHealthWorker extends MastraWorker {
         ...(after ? { after } : {}),
       });
       for (const row of rows) {
+        const failureCode = findingText(row, 'failureCode');
         try {
           await this.#notify({
             projectId: scope.factoryProjectId,
             findingKey: row.findingKey,
             kind: findingText(row, 'kind') ?? 'unknown',
             summary: findingText(row, 'evidence') ?? findingText(row, 'title') ?? row.findingKey,
-            ...(findingText(row, 'failureCode') ? { failureCode: findingText(row, 'failureCode') } : {}),
+            ...(failureCode ? { failureCode } : {}),
           });
           await this.#workItems.markSupervisorFindingNotified({
             ...scope,
