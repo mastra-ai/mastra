@@ -1,6 +1,6 @@
 ---
 title: "Reference: UnixSocketPubSub | PubSub"
-description: API reference for UnixSocketPubSub, the Unix socket pub/sub implementation for cross-process delivery on one host.
+description: "UnixSocketPubSub is a PubSub implementation that delivers events across processes on a single host using a Unix domain socket."
 packages:
   - "@mastra/core"
 ---
@@ -47,6 +47,14 @@ export const mastra = new Mastra({
         type: 'number',
         description:
           'Maximum bytes buffered for a slow remote client before its frames are dropped, which keeps one stuck subscriber from blocking others.',
+        isOptional: true,
+        defaultValue: '67108864',
+      },
+      {
+        name: 'maxInboundFrameBytes',
+        type: 'number',
+        description:
+          'Maximum size in bytes of a single incoming frame. Must be a positive finite number. A connection that sends a larger frame, or an unterminated partial frame beyond this size, is disconnected so one peer cannot exhaust process memory.',
         isOptional: true,
         defaultValue: '67108864',
       },

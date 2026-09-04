@@ -9,19 +9,58 @@ packages:
 
 Mastra Code is configured through project-level files, global settings, and environment variables. Configuration files live in `.mastracode/` directories at the project and user levels.
 
+## Custom configuration directory
+
+When embedding Mastra Code, pass `configDir` to [`createMastraCode()`](/reference#createmastracodeoptions) to replace the `.mastracode` directory name:
+
+```typescript
+import { createMastraCode } from 'mastracode'
+
+const mastraCode = await createMastraCode({
+  configDir: '.acme-code',
+})
+```
+
+This changes the project and global locations used for MCP server configuration, hooks, slash commands, agent instructions, skills, and legacy `database.json` discovery. `configDir` must be a single directory name; absolute paths, `.` and `..`, and names containing `/` or `\` are rejected.
+
+## File autocomplete
+
+Mastra Code can search project files and attach a path to your message when you type `@` followed by part of a filename:
+
+- `@setup` matches files such as `setup.ts` and `setup.py`.
+- `@src/tui` narrows the search to a directory.
+- `@"path with spaces"` handles paths that contain spaces.
+
+Use the arrow keys to select a suggestion, then press Tab to insert it. Slash-command autocomplete continues to work when file autocomplete is unavailable.
+
+File suggestions use [`fd`](https://github.com/sharkdp/fd), a file finder that respects `.gitignore`. Install it with your package manager:
+
+```sh
+# macOS
+brew install fd
+
+# Ubuntu or Debian
+sudo apt install fd-find
+
+# Arch Linux
+sudo pacman -S fd
+```
+
+On Ubuntu and Debian, the executable is named `fdfind`. Mastra Code detects both `fd` and `fdfind`.
+
 ## Authentication
 
 Mastra Code supports two authentication methods: **API keys** (environment variables) and **OAuth** (provider subscriptions). You can use either or both.
 
 :::note
 
-Use the `/setup` command to interactively configure authentication and models.
+Use `/connect` to add a provider account or API key. Use `/setup` to configure authentication and model defaults together.
 
 :::
 
 ### API keys
 
-The simplest way to get started is to set API key environment variables for the providers you want to use. Mastra Code auto-detects these on startup:
+Run `/connect`, select **Sign in with an API key**, and choose a provider to store a key. You can also set API key environment variables. Mastra Code detects them on startup:
 
 ```sh
 export ANTHROPIC_API_KEY=sk-ant-...
@@ -29,31 +68,37 @@ export OPENAI_API_KEY=sk-...
 export GOOGLE_API_KEY=...
 export DEEPSEEK_API_KEY=...
 export CEREBRAS_API_KEY=...
+export KIMI_API_KEY=...
 ```
 
 Mastra Code uses Mastra's [model router](https://mastra.ai/models), which routes requests to the correct provider based on the model ID and available API keys. No OAuth login is required when using API keys.
 
 ### Interactive API key prompt
 
-When you select a model from the model selector (`/models`) that doesn't have an API key configured, Mastra Code prompts you to enter one. The prompt displays the required environment variable name (for example, `ANTHROPIC_API_KEY`) and lets you paste your key directly.
+`/models` switches model packs. Built-in packs keep every mode on one provider. Use `/model` to override the current mode with another model from that provider. Modified built-in packs are labeled in `/models`; selecting one highlights the overridden modes and lets you activate its overrides or reset it to the original built-in models. To mix providers, create or edit a custom pack with `/models`.
+
+If the selected model needs a provider key, Mastra Code prompts for the key and displays its environment variable name, such as `ANTHROPIC_API_KEY`.
 
 - **Enter a key**: The key is stored in `auth.json` and set in the current process environment. The model becomes available immediately.
-- **Cancel the prompt**: Press Escape to dismiss. The model selection continues without storing a key, and the model remains marked as unavailable.
+- **Cancel the prompt**: Press Escape to keep the current model unchanged.
+
+Cancelling a key prompt in the custom pack editor also keeps the previous model unchanged.
 
 Stored API keys persist across sessions. On the next startup, Mastra Code loads them into the environment automatically. Environment variables always take priority — if you later set a key via `export`, it overrides the stored value.
 
 ### OAuth login (optional)
 
-If you have an Anthropic Claude Max or OpenAI ChatGPT Plus subscription, you can authenticate via OAuth to use your subscription instead of API keys. Run `/login` in the TUI to start the flow.
+If you have an Anthropic Claude Max, OpenAI ChatGPT Plus, or Kimi For Coding subscription, run `/login` to sign in with an account. You can also run `/connect` and select **Sign in with an account**.
 
 | Provider | OAuth flow | What you get |
 | - | - | - |
 | **Anthropic** | Claude Max subscription | Access to Claude models via your subscription |
 | **OpenAI** | ChatGPT Plus / Codex | Access to OpenAI models via your subscription |
+| **Kimi For Coding** | Device code | Access to Kimi For Coding models via your subscription |
 
 OAuth credentials are stored in `auth.json` alongside the database in the app data directory. During onboarding, you can skip the OAuth step if you already have API keys configured.
 
-When you select **ChatGPT Plus/Pro (Codex Subscription)** in `/login` or during onboarding, Mastra Code asks how you want to sign in:
+When you select **ChatGPT Plus/Pro (Codex Subscription)** in `/connect` or during onboarding, Mastra Code asks how you want to sign in:
 
 - **Browser (local callback)**: opens the browser and waits for the OAuth callback on localhost. This is the default.
 - **Device code (headless)**: shows a code to enter at `https://auth.openai.com/codex/device` — useful for SSH sessions, remote shells, or environments without a browser.
@@ -68,7 +113,7 @@ export MASTRACODE_OPENAI_CODEX_AUTH_MODE=device
 
 When resolving Anthropic models, Mastra Code checks for credentials in this order:
 
-1. Claude Max OAuth (if logged in via `/login`)
+1. Claude Max OAuth (if connected through `/connect`)
 1. `ANTHROPIC_API_KEY` environment variable or stored API key credential
 1. OAuth login prompt (if nothing else is configured)
 
@@ -77,6 +122,12 @@ To switch from OAuth to API key usage, log out with `/logout` and set your `ANTH
 ### Anthropic OAuth warning
 
 Authenticating with a Claude Max subscription through OAuth is a grey area. Anthropic has reportedly banned users for using Claude max credentials outside of Claude Code, so it may violate Anthropic Terms of Service.
+
+## Custom providers and models
+
+Use `/custom-providers` to add OpenAI-compatible providers. Each provider has a name, base URL, optional API key, and one or more model IDs. Saved models appear in selectors such as `/models` and `/subagents` alongside built-in models.
+
+Custom providers are stored in `settings.json` in the application data directory. API keys saved through this flow are stored locally in plaintext, so use it only on a trusted user account and machine.
 
 ## Direct shell passthrough
 
@@ -554,11 +605,54 @@ For global instructions (first match wins):
 
 `AGENTS.md` takes priority over `CLAUDE.md` when both exist at the same location.
 
+## Process memory diagnostics
+
+Enable process memory diagnostics before startup when investigating memory growth in a long-running TUI or headless process:
+
+```sh
+MASTRACODE_PROFILE=1 mastracode
+```
+
+:::warning
+
+Allocation profiles can contain prompts, credentials, file contents, and tool arguments. Keep the output directory private, do not upload it as telemetry, delete it after the investigation, and never commit captured profiles.
+
+:::
+
+Control the same process-wide diagnostics instance from the TUI:
+
+```text
+/profile status
+/profile start
+/profile capture
+/profile stop
+```
+
+Running `/profile` without an argument shows the current status. `capture` writes a Chrome allocation-sampling profile and starts a new sampling epoch; it does not force garbage collection or write a heap snapshot. `stop` writes a final sample and allocation profile before releasing the profiler.
+
+| Environment variable | Default | Minimum | Description |
+| - | - | - | - |
+| `MASTRACODE_PROFILE` | Disabled | — | Enable startup profiling with `1`, `true`, `yes`, or `on` |
+| `MASTRACODE_PROFILE_DIR` | `<app-data>/profiles` | — | Parent directory for private, per-run output directories |
+| `MASTRACODE_PROFILE_SAMPLE_INTERVAL_MS` | `10000` | `1000` | Process and V8 sample interval in milliseconds |
+| `MASTRACODE_PROFILE_CAPTURE_INTERVAL_MS` | `300000` | `10000` | Allocation-profile capture interval in milliseconds |
+| `MASTRACODE_PROFILE_ALLOCATION_INTERVAL_BYTES` | `524288` | `32768` | V8 allocation-sampling interval in bytes |
+
+Each run writes metadata, process samples, garbage-collection events, and timestamped `.heapprofile` files to a unique directory. Compare JavaScript heap growth with resident set size (RSS): rising heap usage suggests retained JavaScript objects, while rising RSS with a stable heap can indicate external buffers, native libraries, memory-mapped files, or allocator behavior.
+
+Periodic sampling and profile capture add overhead. Increasing the sample, capture, and allocation intervals reduces that overhead. Completed captures survive later process termination, while an abrupt crash or `SIGKILL` cannot guarantee a final capture.
+
 ## Storage
 
-Mastra Code stores threads, messages, state, and observational memory in a database. It uses LibSQL by default with a local file — no setup needed.
+Mastra Code stores threads, messages, state, and observational memory in a database. It uses LibSQL by default with a local file in the operating system's application data directory:
 
-To switch to a remote LibSQL (Turso) or PostgreSQL backend, run `/settings` and select a storage backend. You'll be prompted for a connection URL.
+| Platform | Directory |
+| - | - |
+| macOS | `~/Library/Application Support/mastracode/` |
+| Linux | `~/.local/share/mastracode/` |
+| Windows | `%APPDATA%\mastracode\` |
+
+Credentials and global settings are stored alongside the database. To switch to a remote LibSQL (Turso) or PostgreSQL backend, run `/settings` and select a storage backend. You'll be prompted for a connection URL.
 
 If a PostgreSQL connection fails on startup, Mastra Code falls back to LibSQL and shows a warning so you can fix the connection via `/settings`.
 
@@ -616,6 +710,16 @@ Use the `/theme` command to change the theme at runtime:
 
 Running `/theme` with no arguments shows the current theme. The choice is persisted across sessions.
 
+## macOS sleep prevention
+
+On macOS, Mastra Code runs the built-in `caffeinate` utility only while the agent is active, then stops it when the run completes, aborts, errors, or the TUI exits. Idle sessions do not keep the machine awake.
+
+Set `MASTRACODE_DISABLE_CAFFEINATE=1` before launch to disable this behavior:
+
+```sh
+MASTRACODE_DISABLE_CAFFEINATE=1 mastracode
+```
+
 ## Environment variables
 
 | Variable | Description |
@@ -631,7 +735,14 @@ Running `/theme` with no arguments shows the current theme. The choice is persis
 | `MASTRA_THEME` | Color theme override (`dark` or `light`) |
 | `MASTRACODE_SHELL` | Direct TUI `!` shell executable override |
 | `MASTRACODE_SHELL_MODE` | Direct TUI `!` shell mode (`default`, `path`, or `login`) |
+| `MASTRACODE_DISABLE_CAFFEINATE` | Disable active-run sleep prevention on macOS when set to `1` |
+| `MASTRACODE_PROFILE` | Enable process memory diagnostics |
+| `MASTRACODE_PROFILE_DIR` | Override the diagnostics output directory |
+| `MASTRACODE_PROFILE_SAMPLE_INTERVAL_MS` | Override the process and V8 sample interval |
+| `MASTRACODE_PROFILE_CAPTURE_INTERVAL_MS` | Override the allocation-profile capture interval |
+| `MASTRACODE_PROFILE_ALLOCATION_INTERVAL_BYTES` | Override the V8 allocation-sampling interval |
 | `MASTRACODE_DISPATCH_MAX_IN_FLIGHT` | Maximum concurrent Factory background dispatches per replica; invalid or unset values use the default |
+| `KIMI_API_KEY` | Kimi For Coding API key |
 | `PARALLEL_API_KEY` | Enable Parallel-powered web search and extract tools (selectable as the default web provider in `/settings`) |
 | `TAVILY_API_KEY` | Enable Tavily-powered web search and extract tools |
 
@@ -649,7 +760,7 @@ You can also set `MASTRA_RESOURCE_ID` as an environment variable. Two users who 
 
 ## Telemetry
 
-By default, Mastra Code collects anonymous product analytics about how the TUI is used. Each event includes your OS, Mastra Code version, Node.js version, CPU architecture, and a hostname-derived distinct ID. Tracked events cover session start, prompt submission, thread and model changes, slash command usage, and interactive prompts. Prompt text, message content, file paths, and tool inputs are not collected. You can read the [source code](https://github.com/mastra-ai/mastra/blob/main/mastracode/src/analytics.ts) to check what's collected.
+By default, Mastra Code collects anonymous product analytics about how the TUI is used. Each event includes your OS, Mastra Code version, Node.js version, CPU architecture, and a hostname-derived distinct ID. Tracked events cover session start, prompt submission, thread and model changes, slash command usage, and interactive prompts. Prompt text, message content, file paths, and tool inputs are not collected. You can read the [source code](https://github.com/mastra-ai/mastra/blob/main/mastracode/sdk/src/analytics.ts) to check what's collected.
 
 You can opt out of analytics by setting an environment variable:
 

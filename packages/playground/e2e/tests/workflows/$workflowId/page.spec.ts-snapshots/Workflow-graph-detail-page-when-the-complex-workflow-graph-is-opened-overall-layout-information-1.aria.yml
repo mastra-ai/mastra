@@ -4,10 +4,8 @@
             - link "Workflows":
                 - /url: /workflows
                 - img
-                - text: ''
+                - text: Workflows
         - separator:
             - img
         - listitem:
-            - combobox:
-                - text: complex-workflow
-                - img
+            - combobox: complex-workflow

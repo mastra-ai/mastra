@@ -8,7 +8,7 @@ import type { CoreTool } from '../../../tools/types';
 import { Agent } from '../../agent';
 import { MessageList } from '../../message-list';
 import type { ToolsInput } from '../../types';
-import { fireClientToolOutputHooks } from './client-tool-output-hooks';
+import { applyClientToolModelOutput, fireClientToolOutputHooks } from './client-tool-output-hooks';
 
 /**
  * Builds tools through the real production pipeline (`Agent#getToolsForExecution`
@@ -506,14 +506,23 @@ describe('client tool onOutput through agent.generate (production path)', () => 
     );
   });
 
-  it('does not fire onOutput when an input processor tripwires the request', async () => {
+  it('does not fire onOutput or toModelOutput when an input processor tripwires the request', async () => {
     const onOutput = vi.fn();
+    const toModelOutput = vi.fn(() => ({ type: 'text', value: 'mapped' }));
     const agent = new Agent({
       id: 'test-agent',
       name: 'test-agent',
       instructions: 'test agent',
       model: textModel(),
-      tools: { browserTool: browserToolWith(onOutput) },
+      tools: {
+        browserTool: createTool({
+          id: 'browserTool',
+          description: 'runs in the browser',
+          inputSchema: z.object({ q: z.string().optional() }),
+          onOutput,
+          toModelOutput,
+        }),
+      },
       inputProcessors: [
         {
           id: 'block-everything',
@@ -531,5 +540,401 @@ describe('client tool onOutput through agent.generate (production path)', () => 
     expect(result.tripwire).toBeDefined();
     expect(result.tripwire?.reason).toBe('blocked by policy');
     expect(onOutput).not.toHaveBeenCalled();
+    expect(toModelOutput).not.toHaveBeenCalled();
+  });
+});
+
+describe('applyClientToolModelOutput', () => {
+  function modelOutputTool(toModelOutput: (output: unknown) => unknown) {
+    return createTool({
+      id: 'browserTool',
+      description: 'runs in the browser',
+      inputSchema: z.object({ q: z.string().optional() }),
+      toModelOutput,
+    });
+  }
+
+  function findResultPart(messageList: MessageList): any {
+    for (const message of messageList.get.all.db()) {
+      if (message.content?.format !== 2) continue;
+      for (const part of message.content.parts ?? []) {
+        if (part.type === 'tool-invocation' && (part as any).toolInvocation?.state === 'result') return part;
+      }
+    }
+  }
+
+  async function toolResultPromptOutput(messageList: MessageList, toolCallId: string): Promise<unknown> {
+    const prompt = await messageList.get.all.aiV5.llmPrompt();
+    for (const message of prompt) {
+      if (message.role !== 'tool') continue;
+      for (const part of message.content) {
+        if (part.type === 'tool-result' && part.toolCallId === toolCallId) return part.output;
+      }
+    }
+  }
+
+  it('attaches the mapped output to the ingested client tool result and restores it in the model prompt', async () => {
+    const toModelOutput = vi.fn((output: any) => ({
+      type: 'content',
+      value: [{ type: 'text', text: `Processed: ${output.fileId}` }],
+    }));
+    const tools = await buildAgentTools({ serverTools: { browserTool: modelOutputTool(toModelOutput) } });
+    expect(tools.browserTool!.execute).toBeUndefined();
+    expect(typeof tools.browserTool!.toModelOutput).toBe('function');
+
+    const messageList = new MessageList();
+    messageList.add([toolCallMessage('call-1'), toolResultMessage('call-1', { fileId: 'file-123' })], 'input');
+
+    await applyClientToolModelOutput({ messageList, tools });
+
+    expect(toModelOutput).toHaveBeenCalledTimes(1);
+    expect(toModelOutput).toHaveBeenCalledWith({ fileId: 'file-123' });
+
+    const part = findResultPart(messageList);
+    expect(part.providerMetadata?.mastra).toMatchObject({
+      modelOutput: { type: 'content', value: [{ type: 'text', text: 'Processed: file-123' }] },
+      modelOutputComputed: true,
+    });
+
+    // The final model prompt must carry the mapped output — this proves the
+    // in-place enrichment is visible to prompt conversion.
+    await expect(toolResultPromptOutput(messageList, 'call-1')).resolves.toEqual({
+      type: 'content',
+      value: [{ type: 'text', text: 'Processed: file-123' }],
+    });
+
+    // The enrichment lives on the input message that gets persisted, so
+    // reloads restore it without recomputing.
+    const inputParts = messageList.get.input
+      .db()
+      .flatMap(m => (m.content?.format === 2 ? (m.content.parts ?? []) : []));
+    expect(inputParts.some(p => (p as any).providerMetadata?.mastra?.modelOutputComputed)).toBe(true);
+  });
+
+  it('preserves the server-defined toModelOutput when a serialized client tool of the same name is sent', async () => {
+    const toModelOutput = vi.fn(() => ({ type: 'text', value: 'mapped' }));
+    // Simulate the HTTP round trip: functions are stripped from clientTools.
+    const serializedClientTools = JSON.parse(
+      JSON.stringify({
+        browserTool: {
+          description: 'runs in the browser',
+          inputSchema: { type: 'object', properties: { q: { type: 'string' } } },
+        },
+      }),
+    );
+
+    const tools = await buildAgentTools({
+      serverTools: { browserTool: modelOutputTool(toModelOutput) },
+      clientTools: serializedClientTools,
+    });
+
+    // The client entry overwrites the server tool in convertTools; the server
+    // mapping must survive the merge.
+    expect(tools.browserTool!.execute).toBeUndefined();
+    expect(typeof tools.browserTool!.toModelOutput).toBe('function');
+  });
+
+  it('does not recompute for already-enriched parts', async () => {
+    const toModelOutput = vi.fn(() => ({ type: 'text', value: 'mapped' }));
+    const tools = await buildAgentTools({ serverTools: { browserTool: modelOutputTool(toModelOutput) } });
+
+    const messageList = new MessageList();
+    messageList.add([toolCallMessage('call-1'), toolResultMessage('call-1', 'raw')], 'input');
+
+    await applyClientToolModelOutput({ messageList, tools });
+    await applyClientToolModelOutput({ messageList, tools });
+
+    expect(toModelOutput).toHaveBeenCalledTimes(1);
+  });
+
+  it('marks the part computed without recomputing when toModelOutput opts out with a nullish return', async () => {
+    const toModelOutput = vi.fn(() => undefined);
+    const tools = await buildAgentTools({ serverTools: { browserTool: modelOutputTool(toModelOutput) } });
+
+    const messageList = new MessageList();
+    messageList.add([toolCallMessage('call-1'), toolResultMessage('call-1', { keep: 'raw' })], 'input');
+
+    await applyClientToolModelOutput({ messageList, tools });
+    await applyClientToolModelOutput({ messageList, tools });
+
+    expect(toModelOutput).toHaveBeenCalledTimes(1);
+    const part = findResultPart(messageList);
+    expect(part.providerMetadata?.mastra?.modelOutputComputed).toBe(true);
+    expect(part.providerMetadata?.mastra?.modelOutput).toBeUndefined();
+
+    // The raw result still reaches the model.
+    await expect(toolResultPromptOutput(messageList, 'call-1')).resolves.toMatchObject({
+      value: { keep: 'raw' },
+    });
+  });
+
+  it('swallows toModelOutput errors and keeps the raw result', async () => {
+    const toModelOutput = vi.fn(() => {
+      throw new Error('boom');
+    });
+    const logger = { error: vi.fn() };
+    const tools = await buildAgentTools({ serverTools: { browserTool: modelOutputTool(toModelOutput) } });
+
+    const messageList = new MessageList();
+    messageList.add([toolCallMessage('call-1'), toolResultMessage('call-1', { keep: 'raw' })], 'input');
+
+    await expect(applyClientToolModelOutput({ messageList, tools, logger })).resolves.toBeUndefined();
+
+    expect(logger.error).toHaveBeenCalled();
+    const part = findResultPart(messageList);
+    expect(part.providerMetadata?.mastra?.modelOutputComputed).toBeUndefined();
+    await expect(toolResultPromptOutput(messageList, 'call-1')).resolves.toMatchObject({
+      value: { keep: 'raw' },
+    });
+  });
+
+  it('leaves tools with a server-side execute untouched (execution path owns their mapping)', async () => {
+    const toModelOutput = vi.fn(() => ({ type: 'text', value: 'mapped' }));
+    const tools = await buildAgentTools({
+      serverTools: {
+        serverTool: createTool({
+          id: 'serverTool',
+          description: 'runs on the server',
+          inputSchema: z.object({}),
+          execute: async () => 'x',
+          toModelOutput,
+        }),
+      },
+    });
+
+    const messageList = new MessageList();
+    messageList.add([toolCallMessage('call-1', 'serverTool'), toolResultMessage('call-1', 'x', 'serverTool')], 'input');
+
+    await applyClientToolModelOutput({ messageList, tools });
+
+    expect(toModelOutput).not.toHaveBeenCalled();
+  });
+
+  it('unwraps the AI SDK v5 `{ type, value }` envelope before mapping', async () => {
+    const toModelOutput = vi.fn((output: any) => ({ type: 'text', value: `mapped:${output.ok}` }));
+    const tools = await buildAgentTools({ serverTools: { browserTool: modelOutputTool(toModelOutput) } });
+
+    const messageList = new MessageList();
+    messageList.add(
+      [
+        toolCallMessage('call-1'),
+        {
+          role: 'tool' as const,
+          content: [
+            {
+              type: 'tool-result' as const,
+              toolCallId: 'call-1',
+              toolName: 'browserTool',
+              output: { type: 'json' as const, value: { ok: true } },
+            },
+          ],
+        },
+      ],
+      'input',
+    );
+
+    await applyClientToolModelOutput({ messageList, tools });
+
+    expect(toModelOutput).toHaveBeenCalledWith({ ok: true });
+  });
+
+  it('skips stored results that still carry an AI SDK v5 error envelope', async () => {
+    const toModelOutput = vi.fn(() => ({ type: 'text', value: 'mapped' }));
+    const tools = await buildAgentTools({ serverTools: { browserTool: modelOutputTool(toModelOutput) } });
+
+    // Live ingestion unwraps the v5 envelope, but DB-format messages re-sent
+    // by a client can still carry it on the stored result.
+    const messageList = new MessageList();
+    messageList.add(
+      {
+        id: 'msg-1',
+        role: 'assistant' as const,
+        createdAt: new Date(),
+        content: {
+          format: 2 as const,
+          parts: [
+            {
+              type: 'tool-invocation' as const,
+              toolInvocation: {
+                state: 'result' as const,
+                toolCallId: 'call-1',
+                toolName: 'browserTool',
+                args: {},
+                result: { type: 'error-text', value: 'it failed' },
+              },
+            },
+          ],
+        },
+      },
+      'input',
+    );
+
+    await applyClientToolModelOutput({ messageList, tools });
+
+    expect(toModelOutput).not.toHaveBeenCalled();
+  });
+
+  it('does not re-map results in memory-recalled history', async () => {
+    const toModelOutput = vi.fn(() => ({ type: 'text', value: 'mapped' }));
+    const tools = await buildAgentTools({ serverTools: { browserTool: modelOutputTool(toModelOutput) } });
+
+    // History loaded from memory either already carries the cached mapping or
+    // predates the feature; mutations to it are never persisted, so mapping it
+    // would re-run user code on every request.
+    const messageList = new MessageList();
+    messageList.add(
+      {
+        id: 'msg-history-1',
+        role: 'assistant' as const,
+        createdAt: new Date(),
+        content: {
+          format: 2 as const,
+          parts: [
+            {
+              type: 'tool-invocation' as const,
+              toolInvocation: {
+                state: 'result' as const,
+                toolCallId: 'call-old',
+                toolName: 'browserTool',
+                args: {},
+                result: { fileId: 'file-old' },
+              },
+            },
+          ],
+        },
+      },
+      'memory',
+    );
+
+    await applyClientToolModelOutput({ messageList, tools });
+
+    expect(toModelOutput).not.toHaveBeenCalled();
+  });
+
+  it('ignores provider-defined tools even without an execute function', async () => {
+    const toModelOutput = vi.fn(() => ({ type: 'text', value: 'mapped' }));
+    // Provider-executed tools come out of conversion execute-less too, but the
+    // provider round trip owns their results.
+    const tools = {
+      providerTool: {
+        type: 'provider-defined',
+        id: 'test.providerTool',
+        description: 'runs on the provider',
+        parameters: z.object({}),
+        toModelOutput,
+      } as unknown as CoreTool,
+    };
+
+    const messageList = new MessageList();
+    messageList.add(
+      [toolCallMessage('call-1', 'providerTool'), toolResultMessage('call-1', { ok: true }, 'providerTool')],
+      'input',
+    );
+
+    await applyClientToolModelOutput({ messageList, tools });
+
+    expect(toModelOutput).not.toHaveBeenCalled();
+  });
+
+  it('does not recompute after the enriched message round-trips through JSON storage', async () => {
+    const toModelOutput = vi.fn(() => ({ type: 'text', value: 'mapped' }));
+    const tools = await buildAgentTools({ serverTools: { browserTool: modelOutputTool(toModelOutput) } });
+
+    const messageList = new MessageList();
+    messageList.add([toolCallMessage('call-1'), toolResultMessage('call-1', { fileId: 'file-123' })], 'input');
+    await applyClientToolModelOutput({ messageList, tools });
+    expect(toModelOutput).toHaveBeenCalledTimes(1);
+
+    // Simulate persistence + reload: the input message is saved with the
+    // enrichment; a later request re-sends it as DB-format input.
+    const persisted = JSON.parse(JSON.stringify(messageList.get.input.db()));
+    const reloaded = new MessageList();
+    reloaded.add(persisted, 'input');
+
+    await applyClientToolModelOutput({ messageList: reloaded, tools });
+
+    expect(toModelOutput).toHaveBeenCalledTimes(1);
+    const part = findResultPart(reloaded);
+    expect(part.providerMetadata?.mastra?.modelOutput).toEqual({ type: 'text', value: 'mapped' });
+  });
+
+  it('normalizes image-url shorthand into media content (execution-path parity)', async () => {
+    const toModelOutput = vi.fn(() => ({
+      type: 'content',
+      value: [{ type: 'image-url', url: 'data:image/png;base64,AAAA' }],
+    }));
+    const tools = await buildAgentTools({ serverTools: { browserTool: modelOutputTool(toModelOutput) } });
+
+    const messageList = new MessageList();
+    messageList.add([toolCallMessage('call-1'), toolResultMessage('call-1', { fileId: 'f-1' })], 'input');
+
+    await applyClientToolModelOutput({ messageList, tools });
+
+    const part = findResultPart(messageList);
+    expect(part.providerMetadata?.mastra?.modelOutput).toEqual({
+      type: 'content',
+      value: [{ type: 'media', data: 'data:image/png;base64,AAAA', mediaType: 'image/png' }],
+    });
+  });
+});
+
+describe('client tool toModelOutput through agent.generate (production path)', () => {
+  it('sends the mapped output to the model for a client-supplied tool result', async () => {
+    const prompts: any[] = [];
+    const model = new MockLanguageModelV2({
+      doGenerate: async ({ prompt }) => {
+        prompts.push(prompt);
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop' as const,
+          usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+          content: [{ type: 'text' as const, text: 'ok' }],
+          warnings: [],
+        };
+      },
+    }) as unknown as LanguageModelV2;
+
+    const agent = new Agent({
+      id: 'test-agent',
+      name: 'test-agent',
+      instructions: 'test agent',
+      model,
+      tools: {
+        browserTool: createTool({
+          id: 'browserTool',
+          description: 'runs in the browser',
+          inputSchema: z.object({ q: z.string().optional() }),
+          toModelOutput: (output: any) => ({
+            type: 'content',
+            value: [{ type: 'text', text: `Screenshot uploaded as ${output.fileId}` }],
+          }),
+        }),
+      },
+    });
+
+    const serializedClientTools = {
+      browserTool: {
+        description: 'runs in the browser',
+        inputSchema: { type: 'object', properties: { q: { type: 'string' } } },
+      },
+    };
+    const result = await agent.generate(
+      [toolCallMessage('call-1'), toolResultMessage('call-1', { fileId: 'file-9' })],
+      {
+        clientTools: serializedClientTools as ToolsInput,
+      },
+    );
+
+    expect(result.tripwire).toBeUndefined();
+    const toolResults = prompts
+      .flat()
+      .filter((m: any) => m.role === 'tool')
+      .flatMap((m: any) => m.content)
+      .filter((p: any) => p.type === 'tool-result' && p.toolCallId === 'call-1');
+    expect(toolResults.length).toBeGreaterThan(0);
+    expect(toolResults[0]!.output).toEqual({
+      type: 'content',
+      value: [{ type: 'text', text: 'Screenshot uploaded as file-9' }],
+    });
   });
 });

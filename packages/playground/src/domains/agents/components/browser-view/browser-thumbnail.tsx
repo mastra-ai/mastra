@@ -1,5 +1,5 @@
+import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
-import { StatusBadge } from '@mastra/playground-ui/components/StatusBadge';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { Monitor, ChevronUp, ChevronDown, Maximize2, X } from 'lucide-react';
 import { useEffect, useRef, useState, useCallback, useMemo } from 'react';
@@ -121,9 +121,9 @@ export function BrowserThumbnail({ agentName = 'Agent' }: BrowserThumbnailProps)
         <div className="min-w-0 flex-1 text-left">
           <div className="flex items-center gap-2">
             <span className="text-neutral6 truncate text-sm font-medium">{agentName}&apos;s browser</span>
-            <StatusBadge variant={isLive ? 'success' : 'neutral'} size="sm" withDot pulse={isLive}>
+            <Badge variant={isLive ? 'green' : 'neutral'} size="sm" indicator={isLive ? 'pulse' : 'dot'}>
               {isLive ? 'Live' : 'Idle'}
-            </StatusBadge>
+            </Badge>
           </div>
           <p className="text-neutral4 mt-0.5 truncate text-xs">{displayUrl}</p>
         </div>

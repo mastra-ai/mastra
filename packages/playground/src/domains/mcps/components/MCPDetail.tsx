@@ -76,10 +76,10 @@ export const MCPDetail = ({ isLoading, server }: MCPDetailProps) => {
         </Txt>
 
         <div className="flex items-center gap-1 pb-6">
-          <Badge icon={<FolderIcon className="text-neutral6" />} className="text-neutral4! rounded-r-sm">
+          <Badge icon={<FolderIcon />} size="sm">
             Version
           </Badge>
-          <Badge className="text-neutral4! rounded-l-sm">{server.version_detail.version}</Badge>
+          <Badge size="sm">{server.version_detail.version}</Badge>
         </div>
 
         <Txt className="text-neutral3 pb-4">
@@ -201,7 +201,7 @@ const ToolEntry = ({ tool, serverId }: { tool: McpToolInfo; serverId: string }) 
             <Link ref={linkRef} href={paths.mcpServerToolLink(serverId, tool.id)}>
               {tool.id}
             </Link>
-            {isAppTool && <Badge className="py-0 text-[10px]">App</Badge>}
+            {isAppTool && <Badge size="xs">App</Badge>}
           </span>
         </EntityName>
         <EntityDescription>{tool.description}</EntityDescription>

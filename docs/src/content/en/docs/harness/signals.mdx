@@ -1,6 +1,6 @@
 ---
 title: "Signals | Long-running agents"
-description: "Learn how to send real-time messages and context into a Mastra agent thread."
+description: "Send real-time messages or contextual data into a Mastra agent thread immediately or queue them for the next turn with configurable signal behavior."
 packages:
   - "@mastra/core"
   - "@mastra/client-js"
@@ -16,7 +16,7 @@ Breaking changes may occur without a major version bump until the API is stable.
 
 :::
 
-Signals are a way to interact with an agent through a thread. Instead of starting every interaction with `agent.stream()`, subscribe to a thread and send messages or signals. Mastra either wakes the agent when the thread is idle or drops input into the running agent loop, or alternatively queues input for the next turn.
+Signals let you interact with an agent through a thread. Instead of starting every interaction with `agent.stream()`, subscribe to a thread and send messages or signals. Mastra wakes an idle agent or delivers input to its running loop; alternatively, it queues the input for the next turn.
 
 Use message APIs for user-authored input. Use `sendSignal()` for lower-level system context, such as background task notifications, policy reminders, or processor-generated context.
 
@@ -157,7 +157,7 @@ The model receives the signal as context like this:
 <notification source="github" pr="123">PR #123 has a new review comment from User X about the API surface.</notification>
 ```
 
-Use XML-safe `tagName` and attribute names. They can contain letters, numbers, shows, periods, and hyphens. They must start with a letter or underscore.
+Use XML-safe `tagName` and attribute names. They can contain letters, numbers, periods, hyphens, and the underscore character (`_`). They must start with a letter or underscore.
 
 #### Storage support
 

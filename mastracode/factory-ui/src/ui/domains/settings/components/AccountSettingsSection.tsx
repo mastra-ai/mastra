@@ -68,7 +68,7 @@ export function AccountSettingsSection() {
 
   if (auth.isPending) {
     return (
-      <SettingsSubsection title="Profile">
+      <SettingsSubsection scope="personal" title="Profile">
         <AccountSettingsSkeleton />
       </SettingsSubsection>
     );
@@ -96,7 +96,11 @@ export function AccountSettingsSection() {
 
   return (
     <div className="flex flex-col gap-8">
-      <SettingsSubsection title="Profile" description="Your signed-in identity for this MastraCode deployment.">
+      <SettingsSubsection
+        scope="personal"
+        title="Profile"
+        description="Your signed-in identity for this MastraCode deployment."
+      >
         <SettingsCard>
           <SettingsRow variant="factory" label="Name">
             <AccountValue>{user?.name ?? 'Not provided'}</AccountValue>
@@ -123,7 +127,7 @@ export function AccountSettingsSection() {
           )}
         </SettingsCard>
       </SettingsSubsection>
-      <SettingsSubsection title="Session">
+      <SettingsSubsection scope="personal" title="Session">
         <SettingsCard>
           <SettingsRow variant="factory" label="Log out" description="End your MastraCode session on this device.">
             <Button type="button" variant="outline" size="sm" aria-label="Log out of MastraCode" onClick={logOut}>

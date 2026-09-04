@@ -37,16 +37,6 @@ function invokeIssueInvestigation(context: FactoryStageRuleContext) {
   } as const;
 }
 
-function investigateTriagedIssue(context: FactoryStageRuleContext) {
-  if (
-    context.cause === 'run_start' ||
-    (context.cause === 'linked_item_materialized' && context.fromStage === 'intake' && context.toStage === 'triage')
-  ) {
-    return;
-  }
-  return invokeIssueInvestigation(context);
-}
-
 function retriageGithubIssue(context: FactoryGithubRuleContext) {
   if (!context.item || context.item.source !== 'github-issue' || !context.item.url) return;
   if (context.actor.type === 'github' && context.actor.factoryAuthored) return;
@@ -150,11 +140,10 @@ function completeIssue(context: FactoryStageRuleContext) {
 }
 
 function reviewPullRequest(context: FactoryStageRuleContext) {
-  // A re-entry into Review (from any post-intake stage) supersedes whichever
-  // review pass previously ran on this card: cancel any in-flight run before
-  // dispatching a fresh one so we don't burn tokens on the stale pass and race
-  // two agents on the same card. Cancellation is safe when nothing is in flight.
-  const supersedes = context.fromStage !== 'intake';
+  // Only a Review-to-Review re-entry can supersede an active pass. A card
+  // returning from Done has no live review to cancel; aborting its bound session
+  // would instead cancel the fresh re-review kickoff.
+  const supersedes = context.fromStage === 'review';
   // The re-review skill only applies when a prior review pass actually completed
   // (the card is returning from `done`). A cancelled first-time review that
   // re-enters Review from `review` itself still has no prior pass to reconcile —
@@ -169,6 +158,16 @@ function reviewPullRequest(context: FactoryStageRuleContext) {
     arguments: context.item.url ? `GitHub pull request (${context.item.url})` : context.item.title,
     ...(supersedes ? { cancelInFlight: true } : {}),
   } as const;
+}
+
+// Fires only on webhook materialization, so an item filed by hand or re-synced
+// from source never suggests its own run.
+function onArrival<Effect>(rule: (context: FactoryStageRuleContext) => Effect) {
+  return (context: FactoryStageRuleContext): Effect | undefined => {
+    if (context.cause !== 'linked_item_materialized') return;
+    if (context.item.metadata?.autoStartCandidate !== true) return;
+    return rule(context);
+  };
 }
 
 function resultContent(value: unknown): string | undefined {
@@ -209,6 +208,8 @@ function createdAfterFactory(createdAt: string | undefined, factoryCreatedAt: st
 
 function issueOpened(context: FactoryGithubRuleContext) {
   if (!context.issue) return;
+  // Everything arrives in Intake; arrival only stamps whether `onArrival` may
+  // suggest this card's run without a person.
   return {
     type: 'upsertLinkedWorkItem',
     idempotencyKey: `${context.ingress.id}:issue-intake`,
@@ -217,14 +218,15 @@ function issueOpened(context: FactoryGithubRuleContext) {
     sourceKey: `github-issue:${context.issue.number}`,
     title: context.issue.title,
     url: context.issue.url,
-    stage:
-      trustedGithubActor(context) && createdAfterFactory(context.issue.createdAt, context.factory.createdAt)
-        ? 'triage'
-        : 'intake',
+    stage: 'intake',
     metadata: {
       githubRepositoryId: context.repository.id,
       githubIssueNumber: context.issue.number,
+      ...(context.issue.createdAt ? { sourceCreatedAt: context.issue.createdAt } : {}),
       ...(githubActorLogin(context) ? { author: githubActorLogin(context) } : {}),
+      authorTrusted: trustedGithubActor(context),
+      autoStartCandidate:
+        trustedGithubActor(context) && createdAfterFactory(context.issue.createdAt, context.factory.createdAt),
       assignees: context.issue.assignees ?? [],
       labels: context.issue.labels ?? [],
     },
@@ -254,31 +256,27 @@ function issueClosed(context: FactoryGithubRuleContext) {
   } as const;
 }
 
-function pullRequestOpened(context: FactoryGithubRuleContext) {
+function materializePullRequestIntake(
+  context: FactoryGithubRuleContext,
+  { idempotencyKey, autoStartCandidate }: { idempotencyKey: string; autoStartCandidate: boolean },
+) {
   if (!context.pullRequest) return;
-  // Trust is a repository-collaborator permission lookup, and a GitHub App bot
-  // is never a collaborator — so a PR Factory opened itself scores as untrusted
-  // and parks in Intake, the one class of PR whose provenance we know best.
-  // Factory authorship is its own trust signal: the branch came from a Work run
-  // this Factory dispatched.
-  const factoryAuthored = context.actor.type === 'github' && context.actor.factoryAuthored;
   return {
     type: 'upsertLinkedWorkItem',
-    idempotencyKey: `${context.ingress.id}:pull-request-intake`,
+    idempotencyKey,
     board: 'review',
     source: 'github-pr',
     sourceKey: `github-pr:${context.pullRequest.number}`,
     title: context.pullRequest.title,
     url: context.pullRequest.url,
-    stage:
-      (trustedGithubActor(context) || factoryAuthored) &&
-      createdAfterFactory(context.pullRequest.createdAt, context.factory.createdAt)
-        ? 'review'
-        : 'intake',
+    stage: 'intake',
     metadata: {
       githubRepositoryId: context.repository.id,
       githubPullRequestNumber: context.pullRequest.number,
-      factoryAuthored,
+      ...(context.pullRequest.createdAt ? { sourceCreatedAt: context.pullRequest.createdAt } : {}),
+      factoryAuthored: context.pullRequest.factoryAuthored,
+      authorTrusted: trustedGithubActor(context),
+      autoStartCandidate,
       state: context.pullRequest.state,
       draft: context.pullRequest.draft,
       merged: context.pullRequest.merged,
@@ -287,9 +285,22 @@ function pullRequestOpened(context: FactoryGithubRuleContext) {
       labels: context.pullRequest.labels ?? [],
       headBranch: context.pullRequest.headBranch,
       baseBranch: context.pullRequest.baseBranch,
-      ...(githubActorLogin(context) ? { author: githubActorLogin(context) } : {}),
+      ...(context.pullRequest.author ? { author: context.pullRequest.author } : {}),
     },
   } as const;
+}
+
+function pullRequestOpened(context: FactoryGithubRuleContext) {
+  if (!context.pullRequest) return;
+  // A GitHub App bot is never a collaborator, so Factory's own PRs score
+  // untrusted; their authorship is the trust signal.
+  const autoStartCandidate =
+    (trustedGithubActor(context) || context.pullRequest.factoryAuthored) &&
+    createdAfterFactory(context.pullRequest.createdAt, context.factory.createdAt);
+  return materializePullRequestIntake(context, {
+    idempotencyKey: `${context.ingress.id}:pull-request-intake`,
+    autoStartCandidate,
+  });
 }
 
 function pullRequestMerged(context: FactoryGithubRuleContext) {
@@ -378,6 +389,10 @@ function requestsChangesVerdict(body: string | undefined): boolean {
 }
 
 function addressPullRequestComment(context: FactoryGithubRuleContext) {
+  // A validated Factory mention is a review-entry request, not feedback for the
+  // authoring Work session. Invalid or unrecognized comments retain the normal
+  // feedback route below.
+  if (context.reviewCommand) return reReviewRequestedPullRequest(context);
   if (!context.item || !context.pullRequest || !context.issueComment) return;
   // Provenance binds the comment to the Work item that authored the PR — the
   // only session that can act on it. A Review card must not react to comments
@@ -428,14 +443,25 @@ function pullRequestClosed(context: FactoryGithubRuleContext) {
 }
 
 function reReviewRequestedPullRequest(context: FactoryGithubRuleContext) {
-  // Only a review re-requested *from Factory's own bot* restarts the review —
-  // requesting a human reviewer is not Factory's signal.
-  if (!context.item || context.board !== 'review' || !context.reviewRequest?.factoryReviewer) return;
+  // GitHub reviewer requests and Factory's exact mention command are both
+  // explicit requests to enter the same Review lifecycle.
+  const factoryReviewEntry = context.reviewRequest?.factoryReviewer || context.reviewCommand !== undefined;
+  if ((context.item && context.board !== 'review') || !factoryReviewEntry) return;
   if (!context.pullRequest || context.pullRequest.state !== 'open' || context.pullRequest.merged) return;
-  // Trusted (write/admin) requesters only: re-entering review checks out and
-  // executes PR code, the same bar pullRequestOpened applies to auto-review.
+  // Trusted (write/admin) requesters only: creating or re-entering review checks
+  // out and executes PR code, the same bar pullRequestOpened applies to auto-review.
   if (!trustedGithubActor(context)) return;
   if (context.actor.type === 'github' && context.actor.factoryAuthored) return;
+  if (!context.item) {
+    // On this path the actor is the *requester*, so the materialized
+    // `authorTrusted` stamp records their trust (always true past the gate
+    // above), not the PR author's: a trusted maintainer requesting a Factory
+    // review vouches for the PR.
+    return materializePullRequestIntake(context, {
+      idempotencyKey: `${context.ingress.id}:pull-request-review-requested-intake`,
+      autoStartCandidate: true,
+    });
+  }
   // Already in Reviewing: a review pass is pending or running; re-entering
   // would be a same-stage no-op anyway (stage rules only fire on change).
   if (context.item.stages.length === 1 && context.item.stages[0] === 'review') return;
@@ -483,6 +509,7 @@ function linearIssueObserved(context: FactoryLinearRuleContext) {
     metadata: {
       linearIssueId: context.issue.id,
       identifier: context.issue.identifier,
+      sourceCreatedAt: context.issue.createdAt,
       linearState: context.issue.state,
       linearStateType: context.issue.stateType,
       linearPriority: context.issue.priorityLabel,
@@ -518,8 +545,9 @@ function linearIssueClosed(context: FactoryLinearRuleContext) {
 
 const BUILT_IN_DEFAULTS: FactoryRulesOverrides = {
   work: {
+    intake: { issue: { onEnter: onArrival(invokeIssueInvestigation) } },
     triage: {
-      issue: { onEnter: investigateTriagedIssue },
+      issue: { onEnter: invokeIssueInvestigation },
       linearIssue: { onEnter: investigateTriagedLinearIssue },
     },
     planning: {
@@ -536,7 +564,10 @@ const BUILT_IN_DEFAULTS: FactoryRulesOverrides = {
       issue: { onEnter: completeIssue },
     },
   },
-  review: { review: { pullRequest: { onEnter: reviewPullRequest } } },
+  review: {
+    intake: { pullRequest: { onEnter: onArrival(reviewPullRequest) } },
+    review: { pullRequest: { onEnter: reviewPullRequest } },
+  },
   tools: { submit_plan: { onResult: advanceApprovedPlan } },
   github: {
     issueOpened: { onEvent: issueOpened },

@@ -44,8 +44,8 @@ export const WithBadge: Story = {
     <div className="bg-surface3 w-100 rounded-lg">
       <EntityHeader icon={<Database />} title="Production Database">
         <div className="flex gap-2">
-          <Badge variant="success">Active</Badge>
-          <Badge variant="default">PostgreSQL</Badge>
+          <Badge variant="green">Active</Badge>
+          <Badge>PostgreSQL</Badge>
         </div>
       </EntityHeader>
     </div>

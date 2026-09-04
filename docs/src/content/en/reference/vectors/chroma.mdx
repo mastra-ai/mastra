@@ -1,6 +1,6 @@
 ---
 title: "Reference: Chroma vector store | Vectors"
-description: Documentation for the ChromaVector class in Mastra, which provides vector search using ChromaDB.
+description: "The ChromaVector class provides vector search using Chroma, an open-source embedding database. It offers efficient vector search with metadata filtering and hybrid search capabilities."
 packages:
   - "@mastra/chroma"
 ---
@@ -175,7 +175,7 @@ Note: Forking is only supported on Chroma Cloud, or if you deploy your own OSS *
 
 Query an index using a `queryVector`. Returns an array of semantically similar records in order of distance from the `queryVector`. Each record has the shape:
 
-```typescript prettier:false
+```typescript oxfmt:false
 {
   id: string;
   score: number;
@@ -232,7 +232,7 @@ You can also provide the shape of your metadata to a `query` call for type infer
 
 Get records from your Chroma index by IDs, metadata, and document filters. It returns an array of records of the shape:
 
-```typescript prettier:false
+```typescript oxfmt:false
 {
   id: string;
   document?: string;

@@ -1,6 +1,6 @@
 ---
 title: "Reference: createVectorQueryTool() | Tools and MCP"
-description: Documentation for the Vector Query Tool in Mastra, which facilitates semantic search over vector stores with filtering and reranking capabilities.
+description: "The createVectorQueryTool() function creates a tool for semantic search over vector stores."
 packages:
   - "@mastra/core"
   - "@mastra/pg"
@@ -275,7 +275,7 @@ The tool returns an object with:
 
 ### `QueryResult` object structure
 
-```typescript prettier:false
+```typescript oxfmt:false
 {
   id: string;         // Unique chunk/document identifier
   metadata: any;      // All metadata fields (document ID, etc.)
@@ -312,7 +312,7 @@ With filtering enabled, the tool processes queries to construct metadata filters
 
 1. A user makes a query with specific filter requirements like "Find content where the 'version' field is greater than 2.0"
 1. The agent analyzes the query and constructs the appropriate filters:
-   ```typescript prettier:false
+   ```typescript oxfmt:false
    {
       "version": { "$gt": 2.0 }
    }

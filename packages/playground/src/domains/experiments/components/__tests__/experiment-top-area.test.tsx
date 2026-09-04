@@ -2,7 +2,7 @@ import { cleanup, screen } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { ExperimentTopArea } from '../experiment-top-area';
-import { experiments, noAgents, noWorkflows, noScorers } from './fixtures/experiments';
+import { experiments, noAgents, noProcessors, noWorkflows, noScorers } from './fixtures/experiments';
 import { TestLinkProvider } from '@/test/link-provider';
 import { server } from '@/test/msw-server';
 import { TEST_BASE_URL, renderWithProviders, waitForMutationsIdle } from '@/test/render';
@@ -18,6 +18,7 @@ describe('ExperimentTopArea', () => {
   beforeEach(() => {
     server.use(
       http.get(`${TEST_BASE_URL}/api/agents`, () => HttpResponse.json(noAgents)),
+      http.get(`${TEST_BASE_URL}/api/processors`, () => HttpResponse.json(noProcessors)),
       http.get(`${TEST_BASE_URL}/api/workflows`, () => HttpResponse.json(noWorkflows)),
       http.get(`${TEST_BASE_URL}/api/scores/scorers`, () => HttpResponse.json(noScorers)),
       http.get(`${TEST_BASE_URL}/api/scores/run/:experimentId`, () =>
@@ -37,17 +38,53 @@ describe('ExperimentTopArea', () => {
     );
   });
 
-  it('shows the eyebrow label and the target as the page title, linked to the entity', async () => {
+  it('should render the experiment name as the title when present', async () => {
     const { queryClient } = renderWithProviders(
       <TestLinkProvider>
         <ExperimentTopArea experiment={namedExperiment} />
       </TestLinkProvider>,
+      { router: true },
     );
 
-    expect(await screen.findByText('Evaluation target')).toBeDefined();
-    expect(await screen.findByText('Avg 0.833')).toBeDefined();
-    const title = await screen.findByRole('link', { name: /example-entity-extraction-agent/ });
-    expect(title.getAttribute('href')).toContain('example-entity-extraction-agent');
+    expect(await screen.findByRole('heading', { name: namedExperiment.name! })).toBeDefined();
+    expect(screen.queryByText(`Experiment #${namedExperiment.id.slice(0, 8)}`)).toBeNull();
+
+    await waitForMutationsIdle(queryClient);
+  });
+
+  it('should fall back to the short id when the experiment has no name', async () => {
+    const { queryClient } = renderWithProviders(
+      <TestLinkProvider>
+        <ExperimentTopArea experiment={unnamedExperiment} />
+      </TestLinkProvider>,
+      { router: true },
+    );
+
+    expect(
+      await screen.findByRole('heading', { name: `Experiment #${unnamedExperiment.id.slice(0, 8)}` }),
+    ).toBeDefined();
+
+    await waitForMutationsIdle(queryClient);
+  });
+
+  it('walks through the dataset, the target and the scorers', async () => {
+    const { queryClient } = renderWithProviders(
+      <TestLinkProvider>
+        <ExperimentTopArea experiment={namedExperiment} />
+      </TestLinkProvider>,
+      { router: true },
+    );
+
+    const datasetLink = await screen.findByRole('link', { name: new RegExp(namedExperiment.datasetId!) });
+    expect(datasetLink.getAttribute('href')).toBe(`/datasets/${namedExperiment.datasetId}`);
+
+    const target = await screen.findByRole('link', { name: /example-entity-extraction-agent/ });
+    expect(target.getAttribute('href')).toContain('example-entity-extraction-agent');
+
+    // Two distinct scorers produced the mocked scores.
+    expect(await screen.findByText('2 scorers')).toBeDefined();
+    expect(screen.getByText('each item')).toBeDefined();
+    expect(screen.getByText('comparing ground truth')).toBeDefined();
 
     await waitForMutationsIdle(queryClient);
   });
@@ -57,9 +94,42 @@ describe('ExperimentTopArea', () => {
       <TestLinkProvider>
         <ExperimentTopArea experiment={namedExperiment} />
       </TestLinkProvider>,
+      { router: true },
     );
 
-    expect(await screen.findByText('Entity extraction evaluation using Model A')).toBeDefined();
+    expect(await screen.findByText(namedExperiment.description!)).toBeDefined();
+
+    await waitForMutationsIdle(queryClient);
+  });
+
+  it('places the rename icon button right next to the title', async () => {
+    const { queryClient } = renderWithProviders(
+      <TestLinkProvider>
+        <ExperimentTopArea experiment={namedExperiment} />
+      </TestLinkProvider>,
+      { router: true },
+    );
+
+    const heading = await screen.findByRole('heading', { name: namedExperiment.name! });
+    const rename = screen.getByRole('button', { name: 'Rename this experiment' });
+    expect(rename.textContent).toBe('');
+    expect(heading.parentElement).toBe(rename.parentElement);
+
+    await waitForMutationsIdle(queryClient);
+  });
+
+  it('links to the review queue for this experiment next to Rerun', async () => {
+    const { queryClient } = renderWithProviders(
+      <TestLinkProvider>
+        <ExperimentTopArea experiment={namedExperiment} />
+      </TestLinkProvider>,
+      { router: true },
+    );
+
+    const review = await screen.findByRole('link', { name: 'View items to review' });
+    expect(review.getAttribute('href')).toBe(`/experiments/review-queue?experiment=${namedExperiment.id}`);
+    const rerun = screen.getByRole('button', { name: /rerun/i });
+    expect(review.parentElement).toBe(rerun.parentElement);
 
     await waitForMutationsIdle(queryClient);
   });
@@ -69,9 +139,10 @@ describe('ExperimentTopArea', () => {
       <TestLinkProvider>
         <ExperimentTopArea experiment={unnamedExperiment} />
       </TestLinkProvider>,
+      { router: true },
     );
 
-    expect(await screen.findByText('Evaluation target')).toBeDefined();
+    expect(await screen.findByText(`Experiment #${unnamedExperiment.id.slice(0, 8)}`)).toBeDefined();
     expect(screen.queryByText(namedExperiment.description!)).toBeNull();
 
     await waitForMutationsIdle(queryClient);

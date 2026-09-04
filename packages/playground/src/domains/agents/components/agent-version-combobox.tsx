@@ -62,9 +62,9 @@ export function AgentVersionCombobox({
         value: version.id,
         description,
         end: isPublished ? (
-          <Badge variant="success">Published</Badge>
+          <Badge variant="green">Published</Badge>
         ) : isDraft ? (
-          <Badge variant="info">Draft</Badge>
+          <Badge variant="blue">Draft</Badge>
         ) : undefined,
       };
     }),

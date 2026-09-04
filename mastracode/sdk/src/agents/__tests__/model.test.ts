@@ -196,6 +196,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { MODEL_TOKENS } from '../../../../../docs/src/plugins/remark-model-tokens/models.js';
 import { opencodeClaudeMaxProvider, buildAnthropicOAuthFetch } from '../../providers/claude-max.js';
 import { openaiCodexProvider, buildOpenAICodexOAuthFetch } from '../../providers/openai-codex.js';
+import { setCredentialStoreProvider } from '../credential-resolver.js';
 import {
   createMastraCodeGateway,
   resolveModel,
@@ -234,12 +235,14 @@ describe('resolveModel', () => {
     delete process.env.OPENAI_BASE_URL;
     delete process.env.MOONSHOT_API_KEY;
     delete process.env.MOONSHOT_AI_API_KEY;
+    delete process.env.KIMI_API_KEY;
     delete process.env.DEEPSEEK_API_KEY;
     delete process.env.MASTRA_GATEWAY_API_KEY;
     delete process.env.MASTRA_GATEWAY_URL;
   });
 
   afterEach(() => {
+    setCredentialStoreProvider(undefined);
     process.env = { ...originalEnv };
   });
 
@@ -474,6 +477,22 @@ describe('resolveModel', () => {
       mockAuthStorageInstance.get.mockReturnValue(undefined);
       const result = resolveModel('openai/gpt-4o') as Record<string, unknown>;
       expect(result.__provider).toBe('model-router');
+    });
+
+    it('reports a missing signed-in Factory credential instead of an environment variable', () => {
+      setCredentialStoreProvider(() => ({
+        allowEnvironmentFallback: false,
+        reload() {},
+        get: () => undefined,
+        getStoredApiKey: () => undefined,
+        getApiKey: async () => undefined,
+      }));
+      const requestContext = makeRequestContext();
+      requestContext.set('user', { workosId: 'user-1', organizationId: 'org-1' });
+
+      expect(() => resolveModel('openai/gpt-4o', { requestContext })).toThrow(
+        'No usable openai credential is configured for this signed-in Factory account.',
+      );
     });
 
     it('passes controller headers to the OpenAI OAuth provider', () => {
