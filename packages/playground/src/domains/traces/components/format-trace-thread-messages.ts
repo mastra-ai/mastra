@@ -83,7 +83,18 @@ const toToolPart = (span: SpanRecord): MastraMessagePart => {
   };
 };
 
-const collectVisibleToolParts = (
+/** Model chunk spans whose accumulated content becomes the assistant's response text. */
+const RESPONSE_CHUNK_TYPES = new Set(['text', 'object']);
+
+const isResponseChunkSpan = (span: SpanRecord) =>
+  span.spanType === SpanType.MODEL_CHUNK && RESPONSE_CHUNK_TYPES.has(readString(span.attributes, 'chunkType') ?? '');
+
+/**
+ * Walks the span tree collecting the tool-call parts to render, plus the ids of every span
+ * that contributed to the assistant message: tool-call spans and the model chunks that
+ * produced the response text.
+ */
+const collectAssistantSpans = (
   root: UISpan,
   spans: SpanRecord[],
 ): { parts: MastraMessagePart[]; spanIds: string[] } => {
@@ -100,6 +111,7 @@ const collectVisibleToolParts = (
         spanIds.push(span.spanId);
         continue;
       }
+      if (isResponseChunkSpan(span)) spanIds.push(span.spanId);
       visit(node.spans ?? []);
     }
   };
@@ -135,7 +147,7 @@ export function formatTraceThreadMessages(spans: SpanRecord[]): TraceViewMastraD
 
   const userParts = getUserParts(root.input);
   const responseText = getResponseText(root.output);
-  const { parts: assistantParts, spanIds: toolSpanIds } = collectVisibleToolParts(hierarchicalRoot, spans);
+  const { parts: assistantParts, spanIds: assistantSpanIds } = collectAssistantSpans(hierarchicalRoot, spans);
   if (responseText) assistantParts.push({ type: 'text', text: responseText });
 
   return [
@@ -153,7 +165,7 @@ export function formatTraceThreadMessages(spans: SpanRecord[]): TraceViewMastraD
       createdAt: new Date(root.endedAt ?? root.startedAt),
       threadId: root.threadId ?? undefined,
       content: { format: 2, parts: assistantParts, content: responseText },
-      traceSpanIds: [root.spanId, ...toolSpanIds],
+      traceSpanIds: [root.spanId, ...assistantSpanIds],
     },
   ];
 }

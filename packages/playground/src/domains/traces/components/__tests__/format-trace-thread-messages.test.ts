@@ -30,7 +30,7 @@ describe('formatTraceThreadMessages', () => {
       expect(toolNames).toEqual(['workflow-tripPlanner', 'searchHotels', 'browser_location', 'web_search']);
     });
 
-    it('remembers which spans were used to build each message', () => {
+    it('remembers which spans were used to build each message, including the text chunks but not reasoning', () => {
       const messages = formatTraceThreadMessages(agentTraceWithTools.spans);
 
       expect(messages[0]?.traceSpanIds).toEqual(['agent-root']);
@@ -40,6 +40,7 @@ describe('formatTraceThreadMessages', () => {
         'mcp-tool',
         'client-tool',
         'provider-tool',
+        'text-chunk',
       ]);
       expect(messages[0]?.content.metadata).toBeUndefined();
       expect(messages[1]?.content.metadata).toBeUndefined();
