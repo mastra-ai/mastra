@@ -18,7 +18,8 @@ type ClientFrame =
 
 type ServerFrame =
   | { type: 'event'; topic: string; event: Event; group?: string }
-  | { type: 'subscribed'; topic: string; group?: string };
+  | { type: 'subscribed'; topic: string; group?: string }
+  | { type: 'unsubscribed'; topic: string; group?: string };
 
 type LocalSubscription = {
   callback: EventCallback;
@@ -43,7 +44,7 @@ type BrokerClient = {
   queuedBytes: number;
 };
 
-type SubscribeWaiter = {
+type MembershipWaiter = {
   resolve: () => void;
   reject: (error: Error) => void;
 };
@@ -136,10 +137,6 @@ function writeFrame(socket: net.Socket, frame: ClientFrame | ServerFrame): Promi
   return writeSerializedFrame(socket, serializeFrame(frame));
 }
 
-function nextTick(): Promise<void> {
-  return new Promise(resolve => setImmediate(resolve));
-}
-
 function membershipKey(topic: string, group?: string): string {
   return JSON.stringify([topic, group ?? null]);
 }
@@ -222,7 +219,8 @@ export class UnixSocketPubSub extends PubSub {
   #subscriptions = new Map<string, Map<EventCallback, LocalSubscription>>();
   #localGroupCursors = new Map<string, number>();
   #brokerGroupCursors = new Map<string, number>();
-  #subscribeWaiters = new Map<string, SubscribeWaiter[]>();
+  #subscribeWaiters = new Map<string, MembershipWaiter[]>();
+  #unsubscribeWaiters = new Map<string, MembershipWaiter[]>();
   #brokerClients = new Map<net.Socket, BrokerClient>();
   #pendingWrites = new Set<Promise<void>>();
   #recovering?: Promise<void>;
@@ -322,20 +320,28 @@ export class UnixSocketPubSub extends PubSub {
   async unsubscribe(topic: string, cb: EventCallback): Promise<void> {
     const subscriptions = this.#subscriptions.get(topic);
     const subscription = subscriptions?.get(cb);
-    if (!subscription) return;
+    if (!subscriptions || !subscription) return;
 
-    subscriptions!.delete(cb);
-    if (subscriptions!.size === 0) {
+    const membershipWillEnd = ![...subscriptions.values()].some(
+      candidate => candidate.callback !== cb && candidate.group === subscription.group,
+    );
+    if (membershipWillEnd && !this.#isBroker && this.#clientSocket && !this.#clientSocket.destroyed) {
+      await this.#sendUnsubscribeToBroker(topic, subscription.group);
+      const membershipReplaced = [...subscriptions.values()].some(
+        candidate => candidate.callback !== cb && candidate.group === subscription.group,
+      );
+      if (membershipReplaced) {
+        await this.#sendSubscribeToBroker(topic, subscription.group);
+      }
+    }
+
+    subscriptions.delete(cb);
+    if (subscriptions.size === 0) {
       this.#subscriptions.delete(topic);
     }
-    const membershipEnded = !this.#hasLocalMembership(topic, subscription.group);
-    if (membershipEnded && subscription.group !== undefined) {
+    if (membershipWillEnd && subscription.group !== undefined) {
       this.#localGroupCursors.delete(membershipKey(topic, subscription.group));
       this.#evictBrokerGroupCursor(topic, subscription.group);
-    }
-    if (membershipEnded && !this.#isBroker && this.#clientSocket && !this.#clientSocket.destroyed) {
-      await this.#sendToBroker({ type: 'unsubscribe', topic, group: subscription.group });
-      await nextTick();
     }
   }
 
@@ -365,7 +371,7 @@ export class UnixSocketPubSub extends PubSub {
 
     this.#clientSocket?.destroy();
     this.#clientSocket = undefined;
-    this.#rejectSubscribeWaiters(new Error('UnixSocketPubSub is closed'));
+    this.#rejectMembershipWaiters(new Error('UnixSocketPubSub is closed'));
 
     const clientClosures = [...this.#brokerClients.values()].map(
       client =>
@@ -518,7 +524,7 @@ export class UnixSocketPubSub extends PubSub {
   #handleClientDisconnect(socket: net.Socket, error: Error) {
     if (this.#clientSocket !== socket) return;
     this.#clientSocket = undefined;
-    this.#rejectSubscribeWaiters(error);
+    this.#rejectMembershipWaiters(error);
     if (!this.#closed) {
       void this.#recoverClientConnection();
     }
@@ -603,38 +609,53 @@ export class UnixSocketPubSub extends PubSub {
   }
 
   async #sendSubscribeToBroker(topic: string, group?: string): Promise<void> {
-    const key = membershipKey(topic, group);
-    let waiter: SubscribeWaiter | undefined;
-    const subscribed = new Promise<void>((resolve, reject) => {
-      waiter = { resolve, reject };
-      const waiters = this.#subscribeWaiters.get(key) ?? [];
-      waiters.push(waiter);
-      this.#subscribeWaiters.set(key, waiters);
-    });
-    try {
-      await this.#sendToBroker({ type: 'subscribe', topic, group });
-    } catch (error) {
-      this.#removeSubscribeWaiter(key, waiter);
-      throw error;
-    }
-    await subscribed;
+    await this.#sendMembershipFrameToBroker({ type: 'subscribe', topic, group }, this.#subscribeWaiters);
   }
 
-  #removeSubscribeWaiter(key: string, waiter: SubscribeWaiter | undefined) {
+  async #sendUnsubscribeToBroker(topic: string, group?: string): Promise<void> {
+    await this.#sendMembershipFrameToBroker({ type: 'unsubscribe', topic, group }, this.#unsubscribeWaiters);
+  }
+
+  async #sendMembershipFrameToBroker(
+    frame: Extract<ClientFrame, { type: 'subscribe' | 'unsubscribe' }>,
+    waiterMap: Map<string, MembershipWaiter[]>,
+  ): Promise<void> {
+    const key = membershipKey(frame.topic, frame.group);
+    let waiter: MembershipWaiter | undefined;
+    const acknowledged = new Promise<void>((resolve, reject) => {
+      waiter = { resolve, reject };
+      const waiters = waiterMap.get(key) ?? [];
+      waiters.push(waiter);
+      waiterMap.set(key, waiters);
+    });
+    try {
+      await this.#sendToBroker(frame);
+    } catch (error) {
+      this.#removeMembershipWaiter(waiterMap, key, waiter);
+      throw error;
+    }
+    await acknowledged;
+  }
+
+  #removeMembershipWaiter(
+    waiterMap: Map<string, MembershipWaiter[]>,
+    key: string,
+    waiter: MembershipWaiter | undefined,
+  ) {
     if (!waiter) return;
-    const waiters = this.#subscribeWaiters.get(key);
+    const waiters = waiterMap.get(key);
     if (!waiters) return;
     const nextWaiters = waiters.filter(item => item !== waiter);
     if (nextWaiters.length === 0) {
-      this.#subscribeWaiters.delete(key);
+      waiterMap.delete(key);
       return;
     }
-    this.#subscribeWaiters.set(key, nextWaiters);
+    waiterMap.set(key, nextWaiters);
   }
 
-  #settleSubscribeWaiters(key: string, error?: Error) {
-    const waiters = this.#subscribeWaiters.get(key);
-    this.#subscribeWaiters.delete(key);
+  #settleMembershipWaiters(waiterMap: Map<string, MembershipWaiter[]>, key: string, error?: Error) {
+    const waiters = waiterMap.get(key);
+    waiterMap.delete(key);
     if (error) {
       waiters?.forEach(waiter => waiter.reject(error));
       return;
@@ -642,9 +663,11 @@ export class UnixSocketPubSub extends PubSub {
     waiters?.forEach(waiter => waiter.resolve());
   }
 
-  #rejectSubscribeWaiters(error: Error) {
-    for (const topic of this.#subscribeWaiters.keys()) {
-      this.#settleSubscribeWaiters(topic, error);
+  #rejectMembershipWaiters(error: Error) {
+    for (const waiterMap of [this.#subscribeWaiters, this.#unsubscribeWaiters]) {
+      for (const key of waiterMap.keys()) {
+        this.#settleMembershipWaiters(waiterMap, key, error);
+      }
     }
   }
 
@@ -672,6 +695,11 @@ export class UnixSocketPubSub extends PubSub {
           if (clientFrame.group !== undefined) {
             this.#evictBrokerGroupCursor(clientFrame.topic, clientFrame.group);
           }
+          this.#enqueueBrokerClientWrite(client, {
+            type: 'unsubscribed',
+            topic: clientFrame.topic,
+            ...(clientFrame.group !== undefined ? { group: clientFrame.group } : {}),
+          });
         } else if (clientFrame.type === 'publish') {
           void this.#publishFromBroker(clientFrame.topic, clientFrame.event, client, clientFrame.localOnly);
         }
@@ -737,7 +765,11 @@ export class UnixSocketPubSub extends PubSub {
 
   #handleServerFrame(frame: ServerFrame) {
     if (frame.type === 'subscribed') {
-      this.#settleSubscribeWaiters(membershipKey(frame.topic, frame.group));
+      this.#settleMembershipWaiters(this.#subscribeWaiters, membershipKey(frame.topic, frame.group));
+      return;
+    }
+    if (frame.type === 'unsubscribed') {
+      this.#settleMembershipWaiters(this.#unsubscribeWaiters, membershipKey(frame.topic, frame.group));
       return;
     }
     if (frame.type !== 'event') return;
@@ -944,7 +976,9 @@ export class UnixSocketPubSub extends PubSub {
 
   async #handlePromotedBrokerFrame(frame: ClientFrame) {
     if (frame.type === 'subscribe') {
-      this.#settleSubscribeWaiters(membershipKey(frame.topic, frame.group));
+      this.#settleMembershipWaiters(this.#subscribeWaiters, membershipKey(frame.topic, frame.group));
+    } else if (frame.type === 'unsubscribe') {
+      this.#settleMembershipWaiters(this.#unsubscribeWaiters, membershipKey(frame.topic, frame.group));
     } else if (frame.type === 'publish') {
       await this.#publishFromBroker(frame.topic, frame.event);
     }
