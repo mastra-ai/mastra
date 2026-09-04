@@ -109,9 +109,7 @@ export class SubconsciousRemindExtractor extends Extractor<string> {
         let store: KnowledgeStorage | undefined;
         try {
           scope = resolveScope(context);
-          // The knowledgeResourceId override only moves the knowledge-scope rung; the
-          // reminder sidekick thread is owned by the agent's real resource, matching
-          // the ask_memory question path and the curate sidekick.
+          // The knowledgeResourceId override moves only the knowledge scope; the sidekick thread stays owned by the agent resource.
           const resourceId = context.resourceId;
           if (!resourceId) throw new Error('Subconscious remind requires a resourceId.');
           store = await context.memory.storage.getStore('knowledge');
