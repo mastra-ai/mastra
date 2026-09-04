@@ -1,5 +1,5 @@
 ---
-'@mastra/memory': major
+'@mastra/memory': minor
 ---
 
 **Breaking:** Observational-memory token counting methods now return promises.
