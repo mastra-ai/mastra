@@ -958,6 +958,10 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                 messageId: currentMessageId,
               });
               const replayChunks = cachedResponse.chunks;
+              // Cache replay skips the model call entirely, so the persisted
+              // `startedAt` would make TTFT consumers measure the cache entry's
+              // age. Stamp the replay instant instead.
+              const replayStartedAt = Date.now();
               modelResult = new ReadableStream({
                 start(ctrl) {
                   for (const chunk of replayChunks) {
@@ -965,6 +969,9 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                       ...chunk,
                       runId,
                       from: ChunkFrom.AGENT,
+                      ...(chunk.type === 'step-start'
+                        ? { payload: { ...chunk.payload, startedAt: replayStartedAt } }
+                        : {}),
                     });
                   }
                   ctrl.close();

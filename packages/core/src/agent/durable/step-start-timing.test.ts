@@ -14,7 +14,7 @@
  */
 
 import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { EventEmitterPubSub } from '../../events/event-emitter';
 import { Agent } from '../agent';
 import { createDurableAgent } from './create-durable-agent';
@@ -56,6 +56,34 @@ async function collectWithArrival(stream: ReadableStream<any>) {
     chunks.push({ chunk, arrivedAt: Date.now() });
   }
   return chunks;
+}
+
+/** How much older than "now" the persisted cache entry pretends to be. */
+const CACHE_ENTRY_AGE_MS = 60_000;
+
+/**
+ * Cached chunks shaped like a real {@link ResponseCache} entry: post-transform
+ * Mastra chunks with runId/from stripped, including a `step-start` whose
+ * `startedAt` is the original invocation's (long-past) start instant.
+ */
+function createCachedChunks(startedAt: number) {
+  return [
+    { type: 'step-start', payload: { request: {}, warnings: [], messageId: 'msg-cached', startedAt } },
+    { type: 'stream-start', payload: { warnings: [] } },
+    { type: 'response-metadata', payload: { id: 'resp-cached', modelId: 'mock', timestamp: new Date(0) } },
+    { type: 'text-start', payload: { id: 'text-1' } },
+    { type: 'text-delta', payload: { id: 'text-1', text: 'cached response' } },
+    { type: 'text-end', payload: { id: 'text-1' } },
+    {
+      type: 'finish',
+      payload: {
+        stepResult: { reason: 'stop' },
+        output: { usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 } },
+        metadata: {},
+        messages: { all: [], user: [], nonUser: [] },
+      },
+    },
+  ];
 }
 
 describe('step-start startedAt', () => {
@@ -152,5 +180,82 @@ describe('step-start startedAt', () => {
     const firstText = observed.find(entry => entry.chunk.type === 'text-delta');
     expect(firstText).toBeDefined();
     expect(firstText!.arrivedAt - startedAt).toBeGreaterThanOrEqual(PREFILL_LOWER_BOUND_MS);
+  });
+
+  it('cache replay refreshes startedAt instead of replaying the cache entry age', async () => {
+    const persistedStartedAt = Date.now() - CACHE_ENTRY_AGE_MS;
+    const doStreamSpy = vi.fn();
+    const agent = new Agent({
+      id: 'step-start-cache-replay-durable',
+      name: 'Step Start Cache Replay Durable',
+      instructions: 'Respond briefly.',
+      model: new MockLanguageModelV2({ doStream: doStreamSpy }),
+      inputProcessors: [
+        {
+          id: 'response-cache-processor',
+          processLLMRequest: vi.fn().mockReturnValue({
+            response: {
+              chunks: createCachedChunks(persistedStartedAt),
+              warnings: [],
+              request: { body: 'cached-request' },
+              rawResponse: { status: 200 },
+            },
+          }),
+        },
+      ],
+    });
+    const durable = createDurableAgent({ agent, pubsub });
+
+    const beforeReplay = Date.now();
+    const { output, cleanup } = await durable.stream('Say hello');
+    const observed = await collectWithArrival(output.fullStream);
+    cleanup();
+
+    expect(doStreamSpy).not.toHaveBeenCalled();
+    const stepStarts = observed.filter(entry => entry.chunk.type === 'step-start');
+    expect(stepStarts.length).toBeGreaterThanOrEqual(1);
+    for (const entry of stepStarts) {
+      // The stamp must be the replay instant, not the persisted one: a
+      // consumer subtracting it from the first chunk's arrival would
+      // otherwise measure how old the cache entry is.
+      expect(entry.chunk.payload.startedAt).toBeGreaterThanOrEqual(beforeReplay);
+      expect(entry.chunk.payload.startedAt).not.toBe(persistedStartedAt);
+    }
+  });
+
+  it('regular engine cache replay refreshes startedAt too', async () => {
+    const persistedStartedAt = Date.now() - CACHE_ENTRY_AGE_MS;
+    const doStreamSpy = vi.fn();
+    const agent = new Agent({
+      id: 'step-start-cache-replay-regular',
+      name: 'Step Start Cache Replay Regular',
+      instructions: 'Respond briefly.',
+      model: new MockLanguageModelV2({ doStream: doStreamSpy }),
+      inputProcessors: [
+        {
+          id: 'response-cache-processor',
+          processLLMRequest: vi.fn().mockReturnValue({
+            response: {
+              chunks: createCachedChunks(persistedStartedAt),
+              warnings: [],
+              request: { body: 'cached-request' },
+              rawResponse: { status: 200 },
+            },
+          }),
+        },
+      ],
+    });
+
+    const beforeReplay = Date.now();
+    const stream = await agent.stream('Say hello');
+    const observed = await collectWithArrival(stream.fullStream);
+
+    expect(doStreamSpy).not.toHaveBeenCalled();
+    const stepStarts = observed.filter(entry => entry.chunk.type === 'step-start');
+    expect(stepStarts.length).toBeGreaterThanOrEqual(1);
+    for (const entry of stepStarts) {
+      expect(entry.chunk.payload.startedAt).toBeGreaterThanOrEqual(beforeReplay);
+      expect(entry.chunk.payload.startedAt).not.toBe(persistedStartedAt);
+    }
   });
 });
