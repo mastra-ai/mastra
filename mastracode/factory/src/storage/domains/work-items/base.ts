@@ -246,6 +246,7 @@ export interface FactorySupervisorFindingRecord {
   openedAt: Date;
   updatedAt: Date;
   resolvedAt: Date | null;
+  lastNotifiedAt: Date | null;
 }
 export type FactoryAttentionReceiptAction = 'read' | 'archive' | 'restore';
 
@@ -896,6 +897,7 @@ const FACTORY_GOVERNANCE_SCHEMAS: CollectionSchema[] = [
       opened_at: { type: 'timestamp' },
       updated_at: { type: 'timestamp' },
       resolved_at: { type: 'timestamp', nullable: true },
+      last_notified_at: { type: 'timestamp', nullable: true },
     },
     uniqueIndexes: [
       {
@@ -1088,6 +1090,7 @@ function toSupervisorFinding(row: GovernanceDbRow): FactorySupervisorFindingReco
     openedAt: row.opened_at as Date,
     updatedAt: row.updated_at as Date,
     resolvedAt: (row.resolved_at as Date | null) ?? null,
+    lastNotifiedAt: (row.last_notified_at as Date | null) ?? null,
   };
 }
 
@@ -1239,6 +1242,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
             opened_at: input.now,
             updated_at: input.now,
             resolved_at: null,
+            last_notified_at: null,
           });
           changed = true;
           continue;
@@ -1252,6 +1256,9 @@ export class WorkItemsStorage extends FactoryStorageDomain {
           opened_at: current.resolved_at !== null ? input.now : current.opened_at,
           updated_at: input.now,
           resolved_at: null,
+          // A reopened incident re-rings the doorbell: clear the notification
+          // stamp so the next sweep emits for it again.
+          last_notified_at: current.resolved_at !== null ? null : current.last_notified_at,
         }));
         changed = true;
       }
@@ -1279,6 +1286,31 @@ export class WorkItemsStorage extends FactoryStorageDomain {
       },
     );
     return { rows: rows.slice(0, input.limit).map(toSupervisorFinding), hasMore: rows.length > input.limit };
+  }
+
+  async markSupervisorFindingNotified(input: {
+    orgId: string;
+    factoryProjectId: string;
+    findingKey: string;
+    occurrence: number;
+    notifiedAt: Date;
+  }): Promise<void> {
+    // Occurrence-safe conditional stamp: a resolve/reopen between send and
+    // stamp must not suppress the new occurrence's notification, so the stamp
+    // only lands on the exact occurrence that was emitted, while it is still
+    // open and still un-stamped. No matching row is a silent no-op.
+    await this.#db.updateAtomic<GovernanceDbRow>(
+      'factory_supervisor_findings',
+      {
+        org_id: input.orgId,
+        factory_project_id: input.factoryProjectId,
+        finding_key: input.findingKey,
+        occurrence: input.occurrence,
+        resolved_at: null,
+        last_notified_at: null,
+      },
+      () => ({ last_notified_at: input.notifiedAt }),
+    );
   }
 
   async countOpenSupervisorFindings(input: { orgId: string; factoryProjectId: string }): Promise<number> {

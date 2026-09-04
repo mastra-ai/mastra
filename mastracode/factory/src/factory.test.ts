@@ -13,6 +13,7 @@ import type { VersionControl } from './capabilities/version-control.js';
 import { MastraFactory } from './factory.js';
 import type { FactoryIntegration, IntegrationContext } from './integrations/base.js';
 import type * as projectRoutesModule from './routes/projects.js';
+import { FactorySupervisorHealthWorker } from './supervisor/health-worker.js';
 import type * as surfaceModule from './routes/surface.js';
 import type * as tenantCredentialsModule from './routes/tenant-credentials.js';
 import { defaultFactoryRules, DEFAULT_FACTORY_RULE_VERSION } from './rules/defaults.js';
@@ -268,8 +269,9 @@ describe('MastraFactory.prepare', () => {
     const blockingCalls = controllerMock.onSessionCreated.mock.calls.filter(
       call => (call[1] as { blocking?: boolean } | undefined)?.blocking === true,
     );
-    expect(blockingCalls).toHaveLength(2);
-    const blockingCall = blockingCalls[0];
+    // Supervisor hydration (#23001), OM settings, and model-pack seeding all
+    // register as blocking session-created listeners.
+    expect(blockingCalls).toHaveLength(3);
 
     // Seed the owner's web session row and stored memory settings through the
     // same storage domains the factory registered.
@@ -324,7 +326,13 @@ describe('MastraFactory.prepare', () => {
       state: { get: () => ({}), set: vi.fn().mockResolvedValue(undefined) },
     };
 
-    await (blockingCall![0] as (session: unknown) => Promise<void>)(session);
+    // Select the OM-seeding listener by behavior, not registration index: the
+    // supervisor hydration listener no-ops for non-supervisor resource ids, so
+    // invoking in order until the observer model is seeded lands on the right one.
+    for (const call of blockingCalls) {
+      await (call![0] as (session: unknown) => Promise<void>)(session);
+      if (session.om.observer.switchModel.mock.calls.length > 0) break;
+    }
 
     expect(session.om.observer.switchModel).toHaveBeenCalledWith({ modelId: 'anthropic/claude-haiku-4-5' });
     expect(session.om.reflector.switchModel).toHaveBeenCalledWith({ modelId: 'anthropic/claude-haiku-4-5' });
@@ -1006,7 +1014,10 @@ describe('MastraFactory.prepare integrations', () => {
       integrations: [fakeIntegration({ id: 'custom', workers })],
     });
     const args = await factory.prepare();
-    expect(args.workers).toEqual([worker]);
+    // The factory always contributes its supervisor health worker (#23001)
+    // alongside integration workers.
+    expect(args.workers).toContain(worker);
+    expect(args.workers!.some(w => w instanceof FactorySupervisorHealthWorker)).toBe(true);
     // The workers factory gets the same integration context shape as routes().
     const ctx = workers.mock.calls[0]![0];
     expect(ctx.stateSigner).toBeDefined();
@@ -1042,14 +1053,16 @@ describe('MastraFactory.prepare integrations', () => {
     expect(args).not.toHaveProperty('workers');
   });
 
-  it('omits the workers option when no integration contributes workers', async () => {
+  it('contributes only the supervisor health worker when no integration contributes workers', async () => {
     const factory = new MastraFactory({
       secretEncryption,
       storage: fakeStorage(),
       integrations: [fakeIntegration({ id: 'custom' })],
     });
     const args = await factory.prepare();
-    expect(args).not.toHaveProperty('workers');
+    // #23001: the factory's own supervisor health worker is always present.
+    expect(args.workers).toHaveLength(1);
+    expect(args.workers![0]).toBeInstanceOf(FactorySupervisorHealthWorker);
   });
 
   /**
