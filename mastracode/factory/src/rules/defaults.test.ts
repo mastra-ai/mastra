@@ -94,6 +94,8 @@ function githubContext(
       merged: false,
       assignees: ['assignee'],
       requestedReviewers: ['reviewer'],
+      author: 'author',
+      factoryAuthored: false,
       headBranch: 'feature',
       baseBranch: 'main',
     },
@@ -367,7 +369,7 @@ describe('defaultFactoryRules', () => {
     expect(decision).not.toHaveProperty('cancelInFlight');
   });
 
-  it('cancels an in-flight review pass and dispatches factory-rereview when a push into an already-reviewed PR restarts Review', async () => {
+  it('dispatches factory-rereview without cancellation when a completed review restarts', async () => {
     const rule = defaultFactoryRules({ version: 'deployment-7' }).review.review?.pullRequest?.onEnter;
     const context = {
       ...stageContext({ type: 'github', login: 'author', trusted: true, factoryAuthored: false }, 'review'),
@@ -376,12 +378,13 @@ describe('defaultFactoryRules', () => {
       fromStage: 'done',
       toStage: 'review',
     } as FactoryStageRuleContext;
-    expect(await rule?.(context)).toMatchObject({
+    const decision = await rule?.(context);
+    expect(decision).toMatchObject({
       type: 'invokeSkill',
       role: 'review',
       skillName: 'factory-rereview',
-      cancelInFlight: true,
     });
+    expect(decision).not.toHaveProperty('cancelInFlight');
   });
 
   it('cancels an in-flight review pass but stays on factory-review when the re-entry did not follow a completed pass', async () => {
@@ -761,8 +764,6 @@ describe('defaultFactoryRules', () => {
         reReviewContext({ actor: { type: 'github', login: 'reader', trusted: false, factoryAuthored: false } }),
         // Factory-authored ingress must not restart its own review.
         reReviewContext({ actor: { type: 'github', login: 'factory-app[bot]', trusted: true, factoryAuthored: true } }),
-        // No linked Review card.
-        reReviewContext({ item: undefined, board: undefined, itemRevision: undefined }),
         // Card already in Reviewing: a pass is pending or running.
         reReviewContext({ item: { ...prItem, stages: ['review'] } }),
       ]) {
@@ -863,6 +864,9 @@ describe('defaultFactoryRules', () => {
       const factoryAuthored = {
         ...githubContext(event),
         actor: { type: 'github', login: 'factory-bot', trusted: false, factoryAuthored: true } as const,
+        ...(event === 'pullRequestOpened'
+          ? { pullRequest: { ...githubContext(event).pullRequest!, factoryAuthored: true } }
+          : {}),
       };
 
       const expectedEligibility = {

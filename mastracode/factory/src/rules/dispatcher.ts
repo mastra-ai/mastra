@@ -68,17 +68,26 @@ function watchRun(
     timeoutMs,
     approvePlans,
     onParkedRun,
+    onAgentEnd,
     label,
-  }: { timeoutMs: number; approvePlans: boolean; onParkedRun: ParkedRunPolicy; label: string },
+  }: {
+    timeoutMs: number;
+    approvePlans: boolean;
+    onParkedRun: ParkedRunPolicy;
+    onAgentEnd?: () => Promise<boolean>;
+    label: string;
+  },
 ) {
   let resolveAgentEnd!: () => void;
   let agentEnd!: Promise<void>;
   let endReason: 'complete' | 'aborted' | 'error' | 'suspended' | undefined;
+  let supersededAtEnd: Promise<boolean> | undefined;
   let parked: { toolName: string; toolCallId: string } | undefined;
   // Re-armed before a redelivery so the second send waits on its own run's
   // ending rather than seeing the one that already resolved.
   const arm = () => {
     endReason = undefined;
+    supersededAtEnd = undefined;
     agentEnd = new Promise<void>(resolve => {
       resolveAgentEnd = resolve;
     });
@@ -87,6 +96,7 @@ function watchRun(
   const unsubscribe = session.subscribe(event => {
     if (event.type === 'agent_end') {
       endReason = event.reason;
+      supersededAtEnd = onAgentEnd?.();
       resolveAgentEnd();
       return;
     }
@@ -103,6 +113,7 @@ function watchRun(
   return {
     arm,
     wait,
+    supersededAtEnd: () => supersededAtEnd,
     close: unsubscribe,
     /** The run's own verdict, thrown as what the dispatcher should record. */
     async settle(): Promise<void> {
@@ -166,6 +177,7 @@ function waitForAgentEndOrTimeout(agentEnd: Promise<void>, timeoutMs: number): P
 
 interface ThreadSwitchSession {
   thread: {
+    requireId(): string;
     switch(input: { threadId: string }): Promise<unknown>;
   };
 }
@@ -183,6 +195,7 @@ interface DispatcherSession extends SkillSession {
     switch(input: { threadId: string }): Promise<unknown>;
     listActiveMessages(): Promise<Array<{ id: string }>>;
   };
+  stream: { isActive(): boolean };
   abort(): void;
   sendSignal(
     input: { id: string; type: 'user'; tagName: 'user'; contents: string },
@@ -194,6 +207,32 @@ interface DispatcherSession extends SkillSession {
 
 type FactoryController = Pick<AgentController<MastraCodeState>, 'getSessionByResource'>;
 type BoundDispatcherSession = Session<MastraCodeState>;
+
+function factoryRequestContext(input: {
+  session: BoundDispatcherSession;
+  binding: FactoryRunBindingRecord;
+  userId: string;
+  orgId: string;
+}): RequestContext {
+  const { session, binding, userId, orgId } = input;
+  const requestContext = new RequestContext();
+  requestContext.set('user', { workosId: userId, organizationId: orgId });
+  const modeId = session.mode.get();
+  requestContext.set('controller', {
+    state: session.state.get(),
+    getState: () => session.state.get(),
+    threadId: binding.threadId,
+    resourceId: binding.resourceId,
+    session: {
+      id: session.identity.getId(),
+      ownerId: session.identity.getOwnerId(),
+      modeId,
+      modelId: session.model.get() ?? '',
+    },
+    workspace: session.getWorkspace(),
+  });
+  return requestContext;
+}
 
 export interface FactoryBindingPreparationInput {
   record: FactoryDeferredDecisionRecord;
@@ -217,6 +256,7 @@ export interface FactoryDecisionDispatcherOptions {
   feedReader?: FactoryFeedReader;
   resolveLinkedWorkItemParentId?: (input: {
     orgId: string;
+    factoryProjectId: string;
     decision: Extract<FactoryCommitDecision, { type: 'upsertLinkedWorkItem' }>;
   }) => Promise<string | null>;
   maxInFlight?: number;
@@ -619,10 +659,14 @@ export class FactoryDecisionDispatcher {
         const startedBy = item.sessions[binding.role]?.startedBy;
         if (!startedBy) return;
         await this.#primeCredentials?.({ orgId: record.orgId, userId: startedBy });
-        const requestContext = new RequestContext();
-        requestContext.set('user', { workosId: startedBy, organizationId: record.orgId });
         const session = await this.#findSession(binding);
         if (!session) return;
+        const requestContext = factoryRequestContext({
+          session,
+          binding,
+          userId: startedBy,
+          orgId: record.orgId,
+        });
         await awaitNotification(
           () =>
             session.sendNotificationSignal(
@@ -650,13 +694,21 @@ export class FactoryDecisionDispatcher {
         return;
       }
       case 'invokeSkill': {
+        // A retry for a role the card has already been handed past cannot win:
+        // no seat can be minted for it, and the work it was for is done.
+        if (await this.#roleSuperseded(record, decision.role)) return;
         const binding = await this.#requireOrPrepareBinding(record, decision.role);
         const item = record.workItemId ? await this.#storage.get({ orgId: record.orgId, id: record.workItemId }) : null;
         const startedBy = item?.sessions[binding.role]?.startedBy;
         if (!startedBy) throw new Error(`Factory binding ${binding.id} has no authenticated session owner.`);
         await this.#primeCredentials?.({ orgId: record.orgId, userId: startedBy });
-        const requestContext = new RequestContext();
-        requestContext.set('user', { workosId: startedBy, organizationId: record.orgId });
+        const session = await this.#requireSession(binding);
+        const requestContext = factoryRequestContext({
+          session,
+          binding,
+          userId: startedBy,
+          orgId: record.orgId,
+        });
         const resolved =
           decision.skillName === undefined
             ? await resolvePromptInvocation(this.#controller, {
@@ -668,7 +720,6 @@ export class FactoryDecisionDispatcher {
                 name: decision.skillName,
                 arguments: decision.arguments,
               });
-        const session = resolved.session as DispatcherSession;
         await this.#switchThread(session, binding);
         const deliveryId =
           record.deliveryGeneration === 0 ? record.id : `${record.id}:retry:${record.deliveryGeneration}`;
@@ -680,7 +731,7 @@ export class FactoryDecisionDispatcher {
           { orgId: record.orgId, factoryProjectId: record.factoryProjectId, workItemId: record.workItemId },
           resolved.message,
         );
-        if (decision.cancelInFlight) session.abort();
+        if (decision.cancelInFlight && session.stream.isActive()) session.abort();
         const precedingMessage = decision.precedingMessage;
         if (precedingMessage) {
           await awaitNotification(() =>
@@ -710,6 +761,7 @@ export class FactoryDecisionDispatcher {
           timeoutMs: this.#skillCompletionObservationTimeoutMs,
           approvePlans: await this.#plansAreAutoApproved(record, item),
           onParkedRun: 'escalate',
+          onAgentEnd: () => this.#roleSuperseded(record, decision.role),
           label: 'Factory skill run',
         });
 
@@ -768,7 +820,17 @@ export class FactoryDecisionDispatcher {
           // A landed `deliver` still runs on the in-flight session, so the run's
           // terminal outcome matters as much as a fresh wake's: a run that ends
           // in error after accepting the prompt has still failed this decision.
-          await run.settle();
+          try {
+            await run.settle();
+          } catch (error) {
+            // Roles share one session. When this role handed the card on
+            // mid-turn, the next role's kickoff was delivered onto the same
+            // run and the turn never ended for us — its eventual verdict is
+            // the successor's to record, not ours. Capture that state when the
+            // terminal event arrives so a later hand-on cannot erase our failure.
+            const superseded = (await run.supersededAtEnd()) ?? (await this.#roleSuperseded(record, decision.role));
+            if (!superseded) throw error;
+          }
         } finally {
           run.close();
         }
@@ -782,9 +844,13 @@ export class FactoryDecisionDispatcher {
         const startedBy = item?.sessions[binding.role]?.startedBy;
         if (!startedBy) throw new Error(`Factory binding ${binding.id} has no authenticated session owner.`);
         await this.#primeCredentials?.({ orgId: record.orgId, userId: startedBy });
-        const requestContext = new RequestContext();
-        requestContext.set('user', { workosId: startedBy, organizationId: record.orgId });
         const session = await this.#requireSession(binding);
+        const requestContext = factoryRequestContext({
+          session,
+          binding,
+          userId: startedBy,
+          orgId: record.orgId,
+        });
         await awaitNotification(
           () =>
             session.sendNotificationSignal(
@@ -833,6 +899,7 @@ export class FactoryDecisionDispatcher {
       record.workItemId ??
       (await this.#resolveLinkedWorkItemParentId?.({
         orgId: record.orgId,
+        factoryProjectId: record.factoryProjectId,
         decision,
       })) ??
       null;
@@ -966,6 +1033,39 @@ export class FactoryDecisionDispatcher {
     return this.#findBinding(record, decision.role);
   }
 
+  /**
+   * A role is superseded when its binding was revoked by a later role taking
+   * the same session (`prepareRunBinding` revokes every other active binding on
+   * that session). Only a hand-on — the running agent or a person moving the
+   * card — produces that shape, so the role's job is done: its decision is not
+   * owed a retry, and whatever ends the shared turn afterwards belongs to the
+   * successor's decision. A revoke with no successor (terminal cleanup, an
+   * operator pulling the seat) is not supersession and still fails as before.
+   * Only a hand-on that happened after this decision was queued counts: a
+   * fresh decision for the role (the card came back to it) must still dispatch
+   * even though an older revoked binding for that role is on record.
+   */
+  async #roleSuperseded(record: FactoryDeferredDecisionRecord, role: string): Promise<boolean> {
+    if (!record.workItemId) return false;
+    const bindings = await this.#storage.listRunBindings(record.orgId, record.factoryProjectId, record.workItemId);
+    const own = bindings.filter(candidate => candidate.role === role);
+    if (own.some(candidate => candidate.status === 'active')) return false;
+    return own.some(
+      revoked =>
+        revoked.revokedAt !== null &&
+        revoked.revokedAt.getTime() >= record.createdAt.getTime() &&
+        bindings.some(
+          successor =>
+            successor.role !== role &&
+            successor.status === 'active' &&
+            successor.resourceId === revoked.resourceId &&
+            successor.sessionId === revoked.sessionId &&
+            successor.threadId === revoked.threadId &&
+            successor.createdAt.getTime() >= revoked.revokedAt!.getTime(),
+        ),
+    );
+  }
+
   async #requireOrPrepareBinding(
     record: FactoryDeferredDecisionRecord,
     role: string,
@@ -1009,6 +1109,7 @@ export class FactoryDecisionDispatcher {
   }
 
   async #switchThread(session: ThreadSwitchSession, binding: FactoryRunBindingRecord): Promise<void> {
+    if (session.thread.requireId() === binding.threadId) return;
     await session.thread.switch({ threadId: binding.threadId });
   }
 
@@ -1065,9 +1166,13 @@ export class FactoryDecisionDispatcher {
           const startedBy = item?.sessions[binding.role]?.startedBy;
           if (!startedBy) throw new Error(`Factory binding ${binding.id} has no authenticated session owner.`);
           await this.#primeCredentials?.({ orgId: record.orgId, userId: startedBy });
-          const requestContext = new RequestContext();
-          requestContext.set('user', { workosId: startedBy, organizationId: record.orgId });
           const session = await this.#requireSession(binding);
+          const requestContext = factoryRequestContext({
+            session,
+            binding,
+            userId: startedBy,
+            orgId: record.orgId,
+          });
           // The run's own verdict, not the delivery's: a kickoff delivered
           // into a run that is already terminating is consumed without
           // execution, and completing the pending start on the delivery ack

@@ -506,6 +506,8 @@ Use `restartAllActiveWorkflowRuns()` to restart all active workflow runs of a wo
 workflow.restartAllActiveWorkflowRuns()
 ```
 
+To exclude a workflow from automatic boot-time restarts triggered by `Mastra.restartAllActiveWorkflowRuns()`, set `autoRestartActiveRuns: false` in the workflow's `options`. This is useful for workflows with side effects that must not be re-driven by a blanket restart. Durable agent workflows set this automatically because their recovery is owned by the opt-in `recovery.durableAgents: 'auto'` path.
+
 ### Restarting an active workflow run with `restart()`
 
 Use `restart()` to restart an active workflow run from the last active step. This will resume execution from the last active step, and the workflow will continue from there.

@@ -23,11 +23,16 @@ import type {
   AttentionStreamPosition,
   FactoryAttentionView,
 } from './attention-providers.js';
-import { AutomationFailedAttentionProvider, MentionAttentionProvider } from './attention-providers.js';
+import {
+  AutomationFailedAttentionProvider,
+  MentionAttentionProvider,
+  SupervisorFindingAttentionProvider,
+} from './attention-providers.js';
 
 export { factoryDecisionType } from './attention-providers.js';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const SUPERVISOR_FINDING_KEY_RE = /^[a-z0-9:_-]{1,256}$/i;
 const DEFAULT_PAGE_SIZE = 25;
 const MAX_PAGE_SIZE = 50;
 
@@ -52,11 +57,11 @@ function parseAttentionLimit(raw: string | undefined): number {
 }
 
 function isAttentionKind(value: string): value is FactoryAttentionKind {
-  return value === 'automation-failed' || value === 'mention' || value === 'activity';
+  return value === 'automation-failed' || value === 'mention' || value === 'activity' || value === 'supervisor-finding';
 }
 
 /** Kinds the sidebar badge and the notification sound answer to. */
-const BADGE_KINDS: ReadonlySet<FactoryAttentionKind> = new Set(['automation-failed', 'mention']);
+const BADGE_KINDS: ReadonlySet<FactoryAttentionKind> = new Set(['automation-failed', 'mention', 'supervisor-finding']);
 
 type AttentionTier = 'all' | 'badge' | 'activity';
 
@@ -205,7 +210,9 @@ function receiptRoute(
       const kind = context.req.param('kind');
       const sourceId = context.req.param('sourceId');
       const occurrence = parseOccurrence(context.req.param('occurrence'));
-      if (!kind || !isAttentionKind(kind) || !sourceId || !UUID_RE.test(sourceId) || occurrence === undefined) {
+      const validSourceId =
+        kind === 'supervisor-finding' ? SUPERVISOR_FINDING_KEY_RE.test(sourceId) : UUID_RE.test(sourceId);
+      if (!kind || !isAttentionKind(kind) || !sourceId || !validSourceId || occurrence === undefined) {
         return context.json({ error: 'invalid_attention_item' }, 422);
       }
       await dependencies.workItems.ensureReady();
@@ -234,6 +241,7 @@ export function buildAttentionRoutes(dependencies: AttentionRouteDependencies): 
   const { workItems, comments } = dependencies;
   const providers: AttentionProvider[] = [
     new AutomationFailedAttentionProvider({ workItems }),
+    new SupervisorFindingAttentionProvider({ workItems }),
     new MentionAttentionProvider({ workItems, comments }),
     new ActivityAttentionProvider({ workItems, comments }),
   ];

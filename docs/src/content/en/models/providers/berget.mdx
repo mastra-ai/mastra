@@ -7,7 +7,7 @@ description: "Browse Berget.AI model IDs, capabilities, context windows, and pri
 
 # <img src="https://models.dev/logos/berget.svg" alt="Berget.AI logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Berget.AI
 
-Access 11 Berget.AI models through Mastra's model router. Authentication is handled automatically using the `BERGET_API_KEY` environment variable.
+Access 6 Berget.AI models through Mastra's model router. Authentication is handled automatically using the `BERGET_API_KEY` environment variable.
 
 Learn more in the [Berget.AI documentation](https://api.berget.ai).
 
@@ -22,7 +22,7 @@ const agent = new Agent({
   id: "my-agent",
   name: "My Agent",
   instructions: "You are a helpful assistant",
-  model: "berget/google/gemma-4-31B-it"
+  model: "berget/Qwen/Qwen3.8-27B-FP8"
 });
 
 // Generate a response
@@ -58,30 +58,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 0.55
   },
   {
-    "model": "berget/meta-llama/Llama-3.3-70B-Instruct",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 128000,
-    "maxOutput": 8192,
-    "inputCost": 0.99,
-    "outputCost": 0.99
-  },
-  {
-    "model": "berget/mistralai/Mistral-Medium-3.5-128B",
-    "imageInput": true,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 262144,
-    "maxOutput": 131072,
-    "inputCost": 1.65,
-    "outputCost": 5.5
-  },
-  {
     "model": "berget/mistralai/Mistral-Small-3.2-24B-Instruct-2506",
     "imageInput": false,
     "audioInput": false,
@@ -92,18 +68,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 8192,
     "inputCost": 0.33,
     "outputCost": 0.33
-  },
-  {
-    "model": "berget/moonshotai/Kimi-K2.6",
-    "imageInput": true,
-    "audioInput": false,
-    "videoInput": true,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 262144,
-    "maxOutput": 262144,
-    "inputCost": 0.83,
-    "outputCost": 3.85
   },
   {
     "model": "berget/moonshotai/Kimi-K3",
@@ -118,28 +82,16 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 15
   },
   {
-    "model": "berget/openai/gpt-oss-120b",
-    "imageInput": false,
+    "model": "berget/Qwen/Qwen3.8-27B-FP8",
+    "imageInput": true,
     "audioInput": false,
     "videoInput": false,
     "toolUsage": true,
     "reasoning": true,
-    "contextWindow": 128000,
-    "maxOutput": 8192,
-    "inputCost": 0.22,
-    "outputCost": 0.83
-  },
-  {
-    "model": "berget/zai-org/GLM-4.7",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 128000,
-    "maxOutput": 8192,
-    "inputCost": 0.77,
-    "outputCost": 2.75
+    "contextWindow": 262144,
+    "maxOutput": 65536,
+    "inputCost": 0.46,
+    "outputCost": 3.48
   },
   {
     "model": "berget/zai-org/GLM-5.2",
@@ -154,25 +106,13 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 4.84
   },
   {
-    "model": "berget/zai-org/GLM-5.3",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 327680,
-    "maxOutput": 32768,
-    "inputCost": 1.75,
-    "outputCost": 5.82
-  },
-  {
     "model": "berget/zai-org/GLM-5.3-Flash",
     "imageInput": true,
     "audioInput": false,
     "videoInput": true,
     "toolUsage": true,
     "reasoning": true,
-    "contextWindow": 327680,
+    "contextWindow": 524288,
     "maxOutput": 16384,
     "inputCost": 0.29,
     "outputCost": 0.58
@@ -192,7 +132,7 @@ const agent = new Agent({
   name: "custom-agent",
   model: {
     url: "https://api.berget.ai/v1",
-    id: "berget/google/gemma-4-31B-it",
+    id: "berget/Qwen/Qwen3.8-27B-FP8",
     apiKey: process.env.BERGET_API_KEY,
     headers: {
       "X-Custom-Header": "value"
@@ -211,7 +151,7 @@ const agent = new Agent({
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
       ? "berget/zai-org/GLM-5.3-Flash"
-      : "berget/google/gemma-4-31B-it";
+      : "berget/Qwen/Qwen3.8-27B-FP8";
   }
 });
 ```

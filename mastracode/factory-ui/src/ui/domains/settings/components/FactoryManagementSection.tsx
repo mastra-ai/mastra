@@ -20,7 +20,7 @@ export function FactoryManagementSection() {
   }
 
   return (
-    <SettingsSubsection title="Danger zone">
+    <SettingsSubsection scope="factory" title="Danger zone">
       <SettingsCard>
         <SettingsRow variant="factory" label={`Delete ${factory.name}`} description="Also unlinks its repositories.">
           <AlertDialog>

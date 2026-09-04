@@ -77,7 +77,7 @@ export function InboxFeedbackList({
       </div>
 
       <div className="min-h-0 overflow-hidden">
-        <DataList columns={COLUMNS} variant="striped" fit="container" scrollRef={containerRef}>
+        <DataList columns={COLUMNS} fit="container" scrollRef={containerRef}>
           <DataList.Top>
             <DataList.TopCell>Feedback</DataList.TopCell>
             <DataList.TopCell>Source</DataList.TopCell>

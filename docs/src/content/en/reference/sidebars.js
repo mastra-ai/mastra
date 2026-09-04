@@ -375,6 +375,7 @@ const sidebars = {
               label: '.submitExperimentResult()',
             },
             { type: 'doc', id: 'datasets/update', label: '.update()' },
+            { type: 'doc', id: 'datasets/updateExperiment', label: '.updateExperiment()' },
             { type: 'doc', id: 'datasets/updateItem', label: '.updateItem()' },
           ],
         },
@@ -581,6 +582,7 @@ const sidebars = {
           label: 'Tracing',
           items: [
             { type: 'doc', id: 'observability/tracing/configuration', label: 'Configuration' },
+            { type: 'doc', id: 'observability/tracing/trace-query', label: 'Advanced trace queries' },
             { type: 'doc', id: 'observability/tracing/instances', label: 'Instances' },
             { type: 'doc', id: 'observability/tracing/interfaces', label: 'Interfaces' },
             { type: 'doc', id: 'observability/tracing/span-filtering', label: 'Span filtering' },
@@ -757,8 +759,10 @@ const sidebars = {
         { type: 'doc', id: 'server/koa-adapter', label: 'Koa Adapter' },
         { type: 'doc', id: 'server/mastra-server', label: 'MastraServer' },
         { type: 'doc', id: 'server/nestjs-adapter', label: 'NestJS Adapter' },
+        { type: 'doc', id: 'server/next-adapter', label: 'Next.js Adapter' },
         { type: 'doc', id: 'server/register-api-route', label: 'registerApiRoute()' },
         { type: 'doc', id: 'server/routes', label: 'Server Routes' },
+        { type: 'doc', id: 'server/tanstack-start-adapter', label: 'TanStack Start Adapter' },
       ],
     },
     {

@@ -78,8 +78,6 @@ export interface GithubRepo {
   installationId: number;
   /** Storage UUID of the installation row backing this repo. */
   installationStorageId: string;
-  /** Storage UUID of the repository row backing this repo. */
-  repositoryStorageId: string;
   sandboxProvider: string;
   sandboxWorkdir: string;
 }
@@ -416,7 +414,7 @@ export async function linkRepository(
       credentials: 'include',
       headers: { 'content-type': 'application/json', Accept: 'application/json' },
       body: JSON.stringify({
-        repositoryId: repo.repositoryStorageId,
+        repository: { externalId: String(repo.id), slug: repo.fullName },
         branch: repo.defaultBranch,
         sandboxProvider: repo.sandboxProvider,
         sandboxWorkdir: repo.sandboxWorkdir,

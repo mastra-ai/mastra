@@ -107,7 +107,19 @@ export enum SpanType {
   /** Inline data mapping between pipeline stages (e.g. a tool's `toModelOutput` transform) */
   MAPPING = 'mapping',
   /** Dynamic agent skills resolver run */
+  /**
+   * @deprecated Use {@link SpanType.SKILL_ACTION} with `operation: 'resolve'`.
+   * No longer emitted; retained so existing exporters and stored traces keep
+   * resolving the value.
+   */
   SKILL_RESOLUTION = 'skill_resolution',
+  /** Any skill lifecycle operation: resolve, inject, activate, search, read */
+  SKILL_ACTION = 'skill_action',
+  /**
+   * An agent state signal emitted onto the model context (point-in-time event,
+   * not a duration).
+   */
+  AGENT_SIGNAL = 'agent_signal',
 }
 
 export { EntityType };
@@ -460,19 +472,75 @@ export interface MappingAttributes extends AIBaseAttributes {
 }
 
 /**
- * Skill resolution attributes — for a dynamic agent skills resolver run.
+ * Skill resolution attributes.
+ *
+ * Emitted from two places, distinguished by `phase`:
+ *  - `'resolver'` — a dynamic agent skills resolver run (`skills` configured as
+ *    a function), spanning the resolver call itself.
+ *  - `'injection'` — the skills processor injecting the catalog into the system
+ *    message. This fires for static skills too, so a misconfigured skills path
+ *    surfaces as `skillCount: 0` instead of producing no skill span at all.
+ *
+ * Extends `ProcessorPipelineAttributes` because the injection phase is emitted
+ * by a processor and must still carry the runner's pipeline facts.
  */
-export interface SkillResolutionAttributes extends AIBaseAttributes {
+/** @deprecated Use {@link SkillActionAttributes}. */
+export interface SkillResolutionAttributes extends AIBaseAttributes, ProcessorPipelineAttributes {
   /** Agent whose skills resolver ran */
   agentId?: string;
-  /** Number of skills the resolver returned */
+  /** Number of skills resolved (resolver) or advertised to the model (injection) */
   skillCount?: number;
+  /** Which half of skill resolution this span covers */
+  phase?: 'resolver' | 'injection';
+  /** Format the catalog was rendered in (injection only) */
+  skillFormat?: string;
 }
 
 /**
- * Processor attributes
+ * Skill action attributes — one span type for the whole skill lifecycle,
+ * discriminated by `operation`, mirroring how `WORKSPACE_ACTION` covers
+ * filesystem/sandbox/search under one type.
+ *
+ * The agent-internal half:
+ *  - `'resolve'` — a dynamic skills resolver run (`skills` configured as a function).
+ *  - `'inject'`  — the skills processor advertising the catalog in the system
+ *    message. Emitted for static skills too, so a skills path that resolves to
+ *    nothing surfaces as `skillCount: 0` rather than producing no span at all.
+ *
+ * The model-initiated half, emitted by the skill tools:
+ *  - `'activate'` | `'search'` | `'read'`
+ *
+ * Extends `ProcessorPipelineAttributes` because the `inject` operation is
+ * emitted by a processor and must still carry the runner's pipeline facts.
  */
-export interface ProcessorRunAttributes extends AIBaseAttributes {
+export interface SkillActionAttributes extends AIBaseAttributes, ProcessorPipelineAttributes {
+  /** Which skill lifecycle operation this span covers */
+  operation: 'resolve' | 'inject' | 'activate' | 'search' | 'read';
+  /** Agent the skills belong to */
+  agentId?: string;
+  /** Number of skills resolved (resolve) or advertised to the model (inject) */
+  skillCount?: number;
+  /** Format the catalog was rendered in (inject only) */
+  skillFormat?: string;
+  /** Skill the operation targeted (activate / read) */
+  skillName?: string;
+  /** Whether the operation succeeded */
+  success?: boolean;
+}
+
+/**
+ * Attributes recorded for every processor the processor runner executes,
+ * independent of the span type that processor declares.
+ *
+ * A processor may opt out of the default `PROCESSOR_RUN` span type (see
+ * `Processor.spanType`) so its span is labelled with the Mastra subsystem it
+ * belongs to — e.g. the skills processor emits `SKILL_ACTION` rather than
+ * an anonymous processor span. The runner still records the pipeline facts
+ * below on that span, so retyping never loses the mutation log or the
+ * processor's position in the chain. Any attributes interface reachable from a
+ * declared `spanType` must therefore extend this.
+ */
+export interface ProcessorPipelineAttributes {
   /** Processor executor type (workflow or legacy) */
   processorExecutor?: 'workflow' | 'legacy';
   /** Processor index in the agent */
@@ -496,6 +564,33 @@ export interface ProcessorRunAttributes extends AIBaseAttributes {
     /** Additional metadata */
     metadata?: unknown;
   };
+}
+
+/**
+ * Processor attributes — the default span type for a processor that does not
+ * declare one of its own.
+ */
+export interface ProcessorRunAttributes extends AIBaseAttributes, ProcessorPipelineAttributes {}
+
+/**
+ * Agent signal attributes — one emission on a processor's state-signal lane.
+ *
+ * Recorded as an **event** span: a signal is a point-in-time fact about what
+ * entered the model's context, not a unit of work with a duration. The work of
+ * computing it is already timed by the enclosing processor span.
+ *
+ * Emitted only when a signal is actually produced. A step where the lane
+ * computed no change records nothing, so an unchanged turn stays silent.
+ */
+export interface AgentSignalAttributes extends AIBaseAttributes {
+  /** State lane this signal belongs to (`stateId`), e.g. 'tasks', 'goal', 'browser' */
+  stateId?: string;
+  /** Whether this emission replaced the state or carried only the change since the last snapshot */
+  mode?: 'snapshot' | 'delta';
+  /** Tag the signal is wrapped in for the model, e.g. 'current-task-list' */
+  tagName?: string;
+  /** Processor that produced the signal */
+  processorId?: string;
 }
 
 /**
@@ -589,14 +684,26 @@ export interface WorkflowWaitEventAttributes extends AIBaseAttributes {
 /**
  * Memory operation attributes
  */
-export interface MemoryOperationAttributes extends AIBaseAttributes {
-  operationType?: 'recall' | 'save' | 'delete' | 'update';
+export interface MemoryOperationAttributes extends AIBaseAttributes, ProcessorPipelineAttributes {
+  /**
+   * Which memory operation this span covers.
+   *
+   * `observe` and `reflect` are the observational-memory model passes; the rest
+   * are the read/write operations on stored memory.
+   */
+  operationType?: 'recall' | 'save' | 'delete' | 'update' | 'observe' | 'reflect';
   messageCount?: number;
   embeddingTokens?: number;
   semanticRecallEnabled?: boolean;
   vectorResultCount?: number;
   workingMemoryEnabled?: boolean;
   lastMessages?: number | false;
+  /** Tokens fed to the observational-memory pass (observe / reflect) */
+  inputTokens?: number;
+  /** Model the observational-memory pass selected, or '(dynamic-model)' when resolved per call */
+  selectedModel?: string;
+  /** Whether an `observe` pass ran across multiple threads */
+  multiThread?: boolean;
 }
 
 /**
@@ -604,7 +711,7 @@ export interface MemoryOperationAttributes extends AIBaseAttributes {
  * Operation-specific inputs/outputs are recorded via span input/output,
  * not as attributes.
  */
-export interface WorkspaceActionAttributes extends AIBaseAttributes {
+export interface WorkspaceActionAttributes extends AIBaseAttributes, ProcessorPipelineAttributes {
   /** Workspace identifier */
   workspaceId?: string;
   /** Human-readable workspace name */
@@ -778,12 +885,41 @@ export interface SpanTypeMap {
   [SpanType.GRAPH_ACTION]: GraphActionAttributes;
   [SpanType.MAPPING]: MappingAttributes;
   [SpanType.SKILL_RESOLUTION]: SkillResolutionAttributes;
+  [SpanType.SKILL_ACTION]: SkillActionAttributes;
+  [SpanType.AGENT_SIGNAL]: AgentSignalAttributes;
 }
 
 /**
  * Union type for cases that need to handle any span type
  */
 export type AnySpanAttributes = SpanTypeMap[keyof SpanTypeMap];
+
+/**
+ * Span types a processor may declare via `Processor.spanType`.
+ *
+ * Restricted to those whose attributes extend `ProcessorPipelineAttributes`,
+ * so the runner can always record `processorIndex`, `messageListMutations` and
+ * `tripwireAbort` on the span regardless of which type the processor picked.
+ * Adding a domain span type to this set is therefore a matter of mixing
+ * `ProcessorPipelineAttributes` into its attributes interface.
+ */
+export type ProcessorSpanType = Exclude<
+  {
+    [K in keyof SpanTypeMap]: SpanTypeMap[K] extends ProcessorPipelineAttributes ? K : never;
+  }[keyof SpanTypeMap],
+  // `ProcessorPipelineAttributes` is all-optional, so the check above is
+  // structural rather than nominal: a span type satisfies it by not
+  // conflicting with it, not by mixing it in. Two types pass that way and are
+  // excluded explicitly.
+  //
+  // `AGENT_RUN`, because a processor labelling its span as the agent run that
+  // contains it would reparent the trace's own root.
+  //
+  // `SKILL_RESOLUTION`, because it is deprecated and no longer emitted; it
+  // stays in `SpanTypeMap` so stored traces keep resolving, but nothing new
+  // should declare it. Declare `SKILL_ACTION` with `operation: 'resolve'`.
+  SpanType.AGENT_RUN | SpanType.SKILL_RESOLUTION
+>;
 
 // ============================================================================
 // Span Interfaces
@@ -1329,6 +1465,13 @@ interface UpdateBaseOptions<TType extends SpanType> {
 export interface EndSpanOptions<TType extends SpanType> extends UpdateBaseOptions<TType> {
   /** Output data */
   output?: any;
+  /**
+   * Also close any descendant spans still open, without applying these
+   * options to them. Use at terminal points (error, abort, suspension) where
+   * nothing below this span may keep running. Unlike `endTree()`, options
+   * apply to this span only.
+   */
+  endTree?: boolean;
 }
 
 /** Options for updating a span's attributes, input, or output mid-flight. */
@@ -1347,6 +1490,12 @@ export interface ErrorSpanOptions<TType extends SpanType> extends UpdateBaseOpti
   error: MastraError | Error;
   /** End the span when true */
   endSpan?: boolean;
+  /**
+   * Also close any descendant spans still open, without recording the error
+   * on them. Implies ending this span. Use at terminal points where nothing
+   * below this span may keep running.
+   */
+  endTree?: boolean;
 }
 
 /** Options for retrieving an existing span or creating a new one from a tracing context. */

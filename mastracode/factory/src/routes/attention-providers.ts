@@ -15,6 +15,7 @@ import type {
   FactoryAttentionKind,
   FactoryAttentionReceiptRecord,
   FactoryDeferredDecisionRecord,
+  FactorySupervisorFindingRecord,
   WorkItemRow,
   WorkItemsStorage,
 } from '../storage/domains/work-items/base.js';
@@ -22,7 +23,9 @@ import {
   factoryAttentionKey,
   factoryDecisionAttentionIdentity,
   factoryMentionAttentionIdentity,
+  factorySupervisorFindingAttentionIdentity,
 } from '../storage/domains/work-items/base.js';
+import type { FactoryHealthFinding } from '../supervisor/health.js';
 
 export type FactoryAttentionView = 'open' | 'unread' | 'archived';
 
@@ -307,6 +310,132 @@ interface ResolvedMention {
   item: WorkItemRow;
   identity: FactoryAttentionIdentity;
   receipt: FactoryAttentionReceiptRecord | undefined;
+}
+
+function supervisorFindingPayload(row: FactorySupervisorFindingRecord): FactoryHealthFinding {
+  return row.finding as unknown as FactoryHealthFinding;
+}
+
+export class SupervisorFindingAttentionProvider implements AttentionProvider {
+  readonly kind = 'supervisor-finding' as const;
+  readonly #workItems: WorkItemsStorage;
+
+  constructor({ workItems }: { workItems: WorkItemsStorage }) {
+    this.#workItems = workItems;
+  }
+
+  async counts(scope: AttentionScope): Promise<AttentionCounts> {
+    let open = 0;
+    let unread = 0;
+    const batches = scanBatches<FactorySupervisorFindingRecord>(
+      before =>
+        this.#workItems.listSupervisorFindingPage({ ...scope, ...(before ? { before } : {}), limit: SCAN_PAGE_SIZE }),
+      row => ({ occurredAt: row.updatedAt, id: row.id }),
+    );
+    for await (const page of batches) {
+      const identities = page.rows.map(row =>
+        factorySupervisorFindingAttentionIdentity(row.findingKey, row.occurrence),
+      );
+      const receipts = await this.#workItems.listAttentionReceipts({ ...scope, identities });
+      const byIdentity = new Map(
+        receipts.map(receipt => [`${receipt.sourceId}\0${receipt.occurrence}`, receipt] as const),
+      );
+      for (const row of page.rows) {
+        const receipt = byIdentity.get(`${row.findingKey}\0${row.occurrence}`);
+        if (receipt?.state === 'archived') continue;
+        open += 1;
+        if (!receipt) unread += 1;
+      }
+    }
+    return { open, unread };
+  }
+
+  async latest(scope: AttentionScope): Promise<AttentionLatest | null> {
+    const page = await this.#workItems.listSupervisorFindingPage({ ...scope, limit: 1 });
+    const newest = page.rows[0];
+    if (!newest) return null;
+    const identity = factorySupervisorFindingAttentionIdentity(newest.findingKey, newest.occurrence);
+    const receipts = await this.#workItems.listAttentionReceipts({ ...scope, identities: [identity] });
+    return {
+      key: factoryAttentionKey(scope.factoryProjectId, identity),
+      at: newest.updatedAt,
+      unread: receipts.length === 0,
+    };
+  }
+
+  page(scope: AttentionScope, args: AttentionPageArgs): Promise<AttentionPageResult> {
+    return collectPage(
+      scanBatches<FactorySupervisorFindingRecord>(
+        before =>
+          this.#workItems.listSupervisorFindingPage({ ...scope, ...(before ? { before } : {}), limit: SCAN_PAGE_SIZE }),
+        row => ({ occurredAt: row.updatedAt, id: row.id }),
+        args.before,
+      ),
+      args.limit,
+      async rows => {
+        const identities = rows.map(row => factorySupervisorFindingAttentionIdentity(row.findingKey, row.occurrence));
+        const receipts = await this.#workItems.listAttentionReceipts({ ...scope, identities });
+        const byIdentity = new Map(
+          receipts.map(receipt => [`${receipt.sourceId}\0${receipt.occurrence}`, receipt] as const),
+        );
+        return rows.flatMap(row => {
+          const finding = supervisorFindingPayload(row);
+          const receipt = byIdentity.get(`${row.findingKey}\0${row.occurrence}`);
+          if (!matchesView(args.view, receipt)) return [];
+          const text = `${finding.title} ${finding.evidence}`.toLowerCase();
+          if (args.search && !text.includes(args.search)) return [];
+          const identity = factorySupervisorFindingAttentionIdentity(row.findingKey, row.occurrence);
+          return [
+            {
+              key: factoryAttentionKey(scope.factoryProjectId, identity),
+              occurredAt: row.updatedAt,
+              resumeCursor: { occurredAt: row.updatedAt, id: row.id },
+              receipt,
+              item: {
+                key: factoryAttentionKey(scope.factoryProjectId, identity),
+                kind: this.kind,
+                findingKey: row.findingKey,
+                occurrence: row.occurrence,
+                findingTitle: finding.title,
+                evidence: finding.evidence,
+                title: finding.title,
+                detail: finding.evidence,
+                ageMs: finding.ageMs,
+                suggestedRepair: finding.suggestedRepair,
+                workItemId: finding.workItemId,
+                occurredAt: row.updatedAt.toISOString(),
+                read: Boolean(receipt),
+                archived: receipt?.state === 'archived',
+                target: finding.workItemId
+                  ? { kind: 'work-item', workItemId: finding.workItemId, board: 'work' }
+                  : { kind: 'rules' },
+              },
+            },
+          ];
+        });
+      },
+    );
+  }
+
+  markAllRead(
+    scope: AttentionScope,
+    args: { before?: AttentionStreamPosition; now: Date },
+  ): Promise<{ hasMore: boolean; continuation?: AttentionStreamPosition }> {
+    return markScanRead(
+      scanBatches<FactorySupervisorFindingRecord>(
+        before =>
+          this.#workItems.listSupervisorFindingPage({ ...scope, ...(before ? { before } : {}), limit: SCAN_PAGE_SIZE }),
+        row => ({ occurredAt: row.updatedAt, id: row.id }),
+        args.before,
+      ),
+      rows =>
+        this.#workItems.markAttentionReceiptsRead({
+          ...scope,
+          identities: rows.map(row => factorySupervisorFindingAttentionIdentity(row.findingKey, row.occurrence)),
+          now: args.now,
+        }),
+    );
+  }
 }
 
 export class MentionAttentionProvider implements AttentionProvider {
