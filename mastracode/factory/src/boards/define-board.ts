@@ -1,18 +1,31 @@
-import type {
-  FactoryBoardRules,
-  FactoryRuleHandler,
-  FactoryRuleSource,
-  FactoryStageRuleContext,
-} from '../rules/types.js';
+import type { FactoryRuleHandler, FactoryRuleSource, FactoryStageRuleContext } from '../rules/types.js';
 
 type BoardPhaseHandlers = Partial<Record<FactoryRuleSource, FactoryRuleHandler<FactoryStageRuleContext>>>;
+type ReadonlyBoardPhaseHandlers = Readonly<BoardPhaseHandlers>;
+
+type ReadonlyFactoryBoardRules = Readonly<
+  Record<
+    string,
+    Readonly<
+      Partial<
+        Record<
+          FactoryRuleSource,
+          Readonly<{
+            onEnter?: FactoryRuleHandler<FactoryStageRuleContext>;
+            onExit?: FactoryRuleHandler<FactoryStageRuleContext>;
+          }>
+        >
+      >
+    >
+  >
+>;
 
 export type BoardPhaseDefinition<PhaseId extends string> = {
-  title: string;
-  next?: PhaseId;
-  outcomes?: Readonly<Record<string, PhaseId>>;
-  onEnter?: BoardPhaseHandlers;
-  onExit?: BoardPhaseHandlers;
+  readonly title: string;
+  readonly next?: PhaseId;
+  readonly outcomes?: Readonly<Record<string, PhaseId>>;
+  readonly onEnter?: ReadonlyBoardPhaseHandlers;
+  readonly onExit?: ReadonlyBoardPhaseHandlers;
 };
 
 export interface BoardTransition<PhaseId extends string> {
@@ -21,12 +34,12 @@ export interface BoardTransition<PhaseId extends string> {
 }
 
 export interface BoardDefinition<BoardId extends string, PhaseId extends string> {
-  id: BoardId;
-  title: string;
-  initialPhase: PhaseId;
-  phases: Readonly<Record<PhaseId, BoardPhaseDefinition<PhaseId>>>;
-  transitions: Readonly<Record<PhaseId, readonly BoardTransition<PhaseId>[]>>;
-  rules: FactoryBoardRules;
+  readonly id: BoardId;
+  readonly title: string;
+  readonly initialPhase: PhaseId;
+  readonly phases: Readonly<Record<PhaseId, BoardPhaseDefinition<PhaseId>>>;
+  readonly transitions: Readonly<Record<PhaseId, readonly BoardTransition<PhaseId>[]>>;
+  readonly rules: ReadonlyFactoryBoardRules;
   allowsTransition(from: PhaseId, to: PhaseId): boolean;
 }
 
@@ -69,31 +82,48 @@ export function defineBoard<
     }),
   ) as Record<keyof Phases & string, readonly BoardTransition<keyof Phases & string>[]>;
 
-  const phases = Object.freeze({ ...config.phases });
-  const rules = Object.fromEntries(
-    Object.entries(config.phases).flatMap(([phaseId, phase]) => {
-      const sources = new Set([...Object.keys(phase.onEnter ?? {}), ...Object.keys(phase.onExit ?? {})]);
-      if (sources.size === 0) return [];
-      return [
-        [
-          phaseId,
-          Object.fromEntries(
-            [...sources].map(source => [
-              source,
-              {
-                ...(phase.onEnter?.[source as FactoryRuleSource]
-                  ? { onEnter: phase.onEnter[source as FactoryRuleSource] }
-                  : {}),
-                ...(phase.onExit?.[source as FactoryRuleSource]
-                  ? { onExit: phase.onExit[source as FactoryRuleSource] }
-                  : {}),
-              },
-            ]),
-          ),
-        ],
-      ];
-    }),
-  ) as FactoryBoardRules;
+  const phases = Object.freeze(
+    Object.fromEntries(
+      Object.entries(config.phases).map(([phaseId, phase]) => [
+        phaseId,
+        Object.freeze({
+          title: phase.title,
+          ...(phase.next !== undefined ? { next: phase.next } : {}),
+          ...(phase.outcomes ? { outcomes: Object.freeze({ ...phase.outcomes }) } : {}),
+          ...(phase.onEnter ? { onEnter: Object.freeze({ ...phase.onEnter }) } : {}),
+          ...(phase.onExit ? { onExit: Object.freeze({ ...phase.onExit }) } : {}),
+        }),
+      ]),
+    ),
+  ) as Readonly<Record<keyof Phases & string, BoardPhaseDefinition<keyof Phases & string>>>;
+  const rules = Object.freeze(
+    Object.fromEntries(
+      Object.entries(config.phases).flatMap(([phaseId, phase]) => {
+        const sources = new Set([...Object.keys(phase.onEnter ?? {}), ...Object.keys(phase.onExit ?? {})]);
+        if (sources.size === 0) return [];
+        return [
+          [
+            phaseId,
+            Object.freeze(
+              Object.fromEntries(
+                [...sources].map(source => [
+                  source,
+                  Object.freeze({
+                    ...(phase.onEnter?.[source as FactoryRuleSource]
+                      ? { onEnter: phase.onEnter[source as FactoryRuleSource] }
+                      : {}),
+                    ...(phase.onExit?.[source as FactoryRuleSource]
+                      ? { onExit: phase.onExit[source as FactoryRuleSource] }
+                      : {}),
+                  }),
+                ]),
+              ),
+            ),
+          ],
+        ];
+      }),
+    ),
+  ) as ReadonlyFactoryBoardRules;
   return Object.freeze({
     id: config.id,
     title: config.title,

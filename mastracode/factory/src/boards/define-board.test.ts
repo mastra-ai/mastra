@@ -31,6 +31,37 @@ describe('defineBoard', () => {
     expect(board.allowsTransition('prepare', 'done')).toBe(false);
   });
 
+  it('clones and freezes the public phase and rule graphs', () => {
+    const originalHandler = () => undefined;
+    const replacementHandler = () => ({ type: 'notify', message: 'mutated' }) as const;
+    const phases = {
+      start: {
+        title: 'Start',
+        outcomes: { approved: 'done' },
+        onEnter: { manual: originalHandler },
+      },
+      done: { title: 'Done' },
+    } as const;
+    const board = defineBoard({ id: 'immutable', title: 'Immutable', initialPhase: 'start', phases });
+
+    expect(Object.isFrozen(board.phases.start)).toBe(true);
+    expect(Object.isFrozen(board.phases.start.outcomes)).toBe(true);
+    expect(Object.isFrozen(board.phases.start.onEnter)).toBe(true);
+    expect(Object.isFrozen(board.rules.start)).toBe(true);
+    expect(Object.isFrozen(board.rules.start?.manual)).toBe(true);
+
+    expect(Reflect.set(phases.start.outcomes, 'approved', 'start')).toBe(true);
+    expect(Reflect.set(phases.start.onEnter, 'manual', replacementHandler)).toBe(true);
+    expect(board.phases.start.outcomes?.approved).toBe('done');
+    expect(board.phases.start.onEnter?.manual).toBe(originalHandler);
+    expect(board.rules.start?.manual?.onEnter).toBe(originalHandler);
+
+    expect(Reflect.set(board.phases.start, 'title', 'Mutated')).toBe(false);
+    expect(Reflect.set(board.phases.start.outcomes!, 'approved', 'start')).toBe(false);
+    expect(Reflect.set(board.rules.start!, 'manual', {})).toBe(false);
+    expect(Reflect.set(board.rules.start!.manual!, 'onEnter', replacementHandler)).toBe(false);
+  });
+
   it('rejects definitions whose transitions target missing phases', () => {
     expect(() =>
       defineBoard({
