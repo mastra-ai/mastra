@@ -1,3 +1,4 @@
+import type { JSONValue, ToolInvocationUIPart } from '@ai-sdk/ui-utils';
 import type {
   AgentExecutionOptions,
   MultiPrimitiveExecutionOptions,
@@ -54,6 +55,22 @@ import type { ZodType as ZodTypeV4 } from 'zod/v4';
 import type { Body, QueryParams, RouteKey, RouteResponse, Simplify } from './route-types.generated.js';
 
 export type ZodSchema = ZodSchemaV3 | ZodTypeV4;
+
+/**
+ * Provider metadata as it travels on a message part: a two-level map of
+ * provider namespace -> key -> value (e.g. `{ vertex: { thoughtSignature: '...' } }`).
+ */
+export type PartProviderMetadata = Record<string, Record<string, JSONValue>>;
+
+/** Stream chunk payloads may carry provider metadata; the AI SDK payload types don't declare it. */
+export type MaybeProviderMetadata = { providerMetadata?: PartProviderMetadata };
+
+/**
+ * `ToolInvocationUIPart` from `@ai-sdk/ui-utils` has no `providerMetadata` field, but the
+ * server reads provider metadata from the part itself (not from the nested `toolInvocation`),
+ * so the SDK has to be able to set it there.
+ */
+export type ToolInvocationUIPartWithMeta = ToolInvocationUIPart & MaybeProviderMetadata;
 
 type OptionalizeUndefined<T> = T extends Date
   ? Date
@@ -152,6 +169,8 @@ export type ListAgentSuspendedRunsParams = GeneratedRequest<QueryParams<'GET /ag
  * the rest of the client SDK.
  */
 export type ListAgentSuspendedRunsResponse = GeneratedResponse<'GET /agents/:agentId/suspended-runs'>;
+
+export type GetAgentPlanResponse = GeneratedResponse<'GET /agents/:agentId/plans/file'>;
 
 export type AgentSuspendedRun = ListAgentSuspendedRunsResponse['runs'][number];
 
@@ -487,6 +506,11 @@ export interface GetAgentResponse {
   workspaceTools?: string[];
   /** Browser tool names available to this agent (if browser is configured) */
   browserTools?: string[];
+  /**
+   * Whether the agent has any browser provider — agent-level SDK browser or
+   * workspace-level CLI browser. Gates the Studio browser viewer.
+   */
+  hasBrowser?: boolean;
   /** ID of the agent's workspace (if configured) */
   workspaceId?: string;
   provider: string;
@@ -1316,6 +1340,21 @@ export interface ResolvedAuthor {
 }
 
 /**
+ * Serializable durable-execution opt-in for a stored agent.
+ *
+ * `cache` and `pubsub` are live runtime objects and cannot be sent over the API —
+ * the server inherits them from its Mastra instance.
+ */
+export type StoredAgentDurableConfig =
+  | boolean
+  | {
+      /** Maximum steps for the durable agentic loop. */
+      maxSteps?: number;
+      /** Auto-cleanup timer for durable stream state (ms). `0` disables cleanup. */
+      cleanupTimeoutMs?: number;
+    };
+
+/**
  * Stored agent data returned from API
  */
 export interface StoredAgentResponse {
@@ -1353,6 +1392,7 @@ export interface StoredAgentResponse {
   workspace?: ConditionalField<StoredWorkspaceRef>;
   browser?: ConditionalField<StoredBrowserRef> | boolean | null;
   requestContextSchema?: Record<string, unknown>;
+  durable?: StoredAgentDurableConfig;
   // Favorites (EE feature, present when `favorites` feature is enabled)
   isFavorited?: boolean;
   favoriteCount?: number;
@@ -1456,6 +1496,12 @@ export interface CreateStoredAgentParams {
   browser?: ConditionalField<StoredBrowserRef> | boolean | null;
   requestContextSchema?: Record<string, unknown>;
   /**
+   * Run this agent with durable execution once it is hydrated by the server.
+   * Cache and pubsub are inherited from the server's Mastra instance — without
+   * distributed backends durability is process-local.
+   */
+  durable?: StoredAgentDurableConfig;
+  /**
    * Publish the initial version so the agent resolves at `status: 'published'`.
    * Defaults to true when omitted. Pass false to stage the agent as an unpublished
    * draft — useful when overriding a code-defined agent, whose code definition keeps
@@ -1519,6 +1565,8 @@ export interface UpdateStoredAgentParams {
   /** Browser config. `true` = use admin default, `false` = no browser. */
   browser?: ConditionalField<StoredBrowserRef> | boolean | null;
   requestContextSchema?: Record<string, unknown>;
+  /** Run this agent with durable execution once it is hydrated by the server. */
+  durable?: StoredAgentDurableConfig;
   /** Optional message describing the changes for the auto-created version */
   changeMessage?: string;
   /** Immediately activate the auto-created version. Defaults to false when omitted. */
@@ -2733,8 +2781,11 @@ export interface DatasetExperiment {
   datasetId: string | null;
   datasetVersion: number | null;
   agentVersion: string | null;
-  targetType: 'agent' | 'workflow' | 'scorer' | 'processor';
-  targetId: string;
+  /** `null` for caller-driven ingestion experiments (the caller executes items itself). */
+  targetType: 'agent' | 'workflow' | 'scorer' | 'processor' | null;
+  targetId: string | null;
+  /** Run-level scorer IDs pinned at create time for caller-driven experiments. */
+  scorerIds?: string[] | null;
   /** Human-readable name used as the primary label wherever the experiment is displayed. */
   name?: string;
   /** Longer description shown as secondary detail (e.g. in a tooltip). */
@@ -2749,6 +2800,7 @@ export interface DatasetExperiment {
   totalItems: number;
   succeededCount: number;
   failedCount: number;
+  skippedCount: number;
   startedAt: string | Date | null;
   completedAt: string | Date | null;
   createdAt: string | Date;
@@ -2763,16 +2815,23 @@ export interface DatasetExperimentResult {
   input: unknown;
   output: unknown | null;
   groundTruth: unknown | null;
-  error: string | null;
+  metadata?: Record<string, unknown> | null;
+  /** Structured failure info, as persisted by the experiment runner. */
+  error: { message: string; stack?: string; code?: string } | null;
   startedAt: string | Date;
   completedAt: string | Date;
   retryCount: number;
+  attempt?: number;
   traceId: string | null;
   status: 'needs-review' | 'reviewed' | 'complete' | null;
   tags: string[] | null;
   comment?: string | null;
   toolMockReport?: ToolMockReport | null;
-  scores: Array<{
+  /**
+   * Aggregated scorer runs. Absent on endpoints that return raw result rows
+   * (scores live in the scores store, keyed by `runId = experimentId`).
+   */
+  scores?: Array<{
     scorerId: string;
     scorerName: string;
     score: number | null;
@@ -2884,6 +2943,14 @@ export interface GeneratedItem {
   groundTruth?: unknown;
 }
 
+export interface UpdateDatasetExperimentParams {
+  datasetId: string;
+  experimentId: string;
+  name?: string;
+  description?: string;
+  metadata?: Record<string, unknown>;
+}
+
 export interface TriggerDatasetExperimentParams {
   datasetId: string;
   targetType: 'agent' | 'workflow' | 'scorer';
@@ -2898,6 +2965,87 @@ export interface TriggerDatasetExperimentParams {
   provenance?: ExperimentProvenance;
   grouping?: ExperimentGrouping;
   requestContext?: Record<string, unknown>;
+}
+
+export interface CreateDatasetExperimentParams {
+  datasetId: string;
+  /** Caller-supplied experiment id (e.g. a workflow run id) for idempotent creates. */
+  id?: string;
+  /** Target executed per item via `runExperimentItem`. Both or neither of targetType/targetId. Omit for pure ingestion. */
+  targetType?: 'agent' | 'workflow' | 'scorer';
+  targetId?: string;
+  /** Run-level scorer IDs resolved server-side by `runExperimentItem`. Requires a target. */
+  scorerIds?: string[];
+  name?: string;
+  description?: string;
+  metadata?: Record<string, unknown>;
+  /** Pin to a specific dataset version. Defaults to the latest version. */
+  version?: number;
+  provenance?: ExperimentProvenance;
+  grouping?: ExperimentGrouping;
+}
+
+export interface CreateDatasetExperimentResponse {
+  experimentId: string;
+  status: 'pending' | 'running' | 'completed' | 'failed';
+  totalItems: number;
+  datasetVersion: number;
+}
+
+export interface RunExperimentItemParams {
+  datasetId: string;
+  experimentId: string;
+  itemId: string;
+  /** Zero-based repetition index. Defaults to 0. Retried calls with the same (experimentId, itemId, attempt) converge on one row. */
+  attempt?: number;
+  /** Request context merged with the item's own request context (item wins). */
+  requestContext?: Record<string, unknown>;
+}
+
+/**
+ * A single experiment result row as the server returns it: structured
+ * `error` object and no aggregated `scores` (scores live in the scores
+ * store, keyed by `runId = experimentId`).
+ */
+export type DatasetExperimentResultRow = Omit<DatasetExperimentResult, 'scores'>;
+
+export interface RunExperimentItemResponse {
+  result: DatasetExperimentResultRow;
+  scores: Array<{
+    scorerId: string;
+    scorerName: string;
+    score: number | null;
+    reason: string | null;
+    error: string | null;
+  }>;
+}
+
+export interface SubmitExperimentResultParams {
+  datasetId: string;
+  experimentId: string;
+  itemId: string;
+  /** Zero-based repetition index. Defaults to 0. Retried submissions with the same (experimentId, itemId, attempt) converge on one row. */
+  attempt?: number;
+  input?: unknown;
+  output?: unknown;
+  groundTruth?: unknown;
+  error?: { message: string; stack?: string; code?: string } | null;
+  startedAt?: Date;
+  completedAt?: Date;
+  traceId?: string;
+  /** Externally computed scores, persisted keyed by runId = experimentId. */
+  scores?: Array<{
+    scorerId: string;
+    scorerName?: string;
+    score: number;
+    reason?: string;
+    metadata?: Record<string, unknown>;
+  }>;
+}
+
+export interface FinalizeExperimentParams {
+  datasetId: string;
+  experimentId: string;
 }
 
 export interface CompareExperimentsParams {

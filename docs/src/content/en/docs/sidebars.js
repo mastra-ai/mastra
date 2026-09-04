@@ -22,7 +22,7 @@ const sidebars = {
     },
     {
       type: 'doc',
-      id: 'getting-started/develop',
+      id: 'develop',
       label: 'Develop',
     },
     {
@@ -46,7 +46,7 @@ const sidebars = {
           items: [
             {
               type: 'doc',
-              id: 'agents/using-tools',
+              id: 'agents/tools',
               label: 'Tools',
             },
             {
@@ -56,7 +56,7 @@ const sidebars = {
             },
             {
               type: 'doc',
-              id: 'agents/agent-approval',
+              id: 'agents/human-in-the-loop',
               label: 'Human-in-the-Loop',
             },
             {
@@ -158,32 +158,32 @@ const sidebars = {
           items: [
             {
               type: 'doc',
-              id: 'long-running-agents/durable-agents',
+              id: 'harness/durable-agents',
               label: 'Durable Agents',
             },
             {
               type: 'doc',
-              id: 'long-running-agents/background-tasks',
+              id: 'harness/background-tasks',
               label: 'Background Tasks',
             },
             {
               type: 'doc',
-              id: 'long-running-agents/goals',
+              id: 'harness/goals',
               label: 'Goals',
             },
             {
               type: 'doc',
-              id: 'long-running-agents/schedules',
+              id: 'harness/schedules',
               label: 'Schedules',
             },
             {
               type: 'doc',
-              id: 'long-running-agents/signals',
+              id: 'harness/signals',
               label: 'Signals',
             },
             {
               type: 'doc',
-              id: 'long-running-agents/signal-providers',
+              id: 'harness/signal-providers',
               label: 'Signal Providers',
             },
             {
@@ -247,25 +247,25 @@ const sidebars = {
       items: [
         {
           type: 'doc',
-          id: 'capabilities/subagents',
+          id: 'subagents',
           label: 'Subagents',
         },
         {
           type: 'doc',
-          id: 'agents/skills',
+          id: 'skills',
           label: 'Skills',
         },
         {
           type: 'doc',
-          id: 'capabilities/channels',
+          id: 'channels',
           label: 'Channels',
         },
         {
           type: 'category',
-          label: 'Sandbox',
+          label: 'Sandboxes',
           link: {
             type: 'doc',
-            id: 'workspace/sandbox',
+            id: 'sandbox/overview',
           },
           customProps: {
             contextualSidebar: true,
@@ -273,29 +273,34 @@ const sidebars = {
           items: [
             {
               type: 'doc',
-              id: 'workspace/filesystem',
+              id: 'sandbox/filesystem',
               label: 'Filesystem',
             },
             {
               type: 'doc',
-              id: 'workspace/search',
+              id: 'sandbox/search',
               label: 'Search',
             },
             {
               type: 'doc',
-              id: 'workspace/skills',
+              id: 'sandbox/skills',
               label: 'Skills',
             },
             {
               type: 'doc',
-              id: 'workspace/lsp',
+              id: 'sandbox/computer',
+              label: 'Computer',
+            },
+            {
+              type: 'doc',
+              id: 'sandbox/lsp',
               label: 'LSP',
             },
           ],
         },
         {
           type: 'doc',
-          id: 'browser/overview',
+          id: 'browser',
           label: 'Browser',
         },
         {
@@ -311,23 +316,23 @@ const sidebars = {
           items: [
             {
               type: 'doc',
-              id: 'agents/a2a',
+              id: 'connections/mcp',
+              label: 'MCP',
+            },
+            {
+              type: 'doc',
+              id: 'connections/a2a',
               label: 'A2A',
             },
             {
               type: 'doc',
-              id: 'agents/acp',
+              id: 'connections/acp',
               label: 'ACP',
             },
             {
               type: 'doc',
-              id: 'agents/sdk-agents',
+              id: 'connections/sdk-agents',
               label: 'SDK Agents',
-            },
-            {
-              type: 'doc',
-              id: 'mcp/overview',
-              label: 'MCP',
             },
           ],
         },
@@ -342,7 +347,7 @@ const sidebars = {
       items: [
         {
           type: 'doc',
-          id: 'storage/overview',
+          id: 'storage',
           label: 'Storage',
         },
         {
@@ -350,7 +355,7 @@ const sidebars = {
           label: 'Server',
           link: {
             type: 'doc',
-            id: 'server/mastra-server',
+            id: 'server/overview',
           },
           customProps: {
             contextualSidebar: true,
@@ -421,7 +426,7 @@ const sidebars = {
             },
             {
               type: 'doc',
-              id: 'editor/overview',
+              id: 'studio/editor',
               label: 'Editor',
             },
           ],
@@ -431,7 +436,7 @@ const sidebars = {
           label: 'Auth',
           link: {
             type: 'doc',
-            id: 'server/auth/index',
+            id: 'auth/overview',
           },
           customProps: {
             contextualSidebar: true,
@@ -439,32 +444,32 @@ const sidebars = {
           items: [
             {
               type: 'doc',
-              id: 'server/auth/composite-auth',
+              id: 'auth/composite-auth',
               label: 'Composite Auth',
             },
             {
               type: 'doc',
-              id: 'server/auth/custom-auth-provider',
+              id: 'auth/custom-auth-provider',
               label: 'Custom Auth Provider',
             },
             {
               type: 'doc',
-              id: 'server/auth/fga',
+              id: 'auth/fga',
               label: 'Fine-Grained Authorization',
             },
             {
               type: 'doc',
-              id: 'server/auth/jwt',
+              id: 'auth/jwt',
               label: 'JSON Web Token',
             },
             {
               type: 'doc',
-              id: 'server/auth/simple-auth',
+              id: 'auth/simple-auth',
               label: 'Simple Auth',
             },
             {
               type: 'doc',
-              id: 'server/auth/workers',
+              id: 'auth/workers',
               label: 'Workers',
               customProps: {
                 tags: ['new'],
@@ -546,7 +551,7 @@ const sidebars = {
             {
               type: 'doc',
               id: 'observability/tracing/overview',
-              label: 'Traces',
+              label: 'Usage',
             },
             {
               type: 'doc',
@@ -566,22 +571,9 @@ const sidebars = {
           ],
         },
         {
-          type: 'category',
+          type: 'doc',
+          id: 'observability/metrics/overview',
           label: 'Metrics',
-          link: {
-            type: 'doc',
-            id: 'observability/metrics/overview',
-          },
-          customProps: {
-            contextualSidebar: true,
-          },
-          items: [
-            {
-              type: 'doc',
-              id: 'observability/metrics/querying',
-              label: 'Querying Metrics',
-            },
-          ],
         },
         {
           type: 'category',
@@ -626,25 +618,22 @@ const sidebars = {
             },
             {
               type: 'doc',
+              id: 'evals/vitest-integration',
+              label: 'Vitest Integration',
+            },
+            {
+              type: 'doc',
               id: 'evals/evals-with-memory',
               label: 'Evals with Memory',
             },
-          ],
-        },
-        {
-          type: 'category',
-          label: 'Datasets',
-          link: {
-            type: 'doc',
-            id: 'datasets/overview',
-          },
-          customProps: {
-            contextualSidebar: true,
-          },
-          items: [
             {
               type: 'doc',
-              id: 'datasets/running-experiments',
+              id: 'evals/datasets',
+              label: 'Datasets',
+            },
+            {
+              type: 'doc',
+              id: 'evals/experiments',
               label: 'Experiments',
             },
           ],
@@ -671,6 +660,22 @@ const sidebars = {
             contextualSidebarLabel: 'Multi-agent systems',
           },
           items: [
+            {
+              type: 'doc',
+              id: 'guides/context-engineering',
+              label: 'Context engineering',
+              customProps: {
+                tags: ['new'],
+              },
+            },
+            {
+              type: 'doc',
+              id: 'guides/authentication-identity',
+              label: 'Authentication',
+              customProps: {
+                tags: ['new'],
+              },
+            },
             {
               type: 'doc',
               id: 'guides/streaming',
@@ -701,9 +706,6 @@ const sidebars = {
       type: 'doc',
       id: 'mastra-platform/regions',
       label: 'Regions',
-      customProps: {
-        tags: ['new'],
-      },
     },
     {
       type: 'doc',
@@ -742,9 +744,6 @@ const sidebars = {
       type: 'doc',
       id: 'mastra-platform/workspaces',
       label: 'Workspaces',
-      customProps: {
-        tags: ['new'],
-      },
     },
     {
       type: 'doc',

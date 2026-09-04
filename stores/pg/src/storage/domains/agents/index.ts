@@ -110,6 +110,7 @@ export class AgentsPG extends AgentsStorage {
         'workspace',
         'skills',
         'skillsFormat',
+        'durable',
         'browser',
         'toolProviders',
       ],
@@ -772,10 +773,10 @@ export class AgentsPG extends AgentsStorage {
           "defaultOptions", workflows, agents, "integrationTools", "toolProviders",
           "inputProcessors", "outputProcessors", memory, scorers,
           "mcpClients", "requestContextSchema", workspace, skills, "skillsFormat",
-          browser,
+          durable, browser,
           "changedFields", "changeMessage",
           "createdAt", "createdAtZ"
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27)`,
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28)`,
         [
           input.id,
           input.agentId,
@@ -799,6 +800,7 @@ export class AgentsPG extends AgentsStorage {
           input.workspace ? JSON.stringify(input.workspace) : null,
           input.skills ? JSON.stringify(input.skills) : null,
           input.skillsFormat ?? null,
+          input.durable !== undefined ? JSON.stringify(input.durable) : null,
           input.browser ? JSON.stringify(input.browser) : null,
           input.changedFields ? JSON.stringify(input.changedFields) : null,
           input.changeMessage ?? null,
@@ -843,6 +845,29 @@ export class AgentsPG extends AgentsStorage {
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { versionId: id },
+        },
+        error,
+      );
+    }
+  }
+
+  async getVersions(ids: string[]): Promise<AgentVersion[]> {
+    if (ids.length === 0) {
+      return [];
+    }
+    try {
+      const tableName = getTableName({ indexName: TABLE_AGENT_VERSIONS, schemaName: getSchemaName(this.#schema) });
+      const placeholders = ids.map((_, i) => `$${i + 1}`).join(', ');
+      const rows = await this.#db.client.manyOrNone(`SELECT * FROM ${tableName} WHERE id IN (${placeholders})`, ids);
+      return rows.map(row => this.parseVersionRow(row));
+    } catch (error) {
+      if (error instanceof MastraError) throw error;
+      throw new MastraError(
+        {
+          id: createStorageErrorId('PG', 'GET_VERSIONS', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { count: ids.length },
         },
         error,
       );
@@ -1079,6 +1104,7 @@ export class AgentsPG extends AgentsStorage {
       workspace: parseJsonResilient(row.workspace, 'workspace'),
       skills: parseJsonResilient(row.skills, 'skills'),
       skillsFormat: row.skillsFormat as 'xml' | 'json' | 'markdown' | undefined,
+      durable: parseJsonResilient(row.durable, 'durable'),
       browser: parseJsonResilient(row.browser, 'browser'),
       changedFields: parseJsonResilient(row.changedFields, 'changedFields'),
       changeMessage: row.changeMessage as string | undefined,

@@ -1,3 +1,4 @@
+import { Badge } from '@mastra/playground-ui/components/Badge';
 import { LogoWithoutText } from '@mastra/playground-ui/components/Logo';
 import { MainSidebar, useMainSidebar } from '@mastra/playground-ui/components/MainSidebar';
 import type { NavLink } from '@mastra/playground-ui/components/MainSidebar';
@@ -14,9 +15,12 @@ import { getPermissionForRoute, hasRoutePermission } from '@/domains/auth/route-
 import { isAuthenticated } from '@/domains/auth/types';
 import { useIsCmsAvailable } from '@/domains/cms/hooks/use-is-cms-available';
 import { MastraVersionFooter } from '@/domains/configuration/components/mastra-version-footer';
+import { useFeedbackInboxCount } from '@/domains/feedback/hooks/use-feedback';
+import { useInboxDatasetReviewCount } from '@/domains/review/hooks/use-inbox-review-items';
 import { useNavigationCommand } from '@/lib/command';
 import { useLinkComponent } from '@/lib/framework';
 import { useMastraPlatform } from '@/lib/mastra-platform/hooks/use-mastra-platform';
+import { getIsLinkActive } from '@/lib/nav/get-is-link-active';
 import { bottomNav, mainNav } from '@/lib/nav/nav-items';
 import type { NavItem } from '@/lib/nav/nav-items';
 
@@ -32,13 +36,6 @@ function toSidebarLink(item: NavItem): NavLink {
   return { name: item.name, url: item.url, icon: <Icon /> };
 }
 
-function getIsLinkActive(item: NavItem, pathname: string): boolean {
-  // Exact match or sub-path match (with / boundary so sibling routes don't match by prefix)
-  const matches = (url: string) => pathname === url || pathname.startsWith(url + '/');
-  if (matches(item.url)) return true;
-  return item.activePaths?.some(matches) ?? false;
-}
-
 export function AppSidebar() {
   const { Link } = useLinkComponent();
   const { state, isMobile, setOpenMobile } = useMainSidebar();
@@ -52,6 +49,12 @@ export function AppSidebar() {
   const { data: authCapabilities } = useAuthCapabilities();
   const { isCmsAvailable, isLoading: isCmsLoading } = useIsCmsAvailable();
   const { hasPermission, hasAnyPermission, isLoading: isPermissionsLoading } = usePermissions();
+  const canReadInbox =
+    !isPermissionsLoading && hasRoutePermission(getPermissionForRoute('/inbox'), hasPermission, hasAnyPermission);
+  const feedbackInboxCountQuery = useFeedbackInboxCount({ enabled: canReadInbox });
+  const datasetReviewCountQuery = useInboxDatasetReviewCount({ enabled: canReadInbox });
+  const hasInboxItems =
+    (feedbackInboxCountQuery.data?.pagination?.total ?? 0) > 0 || (datasetReviewCountQuery.data ?? 0) > 0;
 
   const isUserAuthenticated = authCapabilities && isAuthenticated(authCapabilities);
   const cmsOnlyLinks = new Set(['/prompts']);
@@ -90,7 +93,7 @@ export function AppSidebar() {
 
   return (
     <MainSidebar>
-      <div className="mb-2 pt-2">
+      <div className="mb-1.5 pt-2.5">
         {state === 'collapsed' ? (
           <div className="flex flex-col items-center gap-2">
             <div className="relative grid size-9 place-items-center">
@@ -109,7 +112,7 @@ export function AppSidebar() {
             {isUserAuthenticated && <AuthStatus />}
           </div>
         ) : isUserAuthenticated ? (
-          <span className="flex items-center justify-between pr-2 pl-3">
+          <span className="flex h-7 items-center justify-between pr-2 pl-3">
             <span className="flex min-w-0 flex-1 items-center gap-2">
               <LogoWithoutText className="h-[1.5rem] w-[1.5rem] shrink-0" />
               <span className="font-display truncate text-sm font-semibold tracking-tight whitespace-nowrap">
@@ -120,7 +123,7 @@ export function AppSidebar() {
             <AuthStatus />
           </span>
         ) : (
-          <span className="flex items-center gap-2 pr-2 pl-3">
+          <span className="flex h-7 items-center gap-2 pr-2 pl-3">
             <LogoWithoutText className="h-[1.5rem] w-[1.5rem] shrink-0" />
             <span className="font-display truncate text-sm font-semibold tracking-tight whitespace-nowrap">
               Mastra Studio
@@ -203,8 +206,18 @@ export function AppSidebar() {
                     LinkComponent={Link}
                     state={state}
                     link={toSidebarLink(item)}
-                    isActive={getIsLinkActive(item, pathname)}
-                  />
+                    isActive={getIsLinkActive(item, pathname, filtered)}
+                  >
+                    {item.url === '/inbox' && hasInboxItems && state !== 'collapsed' ? (
+                      <Badge
+                        variant="yellow"
+                        size="sm"
+                        indicator="dot"
+                        className="ml-auto"
+                        aria-label="Items need review"
+                      />
+                    ) : null}
+                  </MainSidebar.NavLink>
                 ))}
               </MainSidebar.NavList>
             </MainSidebar.NavSection>

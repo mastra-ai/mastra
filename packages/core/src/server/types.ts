@@ -1,3 +1,4 @@
+import type { IncomingMessage } from 'node:http';
 import type { MastraAuthConfig as InternalMastraAuthConfig } from '@internal/auth/types';
 import type { Handler, MiddlewareHandler, Context } from 'hono';
 import type { cors } from 'hono/cors';
@@ -263,11 +264,40 @@ export type ServerConfig = {
    */
   timeout?: number;
   /**
+   * Max time (ms) to drain in-flight requests after SIGINT/SIGTERM. Must be a
+   * finite number from 0 through 2_147_483_647. When the window passes,
+   * remaining HTTP connections are force-closed. Mastra shutdown then runs
+   * either way (bounded separately) before the process exits. Set 0 to skip
+   * the drain entirely.
+   * @default 5000
+   */
+  drainTimeout?: number;
+  /**
+   * Whether the generated server installs its own SIGINT/SIGTERM handlers
+   * (drain in-flight requests + `mastra.shutdown()` + `process.exit`). Set
+   * false to manage signals yourself (e.g. a handler registered in your
+   * Mastra config module that calls `mastra.shutdown()`). Note: user code
+   * has no access to the HTTP server handle in the generated entry, so HTTP
+   * drain is unavailable with false — prefer `drainTimeout`, or a server
+   * adapter for full custom lifecycle. With false and no user handler,
+   * Node's default signal behavior applies (immediate termination, no drain).
+   * @default true
+   */
+  handleShutdownSignals?: boolean;
+  /**
    * Custom API routes for the server
    */
   apiRoutes?: ApiRoute[];
   /**
-   * Middleware for the server
+   * Middleware for the server. Handlers use Hono's `(c, next)` signature and
+   * run on Hono-based serving paths: `mastra dev` / `mastra build`,
+   * `@mastra/hono`, and adapters built on it such as `@mastra/next` and
+   * `@mastra/tanstack-start`. Handlers are skipped for routes declared public
+   * with `requiresAuth: false` (see `skipIfFrameworkPublic` in `@mastra/hono`),
+   * so they cannot block endpoints such as the Studio sign-in routes.
+   * Non-Hono adapters (Express, Fastify, Koa) cannot run Hono handlers and log
+   * a warning when this is set. Register middleware through the framework's
+   * own API there instead.
    */
   middleware?: Middleware | Middleware[];
   /**
@@ -329,6 +359,15 @@ export type ServerConfig = {
      * Custom session ID generator function
      */
     sessionIdGenerator?: () => string;
+    /**
+     * Sets `req.auth` on the request handed to the MCP transport, which is what
+     * surfaces as `extra.authInfo` inside tool and agent execution.
+     *
+     * When omitted, the principal resolved by `server.auth` is bridged
+     * automatically. Provide this hook when your own middleware performs the
+     * verification and you want full control over the resulting `AuthInfo`.
+     */
+    setRequestAuth?: (req: IncomingMessage, requestContext: RequestContext) => void | Promise<void>;
   };
 
   /**

@@ -1,4 +1,3 @@
-import type { Client } from '@libsql/client';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import {
   ToolProviderConnectionsStorage,
@@ -17,6 +16,7 @@ import type {
 
 import { LibSQLDB, resolveClient } from '../../db';
 import type { LibSQLDomainConfig } from '../../db';
+import type { SqliteClient as Client } from '../../db/client';
 
 function normaliseScope(raw: unknown): StorageToolProviderConnectionScope {
   const value = raw == null ? 'per-author' : String(raw);

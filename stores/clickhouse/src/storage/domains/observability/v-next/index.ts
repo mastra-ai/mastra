@@ -10,6 +10,7 @@
 import type { ClickHouseClient } from '@clickhouse/client';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type { IMastraLogger } from '@mastra/core/logger';
+import * as coreStorage from '@mastra/core/storage';
 import { createStorageErrorId, ObservabilityStorage } from '@mastra/core/storage';
 import type {
   ObservabilityStorageStrategy,
@@ -67,6 +68,8 @@ import type {
   BatchCreateFeedbackArgs,
   ListFeedbackArgs,
   ListFeedbackResponse,
+  FeedbackRecord,
+  UpdateFeedbackReviewStatusArgs,
   GetFeedbackAggregateArgs,
   GetFeedbackAggregateResponse,
   GetFeedbackBreakdownArgs,
@@ -85,6 +88,8 @@ import type {
   GetEnvironmentsResponse,
   GetTagsArgs,
   GetTagsResponse,
+  TraceQueryResponse,
+  TrustedTraceQueryPlan,
 } from '@mastra/core/storage';
 
 import { resolveClickhouseConfig } from '../../../db';
@@ -120,6 +125,8 @@ export type { RetentionConfig } from './ddl';
 /** Extended config for v-next observability, adding per-signal retention. */
 export type VNextObservabilityConfig = ClickhouseDomainConfig & {
   retention?: RetentionConfig;
+  /** Maximum execution time for one advanced trace query. Default 15 seconds. */
+  traceQueryTimeoutMs?: number;
   /** @internal Test-only override for the ClickHouse delta cursor strategy. */
   deltaCursorStrategy?: ClickHouseDeltaCursorStrategy;
 };
@@ -137,6 +144,7 @@ import {
 import type { ClickHouseDeltaCursorStrategy } from './polling';
 import { deltaPollingSupported } from './polling';
 import * as scoresOps from './scores';
+import * as traceQueryOps from './trace-query';
 import * as traceRootsOps from './trace-roots';
 import * as tracingOps from './tracing';
 
@@ -258,6 +266,12 @@ async function filterAppliedRetention(
  * Init's subsequent `CREATE TABLE IF NOT EXISTS` and discovery MV bootstrap
  * recreate both with the current definitions.
  *
+ * Separately, a refreshable MV whose stored definition lacks the `APPEND`
+ * modifier (created by older releases) is dropped — keeping its target
+ * table — so the MV bootstrap recreates it with the current APPEND
+ * definition. Non-APPEND refreshes swap the target table atomically, which
+ * fails when the target is Replicated inside a non-Replicated database.
+ *
  * Silently returns if `system.tables` can't be queried — the rest of init
  * will still run and leave any existing tables untouched.
  */
@@ -289,14 +303,18 @@ async function reconcileDiscoveryTables(
   replication?: ClickhouseReplicationConfig,
 ): Promise<void> {
   let engines: Map<string, string>;
+  let mvCreateQueries: Map<string, string>;
   try {
     const result = await client.query({
-      query: `SELECT name, engine FROM system.tables WHERE database = currentDatabase() AND name IN ({tables:Array(String)})`,
-      query_params: { tables: [TABLE_DISCOVERY_VALUES, TABLE_DISCOVERY_PAIRS] },
+      query: `SELECT name, engine, create_table_query FROM system.tables WHERE database = currentDatabase() AND name IN ({tables:Array(String)})`,
+      query_params: {
+        tables: [TABLE_DISCOVERY_VALUES, TABLE_DISCOVERY_PAIRS, MV_DISCOVERY_VALUES, MV_DISCOVERY_PAIRS],
+      },
       format: 'JSONEachRow',
     });
-    const rows = (await result.json()) as Array<{ name: string; engine: string }>;
+    const rows = (await result.json()) as Array<{ name: string; engine: string; create_table_query: string }>;
     engines = new Map(rows.map(r => [r.name, r.engine]));
+    mvCreateQueries = new Map(rows.map(r => [r.name, r.create_table_query]));
   } catch {
     return;
   }
@@ -312,9 +330,22 @@ async function reconcileDiscoveryTables(
   // tables on every init for those deployments.
   for (const { table, mv } of targets) {
     const engine = engines.get(table);
-    if (!engine || isReplacingMergeTreeEngine(engine)) continue;
-    await client.command({ query: addOnClusterToDDL(`DROP VIEW IF EXISTS ${mv}`, replication) });
-    await client.command({ query: addOnClusterToDDL(`DROP TABLE IF EXISTS ${table}`, replication) });
+    if (engine && !isReplacingMergeTreeEngine(engine)) {
+      await client.command({ query: addOnClusterToDDL(`DROP VIEW IF EXISTS ${mv}`, replication) });
+      await client.command({ query: addOnClusterToDDL(`DROP TABLE IF EXISTS ${table}`, replication) });
+      continue;
+    }
+
+    // Older deployments created the refreshable MVs without APPEND, which
+    // makes refreshes perform an atomic table swap — that fails (error 36)
+    // when the target table is Replicated inside a non-Replicated database.
+    // Drop only the stale view (keeping its target table and data); init()'s
+    // subsequent `CREATE MATERIALIZED VIEW IF NOT EXISTS` recreates it with
+    // the current APPEND definition.
+    const createQuery = mvCreateQueries.get(mv);
+    if (createQuery && /REFRESH EVERY/i.test(createQuery) && !/\bAPPEND\b/i.test(createQuery)) {
+      await client.command({ query: addOnClusterToDDL(`DROP VIEW IF EXISTS ${mv}`, replication) });
+    }
   }
 }
 
@@ -421,6 +452,7 @@ export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
   readonly #retention?: RetentionConfig;
   readonly #replication?: ClickhouseReplicationConfig;
   readonly #deltaCursorStrategyOverride?: ClickHouseDeltaCursorStrategy;
+  readonly #traceQueryTimeoutMs: number;
   #deltaCursorStrategy: ClickHouseDeltaCursorStrategy | null = 'fallback';
 
   constructor(config: VNextObservabilityConfig) {
@@ -430,6 +462,7 @@ export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
     this.#replication = replication;
     this.#retention = config.retention;
     this.#deltaCursorStrategyOverride = config.deltaCursorStrategy;
+    this.#traceQueryTimeoutMs = coreStorage.resolveTraceQueryTimeoutMs(config.traceQueryTimeoutMs);
   }
 
   // -------------------------------------------------------------------------
@@ -652,10 +685,10 @@ export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
 
   override getFeatures() {
     if (!deltaPollingSupported(this.#deltaCursorStrategy)) {
-      return ['metrics', 'logs'] as const;
+      return ['metrics', 'logs', 'trace-query'] as const;
     }
 
-    return ['metrics', 'logs', 'delta-polling'] as const;
+    return ['metrics', 'logs', 'delta-polling', 'trace-query'] as const;
   }
 
   // -------------------------------------------------------------------------
@@ -793,6 +826,22 @@ export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
       throw new MastraError(
         {
           id: createStorageErrorId('CLICKHOUSE', 'LIST_TRACES', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+        },
+        error,
+      );
+    }
+  }
+
+  override async queryTraces(plan: TrustedTraceQueryPlan): Promise<TraceQueryResponse> {
+    try {
+      return await traceQueryOps.queryTraces(this.#client, plan, this.#traceQueryTimeoutMs);
+    } catch (error) {
+      if (error instanceof MastraError || error instanceof coreStorage.TraceQueryExecutionError) throw error;
+      throw new MastraError(
+        {
+          id: createStorageErrorId('CLICKHOUSE', 'QUERY_TRACES', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
         },
@@ -992,6 +1041,23 @@ export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { count: args.feedbacks.length },
+        },
+        error,
+      );
+    }
+  }
+
+  override async updateFeedbackReviewStatus(args: UpdateFeedbackReviewStatusArgs): Promise<FeedbackRecord> {
+    try {
+      return await feedbackOps.updateFeedbackReviewStatus(this.#client, args);
+    } catch (error) {
+      if (error instanceof MastraError) throw error;
+      throw new MastraError(
+        {
+          id: createStorageErrorId('CLICKHOUSE', 'UPDATE_FEEDBACK_REVIEW_STATUS', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { feedbackId: args.feedbackId },
         },
         error,
       );

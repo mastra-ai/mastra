@@ -1,7 +1,14 @@
 import type { MastraDBMessage, MessageList } from '@mastra/core/agent';
 import { parseMemoryRequestContext } from '@mastra/core/memory';
-import type { ObservabilityContext } from '@mastra/core/observability';
-import type { Processor, ProcessInputStepArgs, ProcessOutputResultArgs } from '@mastra/core/processors';
+import type { MemoryRunState } from '@mastra/core/memory';
+import type { MemoryOperationAttributes, ObservabilityContext } from '@mastra/core/observability';
+import { SpanType } from '@mastra/core/observability';
+import type {
+  Processor,
+  ProcessInputStepArgs,
+  ProcessOutputResultArgs,
+  ProcessorSpanPhase,
+} from '@mastra/core/processors';
 import type { ObservationalMemoryRecord } from '@mastra/core/storage';
 
 import { OBSERVATION_CONTINUATION_HINT } from './constants';
@@ -29,7 +36,7 @@ function asLiveTurn(value: unknown): ObservationTurn | undefined {
 
 /** Subset of Memory that the processor needs — avoids circular imports. */
 export interface MemoryContextProvider {
-  getContext(opts: { threadId: string; resourceId?: string }): Promise<{
+  getContext(opts: { threadId: string; resourceId?: string; runState?: MemoryRunState }): Promise<{
     systemMessage: string | undefined;
     messages: MastraDBMessage[];
     hasObservations: boolean;
@@ -112,9 +119,34 @@ function injectObservationContextMessages({
   messageList.add(contMsg, 'memory');
 }
 
+/**
+ * Observational memory runs on the processor pipeline, but a user configures
+ * `memory`, not a processor — so its spans are labelled as memory operations
+ * rather than as anonymous pipeline entries.
+ *
+ * The two phases do different things and are named separately: the input step
+ * builds observation context into the system messages (a recall), and the
+ * output result persists what the turn produced (a save).
+ */
+const OM_PHASE_OPERATION: Partial<Record<ProcessorSpanPhase, NonNullable<MemoryOperationAttributes['operationType']>>> =
+  {
+    inputStep: 'recall',
+    output: 'save',
+    outputStep: 'save',
+  };
+
 export class ObservationalMemoryProcessor implements Processor<'observational-memory'> {
   readonly id = 'observational-memory' as const;
   readonly name = 'Observational Memory';
+
+  readonly spanType = SpanType.MEMORY_OPERATION;
+
+  readonly spanName = (phase: ProcessorSpanPhase): string => `memory: ${OM_PHASE_OPERATION[phase] ?? 'observational'}`;
+
+  readonly spanAttributes = (phase: ProcessorSpanPhase): Partial<MemoryOperationAttributes> => {
+    const operationType = OM_PHASE_OPERATION[phase];
+    return operationType ? { operationType } : {};
+  };
 
   /** The underlying ObservationalMemory engine. */
   readonly engine: ObservationalMemory;
@@ -174,6 +206,7 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
 
     const { threadId, resourceId } = context;
     const memoryContext = parseMemoryRequestContext(requestContext);
+    const runState = memoryContext?.runState?.();
     const readOnly = memoryContext?.memoryConfig?.readOnly;
 
     const actorModelContext = model?.modelId
@@ -201,6 +234,7 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
           messageList,
           threadId,
           resourceId,
+          runState,
         });
         // Pass the record through even without observations — resource-scoped
         // retrieval still injects recall guidance so the actor can browse and
@@ -260,9 +294,10 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
         });
         this.turn.writer = writer;
         this.turn.sendSignal = args.sendSignal;
+        this.turn.sendStateSignal = args.sendStateSignal;
         this.turn.agent = args.agent;
         this.turn.requestContext = requestContext;
-        await this.turn.start(this.memory);
+        await this.turn.start(this.memory, runState);
         if (stepNumber === 0 && this.temporalMarkers) {
           await insertTemporalGapMarkers({ messageList, sendSignal: args.sendSignal });
         }

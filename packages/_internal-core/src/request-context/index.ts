@@ -50,6 +50,18 @@ export const MASTRA_VERSIONS_KEY = 'mastra__versions';
  */
 export const MASTRA_AUTH_TOKEN_KEY = 'mastra__authToken';
 
+/**
+ * Reserved key carrying a delegating agent's `MastraMemory` into a delegated
+ * run, so a sub-agent without its own memory can persist that run's transcript
+ * without the shared sub-agent instance being modified. The value is
+ * `{ agentId, memory }` and only the named agent reads it.
+ *
+ * Holds a live class instance, so it is deliberately run-scoped: it is excluded
+ * from the durable request-context snapshot and is not copied into further
+ * nested delegated runs. Internal to delegation — do not set it yourself.
+ */
+export const MASTRA_INHERITED_MEMORY_KEY = 'mastra__inheritedMemory';
+
 export type VersionSelector = { versionId: string } | { status: 'draft' | 'published' };
 
 export type VersionOverrides = {

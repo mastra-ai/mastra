@@ -21,6 +21,12 @@ export interface CredentialTenant {
   orgId?: string;
   /** Stable user id from the web auth adapter. */
   userId: string;
+  /**
+   * Resolve org-shared credentials over the user's personal ones. Set by
+   * trusted server code for automated (factory) runs so they ride the org's
+   * shared keys first and only fall back to the acting user's credentials.
+   */
+  orgFirst?: boolean;
 }
 
 /**
@@ -66,6 +72,8 @@ interface RequestContextUser {
   workosId?: string;
   id?: string;
   organizationId?: string;
+  /** Trusted server code marks automated runs to resolve org > user credentials. */
+  orgFirstCredentials?: boolean;
 }
 
 /**
@@ -75,6 +83,23 @@ interface RequestContextUser {
 interface RequestContextSession {
   user?: RequestContextUser;
   session?: { activeOrganizationId?: string };
+}
+
+/**
+ * Whether the request context belongs to a run on a factory-owned session.
+ *
+ * The agent controller stamps the session's state onto the request context
+ * under `controller`, and only trusted factory server code ever writes
+ * `factoryProjectId` into session state (board-run creation) — interactive
+ * chat sessions never carry it. Runs on such sessions resolve credentials
+ * org > user regardless of who sent the message: a board run continued
+ * interactively, or a model switch inside it, is still org work.
+ */
+function isFactorySessionContext(requestContext?: RequestContext): boolean {
+  const controller = requestContext?.get('controller') as { state?: { factoryProjectId?: unknown } } | undefined;
+  if (!controller || typeof controller !== 'object') return false;
+  const factoryProjectId = controller.state?.factoryProjectId;
+  return typeof factoryProjectId === 'string' && factoryProjectId.length > 0;
 }
 
 /**
@@ -104,7 +129,12 @@ export function resolveTenantFromRequestContext(requestContext?: RequestContext)
   // (fail closed), not flow onward as a mistyped key.
   if (typeof userId !== 'string' || !userId) return undefined;
   if (orgId !== undefined && typeof orgId !== 'string') return undefined;
-  return { orgId, userId };
+  // Only an exact `true` flips precedence — anything else keeps user > org.
+  // Server code stamps the flag on the stashed value itself, so read it from
+  // the top level as well as the unwrapped user (better-auth wrapper shape).
+  const orgFirst =
+    raw.orgFirstCredentials === true || user.orgFirstCredentials === true || isFactorySessionContext(requestContext);
+  return { orgId, userId, ...(orgFirst ? { orgFirst } : {}) };
 }
 
 /**
@@ -116,6 +146,23 @@ export function resolveTenantFromRequestContext(requestContext?: RequestContext)
 export function resolveCredentialStore(requestContext?: RequestContext): CredentialStore | undefined {
   if (!credentialStoreProvider) return undefined;
   const tenant = resolveTenantFromRequestContext(requestContext);
-  if (!tenant) return unavailableTenantCredentialStore;
-  return credentialStoreProvider(tenant) ?? unavailableTenantCredentialStore;
+  if (!tenant) {
+    const rawUser = requestContext?.get('user');
+    console.warn('[MastraCode] Tenant credential resolution failed closed', {
+      reason: rawUser === undefined ? 'missing-user-context' : 'invalid-principal-shape',
+      hasRequestContext: requestContext !== undefined,
+      factorySession: isFactorySessionContext(requestContext),
+    });
+    return unavailableTenantCredentialStore;
+  }
+  const store = credentialStoreProvider(tenant);
+  if (!store) {
+    console.warn('[MastraCode] Tenant credential resolution failed closed', {
+      reason: 'credential-store-unavailable',
+      hasOrganization: tenant.orgId !== undefined,
+      orgFirst: tenant.orgFirst === true,
+    });
+    return unavailableTenantCredentialStore;
+  }
+  return store;
 }

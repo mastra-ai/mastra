@@ -8,7 +8,9 @@ import type { ParsedRequestParams, ServerRoute } from '@mastra/server/server-ada
 import {
   MASTRA_FRAMEWORK_PUBLIC_KEY,
   MastraServer as MastraServerBase,
+  applyMcpRequestAuth,
   checkRouteFGA,
+  getCustomHTTPExceptionResponse,
   isZodError,
   normalizeQueryParams,
   redactStreamChunk,
@@ -85,6 +87,16 @@ export const skipIfFrameworkPublic = (handler: MiddlewareHandler): MiddlewareHan
   };
 };
 
+/**
+ * Context key holding a pristine clone of the incoming request, captured by
+ * the context middleware before user middleware runs. The custom-route bridge
+ * reads the body from this clone so user middleware that consumes the request
+ * body (e.g. `await c.req.json()`) does not break custom API routes.
+ */
+const MASTRA_PRISTINE_REQUEST_KEY = '__mastraPristineRequest';
+
+const BODY_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
+
 export type HonoBindings = {};
 
 /**
@@ -111,6 +123,14 @@ export interface HonoApp {
 export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context> {
   createContextMiddleware(): MiddlewareHandler {
     return async (c, next) => {
+      // Preserve a pristine clone of the request before user middleware runs.
+      // `Request.clone()` tees the body stream, so the clone stays readable
+      // even after middleware consumes the original (json/text/formData/raw).
+      // Only taken when custom routes exist — the bridge is the sole consumer.
+      if (this.hasCustomRouteHandler && BODY_METHODS.has(c.req.method) && c.req.raw.body) {
+        c.set(MASTRA_PRISTINE_REQUEST_KEY, c.req.raw.clone());
+      }
+
       // Patch req.json() to prevent "Body is unusable" errors when the body is read multiple times
       // e.g. by middleware and then by an agent.
       const originalJson = c.req.json.bind(c.req);
@@ -369,7 +389,13 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
       const { req, res } = toReqRes(response.req.raw);
 
       // Merge class-level mcpOptions with route-specific options (route takes precedence)
-      const options = { ...this.mcpOptions, ...routeMcpOptions };
+      const { setRequestAuth, ...options } = { ...this.mcpOptions, ...routeMcpOptions };
+
+      // `toReqRes` builds a fresh IncomingMessage, so the principal resolved by
+      // auth middleware never reaches the MCP transport unless we bridge it here.
+      // This runs before startHTTP so every branch (stateless, existing session,
+      // new session) sees the same `req.auth`.
+      await applyMcpRequestAuth({ req, requestContext: response.get('requestContext'), setRequestAuth });
 
       // Do NOT await startHTTP — let it run in the background so SSE
       // notifications stream to the client as they are written.
@@ -408,11 +434,22 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
       const { server, ssePath, messagePath } = result as MCPSseTransportResult;
 
       try {
+        // SSE has no Node request to hang `req.auth` on, so resolve the auth info
+        // here and pass it explicitly. Reuse the same bridge as streamable HTTP so
+        // a `setRequestAuth` hook sees a real request object.
+        const { req } = toReqRes(response.req.raw);
+        await applyMcpRequestAuth({
+          req,
+          requestContext: response.get('requestContext'),
+          setRequestAuth: this.mcpOptions?.setRequestAuth,
+        });
+
         return await server.startHonoSSE({
           url: new URL(response.req.url),
           ssePath: `${resolvedPrefix}${ssePath}`,
           messagePath: `${resolvedPrefix}${messagePath}`,
           context: response,
+          authInfo: (req as typeof req & { auth?: unknown }).auth,
         });
       } catch {
         return response.json({ error: 'Error handling MCP SSE request' }, 500);
@@ -430,25 +467,27 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
     // Default prefix to this.prefix if not provided, or empty string
     const prefix = prefixParam ?? this.prefix ?? '';
 
-    // Determine if body limits should be applied
-    const shouldApplyBodyLimit =
-      this.bodyLimitOptions && ['POST', 'PUT', 'PATCH', 'DELETE'].includes(route.method.toUpperCase());
-
-    // Get the body size limit for this route (route-specific or default)
     const maxSize = route.maxBodySize ?? this.bodyLimitOptions?.maxSize;
+    const isBodyMethod = ['POST', 'PUT', 'PATCH', 'DELETE'].includes(route.method.toUpperCase());
 
     // Build middleware array
     const middlewares: MiddlewareHandler[] = [];
 
-    if (shouldApplyBodyLimit && maxSize && this.bodyLimitOptions) {
-      const { onError } = this.bodyLimitOptions;
+    if (isBodyMethod && maxSize !== undefined) {
       middlewares.push(
         bodyLimit({
           maxSize,
-          // Hono's bodyLimit middleware uses this callback's return value as the response
-          // directly, so it must resolve to a Response, unlike onError's framework-agnostic
-          // (error: unknown) => unknown contract used by the other adapters.
-          onError: (c: Context) => c.json(onError({ error: 'Request body too large' }), 413),
+          onError: (c: Context) => {
+            let errorResponse: unknown = { error: 'Request body too large' };
+            if (route.maxBodySize === undefined && this.bodyLimitOptions) {
+              try {
+                errorResponse = this.bodyLimitOptions.onError(errorResponse);
+              } catch {
+                // Fall back to the default response.
+              }
+            }
+            return c.json(errorResponse, 413);
+          },
         }),
       );
     }
@@ -623,6 +662,11 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
               method: route.method,
             });
           }
+          const customResponse = getCustomHTTPExceptionResponse(error);
+          if (customResponse) {
+            return customResponse;
+          }
+
           // Check if it's an HTTPException or MastraError with a status code
           if (error && typeof error === 'object') {
             // Check for direct status property (HTTPException)
@@ -723,12 +767,17 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
           }
         }
 
+        // Use the pristine clone captured by the context middleware (before
+        // user middleware ran) so body reads survive middleware that already
+        // consumed `c.req.raw`.
+        const pristineRequest = (c.get(MASTRA_PRISTINE_REQUEST_KEY) as Request | undefined) ?? c.req.raw;
+
         // Check FGA authorization (EE feature)
         let bodyParams: Record<string, unknown> = {};
         const contentType = c.req.header('content-type');
         if (contentType?.includes('application/json')) {
           try {
-            const body = (await c.req.raw.clone().json()) as unknown;
+            const body = (await pristineRequest.clone().json()) as unknown;
             if (body && typeof body === 'object' && !Array.isArray(body)) {
               bodyParams = body as Record<string, unknown>;
             }
@@ -740,7 +789,7 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
           contentType?.includes('multipart/form-data')
         ) {
           try {
-            bodyParams = Object.fromEntries(await c.req.raw.clone().formData());
+            bodyParams = Object.fromEntries(await pristineRequest.clone().formData());
           } catch {
             bodyParams = {};
           }
@@ -772,7 +821,7 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
           c.req.url,
           c.req.method,
           reqHeaders,
-          c.req.raw.body,
+          pristineRequest.body,
           c.get('requestContext'),
           c.req.raw.signal,
           executionCtx,
@@ -809,6 +858,28 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
   registerAuthMiddleware(): void {
     // Auth is handled per-route in registerRoute() and registerCustomApiRoutes()
     // No global middleware needed
+  }
+
+  registerUserMiddleware(): void {
+    // Middleware added at runtime via `mastra.setServerMiddleware()` — already
+    // normalized to `{ path, handler }` entries by core.
+    for (const m of this.mastra.getServerMiddleware?.() ?? []) {
+      this.app.use(m.path, skipIfFrameworkPublic(m.handler));
+    }
+
+    const configMiddleware = this.mastra.getServer()?.middleware;
+    if (!configMiddleware) {
+      return;
+    }
+
+    const normalizedMiddlewares = Array.isArray(configMiddleware) ? configMiddleware : [configMiddleware];
+    for (const middleware of normalizedMiddlewares) {
+      const { path, handler } = typeof middleware === 'function' ? { path: '*', handler: middleware } : middleware;
+      // Wrap with skipIfFrameworkPublic so user middleware cannot 401 routes
+      // the framework declared public via `requiresAuth: false`
+      // (e.g. Studio sign-in endpoints like /api/auth/capabilities).
+      this.app.use(path, skipIfFrameworkPublic(handler as unknown as MiddlewareHandler));
+    }
   }
 
   registerHttpLoggingMiddleware(): void {

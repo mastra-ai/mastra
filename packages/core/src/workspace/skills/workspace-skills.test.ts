@@ -532,6 +532,195 @@ user-invocable: false
     });
   });
 
+  describe('non-blocking refresh (stale-while-revalidate)', () => {
+    it('list() during an in-flight refresh() serves the previous complete catalog without blocking', async () => {
+      const filesystem = createMockFilesystem({
+        'skills/skill-a/SKILL.md': VALID_SKILL_MD.replace('test-skill', 'skill-a'),
+        'skills/skill-b/SKILL.md': VALID_SKILL_MD.replace('test-skill', 'skill-b'),
+      });
+
+      const skills = new WorkspaceSkillsImpl({
+        source: filesystem,
+        skills: ['skills'],
+      });
+
+      expect(await skills.list()).toHaveLength(2);
+
+      // Gate the source so the refresh's re-discovery hangs mid-flight
+      let release!: () => void;
+      const gate = new Promise<void>(resolve => {
+        release = resolve;
+      });
+      const originalReaddir = filesystem.readdir;
+      filesystem.readdir = vi.fn(async (path: string) => {
+        await gate;
+        return originalReaddir(path);
+      });
+
+      const refreshP = skills.refresh();
+      // Let the refresh reach the gated readdir
+      await new Promise(resolve => setTimeout(resolve, 10));
+
+      const start = performance.now();
+      const during = await skills.list();
+      const elapsed = performance.now() - start;
+
+      // Previous complete catalog, served without waiting on discovery
+      expect(during).toHaveLength(2);
+      expect(during.map(s => s.name).sort()).toEqual(['skill-a', 'skill-b']);
+      expect(elapsed).toBeLessThan(100);
+
+      release();
+      await refreshP;
+      expect(await skills.list()).toHaveLength(2);
+    });
+
+    it('concurrent refresh() calls coalesce onto one rebuild', async () => {
+      const filesystem = createMockFilesystem({
+        'skills/skill-a/SKILL.md': VALID_SKILL_MD.replace('test-skill', 'skill-a'),
+      });
+
+      const skills = new WorkspaceSkillsImpl({
+        source: filesystem,
+        skills: ['skills'],
+      });
+
+      await skills.list();
+
+      const readdirMock = filesystem.readdir as ReturnType<typeof vi.fn>;
+      const callsAfterInit = readdirMock.mock.calls.length;
+
+      await Promise.all([skills.refresh(), skills.refresh(), skills.refresh()]);
+
+      // One rebuild reads the root exactly once; coalesced calls must not multiply it
+      expect(readdirMock.mock.calls.length - callsAfterInit).toBe(1);
+    });
+
+    it('a paths-changed maybeRefresh coalesced onto an in-flight refresh still discovers the new paths', async () => {
+      const filesystem = createMockFilesystem({
+        'skills/path-a/skill-a/SKILL.md': VALID_SKILL_MD.replace('test-skill', 'skill-a'),
+        'skills/path-b/skill-b/SKILL.md': VALID_SKILL_MD.replace('test-skill', 'skill-b'),
+      });
+
+      let currentPath = 'skills/path-a';
+      const skills = new WorkspaceSkillsImpl({
+        source: filesystem,
+        skills: () => [currentPath],
+      });
+
+      expect((await skills.list()).map(s => s.name)).toEqual(['skill-a']);
+
+      // Gate the source so a refresh started with the OLD paths hangs mid-walk
+      let release!: () => void;
+      const gate = new Promise<void>(resolve => {
+        release = resolve;
+      });
+      const originalReaddir = filesystem.readdir;
+      let gated = true;
+      filesystem.readdir = vi.fn(async (path: string) => {
+        if (gated) await gate;
+        return originalReaddir(path);
+      });
+
+      const staleRefresh = skills.refresh();
+      await new Promise(resolve => setTimeout(resolve, 10));
+
+      // Paths change while that rebuild is in flight; this maybeRefresh
+      // coalesces onto it and must NOT be satisfied by the stale-path walk
+      currentPath = 'skills/path-b';
+      const pathsChangedRefresh = skills.maybeRefresh();
+      await new Promise(resolve => setTimeout(resolve, 10));
+
+      gated = false;
+      release();
+      await Promise.all([staleRefresh, pathsChangedRefresh]);
+
+      expect((await skills.list()).map(s => s.name)).toEqual(['skill-b']);
+    });
+
+    it('concurrent maybeRefresh calls share one staleness walk', async () => {
+      const filesystem = createMockFilesystem({
+        'skills/skill-a/SKILL.md': VALID_SKILL_MD.replace('test-skill', 'skill-a'),
+        'skills/skill-b/SKILL.md': VALID_SKILL_MD.replace('test-skill', 'skill-b'),
+      });
+
+      const skills = new WorkspaceSkillsImpl({
+        source: filesystem,
+        skills: ['skills'],
+      });
+
+      await skills.list();
+
+      const statMock = filesystem.stat as ReturnType<typeof vi.fn>;
+      const originalCooldown = WorkspaceSkillsImpl.STALENESS_CHECK_COOLDOWN;
+      try {
+        (WorkspaceSkillsImpl as any).STALENESS_CHECK_COOLDOWN = 0;
+
+        // Settle any mtime/discovery-time tie left over from initial discovery:
+        // mock entries and #lastDiscoveryTime can land in the same millisecond,
+        // making the first walk short-circuit as stale (1 stat) while the next
+        // walk runs in full (3 stats). One refresh here guarantees both
+        // measurements below observe identical non-stale walks.
+        await skills.maybeRefresh();
+
+        const before = statMock.mock.calls.length;
+        await Promise.all([skills.maybeRefresh(), skills.maybeRefresh()]);
+        const concurrentDelta = statMock.mock.calls.length - before;
+
+        const beforeSingle = statMock.mock.calls.length;
+        await skills.maybeRefresh();
+        const singleDelta = statMock.mock.calls.length - beforeSingle;
+
+        // Two overlapping revalidations pay for exactly one walk
+        expect(concurrentDelta).toBe(singleDelta);
+      } finally {
+        (WorkspaceSkillsImpl as any).STALENESS_CHECK_COOLDOWN = originalCooldown;
+      }
+    });
+
+    it('refresh() swaps in the new catalog and reconciles the search index', async () => {
+      const filesystem = createMockFilesystem({
+        'skills/skill-a/SKILL.md': VALID_SKILL_MD.replace('test-skill', 'skill-a'),
+        'skills/skill-b/SKILL.md': VALID_SKILL_MD.replace('test-skill', 'skill-b'),
+      });
+
+      const baseEngine = createMockSearchEngine();
+      const searchEngine = {
+        ...baseEngine,
+        remove: vi.fn(async (id: string) => {
+          const idx = baseEngine.indexedDocs.findIndex(doc => doc.id === id);
+          if (idx >= 0) baseEngine.indexedDocs.splice(idx, 1);
+        }),
+      };
+
+      const skills = new WorkspaceSkillsImpl({
+        source: filesystem,
+        skills: ['skills'],
+        searchEngine: searchEngine as any,
+      });
+
+      await skills.list();
+
+      // Remove skill-b, add skill-c, keep skill-a untouched
+      await filesystem.rmdir('skills/skill-b');
+      await filesystem.deleteFile('skills/skill-b/SKILL.md');
+      await filesystem.writeFile('skills/skill-c/SKILL.md', VALID_SKILL_MD.replace('test-skill', 'skill-c'));
+
+      await skills.refresh();
+
+      const names = (await skills.list()).map(s => s.name).sort();
+      expect(names).toEqual(['skill-a', 'skill-c']);
+
+      const indexedPaths = baseEngine.indexedDocs.map(doc => doc.metadata?.skillPath);
+      // Removed skill leaves no stale index entries
+      expect(indexedPaths).not.toContain('skills/skill-b');
+      // New skill is indexed
+      expect(indexedPaths).toContain('skills/skill-c');
+      // Unchanged skill is neither duplicated nor dropped
+      expect(indexedPaths.filter(p => p === 'skills/skill-a')).toHaveLength(1);
+    });
+  });
+
   describe('search()', () => {
     it('should search skills by content using simple search', async () => {
       const filesystem = createMockFilesystem({
@@ -2938,6 +3127,134 @@ Premium instructions.
 
       warnSpy.mockRestore();
     });
+
+    it('should rethrow a coded TypeError (ERR_INVALID_ARG_TYPE) from source.exists instead of warning', async () => {
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+      const inner = createMockFilesystem({});
+      const source: SkillSource = {
+        ...inner,
+        exists: vi.fn(async () => {
+          // Shape Node's fs/path helpers throw when handed a non-string path.
+          throw Object.assign(new TypeError('The "path" argument must be of type string. Received function workdir'), {
+            code: 'ERR_INVALID_ARG_TYPE',
+          });
+        }),
+      };
+
+      const skills = new WorkspaceSkillsImpl({ skills: ['.mastracode/skills'], source });
+
+      await expect(skills.list()).rejects.toThrow(/must be of type string/);
+      expect(warnSpy).not.toHaveBeenCalledWith(expect.stringContaining('Cannot access skills path'));
+
+      warnSpy.mockRestore();
+    });
+
+    it('should warn and continue for a bare TypeError (e.g. fetch network failure) from source.exists', async () => {
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+      const inner = createMockFilesystem({});
+      const source: SkillSource = {
+        ...inner,
+        exists: vi.fn(async () => {
+          // `fetch` rejects network failures with a code-less TypeError.
+          throw new TypeError('fetch failed');
+        }),
+      };
+
+      const skills = new WorkspaceSkillsImpl({ skills: ['.mastracode/skills'], source });
+
+      await expect(skills.list()).resolves.toEqual([]);
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('Cannot access skills path ".mastracode/skills"'));
+
+      warnSpy.mockRestore();
+    });
+
+    it('should rethrow ERR_INVALID_ARG_TYPE errors from source.exists instead of warning', async () => {
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+      const inner = createMockFilesystem({});
+      const source: SkillSource = {
+        ...inner,
+        exists: vi.fn(async () => {
+          throw Object.assign(new Error('bad argument'), { code: 'ERR_INVALID_ARG_TYPE' });
+        }),
+      };
+
+      const skills = new WorkspaceSkillsImpl({ skills: ['.mastracode/skills'], source });
+
+      await expect(skills.list()).rejects.toThrow('bad argument');
+      expect(warnSpy).not.toHaveBeenCalledWith(expect.stringContaining('Cannot access skills path'));
+
+      warnSpy.mockRestore();
+    });
+
+    it('should rethrow ERR_INVALID_ARG_TYPE from a child SKILL.md probe during directory scan', async () => {
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+      const inner = createMockFilesystem({
+        '/skills/one/SKILL.md': '---\nname: one\ndescription: One\n---\n# One',
+      });
+      const source: SkillSource = {
+        ...inner,
+        exists: vi.fn(async (path: string) => {
+          if (path === '/skills/one/SKILL.md') {
+            throw Object.assign(new TypeError('bad child path'), { code: 'ERR_INVALID_ARG_TYPE' });
+          }
+          return inner.exists(path);
+        }),
+      };
+
+      const skills = new WorkspaceSkillsImpl({ skills: ['/skills'], source });
+
+      await expect(skills.list()).rejects.toThrow('bad child path');
+      expect(errorSpy).not.toHaveBeenCalledWith(expect.stringContaining('Failed to load skill'), expect.anything());
+
+      errorSpy.mockRestore();
+    });
+
+    it('should rethrow ERR_INVALID_ARG_TYPE surfaced from a glob-resolved entry', async () => {
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+      const inner = createMockFilesystem({
+        '/packages/a/skills/one/SKILL.md': '---\nname: one\ndescription: One\n---\n# One',
+      });
+      const source: SkillSource = {
+        ...inner,
+        exists: vi.fn(async (path: string) => {
+          if (path === '/packages/a/skills') {
+            throw Object.assign(new TypeError('bad glob entry'), { code: 'ERR_INVALID_ARG_TYPE' });
+          }
+          return inner.exists(path);
+        }),
+      };
+
+      const skills = new WorkspaceSkillsImpl({ skills: ['/packages/*/skills'], source });
+
+      await expect(skills.list()).rejects.toThrow('bad glob entry');
+      expect(errorSpy).not.toHaveBeenCalledWith(expect.stringContaining('Failed to load skill'), expect.anything());
+
+      errorSpy.mockRestore();
+    });
+
+    it('should still warn and continue for access errors from source.exists', async () => {
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+      const inner = createMockFilesystem({});
+      const source: SkillSource = {
+        ...inner,
+        exists: vi.fn(async () => {
+          throw Object.assign(new Error('EACCES: permission denied'), { code: 'EACCES' });
+        }),
+      };
+
+      const skills = new WorkspaceSkillsImpl({ skills: ['.mastracode/skills'], source });
+
+      await expect(skills.list()).resolves.toEqual([]);
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('Cannot access skills path ".mastracode/skills"'));
+
+      warnSpy.mockRestore();
+    });
   });
 
   // ===========================================================================
@@ -3075,15 +3392,21 @@ Premium instructions.
       await skills.list();
       const ioAfterInit = filesystem.ioCalls;
 
-      // Wait for the STALENESS_CHECK_COOLDOWN (2s) to expire so maybeRefresh
-      // actually runs the staleness check
-      await new Promise(resolve => setTimeout(resolve, WorkspaceSkillsImpl.STALENESS_CHECK_COOLDOWN + 100));
-
+      // Defeat the STALENESS_CHECK_COOLDOWN (30s, too long to sleep through
+      // with real timers) so maybeRefresh actually runs the staleness check.
+      // The static is runtime-writable; restore it after the check.
+      const originalCooldown = WorkspaceSkillsImpl.STALENESS_CHECK_COOLDOWN;
       const ioBeforeRefresh = filesystem.ioCalls;
 
-      const start = performance.now();
-      await skills.maybeRefresh();
-      const elapsed = performance.now() - start;
+      let elapsed: number;
+      try {
+        (WorkspaceSkillsImpl as any).STALENESS_CHECK_COOLDOWN = 0;
+        const start = performance.now();
+        await skills.maybeRefresh();
+        elapsed = performance.now() - start;
+      } finally {
+        (WorkspaceSkillsImpl as any).STALENESS_CHECK_COOLDOWN = originalCooldown;
+      }
 
       const stalenessIoCalls = filesystem.ioCalls - ioBeforeRefresh;
 

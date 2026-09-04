@@ -6,6 +6,7 @@ import { OverlaysProvider } from '../../lib/overlays';
 import { ChatOverlays } from './components/ChatOverlays';
 import { ChatSessionConfigProvider } from './context/ChatSessionProvider';
 import { ChatPermissionsProvider } from './context/ChatPermissionsProvider';
+import { supervisorSessionAddress } from '../supervisor/services/supervisor';
 
 /**
  * Shared chat app providers. Route leaves render their own pages so `/new` is a
@@ -29,8 +30,12 @@ function ChatSessionRouteProvider({ children }: { children: ReactNode }) {
   const userDraftMatch = useMatch('/factories/:factoryId/user/new/:draftSessionId');
   const userThreadMatch = useMatch('/factories/:factoryId/user/threads/:threadId');
   const factoryThreadMatch = useMatch('/factories/:factoryId/workspaces/:sessionId/threads/:threadId');
+  const supervisorMatch = useMatch('/factories/:factoryId/supervisor');
   const userScoped = userDraftMatch !== null || userThreadMatch !== null;
-  const threadId = userThreadMatch?.params.threadId ?? factoryThreadMatch?.params.threadId;
+  const supervisor = supervisorMatch?.params.factoryId
+    ? supervisorSessionAddress(supervisorMatch.params.factoryId)
+    : undefined;
+  const threadId = userThreadMatch?.params.threadId ?? factoryThreadMatch?.params.threadId ?? supervisor?.threadId;
 
   return (
     <ChatSessionConfigProvider
@@ -38,6 +43,7 @@ function ChatSessionRouteProvider({ children }: { children: ReactNode }) {
       threadId={threadId}
       userScoped={userScoped}
       draftSessionId={userDraftMatch?.params.draftSessionId}
+      supervisor={supervisor}
     >
       <ChatPermissionsProvider>{children}</ChatPermissionsProvider>
     </ChatSessionConfigProvider>

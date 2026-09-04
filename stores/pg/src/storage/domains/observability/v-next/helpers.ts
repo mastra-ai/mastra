@@ -22,6 +22,7 @@ import type {
   SpanRecord,
 } from '@mastra/core/storage';
 import { EntityType } from '@mastra/core/storage';
+import { coerceFeedbackReviewStatus } from './review-status';
 
 const PROMOTED_KEYS = new Set([
   'experimentId',
@@ -241,6 +242,11 @@ function commonContextToRow(record: CommonContextWritable): Record<string, unkno
 // ---------------------------------------------------------------------------
 
 export function spanRecordToRow(span: CreateSpanRecord): Record<string, unknown> {
+  // `endedAt` is both a primary key and a partition key column, so a span that
+  // has started but not ended still needs a value there. Synthesize it from
+  // `startedAt` and record the real state in `isPending`, which the read path
+  // maps back to a null `endedAt`.
+  const isPending = !span.isEvent && span.endedAt == null;
   const endedAt = span.isEvent ? span.startedAt : (span.endedAt ?? span.startedAt);
   const metadata = span.metadata ?? null;
   return {
@@ -251,6 +257,7 @@ export function spanRecordToRow(span: CreateSpanRecord): Record<string, unknown>
     name: span.name,
     spanType: span.spanType,
     isEvent: Boolean(span.isEvent),
+    isPending,
     startedAt: toIsoOrDate(span.startedAt),
     endedAt: toIsoOrDate(endedAt),
     tags: normalizeTags(span.tags),
@@ -266,9 +273,20 @@ export function spanRecordToRow(span: CreateSpanRecord): Record<string, unknown>
   };
 }
 
+/**
+ * Recover a span's real `endedAt` from its row. A pending row carries a
+ * synthesized `endedAt` (a copy of `startedAt`) because the column is part of
+ * the primary key; callers must see null so the span reads as still running.
+ */
+function spanRowEndedAt(row: Record<string, any>, startedAt: Date): Date | null {
+  if (row.isEvent) return startedAt;
+  if (row.isPending) return null;
+  return toDateOrNull(row.endedAt);
+}
+
 export function rowToSpanRecord(row: Record<string, any>): SpanRecord {
   const startedAt = toDate(row.startedAt);
-  const endedAt = row.isEvent ? startedAt : toDateOrNull(row.endedAt);
+  const endedAt = spanRowEndedAt(row, startedAt);
   const error = parsedJson(row.error);
   // Spans expose the row's `executionSource` column as `source` on the record.
   const { executionSource, ...ctx } = rowToCommonContext(row);
@@ -304,7 +322,7 @@ export function rowToSpanRecord(row: Record<string, any>): SpanRecord {
  */
 export function rowToLightSpanRecord(row: Record<string, any>): LightSpanRecord {
   const startedAt = toDate(row.startedAt);
-  const endedAt = row.isEvent ? startedAt : toDateOrNull(row.endedAt);
+  const endedAt = spanRowEndedAt(row, startedAt);
   return {
     traceId: row.traceId,
     spanId: row.spanId,
@@ -474,6 +492,7 @@ export function feedbackRecordToRow(feedback: CreateFeedbackRecord): Record<stri
     spanId: feedback.spanId ?? null,
     feedbackUserId: feedback.feedbackUserId ?? null,
     sourceId: feedback.sourceId ?? null,
+    reviewStatus: feedback.reviewStatus ?? 'needs-review',
     feedbackSource,
     feedbackType: feedback.feedbackType,
     valueString: typeof feedback.value === 'string' ? feedback.value : null,
@@ -497,6 +516,7 @@ export function rowToFeedbackRecord(row: Record<string, any>): FeedbackRecord {
     spanId: nullableString(row.spanId),
     feedbackUserId: nullableString(row.feedbackUserId),
     sourceId: nullableString(row.sourceId),
+    reviewStatus: coerceFeedbackReviewStatus(row.reviewStatus),
     feedbackSource,
     feedbackType: row.feedbackType,
     value: hasNumber ? Number(row.valueNumber) : (nullableString(row.valueString) ?? ''),

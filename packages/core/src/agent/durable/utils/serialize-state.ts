@@ -1,4 +1,5 @@
 import type { JSONSchema7 } from 'json-schema';
+import type { ScoringFilter } from '../../../evals/predicate';
 import type { MastraLanguageModel } from '../../../llm/model/shared.types';
 import type { ToolCallConcurrency } from '../../../loop/types';
 import type { MemoryConfig } from '../../../memory/types';
@@ -112,7 +113,11 @@ export function serializeModelList(models: AgentModelManagerConfig[]): Serializa
 export function serializeScorersConfig(
   scorers: Record<
     string,
-    { scorer: { name: string } | string; sampling?: { type: 'none' } | { type: 'ratio'; rate: number } }
+    {
+      scorer: { name: string } | string;
+      sampling?: { type: 'none' } | { type: 'ratio'; rate: number };
+      filter?: ScoringFilter;
+    }
   >,
 ): SerializableScorersConfig {
   const result: SerializableScorersConfig = {};
@@ -128,6 +133,12 @@ export function serializeScorersConfig(
     // Include sampling if provided
     if (entry.sampling) {
       scorerEntry.sampling = entry.sampling;
+    }
+
+    // Filters are plain JSON (declarative predicates), so they survive the
+    // snapshot round-trip by value with no name-based re-resolution.
+    if (entry.filter) {
+      scorerEntry.filter = entry.filter;
     }
 
     result[key] = scorerEntry;

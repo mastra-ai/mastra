@@ -164,7 +164,12 @@ export function tsConfigPaths({ tsConfigPath, respectCoreModule, localResolve }:
             const importerInfo = this.getModuleInfo(importer);
             const importerPluginMeta = importerInfo?.meta?.[PLUGIN_NAME];
 
-            if (!request.startsWith('./') && !request.startsWith('../') && importerPluginMeta?.resolved) {
+            if (
+              !path.isAbsolute(request) &&
+              !request.startsWith('./') &&
+              !request.startsWith('../') &&
+              importerPluginMeta?.resolved
+            ) {
               return {
                 ...resolved,
                 external: !request.startsWith('hono/') && request !== 'hono',

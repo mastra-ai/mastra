@@ -15,13 +15,16 @@
   "dependencies": {
     "@ai-sdk/openai": "^2.0.110",
     "@mastra/core": "monorepo-test",
+    "@mastra/server": "monorepo-test",
     "@inner/inner-tools": "workspace:*",
     "@inner/hello-world": "workspace:*",
     "@inner/transitive-a": "workspace:*",
     "date-fns": "4.4.0",
     "lodash": "^4.18.1",
+    "@hono/node-ws": "^1.3.0",
     "hono": "^4.12.29",
-    "nodemailer": "^7.0.0",
+    "ws": "^8.21.0",
+    "nodemailer": "^9.0.1",
     "unicorn-magic": "0.4.0",
     "zod": "^4.0.0"
   },

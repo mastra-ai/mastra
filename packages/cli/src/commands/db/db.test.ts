@@ -69,95 +69,151 @@ describe('formatScope', () => {
 });
 
 describe('defaultDatabaseName', () => {
-  it('derives a name from the project slug', () => {
-    expect(defaultDatabaseName({ name: 'My App', slug: 'my-app' })).toBe('my-app-db');
+  it('derives a name from the project slug with a per-provider suffix', () => {
+    expect(defaultDatabaseName('turso', { name: 'My App', slug: 'my-app' })).toBe('my-app-turso');
+  });
+
+  it('matches the dashboard suggestions for every provider', () => {
+    // Must stay in sync with `suggestDatabaseName` in the platform
+    // frontend so CLI- and UI-created databases look the same.
+    expect(defaultDatabaseName('turso', { name: 'My App', slug: 'my-app' })).toBe('my-app-turso');
+    expect(defaultDatabaseName('neon', { name: 'My App', slug: 'my-app' })).toBe('my-app-pg');
+    expect(defaultDatabaseName('redis', { name: 'My App', slug: 'my-app' })).toBe('my-app-redis');
+    expect(defaultDatabaseName('mongodb', { name: 'My App', slug: 'my-app' })).toBe('my-app-mongo');
   });
 
   it('falls back to the project name and sanitizes it for DNS-safe providers', () => {
-    expect(defaultDatabaseName({ name: 'My_Fancy App!', slug: null })).toBe('my-fancy-app-db');
+    expect(defaultDatabaseName('turso', { name: 'My_Fancy App!', slug: null })).toBe('my-fancy-app-turso');
   });
 
   it('never returns leading/trailing hyphens or an empty base', () => {
-    expect(defaultDatabaseName({ name: '---', slug: null })).toBe('mastra-db');
+    expect(defaultDatabaseName('turso', { name: '---', slug: null })).toBe('mastra-turso');
   });
 
   it('does not suffix production-type environments (keeps the canonical name)', () => {
     expect(
       defaultDatabaseName(
+        'turso',
         { name: 'My App', slug: 'my-app' },
         { name: 'production', slug: 'my-app', type: 'production' },
       ),
-    ).toBe('my-app-db');
+    ).toBe('my-app-turso');
   });
 
   it('recognises production by env type even when the env is renamed (e.g. `main`)', () => {
     // Users are free to rename their production env; we must not suffix
     // it and orphan the canonical DB.
     expect(
-      defaultDatabaseName({ name: 'My App', slug: 'my-app' }, { name: 'main', slug: 'main', type: 'production' }),
-    ).toBe('my-app-db');
+      defaultDatabaseName(
+        'turso',
+        { name: 'My App', slug: 'my-app' },
+        { name: 'main', slug: 'main', type: 'production' },
+      ),
+    ).toBe('my-app-turso');
   });
 
   it('suffixes a non-production env even if it happens to be named `production`', () => {
     // The name is not the discriminator — the type is.
     expect(
       defaultDatabaseName(
+        'turso',
         { name: 'My App', slug: 'my-app' },
         { name: 'production', slug: 'production', type: 'staging' },
       ),
-    ).toBe('my-app-production-db');
+    ).toBe('my-app-production-turso');
   });
 
   it('suffixes non-production environments so multi-env attaches do not collide', () => {
     expect(
-      defaultDatabaseName({ name: 'My App', slug: 'my-app' }, { name: 'eu', slug: 'my-app--eu', type: 'preview' }),
-    ).toBe('my-app-eu-db');
+      defaultDatabaseName(
+        'redis',
+        { name: 'My App', slug: 'my-app' },
+        { name: 'eu', slug: 'my-app--eu', type: 'preview' },
+      ),
+    ).toBe('my-app-eu-redis');
     expect(
       defaultDatabaseName(
+        'redis',
         { name: 'My App', slug: 'my-app' },
         { name: 'staging', slug: 'my-app--staging', type: 'staging' },
       ),
-    ).toBe('my-app-staging-db');
+    ).toBe('my-app-staging-redis');
   });
 
   it('sanitizes env names into DNS-safe segments', () => {
     expect(
-      defaultDatabaseName({ name: 'My App', slug: 'my-app' }, { name: 'EU West', slug: 'eu', type: 'preview' }),
-    ).toBe('my-app-eu-west-db');
+      defaultDatabaseName(
+        'turso',
+        { name: 'My App', slug: 'my-app' },
+        { name: 'EU West', slug: 'eu', type: 'preview' },
+      ),
+    ).toBe('my-app-eu-west-turso');
   });
 
   it('truncates the project segment (not the env) so long-slug projects still get distinct names per env', () => {
-    // 60-char project slug + `-eu-db` / `-us-db` would collide if we
-    // truncated the tail. Both must produce distinct names.
+    // 60-char project slug + `-eu-turso` / `-us-turso` would collide if
+    // we truncated the tail. Both must produce distinct names.
     const longSlug = 'a'.repeat(60);
-    const euName = defaultDatabaseName({ name: 'App', slug: longSlug }, { name: 'eu', slug: 'eu', type: 'preview' });
-    const usName = defaultDatabaseName({ name: 'App', slug: longSlug }, { name: 'us', slug: 'us', type: 'preview' });
+    const euName = defaultDatabaseName(
+      'turso',
+      { name: 'App', slug: longSlug },
+      { name: 'eu', slug: 'eu', type: 'preview' },
+    );
+    const usName = defaultDatabaseName(
+      'turso',
+      { name: 'App', slug: longSlug },
+      { name: 'us', slug: 'us', type: 'preview' },
+    );
     expect(euName).not.toBe(usName);
     expect(euName.length).toBeLessThanOrEqual(64);
     expect(usName.length).toBeLessThanOrEqual(64);
-    expect(euName.endsWith('-eu-db')).toBe(true);
-    expect(usName.endsWith('-us-db')).toBe(true);
+    expect(euName.endsWith('-eu-turso')).toBe(true);
+    expect(usName.endsWith('-us-turso')).toBe(true);
   });
 
   it('respects the 64-char cap even with long env discriminators', () => {
     const longSlug = 'p'.repeat(50);
     const longEnv = 'e'.repeat(30);
     const name = defaultDatabaseName(
+      'turso',
       { name: 'App', slug: longSlug },
       { name: longEnv, slug: longEnv, type: 'preview' },
     );
     expect(name.length).toBeLessThanOrEqual(64);
-    expect(name.endsWith('-db')).toBe(true);
+    expect(name.endsWith('-turso')).toBe(true);
     // Env discriminator must survive in some form even when the budget
     // is fully consumed.
     expect(name).toContain('-e');
   });
 
+  it('keeps truncated env discriminators unique via a hash suffix', () => {
+    // Two env names sharing the same >56-char prefix must not produce the
+    // same database name once the env segment is truncated to fit the cap —
+    // the platform rejects duplicate names, stranding the second attach.
+    const prefix = 'e'.repeat(60);
+    const project = { name: 'App', slug: 'app' };
+    const first = defaultDatabaseName('redis', project, {
+      name: `${prefix}-one`,
+      slug: `${prefix}-one`,
+      type: 'preview',
+    });
+    const second = defaultDatabaseName('redis', project, {
+      name: `${prefix}-two`,
+      slug: `${prefix}-two`,
+      type: 'preview',
+    });
+    expect(first).not.toBe(second);
+    expect(first.length).toBeLessThanOrEqual(64);
+    expect(second.length).toBeLessThanOrEqual(64);
+    expect(first.endsWith('-redis')).toBe(true);
+    expect(second.endsWith('-redis')).toBe(true);
+  });
+
   it('drops a hyphen at the truncation boundary so the joined name stays DNS-clean', () => {
-    // A slug whose char at the cutoff is `-` would leave `foo--eu-db`
+    // A slug whose char at the cutoff is `-` would leave `foo--eu-turso`
     // if we naively sliced. The result must have no double hyphens.
     const slug = 'x-'.repeat(40).replace(/-$/, ''); // long alternating x-x-x-...
-    const name = defaultDatabaseName({ name: 'X', slug }, { name: 'eu', slug: 'eu', type: 'preview' });
+    const name = defaultDatabaseName('turso', { name: 'X', slug }, { name: 'eu', slug: 'eu', type: 'preview' });
     expect(name).not.toMatch(/--/);
     expect(name.length).toBeLessThanOrEqual(64);
   });

@@ -1,7 +1,8 @@
+import type { FactoryRole } from '@mastra/factory/rules/types';
+import { workItemBranch } from '@mastra/factory/work-item-branch';
 import type { FactoryRunInvocation, FactoryRunPhase } from '../../../hooks/useStartFactoryRun';
 import { NEEDS_APPROVAL_LABEL, githubNumberForItem, hasLabel, metadataLabels } from './boardItems';
 import type { WorkItem } from './services/workItems';
-import type { BoardStageId } from './stages';
 
 export const RUN_PHASE_LABELS: Record<FactoryRunPhase, string> = {
   workspace: 'preparing workspace…',
@@ -9,20 +10,15 @@ export const RUN_PHASE_LABELS: Record<FactoryRunPhase, string> = {
   opening: 'opening thread…',
 };
 
-/**
- * One agent run a card or candidate can start, and the lane it lands the card
- * in. Cards offer several: e.g. an issue can be investigated (understand it →
- * Planning) or built right away (implement it → Building). All of an item's
- * runs share one branch/worktree, so a later run continues the same
- * conversation as a follow-up.
- */
+// One startable run; its lane is the role's stage (`FACTORY_ROLE_STAGES`), and
+// all of an item's runs share one branch/worktree, so a later run is a follow-up.
 export interface RunAction {
   label: 'Investigate' | 'Build' | 'Prepare approval' | 'Review';
   /** Session slot the run fills on the card, e.g. `plan` or `work`. */
-  role: 'triage' | 'plan' | 'work' | 'review';
-  /** Lane the card lands in once the run is underway. */
-  stage: BoardStageId;
+  role: FactoryRole;
   invocation: FactoryRunInvocation;
+  /** The run's outcome is a maintainer decision, so hands-off has nothing to remove. */
+  awaitsHumanDecision?: true;
   threadTags?: Record<string, string>;
 }
 
@@ -49,13 +45,10 @@ export function guidedPrompt(base: string, instructions: string): string {
 /** Investigate an issue, then Build it when needed. */
 export function issueRunActions(ref: string, extra?: { context?: string; triage?: boolean }): RunAction[] {
   const context = extra?.context ? `\n\n${extra.context}` : '';
-  const role = extra?.triage ? 'triage' : 'plan';
-  const stage = extra?.triage ? 'triage' : 'planning';
   return [
     {
       label: 'Investigate',
-      role,
-      stage,
+      role: extra?.triage ? 'triage' : 'plan',
       invocation: {
         type: 'skill',
         skillName: 'factory-triage',
@@ -65,7 +58,6 @@ export function issueRunActions(ref: string, extra?: { context?: string; triage?
     {
       label: 'Build',
       role: 'work',
-      stage: 'execute',
       invocation: {
         type: 'prompt',
         prompt: `Implement a fix for ${ref}: investigate the root cause, make the change with tests, and open a pull request.${extra?.context ? ` ${extra.context}` : ''}`,
@@ -78,7 +70,7 @@ export function approvalRunAction(ref: string, issueNumber: number): RunAction {
   return {
     label: 'Prepare approval',
     role: 'triage',
-    stage: 'triage',
+    awaitsHumanDecision: true,
     invocation: {
       type: 'prompt',
       prompt: `Prepare approval for ${ref}. Review the existing triage comment and summarize the decision needed before implementation or closure.`,
@@ -91,7 +83,6 @@ export function reviewRunAction(ref: string, checkout: string): RunAction {
   return {
     label: 'Review',
     role: 'review',
-    stage: 'review',
     invocation: {
       type: 'skill',
       skillName: 'factory-review',
@@ -103,6 +94,20 @@ export function reviewRunAction(ref: string, checkout: string): RunAction {
 export const LINEAR_FETCH_HINT = `Start by fetching the issue's full details (description and comments) with the linear_get_issue tool.`;
 
 /**
+ * The `needs approval` label only holds a card at rest. Once a person accepts
+ * it — or it sits in a working lane, which only a person could have put it in
+ * before acceptance was recorded — the label is stale until the source
+ * catches up, and the card offers its ordinary runs again.
+ */
+function approvalPending(item: Pick<WorkItem, 'metadata' | 'stages' | 'acceptedAt'>): boolean {
+  return (
+    hasLabel(metadataLabels(item.metadata), NEEDS_APPROVAL_LABEL) &&
+    item.acceptedAt === null &&
+    item.stages.every(stage => stage === 'intake' || stage === 'triage')
+  );
+}
+
+/**
  * The runs a persisted card can start, derived from its source + metadata.
  * Issues can be investigated (→ Planning) or built (→ Building); PRs get a
  * review run. Manual cards (or cards missing the needed metadata) can't
@@ -112,10 +117,10 @@ export function itemRunSpec(item: WorkItem): ItemRunSpec | undefined {
   const meta = item.metadata;
   const githubNumber = githubNumberForItem(item);
   if (item.source === 'github-issue' && githubNumber !== undefined) {
-    const needsApproval = hasLabel(metadataLabels(meta), NEEDS_APPROVAL_LABEL);
+    const needsApproval = approvalPending(item);
     const ref = `GitHub issue #${githubNumber}${item.url ? ` (${item.url})` : ''}`;
     return {
-      branch: `factory/issue-${githubNumber}`,
+      branch: workItemBranch(item),
       threadTitle: needsApproval ? `Triage #${githubNumber}: ${item.title}` : `Issue #${githubNumber}: ${item.title}`,
       actions: needsApproval ? [approvalRunAction(ref, githubNumber)] : issueRunActions(ref, { triage: true }),
     };
@@ -123,7 +128,7 @@ export function itemRunSpec(item: WorkItem): ItemRunSpec | undefined {
   if (item.source === 'linear-issue' && typeof meta.identifier === 'string') {
     const ref = `Linear issue ${meta.identifier}${item.url ? ` (${item.url})` : ''}`;
     return {
-      branch: `factory/linear-${meta.identifier.toLowerCase()}`,
+      branch: workItemBranch(item),
       threadTitle: `${meta.identifier}: ${item.title}`,
       actions: issueRunActions(ref, { context: LINEAR_FETCH_HINT }),
     };
@@ -133,7 +138,7 @@ export function itemRunSpec(item: WorkItem): ItemRunSpec | undefined {
     const headBranch = typeof meta.headBranch === 'string' ? ` Expected head branch: ${meta.headBranch}.` : '';
     const checkout = `Check out the PR in this worktree first with \`gh pr checkout ${githubNumber}\`.${headBranch}`;
     return {
-      branch: `factory/pr-${githubNumber}`,
+      branch: workItemBranch(item),
       threadTitle: `PR #${githubNumber}: ${item.title}`,
       actions: [reviewRunAction(ref, checkout)],
     };
@@ -144,11 +149,11 @@ export function itemRunSpec(item: WorkItem): ItemRunSpec | undefined {
 /**
  * Branch + thread title for a card's session. Prefers the run spec (shared
  * with agent runs so the title click and a later run converge on one
- * worktree); manual/metadata-poor cards fall back to an id-derived branch so
- * every card's title can open a session.
+ * worktree); the branch grammar itself is shared with the server's autonomous
+ * runs (`workItemBranch`), so every card resolves to a session branch.
  */
 export function itemSessionSpec(item: WorkItem): { branch: string; threadTitle: string } {
   const spec = itemRunSpec(item);
   if (spec) return { branch: spec.branch, threadTitle: spec.threadTitle };
-  return { branch: `factory/item-${item.id}`, threadTitle: item.title };
+  return { branch: workItemBranch(item), threadTitle: item.title };
 }

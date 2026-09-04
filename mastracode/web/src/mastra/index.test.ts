@@ -42,10 +42,26 @@ describe('platform entry (src/mastra/index.ts)', () => {
       'WORKOS_COOKIE_PASSWORD',
       'MASTRA_SHARED_API_URL',
       'MASTRA_PLATFORM_SECRET_KEY',
+      'MASTRA_PLATFORM_ACCESS_TOKEN',
+      'MASTRA_CLOUD_ACCESS_TOKEN',
+      'MASTRA_ENVIRONMENT_ID',
+      'DATABASE_URL',
+      'APP_DATABASE_URL',
+      'REDIS_URL',
+      'GITHUB_APP_ID',
+      'GITHUB_APP_PRIVATE_KEY',
+      'GITHUB_APP_CLIENT_ID',
+      'GITHUB_APP_CLIENT_SECRET',
+      'GITHUB_APP_SLUG',
+      'GITHUB_APP_WEBHOOK_SECRET',
+      'LINEAR_CLIENT_ID',
+      'LINEAR_CLIENT_SECRET',
+      'SLACK_APP_SIGNING_SECRET',
       'MASTRACODE_DISPATCH_MAX_IN_FLIGHT',
     ]) {
       vi.stubEnv(name, '');
     }
+    vi.stubEnv('MASTRA_PROJECT_ID', 'test-project');
     factoryConfigs.length = 0;
     vi.resetModules();
   });

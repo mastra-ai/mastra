@@ -1,0 +1,87 @@
+{
+  "fixtures": [
+    {
+      "match": {
+        "endpoint": "chat",
+        "model": "gpt-5.4-mini",
+        "userMessage": "Subscribe to both GitHub PRs with the tool.",
+        "sequenceIndex": 0
+      },
+      "response": {
+        "toolCalls": [
+          {
+            "id": "call_github_multi_subscribe_e2e",
+            "name": "github_subscribe_pr",
+            "arguments": {
+              "prs": [
+                {
+                  "owner": "mastra-ai",
+                  "repo": "mastra",
+                  "number": 17637
+                },
+                {
+                  "owner": "mastra-ai",
+                  "repo": "mastra",
+                  "number": 17638
+                }
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "match": {
+        "endpoint": "chat",
+        "model": "gpt-5.4-mini",
+        "userMessage": "Unsubscribe one GitHub PR with the tool.",
+        "sequenceIndex": 0
+      },
+      "response": {
+        "toolCalls": [
+          {
+            "id": "call_github_single_unsubscribe_e2e",
+            "name": "github_unsubscribe_pr",
+            "arguments": {
+              "prs": [
+                {
+                  "owner": "mastra-ai",
+                  "repo": "mastra",
+                  "number": 17637
+                }
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "match": {
+        "endpoint": "chat",
+        "model": "gpt-5.4-mini",
+        "userMessage": "Unsubscribe all GitHub PRs with the tool.",
+        "sequenceIndex": 0
+      },
+      "response": {
+        "toolCalls": [
+          {
+            "id": "call_github_all_unsubscribe_e2e",
+            "name": "github_unsubscribe_pr",
+            "arguments": {
+              "all": true
+            }
+          }
+        ]
+      }
+    },
+    {
+      "match": {
+        "endpoint": "chat",
+        "model": "gpt-5.4-mini"
+      },
+      "response": {
+        "content": "GitHub signal tool step complete."
+      }
+    }
+  ]
+}

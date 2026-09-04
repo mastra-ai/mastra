@@ -29,46 +29,15 @@ const agent = new Agent({
 });
 ```
 
-### Mounting Cloud Storage
-
-E2B sandboxes can mount S3, GCS, or Azure Blob filesystems, making cloud storage accessible as a local directory inside the sandbox:
-
-```typescript
-import { Workspace } from '@mastra/core/workspace';
-import { S3Filesystem } from '@mastra/s3';
-import { AzureBlobFilesystem } from '@mastra/azure/blob';
-import { E2BSandbox } from '@mastra/e2b';
-
-const workspace = new Workspace({
-  mounts: {
-    '/data': new S3Filesystem({
-      bucket: 'my-bucket',
-      region: 'us-east-1',
-      accessKeyId: process.env.AWS_ACCESS_KEY_ID,
-      secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
-    }),
-    '/azure-data': new AzureBlobFilesystem({
-      container: 'my-container',
-      connectionString: process.env.AZURE_STORAGE_CONNECTION_STRING,
-      prefix: 'workspace/data',
-    }),
-  },
-  sandbox: new E2BSandbox(),
-});
-```
-
-### Custom Templates
-
-For advanced use cases, you can use custom E2B templates:
-
-```typescript
-const workspace = new Workspace({
-  sandbox: new E2BSandbox({
-    template: 'my-custom-template',
-  }),
-});
-```
-
 ## Documentation
 
-For more information, see the [Mastra Workspaces documentation](https://mastra.ai/docs/workspace/overview).
+- [E2B integration guide](https://mastra.ai/integrations/sandboxes/e2b)
+- [Workspace documentation](https://mastra.ai/docs/mastra-platform/workspaces)
+
+## Changelog
+
+See the [package changelog](https://github.com/mastra-ai/mastra/blob/main/workspaces/e2b/CHANGELOG.md) for version history and release notes.
+
+## Support
+
+We have an [open community Discord](https://discord.gg/mastra-ai). Come and say hello and let us know if you have any questions or need any help getting things running.

@@ -48,6 +48,7 @@ import type { EventHandlerContext } from './handlers/types.js';
 import { flushRender } from './render-scheduler.js';
 import type { TUIState } from './state.js';
 import { getGithubPrSubscriptionsFromMetadata } from './state.js';
+import { setCurrentThreadTitle } from './thread-title.js';
 
 /**
  * Dispatch a AgentControllerEvent to the appropriate handler.
@@ -200,6 +201,7 @@ export async function dispatchEvent(
 
     case 'thread_changed': {
       ectx.showInfo(`Switched to thread: ${event.threadId}`);
+      state.latestRequestPromptTokens = undefined;
       // Clear per-thread ephemeral state first so renderExistingMessages
       // and other downstream observers see clean state.
       await state.session.state.set({ tasks: [], activePlan: null, sandboxAllowedPaths: [] });
@@ -222,7 +224,7 @@ export async function dispatchEvent(
       const threads = await state.session.thread.list();
       const currentThread = threads.find((t: AgentControllerThread) => t.id === event.threadId);
       if (currentThread) {
-        state.currentThreadTitle = currentThread.title;
+        setCurrentThreadTitle(state, currentThread.title);
         const metadata = currentThread.metadata as Record<string, unknown> | undefined;
         state.activeGithubPrSubscriptions = getGithubPrSubscriptionsFromMetadata(metadata);
         state.githubPrPollingActive = false;
@@ -239,8 +241,9 @@ export async function dispatchEvent(
 
     case 'thread_created': {
       ectx.showInfo(`Created thread: ${event.thread.id}`);
+      state.latestRequestPromptTokens = undefined;
       // Update current thread title for status line display
-      state.currentThreadTitle = event.thread.title;
+      setCurrentThreadTitle(state, event.thread.title);
       state.activeGithubPrSubscriptions = getGithubPrSubscriptionsFromMetadata(
         event.thread.metadata as Record<string, unknown> | undefined,
       );
@@ -271,7 +274,9 @@ export async function dispatchEvent(
     }
 
     case 'usage_update': {
-      // Token accumulation handled by AgentController display state.
+      // Token accumulation handled by AgentController display state. Keep the
+      // latest step separate for context auditing; cumulative usage is billing data.
+      state.latestRequestPromptTokens = event.usage.promptTokens ?? 0;
       // usage_update fires at step-finish and carries the completion (and any
       // reasoning) tokens generated during this step. Measure tokens/sec over the
       // decode window only — from this step's first content delta
@@ -368,8 +373,15 @@ export async function dispatchEvent(
       break;
     }
 
+    case 'thread_title_updated':
+      if (event.threadId !== state.session.thread.getId()) break;
+      setCurrentThreadTitle(state, event.title);
+      ectx.updateStatusLine();
+      break;
+
     case 'om_thread_title_updated':
-      state.currentThreadTitle = event.newTitle;
+      if (event.threadId !== state.session.thread.getId()) break;
+      setCurrentThreadTitle(state, event.newTitle);
       handleOMThreadTitleUpdated(ectx, event.newTitle, event.oldTitle);
       ectx.updateStatusLine();
       break;

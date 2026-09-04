@@ -86,11 +86,11 @@ describe('PostgresStoreVNext', () => {
       expect(store.name).toBe('PostgresStoreVNext');
     });
 
-    it('declares the insert-only observability strategy', () => {
+    it('declares the event-sourced observability strategy', () => {
       const observability = store.stores.observability as ObservabilityStoragePostgresVNext;
       expect(observability.observabilityStrategy).toEqual({
-        preferred: 'insert-only',
-        supported: ['insert-only'],
+        preferred: 'event-sourced',
+        supported: ['event-sourced'],
       });
     });
 
@@ -203,7 +203,8 @@ describe.skipIf(!integrationEnabled)('PostgresStoreVNext / shared observability 
     },
     capabilities: {
       label: 'Postgres vNext',
-      preferredStrategy: 'insert-only',
+      preferredStrategy: 'event-sourced',
+      traceQuery: true,
     },
     cleanup: async storage => {
       await storage.dangerouslyClearAll();

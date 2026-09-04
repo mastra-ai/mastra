@@ -18,12 +18,16 @@ export const customPack: ModelPackInfo = {
   active: false,
 };
 
-export function packsResponse(activePackId: string | null = null): ModelPacksResponse {
+export function packsResponse(
+  activePackId: string | null = null,
+  sessionPackId: string | null = null,
+): ModelPacksResponse {
   return {
     packs: [
       { ...builtinPack, active: builtinPack.id === activePackId },
       { ...customPack, active: customPack.id === activePackId },
     ],
     activePackId,
+    sessionPackId,
   };
 }

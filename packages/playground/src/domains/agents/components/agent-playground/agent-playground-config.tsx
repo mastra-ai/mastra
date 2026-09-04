@@ -13,6 +13,7 @@ import { useMemo } from 'react';
 
 import { useAgentEditFormContext } from '../../context/agent-edit-form-context';
 import { useCompareAgentVersions } from '../../hooks/use-agent-versions';
+import { getEditorOwnership } from '../../utils/editor-ownership';
 import { InstructionBlocksPage } from '../agent-cms-pages/instruction-blocks-page';
 import { ToolsPage } from '../agent-cms-pages/tools-page';
 import { useStoredPromptBlock } from '@/domains/prompt-blocks';
@@ -28,7 +29,7 @@ function ConfigTabLabel({ title, icon, badge }: { title: string; icon: React.Rea
       <Txt as="span" variant="ui-sm" className="text-inherit">
         {title}
       </Txt>
-      {badge}
+      {badge !== undefined && badge !== null ? <> {badge}</> : null}
     </>
   );
 }
@@ -394,12 +395,12 @@ function ToolsDiffView({
               {tool}
             </Txt>
             {status === 'removed' && (
-              <Badge variant="error" className="ml-auto">
+              <Badge variant="red" className="ml-auto">
                 removed in latest
               </Badge>
             )}
             {status === 'added' && (
-              <Badge variant="success" className="ml-auto">
+              <Badge variant="green" className="ml-auto">
                 added in latest
               </Badge>
             )}
@@ -494,12 +495,12 @@ function VariablesDiffView({
               {`{{${name}}}`}
             </Txt>
             {status === 'removed' && (
-              <Badge variant="error" className="ml-auto">
+              <Badge variant="red" className="ml-auto">
                 removed in latest
               </Badge>
             )}
             {status === 'added' && (
-              <Badge variant="success" className="ml-auto">
+              <Badge variant="green" className="ml-auto">
                 added in latest
               </Badge>
             )}
@@ -530,7 +531,7 @@ function ReadOnlyVariables({ variables }: { variables: Record<string, unknown> |
             {`{{${name}}}`}
           </Txt>
           {(schema as Record<string, unknown>)?.type ? (
-            <Badge variant="default">{String((schema as Record<string, unknown>).type)}</Badge>
+            <Badge>{String((schema as Record<string, unknown>).type)}</Badge>
           ) : null}
         </div>
       ))}
@@ -578,19 +579,19 @@ function ReadOnlyConfigWithDiff({
   const variablesDiff = diffMap.get('requestContextSchema');
 
   const instructionsBadge = instructionsDiff ? (
-    <Badge variant="warning" size="sm">
+    <Badge variant="yellow" size="sm">
       modified
     </Badge>
   ) : null;
   const toolsBadge = toolsDiff ? (
-    <Badge variant="warning" size="sm">
+    <Badge variant="yellow" size="sm">
       modified
     </Badge>
   ) : toolCount > 0 ? (
-    <Badge variant="default" size="sm">{`${toolCount}`}</Badge>
+    <Badge size="sm">{`${toolCount}`}</Badge>
   ) : null;
   const variablesBadge = variablesDiff ? (
-    <Badge variant="warning" size="sm">
+    <Badge variant="yellow" size="sm">
       modified
     </Badge>
   ) : null;
@@ -664,7 +665,8 @@ interface AgentPlaygroundConfigProps {
 }
 
 export function AgentPlaygroundConfig({ agentId, selectedVersionId, latestVersionId }: AgentPlaygroundConfigProps) {
-  const { form, readOnly } = useAgentEditFormContext();
+  const { form, readOnly, isCodeAgentOverride, editorConfig } = useAgentEditFormContext();
+  const { isInstructionsLocked } = getEditorOwnership(isCodeAgentOverride, editorConfig);
   const tools = form.watch('tools');
   const instructionBlocks = form.watch('instructionBlocks');
   const variables = form.watch('variables') as JsonSchema | undefined;
@@ -698,7 +700,7 @@ export function AgentPlaygroundConfig({ agentId, selectedVersionId, latestVersio
                 <ConfigTabLabel
                   title="Tools"
                   icon={<Wrench />}
-                  badge={toolCount > 0 ? <Badge variant="default" size="sm">{`${toolCount}`}</Badge> : undefined}
+                  badge={toolCount > 0 ? <Badge size="sm">{`${toolCount}`}</Badge> : undefined}
                 />
               </Tab>
             </TabList>
@@ -739,7 +741,11 @@ export function AgentPlaygroundConfig({ agentId, selectedVersionId, latestVersio
                 </Txt>
               </div>
 
-              {readOnly ? <ReadOnlyInstructions blocks={instructionBlocks} /> : <InstructionBlocksPage />}
+              {readOnly || isInstructionsLocked ? (
+                <ReadOnlyInstructions blocks={instructionBlocks} />
+              ) : (
+                <InstructionBlocksPage />
+              )}
             </TabContent>
 
             <TabContent value="tools" className="px-4 py-0 pb-4">

@@ -1,6 +1,6 @@
 ---
 title: "Nuxt | Frameworks"
-description: "Get started with Mastra and Nuxt"
+description: "Build a tool-calling Mastra agent in Nuxt, create a server route and Vue chat interface with AI SDK UI, and test streamed agent responses."
 packages:
   - '@mastra/core'
 ---
@@ -47,9 +47,9 @@ npx mastra@latest init
 
 This creates a `mastra` folder with an example weather agent and the following files:
 
-- `index.ts` - Mastra config, including memory
-- `tools/weather-tool.ts` - a tool to fetch weather for a given location
-- `agents/weather-agent.ts`- a weather agent with a prompt that uses the tool
+- `index.ts`: Mastra config, including memory
+- `tools/weather-tool.ts`: A tool to fetch weather for a given location
+- `agents/weather-agent.ts`: A weather agent with a prompt that uses the tool
 
 You'll call `weather-agent.ts` from your Nuxt server routes in the next steps.
 
@@ -438,7 +438,7 @@ Congratulations on building your Mastra agent with Nuxt! 🎉
 From here, you can extend the project with your own tools and logic:
 
 - Learn more about [agents](/docs/agents/overview)
-- Give your agent its own [tools](/docs/agents/using-tools)
+- Give your agent its own [tools](/docs/agents/tools)
 - Add human-like [memory](/docs/memory/overview) to your agent
 
 When you're ready, read more about how Mastra integrates with AI SDK UI and Nuxt, and how to deploy your agent anywhere:

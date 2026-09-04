@@ -91,6 +91,10 @@ describe('Anthropic signed thinking round-trip', () => {
           { type: 'text', text: 'Hello.' },
         ],
       },
+      // Real replay requests always end with a user (or tool) turn; a legacy
+      // assistant message followed by a new user turn is not protected from
+      // sanitization.
+      { role: 'user', content: [{ type: 'text', text: 'Continue.' }] },
     ];
 
     const result = await new ProviderHistoryCompat().processLLMRequest({

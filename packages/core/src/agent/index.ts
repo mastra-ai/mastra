@@ -50,6 +50,7 @@ export type {
   DelegationCompleteContext,
   DelegationCompleteResult,
   OnDelegationCompleteHandler,
+  DelegationHookError,
   DelegationConfig,
   MessageFilterContext,
   /** @deprecated Use MessageFilterContext instead */

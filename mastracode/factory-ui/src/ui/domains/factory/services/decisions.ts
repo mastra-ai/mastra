@@ -1,5 +1,15 @@
-/** `proposed`: a run waiting for someone to release it. `dismissed`: one turned down, so it never runs. */
-export type FactoryDecisionStatus = 'pending' | 'proposed' | 'dismissed' | 'leased' | 'retry' | 'succeeded' | 'failed';
+import type { FactoryDispatchFailureCode } from '@mastra/factory/storage/domains/work-items/base';
+
+/** `dismissed` is human rejection; `superseded` means newer Factory state made a proposal obsolete. */
+export type FactoryDecisionStatus =
+  | 'pending'
+  | 'proposed'
+  | 'dismissed'
+  | 'superseded'
+  | 'leased'
+  | 'retry'
+  | 'succeeded'
+  | 'failed';
 
 /** What a person can do to a queued effect from the board or the Rules page. */
 export type FactoryDecisionAction = 'approve' | 'dismiss' | 'retry';
@@ -11,8 +21,13 @@ export interface FactoryDecisionSummary {
   type: string;
   /** Session slot a proposed run fills, so the card can name what it starts. */
   role: string | null;
+  /** Where a linked card is synced from; `null` for effects that are not `upsertLinkedWorkItem`. */
+  source: 'github-issue' | 'github-pr' | 'linear-issue' | 'manual' | null;
   status: FactoryDecisionStatus;
   attempts: number;
+  failureOccurrence: number;
+  failureCode: FactoryDispatchFailureCode | null;
+  canRetry: boolean;
   lastError: string | null;
   createdAt: string;
   updatedAt: string;

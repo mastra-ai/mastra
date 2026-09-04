@@ -2,50 +2,62 @@ import { Button } from '@mastra/playground-ui/components/Button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@mastra/playground-ui/components/Dialog';
 import { MainSidebar } from '@mastra/playground-ui/components/MainSidebar';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { GitPullRequest, SquareKanban } from 'lucide-react';
+import { SidebarSectionHeading } from '../../../SidebarSectionHeading';
 import { useState } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router';
 
-import { useQueryClient } from '@tanstack/react-query';
-
-import { queryKeys } from '../../../../api/keys';
-import { useWorkspaceActivity } from '../../../../hooks/useWorkspaceActivity';
-import { useWorkspaceAttention } from '../../../../hooks/useWorkspaceAttention';
+import { useFactoryAuth } from '../../../../hooks/useFactoryAuth';
+import { useActiveRunResources } from '../../../../hooks/useActiveRunResources';
 import { useWorkItemsQuery } from '../../../../hooks/useWorkItems';
 import { useWorkspacePullRequestMerges } from '../../../../hooks/useWorkspacePullRequestMerges';
 import { useDeleteWorkspaceMutation, useWorkspacesQuery } from '../../../../hooks/useWorkspaces';
 import { useChatSessionContext } from '../../chat/context/useChatSessionContext';
 import { AGENT_CONTROLLER_ID } from '../../chat/services/constants';
-import { githubNumberForItem } from '../../factory/boardItems';
-import { relatedWorkItems, relationshipLabel } from '../../factory/services/relationships';
+import { itemAwaitsPerson } from '../../factory/boardCardStatus';
+import { githubNumberForItem, pullRequestStatusForItem } from '../../factory/boardItems';
+import { useItemDecisions } from '../../factory/hooks/useBoardDecisions';
+import { relatedWorkItemIndex, relationshipLabel } from '../../factory/services/relationships';
+import type { WorkItem } from '../../factory/services/workItems';
+import { isTerminalStage } from '../../factory/stages';
 import { usePinnedSessions } from '../hooks/usePinnedSessions';
-import type { FactoryUserSession } from '../services/github';
-import { getFactorySessionKind } from '../services/sessionPresentation';
+import type { FactoryUserSession } from '../services/user-sessions';
+import { getFactorySessionKind, getSessionOwnerDetails } from '../services/sessionPresentation';
+import type { SessionViewerProfile } from '../services/sessionPresentation';
 import { SessionNavRow } from './SessionNavRow';
-import type { SessionRowStatus } from './SessionNavRow';
+import { sessionRowStatus } from '../services/sessionStatus';
 import type { SessionPreviewDetails } from './SessionPreviewCard';
 
 const COLLAPSED_ROW_COUNT = 5;
 
-const byPinnedThenRecent = (a: FactoryWorkspaceRow, b: FactoryWorkspaceRow) =>
-  Number(b.pinned) - Number(a.pinned) || b.updatedAt.localeCompare(a.updatedAt);
-
-const stillUnfolding = (row: FactoryWorkspaceRow) => row.active || row.initializing || row.running || row.attention;
-
-// Who keeps one of the collapsed slots. A pin is an explicit request, so it wins
-// over a session that merely happens to be busy.
-const bySlotPriority = (a: FactoryWorkspaceRow, b: FactoryWorkspaceRow) =>
-  Number(b.pinned) - Number(a.pinned) ||
-  Number(stillUnfolding(b)) - Number(stillUnfolding(a)) ||
-  b.updatedAt.localeCompare(a.updatedAt);
-
-function workspaceStatus(row: FactoryWorkspaceRow): SessionRowStatus | undefined {
-  // An active thread means work is happening even if the workspace record has
-  // not yet been stamped materialized — surface the more informative state.
-  if (row.running) return 'working';
-  if (row.initializing) return 'initializing';
-  if (row.attention) return 'ready';
-  return undefined;
+/** Nothing left to watch: the card is done or canceled, or its pull request is merged or closed. */
+function isSettled(item: WorkItem | undefined, pullRequest: WorkItem | undefined): boolean {
+  if (item?.stages.some(isTerminalStage)) return true;
+  if (!pullRequest) return false;
+  const status = pullRequestStatusForItem(pullRequest);
+  return status === 'merged' || status === 'closed';
 }
+
+/** Waiting on a person or moving, then open, then finished — a card the agent is still in is never finished. */
+function watchRank(row: FactoryWorkspaceRow): number {
+  if (row.initializing || row.running || row.attention) return 0;
+  return row.settled ? 2 : 1;
+}
+
+/**
+ * Explicit intent first, then whatever still has work in it, newest first inside a tier.
+ * Sorting on creation rather than activity is what keeps a row still: every card write bumps
+ * `updatedAt` and the board polls, so an activity order reshuffles the sidebar under the reader.
+ * Opening a session is that same reshuffle with the reader's own click behind it, so the row
+ * being read holds its place and is kept reachable by `latestRows` instead.
+ * Session id closes it into a total order — the sessions endpoint sorts nothing, so anything
+ * falling through to its order would still shuffle.
+ */
+const bySessionPriority = (a: FactoryWorkspaceRow, b: FactoryWorkspaceRow) =>
+  Number(b.pinned) - Number(a.pinned) ||
+  watchRank(a) - watchRank(b) ||
+  b.createdAt.localeCompare(a.createdAt) ||
+  b.workspace.sessionId.localeCompare(a.workspace.sessionId);
 
 export function WorkspacesSection() {
   const { factoryId, sessionId } = useParams<{ factoryId: string; sessionId: string }>();
@@ -57,21 +69,17 @@ export function WorkspacesSection() {
   const scope = { agentControllerId: AGENT_CONTROLLER_ID, resourceId };
   const deleteWorkspace = useDeleteWorkspaceMutation(factoryId, projectRepositoryId, scope);
   const [confirmDelete, setConfirmDelete] = useState<FactoryUserSession | null>(null);
+  const auth = useFactoryAuth();
+  const viewerUserId = auth.data?.user?.userId;
   const { pinnedSessions, setPinned } = usePinnedSessions();
   const workItems = useWorkItemsQuery(factoryId);
   const workspaceRows = workspaces.data?.workspaces ?? [];
   const workspaceIds = workspaceRows.map(workspace => workspace.sessionId);
-  const runningByPath = useWorkspaceActivity({
+  const runningByPath = useActiveRunResources({
     agentControllerId: AGENT_CONTROLLER_ID,
-    workspaceIds,
-    baseUrl,
+    resourceIds: workspaceIds,
   });
-  const queryClient = useQueryClient();
-  // The server re-derives session titles at the end of a run.
-  const { attentionByPath, clearAttention } = useWorkspaceAttention(
-    runningByPath,
-    () => void queryClient.invalidateQueries({ queryKey: queryKeys.sessions(projectRepositoryId) }),
-  );
+  const { proposalByItem, effectByItem } = useItemDecisions(factoryId);
 
   const allWorkItems = workItems.data ?? [];
   const workItemByPath = new Map(
@@ -81,17 +89,18 @@ export function WorkspacesSection() {
       ),
     ),
   );
+  const relatedItemsFor = relatedWorkItemIndex(allWorkItems);
+  const latestPullRequestFor = (item: WorkItem) => {
+    if (item.source === 'github-pr') return item;
+    return relatedItemsFor(item)
+      .filter(related => related.source === 'github-pr')
+      .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))[0];
+  };
+
   const rows = workspaceRows.flatMap(workspace => {
     const workItemSession = workItemByPath.get(workspace.sessionId);
     const item = workItemSession?.item;
-    const pullRequest =
-      item?.source === 'github-pr'
-        ? item
-        : item
-          ? [...relatedWorkItems(item, allWorkItems).filter(candidate => candidate.source === 'github-pr')].sort(
-              (a, b) => b.updatedAt.localeCompare(a.updatedAt),
-            )[0]
-          : undefined;
+    const pullRequest = item && latestPullRequestFor(item);
     const pullRequestNumber = pullRequest ? githubNumberForItem(pullRequest) : undefined;
     const active = workspace.sessionId === sessionId;
     const running = runningByPath[workspace.sessionId] === true;
@@ -106,10 +115,12 @@ export function WorkspacesSection() {
         active,
         initializing,
         running,
-        attention: attentionByPath[workspace.sessionId] === true,
+        attention: item !== undefined && itemAwaitsPerson(proposalByItem.get(item.id), effectByItem.get(item.id)),
         review: getFactorySessionKind(workspace, item) === 'review',
         itemLabel: item && item.source !== 'manual' ? relationshipLabel(item) : undefined,
         itemTitle: item?.title,
+        settled: isSettled(item, pullRequest),
+        createdAt: workspace.createdAt,
         updatedAt: item?.updatedAt ?? workspace.updatedAt,
         threadId: workItemSession?.threadId,
         pullRequestNumber,
@@ -119,9 +130,12 @@ export function WorkspacesSection() {
     ];
   });
   const latestRows = (review: boolean) => {
-    const all = rows.filter(row => row.review === review).sort(byPinnedThenRecent);
-    // The cap holds either way — priority only decides which rows fill the slots.
-    const visible = [...all].sort(bySlotPriority).slice(0, COLLAPSED_ROW_COUNT).sort(byPinnedThenRecent);
+    const all = rows.filter(row => row.review === review).sort(bySessionPriority);
+    const visible = all.slice(0, COLLAPSED_ROW_COUNT);
+    // Deep links and board handoffs can open a session that sorts below the fold;
+    // show it rather than promote it, so the list never moves under the reader.
+    const open = all.find(row => row.active);
+    if (open && !visible.includes(open)) visible.push(open);
     return { visible, all };
   };
   const workRows = latestRows(false);
@@ -148,7 +162,6 @@ export function WorkspacesSection() {
   const pending = deleteWorkspace.isPending;
 
   const openWorkspaceThread = (workspace: FactoryUserSession) => {
-    clearAttention(workspace.sessionId);
     // A workspace's thread id is its own session id (FactoryStartCoordinator
     // seeds the session with threadId = sessionId), so navigate straight there
     // instead of blocking on a session create + thread listing round-trip. The
@@ -177,6 +190,8 @@ export function WorkspacesSection() {
           kind="Work session"
           pending={pending}
           mergedByPath={mergedByPath}
+          viewerUserId={viewerUserId}
+          viewerProfile={auth.data?.user}
           onSelect={openWorkspaceThread}
           onPinChange={setPinned}
           onDelete={setConfirmDelete}
@@ -191,6 +206,8 @@ export function WorkspacesSection() {
           kind="Review session"
           pending={pending}
           mergedByPath={mergedByPath}
+          viewerUserId={viewerUserId}
+          viewerProfile={auth.data?.user}
           onSelect={openWorkspaceThread}
           onPinChange={setPinned}
           onDelete={setConfirmDelete}
@@ -240,6 +257,8 @@ interface FactoryWorkspaceRow {
   review: boolean;
   itemLabel?: string;
   itemTitle?: string;
+  settled: boolean;
+  createdAt: string;
   updatedAt: string;
   threadId?: string;
   pullRequestNumber?: number;
@@ -254,6 +273,8 @@ function WorkspaceGroup({
   kind,
   pending,
   mergedByPath,
+  viewerUserId,
+  viewerProfile,
   onSelect,
   onPinChange,
   onDelete,
@@ -264,6 +285,8 @@ function WorkspaceGroup({
   kind: SessionPreviewDetails['kind'];
   pending: boolean;
   mergedByPath: Record<string, boolean>;
+  viewerUserId: string | undefined;
+  viewerProfile: SessionViewerProfile | undefined;
   onSelect: (workspace: FactoryUserSession) => void;
   onPinChange: (sessionId: string, pinned: boolean) => void;
   onDelete: (workspace: FactoryUserSession) => void;
@@ -272,12 +295,10 @@ function WorkspaceGroup({
   const visibleRows = expanded ? allRows : rows;
   const hiddenCount = allRows.length - rows.length;
   return (
-    <section className="flex flex-col gap-2" aria-label={title}>
-      <div className="flex items-center px-1">
-        <Txt as="span" variant="ui-xs" className="text-icon3 tracking-wide uppercase">
-          {title}
-        </Txt>
-      </div>
+    <section className="flex flex-col gap-1" aria-label={title}>
+      <SidebarSectionHeading icon={kind === 'Review session' ? <GitPullRequest /> : <SquareKanban />}>
+        {title}
+      </SidebarSectionHeading>
       <MainSidebar.NavList>
         {visibleRows.map(row => (
           <SessionNavRow
@@ -290,11 +311,12 @@ function WorkspaceGroup({
             url={row.url}
             active={row.active}
             disabled={pending}
-            merged={mergedByPath[row.workspace.sessionId] === true}
-            status={workspaceStatus(row)}
+            merged={mergedByPath[row.workspace.sessionId] ?? row.knownMerged}
+            status={sessionRowStatus(row)}
             pinned={row.pinned}
             preview={{
               kind,
+              owner: getSessionOwnerDetails(row.workspace, viewerProfile),
               itemLabel: row.itemLabel,
               itemTitle: row.itemTitle,
               branch: row.workspace.branch,
@@ -303,14 +325,18 @@ function WorkspaceGroup({
             }}
             onSelect={() => onSelect(row.workspace)}
             onPinChange={pinned => onPinChange(row.workspace.sessionId, pinned)}
-            onDelete={() => onDelete(row.workspace)}
+            // The DELETE route is owner-only and 404s for non-owners, which the
+            // delete service treats as an idempotent success; offering delete
+            // on a known non-owned row would fake-succeed and the row would
+            // reappear. Unknown viewer (auth disabled) keeps it.
+            onDelete={viewerUserId && row.workspace.userId !== viewerUserId ? undefined : () => onDelete(row.workspace)}
           />
         ))}
       </MainSidebar.NavList>
       {hiddenCount > 0 && (
         <button
           type="button"
-          className="text-icon3 hover:text-icon5 px-1 text-left text-xs"
+          className="text-icon3 hover:text-icon5 pl-3 text-left text-xs"
           onClick={() => setExpanded(value => !value)}
         >
           {expanded ? 'Show less' : `Show ${hiddenCount} more`}

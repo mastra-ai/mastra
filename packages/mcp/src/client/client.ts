@@ -4,7 +4,7 @@ import type { Stream } from 'node:stream';
 import { MastraBase } from '@mastra/core/base';
 import type { RequestContext } from '@mastra/core/di';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import { createTool } from '@mastra/core/tools';
+import { createTool, validateToolOutput } from '@mastra/core/tools';
 import type { NeedsApprovalFn, Tool } from '@mastra/core/tools';
 import { toStandardSchema } from '@mastra/schema-compat';
 import type { JSONSchema7, StandardSchemaWithJSON } from '@mastra/schema-compat';
@@ -138,77 +138,69 @@ function extractModelTextFromToolContent(content: unknown): string | undefined {
 /**
  * Non-enumerable metadata attached to structured tool execute results so
  * `toModelOutput` can read MCP `content` without changing the execute return shape.
+ *
+ * When a tool has an `outputSchema` and the server returns `structuredContent`,
+ * `execute()` returns that structured value directly. The rest of the
+ * CallToolResult envelope is preserved on non-enumerable symbols:
+ * - {@link MCP_CALL_TOOL_CONTENT} holds the MCP `content` blocks (model-facing text).
+ * - {@link MCP_CALL_TOOL_META} holds the result-level `_meta` (e.g. `ui.resourceUri`
+ *   used by MCP Apps hosts), with `ui.serverId` stamped by the client.
+ *
+ * Read them with {@link getMcpCallToolContent} and {@link getMcpCallToolMeta}.
+ * Note: scalar or `null` structured results cannot carry properties, so these
+ * channels are only available when `structuredContent` is an object or array.
  */
 export const MCP_CALL_TOOL_CONTENT = Symbol.for('mastra.mcp.callToolContent');
 
-type ScalarMcpContentReservation = {
-  output?: unknown;
-  content?: unknown;
-  ready: boolean;
-};
-
-function reserveScalarMcpContent(queue: ScalarMcpContentReservation[]): ScalarMcpContentReservation {
-  const reservation = { ready: false };
-  queue.push(reservation);
-  return reservation;
-}
-
-function removeScalarMcpContentReservation(
-  queue: ScalarMcpContentReservation[],
-  reservation: ScalarMcpContentReservation | undefined,
-): void {
-  if (!reservation) return;
-  const index = queue.indexOf(reservation);
-  if (index !== -1) {
-    queue.splice(index, 1);
-  }
-}
+/** Non-enumerable result-level `_meta` attached to structured tool execute results. */
+export const MCP_CALL_TOOL_META = Symbol.for('mastra.mcp.callToolMeta');
 
 function attachMcpCallToolContent(
   structuredContent: unknown,
   content: unknown,
-  scalarMcpContentQueue: ScalarMcpContentReservation[],
-  reservation: ScalarMcpContentReservation | undefined,
+  _meta?: Record<string, unknown>,
 ): unknown {
   if (structuredContent !== null && typeof structuredContent === 'object') {
-    removeScalarMcpContentReservation(scalarMcpContentQueue, reservation);
     Object.defineProperty(structuredContent, MCP_CALL_TOOL_CONTENT, {
       value: content,
       enumerable: false,
       configurable: true,
     });
-    return structuredContent;
-  }
-
-  if (reservation) {
-    reservation.output = structuredContent;
-    reservation.content = content;
-    reservation.ready = true;
+    if (_meta !== undefined) {
+      Object.defineProperty(structuredContent, MCP_CALL_TOOL_META, {
+        value: _meta,
+        enumerable: false,
+        configurable: true,
+      });
+    }
   }
   return structuredContent;
 }
 
-function getMcpCallToolContent(output: unknown, scalarMcpContentQueue: ScalarMcpContentReservation[]): unknown {
-  if (output !== null && typeof output === 'object') {
-    const attached = (output as Record<PropertyKey, unknown>)[MCP_CALL_TOOL_CONTENT];
-    if (attached !== undefined) {
-      return attached;
-    }
-  }
-
-  const index = scalarMcpContentQueue.findIndex(entry => entry.ready && Object.is(entry.output, output));
-  if (index !== -1) {
-    return scalarMcpContentQueue.splice(index, 1)[0]?.content;
-  }
-
-  return undefined;
+/**
+ * Read the MCP `content` blocks preserved on a structured tool execute result.
+ * Returns `undefined` for scalar results or results without a hidden content channel.
+ */
+export function getMcpCallToolContent(output: unknown): unknown {
+  if (output === null || typeof output !== 'object') return undefined;
+  return (output as Record<PropertyKey, unknown>)[MCP_CALL_TOOL_CONTENT];
 }
 
-function createStructuredToolToModelOutput(
-  scalarMcpContentQueue: ScalarMcpContentReservation[],
-): (output: unknown) => { type: 'text'; value: string } | { type: 'json'; value: unknown } {
+/**
+ * Read the result-level `_meta` preserved on a structured tool execute result
+ * (e.g. `_meta.ui.resourceUri` for MCP Apps detection). Returns `undefined` for
+ * scalar results or results whose CallToolResult had no `_meta`.
+ */
+export function getMcpCallToolMeta(output: unknown): Record<string, unknown> | undefined {
+  if (output === null || typeof output !== 'object') return undefined;
+  return (output as Record<PropertyKey, unknown>)[MCP_CALL_TOOL_META] as Record<string, unknown> | undefined;
+}
+
+function createStructuredToolToModelOutput(): (output: unknown) =>
+  | { type: 'text'; value: string }
+  | { type: 'json'; value: unknown } {
   return output => {
-    const modelText = extractModelTextFromToolContent(getMcpCallToolContent(output, scalarMcpContentQueue));
+    const modelText = extractModelTextFromToolContent(getMcpCallToolContent(output));
     if (modelText !== undefined) {
       return { type: 'text', value: modelText };
     }
@@ -379,6 +371,15 @@ export class InternalMastraMCPClient extends MastraBase {
       },
     };
 
+    // Opt-in protocol version negotiation. Omitted keeps the SDK default
+    // ('legacy'): the plain 2025 connect sequence, byte-identical to today.
+    // 'auto' probes with server/discover and falls back to initialize;
+    // '2026-07-28' pins that revision and fails loudly when unavailable.
+    const versionNegotiation =
+      server.protocolVersion === undefined
+        ? undefined
+        : { mode: server.protocolVersion === 'auto' ? ('auto' as const) : { pin: server.protocolVersion } };
+
     this.client = new Client(
       {
         name,
@@ -387,6 +388,7 @@ export class InternalMastraMCPClient extends MastraBase {
       {
         capabilities: clientCapabilities,
         ...(server.jsonSchemaValidator ? { jsonSchemaValidator: server.jsonSchemaValidator } : {}),
+        ...(versionNegotiation ? { versionNegotiation } : {}),
       },
     );
 
@@ -606,10 +608,9 @@ export class InternalMastraMCPClient extends MastraBase {
           throw error;
         }
 
-        // A policy violation is final: retrying the blocked host over SSE cannot
-        // succeed, and falling through would bury the policy error under a generic
-        // "could not connect" message.
-        if (isUrlPolicyError(error)) {
+        // Policy violations and pinned protocol negotiation failures are final:
+        // retrying over legacy SSE cannot succeed and would bury the typed error.
+        if (isUrlPolicyError(error) || this.serverConfig.protocolVersion === '2026-07-28') {
           throw error;
         }
 
@@ -1205,6 +1206,11 @@ export class InternalMastraMCPClient extends MastraBase {
 
   setElicitationRequestHandler(handler: ElicitationHandler): void {
     this.log('debug', 'Setting elicitation request handler');
+    // The handler serves both protocol eras: on legacy (2025-era) connections it
+    // answers elicitation/create wire requests; on negotiated 2026-07-28
+    // connections the SDK's multi-round-trip driver dispatches embedded
+    // elicitation requests from input_required results through the same
+    // registered handler and retries the originating call automatically.
     if (!this.hasElicitationCapability) {
       try {
         this.client.registerCapabilities({ elicitation: { form: {} } });
@@ -1237,8 +1243,12 @@ export class InternalMastraMCPClient extends MastraBase {
   }
 
   /**
-   * Wraps the output schema with a validator that always succeeds. The MCP client validates
-   * structuredContent via AJV; the JSON schema is surfaced here for documentation only.
+   * Wraps the output schema with a validator that always succeeds. The tool's execute wrapper
+   * returns the full CallToolResult envelope when there is no structuredContent (and for
+   * in-band errors with `onToolError: 'return'`), which would never match the advertised
+   * outputSchema — so enforcement happens inside the execute wrapper, scoped to the
+   * structuredContent path (see buildToolFromListEntry). The JSON schema is surfaced here
+   * for documentation.
    */
   private convertOutputSchema(
     outputSchema: Awaited<ReturnType<Client['listTools']>>['tools'][0]['outputSchema'],
@@ -1407,7 +1417,13 @@ export class InternalMastraMCPClient extends MastraBase {
                 },
               }
             : {};
-        const scalarMcpContentQueue: ScalarMcpContentReservation[] = [];
+        // Real validator for structuredContent. Kept separate from the Tool's outputSchema
+        // (whose validator is a no-op — see convertOutputSchema) because only the
+        // structuredContent success path should be validated, not envelope returns.
+        const rawOutputSchema = tool.outputSchema
+          ? (('jsonSchema' in tool.outputSchema ? tool.outputSchema.jsonSchema : tool.outputSchema) as JSONSchema7)
+          : undefined;
+        const outputValidator = rawOutputSchema ? toStandardSchema(rawOutputSchema) : undefined;
         const mastraTool = createTool({
           id: `${this.name}_${tool.name}`,
           description: tool.description || '',
@@ -1427,7 +1443,7 @@ export class InternalMastraMCPClient extends MastraBase {
             forwardInstructions: this.forwardInstructions,
             instructionsMaxLength: this.instructionsMaxLength,
           },
-          ...(tool.outputSchema ? { toModelOutput: createStructuredToolToModelOutput(scalarMcpContentQueue) } : {}),
+          ...(tool.outputSchema ? { toModelOutput: createStructuredToolToModelOutput() } : {}),
           execute: async (
             input: any,
             context?: {
@@ -1445,9 +1461,6 @@ export class InternalMastraMCPClient extends MastraBase {
             }
 
             const operationContext = context?.requestContext ?? null;
-            const scalarMcpContentReservation = tool.outputSchema
-              ? reserveScalarMcpContent(scalarMcpContentQueue)
-              : undefined;
 
             return this.operationContextStore.run(operationContext, async () => {
               const executeToolCall = async () => {
@@ -1492,15 +1505,31 @@ export class InternalMastraMCPClient extends MastraBase {
                 this.log('debug', `Tool executed successfully: ${tool.name}`);
 
                 if (res.structuredContent !== undefined) {
+                  // Enforce the server-advertised outputSchema before the result reaches the
+                  // model. This covers both live-discovered tools and tools hydrated from a
+                  // cached catalog (which never populate the MCP SDK's tools/list output-schema
+                  // cache, so the SDK's own AJV check does not fire for them). On mismatch,
+                  // return the same structured ValidationError shape createTool produces so
+                  // the model can self-correct. Skipped for isError results, which are handled
+                  // above / by the `onToolError: 'return'` envelope path.
+                  if (!res.isError && outputValidator) {
+                    const validation = validateToolOutput(outputValidator, res.structuredContent, tool.name);
+                    if (validation.error) {
+                      this.log('debug', `Tool output failed schema validation: ${tool.name}`, {
+                        message: validation.error.message,
+                      });
+                      return validation.error;
+                    }
+                  }
+                  // Attach content metadata to the original structuredContent reference so the
+                  // hidden symbol channels (content/_meta) are preserved.
                   return attachMcpCallToolContent(
                     res.structuredContent,
                     res.content,
-                    scalarMcpContentQueue,
-                    scalarMcpContentReservation,
+                    res._meta ? this.stampServerIdInMeta(res._meta) : undefined,
                   );
                 }
 
-                removeScalarMcpContentReservation(scalarMcpContentQueue, scalarMcpContentReservation);
                 return res;
               };
 
@@ -1533,7 +1562,6 @@ export class InternalMastraMCPClient extends MastraBase {
                       reconnectError: reconnectError instanceof Error ? reconnectError.stack : String(reconnectError),
                       toolArgs: input,
                     });
-                    removeScalarMcpContentReservation(scalarMcpContentQueue, scalarMcpContentReservation);
                     throw reconnectError;
                   }
                 }
@@ -1543,7 +1571,6 @@ export class InternalMastraMCPClient extends MastraBase {
                   error: e instanceof Error ? e.stack : JSON.stringify(e, null, 2),
                   toolArgs: input,
                 });
-                removeScalarMcpContentReservation(scalarMcpContentQueue, scalarMcpContentReservation);
                 throw e;
               }
             });

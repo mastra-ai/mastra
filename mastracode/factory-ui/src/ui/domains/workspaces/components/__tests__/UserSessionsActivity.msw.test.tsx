@@ -1,18 +1,20 @@
 /**
- * Sidebar activity dot for user sessions.
+ * Sidebar activity belt for user sessions.
  *
- * Unlike factory workspaces, user sessions each own their own `resourceId`
- * (=== `sessionId`), so activity is polled per session. This suite pins down
+ * User sessions are addressed by their own `sessionId` as `resourceId`, so they
+ * read the same active-run registry as factory workspaces. This suite pins down
  * the three-state indicator (initializing / working / idle) for those rows.
  */
-import { screen } from '@testing-library/react';
+import { screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { MemoryRouter, Route, Routes } from 'react-router';
 import { describe, expect, it } from 'vitest';
 
+import { queryKeys } from '../../../../../api/keys';
 import { server } from '../../../../../../e2e/ui/msw-server';
 import { TEST_BASE_URL, renderWithProviders, waitForMutationsIdle } from '../../../../../../e2e/ui/render';
-import type { FactoryUserSession } from '../../services/github';
+import { AGENT_CONTROLLER_ID } from '../../../chat/services/constants';
+import type { FactoryUserSession } from '../../services/user-sessions';
 import { UserSessionsSection } from '../UserSessionsSection';
 
 const factoryId = 'fp-1';
@@ -26,6 +28,7 @@ function makeSession(
     projectRepositoryId,
     orgId: 'org-1',
     userId: 'user-1',
+    visibility: 'org' as const,
     baseBranch: 'main',
     sandboxId: null,
     sandboxWorkdir: null,
@@ -67,15 +70,15 @@ function stubProjectAndSessions(sessions: FactoryUserSession[]) {
 
 function stubActiveSessions(activeIds: Set<string>) {
   server.use(
-    http.get(`${TEST_BASE_URL}/api/agent-controller/:agentControllerId/sessions/:resourceId/threads`, ({ params }) => {
-      const resourceId = String(params.resourceId);
-      if (activeIds.has(resourceId)) {
-        return HttpResponse.json({
-          threads: [{ id: `${resourceId}-thread`, state: 'active', tags: {}, createdAt: '2026-07-20T00:00:00.000Z' }],
-        });
-      }
-      return HttpResponse.json({ threads: [] });
-    }),
+    http.get(`${TEST_BASE_URL}/api/agent-controller/:agentControllerId/active-runs`, () =>
+      HttpResponse.json({
+        runs: [...activeIds].map(sessionId => ({
+          runId: `run-${sessionId}`,
+          resourceId: sessionId,
+          threadId: sessionId,
+        })),
+      }),
+    ),
   );
 }
 
@@ -90,7 +93,7 @@ function renderSection() {
 }
 
 describe('User sessions sidebar activity', () => {
-  it('lights the working dot when the session has an active thread', async () => {
+  it('lights the working belt when the session has an active thread', async () => {
     stubProjectAndSessions([makeSession({ sessionId: 'sess-1', branch: 'user/feature-a' })]);
     stubActiveSessions(new Set(['sess-1']));
 
@@ -100,7 +103,7 @@ describe('User sessions sidebar activity', () => {
     await screen.findByRole('status', { name: 'Agent working in feature-a' });
   });
 
-  it('shows the initializing dot for a session that has not materialized yet', async () => {
+  it('shows the initializing belt for a session that has not materialized yet', async () => {
     stubProjectAndSessions([makeSession({ sessionId: 'sess-2', branch: 'user/feature-b', materializedAt: null })]);
     stubActiveSessions(new Set());
 
@@ -110,7 +113,48 @@ describe('User sessions sidebar activity', () => {
     await screen.findByRole('status', { name: 'Initializing feature-b' });
   });
 
-  it('leaves an idle materialized session without a status dot', async () => {
+  it('resolves the initializing belt once the run that materialized the session finishes', async () => {
+    let settled = false;
+    const active = new Set(['sess-4']);
+    stubProjectAndSessions([]);
+    // Serve a mutable session row so the next sessions refetch observes the
+    // stamped `materializedAt` (registered after the base stub — the most
+    // recent handler wins).
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/github/projects/${projectRepositoryId}/sessions`, () =>
+        HttpResponse.json({
+          sessions: [
+            makeSession({
+              sessionId: 'sess-4',
+              branch: 'user/feature-d',
+              materializedAt: settled ? '2026-07-20T00:00:00.000Z' : null,
+            }),
+          ],
+        }),
+      ),
+    );
+    stubActiveSessions(active);
+
+    const { client } = renderSection();
+    await waitForMutationsIdle(client);
+    await screen.findByRole('status', { name: 'Agent working in feature-d' });
+
+    // The run finishes and the server stamps materializedAt; the sessions
+    // list refetches on its own cadence.
+    settled = true;
+    active.delete('sess-4');
+    await client.invalidateQueries({
+      queryKey: queryKeys.agentControllerActivity(AGENT_CONTROLLER_ID, TEST_BASE_URL),
+    });
+    await client.invalidateQueries({ queryKey: queryKeys.sessions(projectRepositoryId) });
+    await waitForMutationsIdle(client);
+
+    // The belt goes dark on an idle session, not back on (or stuck at) initializing.
+    const row = screen.getByRole('button', { name: 'feature-d' }).closest('li');
+    await waitFor(() => expect(row?.querySelector('[role="status"]')).toBeNull());
+  });
+
+  it('leaves an idle materialized session without a status belt', async () => {
     stubProjectAndSessions([makeSession({ sessionId: 'sess-3', branch: 'user/feature-c' })]);
     stubActiveSessions(new Set());
 

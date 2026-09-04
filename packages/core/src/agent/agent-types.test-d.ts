@@ -1,8 +1,10 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
+import type { ProviderDefinedTool } from '@internal/external-types';
 import { assertType, describe, expectTypeOf, it } from 'vitest';
 import { z } from 'zod/v4';
 import type { RequestContext } from '../request-context';
 import type { PublicSchema } from '../schema';
+import { createTool, webSearchTool } from '../tools';
 import { Agent } from './agent';
 import type { AgentExecutionOptions, PublicAgentExecutionOptions } from './agent.types';
 import type { AgentConfig } from './types';
@@ -326,6 +328,106 @@ describe('Agent Type Tests', () => {
       const decline: Parameters<typeof agent.declineToolCallGenerate>[0] = { runId: 'r', model: {} as any };
       assertType<string>(approve.runId);
       assertType<string>(decline.runId);
+    });
+  });
+
+  describe('Issue #15229: `AgentConfig.tools` rejects plain functions as individual entries', () => {
+    // `ProviderDefinedTool`'s v5 branch is all-optional with an index signature, which made
+    // any value — including a bare function — satisfy `ToolsInput`. Nested resolvers like
+    // `tools: { myTool: () => realTool }` compiled but crashed at runtime in `listTools()`.
+    const realTool = createTool({
+      id: 'real-tool',
+      description: 'a real tool',
+      inputSchema: z.object({ q: z.string() }),
+      execute: async () => ({ ok: true }),
+    });
+
+    it('rejects a function entry that returns a valid tool', () => {
+      const config: AgentConfig = {
+        id: 'a',
+        name: 'A',
+        model: {} as any,
+        instructions: 'hi',
+        // @ts-expect-error - per-entry resolver functions are not tools
+        tools: { myTool: () => realTool },
+      };
+      assertType<string>(config.name!);
+    });
+
+    it('rejects a function entry that returns a non-tool value', () => {
+      const config: AgentConfig = {
+        id: 'a',
+        name: 'A',
+        model: {} as any,
+        instructions: 'hi',
+        // @ts-expect-error - per-entry resolver functions are not tools
+        tools: { myTool: () => 42 },
+      };
+      assertType<string>(config.name!);
+    });
+
+    it('rejects an async function entry', () => {
+      const config: AgentConfig = {
+        id: 'a',
+        name: 'A',
+        model: {} as any,
+        instructions: 'hi',
+        // @ts-expect-error - per-entry resolver functions are not tools
+        tools: { myTool: async () => ({}) },
+      };
+      assertType<string>(config.name!);
+    });
+
+    it('accepts a static tool entry', () => {
+      const config: AgentConfig = {
+        id: 'a',
+        name: 'A',
+        model: {} as any,
+        instructions: 'hi',
+        tools: { myTool: realTool },
+      };
+      assertType<string>(config.name!);
+    });
+
+    it('accepts the webSearchTool placeholder as an entry', () => {
+      const config: AgentConfig = {
+        id: 'a',
+        name: 'A',
+        model: {} as any,
+        instructions: 'hi',
+        tools: { searchTheWeb: webSearchTool },
+      };
+      assertType<string>(config.name!);
+    });
+
+    it('accepts a provider-defined tool entry', () => {
+      const config: AgentConfig = {
+        id: 'a',
+        name: 'A',
+        model: {} as any,
+        instructions: 'hi',
+        tools: {
+          googleSearch: {
+            type: 'provider-defined',
+            id: 'google.google_search',
+            args: {},
+          } as any as ProviderDefinedTool & {
+            id: string;
+          },
+        },
+      };
+      assertType<string>(config.name!);
+    });
+
+    it('still accepts a whole-map resolver on `tools`', () => {
+      const config: AgentConfig = {
+        id: 'a',
+        name: 'A',
+        model: {} as any,
+        instructions: 'hi',
+        tools: () => ({ myTool: realTool }),
+      };
+      assertType<string>(config.name!);
     });
   });
 });

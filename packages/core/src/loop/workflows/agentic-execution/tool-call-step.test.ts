@@ -42,6 +42,212 @@ const makeBaseExecuteParams = (suspend: Mock, overrides: any = {}) => ({
   ...overrides,
 });
 
+describe('createToolCallStep background task resume with falsy payload', () => {
+  afterEach(() => {
+    vi.clearAllMocks();
+    vi.restoreAllMocks();
+  });
+
+  const runBackgroundResume = async (resumeData: unknown) => {
+    const controller = { enqueue: vi.fn() };
+    const streamState = { serialize: vi.fn().mockReturnValue('serialized-state') };
+    const messageList = createMessageList();
+    const backgroundTaskManager = {
+      // A suspended task already exists for this tool call, so the step should
+      // resume it rather than dispatch a brand new one.
+      listTasks: vi.fn(async () => ({ tasks: [{ id: 'suspended-task-1' }], total: 1 })),
+      resume: vi.fn(async () => ({ id: 'suspended-task-1' })),
+      enqueue: vi.fn(async () => ({ task: { id: 'brand-new-task' }, fallbackToSync: false })),
+      cancel: vi.fn(),
+      waitForNextTask: vi.fn(),
+    };
+    const tools = {
+      'background-tool': {
+        backgroundConfig: { enabled: true },
+        execute: vi.fn(async () => ({ ok: true })),
+      },
+    } as any;
+
+    const toolCallStep = createToolCallStep({
+      tools,
+      messageList,
+      controller,
+      runId: 'current-run',
+      streamState,
+      _internal: {
+        backgroundTaskManager,
+        backgroundTaskManagerConfig: { enabled: true },
+        agentBackgroundConfig: { tools: 'all' },
+      },
+    } as any);
+
+    await toolCallStep.execute(
+      makeBaseExecuteParams(vi.fn(), {
+        resumeData,
+        inputData: { toolCallId: 'call-1', toolName: 'background-tool', args: { query: 'customers' } },
+      }),
+    );
+
+    return backgroundTaskManager;
+  };
+
+  const runBackgroundDispatchOnResume = async (resumeData: unknown) => {
+    const controller = { enqueue: vi.fn() };
+    const streamState = { serialize: vi.fn().mockReturnValue('serialized-state') };
+    const messageList = createMessageList();
+    const backgroundTaskManager = {
+      // No suspended task, so this resume turn dispatches instead. The chunk comes
+      // back on the CURRENT run id, which is the case the replay gate guards.
+      listTasks: vi.fn(async () => ({ tasks: [], total: 0 })),
+      resume: vi.fn(),
+      enqueue: vi.fn(async (_payload: any, context: any) => {
+        context.onChunk?.({
+          type: 'background-task-completed',
+          payload: {
+            taskId: 'task-1',
+            toolCallId: 'call-1',
+            toolName: 'background-tool',
+            agentId: 'agent-1',
+            runId: 'current-run',
+            result: { ok: true },
+            completedAt: new Date(),
+          },
+        });
+        return { task: { id: 'task-1' }, fallbackToSync: false };
+      }),
+      cancel: vi.fn(),
+      waitForNextTask: vi.fn(),
+    };
+    const tools = {
+      'background-tool': { backgroundConfig: { enabled: true }, execute: vi.fn() },
+    } as any;
+
+    const toolCallStep = createToolCallStep({
+      tools,
+      messageList,
+      controller,
+      runId: 'current-run',
+      streamState,
+      _internal: {
+        backgroundTaskManager,
+        backgroundTaskManagerConfig: { enabled: true },
+        agentBackgroundConfig: { tools: 'all' },
+      },
+    } as any);
+
+    await toolCallStep.execute(
+      makeBaseExecuteParams(vi.fn(), {
+        resumeData,
+        inputData: { toolCallId: 'call-1', toolName: 'background-tool', args: { query: 'customers' } },
+      }),
+    );
+
+    await vi.waitFor(() => {
+      expect(controller.enqueue).toHaveBeenCalled();
+    });
+    return controller;
+  };
+
+  it('replays the tool-call chunk on a same-run resume with a falsy payload', async () => {
+    // The replay exists so a reloading UI still renders the invocation that was streamed
+    // in the earlier turn. A falsy resume payload is still a resume, so it must replay.
+    const controller = await runBackgroundDispatchOnResume(false);
+
+    const replayed = controller.enqueue.mock.calls
+      .map(([chunk]: [any]) => chunk)
+      .filter((chunk: any) => chunk.type === 'tool-call');
+    expect(replayed).toHaveLength(1);
+  });
+
+  it('records the background result to memory on a same-run resume with a falsy payload', async () => {
+    // When no matching tool-invocation is on the list, the result is appended as a standalone
+    // tool message so memory still records it. A falsy resume payload must not skip that.
+    const streamState = { serialize: vi.fn().mockReturnValue('serialized-state') };
+    const added: any[] = [];
+    const messageList = {
+      get: {
+        input: { aiV5: { model: () => [] } },
+        response: { db: () => [] },
+        all: { db: () => [], aiV5: { model: () => [] } },
+      },
+      updateToolInvocation: vi.fn(() => false),
+      updateMessageMetadataByToolCallId: vi.fn(() => true),
+      add: vi.fn((messages: any) => {
+        added.push(messages);
+      }),
+    } as unknown as MessageList;
+
+    const backgroundTaskManager = {
+      listTasks: vi.fn(async () => ({ tasks: [], total: 0 })),
+      resume: vi.fn(),
+      enqueue: vi.fn(async (_payload: any, context: any) => {
+        await context.onResult?.({
+          taskId: 'task-1',
+          toolCallId: 'call-1',
+          toolName: 'background-tool',
+          runId: 'current-run',
+          status: 'completed',
+          result: { ok: true },
+          startedAt: new Date(0),
+          completedAt: new Date(0),
+        });
+        return { task: { id: 'task-1' }, fallbackToSync: false };
+      }),
+      cancel: vi.fn(),
+      waitForNextTask: vi.fn(),
+    };
+
+    const toolCallStep = createToolCallStep({
+      tools: { 'background-tool': { backgroundConfig: { enabled: true }, execute: vi.fn() } } as any,
+      messageList,
+      controller: { enqueue: vi.fn() },
+      runId: 'current-run',
+      streamState,
+      _internal: {
+        backgroundTaskManager,
+        backgroundTaskManagerConfig: { enabled: true },
+        agentBackgroundConfig: { tools: 'all' },
+      },
+    } as any);
+
+    await toolCallStep.execute(
+      makeBaseExecuteParams(vi.fn(), {
+        resumeData: false,
+        inputData: { toolCallId: 'call-1', toolName: 'background-tool', args: { query: 'customers' } },
+      }),
+    );
+
+    // Distinguish the standalone tool-CALL record (the gated fallback) from the
+    // tool-RESULT message that is appended unconditionally a few lines below it.
+    const callRecords = added
+      .flat()
+      .filter((message: any) => message?.role === 'tool')
+      .filter((message: any) => (message.content ?? []).some((part: any) => part.type === 'tool-call'));
+    expect(callRecords).toHaveLength(1);
+  });
+
+  it('resumes the suspended task when the resume payload is an object', async () => {
+    const manager = await runBackgroundResume({ confirmed: true });
+
+    expect(manager.resume).toHaveBeenCalledWith('suspended-task-1', { confirmed: true });
+    expect(manager.enqueue).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['false', false],
+    ['zero', 0],
+    ['an empty string', ''],
+  ])('resumes the suspended task when the resume payload is %s', async (_label, resumeData) => {
+    // A primitive resumeSchema makes these valid payloads; `false` is how a boolean
+    // human-in-the-loop tool declines. Treating them as "no resume data" silently
+    // dispatches a second task while the first stays suspended forever.
+    const manager = await runBackgroundResume(resumeData);
+
+    expect(manager.resume).toHaveBeenCalledWith('suspended-task-1', resumeData);
+    expect(manager.enqueue).not.toHaveBeenCalled();
+  });
+});
+
 describe('createToolCallStep background task stream replay', () => {
   afterEach(() => {
     vi.clearAllMocks();
@@ -1190,6 +1396,237 @@ describe('createToolCallStep delegated agent tool metadata', () => {
   });
 });
 
+describe('createToolCallStep suspension metadata cleanup on resume', () => {
+  let controller: { enqueue: Mock };
+  let streamState: { serialize: Mock };
+
+  const createSuspendedAssistantMessage = (toolCallId: string, toolName: string) => ({
+    id: 'assistant-suspended',
+    role: 'assistant' as const,
+    createdAt: new Date(0),
+    content: {
+      format: 2 as const,
+      metadata: {
+        suspendedTools: {
+          [toolCallId]: { toolCallId, toolName, runId: 'parent-run-id' },
+        },
+      } as Record<string, unknown>,
+      parts: [
+        {
+          type: 'tool-invocation' as const,
+          toolInvocation: { state: 'call' as const, toolCallId, toolName, args: {} },
+        },
+      ],
+    },
+  });
+
+  const runResumedTool = async ({
+    resumeData,
+    args,
+    message,
+    flushMessages,
+    suspendData,
+    toolCallId = 'hitl-call-id',
+  }: {
+    resumeData?: unknown;
+    args: Record<string, unknown>;
+    message: ReturnType<typeof createSuspendedAssistantMessage>;
+    flushMessages: Mock;
+    suspendData?: unknown;
+    toolCallId?: string;
+  }) => {
+    const messageList = {
+      get: {
+        input: { aiV5: { model: () => [] } },
+        response: { db: () => [message] },
+        all: { db: () => [message], aiV5: { model: () => [] } },
+      },
+    } as unknown as MessageList;
+
+    const tools = {
+      'hitl-tool': {
+        execute: vi.fn(async () => ({ confirmed: true })),
+      },
+    } as ToolSet;
+
+    const inputData = { toolCallId, toolName: 'hitl-tool', args };
+
+    const toolCallStep = createToolCallStep({
+      tools,
+      messageList,
+      controller,
+      runId: 'parent-run-id',
+      streamState,
+      _internal: {
+        saveQueueManager: { flushMessages },
+        threadId: 'thread-1',
+      },
+    } as any);
+
+    return toolCallStep.execute({
+      ...makeBaseExecuteParams(vi.fn(), { resumeData, suspendData }),
+      writer: new ToolStream({
+        prefix: 'tool',
+        callId: inputData.toolCallId,
+        name: inputData.toolName,
+        runId: 'parent-run-id',
+      }),
+      inputData,
+    });
+  };
+
+  beforeEach(() => {
+    controller = { enqueue: vi.fn() };
+    streamState = { serialize: vi.fn().mockReturnValue('serialized-state') };
+  });
+
+  afterEach(() => {
+    vi.clearAllMocks();
+    vi.restoreAllMocks();
+  });
+
+  it('clears suspendedTools when resumed via workflow resumeData (agent.resumeStream)', async () => {
+    // `agent.resumeStream(resumeData, { runId, toolCallId })` delivers the payload as the step's
+    // workflow resumeData, NOT embedded in the LLM's args. The suspension entry must still be
+    // cleared, or a reloading client reads the resolved tool as still resumable.
+    const message = createSuspendedAssistantMessage('hitl-call-id', 'hitl-tool');
+    const flushMessages = vi.fn();
+
+    await runResumedTool({
+      resumeData: { confirmed: true },
+      args: { prompt: 'do thing' },
+      message,
+      flushMessages,
+    });
+
+    expect(message.content.metadata.suspendedTools).toBeUndefined();
+    expect(flushMessages).toHaveBeenCalled();
+  });
+
+  it('clears suspendedTools when resumed via resumeData embedded in args', async () => {
+    const message = createSuspendedAssistantMessage('hitl-call-id', 'hitl-tool');
+    const flushMessages = vi.fn();
+
+    await runResumedTool({
+      args: { prompt: 'do thing', resumeData: { confirmed: true } },
+      message,
+      flushMessages,
+    });
+
+    expect(message.content.metadata.suspendedTools).toBeUndefined();
+    expect(flushMessages).toHaveBeenCalled();
+  });
+
+  it.each([
+    ['false', false],
+    ['zero', 0],
+    ['an empty string', ''],
+  ])('clears suspendedTools when the resume payload is %s', async (_label, resumeData) => {
+    // A tool with a primitive resumeSchema can legitimately be resumed with a falsy value —
+    // `false` is how a boolean HITL tool declines. A truthiness gate would skip cleanup here.
+    const message = createSuspendedAssistantMessage('hitl-call-id', 'hitl-tool');
+    const flushMessages = vi.fn();
+
+    await runResumedTool({ resumeData, args: { prompt: 'do thing' }, message, flushMessages });
+
+    expect(message.content.metadata.suspendedTools).toBeUndefined();
+    expect(flushMessages).toHaveBeenCalled();
+  });
+
+  it('leaves a same-name sibling suspended when an approval resume arrives after policy loss', async () => {
+    // Approve-after-policy-loss (#20470): the live `requireToolApproval` policy is gone, but the
+    // suspension was an approval one, so `approvalGated` is still true and the approval branch
+    // clears its own metadata. The generic suspension cleanup must not also run here —
+    // `removeToolMetadata` falls back from toolCallId to toolName, so it would delete the entry
+    // belonging to a different, still-suspended call of the same tool.
+    const message = createSuspendedAssistantMessage('sibling-call-id', 'hitl-tool');
+    const flushMessages = vi.fn();
+
+    await runResumedTool({
+      toolCallId: 'approved-call-id',
+      resumeData: { approved: true },
+      suspendData: { requireToolApproval: true },
+      args: { prompt: 'do thing' },
+      message,
+      flushMessages,
+    });
+
+    expect(message.content.metadata.suspendedTools).toHaveProperty('sibling-call-id');
+  });
+
+  it('still recovers the delegated runId when a workflow tool is resumed with a falsy payload', async () => {
+    // The suspension entry carries the sub-run id a delegated tool must resume into. The lookup
+    // that reads it has to run for falsy resume payloads too, because the cleanup below then
+    // removes the entry: skipping it would silently start a fresh sub-run instead.
+    const message = {
+      id: 'assistant-suspended',
+      role: 'assistant' as const,
+      createdAt: new Date(0),
+      content: {
+        format: 2 as const,
+        metadata: {
+          suspendedTools: {
+            'wf-call-id': {
+              toolCallId: 'wf-call-id',
+              toolName: 'workflow-sub',
+              runId: 'parent-run-id',
+              delegatedRunId: 'sub-run-id',
+            },
+          },
+        } as Record<string, unknown>,
+        parts: [
+          {
+            type: 'tool-invocation' as const,
+            toolInvocation: {
+              state: 'call' as const,
+              toolCallId: 'wf-call-id',
+              toolName: 'workflow-sub',
+              args: {},
+            },
+          },
+        ],
+      },
+    };
+    const messageList = {
+      get: {
+        input: { aiV5: { model: () => [] } },
+        response: { db: () => [message] },
+        all: { db: () => [message], aiV5: { model: () => [] } },
+      },
+    } as unknown as MessageList;
+    const execute = vi.fn(async () => ({ done: true }));
+
+    const toolCallStep = createToolCallStep({
+      tools: { 'workflow-sub': { execute } } as ToolSet,
+      messageList,
+      controller,
+      runId: 'parent-run-id',
+      streamState,
+      _internal: { saveQueueManager: { flushMessages: vi.fn() }, threadId: 'thread-1' },
+    } as any);
+
+    await toolCallStep.execute({
+      ...makeBaseExecuteParams(vi.fn()),
+      writer: new ToolStream({ prefix: 'tool', callId: 'wf-call-id', name: 'workflow-sub', runId: 'parent-run-id' }),
+      inputData: { toolCallId: 'wf-call-id', toolName: 'workflow-sub', args: { resumeData: false } },
+    });
+
+    expect(execute).toHaveBeenCalledWith(
+      expect.objectContaining({ suspendedToolRunId: 'sub-run-id' }),
+      expect.objectContaining({ resumeData: false }),
+    );
+  });
+
+  it('leaves suspendedTools intact for a plain (non-resume) tool call', async () => {
+    const message = createSuspendedAssistantMessage('other-call-id', 'other-tool');
+    const flushMessages = vi.fn();
+
+    await runResumedTool({ args: { prompt: 'do thing' }, message, flushMessages });
+
+    expect(message.content.metadata.suspendedTools).toHaveProperty('other-call-id');
+  });
+});
+
 describe('createToolCallStep needsApprovalFn enriched context', () => {
   let controller: { enqueue: Mock };
   let suspend: Mock;
@@ -1591,6 +2028,7 @@ describe('createToolCallStep requestContext forwarding', () => {
     expect(capturedOptions!.requestContext).toBe(requestContext);
     expect(capturedOptions!.requestContext!.get('testKey')).toBe('testValue');
     expect(capturedOptions!.requestContext!.get('apiClient')).toEqual({ fetch: expect.any(Function) });
+    expect(capturedOptions).not.toHaveProperty('observe');
     expect(result).toEqual({ result: { ok: true }, ...inputData });
   });
 

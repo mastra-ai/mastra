@@ -1,49 +1,22 @@
 import { CodeBlock as DsCodeBlock } from '@mastra/playground-ui/components/CodeBlock';
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@mastra/playground-ui/components/Collapsible';
-import { CopyButton } from '@mastra/playground-ui/components/CopyButton';
+import {
+  ToolCall as ToolCallRoot,
+  ToolCallContent,
+  ToolCallMono,
+  ToolCallPresentedHeader,
+  ToolCallTrigger,
+  presentTool,
+  stringifyToolValue,
+} from '@mastra/playground-ui/components/ai/tool-call';
+import type { ToolCallStatus } from '@mastra/playground-ui/components/ai/tool-call';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { X } from 'lucide-react';
-import type { ReactNode } from 'react';
-import { useState } from 'react';
 
 import { highlightCode, languageForPath } from '../../../../ui/highlight';
 import { stripSerializedAnsi } from '../../services/ansi';
 import type { ToolCall } from '../../services/transcript';
-import { ROW_RAIL, ROW_TRIGGER, TranscriptRow } from '../TranscriptRow';
-import { presentTool } from './tool-presentation';
 
 function truncate(s: string, max: number): string {
   return s.length > max ? s.slice(0, max) + '…' : s;
-}
-
-function stringify(v: unknown): string {
-  if (typeof v === 'string') return v;
-  try {
-    return JSON.stringify(v, null, 2) ?? String(v);
-  } catch {
-    return String(v);
-  }
-}
-
-function MonoBlock({ copyText, className, children }: { copyText: string; className?: string; children: ReactNode }) {
-  return (
-    <div className="group/block relative max-w-full min-w-0">
-      <pre
-        className={cn(
-          'bg-surface1 m-0 max-h-60 max-w-full overflow-auto rounded-md px-3 py-2 font-mono text-xs leading-normal break-words whitespace-pre-wrap',
-          className,
-        )}
-      >
-        {children}
-      </pre>
-      <CopyButton
-        content={copyText}
-        size="sm"
-        variant="ghost"
-        className="absolute top-1 right-1 opacity-0 transition-opacity group-hover/block:opacity-100"
-      />
-    </div>
-  );
 }
 
 const DIFF_MAX_LINES = 200;
@@ -82,7 +55,7 @@ function DiffView({ oldText, newText, path }: { oldText: string; newText: string
   const hidden = removed.hidden + added.hidden;
   return (
     <div
-      className="border-border1 bg-surface1 max-w-full min-w-0 overflow-x-auto rounded-md border font-mono text-xs leading-normal"
+      className="border-border1 bg-neutral6/5 max-w-full min-w-0 overflow-x-auto rounded-md border font-mono text-xs leading-normal"
       role="group"
       aria-label="File change"
     >
@@ -125,7 +98,9 @@ function editArgs(toolName: string, args: unknown): EditArgs | undefined {
 function ToolBody({ tool, command }: { tool: ToolCall; command?: string }) {
   const edit = editArgs(tool.toolName, tool.args);
   const resultText =
-    tool.status !== 'running' && tool.result !== undefined ? stripSerializedAnsi(stringify(tool.result)) : undefined;
+    tool.status !== 'running' && tool.result !== undefined
+      ? stripSerializedAnsi(stringifyToolValue(tool.result))
+      : undefined;
 
   if (edit) {
     return (
@@ -141,9 +116,9 @@ function ToolBody({ tool, command }: { tool: ToolCall; command?: string }) {
           />
         )}
         {tool.status === 'error' && resultText !== undefined && (
-          <MonoBlock copyText={resultText} className="text-error/90">
+          <ToolCallMono copyText={resultText} className="text-error/90">
             {truncate(resultText, 800)}
-          </MonoBlock>
+          </ToolCallMono>
         )}
       </>
     );
@@ -152,78 +127,67 @@ function ToolBody({ tool, command }: { tool: ToolCall; command?: string }) {
   if (command) {
     return (
       <>
-        <MonoBlock copyText={command} className="text-icon5">
+        <ToolCallMono copyText={command} className="text-icon5">
           <span className="text-icon3 select-none">$ </span>
           {command}
-        </MonoBlock>
+        </ToolCallMono>
         {tool.output ? (
-          <MonoBlock copyText={tool.output} className="text-icon3">
+          <ToolCallMono copyText={tool.output} className="text-icon3">
             {tool.output}
-          </MonoBlock>
+          </ToolCallMono>
         ) : (
           resultText !== undefined && (
-            <MonoBlock copyText={resultText} className="text-icon3">
+            <ToolCallMono copyText={resultText} className="text-icon3">
               {truncate(resultText, 800)}
-            </MonoBlock>
+            </ToolCallMono>
           )
         )}
       </>
     );
   }
 
-  const argsPretty = tool.args !== undefined ? stringify(tool.args) : tool.argsText;
+  const argsPretty = tool.args !== undefined ? stringifyToolValue(tool.args) : tool.argsText;
   return (
     <>
       {argsPretty && (
-        <MonoBlock copyText={argsPretty} className="text-icon5">
+        <ToolCallMono copyText={argsPretty} className="text-icon5">
           {argsPretty}
-        </MonoBlock>
+        </ToolCallMono>
       )}
       {tool.output && (
-        <MonoBlock copyText={tool.output} className="text-icon3">
+        <ToolCallMono copyText={tool.output} className="text-icon3">
           {tool.output}
-        </MonoBlock>
+        </ToolCallMono>
       )}
       {resultText !== undefined && (
-        <MonoBlock copyText={resultText} className="text-icon3">
+        <ToolCallMono copyText={resultText} className="text-icon3">
           {truncate(resultText, 800)}
-        </MonoBlock>
+        </ToolCallMono>
       )}
     </>
   );
 }
 
+function cardStatus(status: ToolCall['status']): ToolCallStatus {
+  if (status === 'running' || status === 'error') return status;
+  return 'idle';
+}
+
 export function ToolCard({ tool }: { tool: ToolCall }) {
-  const [expanded, setExpanded] = useState(false);
-  const { icon: Icon, label, detail, command } = presentTool(tool.toolName, tool.args);
-  const failed = tool.status === 'error';
-  // A card already on screen when the transcript loaded was not just called.
-  const [arrivedLive] = useState(() => tool.status === 'running');
+  const { icon, label, detail, command } = presentTool(tool.toolName, tool.args);
 
   return (
-    <Collapsible
-      open={expanded}
-      onOpenChange={setExpanded}
-      className={cn('max-w-full min-w-0', arrivedLive && 'motion-safe:animate-in fade-in-0 slide-in-from-bottom-1')}
-      role="group"
+    <ToolCallRoot
+      status={cardStatus(tool.status)}
       aria-label={`Tool: ${tool.toolName}`}
       aria-busy={tool.status === 'running'}
     >
-      <CollapsibleTrigger className={ROW_TRIGGER}>
-        <TranscriptRow
-          icon={<Icon size={14} strokeWidth={1.75} aria-hidden className={failed ? 'text-error/80' : 'text-icon2'} />}
-          label={label}
-          detail={detail}
-          running={tool.status === 'running'}
-          expanded={expanded}
-          trailing={failed && <X size={13} role="img" aria-label="Failed" className="text-error shrink-0" />}
-        />
-      </CollapsibleTrigger>
-      <CollapsibleContent className="max-w-full min-w-0">
-        <div className={cn(ROW_RAIL, 'flex flex-col gap-1.5')}>
-          <ToolBody tool={tool} command={command} />
-        </div>
-      </CollapsibleContent>
-    </Collapsible>
+      <ToolCallTrigger>
+        <ToolCallPresentedHeader icon={icon} label={label} detail={detail} />
+      </ToolCallTrigger>
+      <ToolCallContent>
+        <ToolBody tool={tool} command={command} />
+      </ToolCallContent>
+    </ToolCallRoot>
   );
 }

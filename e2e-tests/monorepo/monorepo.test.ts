@@ -8,6 +8,27 @@ import { execa, execaNode } from 'execa';
 
 const timeout = 5 * 60 * 1000;
 
+/**
+ * Killing the `npm run dev` wrapper orphans the `mastra dev` grandchild, which
+ * keeps running and holds `.mastra/dev.lock`. `mastra build` refuses to build
+ * while that lock names a live pid, so later build suites in this file fail
+ * with "A `mastra dev` server is running in this directory" unless the real
+ * dev server is killed and the lock removed.
+ */
+async function killOrphanedDevServer(projectDir: string) {
+  const lockPath = join(projectDir, '.mastra', 'dev.lock');
+  try {
+    const { pid } = JSON.parse(await readFile(lockPath, 'utf-8'));
+    if (typeof pid !== 'number' || pid <= 0) return;
+    try {
+      process.kill(pid, 'SIGKILL');
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'ESRCH') return;
+    }
+    await rm(lockPath, { force: true });
+  } catch {}
+}
+
 const activeProcesses: Array<{ controller: AbortController; proc: ReturnType<typeof execa | typeof execaNode> }> = [];
 
 async function cleanupAllProcesses() {
@@ -98,6 +119,14 @@ describe.sequential.for([['pnpm'] as const])(`%s monorepo`, ([pkgManager]) => {
       expect(res.status).toBe(200);
       expect(body).toEqual({ message: 'Hello, world!', a: 'b' });
     });
+
+    it('should resolve createRoute api routes', async () => {
+      const res = await fetch(`http://localhost:${port}/create-route`);
+      const body = await res.json();
+      expect(res.status).toBe(200);
+      expect(body).toEqual({ message: 'Hello from createRoute!' });
+    });
+
     it('should resolve api ALL routes', async () => {
       let res = await fetch(`http://localhost:${port}/all`);
       let body = await res.json();
@@ -119,6 +148,29 @@ describe.sequential.for([['pnpm'] as const])(`%s monorepo`, ([pkgManager]) => {
       expect(body).toEqual({ value: 'a -> b -> c', app: 'App value is BEFORE.' });
     });
 
+    it('reports hasBrowser for an agent with a workspace-level CLI browser', async () => {
+      const res = await fetch(`http://localhost:${port}/api/agents/browser-agent`);
+      const body = await res.json();
+      expect(res.status).toBe(200);
+      // CLI providers expose no SDK tools; the capability must come from the workspace browser.
+      expect(body.browserTools).toEqual([]);
+      expect(body.hasBrowser).toBe(true);
+    });
+
+    it('reports hasBrowser false for an agent without a browser', async () => {
+      const res = await fetch(`http://localhost:${port}/api/agents/inner-agent`);
+      const body = await res.json();
+      expect(res.status).toBe(200);
+      expect(body.hasBrowser).toBe(false);
+    });
+
+    it('serves the browser session probe with screencast available', async () => {
+      const res = await fetch(`http://localhost:${port}/api/agents/browser-agent/browser/session`);
+      const body = await res.json();
+      expect(res.status).toBe(200);
+      expect(body).toEqual({ hasSession: false, screencastAvailable: true });
+    });
+
     it('should return tools from the api', async () => {
       const res = await fetch(`http://localhost:${port}/api/tools`);
       const body = await res.json();
@@ -137,13 +189,44 @@ describe.sequential.for([['pnpm'] as const])(`%s monorepo`, ([pkgManager]) => {
 
     beforeAll(async () => {
       const inputFile = join(fixturePath, 'apps', 'custom');
-      proc = execa('npm', ['run', 'dev'], {
+      const mastraIndexPath = join(inputFile, 'src', 'mastra', 'index.ts');
+      const mastraIndex = (await readFile(mastraIndexPath, 'utf8'))
+        .replace(
+          "import { testRoute } from '@/api/route/test';",
+          "import { testRoute } from '@/api/route/test';\nimport { environmentRoute } from '@/api/route/environment';",
+        )
+        .replace('apiRoutes: [testRoute,', 'apiRoutes: [testRoute, environmentRoute,');
+      await Promise.all([
+        writeFile(mastraIndexPath, mastraIndex),
+        writeFile(join(inputFile, '.env'), 'BASE_ONLY=base\nSHARED=base\n'),
+        writeFile(join(inputFile, '.env.local'), 'LOCAL_ONLY=local\nSHARED=local\n'),
+        writeFile(join(inputFile, '.env.development'), 'ENVIRONMENT_ONLY=development\n'),
+        writeFile(join(inputFile, '.env.production'), 'ENVIRONMENT_ONLY=production\n'),
+        writeFile(
+          join(inputFile, 'src', 'mastra', 'api', 'route', 'environment.ts'),
+          `import { registerApiRoute } from '@mastra/core/server';
+
+export const environmentRoute = registerApiRoute('/environment', {
+  method: 'GET',
+  handler: async c => c.json({
+    base: process.env.BASE_ONLY,
+    local: process.env.LOCAL_ONLY,
+    environment: process.env.ENVIRONMENT_ONLY,
+    shared: process.env.SHARED,
+  }),
+});
+`,
+        ),
+      ]);
+      proc = execa('mastra', ['dev'], {
         cwd: inputFile,
+        preferLocal: true,
         cancelSignal,
         gracefulCancel: true,
         env: {
           OPENAI_API_KEY: process.env.OPENAI_API_KEY,
           MASTRA_PORT: port.toString(),
+          SHARED: 'shell',
         },
       });
 
@@ -174,18 +257,30 @@ describe.sequential.for([['pnpm'] as const])(`%s monorepo`, ([pkgManager]) => {
     afterAll(async () => {
       if (proc) {
         try {
-          proc.kill('SIGKILL');
+          controller.abort();
           await Promise.race([proc.catch(() => {}), new Promise(resolve => setTimeout(resolve, 5_000))]);
         } catch (err) {
           // @ts-expect-error - isCanceled is not typed
-          if (!err.killed) {
-            console.log('failed to kill build proc', err);
+          if (!err.isCanceled) {
+            console.log('failed to kill dev proc', err);
           }
         }
       }
+      await killOrphanedDevServer(join(fixturePath, 'apps', 'custom'));
     }, timeout);
 
     runApiTests(port);
+
+    it('layers development dotenv files without overriding the shell environment', async () => {
+      const res = await fetch(`http://localhost:${port}/environment`);
+
+      await expect(res.json()).resolves.toEqual({
+        base: 'base',
+        local: 'local',
+        environment: 'development',
+        shared: 'shell',
+      });
+    });
 
     it(
       'hot-reloads workspace package changes without a full process restart',
@@ -330,7 +425,7 @@ describe.sequential.for([['pnpm'] as const])(`%s monorepo`, ([pkgManager]) => {
 
       expect(outputFiles).not.toContain('nodemailer.mjs');
       expect(output).not.toContain('nodemailer/lib');
-      expect(packageJson.dependencies?.nodemailer).toBe('^7.0.0');
+      expect(packageJson.dependencies?.nodemailer).toBe('^9.0.1');
     });
 
     // This stays in the monorepo E2E suite because it builds the generated fixture and validates its output manifest.
@@ -345,6 +440,14 @@ describe.sequential.for([['pnpm'] as const])(`%s monorepo`, ([pkgManager]) => {
           typescript: expect.any(String),
         }),
       );
+    });
+
+    it('should emit a worker runtime entry with a readiness endpoint', async () => {
+      const workerEntryPath = join(fixturePath, 'apps', 'custom', '.mastra', 'output', 'worker.mjs');
+      const workerEntry = await readFile(workerEntryPath, 'utf-8');
+
+      expect(workerEntry).toContain('/health');
+      expect(workerEntry).toContain('startWorkers');
     });
 
     afterAll(async () => {
@@ -425,6 +528,73 @@ describe.sequential.for([['pnpm'] as const])(`%s monorepo`, ([pkgManager]) => {
     }, timeout);
 
     runApiTests(port);
+
+    it(
+      'drains an in-flight response before the generated server exits on SIGTERM',
+      async () => {
+        // Run the built server directly and signal it directly. Going through
+        // `npm run start` (npm -> sh -> mastra CLI -> node) is not a reliable
+        // signal chain on CI runners: the SIGTERM sent to npm never reached
+        // the server, the stream never ended, and the test hung until its
+        // timeout. CLI signal forwarding is covered by unit tests in
+        // packages/cli/src/commands/start/start.test.ts; the behavior under
+        // test here is the generated server's graceful drain.
+        const drainPort = await getPort();
+        const outputDir = join(fixturePath, 'apps', 'custom', '.mastra', 'output');
+        const drainController = new AbortController();
+        const server = execaNode('index.mjs', {
+          cwd: outputDir,
+          cancelSignal: drainController.signal,
+          env: {
+            OPENAI_API_KEY: process.env.OPENAI_API_KEY,
+            MASTRA_PORT: drainPort.toString(),
+          },
+        });
+        activeProcesses.push({ controller: drainController, proc: server });
+
+        try {
+          // Poll the server until it's ready
+          const maxAttempts = 60;
+          for (let i = 0; i < maxAttempts; i++) {
+            try {
+              const res = await fetch(`http://localhost:${drainPort}/api/tools`);
+              if (res.ok) break;
+            } catch {
+              // Server not ready yet
+            }
+            if (i === maxAttempts - 1) {
+              throw new Error('Drain test server failed to start within timeout');
+            }
+            await new Promise(resolve => setTimeout(resolve, 1000));
+          }
+
+          const response = await fetch(`http://localhost:${drainPort}/shutdown-drain`);
+          const reader = response.body!.getReader();
+          const decoder = new TextDecoder();
+          const firstChunk = await reader.read();
+          expect(decoder.decode(firstChunk.value)).toBe('started\n');
+
+          server.kill('SIGTERM');
+
+          let remaining = '';
+          while (true) {
+            const chunk = await reader.read();
+            if (chunk.done) break;
+            remaining += decoder.decode(chunk.value, { stream: true });
+          }
+
+          expect(remaining).toBe('finished\n');
+          await expect(server).resolves.toMatchObject({ exitCode: 0 });
+          // Full shutdown includes the drain window plus core teardown; the vitest
+          // default 5s timeout is tighter than the server's own worst-case bounds.
+        } finally {
+          // Never leave the drain server running if an assertion failed.
+          server.kill('SIGKILL');
+          await Promise.race([server.catch(() => {}), new Promise(resolve => setTimeout(resolve, 5_000))]);
+        }
+      },
+      timeout,
+    );
   });
 
   describe.sequential('build without externals', async () => {

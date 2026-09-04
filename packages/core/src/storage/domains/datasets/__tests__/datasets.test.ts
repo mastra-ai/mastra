@@ -373,6 +373,47 @@ describe('DatasetsInMemory', () => {
       expect(notFound).toBeNull();
     });
 
+    it('getItemById returns the item row visible in the requested dataset snapshot', async () => {
+      const dataset = await storage.createDataset({ name: 'test' });
+      const itemA = await storage.addItem({ datasetId: dataset.id, input: { value: 'original' } });
+
+      await expect(storage.getItemById({ id: itemA.id, datasetVersion: 0 })).resolves.toBeNull();
+
+      const itemB = await storage.addItem({ datasetId: dataset.id, input: { value: 'second item' } });
+      await expect(storage.getItemById({ id: itemA.id, datasetVersion: itemB.datasetVersion })).resolves.toMatchObject({
+        id: itemA.id,
+        datasetVersion: itemA.datasetVersion,
+        input: { value: 'original' },
+      });
+
+      const updated = await storage.updateItem({
+        id: itemA.id,
+        datasetId: dataset.id,
+        input: { value: 'updated' },
+      });
+      await expect(storage.getItemById({ id: itemA.id, datasetVersion: itemB.datasetVersion })).resolves.toMatchObject({
+        datasetVersion: itemA.datasetVersion,
+        input: { value: 'original' },
+      });
+      await expect(
+        storage.getItemById({ id: itemA.id, datasetVersion: updated.datasetVersion }),
+      ).resolves.toMatchObject({
+        datasetVersion: updated.datasetVersion,
+        input: { value: 'updated' },
+      });
+
+      await storage.deleteItem({ id: itemA.id, datasetId: dataset.id });
+      await expect(
+        storage.getItemById({ id: itemA.id, datasetVersion: updated.datasetVersion }),
+      ).resolves.toMatchObject({
+        datasetVersion: updated.datasetVersion,
+        input: { value: 'updated' },
+      });
+      await expect(
+        storage.getItemById({ id: itemA.id, datasetVersion: updated.datasetVersion + 1 }),
+      ).resolves.toBeNull();
+    });
+
     it('updateItem modifies item fields', async () => {
       const dataset = await storage.createDataset({ name: 'test' });
       const item = await storage.addItem({ datasetId: dataset.id, input: { a: 1 } });
@@ -554,7 +595,7 @@ describe('DatasetsInMemory', () => {
       expect(fetched).toBeNull();
     });
 
-    it('getItemById with datasetVersion returns exact row (T3.13)', async () => {
+    it('getItemById with datasetVersion returns the row visible in the snapshot (T3.13)', async () => {
       const dataset = await storage.createDataset({ name: 'test' });
       const item = await storage.addItem({ datasetId: dataset.id, input: { n: 1 }, scorerIds: ['quality'] });
 
@@ -577,9 +618,9 @@ describe('DatasetsInMemory', () => {
       expect(atV2?.input).toEqual({ n: 2 });
       expect(atV2?.scorerIds).toEqual(['safety']);
 
-      // Version 99 — doesn't exist
+      // The current row remains visible in later snapshots
       const atV99 = await storage.getItemById({ id: item.id, datasetVersion: 99 });
-      expect(atV99).toBeNull();
+      expect(atV99?.input).toEqual({ n: 2 });
     });
 
     it('every mutation inserts a dataset_version row (T3.11)', async () => {

@@ -1,6 +1,6 @@
 ---
 title: "Railway | Sandbox"
-description: "Documentation for the RailwaySandbox provider for isolated cloud code execution."
+description: "Run Mastra workspace commands in Railway cloud sandboxes with private networking, custom images, streaming, checkpoints, forks, and reconnection."
 packages:
   - "@mastra/railway"
 ---
@@ -131,6 +131,15 @@ const sandbox = new RailwaySandbox({
 
 `RailwaySandbox` refreshes the checkpoint shortly before the idle timeout. Recovery restores the latest successful checkpoint. It doesn't restore running processes or filesystem writes made after the last checkpoint.
 
+Set `seedCheckpointName` to provide a boot-only fallback when `checkpointName` doesn't exist yet. Railway restores `checkpointName` first when both checkpoints exist. Later snapshots write only to `checkpointName`, so each sandbox keeps an independent recovery history.
+
+```typescript
+const sandbox = new RailwaySandbox({
+  checkpointName: 'project-session-42',
+  seedCheckpointName: 'project-base',
+})
+```
+
 Call `snapshot()` after a filesystem update to capture the configured checkpoint immediately. It resolves without capturing when `checkpointName` isn't configured or the sandbox isn't running.
 
 ```typescript
@@ -218,6 +227,13 @@ const result = await sandbox.executeCommand('cat', ['/tmp/state.txt'])
     isOptional: true,
   },
   {
+    name: 'seedCheckpointName',
+    type: 'string',
+    description:
+      'Boot-only fallback checkpoint used when checkpointName has no stored state. Later snapshots continue writing to checkpointName.',
+    isOptional: true,
+  },
+  {
     name: 'idleTimeoutMinutes',
     type: 'number',
     description:
@@ -238,6 +254,13 @@ const result = await sandbox.executeCommand('cat', ['/tmp/state.txt'])
     description: 'Environment variables baked into the sandbox, available to every command.',
     isOptional: true,
     defaultValue: '{}',
+  },
+  {
+    name: 'workingDirectory',
+    type: 'string',
+    description:
+      'Default directory for command execution when no per-command `cwd` is given. A per-command `cwd` always wins. Use an absolute path.',
+    isOptional: true,
   },
   {
     name: 'template',

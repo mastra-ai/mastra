@@ -182,6 +182,9 @@ describe('LangfuseExporter', () => {
         publicKey: 'pk-test',
         secretKey: 'sk-test',
         baseUrl: 'https://custom.langfuse.com',
+        additionalHeaders: {
+          'x-custom-header': 'custom-value',
+        },
         environment: 'production',
         release: '1.0.0',
       });
@@ -191,6 +194,9 @@ describe('LangfuseExporter', () => {
           publicKey: 'pk-test',
           secretKey: 'sk-test',
           baseUrl: 'https://custom.langfuse.com',
+          additionalHeaders: {
+            'x-custom-header': 'custom-value',
+          },
           environment: 'production',
           release: '1.0.0',
           exportMode: 'batched',
@@ -233,6 +239,9 @@ describe('LangfuseExporter', () => {
         publicKey: 'pk-test',
         secretKey: 'sk-test',
         baseUrl: 'https://custom.langfuse.com',
+        additionalHeaders: {
+          'x-custom-header': 'custom-value',
+        },
       });
 
       expect(clientConstructorArgs[0]).toEqual(
@@ -240,6 +249,9 @@ describe('LangfuseExporter', () => {
           publicKey: 'pk-test',
           secretKey: 'sk-test',
           baseUrl: 'https://custom.langfuse.com',
+          additionalHeaders: {
+            'x-custom-header': 'custom-value',
+          },
         }),
       );
     });
@@ -418,6 +430,64 @@ describe('LangfuseExporter', () => {
       const attrs = processedSpans[0].attributes;
       expect(attrs['session.id']).toBe('session-456');
       expect(attrs['mastra.metadata.sessionId']).toBeUndefined();
+    });
+
+    it('maps root-span input/output to langfuse.trace.input/output', async () => {
+      exporter = new LangfuseExporter({ publicKey: 'pk-test', secretKey: 'sk-test' });
+      await exportSpan(
+        exporter,
+        makeSpan({
+          isRootSpan: true,
+          type: SpanType.AGENT_RUN,
+          input: { parts: [{ type: 'text', text: 'Hello' }] },
+          output: { text: 'Hi there' },
+        } as any),
+      );
+
+      const attrs = processedSpans[0].attributes;
+      expect(attrs['langfuse.trace.input']).toBe(JSON.stringify({ parts: [{ type: 'text', text: 'Hello' }] }));
+      expect(attrs['langfuse.trace.output']).toBe(JSON.stringify({ text: 'Hi there' }));
+    });
+
+    it('passes string root-span input/output through without re-serializing', async () => {
+      exporter = new LangfuseExporter({ publicKey: 'pk-test', secretKey: 'sk-test' });
+      await exportSpan(
+        exporter,
+        makeSpan({ isRootSpan: true, input: 'plain question', output: 'plain answer' } as any),
+      );
+
+      const attrs = processedSpans[0].attributes;
+      expect(attrs['langfuse.trace.input']).toBe('plain question');
+      expect(attrs['langfuse.trace.output']).toBe('plain answer');
+    });
+
+    it('does not set trace input/output for non-root spans', async () => {
+      exporter = new LangfuseExporter({ publicKey: 'pk-test', secretKey: 'sk-test' });
+      await exportSpan(exporter, makeSpan({ isRootSpan: false } as any));
+
+      const attrs = processedSpans[0].attributes;
+      expect(attrs['langfuse.trace.input']).toBeUndefined();
+      expect(attrs['langfuse.trace.output']).toBeUndefined();
+    });
+
+    it('omits trace input/output that cannot be serialized instead of failing the export', async () => {
+      exporter = new LangfuseExporter({ publicKey: 'pk-test', secretKey: 'sk-test' });
+      const circular: Record<string, unknown> = {};
+      circular.self = circular;
+      await exportSpan(exporter, makeSpan({ isRootSpan: true, input: circular, output: { text: 'ok' } } as any));
+
+      const attrs = processedSpans[0].attributes;
+      expect(attrs['langfuse.trace.input']).toBeUndefined();
+      expect(attrs['langfuse.trace.output']).toBe(JSON.stringify({ text: 'ok' }));
+    });
+
+    it('omits trace input/output when the root span has none', async () => {
+      exporter = new LangfuseExporter({ publicKey: 'pk-test', secretKey: 'sk-test' });
+      await exportSpan(exporter, makeSpan({ isRootSpan: true, input: undefined, output: undefined } as any));
+
+      const attrs = processedSpans[0].attributes;
+      expect(attrs['langfuse.trace.input']).toBeUndefined();
+      expect(attrs['langfuse.trace.output']).toBeUndefined();
     });
 
     it('maps tags to langfuse.trace.tags', async () => {

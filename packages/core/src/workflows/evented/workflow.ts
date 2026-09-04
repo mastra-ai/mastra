@@ -9,6 +9,8 @@ import { isAgentCompatible } from '../../agent/subagent';
 import type { SubAgent } from '../../agent/subagent';
 import { TripWire } from '../../agent/trip-wire';
 import { isSupportedLanguageModel } from '../../agent/utils';
+import { MastraFGAPermissions, getWorkflowFGAResourceId, requireFGA } from '../../auth/ee';
+import type { ActorSignal } from '../../auth/ee';
 import type { MastraBase } from '../../base';
 import { RequestContext } from '../../di';
 import { ErrorCategory, ErrorDomain, MastraError } from '../../error';
@@ -21,6 +23,7 @@ import {
   SpanType,
   createObservabilityContext,
   getOrCreateSpan,
+  getRootExportSpan,
   resolveObservabilityContext,
 } from '../../observability';
 import type { ObservabilityContext, TracingContext, TracingPolicy } from '../../observability';
@@ -33,6 +36,11 @@ import {
   ProcessorStepSchema,
   createProcessorSendSignal,
 } from '../../processors';
+import {
+  resolveProcessorSpanAttributes,
+  resolveProcessorSpanName,
+  toProcessorSpanPhase,
+} from '../../processors/span-declaration';
 import {
   summarizeActiveToolsForSpan,
   summarizeProcessorModelForSpan,
@@ -47,7 +55,8 @@ import type { InferPublicSchema, InferStandardSchemaOutput, PublicSchema, Standa
 import { WorkflowRunOutput } from '../../stream/RunOutput';
 import type { ChunkType, LanguageModelUsage, ProviderMetadata } from '../../stream/types';
 import { ChunkFrom } from '../../stream/types';
-import { Tool } from '../../tools/tool';
+import type { Tool } from '../../tools/tool';
+import { isMastraTool } from '../../tools/toolchecks';
 import type { ToolExecutionContext } from '../../tools/types';
 import type { DynamicArgument } from '../../types';
 import type { ExecutionEngine, ExecutionGraph } from '../../workflows/execution-engine';
@@ -73,6 +82,7 @@ import { validateCron } from '../scheduler/cron';
 import type { WorkflowScheduleConfig } from '../scheduler/types';
 import { forwardAgentStreamChunk } from '../stream-utils';
 import type { StreamChunkWriter } from '../stream-utils';
+import { waitForSuspendedSnapshot } from '../utils';
 import { Workflow, Run } from '../workflow';
 import type { AgentStepOptions } from '../workflow';
 import { EventedExecutionEngine } from './execution-engine';
@@ -140,7 +150,10 @@ export function cloneStep<TStepId extends string>(
 // ============================================
 
 function isToolStep(input: unknown): input is ToolStep<any, any, any, any, any> {
-  return input instanceof Tool;
+  // `isMastraTool` also recognizes tools by their shared marker symbol, which
+  // survives module duplication (Vite SSR) and spread copies — e.g. tools
+  // renamed by `resolveStoredToolProviders` — where `instanceof` fails.
+  return isMastraTool(input);
 }
 
 /**
@@ -160,7 +173,7 @@ function isStepParams(input: unknown): input is StepParams<any, any, any, any, a
     'id' in input &&
     'execute' in input &&
     !isAgent(input) &&
-    !(input instanceof Tool)
+    !isMastraTool(input)
   );
 }
 
@@ -175,7 +188,7 @@ function isProcessor(obj: unknown): obj is Processor {
     'id' in obj &&
     typeof (obj as any).id === 'string' &&
     !isAgent(obj) &&
-    !(obj instanceof Tool) &&
+    !isMastraTool(obj) &&
     (typeof (obj as any).processInput === 'function' ||
       typeof (obj as any).processInputStep === 'function' ||
       typeof (obj as any).processOutputStream === 'function' ||
@@ -1017,21 +1030,29 @@ function createStepFromProcessor<TProcessorId extends string>(
       // - For input/outputResult: find AGENT_RUN (processor runs once at start/end)
       // - For inputStep/outputStep/toolResult: find MODEL_STEP (processor runs per LLM call / tool round-trip)
       // When workflow is executed, currentSpan is WORKFLOW_STEP, so we walk up the parent chain
+      // Fall back to currentSpan only when its tree can reach exporters — otherwise
+      // the public processor span would export as an orphan trace root.
+      const fallbackSpan = currentSpan && getRootExportSpan(currentSpan) ? currentSpan : undefined;
       const parentSpan =
         phase === 'inputStep' || phase === 'outputStep' || phase === 'toolResult'
-          ? currentSpan?.findParent(SpanType.MODEL_STEP) || currentSpan
-          : currentSpan?.findParent(SpanType.AGENT_RUN) || currentSpan;
+          ? currentSpan?.findParent(SpanType.MODEL_STEP) || fallbackSpan
+          : currentSpan?.findParent(SpanType.AGENT_RUN) || fallbackSpan;
 
       const processorSpan =
         phase !== 'outputStream'
           ? parentSpan?.createChildSpan({
-              type: SpanType.PROCESSOR_RUN,
-              name: `${getSpanNamePrefix(phase)}: ${processor.id}`,
+              type: processor.spanType ?? SpanType.PROCESSOR_RUN,
+              name: resolveProcessorSpanName(
+                processor,
+                toProcessorSpanPhase(phase),
+                `${getSpanNamePrefix(phase)}: ${processor.id}`,
+              ),
               entityType: getProcessorEntityType(phase),
               entityId: processor.id,
               entityName: processor.name ?? processor.id,
               input: buildProcessorSpanInput(),
               attributes: {
+                ...resolveProcessorSpanAttributes(processor, toProcessorSpanPhase(phase)),
                 processorExecutor: 'workflow',
                 // Read processorIndex from processor (set in combineProcessorsIntoWorkflow)
                 processorIndex: processor.processorIndex,
@@ -1147,7 +1168,17 @@ function createStepFromProcessor<TProcessorId extends string>(
         } catch (error) {
           // TripWire errors should end span but bubble up to halt the workflow
           if (error instanceof TripWire) {
-            processorSpan?.end({ output: { tripwire: error.message } });
+            processorSpan?.error({
+              error,
+              endSpan: true,
+              attributes: {
+                tripwireAbort: {
+                  reason: error.message,
+                  retry: error.options?.retry,
+                  metadata: error.options?.metadata,
+                },
+              },
+            });
           } else {
             processorSpan?.error({ error: error as Error, endSpan: true });
           }
@@ -1308,12 +1339,13 @@ function createStepFromProcessor<TProcessorId extends string>(
               if (!processorSpan && parentSpan) {
                 // First chunk - create span for this processor
                 processorSpan = parentSpan.createChildSpan({
-                  type: SpanType.PROCESSOR_RUN,
-                  name: `output stream processor: ${processor.id}`,
+                  type: processor.spanType ?? SpanType.PROCESSOR_RUN,
+                  name: resolveProcessorSpanName(processor, 'output', `output stream processor: ${processor.id}`),
                   entityType: EntityType.OUTPUT_PROCESSOR,
                   entityId: processor.id,
                   entityName: processor.name ?? processor.id,
                   attributes: {
+                    ...resolveProcessorSpanAttributes(processor, 'output'),
                     processorExecutor: 'workflow',
                     processorIndex: processor.processorIndex,
                   },
@@ -1347,7 +1379,17 @@ function createStepFromProcessor<TProcessorId extends string>(
               } catch (error) {
                 // End span with error and clean up state
                 if (error instanceof TripWire) {
-                  processorSpan?.end({ output: { tripwire: error.message } });
+                  processorSpan?.error({
+                    error,
+                    endSpan: true,
+                    attributes: {
+                      tripwireAbort: {
+                        reason: error.message,
+                        retry: error.options?.retry,
+                        metadata: error.options?.metadata,
+                      },
+                    },
+                  });
                 } else {
                   processorSpan?.error({ error: error as Error, endSpan: true });
                 }
@@ -1746,6 +1788,7 @@ export class EventedWorkflow<
         workflowId: this.id,
         runId: runIdToUse,
         resourceId: options?.resourceId,
+        isInternalWorkflow: this.isInternal,
         executionEngine: this.executionEngine,
         executionGraph: this.executionGraph,
         serializedStepGraph: this.serializedStepGraph,
@@ -1824,6 +1867,7 @@ export class EventedRun<
     workflowId: string;
     runId: string;
     resourceId?: string;
+    isInternalWorkflow?: boolean;
     executionEngine: ExecutionEngine;
     executionGraph: ExecutionGraph;
     serializedStepGraph: SerializedStepFlowEntry[];
@@ -1960,6 +2004,7 @@ export class EventedRun<
       requestContext,
       mastra: this.mastra,
     });
+    this.workflowRunSpan = workflowSpan;
     if (workflowSpan) {
       this.mastra?.__registerRunTracingContext(this.runId, { currentSpan: workflowSpan });
     }
@@ -2190,6 +2235,7 @@ export class EventedRun<
     requestContext,
     perStep,
     outputOptions,
+    actor,
   }: {
     resumeData?: TResume;
     step?:
@@ -2201,6 +2247,7 @@ export class EventedRun<
       | string
       | string[];
     requestContext?: RequestContext;
+    actor?: ActorSignal;
     perStep?: boolean;
     outputOptions?: {
       includeState?: boolean;
@@ -2243,6 +2290,7 @@ export class EventedRun<
             requestContext,
             perStep,
             outputOptions,
+            actor,
           });
 
           if (self.streamOutput) {
@@ -2282,20 +2330,38 @@ export class EventedRun<
     label?: string;
     forEachIndex?: number;
     requestContext?: RequestContext;
+    actor?: ActorSignal;
     perStep?: boolean;
     outputOptions?: {
       includeState?: boolean;
       includeResumeLabels?: boolean;
     };
   }): Promise<WorkflowResult<TState, TInput, TOutput, TSteps>> {
+    const fgaProvider = this.mastra?.getServer()?.fga;
+    if (fgaProvider && !this.isInternalWorkflow) {
+      await requireFGA({
+        fgaProvider,
+        user: params.requestContext?.get('user' as any),
+        resource: { type: 'workflow', id: getWorkflowFGAResourceId(this.workflowId) },
+        permission: MastraFGAPermissions.WORKFLOWS_EXECUTE,
+        requestContext: params.requestContext,
+        actor: params.actor,
+        context: {
+          resourceId: this.resourceId,
+        },
+        metadata: {
+          workflowId: this.workflowId,
+          runId: this.runId,
+          resourceId: this.resourceId,
+        },
+      });
+    }
+
     const workflowsStore = await this.mastra?.getStorage()?.getStore('workflows');
     if (!workflowsStore) {
       throw new Error('Cannot resume workflow: workflows store is required');
     }
-    const snapshot = await workflowsStore.loadWorkflowSnapshot({
-      workflowName: this.workflowId,
-      runId: this.runId,
-    });
+    const snapshot = await waitForSuspendedSnapshot(workflowsStore, this.workflowId, this.runId);
     if (!snapshot) {
       throw new Error(`Cannot resume workflow: no snapshot found for runId ${this.runId}`);
     }
@@ -2485,6 +2551,10 @@ export class EventedRun<
         status: 'canceled',
       },
     });
+
+    // End the whole span tree now: a step that ignores abortSignal keeps running, so the
+    // execution engine may never unwind and no span in the tree would otherwise be ended.
+    this.workflowRunSpan?.endTree({ attributes: { status: 'canceled' } });
 
     // Trigger abort signal - the abort handler will publish the workflow.cancel event
     // This ensures consistent behavior whether cancel() or abort() is called

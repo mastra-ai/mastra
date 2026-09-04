@@ -188,11 +188,13 @@ describe('Dataset', () => {
   });
 
   // 12. getItem — with version
-  it('getItem with version returns DatasetItem at that version', async () => {
-    const added = await ds.addItem({ input: { x: 1 } });
-    const fetched = await ds.getItem({ itemId: added.id, version: added.datasetVersion });
+  it('getItem with version returns the item visible in that dataset snapshot', async () => {
+    const itemA = await ds.addItem({ input: { x: 1 } });
+    const itemB = await ds.addItem({ input: { x: 2 } });
+
+    const fetched = await ds.getItem({ itemId: itemA.id, version: itemB.datasetVersion });
     expect(fetched).not.toBeNull();
-    expect(fetched!.datasetVersion).toBe(added.datasetVersion);
+    expect(fetched!.datasetVersion).toBe(itemA.datasetVersion);
   });
 
   // 13. getItem — nonexistent returns null

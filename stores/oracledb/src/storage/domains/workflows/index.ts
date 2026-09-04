@@ -1,5 +1,10 @@
 import { ErrorCategory } from '@mastra/core/error';
-import { normalizePerPage, TABLE_WORKFLOW_SNAPSHOT, WorkflowsStorage } from '@mastra/core/storage';
+import {
+  normalizePerPage,
+  TABLE_WORKFLOW_SNAPSHOT,
+  WorkflowsStorage,
+  matchesExpectedWorkflowStatus,
+} from '@mastra/core/storage';
 import type {
   StorageListWorkflowRunsInput,
   UpdateWorkflowStateOptions,
@@ -131,7 +136,12 @@ export class WorkflowsOracle extends WorkflowsStorage {
           throw new Error(`Snapshot not found for runId ${runId}`);
         }
 
-        const updatedSnapshot = { ...snapshot, ...opts };
+        const { expectedStatus, ...state } = opts;
+        if (!matchesExpectedWorkflowStatus(snapshot.status, expectedStatus)) {
+          return undefined;
+        }
+
+        const updatedSnapshot = { ...snapshot, ...state };
         await client.none(
           `UPDATE ${this.table()} SET snapshot = :snapshot, ${WORKFLOW_UPDATED_AT} = :updatedAt WHERE workflow_name = :workflowName AND run_id = :runId`,
           { workflowName, runId, snapshot: jsonBind(updatedSnapshot), updatedAt: new Date() },

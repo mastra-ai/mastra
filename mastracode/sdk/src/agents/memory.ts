@@ -3,8 +3,9 @@ import type { RequestContext } from '@mastra/core/request-context';
 import type { MastraCompositeStore } from '@mastra/core/storage';
 import type { MastraVector } from '@mastra/core/vector';
 import { fastembed } from '@mastra/fastembed';
-import { Memory } from '@mastra/memory';
+import { Memory, Subconscious } from '@mastra/memory';
 import { DEFAULT_OM_MODEL_ID, DEFAULT_OBS_THRESHOLD, DEFAULT_REF_THRESHOLD } from '../constants.js';
+import { LOCAL_KNOWLEDGE_ORG_ID, resolveKnowledgeScopeIdentity } from '../knowledge-scope.js';
 import type { MastraCodeState } from '../schema.js';
 import { getOmScope } from '../utils/project.js';
 import { resolveModel } from './model.js';
@@ -69,6 +70,36 @@ Don't say "Agent did x", say "did x". It will be assumed the agent did what was 
 
 Drop caveman for: security warnings, irreversible action confirmations, multi-step sequences where fragment order risks misread, user asks to clarify or repeats question, and anything that requires remembering verbatim content. Resume caveman after clear part done`;
 
+export { LOCAL_KNOWLEDGE_ORG_ID };
+
+// One error per session, not per memory resolution. Keyed on the session id
+// rather than the controller object: the controller is read off the request
+// context on every resolution, so it is a fresh object per request and would
+// dedupe nothing. Bounded so a long-running Factory process cannot grow this
+// without limit — refusing sessions are rare, and losing the oldest ids only
+// costs one extra log line.
+const REPORTED_ORG_UNRESOLVED_LIMIT = 500;
+const reportedOrgUnresolved = new Set<string>();
+
+function reportOrgUnresolved(
+  controller: AgentControllerRequestContext<MastraCodeState> | undefined,
+  factoryProjectId: string | undefined,
+  reason?: string,
+) {
+  const sessionId = controller?.session?.id;
+  if (sessionId) {
+    if (reportedOrgUnresolved.has(sessionId)) return;
+    if (reportedOrgUnresolved.size >= REPORTED_ORG_UNRESOLVED_LIMIT) {
+      reportedOrgUnresolved.delete(reportedOrgUnresolved.values().next().value as string);
+    }
+    reportedOrgUnresolved.add(sessionId);
+  }
+  const session = controller?.session;
+  console.error(
+    `[Subconscious] Knowledge curation disabled: no organization resolved for session ${session?.id ?? 'unknown'} (project ${factoryProjectId ?? 'none'})${reason ? `: ${reason}` : ''}. Knowledge is not written rather than written where it cannot be read.`,
+  );
+}
+
 /**
  * Dynamic memory factory function.
  * Reads OM thresholds from controller state via requestContext.
@@ -81,7 +112,32 @@ export function getDynamicMemory(storage: MastraCompositeStore, vector?: MastraV
   let cachedMemoryKey: string | null = null;
 
   return ({ requestContext }: { requestContext: RequestContext }) => {
-    const state = getAgentControllerState(requestContext);
+    const controller = requestContext.get('controller') as AgentControllerRequestContext<MastraCodeState> | undefined;
+    const state = controller?.getState() as MastraCodeState | undefined;
+    const subconsciousEnabled = Boolean(vector) && process.env.MASTRACODE_EXPERIMENTAL_SUBCONSCIOUS === '1';
+    const factoryProjectId = state?.factoryProjectId;
+    const isFactory = typeof factoryProjectId === 'string' && factoryProjectId.trim().length > 0;
+
+    // A Factory-owned session that could not resolve its org refuses to curate:
+    // writing under a substituted identity produces knowledge the fail-closed
+    // read path can never see.
+    let orgUnresolvedRefusal = false;
+
+    if (subconsciousEnabled) {
+      const identity = resolveKnowledgeScopeIdentity(state);
+      if (identity.resolved) {
+        requestContext.set('organizationId', identity.organizationId);
+      } else {
+        orgUnresolvedRefusal = true;
+        reportOrgUnresolved(controller, identity.knowledgeResourceId, identity.reason);
+      }
+      if (identity.knowledgeResourceId) {
+        requestContext.set('knowledgeResourceId', identity.knowledgeResourceId);
+      }
+    }
+
+    const subconsciousAvailable = subconsciousEnabled && !orgUnresolvedRefusal;
+
     const omScope = state?.omScope ?? getOmScope(state?.projectPath);
 
     const obsThreshold = state?.observationThreshold ?? DEFAULT_OBS_THRESHOLD;
@@ -90,7 +146,9 @@ export function getDynamicMemory(storage: MastraCompositeStore, vector?: MastraV
 
     const observerPreviousObservationTokens = 1000;
     const observeAttachments = state?.observeAttachments;
-    const cacheKey = `${obsThreshold}:${refThreshold}:${omScope}:${observerPreviousObservationTokens}:${caveman ? 1 : 0}:${observeAttachments}`;
+    // Factory sessions get a factory-only Subconscious config, so the cache key
+    // carries a factory presence bit to keep the two configs from cross-serving.
+    const cacheKey = `${obsThreshold}:${refThreshold}:${omScope}:${observerPreviousObservationTokens}:${caveman ? 1 : 0}:${observeAttachments}:${isFactory ? 1 : 0}:${subconsciousAvailable ? 1 : 0}`;
     if (cachedMemory && cachedMemoryKey === cacheKey) {
       return cachedMemory;
     }
@@ -108,10 +166,21 @@ export function getDynamicMemory(storage: MastraCompositeStore, vector?: MastraV
       vector: vector || false,
       embedder: vector ? fastembed.small : undefined,
       options: {
+        // Generate a durable title from the first user message. Every client uses
+        // the same title in its thread list and active-session chrome.
+        generateTitle: { model: getObserverModel },
         observationalMemory: {
           enabled: true,
           temporalMarkers: true,
           retrieval: vector ? { vector: true } : true,
+          experimental_subconscious: subconsciousAvailable
+            ? new Subconscious({
+                defaultScope: 'resource',
+                maxScope: 'resource',
+                pins: true,
+                ...(isFactory ? { maxSteps: 25 } : {}),
+              })
+            : undefined,
           scope: omScope,
           activateAfterIdle: 'auto',
           activateOnProviderChange: true,

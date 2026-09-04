@@ -10,11 +10,12 @@ import { StructuredOutputProcessor } from '../../../processors';
 import type { RequestContext } from '../../../request-context';
 import type { Step } from '../../../workflows/step';
 import type { InnerAgentExecutionOptions } from '../../agent.types';
+import type { MessageList } from '../../message-list';
 import type { SaveQueueManager } from '../../save-queue';
 import { getModelOutputForTripwire } from '../../trip-wire';
 import type { AgentMethodType } from '../../types';
 import { isSupportedLanguageModel } from '../../utils';
-import { fireClientToolOutputHooks } from './client-tool-output-hooks';
+import { applyClientToolModelOutput, fireClientToolOutputHooks } from './client-tool-output-hooks';
 import type { PrepareStreamRunScope } from './run-scope';
 import {
   CONVERTED_TOOLS_KEY,
@@ -36,6 +37,7 @@ interface MapResultsStepOptions<OUTPUT = undefined> {
   memoryConfig?: MemoryConfigInternal;
   agentSpan?: Span<SpanType.AGENT_RUN>;
   agentId: string;
+  agentVersionId?: string;
   methodType: AgentMethodType;
   saveQueueManager?: SaveQueueManager;
   runScope: PrepareStreamRunScope<OUTPUT>;
@@ -52,6 +54,7 @@ export function createMapResultsStep<OUTPUT = undefined>({
   memoryConfig,
   agentSpan,
   agentId,
+  agentVersionId,
   methodType,
   saveQueueManager,
   runScope,
@@ -77,6 +80,7 @@ export function createMapResultsStep<OUTPUT = undefined>({
     const result = {
       ...options,
       agentId,
+      agentVersionId,
       tools: convertedTools,
       runId,
       temperature: options.modelSettings?.temperature,
@@ -137,8 +141,10 @@ export function createMapResultsStep<OUTPUT = undefined>({
           messageList,
         });
 
-        // End agent span with tripwire information after fallback completes
+        // End the whole tree with tripwire information; descendants close
+        // without inheriting the terminal output
         agentSpan?.end({
+          endTree: true,
           output: { tripwire: memoryData.tripwire },
           attributes: {
             tripwireAbort: {
@@ -152,10 +158,25 @@ export function createMapResultsStep<OUTPUT = undefined>({
 
         return bail(modelOutput);
       } catch (error) {
-        // End agent span with error and tripwire context so failures aren't masked
+        // Record the error with tripwire context so failures aren't masked,
+        // then end the whole span tree. Rejections are not guaranteed to be
+        // Error instances; MastraError extracts a usable message from any
+        // cause shape.
+        const spanError =
+          error instanceof Error
+            ? error
+            : new MastraError(
+                {
+                  id: 'AGENT_TRIPWIRE_FALLBACK_FAILED',
+                  domain: ErrorDomain.AGENT,
+                  category: ErrorCategory.SYSTEM,
+                  details: { runId },
+                },
+                error,
+              );
         agentSpan?.error({
-          error: error as Error,
-          endSpan: true,
+          error: spanError,
+          endTree: true,
           attributes: {
             tripwireAbort: {
               reason: memoryData.tripwire?.reason,
@@ -178,6 +199,16 @@ export function createMapResultsStep<OUTPUT = undefined>({
       messages: options.messages,
       tools: convertedTools,
       abortSignal: options.abortSignal,
+      logger: capabilities.logger,
+    });
+
+    // Apply server-defined toModelOutput to those same client-executed results.
+    // This enriches the ingested MessageList parts (not options.messages — the
+    // list converted its own copies in prepare-memory) so prompt conversion
+    // restores the mapped output.
+    await applyClientToolModelOutput({
+      messageList,
+      tools: convertedTools,
       logger: capabilities.logger,
     });
 
@@ -243,6 +274,7 @@ export function createMapResultsStep<OUTPUT = undefined>({
     const loopOptions = {
       methodType: modelMethodType,
       agentId,
+      agentVersionId,
       requestContext: result.requestContext!,
       actor: options.actor,
       mcp: options.mcp,
@@ -301,15 +333,16 @@ export function createMapResultsStep<OUTPUT = undefined>({
               });
             }
 
-            // End the AGENT_RUN span so the trace is exported.
-            // Without this, the span is orphaned and exporters that wait
-            // for the root span to end (e.g. Datadog) never emit the trace.
-            agentSpan?.error({ error, endSpan: true });
+            // Record the error, then end the whole span tree. Ending only the
+            // root would orphan still-open descendants, and exporters that wait
+            // for every span to finish (e.g. Datadog) retain the trace forever.
+            agentSpan?.error({ error, endTree: true });
             return;
           }
 
           if (payload.finishReason === 'suspended') {
             agentSpan?.end({
+              endTree: true,
               output: {
                 status: 'suspended',
                 reason: payload.suspendReason,
@@ -320,27 +353,22 @@ export function createMapResultsStep<OUTPUT = undefined>({
             return;
           }
 
-          if (payload.finishReason === 'aborted') {
-            agentSpan?.end({
-              output: {
-                status: 'aborted',
-                reason: 'abort',
-              },
-            });
-            return;
-          }
+          const aborted = payload.finishReason === 'aborted' || options.abortSignal?.aborted === true;
 
-          // Skip memory persistence when the abort signal has fired.
-          // The LLM response may have continued after the caller disconnected,
-          // and we should not persist a partial or full response for an aborted request.
-          const aborted = options.abortSignal?.aborted;
+          if (aborted) {
+            if (payload.finishReason === 'aborted') {
+              agentSpan?.end({ endTree: true, output: { status: 'aborted', reason: 'abort' } });
+              // The aborted finish payload is synthetic; the caller already received onAbort.
+              return;
+            }
 
-          if (!aborted) {
+            agentSpan?.end({ endTree: true });
+          } else {
             try {
               const outputText =
                 options.structuredOutput?.schema && payload.object != null
                   ? JSON.stringify(payload.object)
-                  : (payload.text ?? '');
+                  : payload.text || '';
 
               await capabilities.executeOnFinish({
                 result: payload,
@@ -354,7 +382,7 @@ export function createMapResultsStep<OUTPUT = undefined>({
                 agentSpan: agentSpan,
                 runId,
                 messageList,
-                threadExists: memoryData.threadExists,
+                threadExists: memoryData.threadExists || threadCreatedByStep,
                 structuredOutput: !!options.structuredOutput?.schema,
                 overrideScorers: options.scorers,
                 onTitleGenerated: options.memory?.onTitleGenerated,
@@ -379,10 +407,8 @@ export function createMapResultsStep<OUTPUT = undefined>({
                       e,
                     );
 
-              agentSpan?.error({ error: spanError, endSpan: true });
+              agentSpan?.error({ error: spanError, endTree: true });
             }
-          } else {
-            agentSpan?.end();
           }
 
           await options?.onFinish?.({

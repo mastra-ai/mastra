@@ -17,7 +17,7 @@ export type NestedWorkflowResult =
   | Pick<WorkflowResultWithStatus<'success'>, 'status' | 'state' | 'result'>
   | Pick<WorkflowResultWithStatus<'failed'>, 'status' | 'state' | 'error'>
   | Pick<WorkflowResultWithStatus<'tripwire'>, 'status' | 'state' | 'tripwire'>
-  | Pick<WorkflowResultWithStatus<'suspended'>, 'status' | 'state' | 'steps'>
+  | Pick<WorkflowResultWithStatus<'suspended'>, 'status' | 'state' | 'steps' | 'resumeLabels'>
   | Pick<WorkflowResultWithStatus<'paused'>, 'status' | 'state'>;
 
 /**
@@ -52,7 +52,9 @@ export function compactNestedWorkflowResult(result: AnyWorkflowResult): NestedWo
     case 'tripwire':
       return { status: result.status, tripwire: result.tripwire, state: result.state };
     case 'suspended':
-      return { status: result.status, steps: result.steps, state: result.state };
+      // resumeLabels travels with a suspended result so the parent can re-register
+      // the child's labels and stay able to name each parked leaf.
+      return { status: result.status, steps: result.steps, state: result.state, resumeLabels: result.resumeLabels };
     case 'paused':
       return { status: result.status, state: result.state };
   }

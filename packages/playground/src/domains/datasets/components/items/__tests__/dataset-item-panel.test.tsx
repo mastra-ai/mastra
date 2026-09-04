@@ -16,6 +16,12 @@ const BASE_URL = 'http://localhost:4111';
 const scorerControlTestTimeout = 15_000;
 
 const renderPanel = (item: DatasetItem) => {
+  // The panel embeds CompareWithList, which fetches the dataset's items.
+  server.use(
+    http.get(`${BASE_URL}/api/datasets/ds-1/items`, () =>
+      HttpResponse.json({ items: [], pagination: { total: 0, page: 0, perPage: 10 } }),
+    ),
+  );
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });

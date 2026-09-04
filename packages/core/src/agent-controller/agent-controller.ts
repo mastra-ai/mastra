@@ -1,14 +1,16 @@
 import { randomUUID } from 'node:crypto';
 
 import { Agent } from '../agent';
+import { MessageList } from '../agent/message-list';
 import type { MastraDBMessage, MastraMessageContentV2 } from '../agent/message-list/state/types';
+import { isUserAuthoredMessage } from '../agent/signals';
 import type { ActiveThreadRun } from '../agent/thread-stream-runtime';
 import type { AgentInstructions, ToolsInput, ToolsetsInput } from '../agent/types';
 import type { MastraBrowser } from '../browser/browser';
 import { AgentControllerChannels } from '../channels/agent-controller-channels';
-import { getErrorFromUnknown } from '../error';
 import { GatewayManager } from '../llm/model/gateways';
 import { defaultGateways } from '../llm/model/gateways/defaults';
+import type { MastraModelConfig } from '../llm/model/shared.types';
 import { Mastra } from '../mastra';
 import type { MastraMemory } from '../memory/memory';
 import type { StorageThreadType } from '../memory/types';
@@ -19,7 +21,6 @@ import type { MemoryStorage } from '../storage/domains/memory/base';
 import type { ObservationalMemoryRecord } from '../storage/types';
 import type { DynamicArgument } from '../types';
 import { Workspace } from '../workspace/workspace';
-import type { WorkspaceConfig } from '../workspace/workspace';
 
 import { Session } from './session';
 import type { ThreadDataStore } from './session';
@@ -148,6 +149,10 @@ export function buildFableFallbackProviderOptions(
  * Without a notice the user has no way to tell that the response did not come
  * from the model they selected.
  */
+
+/** How much of the tail a rename reads: enough to say where the thread went, bounded so a long thread costs no more than a short one. */
+const TITLE_WINDOW_MESSAGES = 20;
+
 /**
  * The AgentController orchestrates multiple agent modes, shared state, memory, and storage.
  * It's the core abstraction that a TUI (or other UI) controls.
@@ -178,7 +183,6 @@ export class AgentController<TState = {}> {
   readonly id: string;
 
   private config: AgentControllerConfig<TState>;
-  private workspaceInitialized = false;
   private initPromise: Promise<void> | undefined = undefined;
   private browser: DynamicArgument<MastraBrowser | undefined> = undefined;
   private workspace: DynamicArgument<Workspace | undefined> = undefined;
@@ -403,8 +407,9 @@ export class AgentController<TState = {}> {
     session.thread.connect(this.createThreadDataStore(session), session as Session);
     session.setMachinery({
       getAgent: () => this.getCurrentAgent(session),
-      subscribeToThread: ({ resourceId, threadId }) =>
-        this.getCurrentAgent(session).subscribeToThread({ resourceId, threadId }),
+      getRunScope: runId => this.getMastra()?.__getRunScope(runId),
+      subscribeToThread: ({ agent, resourceId, threadId }) =>
+        (agent ?? this.getCurrentAgent(session)).subscribeToThread({ resourceId, threadId }),
       buildStreamOptions: input => this.buildAgentMessageStreamOptions({ session, ...input }),
       buildSharedRunOptions: () => this.buildSharedRunOptions(session),
       buildToolsets: requestContext => this.buildToolsets(session, requestContext),
@@ -685,22 +690,6 @@ export class AgentController<TState = {}> {
       }),
     );
 
-    if (workspaceToConnect && workspaceToConnect instanceof Workspace) {
-      try {
-        await workspaceToConnect.init();
-        session.emit({ type: 'workspace_status_changed', status: 'ready' });
-        session.emit({
-          type: 'workspace_ready',
-          workspaceId: workspaceToConnect.id,
-          workspaceName: workspaceToConnect.name,
-        });
-      } catch (error) {
-        const initError = getErrorFromUnknown(error);
-        session.emit({ type: 'workspace_status_changed', status: 'error', error: initError });
-        session.emit({ type: 'workspace_error', error: initError });
-      }
-    }
-
     if (overrides?.threadId) {
       const existingThread = await session.thread.getById({ threadId: overrides.threadId });
       if (existingThread) {
@@ -830,14 +819,12 @@ export class AgentController<TState = {}> {
   }
 
   /**
-   * Whether the AgentController-level static workspace has been initialized. Dynamic
-   * factory workspaces are resolved and initialized per-session during
-   * `createSession`, so this returns `false` for factory configs until a
-   * session is created.
+   * Whether the AgentController-level static workspace has been explicitly initialized.
+   * Dynamic factory workspaces have no controller-level readiness state.
    */
   isWorkspaceReady(): boolean {
     if (typeof this.workspace === 'function') return true;
-    return this.workspaceInitialized && this.workspace !== undefined;
+    return this.workspace?.status === 'ready';
   }
 
   /**
@@ -918,8 +905,8 @@ export class AgentController<TState = {}> {
   // ===========================================================================
 
   /**
-   * Initialize the harness — loads storage and workspace.
-   * Must be called before using the harness. Idempotent: repeated calls
+   * Initialize the harness by loading storage and propagating runtime services.
+   * Workspaces initialize lazily when used. Must be called before using the harness. Idempotent: repeated calls
    * return the same in-flight/completed initialization instead of rebuilding
    * the internal Mastra instance (which would orphan registered agents).
    */
@@ -944,14 +931,14 @@ export class AgentController<TState = {}> {
   #storageInitPromise?: Promise<void>;
 
   private async runStorageInit(): Promise<void> {
-    // Create an internal Mastra instance so agents have access to storage
-    // (required for tool approval snapshot persistence/resume).
+    // Create an internal Mastra instance so mode agents share the run state
+    // needed to persist and resume tool approvals, even without configured storage.
     // We init storage through Mastra's proxied storage so augmentWithInit
     // tracks it and won't double-init.
     //
     // Skip this when registered on a parent Mastra: that Mastra already owns
     // storage/agents/gateways, and getMastra() resolves to it.
-    if (this.config.storage && !this.#externalMastra) {
+    if (!this.#externalMastra) {
       const enabledGateways = this.config.gateways?.filter(gateway => gateway.shouldEnable?.() ?? true);
       const gateways = enabledGateways?.length
         ? Object.fromEntries(enabledGateways.map(gateway => [gateway.id, gateway]))
@@ -959,7 +946,7 @@ export class AgentController<TState = {}> {
 
       this.#internalMastra = new Mastra({
         logger: false,
-        storage: this.config.storage,
+        ...(this.config.storage ? { storage: this.config.storage } : {}),
         ...(this.config.pubsub ? { pubsub: this.config.pubsub } : {}),
         ...(this.config.observability ? { observability: this.config.observability } : {}),
         ...(gateways ? { gateways } : {}),
@@ -975,30 +962,10 @@ export class AgentController<TState = {}> {
   }
 
   private async runInit(): Promise<void> {
-    // Storage init is a prerequisite for both reads and writes; share the same
-    // promise so a concurrent read that already triggered storage init doesn't
-    // race with the workspace init we're about to do.
     await this.initStorage();
 
-    // Initialize workspace if configured (skip for dynamic factory — resolved per-request)
-    if (this.config.workspace && !this.workspaceInitialized && typeof this.workspace !== 'function') {
-      try {
-        if (!this.workspace) {
-          this.workspace = new Workspace(this.config.workspace as WorkspaceConfig);
-        }
-
-        await (this.workspace as Workspace).init();
-        this.workspaceInitialized = true;
-      } catch {
-        this.workspace = undefined;
-        this.workspaceInitialized = false;
-        // Sessions created later will call workspace.init() themselves and
-        // surface the error through workspace_error events on the session.
-      }
-    }
-
     // Propagate harness-level Mastra, memory, workspace, browser, and pubsub
-    // to the agent(s) that back each mode (after workspace init).
+    // to the agent(s) that back each mode. Workspaces initialize lazily when used.
     for (const agent of this.backingAgents()) {
       this.propagateRuntimeServicesToAgent(agent);
     }
@@ -1270,7 +1237,7 @@ export class AgentController<TState = {}> {
 
     const firstUserMessages = new Map<string, MastraDBMessage>();
     for (const message of result.messages) {
-      if (message.role !== 'user' || !message.threadId || firstUserMessages.has(message.threadId)) continue;
+      if (!isUserAuthoredMessage(message) || !message.threadId || firstUserMessages.has(message.threadId)) continue;
       firstUserMessages.set(message.threadId, this.convertToControllerMessage(message));
 
       if (firstUserMessages.size === threadIds.length) {
@@ -1279,6 +1246,69 @@ export class AgentController<TState = {}> {
     }
 
     return firstUserMessages;
+  }
+
+  /**
+   * Name a thread from where its conversation went, with the model and
+   * instructions `generateTitle` gives the first-turn namer — so a title asked
+   * for by hand reads like one the thread would have been given on its own.
+   *
+   * Runs without constructing a {@link Session}: naming reads a window of recent
+   * messages and writes the thread row, so asking for a title never spins up a
+   * workspace or sandbox. A session already live for the resource lends its agent, request
+   * context and event stream; otherwise the default mode answers — and with no
+   * session state to read, a `generateTitle.model` that resolves from it falls
+   * back to its own default, which is why hosts that store the choice elsewhere
+   * pass `model`. Resolves to the new title, or `undefined` when the model
+   * returns nothing and the current title stands.
+   */
+  async generateThreadTitle({
+    threadId,
+    resourceId,
+    scope,
+    model,
+    requestContext: callerContext,
+  }: {
+    threadId: string;
+    resourceId?: string;
+    scope?: string;
+    /** Overrides the memory-configured title model — for hosts that resolve it themselves. */
+    model?: DynamicArgument<MastraModelConfig>;
+    /** The caller's context — carries the identity model resolution bills to. */
+    requestContext?: RequestContext;
+  }): Promise<string | undefined> {
+    const thread = await this.queryThreadById({ threadId });
+    if (!thread) throw new Error(`Thread not found: ${threadId}`);
+
+    const recent = await this.queryThreadMessages({ threadId, limit: TITLE_WINDOW_MESSAGES });
+    const messages = new MessageList().add(recent, 'memory').get.all.ui();
+    if (!messages.some(message => message.role === 'user')) {
+      throw new Error('This conversation has no message to name it from yet.');
+    }
+
+    const session = resourceId ? await this.getSessionByResource(resourceId, scope) : undefined;
+    const agent = session
+      ? this.getCurrentAgent(session)
+      : this.propagateRuntimeServicesToAgent(this.getAgentForMode(this.#defaultMode));
+    const requestContext = session
+      ? await this.buildRequestContext(session, callerContext)
+      : (callerContext ?? new RequestContext());
+    const configured = (await agent.getMemory({ requestContext }))?.getMergedThreadConfig().generateTitle;
+    const titleConfig = typeof configured === 'object' ? configured : undefined;
+
+    const title = (
+      await agent.generateTitleFromUserMessage({
+        messages,
+        requestContext,
+        model: model ?? titleConfig?.model,
+        instructions: titleConfig?.instructions,
+      })
+    )?.trim();
+    if (!title) return undefined;
+
+    await this.persistThreadRow({ ...thread, title, updatedAt: new Date() });
+    session?.emit({ type: 'thread_title_updated', threadId, title });
+    return title;
   }
 
   // ===========================================================================
@@ -1666,8 +1696,7 @@ export class AgentController<TState = {}> {
 
   /**
    * Load observational memory progress for the current thread.
-   * Reads the OM record and recent messages to reconstruct status,
-   * then emits an `om_status` event for the UI.
+   * Reconstructs status from the durable OM record, then emits an `om_status` event for the UI.
    */
   async loadOMProgress(session: Session<TState>): Promise<void> {
     const threadId = session.thread.getId();
@@ -1681,8 +1710,12 @@ export class AgentController<TState = {}> {
 
       const config = record.config as
         | {
-            observationThreshold?: number | { min: number; max: number };
-            reflectionThreshold?: number | { min: number; max: number };
+            observation?: { messageTokens?: number | { min: number; max: number } };
+            reflection?: { observationTokens?: number | { min: number; max: number } };
+            _overrides?: {
+              observation?: { messageTokens?: number | { min: number; max: number } };
+              reflection?: { observationTokens?: number | { min: number; max: number } };
+            };
           }
         | undefined;
 
@@ -1692,75 +1725,62 @@ export class AgentController<TState = {}> {
         return val.max;
       };
 
-      let observationThreshold = getThreshold(config?.observationThreshold, 30_000);
-      let reflectionThreshold = getThreshold(config?.reflectionThreshold, 40_000);
-
-      let messageTokens = record.pendingMessageTokens ?? 0;
-      let observationTokens = record.observationTokenCount ?? 0;
-      let bufferedObs = {
-        status: 'idle' as 'idle' | 'running' | 'complete',
-        chunks: 0,
-        messageTokens: 0,
-        projectedMessageRemoval: 0,
-        observationTokens: 0,
-      };
-      let bufferedRef = {
-        status: 'idle' as 'idle' | 'running' | 'complete',
-        inputObservationTokens: 0,
-        observationTokens: 0,
-      };
-      let generationCount = 0;
-      let stepNumber = 0;
-
-      const messagesResult = await memoryStorage.listMessages({
-        threadId,
-        perPage: 70,
-        page: 0,
-        orderBy: { field: 'createdAt', direction: 'DESC' },
-      });
-      const messages = messagesResult.messages;
-      let foundStatus = false;
-      for (const msg of messages) {
-        if (msg.role !== 'assistant') continue;
-        const content = msg.content as { parts?: Array<{ type?: string; data?: Record<string, unknown> }> } | string;
-        if (typeof content === 'string' || !content?.parts) continue;
-
-        for (let i = content.parts.length - 1; i >= 0; i--) {
-          const part = content.parts[i] as { type?: string; data?: Record<string, unknown> };
-          if (part.type === 'data-om-status' && part.data?.windows) {
-            const w = part.data.windows as Record<string, Record<string, Record<string, unknown>>>;
-            messageTokens = (w.active?.messages?.tokens as number) ?? messageTokens;
-            observationTokens = (w.active?.observations?.tokens as number) ?? observationTokens;
-            const msgThresh = w.active?.messages?.threshold as number | undefined;
-            const obsThresh = w.active?.observations?.threshold as number | undefined;
-            if (msgThresh) observationThreshold = msgThresh;
-            if (obsThresh) reflectionThreshold = obsThresh;
-            const bo = w.buffered?.observations as Record<string, unknown> | undefined;
-            if (bo) {
-              bufferedObs = {
-                status: (bo.status as 'idle' | 'running' | 'complete') ?? 'idle',
-                chunks: (bo.chunks as number) ?? 0,
-                messageTokens: (bo.messageTokens as number) ?? 0,
-                projectedMessageRemoval: (bo.projectedMessageRemoval as number) ?? 0,
-                observationTokens: (bo.observationTokens as number) ?? 0,
-              };
-            }
-            const br = w.buffered?.reflection as Record<string, unknown> | undefined;
-            if (br) {
-              bufferedRef = {
-                status: (br.status as 'idle' | 'running' | 'complete') ?? 'idle',
-                inputObservationTokens: (br.inputObservationTokens as number) ?? 0,
-                observationTokens: (br.observationTokens as number) ?? 0,
-              };
-            }
-            generationCount = (part.data.generationCount as number) ?? 0;
-            stepNumber = (part.data.stepNumber as number) ?? 0;
-            foundStatus = true;
-            break;
-          }
+      const observationThreshold = getThreshold(
+        config?._overrides?.observation?.messageTokens ?? config?.observation?.messageTokens,
+        30_000,
+      );
+      const reflectionThreshold = getThreshold(
+        config?._overrides?.reflection?.observationTokens ?? config?.reflection?.observationTokens,
+        40_000,
+      );
+      const messageTokens = record.pendingMessageTokens ?? 0;
+      const observationTokens = record.observationTokenCount ?? 0;
+      // Some storage backends return the chunk list serialized, so parse defensively
+      // (mirrors the OM processor's own `getBufferedChunks` helper).
+      const rawChunks = record.bufferedObservationChunks;
+      let bufferedChunks: { messageTokens?: number; tokenCount?: number }[] = [];
+      if (Array.isArray(rawChunks)) {
+        bufferedChunks = rawChunks;
+      } else if (typeof rawChunks === 'string') {
+        try {
+          const parsed = JSON.parse(rawChunks);
+          if (Array.isArray(parsed)) bufferedChunks = parsed;
+        } catch {
+          bufferedChunks = [];
         }
-        if (foundStatus) break;
       }
+      const bufferedMessageTokens = Math.min(
+        bufferedChunks.reduce((sum, chunk) => sum + (chunk.messageTokens ?? 0), 0),
+        messageTokens,
+      );
+      const bufferedObservationTokens = bufferedChunks.reduce((sum, chunk) => sum + (chunk.tokenCount ?? 0), 0);
+      const bufferedObs = {
+        status: record.isBufferingObservation
+          ? ('running' as const)
+          : bufferedChunks.length
+            ? ('complete' as const)
+            : ('idle' as const),
+        chunks: bufferedChunks.length,
+        messageTokens: bufferedMessageTokens,
+        // The real projection depends on the OM processor's activation boundary math,
+        // which isn't reproducible from the record alone. Report 0 until the first live
+        // status arrives rather than an authoritative-looking approximation.
+        projectedMessageRemoval: 0,
+        observationTokens: bufferedObservationTokens,
+      };
+      const bufferedRef = {
+        status: record.isBufferingReflection
+          ? ('running' as const)
+          : record.bufferedReflection
+            ? ('complete' as const)
+            : ('idle' as const),
+        inputObservationTokens: record.bufferedReflectionInputTokens ?? 0,
+        observationTokens: record.bufferedReflectionTokens ?? 0,
+      };
+      const generationCount = record.generationCount ?? 0;
+      // Step index is per-run and intentionally not durable — a restored thread starts at 0
+      // and picks up the real step number from the next live status update.
+      const stepNumber = 0;
 
       session.emit({
         type: 'om_status',
@@ -1869,11 +1889,18 @@ export class AgentController<TState = {}> {
     tracingContext?: TracingContext;
     tracingOptions?: TracingOptions;
   }): Promise<Record<string, unknown>> {
-    if (!session.thread.getId()) {
+    const runThreadId = session.thread.getId();
+    if (!runThreadId) {
       throw new Error('Cannot build stream options without a current thread');
     }
 
     session.run.clearAbortRequested();
+    // Reconcile the in-memory model selection with the persisted per-mode model
+    // before snapshotting it into the request context. In multiplayer
+    // deployments another process (or a freshly-created Session for an existing
+    // thread) may have persisted a different model; the per-instance cache would
+    // otherwise run with a stale selection. No-op in the single-player TUI.
+    await session.model.syncFromPersisted({ modeId: session.mode.get() });
     const requestContext = await this.buildRequestContext(session, requestContextInput);
     // Resolve mode-aware instructions at call time so the agent's own
     // instructions are never mutated by the harness.
@@ -1896,7 +1923,14 @@ export class AgentController<TState = {}> {
 
     const streamOptions: Record<string, unknown> = {
       ...this.buildSharedRunOptions(session),
-      memory: { thread: session.thread.getId(), resource: session.identity.getResourceId() },
+      memory: {
+        thread: runThreadId,
+        resource: session.identity.getResourceId(),
+        // Titling outlives the run, so the thread it named is the one captured here,
+        // not whichever thread the session happens to hold when the model answers.
+        onTitleGenerated: (title: string) =>
+          session.emit({ type: 'thread_title_updated', threadId: runThreadId, title }),
+      },
       abortSignal: session.run.ensureAbortController().signal,
       requestContext,
       outputWriter: async (chunk: { type?: string; data?: unknown }) => {

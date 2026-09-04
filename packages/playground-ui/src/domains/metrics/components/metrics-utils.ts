@@ -16,8 +16,7 @@ export function formatCost(value: number, unit?: string | null): string {
 export const METRICS_DATA_LIST_PROPS = {
   className: 'max-h-80',
   mask: { left: false },
-  stickyHeaderBackground: 'tinted',
-} satisfies Pick<DataListRootProps, 'className' | 'mask' | 'stickyHeaderBackground'>;
+} satisfies Pick<DataListRootProps, 'className' | 'mask'>;
 
 export const CHART_COLORS = {
   green: '#22c55e',

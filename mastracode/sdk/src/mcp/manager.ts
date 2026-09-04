@@ -17,6 +17,7 @@ import {
   getClaudeSettingsPath,
   resolveOAuthRedirectUrl,
 } from './config.js';
+import type { ExternalMcpDiscoveryOptions } from './config.js';
 import { loadDisabledServers, loadGlobalDisableState, saveDisabledServers, saveGlobalDisableState } from './state.js';
 import type {
   McpConfig,
@@ -190,6 +191,7 @@ export function createMcpManager(
   projectDir: string,
   configDirName = DEFAULT_CONFIG_DIR,
   extraServers?: Record<string, McpServerConfig>,
+  externalDiscovery?: ExternalMcpDiscoveryOptions,
 ): McpManager {
   /** Merge programmatic servers into a base config (highest priority). */
   const applyExtraServers = (base: McpConfig): McpConfig => {
@@ -197,7 +199,7 @@ export function createMcpManager(
     return { ...base, mcpServers: { ...base.mcpServers, ...extraServers } };
   };
 
-  let config = applyExtraServers(loadMcpConfig(projectDir, configDirName));
+  let config = applyExtraServers(loadMcpConfig(projectDir, configDirName, externalDiscovery));
   let disabledServers = new Set(loadDisabledServers(projectDir));
   let globalDisableState = loadGlobalDisableState();
   let globallyDisabledServers = new Set(globalDisableState.disabledServers);
@@ -627,7 +629,7 @@ export function createMcpManager(
     },
 
     async reload() {
-      config = applyExtraServers(loadMcpConfig(projectDir, configDirName));
+      config = applyExtraServers(loadMcpConfig(projectDir, configDirName, externalDiscovery));
       disabledServers = new Set(loadDisabledServers(projectDir));
       globalDisableState = loadGlobalDisableState();
       globallyDisabledServers = new Set(globalDisableState.disabledServers);

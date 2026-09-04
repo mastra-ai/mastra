@@ -100,6 +100,19 @@ describe('Factory rule validation', () => {
         message: 'x'.repeat(8_193),
       }),
     ).toThrow(/message is invalid/i);
+    // A seatless message reaches whichever session is live; preparing a
+    // session needs to know which seat to prepare.
+    expect(
+      validateFactoryRuleDecision({ type: 'sendMessage', idempotencyKey: 'message-2', message: 'Parked.' }),
+    ).not.toHaveProperty('role');
+    expect(() =>
+      validateFactoryRuleDecision({
+        type: 'sendMessage',
+        idempotencyKey: 'message-3',
+        message: 'Parked.',
+        prepareBinding: true,
+      }),
+    ).toThrow(/requires a role/i);
     expect(() =>
       validateFactoryRuleDecision(
         { type: 'transition', idempotencyKey: 'transition-1', board: 'work', stage: 'execute' },
@@ -146,6 +159,30 @@ describe('Factory rule validation', () => {
     }
     expect(error).toBeInstanceOf(FactoryRuleValidationError);
     expect(String(error)).not.toContain(secret);
+  });
+
+  it('takes a prompt in place of a skill, but never both and never neither', () => {
+    expect(
+      validateFactoryRuleDecision({
+        type: 'invokeSkill',
+        idempotencyKey: 'build-1',
+        role: 'work',
+        prompt: 'Implement the approved plan.',
+      }),
+    ).toEqual({
+      type: 'invokeSkill',
+      idempotencyKey: 'build-1',
+      role: 'work',
+      prompt: 'Implement the approved plan.',
+    });
+    // Both are ways of authoring the same kickoff message, so accepting both
+    // would leave the dispatcher to pick a winner.
+    for (const invalid of [
+      { type: 'invokeSkill', idempotencyKey: 'build-2', role: 'work', skillName: 'factory-plan', prompt: 'Build it.' },
+      { type: 'invokeSkill', idempotencyKey: 'build-3', role: 'work' },
+    ]) {
+      expect(() => validateFactoryRuleDecision(invalid)).toThrow(/exactly one of skillName or prompt/);
+    }
   });
 
   it('accepts and normalizes the optional cancelInFlight flag on invokeSkill decisions', () => {

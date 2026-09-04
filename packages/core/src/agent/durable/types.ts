@@ -11,6 +11,7 @@ import type { z } from 'zod';
 import type { ActorSignal } from '../../auth/ee/fga-check';
 import type { BackgroundTaskManager } from '../../background-tasks/manager';
 import type { AgentBackgroundConfig } from '../../background-tasks/types';
+import type { ScoringFilter } from '../../evals/predicate';
 import type { SystemMessage } from '../../llm';
 import type { ProviderOptions } from '../../llm/model/provider-options';
 import type { MastraLanguageModel } from '../../llm/model/shared.types';
@@ -108,6 +109,8 @@ export interface SerializableScorerEntry {
   scorerName: string;
   /** Optional sampling configuration */
   sampling?: SerializableScoringSamplingConfig;
+  /** Optional eligibility filter (JSON-safe predicate, survives round-trips as-is) */
+  filter?: ScoringFilter;
 }
 
 /**
@@ -503,6 +506,8 @@ export interface AgentSuspendedEventData {
 export interface AgentAbortEventData {
   /** Steps accumulated up to the point of abort */
   steps: unknown[];
+  /** Assistant text streamed before the abort */
+  text?: string;
 }
 
 /**
@@ -789,6 +794,15 @@ export interface RunRegistryEntry {
    * and structured output degrades to raw text.
    */
   structuredOutput?: StructuredOutputOptions;
+  /**
+   * Call-time `returnScorerData` flag. Also serialized into
+   * `SerializableDurableOptions`, but parked here too so warm resume() and
+   * observe() can rebuild `scoringData` on their client-side
+   * `MastraModelOutput` without re-reading the snapshot. Cross-process
+   * engines lose this slot; cold resume restores it from the persisted
+   * workflow input instead.
+   */
+  returnScorerData?: boolean;
 }
 
 /**

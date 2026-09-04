@@ -1,19 +1,11 @@
 # @mastra/voice-openai
 
-OpenAI Voice integration for Mastra, providing both Text-to-Speech (TTS) and Speech-to-Text (STT) capabilities using OpenAI's advanced models.
+Add OpenAI text-to-speech and speech-to-text to Mastra with configurable models, voices, audio formats, synthesis, and transcription.
 
 ## Installation
 
 ```bash
 npm install @mastra/voice-openai
-```
-
-## Configuration
-
-The module requires an OpenAI API key, which can be provided through environment variables or directly in the configuration:
-
-```bash
-OPENAI_API_KEY=your_api_key
 ```
 
 ## Usage
@@ -66,26 +58,14 @@ const text = await voice.listen(audioStream, {
 });
 ```
 
-## Features
+## Documentation
 
-- High-quality Text-to-Speech synthesis
-- Accurate Speech-to-Text transcription
-- Multiple voice options
-- Natural and expressive speech output
-- Fast processing times
+- [OpenAI](https://mastra.ai/integrations/voice/openai)
 
-## Voice Options
+## Changelog
 
-OpenAI provides several high-quality voices:
+See the [package changelog](https://github.com/mastra-ai/mastra/blob/main/voice/openai/CHANGELOG.md) for version history and release notes.
 
-- alloy (Neutral)
-- echo (Male)
-- fable (Male)
-- onyx (Male)
-- nova (Female)
-- shimmer (Female)
-- ash (Male)
-- coral (Female)
-- sage (Male)
+## Support
 
-View the complete list in OpenAI's [Text to Speech documentation](https://platform.openai.com/docs/guides/text-to-speech).
+We have an [open community Discord](https://discord.gg/mastra-ai). Come and say hello and let us know if you have any questions or need any help getting things running.
