@@ -67,6 +67,12 @@ function request(
   };
 }
 
+// A person's move injects its own stage notice; the rules' own effects are what these assert on.
+async function ruleDecisionKeys(storage: WorkItemsStorage, orgId: string) {
+  const rows = await storage.listDeferredDecisions(orgId, PROJECT_ID);
+  return rows.map(row => row.idempotencyKey).filter(key => !key.startsWith('factory-stage:'));
+}
+
 describe('FactoryTransitionService', () => {
   it('replays concurrent transitions with the same ingress identity', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
@@ -460,7 +466,24 @@ describe('FactoryTransitionService', () => {
     });
     expect((await storage.get({ orgId: 'org-1', id: item.id }))?.autonomyArmedAt).toBeNull();
 
-    const result = await service.transition({ ...request(item, { stage: 'triage' }), cause: 'board_drag' });
+    const result = await service.transition(request(item, { stage: 'triage' }));
+
+    expect(result.status).toBe('accepted');
+    expect((await storage.get({ orgId: 'org-1', id: item.id }))?.autonomyArmedAt).toBeInstanceOf(Date);
+  });
+
+  it('arms autonomy when a person creates a card straight into a working lane', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const item = await createItem(storage, { stages: ['intake'] });
+    const service = new FactoryTransitionService({
+      rules: defaultFactoryRules({ version: 'rules-v1' }),
+      storage,
+    });
+
+    const result = await service.transition({
+      ...request(item, { stage: 'planning' }),
+      cause: 'manual_creation',
+    });
 
     expect(result.status).toBe('accepted');
     expect((await storage.get({ orgId: 'org-1', id: item.id }))?.autonomyArmedAt).toBeInstanceOf(Date);
@@ -546,7 +569,7 @@ describe('FactoryTransitionService', () => {
     expect((await storage.get({ orgId: 'org-1', id: item.id }))?.autonomyArmedAt).toBeNull();
   });
 
-  it('queues an urgent wake-up when a board drag has no skill follow-up', async () => {
+  it('queues an urgent wake-up when a move has no skill follow-up', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const item = await createItem(storage, { stages: ['triage'] });
     const service = new FactoryTransitionService({
@@ -574,7 +597,7 @@ describe('FactoryTransitionService', () => {
     expect(result.decisions[0]).not.toHaveProperty('role');
   });
 
-  it('attaches a persisted notice to a skill triggered by a board drag', async () => {
+  it('attaches a persisted notice to a skill triggered by a move', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const item = await createItem(storage);
     const service = new FactoryTransitionService({
@@ -636,10 +659,7 @@ describe('FactoryTransitionService', () => {
       'intake',
       'execute',
     ]);
-    expect((await storage.listDeferredDecisions('org-1', PROJECT_ID)).map(entry => entry.idempotencyKey)).toEqual([
-      'notify-exit',
-      'message-enter',
-    ]);
+    expect(await ruleDecisionKeys(storage, 'org-1')).toEqual(['notify-exit', 'message-enter']);
   });
 
   it('starts nothing when a person parks a card back in Intake', async () => {
@@ -1008,7 +1028,7 @@ describe('FactoryTransitionService', () => {
     await service.transition(request(first, { identity: 'same-ingress' }));
     await service.transition(request(second, { orgId: 'org-2', identity: 'same-ingress' }));
 
-    expect(await storage.listDeferredDecisions('org-1', PROJECT_ID)).toHaveLength(1);
-    expect(await storage.listDeferredDecisions('org-2', PROJECT_ID)).toHaveLength(1);
+    expect(await ruleDecisionKeys(storage, 'org-1')).toEqual(['same-effect-key']);
+    expect(await ruleDecisionKeys(storage, 'org-2')).toEqual(['same-effect-key']);
   });
 });

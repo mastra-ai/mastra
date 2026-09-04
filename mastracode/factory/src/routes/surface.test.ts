@@ -1,9 +1,11 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import type { GithubIntegration } from '../integrations/github/integration.js';
+import { builtInFactoryRules } from '../rules/defaults.js';
 import { FactoryDispatchError } from '../rules/dispatch-errors.js';
 import type { FactoryBindingPreparationInput } from '../rules/dispatcher.js';
 import type { FactoryStartCoordinator } from '../rules/start-coordinator.js';
+import { FactoryTransitionService } from '../rules/transition-service.js';
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
 import { prepareFactoryRuleBinding } from './surface.js';
 
@@ -283,6 +285,50 @@ describe('prepareFactoryRuleBinding', () => {
     expect(userId).toBe('approver-1');
     await expect(sourceControl.sessions.getBySessionId(sessionId)).resolves.toEqual(
       expect.objectContaining({ userId: 'approver-1' }),
+    );
+  });
+
+  it("opens a card_action run under the clicker's id", async () => {
+    const { seeded, sourceControl, project, github } = await seedFactoryWithRepository();
+    const { item } = await seeded.workItems.upsert({
+      orgId: 'org-1',
+      userId: 'user-1',
+      factoryProjectId: project.id,
+      input: {
+        externalSource: { integrationId: 'github', type: 'issue', externalId: '49', url: 'https://github.test/i/49' },
+        title: 'Broken login',
+        stages: ['intake'],
+        sessions: {},
+        metadata: { githubIssueNumber: 49, repository: 'mastra-ai/mastra', authorTrusted: true },
+      },
+    });
+    const transitions = new FactoryTransitionService({
+      storage: seeded.workItems,
+      rules: builtInFactoryRules(),
+    });
+    await transitions.transition({
+      orgId: 'org-1',
+      factoryProjectId: project.id,
+      workItemId: item.id,
+      actor: { type: 'human', id: 'clicker-1' },
+      board: 'work',
+      stage: 'triage',
+      expectedRevision: item.revision,
+      ingress: { type: 'human', identity: 'click-1' },
+      cause: 'card_action',
+    });
+    const [decision] = await seeded.workItems.listDeferredDecisions('org-1', project.id);
+    expect(decision).toMatchObject({ decision: { type: 'invokeSkill' }, approvedBy: 'clicker-1' });
+
+    const prepare = vi.fn(async () => ({}) as never);
+    const input = bindingInput(project.id);
+    (input.record as { approvedBy?: string | null }).approvedBy = decision!.approvedBy;
+    await prepareFactoryRuleBinding(github, { prepare } as unknown as FactoryStartCoordinator, seeded.projects, input);
+
+    const { sessionId, userId } = prepare.mock.calls[0]![0] as unknown as { sessionId: string; userId: string };
+    expect(userId).toBe('clicker-1');
+    await expect(sourceControl.sessions.getBySessionId(sessionId)).resolves.toEqual(
+      expect.objectContaining({ userId: 'clicker-1' }),
     );
   });
 

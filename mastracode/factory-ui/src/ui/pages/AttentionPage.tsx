@@ -9,7 +9,6 @@ import { useSearchParams } from 'react-router';
 
 import { useFactoryAttentionHistory, useMarkAllFactoryAttentionRead } from '../../hooks/useFactoryAttention';
 import { dayHeading, groupByDay } from '../domains/factory/activity';
-import { ApprovalQueue } from '../domains/factory/components/ApprovalQueue';
 import { AttentionItemRow, KindIcon } from '../domains/factory/components/AttentionItemRow';
 import { LoadMoreSentinel } from '../domains/factory/components/LoadMoreSentinel';
 import { DayHeading, RailRow, RAIL_LIST } from '../domains/factory/components/Timeline';
@@ -86,7 +85,6 @@ export function AttentionContent({ factoryId }: { factoryId: string }) {
   const activity = items.filter(item => item.kind === 'activity');
   const activityUnread = view === 'archived' ? 0 : (summary?.activityUnreadCount ?? 0);
   const unreadCount = (summary?.unreadCount ?? 0) + (summary?.activityUnreadCount ?? 0);
-  const showApprovalQueue = view === 'open' && !normalizedSearch && (summary?.approvalCount ?? 0) > 0;
 
   return (
     <section className="mx-auto flex w-full max-w-4xl flex-col gap-6 pb-16" aria-labelledby="attention-heading">
@@ -147,7 +145,7 @@ export function AttentionContent({ factoryId }: { factoryId: string }) {
             Try again
           </Button>
         </Notice>
-      ) : items.length === 0 && !showApprovalQueue ? (
+      ) : items.length === 0 ? (
         <div className="text-ui-sm text-icon2 flex min-h-40 items-center justify-center text-center">
           {attention.hasNextPage
             ? 'Loading older items…'
@@ -157,8 +155,6 @@ export function AttentionContent({ factoryId }: { factoryId: string }) {
         </div>
       ) : (
         <>
-          {showApprovalQueue ? <ApprovalQueue factoryId={factoryId} total={summary?.approvalCount ?? 0} /> : null}
-
           {primary.length > 0 ? <AttentionRail factoryId={factoryId} items={primary} rowProps={rowProps} /> : null}
 
           {activity.length > 0 ? (
