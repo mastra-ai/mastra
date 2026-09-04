@@ -2640,6 +2640,43 @@ async function validateRunListThreadAccess({
   });
 }
 
+/**
+ * Suspended tool calls carry model-supplied arguments and tool suspend payloads.
+ * Only return them when the listing is bound to a scope the server trusts: a
+ * thread filter (ownership already validated), a server-derived resourceId, or
+ * a server without auth where there is no principal to scope by. Any other
+ * listing is agent-wide and only gets the identifying fields needed to follow
+ * up with a scoped request.
+ */
+function hasTrustedRunListScope({
+  mastra,
+  requestContext,
+  threadId,
+}: {
+  mastra: Context['mastra'];
+  requestContext: RequestContext;
+  threadId?: string;
+}): boolean {
+  if (threadId) return true;
+  if (requestContext.get(MASTRA_RESOURCE_ID_KEY)) return true;
+  return !mastra.getServer?.()?.auth;
+}
+
+function redactSuspendedToolCallData<
+  TRun extends { status: string; toolCalls?: Array<{ args?: unknown; suspendPayload?: unknown }> },
+>(result: { runs: TRun[]; total: number }): { runs: TRun[]; total: number } {
+  return {
+    ...result,
+    runs: result.runs.map(run => {
+      if (run.status !== 'suspended' || !run.toolCalls) return run;
+      return {
+        ...run,
+        toolCalls: run.toolCalls.map(({ args: _args, suspendPayload: _suspendPayload, ...toolCall }) => toolCall),
+      };
+    }),
+  };
+}
+
 function extractRunListVersionOptions(
   query: { agentVersionId?: string; agentVersionStatus?: 'draft' | 'published' },
   requestContext: RequestContext,
@@ -2736,7 +2773,7 @@ export const LIST_AGENT_RUNS_ROUTE = createRoute({
         effectiveResourceId,
       });
 
-      return await agent.listRuns({
+      const result = await agent.listRuns({
         status: query.status,
         threadId: effectiveThreadId,
         resourceId: effectiveResourceId,
@@ -2745,6 +2782,10 @@ export const LIST_AGENT_RUNS_ROUTE = createRoute({
         perPage: query.perPage,
         page: query.page,
       });
+
+      return hasTrustedRunListScope({ mastra, requestContext, threadId: effectiveThreadId })
+        ? result
+        : redactSuspendedToolCallData(result);
     } catch (error) {
       return handleError(error, 'error listing agent runs');
     }
@@ -2786,7 +2827,7 @@ export const LIST_SUSPENDED_RUNS_ROUTE = createRoute({
         effectiveResourceId,
       });
 
-      return await agent.listSuspendedRuns({
+      const result = await agent.listSuspendedRuns({
         threadId: effectiveThreadId,
         resourceId: effectiveResourceId,
         fromDate: query.fromDate,
@@ -2794,6 +2835,10 @@ export const LIST_SUSPENDED_RUNS_ROUTE = createRoute({
         perPage: query.perPage,
         page: query.page,
       });
+
+      return hasTrustedRunListScope({ mastra, requestContext, threadId: effectiveThreadId })
+        ? result
+        : redactSuspendedToolCallData(result);
     } catch (error) {
       return handleError(error, 'error listing suspended runs');
     }
