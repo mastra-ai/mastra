@@ -1,5 +1,6 @@
 import { fetchSchemaManifest } from './client.js';
 import { ApiCliError } from './errors.js';
+import { FACTORY_API_ROUTE_SCHEMAS } from './factory-route-metadata.generated.js';
 import { LEARNING_ROUTE_SCHEMAS } from './learning-route-metadata.js';
 import type { ResolvedTarget } from './target.js';
 import type { ApiCommandDescriptor, ApiCommandExample } from './types.js';
@@ -11,7 +12,20 @@ type BundledRouteSchema = {
   responseSchema?: unknown;
 };
 
+const FACTORY_BUNDLED_ROUTE_SCHEMAS = Object.fromEntries(
+  Object.entries(FACTORY_API_ROUTE_SCHEMAS).map(([routeKey, schemas]) => [
+    routeKey,
+    {
+      pathParamSchema: 'path' in schemas ? schemas.path : undefined,
+      queryParamSchema: 'query' in schemas ? schemas.query : undefined,
+      bodySchema: 'body' in schemas ? schemas.body : undefined,
+      responseSchema: schemas.response,
+    },
+  ]),
+);
+
 export const BUNDLED_ROUTE_SCHEMAS: Readonly<Record<string, BundledRouteSchema>> = {
+  ...FACTORY_BUNDLED_ROUTE_SCHEMAS,
   ...LEARNING_ROUTE_SCHEMAS,
 };
 

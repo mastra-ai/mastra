@@ -2,6 +2,7 @@ import type { Command as CommanderCommand } from 'commander';
 import { getAnalytics } from '../../analytics/index.js';
 import { requestApi } from './client.js';
 import { ApiCliError, errorEnvelope, toApiCliError } from './errors.js';
+import { FACTORY_API_ROUTE_CATALOG, FACTORY_API_ROUTE_METADATA } from './factory-route-metadata.generated.js';
 import { parseInput, resolvePathParams, stripPathParamsFromInput } from './input.js';
 import { LEARNING_ROUTE_METADATA } from './learning-route-metadata.js';
 import { normalizeData } from './normalizers.js';
@@ -17,9 +18,13 @@ const API_ANALYTICS_SHUTDOWN_TIMEOUT_MS = 1000;
 
 /**
  * All route metadata addressable by CLI commands: generated `@mastra/server`
- * routes plus hand-authored Mastra platform learning routes.
+ * and Factory routes plus hand-authored Mastra platform learning routes.
  */
-export const CLI_ROUTE_METADATA = { ...API_ROUTE_METADATA, ...LEARNING_ROUTE_METADATA } as const;
+export const CLI_ROUTE_METADATA = {
+  ...API_ROUTE_METADATA,
+  ...FACTORY_API_ROUTE_METADATA,
+  ...LEARNING_ROUTE_METADATA,
+} as const;
 
 export const API_COMMANDS = {} as Record<string, ApiCommandDescriptor>;
 
@@ -411,6 +416,139 @@ export function registerApiCommand(program: CommanderCommand): void {
     description: 'List experiment results',
     input: 'optional',
     list: true,
+  });
+
+  const factory = api.command('factory').description('Manage Factory projects and automation');
+  const factoryProject = factory.command('project').description('Manage Factory projects');
+  addAction(factoryProject, 'list', FACTORY_API_ROUTE_CATALOG.projectList, {
+    description: 'List Factory projects for the current organization',
+    list: true,
+    routePlacement: 'origin',
+  });
+  addAction(factoryProject, 'get', FACTORY_API_ROUTE_CATALOG.projectGet, {
+    description: 'Get a Factory project',
+    routePlacement: 'origin',
+  });
+  addAction(factoryProject, 'create', FACTORY_API_ROUTE_CATALOG.projectCreate, {
+    description: 'Create a Factory project',
+    input: 'required',
+    routePlacement: 'origin',
+  });
+  addAction(factoryProject, 'update', FACTORY_API_ROUTE_CATALOG.projectUpdate, {
+    description: 'Update a Factory project',
+    input: 'required',
+    routePlacement: 'origin',
+  });
+  addAction(factoryProject, 'delete', FACTORY_API_ROUTE_CATALOG.projectDelete, {
+    description: 'Delete a Factory project',
+    routePlacement: 'origin',
+  });
+
+  const factoryWorkItem = factory.command('work-item').description('Manage Factory work items');
+  addAction(factoryWorkItem, 'list', FACTORY_API_ROUTE_CATALOG.workItemList, {
+    description: 'List Factory work items and running sessions',
+    routePlacement: 'origin',
+  });
+  addAction(factoryWorkItem, 'create', FACTORY_API_ROUTE_CATALOG.workItemCreate, {
+    description: 'Create a Factory work item in Intake',
+    input: 'required',
+    routePlacement: 'origin',
+    examples: [
+      {
+        description: 'Create a work item in Intake',
+        command: `mastra api factory work-item create <project-id> '{"title":"Investigate flaky tests"}'`,
+      },
+    ],
+  });
+  addAction(factoryWorkItem, 'update', FACTORY_API_ROUTE_CATALOG.workItemUpdate, {
+    description: 'Update Factory work-item metadata without changing its stage',
+    input: 'required',
+    routePlacement: 'origin',
+  });
+  addAction(factoryWorkItem, 'delete', FACTORY_API_ROUTE_CATALOG.workItemDelete, {
+    description: 'Delete a Factory work item',
+    routePlacement: 'origin',
+  });
+  addAction(factoryWorkItem, 'transition', FACTORY_API_ROUTE_CATALOG.workItemTransition, {
+    description: 'Transition a Factory work item using its expected revision',
+    input: 'required',
+    routePlacement: 'origin',
+    examples: [
+      {
+        description: 'Move a work item with optimistic concurrency',
+        command: `mastra api factory work-item transition <project-id> <work-item-id> '{"board":"engineering","stage":"planning","requestId":"00000000-0000-4000-8000-000000000000","cause":"manual","expectedRevision":1}'`,
+      },
+    ],
+  });
+  addAction(factoryWorkItem, 'start', FACTORY_API_ROUTE_CATALOG.workItemStart, {
+    description: 'Explicitly start a Factory work-item run',
+    input: 'required',
+    routePlacement: 'origin',
+  });
+
+  addAction(factory, 'metrics', FACTORY_API_ROUTE_CATALOG.metricsGet, {
+    description: 'Get Factory project metrics',
+    input: 'optional',
+    routePlacement: 'origin',
+  });
+
+  const factoryHealth = factory.command('health').description('Inspect Factory queue health');
+  addAction(factoryHealth, 'thresholds', FACTORY_API_ROUTE_CATALOG.healthThresholdsGet, {
+    description: 'Get queue-health thresholds',
+    routePlacement: 'origin',
+  });
+
+  const factoryDecision = factory.command('decision').description('Review Factory decisions');
+  addAction(factoryDecision, 'list', FACTORY_API_ROUTE_CATALOG.decisionList, {
+    description: 'List Factory decisions',
+    input: 'optional',
+    routePlacement: 'origin',
+  });
+  addAction(factoryDecision, 'approve', FACTORY_API_ROUTE_CATALOG.decisionApprove, {
+    description: 'Approve a Factory decision',
+    routePlacement: 'origin',
+  });
+  addAction(factoryDecision, 'dismiss', FACTORY_API_ROUTE_CATALOG.decisionDismiss, {
+    description: 'Dismiss a Factory decision',
+    routePlacement: 'origin',
+  });
+  addAction(factoryDecision, 'retry', FACTORY_API_ROUTE_CATALOG.decisionRetry, {
+    description: 'Retry a failed, retryable Factory decision',
+    routePlacement: 'origin',
+  });
+
+  const factoryAttention = factory.command('attention').description('Manage the Factory attention inbox');
+  addAction(factoryAttention, 'list', FACTORY_API_ROUTE_CATALOG.attentionList, {
+    description: 'List the Factory attention inbox',
+    input: 'optional',
+    routePlacement: 'origin',
+  });
+  addAction(factoryAttention, 'read-all', FACTORY_API_ROUTE_CATALOG.attentionReadAll, {
+    description: 'Mark Factory attention items as read',
+    input: 'optional',
+    routePlacement: 'origin',
+  });
+  addAction(factoryAttention, 'read', FACTORY_API_ROUTE_CATALOG.attentionRead, {
+    description: 'Mark a Factory attention item as read',
+    routePlacement: 'origin',
+  });
+  addAction(factoryAttention, 'archive', FACTORY_API_ROUTE_CATALOG.attentionArchive, {
+    description: 'Archive a Factory attention item',
+    routePlacement: 'origin',
+  });
+  addAction(factoryAttention, 'restore', FACTORY_API_ROUTE_CATALOG.attentionRestore, {
+    description: 'Restore a Factory attention item',
+    routePlacement: 'origin',
+  });
+
+  const factorySupervisor = factory.command('supervisor').description('Inspect the Factory supervisor');
+  addAction(factorySupervisor, 'session', FACTORY_API_ROUTE_CATALOG.supervisorSession, {
+    description: 'Get or create the deterministic Factory supervisor session',
+    routePlacement: 'origin',
+  });
+  addAction(factorySupervisor, 'health', FACTORY_API_ROUTE_CATALOG.supervisorHealth, {
+    description: 'Run the deterministic Factory supervisor health check',
+    routePlacement: 'origin',
   });
 
   const learning = api
