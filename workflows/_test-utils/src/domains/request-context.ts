@@ -8,7 +8,12 @@
 
 import { describe, it, expect } from 'vitest';
 import { z } from 'zod';
-import { RequestContext, MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY } from '@mastra/core/request-context';
+import {
+  RequestContext,
+  MASTRA_AUTH_TOKEN_KEY,
+  MASTRA_RESOURCE_ID_KEY,
+  MASTRA_THREAD_ID_KEY,
+} from '@mastra/core/request-context';
 import { createTool } from '@mastra/core/tools';
 import type { DurableAgentTestContext } from '../types';
 import { createTextStreamModel, createToolCallModel } from '../mock-models';
@@ -142,7 +147,7 @@ export function createRequestContextTests({ createAgent }: DurableAgentTestConte
     });
 
     describe('RequestContext serialization', () => {
-      it('should not include requestContext in serialized workflow input', async () => {
+      it('should snapshot caller entries but never the framework-managed auth token', async () => {
         const mockModel = createTextStreamModel('Hello!');
 
         const agent = await createAgent({
@@ -153,16 +158,23 @@ export function createRequestContextTests({ createAgent }: DurableAgentTestConte
         });
 
         const requestContext = new RequestContext();
-        requestContext.set('sensitiveData', 'should-not-serialize');
+        requestContext.set('userId', 'user-123');
+        requestContext.set(MASTRA_AUTH_TOKEN_KEY, 'super-secret-bearer-token');
 
         const result = await agent.prepare('Hello', {
           requestContext,
         });
 
+        // Caller-provided entries are intentionally snapshotted onto workflow
+        // input so durable steps can restore the request context after a
+        // restart or resume.
+        const entries = (result.workflowInput as { requestContextEntries?: Record<string, unknown> })
+          .requestContextEntries;
+        expect(entries).toEqual({ userId: 'user-123' });
+
+        // The framework-managed auth token must never be persisted.
         const serialized = JSON.stringify(result.workflowInput);
-        expect(serialized).toBeDefined();
-        expect(serialized).not.toContain('sensitiveData');
-        expect(serialized).not.toContain('should-not-serialize');
+        expect(serialized).not.toContain('super-secret-bearer-token');
       });
     });
   });
