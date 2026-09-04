@@ -1,6 +1,5 @@
-import { PermissionDenied } from '@mastra/playground-ui/components/PermissionDenied';
-import { SessionExpired } from '@mastra/playground-ui/components/SessionExpired';
-import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
+import { QueryError } from '@mastra/playground-ui/components/QueryError';
+import { isAuthError } from '@mastra/playground-ui/utils/errors';
 import { useParams } from 'react-router';
 import { AgentViewLoadingSkeleton } from '@/domains/agents/components/agent-loading-skeletons';
 import { AgentSettingsView } from '@/domains/agents/components/agent-settings/agent-settings-view';
@@ -12,20 +11,10 @@ function Agent() {
   const { agentId } = useParams();
   const { data: agent, isLoading: isAgentLoading, error } = useAgent(agentId!);
 
-  // 401 check - session expired, needs re-authentication
-  if (error && is401UnauthorizedError(error)) {
+  if (error && isAuthError(error)) {
     return (
       <div className="flex h-full items-center justify-center">
-        <SessionExpired />
-      </div>
-    );
-  }
-
-  // 403 check - permission denied for agents
-  if (error && is403ForbiddenError(error)) {
-    return (
-      <div className="flex h-full items-center justify-center">
-        <PermissionDenied resource="agents" />
+        <QueryError error={error} resource="agents" title="Failed to load agents" />
       </div>
     );
   }

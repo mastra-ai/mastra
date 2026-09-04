@@ -1,7 +1,6 @@
-import { PermissionDenied } from '@mastra/playground-ui/components/PermissionDenied';
-import { SessionExpired } from '@mastra/playground-ui/components/SessionExpired';
+import { QueryError } from '@mastra/playground-ui/components/QueryError';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
-import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
+import { isAuthError } from '@mastra/playground-ui/utils/errors';
 import { useParams, Navigate } from 'react-router';
 import { ProcessorPanel } from '@/domains/processors/components/processor-panel';
 import { useProcessor } from '@/domains/processors/hooks/use-processors';
@@ -10,20 +9,10 @@ export function Processor() {
   const { processorId } = useParams();
   const { data: processor, isLoading, error } = useProcessor(processorId!);
 
-  // 401 check - session expired
-  if (error && is401UnauthorizedError(error)) {
+  if (error && isAuthError(error)) {
     return (
       <div className="flex h-full items-center justify-center">
-        <SessionExpired />
-      </div>
-    );
-  }
-
-  // 403 check - permission denied for processors
-  if (error && is403ForbiddenError(error)) {
-    return (
-      <div className="flex h-full items-center justify-center">
-        <PermissionDenied resource="processors" />
+        <QueryError error={error} resource="processors" title="Failed to load processors" />
       </div>
     );
   }

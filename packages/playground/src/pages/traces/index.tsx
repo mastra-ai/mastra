@@ -5,9 +5,9 @@ import { Label } from '@mastra/playground-ui/components/Label';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { PropertyFilterCreator } from '@mastra/playground-ui/components/PropertyFilter';
+import { QueryError } from '@mastra/playground-ui/components/QueryError';
 import { NoTracesInfo } from '@mastra/playground-ui/domains/traces/components/no-traces-info';
 import { TraceColumnsMenu } from '@mastra/playground-ui/domains/traces/components/trace-columns-menu';
-import { TracesErrorContent } from '@mastra/playground-ui/domains/traces/components/traces-error-content';
 import { TracesLayout } from '@mastra/playground-ui/domains/traces/components/traces-layout';
 import { TracesListView } from '@mastra/playground-ui/domains/traces/components/traces-list-view';
 import { TracesToolbar } from '@mastra/playground-ui/domains/traces/components/traces-toolbar';
@@ -385,7 +385,7 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
       <PageLayout width="wide" height="full">
         {pageTopArea}
         <PageLayout.MainArea isCentered>
-          <TracesErrorContent error={tracesError} resource="traces" errorTitle="Failed to load traces" />
+          <QueryError error={tracesError} resource="traces" title="Failed to load traces" />
         </PageLayout.MainArea>
       </PageLayout>
     );

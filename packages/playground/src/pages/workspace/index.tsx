@@ -1,8 +1,6 @@
 import { Button } from '@mastra/playground-ui/components/Button';
-import { ErrorState } from '@mastra/playground-ui/components/ErrorState';
 import { NoDataPageLayout, PageLayout } from '@mastra/playground-ui/components/PageLayout';
-import { PermissionDenied } from '@mastra/playground-ui/components/PermissionDenied';
-import { SessionExpired } from '@mastra/playground-ui/components/SessionExpired';
+import { QueryError } from '@mastra/playground-ui/components/QueryError';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Tab, TabContent, TabList, Tabs } from '@mastra/playground-ui/components/Tabs';
 import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
@@ -62,11 +60,9 @@ export default function Workspace() {
     error: workspaceInfoError,
   } = useWorkspaceInfo(effectiveWorkspaceId);
 
-  // Check if 401 unauthorized (session expired)
-  const isSessionExpired = is401UnauthorizedError(workspacesError) || is401UnauthorizedError(workspaceInfoError);
-
-  // Check if 403 forbidden (permission denied)
-  const isPermissionDenied = is403ForbiddenError(workspacesError) || is403ForbiddenError(workspaceInfoError);
+  const workspaceErrors = [workspacesError, workspaceInfoError];
+  const expiredSession = workspaceErrors.find(is401UnauthorizedError);
+  const authError = expiredSession ?? workspaceErrors.find(is403ForbiddenError);
 
   const pathFromUrl = searchParams.get('path') || '.';
 
@@ -307,20 +303,10 @@ export default function Workspace() {
     );
   }
 
-  // If session expired (401 error)
-  if (isSessionExpired) {
+  if (authError) {
     return (
       <NoDataPageLayout>
-        <SessionExpired />
-      </NoDataPageLayout>
-    );
-  }
-
-  // If permission denied (403 error)
-  if (isPermissionDenied) {
-    return (
-      <NoDataPageLayout>
-        <PermissionDenied resource="workspaces" />
+        <QueryError error={authError} resource="workspaces" title="Failed to load workspace" />
       </NoDataPageLayout>
     );
   }
@@ -339,7 +325,7 @@ export default function Workspace() {
   if (genericError) {
     return (
       <NoDataPageLayout>
-        <ErrorState title="Failed to load workspace" message={(genericError as Error).message} />
+        <QueryError error={genericError} resource="workspaces" title="Failed to load workspace" />
       </NoDataPageLayout>
     );
   }

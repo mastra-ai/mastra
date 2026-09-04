@@ -1,10 +1,7 @@
 import { Button } from '@mastra/playground-ui/components/Button';
-import { ErrorState } from '@mastra/playground-ui/components/ErrorState';
 import { ListSearch } from '@mastra/playground-ui/components/ListSearch';
 import { NoDataPageLayout, PageLayout } from '@mastra/playground-ui/components/PageLayout';
-import { PermissionDenied } from '@mastra/playground-ui/components/PermissionDenied';
-import { SessionExpired } from '@mastra/playground-ui/components/SessionExpired';
-import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
+import { QueryError } from '@mastra/playground-ui/components/QueryError';
 import { Plus } from 'lucide-react';
 import { useCallback, useState } from 'react';
 import { Link } from 'react-router';
@@ -38,26 +35,10 @@ export default function PromptBlocks() {
     setPage(0);
   }, []);
 
-  if (error && is401UnauthorizedError(error)) {
-    return (
-      <NoDataPageLayout>
-        <SessionExpired />
-      </NoDataPageLayout>
-    );
-  }
-
-  if (error && is403ForbiddenError(error)) {
-    return (
-      <NoDataPageLayout>
-        <PermissionDenied resource="prompt blocks" />
-      </NoDataPageLayout>
-    );
-  }
-
   if (error) {
     return (
       <NoDataPageLayout>
-        <ErrorState title="Failed to load prompt blocks" message={error.message} />
+        <QueryError error={error} resource="prompt blocks" title="Failed to load prompt blocks" />
       </NoDataPageLayout>
     );
   }

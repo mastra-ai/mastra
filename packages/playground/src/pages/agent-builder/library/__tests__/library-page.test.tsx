@@ -168,7 +168,7 @@ describe('AgentBuilderLibraryPage', () => {
     });
   });
 
-  it('shows SessionExpired when the API returns 401', async () => {
+  it('shows the session-expired state when the API returns 401', async () => {
     server.use(
       http.get(`${BASE_URL}/api/stored/agents`, () => HttpResponse.json({ message: 'unauthorized' }, { status: 401 })),
     );
@@ -178,7 +178,6 @@ describe('AgentBuilderLibraryPage', () => {
     await waitFor(() => {
       expect(screen.queryByText('No public agents yet')).toBeNull();
     });
-    // SessionExpired component renders "Session expired" copy by default
     await waitFor(() => {
       expect(screen.getByText(/session expired/i)).toBeTruthy();
     });

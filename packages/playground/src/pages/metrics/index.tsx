@@ -1,13 +1,11 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
-import { ErrorState } from '@mastra/playground-ui/components/ErrorState';
 import { MetricsFlexGrid } from '@mastra/playground-ui/components/MetricsFlexGrid';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { NoDataPageLayout, PageLayout } from '@mastra/playground-ui/components/PageLayout';
-import { PermissionDenied } from '@mastra/playground-ui/components/PermissionDenied';
 import { PropertyFilterCreator } from '@mastra/playground-ui/components/PropertyFilter';
 import type { PropertyFilterToken } from '@mastra/playground-ui/components/PropertyFilter';
-import { SessionExpired } from '@mastra/playground-ui/components/SessionExpired';
+import { QueryError } from '@mastra/playground-ui/components/QueryError';
 import { DateRangeSelector } from '@mastra/playground-ui/domains/metrics/components/date-range-selector';
 import { useAgentRunsKpiMetrics } from '@mastra/playground-ui/domains/metrics/hooks/use-agent-runs-kpi-metrics';
 import { MetricsProvider, isValidPreset, useMetrics } from '@mastra/playground-ui/domains/metrics/hooks/use-metrics';
@@ -25,7 +23,6 @@ import { useEntityNames } from '@mastra/playground-ui/domains/traces/hooks/use-e
 import { useEnvironments } from '@mastra/playground-ui/domains/traces/hooks/use-environments';
 import { useServiceNames } from '@mastra/playground-ui/domains/traces/hooks/use-service-names';
 import { useTags } from '@mastra/playground-ui/domains/traces/hooks/use-tags';
-import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
 import { toast } from '@mastra/playground-ui/utils/toast';
 import { CircleSlashIcon, ExternalLinkIcon } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -247,26 +244,10 @@ function MetricsContent() {
     setFilterTokens(neutralTokens);
   }, [filterFields, filterTokens, setFilterTokens]);
 
-  if (error && is401UnauthorizedError(error)) {
-    return (
-      <NoDataPageLayout>
-        <SessionExpired />
-      </NoDataPageLayout>
-    );
-  }
-
-  if (error && is403ForbiddenError(error)) {
-    return (
-      <NoDataPageLayout>
-        <PermissionDenied resource="metrics" />
-      </NoDataPageLayout>
-    );
-  }
-
   if (error) {
     return (
       <NoDataPageLayout>
-        <ErrorState title="Failed to load metrics" message={error.message} />
+        <QueryError error={error} resource="metrics" title="Failed to load metrics" />
       </NoDataPageLayout>
     );
   }

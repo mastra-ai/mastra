@@ -1,7 +1,6 @@
 import type { GetWorkflowResponse } from '@mastra/client-js';
-import { PermissionDenied } from '@mastra/playground-ui/components/PermissionDenied';
-import { SessionExpired } from '@mastra/playground-ui/components/SessionExpired';
-import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
+import { QueryError } from '@mastra/playground-ui/components/QueryError';
+import { isAuthError } from '@mastra/playground-ui/utils/errors';
 import { useParams } from 'react-router';
 import { WorkflowStepDetailContent } from '@/domains/workflows/components/workflow-step-detail';
 import { useWorkflowStepDetail } from '@/domains/workflows/context/workflow-step-detail-context';
@@ -42,20 +41,10 @@ export const Workflow = () => {
   const { workflowId } = useParams();
   const { data: workflow, isLoading, error } = useWorkflow(workflowId!);
 
-  // 401 check - session expired, needs re-authentication
-  if (error && is401UnauthorizedError(error)) {
+  if (error && isAuthError(error)) {
     return (
       <div className="flex h-full items-center justify-center">
-        <SessionExpired />
-      </div>
-    );
-  }
-
-  // 403 check - permission denied for workflows
-  if (error && is403ForbiddenError(error)) {
-    return (
-      <div className="flex h-full items-center justify-center">
-        <PermissionDenied resource="workflows" />
+        <QueryError error={error} resource="workflows" title="Failed to load workflows" />
       </div>
     );
   }

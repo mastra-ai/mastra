@@ -1,7 +1,6 @@
-import { PermissionDenied } from '@mastra/playground-ui/components/PermissionDenied';
-import { SessionExpired } from '@mastra/playground-ui/components/SessionExpired';
+import { QueryError } from '@mastra/playground-ui/components/QueryError';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
-import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
+import { isAuthError } from '@mastra/playground-ui/utils/errors';
 import { useMemo, useState } from 'react';
 import { useParams } from 'react-router';
 import { AgentPlaygroundEvaluate } from '@/domains/agents/components/agent-playground/agent-playground-evaluate';
@@ -71,18 +70,10 @@ function AgentEvaluate() {
     },
   );
 
-  if (error && is401UnauthorizedError(error)) {
+  if (error && isAuthError(error)) {
     return (
       <div className="flex h-full items-center justify-center">
-        <SessionExpired />
-      </div>
-    );
-  }
-
-  if (error && is403ForbiddenError(error)) {
-    return (
-      <div className="flex h-full items-center justify-center">
-        <PermissionDenied resource="agents" />
+        <QueryError error={error} resource="agents" title="Failed to load agents" />
       </div>
     );
   }

@@ -1,9 +1,7 @@
 import { Button } from '@mastra/playground-ui/components/Button';
-import { ErrorState } from '@mastra/playground-ui/components/ErrorState';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
-import { PermissionDenied } from '@mastra/playground-ui/components/PermissionDenied';
-import { SessionExpired } from '@mastra/playground-ui/components/SessionExpired';
-import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
+import { QueryError } from '@mastra/playground-ui/components/QueryError';
+import { is401UnauthorizedError } from '@mastra/playground-ui/utils/errors';
 import { toast } from '@mastra/playground-ui/utils/toast';
 import { PencilIcon, Play } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
@@ -147,14 +145,9 @@ export default function Scorer() {
     return null;
   }
 
-  const isUnauthorized =
-    is401UnauthorizedError(scorerError) ||
-    is401UnauthorizedError(agentsError) ||
-    is401UnauthorizedError(workflowsError);
-
-  const isForbidden = scorerError && is403ForbiddenError(scorerError);
-
-  const hasOtherError = !isUnauthorized && !isForbidden && (scorerError || agentsError || workflowsError);
+  const pageErrors = [scorerError, agentsError, workflowsError].filter(Boolean);
+  const expiredSession = pageErrors.find(is401UnauthorizedError);
+  const pageError = expiredSession ?? pageErrors[0];
 
   const hasNoScores = !isLoadingScores && scores.length === 0;
   const hasFilterApplied = selectedEntityOption?.value !== 'all';
@@ -177,25 +170,15 @@ export default function Scorer() {
     />
   ) : null;
 
-  const showEmptyState = isUnauthorized || isForbidden || hasOtherError || (hasNoScores && !hasFilterApplied);
+  const showEmptyState = Boolean(pageError) || (hasNoScores && !hasFilterApplied);
 
   if (showEmptyState) {
-    const errorMessage =
-      (scorerError instanceof Error ? scorerError.message : undefined) ??
-      (agentsError instanceof Error ? agentsError.message : undefined) ??
-      (workflowsError instanceof Error ? workflowsError.message : undefined) ??
-      'An unexpected error occurred';
-
     return (
       <PageLayout width="wide" height="full" className="grid-rows-[1fr]">
         {scorerHeaderActions}
         <PageLayout.MainArea isCentered>
-          {isUnauthorized ? (
-            <SessionExpired />
-          ) : isForbidden ? (
-            <PermissionDenied resource="scorers" />
-          ) : hasOtherError ? (
-            <ErrorState title="Failed to load scorer" message={errorMessage} />
+          {pageError ? (
+            <QueryError error={pageError} resource="scorers" title="Failed to load scorer" />
           ) : (
             <NoScoresInfo onRunExperiment={() => setRunDialogOpen(true)} />
           )}

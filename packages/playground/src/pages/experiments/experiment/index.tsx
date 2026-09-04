@@ -1,10 +1,8 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
-import { ErrorState } from '@mastra/playground-ui/components/ErrorState';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
-import { PermissionDenied } from '@mastra/playground-ui/components/PermissionDenied';
-import { SessionExpired } from '@mastra/playground-ui/components/SessionExpired';
-import { is401UnauthorizedError, is403ForbiddenError, is404NotFoundError } from '@mastra/playground-ui/utils/errors';
+import { QueryError } from '@mastra/playground-ui/components/QueryError';
+import { is404NotFoundError, isAuthError } from '@mastra/playground-ui/utils/errors';
 import { ArrowLeft, PlayCircle } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { Link, Outlet, useParams } from 'react-router';
@@ -52,18 +50,10 @@ function ExperimentPage() {
   if (!experimentId) return null;
   if (experimentsListLoading || experimentLoading) return null; // Avoid layout shift on initial load
 
-  if (experimentError && is401UnauthorizedError(experimentError)) {
+  if (experimentError && isAuthError(experimentError)) {
     return (
       <ExperimentPageShell>
-        <SessionExpired />
-      </ExperimentPageShell>
-    );
-  }
-
-  if (experimentError && is403ForbiddenError(experimentError)) {
-    return (
-      <ExperimentPageShell>
-        <PermissionDenied resource="datasets" />
+        <QueryError error={experimentError} resource="datasets" title="Failed to load experiment" />
       </ExperimentPageShell>
     );
   }
@@ -96,14 +86,7 @@ function ExperimentPage() {
   if (experimentError) {
     return (
       <ExperimentPageShell>
-        <ErrorState
-          title="Failed to load experiment"
-          message={
-            experimentError instanceof Error
-              ? experimentError.message
-              : 'An unexpected error occurred. Please try again.'
-          }
-        />
+        <QueryError error={experimentError} resource="datasets" title="Failed to load experiment" />
       </ExperimentPageShell>
     );
   }

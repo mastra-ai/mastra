@@ -2,10 +2,9 @@ import { Button } from '@mastra/playground-ui/components/Button';
 import { Column, Columns } from '@mastra/playground-ui/components/Columns';
 import { MainContentContent, MainContentLayout } from '@mastra/playground-ui/components/MainContent';
 import { MainHeader } from '@mastra/playground-ui/components/MainHeader';
-import { PermissionDenied } from '@mastra/playground-ui/components/PermissionDenied';
-import { SessionExpired } from '@mastra/playground-ui/components/SessionExpired';
+import { QueryError } from '@mastra/playground-ui/components/QueryError';
 import { TextAndIcon } from '@mastra/playground-ui/components/Text';
-import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
+import { isAuthError } from '@mastra/playground-ui/utils/errors';
 import { ArrowLeft, ScaleIcon, HistoryIcon } from 'lucide-react';
 import { useMemo } from 'react';
 import { useParams, useSearchParams, useNavigate, Link } from 'react-router';
@@ -46,21 +45,11 @@ function DatasetCompareVersionsPage() {
   const itemsAMap = useMemo(() => new Map(itemsA.map(i => [i.id, i])), [itemsA]);
   const itemsBMap = useMemo(() => new Map(itemsB.map(i => [i.id, i])), [itemsB]);
 
-  if (error && is401UnauthorizedError(error)) {
+  if (error && isAuthError(error)) {
     return (
       <MainContentLayout>
         <div className="flex h-full items-center justify-center">
-          <SessionExpired />
-        </div>
-      </MainContentLayout>
-    );
-  }
-
-  if (error && is403ForbiddenError(error)) {
-    return (
-      <MainContentLayout>
-        <div className="flex h-full items-center justify-center">
-          <PermissionDenied resource="datasets" />
+          <QueryError error={error} resource="datasets" title="Failed to load datasets" />
         </div>
       </MainContentLayout>
     );

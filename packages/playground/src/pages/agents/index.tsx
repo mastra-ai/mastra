@@ -1,9 +1,6 @@
-import { ErrorState } from '@mastra/playground-ui/components/ErrorState';
 import { ListSearch } from '@mastra/playground-ui/components/ListSearch';
 import { NoDataPageLayout, PageLayout } from '@mastra/playground-ui/components/PageLayout';
-import { PermissionDenied } from '@mastra/playground-ui/components/PermissionDenied';
-import { SessionExpired } from '@mastra/playground-ui/components/SessionExpired';
-import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
+import { QueryError } from '@mastra/playground-ui/components/QueryError';
 import { useState } from 'react';
 import { AgentHeaderCreateAction } from '@/domains/agents/agent-header-actions';
 import { AgentsCompactGrid } from '@/domains/agents/components/agent-list/agents-compact-grid';
@@ -23,26 +20,10 @@ function Agents() {
   const [view, setView] = useState<AgentsView>('list');
   const [sort, setSort] = useState<AgentsSort>('default');
 
-  if (error && is401UnauthorizedError(error)) {
-    return (
-      <NoDataPageLayout>
-        <SessionExpired />
-      </NoDataPageLayout>
-    );
-  }
-
-  if (error && is403ForbiddenError(error)) {
-    return (
-      <NoDataPageLayout>
-        <PermissionDenied resource="agents" />
-      </NoDataPageLayout>
-    );
-  }
-
   if (error) {
     return (
       <NoDataPageLayout>
-        <ErrorState title="Failed to load agents" message={error.message} />
+        <QueryError error={error} resource="agents" title="Failed to load agents" />
       </NoDataPageLayout>
     );
   }

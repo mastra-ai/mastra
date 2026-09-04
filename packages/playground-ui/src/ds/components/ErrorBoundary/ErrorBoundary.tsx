@@ -148,7 +148,7 @@ function DefaultErrorFallback({
       >
         <div
           className={cn(
-            'flex items-center justify-center rounded-full bg-accent2/10 text-accent2',
+            'flex items-center justify-center rounded-full bg-negative1/10 text-negative1',
             isInline
               ? 'size-10 [&>svg]:size-5'
               : 'size-14 @md:size-16 @lg:size-20 [&>svg]:size-7 @md:[&>svg]:size-8 @lg:[&>svg]:size-10',
@@ -158,7 +158,7 @@ function DefaultErrorFallback({
         </div>
         <h3
           className={cn(
-            'font-medium text-neutral6',
+            'font-medium text-neutral5',
             isInline ? 'text-ui-md' : 'text-ui-lg @md:text-header-md @lg:text-header-lg',
           )}
         >

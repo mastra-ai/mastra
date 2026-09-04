@@ -1,14 +1,11 @@
 import type { ListStoredAgentsParams } from '@mastra/client-js';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
-import { ErrorState } from '@mastra/playground-ui/components/ErrorState';
 import { ListSearch } from '@mastra/playground-ui/components/ListSearch';
 import { PageHeader } from '@mastra/playground-ui/components/PageHeader';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
-import { PermissionDenied } from '@mastra/playground-ui/components/PermissionDenied';
-import { SessionExpired } from '@mastra/playground-ui/components/SessionExpired';
+import { QueryError } from '@mastra/playground-ui/components/QueryError';
 import { AgentIcon } from '@mastra/playground-ui/icons/AgentIcon';
-import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
 import { PlusIcon } from 'lucide-react';
 import { useMemo, useState } from 'react';
 
@@ -50,23 +47,9 @@ export default function AgentBuilderAgentsPage() {
     }
 
     if (error) {
-      if (is401UnauthorizedError(error)) {
-        return (
-          <div className="flex items-center justify-center pt-10">
-            <SessionExpired />
-          </div>
-        );
-      }
-      if (is403ForbiddenError(error)) {
-        return (
-          <div className="flex items-center justify-center pt-10">
-            <PermissionDenied resource="agents" />
-          </div>
-        );
-      }
       return (
         <div className="flex items-center justify-center pt-10">
-          <ErrorState title="Failed to load agents" message={error.message} />
+          <QueryError error={error} resource="agents" title="Failed to load agents" />
         </div>
       );
     }

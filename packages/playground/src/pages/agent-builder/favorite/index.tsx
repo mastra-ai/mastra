@@ -1,12 +1,9 @@
 import type { ListStoredAgentsParams, StoredSkillResponse } from '@mastra/client-js';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
-import { ErrorState } from '@mastra/playground-ui/components/ErrorState';
 import { ListSearch } from '@mastra/playground-ui/components/ListSearch';
 import { PageHeader } from '@mastra/playground-ui/components/PageHeader';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
-import { PermissionDenied } from '@mastra/playground-ui/components/PermissionDenied';
-import { SessionExpired } from '@mastra/playground-ui/components/SessionExpired';
-import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
+import { QueryError } from '@mastra/playground-ui/components/QueryError';
 import { SparklesIcon, StarIcon } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router';
@@ -56,27 +53,11 @@ export default function AgentBuilderFavoritePage() {
   const agents = agentsData?.agents ?? [];
   const skills = skillsData?.skills ?? [];
 
-  const renderError = (error: Error, resource: string) => {
-    if (is401UnauthorizedError(error)) {
-      return (
-        <div className="flex items-center justify-center pt-10">
-          <SessionExpired />
-        </div>
-      );
-    }
-    if (is403ForbiddenError(error)) {
-      return (
-        <div className="flex items-center justify-center pt-10">
-          <PermissionDenied resource={resource} />
-        </div>
-      );
-    }
-    return (
-      <div className="flex items-center justify-center pt-10">
-        <ErrorState title={`Failed to load favorite ${resource}`} message={error.message} />
-      </div>
-    );
-  };
+  const renderError = (error: Error, resource: string) => (
+    <div className="flex items-center justify-center pt-10">
+      <QueryError error={error} resource={resource} title={`Failed to load favorite ${resource}`} />
+    </div>
+  );
 
   const body = (() => {
     if (tab === 'agents') {

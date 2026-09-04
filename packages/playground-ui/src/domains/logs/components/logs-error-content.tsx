@@ -1,32 +1,21 @@
 import { CircleSlashIcon } from 'lucide-react';
 import { EmptyState } from '@/ds/components/EmptyState';
-import { ErrorState } from '@/ds/components/ErrorState';
-import { PermissionDenied } from '@/ds/components/PermissionDenied';
-import { SessionExpired } from '@/ds/components/SessionExpired';
-import {
-  is401UnauthorizedError,
-  is403ForbiddenError,
-  isObservabilityUnavailableError,
-  isUnsupportedObservabilityOperationError,
-} from '@/lib/query-utils';
+import { QueryError } from '@/ds/components/QueryError';
+import { isObservabilityUnavailableError, isUnsupportedObservabilityOperationError } from '@/lib/query-utils';
 
 export interface LogsErrorContentProps {
   /** The error from a useLogs query. */
   error: unknown;
-  /** Passed to PermissionDenied (usually 'logs'). */
+  /** Named in the permission-denied copy (usually 'logs'). */
   resource: string;
-  /** Title shown on the generic ErrorState fallback. */
+  /** Title shown on the generic error fallback. */
   errorTitle: string;
 }
 
 /**
- * Renders the appropriate fallback content for a logs-related query error:
- * `<SessionExpired />` for 401, `<PermissionDenied />` for 403, otherwise `<ErrorState />`.
- * Mirror of `TracesErrorContent` for the logs domain.
+ * `<QueryError />` plus the two storage-capability arms that only logs can hit.
  */
 export function LogsErrorContent({ error, resource, errorTitle }: LogsErrorContentProps) {
-  if (is401UnauthorizedError(error)) return <SessionExpired />;
-  if (is403ForbiddenError(error)) return <PermissionDenied resource={resource} />;
   if (isObservabilityUnavailableError(error)) {
     return (
       <EmptyState
@@ -36,6 +25,7 @@ export function LogsErrorContent({ error, resource, errorTitle }: LogsErrorConte
       />
     );
   }
+
   if (isUnsupportedObservabilityOperationError(error, 'logs')) {
     return (
       <EmptyState
@@ -45,6 +35,6 @@ export function LogsErrorContent({ error, resource, errorTitle }: LogsErrorConte
       />
     );
   }
-  const message = error instanceof Error ? error.message : undefined;
-  return <ErrorState title={errorTitle} message={message ?? 'Unknown error'} />;
+
+  return <QueryError error={error} resource={resource} title={errorTitle} />;
 }

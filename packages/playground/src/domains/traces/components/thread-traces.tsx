@@ -1,4 +1,4 @@
-import { TracesErrorContent } from '@mastra/playground-ui/domains/traces/components/traces-error-content';
+import { QueryError } from '@mastra/playground-ui/components/QueryError';
 import { TracesListView } from '@mastra/playground-ui/domains/traces/components/traces-list-view';
 import { useTraceListNavigation } from '@mastra/playground-ui/domains/traces/hooks/use-trace-list-navigation';
 import { useTraceOrBranchSpans } from '@mastra/playground-ui/domains/traces/hooks/use-trace-or-branch-spans';
@@ -70,7 +70,7 @@ export function ThreadTraces({ threadId, onTraceOpenChange, onSpanOpenChange }: 
   if (error) {
     return (
       <div className="flex h-full items-center justify-center p-4">
-        <TracesErrorContent error={error} resource="traces" errorTitle="Failed to load traces" />
+        <QueryError error={error} resource="traces" title="Failed to load traces" />
       </div>
     );
   }

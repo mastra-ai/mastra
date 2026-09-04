@@ -1,11 +1,9 @@
 import { Button } from '@mastra/playground-ui/components/Button';
-import { ErrorState } from '@mastra/playground-ui/components/ErrorState';
 import { MainContentContent, MainContentLayout } from '@mastra/playground-ui/components/MainContent';
-import { PermissionDenied } from '@mastra/playground-ui/components/PermissionDenied';
-import { SessionExpired } from '@mastra/playground-ui/components/SessionExpired';
+import { QueryError } from '@mastra/playground-ui/components/QueryError';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { is401UnauthorizedError, is403ForbiddenError, is404NotFoundError } from '@mastra/playground-ui/utils/errors';
+import { is404NotFoundError, isAuthError } from '@mastra/playground-ui/utils/errors';
 import { ArrowLeftRightIcon } from 'lucide-react';
 import { useSearchParams } from 'react-router';
 import { useDatasetExperiment } from '@/domains/datasets/hooks/use-dataset-experiments';
@@ -39,21 +37,11 @@ function CompareExperimentsPage() {
   const isLoading = experimentA.isLoading || experimentB.isLoading;
   const error = experimentA.error ?? experimentB.error;
 
-  if (error && is401UnauthorizedError(error)) {
+  if (error && isAuthError(error)) {
     return (
       <MainContentLayout>
         <div className="flex h-full items-center justify-center">
-          <SessionExpired />
-        </div>
-      </MainContentLayout>
-    );
-  }
-
-  if (error && is403ForbiddenError(error)) {
-    return (
-      <MainContentLayout>
-        <div className="flex h-full items-center justify-center">
-          <PermissionDenied resource="experiments" />
+          <QueryError error={error} resource="experiments" title="Failed to load experiments" />
         </div>
       </MainContentLayout>
     );
@@ -81,7 +69,7 @@ function CompareExperimentsPage() {
     return (
       <MainContentLayout>
         <div className="flex h-full items-center justify-center">
-          <ErrorState title="Failed to load experiments" message={error.message} />
+          <QueryError error={error} resource="experiments" title="Failed to load experiments" />
         </div>
       </MainContentLayout>
     );

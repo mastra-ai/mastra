@@ -1,8 +1,6 @@
-import { ErrorState } from '@mastra/playground-ui/components/ErrorState';
 import { NoDataPageLayout, PageLayout } from '@mastra/playground-ui/components/PageLayout';
-import { PermissionDenied } from '@mastra/playground-ui/components/PermissionDenied';
-import { SessionExpired } from '@mastra/playground-ui/components/SessionExpired';
-import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
+import { QueryError } from '@mastra/playground-ui/components/QueryError';
+import { isAuthError } from '@mastra/playground-ui/utils/errors';
 import { useCallback, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router';
 import { ExperimentTriggerDialog } from '@/domains/datasets/components/experiment-trigger/experiment-trigger-dialog';
@@ -95,26 +93,18 @@ export default function Experiments() {
     void navigate(`/experiments/compare?${query.toString()}`);
   };
 
-  if (error && is401UnauthorizedError(error)) {
+  if (errorExperiments && isAuthError(errorExperiments)) {
     return (
       <NoDataPageLayout>
-        <SessionExpired />
+        <QueryError error={errorExperiments} resource="experiments" title="Failed to load experiments" />
       </NoDataPageLayout>
     );
   }
 
-  if (errorExperiments && is403ForbiddenError(errorExperiments)) {
+  if (errorDatasets && isAuthError(errorDatasets)) {
     return (
       <NoDataPageLayout>
-        <PermissionDenied resource="experiments" />
-      </NoDataPageLayout>
-    );
-  }
-
-  if (errorDatasets && is403ForbiddenError(errorDatasets)) {
-    return (
-      <NoDataPageLayout>
-        <PermissionDenied resource="datasets" />
+        <QueryError error={errorDatasets} resource="datasets" title="Failed to load datasets" />
       </NoDataPageLayout>
     );
   }
@@ -122,7 +112,7 @@ export default function Experiments() {
   if (error) {
     return (
       <NoDataPageLayout>
-        <ErrorState title="Failed to load experiments" message={error.message} />
+        <QueryError error={error} title="Failed to load experiments" />
       </NoDataPageLayout>
     );
   }

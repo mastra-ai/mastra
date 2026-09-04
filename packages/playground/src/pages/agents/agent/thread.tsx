@@ -4,10 +4,9 @@ import { Button } from '@mastra/playground-ui/components/Button';
 import { LogoWithoutText } from '@mastra/playground-ui/components/Logo';
 import { MainContentLayout } from '@mastra/playground-ui/components/MainContent';
 import { MainSidebar, MainSidebarProvider, useMainSidebar } from '@mastra/playground-ui/components/MainSidebar';
-import { PermissionDenied } from '@mastra/playground-ui/components/PermissionDenied';
-import { SessionExpired } from '@mastra/playground-ui/components/SessionExpired';
+import { QueryError } from '@mastra/playground-ui/components/QueryError';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
-import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
+import { isAuthError } from '@mastra/playground-ui/utils/errors';
 import { ArrowLeft, ChartNoAxesGantt, Plus, X } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router';
@@ -71,20 +70,10 @@ function AgentThread() {
 
   const defaultSettings = useMemo(() => buildAgentDefaultSettings(agent), [agent]);
 
-  // 401 check - session expired, needs re-authentication
-  if (error && is401UnauthorizedError(error)) {
+  if (error && isAuthError(error)) {
     return (
       <div className="flex h-full items-center justify-center">
-        <SessionExpired />
-      </div>
-    );
-  }
-
-  // 403 check - permission denied for agents
-  if (error && is403ForbiddenError(error)) {
-    return (
-      <div className="flex h-full items-center justify-center">
-        <PermissionDenied resource="agents" />
+        <QueryError error={error} resource="agents" title="Failed to load agents" />
       </div>
     );
   }

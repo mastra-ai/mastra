@@ -1,6 +1,8 @@
 import { Button } from '@mastra/playground-ui/components/Button';
-import { ErrorState } from '@mastra/playground-ui/components/ErrorState';
+import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
+import { Icon } from '@mastra/playground-ui/icons/Icon';
+import { CircleXIcon } from 'lucide-react';
 
 import { usePermissionPatterns } from '../hooks/use-permission-patterns';
 import { ALL_SIDEBAR_PERMISSIONS } from '../route-permissions';
@@ -87,10 +89,15 @@ const GateInvalidBaseUrl = ({ error, baseUrl }: GateInvalidBaseUrlProps) => {
 
   return (
     <div className="flex h-screen w-full items-center justify-center">
-      <ErrorState
-        title="Failed to load studio"
-        message={messages.join('\n\n')}
-        action={<Button onClick={handleReset}>Reset Studio Configuration</Button>}
+      <EmptyState
+        iconSlot={
+          <Icon size="lg" className="text-negative1">
+            <CircleXIcon />
+          </Icon>
+        }
+        titleSlot="Failed to load studio"
+        descriptionSlot={messages.join('\n\n')}
+        actionSlot={<Button onClick={handleReset}>Reset Studio Configuration</Button>}
       />
     </div>
   );
