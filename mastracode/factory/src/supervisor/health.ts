@@ -54,12 +54,6 @@ export interface FactoryHealthFinding {
   /** How long the condition has held, in ms, when it is age-based. */
   ageMs: number | null;
   suggestedRepair: FactoryHealthRepair | null;
-  /**
-   * The dispatch failure code, on `decision-failed` only. It is the
-   * classification the supervisor reads (a parked question vs a crash), so
-   * it rides on the finding itself and survives into any later re-ring.
-   */
-  failureCode?: string;
 }
 
 export interface FactoryHealthReport {
@@ -179,8 +173,17 @@ export function decisionFailedFinding(
     evidence: `Decision ${decision.id} (${describeDecision(decision)}) failed after ${decision.attempts} attempt(s) at ${decision.updatedAt.toISOString()}${decision.failureCode ? ` [${decision.failureCode}]` : ''}: ${truncate(decision.lastError ?? 'no error recorded')}`,
     ageMs: now.getTime() - decision.updatedAt.getTime(),
     suggestedRepair: { action: 'retry-decision', decisionId: decision.id },
-    ...(decision.failureCode ? { failureCode: decision.failureCode } : {}),
   };
+}
+
+/**
+ * Reads the failure code back out of a `decision-failed` evidence line the
+ * helper above wrote (` [code]: `). The code is the classification the
+ * supervisor reads (a parked question vs a crash), and it must survive into a
+ * later re-ring from the stored row; the finding shape itself stays as is.
+ */
+export function decisionFailureCodeFromEvidence(evidence: string): string | undefined {
+  return /\s\[([a-z_]+)\]: /.exec(evidence)?.[1];
 }
 
 export function computeFactoryHealth(

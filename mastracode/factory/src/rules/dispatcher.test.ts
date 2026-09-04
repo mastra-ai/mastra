@@ -4515,7 +4515,6 @@ describe('FactoryDecisionDispatcher', () => {
       const { ageMs: _sweepAge, ...sweepFinding } = report.findings.find(f => f.id === before!.findingKey)!;
       const { ageMs: _rowAge, ...rowFinding } = before!.finding as typeof sweepFinding;
       expect(rowFinding).toEqual(sweepFinding);
-      expect(rowFinding.failureCode).toBe('run_awaiting_input');
       await storage.syncSupervisorFindings({
         ...scope,
         findings: report.findings,
