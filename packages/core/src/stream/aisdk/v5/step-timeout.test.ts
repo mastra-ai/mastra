@@ -8,10 +8,12 @@ const inputMessages = [{ role: 'user' as const, content: [{ type: 'text' as cons
 const runExecute = async ({
   model,
   stepMs,
+  firstChunkMs,
   maxRetries,
 }: {
   model: MockLanguageModelV2;
   stepMs?: number;
+  firstChunkMs?: number;
   maxRetries?: number;
 }) => {
   const stream = execute({
@@ -20,7 +22,7 @@ const runExecute = async ({
     inputMessages,
     tools: {},
     methodType: 'stream',
-    modelSettings: { maxRetries, timeout: stepMs ? { stepMs } : undefined },
+    modelSettings: { maxRetries, timeout: stepMs || firstChunkMs ? { stepMs, firstChunkMs } : undefined },
     shouldThrowError: true,
     onResult: () => {},
     options: {},
@@ -87,5 +89,91 @@ describe('modelSettings.timeout.stepMs', () => {
 
     expect(chunks.some(chunk => chunk.type === 'text-delta')).toBe(true);
     expect(chunks.some(chunk => chunk.type === 'error')).toBe(false);
+  });
+});
+
+describe('modelSettings.timeout.firstChunkMs', () => {
+  it('times out when only non-content metadata arrives', async () => {
+    const model = new MockLanguageModelV2({
+      doStream: async () => ({
+        stream: new ReadableStream({
+          start(controller) {
+            controller.enqueue({ type: 'stream-start', warnings: [] });
+            controller.enqueue({ type: 'text-start', id: 'text-1' });
+          },
+        }),
+      }),
+    });
+
+    await expect(runExecute({ model, firstChunkMs: 50, maxRetries: 0 })).rejects.toMatchObject({
+      timeoutType: 'firstChunk',
+    });
+  });
+
+  it('clears the first-content budget after a content chunk arrives', async () => {
+    const model = new MockLanguageModelV2({
+      doStream: async () => ({
+        stream: new ReadableStream({
+          async start(controller) {
+            controller.enqueue({ type: 'text-start', id: 'text-1' });
+            controller.enqueue({ type: 'text-delta', id: 'text-1', delta: 'partial' });
+            await new Promise(resolve => setTimeout(resolve, 80));
+            controller.enqueue({ type: 'text-end', id: 'text-1' });
+            controller.enqueue({
+              type: 'finish',
+              finishReason: 'stop',
+              usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+            });
+            controller.close();
+          },
+        }),
+      }),
+    });
+
+    const chunks = await runExecute({ model, firstChunkMs: 50, maxRetries: 0 });
+    expect(chunks.some(chunk => chunk.type === 'text-delta')).toBe(true);
+  });
+
+  it.each([
+    {
+      name: 'reasoning delta',
+      chunks: [
+        { type: 'reasoning-start', id: 'reasoning-1' },
+        { type: 'reasoning-delta', id: 'reasoning-1', delta: 'thinking' },
+        { type: 'reasoning-end', id: 'reasoning-1' },
+      ],
+    },
+    {
+      name: 'tool call',
+      chunks: [{ type: 'tool-call', toolCallId: 'tool-1', toolName: 'lookup', input: '{}' }],
+    },
+  ])('treats a $name as first content', async ({ chunks: contentChunks }) => {
+    const model = new MockLanguageModelV2({
+      doStream: async () => ({
+        stream: new ReadableStream({
+          async start(controller) {
+            for (const chunk of contentChunks) controller.enqueue(chunk);
+            await new Promise(resolve => setTimeout(resolve, 80));
+            controller.enqueue({
+              type: 'finish',
+              finishReason: 'stop',
+              usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+            });
+            controller.close();
+          },
+        }),
+      }),
+    });
+
+    const chunks = await runExecute({ model, firstChunkMs: 50, maxRetries: 0 });
+    expect(chunks.some(chunk => contentChunks.some(content => content.type === chunk.type))).toBe(true);
+  });
+
+  it('does not retry the same model after a first-content timeout', async () => {
+    const doStream = vi.fn(async () => ({ stream: new ReadableStream() }));
+    const model = new MockLanguageModelV2({ doStream: doStream as any });
+
+    await expect(runExecute({ model, firstChunkMs: 50, maxRetries: 3 })).rejects.toSatisfy(isMastraTimeoutError);
+    expect(doStream).toHaveBeenCalledTimes(1);
   });
 });
