@@ -1158,14 +1158,15 @@ describe('TraceDataPanelView — span search', () => {
     expect(searchField().value).toBe('zzz-nothing');
   });
 
-  it('sits on the same row as the span type legend', () => {
+  it('sits on its own full-width row above the span type legend', () => {
     renderDeep();
 
-    // The legend is right-aligned on its own row; the search field fills the
-    // empty left half of that row rather than taking a row of its own.
+    // The field gets a whole row so it is never squeezed by a wide legend.
     const legendRow = screen.getByText('Tool').closest('div')?.parentElement;
+    const field = searchField();
 
-    expect(legendRow?.contains(searchField())).toBe(true);
+    expect(legendRow?.contains(field)).toBe(false);
+    expect((legendRow?.compareDocumentPosition(field) ?? 0) & Node.DOCUMENT_POSITION_PRECEDING).toBeTruthy();
   });
 
   it('restores the full trace when the query is cleared', async () => {
