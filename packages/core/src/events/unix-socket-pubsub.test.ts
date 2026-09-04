@@ -190,8 +190,13 @@ describe('UnixSocketPubSub', () => {
 
     const first = vi.fn();
     const second = vi.fn();
+    await broker.publish('bootstrap', makeEvent());
+    expect(broker.isBroker).toBe(true);
+
     await client.subscribe('topic-a', first, { group: 'workers' });
     await client.subscribe('topic-a', second, { group: 'workers' });
+    expect(client.isBroker).toBe(false);
+
     await client.unsubscribe('topic-a', first);
 
     await broker.publish('topic-a', makeEvent({ type: 'still-subscribed' }));
