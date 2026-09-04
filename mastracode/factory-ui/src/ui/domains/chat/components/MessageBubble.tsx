@@ -2,21 +2,22 @@ import type { PlanResume } from '@mastra/client-js';
 import { MarkdownRenderer } from '@mastra/playground-ui/components/MarkdownRenderer';
 import { useRevealedParts } from '@mastra/playground-ui/components/ai/message-reveal';
 import { Notice } from '@mastra/playground-ui/components/Notice';
-import { SlackIcon } from '@mastra/playground-ui/icons/SlackIcon';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { MessageFactory } from '@mastra/react/ui';
 import type { FilePart, MessageRoleRenderers, ReasoningPart, TextPart, ToolInvocationPart } from '@mastra/react/ui';
 import { useState } from 'react';
 
+import { channelOrigin, messageAuthor } from '../services/message-author';
 import type { MessageEntry, SuspensionPrompt } from '../services/transcript';
 import { Arriving } from '@mastra/playground-ui/components/Arrival';
 import { MESSAGE_HOVER, MessageMeta } from './MessageMeta';
+import { ChannelOriginBadge, SenderAvatar } from './MessageSender';
 import { parseSkillActivation, SkillMessage } from './SkillMessage';
 import { ToolCard } from './tool/ToolCard';
 import { ToolGroup } from './tool/ToolGroup';
 import { ToolFactory } from './ToolFactory';
 import { collectToolGroups, draws, messageText, renderableParts, toolFromInvocationPart } from './transcript-parts';
-import { isRecord, resultBlock, stringify } from './transcript-shared';
+import { resultBlock, stringify } from './transcript-shared';
 import {
   isSkillNotificationSignal,
   notificationMetadata,
@@ -30,46 +31,6 @@ import {
   SUPPRESSED_STATE_SIGNAL_IDS,
   TimeGap,
 } from './TranscriptSignals';
-
-const CHANNEL_PLATFORM_LABEL: Record<string, string> = {
-  slack: 'Slack',
-};
-
-/**
- * Channel provenance for a message that arrived via a channel adapter.
- * `agent-channels` stamps `content.providerMetadata.mastra.channels.<platform>`
- * with author facts on inbound messages exactly so UIs can show origin
- * without unpacking the signal envelope.
- */
-export function channelOrigin(entry: MessageEntry): { platform: string; authorName?: string } | undefined {
-  const mastra = entry.message.content.providerMetadata?.mastra;
-  const channels = isRecord(mastra) ? mastra.channels : undefined;
-  if (!isRecord(channels)) return undefined;
-  const platform = Object.keys(channels)[0];
-  if (!platform) return undefined;
-  const info = channels[platform];
-  const author = isRecord(info) && isRecord(info.author) ? info.author : undefined;
-  const authorName =
-    typeof author?.fullName === 'string'
-      ? author.fullName
-      : typeof author?.userName === 'string'
-        ? author.userName
-        : undefined;
-  return { platform, authorName };
-}
-
-export function ChannelOriginBadge({ origin }: { origin: { platform: string; authorName?: string } }) {
-  const label = CHANNEL_PLATFORM_LABEL[origin.platform] ?? origin.platform;
-  return (
-    <div className="text-ui-xs text-icon3 mt-1 flex items-center gap-1" aria-label={`Sent from ${label}`}>
-      {origin.platform === 'slack' && <SlackIcon className="size-3" aria-hidden="true" />}
-      <span>
-        via {label}
-        {origin.authorName ? ` · ${origin.authorName}` : ''}
-      </span>
-    </div>
-  );
-}
 
 function steeringLabel(entry: MessageEntry): string | undefined {
   if (!entry.steer) return undefined;
@@ -101,6 +62,7 @@ export function MessageBubble({
   reply,
   isSubmitting,
   onRespond,
+  viewerId,
 }: {
   entry: MessageEntry;
   suspensions: ReadonlyMap<string, SuspensionPrompt>;
@@ -108,6 +70,8 @@ export function MessageBubble({
   reply?: string;
   isSubmitting: boolean;
   onRespond: (toolCallId: string, resumeData: string | string[] | PlanResume, promptId: string) => void;
+  /** The signed-in user; anyone else's message gets their avatar beside it. */
+  viewerId?: string;
 }) {
   const written = renderableParts(entry);
   const parts = useRevealedParts(written, Boolean(entry.streaming));
@@ -127,7 +91,9 @@ export function MessageBubble({
   const hasRenderablePart = written.some(part => draws(part, suspensions, entry.runtimeTools));
 
   const toolGroups = collectToolGroups(parts, suspensions, entry.runtimeTools, groupable);
-  const origin = channelOrigin(entry);
+  const origin = channelOrigin(entry.message);
+  const author = messageAuthor(entry.message);
+  const sender = author && author.id !== viewerId ? author : undefined;
   const prose = messageText(written);
   const meta = metaText(entry, prose, reply);
   const steeringStatus = steeringLabel(entry);
@@ -135,25 +101,28 @@ export function MessageBubble({
   const steeringFailed = entry.deliveryStatus === 'failed';
   const roles: MessageRoleRenderers = {
     User: ({ children }) => (
-      <div className={cn(MESSAGE_HOVER, 'my-3 ml-auto flex w-fit max-w-[70%] flex-col items-end')}>
-        <div
-          className={cn(
-            'text-text1 bg-neutral6/5 rounded-xl border border-transparent px-4 py-2 break-words',
-            steeringPending && 'border-border1 border-dashed',
-          )}
-        >
-          {children}
-        </div>
-        {steeringStatus && (
-          <span
-            className={cn('text-ui-xs text-icon3 mt-1', steeringFailed && 'text-notice-destructive-fg')}
-            aria-live="polite"
+      <div className={cn(MESSAGE_HOVER, 'my-3 ml-auto flex w-fit max-w-[70%] items-start gap-2')}>
+        {sender && <SenderAvatar author={sender} />}
+        <div className="flex min-w-0 flex-col items-end">
+          <div
+            className={cn(
+              'text-text1 bg-neutral6/5 rounded-xl border border-transparent px-4 py-2 break-words',
+              steeringPending && 'border-border1 border-dashed',
+            )}
           >
-            {steeringStatus}
-          </span>
-        )}
-        {origin && <ChannelOriginBadge origin={origin} />}
-        {meta ? <MessageMeta text={meta} createdAt={entry.message.createdAt} align="end" /> : null}
+            {children}
+          </div>
+          {steeringStatus && (
+            <span
+              className={cn('text-ui-xs text-icon3 mt-1', steeringFailed && 'text-notice-destructive-fg')}
+              aria-live="polite"
+            >
+              {steeringStatus}
+            </span>
+          )}
+          {origin && <ChannelOriginBadge origin={origin} />}
+          {meta ? <MessageMeta text={meta} createdAt={entry.message.createdAt} align="end" /> : null}
+        </div>
       </div>
     ),
     Assistant: ({ children }) => (
