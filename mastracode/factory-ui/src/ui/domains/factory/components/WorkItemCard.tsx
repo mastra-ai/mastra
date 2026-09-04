@@ -238,7 +238,7 @@ export function WorkItemCard({
           draggable={false}
           aria-label={`Details for ${item.title}`}
           aria-expanded={morph.open}
-          className="focus-visible:outline-accent1 absolute inset-0 cursor-pointer rounded-card outline-none focus-visible:outline-2 focus-visible:outline-offset-2"
+          className="focus-visible:outline-accent1 rounded-card absolute inset-0 cursor-pointer outline-none focus-visible:outline-2 focus-visible:outline-offset-2"
           onClick={morph.openDetails}
         />
         <WorkItemCardRows
