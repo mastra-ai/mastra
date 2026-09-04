@@ -836,7 +836,8 @@ describe('MastraFactory.prepare', () => {
    */
   it('wires the health worker to touch the attention feed when the backstop surfaces a finding', async () => {
     const storage = fakeStorage();
-    const pubsub = { publish: vi.fn(async () => {}), subscribe: vi.fn() } as never;
+    const publish = vi.fn(async () => {});
+    const pubsub = { publish, subscribe: vi.fn() } as never;
     const factory = new MastraFactory({ secretEncryption, storage, pubsub });
     const args = await factory.prepare();
     const worker = args.workers!.find(
@@ -863,25 +864,37 @@ describe('MastraFactory.prepare', () => {
       ],
       now: new Date(Date.now() - SUPERVISOR_ATTENTION_FORCE_SURFACE_MS - 60_000),
     });
-    (pubsub as { publish: ReturnType<typeof vi.fn> }).publish.mockClear();
+    publish.mockClear();
+    // The first backstop publish fails: the sweep must not consider the crossing announced.
+    publish.mockRejectedValueOnce(new Error('broker down'));
 
     // A sweep reconciles against computed health, which would resolve the
-    // seeded row; keep the row by making the sweep compute the same finding.
+    // seeded row; keep the row by making reconciliation a no-op.
     const health = vi.spyOn(workItems, 'syncSupervisorFindings').mockResolvedValue(undefined);
+    const error = vi.fn();
+    const sweep = async () => {
+      await worker.start();
+      await new Promise(resolve => setTimeout(resolve, 0));
+      await worker.stop();
+    };
     try {
       await worker.init({
         pubsub,
         storage: {} as never,
-        logger: { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() } as never,
+        logger: { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error } as never,
       });
-      await worker.start();
-      await new Promise(resolve => setTimeout(resolve, 0));
-      await worker.stop();
+      await sweep(); // publish rejects, sweep logs the failure
+      expect(publish).toHaveBeenCalledTimes(1);
+      expect(error).toHaveBeenCalled();
+      await sweep(); // retried and accepted
+      expect(publish).toHaveBeenCalledTimes(2);
+      await sweep(); // announced; silent now
+      expect(publish).toHaveBeenCalledTimes(2);
     } finally {
       health.mockRestore();
     }
 
-    expect((pubsub as { publish: ReturnType<typeof vi.fn> }).publish).toHaveBeenCalledWith(
+    expect(publish).toHaveBeenLastCalledWith(
       expect.stringContaining(project.id),
       expect.objectContaining({ type: 'factory.feed.touched', runId: project.id }),
     );

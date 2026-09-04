@@ -40,7 +40,7 @@ import {
   getFactoryAuthUserFromContext,
   getFactoryAuthUserId,
 } from './auth.js';
-import { touchFeed } from './feed-events.js';
+import { publishFeedTouch, touchFeed } from './feed-events.js';
 import type { FactoryIntegration, IntegrationPostToolContext, IntegrationTools } from './integrations/base.js';
 import { reconcileGithubAcceptanceLabels } from './integrations/github/acceptance-labels.js';
 import type { GithubIntegration } from './integrations/github/integration.js';
@@ -829,6 +829,7 @@ export class MastraFactory {
                               },
                         workItems: workItemsStorage,
                         audit: auditStorage,
+                        logger: { warn: (message, meta) => console.warn(`[Factory Supervisor] ${message}`, meta) },
                       }),
                     );
                     // The approval-gated write tools stamp the human who asked
@@ -1166,7 +1167,9 @@ export class MastraFactory {
               notify: input => notifySupervisor({ controller: prepared.base.controller }, input),
               // Same doorbell storage writes ring: the 30-minute force-surface
               // backstop changes the Attention projection without a write.
-              attentionChanged: scope => touchFeed(eventBus, scope),
+              // Awaited (unlike a write's touch) so a failed publish leaves the
+              // sweep's checkpoint behind and the next sweep rings again.
+              attentionChanged: scope => publishFeedTouch(eventBus, scope),
             }),
           ]
         : []),
