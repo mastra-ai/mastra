@@ -11,15 +11,44 @@ function readString(value: unknown): string | undefined {
   return typeof value === 'string' ? value : undefined;
 }
 
-type ProcessorToolSummary = {
+export type ProcessorToolSummary = {
   id: string;
   name: string;
   description?: string;
 };
 
-type ActiveToolSummary = {
+export type ActiveToolSummary = {
   id: string;
   name: string;
+};
+
+export type ProcessorModelSummary = {
+  modelId?: string;
+  provider?: string;
+  specificationVersion?: string;
+};
+
+export type ProcessorToolChoiceSummary = {
+  type: string;
+  tool?: ActiveToolSummary;
+};
+
+const PROCESSOR_RESULT_SUMMARY_KEYS = [
+  'text',
+  'object',
+  'finishReason',
+  'toolCalls',
+  'toolResults',
+  'warnings',
+  'files',
+  'sources',
+  'reasoning',
+  'reasoningText',
+  'tripwire',
+] as const;
+
+export type ProcessorResultSummary = Partial<Record<(typeof PROCESSOR_RESULT_SUMMARY_KEYS)[number], unknown>> & {
+  stepCount?: number;
 };
 
 function summarizeProcessorToolEntry(key: string, value: unknown): ProcessorToolSummary {
@@ -41,13 +70,7 @@ function summarizeProcessorToolEntry(key: string, value: unknown): ProcessorTool
   };
 }
 
-export function summarizeProcessorModelForSpan(value: unknown):
-  | {
-      modelId?: string;
-      provider?: string;
-      specificationVersion?: string;
-    }
-  | undefined {
+export function summarizeProcessorModelForSpan(value: unknown): ProcessorModelSummary | undefined {
   if (!isPlainObject(value)) {
     return undefined;
   }
@@ -130,12 +153,7 @@ export function summarizeActiveToolsForSpan(activeTools: unknown, tools?: unknow
 export function summarizeToolChoiceForSpan(
   toolChoice: unknown,
   tools?: unknown,
-):
-  | {
-      type: string;
-      tool?: ActiveToolSummary;
-    }
-  | undefined {
+): ProcessorToolChoiceSummary | undefined {
   if (typeof toolChoice === 'string') {
     return { type: toolChoice };
   }
@@ -177,25 +195,13 @@ export function summarizeToolChoiceForSpan(
   };
 }
 
-export function summarizeProcessorResultForSpan(value: unknown): Record<string, unknown> | undefined {
+export function summarizeProcessorResultForSpan(value: unknown): ProcessorResultSummary | undefined {
   if (!isPlainObject(value)) {
     return undefined;
   }
 
-  const projected: Record<string, unknown> = {};
-  for (const key of [
-    'text',
-    'object',
-    'finishReason',
-    'toolCalls',
-    'toolResults',
-    'warnings',
-    'files',
-    'sources',
-    'reasoning',
-    'reasoningText',
-    'tripwire',
-  ] as const) {
+  const projected: ProcessorResultSummary = {};
+  for (const key of PROCESSOR_RESULT_SUMMARY_KEYS) {
     if (value[key] !== undefined) {
       projected[key] = value[key];
     }

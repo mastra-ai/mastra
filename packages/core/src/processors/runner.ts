@@ -1,4 +1,5 @@
 import type { LanguageModelV2Prompt, LanguageModelV2CallWarning } from '@ai-sdk/provider-v5';
+import type { CoreMessage as CoreMessageV4 } from '@internal/ai-sdk-v4';
 import type { StepResult } from '@internal/ai-sdk-v5';
 import type { Agent } from '../agent';
 import type { MastraDBMessage, MessageInput } from '../agent/message-list';
@@ -30,6 +31,20 @@ import { isProcessorWorkflow } from './is-processor-workflow';
 import { isMaybeAnthropicWithoutAssistantPrefill } from './provider-history-compat';
 import { createProcessorSendSignal } from './send-signal';
 import { resolveProcessorSpanAttributes, resolveProcessorSpanName } from './span-declaration';
+import type {
+  ProcessorInputSpanInput,
+  ProcessorInputSpanOutput,
+  ProcessorInputStepSpanInput,
+  ProcessorInputStepSpanOutput,
+  ProcessorOutputResultSpanInput,
+  ProcessorOutputSpanOutput,
+  ProcessorOutputStepSpanInput,
+  ProcessorOutputStepSpanOutput,
+  ProcessorOutputStreamSpanInput,
+  ProcessorOutputStreamSpanOutput,
+  ProcessorToolResultSpanInput,
+  ProcessorToolResultSpanOutput,
+} from './span-io';
 import {
   summarizeActiveToolsForSpan,
   summarizeProcessorModelForSpan,
@@ -152,7 +167,7 @@ export class ProcessorState<OUTPUT = undefined> {
       },
       input: {
         totalChunks: 0,
-      },
+      } satisfies ProcessorOutputStreamSpanInput,
     });
   }
 
@@ -168,7 +183,7 @@ export class ProcessorState<OUTPUT = undefined> {
       this.span.input = {
         totalChunks: this.streamParts.length,
         accumulatedText: this.inputAccumulatedText,
-      };
+      } satisfies ProcessorOutputStreamSpanInput;
     }
   }
 
@@ -183,7 +198,7 @@ export class ProcessorState<OUTPUT = undefined> {
   }
 
   /** Get final output for span */
-  getFinalOutput(): { totalChunks: number; accumulatedText: string } {
+  getFinalOutput(): ProcessorOutputStreamSpanOutput {
     return {
       totalChunks: this.outputChunkCount,
       accumulatedText: this.outputAccumulatedText,
@@ -213,7 +228,7 @@ function areProcessorMessageArraysEqual(before: unknown[] | undefined, after: un
 
 function buildProcessInputStepSpanInput(args: {
   messages: MastraDBMessage[];
-  systemMessages: unknown[];
+  systemMessages: CoreMessageV4[];
   stepNumber: number;
   messageId?: string;
   retryCount: number;
@@ -221,7 +236,7 @@ function buildProcessInputStepSpanInput(args: {
   tools?: unknown;
   toolChoice?: unknown;
   activeTools?: unknown;
-}) {
+}): ProcessorInputStepSpanInput {
   const summarizedModel = summarizeProcessorModelForSpan(args.model);
   const summarizedTools = summarizeProcessorToolsForSpan(args.tools);
   const summarizedToolChoice = summarizeToolChoiceForSpan(args.toolChoice, args.tools);
@@ -245,11 +260,11 @@ function buildProcessInputStepSpanOutput(args: {
   beforeStepInput: Pick<RunProcessInputStepResult, 'messageId' | 'model' | 'tools' | 'toolChoice' | 'activeTools'>;
   afterStepInput: RunProcessInputStepResult;
   beforeMessages: MastraDBMessage[];
-  beforeSystemMessages: unknown[];
+  beforeSystemMessages: CoreMessageV4[];
   messages: MastraDBMessage[];
-  systemMessages: unknown[];
-}) {
-  const output: Record<string, unknown> = {};
+  systemMessages: CoreMessageV4[];
+}): ProcessorInputStepSpanOutput {
+  const output: ProcessorInputStepSpanOutput = {};
 
   if (!areProcessorMessageArraysEqual(args.beforeMessages, args.messages)) {
     output.messages = args.messages;
@@ -747,7 +762,7 @@ export class ProcessorRunner {
           messages: processableMessages,
           ...(summarizedResult ? { result: summarizedResult } : {}),
           retryCount,
-        },
+        } satisfies ProcessorOutputResultSpanInput,
       });
 
       // Start recording MessageList mutations for this processor
@@ -811,7 +826,7 @@ export class ProcessorRunner {
             ...(!areProcessorMessageArraysEqual(outputSystemMessagesBefore, messageList.getAllSystemMessages())
               ? { systemMessages: messageList.getAllSystemMessages() }
               : {}),
-          },
+          } satisfies ProcessorOutputSpanOutput,
           attributes: mutations.length > 0 ? { messageListMutations: mutations } : undefined,
         });
       } catch (error) {
@@ -1267,7 +1282,7 @@ export class ProcessorRunner {
         input: {
           messages: processableMessages,
           systemMessages: currentSystemMessages,
-        },
+        } satisfies ProcessorInputSpanInput,
       });
 
       // Start recording MessageList mutations for this processor
@@ -1399,7 +1414,7 @@ export class ProcessorRunner {
             ...(!areProcessorMessageArraysEqual(inputSystemMessagesBefore, messageList.getSystemMessages())
               ? { systemMessages: messageList.getSystemMessages() }
               : {}),
-          },
+          } satisfies ProcessorInputSpanOutput,
           attributes: mutations.length > 0 ? { messageListMutations: mutations } : undefined,
         });
       } catch (error) {
@@ -2103,7 +2118,7 @@ export class ProcessorRunner {
           ...(finishReason !== undefined ? { finishReason } : {}),
           ...(toolCalls !== undefined ? { toolCalls } : {}),
           ...(text !== undefined ? { text } : {}),
-        },
+        } satisfies ProcessorOutputStepSpanInput,
       });
 
       // Start recording MessageList mutations for this processor
@@ -2180,7 +2195,7 @@ export class ProcessorRunner {
             ...(!areProcessorMessageArraysEqual(currentSystemMessages, messageList.getSystemMessages())
               ? { systemMessages: messageList.getSystemMessages() }
               : {}),
-          },
+          } satisfies ProcessorOutputStepSpanOutput,
           attributes: mutations.length > 0 ? { messageListMutations: mutations } : undefined,
         });
       } catch (error) {
@@ -2320,7 +2335,7 @@ export class ProcessorRunner {
           toolCallId,
           stepNumber,
           ...(providerExecuted !== undefined ? { providerExecuted } : {}),
-        },
+        } satisfies ProcessorToolResultSpanInput,
       });
 
       // Start recording MessageList mutations for this processor
@@ -2383,7 +2398,7 @@ export class ProcessorRunner {
             ...(!areProcessorMessageArraysEqual(currentSystemMessages, messageList.getAllSystemMessages())
               ? { systemMessages: messageList.getAllSystemMessages() }
               : {}),
-          },
+          } satisfies ProcessorToolResultSpanOutput,
           attributes: mutations.length > 0 ? { messageListMutations: mutations } : undefined,
         });
       } catch (error) {

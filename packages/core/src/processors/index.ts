@@ -970,6 +970,14 @@ export {
 export type { CompatRule } from './provider-history-compat';
 export { ProcessorState, ProcessorRunner } from './runner';
 export { createProcessorSendSignal } from './send-signal';
+export * from './span-io';
+export type {
+  ProcessorModelSummary,
+  ProcessorToolSummary,
+  ActiveToolSummary,
+  ProcessorToolChoiceSummary,
+  ProcessorResultSummary,
+} from './span-payload';
 export * from './memory';
 export type { TripWireOptions } from '../agent/trip-wire';
 export {

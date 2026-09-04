@@ -31,7 +31,13 @@ import {
   resolveObservabilityContext,
 } from '../observability';
 import { executeWithContext } from '../observability/utils';
-import type { OutputResult, Processor, ProcessorStreamWriter, ProcessorStreamWriterOptions } from '../processors';
+import type {
+  OutputResult,
+  ProcessInputStepResult,
+  Processor,
+  ProcessorStreamWriter,
+  ProcessorStreamWriterOptions,
+} from '../processors';
 import { ProcessorRunner, ProcessorState } from '../processors/runner';
 import { createProcessorSendSignal } from '../processors/send-signal';
 import {
@@ -39,6 +45,16 @@ import {
   resolveProcessorSpanName,
   toProcessorSpanPhase,
 } from '../processors/span-declaration';
+import type {
+  ProcessorInputSpanInput,
+  ProcessorInputStepSpanInput,
+  ProcessorInputStepSpanOutput,
+  ProcessorMessagesDiffSpanOutput,
+  ProcessorOutputResultSpanInput,
+  ProcessorOutputStepSpanInput,
+  ProcessorOutputStreamSpanOutput,
+  ProcessorToolResultSpanInput,
+} from '../processors/span-io';
 import {
   summarizeActiveToolsForSpan,
   summarizeProcessorModelForSpan,
@@ -788,7 +804,7 @@ function createStepFromProcessor<TProcessorId extends string>(
               messages: (messages as MastraDBMessage[]) ?? [],
               ...(systemMessages ? { systemMessages } : {}),
               ...(retryCount !== undefined ? { retryCount } : {}),
-            };
+            } satisfies ProcessorInputSpanInput;
           case 'inputStep': {
             const summarizedModel = summarizeProcessorModelForSpan(model);
             const summarizedTools = summarizeProcessorToolsForSpan(tools);
@@ -805,7 +821,7 @@ function createStepFromProcessor<TProcessorId extends string>(
               ...(summarizedTools ? { tools: summarizedTools } : {}),
               ...(summarizedToolChoice ? { toolChoice: summarizedToolChoice } : {}),
               ...(summarizedActiveTools ? { activeTools: summarizedActiveTools } : {}),
-            };
+            } satisfies ProcessorInputStepSpanInput;
           }
           case 'outputResult': {
             const summarizedResult = summarizeProcessorResultForSpan(outputResult ?? defaultOutputResult);
@@ -814,7 +830,7 @@ function createStepFromProcessor<TProcessorId extends string>(
               messages: (messages as MastraDBMessage[]) ?? [],
               ...(summarizedResult ? { result: summarizedResult } : {}),
               ...(retryCount !== undefined ? { retryCount } : {}),
-            };
+            } satisfies ProcessorOutputResultSpanInput;
           }
           case 'outputStep':
             return {
@@ -825,7 +841,7 @@ function createStepFromProcessor<TProcessorId extends string>(
               ...(text !== undefined ? { text } : {}),
               ...(toolCalls !== undefined ? { toolCalls } : {}),
               ...(retryCount !== undefined ? { retryCount } : {}),
-            };
+            } satisfies ProcessorOutputStepSpanInput;
           case 'toolResult':
             return {
               ...(stepNumber !== undefined ? { stepNumber } : {}),
@@ -833,7 +849,7 @@ function createStepFromProcessor<TProcessorId extends string>(
               ...(toolCallId !== undefined ? { toolCallId } : {}),
               ...(providerExecuted !== undefined ? { providerExecuted } : {}),
               ...(retryCount !== undefined ? { retryCount } : {}),
-            };
+            } satisfies ProcessorToolResultSpanInput;
           default:
             return undefined;
         }
@@ -856,58 +872,63 @@ function createStepFromProcessor<TProcessorId extends string>(
               !areProcessorMessageArraysEqual(systemMessages as unknown[] | undefined, payload.systemMessages)
                 ? { systemMessages: payload.systemMessages }
                 : {}),
-            };
+            } satisfies ProcessorMessagesDiffSpanOutput;
           case 'inputStep': {
-            const output: Record<string, unknown> = {};
+            const output: ProcessorInputStepSpanOutput = {};
+            // Same object as `payload`; typed against the processor result so the diff below is checked.
+            const stepResult = payload as Partial<ProcessInputStepResult>;
 
             if (
-              Array.isArray(payload.messages) &&
-              !areProcessorMessageArraysEqual(messages as unknown[] | undefined, payload.messages)
+              Array.isArray(stepResult.messages) &&
+              !areProcessorMessageArraysEqual(messages as unknown[] | undefined, stepResult.messages)
             ) {
-              output.messages = payload.messages;
+              output.messages = stepResult.messages;
             }
 
             if (
-              Array.isArray(payload.systemMessages) &&
-              !areProcessorMessageArraysEqual(systemMessages as unknown[] | undefined, payload.systemMessages)
+              Array.isArray(stepResult.systemMessages) &&
+              !areProcessorMessageArraysEqual(systemMessages as unknown[] | undefined, stepResult.systemMessages)
             ) {
-              output.systemMessages = payload.systemMessages;
+              output.systemMessages = stepResult.systemMessages;
             }
 
-            if (payload.messageId !== undefined && payload.messageId !== initialMessageId) {
-              output.messageId = payload.messageId;
+            if (stepResult.messageId !== undefined && stepResult.messageId !== initialMessageId) {
+              output.messageId = stepResult.messageId;
             }
 
-            if (payload.model !== undefined && payload.model !== model) {
-              const summarizedModel = summarizeProcessorModelForSpan(payload.model);
+            if (stepResult.model !== undefined && stepResult.model !== model) {
+              const summarizedModel = summarizeProcessorModelForSpan(stepResult.model);
               if (summarizedModel) {
                 output.model = summarizedModel;
               }
             }
 
-            if (payload.tools !== undefined && payload.tools !== tools) {
-              const summarizedTools = summarizeProcessorToolsForSpan(payload.tools);
+            if (stepResult.tools !== undefined && stepResult.tools !== tools) {
+              const summarizedTools = summarizeProcessorToolsForSpan(stepResult.tools);
               if (summarizedTools) {
                 output.tools = summarizedTools;
               }
             }
 
-            if (payload.toolChoice !== undefined && payload.toolChoice !== toolChoice) {
-              const summarizedToolChoice = summarizeToolChoiceForSpan(payload.toolChoice, payload.tools ?? tools);
+            if (stepResult.toolChoice !== undefined && stepResult.toolChoice !== toolChoice) {
+              const summarizedToolChoice = summarizeToolChoiceForSpan(stepResult.toolChoice, stepResult.tools ?? tools);
               if (summarizedToolChoice) {
                 output.toolChoice = summarizedToolChoice;
               }
             }
 
-            if (payload.activeTools !== undefined && payload.activeTools !== activeTools) {
-              const summarizedActiveTools = summarizeActiveToolsForSpan(payload.activeTools, payload.tools ?? tools);
+            if (stepResult.activeTools !== undefined && stepResult.activeTools !== activeTools) {
+              const summarizedActiveTools = summarizeActiveToolsForSpan(
+                stepResult.activeTools,
+                stepResult.tools ?? tools,
+              );
               if (summarizedActiveTools) {
                 output.activeTools = summarizedActiveTools;
               }
             }
 
-            if (payload.retryCount !== undefined && payload.retryCount !== retryCount) {
-              output.retryCount = payload.retryCount;
+            if (stepResult.retryCount !== undefined && stepResult.retryCount !== retryCount) {
+              output.retryCount = stepResult.retryCount;
             }
 
             return output;
@@ -924,7 +945,7 @@ function createStepFromProcessor<TProcessorId extends string>(
               !areProcessorMessageArraysEqual(systemMessages as unknown[] | undefined, payload.systemMessages)
                 ? { systemMessages: payload.systemMessages }
                 : {}),
-            };
+            } satisfies ProcessorMessagesDiffSpanOutput;
           default:
             return undefined;
         }
@@ -1304,7 +1325,9 @@ function createStepFromProcessor<TProcessorId extends string>(
                 // End span on finish chunk
                 if (part && (part as ChunkType).type === 'finish') {
                   // Output just totalChunks (workflow processors don't track accumulated text yet)
-                  processorSpan?.end({ output: { totalChunks: (streamParts ?? []).length } });
+                  processorSpan?.end({
+                    output: { totalChunks: (streamParts ?? []).length } satisfies ProcessorOutputStreamSpanOutput,
+                  });
                   // Keep the ended span reference in mutableState so that
                   // post-finish chunks (e.g. step-finish) don't trigger a
                   // new span creation at the guard above.

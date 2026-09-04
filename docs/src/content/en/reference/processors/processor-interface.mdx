@@ -261,6 +261,33 @@ async processInputStep({ messageList, tracingContext }: ProcessInputStepArgs) {
 }
 ```
 
+### Reading processor spans
+
+A stored processor span's `input` and `output` are typed `unknown`, because their shape depends on the phase the processor ran in. The span's `entityType` identifies that phase, and `isProcessorSpan` narrows `input` and `output` to the payload recorded for it:
+
+| `entityType` | Phase | `input` / `output` types |
+| - | - | - |
+| `INPUT_PROCESSOR` | `input` | `ProcessorInputSpanInput` / `ProcessorInputSpanOutput` |
+| `INPUT_STEP_PROCESSOR` | `inputStep` | `ProcessorInputStepSpanInput` / `ProcessorInputStepSpanOutput` |
+| `OUTPUT_PROCESSOR` | `output` | `ProcessorOutputSpanInput` / `ProcessorOutputSpanOutput` |
+| `OUTPUT_STEP_PROCESSOR` | `outputStep` | `ProcessorOutputStepSpanInput` / `ProcessorOutputStepSpanOutput` |
+| `TOOL_RESULT_PROCESSOR` | `toolResult` | `ProcessorToolResultSpanInput` / `ProcessorToolResultSpanOutput` |
+
+```typescript
+import { isProcessorSpan, getProcessorSpanPhase } from '@mastra/core/processors'
+import type { SpanRecord } from '@mastra/core/storage'
+
+function describe(span: SpanRecord) {
+  if (isProcessorSpan(span, 'inputStep')) {
+    // span.input is ProcessorInputStepSpanInput | null | undefined
+    return `step ${span.input?.stepNumber} with ${span.input?.messages.length} messages`
+  }
+  return getProcessorSpanPhase(span) ?? 'not a processor span'
+}
+```
+
+Output payloads only contain the fields the processor changed, so every field on an output type is optional. The `output` phase covers both the result and stream forms of output processing, so `ProcessorOutputSpanInput` is a union.
+
 ## Message arguments
 
 Most processor methods receive both `messages` and `messageList`. They point to the same underlying conversation but expose it differently.
