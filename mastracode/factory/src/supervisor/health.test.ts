@@ -182,7 +182,24 @@ describe('computeFactoryHealth', () => {
       NOW,
     );
     expect(decisionFailureCodeFromEvidence(lookalike.findings[0]!.evidence)).toBe('run_awaiting_input');
-    expect(decisionFailureCodeFromEvidence('Decision d (x) failed after 1 attempt(s) at t: boom')).toBeUndefined();
+    // No real code, but a lookalike in the error text: still no code.
+    const codeless = computeFactoryHealth(
+      {
+        ...empty,
+        decisions: [
+          decision({
+            id: 'd-3',
+            status: 'failed',
+            attempts: 1,
+            failureCode: null,
+            lastError: 'worker said [not_a_code]: nope',
+          }),
+        ],
+      },
+      NOW,
+    );
+    expect(codeless.findings[0]!.evidence).toContain('[not_a_code]: nope');
+    expect(decisionFailureCodeFromEvidence(codeless.findings[0]!.evidence)).toBeUndefined();
   });
 
   it('flags retry decisions the dispatcher never picked up, but not ones inside their backoff', () => {
