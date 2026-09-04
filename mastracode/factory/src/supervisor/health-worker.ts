@@ -4,6 +4,7 @@ import type { FactoryProjectsStorage } from '../storage/domains/projects/base.js
 import type { FactorySupervisorFindingRecord, WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import { runFactoryHealthCheck } from './health.js';
 import type { NotifySupervisorInput } from './notify.js';
+import { isSupervisorFindingVisibleToHumans } from './visibility.js';
 
 export const DEFAULT_SUPERVISOR_HEALTH_INTERVAL_MS = 5 * 60_000;
 /** Un-notified findings emitted per storage read during a sweep's drain. */
@@ -16,7 +17,9 @@ export class FactorySupervisorHealthWorker extends MastraWorker {
   readonly #workItems: WorkItemsStorage;
   readonly #intervalMs: number;
   readonly #notify: ((input: NotifySupervisorInput) => Promise<void>) | undefined;
+  readonly #attentionChanged: ((scope: { orgId: string; factoryProjectId: string }) => void) | undefined;
   #running = false;
+  #lastTickAt: Date | undefined;
   #timer: ReturnType<typeof setTimeout> | undefined;
   #inFlight: Promise<void> | undefined;
 
@@ -26,12 +29,20 @@ export class FactorySupervisorHealthWorker extends MastraWorker {
     intervalMs?: number;
     /** Emits one supervisor notification per un-notified open finding. Optional so tests can construct the worker without wiring the controller. */
     notify?: (input: NotifySupervisorInput) => Promise<void>;
+    /**
+     * Announces that a project's Attention projection changed without a row
+     * write: the force-surface backstop flips a hidden finding visible purely
+     * by wall-clock age, and connected Attention streams stop polling, so the
+     * sweep rings the same doorbell storage writes do.
+     */
+    attentionChanged?: (scope: { orgId: string; factoryProjectId: string }) => void;
   }) {
     super();
     this.#projects = input.projects;
     this.#workItems = input.workItems;
     this.#intervalMs = input.intervalMs ?? DEFAULT_SUPERVISOR_HEALTH_INTERVAL_MS;
     this.#notify = input.notify;
+    this.#attentionChanged = input.attentionChanged;
   }
 
   async start(): Promise<void> {
@@ -68,6 +79,11 @@ export class FactorySupervisorHealthWorker extends MastraWorker {
 
   async #tick(): Promise<void> {
     const now = new Date();
+    // Rows that crossed the backstop between the previous sweep and this one
+    // are the ones no write announced. Before the first sweep everything is
+    // "since forever": already-stale rows get one refresh after boot.
+    const since = this.#lastTickAt ?? new Date(0);
+    this.#lastTickAt = now;
     const projects = await this.#projects.listAll();
     const concurrency = 4;
     let nextIndex = 0;
@@ -88,6 +104,7 @@ export class FactorySupervisorHealthWorker extends MastraWorker {
             now,
           });
           await this.#emitUnnotified({ orgId: project.orgId, factoryProjectId: project.id });
+          await this.#announceForceSurfaced({ orgId: project.orgId, factoryProjectId: project.id }, since, now);
         }
       }),
     );
@@ -140,6 +157,39 @@ export class FactorySupervisorHealthWorker extends MastraWorker {
       const last = rows[rows.length - 1];
       if (rows.length < EMIT_PAGE_SIZE || !last) return;
       after = { openedAt: last.openedAt, id: last.id };
+    }
+  }
+
+  /**
+   * Ring the Attention doorbell once if any open finding became visible to
+   * humans purely by aging past the backstop since the previous sweep. Uses
+   * the one visibility predicate at both instants, so escalated and
+   * human-facing rows (visible at both) never count and the hidden-kind set
+   * is never restated here.
+   */
+  async #announceForceSurfaced(
+    scope: { orgId: string; factoryProjectId: string },
+    since: Date,
+    now: Date,
+  ): Promise<void> {
+    if (!this.#attentionChanged) return;
+    let before: { occurredAt: Date; id: string } | undefined;
+    for (;;) {
+      const { rows, hasMore } = await this.#workItems.listSupervisorFindingPage({
+        ...scope,
+        limit: EMIT_PAGE_SIZE,
+        ...(before ? { before } : {}),
+      });
+      const crossed = rows.some(
+        row => isSupervisorFindingVisibleToHumans(row, now) && !isSupervisorFindingVisibleToHumans(row, since),
+      );
+      if (crossed) {
+        this.#attentionChanged(scope);
+        return;
+      }
+      const last = rows.at(-1);
+      if (!hasMore || !last) return;
+      before = { occurredAt: last.updatedAt, id: last.id };
     }
   }
 }

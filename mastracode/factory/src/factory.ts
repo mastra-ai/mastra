@@ -1173,6 +1173,9 @@ export class MastraFactory {
                   },
                   input,
                 ),
+              // Same doorbell storage writes ring: the 30-minute force-surface
+              // backstop changes the Attention projection without a write.
+              attentionChanged: scope => touchFeed(eventBus, scope),
             }),
           ]
         : []),
