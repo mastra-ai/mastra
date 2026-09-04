@@ -634,7 +634,7 @@ export class FactoryDecisionDispatcher {
         findingKey: finding.findingKey,
         kind: 'decision-failed',
         summary: String(finding.finding.evidence ?? finding.findingKey),
-        ...(decision.failureCode ? { failureCode: decision.failureCode } : {}),
+        ...(typeof finding.finding.failureCode === 'string' ? { failureCode: finding.finding.failureCode } : {}),
         priority: 'high',
       });
       await this.#storage.markSupervisorFindingNotified({
