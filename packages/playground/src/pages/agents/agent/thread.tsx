@@ -1,12 +1,14 @@
 import { v4 as uuid } from '@lukeed/uuid';
 import { AlertDialog } from '@mastra/playground-ui/components/AlertDialog';
 import { Button } from '@mastra/playground-ui/components/Button';
+import { Header, HeaderGroup, HeaderTitle } from '@mastra/playground-ui/components/Header';
 import { LogoWithoutText } from '@mastra/playground-ui/components/Logo';
 import { MainContentLayout } from '@mastra/playground-ui/components/MainContent';
 import { MainSidebar, MainSidebarProvider, useMainSidebar } from '@mastra/playground-ui/components/MainSidebar';
 import { PermissionDenied } from '@mastra/playground-ui/components/PermissionDenied';
 import { SessionExpired } from '@mastra/playground-ui/components/SessionExpired';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
+import { Switch } from '@mastra/playground-ui/components/Switch';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
 import { ArrowLeft, ChartNoAxesGantt, Plus, X } from 'lucide-react';
@@ -37,7 +39,7 @@ import { useLinkComponent } from '@/lib/framework';
 
 function AgentThread() {
   const { agentId, threadId } = useParams();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { data: agent, isLoading: isAgentLoading, error } = useAgent(agentId!);
   const { data: memory } = useMemory(agentId!);
   const navigate = useNavigate();
@@ -71,6 +73,14 @@ function AgentThread() {
   const messageId = searchParams.get('messageId') ?? undefined;
   // A new thread has no traces yet, so the advanced (trace-based) view falls back to the chat.
   const isAdvancedVariant = searchParams.get('variant') === 'advanced' && !isNewThread;
+  const setAdvancedVariant = (enabled: boolean) => {
+    setSearchParams(params => {
+      const next = new URLSearchParams(params);
+      if (enabled) next.set('variant', 'advanced');
+      else next.delete('variant');
+      return next;
+    });
+  };
   const suggestedPrompts = getAgentSuggestedPrompts(agent?.metadata);
 
   const defaultSettings = useMemo(() => buildAgentDefaultSettings(agent), [agent]);
@@ -137,10 +147,24 @@ function AgentThread() {
                               isLoading={isThreadsLoading}
                             />
                             <div className="relative min-h-0">
-                              <div className="rounded-studio-frame border-border1 bg-surface2 shadow-main-frame m-1.5 h-[calc(100%-0.75rem)] min-h-0 overflow-hidden border [--studio-frame-inset:0.5rem] [--studio-frame-radius:1.5rem] lg:m-2 lg:ml-0 lg:h-[calc(100%-1rem)]">
+                              <div className="rounded-studio-frame border-border1 bg-surface2 shadow-main-frame m-1.5 flex h-[calc(100%-0.75rem)] min-h-0 flex-col overflow-hidden border [--studio-frame-inset:0.5rem] [--studio-frame-radius:1.5rem] lg:m-2 lg:ml-0 lg:h-[calc(100%-1rem)]">
+                                <Header>
+                                  <HeaderTitle>Threads</HeaderTitle>
+                                  <HeaderGroup>
+                                    <Switch
+                                      id="thread-advanced-view"
+                                      checked={isAdvancedVariant}
+                                      disabled={isNewThread}
+                                      onCheckedChange={setAdvancedVariant}
+                                    />
+                                    <label htmlFor="thread-advanced-view" className="text-ui-sm text-neutral4">
+                                      Advanced view
+                                    </label>
+                                  </HeaderGroup>
+                                </Header>
                                 <div
                                   className={cn(
-                                    'relative grid h-full min-h-0',
+                                    'relative grid min-h-0 flex-1',
                                     // The advanced view manages its own scroll container.
                                     !isAdvancedVariant && 'overflow-y-auto pt-6',
                                   )}

@@ -405,6 +405,30 @@ describe('Standalone thread page', () => {
       expect(await screen.findByText('Sushi ideas')).not.toBeNull();
       expect(screen.queryByTestId('thread-view-by-trace')).toBeNull();
     });
+
+    it('is toggled from the "Advanced view" switch in the Threads header', async () => {
+      installHandlers();
+      installTraceHandlers();
+      renderAt(`/agents/${AGENT_ID}/threads/${THREAD_ID}`);
+
+      expect(await screen.findByRole('heading', { name: 'Threads' })).not.toBeNull();
+      const toggle = screen.getByRole('switch', { name: 'Advanced view' });
+      expect(toggle.getAttribute('aria-checked')).toBe('false');
+
+      fireEvent.click(toggle);
+      await waitFor(() =>
+        expect(screen.getByTestId('location-probe').textContent).toBe(
+          `/agents/${AGENT_ID}/threads/${THREAD_ID}?variant=advanced`,
+        ),
+      );
+      expect(await screen.findByTestId('thread-view-by-trace')).not.toBeNull();
+
+      fireEvent.click(screen.getByRole('switch', { name: 'Advanced view' }));
+      await waitFor(() =>
+        expect(screen.getByTestId('location-probe').textContent).toBe(`/agents/${AGENT_ID}/threads/${THREAD_ID}`),
+      );
+      expect(screen.queryByTestId('thread-view-by-trace')).toBeNull();
+    });
   });
 
   it('shows "Agent not found" for an unknown agent', async () => {
