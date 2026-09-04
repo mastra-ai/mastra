@@ -28,11 +28,11 @@ import {
   MentionAttentionProvider,
   SupervisorFindingAttentionProvider,
 } from './attention-providers.js';
+import { FACTORY_ROUTE_CONTRACTS } from './contracts.js';
 
 export { factoryDecisionType } from './attention-providers.js';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-const SUPERVISOR_FINDING_KEY_RE = /^[a-z0-9:_-]{1,256}$/i;
 const DEFAULT_PAGE_SIZE = 25;
 const MAX_PAGE_SIZE = 50;
 
@@ -201,20 +201,28 @@ function receiptRoute(
   verb: 'read' | 'archive' | 'restore',
   action: FactoryAttentionReceiptAction,
 ): ApiRoute {
-  return registerApiRoute(`/web/factory/projects/:id/attention/:kind/:sourceId/:occurrence/${verb}`, {
-    method: 'POST',
+  const contract =
+    verb === 'read'
+      ? FACTORY_ROUTE_CONTRACTS.attentionRead
+      : verb === 'archive'
+        ? FACTORY_ROUTE_CONTRACTS.attentionArchive
+        : FACTORY_ROUTE_CONTRACTS.attentionRestore;
+  return registerApiRoute(contract.path, {
+    method: contract.method,
     requiresAuth: false,
     handler: async context => {
       const resolved = await dependencies.resolveProject(context);
       if ('response' in resolved) return resolved.response;
-      const kind = context.req.param('kind');
-      const sourceId = context.req.param('sourceId');
-      const occurrence = parseOccurrence(context.req.param('occurrence'));
-      const validSourceId =
-        kind === 'supervisor-finding' ? SUPERVISOR_FINDING_KEY_RE.test(sourceId) : UUID_RE.test(sourceId);
-      if (!kind || !isAttentionKind(kind) || !sourceId || !validSourceId || occurrence === undefined) {
-        return context.json({ error: 'invalid_attention_item' }, 422);
-      }
+      const parsedPath = contract.pathSchema.safeParse({
+        id: resolved.factoryProjectId,
+        kind: context.req.param('kind'),
+        sourceId: context.req.param('sourceId'),
+        occurrence: context.req.param('occurrence'),
+      });
+      if (!parsedPath.success) return context.json({ error: 'invalid_attention_item' }, 422);
+      const { kind, sourceId } = parsedPath.data;
+      const occurrence = parseOccurrence(parsedPath.data.occurrence);
+      if (occurrence === undefined) return context.json({ error: 'invalid_attention_item' }, 422);
       await dependencies.workItems.ensureReady();
       const receipt = await dependencies.workItems.setAttentionReceipt({
         orgId: resolved.orgId,
@@ -247,27 +255,37 @@ export function buildAttentionRoutes(dependencies: AttentionRouteDependencies): 
   ];
 
   return [
-    registerApiRoute('/web/factory/projects/:id/attention', {
-      method: 'GET',
+    registerApiRoute(FACTORY_ROUTE_CONTRACTS.attentionList.path, {
+      method: FACTORY_ROUTE_CONTRACTS.attentionList.method,
       requiresAuth: false,
       handler: async context => {
         const resolved = await dependencies.resolveProject(context);
         if ('response' in resolved) return resolved.response;
-        const view = parseAttentionView(context.req.query('view'));
+        const query = FACTORY_ROUTE_CONTRACTS.attentionList.querySchema.safeParse({
+          view: context.req.query('view'),
+          tier: context.req.query('tier'),
+          before: context.req.query('before'),
+          limit: context.req.query('limit'),
+          search: context.req.query('search'),
+        });
+        if (!query.success) {
+          const field = query.error.issues[0]?.path[0];
+          return context.json({ error: field === 'tier' ? 'invalid_attention_tier' : 'invalid_attention_view' }, 400);
+        }
+        const view = parseAttentionView(query.data.view);
         if (view === undefined) return context.json({ error: 'invalid_attention_view' }, 400);
         // `tier` scopes the item list only; the counts always describe every
         // tier, so the badge popover can page badge kinds without losing the
         // activity numbers.
-        const tier = parseAttentionTier(context.req.query('tier'));
+        const tier = parseAttentionTier(query.data.tier);
         if (tier === undefined) return context.json({ error: 'invalid_attention_tier' }, 400);
-        const cursorRaw = context.req.query('before');
-        const before = parseAttentionCursor(cursorRaw);
-        if (cursorRaw && !before) return context.json({ error: 'invalid_cursor' }, 400);
+        const before = parseAttentionCursor(query.data.before);
+        if (query.data.before && !before) return context.json({ error: 'invalid_cursor' }, 400);
         await workItems.ensureReady();
         await comments.ensureReady();
 
-        const search = context.req.query('search')?.trim().toLowerCase().slice(0, 200);
-        const limit = parseAttentionLimit(context.req.query('limit'));
+        const search = query.data.search?.trim().toLowerCase().slice(0, 200);
+        const limit = parseAttentionLimit(query.data.limit);
         const active = providers.filter(
           provider => kindInTier(tier, provider.kind) && (!before || before.has(provider.kind)),
         );
@@ -330,15 +348,18 @@ export function buildAttentionRoutes(dependencies: AttentionRouteDependencies): 
         });
       },
     }),
-    registerApiRoute('/web/factory/projects/:id/attention/read-all', {
-      method: 'POST',
+    registerApiRoute(FACTORY_ROUTE_CONTRACTS.attentionReadAll.path, {
+      method: FACTORY_ROUTE_CONTRACTS.attentionReadAll.method,
       requiresAuth: false,
       handler: async context => {
         const resolved = await dependencies.resolveProject(context);
         if ('response' in resolved) return resolved.response;
-        const cursorRaw = context.req.query('before');
-        const before = parseAttentionCursor(cursorRaw);
-        if (cursorRaw && !before) return context.json({ error: 'invalid_cursor' }, 400);
+        const query = FACTORY_ROUTE_CONTRACTS.attentionReadAll.querySchema.safeParse({
+          before: context.req.query('before'),
+        });
+        if (!query.success) return context.json({ error: 'invalid_cursor' }, 400);
+        const before = parseAttentionCursor(query.data.before);
+        if (query.data.before && !before) return context.json({ error: 'invalid_cursor' }, 400);
         await workItems.ensureReady();
         await comments.ensureReady();
 

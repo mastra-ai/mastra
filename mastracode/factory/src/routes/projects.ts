@@ -3,11 +3,7 @@ import { registerApiRoute } from '@mastra/core/server';
 import type { Context } from 'hono';
 
 import type { SessionRetirementCoordinator } from '../sandbox/session-retirement.js';
-import type {
-  CreateFactoryProjectInput,
-  FactoryProjectsStorage,
-  UpdateFactoryProjectInput,
-} from '../storage/domains/projects/base.js';
+import type { FactoryProjectsStorage } from '../storage/domains/projects/base.js';
 import type {
   ProjectRepository,
   SourceControlRepository,
@@ -16,12 +12,12 @@ import type {
   UpdateProjectRepositoryInput,
 } from '../storage/domains/source-control/base.js';
 import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
+import { FACTORY_ROUTE_CONTRACTS } from './contracts.js';
 import type { RouteDependencies } from './route.js';
 import { Route } from './route.js';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const MAX_NAME_LENGTH = 200;
-const MAX_DESCRIPTION_LENGTH = 2_000;
 const MAX_REPOSITORY_COMMAND_LENGTH = 2_000;
 const MAX_BRANCH_LENGTH = 255;
 const MAX_SANDBOX_PROVIDER_LENGTH = 100;
@@ -38,55 +34,6 @@ async function readJson(context: Context): Promise<unknown | undefined> {
   } catch {
     return undefined;
   }
-}
-
-function parseCreateInput(value: unknown): CreateFactoryProjectInput | null {
-  if (!value || typeof value !== 'object') return null;
-  const input = value as Record<string, unknown>;
-  if (typeof input.name !== 'string') return null;
-  const name = input.name.trim();
-  if (!name || name.length > MAX_NAME_LENGTH) return null;
-  if (input.description !== undefined && input.description !== null && typeof input.description !== 'string')
-    return null;
-  const description = typeof input.description === 'string' ? input.description.trim() || null : null;
-  if (description && description.length > MAX_DESCRIPTION_LENGTH) return null;
-  return { name, description };
-}
-
-function parseUpdateInput(value: unknown): UpdateFactoryProjectInput | null {
-  if (!value || typeof value !== 'object') return null;
-  const input = value as Record<string, unknown>;
-  const patch: UpdateFactoryProjectInput = {};
-  if (input.name !== undefined) {
-    if (typeof input.name !== 'string') return null;
-    const name = input.name.trim();
-    if (!name || name.length > MAX_NAME_LENGTH) return null;
-    patch.name = name;
-  }
-  if (input.description !== undefined) {
-    if (input.description !== null && typeof input.description !== 'string') return null;
-    const description = typeof input.description === 'string' ? input.description.trim() || null : null;
-    if (description && description.length > MAX_DESCRIPTION_LENGTH) return null;
-    patch.description = description;
-  }
-  if (input.defaultModelId !== undefined) {
-    const defaultModelId = parseOptionalString(input.defaultModelId, { maxLength: MAX_NAME_LENGTH, nullable: true });
-    if (defaultModelId === false) return null;
-    patch.defaultModelId = defaultModelId ?? null;
-  }
-  if (input.slackWorkItemsEnabled !== undefined) {
-    if (typeof input.slackWorkItemsEnabled !== 'boolean') return null;
-    patch.slackWorkItemsEnabled = input.slackWorkItemsEnabled;
-  }
-  if (input.autoRunEnabled !== undefined) {
-    if (typeof input.autoRunEnabled !== 'boolean') return null;
-    patch.autoRunEnabled = input.autoRunEnabled;
-  }
-  if (input.autoApprovePlans !== undefined) {
-    if (typeof input.autoApprovePlans !== 'boolean') return null;
-    patch.autoApprovePlans = input.autoApprovePlans;
-  }
-  return Object.keys(patch).length > 0 ? patch : null;
 }
 
 function parseConnectionInput(value: unknown): { integrationId: string; installationId: string } | null {
@@ -306,8 +253,8 @@ export class ProjectRoutes extends Route<ProjectRoutesDeps> {
 
   routes(): ApiRoute[] {
     return [
-      registerApiRoute('/web/factory/projects', {
-        method: 'GET',
+      registerApiRoute(FACTORY_ROUTE_CONTRACTS.projectList.path, {
+        method: FACTORY_ROUTE_CONTRACTS.projectList.method,
         requiresAuth: false,
         handler: async routeContext => {
           const context = loose(routeContext);
@@ -316,56 +263,66 @@ export class ProjectRoutes extends Route<ProjectRoutesDeps> {
           return context.json({ projects: await (await this.#projects()).list({ orgId: tenant.orgId }) });
         },
       }),
-      registerApiRoute('/web/factory/projects', {
-        method: 'POST',
+      registerApiRoute(FACTORY_ROUTE_CONTRACTS.projectCreate.path, {
+        method: FACTORY_ROUTE_CONTRACTS.projectCreate.method,
         requiresAuth: false,
         handler: async routeContext => {
           const context = loose(routeContext);
           const tenant = await this.#resolveTenant(context);
           if ('response' in tenant) return tenant.response;
-          const input = parseCreateInput(await readJson(context));
-          if (!input) return context.json({ error: 'invalid_project' }, 400);
-          const project = await (await this.#projects()).create({ orgId: tenant.orgId, userId: tenant.userId, input });
+          const parsed = FACTORY_ROUTE_CONTRACTS.projectCreate.bodySchema.safeParse(await readJson(context));
+          if (!parsed.success) return context.json({ error: 'invalid_project' }, 400);
+          const project = await (
+            await this.#projects()
+          ).create({ orgId: tenant.orgId, userId: tenant.userId, input: parsed.data });
           return context.json({ project }, 201);
         },
       }),
-      registerApiRoute('/web/factory/projects/:id', {
-        method: 'GET',
+      registerApiRoute(FACTORY_ROUTE_CONTRACTS.projectGet.path, {
+        method: FACTORY_ROUTE_CONTRACTS.projectGet.method,
         requiresAuth: false,
         handler: async routeContext => {
           const context = loose(routeContext);
           const tenant = await this.#resolveTenant(context);
           if ('response' in tenant) return tenant.response;
-          const id = context.req.param('id');
-          if (!id || !UUID_RE.test(id)) return context.json({ error: 'Project not found' }, 404);
+          const parsedPath = FACTORY_ROUTE_CONTRACTS.projectGet.pathSchema.safeParse({ id: context.req.param('id') });
+          if (!parsedPath.success) return context.json({ error: 'Project not found' }, 404);
+          const { id } = parsedPath.data;
           const project = await this.#project(tenant.orgId, id);
           return project ? context.json({ project }) : context.json({ error: 'Project not found' }, 404);
         },
       }),
-      registerApiRoute('/web/factory/projects/:id', {
-        method: 'PATCH',
+      registerApiRoute(FACTORY_ROUTE_CONTRACTS.projectUpdate.path, {
+        method: FACTORY_ROUTE_CONTRACTS.projectUpdate.method,
         requiresAuth: false,
         handler: async routeContext => {
           const context = loose(routeContext);
           const tenant = await this.#resolveTenant(context);
           if ('response' in tenant) return tenant.response;
-          const id = context.req.param('id');
-          if (!id || !UUID_RE.test(id)) return context.json({ error: 'Project not found' }, 404);
-          const input = parseUpdateInput(await readJson(context));
-          if (!input) return context.json({ error: 'invalid_project' }, 400);
-          const project = await (await this.#projects()).update({ orgId: tenant.orgId, id, input });
+          const parsedPath = FACTORY_ROUTE_CONTRACTS.projectUpdate.pathSchema.safeParse({
+            id: context.req.param('id'),
+          });
+          if (!parsedPath.success) return context.json({ error: 'Project not found' }, 404);
+          const parsedBody = FACTORY_ROUTE_CONTRACTS.projectUpdate.bodySchema.safeParse(await readJson(context));
+          if (!parsedBody.success) return context.json({ error: 'invalid_project' }, 400);
+          const project = await (
+            await this.#projects()
+          ).update({ orgId: tenant.orgId, id: parsedPath.data.id, input: parsedBody.data });
           return project ? context.json({ project }) : context.json({ error: 'Project not found' }, 404);
         },
       }),
-      registerApiRoute('/web/factory/projects/:id', {
-        method: 'DELETE',
+      registerApiRoute(FACTORY_ROUTE_CONTRACTS.projectDelete.path, {
+        method: FACTORY_ROUTE_CONTRACTS.projectDelete.method,
         requiresAuth: false,
         handler: async routeContext => {
           const context = loose(routeContext);
           const tenant = await this.#resolveTenant(context);
           if ('response' in tenant) return tenant.response;
-          const id = context.req.param('id');
-          if (!id || !UUID_RE.test(id)) return context.json({ error: 'Project not found' }, 404);
+          const parsedPath = FACTORY_ROUTE_CONTRACTS.projectDelete.pathSchema.safeParse({
+            id: context.req.param('id'),
+          });
+          if (!parsedPath.success) return context.json({ error: 'Project not found' }, 404);
+          const { id } = parsedPath.data;
           if (!(await this.#project(tenant.orgId, id))) return context.json({ error: 'Project not found' }, 404);
           for (const handle of await this.#handles()) {
             for (const connection of await handle.connections.list({ orgId: tenant.orgId, factoryProjectId: id })) {

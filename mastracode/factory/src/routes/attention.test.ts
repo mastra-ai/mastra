@@ -554,6 +554,12 @@ describe('activity attention items', () => {
     expect(badge.activityUnreadCount).toBe(2);
   });
 
+  it('rejects an invalid cursor', async () => {
+    const response = await request('GET', `/web/factory/projects/${PROJECT_ID}/attention?before=not-a-cursor`);
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({ error: 'invalid_cursor' });
+  });
+
   it('rejects an unknown tier', async () => {
     const response = await request('GET', `/web/factory/projects/${PROJECT_ID}/attention?tier=bogus`);
     expect(response.status).toBe(400);

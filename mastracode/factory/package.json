@@ -29,6 +29,7 @@
   },
   "scripts": {
     "build:lib": "tsdown --silent --config tsdown.config.ts",
+    "generate:api-cli-route-metadata": "tsx scripts/generate-api-cli-route-metadata.ts",
     "smoke:dist": "node --input-type=module -e \"import('./dist/index.js').then(() => console.log('dist import ok')).catch(e => { console.error(e.message); process.exit(1); })\"",
     "check": "tsc --noEmit",
     "test": "vitest run",

@@ -509,6 +509,14 @@ describe('ProjectRoutes', () => {
         })
       ).status,
     ).toBe(400);
+    const malformed = await app.request('/web/factory/projects', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: '{',
+    });
+    expect(malformed.status).toBe(400);
+    expect(await malformed.json()).toEqual({ error: 'invalid_project' });
+    expect((await app.request('/web/factory/projects/not-a-uuid')).status).toBe(404);
 
     const project = await seed.projects.create({ orgId: 'org-1', userId: 'user-1', input: { name: 'Valid' } });
     expect(
