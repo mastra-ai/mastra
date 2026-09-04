@@ -58,6 +58,11 @@ describe('cardMoves', () => {
     expect(cardMoves(pullRequest, 'review')).toEqual([review]);
   });
 
+  it('offers a Work card in Review no lane, so its session is the action', () => {
+    expect(cardMoves({ source: 'github-issue', metadata: {} }, 'review')).toEqual([]);
+    expect(cardMoves({ source: 'linear-issue', metadata: {} }, 'review')).toEqual([]);
+  });
+
   it('offers a finished card no lane, so its session is the action', () => {
     expect(cardMoves({ source: 'github-pr', metadata: { merged: true }, stages: ['done'] }, 'done')).toEqual([]);
     expect(cardMoves({ source: 'github-pr', metadata: { state: 'open' } }, 'canceled')).toEqual([]);
