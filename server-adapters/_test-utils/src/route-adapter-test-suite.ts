@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { SERVER_ROUTES, type ServerRoute } from '@mastra/server/server-adapter';
+import { HTTPException, SERVER_ROUTES, type ServerRoute } from '@mastra/server/server-adapter';
 
 import {
   AdapterTestContext,
@@ -435,12 +435,11 @@ export function createRouteAdapterTestSuite(config: AdapterTestSuiteConfig) {
 
                 const response = await executeHttpRequest(app, httpRequest);
 
-                // Expect 400 Bad Request for schema validation failure
-                // Some routes may still succeed if they ignore unknown fields
-                // So we check for either 400 or success
-                expect([200, 201, 400]).toContain(response.status);
+                // Routes may use the shared 400 response or a route-specific 422 response.
+                // Lenient schemas may still succeed if they ignore unknown fields.
+                expect([200, 201, 400, 422]).toContain(response.status);
 
-                if (response.status === 400) {
+                if (response.status === 400 || response.status === 422) {
                   expect(response.type).toBe('json');
 
                   // Verify error response has helpful structure
@@ -498,8 +497,8 @@ export function createRouteAdapterTestSuite(config: AdapterTestSuiteConfig) {
                 const response = await executeHttpRequest(app, httpRequest);
 
                 if (strictBody) {
-                  // strict schema: adapter must surface the validation rejection, exactly 400
-                  expect(response.status).toBe(400);
+                  // Strict schemas must surface either the shared or route-specific validation rejection.
+                  expect([400, 422]).toContain(response.status);
                 } else {
                   // lenient schema: unknown field must be ignored, request must succeed
                   expect(response.status).toBeLessThan(400);
@@ -588,11 +587,11 @@ export function createRouteAdapterTestSuite(config: AdapterTestSuiteConfig) {
 
           const response = await executeHttpRequest(app, httpRequest);
 
-          // Should return 400 Bad Request for missing required fields
-          // (or 200/201 if all fields are optional)
-          expect([200, 201, 400]).toContain(response.status);
+          // Should return the shared or route-specific validation response for missing fields
+          // (or 200/201 if all fields are optional).
+          expect([200, 201, 400, 422]).toContain(response.status);
 
-          if (response.status === 400) {
+          if (response.status === 400 || response.status === 422) {
             expect(response.type).toBe('json');
             const errorData = response.data as any;
             expect(errorData).toBeDefined();
@@ -602,6 +601,105 @@ export function createRouteAdapterTestSuite(config: AdapterTestSuiteConfig) {
             }
           }
         });
+      });
+    });
+
+    describe('Custom HTTPException responses', () => {
+      async function setupCustomErrorRoutes() {
+        let handlerCalls = 0;
+        const routes: ServerRoute<any, any, any>[] = [
+          {
+            method: 'GET',
+            path: '/custom/http-error-json',
+            responseType: 'json',
+            handler: async () => {
+              handlerCalls++;
+              throw new HTTPException(409, {
+                res: Response.json(
+                  { code: 'TRACE_QUERY_CURSOR_CONFLICT', message: 'The cursor does not match the query' },
+                  { headers: { 'X-Trace-Error': 'cursor' } },
+                ),
+              });
+            },
+          },
+          {
+            method: 'GET',
+            path: '/custom/http-error-text',
+            responseType: 'json',
+            handler: async () => {
+              handlerCalls++;
+              throw new HTTPException(418, {
+                res: new Response('custom text', {
+                  headers: { 'Content-Type': 'text/custom', 'X-Custom-Error': 'true' },
+                }),
+              });
+            },
+          },
+          {
+            method: 'GET',
+            path: '/custom/http-error-fallback',
+            responseType: 'json',
+            handler: async () => {
+              handlerCalls++;
+              throw new HTTPException(404, { message: 'Legacy fallback' });
+            },
+          },
+        ];
+        const mutableServerRoutes = SERVER_ROUTES as ServerRoute[];
+        const originalLength = mutableServerRoutes.length;
+        mutableServerRoutes.push(...routes);
+        try {
+          const setup = await setupAdapter(await createDefaultTestContext());
+          return { app: setup.app, getHandlerCalls: () => handlerCalls };
+        } finally {
+          mutableServerRoutes.splice(originalLength);
+        }
+      }
+
+      it('preserves an attached JSON response and headers', async () => {
+        const custom = await setupCustomErrorRoutes();
+
+        const response = await executeHttpRequest(custom.app, {
+          method: 'GET',
+          path: '/api/custom/http-error-json',
+        });
+
+        expect(response.status).toBe(409);
+        expect(response.headers['content-type']).toContain('application/json');
+        expect(response.headers['x-trace-error']).toBe('cursor');
+        expect(response.data).toEqual({
+          code: 'TRACE_QUERY_CURSOR_CONFLICT',
+          message: 'The cursor does not match the query',
+        });
+        expect(custom.getHandlerCalls()).toBe(1);
+      });
+
+      it('preserves an attached text response without JSON wrapping', async () => {
+        const custom = await setupCustomErrorRoutes();
+
+        const response = await executeHttpRequest(custom.app, {
+          method: 'GET',
+          path: '/api/custom/http-error-text',
+        });
+
+        expect(response.status).toBe(418);
+        expect(response.headers['content-type']).toContain('text/custom');
+        expect(response.headers['x-custom-error']).toBe('true');
+        expect(response.data).toBe('custom text');
+        expect(custom.getHandlerCalls()).toBe(1);
+      });
+
+      it('retains the JSON fallback for message-only HTTP exceptions', async () => {
+        const custom = await setupCustomErrorRoutes();
+
+        const response = await executeHttpRequest(custom.app, {
+          method: 'GET',
+          path: '/api/custom/http-error-fallback',
+        });
+
+        expect(response.status).toBe(404);
+        expect(response.data).toEqual({ error: 'Legacy fallback' });
+        expect(custom.getHandlerCalls()).toBe(1);
       });
     });
 

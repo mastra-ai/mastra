@@ -1,5 +1,6 @@
 import type { QueryClient } from '@tanstack/react-query';
 import { http, HttpResponse } from 'msw';
+import { waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { queryKeys } from '../../../../../api/keys';
@@ -8,7 +9,7 @@ import { renderWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '../../
 import { AGENT_CONTROLLER_ID } from '../../../chat/services/constants';
 import { saveDoneSound } from '../../../settings/services/doneSound';
 import type { FactoryUserSession } from '../../services/user-sessions';
-import { resetRunEndObserverForTests, RunEndObserver } from '../RunEndObserver';
+import { resetSessionRunObserverForTests, SessionRunObserver } from '../SessionRunObserver';
 
 const REPOSITORY_ID = 'repository-1';
 const SESSION_ID = 'session-1';
@@ -47,7 +48,7 @@ const session: FactoryUserSession = {
   updatedAt: '2026-08-20T10:00:00.000Z',
 };
 
-function stubRegistry(running: () => boolean) {
+function stubRegistry(runningSessionIds: () => string[]) {
   const sessionsList = { requests: 0 };
   server.use(
     http.get(`${TEST_BASE_URL}/web/github/projects/${REPOSITORY_ID}/sessions`, () => {
@@ -56,7 +57,11 @@ function stubRegistry(running: () => boolean) {
     }),
     http.get(`${TEST_BASE_URL}/api/agent-controller/${AGENT_CONTROLLER_ID}/active-runs`, () =>
       HttpResponse.json({
-        runs: running() ? [{ runId: 'run-1', resourceId: SESSION_ID, threadId: SESSION_ID }] : [],
+        runs: runningSessionIds().map(sessionId => ({
+          runId: `run-${sessionId}`,
+          resourceId: sessionId,
+          threadId: sessionId,
+        })),
       }),
     ),
   );
@@ -69,17 +74,17 @@ async function refetchRegistry(client: QueryClient) {
 }
 
 beforeEach(() => {
-  resetRunEndObserverForTests();
+  resetSessionRunObserverForTests();
   oscillatorStart.mockClear();
   saveDoneSound('arcade');
   Object.defineProperty(window, 'AudioContext', { configurable: true, value: AudioContextStub });
 });
 
-describe('RunEndObserver', () => {
+describe('SessionRunObserver', () => {
   it('rings and refetches the sessions list once when a run it watched in flight ends', async () => {
     let running = false;
-    const sessionsList = stubRegistry(() => running);
-    const { client } = renderWithProviders(<RunEndObserver projectRepositoryId={REPOSITORY_ID} />);
+    const sessionsList = stubRegistry(() => (running ? [SESSION_ID] : []));
+    const { client } = renderWithProviders(<SessionRunObserver projectRepositoryId={REPOSITORY_ID} />);
     await waitForMutationsIdle(client);
     expect(sessionsList.requests).toBe(1);
 
@@ -100,10 +105,20 @@ describe('RunEndObserver', () => {
   });
 
   it('stays silent for a run already over when the tab opened', async () => {
-    stubRegistry(() => false);
-    const { client } = renderWithProviders(<RunEndObserver projectRepositoryId={REPOSITORY_ID} />);
+    stubRegistry(() => []);
+    const { client } = renderWithProviders(<SessionRunObserver projectRepositoryId={REPOSITORY_ID} />);
     await waitForMutationsIdle(client);
     await refetchRegistry(client);
+    expect(oscillatorStart).not.toHaveBeenCalled();
+  });
+
+  it('refetches the sessions list once when a run starts on a session it has not listed', async () => {
+    const sessionsList = stubRegistry(() => ['session-created-by-the-dispatcher']);
+    const { client } = renderWithProviders(<SessionRunObserver projectRepositoryId={REPOSITORY_ID} />);
+    await waitFor(() => expect(sessionsList.requests).toBe(2));
+
+    await refetchRegistry(client);
+    expect(sessionsList.requests).toBe(2);
     expect(oscillatorStart).not.toHaveBeenCalled();
   });
 });

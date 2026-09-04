@@ -1,5 +1,34 @@
 # mastracode
 
+## 0.38.1-alpha.5
+
+### Patch Changes
+
+- Updated dependencies [[`abb0263`](https://github.com/mastra-ai/mastra/commit/abb0263bc5740868dd9b3b615312a0b9e040747f), [`a8c1260`](https://github.com/mastra-ai/mastra/commit/a8c126036be106db9ee39c624df08341d56b95e1), [`f649ea0`](https://github.com/mastra-ai/mastra/commit/f649ea0f006436e7268c3b0fa45f9865a02130cc), [`18d99e7`](https://github.com/mastra-ai/mastra/commit/18d99e7b5687ea6a1cdb601fa5c4209a03b97c02), [`a0ad935`](https://github.com/mastra-ai/mastra/commit/a0ad9351eaf8527d1515051ddf3998ee258b9acd), [`e5a8e80`](https://github.com/mastra-ai/mastra/commit/e5a8e80caef6aaa00495de9e00d11f06c4a78bdb)]:
+  - @mastra/observability@1.17.6-alpha.1
+  - @mastra/code-sdk@1.7.0-alpha.4
+  - @mastra/core@1.65.0-alpha.3
+  - @mastra/mcp@1.17.3
+
+## 0.38.1-alpha.4
+
+### Patch Changes
+
+- Fixed resumed agent output failing to render after plan approval. ([#22993](https://github.com/mastra-ai/mastra/pull/22993))
+
+## 0.38.1-alpha.3
+
+### Patch Changes
+
+- Read `/knowledge` from the same scope the Subconscious writes under. The knowledge browser was building its org rung from the session owner id (a user id), while local curation writes under the fixed `local` org, so the browser always looked at an empty scope. Both the memory factory and the inspector now derive their org/resource rungs from one resolver, and the local org id is exported as `LOCAL_KNOWLEDGE_ORG_ID`. Factory sessions keep failing closed when their org is unresolved. ([#22944](https://github.com/mastra-ai/mastra/pull/22944))
+
+- Updated dependencies [[`ae375e6`](https://github.com/mastra-ai/mastra/commit/ae375e6799af20820d90e30f63a084ba1507b771), [`c107c7e`](https://github.com/mastra-ai/mastra/commit/c107c7ee6ed85ac42577bc5b28865f3a7fbc569a), [`7f107dd`](https://github.com/mastra-ai/mastra/commit/7f107dd68c9d1d3906cb31db7fcd222991281b5b), [`c66e628`](https://github.com/mastra-ai/mastra/commit/c66e6284421eabaca23029c2089a070ffd914678), [`6827484`](https://github.com/mastra-ai/mastra/commit/6827484382bb2a4d0781ed9c76a432cdbd75e50a)]:
+  - @mastra/core@1.65.0-alpha.2
+  - @mastra/code-sdk@1.7.0-alpha.3
+  - @mastra/pg@1.23.0-alpha.0
+  - @mastra/memory@1.28.3-alpha.1
+  - @mastra/duckdb@1.7.0-alpha.0
+
 ## 0.38.1-alpha.2
 
 ### Patch Changes

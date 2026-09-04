@@ -103,6 +103,7 @@ export class LinearRules {
               title: relatedItem.title,
               url: relatedItem.externalSource?.url ?? null,
               stages: relatedItem.stages,
+              acceptedAt: relatedItem.acceptedAt,
               metadata: relatedItem.metadata,
             },
             board: 'work' as const,

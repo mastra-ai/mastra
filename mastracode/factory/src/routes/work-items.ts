@@ -202,16 +202,18 @@ export function parseCreateWorkItem(body: unknown): CreateWorkItemInput | null {
 /** Validate an untrusted patch body. Unknown keys are dropped. */
 export function parseUpdateWorkItem(body: unknown): UpdateWorkItemInput | null {
   if (!isRecord(body)) return null;
-  const { title, stages, sessions, metadata } = body;
+  const { title, stages, sessions, metadata, plansPreapproved } = body;
   const hasParentWorkItemId = 'parentWorkItemId' in body;
   if (
     title === undefined &&
     stages === undefined &&
     sessions === undefined &&
     metadata === undefined &&
+    plansPreapproved === undefined &&
     !hasParentWorkItemId
   )
     return null;
+  if (plansPreapproved !== undefined && plansPreapproved !== true) return null;
   const parentWorkItemId = hasParentWorkItemId ? parseParentWorkItemId(body.parentWorkItemId) : undefined;
   if (hasParentWorkItemId && parentWorkItemId === undefined) return null;
   if (title !== undefined && (typeof title !== 'string' || title.trim().length === 0 || title.length > 500))
@@ -231,6 +233,7 @@ export function parseUpdateWorkItem(body: unknown): UpdateWorkItemInput | null {
     ...(stages !== undefined ? { stages } : {}),
     ...(parsedSessions !== undefined ? { sessions: parsedSessions } : {}),
     ...(parsedMetadata !== undefined ? { metadata: parsedMetadata } : {}),
+    ...(plansPreapproved === true ? { plansPreapproved: true } : {}),
   };
 }
 
@@ -280,22 +283,8 @@ function parseTransitionBody(
     expectedRevision: Number(body.expectedRevision),
     ingress: { type: 'human', identity: requestId },
     cause,
+    ...(body.reenter === true ? { reenter: true } : {}),
   };
-}
-
-function parseInvocation(value: unknown): FactoryStartRequest['invocation'] | undefined | null {
-  if (value === undefined) return undefined;
-  if (!isRecord(value)) return null;
-  if (value.type === 'prompt') {
-    const prompt = boundedText(value.prompt, 16_384);
-    return prompt ? { type: 'prompt', prompt } : null;
-  }
-  if (value.type === 'skill') {
-    const skillName = boundedText(value.skillName, 64);
-    const args = typeof value.arguments === 'string' && value.arguments.length <= 16_384 ? value.arguments : undefined;
-    return skillName && args !== undefined ? { type: 'skill', skillName, arguments: args } : null;
-  }
-  return null;
 }
 
 function parseStartBody(
@@ -308,11 +297,8 @@ function parseStartBody(
   const sessionId = boundedText(body.sessionId, 256);
   const threadTitle = boundedText(body.threadTitle, 512);
   const kickoffKey = boundedText(body.kickoffKey, 256);
-  const invocation = parseInvocation(body.invocation);
-  const destinationStage = isFactoryRuleStage(body.destinationStage) ? body.destinationStage : undefined;
   const role = boundedText(body.workItem.role, 32);
-  const id = body.workItem.id === undefined ? undefined : boundedText(body.workItem.id, 64);
-  if (body.workItem.id !== undefined && (!id || !UUID_RE.test(id))) return null;
+  const id = boundedText(body.workItem.id, 64);
   if (
     !input ||
     !sessionId ||
@@ -320,34 +306,13 @@ function parseStartBody(
     !threadTitle ||
     !kickoffKey ||
     !UUID_RE.test(kickoffKey) ||
-    invocation === null ||
-    !destinationStage ||
+    !id ||
+    !UUID_RE.test(id) ||
     !role
   ) {
     return null;
   }
-  const threadTags = isRecord(body.threadTags)
-    ? Object.fromEntries(
-        Object.entries(body.threadTags)
-          .filter(
-            (entry): entry is [string, string] =>
-              boundedText(entry[0], 64) !== undefined && boundedText(entry[1], 256) !== undefined,
-          )
-          .map(([key, value]) => [key, value.trim()]),
-      )
-    : undefined;
-  return {
-    ...tenant,
-    factoryProjectId,
-    sessionId,
-    threadTitle,
-    threadTags,
-    kickoffKey,
-    preapprovePlans: body.preapprovePlans === true,
-    invocation,
-    destinationStage,
-    workItem: { id, role, input },
-  };
+  return { ...tenant, factoryProjectId, sessionId, threadTitle, kickoffKey, workItem: { id, role, input } };
 }
 
 const DECISION_STATUSES = new Set<FactoryDispatchStatus>([
@@ -870,21 +835,6 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
           if (!input) return c.json({ error: 'invalid_factory_start' }, 400);
           input.requestContext = loose(c).get('requestContext');
           input.defaultModelId = resolved.defaultModelId ?? undefined;
-          // This route is only reached by a person pressing a run action, so
-          // reaching it is the commitment the approval gate is asking for.
-          // Arming rides inside prepareRunStart's transaction so a crash can't
-          // start the run while leaving its follow-up work waiting on approval.
-          input.armAutonomy = true;
-          if (
-            !input.workItem.id &&
-            ((input.workItem.input.stages ?? ['intake']).length !== 1 ||
-              (input.workItem.input.stages ?? ['intake'])[0] !== 'intake')
-          ) {
-            return c.json(
-              { error: 'governed_transition_required', message: 'Create the work item in Intake before starting it.' },
-              409,
-            );
-          }
           await workItems.ensureReady();
           let prepared: FactoryStartPreparedResult;
           try {

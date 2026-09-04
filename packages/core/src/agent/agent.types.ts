@@ -221,8 +221,9 @@ export interface DelegationCompleteResult {
    * `feedback` is persisted to the parent's memory and therefore only reaches the
    * model on the next turn. Use `resultText` when the sub-agent's own result would
    * mislead the parent right now — for example when the sub-agent stopped on a
-   * tool-calls step and returned empty text, which reads to the model as a
-   * successful but empty delegation.
+   * tool-calls step and returned empty text, or when a failed delegation needs a
+   * more useful error message. Replacing the text does not recover a failed
+   * delegation; the parent still receives a failed tool result.
    */
   resultText?: string;
 }

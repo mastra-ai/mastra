@@ -1,5 +1,18 @@
 # @mastra/duckdb
 
+## 1.7.0-alpha.0
+
+### Minor Changes
+
+- Added advanced trace query support to DuckDB observability storage, including filtering, grouping, ordering, cursor pagination, shared cross-adapter semantics, and query-shape-aware relation reads. ([#22801](https://github.com/mastra-ai/mastra/pull/22801))
+
+  Repeated writes for a score ID now retain the latest record so trace queries evaluate the current score consistently with other observability adapters.
+
+### Patch Changes
+
+- Updated dependencies [[`ae375e6`](https://github.com/mastra-ai/mastra/commit/ae375e6799af20820d90e30f63a084ba1507b771)]:
+  - @mastra/core@1.65.0-alpha.2
+
 ## 1.6.4
 
 ### Patch Changes

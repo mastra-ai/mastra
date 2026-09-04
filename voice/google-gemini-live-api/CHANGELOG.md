@@ -1,5 +1,11 @@
 # @mastra/voice-google-gemini-live
 
+## 0.14.9-alpha.0
+
+### Patch Changes
+
+- Deduplicate tool calls by provider call id: the same function call delivered through both `serverContent.modelTurn.parts[].functionCall` and a top-level `toolCall` message now executes once and emits a single `toolResponse` instead of running the tool twice. ([#22985](https://github.com/mastra-ai/mastra/pull/22985))
+
 ## 0.14.8
 
 ### Patch Changes

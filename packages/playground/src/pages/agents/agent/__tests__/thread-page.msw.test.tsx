@@ -7,7 +7,12 @@ import { createMemoryRouter, RouterProvider, useLocation } from 'react-router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import AgentThread from '../thread';
-import { emptyThreadTracesList } from '@/domains/traces/components/__tests__/fixtures/thread-traces';
+import {
+  emptyThreadTracesList,
+  threadTracesList,
+  traceASpans,
+  traceBSpans,
+} from '@/domains/traces/components/__tests__/fixtures/thread-traces';
 import { agentIndexLoader, agentThreadsIndexLoader, legacyAgentChatLoader, paths } from '@/lib/app-routing';
 import { LinkComponentProvider } from '@/lib/framework';
 import { Link } from '@/lib/link';
@@ -69,7 +74,7 @@ const agentResponse = {
   tools: {},
   workflows: {},
   provider: 'openai',
-  modelId: 'openai/gpt-5-mini',
+  modelId: 'gpt-5-mini',
   modelVersion: 'v2',
   supportsMemory: true,
   defaultOptions: {},
@@ -121,6 +126,17 @@ function installHandlers() {
     ),
     http.get(`${BASE_URL}/api/observability/traces/light`, emptyTraces),
     http.get(`${BASE_URL}/api/observability/traces`, emptyTraces),
+    http.get(`${BASE_URL}/api/agents/providers`, () =>
+      HttpResponse.json({
+        providers: [
+          { id: 'openai', name: 'OpenAI', envVar: 'OPENAI_API_KEY', connected: true, models: ['gpt-5-mini'] },
+        ],
+      }),
+    ),
+    http.get(`${BASE_URL}/api/editor/builder/settings`, () =>
+      HttpResponse.json({ enabled: false, modelPolicy: { active: false } }),
+    ),
+    http.get(`${BASE_URL}/api/editor/builder/models/available`, () => HttpResponse.json({ providers: [] })),
   );
 }
 
@@ -137,6 +153,17 @@ describe('Standalone thread page', () => {
     renderAt(`/agents/${AGENT_ID}/threads/${THREAD_ID}`);
 
     expect(await screen.findByText('Tonight we cook carbonara.')).not.toBeNull();
+  });
+
+  it('renders the composer model switcher with the agent model', async () => {
+    installHandlers();
+    renderAt(`/agents/${AGENT_ID}/threads/${THREAD_ID}`);
+
+    await screen.findByText('Tonight we cook carbonara.');
+    // Provider + model pill (needs PlaygroundModelProvider, which this page must supply itself).
+    expect(await screen.findByText('OpenAI')).not.toBeNull();
+    expect(await screen.findByText('gpt-5-mini')).not.toBeNull();
+    expect(await screen.findByTestId('composer-model-settings-trigger')).not.toBeNull();
   });
 
   it('shows the thread list next to the chat', async () => {
@@ -367,6 +394,63 @@ describe('Standalone thread page', () => {
       await screen.findByText('Sushi ideas');
 
       expect(screen.queryByRole('button', { name: 'Delete thread' })).toBeNull();
+    });
+  });
+
+  describe('with ?variant=advanced', () => {
+    const installTraceHandlers = () => {
+      server.use(
+        http.get(`${BASE_URL}/api/observability/traces/light`, () => HttpResponse.json(threadTracesList)),
+        http.get(`${BASE_URL}/api/observability/traces`, () => HttpResponse.json(threadTracesList)),
+        http.get(`${BASE_URL}/api/observability/traces/:traceId`, ({ params }) =>
+          HttpResponse.json(params.traceId === 'trace-b' ? traceBSpans : traceASpans),
+        ),
+      );
+    };
+
+    it('renders the thread as its traces instead of the chat', async () => {
+      installHandlers();
+      installTraceHandlers();
+      renderAt(`/agents/${AGENT_ID}/threads/${THREAD_ID}?variant=advanced`);
+
+      expect(await screen.findByTestId('thread-view-by-trace')).not.toBeNull();
+      expect(await screen.findByText('Chef agent run')).not.toBeNull();
+      expect(screen.queryByText('Tonight we cook carbonara.')).toBeNull();
+      expect(screen.queryByRole('button', { name: 'Traces' })).toBeNull();
+    });
+
+    it('still renders the chat for a new thread', async () => {
+      installHandlers();
+      installTraceHandlers();
+      renderAt(`/agents/${AGENT_ID}/threads/new?variant=advanced`);
+
+      expect(await screen.findByText('Sushi ideas')).not.toBeNull();
+      expect(screen.queryByTestId('thread-view-by-trace')).toBeNull();
+      expect(screen.queryByRole('switch', { name: 'Advanced view' })).toBeNull();
+    });
+
+    it('is toggled from the "Advanced view" switch in the Thread header', async () => {
+      installHandlers();
+      installTraceHandlers();
+      renderAt(`/agents/${AGENT_ID}/threads/${THREAD_ID}`);
+
+      expect(await screen.findByRole('heading', { name: 'Thread' })).not.toBeNull();
+      const toggle = screen.getByRole('switch', { name: 'Advanced view' });
+      expect(toggle.getAttribute('aria-checked')).toBe('false');
+
+      fireEvent.click(toggle);
+      await waitFor(() =>
+        expect(screen.getByTestId('location-probe').textContent).toBe(
+          `/agents/${AGENT_ID}/threads/${THREAD_ID}?variant=advanced`,
+        ),
+      );
+      expect(await screen.findByTestId('thread-view-by-trace')).not.toBeNull();
+
+      fireEvent.click(screen.getByRole('switch', { name: 'Advanced view' }));
+      await waitFor(() =>
+        expect(screen.getByTestId('location-probe').textContent).toBe(`/agents/${AGENT_ID}/threads/${THREAD_ID}`),
+      );
+      expect(screen.queryByTestId('thread-view-by-trace')).toBeNull();
     });
   });
 

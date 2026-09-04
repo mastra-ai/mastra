@@ -129,7 +129,6 @@ describe('Factory work item service boundary', () => {
       sessionId: 'session-1',
       threadTitle: 'Fix Factory board',
       kickoffKey: 'kickoff-1',
-      destinationStage: 'triage',
       workItem: {
         id: 'item-1',
         role: 'triage',

@@ -1,5 +1,23 @@
 # @mastra/express
 
+## 1.5.9-alpha.3
+
+### Patch Changes
+
+- Updated dependencies [[`f649ea0`](https://github.com/mastra-ai/mastra/commit/f649ea0f006436e7268c3b0fa45f9865a02130cc), [`18d99e7`](https://github.com/mastra-ai/mastra/commit/18d99e7b5687ea6a1cdb601fa5c4209a03b97c02), [`a0ad935`](https://github.com/mastra-ai/mastra/commit/a0ad9351eaf8527d1515051ddf3998ee258b9acd)]:
+  - @mastra/core@1.65.0-alpha.3
+  - @mastra/server@1.65.0-alpha.3
+
+## 1.5.9-alpha.2
+
+### Patch Changes
+
+- Fixed route-specific oversized-request rejection before handler execution and preserved explicitly attached HTTP exception responses. When a host parser has already consumed a request without `Content-Length`, the route limit remains a post-parse safeguard. ([#22728](https://github.com/mastra-ai/mastra/pull/22728))
+
+- Updated dependencies [[`ae375e6`](https://github.com/mastra-ai/mastra/commit/ae375e6799af20820d90e30f63a084ba1507b771), [`bc3a320`](https://github.com/mastra-ai/mastra/commit/bc3a3208697da4aca95ad25d1bcee29cbbffb075)]:
+  - @mastra/core@1.65.0-alpha.2
+  - @mastra/server@1.65.0-alpha.2
+
 ## 1.5.9-alpha.1
 
 ### Patch Changes

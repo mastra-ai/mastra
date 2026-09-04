@@ -9,7 +9,7 @@ import { useRef, useState } from 'react';
 
 import type { BoardCandidate } from '../boardCandidates';
 import type { BoardCardStatus } from '../boardCardStatus';
-import type { RunAction } from '../boardRunSpecs';
+import type { CardMove } from '../cardPrimaryAction';
 import type { CardMorph } from '../hooks/useCardMorph';
 import { CardSourceDescription } from './BoardCardDetails';
 import { CardActions } from './BoardCardParts';
@@ -24,9 +24,7 @@ export function CandidateDetailsPanel({
   projectRepositoryId,
   factoryProjectId,
   menu,
-  defaultAction,
-  disabled,
-  runPending,
+  defaultMove,
   onRun,
 }: {
   candidate: BoardCandidate;
@@ -36,11 +34,9 @@ export function CandidateDetailsPanel({
   projectRepositoryId: string;
   factoryProjectId: string;
   menu: ReactNode;
-  defaultAction: RunAction;
-  disabled: boolean;
-  runPending: boolean;
-  /** Start a run; `prompt` undefined = the action's default prompt. */
-  onRun: (action: RunAction, prompt?: string) => void;
+  defaultMove: CardMove;
+  /** File the candidate and move it into the lane; `prompt` undefined = no typed guidance. */
+  onRun: (move: CardMove, prompt?: string) => void;
 }) {
   const promptAnchorRef = useRef<HTMLButtonElement>(null);
   const [promptOpen, setPromptOpen] = useState(false);
@@ -53,10 +49,10 @@ export function CandidateDetailsPanel({
 
   const runPrompt = () => {
     const trimmed = prompt.trim();
-    if (!trimmed || runPending) return;
+    if (!trimmed) return;
     closePrompt();
     morph.closeDetails();
-    onRun(defaultAction, trimmed);
+    onRun(defaultMove, trimmed);
   };
 
   return (
@@ -100,13 +96,7 @@ export function CandidateDetailsPanel({
           }
           actions={
             <CardActions
-              actions={[
-                {
-                  label: runPending ? 'Starting…' : defaultAction.label,
-                  disabled: disabled || runPending,
-                  start: () => onRun(defaultAction),
-                },
-              ]}
+              actions={[{ label: defaultMove.label, start: () => onRun(defaultMove) }]}
               beforeStart={morph.closeDetails}
             >
               <Button
@@ -164,7 +154,7 @@ export function CandidateDetailsPanel({
               <Button type="button" variant="ghost" size="xs" onClick={closePrompt}>
                 Cancel
               </Button>
-              <Button type="submit" size="xs" disabled={runPending || !prompt.trim()}>
+              <Button type="submit" size="xs" disabled={!prompt.trim()}>
                 Run
               </Button>
             </div>

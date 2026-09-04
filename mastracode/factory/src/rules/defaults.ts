@@ -1,3 +1,5 @@
+import { reviewBoard } from '../boards/review.js';
+import { workItemNumber } from '../work-item-branch.js';
 import type {
   FactoryBoardRuleLeaf,
   FactoryBoardRules,
@@ -9,12 +11,14 @@ import type {
   FactoryLinearRuleLeaf,
   FactoryRules,
   FactoryRulesOverrides,
+  FactoryRuleItemContext,
   FactoryRuleSource,
   FactoryRuleStage,
   FactoryStageRuleContext,
   FactoryToolResultRuleContext,
   FactoryToolRuleLeaf,
 } from './types.js';
+import { needsApproval } from './types.js';
 import { assertFactoryRules, FactoryRuleValidationError } from './validation.js';
 
 export const DEFAULT_FACTORY_RULE_VERSION = 'factory-default-v1';
@@ -27,14 +31,49 @@ function githubActorLogin(context: Pick<FactoryStageRuleContext, 'actor'>): stri
   return context.actor.type === 'github' ? context.actor.login : undefined;
 }
 
+// `sourceKey` reaches a rule as `linear:issue:linear:ENG-42`; the intake stamps the bare identifier.
+function linearIdentifier(item: FactoryRuleItemContext): string | undefined {
+  const identifier = item.metadata?.identifier;
+  return typeof identifier === 'string' ? identifier : undefined;
+}
+
+/** How a run names the card it is about: the noun, the provider number when the card carries one, the link. */
+function sourceRef(item: FactoryRuleItemContext): string {
+  const link = item.url ? ` (${item.url})` : '';
+  if (item.source === 'linear-issue') {
+    const identifier = linearIdentifier(item);
+    return identifier ? `Linear issue ${identifier}${link}` : `Linear issue ${item.title}${link}`;
+  }
+  if (item.source === 'manual') return item.url ? `Work item${link}` : item.title;
+  const noun = item.source === 'github-pr' ? 'GitHub pull request' : 'GitHub issue';
+  const number = workItemNumber(item);
+  if (number === undefined) return item.url ? `${noun}${link}` : item.title;
+  return `${noun} #${number}${link}`;
+}
+
 function invokeIssueInvestigation(context: FactoryStageRuleContext) {
   return {
     type: 'invokeSkill',
     idempotencyKey: `${context.ingress.id}:factory-triage`,
     role: 'triage',
     skillName: 'factory-triage',
-    arguments: context.item.url ? `GitHub issue (${context.item.url})` : context.item.title,
+    arguments: sourceRef(context.item),
   } as const;
+}
+
+function prepareApproval(context: FactoryStageRuleContext) {
+  return {
+    type: 'invokeSkill',
+    idempotencyKey: `${context.ingress.id}:prepare-approval`,
+    role: 'triage',
+    prompt:
+      `Prepare approval for ${sourceRef(context.item)}. Review the existing triage comment and summarize ` +
+      'the decision needed before implementation or closure.',
+  } as const;
+}
+
+function triageIssueEntry(context: FactoryStageRuleContext) {
+  return needsApproval(context.item) ? prepareApproval(context) : invokeIssueInvestigation(context);
 }
 
 function retriageGithubIssue(context: FactoryGithubRuleContext) {
@@ -63,15 +102,12 @@ function retriageGithubIssue(context: FactoryGithubRuleContext) {
 }
 
 function investigateTriagedLinearIssue(context: FactoryStageRuleContext) {
-  const identifier = context.item.sourceKey?.startsWith('linear:')
-    ? context.item.sourceKey.slice('linear:'.length)
-    : context.item.title;
   return {
     type: 'invokeSkill',
     idempotencyKey: `${context.ingress.id}:factory-triage-linear`,
     role: 'triage',
     skillName: 'factory-triage',
-    arguments: `Linear issue ${identifier}${context.item.url ? ` (${context.item.url})` : ''}`,
+    arguments: `${sourceRef(context.item)}\n\n${LINEAR_FETCH_HINT}`,
   } as const;
 }
 
@@ -112,7 +148,11 @@ function reporterCoAuthor(context: FactoryStageRuleContext) {
  * pull request, which arrives as its own event and raises the Review card.
  */
 function buildWorkItem(context: FactoryStageRuleContext) {
-  const subject = context.item.url ? `the approved plan for ${context.item.url}` : 'the approved plan';
+  const ref = sourceRef(context.item);
+  const fromApprovedPlan = context.fromStage === 'planning';
+  const task = fromApprovedPlan
+    ? `Implement the approved plan for ${ref}. Open a pull request when the work is ready for review.`
+    : `Implement a fix for ${ref}: investigate the root cause, make the change with tests, and open a pull request.`;
   const reporter = reporterCoAuthor(context);
   // The trailer needs the reporter's numeric id, which intake does not stamp, so
   // the agent resolves it from the same issue it is already reading.
@@ -125,7 +165,7 @@ function buildWorkItem(context: FactoryStageRuleContext) {
     type: 'invokeSkill',
     idempotencyKey: `${context.ingress.id}:build`,
     role: 'work',
-    prompt: `Implement ${subject}. Open a pull request when the work is ready for review.${credit}`,
+    prompt: `${task}${credit}`,
   } as const;
 }
 
@@ -139,26 +179,8 @@ function completeIssue(context: FactoryStageRuleContext) {
   } as const;
 }
 
-function reviewPullRequest(context: FactoryStageRuleContext) {
-  // Only a Review-to-Review re-entry can supersede an active pass. A card
-  // returning from Done has no live review to cancel; aborting its bound session
-  // would instead cancel the fresh re-review kickoff.
-  const supersedes = context.fromStage === 'review';
-  // The re-review skill only applies when a prior review pass actually completed
-  // (the card is returning from `done`). A cancelled first-time review that
-  // re-enters Review from `review` itself still has no prior pass to reconcile —
-  // it gets the regular factory-review skill.
-  const priorReviewCompleted = context.fromStage === 'done';
-  const skillName = priorReviewCompleted ? 'factory-rereview' : 'factory-review';
-  return {
-    type: 'invokeSkill',
-    idempotencyKey: `${context.ingress.id}:${skillName}`,
-    role: 'review',
-    skillName,
-    arguments: context.item.url ? `GitHub pull request (${context.item.url})` : context.item.title,
-    ...(supersedes ? { cancelInFlight: true } : {}),
-  } as const;
-}
+const LINEAR_FETCH_HINT =
+  "Start by fetching the issue's full details (description and comments) with the linear_get_issue tool.";
 
 // Fires only on webhook materialization, so an item filed by hand or re-synced
 // from source never suggests its own run.
@@ -545,9 +567,9 @@ function linearIssueClosed(context: FactoryLinearRuleContext) {
 
 const BUILT_IN_DEFAULTS: FactoryRulesOverrides = {
   work: {
-    intake: { issue: { onEnter: onArrival(invokeIssueInvestigation) } },
+    intake: { issue: { onEnter: onArrival(triageIssueEntry) } },
     triage: {
-      issue: { onEnter: invokeIssueInvestigation },
+      issue: { onEnter: triageIssueEntry },
       linearIssue: { onEnter: investigateTriagedLinearIssue },
     },
     planning: {
@@ -564,10 +586,7 @@ const BUILT_IN_DEFAULTS: FactoryRulesOverrides = {
       issue: { onEnter: completeIssue },
     },
   },
-  review: {
-    intake: { pullRequest: { onEnter: onArrival(reviewPullRequest) } },
-    review: { pullRequest: { onEnter: reviewPullRequest } },
-  },
+  review: reviewBoard.rules,
   tools: { submit_plan: { onResult: advanceApprovedPlan } },
   github: {
     issueOpened: { onEvent: issueOpened },

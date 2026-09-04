@@ -15,6 +15,8 @@ import {
   paginationInfoSchema,
   refineObservabilityListMode,
   sortDirectionSchema,
+  organizationIdField,
+  resourceIdField,
   tagsField,
   traceIdField,
   spanIdField,
@@ -842,17 +844,39 @@ export const batchUpdateSpansArgsSchema = z
 /** Arguments for batch updating multiple spans */
 export type BatchUpdateSpansArgs = z.infer<typeof batchUpdateSpansArgsSchema>;
 
+/** Maximum number of trace IDs accepted by a single batch delete request. */
+export const BATCH_DELETE_TRACES_MAX_IDS = 1000;
+
 /**
  * Schema for batchDeleteTraces operation arguments
  */
 export const batchDeleteTracesArgsSchema = z
   .object({
-    traceIds: z.array(traceIdField),
+    traceIds: z
+      .array(traceIdField)
+      .max(BATCH_DELETE_TRACES_MAX_IDS)
+      .describe(`Trace IDs to delete (maximum ${BATCH_DELETE_TRACES_MAX_IDS})`),
+    organizationId: organizationIdField
+      .optional()
+      .describe('Optional tenant scope: only delete rows belonging to this organization'),
+    resourceId: resourceIdField
+      .optional()
+      .describe('Optional tenant scope: only delete rows belonging to this resource'),
   })
   .describe('Arguments for batch deleting traces');
 
 /** Arguments for batch deleting multiple traces */
 export type BatchDeleteTracesArgs = z.infer<typeof batchDeleteTracesArgsSchema>;
+
+/** Schema for batchDeleteTraces route response */
+export const batchDeleteTracesResponseSchema = z
+  .object({
+    success: z.literal(true),
+  })
+  .describe('Response for batch deleting traces');
+
+/** Response for batch deleting traces */
+export type BatchDeleteTracesResponse = z.infer<typeof batchDeleteTracesResponseSchema>;
 
 // ============================================================================
 // Scoring related schemas
