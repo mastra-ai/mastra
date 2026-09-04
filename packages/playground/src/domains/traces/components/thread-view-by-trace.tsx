@@ -48,14 +48,15 @@ export function ThreadViewByTrace({ threadId }: ThreadViewByTraceProps) {
   };
 
   const highlightSpans = (traceId: string, spanIds: string[]) => {
-    const [firstSpanId] = spanIds;
-    if (!firstSpanId) {
+    const lastSpanId = spanIds.at(-1);
+    if (!lastSpanId) {
       setHighlight(null);
       return;
     }
     setHighlight({ traceId, spanIds });
-    // Open the detail panel on the first highlighted span, mirroring the traces page.
-    setSelected({ traceId, spanId: firstSpanId });
+    // Open the detail panel on the last highlighted span: the first is always the root, the
+    // last is the deepest step behind the message. The timeline scrolls the selected row into view.
+    setSelected({ traceId, spanId: lastSpanId });
   };
 
   if (error) {

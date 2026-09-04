@@ -1,6 +1,6 @@
 import { fireEvent, screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
-import { beforeAll, describe, expect, it, vi } from 'vitest';
+import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { feedbackRecord, listFeedbackResponse } from '../../hooks/__tests__/fixtures/trace-feedback';
 import { ThreadViewByTrace } from '../thread-view-by-trace';
@@ -19,9 +19,11 @@ import { server } from '@/test/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '@/test/render';
 
 // jsdom does not implement scrollIntoView, which the timeline uses to reveal the selected span.
+const scrollIntoView = vi.fn();
 beforeAll(() => {
-  if (!Element.prototype.scrollIntoView) Element.prototype.scrollIntoView = () => {};
+  Element.prototype.scrollIntoView = scrollIntoView;
 });
+beforeEach(() => scrollIntoView.mockClear());
 
 // The API returns traces newest-first (startedAt DESC): trace-b (12:05) before trace-a (12:00).
 const newestFirstList = { ...threadTracesList, spans: [threadTracesList.spans[1], threadTracesList.spans[0]] };
@@ -105,7 +107,7 @@ describe('ThreadViewByTrace', () => {
   describe('highlighting the spans behind a message', () => {
     const spanLabel = (name: string) => screen.getByLabelText(`View details for span ${name}`);
 
-    it('fades the other spans of that trace and opens the first highlighted span', async () => {
+    it('fades the other spans of that trace and opens the last highlighted span', async () => {
       installHandlers();
       const { queryClient } = renderView();
 
@@ -122,8 +124,12 @@ describe('ThreadViewByTrace', () => {
       expect(spanLabel('Recipe lookup').className).not.toContain('opacity-30');
       // ...and the other trace's tree is untouched.
       expect(spanLabel('Chef agent follow-up').className).not.toContain('opacity-30');
-      // The detail panel opens on the first highlighted span.
+      // The detail panel opens on the last highlighted span (the deepest step, not the root),
+      // and the timeline scrolls that row into view.
       expect(await screen.findByRole('button', { name: /close/i })).not.toBeNull();
+      expect(spanLabel('Recipe lookup').className).toContain('bg-surface4');
+      expect(spanLabel('Chef agent run').className).not.toContain('bg-surface4');
+      expect(scrollIntoView).toHaveBeenCalled();
       await waitFor(() => expect(queryClient.isFetching()).toBe(0));
     });
 
