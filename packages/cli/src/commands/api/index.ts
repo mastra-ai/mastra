@@ -658,6 +658,7 @@ function buildDescriptor(
     responseShape: route.responseShape,
     queryParams: [...route.queryParams],
     bodyParams: [...route.bodyParams],
+    routePlacement: options.routePlacement ?? 'api-prefix',
     defaultTimeoutMs: options.defaultTimeoutMs,
     examples: options.examples,
     verbose: verboseRoute

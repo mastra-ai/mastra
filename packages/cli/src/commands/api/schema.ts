@@ -4,20 +4,25 @@ import { LEARNING_ROUTE_SCHEMAS } from './learning-route-metadata.js';
 import type { ResolvedTarget } from './target.js';
 import type { ApiCommandDescriptor, ApiCommandExample } from './types.js';
 
+type BundledRouteSchema = {
+  pathParamSchema?: unknown;
+  queryParamSchema?: unknown;
+  bodySchema?: unknown;
+  responseSchema?: unknown;
+};
+
+export const BUNDLED_ROUTE_SCHEMAS: Readonly<Record<string, BundledRouteSchema>> = {
+  ...LEARNING_ROUTE_SCHEMAS,
+};
+
 export async function getCommandSchema(descriptor: ApiCommandDescriptor, target: ResolvedTarget): Promise<unknown> {
   if (!descriptor.acceptsInput) {
     throw new ApiCliError('SCHEMA_UNAVAILABLE', 'This command does not accept JSON input');
   }
 
-  // Learning routes live on the Mastra platform learning endpoint, which does
-  // not expose a schema manifest; resolve their hand-authored schemas locally.
-  const learningSchema = (
-    LEARNING_ROUTE_SCHEMAS as Partial<
-      Record<string, (typeof LEARNING_ROUTE_SCHEMAS)[keyof typeof LEARNING_ROUTE_SCHEMAS]>
-    >
-  )[`${descriptor.method} ${descriptor.path}`];
-  if (learningSchema) {
-    return buildRouteSchema(descriptor, learningSchema);
+  const bundledSchema = BUNDLED_ROUTE_SCHEMAS[`${descriptor.method} ${descriptor.path}`];
+  if (bundledSchema) {
+    return buildRouteSchema(descriptor, bundledSchema);
   }
 
   const manifest = await fetchSchemaManifest(target.baseUrl, target.headers, target.timeoutMs, target.apiPrefix);
