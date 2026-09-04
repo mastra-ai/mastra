@@ -1,10 +1,14 @@
+import type { MastraClient } from '@mastra/client-js';
 import { buildThreadRailTurns } from '@mastra/playground-ui/components/ThreadRail';
 import type { ThreadRailTurn } from '@mastra/playground-ui/components/ThreadRail';
 import { traceSpansQueryOptions } from '@mastra/playground-ui/domains/traces/hooks/use-trace-spans';
 import { useMastraClient } from '@mastra/react';
 import { useQueries } from '@tanstack/react-query';
+import type { UseQueryOptions } from '@tanstack/react-query';
 
 import { formatTraceThreadMessages } from '@/domains/traces/components/format-trace-thread-messages';
+
+type TraceSpansData = Awaited<ReturnType<MastraClient['getTrace']>>;
 
 export const fallbackRailTurn = (traceId: string): ThreadRailTurn => ({
   key: traceId,
@@ -22,14 +26,24 @@ export const fallbackRailTurn = (traceId: string): ThreadRailTurn => ({
 export function useThreadRailTurns(traceIds: string[]): ThreadRailTurn[] {
   const client = useMastraClient();
 
-  return useQueries({
-    queries: traceIds.map(traceId => ({
-      ...traceSpansQueryOptions(client, traceId),
-      select: (data: Awaited<ReturnType<typeof client.getTrace>>): ThreadRailTurn => {
+  const queries = traceIds.map((traceId): UseQueryOptions<TraceSpansData, Error, ThreadRailTurn> => {
+    const { queryKey, queryFn, enabled, staleTime, gcTime } = traceSpansQueryOptions(client, traceId);
+    return {
+      queryKey,
+      queryFn,
+      enabled,
+      staleTime,
+      gcTime,
+      select: data => {
         const [turn] = buildThreadRailTurns(formatTraceThreadMessages(data?.spans ?? []));
         return turn ? { ...turn, key: traceId, messageId: traceId } : fallbackRailTurn(traceId);
       },
-    })),
-    combine: results => results.map((result, index) => result.data ?? fallbackRailTurn(traceIds[index]!)),
+    };
+  });
+
+  return useQueries({
+    queries,
+    combine: (results): ThreadRailTurn[] =>
+      results.map((result, index) => result.data ?? fallbackRailTurn(traceIds[index]!)),
   });
 }
