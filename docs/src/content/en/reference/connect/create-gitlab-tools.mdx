@@ -1,0 +1,73 @@
+---
+title: "Reference: createGitlabTools() | Connect"
+description: "API reference for createGitlabTools() and the curated GitLab toolset in @mastra/connect."
+packages:
+  - "@mastra/connect"
+---
+
+# createGitlabTools()
+
+Returns a curated GitLab toolset over the REST API v4 that executes through the Mastra platform connection proxy. Tools never handle provider credentials directly.
+
+```typescript
+import { createGitlabTools } from '@mastra/connect'
+
+const tools = createGitlabTools()
+```
+
+The returned object is a `ToolsInput`: spread it into an agent's `tools`, or pass it through `toolsets`.
+
+The connection is a GitLab group access token, so tools operate within the connected group. Project ids accept a numeric id or a path like `group/project`, which is URL-encoded automatically.
+
+## Parameters
+
+<PropertiesTable
+  content={[
+  {
+    name: 'options',
+    type: 'ProviderToolsOptions',
+    description: 'Optional connection, filtering, and client configuration.',
+    isOptional: true,
+    properties: [
+      {
+        type: 'ProviderToolsOptions',
+        parameters: [
+          {
+            name: 'connectionId',
+            type: 'string',
+            description: 'Connection to use. Falls back to MASTRA_GITLAB_CONNECTION_ID at execute time.',
+            isOptional: true,
+          },
+          {
+            name: 'allowTools',
+            type: 'string[]',
+            description: 'Restrict the returned toolset to these tool keys. Unknown names throw immediately.',
+            isOptional: true,
+          },
+          {
+            name: 'client',
+            type: 'ConnectClientOptions',
+            description: 'Platform client overrides. See ConnectClientOptions in connect().',
+            isOptional: true,
+          },
+        ],
+      },
+    ],
+  },
+]}
+/>
+
+## Tools
+
+| Tool | Description |
+| - | - |
+| `gitlab_list_projects` | List projects the connected group token can access |
+| `gitlab_get_project` | Get one project by numeric id or `group/project` path |
+| `gitlab_list_issues` | List issues of a project |
+| `gitlab_create_issue` | Create an issue in a project |
+| `gitlab_update_issue` | Update an issue (title, description, labels, or open/close state) |
+| `gitlab_list_merge_requests` | List merge requests of a project |
+| `gitlab_get_merge_request` | Get one merge request by its iid |
+| `gitlab_create_mr_note` | Add a comment (note) to a merge request |
+| `gitlab_get_file` | Read a file from a repository at a ref, returned as UTF-8 text |
+| `gitlab_list_pipelines` | List CI/CD pipelines of a project |

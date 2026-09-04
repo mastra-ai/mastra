@@ -1,0 +1,69 @@
+---
+title: "Reference: createSnowflakeTools() | Connect"
+description: "API reference for createSnowflakeTools() and the curated Snowflake toolset in @mastra/connect."
+packages:
+  - "@mastra/connect"
+---
+
+# createSnowflakeTools()
+
+Returns a curated Snowflake toolset over the SQL API that executes through the Mastra platform connection proxy. Tools never handle provider credentials directly.
+
+```typescript
+import { createSnowflakeTools } from '@mastra/connect'
+
+const tools = createSnowflakeTools()
+```
+
+The returned object is a `ToolsInput`: spread it into an agent's `tools`, or pass it through `toolsets`.
+
+SQL-execution tools take `warehouse`, `database`, and `schema` context inputs. Identifiers interpolated into `SHOW`/`DESCRIBE` statements are validated against a strict identifier pattern at the schema layer before any request is built.
+
+## Parameters
+
+<PropertiesTable
+  content={[
+  {
+    name: 'options',
+    type: 'ProviderToolsOptions',
+    description: 'Optional connection, filtering, and client configuration.',
+    isOptional: true,
+    properties: [
+      {
+        type: 'ProviderToolsOptions',
+        parameters: [
+          {
+            name: 'connectionId',
+            type: 'string',
+            description: 'Connection to use. Falls back to MASTRA_SNOWFLAKE_CONNECTION_ID at execute time.',
+            isOptional: true,
+          },
+          {
+            name: 'allowTools',
+            type: 'string[]',
+            description: 'Restrict the returned toolset to these tool keys. Unknown names throw immediately.',
+            isOptional: true,
+          },
+          {
+            name: 'client',
+            type: 'ConnectClientOptions',
+            description: 'Platform client overrides. See ConnectClientOptions in connect().',
+            isOptional: true,
+          },
+        ],
+      },
+    ],
+  },
+]}
+/>
+
+## Tools
+
+| Tool | Description |
+| - | - |
+| `snowflake_execute_sql` | Execute a SQL statement. Fast statements return results immediately; otherwise poll `snowflake_get_statement_status` with the returned statement handle |
+| `snowflake_get_statement_status` | Get the status and, once complete, the results of an async statement. Partitioned results return one partition per call |
+| `snowflake_cancel_statement` | Cancel a running statement by its statement handle |
+| `snowflake_list_databases` | List databases visible in the connection context (`SHOW DATABASES`) |
+| `snowflake_list_tables` | List tables in a database schema (`SHOW TABLES IN <database>.<schema>`) |
+| `snowflake_describe_table` | Describe a table's columns and types (`DESCRIBE TABLE <database>.<schema>.<table>`) |

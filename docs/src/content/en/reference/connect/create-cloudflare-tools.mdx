@@ -1,0 +1,71 @@
+---
+title: "Reference: createCloudflareTools() | Connect"
+description: "API reference for createCloudflareTools() and the curated Cloudflare toolset in @mastra/connect."
+packages:
+  - "@mastra/connect"
+---
+
+# createCloudflareTools()
+
+Returns a curated Cloudflare toolset over the client API v4 that executes through the Mastra platform connection proxy. Tools never handle provider credentials directly.
+
+```typescript
+import { createCloudflareTools } from '@mastra/connect'
+
+const tools = createCloudflareTools()
+```
+
+The returned object is a `ToolsInput`: spread it into an agent's `tools`, or pass it through `toolsets`.
+
+Cloudflare envelopes responses as `{ success, errors, result }`. These tools unwrap the envelope and surface Cloudflare's error messages as `proxy_error`, even when the HTTP status is 200.
+
+## Parameters
+
+<PropertiesTable
+  content={[
+  {
+    name: 'options',
+    type: 'ProviderToolsOptions',
+    description: 'Optional connection, filtering, and client configuration.',
+    isOptional: true,
+    properties: [
+      {
+        type: 'ProviderToolsOptions',
+        parameters: [
+          {
+            name: 'connectionId',
+            type: 'string',
+            description: 'Connection to use. Falls back to MASTRA_CLOUDFLARE_CONNECTION_ID at execute time.',
+            isOptional: true,
+          },
+          {
+            name: 'allowTools',
+            type: 'string[]',
+            description: 'Restrict the returned toolset to these tool keys. Unknown names throw immediately.',
+            isOptional: true,
+          },
+          {
+            name: 'client',
+            type: 'ConnectClientOptions',
+            description: 'Platform client overrides. See ConnectClientOptions in connect().',
+            isOptional: true,
+          },
+        ],
+      },
+    ],
+  },
+]}
+/>
+
+## Tools
+
+| Tool | Description |
+| - | - |
+| `cloudflare_verify_token` | Verify the connected API token and report its status |
+| `cloudflare_list_accounts` | List accounts the connected token can access |
+| `cloudflare_list_zones` | List DNS zones (domains) in an account |
+| `cloudflare_list_dns_records` | List DNS records of a zone |
+| `cloudflare_create_dns_record` | Create a DNS record. MX records require a priority |
+| `cloudflare_update_dns_record` | Update an existing DNS record |
+| `cloudflare_delete_dns_record` | Destructive: permanently delete a DNS record |
+| `cloudflare_purge_cache` | Purge the zone cache: everything, or specific files, cache tags, or hosts |

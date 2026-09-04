@@ -1,0 +1,73 @@
+---
+title: "Reference: createJiraTools() | Connect"
+description: "API reference for createJiraTools() and the curated Jira toolset in @mastra/connect."
+packages:
+  - "@mastra/connect"
+---
+
+# createJiraTools()
+
+Returns a curated Jira Cloud toolset that executes through the Mastra platform connection proxy. Tools never handle provider credentials directly.
+
+```typescript
+import { createJiraTools } from '@mastra/connect'
+
+const tools = createJiraTools()
+```
+
+The returned object is a `ToolsInput`: spread it into an agent's `tools`, or pass it through `toolsets`.
+
+Jira Cloud scopes its REST API per site, so most tools require a `cloudId`. Call `jira_get_accessible_resources` first to discover the sites this connection can reach.
+
+## Parameters
+
+<PropertiesTable
+  content={[
+  {
+    name: 'options',
+    type: 'ProviderToolsOptions',
+    description: 'Optional connection, filtering, and client configuration.',
+    isOptional: true,
+    properties: [
+      {
+        type: 'ProviderToolsOptions',
+        parameters: [
+          {
+            name: 'connectionId',
+            type: 'string',
+            description: 'Connection to use. Falls back to MASTRA_JIRA_CONNECTION_ID at execute time.',
+            isOptional: true,
+          },
+          {
+            name: 'allowTools',
+            type: 'string[]',
+            description: 'Restrict the returned toolset to these tool keys. Unknown names throw immediately.',
+            isOptional: true,
+          },
+          {
+            name: 'client',
+            type: 'ConnectClientOptions',
+            description: 'Platform client overrides. See ConnectClientOptions in connect().',
+            isOptional: true,
+          },
+        ],
+      },
+    ],
+  },
+]}
+/>
+
+## Tools
+
+| Tool | Description |
+| - | - |
+| `jira_get_accessible_resources` | List the Jira sites accessible to this connection, with their cloud ids. Call this first |
+| `jira_search_issues` | Search issues with a JQL query |
+| `jira_get_issue` | Get an issue by key, e.g. `ENG-123`, including its plain-text description |
+| `jira_create_issue` | Create an issue. Plain-text descriptions are wrapped into Atlassian Document Format. Issue types are referenced by name (classic projects) |
+| `jira_update_issue` | Update fields of an issue (summary, description, assignee, labels, or priority) |
+| `jira_list_transitions` | List the workflow transitions currently available for an issue |
+| `jira_transition_issue` | Move an issue through a workflow transition to change its status |
+| `jira_add_comment` | Add a comment to an issue. Plain text is wrapped into Atlassian Document Format automatically |
+| `jira_list_comments` | List comments on an issue as plain text |
+| `jira_list_projects` | List projects in the site, optionally filtered by a name/key query |

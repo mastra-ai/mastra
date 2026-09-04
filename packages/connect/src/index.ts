@@ -1,0 +1,17 @@
+export { connect } from './connect.js';
+export type { ConnectOptions, ConnectIntegrationOptions, ConnectLiveOptions, ConnectLiveTools } from './connect.js';
+export { credential } from './credential.js';
+export { MastraConnectError } from './errors.js';
+export type { MastraConnectErrorCode } from './errors.js';
+export type { ConnectClientOptions, ConnectionCredential, ProjectConnection } from './client.js';
+export type { ProviderKey } from './registry.js';
+export type { ProviderToolsOptions } from './toolset.js';
+export { createAnthropicTools } from './providers/anthropic.js';
+export { createCloudflareTools } from './providers/cloudflare.js';
+export { createGitlabTools } from './providers/gitlab.js';
+export { createJiraTools } from './providers/jira.js';
+export { createLinearTools } from './providers/linear.js';
+export { createNeonTools } from './providers/neon.js';
+export { createNotionTools } from './providers/notion.js';
+export { createResendTools } from './providers/resend.js';
+export { createSnowflakeTools } from './providers/snowflake.js';

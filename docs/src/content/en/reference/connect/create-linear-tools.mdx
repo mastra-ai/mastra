@@ -1,0 +1,70 @@
+---
+title: "Reference: createLinearTools() | Connect"
+description: "API reference for createLinearTools() and the curated Linear toolset in @mastra/connect."
+packages:
+  - "@mastra/connect"
+---
+
+# createLinearTools()
+
+Returns a curated Linear toolset that executes through the Mastra platform connection proxy. Tools never handle provider credentials directly.
+
+```typescript
+import { createLinearTools } from '@mastra/connect'
+
+const tools = createLinearTools()
+```
+
+The returned object is a `ToolsInput`: spread it into an agent's `tools`, or pass it through `toolsets`.
+
+## Parameters
+
+<PropertiesTable
+  content={[
+  {
+    name: 'options',
+    type: 'ProviderToolsOptions',
+    description: 'Optional connection, filtering, and client configuration.',
+    isOptional: true,
+    properties: [
+      {
+        type: 'ProviderToolsOptions',
+        parameters: [
+          {
+            name: 'connectionId',
+            type: 'string',
+            description: 'Connection to use. Falls back to MASTRA_LINEAR_CONNECTION_ID at execute time.',
+            isOptional: true,
+          },
+          {
+            name: 'allowTools',
+            type: 'string[]',
+            description: 'Restrict the returned toolset to these tool keys. Unknown names throw immediately.',
+            isOptional: true,
+          },
+          {
+            name: 'client',
+            type: 'ConnectClientOptions',
+            description: 'Platform client overrides. See ConnectClientOptions in connect().',
+            isOptional: true,
+          },
+        ],
+      },
+    ],
+  },
+]}
+/>
+
+## Tools
+
+| Tool | Description |
+| - | - |
+| `linear_list_teams` | List teams in the Linear workspace with their ids, keys, and names |
+| `linear_list_issues` | List issues, optionally filtered by team key, assignee email, or workflow state name |
+| `linear_get_issue` | Get a single issue by id or identifier, e.g. `ENG-123` |
+| `linear_search_issues` | Full-text search issues by title and description |
+| `linear_create_issue` | Create an issue in a team |
+| `linear_update_issue` | Update an issue (title, description, assignee, priority, or workflow state) |
+| `linear_add_comment` | Add a comment to an issue |
+| `linear_list_projects` | List projects in the workspace |
+| `linear_list_users` | List users with their ids, names, and emails |
