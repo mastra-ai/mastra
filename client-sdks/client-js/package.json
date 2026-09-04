@@ -1,14 +1,13 @@
 {
   "name": "@mastra/client-js",
-  "version": "1.42.3-alpha.0",
+  "version": "1.44.0-alpha.2",
   "description": "The official TypeScript library for the Mastra Client API",
   "author": "",
   "type": "module",
   "types": "dist/index.d.ts",
   "main": "dist/index.js",
   "files": [
-    "dist",
-    "CHANGELOG.md"
+    "dist"
   ],
   "exports": {
     ".": {

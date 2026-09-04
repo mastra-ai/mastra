@@ -58,6 +58,7 @@ const createMockObservabilityStore = () => ({
   getScorePercentiles: vi.fn(),
   listFeedback: vi.fn(),
   createFeedback: vi.fn(),
+  updateFeedbackReviewStatus: vi.fn(),
   getFeedbackAggregate: vi.fn(),
   getFeedbackBreakdown: vi.fn(),
   getFeedbackTimeSeries: vi.fn(),
@@ -1736,6 +1737,33 @@ describe('Observability Handlers', () => {
     });
   });
 
+  describe('UPDATE_FEEDBACK_REVIEW_STATUS_ROUTE', () => {
+    it('should update and return the feedback review status', async () => {
+      const feedback = {
+        feedbackId: 'feedback-123',
+        timestamp: new Date('2026-09-01T12:00:00.000Z'),
+        traceId: 'trace-123',
+        feedbackSource: 'user',
+        feedbackType: 'comment',
+        value: 'Needs follow-up',
+        reviewStatus: 'reviewed' as const,
+      };
+      (mockObservabilityStore.updateFeedbackReviewStatus as ReturnType<typeof vi.fn>).mockResolvedValue(feedback);
+
+      const result = await NEW_ROUTES.UPDATE_FEEDBACK_REVIEW_STATUS.handler({
+        ...createTestServerContext({ mastra: mockMastra }),
+        feedbackId: 'feedback-123',
+        reviewStatus: 'reviewed',
+      });
+
+      expect(result).toEqual(feedback);
+      expect(mockObservabilityStore.updateFeedbackReviewStatus).toHaveBeenCalledWith({
+        feedbackId: 'feedback-123',
+        reviewStatus: 'reviewed',
+      });
+    });
+  });
+
   describe('CREATE_FEEDBACK_ROUTE', () => {
     it('should create feedback successfully', async () => {
       (mockObservabilityStore.createFeedback as ReturnType<typeof vi.fn>).mockResolvedValue(undefined);
@@ -1785,6 +1813,38 @@ describe('Observability Handlers', () => {
 
       expect(mockObservabilityStore.createFeedback).toHaveBeenCalledWith({
         feedback: expect.objectContaining({ ...feedbackData, timestamp: expect.any(Date) }),
+      });
+    });
+
+    it('should default reviewStatus to needs-review', async () => {
+      (mockObservabilityStore.createFeedback as ReturnType<typeof vi.fn>).mockResolvedValue(undefined);
+
+      await NEW_ROUTES.CREATE_FEEDBACK.handler({
+        ...createTestServerContext({ mastra: mockMastra }),
+        feedback: { traceId: 'trace-123', source: 'user', feedbackType: 'comment', value: 'hi' },
+      });
+
+      expect(mockObservabilityStore.createFeedback).toHaveBeenCalledWith({
+        feedback: expect.objectContaining({ reviewStatus: 'needs-review' }),
+      });
+    });
+
+    it('should preserve a caller-supplied reviewStatus', async () => {
+      (mockObservabilityStore.createFeedback as ReturnType<typeof vi.fn>).mockResolvedValue(undefined);
+
+      await NEW_ROUTES.CREATE_FEEDBACK.handler({
+        ...createTestServerContext({ mastra: mockMastra }),
+        feedback: {
+          traceId: 'trace-123',
+          source: 'studio',
+          feedbackType: 'rating',
+          value: 1,
+          reviewStatus: 'reviewed',
+        },
+      });
+
+      expect(mockObservabilityStore.createFeedback).toHaveBeenCalledWith({
+        feedback: expect.objectContaining({ reviewStatus: 'reviewed' }),
       });
     });
 

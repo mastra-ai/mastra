@@ -34,6 +34,7 @@ export const server = setupServer(
       approvalCount: 0,
       badgeCount: 0,
       unreadCount: 0,
+      activityUnreadCount: 0,
       hasMore: false,
       latestOccurrenceKey: null,
       latestOccurrenceAt: null,
@@ -42,5 +43,16 @@ export const server = setupServer(
   ),
   http.get('*/web/factory/projects/:id/decisions', () => HttpResponse.json({ decisions: [] })),
   http.get('*/web/factory/projects/:id/work-items', () => HttpResponse.json({ workItems: [] })),
+  http.get('*/web/factory/projects/:id/mention-roster', () => HttpResponse.json({ members: [] })),
+  // Ambient feed stream: `FactoryLayout` mounts it on every routed surface. It
+  // must never close — a closing stream puts every test into the retry loop.
+  http.get(
+    '*/web/factory/projects/:id/feed-events',
+    () =>
+      new Response(new ReadableStream<Uint8Array>({ start() {}, cancel() {} }), {
+        headers: { 'content-type': 'text/event-stream' },
+      }),
+  ),
+  http.get('*/web/factory/work-items/:workItemId/comments', () => HttpResponse.json({ comments: [] })),
   http.get('*/web/github/projects/:projectRepositoryId/worktrees', () => HttpResponse.json({ worktrees: [] })),
 );

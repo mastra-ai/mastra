@@ -736,6 +736,61 @@ describe('DaytonaSandbox', () => {
     });
   });
 
+  describe('workingDirectory option', () => {
+    it('commands cd into the configured workingDirectory when no cwd is given', async () => {
+      const sandbox = new DaytonaSandbox({ workingDirectory: '/srv/app' });
+      await sandbox._start();
+      await sandbox.executeCommand('echo', ['hello']);
+
+      const cmd: string = mockSandbox.process.executeSessionCommand.mock.calls[0]![1].command;
+      expect(cmd).toContain('cd /srv/app');
+      expect(sandbox.workingDirectory).toBe('/srv/app');
+    });
+
+    it('per-command cwd wins over the configured workingDirectory', async () => {
+      const sandbox = new DaytonaSandbox({ workingDirectory: '/srv/app' });
+      await sandbox._start();
+      await sandbox.executeCommand('echo', ['hello'], { cwd: '/tmp' });
+
+      const cmd: string = mockSandbox.process.executeSessionCommand.mock.calls[0]![1].command;
+      expect(cmd).toContain('cd /tmp');
+      expect(cmd).not.toContain('/srv/app');
+    });
+
+    it('an explicit workingDirectory wins over the first mount path', async () => {
+      const sandbox = new DaytonaSandbox({ workingDirectory: '/srv/app' });
+      await sandbox._start();
+      sandbox.mounts.entries.set('/data/gcs-mount', { state: 'mounted' });
+
+      await sandbox.executeCommand('echo', ['hello']);
+
+      const cmd: string = mockSandbox.process.executeSessionCommand.mock.calls[0]![1].command;
+      expect(cmd).toContain('cd /srv/app');
+      expect(cmd).not.toContain('gcs-mount');
+    });
+
+    it('skips the pwd probe when workingDirectory is configured', async () => {
+      const sandbox = new DaytonaSandbox({ workingDirectory: '/srv/app' });
+      await sandbox._start();
+
+      const probed = mockSandbox.process.executeCommand.mock.calls.some(call => call[0] === 'pwd');
+      expect(probed).toBe(false);
+      expect(sandbox.workingDirectory).toBe('/srv/app');
+    });
+
+    it('probes pwd and fills the getter when workingDirectory is not configured', async () => {
+      mockSandbox.process.executeCommand.mockImplementation(async (command: string) =>
+        command === 'pwd' ? { exitCode: 0, result: '/home/daytona\n' } : { exitCode: 0, result: '' },
+      );
+      const sandbox = new DaytonaSandbox();
+      await sandbox._start();
+
+      const probed = mockSandbox.process.executeCommand.mock.calls.some(call => call[0] === 'pwd');
+      expect(probed).toBe(true);
+      expect(sandbox.workingDirectory).toBe('/home/daytona');
+    });
+  });
+
   describe('Default cwd from mounts', () => {
     it('no mounts and no cwd — command has no cd prefix', async () => {
       const sandbox = new DaytonaSandbox();
@@ -1265,8 +1320,15 @@ describe('DaytonaSandbox', () => {
   });
 
   describe('Computer Use', () => {
-    it('exposes the computer capability by default', () => {
+    it('does not expose the computer capability by default', () => {
       const sandbox = new DaytonaSandbox();
+
+      expect(sandbox.computer).toBeUndefined();
+      expect(supportsComputer(sandbox)).toBe(false);
+    });
+
+    it('computerUse: true enables the capability', () => {
+      const sandbox = new DaytonaSandbox({ computerUse: true });
 
       expect(sandbox.computer).toBeDefined();
       expect(supportsComputer(sandbox)).toBe(true);
@@ -1280,7 +1342,7 @@ describe('DaytonaSandbox', () => {
     });
 
     it('starts desktop processes lazily on the first operation and memoizes', async () => {
-      const sandbox = new DaytonaSandbox();
+      const sandbox = new DaytonaSandbox({ computerUse: true });
       await sandbox._start();
       expect(mockSandbox.computerUse.start).not.toHaveBeenCalled();
 
@@ -1301,7 +1363,7 @@ describe('DaytonaSandbox', () => {
     });
 
     it('restarts desktop processes after the sandbox is stopped', async () => {
-      const sandbox = new DaytonaSandbox();
+      const sandbox = new DaytonaSandbox({ computerUse: true });
       await sandbox._start();
       await sandbox.computer!.leftClick(1, 1);
       expect(mockSandbox.computerUse.start).toHaveBeenCalledTimes(1);
@@ -1314,7 +1376,7 @@ describe('DaytonaSandbox', () => {
 
     it('retries lazy start after a startup failure', async () => {
       mockSandbox.computerUse.start.mockRejectedValueOnce(new Error('no desktop'));
-      const sandbox = new DaytonaSandbox();
+      const sandbox = new DaytonaSandbox({ computerUse: true });
       await sandbox._start();
 
       await expect(sandbox.computer!.leftClick(1, 1)).rejects.toThrow('no desktop');
@@ -1325,7 +1387,7 @@ describe('DaytonaSandbox', () => {
     });
 
     it('screenshot decodes the base64 response to PNG bytes', async () => {
-      const sandbox = new DaytonaSandbox();
+      const sandbox = new DaytonaSandbox({ computerUse: true });
       await sandbox._start();
 
       const shot = await sandbox.computer!.screenshot();
@@ -1337,14 +1399,14 @@ describe('DaytonaSandbox', () => {
 
     it('screenshot throws on an empty response', async () => {
       mockSandbox.computerUse.screenshot.takeFullScreen.mockResolvedValueOnce({});
-      const sandbox = new DaytonaSandbox();
+      const sandbox = new DaytonaSandbox({ computerUse: true });
       await sandbox._start();
 
       await expect(sandbox.computer!.screenshot()).rejects.toThrow(/empty screenshot/);
     });
 
     it('maps clicks to mouse.click with the right button semantics', async () => {
-      const sandbox = new DaytonaSandbox();
+      const sandbox = new DaytonaSandbox({ computerUse: true });
       await sandbox._start();
 
       await sandbox.computer!.leftClick(10, 20);
@@ -1357,7 +1419,7 @@ describe('DaytonaSandbox', () => {
     });
 
     it('maps moveMouse and drag', async () => {
-      const sandbox = new DaytonaSandbox();
+      const sandbox = new DaytonaSandbox({ computerUse: true });
       await sandbox._start();
 
       await sandbox.computer!.moveMouse(5, 6);
@@ -1369,7 +1431,7 @@ describe('DaytonaSandbox', () => {
 
     it('scroll uses the current cursor position', async () => {
       mockSandbox.computerUse.mouse.getPosition.mockResolvedValue({ x: 640, y: 360 });
-      const sandbox = new DaytonaSandbox();
+      const sandbox = new DaytonaSandbox({ computerUse: true });
       await sandbox._start();
 
       await sandbox.computer!.scroll('down', 3);
@@ -1378,7 +1440,7 @@ describe('DaytonaSandbox', () => {
     });
 
     it('maps type, single key press, and hotkey chords', async () => {
-      const sandbox = new DaytonaSandbox();
+      const sandbox = new DaytonaSandbox({ computerUse: true });
       await sandbox._start();
 
       await sandbox.computer!.type('hello world');
@@ -1397,7 +1459,7 @@ describe('DaytonaSandbox', () => {
           { id: 1, x: 800, y: 0, width: 1920, height: 1080, isActive: true },
         ],
       });
-      const sandbox = new DaytonaSandbox();
+      const sandbox = new DaytonaSandbox({ computerUse: true });
       await sandbox._start();
 
       const size = await sandbox.computer!.getScreenSize();
@@ -1407,7 +1469,7 @@ describe('DaytonaSandbox', () => {
 
     it('getScreenSize throws when no display info is returned', async () => {
       mockSandbox.computerUse.display.getInfo.mockResolvedValueOnce({ displays: [] });
-      const sandbox = new DaytonaSandbox();
+      const sandbox = new DaytonaSandbox({ computerUse: true });
       await sandbox._start();
 
       await expect(sandbox.computer!.getScreenSize()).rejects.toThrow(/display information/);
@@ -1415,7 +1477,7 @@ describe('DaytonaSandbox', () => {
 
     it('getCursorPosition returns the mouse position', async () => {
       mockSandbox.computerUse.mouse.getPosition.mockResolvedValue({ x: 12, y: 34 });
-      const sandbox = new DaytonaSandbox();
+      const sandbox = new DaytonaSandbox({ computerUse: true });
       await sandbox._start();
 
       const position = await sandbox.computer!.getCursorPosition();
@@ -1425,7 +1487,7 @@ describe('DaytonaSandbox', () => {
 
     it('streamUrl resolves the noVNC preview link (default port 6080)', async () => {
       mockSandbox.getPreviewLink.mockResolvedValue({ url: 'https://6080-mock.proxy.daytona.work', token: 't' });
-      const sandbox = new DaytonaSandbox();
+      const sandbox = new DaytonaSandbox({ computerUse: true });
       await sandbox._start();
 
       const url = await sandbox.computer!.streamUrl!();
@@ -1446,7 +1508,7 @@ describe('DaytonaSandbox', () => {
 
     it('streamUrl returns null when the preview link fails', async () => {
       mockSandbox.getPreviewLink.mockRejectedValueOnce(new Error('preview unavailable'));
-      const sandbox = new DaytonaSandbox();
+      const sandbox = new DaytonaSandbox({ computerUse: true });
       await sandbox._start();
 
       const url = await sandbox.computer!.streamUrl!();
@@ -1455,7 +1517,7 @@ describe('DaytonaSandbox', () => {
     });
 
     it('operations start the sandbox automatically when not running', async () => {
-      const sandbox = new DaytonaSandbox();
+      const sandbox = new DaytonaSandbox({ computerUse: true });
 
       await sandbox.computer!.leftClick(1, 2);
 
@@ -1463,8 +1525,19 @@ describe('DaytonaSandbox', () => {
       expect(mockSandbox.computerUse.mouse.click).toHaveBeenCalledWith(1, 2, 'left');
     });
 
-    it('emits exactly the workspace computer tool set', async () => {
+    it('does not emit workspace computer tools by default', async () => {
       const sandbox = new DaytonaSandbox();
+      const workspace = new Workspace({ sandbox });
+
+      const tools = await createWorkspaceTools(workspace);
+
+      const computerToolNames = Object.keys(tools).filter(name => name.startsWith('mastra_workspace_computer_'));
+      expect(computerToolNames).toEqual([]);
+      expect(tools[WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND]).toBeDefined();
+    });
+
+    it('emits exactly the workspace computer tool set when enabled', async () => {
+      const sandbox = new DaytonaSandbox({ computerUse: true });
       const workspace = new Workspace({ sandbox });
 
       const tools = await createWorkspaceTools(workspace);
@@ -1613,7 +1686,7 @@ describe('DaytonaSandbox', () => {
 
     it('includes working directory when detected', () => {
       const sandbox = new DaytonaSandbox();
-      (sandbox as any)._workingDir = '/home/daytona';
+      (sandbox as any).setWorkingDirectory('/home/daytona');
       expect(sandbox.getInstructions()).toContain('Default working directory: /home/daytona');
     });
 
@@ -1955,6 +2028,14 @@ describe('DaytonaSandbox.clone', () => {
     expect(child).not.toBe(template);
     expect(child.id).toBe('mc-project-1');
     expect(child.status).toBe('pending');
+  });
+
+  it('preserves explicit computer use configuration', () => {
+    const disabledChild = new DaytonaSandbox().clone();
+    const enabledChild = new DaytonaSandbox({ computerUse: true }).clone();
+
+    expect(disabledChild.computer).toBeUndefined();
+    expect(enabledChild.computer).toBeDefined();
   });
 
   it('inherits template config and applies env override', () => {

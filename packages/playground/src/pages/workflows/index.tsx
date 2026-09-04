@@ -30,7 +30,7 @@ function Workflows() {
   }
 
   return (
-    <PageLayout>
+    <PageLayout height="full">
       <PageLayout.TopArea>
         <PageLayout.Row align="center" stack="responsive">
           <div className="max-w-120 flex-1">

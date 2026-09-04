@@ -7,6 +7,7 @@ const createSessionCalls = vi.hoisted<Array<{ id?: string; ownerId?: string; res
 // Captures the AgentController constructor initialState so tests can assert on
 // which settings.json values were seeded into session state.
 const controllerInitialStates = vi.hoisted<Array<Record<string, unknown>>>(() => []);
+const authCredentials = vi.hoisted(() => new Map<string, Record<string, unknown>>());
 
 vi.mock('@mastra/core/llm', () => ({
   MastraModelGateway: class {},
@@ -91,8 +92,8 @@ vi.mock('./agents/workspace.js', () => ({ getDynamicWorkspace: vi.fn(), getGoalJ
 
 vi.mock('./auth/storage.js', () => ({
   AuthStorage: class {
-    get() {
-      return undefined;
+    get(provider: string) {
+      return authCredentials.get(provider);
     }
     getStoredApiKey() {
       return undefined;
@@ -229,6 +230,33 @@ describe('createMastraCode startup performance', () => {
     expect(result.storageWarning).toBe('Storage fallback warning');
     expect(syncGateways).not.toHaveBeenCalled();
     resolveSync?.();
+  });
+});
+
+describe('Kimi startup access', () => {
+  it('rejects stored OAuth credentials without a valid device ID', async () => {
+    const previousApiKey = process.env.KIMI_API_KEY;
+    const { getAvailableModePacks } = await import('./onboarding/packs.js');
+    const { createMastraCode } = await import('./index.js');
+
+    try {
+      delete process.env.KIMI_API_KEY;
+      authCredentials.set('kimi-for-coding', {
+        type: 'oauth',
+        access: 'access-token',
+        refresh: 'refresh-token',
+        expires: Date.now() + 60_000,
+      });
+      vi.mocked(getAvailableModePacks).mockClear();
+
+      await createMastraCode({ cwd: '/tmp/project-invalid-kimi-oauth' });
+
+      expect(getAvailableModePacks).toHaveBeenLastCalledWith(expect.objectContaining({ 'kimi-for-coding': false }));
+    } finally {
+      authCredentials.clear();
+      if (previousApiKey === undefined) delete process.env.KIMI_API_KEY;
+      else process.env.KIMI_API_KEY = previousApiKey;
+    }
   });
 });
 

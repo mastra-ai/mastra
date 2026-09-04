@@ -74,7 +74,6 @@ import {
   refreshSkillsAutocomplete,
   setupKeyHandlers,
   subscribeToAgentController,
-  updateTerminalTitle,
   promptForThreadSelection,
   renderExistingTasks,
 } from './setup.js';
@@ -82,6 +81,7 @@ import { handleShellPassthrough } from './shell.js';
 import type { MastraTUIOptions, TUIState } from './state.js';
 import { createTUIState, getGithubPrSubscriptionsFromMetadata } from './state.js';
 import { updateStatusLine } from './status-line.js';
+import { setCurrentThreadTitle } from './thread-title.js';
 
 // =============================================================================
 // Types
@@ -108,13 +108,14 @@ const CAFFEINATE_ARGS = ['-i', '-m'];
 
 export async function syncInitialThreadState(state: TUIState): Promise<void> {
   const initThreadId = state.session.thread.getId();
-  if (!initThreadId) return;
+  if (!initThreadId) {
+    setCurrentThreadTitle(state, undefined);
+    return;
+  }
 
   const initThreads = await state.session.thread.list();
   const initThread = initThreads.find(t => t.id === initThreadId);
-  if (initThread?.title) {
-    state.currentThreadTitle = initThread.title;
-  }
+  setCurrentThreadTitle(state, initThread?.title);
   const metadata = initThread?.metadata as Record<string, unknown> | undefined;
   state.activeGithubPrSubscriptions = getGithubPrSubscriptionsFromMetadata(metadata);
   // Prefer the durable ThreadState objective; fall back to the legacy
@@ -285,7 +286,7 @@ export class MastraTUI {
       const msg = this.state.options.initialMessage;
 
       if (!this.state.session.model.hasSelection()) {
-        showInfo(this.state, 'No model selected. Use /models to select a model, or /login to authenticate.');
+        showInfo(this.state, 'No model selected. Use /model to select a model, or /connect to authenticate.');
       } else {
         const messageId = `user-${Date.now()}`;
         addUserMessage(this.state, {
@@ -343,7 +344,7 @@ export class MastraTUI {
 
         // Check if a model is selected (sync — fast, no reason to defer)
         if (!this.state.session.model.hasSelection()) {
-          showInfo(this.state, 'No model selected. Use /models to select a model, or /login to authenticate.');
+          showInfo(this.state, 'No model selected. Use /model to select a model, or /connect to authenticate.');
           continue;
         }
 
@@ -687,8 +688,6 @@ export class MastraTUI {
         });
     }
 
-    // Set terminal title
-    updateTerminalTitle(this.state);
     // Render existing messages
     await this.renderExistingMessagesAndSeedIdleCounter();
     // Render existing tasks if any

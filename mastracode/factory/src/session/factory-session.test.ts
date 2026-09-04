@@ -196,6 +196,9 @@ describe('hydrateFactorySession', () => {
     await hydrateFactorySession(session, { orgId: 'org-1', factoryProjectId: 'proj-1' });
 
     expect(double.model.switch).not.toHaveBeenCalled();
+    // The org seed is the one state write that always happens: knowledge
+    // capture scopes on it, and it must land even when nothing else does.
+    expect(double.state.set).toHaveBeenCalledWith({ factoryOrgId: 'org-1' });
   });
 
   it('resets to the built-in memory defaults when memory settings are omitted', async () => {
@@ -209,6 +212,15 @@ describe('hydrateFactorySession', () => {
       observationThreshold: DEFAULT_OBSERVATION_THRESHOLD,
       reflectionThreshold: DEFAULT_REFLECTION_THRESHOLD,
     });
+  });
+
+  it('marks the session unresolved when the caller has no organization', async () => {
+    const { session, double } = createSessionDouble();
+
+    await hydrateFactorySession(session, { orgId: '  ', factoryProjectId: 'proj-1' });
+
+    expect(double.state.set).toHaveBeenCalledWith({ factoryOrgUnresolved: true });
+    expect(double.state.set).not.toHaveBeenCalledWith(expect.objectContaining({ factoryOrgId: expect.anything() }));
   });
 
   it('keeps going when the default model is unknown', async () => {

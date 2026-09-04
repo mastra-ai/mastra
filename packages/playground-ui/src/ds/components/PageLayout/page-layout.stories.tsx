@@ -20,7 +20,7 @@ const resources = ['Research agent', 'Support workflow', 'Knowledge search tool'
 export const FullPage: Story = {
   render: () => (
     <PageHeadingContext value="Resources">
-      <div className="bg-surface1 h-[38rem]">
+      <div className="bg-surface1 h-152">
         <PageLayout width="wide" height="full">
           <PageLayout.TopArea>
             <PageLayout.Row align="center" stack="responsive">
@@ -58,7 +58,7 @@ export const FullPage: Story = {
 
 export const NarrowSettings: Story = {
   render: () => (
-    <div className="bg-surface1 min-h-[34rem]">
+    <div className="bg-surface1 min-h-136">
       <PageLayout width="narrow">
         <PageLayout.TopArea>
           <PageHeader>
@@ -77,7 +77,7 @@ export const NarrowSettings: Story = {
 
 export const CenteredEmptyState: Story = {
   render: () => (
-    <div className="bg-surface1 h-[34rem]">
+    <div className="bg-surface1 h-136">
       <NoDataPageLayout>
         <EmptyState
           iconSlot={<WrenchIcon />}

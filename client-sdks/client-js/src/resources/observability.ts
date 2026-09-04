@@ -7,6 +7,8 @@ import type {
   ListTracesArgs,
   ListTracesResponse,
   ListTracesLightResponse,
+  TraceQueryRequest,
+  TraceQueryResponse,
   ListBranchesArgs,
   ListBranchesResponse,
   GetBranchArgs,
@@ -38,6 +40,8 @@ import type {
   ListFeedbackResponse,
   CreateFeedbackBody,
   CreateFeedbackResponse,
+  UpdateFeedbackReviewStatusArgs,
+  FeedbackRecord,
   GetFeedbackAggregateArgs,
   GetFeedbackAggregateResponse,
   GetFeedbackBreakdownArgs,
@@ -228,6 +232,16 @@ export class Observability extends BaseResource {
   }
 
   /**
+   * Queries completed logical traces using recursive trace and related-record predicates.
+   *
+   * @param params - Advanced trace query, including its required time range
+   * @returns Matching lightweight traces or distinct thread groups
+   */
+  queryTraces(params: TraceQueryRequest): Promise<TraceQueryResponse> {
+    return this.request('/observability/traces/query', { method: 'POST', body: params });
+  }
+
+  /**
    * Retrieves paginated list of traces carrying only the fields a trace list renders.
    *
    * Same filtering, ordering and delta-polling contract as {@link listTraces}, but rows
@@ -395,6 +409,14 @@ export class Observability extends BaseResource {
     return this.request(`/observability/feedback`, {
       method: 'POST',
       body: params,
+    });
+  }
+
+  /** Updates a feedback record's review workflow status. */
+  updateFeedbackReviewStatus(params: UpdateFeedbackReviewStatusArgs): Promise<FeedbackRecord> {
+    return this.request(`/observability/feedback/${encodeURIComponent(params.feedbackId)}/review-status`, {
+      method: 'PATCH',
+      body: { reviewStatus: params.reviewStatus },
     });
   }
 

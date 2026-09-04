@@ -749,6 +749,33 @@ export class AgentsLibSQL extends AgentsStorage {
     }
   }
 
+  async getVersions(ids: string[]): Promise<AgentVersion[]> {
+    if (ids.length === 0) {
+      return [];
+    }
+    try {
+      const rows = await this.#db.selectMany<Record<string, any>>({
+        tableName: TABLE_AGENT_VERSIONS,
+        whereClause: {
+          sql: `WHERE id IN (${ids.map(() => '?').join(', ')})`,
+          args: ids,
+        },
+      });
+      return (rows ?? []).map(row => this.parseVersionRow(row));
+    } catch (error) {
+      if (error instanceof MastraError) throw error;
+      throw new MastraError(
+        {
+          id: createStorageErrorId('LIBSQL', 'GET_VERSIONS', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { count: ids.length },
+        },
+        error,
+      );
+    }
+  }
+
   async getVersionByNumber(agentId: string, versionNumber: number): Promise<AgentVersion | null> {
     try {
       const rows = await this.#db.selectMany<Record<string, any>>({

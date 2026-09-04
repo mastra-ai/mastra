@@ -1,4 +1,4 @@
-import { StatusBadge } from '@mastra/playground-ui/components/StatusBadge';
+import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Switch } from '@mastra/playground-ui/components/Switch';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { GlobeIcon } from 'lucide-react';
@@ -56,9 +56,9 @@ export const Browser = ({ editable = true }: BrowserProps) => {
           <label htmlFor={TOGGLE_ID} className="text-ui-md text-neutral6 cursor-pointer font-medium">
             Enable browser
           </label>
-          <StatusBadge variant={browserEnabled ? 'success' : 'neutral'} size="sm" withDot>
+          <Badge variant={browserEnabled ? 'green' : 'neutral'} size="sm" indicator="dot">
             {browserEnabled ? 'Enabled' : 'Disabled'}
-          </StatusBadge>
+          </Badge>
         </div>
       </div>
     </div>

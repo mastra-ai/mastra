@@ -6,7 +6,7 @@ import { http, HttpResponse } from 'msw';
 import { MemoryRouter, Route, Routes } from 'react-router';
 import { afterEach, describe, expect, it } from 'vitest';
 
-import AgentPage from '../index';
+import AgentPage from '../thread';
 import { StudioConfigContext } from '@/domains/configuration';
 import { memoryEnabled, v2Agent } from '@/lib/ai-ui/__tests__/fixtures/agent';
 import { server } from '@/test/msw-server';
@@ -36,9 +36,9 @@ const renderPage = () => {
     >
       <MastraReactProvider baseUrl={BASE_URL}>
         <QueryClientProvider client={queryClient}>
-          <MemoryRouter initialEntries={[`/agents/${AGENT_ID}/chat/${THREAD_ID}`]}>
+          <MemoryRouter initialEntries={[`/agents/${AGENT_ID}/threads/${THREAD_ID}`]}>
             <Routes>
-              <Route path="/agents/:agentId/chat/:threadId" element={<AgentPage />} />
+              <Route path="/agents/:agentId/threads/:threadId" element={<AgentPage />} />
             </Routes>
           </MemoryRouter>
         </QueryClientProvider>

@@ -26,6 +26,10 @@ function parseJson<T = unknown>(val: unknown, column: string, rowId: unknown): T
   return val as T;
 }
 
+function workflowDefinitionSelectColumns(): string {
+  return buildSelectColumns(TABLE_WORKFLOW_DEFINITIONS).replace('json("schedule") as "schedule"', '"schedule"');
+}
+
 function rowToDefinition(row: Record<string, any>): WorkflowDefinition {
   const inputSchema = parseJson(row.inputSchema, 'inputSchema', row.id);
   const outputSchema = parseJson(row.outputSchema, 'outputSchema', row.id);
@@ -50,6 +54,14 @@ function rowToDefinition(row: Record<string, any>): WorkflowDefinition {
   if (stateSchema !== undefined) def.stateSchema = stateSchema;
   const requestContextSchema = parseJson(row.requestContextSchema, 'requestContextSchema', row.id);
   if (requestContextSchema !== undefined) def.requestContextSchema = requestContextSchema;
+  try {
+    const schedule = parseJson<WorkflowDefinition['schedule']>(row.schedule, 'schedule', row.id);
+    if (schedule != null) def.schedule = schedule;
+  } catch {
+    // Preserve the malformed value so lenient rehydration can report it while
+    // still loading the workflow without a schedule.
+    def.schedule = row.schedule as unknown as WorkflowDefinition['schedule'];
+  }
   if (row.authorId != null) def.authorId = String(row.authorId);
   return def;
 }
@@ -69,6 +81,11 @@ export class WorkflowDefinitionsLibSQL extends WorkflowDefinitionsStorage {
     await this.#db.createTable({
       tableName: TABLE_WORKFLOW_DEFINITIONS,
       schema: TABLE_SCHEMAS[TABLE_WORKFLOW_DEFINITIONS],
+    });
+    await this.#db.alterTable({
+      tableName: TABLE_WORKFLOW_DEFINITIONS,
+      schema: TABLE_SCHEMAS[TABLE_WORKFLOW_DEFINITIONS],
+      ifNotExists: ['schedule'],
     });
     await this.#client.execute({
       sql: `CREATE INDEX IF NOT EXISTS idx_workflow_definitions_status ON "${TABLE_WORKFLOW_DEFINITIONS}" ("status")`,
@@ -102,6 +119,7 @@ export class WorkflowDefinitionsLibSQL extends WorkflowDefinitionsStorage {
         stateSchema: input.stateSchema ?? null,
         requestContextSchema: input.requestContextSchema ?? null,
         graph: input.graph,
+        schedule: 'schedule' in input ? (input.schedule ?? null) : null,
         status: 'active',
         source: 'storage',
         authorId: 'authorId' in input ? (input.authorId ?? null) : null,
@@ -141,6 +159,7 @@ export class WorkflowDefinitionsLibSQL extends WorkflowDefinitionsStorage {
     if ('requestContextSchema' in input && input.requestContextSchema !== undefined)
       data.requestContextSchema = input.requestContextSchema;
     if ('graph' in input && input.graph !== undefined) data.graph = input.graph;
+    if ('schedule' in input && input.schedule !== undefined) data.schedule = input.schedule;
     if ('status' in input && input.status !== undefined) data.status = input.status;
     if ('authorId' in input && input.authorId !== undefined) data.authorId = input.authorId;
 
@@ -152,7 +171,7 @@ export class WorkflowDefinitionsLibSQL extends WorkflowDefinitionsStorage {
 
   async get(id: string): Promise<WorkflowDefinition | null> {
     const result = await this.#client.execute({
-      sql: `SELECT ${buildSelectColumns(TABLE_WORKFLOW_DEFINITIONS)} FROM "${TABLE_WORKFLOW_DEFINITIONS}" WHERE id = ?`,
+      sql: `SELECT ${workflowDefinitionSelectColumns()} FROM "${TABLE_WORKFLOW_DEFINITIONS}" WHERE id = ?`,
       args: [id],
     });
     const row = result.rows[0];
@@ -172,7 +191,7 @@ export class WorkflowDefinitionsLibSQL extends WorkflowDefinitionsStorage {
     }
     const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
     const result = await this.#client.execute({
-      sql: `SELECT ${buildSelectColumns(TABLE_WORKFLOW_DEFINITIONS)} FROM "${TABLE_WORKFLOW_DEFINITIONS}" ${where} ORDER BY updatedAt DESC`,
+      sql: `SELECT ${workflowDefinitionSelectColumns()} FROM "${TABLE_WORKFLOW_DEFINITIONS}" ${where} ORDER BY updatedAt DESC`,
       args: params,
     });
     const definitions = result.rows.map(row => rowToDefinition(row as Record<string, any>));

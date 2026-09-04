@@ -9,6 +9,7 @@ import {
   DialogBody,
   DialogFooter,
 } from '@mastra/playground-ui/components/Dialog';
+import { Input } from '@mastra/playground-ui/components/Input';
 import { Label } from '@mastra/playground-ui/components/Label';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { useMemo, useRef, useState } from 'react';
@@ -27,6 +28,10 @@ export interface ExperimentTriggerDialogProps {
   initialDatasetId?: string;
   initialDatasetVersion?: number;
   initialScorerIds?: string[];
+  initialTargetType?: TargetType;
+  initialTargetId?: string;
+  initialName?: string;
+  initialDescription?: string;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSuccess?: (experimentId: string) => void;
@@ -68,15 +73,21 @@ export function ExperimentTriggerDialog({
   initialDatasetId,
   initialDatasetVersion,
   initialScorerIds,
+  initialTargetType,
+  initialTargetId,
+  initialName,
+  initialDescription,
   open,
   onOpenChange,
   onSuccess,
 }: ExperimentTriggerDialogProps) {
   const contentRef = useRef<HTMLDivElement>(null);
+  const [name, setName] = useState(initialName ?? '');
+  const [description, setDescription] = useState(initialDescription ?? '');
   const [datasetId, setDatasetId] = useState(initialDatasetId ?? '');
   const [version, setVersion] = useState<number | null>(initialDatasetVersion ?? null);
-  const [targetType, setTargetType] = useState<TargetType | ''>('');
-  const [targetId, setTargetId] = useState<string>('');
+  const [targetType, setTargetType] = useState<TargetType | ''>(initialTargetType ?? '');
+  const [targetId, setTargetId] = useState<string>(initialTargetId ?? '');
   const [selectedScorers, setSelectedScorers] = useState<string[]>(initialScorerIds ?? []);
   const [requestContextValues, setRequestContextValues] = useState<Record<string, unknown>>({});
   const [requestContextRaw, setRequestContextRaw] = useState('');
@@ -87,7 +98,7 @@ export function ExperimentTriggerDialog({
 
   const hasSchema = Boolean(requestContextSchema && Object.keys(requestContextSchema).length > 0);
 
-  const canRun = datasetId && targetType && targetId;
+  const canRun = Boolean(datasetId && targetType && targetId && name.trim());
   const isRunning = triggerExperiment.isPending;
 
   const handleDatasetChange = (nextDatasetId: string) => {
@@ -97,10 +108,12 @@ export function ExperimentTriggerDialog({
   };
 
   const resetState = () => {
+    setName(initialName ?? '');
+    setDescription(initialDescription ?? '');
     setDatasetId(initialDatasetId ?? '');
     setVersion(initialDatasetVersion ?? null);
-    setTargetType('');
-    setTargetId('');
+    setTargetType(initialTargetType ?? '');
+    setTargetId(initialTargetId ?? '');
     setSelectedScorers(initialScorerIds ?? []);
     setRequestContextValues({});
     setRequestContextRaw('');
@@ -127,7 +140,8 @@ export function ExperimentTriggerDialog({
   };
 
   const handleRun = async () => {
-    if (!canRun) return;
+    // Explicit guards (rather than `canRun`) so TypeScript narrows `targetType` for the request.
+    if (!datasetId || !targetType || !targetId || !name.trim()) return;
 
     let requestContext: Record<string, unknown> | undefined;
     try {
@@ -141,6 +155,8 @@ export function ExperimentTriggerDialog({
     try {
       const result = await triggerExperiment.mutateAsync({
         datasetId,
+        name: name.trim(),
+        description: description.trim() || undefined,
         targetType,
         targetId,
         scorerIds: selectedScorers.length > 0 ? selectedScorers : undefined,
@@ -180,6 +196,29 @@ export function ExperimentTriggerDialog({
 
         <DialogBody className="grid gap-6">
           <div className="grid gap-6">
+            <div className="grid gap-2">
+              <Label htmlFor="experiment-name">Name *</Label>
+              <Input
+                id="experiment-name"
+                value={name}
+                onChange={e => setName(e.target.value)}
+                placeholder="Enter experiment name"
+                autoFocus
+                disabled={isRunning}
+              />
+            </div>
+
+            <div className="grid gap-2">
+              <Label htmlFor="experiment-description">Description</Label>
+              <Input
+                id="experiment-description"
+                value={description}
+                onChange={e => setDescription(e.target.value)}
+                placeholder="Enter experiment description (optional)"
+                disabled={isRunning}
+              />
+            </div>
+
             <div className="grid gap-2">
               <Label>Dataset</Label>
               <DatasetCombobox value={datasetId} onValueChange={handleDatasetChange} container={contentRef} />

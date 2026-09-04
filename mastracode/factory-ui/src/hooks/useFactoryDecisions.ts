@@ -39,6 +39,30 @@ export function useFactoryDecisionAction(githubProjectId: string | undefined, ac
   });
 }
 
+/**
+ * Clearing a queue nobody wants, one request at a time — there is no bulk route,
+ * and each dismissal is its own audited consent. Sequential so a fifty-deep
+ * queue does not arrive at the dispatcher as fifty concurrent writes.
+ */
+export function useDismissFactoryDecisions(githubProjectId: string | undefined) {
+  const { baseUrl } = useApiConfig();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (decisionIds: string[]) => {
+      if (!githubProjectId) throw new Error('Factory project is required');
+      for (const decisionId of decisionIds) {
+        await actOnFactoryDecision(baseUrl, githubProjectId, decisionId, 'dismiss');
+      }
+    },
+    onSettled: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: queryKeys.factoryDecisionsRoot(githubProjectId) }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.factoryAttentionRoot(githubProjectId) }),
+      ]);
+    },
+  });
+}
+
 export function useFactoryDecisionHistory(
   githubProjectId: string | undefined,
   statusKey: string,

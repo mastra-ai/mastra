@@ -1,6 +1,6 @@
 ---
 title: "Feedback | Observability"
-description: "Collect, list, and query human feedback records in Mastra observability."
+description: "Create, list, aggregate, and export human feedback records in Mastra observability, with ratings and comments linked to specific traces and spans."
 packages:
   - "@mastra/core"
   - "@mastra/observability"
@@ -159,7 +159,7 @@ The local runtime exposes the list route at `/api/observability/feedback` and an
 
 [`MastraPlatformExporter`](/reference/observability/tracing/exporters/mastra-platform-exporter) forwards emitted feedback events to Mastra Platform automatically because the hosted query API doesn't provide a creation route.
 
-If your application adds feedback after an agent or workflow response using only its `traceId`, configure `MastraStorageExporter` alongside `MastraPlatformExporter`. The storage exporter keeps the trace available for `addFeedback()` to rehydrate, and the Platform exporter forwards the resulting feedback event. Exporting a trace to Platform doesn't make it available to the application's local storage.
+If your application adds feedback after an agent or workflow response using only its `traceId`, configure `MastraStorageExporter` alongside `MastraPlatformExporter`. The storage exporter keeps the trace available for `addFeedback()` to rehydrate, while the Platform exporter forwards the resulting feedback event without adding the trace to the application's local storage.
 
 See [Observability on Mastra Platform](/docs/mastra-platform/observability#store-data-locally) for the combined exporter configuration.
 
@@ -170,7 +170,7 @@ Feedback flows through the observability event bus, so exporters that support fe
 ## Related
 
 - [Observability overview](/docs/observability/overview)
-- [Tracing overview](/docs/observability/tracing/overview)
+- [Traces usage](/docs/observability/tracing/overview)
 - [Metrics overview](/docs/observability/metrics/overview)
 - [Client SDK observability reference](/reference/client-js/observability)
 - [Feedback reference](/reference/observability/feedback)

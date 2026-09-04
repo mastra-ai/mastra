@@ -1,15 +1,11 @@
 ---
-title: "Temporal | Deploy"
-description: "Deploy Mastra workflows with Temporal"
+title: 'Temporal | Deploy'
+description: "Run Mastra workflows on Temporal with durable orchestration, retries, workers, task queues, suspension, activity execution, and local development."
 ---
 
 # Temporal
 
 [Temporal](https://temporal.io/) is a durable execution platform for orchestrating long-running, fault-tolerant workflows. The `@mastra/temporal` package lets you author workflows with the standard Mastra API and run them on a Temporal cluster.
-
-:::warning
-`@mastra/temporal` is experimental and not ready for production use. The API may change between releases. See the [package README](https://github.com/mastra-ai/mastra/tree/main/workflows/temporal) for the current state.
-:::
 
 ## How Temporal works with Mastra
 
@@ -29,7 +25,7 @@ Install the required packages:
 npm install @mastra/temporal@latest @temporalio/client @temporalio/worker @temporalio/envconfig
 ```
 
-You also need access to a Temporal cluster. For local development, you can run one with Docker (see [Running locally](#running-locally)).
+You also need access to a Temporal cluster. For local development, use the [Temporal CLI development server](https://docs.temporal.io/develop/run-a-development-server).
 
 ## Building a Temporal-backed workflow
 
@@ -116,7 +112,7 @@ export const mastra = new Mastra({
 
 ## Running the worker
 
-The worker is a long-lived Node.js process that polls a Temporal task queue. Install `MastraPlugin` and point its `src` option at the Mastra entry file that registers your workflows.
+The worker is a long-lived Node.js process that polls a Temporal task queue. Install `MastraPlugin` and pass it the path to the Mastra entry file that registers your workflows.
 
 ```ts title="src/mastra/worker.ts"
 import { MastraPlugin } from '@mastra/temporal/worker'
@@ -126,11 +122,7 @@ const connection = await NativeConnection.connect({
   address: 'localhost:7233',
 })
 
-const mastraPlugin = new MastraPlugin()
-
-await mastraPlugin.prebuild({
-  entryFile: import.meta.resolve('./index.ts'),
-})
+const mastraPlugin = new MastraPlugin(import.meta.resolve('./index.ts'))
 
 const worker = await Worker.create({
   connection,
@@ -148,13 +140,13 @@ await worker.run()
 
 ### Running locally
 
-1. Start a local Temporal server. The simplest option is the `temporalio/auto-setup` Docker image:
+1. [Install the Temporal CLI](https://docs.temporal.io/cli/setup-cli), then start the local server:
 
    ```bash
-   docker run --rm -p 7233:7233 -p 8080:8080 temporalio/auto-setup:latest
+   temporal server start-dev --db-filename temporal.db
    ```
 
-1. Open the Temporal UI at [http://localhost:8080](http://localhost:8080) to inspect namespaces, workflows, and activities.
+1. Open the Temporal UI at [http://localhost:8233](http://localhost:8233) to inspect namespaces, workflows, and activities.
 
 1. In a new terminal, start the worker by running:
 

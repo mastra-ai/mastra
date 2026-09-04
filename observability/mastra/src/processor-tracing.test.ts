@@ -18,8 +18,10 @@ import { ModerationProcessor, ProcessorStepSchema } from '@mastra/core/processor
 import { MockStore } from '@mastra/core/storage';
 import { ChunkFrom, MastraModelOutput } from '@mastra/core/stream';
 import type { ChunkType } from '@mastra/core/stream';
+import { createTool } from '@mastra/core/tools';
 import { createWorkflow, createStep } from '@mastra/core/workflows';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { z } from 'zod';
 
 import { Observability } from './default';
 
@@ -199,6 +201,24 @@ class ProcessorTestExporter implements ObservabilityExporter {
 // ============================================================================
 // Mock Model Factory
 // ============================================================================
+
+/**
+ * Entity types the processor runner assigns, one per pipeline phase. A
+ * processor may declare a domain span type (MessageHistory declares
+ * MEMORY_OPERATION), so a processor is identified by its entity type rather
+ * than by PROCESSOR_RUN.
+ */
+const PROCESSOR_ENTITY_TYPES: EntityType[] = [
+  EntityType.INPUT_PROCESSOR,
+  EntityType.INPUT_STEP_PROCESSOR,
+  EntityType.OUTPUT_PROCESSOR,
+  EntityType.OUTPUT_STEP_PROCESSOR,
+  EntityType.TOOL_RESULT_PROCESSOR,
+];
+
+function processorPhaseSpans(exporter: ProcessorTestExporter) {
+  return exporter.getAllSpans().filter(s => s.entityType && PROCESSOR_ENTITY_TYPES.includes(s.entityType));
+}
 
 function createMockModel() {
   return new MockLanguageModelV2({
@@ -1671,10 +1691,14 @@ describe('Processor Tracing Tests', () => {
     /**
      * Expected span structure:
      * - test-agent AGENT_RUN (root)
-     *   - input processor: message-history PROCESSOR_RUN (fetches history)
+     *   - memory: recall MEMORY_OPERATION (fetches history)
      *   - MODEL_GENERATION
      *     - MODEL_STEP
-     *   - output processor: message-history PROCESSOR_RUN (saves messages)
+     *   - memory: save MEMORY_OPERATION (saves messages)
+     *
+     * MessageHistory declares MEMORY_OPERATION, so its spans carry the memory
+     * operation rather than an anonymous processor label. They keep their
+     * processor entity type, which is what identifies them here.
      */
     it('should trace MessageHistory processor when memory is enabled', async () => {
       const model = createMockModel();
@@ -1720,9 +1744,9 @@ describe('Processor Tracing Tests', () => {
       // EXPECTED: MessageHistory processor should create input and output spans
       // Input: fetches message history
       // Output: saves new messages
-      const messageHistorySpans = processorSpans.filter(
-        s => s.name?.includes('message-history') || s.entityId?.includes('message-history'),
-      );
+      const messageHistorySpans = testExporter
+        .getSpansByType(SpanType.MEMORY_OPERATION)
+        .filter(s => s.entityId?.includes('message-history'));
 
       // MessageHistory runs on both input (fetch) and output (save)
       expect(messageHistorySpans.length).toBe(2);
@@ -1745,10 +1769,10 @@ describe('Processor Tracing Tests', () => {
      * Expected span structure:
      * - test-agent AGENT_RUN (root)
      *   - input processor: working-memory PROCESSOR_RUN (retrieves state)
-     *   - input processor: message-history PROCESSOR_RUN
+     *   - memory: recall MEMORY_OPERATION
      *   - MODEL_GENERATION
      *     - MODEL_STEP
-     *   - output processor: message-history PROCESSOR_RUN
+     *   - memory: save MEMORY_OPERATION
      */
     it('should trace WorkingMemory processor when enabled', async () => {
       const model = createMockModel();
@@ -1814,12 +1838,12 @@ describe('Processor Tracing Tests', () => {
     /**
      * Expected span structure:
      * - test-agent AGENT_RUN (root)
-     *   - input processor: message-history PROCESSOR_RUN (memory runs first)
+     *   - memory: recall MEMORY_OPERATION (memory runs first)
      *   - input processor: custom-input PROCESSOR_RUN
      *   - MODEL_GENERATION
      *     - MODEL_STEP
      *   - output processor: custom-output PROCESSOR_RUN
-     *   - output processor: message-history PROCESSOR_RUN (memory runs last)
+     *   - memory: save MEMORY_OPERATION (memory runs last)
      */
     it('should trace memory processors alongside custom processors', async () => {
       const model = createMockModel();
@@ -1866,8 +1890,9 @@ describe('Processor Tracing Tests', () => {
 
       // EXPECTED: Both memory processors and custom processors should have spans
       // Memory processors run first on input, last on output
-      // MessageHistory (input) + custom-input + custom-output + MessageHistory (output) = 4
-      expect(processorSpans.length).toBe(4);
+      // MessageHistory (input) + custom-input + custom-output + MessageHistory (output) = 4.
+      // MessageHistory declares MEMORY_OPERATION, so count by processor entity type.
+      expect(processorPhaseSpans(testExporter).length).toBe(4);
 
       // Should have custom processor spans with correct names
       const customInputSpan = processorSpans.find(s => s.name === 'input processor: custom-input');
@@ -1888,12 +1913,12 @@ describe('Processor Tracing Tests', () => {
     /**
      * Expected span structure (execution order matters):
      * - test-agent AGENT_RUN (root)
-     *   - input processor: message-history PROCESSOR_RUN (memory first - fetches history)
+     *   - memory: recall MEMORY_OPERATION (memory first - fetches history)
      *   - input processor: guardrail PROCESSOR_RUN (custom after memory)
      *   - MODEL_GENERATION
      *     - MODEL_STEP
      *   - output processor: filter PROCESSOR_RUN (custom before memory)
-     *   - output processor: message-history PROCESSOR_RUN (memory last - persists)
+     *   - memory: save MEMORY_OPERATION (memory last - persists)
      */
     it('should respect processor execution order for memory processors', async () => {
       const model = createMockModel();
@@ -1938,8 +1963,9 @@ describe('Processor Tracing Tests', () => {
       const modelSpan = modelSpans[0];
       const modelStepSpan = modelStepSpans[0];
 
-      const inputSpans = processorSpans.filter(s => s.entityType === EntityType.INPUT_PROCESSOR);
-      const outputSpans = processorSpans.filter(s => s.entityType === EntityType.OUTPUT_PROCESSOR);
+      const phaseSpans = processorPhaseSpans(testExporter);
+      const inputSpans = phaseSpans.filter(s => s.entityType === EntityType.INPUT_PROCESSOR);
+      const outputSpans = phaseSpans.filter(s => s.entityType === EntityType.OUTPUT_PROCESSOR);
 
       // EXPECTED: Memory processors run first on inputs, last on outputs
       // This ensures guardrails validate content before persistence
@@ -2405,6 +2431,110 @@ describe('Processor Tracing Tests', () => {
       expect(agentSpan?.attributes?.availableTools).toEqual([]);
 
       await testExporter.finalExpectations();
+    });
+  });
+
+  // ==========================================================================
+  // Output Stream Processor Spans Across Steps
+  // ==========================================================================
+
+  describe('Output Stream Processor Across Steps', () => {
+    /**
+     * Output stream processor state outlives a single LLM step, so the per-step
+     * span teardown must drop its span reference. Otherwise every step after the
+     * first writes to an already-ended span and its output (including a tripwire
+     * abort) never reaches the trace.
+     */
+    it('should record a tripwire on a processor span when the abort happens after a tool step', async () => {
+      let call = 0;
+      const model = new MockLanguageModelV2({
+        doStream: async () => {
+          call++;
+          if (call === 1) {
+            return {
+              stream: convertArrayToReadableStream([
+                { type: 'response-metadata', id: '1' },
+                { type: 'tool-call', toolCallId: 'call-1', toolName: 'echo', input: JSON.stringify({ text: 'hi' }) },
+                {
+                  type: 'finish',
+                  finishReason: 'tool-calls',
+                  usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+                },
+              ]),
+            };
+          }
+          return {
+            stream: convertArrayToReadableStream([
+              { type: 'response-metadata', id: '2' },
+              { type: 'text-delta', id: '1', delta: 'safe ' },
+              { type: 'text-delta', id: '1', delta: 'boom' },
+              {
+                type: 'finish',
+                finishReason: 'stop',
+                usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+              },
+            ]),
+          };
+        },
+      });
+
+      class AbortingStreamProcessor implements Processor {
+        readonly id = 'aborting-stream';
+        readonly name = 'Aborting Stream';
+
+        async processOutputStream(args: ProcessOutputStreamArgs): Promise<ChunkType | null> {
+          const part = args.part;
+          if (part.type === 'text-delta' && part.payload.text.includes('boom')) {
+            args.abort('Blocked by aborting-stream', { retry: false, metadata: { limit: 1 } });
+          }
+          return part;
+        }
+      }
+
+      const agent = new Agent({
+        id: 'test-agent',
+        name: 'Test Agent',
+        instructions: 'Test',
+        model,
+        tools: {
+          echo: createTool({
+            id: 'echo',
+            description: 'Echo the input back',
+            inputSchema: z.object({ text: z.string() }),
+            execute: async ({ text }) => ({ text }),
+          }),
+        },
+        outputProcessors: [new AbortingStreamProcessor()],
+      });
+
+      const mastra = new Mastra({
+        ...getBaseMastraConfig(testExporter),
+        agents: { agent },
+      });
+
+      const stream = await mastra.getAgent('agent').stream('Hello');
+      const chunkTypes: string[] = [];
+      for await (const chunk of stream.fullStream) {
+        chunkTypes.push(chunk.type);
+      }
+
+      // Stream signal still reaches consumers (Studio renders this)
+      expect(chunkTypes).toContain('tripwire');
+      expect(await stream.tripwire).toMatchObject({
+        reason: 'Blocked by aborting-stream',
+        processorId: 'aborting-stream',
+      });
+
+      // The step the abort happened in gets its own span carrying the tripwire
+      const streamProcessorSpans = testExporter
+        .getProcessorSpans()
+        .filter(span => span.name === 'output stream processor: aborting-stream');
+      expect(streamProcessorSpans.length).toBe(2);
+
+      const tripwireSpans = streamProcessorSpans.filter(
+        span => JSON.stringify(span.output ?? {}).includes('Blocked by aborting-stream') || span.errorInfo,
+      );
+      expect(tripwireSpans.length).toBe(1);
     });
   });
 });

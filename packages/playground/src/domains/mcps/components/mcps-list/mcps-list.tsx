@@ -61,7 +61,7 @@ export function McpServersList({ mcpServers, isLoading, search = '' }: McpServer
   }
 
   return (
-    <EntityList columns="auto 1fr auto auto auto" variant="striped" scrollRef={containerRef}>
+    <EntityList columns="auto 1fr auto auto auto" scrollRef={containerRef}>
       <EntityList.Top>
         <EntityList.TopCell>Name</EntityList.TopCell>
         <EntityList.TopCell>URL</EntityList.TopCell>

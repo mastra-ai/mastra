@@ -1,6 +1,6 @@
 ---
 title: "Regions | Mastra platform"
-description: Choose where a Mastra platform environment runs, where its hosted database is placed, and where its observability data is stored.
+description: "Choose the US or EU region for a Mastra platform environment and understand how compute, hosted databases, and observability data are colocated."
 ---
 
 # Regions
@@ -68,7 +68,7 @@ Observability ingest runs in two regions today: **US** (Iowa, `us-central1`) and
 | `pdx`, `iad`, `sfo`, `us` shorthand | US (Iowa) |
 | `ams`, `eu` shorthand | EU (Amsterdam) |
 
-Compute and databases can be placed in more Railway and provider regions than observability supports, so co-location isn't perfect for every combination. A `us`-zone environment always sends telemetry to US ingest, and an `eu`-zone environment always sends telemetry to EU ingest, even if the underlying Railway region is a specific city not directly served by an ingest endpoint. Data residency is preserved at the zone level. Telemetry from an `eu` environment never crosses into the US.
+Railway and database providers offer more regions than observability ingest, so some combinations can't be fully co-located. Environments in the `us` zone always send telemetry to US ingest, while those in the `eu` zone use EU ingest. This routing applies even when the underlying Railway region is a city without a dedicated ingest endpoint. Data residency is preserved at the zone level. Telemetry from an `eu` environment never crosses into the US.
 
 ## Related
 

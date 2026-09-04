@@ -77,8 +77,8 @@ export function AgentVersionPanel({
                       <Txt variant="ui-sm" className="text-inherit">
                         v{version.versionNumber}
                       </Txt>
-                      {isPublished && <Badge variant="success">Published</Badge>}
-                      {isDraft && <Badge variant="info">Draft</Badge>}
+                      {isPublished && <Badge variant="green">Published</Badge>}
+                      {isDraft && <Badge variant="blue">Draft</Badge>}
                     </div>
                     <Txt variant="ui-xs" className="text-neutral2 mt-0.5">
                       {formatTimestamp(version.createdAt)}

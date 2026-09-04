@@ -14,22 +14,21 @@ Expected result: each thread restores its own pack selection instead of using on
 
 ## 2) Model usage ranking
 
-- [ ] Open `/models` and choose a pack that uses a model you can repeatedly select.
-- [ ] Re-select the same model multiple times (through pack switches or model picks that call `session.model.switch`).
-- [ ] Re-open the model selector.
-- [ ] Confirm frequently selected models appear higher in the sorted list.
+- [ ] Run `/model` and select the same model several times.
+- [ ] Reopen `/model`.
+- [ ] Confirm frequently selected models appear higher in the list.
 
 Expected result: model ordering reflects persisted `modelUseCounts` and updates over time.
 
-## 3) Command consolidation
+## 3) Model commands
 
-- [ ] Run `/models`.
-- [ ] Confirm it opens the model-pack selector flow.
-- [ ] Run `/models:pack`.
-- [ ] Confirm it is not a valid command anymore.
-- [ ] Open `/help` and verify only `/models` is shown for model pack switching.
+- [ ] Run `/model` and confirm it opens the searchable model selector for the current mode.
+- [ ] Change a model while a built-in pack is active and confirm the active pack becomes `Custom`.
+- [ ] Run `/models` and confirm it opens the model-pack selector.
+- [ ] Run `/packs` and confirm it opens the same model-pack selector.
+- [ ] Open `/help` and confirm it describes all three commands.
 
-Expected result: `/models` is the single command path for pack selection.
+Expected result: `/model` changes one mode, while `/models` and `/packs` switch packs.
 
 ## 4) Custom pack CRUD + targeted edit UX
 

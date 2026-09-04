@@ -11,9 +11,10 @@ import {
 import { Input } from '@mastra/playground-ui/components/Input';
 import { MarkdownRenderer } from '@mastra/playground-ui/components/MarkdownRenderer';
 import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
+import { GithubIcon } from '@mastra/playground-ui/icons/GithubIcon';
 import { SkillIcon } from '@mastra/playground-ui/icons/SkillIcon';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { Check, Download, ExternalLink, Github, Loader2, Package, Search } from 'lucide-react';
+import { Check, Download, ExternalLink, Loader2, Package, Search } from 'lucide-react';
 import { useCallback, useMemo, useState } from 'react';
 import { useDebouncedCallback } from 'use-debounce';
 
@@ -271,7 +272,7 @@ export function BuilderAddSkillDialog({
                         <h3 className="text-neutral6 truncate font-semibold">{selectedSkill.name}</h3>
                         <div className="text-neutral4 mt-1 flex items-center gap-3 text-xs">
                           <span className="flex items-center gap-1">
-                            <Github className="h-3 w-3" />
+                            <GithubIcon className="h-3 w-3" />
                             {selectedSkill.topSource}
                           </span>
                           <span className="flex items-center gap-1">
