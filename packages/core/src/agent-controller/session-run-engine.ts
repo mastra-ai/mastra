@@ -41,8 +41,6 @@ type StreamIgnoredChunk =
   | StreamPayloadChunk<'abort'>
   | StreamPayloadChunk<'response-metadata'>
   | StreamPayloadChunk<'text-end'>
-  | StreamPayloadChunk<'reasoning-end'>
-  | StreamPayloadChunk<'reasoning-signature'>
   | StreamPayloadChunk<'redacted-reasoning'>
   | StreamPayloadChunk<'source'>
   | StreamPayloadChunk<'file'>
@@ -72,6 +70,8 @@ type StreamChunk =
   | StreamPayloadChunk<'text-delta'>
   | StreamPayloadChunk<'reasoning-start'>
   | StreamPayloadChunk<'reasoning-delta'>
+  | StreamPayloadChunk<'reasoning-end'>
+  | StreamPayloadChunk<'reasoning-signature'>
   | StreamPayloadChunk<'tool-call-input-streaming-start'>
   | StreamPayloadChunk<'tool-call-delta'>
   | StreamPayloadChunk<'tool-call-input-streaming-end'>
@@ -545,11 +545,19 @@ export class SessionRunEngine {
       }
 
       case 'reasoning-start': {
+        const payload = getPayload(chunk);
+        const id = getString(payload.id) ?? '';
         // Mirror text-start: a late start for an already-seeded id is a no-op.
-        if (state.thinkingContentById.has(getString(getPayload(chunk).id) ?? '')) break;
+        if (state.thinkingContentById.has(id)) break;
         const thinkingIndex = state.currentMessage.content.parts.length;
-        state.currentMessage.content.parts.push({ type: 'reasoning', reasoning: '', details: [] });
-        state.thinkingContentById.set(getString(getPayload(chunk).id) ?? '', { index: thinkingIndex, text: '' });
+        const providerMetadata = isProviderMetadata(payload.providerMetadata) ? payload.providerMetadata : undefined;
+        state.currentMessage.content.parts.push({
+          type: 'reasoning',
+          reasoning: '',
+          details: [],
+          ...(providerMetadata ? { providerMetadata } : {}),
+        });
+        state.thinkingContentById.set(id, { index: thinkingIndex, text: '' });
         this.#session.emit({ type: 'message_update', message: state.currentMessage });
         break;
       }
@@ -570,6 +578,62 @@ export class SessionRunEngine {
         if (thinkingContent && thinkingContent.type === 'reasoning') {
           thinkingContent.reasoning = thinkingState.text;
           thinkingContent.details = [{ type: 'text', text: thinkingState.text }];
+        }
+        this.#session.emit({ type: 'message_update', message: state.currentMessage });
+        break;
+      }
+
+      case 'reasoning-end': {
+        const payload = getPayload(chunk);
+        const id = getString(payload.id) ?? '';
+        let thinkingState = state.thinkingContentById.get(id);
+        if (!thinkingState) {
+          const thinkingIndex = state.currentMessage.content.parts.length;
+          state.currentMessage.content.parts.push({ type: 'reasoning', reasoning: '', details: [] });
+          thinkingState = { index: thinkingIndex, text: '' };
+          state.thinkingContentById.set(id, thinkingState);
+        }
+        const thinkingContent = state.currentMessage.content.parts[thinkingState.index];
+        if (thinkingContent && thinkingContent.type === 'reasoning') {
+          const providerMetadata = isProviderMetadata(payload.providerMetadata) ? payload.providerMetadata : undefined;
+          if (providerMetadata) {
+            thinkingContent.providerMetadata = {
+              ...(thinkingContent.providerMetadata || {}),
+              ...providerMetadata,
+            };
+          }
+        }
+        this.#session.emit({ type: 'message_update', message: state.currentMessage });
+        break;
+      }
+
+      case 'reasoning-signature': {
+        const payload = getPayload(chunk);
+        const id = getString(payload.id) ?? '';
+        const signature =
+          getString(payload.signature) ??
+          (isRecord(chunk) && 'signature' in chunk ? getString(chunk.signature) : undefined);
+        let thinkingState = state.thinkingContentById.get(id);
+        if (!thinkingState) {
+          const thinkingIndex = state.currentMessage.content.parts.length;
+          state.currentMessage.content.parts.push({ type: 'reasoning', reasoning: '', details: [] });
+          thinkingState = { index: thinkingIndex, text: '' };
+          state.thinkingContentById.set(id, thinkingState);
+        }
+        if (signature) {
+          const thinkingContent = state.currentMessage.content.parts[thinkingState.index];
+          if (thinkingContent && thinkingContent.type === 'reasoning') {
+            const existingAnthropic = isRecord(thinkingContent.providerMetadata?.anthropic)
+              ? (thinkingContent.providerMetadata!.anthropic as Record<string, unknown>)
+              : {};
+            thinkingContent.providerMetadata = {
+              ...(thinkingContent.providerMetadata || {}),
+              anthropic: {
+                ...existingAnthropic,
+                signature,
+              },
+            };
+          }
         }
         this.#session.emit({ type: 'message_update', message: state.currentMessage });
         break;

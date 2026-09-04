@@ -114,6 +114,64 @@ describe('SessionRunEngine — MastraDBMessage contract', () => {
     expect(reasoningPart).toMatchObject({ type: 'reasoning', reasoning: 'thinking…' });
   });
 
+  it('Given a reasoning stream with reasoning-end providerMetadata, Then providerMetadata is preserved on the reasoning part', async () => {
+    const { engine, events } = createHarness();
+    const state = engine.createStreamState();
+    const ctx = requestContext();
+
+    await engine.processStreamChunk(state, chunk({ type: 'reasoning-start', payload: { id: 'r1' } }), ctx);
+    await engine.processStreamChunk(
+      state,
+      chunk({ type: 'reasoning-delta', payload: { id: 'r1', text: 'thinking…' } }),
+      ctx,
+    );
+    await engine.processStreamChunk(
+      state,
+      chunk({
+        type: 'reasoning-end',
+        payload: { id: 'r1', providerMetadata: { anthropic: { signature: 'sig_test_123' } } },
+      }),
+      ctx,
+    );
+
+    const message = lastMessageEvent(events);
+    const reasoningPart = message.content.parts.find(part => part.type === 'reasoning');
+    expect(reasoningPart).toMatchObject({
+      type: 'reasoning',
+      reasoning: 'thinking…',
+      providerMetadata: { anthropic: { signature: 'sig_test_123' } },
+    });
+  });
+
+  it('Given a reasoning stream with reasoning-signature chunk, Then signature is attached to providerMetadata', async () => {
+    const { engine, events } = createHarness();
+    const state = engine.createStreamState();
+    const ctx = requestContext();
+
+    await engine.processStreamChunk(state, chunk({ type: 'reasoning-start', payload: { id: 'r1' } }), ctx);
+    await engine.processStreamChunk(
+      state,
+      chunk({ type: 'reasoning-delta', payload: { id: 'r1', text: 'thinking…' } }),
+      ctx,
+    );
+    await engine.processStreamChunk(
+      state,
+      chunk({
+        type: 'reasoning-signature',
+        payload: { id: 'r1', signature: 'sig_chunk_456' },
+      }),
+      ctx,
+    );
+
+    const message = lastMessageEvent(events);
+    const reasoningPart = message.content.parts.find(part => part.type === 'reasoning');
+    expect(reasoningPart).toMatchObject({
+      type: 'reasoning',
+      reasoning: 'thinking…',
+      providerMetadata: { anthropic: { signature: 'sig_chunk_456' } },
+    });
+  });
+
   it('Given a tool call + result, When chunks arrive, Then it emits a tool-invocation part', async () => {
     const { engine, events } = createHarness();
     const state = engine.createStreamState();
