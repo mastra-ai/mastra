@@ -51,6 +51,7 @@ describe('defineBoard', () => {
     expect(reviewBoard.allowsTransition('review', 'canceled')).toBe(true);
     expect(reviewBoard.allowsTransition('review', 'intake')).toBe(true);
     expect(reviewBoard.allowsTransition('done', 'review')).toBe(true);
+    expect(reviewBoard.allowsTransition('canceled', 'review')).toBe(true);
     expect(reviewBoard.rules.intake?.pullRequest?.onEnter).toBeTypeOf('function');
     expect(reviewBoard.rules.review?.pullRequest?.onEnter).toBeTypeOf('function');
   });

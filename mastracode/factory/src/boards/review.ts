@@ -48,7 +48,10 @@ export const reviewBoard = defineBoard({
       title: 'Done',
       outcomes: { updated: 'review' },
     },
-    canceled: { title: 'Canceled' },
+    canceled: {
+      title: 'Canceled',
+      outcomes: { reviewRequested: 'review' },
+    },
   },
 });
 
