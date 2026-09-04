@@ -187,7 +187,7 @@ function TraceThreadRow({
       </div>
       {/* The row height is driven by the messages column; the timeline is absolutely
           positioned so it fills that height and scrolls instead of stretching the row. */}
-      <div className="border-border1 relative min-w-0 border-b border-dashed">
+      <div className="border-border1 relative min-w-0 border-b">
         <div className="absolute inset-0 overflow-y-auto py-4 pl-4">
           <TraceTimeline
             hierarchicalSpans={hierarchicalSpans}
