@@ -8,7 +8,12 @@ import type {
   WorkItemRow,
 } from '../storage/domains/work-items/base.js';
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
-import { computeFactoryHealth, DEFAULT_HEALTH_THRESHOLDS, runFactoryHealthCheck } from './health.js';
+import {
+  computeFactoryHealth,
+  DEFAULT_HEALTH_THRESHOLDS,
+  decisionIdFromFindingKey,
+  runFactoryHealthCheck,
+} from './health.js';
 
 const NOW = new Date('2026-09-03T12:00:00.000Z');
 const HOUR = 60 * 60_000;
@@ -158,6 +163,8 @@ describe('computeFactoryHealth', () => {
     expect(report.findings[0]!.evidence).toContain('invokeSkill (plan)');
     expect(report.findings[0]!.evidence).toContain('[session_unavailable]');
     expect(report.findings[0]!.evidence).toContain('No active Factory binding');
+    expect(decisionIdFromFindingKey(report.findings[0]!.id)).toBe('d-fail');
+    expect(decisionIdFromFindingKey('seat-missing:b-1')).toBeUndefined();
   });
 
   it('flags retry decisions the dispatcher never picked up, but not ones inside their backoff', () => {

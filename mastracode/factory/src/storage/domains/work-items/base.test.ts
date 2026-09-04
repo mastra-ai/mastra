@@ -1010,3 +1010,148 @@ describe('supervisor finding notification stamps', () => {
     await rm(dir, { recursive: true, force: true });
   });
 });
+
+describe('openSupervisorFinding (single-finding, non-reconciling)', () => {
+  const scope = { orgId: 'org1', factoryProjectId: 'p1' };
+  const finding = (key: string, evidence = 'first') => ({
+    id: key,
+    kind: 'decision-failed' as const,
+    workItemId: 'item-1',
+    workItemNumber: null,
+    title: 'A decision failed',
+    evidence,
+    ageMs: 0,
+    suggestedRepair: { action: 'retry-decision' as const, decisionId: 'decision-1' },
+  });
+  const rows = async (storage: WorkItemsStorage) =>
+    (await storage.listSupervisorFindingPage({ ...scope, limit: 10 })).rows;
+
+  it('inserts exactly one row and leaves unrelated open findings untouched', async () => {
+    const storage = await makeStorage();
+    const t0 = new Date('2030-01-01T00:00:00.000Z');
+    await storage.syncSupervisorFindings({
+      ...scope,
+      findings: [finding('seat-missing:a'), finding('held-waiting:b')],
+      now: t0,
+    });
+
+    const opened = await storage.openSupervisorFinding({ ...scope, finding: finding('decision-failed:d1'), now: t0 });
+
+    expect(opened).toMatchObject({
+      findingKey: 'decision-failed:d1',
+      occurrence: 0,
+      status: 'open',
+      lastNotifiedAt: null,
+    });
+    const open = await rows(storage);
+    expect(open.map(row => row.findingKey).sort()).toEqual(['decision-failed:d1', 'held-waiting:b', 'seat-missing:a']);
+    expect(open.every(row => row.resolvedAt === null)).toBe(true);
+  });
+
+  it('reopens a resolved row with the sweep semantics: occurrence up, stamp and escalation cleared', async () => {
+    const storage = await makeStorage();
+    const t0 = new Date('2030-01-01T00:00:00.000Z');
+    await storage.openSupervisorFinding({ ...scope, finding: finding('decision-failed:d1'), now: t0 });
+    await storage.markSupervisorFindingNotified({
+      ...scope,
+      findingKey: 'decision-failed:d1',
+      occurrence: 0,
+      notifiedAt: t0,
+    });
+    await storage.escalateSupervisorFinding({ ...scope, findingKey: 'decision-failed:d1', note: 'n', escalatedAt: t0 });
+    await storage.syncSupervisorFindings({ ...scope, findings: [], now: new Date('2030-01-01T00:01:00.000Z') });
+
+    const reopened = await storage.openSupervisorFinding({
+      ...scope,
+      finding: finding('decision-failed:d1', 'again'),
+      now: new Date('2030-01-01T00:02:00.000Z'),
+    });
+    expect(reopened).toMatchObject({
+      occurrence: 1,
+      status: 'open',
+      lastNotifiedAt: null,
+      escalatedAt: null,
+      escalationNote: null,
+      resolvedAt: null,
+    });
+    expect(reopened.finding.evidence).toBe('again');
+  });
+
+  it('refreshes an open row in place without touching occurrence or stamps', async () => {
+    const storage = await makeStorage();
+    const t0 = new Date('2030-01-01T00:00:00.000Z');
+    await storage.openSupervisorFinding({ ...scope, finding: finding('decision-failed:d1'), now: t0 });
+    await storage.markSupervisorFindingNotified({
+      ...scope,
+      findingKey: 'decision-failed:d1',
+      occurrence: 0,
+      notifiedAt: t0,
+    });
+
+    const same = await storage.openSupervisorFinding({ ...scope, finding: finding('decision-failed:d1'), now: t0 });
+    expect(same).toMatchObject({ occurrence: 0, lastNotifiedAt: t0 });
+    const refreshed = await storage.openSupervisorFinding({
+      ...scope,
+      finding: finding('decision-failed:d1', 'newer evidence'),
+      now: new Date('2030-01-01T00:01:00.000Z'),
+    });
+    expect(refreshed).toMatchObject({ occurrence: 0, lastNotifiedAt: t0 });
+    expect(refreshed.finding.evidence).toBe('newer evidence');
+  });
+
+  it('a later sweep that derives the same key keeps the call-site row: no duplicate, no auto-resolve', async () => {
+    const storage = await makeStorage();
+    const t0 = new Date('2030-01-01T00:00:00.000Z');
+    await storage.openSupervisorFinding({ ...scope, finding: finding('decision-failed:d1'), now: t0 });
+    await storage.markSupervisorFindingNotified({
+      ...scope,
+      findingKey: 'decision-failed:d1',
+      occurrence: 0,
+      notifiedAt: t0,
+    });
+
+    // The sweep recomputes the same finding (different ageMs, as it would).
+    await storage.syncSupervisorFindings({
+      ...scope,
+      findings: [{ ...finding('decision-failed:d1'), ageMs: 60_000 }],
+      now: new Date('2030-01-01T00:01:00.000Z'),
+    });
+    const open = await rows(storage);
+    expect(open).toHaveLength(1);
+    expect(open[0]).toMatchObject({
+      findingKey: 'decision-failed:d1',
+      occurrence: 0,
+      resolvedAt: null,
+      lastNotifiedAt: t0,
+    });
+  });
+
+  it('a sweep whose snapshot predates the call-site row does not auto-resolve it', async () => {
+    const storage = await makeStorage();
+    const snapshot = new Date('2030-01-01T00:00:00.000Z');
+    // Health was computed at `snapshot` (no failed decision yet); the
+    // dispatcher opens the row a moment later; the sweep's sync lands last.
+    await storage.openSupervisorFinding({
+      ...scope,
+      finding: finding('decision-failed:d1'),
+      now: new Date('2030-01-01T00:00:00.500Z'),
+    });
+    await storage.syncSupervisorFindings({ ...scope, findings: [], now: snapshot });
+
+    const open = await rows(storage);
+    expect(open.map(row => row.findingKey)).toEqual(['decision-failed:d1']);
+    expect(open[0]).toMatchObject({ occurrence: 0, resolvedAt: null });
+
+    // Same millisecond as the snapshot: the snapshot cannot have seen it either.
+    await storage.openSupervisorFinding({ ...scope, finding: finding('decision-failed:d2'), now: snapshot });
+    await storage.syncSupervisorFindings({ ...scope, findings: [], now: snapshot });
+    expect((await rows(storage)).map(row => row.findingKey).sort()).toEqual([
+      'decision-failed:d1',
+      'decision-failed:d2',
+    ]);
+
+    // A sweep that genuinely post-dates the row and no longer derives it resolves it as before.
+    await storage.syncSupervisorFindings({ ...scope, findings: [], now: new Date('2030-01-01T00:05:00.000Z') });
+    expect(await rows(storage)).toEqual([]);
+  });
+});

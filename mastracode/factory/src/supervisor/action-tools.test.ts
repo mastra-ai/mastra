@@ -116,7 +116,7 @@ describe('factory_escalate_finding', () => {
     await expect(
       execute(tools.factory_escalate_finding, { findingKey: 'decision-failed:nope', note: 'n' }),
     ).rejects.toThrow(/not open/);
-    await workItems.syncSupervisorFindings({ ...SCOPE, findings: [], now: NOW });
+    await workItems.syncSupervisorFindings({ ...SCOPE, findings: [], now: new Date(NOW.getTime() + 1_000) });
     await expect(
       execute(tools.factory_escalate_finding, { findingKey: 'decision-failed:d1', note: 'n' }),
     ).rejects.toThrow(/not open/);

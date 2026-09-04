@@ -2,7 +2,7 @@ import { MastraWorker } from '@mastra/core/worker';
 
 import type { FactoryProjectsStorage } from '../storage/domains/projects/base.js';
 import type { FactorySupervisorFindingRecord, WorkItemsStorage } from '../storage/domains/work-items/base.js';
-import { runFactoryHealthCheck } from './health.js';
+import { decisionIdFromFindingKey, runFactoryHealthCheck } from './health.js';
 import type { NotifySupervisorInput } from './notify.js';
 import { isSupervisorFindingVisibleToHumans } from './visibility.js';
 
@@ -145,12 +145,22 @@ export class FactorySupervisorHealthWorker extends MastraWorker {
         ...(after ? { after } : {}),
       });
       for (const row of rows) {
+        const evidence = findingText(row, 'evidence');
         try {
+          // The failure code is the supervisor's classification (a parked
+          // question vs a crash). It lives on the decision record the key
+          // names, so a re-ring reads it from there, never from prose.
+          const decisionId = decisionIdFromFindingKey(row.findingKey);
+          const failureCode = decisionId
+            ? ((await this.#workItems.getDeferredDecision(scope.orgId, scope.factoryProjectId, decisionId))
+                ?.failureCode ?? undefined)
+            : undefined;
           await this.#notify({
             projectId: scope.factoryProjectId,
             findingKey: row.findingKey,
             kind: findingText(row, 'kind') ?? 'unknown',
-            summary: findingText(row, 'evidence') ?? findingText(row, 'title') ?? row.findingKey,
+            summary: evidence ?? findingText(row, 'title') ?? row.findingKey,
+            ...(failureCode ? { failureCode } : {}),
           });
           await this.#workItems.markSupervisorFindingNotified({
             ...scope,

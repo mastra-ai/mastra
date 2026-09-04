@@ -1108,6 +1108,56 @@ function toSupervisorFinding(row: GovernanceDbRow): FactorySupervisorFindingReco
   };
 }
 
+/**
+ * The one insert/reopen/refresh rule for a finding row, shared by the sweep's
+ * whole-snapshot reconciliation and the single-finding open path so both
+ * agree on occurrence, notification-stamp and escalation semantics. Returns
+ * whether anything was written.
+ */
+async function upsertSupervisorFinding(
+  ops: FactoryStorageOps,
+  scope: { orgId: string; factoryProjectId: string; now: Date },
+  finding: FactoryHealthFinding,
+  row: GovernanceDbRow | null | undefined,
+): Promise<boolean> {
+  if (!row) {
+    await ops.insertOne<GovernanceDbRow>('factory_supervisor_findings', {
+      org_id: scope.orgId,
+      factory_project_id: scope.factoryProjectId,
+      finding_key: finding.id,
+      occurrence: 0,
+      finding,
+      opened_at: scope.now,
+      updated_at: scope.now,
+      resolved_at: null,
+      last_notified_at: null,
+      status: 'open',
+      escalated_at: null,
+      escalation_note: null,
+    });
+    return true;
+  }
+  const reopening = row.resolved_at !== null;
+  const findingChanged = stableJson(row.finding) !== stableJson(finding);
+  if (!reopening && !findingChanged) return false;
+  await ops.updateAtomic<GovernanceDbRow>('factory_supervisor_findings', { id: row.id }, current => ({
+    finding,
+    occurrence: Number(current.occurrence) + (current.resolved_at !== null ? 1 : 0),
+    opened_at: current.resolved_at !== null ? scope.now : current.opened_at,
+    updated_at: scope.now,
+    resolved_at: null,
+    // A reopened incident re-rings the doorbell: clear the notification
+    // stamp so the next sweep emits for it again.
+    last_notified_at: current.resolved_at !== null ? null : current.last_notified_at,
+    // A reopened incident is a new incident: stale escalation state
+    // must never keep it visible (or hidden) on the old terms.
+    status: current.resolved_at !== null ? 'open' : current.status,
+    escalated_at: current.resolved_at !== null ? null : current.escalated_at,
+    escalation_note: current.resolved_at !== null ? null : current.escalation_note,
+  }));
+  return true;
+}
+
 function attentionReceiptState(value: unknown): FactoryAttentionReceiptState {
   if (value === 'read' || value === 'archived') return value;
   throw new Error(`Unsupported attention receipt state '${String(value)}'.`);
@@ -1228,7 +1278,12 @@ export class WorkItemsStorage extends FactoryStorageDomain {
       });
       const currentKeys = new Set(input.findings.map(finding => finding.id));
       for (const row of existingOpen) {
-        if (!currentKeys.has(String(row.finding_key))) {
+        // A row opened after this snapshot was taken (the dispatcher raising a
+        // failure mid-sweep) is not "absent from health" — the snapshot simply
+        // predates it. Leave it for the next sweep to reconcile. Equal
+        // millisecond counts as after: the snapshot cannot have seen it.
+        const openedAfterSnapshot = (row.opened_at as Date).getTime() >= input.now.getTime();
+        if (!currentKeys.has(String(row.finding_key)) && !openedAfterSnapshot) {
           await ops.updateAtomic<GovernanceDbRow>(
             'factory_supervisor_findings',
             { id: row.id, resolved_at: null },
@@ -1246,47 +1301,47 @@ export class WorkItemsStorage extends FactoryStorageDomain {
             factory_project_id: input.factoryProjectId,
             finding_key: finding.id,
           }));
-        if (!row) {
-          await ops.insertOne<GovernanceDbRow>('factory_supervisor_findings', {
-            org_id: input.orgId,
-            factory_project_id: input.factoryProjectId,
-            finding_key: finding.id,
-            occurrence: 0,
-            finding,
-            opened_at: input.now,
-            updated_at: input.now,
-            resolved_at: null,
-            last_notified_at: null,
-            status: 'open',
-            escalated_at: null,
-            escalation_note: null,
-          });
-          changed = true;
-          continue;
-        }
-        const reopening = row.resolved_at !== null;
-        const findingChanged = stableJson(row.finding) !== stableJson(finding);
-        if (!reopening && !findingChanged) continue;
-        await ops.updateAtomic<GovernanceDbRow>('factory_supervisor_findings', { id: row.id }, current => ({
-          finding,
-          occurrence: Number(current.occurrence) + (current.resolved_at !== null ? 1 : 0),
-          opened_at: current.resolved_at !== null ? input.now : current.opened_at,
-          updated_at: input.now,
-          resolved_at: null,
-          // A reopened incident re-rings the doorbell: clear the notification
-          // stamp so the next sweep emits for it again.
-          last_notified_at: current.resolved_at !== null ? null : current.last_notified_at,
-          // A reopened incident is a new incident: stale escalation state
-          // must never keep it visible (or hidden) on the old terms.
-          status: current.resolved_at !== null ? 'open' : current.status,
-          escalated_at: current.resolved_at !== null ? null : current.escalated_at,
-          escalation_note: current.resolved_at !== null ? null : current.escalation_note,
-        }));
-        changed = true;
+        if (await upsertSupervisorFinding(ops, input, finding, row)) changed = true;
       }
       return changed;
     });
     if (changed) this.#attentionChanged?.({ orgId: input.orgId, factoryProjectId: input.factoryProjectId });
+  }
+
+  /**
+   * Open (or reopen) exactly one finding without reconciling the rest: the
+   * call-site twin of {@link syncSupervisorFindings} for code paths that know
+   * a finding exists the moment it happens (a terminal dispatch failure)
+   * rather than at the next sweep. Same insert/reopen/refresh semantics as
+   * the sweep, applied to one key; every other open row is untouched. The
+   * caller must build the finding with the sweep's own derivation so the
+   * next sweep recognizes the row instead of resolving or duplicating it.
+   * Returns the row as it stands afterwards.
+   */
+  async openSupervisorFinding(input: {
+    orgId: string;
+    factoryProjectId: string;
+    finding: FactoryHealthFinding;
+    now: Date;
+  }): Promise<FactorySupervisorFindingRecord> {
+    const { changed, row } = await this.#withProjectRelationTransaction(
+      input.orgId,
+      input.factoryProjectId,
+      async ops => {
+        const where = {
+          org_id: input.orgId,
+          factory_project_id: input.factoryProjectId,
+          finding_key: input.finding.id,
+        };
+        const existing = await ops.findOne<GovernanceDbRow>('factory_supervisor_findings', where);
+        const changed = await upsertSupervisorFinding(ops, input, input.finding, existing);
+        const row = await ops.findOne<GovernanceDbRow>('factory_supervisor_findings', where);
+        if (!row) throw new Error('[WorkItemsStorage] supervisor finding vanished after open.');
+        return { changed, row };
+      },
+    );
+    if (changed) this.#attentionChanged?.({ orgId: input.orgId, factoryProjectId: input.factoryProjectId });
+    return toSupervisorFinding(row);
   }
 
   async listSupervisorFindingPage(input: {

@@ -268,7 +268,9 @@ describe('supervisor finding attention items', () => {
       note: 'n',
       escalatedAt: new Date(),
     });
-    await seed.workItems.syncSupervisorFindings({ ...scope, findings: [], now: new Date() });
+    // A later sweep (a row opened in the same millisecond as a snapshot is
+    // treated as opened after it).
+    await seed.workItems.syncSupervisorFindings({ ...scope, findings: [], now: new Date(Date.now() + 1_000) });
     await expect((await request('GET', `/web/factory/projects/${PROJECT_ID}/attention`)).json()).resolves.toMatchObject(
       { items: [], openCount: 0 },
     );
