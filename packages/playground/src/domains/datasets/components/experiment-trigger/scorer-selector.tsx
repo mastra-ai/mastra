@@ -30,7 +30,7 @@ export function ScorerSelector({
 
   return (
     <div className="grid gap-2">
-      <Label>{label}</Label>
+      {label ? <Label>{label}</Label> : null}
       {helperText ? <p className="text-muted-foreground text-xs">{helperText}</p> : null}
       <Combobox
         multiple

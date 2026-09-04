@@ -1,3 +1,4 @@
+import { AsyncLocalStorage } from 'node:async_hooks';
 import { randomUUID } from 'node:crypto';
 import type { ActorSignal } from '@mastra/core/auth/ee';
 import type { RequestContext } from '@mastra/core/di';
@@ -54,6 +55,8 @@ function isNonRetryableStepFailure(error: unknown): boolean {
   return false;
 }
 
+const retryCountStorage = new AsyncLocalStorage<number>();
+
 export class InngestExecutionEngine extends DefaultExecutionEngine {
   private inngestStep: BaseContext<Inngest>['step'];
   private inngestAttempts: number;
@@ -67,6 +70,10 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
     super({ mastra, options });
     this.inngestStep = inngestStep;
     this.inngestAttempts = inngestAttempts;
+  }
+
+  override getOrGenerateRetryCount(_stepId: string): number {
+    return retryCountStorage.getStore() ?? 0;
   }
 
   // =============================================================================
@@ -131,7 +138,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
       }
       try {
         //removed retry config with RetryAfterError from wrapDurableOperation, since we're manually handling retries here
-        const result = await this.wrapDurableOperation(stepId, runStep);
+        const result = await retryCountStorage.run(i, () => this.wrapDurableOperation(stepId, runStep));
         return { ok: true, result };
       } catch (e) {
         const isNonRetryable = isNonRetryableStepFailure(e);

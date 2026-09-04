@@ -7,7 +7,7 @@ description: "Browse SCNet Token Plan model IDs, capabilities, and context windo
 
 # <img src="https://models.dev/logos/scnet-token-plan.svg" alt="SCNet Token Plan logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />SCNet Token Plan
 
-Access 17 SCNet Token Plan models through Mastra's model router. Authentication is handled automatically using the `SCNET_API_KEY` environment variable.
+Access 20 SCNet Token Plan models through Mastra's model router. Authentication is handled automatically using the `SCNET_API_KEY` environment variable.
 
 Learn more in the [SCNet Token Plan documentation](https://www.scnet.cn/ac/openapi/doc/2.0/moduleapi/plans/token-plan.html).
 
@@ -142,6 +142,30 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": null
   },
   {
+    "model": "scnet-token-plan/GLM-5.3",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1000000,
+    "maxOutput": 131072,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
+    "model": "scnet-token-plan/GLM-5.3-Flash",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1000000,
+    "maxOutput": 131072,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
     "model": "scnet-token-plan/Kimi-K2.5",
     "imageInput": true,
     "audioInput": false,
@@ -234,6 +258,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 1048576,
     "maxOutput": 512000,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
+    "model": "scnet-token-plan/Qwen3.8-Flash",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1000000,
+    "maxOutput": 131072,
     "inputCost": null,
     "outputCost": null
   },
