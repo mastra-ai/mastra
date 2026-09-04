@@ -100,6 +100,14 @@ export const traceQueryPredicateSchema: z.ZodType<TraceQueryPredicate> = z.lazy(
         ]),
       })
       .strict(),
+    z
+      .object({
+        feedback: z.union([
+          z.object({ some: traceQueryScalarPredicateSchema }).strict(),
+          z.object({ none: traceQueryScalarPredicateSchema }).strict(),
+        ]),
+      })
+      .strict(),
   ]),
 );
 
@@ -196,7 +204,8 @@ export type TraceQueryPredicate =
   | { op: 'and' | 'or'; args: TraceQueryPredicate[] }
   | { op: 'not'; arg: TraceQueryPredicate }
   | { spans: { some: TraceQueryScalarPredicate } | { none: TraceQueryScalarPredicate } }
-  | { scores: { some: TraceQueryScalarPredicate } | { none: TraceQueryScalarPredicate } };
+  | { scores: { some: TraceQueryScalarPredicate } | { none: TraceQueryScalarPredicate } }
+  | { feedback: { some: TraceQueryScalarPredicate } | { none: TraceQueryScalarPredicate } };
 
 export type TraceQueryRequest = z.input<typeof traceQueryRequestObjectSchema>;
 export type NormalizedTraceQueryRequest = z.output<typeof traceQueryRequestObjectSchema>;
@@ -241,7 +250,22 @@ export type TraceQueryScoreField =
   | 'entityVersionId'
   | 'parentEntityVersionId'
   | 'rootEntityVersionId';
-export type TraceQueryCanonicalField = TraceQueryField | TraceQuerySpanField | TraceQueryScoreField;
+export type TraceQueryFeedbackField =
+  | 'feedbackType'
+  | 'feedbackSource'
+  | 'feedbackUserId'
+  | 'sourceId'
+  | 'entityVersionId'
+  | 'parentEntityVersionId'
+  | 'rootEntityVersionId'
+  | 'value'
+  | 'timestamp'
+  | 'comment';
+export type TraceQueryCanonicalField =
+  | TraceQueryField
+  | TraceQuerySpanField
+  | TraceQueryScoreField
+  | TraceQueryFeedbackField;
 export type TraceQueryMetadataField = `metadata.${string}`;
 export type TraceQueryPredicateField = TraceQueryCanonicalField | TraceQueryMetadataField;
 export type TraceQueryComparisonOperator = 'eq' | 'ne' | 'lt' | 'lte' | 'gt' | 'gte';
@@ -271,7 +295,7 @@ export type TrustedTraceQueryPredicate =
   | { type: 'not'; arg: TrustedTraceQueryPredicate }
   | {
       type: 'relation';
-      collection: 'spans' | 'scores';
+      collection: 'spans' | 'scores' | 'feedback';
       quantifier: 'some' | 'none';
       predicate: TrustedTraceQueryScalarPredicate;
     };
@@ -363,7 +387,7 @@ export function resolveTraceQueryTimeoutMs(timeoutMs = TRACE_QUERY_DEFAULT_TIMEO
 }
 
 interface FieldRule {
-  type: 'string' | 'number' | 'timestamp' | 'presence';
+  type: 'string' | 'number' | 'stringOrNumber' | 'timestamp' | 'presence';
   operators: ReadonlySet<string>;
   nonEmpty?: boolean;
 }
@@ -415,7 +439,20 @@ const SCORE_FIELD_RULES: Record<TraceQueryScoreField, FieldRule> = {
   rootEntityVersionId: { type: 'string', operators: STRING_OPERATORS },
 };
 
-type PredicateContext = 'trace' | 'spans' | 'scores';
+const FEEDBACK_FIELD_RULES: Record<TraceQueryFeedbackField, FieldRule> = {
+  feedbackType: { type: 'string', operators: STRING_OPERATORS },
+  feedbackSource: { type: 'string', operators: STRING_OPERATORS },
+  feedbackUserId: { type: 'string', operators: STRING_OPERATORS },
+  sourceId: { type: 'string', operators: STRING_OPERATORS },
+  entityVersionId: { type: 'string', operators: STRING_OPERATORS },
+  parentEntityVersionId: { type: 'string', operators: STRING_OPERATORS },
+  rootEntityVersionId: { type: 'string', operators: STRING_OPERATORS },
+  value: { type: 'stringOrNumber', operators: ORDERED_OPERATORS },
+  timestamp: { type: 'timestamp', operators: ORDERED_OPERATORS },
+  comment: { type: 'presence', operators: PRESENCE_OPERATORS },
+};
+
+type PredicateContext = 'trace' | 'spans' | 'scores' | 'feedback';
 
 interface PlannerState {
   nodes: number;
@@ -459,7 +496,7 @@ function findPredicateComplexityIssue(input: unknown): Array<string | number> | 
       continue;
     }
 
-    for (const collection of ['scores', 'spans'] as const) {
+    for (const collection of ['feedback', 'scores', 'spans'] as const) {
       const clause = predicate[collection];
       if (!clause || typeof clause !== 'object') continue;
       for (const quantifier of ['none', 'some'] as const) {
@@ -619,7 +656,7 @@ function planPredicate(
     return undefined;
   }
 
-  if ('spans' in predicate || 'scores' in predicate) {
+  if ('spans' in predicate || 'scores' in predicate || 'feedback' in predicate) {
     state.relatedClauses += 1;
     if (state.relatedClauses > TRACE_QUERY_MAX_RELATED_CLAUSES) {
       addPredicateComplexityIssue(
@@ -636,8 +673,9 @@ function planPredicate(
       });
       return undefined;
     }
-    const collection = 'spans' in predicate ? 'spans' : 'scores';
-    const clause = 'spans' in predicate ? predicate.spans : predicate.scores;
+    const collection = 'spans' in predicate ? 'spans' : 'scores' in predicate ? 'scores' : 'feedback';
+    const clause =
+      'spans' in predicate ? predicate.spans : 'scores' in predicate ? predicate.scores : predicate.feedback;
     const quantifier = 'some' in clause ? 'some' : 'none';
     const nested = 'some' in clause ? clause.some : clause.none;
     const planned = planPredicate(nested, collection, [...path, collection, quantifier], depth + 1, state);
@@ -725,7 +763,7 @@ function planPredicate(
   const rule = getRule(field, context, rules, [...path, 'left', 'path'], state);
   if (!rule) return undefined;
   if (!rule.operators.has(comparison.op)) addOperatorIssue(comparison.op, field, [...path, 'op'], state);
-  const value = normalizeLiteral(comparison.right.literal, rule);
+  const value = normalizeLiteral(comparison.right.literal, rule, comparison.op);
   if (value === undefined) {
     state.issues.push({
       code: 'invalid_literal',
@@ -740,6 +778,7 @@ function planPredicate(
 function rulesForContext(context: PredicateContext): Record<string, FieldRule> {
   if (context === 'spans') return SPAN_FIELD_RULES;
   if (context === 'scores') return SCORE_FIELD_RULES;
+  if (context === 'feedback') return FEEDBACK_FIELD_RULES;
   return TRACE_FIELD_RULES;
 }
 
@@ -788,8 +827,18 @@ function normalizePath(path: string): string {
   return normalized;
 }
 
-function normalizeLiteral(value: TraceQueryLiteral, rule: FieldRule): string | number | undefined {
+function normalizeLiteral(
+  value: TraceQueryLiteral,
+  rule: FieldRule,
+  operator?: TraceQueryComparisonOperator,
+): string | number | undefined {
   if (rule.type === 'number') return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
+  if (rule.type === 'stringOrNumber') {
+    if (operator && !STRING_OPERATORS.has(operator)) {
+      return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
+    }
+    return typeof value === 'string' || (typeof value === 'number' && Number.isFinite(value)) ? value : undefined;
+  }
   if (rule.type === 'timestamp') {
     const timestamp = timestampLiteralSchema.safeParse(value);
     return timestamp.success ? new Date(timestamp.data).toISOString() : undefined;
@@ -802,7 +851,10 @@ function normalizeLiteral(value: TraceQueryLiteral, rule: FieldRule): string | n
 
 function normalizeSet(values: TraceQueryLiteral[], rule: FieldRule): Array<string | number> | undefined {
   const normalized = values.map(value => normalizeLiteral(value, rule));
-  return normalized.some(value => value === undefined) ? undefined : (normalized as Array<string | number>);
+  if (normalized.some(value => value === undefined)) return undefined;
+  if (rule.type === 'stringOrNumber' && normalized.some(value => typeof value !== typeof normalized[0]))
+    return undefined;
+  return normalized as Array<string | number>;
 }
 
 function digestBinding(value: unknown): string {
