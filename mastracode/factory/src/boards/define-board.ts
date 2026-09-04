@@ -53,12 +53,13 @@ export function defineBoard<
 
   const transitions = Object.fromEntries(
     Object.entries(config.phases).map(([phaseId, phase]) => {
-      if (phase.next && phase.outcomes) {
+      if (phase.next !== undefined && phase.outcomes) {
         throw new BoardDefinitionError(`Phase "${phaseId}" cannot define both next and outcomes.`);
       }
-      const targets: BoardTransition<string>[] = phase.next
-        ? [Object.freeze({ outcome: null, to: phase.next })]
-        : Object.entries(phase.outcomes ?? {}).map(([outcome, to]) => Object.freeze({ outcome, to }));
+      const targets: BoardTransition<string>[] =
+        phase.next !== undefined
+          ? [Object.freeze({ outcome: null, to: phase.next })]
+          : Object.entries(phase.outcomes ?? {}).map(([outcome, to]) => Object.freeze({ outcome, to }));
       for (const { to } of targets) {
         if (!phaseIds.has(to)) {
           throw new BoardDefinitionError(`Phase "${phaseId}" targets undefined phase "${to}".`);

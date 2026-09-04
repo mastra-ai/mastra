@@ -44,6 +44,19 @@ describe('defineBoard', () => {
     ).toThrow(new BoardDefinitionError('Phase "start" targets undefined phase "missing".'));
   });
 
+  it('validates an empty string next target instead of dropping it', () => {
+    expect(() =>
+      defineBoard({
+        id: 'broken',
+        title: 'Broken',
+        initialPhase: 'start',
+        phases: {
+          start: { title: 'Start', next: '' },
+        } as Record<string, { title: string; next: string }>,
+      }),
+    ).toThrow(new BoardDefinitionError('Phase "start" targets undefined phase "".'));
+  });
+
   it('defines the built-in Review lifecycle', () => {
     expect(reviewBoard.initialPhase).toBe('intake');
     expect(reviewBoard.allowsTransition('intake', 'review')).toBe(true);
