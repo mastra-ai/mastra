@@ -326,6 +326,12 @@
 /* The same pools blurred and let out past the card, which is what turns a lit
  * edge into a lit card. Kept short: cards sit 10px apart in a column. */
 .session-wick::before {
+  /* The halo does not travel with the rim. Under a 9px blur its own drift is
+   * invisible, and animating it would mean re-blurring eight gradients every
+   * frame for nothing: parked, the browser paints this layer once and the only
+   * thing moving per frame is the 1px rim above it. */
+  --wick-drift: 0;
+
   content: '';
   position: absolute;
   inset: -6px;
