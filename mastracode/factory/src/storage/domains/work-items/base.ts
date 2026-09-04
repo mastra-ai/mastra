@@ -1141,7 +1141,7 @@ function toSupervisorFinding(row: GovernanceDbRow): FactorySupervisorFindingReco
  */
 async function upsertSupervisorFinding(
   ops: FactoryStorageOps,
-  scope: { orgId: string; factoryProjectId: string; now: Date; renotify?: boolean },
+  scope: { orgId: string; factoryProjectId: string; now: Date; newContent?: boolean },
   finding: FactoryHealthFinding,
   row: GovernanceDbRow | null | undefined,
 ): Promise<boolean> {
@@ -1164,24 +1164,26 @@ async function upsertSupervisorFinding(
   }
   const reopening = row.resolved_at !== null;
   const findingChanged = stableJson(row.finding) !== stableJson(finding);
-  if (!reopening && !findingChanged && !scope.renotify) return false;
-  await ops.updateAtomic<GovernanceDbRow>('factory_supervisor_findings', { id: row.id }, current => ({
-    finding,
-    occurrence: Number(current.occurrence) + (current.resolved_at !== null ? 1 : 0),
-    opened_at: current.resolved_at !== null ? scope.now : current.opened_at,
-    updated_at: scope.now,
-    resolved_at: null,
-    // A reopened incident re-rings the doorbell: clear the notification
-    // stamp so the next sweep emits for it again. A caller that is about to
-    // ring for new content (`renotify`) clears it too, so a ring that never
-    // lands is retried by the sweep rather than lost.
-    last_notified_at: current.resolved_at !== null || scope.renotify ? null : current.last_notified_at,
-    // A reopened incident is a new incident: stale escalation state
-    // must never keep it visible (or hidden) on the old terms.
-    status: current.resolved_at !== null ? 'open' : current.status,
-    escalated_at: current.resolved_at !== null ? null : current.escalated_at,
-    escalation_note: current.resolved_at !== null ? null : current.escalation_note,
-  }));
+  if (!reopening && !findingChanged && !scope.newContent) return false;
+  await ops.updateAtomic<GovernanceDbRow>('factory_supervisor_findings', { id: row.id }, current => {
+    // A reopened incident is a new incident, and so is an open one refreshed
+    // with new actionable content (a run that parked on a different
+    // question): the doorbell rings again (stamp cleared, so a ring that
+    // never lands is retried by the sweep) and stale escalation state must
+    // never keep it visible (or hidden) on the old terms.
+    const fresh = current.resolved_at !== null || scope.newContent === true;
+    return {
+      finding,
+      occurrence: Number(current.occurrence) + (current.resolved_at !== null ? 1 : 0),
+      opened_at: current.resolved_at !== null ? scope.now : current.opened_at,
+      updated_at: scope.now,
+      resolved_at: null,
+      last_notified_at: fresh ? null : current.last_notified_at,
+      status: fresh ? 'open' : current.status,
+      escalated_at: fresh ? null : current.escalated_at,
+      escalation_note: fresh ? null : current.escalation_note,
+    };
+  });
   return true;
 }
 
@@ -1350,8 +1352,13 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     factoryProjectId: string;
     finding: FactoryHealthFinding;
     now: Date;
-    /** The caller will ring for this content itself: clear the notification stamp so an unsent ring is swept up. */
-    renotify?: boolean;
+    /**
+     * The finding carries new actionable content (a different question on the
+     * same run): the notification stamp and any escalation state are reset,
+     * as for a reopened incident. The caller rings for it; an unsent ring is
+     * swept up.
+     */
+    newContent?: boolean;
   }): Promise<FactorySupervisorFindingRecord> {
     const { changed, row } = await this.#withProjectRelationTransaction(
       input.orgId,
@@ -1431,11 +1438,17 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     findingKey: string;
     occurrence: number;
     notifiedAt: Date;
+    /** Stamp only if the row still carries exactly this finding content (the content that was rung). */
+    ifFinding?: Record<string, unknown>;
   }): Promise<void> {
     // Occurrence-safe conditional stamp: a resolve/reopen between send and
     // stamp must not suppress the new occurrence's notification, so the stamp
     // only lands on the exact occurrence that was emitted, while it is still
-    // open and still un-stamped. No matching row is a silent no-op.
+    // open and still un-stamped. Content-safe too, when asked: a refresh with
+    // new content between send and stamp (a run that parked on yet another
+    // question) must not be marked notified by the older ring. No matching row
+    // is a silent no-op.
+    const expected = input.ifFinding ? stableJson(input.ifFinding) : undefined;
     await this.#db.updateAtomic<GovernanceDbRow>(
       'factory_supervisor_findings',
       {
@@ -1446,7 +1459,10 @@ export class WorkItemsStorage extends FactoryStorageDomain {
         resolved_at: null,
         last_notified_at: null,
       },
-      () => ({ last_notified_at: input.notifiedAt }),
+      current =>
+        expected !== undefined && stableJson(current.finding) !== expected
+          ? null
+          : { last_notified_at: input.notifiedAt },
     );
   }
 
