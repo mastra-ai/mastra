@@ -170,22 +170,29 @@ export function decisionFailedFinding(
     kind: 'decision-failed',
     id: `decision-failed:${decision.id}`,
     ...subject,
-    evidence: `Decision ${decision.id} (${describeDecision(decision)}) failed after ${decision.attempts} attempt(s) at ${decision.updatedAt.toISOString()}${decision.failureCode ? ` [${decision.failureCode}]` : ''}: ${truncate(decision.lastError ?? 'no error recorded')}`,
+    evidence: `${decisionFailedEvidencePrefix(decision)}${decision.failureCode ? ` [${decision.failureCode}]` : ''}: ${truncate(decision.lastError ?? 'no error recorded')}`,
     ageMs: now.getTime() - decision.updatedAt.getTime(),
     suggestedRepair: { action: 'retry-decision', decisionId: decision.id },
   };
 }
 
+/** Everything the evidence line says before the optional ` [code]` slot; nothing here comes from error text. */
+function decisionFailedEvidencePrefix(decision: FactoryDeferredDecisionRecord): string {
+  return `Decision ${decision.id} (${describeDecision(decision)}) failed after ${decision.attempts} attempt(s) at ${decision.updatedAt.toISOString()}`;
+}
+
 /**
  * Reads the failure code back out of a `decision-failed` evidence line the
- * helper above wrote (` [code]: `). The code is the classification the
- * supervisor reads (a parked question vs a crash), and it must survive into a
- * later re-ring from the stored row; the finding shape itself stays as is.
+ * helper above wrote. The code is the classification the supervisor reads
+ * (a parked question vs a crash), and it must survive into a later re-ring
+ * from the stored row; the finding shape itself stays as is. The match is
+ * anchored at the start of the line over the whole generated prefix, so
+ * nothing inside the error text (which follows the slot) can pass as a code.
  */
 export function decisionFailureCodeFromEvidence(evidence: string): string | undefined {
-  // Anchored on the writer's fixed `attempt(s) at <ISO timestamp> [code]: `
-  // slot so bracketed text inside the error message can never pass as a code.
-  return /attempt\(s\) at \d{4}-\d{2}-\d{2}T[\d:.]+Z \[([a-z_]+)\]: /.exec(evidence)?.[1];
+  return /^Decision \S+ \([^()]*(?: \([^()]*\))?\) failed after \d+ attempt\(s\) at \d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z \[([a-z_]+)\]: /.exec(
+    evidence,
+  )?.[1];
 }
 
 export function computeFactoryHealth(
