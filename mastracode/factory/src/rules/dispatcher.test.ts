@@ -5,7 +5,7 @@ import { FactoryFeedReader } from '../storage/domains/comments/feed-context.js';
 import { FACTORY_RULE_MATERIALIZATION_KEY, type WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
 import { FactorySupervisorHealthWorker } from '../supervisor/health-worker.js';
-import { runFactoryHealthCheck } from '../supervisor/health.js';
+import { decisionFailedFinding, runFactoryHealthCheck } from '../supervisor/health.js';
 import { builtInFactoryRules, defaultFactoryRules } from './defaults.js';
 import { FACTORY_DISPATCH_CONSTANTS, FactoryDecisionDispatcher } from './dispatcher.js';
 import { FactoryTransitionService } from './transition-service.js';
@@ -4363,17 +4363,20 @@ describe('FactoryDecisionDispatcher', () => {
       expect(record.suspension?.question.endsWith('…')).toBe(true);
     });
 
-    it('bounds the captured options in count and label length', async () => {
+    it('keeps options verbatim or not at all: an oversized set is marked omitted, never altered', async () => {
       const storage = (await createFactoryStorageForTests()).workItems;
-      const options = Array.from({ length: 50 }, (_, index) => ({ label: `${index}-${'x'.repeat(500)}` }));
-      const { record } = await park(storage, { suspendPayload: { question: 'Pick', options } });
-      expect(record.suspension?.options).toHaveLength(20);
-      for (const label of record.suspension?.options ?? []) {
-        expect(label).toHaveLength(120);
-        expect(label.endsWith('…')).toBe(true);
-      }
-      // What the sweep renders and rings stays bounded with it.
-      expect(record.suspension?.options?.[0]?.startsWith('0-')).toBe(true);
+      const tooMany = Array.from({ length: 50 }, (_, index) => ({ label: `option-${index}` }));
+      const { record: many } = await park(storage, { suspendPayload: { question: 'Pick', options: tooMany } });
+      expect(many.suspension?.options).toBeUndefined();
+      expect(many.suspension?.optionsOmitted).toBe(true);
+
+      const tooLong = [{ label: 'short' }, { label: 'x'.repeat(500) }];
+      const { record: long } = await park(storage, { suspendPayload: { question: 'Pick', options: tooLong } });
+      expect(long.suspension?.options).toBeUndefined();
+      expect(long.suspension?.optionsOmitted).toBe(true);
+      // The sweep says so instead of rendering a truncated choice list.
+      const finding = decisionFailedFinding(long, { workItemId: null, workItemNumber: null, title: 'x' }, new Date());
+      expect(finding.evidence).toContain('too many or too long to capture');
     });
 
     it('falls back to the tool and call id when the suspension carries no text', async () => {

@@ -830,6 +830,7 @@ export class MastraFactory {
                         workItems: workItemsStorage,
                         audit: auditStorage,
                         controller: prepared.base.controller,
+                        notifySupervisor: input => notifySupervisor({ controller: prepared.base.controller }, input),
                         logger: { warn: (message, meta) => console.warn(`[Factory Supervisor] ${message}`, meta) },
                       }),
                     );

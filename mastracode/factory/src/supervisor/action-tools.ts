@@ -2,18 +2,36 @@ import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 
 import type { IntegrationTools } from '../integrations/base.js';
-import { FACTORY_DISPATCH_CONSTANTS } from '../rules/dispatcher.js';
+import { describeParkedTool, FACTORY_DISPATCH_CONSTANTS } from '../rules/dispatcher.js';
 import type { AuditActorType, AuditStorage } from '../storage/domains/audit/base.js';
-import type { FactoryParkedSuspension, WorkItemsStorage } from '../storage/domains/work-items/base.js';
+import type {
+  FactoryDeferredDecisionRecord,
+  FactoryParkedSuspension,
+  FactoryRunBindingRecord,
+  WorkItemsStorage,
+} from '../storage/domains/work-items/base.js';
 import { decisionIdFromFindingKey, QUESTION_FAILURE_CODES } from './health.js';
+import type { NotifySupervisorInput } from './notify.js';
 import type { SupervisorScope } from './read-tools.js';
+import { MAX_TEXT, truncateText } from './text.js';
 
-/** The slice of a code-agent session an answer needs: is it still parked, and resume it. */
+/** What a resumed run does next, as the session reports it. */
+export type ResumeBoundaryEvent =
+  | { type: 'tool_suspended'; toolCallId: string; toolName: string; args?: unknown; suspendPayload?: unknown }
+  | { type: 'agent_end'; reason: 'complete' | 'aborted' | 'error' | 'suspended' }
+  | { type: 'error'; error: unknown }
+  | { type: string };
+
+/** The slice of a code-agent session an answer needs: is it still parked, resume it, and watch what follows. */
 export interface SuspendableSession {
   suspensions: { has(input: { toolCallId: string }): boolean };
+  /** Resolves when the resumed run reaches its next boundary: parks again, ends, or errors. */
   respondToToolSuspension(input: { resumeData: unknown; toolCallId?: string }): Promise<void>;
-  subscribe(listener: (event: { type: string; error?: unknown }) => void): () => void;
+  subscribe(listener: (event: ResumeBoundaryEvent) => void): () => void;
 }
+
+/** How long an answer waits for the resumed run's next boundary before reporting it as proceeding. */
+const RESUME_ACK_MS = 2_000;
 
 /**
  * Who a supervisor turn is acting as. Authenticated turns carry the human's
@@ -28,12 +46,23 @@ export interface SupervisorActor {
 interface SupervisorActionDependencies {
   scope: SupervisorScope;
   actor: SupervisorActor;
-  workItems: Pick<WorkItemsStorage, 'escalateSupervisorFinding' | 'getDeferredDecision' | 'listRunBindings'>;
+  workItems: Pick<
+    WorkItemsStorage,
+    | 'escalateSupervisorFinding'
+    | 'getDeferredDecision'
+    | 'listRunBindings'
+    | 'resolveAnsweredDecision'
+    | 'reparkDecision'
+  >;
   audit: Pick<AuditStorage, 'record'>;
   /** Session lookup by resource id, the join key persisted with a parked suspension. */
   controller: { getSessionByResource(resourceId: string): Promise<SuspendableSession | undefined> };
+  /** Rings the supervisor when an answered run parks on a new question. */
+  notifySupervisor?: (input: NotifySupervisorInput) => Promise<void>;
   logger?: { warn: (message: string, meta?: Record<string, unknown>) => void };
   now?: () => Date;
+  /** Test seam for {@link RESUME_ACK_MS}. */
+  resumeAckMs?: number;
 }
 
 /**
@@ -75,6 +104,90 @@ export function createFactorySupervisorActionTools(deps: SupervisorActionDepende
       });
       return { audited: false, auditError: 'Done, but recording the audit entry failed. Do not retry.' };
     }
+  };
+
+  /**
+   * What an answered run did next, recorded on its decision so the finding
+   * keeps telling the truth: completed → the decision succeeded and the next
+   * sweep resolves the finding; parked again → the new question replaces the
+   * old one and the supervisor is rung; failed → escalated to a person.
+   */
+  const settleResumedRun = async ({
+    event,
+    decision,
+    binding,
+    question,
+    given,
+    escalate,
+  }: {
+    event: ResumeBoundaryEvent | undefined;
+    decision: FactoryDeferredDecisionRecord;
+    binding: FactoryRunBindingRecord;
+    question: string;
+    given: string;
+    escalate: (note: string) => Promise<Record<string, unknown>>;
+  }): Promise<Record<string, unknown>> => {
+    const tenant = { orgId: deps.scope.orgId, factoryProjectId: deps.scope.factoryProjectId, decisionId: decision.id };
+    if (event?.type === 'tool_suspended' && 'toolCallId' in event) {
+      const next = describeParkedTool(
+        {
+          toolName: event.toolName,
+          toolCallId: event.toolCallId,
+          args: event.args,
+          suspendPayload: event.suspendPayload,
+        },
+        binding,
+      );
+      await deps.workItems.reparkDecision({
+        ...tenant,
+        suspension: next,
+        lastError: `Factory run is waiting on ${next.toolName} for an answer.`,
+        now: now(),
+      });
+      try {
+        await deps.notifySupervisor?.({
+          projectId: deps.scope.factoryProjectId,
+          findingKey: `decision-failed:${decision.id}`,
+          kind: 'decision-failed',
+          summary: `Worker answered, then asked again: ${next.question}`,
+          ...(decision.failureCode ? { failureCode: decision.failureCode } : {}),
+          priority: 'high',
+        });
+      } catch (error) {
+        deps.logger?.warn('Factory supervisor could not ring for a re-parked run', {
+          decisionId: decision.id,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+      return {
+        run: 'parked-again',
+        nextQuestion: next.question,
+        ...(next.options ? { nextOptions: next.options } : {}),
+        note: 'The worker took the answer and asked another question; answer it the same way (same decision id).',
+      };
+    }
+    if (event?.type === 'agent_end' && 'reason' in event && event.reason === 'complete') {
+      await deps.workItems.resolveAnsweredDecision({ ...tenant, now: now() });
+      return {
+        run: 'completed',
+        decisionStatus: 'succeeded',
+        note: 'The run finished; its finding clears at the next sweep.',
+      };
+    }
+    if (event?.type === 'agent_end' && 'reason' in event && event.reason === 'suspended') {
+      return escalate(
+        `The worker asked: ${question} The supervisor answered (${given}); the run then parked again on something the session did not describe. A person needs to look at the session.`,
+      );
+    }
+    const error = event && 'error' in event ? event.error : undefined;
+    deps.logger?.warn('Factory supervisor answer did not carry the run to completion', {
+      decisionId: decision.id,
+      boundary: event?.type,
+      error: error instanceof Error ? error.message : error === undefined ? undefined : String(error),
+    });
+    return escalate(
+      `The worker asked: ${question} The supervisor answered (${given}) but the run ${event?.type === 'error' ? 'failed while resuming' : 'ended without finishing'}; a person needs to look at the session.`,
+    );
   };
 
   return {
@@ -128,7 +241,10 @@ export function createFactorySupervisorActionTools(deps: SupervisorActionDepende
       inputSchema: z.object({
         decisionId: z.string().min(1).optional(),
         findingKey: z.string().min(1).optional(),
-        answer: z.union([z.string().trim().min(1), z.array(z.string().trim().min(1)).min(1)]),
+        answer: z.union([
+          z.string().trim().min(1).max(MAX_TEXT),
+          z.array(z.string().trim().min(1).max(MAX_TEXT)).min(1).max(20),
+        ]),
       }),
       execute: async ({ decisionId: givenId, findingKey, answer }) => {
         const fromKey = findingKey ? decisionIdFromFindingKey(findingKey) : undefined;
@@ -160,11 +276,12 @@ export function createFactorySupervisorActionTools(deps: SupervisorActionDepende
 
         const escalate = async (note: string) => {
           const escalatedAt = now();
+          const bounded = truncateText(note);
           const finding = await deps.workItems.escalateSupervisorFinding({
             orgId: deps.scope.orgId,
             factoryProjectId: deps.scope.factoryProjectId,
             findingKey: key,
-            note,
+            note: bounded,
             escalatedAt,
           });
           if (!finding) {
@@ -175,9 +292,9 @@ export function createFactorySupervisorActionTools(deps: SupervisorActionDepende
           const audited = await auditAfter(
             'factory.supervisor.suspension_escalated',
             { type: 'deferred_decision', id: decisionId },
-            { findingKey: key, note, answer },
+            { findingKey: key, note: bounded, answer },
           );
-          return { decisionId, outcome: 'escalated' as const, findingKey: key, note, ...audited };
+          return { decisionId, outcome: 'escalated' as const, findingKey: key, note: bounded, ...audited };
         };
 
         const parked = decision.suspension;
@@ -194,6 +311,11 @@ export function createFactorySupervisorActionTools(deps: SupervisorActionDepende
         if (parked.toolName !== 'ask_user') {
           return escalate(
             `The worker is parked on ${parked.toolName}, which the supervisor cannot answer on its own. Question: ${parked.question}. Supervisor's read: ${given}`,
+          );
+        }
+        if (parked.optionsOmitted) {
+          return escalate(
+            `The worker asked: ${parked.question} It offered choices that could not be captured verbatim, so no answer can be matched to them; a person needs to answer from the session. Supervisor's read: ${given}`,
           );
         }
         const resumeData = askUserResumeData(parked, answer);
@@ -235,32 +357,55 @@ export function createFactorySupervisorActionTools(deps: SupervisorActionDepende
         }
         // No await between the check above and this call: the session resolves
         // the suspension synchronously on entry, so nothing can take it in
-        // between. A resume that fails inside the run is swallowed by the
-        // session (it emits an error and ends the run), so watch for that.
-        let resumeError: unknown;
-        const unsubscribe = session.subscribe(event => {
-          if (event.type === 'error') resumeError = event.error;
-        });
-        try {
-          await session.respondToToolSuspension({ resumeData, toolCallId: parked.toolCallId });
-        } finally {
-          unsubscribe();
-        }
-        if (resumeError !== undefined) {
-          deps.logger?.warn('Factory supervisor answer did not resume the run', {
-            decisionId,
-            error: resumeError instanceof Error ? resumeError.message : String(resumeError),
-          });
-          return escalate(
-            `The worker asked: ${parked.question} The supervisor answered (${given}) but the run failed while resuming; a person needs to look at the session.`,
-          );
-        }
+        // between. The call itself settles at the resumed run's next boundary
+        // (parks again, ends, or errors) — minutes, for a real run — so the
+        // answer is acknowledged after a short wait and the boundary is
+        // handled whenever it arrives, in the background if need be.
+        const boundary = watchResumeBoundary(session);
+        const resumed = session
+          .respondToToolSuspension({ resumeData, toolCallId: parked.toolCallId })
+          .then(
+            () => boundary.first(),
+            (error): ResumeBoundaryEvent => ({ type: 'error', error }),
+          )
+          .finally(() => boundary.stop());
+        const settle = (event: ResumeBoundaryEvent | undefined) =>
+          settleResumedRun({ event, decision, binding, question: parked.question, given, escalate });
+        const first = await Promise.race([
+          resumed,
+          new Promise<undefined>(resolve => setTimeout(() => resolve(undefined), deps.resumeAckMs ?? RESUME_ACK_MS)),
+        ]);
         const audited = await auditAfter(
           'factory.supervisor.suspension_answered',
           { type: 'deferred_decision', id: decisionId },
           { toolName: parked.toolName, toolCallId: parked.toolCallId, question: parked.question, answer: resumeData },
         );
-        return { decisionId, outcome: 'answered' as const, question: parked.question, answer: resumeData, ...audited };
+        if (first === undefined) {
+          void resumed.then(settle).catch(error => {
+            deps.logger?.warn('Factory supervisor could not record how an answered run ended', {
+              decisionId,
+              error: error instanceof Error ? error.message : String(error),
+            });
+          });
+          return {
+            decisionId,
+            outcome: 'answered' as const,
+            run: 'proceeding' as const,
+            question: parked.question,
+            answer: resumeData,
+            ...audited,
+            note: 'The run is going again; its finding clears when the run ends, or updates if it parks on another question.',
+          };
+        }
+        const settled = await settle(first);
+        return {
+          decisionId,
+          outcome: 'answered' as const,
+          question: parked.question,
+          answer: resumeData,
+          ...audited,
+          ...settled,
+        };
       },
     }),
   };
@@ -283,4 +428,17 @@ function askUserResumeData(parked: FactoryParkedSuspension, answer: string | str
   const chosen = matched as string[];
   if (parked.selectionMode === 'multi_select') return chosen;
   return chosen.length === 1 ? chosen[0] : undefined;
+}
+
+/** Collects the first boundary event the session emits after a resume, until stopped. */
+function watchResumeBoundary(session: SuspendableSession): {
+  first(): ResumeBoundaryEvent | undefined;
+  stop(): void;
+} {
+  let first: ResumeBoundaryEvent | undefined;
+  const unsubscribe = session.subscribe(event => {
+    if (first) return;
+    if (event.type === 'tool_suspended' || event.type === 'agent_end' || event.type === 'error') first = event;
+  });
+  return { first: () => first, stop: unsubscribe };
 }

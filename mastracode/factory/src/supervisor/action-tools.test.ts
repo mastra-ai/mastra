@@ -2,10 +2,12 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
 import { createFactorySupervisorActionTools } from './action-tools.js';
+import { computeFactoryHealth } from './health.js';
 
 const PROJECT_ID = '11111111-2222-4333-8444-555555555555';
 const SCOPE = { orgId: 'org-1', factoryProjectId: PROJECT_ID };
 const NOW = new Date('2026-09-04T12:00:00.000Z');
+const emptyHealthInputs = { items: [], decisions: [], bindings: [], pendingStarts: [] };
 
 function execute<T>(tool: unknown, input: unknown): Promise<T> {
   return (tool as { execute: (input: unknown, ctx: unknown) => Promise<T> }).execute(input, {});
@@ -237,21 +239,38 @@ describe('factory_answer_suspension', () => {
     return { decision, binding, item };
   }
 
-  function fakeSession(parkedCallIds: string[] = ['call-1'], resumeError?: Error) {
+  type Boundary =
+    | { type: 'agent_end'; reason: 'complete' | 'aborted' | 'error' | 'suspended' }
+    | { type: 'error'; error: unknown }
+    | { type: 'tool_suspended'; toolCallId: string; toolName: string; args?: unknown; suspendPayload?: unknown };
+
+  /**
+   * Behaves like core: an unknown suspension is a silent no-op; a known one is
+   * consumed once and the call settles at the resumed run's next boundary,
+   * which is emitted to subscribers (a completed run by default). `delayMs`
+   * holds the boundary back, as a real run would for minutes.
+   */
+  function fakeSession(
+    parkedCallIds: string[] = ['call-1'],
+    boundary: Boundary | Error = { type: 'agent_end', reason: 'complete' },
+    delayMs = 0,
+  ) {
     const parked = new Set(parkedCallIds);
-    const listeners = new Set<(event: { type: string; error?: unknown }) => void>();
+    const listeners = new Set<(event: Boundary) => void>();
+    const emit = (event: Boundary) => {
+      if (event.type === 'tool_suspended') parked.add(event.toolCallId);
+      for (const listener of listeners) listener(event);
+    };
     const respondToToolSuspension = vi.fn(async ({ toolCallId }: { resumeData: unknown; toolCallId?: string }) => {
-      // Like core: an unknown suspension is a silent no-op; a known one is
-      // consumed once; a resume that fails inside the run is swallowed into an
-      // `error` event instead of a rejection.
       if (!toolCallId || !parked.has(toolCallId)) return;
       parked.delete(toolCallId);
-      if (resumeError) for (const listener of listeners) listener({ type: 'error', error: resumeError });
+      if (delayMs) await new Promise(resolve => setTimeout(resolve, delayMs));
+      emit(boundary instanceof Error ? { type: 'error', error: boundary } : boundary);
     });
     return {
       suspensions: { has: ({ toolCallId }: { toolCallId: string }) => parked.has(toolCallId) },
       respondToToolSuspension,
-      subscribe: (listener: (event: { type: string; error?: unknown }) => void) => {
+      subscribe: (listener: (event: Boundary) => void) => {
         listeners.add(listener);
         return () => listeners.delete(listener);
       },
@@ -272,18 +291,21 @@ describe('factory_answer_suspension', () => {
     const getSessionByResource = vi.fn(async (resourceId: string) =>
       resourceId === seeded.binding.resourceId ? session : undefined,
     );
+    const notify = vi.fn(async () => {});
     const tools = createFactorySupervisorActionTools({
       scope: SCOPE,
       actor: overrides.actor ?? { type: 'agent', id: 'agent:thread-1' },
       workItems: seed.workItems,
       audit: overrides.audit ?? seed.audit,
       controller: { getSessionByResource },
+      notifySupervisor: notify,
       ...(overrides.warn ? { logger: { warn: overrides.warn } } : {}),
       now: () => NOW,
+      resumeAckMs: 50,
     });
     const events = async () =>
       (await seed.audit.list({ orgId: 'org-1', factoryProjectId: PROJECT_ID, limit: 10 })).events;
-    return { ...seed, ...seeded, tools, session, getSessionByResource, events };
+    return { ...seed, ...seeded, tools, session, getSessionByResource, notify, events };
   }
 
   it('is approval-free and registers beside the escalate tool', async () => {
@@ -292,7 +314,7 @@ describe('factory_answer_suspension', () => {
   });
 
   it('answers a free-text question with a string and resumes exactly that suspension', async () => {
-    const { tools, decision, session, getSessionByResource, events } = await answerSetup();
+    const { tools, decision, session, getSessionByResource, events, workItems } = await answerSetup();
 
     const result = await execute<any>(tools.factory_answer_suspension, {
       decisionId: decision.id,
@@ -305,7 +327,14 @@ describe('factory_answer_suspension', () => {
       question: 'Which database should the fixture use?',
       answer: 'Use libsql.',
       audited: true,
+      run: 'completed',
+      decisionStatus: 'succeeded',
+      note: expect.any(String),
     });
+    // The decision is done, so the next sweep has no failed decision to report.
+    const after = (await workItems.getDeferredDecision('org-1', PROJECT_ID, decision.id))!;
+    expect(after.status).toBe('succeeded');
+    expect(computeFactoryHealth({ ...emptyHealthInputs, decisions: [after] }, NOW).findings).toEqual([]);
     expect(getSessionByResource).toHaveBeenCalledWith('resource-1');
     expect(session.respondToToolSuspension).toHaveBeenCalledWith({ resumeData: 'Use libsql.', toolCallId: 'call-1' });
     expect((await events())[0]).toMatchObject({
@@ -383,18 +412,20 @@ describe('factory_answer_suspension', () => {
   });
 
   it('reports already-handled when the question is no longer parked, and a double answer is benign', async () => {
+    // A person answered from the session (or the process restarted): the
+    // decision still reads failed, but the registry no longer holds the call.
+    const handled = await answerSetup({}, fakeSession([]));
+    expect(
+      await execute<any>(handled.tools.factory_answer_suspension, { decisionId: handled.decision.id, answer: 'x' }),
+    ).toMatchObject({ outcome: 'already-handled', reason: expect.stringContaining('restarted') });
+    expect(handled.session.respondToToolSuspension).not.toHaveBeenCalled();
+
+    // A second answer after our own: the run finished, the decision is done.
     const { tools, decision, session } = await answerSetup();
     await execute(tools.factory_answer_suspension, { decisionId: decision.id, answer: 'first' });
-    // A person (or the first answer) already resumed it: the registry no longer holds the call.
     const second = await execute<any>(tools.factory_answer_suspension, { decisionId: decision.id, answer: 'second' });
-    expect(second).toMatchObject({ outcome: 'already-handled' });
+    expect(second).toMatchObject({ outcome: 'not-parked' });
     expect(session.respondToToolSuspension).toHaveBeenCalledTimes(1);
-
-    // After a restart the session exists but holds no in-memory suspension: same clean answer.
-    const restarted = await answerSetup({}, fakeSession([]));
-    expect(
-      await execute<any>(restarted.tools.factory_answer_suspension, { decisionId: restarted.decision.id, answer: 'x' }),
-    ).toMatchObject({ outcome: 'already-handled', reason: expect.stringContaining('restarted') });
   });
 
   it('fails closed on a revoked binding and on a decision outside its factory', async () => {
@@ -461,6 +492,8 @@ describe('factory_answer_suspension', () => {
             seed.workItems.listRunBindings(...args),
           escalateSupervisorFinding: (...args: Parameters<typeof seed.workItems.escalateSupervisorFinding>) =>
             seed.workItems.escalateSupervisorFinding(...args),
+          resolveAnsweredDecision: async () => null,
+          reparkDecision: async () => null,
         },
         audit: seed.audit,
         controller: { getSessionByResource },
@@ -480,7 +513,9 @@ describe('factory_answer_suspension', () => {
     const { tools, decision, workItems, events } = await answerSetup(
       {},
       fakeSession(['call-1'], new Error('snapshot gone')),
-      { warn },
+      {
+        warn,
+      },
     );
     const result = await execute<any>(tools.factory_answer_suspension, { decisionId: decision.id, answer: 'x' });
     expect(result).toMatchObject({ outcome: 'escalated' });
@@ -488,9 +523,13 @@ describe('factory_answer_suspension', () => {
     expect((await workItems.listSupervisorFindingPage({ ...SCOPE, limit: 5 })).rows[0]).toMatchObject({
       status: 'escalated',
     });
-    expect((await events()).map(e => e.action)).toEqual(['factory.supervisor.suspension_escalated']);
+    // The answer was submitted (audited as such), and the failure that followed is escalated.
+    expect((await events()).map(e => e.action).sort()).toEqual([
+      'factory.supervisor.suspension_answered',
+      'factory.supervisor.suspension_escalated',
+    ]);
     expect(warn).toHaveBeenCalledWith(
-      'Factory supervisor answer did not resume the run',
+      'Factory supervisor answer did not carry the run to completion',
       expect.objectContaining({ error: 'snapshot gone' }),
     );
   });
@@ -549,5 +588,115 @@ describe('factory_answer_suspension', () => {
       actorType: 'human',
       actorId: 'user-7',
     });
+  });
+
+  it('records a run that parks on a second question, rings, and answers the new suspension next time', async () => {
+    const second = {
+      type: 'tool_suspended' as const,
+      toolCallId: 'call-2',
+      toolName: 'ask_user',
+      suspendPayload: { question: 'And which port?', options: [{ label: '5432' }, { label: '5433' }] },
+    };
+    const { tools, decision, session, notify, workItems } = await answerSetup({}, fakeSession(['call-1'], second));
+
+    const first = await execute<any>(tools.factory_answer_suspension, { decisionId: decision.id, answer: 'libsql' });
+    expect(first).toMatchObject({
+      outcome: 'answered',
+      run: 'parked-again',
+      nextQuestion: 'And which port?',
+      nextOptions: ['5432', '5433'],
+    });
+    const reparked = (await workItems.getDeferredDecision('org-1', PROJECT_ID, decision.id))!;
+    expect(reparked.status).toBe('failed');
+    expect(reparked.suspension).toMatchObject({
+      toolCallId: 'call-2',
+      question: 'And which port?',
+      options: ['5432', '5433'],
+    });
+    expect(reparked.suspension?.session).toEqual(decision.suspension?.session);
+    expect(notify).toHaveBeenCalledWith(
+      expect.objectContaining({
+        findingKey: `decision-failed:${decision.id}`,
+        priority: 'high',
+        failureCode: 'run_awaiting_input',
+      }),
+    );
+
+    const again = await execute<any>(tools.factory_answer_suspension, { decisionId: decision.id, answer: '5433' });
+    expect(again).toMatchObject({ outcome: 'answered' });
+    expect(session.respondToToolSuspension).toHaveBeenLastCalledWith({ resumeData: '5433', toolCallId: 'call-2' });
+  });
+
+  it('acknowledges a long run as proceeding and records its end when it comes', async () => {
+    const { tools, decision, workItems } = await answerSetup(
+      {},
+      fakeSession(['call-1'], { type: 'agent_end', reason: 'complete' }, 200),
+    );
+    const result = await execute<any>(tools.factory_answer_suspension, { decisionId: decision.id, answer: 'x' });
+    expect(result).toMatchObject({ outcome: 'answered', run: 'proceeding' });
+    expect((await workItems.getDeferredDecision('org-1', PROJECT_ID, decision.id))!.status).toBe('failed');
+    await vi.waitFor(async () => {
+      expect((await workItems.getDeferredDecision('org-1', PROJECT_ID, decision.id))!.status).toBe('succeeded');
+    });
+  });
+
+  it('escalates when the answered run aborts instead of finishing', async () => {
+    const { tools, decision, workItems } = await answerSetup(
+      {},
+      fakeSession(['call-1'], { type: 'agent_end', reason: 'aborted' }),
+    );
+    const result = await execute<any>(tools.factory_answer_suspension, { decisionId: decision.id, answer: 'x' });
+    expect(result).toMatchObject({ outcome: 'escalated' });
+    expect(result.note).toContain('ended without finishing');
+    expect((await workItems.getDeferredDecision('org-1', PROJECT_ID, decision.id))!.status).toBe('failed');
+  });
+
+  it('escalates a question whose choices could not be captured verbatim', async () => {
+    const seed = await createFactoryStorageForTests();
+    const { decision } = await parkDecision(seed);
+    const omitted = { ...decision, suspension: { ...decision.suspension!, optionsOmitted: true as const } };
+    const session = fakeSession();
+    const tools = createFactorySupervisorActionTools({
+      scope: SCOPE,
+      actor: { type: 'agent', id: 'agent:thread-1' },
+      workItems: {
+        getDeferredDecision: async () => omitted,
+        listRunBindings: (...args: Parameters<typeof seed.workItems.listRunBindings>) =>
+          seed.workItems.listRunBindings(...args),
+        escalateSupervisorFinding: (...args: Parameters<typeof seed.workItems.escalateSupervisorFinding>) =>
+          seed.workItems.escalateSupervisorFinding(...args),
+        resolveAnsweredDecision: async () => null,
+        reparkDecision: async () => null,
+      },
+      audit: seed.audit,
+      controller: { getSessionByResource: async () => session },
+      now: () => NOW,
+    });
+    const result = await execute<any>(tools.factory_answer_suspension, { decisionId: decision.id, answer: 'anything' });
+    expect(result).toMatchObject({ outcome: 'escalated' });
+    expect(result.note).toContain('could not be captured verbatim');
+    expect(session.respondToToolSuspension).not.toHaveBeenCalled();
+  });
+
+  it('bounds generated escalation notes and the answer input', async () => {
+    const { tools, decision, workItems } = await answerSetup({
+      toolName: 'submit_plan',
+      failureCode: 'plan_awaiting_approval',
+    });
+    const result = await execute<any>(tools.factory_answer_suspension, {
+      decisionId: decision.id,
+      answer: 'y'.repeat(600),
+    });
+    expect(result).toMatchObject({ outcome: 'escalated' });
+    expect(result.note.length).toBeLessThanOrEqual(600);
+    expect(
+      (await workItems.listSupervisorFindingPage({ ...SCOPE, limit: 5 })).rows[0]?.escalationNote?.length,
+    ).toBeLessThanOrEqual(600);
+    await expect(
+      execute<{ error?: boolean }>(tools.factory_answer_suspension, {
+        decisionId: decision.id,
+        answer: 'y'.repeat(601),
+      }),
+    ).resolves.toMatchObject({ error: true });
   });
 });

@@ -66,7 +66,7 @@ function isTerminalFailure(attempts: number, failureCode: FactoryDispatchFailure
  */
 type ParkedRunPolicy = 'escalate' | 'await';
 
-type ParkedTool = { toolName: string; toolCallId: string; args: unknown; suspendPayload: unknown };
+export type ParkedTool = { toolName: string; toolCallId: string; args: unknown; suspendPayload: unknown };
 
 /** Bounds on the captured choices of a parked question (count, and label length). */
 const MAX_PARKED_OPTIONS = 20;
@@ -80,7 +80,7 @@ const asRecord = (value: unknown): Record<string, unknown> =>
  * text (from the suspend payload, else the tool args, else the tool itself),
  * any choices offered, and the exact session the suspension lives in.
  */
-function describeParkedTool(parked: ParkedTool, binding: FactoryRunBindingRecord): FactoryParkedSuspension {
+export function describeParkedTool(parked: ParkedTool, binding: FactoryRunBindingRecord): FactoryParkedSuspension {
   const payload = asRecord(parked.suspendPayload);
   const args = asRecord(parked.args);
   const questionText = [payload.question, args.question, payload.message, args.message].find(
@@ -94,20 +94,23 @@ function describeParkedTool(parked: ParkedTool, binding: FactoryRunBindingRecord
         ? JSON.stringify(parked.args)
         : undefined);
   // `ask_user` offers `{ label, description? }` objects; other tools may offer
-  // plain strings. Either way the answer is submitted as the label text. The
-  // set is bounded: it is persisted, rendered into evidence, and rung out as a
-  // notification summary, and a worker can offer anything.
-  const options = [payload.options, args.options]
+  // plain strings. Either way the answer is submitted as the label text, so
+  // labels are kept verbatim or not at all: a set that exceeds the capture
+  // bounds (it is persisted, rendered into evidence, and rung out as a
+  // notification summary) is marked omitted rather than altered.
+  const offered = [payload.options, args.options]
     .map(value =>
       Array.isArray(value)
         ? value
-            .slice(0, MAX_PARKED_OPTIONS)
             .map(item => (typeof item === 'string' ? item : asRecord(item).label))
             .filter((item): item is string => typeof item === 'string' && item.length > 0)
-            .map(item => truncateText(item, MAX_PARKED_OPTION_LENGTH))
         : [],
     )
     .find(labels => labels.length > 0);
+  const optionsOmitted =
+    offered !== undefined &&
+    (offered.length > MAX_PARKED_OPTIONS || offered.some(label => label.length > MAX_PARKED_OPTION_LENGTH));
+  const options = offered && !optionsOmitted ? offered : undefined;
   const selectionMode = [payload.selectionMode, args.selectionMode].find(
     (value): value is string => typeof value === 'string',
   );
@@ -116,6 +119,7 @@ function describeParkedTool(parked: ParkedTool, binding: FactoryRunBindingRecord
     toolCallId: parked.toolCallId,
     question: raw && raw !== '{}' ? truncateText(raw) : `${parked.toolName} (${parked.toolCallId})`,
     ...(options ? { options } : {}),
+    ...(optionsOmitted ? { optionsOmitted: true as const } : {}),
     ...(selectionMode ? { selectionMode } : {}),
     session: { bindingId: binding.id, resourceId: binding.resourceId, threadId: binding.threadId },
   };

@@ -209,7 +209,10 @@ export interface FactoryParkedSuspension {
   toolCallId: string;
   /** The worker's question (or a description of the suspension), bounded text. */
   question: string;
+  /** Offered choices, verbatim. Absent when none were offered, or when they exceeded the capture bounds. */
   options?: string[];
+  /** Set when choices were offered but not captured verbatim (too many, or too long): an answer cannot be matched against them. */
+  optionsOmitted?: true;
   selectionMode?: string;
   session: { bindingId: string; resourceId: string; threadId: string };
 }
@@ -2607,6 +2610,48 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     });
     if (resolved) this.#attentionChanged(resolved);
     return resolved;
+  }
+
+  /**
+   * A decision that failed only because its run parked on a question is done
+   * once that question is answered and the run runs on: the effect the
+   * decision asked for (the run) happened. Marks it `succeeded` so the next
+   * health sweep resolves its finding. Null when it is not a failed decision.
+   */
+  async resolveAnsweredDecision(input: {
+    orgId: string;
+    factoryProjectId: string;
+    decisionId: string;
+    now: Date;
+  }): Promise<FactoryDeferredDecisionRecord | null> {
+    return this.#resolveFailedDecision({ ...input, status: 'succeeded' });
+  }
+
+  /**
+   * The answered run parked again on a new question. The decision stays
+   * `failed` with the same failure code; only the parked question changes,
+   * so the same finding (keyed by the decision) keeps describing the run and
+   * a later answer resumes the right suspension.
+   */
+  async reparkDecision(input: {
+    orgId: string;
+    factoryProjectId: string;
+    decisionId: string;
+    suspension: FactoryParkedSuspension;
+    lastError: string;
+    now: Date;
+  }): Promise<FactoryDeferredDecisionRecord | null> {
+    let reparked = false;
+    const row = await this.#db.updateAtomic<GovernanceDbRow>(
+      'factory_deferred_decisions',
+      { id: input.decisionId, org_id: input.orgId, factory_project_id: input.factoryProjectId },
+      current => {
+        if (current.status !== 'failed') return null;
+        reparked = true;
+        return { suspension: input.suspension, last_error: input.lastError, updated_at: input.now };
+      },
+    );
+    return reparked && row ? toDeferredDecision(row) : null;
   }
 
   async supersedeTerminalDecisionsForWorkItem(input: {
