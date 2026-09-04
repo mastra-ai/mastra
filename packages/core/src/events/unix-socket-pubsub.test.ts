@@ -675,6 +675,82 @@ describe('UnixSocketPubSub', () => {
     });
   });
 
+  it('keeps the final callback active until the broker acknowledges unsubscribe', async () => {
+    const path = await socketPath();
+    const sockets = new Set<net.Socket>();
+    let acknowledgeUnsubscribe: (() => void) | undefined;
+    let unsubscribeReceivedResolve: (() => void) | undefined;
+    const unsubscribeReceived = new Promise<void>(resolve => {
+      unsubscribeReceivedResolve = resolve;
+    });
+    const event = {
+      ...makeEvent({ type: 'during-unsubscribe' }),
+      id: 'event-1',
+      createdAt: new Date().toISOString(),
+      deliveryAttempt: 1,
+    };
+    const server = net.createServer((socket: net.Socket) => {
+      sockets.add(socket);
+      socket.on('close', () => sockets.delete(socket));
+      socket.setEncoding('utf8');
+      let pending = '';
+      socket.on('data', (chunk: string) => {
+        pending += chunk;
+        const lines = pending.split('\n');
+        pending = lines.pop() ?? '';
+        for (const line of lines) {
+          if (!line.trim()) continue;
+          const frame = JSON.parse(line);
+          if (frame.type === 'subscribe') {
+            socket.write(`${JSON.stringify({ type: 'subscribed', topic: frame.topic, group: frame.group })}\n`);
+          } else if (frame.type === 'unsubscribe') {
+            acknowledgeUnsubscribe = () => {
+              socket.write(`${JSON.stringify({ type: 'unsubscribed', topic: frame.topic, group: frame.group })}\n`);
+            };
+            socket.write(`${JSON.stringify({ type: 'event', topic: frame.topic, group: frame.group, event })}\n`);
+            unsubscribeReceivedResolve?.();
+          }
+        }
+      });
+    });
+    await new Promise<void>((resolve, reject) => {
+      server.once('error', reject);
+      server.listen(path, () => resolve());
+    });
+    const pubsub = new UnixSocketPubSub(path);
+    pubsubs.push(pubsub);
+    const cb = vi.fn();
+
+    try {
+      await pubsub.subscribe('topic-a', cb, { group: 'workers' });
+
+      let unsubscribeCompleted = false;
+      const unsubscribe = pubsub.unsubscribe('topic-a', cb).then(() => {
+        unsubscribeCompleted = true;
+      });
+      await unsubscribeReceived;
+      await waitFor(() => expect(cb).toHaveBeenCalledTimes(1));
+      expect(unsubscribeCompleted).toBe(false);
+
+      const replacement = vi.fn();
+      await pubsub.subscribe('topic-a', replacement, { group: 'workers' });
+      expect(acknowledgeUnsubscribe).toBeTypeOf('function');
+      acknowledgeUnsubscribe!();
+      await unsubscribe;
+      expect(unsubscribeCompleted).toBe(true);
+
+      for (const socket of sockets) {
+        socket.write(`${JSON.stringify({ type: 'event', topic: 'topic-a', group: 'workers', event })}\n`);
+      }
+      await waitFor(() => expect(replacement).toHaveBeenCalledTimes(1));
+      expect(cb).toHaveBeenCalledTimes(1);
+    } finally {
+      await pubsub.close();
+      for (const socket of sockets) socket.destroy();
+      await new Promise<void>(resolve => server.close(() => resolve()));
+    }
+  });
+
   it('rejects subscribe when the broker disconnects before acknowledging', async () => {
     const path = await socketPath();
     const server = net.createServer((socket: net.Socket) => {
