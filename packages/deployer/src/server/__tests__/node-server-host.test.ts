@@ -43,8 +43,8 @@ vi.mock('../handlers/health', () => ({
 
 vi.mock('../handlers/client', () => ({
   closeRefreshStreams: vi.fn(),
-  handleClientsRefresh: vi.fn(ctx => ctx.json({ refresh: true })),
-  handleTriggerClientsRefresh: vi.fn(ctx => ctx.json({ triggered: true })),
+  handleClientsRefreshRequest: vi.fn(() => new Response(JSON.stringify({ refresh: true }))),
+  getTriggerClientsRefreshPayload: vi.fn(() => ({ triggered: true })),
   isHotReloadDisabled: vi.fn(() => false),
 }));
 
