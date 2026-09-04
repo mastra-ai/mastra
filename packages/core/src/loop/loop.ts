@@ -98,6 +98,10 @@ export function loop<Tools extends ToolSet = ToolSet, OUTPUT = undefined>({
     modelOutput?.deserializeState(state);
   };
 
+  const markStreamSuspended = () => {
+    modelOutput?.markSuspended();
+  };
+
   // Use the passed-in processorStates map if available, otherwise create a new one.
   // This map persists across loop iterations and is shared by all processor methods.
   const processorStates = rest.processorStates ?? new Map<string, ProcessorState>();
@@ -122,6 +126,7 @@ export function loop<Tools extends ToolSet = ToolSet, OUTPUT = undefined>({
     streamState: {
       serialize: serializeStreamState,
       deserialize: deserializeStreamState,
+      markSuspended: markStreamSuspended,
     },
     processorStates,
     ...rest,
