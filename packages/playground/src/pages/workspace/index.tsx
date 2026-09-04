@@ -325,7 +325,7 @@ export default function Workspace() {
   if (genericError) {
     return (
       <NoDataPageLayout>
-        <QueryError error={genericError} title="Failed to load workspace" />
+        <QueryError error={genericError} resource="workspaces" title="Failed to load workspace" />
       </NoDataPageLayout>
     );
   }

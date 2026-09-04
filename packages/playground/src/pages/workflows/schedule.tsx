@@ -120,7 +120,7 @@ export default function SchedulePage() {
               Trigger history
             </Txt>
             {triggersError ? (
-              <QueryError error={triggersError} title="Failed to load trigger history" />
+              <QueryError error={triggersError} resource="trigger history" title="Failed to load trigger history" />
             ) : (
               <ScheduleTriggersList
                 triggers={triggers ?? []}

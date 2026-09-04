@@ -9,7 +9,7 @@ export function SchedulesPage({ workflowId }: { workflowId?: string } = {}) {
   const [search, setSearch] = useState('');
 
   if (error) {
-    return <QueryError error={error} title="Failed to load schedules" />;
+    return <QueryError error={error} resource="schedules" title="Failed to load schedules" />;
   }
 
   return (
