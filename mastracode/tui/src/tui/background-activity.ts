@@ -12,7 +12,6 @@ export interface BackgroundActivity {
   status: BackgroundActivityStatus;
   createdAt: number;
   completedAt?: number;
-  errorSummary?: string;
 }
 
 export interface BackgroundToolContext {
@@ -59,7 +58,6 @@ export function completeBackgroundActivity(
     status: event.status,
     createdAt: existing?.createdAt ?? Date.now(),
     completedAt: Date.now(),
-    errorSummary: event.errorSummary,
   });
 }
 
