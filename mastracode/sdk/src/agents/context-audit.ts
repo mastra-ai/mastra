@@ -81,14 +81,16 @@ export interface ContextAuditInput {
   conversation?: { promptTokens?: number };
 }
 
-function measure(id: string, label: string, content: string, detail?: string): ContextAuditEntry {
-  return { id, label, detail, tokens: tokenEstimate(content), characters: content.length, percent: 0 };
+async function measure(id: string, label: string, content: string, detail?: string): Promise<ContextAuditEntry> {
+  return { id, label, detail, tokens: await tokenEstimate(content), characters: content.length, percent: 0 };
 }
 
-function sectionEntries(sections: PromptSection[], prefix: string): ContextAuditEntry[] {
-  return sections
-    .filter(section => section.content.length > 0)
-    .map(section => measure(`${prefix}:${section.id}`, section.label, section.content, section.detail));
+async function sectionEntries(sections: PromptSection[], prefix: string): Promise<ContextAuditEntry[]> {
+  return Promise.all(
+    sections
+      .filter(section => section.content.length > 0)
+      .map(section => measure(`${prefix}:${section.id}`, section.label, section.content, section.detail)),
+  );
 }
 
 function group(id: string, label: string, entries: ContextAuditEntry[], note?: string): ContextAuditGroup | undefined {
@@ -100,15 +102,19 @@ function group(id: string, label: string, entries: ContextAuditEntry[], note?: s
  * Group tool definitions by their provider so a chatty MCP server is visible as
  * one line rather than fifty. Per-tool entries stay available underneath.
  */
-function toolEntries(tools: ContextAuditTool[]): ContextAuditEntry[] {
-  return tools.map(tool => {
-    // Approximates the serialized definition: name, description and schema are
-    // what a provider sends, and the exact wire framing is provider-specific.
-    const serialized = [tool.name, tool.description ?? '', tool.parameters ? JSON.stringify(tool.parameters) : ''].join(
-      '\n',
-    );
-    return measure(`tool:${tool.server ?? 'built-in'}:${tool.name}`, tool.name, serialized, tool.server);
-  });
+async function toolEntries(tools: ContextAuditTool[]): Promise<ContextAuditEntry[]> {
+  return Promise.all(
+    tools.map(tool => {
+      // Approximates the serialized definition: name, description and schema are
+      // what a provider sends, and the exact wire framing is provider-specific.
+      const serialized = [
+        tool.name,
+        tool.description ?? '',
+        tool.parameters ? JSON.stringify(tool.parameters) : '',
+      ].join('\n');
+      return measure(`tool:${tool.server ?? 'built-in'}:${tool.name}`, tool.name, serialized, tool.server);
+    }),
+  );
 }
 
 function withPercent<T extends { tokens: number; percent: number }>(items: T[], total: number): T[] {
@@ -129,22 +135,28 @@ function sumTokens(groups: ContextAuditGroup[]): number {
  * window: window size is not exposed by the model registry, and inventing one
  * would make every number wrong for models that disagree with the guess.
  */
-export function buildContextAudit(input: ContextAuditInput): ContextAudit {
+export async function buildContextAudit(input: ContextAuditInput): Promise<ContextAudit> {
   const startupGroups = [
-    group('system-prompt', 'System prompt', sectionEntries(input.promptSections ?? [], 'prompt')),
-    group('dynamic-instructions', 'Dynamic instructions', sectionEntries(input.instructionSections ?? [], 'dynamic')),
+    group('system-prompt', 'System prompt', await sectionEntries(input.promptSections ?? [], 'prompt')),
+    group(
+      'dynamic-instructions',
+      'Dynamic instructions',
+      await sectionEntries(input.instructionSections ?? [], 'dynamic'),
+    ),
     group(
       'skills',
       'Skills catalog',
-      input.skillsCatalog ? [measure('skills:catalog', 'Available skills', input.skillsCatalog)] : [],
+      input.skillsCatalog ? [await measure('skills:catalog', 'Available skills', input.skillsCatalog)] : [],
       'Skill instructions are loaded on demand and are not counted here.',
     ),
-    group('tools', 'Tool definitions', toolEntries(input.tools ?? [])),
+    group('tools', 'Tool definitions', await toolEntries(input.tools ?? [])),
   ].filter((entry): entry is ContextAuditGroup => entry !== undefined);
 
   const observationEntries: ContextAuditEntry[] = [];
   if (typeof input.injectedObservations === 'string') {
-    observationEntries.push(measure('observations:injected', 'Injected into context', input.injectedObservations));
+    observationEntries.push(
+      await measure('observations:injected', 'Injected into context', input.injectedObservations),
+    );
   } else if (input.injectedObservations && input.injectedObservations.tokens > 0) {
     observationEntries.push({
       id: 'observations:injected',

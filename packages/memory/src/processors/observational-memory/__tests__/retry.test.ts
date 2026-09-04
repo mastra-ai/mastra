@@ -3,17 +3,17 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { computeDelay, isTransientLLMError, RETRY_CONFIG, withRetry } from '../retry';
 
 describe('isTransientLLMError', () => {
-  it('matches undici "terminated" error messages', () => {
+  it('matches undici "terminated" error messages', async () => {
     expect(isTransientLLMError(new TypeError('terminated'))).toBe(true);
     expect(isTransientLLMError(new Error('TypeError: terminated'))).toBe(true);
   });
 
-  it('matches undici UND_ERR_* error codes', () => {
+  it('matches undici UND_ERR_* error codes', async () => {
     const err = Object.assign(new Error('something bad'), { code: 'UND_ERR_SOCKET' });
     expect(isTransientLLMError(err)).toBe(true);
   });
 
-  it('matches common transport substrings', () => {
+  it('matches common transport substrings', async () => {
     expect(isTransientLLMError(new Error('fetch failed'))).toBe(true);
     expect(isTransientLLMError(new Error('ECONNRESET'))).toBe(true);
     expect(isTransientLLMError(new Error('socket hang up'))).toBe(true);
@@ -21,18 +21,18 @@ describe('isTransientLLMError', () => {
     expect(isTransientLLMError(new Error('Request timeout'))).toBe(true);
   });
 
-  it('matches retryable HTTP statuses', () => {
+  it('matches retryable HTTP statuses', async () => {
     expect(isTransientLLMError({ statusCode: 500 })).toBe(true);
     expect(isTransientLLMError({ statusCode: 502 })).toBe(true);
     expect(isTransientLLMError({ statusCode: 429 })).toBe(true);
     expect(isTransientLLMError({ statusCode: 408 })).toBe(true);
   });
 
-  it('matches AI SDK-style isRetryable: true', () => {
+  it('matches AI SDK-style isRetryable: true', async () => {
     expect(isTransientLLMError({ isRetryable: true })).toBe(true);
   });
 
-  it('matches OpenRouter-style mid-stream errors with a numeric code property', () => {
+  it('matches OpenRouter-style mid-stream errors with a numeric code property', async () => {
     // OpenRouter injects provider errors into the SSE stream as
     // { code: 502, message, metadata: { error_type: 'provider_unavailable' } }
     // and Mastra's getErrorFromUnknown copies those props onto the Error.
@@ -44,36 +44,36 @@ describe('isTransientLLMError', () => {
     expect(isTransientLLMError({ code: 429, message: 'rate limited' })).toBe(true);
   });
 
-  it('does NOT retry on non-retryable numeric code properties', () => {
+  it('does NOT retry on non-retryable numeric code properties', async () => {
     expect(isTransientLLMError({ code: 400, message: 'bad request' })).toBe(false);
     expect(isTransientLLMError({ code: 401, message: 'unauthorized' })).toBe(false);
   });
 
-  it('walks the error.cause chain', () => {
+  it('walks the error.cause chain', async () => {
     const cause = new TypeError('terminated');
     const wrapper = new Error('agent stream failed');
     (wrapper as any).cause = cause;
     expect(isTransientLLMError(wrapper)).toBe(true);
   });
 
-  it('walks the error.error chain (some AI SDK wrappers)', () => {
+  it('walks the error.error chain (some AI SDK wrappers)', async () => {
     const inner = Object.assign(new Error('boom'), { code: 'UND_ERR_CONNECT_TIMEOUT' });
     const wrapper = new Error('wrapped');
     (wrapper as any).error = inner;
     expect(isTransientLLMError(wrapper)).toBe(true);
   });
 
-  it('does NOT retry on AbortError', () => {
+  it('does NOT retry on AbortError', async () => {
     const err = new Error('cancelled');
     (err as any).name = 'AbortError';
     expect(isTransientLLMError(err)).toBe(false);
   });
 
-  it('does NOT retry on DOMException-style abort code', () => {
+  it('does NOT retry on DOMException-style abort code', async () => {
     expect(isTransientLLMError({ name: 'Error', code: 'ABORT_ERR' })).toBe(false);
   });
 
-  it('does NOT retry on auth / validation / 4xx errors', () => {
+  it('does NOT retry on auth / validation / 4xx errors', async () => {
     expect(isTransientLLMError({ statusCode: 401 })).toBe(false);
     expect(isTransientLLMError({ statusCode: 403 })).toBe(false);
     expect(isTransientLLMError({ statusCode: 400 })).toBe(false);
@@ -81,19 +81,19 @@ describe('isTransientLLMError', () => {
     expect(isTransientLLMError({ statusCode: 422 })).toBe(false);
   });
 
-  it('does NOT retry on plain errors with non-transport messages', () => {
+  it('does NOT retry on plain errors with non-transport messages', async () => {
     expect(isTransientLLMError(new Error('invalid api key'))).toBe(false);
     expect(isTransientLLMError(new Error('schema validation failed'))).toBe(false);
   });
 
-  it('handles non-Error / non-object values without throwing', () => {
+  it('handles non-Error / non-object values without throwing', async () => {
     expect(isTransientLLMError(undefined)).toBe(false);
     expect(isTransientLLMError(null)).toBe(false);
     expect(isTransientLLMError('terminated')).toBe(false);
     expect(isTransientLLMError(42)).toBe(false);
   });
 
-  it('handles cycles in cause chains', () => {
+  it('handles cycles in cause chains', async () => {
     const a: any = new Error('a');
     const b: any = new Error('b');
     a.cause = b;
@@ -114,14 +114,14 @@ describe('default retry schedule', () => {
     maxDelayMs: 120_000,
   };
 
-  it('has the expected default config', () => {
+  it('has the expected default config', async () => {
     expect(RETRY_CONFIG.maxRetries).toBe(defaults.maxRetries);
     expect(RETRY_CONFIG.initialDelayMs).toBe(defaults.initialDelayMs);
     expect(RETRY_CONFIG.backoffFactor).toBe(defaults.backoffFactor);
     expect(RETRY_CONFIG.maxDelayMs).toBe(defaults.maxDelayMs);
   });
 
-  it('produces the expected pre-jitter schedule and total budget', () => {
+  it('produces the expected pre-jitter schedule and total budget', async () => {
     const originalJitter = RETRY_CONFIG.jitter;
     RETRY_CONFIG.jitter = 0;
     try {

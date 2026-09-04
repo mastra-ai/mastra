@@ -1516,10 +1516,10 @@ export class ObservationalMemory {
    * Returns the (possibly optimized) observations string to pass as "Previous Observations"
    * to the observer prompt. When no optimization options are set, returns the input unchanged.
    */
-  prepareObserverContext(
+  async prepareObserverContext(
     existingObservations: string | undefined,
     record?: ObservationalMemoryRecord | null,
-  ): { context: string | undefined; wasTruncated: boolean } {
+  ): Promise<{ context: string | undefined; wasTruncated: boolean }> {
     const { previousObserverTokens } = this.observationConfig;
     const tokenBudget =
       previousObserverTokens === undefined || previousObserverTokens === false ? undefined : previousObserverTokens;
@@ -1555,9 +1555,9 @@ export class ObservationalMemory {
         return { context: '', wasTruncated: true };
       }
 
-      const currentTokens = this.tokenCounter.countObservations(observations);
+      const currentTokens = await this.tokenCounter.countObservations(observations);
       if (currentTokens > tokenBudget) {
-        observations = this.truncateObservationsToTokenBudget(observations, tokenBudget);
+        observations = await this.truncateObservationsToTokenBudget(observations, tokenBudget);
         wasTruncated = true;
       }
     }
@@ -1574,12 +1574,12 @@ export class ObservationalMemory {
    * 3. Try to preserve important observations (🔴) from older context, newest-first.
    * 4. Enforce that at least 50% of kept observations remain raw tail observations.
    */
-  private truncateObservationsToTokenBudget(observations: string, budget: number): string {
+  private async truncateObservationsToTokenBudget(observations: string, budget: number): Promise<string> {
     if (budget === 0) {
       return '';
     }
 
-    const totalTokens = this.tokenCounter.countObservations(observations);
+    const totalTokens = await this.tokenCounter.countObservations(observations);
     if (totalTokens <= budget) {
       return observations;
     }
@@ -1591,7 +1591,7 @@ export class ObservationalMemory {
     const lineTokens: number[] = new Array(totalCount);
     const isImportant: boolean[] = new Array(totalCount);
     for (let i = 0; i < totalCount; i++) {
-      lineTokens[i] = this.tokenCounter.countString(lines[i]!);
+      lineTokens[i] = await this.tokenCounter.countString(lines[i]!);
       isImportant[i] = lines[i]!.includes('🔴') || lines[i]!.includes('✅');
     }
 
@@ -1686,7 +1686,7 @@ export class ObservationalMemory {
         (importantToKeep === bestImportantCount && rawTailLength > bestRawTailLength)
       ) {
         const candidate = buildCandidateString(tailStart, getSelectedImportant(importantToKeep));
-        if (this.tokenCounter.countObservations(candidate) <= budget) {
+        if ((await this.tokenCounter.countObservations(candidate)) <= budget) {
           bestCandidate = candidate;
           bestImportantCount = importantToKeep;
           bestRawTailLength = rawTailLength;
@@ -1939,7 +1939,7 @@ export class ObservationalMemory {
 
       // Format messages with timestamps, truncating large parts (e.g. tool results)
       // since this is injected as context for the actor, not sent to the observer
-      const formattedMessages = formatMessagesForObserver(messages, { maxPartLength: 500 });
+      const formattedMessages = await formatMessagesForObserver(messages, { maxPartLength: 500 });
 
       if (formattedMessages) {
         const obscuredId = await this.representThreadIDInContext(threadId);
@@ -2128,7 +2128,7 @@ ${formattedMessages}
     // totalPendingTokens passed to shouldTriggerAsyncObservation.
     const currentTokens =
       contextWindowTokens ??
-      (await this.tokenCounter.countMessagesAsync(unobservedMessages)) + (record.pendingMessageTokens ?? 0);
+      (await this.tokenCounter.countMessages(unobservedMessages)) + (record.pendingMessageTokens ?? 0);
     BufferingCoordinator.lastBufferedBoundary.set(bufferKey, currentTokens);
 
     // Set persistent flag so new instances (created per request) know buffering is in progress
@@ -2224,7 +2224,7 @@ ${formattedMessages}
     // Check if there's enough content to buffer
     const bufferTokens = this.observationConfig.bufferTokens ?? 5000;
     const minNewTokens = bufferTokens / 2;
-    const newTokens = await this.tokenCounter.countMessagesAsync(candidateMessages);
+    const newTokens = await this.tokenCounter.countMessages(candidateMessages);
 
     if (newTokens < minNewTokens) {
       return; // Not enough new content to buffer
@@ -2257,7 +2257,7 @@ ${formattedMessages}
     // Generate cycle ID and capture start time
     const cycleId = `buffer-obs-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
     const startedAt = new Date().toISOString();
-    const tokensToBuffer = await this.tokenCounter.countMessagesAsync(messagesToBuffer);
+    const tokensToBuffer = await this.tokenCounter.countMessages(messagesToBuffer);
 
     const startMarker = createBufferingStartMarker({
       cycleId,
@@ -2426,7 +2426,7 @@ ${formattedMessages}
         const nextRemainingMessages = messages.filter(
           m => m?.id && m.id !== 'om-continuation' && !idsToRemove.has(m.id) && m.id !== msg.id,
         );
-        const remainingIfRemoved = retentionCounter.countMessages(nextRemainingMessages);
+        const remainingIfRemoved = await retentionCounter.countMessages(nextRemainingMessages);
         if (remainingIfRemoved < retentionFloor) {
           skipped += 1;
           backoffTriggered = true;
@@ -2440,7 +2440,7 @@ ${formattedMessages}
 
     if (retentionCounter && typeof retentionFloor === 'number' && idsToRemove.size > 0) {
       let remainingMessages = messages.filter(m => m?.id && m.id !== 'om-continuation' && !idsToRemove.has(m.id));
-      let remainingTokens = retentionCounter.countMessages(remainingMessages);
+      let remainingTokens = await retentionCounter.countMessages(remainingMessages);
 
       while (remainingTokens < retentionFloor && removalOrder.length > 0) {
         const restoreId = removalOrder.pop()!;
@@ -2448,7 +2448,7 @@ ${formattedMessages}
         skipped += 1;
         backoffTriggered = true;
         remainingMessages = messages.filter(m => m?.id && m.id !== 'om-continuation' && !idsToRemove.has(m.id));
-        remainingTokens = retentionCounter.countMessages(remainingMessages);
+        remainingTokens = await retentionCounter.countMessages(remainingMessages);
       }
     }
 
@@ -2903,11 +2903,11 @@ ${formattedMessages}
     }
 
     // Count tokens
-    const contextWindowTokens = await this.tokenCounter.countMessagesAsync(unobservedMessages);
+    const contextWindowTokens = await this.tokenCounter.countMessages(unobservedMessages);
     let otherThreadTokens = 0;
     if (this.scope === 'resource' && resourceId) {
       const otherContext = await this.getOtherThreadsContext(resourceId, threadId);
-      otherThreadTokens = otherContext ? this.tokenCounter.countString(otherContext) : 0;
+      otherThreadTokens = otherContext ? await this.tokenCounter.countString(otherContext) : 0;
     }
     const pendingTokens = Math.max(0, contextWindowTokens + otherThreadTokens);
 
@@ -3226,7 +3226,7 @@ ${formattedMessages}
       // Check minimum token threshold
       const bufferTokens = this.observationConfig.bufferTokens ?? 5000;
       const minNewTokens = bufferTokens / 2;
-      const newTokens = await this.tokenCounter.countMessagesAsync(candidateMessages);
+      const newTokens = await this.tokenCounter.countMessages(candidateMessages);
 
       if (candidateMessages.length === 0 || (!opts.skipMinimumTokenCheck && newTokens < minNewTokens)) {
         setBufferingState(false);
@@ -3386,7 +3386,7 @@ ${formattedMessages}
       const dbBoundary = record.lastBufferedAtTokens ?? 0;
       if (dbBoundary > 0 && opts.messages) {
         const unobserved = this.getUnobservedMessages(opts.messages, record);
-        const currentContextTokens = this.tokenCounter.countMessages(unobserved);
+        const currentContextTokens = await this.tokenCounter.countMessages(unobserved);
         if (currentContextTokens < dbBoundary * 0.5) {
           omDebug(
             `[OM:activate] resetting stale lastBufferedBoundary: dbBoundary=${dbBoundary}, currentContextTokens=${currentContextTokens}`,
@@ -3737,7 +3737,7 @@ ${formattedMessages}
         if (
           !this.meetsObservationThreshold({
             record: freshRecord,
-            unobservedTokens: await this.tokenCounter.countMessagesAsync(unobservedMessages),
+            unobservedTokens: await this.tokenCounter.countMessages(unobservedMessages),
           })
         ) {
           return;
@@ -3867,7 +3867,7 @@ ${formattedMessages}
         observabilityContext,
         undefined,
       );
-      const reflectionTokenCount = this.tokenCounter.countObservations(reflectResult.observations);
+      const reflectionTokenCount = await this.tokenCounter.countObservations(reflectResult.observations);
 
       await this.storage.createReflectionGeneration({
         currentRecord: record,

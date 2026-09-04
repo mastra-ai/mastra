@@ -22,7 +22,7 @@ const semanticInfrastructure = {
 };
 
 describe('Subconscious configuration', () => {
-  it('resolves the signed defaults and bounded surfacing settings', () => {
+  it('resolves the signed defaults and bounded surfacing settings', async () => {
     const subconscious = new Subconscious();
 
     expect(subconscious.resolved).toMatchObject({
@@ -36,7 +36,7 @@ describe('Subconscious configuration', () => {
     });
   });
 
-  it('supports disabling defaults and resolves global and per-agent options', () => {
+  it('supports disabling defaults and resolves global and per-agent options', async () => {
     const subconscious = new Subconscious({
       observation: [{ name: 'curate', model, instructions: 'Prefer canonical project names.', maxSteps: 3 }],
       model: 'openai/gpt-5-mini',
@@ -62,7 +62,7 @@ describe('Subconscious configuration', () => {
     });
   });
 
-  it('lets a global maxSteps override the per-agent curation default', () => {
+  it('lets a global maxSteps override the per-agent curation default', async () => {
     const subconscious = new Subconscious({ maxSteps: 7 });
 
     expect(subconscious.resolved.observation.map(agent => [agent.name, agent.maxSteps])).toEqual([
@@ -71,7 +71,7 @@ describe('Subconscious configuration', () => {
     ]);
   });
 
-  it('validates custom agents, duplicate names, and bounds', () => {
+  it('validates custom agents, duplicate names, and bounds', async () => {
     expect(() => new Subconscious({ observation: ['remind', 'remind'] })).toThrow(/Duplicate/);
     expect(() => new Subconscious({ observation: ['unknown' as 'remind'] })).toThrow(/Unknown/);
     expect(() => new Subconscious({ observation: [{ name: 'ticket', schema: z.string() } as any] })).toThrow(
@@ -91,7 +91,7 @@ describe('Subconscious configuration', () => {
     ).toThrow(/shares the Observer model/);
   });
 
-  it('compiles custom observation hooks into the shared extractor list', () => {
+  it('compiles custom observation hooks into the shared extractor list', async () => {
     const onExtracted = vi.fn();
     const subconscious = new Subconscious({
       observation: [{ name: 'ticket', schema: z.object({ ids: z.array(z.string()) }), onExtracted }],
@@ -113,7 +113,7 @@ describe('Subconscious configuration', () => {
     await expect((dynamicModel as (context: unknown) => Promise<unknown>)({})).resolves.toEqual([]);
   });
 
-  it('fails initialization explicitly when semantic infrastructure is missing', () => {
+  it('fails initialization explicitly when semantic infrastructure is missing', async () => {
     expect(
       () =>
         new Memory({
@@ -137,7 +137,7 @@ describe('Subconscious configuration', () => {
     await expect(memory.omEngine).rejects.toThrow(/Knowledge storage domain is not available/);
   });
 
-  it('rejects the stable-looking configuration key at the type boundary', () => {
+  it('rejects the stable-looking configuration key at the type boundary', async () => {
     const memory = new Memory({
       storage: new InMemoryStore(),
       options: {
@@ -152,7 +152,7 @@ describe('Subconscious configuration', () => {
     expect(getExtractors(memory)).toEqual([]);
   });
 
-  it('does not alter observational memory when Subconscious is absent', () => {
+  it('does not alter observational memory when Subconscious is absent', async () => {
     const memory = new Memory({
       storage: new InMemoryStore(),
       options: { observationalMemory: { model, observation: { extract: [] } } },

@@ -35,7 +35,7 @@ function createMemory() {
 const CHARS_PER_TOKEN = 4;
 
 describe('Memory.chunkText', () => {
-  it('splits normal prose on whitespace into chunks under the budget', () => {
+  it('splits normal prose on whitespace into chunks under the budget', async () => {
     const memory = createMemory() as any;
     const tokenSize = 8;
     const charSize = tokenSize * CHARS_PER_TOKEN; // 32
@@ -52,7 +52,7 @@ describe('Memory.chunkText', () => {
     expect(chunks.join(' ').split(/\s+/)).toEqual(text.split(/\s+/));
   });
 
-  it('hard-splits a single unbroken word longer than the budget (base64/minified blob)', () => {
+  it('hard-splits a single unbroken word longer than the budget (base64/minified blob)', async () => {
     const memory = createMemory() as any;
     const tokenSize = 4096;
     const charSize = tokenSize * CHARS_PER_TOKEN; // 16384
@@ -70,7 +70,7 @@ describe('Memory.chunkText', () => {
     expect(chunks.join('')).toBe(blob);
   });
 
-  it('never emits an empty leading chunk when the first word is oversized', () => {
+  it('never emits an empty leading chunk when the first word is oversized', async () => {
     const memory = createMemory() as any;
     const tokenSize = 4;
     const charSize = tokenSize * CHARS_PER_TOKEN; // 16
@@ -85,7 +85,7 @@ describe('Memory.chunkText', () => {
     }
   });
 
-  it('splits spaceless CJK text (the whole message is one "word")', () => {
+  it('splits spaceless CJK text (the whole message is one "word")', async () => {
     const memory = createMemory() as any;
     const tokenSize = 4096;
     const charSize = tokenSize * CHARS_PER_TOKEN; // 16384
@@ -102,7 +102,7 @@ describe('Memory.chunkText', () => {
     expect(chunks.join('')).toBe(cjk);
   });
 
-  it('flushes accumulated words before hard-splitting an oversized word', () => {
+  it('flushes accumulated words before hard-splitting an oversized word', async () => {
     const memory = createMemory() as any;
     const tokenSize = 4;
     const charSize = tokenSize * CHARS_PER_TOKEN; // 16

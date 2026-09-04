@@ -22,7 +22,7 @@ describe('BufferingCoordinator static map cleanup', () => {
   });
 
   describe('cleanupStaticMaps key correctness', () => {
-    it('full cleanup removes reflectionBufferCycleIds using the reflection key, not the observation key', () => {
+    it('full cleanup removes reflectionBufferCycleIds using the reflection key, not the observation key', async () => {
       // Seed static maps with both obs and refl keys for thread-1
       const lockKey = 'thread:thread-1';
       const obsBufKey = `obs:${lockKey}`;
@@ -54,7 +54,7 @@ describe('BufferingCoordinator static map cleanup', () => {
       expect(BC.reflectionBufferCycleIds.has(reflBufKey)).toBe(false);
     });
 
-    it('partial cleanup clears stale observation boundary/time for the buffer key', () => {
+    it('partial cleanup clears stale observation boundary/time for the buffer key', async () => {
       const lockKey = 'thread:thread-1';
       const obsBufKey = `obs:${lockKey}`;
 

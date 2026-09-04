@@ -94,7 +94,7 @@ export const LIST_MCP_SERVERS_ROUTE = createRoute({
     }
 
     // Get server info for each server
-    const serverInfoList: ServerInfo[] = paginatedServers.map(server => server.getServerInfo());
+    const serverInfoList: ServerInfo[] = await Promise.all(paginatedServers.map(server => server.getServerInfo()));
 
     return {
       servers: serverInfoList,
@@ -120,13 +120,13 @@ export const GET_MCP_SERVER_DETAIL_ROUTE = createRoute({
       throw new HTTPException(500, { message: 'Mastra instance or getMCPServerById method not available' });
     }
 
-    const server = mastra.getMCPServerById(id);
+    const server = await mastra.getMCPServerById(id);
 
     if (!server) {
       throw new HTTPException(404, { message: `MCP server with ID '${id}' not found` });
     }
 
-    const serverDetail = server.getServerDetail();
+    const serverDetail = await server.getServerDetail();
 
     // If a specific version was requested, check if it matches
     if (version && serverDetail.version_detail.version !== version) {
@@ -154,7 +154,7 @@ export const LIST_MCP_SERVER_TOOLS_ROUTE = createRoute({
       throw new HTTPException(500, { message: 'Mastra instance or getMCPServerById method not available' });
     }
 
-    const server = mastra.getMCPServerById(serverId);
+    const server = await mastra.getMCPServerById(serverId);
 
     if (!server) {
       throw new HTTPException(404, { message: `MCP server with ID '${serverId}' not found` });
@@ -183,7 +183,7 @@ export const GET_MCP_SERVER_TOOL_DETAIL_ROUTE = createRoute({
       throw new HTTPException(500, { message: 'Mastra instance or getMCPServerById method not available' });
     }
 
-    const server = mastra.getMCPServerById(serverId);
+    const server = await mastra.getMCPServerById(serverId);
 
     if (!server) {
       throw new HTTPException(404, { message: `MCP server with ID '${serverId}' not found` });
@@ -224,7 +224,7 @@ export const EXECUTE_MCP_SERVER_TOOL_ROUTE = createRoute({
       throw new HTTPException(500, { message: 'Mastra instance or getMCPServerById method not available' });
     }
 
-    const server = mastra.getMCPServerById(serverId);
+    const server = await mastra.getMCPServerById(serverId);
 
     if (!server) {
       throw new HTTPException(404, { message: `MCP server with ID '${serverId}' not found` });
@@ -258,7 +258,7 @@ export const LIST_MCP_SERVER_RESOURCES_ROUTE = createRoute({
       throw new HTTPException(500, { message: 'Mastra instance or getMCPServerById method not available' });
     }
 
-    const server = mastra.getMCPServerById(serverId);
+    const server = await mastra.getMCPServerById(serverId);
 
     if (!server) {
       throw new HTTPException(404, { message: `MCP server with ID '${serverId}' not found` });
@@ -288,7 +288,7 @@ export const READ_MCP_SERVER_RESOURCE_ROUTE = createRoute({
       throw new HTTPException(500, { message: 'Mastra instance or getMCPServerById method not available' });
     }
 
-    const server = mastra.getMCPServerById(serverId);
+    const server = await mastra.getMCPServerById(serverId);
 
     if (!server) {
       throw new HTTPException(404, { message: `MCP server with ID '${serverId}' not found` });
@@ -375,7 +375,7 @@ export const MCP_HTTP_TRANSPORT_ROUTE = createRoute({
       throw new HTTPException(500, { message: 'Mastra instance or getMCPServerById method not available' });
     }
 
-    const server = mastra.getMCPServerById(serverId);
+    const server = await mastra.getMCPServerById(serverId);
 
     if (!server) {
       throw new HTTPException(404, { message: `MCP server '${serverId}' not found` });
@@ -402,7 +402,7 @@ export const MCP_SSE_TRANSPORT_ROUTE = createRoute({
       throw new HTTPException(500, { message: 'Mastra instance or getMCPServerById method not available' });
     }
 
-    const server = mastra.getMCPServerById(serverId);
+    const server = await mastra.getMCPServerById(serverId);
 
     if (!server) {
       throw new HTTPException(404, { message: `MCP server '${serverId}' not found` });

@@ -3,7 +3,7 @@ import type { AgentSignalAttributes, AgentSignalType } from '../agent/signals';
 import { ErrorCategory, ErrorDomain, MastraError } from '../error';
 import type { Mastra } from '../mastra';
 import type { Schedule, SchedulesStorage } from '../storage/domains/schedules/base';
-import { slugify } from '../utils/slugify';
+import { loadSlugify } from '../utils/slugify';
 import { computeNextFireAt, validateCron } from '../workflows/scheduler/cron';
 import type { ScheduleIfActive, ScheduleIfIdle } from './types';
 import { AGENT_SCHEDULE_PREFIX, WORKFLOW_SCHEDULE_PREFIX } from './types';
@@ -22,9 +22,10 @@ const TOPIC_WORKFLOWS = 'workflows';
  * `agent_nightly-summary` and get the same canonical id. Returns an empty
  * string when nothing slug-able remains.
  */
-function canonicalizeScheduleId(rawId: string, prefix: string): string {
+async function canonicalizeScheduleId(rawId: string, prefix: string): Promise<string> {
   const trimmed = rawId.trim();
   const withoutPrefix = trimmed.startsWith(prefix) ? trimmed.slice(prefix.length) : trimmed;
+  const slugify = await loadSlugify();
   const slug = slugify(withoutPrefix);
   if (!slug) return '';
   return `${prefix}${slug}`;
@@ -35,8 +36,8 @@ function canonicalizeScheduleId(rawId: string, prefix: string): string {
  * `SCHEDULES_INVALID_ID` when the id is empty after normalization so callers
  * cannot create an unaddressable schedule.
  */
-function normalizeScheduleId(rawId: string, prefix: string): string {
-  const canonical = canonicalizeScheduleId(rawId, prefix);
+async function normalizeScheduleId(rawId: string, prefix: string): Promise<string> {
+  const canonical = await canonicalizeScheduleId(rawId, prefix);
   if (!canonical) {
     throw new MastraError({
       id: 'SCHEDULES_INVALID_ID',
@@ -254,7 +255,7 @@ export class Schedules {
     const trimmed = id.trim();
     const exact = trimmed ? await store.getSchedule(trimmed) : null;
     if (exact) return exact;
-    const canonical = canonicalizeScheduleId(trimmed, AGENT_SCHEDULE_PREFIX);
+    const canonical = await canonicalizeScheduleId(trimmed, AGENT_SCHEDULE_PREFIX);
     if (!canonical || canonical === trimmed) return null;
     return store.getSchedule(canonical);
   }
@@ -311,7 +312,7 @@ export class Schedules {
 
     const id =
       input.id !== undefined
-        ? normalizeScheduleId(input.id, AGENT_SCHEDULE_PREFIX)
+        ? await normalizeScheduleId(input.id, AGENT_SCHEDULE_PREFIX)
         : `${AGENT_SCHEDULE_PREFIX}${randomUUID()}`;
     await this.#assertIdAvailable(store, id, input.id !== undefined);
     const now = Date.now();
@@ -361,7 +362,7 @@ export class Schedules {
 
     const id =
       input.id !== undefined
-        ? normalizeScheduleId(input.id, WORKFLOW_SCHEDULE_PREFIX)
+        ? await normalizeScheduleId(input.id, WORKFLOW_SCHEDULE_PREFIX)
         : `${WORKFLOW_SCHEDULE_PREFIX}${randomUUID()}`;
     await this.#assertIdAvailable(store, id, input.id !== undefined);
     const now = Date.now();

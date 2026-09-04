@@ -3,22 +3,22 @@ import { describe, it, expect } from 'vitest';
 import { safeSlice } from '../string-utils';
 
 describe('safeSlice', () => {
-  it('returns the whole string when end >= str.length', () => {
+  it('returns the whole string when end >= str.length', async () => {
     expect(safeSlice('hello', 10)).toBe('hello');
     expect(safeSlice('hello', 5)).toBe('hello');
   });
 
-  it('returns empty string when end <= 0', () => {
+  it('returns empty string when end <= 0', async () => {
     expect(safeSlice('hello', 0)).toBe('');
     expect(safeSlice('hello', -1)).toBe('');
   });
 
-  it('handles ASCII strings like normal slice', () => {
+  it('handles ASCII strings like normal slice', async () => {
     expect(safeSlice('abcdef', 3)).toBe('abc');
     expect(safeSlice('abcdef', 1)).toBe('a');
   });
 
-  it('backs off by one when end lands immediately after a high surrogate', () => {
+  it('backs off by one when end lands immediately after a high surrogate', async () => {
     const prefix = 'a'.repeat(9);
     const emoji = '\uD83D\uDD25'; // 🔥 (high surrogate + low surrogate)
     const str = prefix + emoji;
@@ -28,7 +28,7 @@ describe('safeSlice', () => {
     expect(safeSlice(str, 10)).toBe(prefix);
   });
 
-  it('does not back off when end lands after a low surrogate', () => {
+  it('does not back off when end lands after a low surrogate', async () => {
     const prefix = 'a'.repeat(9);
     const emoji = '\uD83D\uDD25'; // 🔥
     const str = prefix + emoji;
@@ -37,7 +37,7 @@ describe('safeSlice', () => {
     expect(safeSlice(str, 11)).toBe(prefix + emoji);
   });
 
-  it('does not back off when end lands after a non-surrogate BMP character', () => {
+  it('does not back off when end lands after a non-surrogate BMP character', async () => {
     const str = 'abc🔥def';
     // indexes: 0='a', 1='b', 2='c', 3=high surrogate, 4=low surrogate, 5='d', 6='e', 7='f'
     expect(safeSlice(str, 3)).toBe('abc'); // end on high surrogate → back off
@@ -46,7 +46,7 @@ describe('safeSlice', () => {
     expect(safeSlice(str, 6)).toBe('abc🔥d'); // end on 'e' (not a surrogate)
   });
 
-  it('handles multiple surrogate pairs correctly', () => {
+  it('handles multiple surrogate pairs correctly', async () => {
     const str = '🔥a🔥b🔥';
     // indices: 0=high,1=low,2=a,3=high,4=low,5=b,6=high,7=low
     expect(safeSlice(str, 1)).toBe(''); // backs off from first high surrogate
@@ -56,13 +56,13 @@ describe('safeSlice', () => {
     expect(safeSlice(str, 7)).toBe('🔥a🔥b'); // backs off from third high surrogate
   });
 
-  it('handles a string that starts with a high surrogate', () => {
+  it('handles a string that starts with a high surrogate', async () => {
     const str = '\uD83D\uDD25hello';
     expect(safeSlice(str, 1)).toBe('');
     expect(safeSlice(str, 2)).toBe('🔥');
   });
 
-  it('handles an empty string', () => {
+  it('handles an empty string', async () => {
     expect(safeSlice('', 0)).toBe('');
     expect(safeSlice('', 5)).toBe('');
   });

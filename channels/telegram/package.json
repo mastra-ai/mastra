@@ -40,7 +40,7 @@
     "vitest": "^4.1.10"
   },
   "peerDependencies": {
-    "@mastra/core": ">=1.22.0 <2.0.0"
+    "@mastra/core": ">=2.0.0-0 <3.0.0-0"
   },
   "publishConfig": {
     "access": "public"

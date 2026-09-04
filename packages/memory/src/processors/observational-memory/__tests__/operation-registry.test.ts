@@ -6,7 +6,7 @@ describe('operation-registry', () => {
   const recordId = 'test-record-123';
 
   describe('opKey', () => {
-    it('creates a key from recordId and operation name', () => {
+    it('creates a key from recordId and operation name', async () => {
       expect(opKey(recordId, 'reflecting')).toBe('test-record-123:reflecting');
       expect(opKey(recordId, 'observing')).toBe('test-record-123:observing');
       expect(opKey(recordId, 'bufferingObservation')).toBe('test-record-123:bufferingObservation');
@@ -16,24 +16,24 @@ describe('operation-registry', () => {
 
   describe('registerOp / unregisterOp / isOpActiveInProcess', () => {
     // Use unique recordIds per test to avoid cross-test pollution from the shared Set
-    it('returns false when no op is registered', () => {
+    it('returns false when no op is registered', async () => {
       expect(isOpActiveInProcess('unreg-1', 'reflecting')).toBe(false);
     });
 
-    it('returns true after registering an op', () => {
+    it('returns true after registering an op', async () => {
       registerOp('reg-1', 'observing');
       expect(isOpActiveInProcess('reg-1', 'observing')).toBe(true);
       // cleanup
       unregisterOp('reg-1', 'observing');
     });
 
-    it('returns false after unregistering an op', () => {
+    it('returns false after unregistering an op', async () => {
       registerOp('unreg-2', 'reflecting');
       unregisterOp('unreg-2', 'reflecting');
       expect(isOpActiveInProcess('unreg-2', 'reflecting')).toBe(false);
     });
 
-    it('tracks different operations independently for the same record', () => {
+    it('tracks different operations independently for the same record', async () => {
       registerOp('multi-1', 'observing');
       registerOp('multi-1', 'reflecting');
 
@@ -49,7 +49,7 @@ describe('operation-registry', () => {
       unregisterOp('multi-1', 'reflecting');
     });
 
-    it('tracks different records independently', () => {
+    it('tracks different records independently', async () => {
       registerOp('rec-a', 'observing');
       registerOp('rec-b', 'observing');
 
@@ -64,14 +64,14 @@ describe('operation-registry', () => {
       unregisterOp('rec-b', 'observing');
     });
 
-    it('unregisterOp is idempotent (no error on double-unregister)', () => {
+    it('unregisterOp is idempotent (no error on double-unregister)', async () => {
       registerOp('idem-1', 'bufferingObservation');
       unregisterOp('idem-1', 'bufferingObservation');
       unregisterOp('idem-1', 'bufferingObservation'); // should not throw
       expect(isOpActiveInProcess('idem-1', 'bufferingObservation')).toBe(false);
     });
 
-    it('handles concurrent duplicate registrations with ref counting', () => {
+    it('handles concurrent duplicate registrations with ref counting', async () => {
       registerOp('dup-1', 'observing');
       registerOp('dup-1', 'observing'); // second concurrent registration
 
@@ -84,7 +84,7 @@ describe('operation-registry', () => {
       expect(isOpActiveInProcess('dup-1', 'observing')).toBe(false);
     });
 
-    it('unregisterOp on non-registered key is a no-op', () => {
+    it('unregisterOp on non-registered key is a no-op', async () => {
       unregisterOp('never-registered', 'reflecting'); // should not throw
       expect(isOpActiveInProcess('never-registered', 'reflecting')).toBe(false);
     });

@@ -34,7 +34,7 @@ import * as path from 'node:path';
 import type { MastraBrowser } from '../browser';
 import type { IMastraLogger } from '../logger';
 import { RequestContext } from '../request-context';
-import { pMap, pMapSkip } from '../utils/p-map';
+import { loadPMap } from '../utils/p-map';
 import type { MastraVector } from '../vector';
 
 import { WorkspaceError, SearchNotAvailableError, WorkspaceNotReadyError } from './errors';
@@ -1123,7 +1123,8 @@ export class Workspace<
     }
 
     const fs = this._fs;
-    return pMap(
+    const { default: pMap, pMapSkip } = await loadPMap();
+    const entries = await pMap(
       files,
       async (filePath): Promise<{ filePath: string; docs: IndexDocument[] } | typeof pMapSkip> => {
         try {
@@ -1145,6 +1146,7 @@ export class Workspace<
       },
       { stopOnError: false, concurrency: FS_READ_CONCURRENCY },
     );
+    return entries.filter((entry): entry is { filePath: string; docs: IndexDocument[] } => entry !== pMapSkip);
   }
 
   /**
@@ -1158,6 +1160,7 @@ export class Workspace<
     if (!engine) return [];
     try {
       const entries = await this.batchReadFiles(paths);
+      const { default: pMap } = await loadPMap();
       // Clear stale single-doc/chunked entries from previous indexing passes.
       await pMap(entries, ({ filePath }) => engine.removeSource(filePath), {
         concurrency: FS_READ_CONCURRENCY,

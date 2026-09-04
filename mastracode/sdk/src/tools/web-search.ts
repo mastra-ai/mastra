@@ -73,7 +73,7 @@ export function createWebSearchTool() {
       }
 
       const text = parts.join('\n\n');
-      return truncateStringForTokenEstimate(text, MAX_WEB_SEARCH_TOKENS);
+      return await truncateStringForTokenEstimate(text, MAX_WEB_SEARCH_TOKENS);
     },
   });
 }
@@ -103,7 +103,7 @@ export function createWebExtractTool() {
       }
 
       const text = parts.join('\n\n');
-      return truncateStringForTokenEstimate(text, MAX_WEB_EXTRACT_TOKENS);
+      return await truncateStringForTokenEstimate(text, MAX_WEB_EXTRACT_TOKENS);
     },
   });
 }
@@ -132,7 +132,7 @@ export function createParallelWebSearchTool() {
         parts.push([`## ${title}`, result.url, excerpts].filter(Boolean).join('\n'));
       }
 
-      return truncateStringForTokenEstimate(parts.join('\n\n'), MAX_WEB_SEARCH_TOKENS);
+      return await truncateStringForTokenEstimate(parts.join('\n\n'), MAX_WEB_SEARCH_TOKENS);
     },
   });
 }
@@ -162,7 +162,7 @@ export function createParallelWebExtractTool() {
         parts.push([`## ${error.url}`, `Error: ${error.errorType}${status}`, error.content].filter(Boolean).join('\n'));
       }
 
-      return truncateStringForTokenEstimate(parts.join('\n\n'), MAX_WEB_EXTRACT_TOKENS);
+      return await truncateStringForTokenEstimate(parts.join('\n\n'), MAX_WEB_EXTRACT_TOKENS);
     },
   });
 }

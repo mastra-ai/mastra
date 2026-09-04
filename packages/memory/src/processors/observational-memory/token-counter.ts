@@ -2,9 +2,10 @@ import { AsyncLocalStorage } from 'node:async_hooks';
 import { createHash } from 'node:crypto';
 import type { MastraDBMessage } from '@mastra/core/agent';
 import type { MastraToolInvocation } from '@mastra/core/agent/message-list';
-import { estimateTokenCount } from 'tokenx';
+import type { estimateTokenCount } from 'tokenx';
 
 import { measureImageBuffer } from './measure-image-buffer';
+import { loadTokenx } from './tokenx';
 import { resolveToolResultValue, serializeToolResultForTokenCounting } from './tool-result-helpers';
 
 type TokenEstimateCacheEntry = {
@@ -1222,6 +1223,7 @@ export class TokenCounter {
   private readonly modelContextStorage = new AsyncLocalStorage<TokenCounterModelContext | undefined>();
   private readonly inFlightAttachmentCounts = new Map<string, Promise<number | undefined>>();
   private readonly multimodalToolResultCounts = new WeakMap<object, { resultKey: string; tokens: number }>();
+  private tokenEstimator?: typeof estimateTokenCount;
 
   // Per-message overhead: accounts for role tokens, message framing, and separators.
   // 3.8 remains a practical average across providers for OM thresholding.
@@ -1242,12 +1244,21 @@ export class TokenCounter {
     return this.modelContextStorage.getStore() ?? this.defaultModelContext;
   }
 
-  /**
-   * Count tokens in a plain string
-   */
-  countString(text: string): number {
+  private async ensureTokenEstimator(): Promise<void> {
+    if (!this.tokenEstimator) {
+      this.tokenEstimator = (await loadTokenx()).estimateTokenCount;
+    }
+  }
+
+  private countStringSync(text: string): number {
     if (!text) return 0;
-    return estimateTokenCount(text);
+    return this.tokenEstimator!(text);
+  }
+
+  /** Count tokens in a plain string. */
+  async countString(text: string): Promise<number> {
+    await this.ensureTokenEstimator();
+    return this.countStringSync(text);
   }
 
   private readOrPersistPartEstimate(part: CacheablePart, kind: string, payload: string): number {
@@ -1257,7 +1268,7 @@ export class TokenCounter {
       return cached.tokens;
     }
 
-    const tokens = this.countString(payload);
+    const tokens = this.countStringSync(payload);
     setPartCacheEntry(part, key, {
       v: TOKEN_ESTIMATE_CACHE_VERSION,
       source: this.cacheSource,
@@ -1292,7 +1303,7 @@ export class TokenCounter {
       return cached.tokens;
     }
 
-    const tokens = this.countString(payload);
+    const tokens = this.countStringSync(payload);
     setMessageCacheEntry(message, key, {
       v: TOKEN_ESTIMATE_CACHE_VERSION,
       source: this.cacheSource,
@@ -1332,7 +1343,7 @@ export class TokenCounter {
     const cacheParts: unknown[] = [];
     const countJsonContentPart = (contentPart: Record<string, unknown>) => {
       const formatted = serializeToolResultForTokenCounting(contentPart);
-      tokens += this.countString(formatted);
+      tokens += this.countStringSync(formatted);
       cacheParts.push({ type: 'json', valueHash: createHash('sha256').update(formatted).digest('hex') });
     };
 
@@ -1346,7 +1357,7 @@ export class TokenCounter {
 
       if (partType === 'text') {
         const text = typeof contentPart.text === 'string' ? contentPart.text : String(contentPart.value ?? '');
-        tokens += this.countString(text);
+        tokens += this.countStringSync(text);
         cacheParts.push({ type: 'text', textHash: createHash('sha256').update(text).digest('hex') });
         continue;
       }
@@ -1426,7 +1437,7 @@ export class TokenCounter {
         }
 
         const descriptor = serializeNonImageFilePartForTokenCounting(filePart);
-        tokens += this.countString(descriptor);
+        tokens += this.countStringSync(descriptor);
         cacheParts.push({ type: 'file-data-descriptor', descriptor });
         continue;
       }
@@ -1848,8 +1859,8 @@ export class TokenCounter {
   /**
    * Count tokens in a single message
    */
-  countMessage(message: MastraDBMessage): number {
-    let payloadTokens = this.countString(message.role);
+  private countMessageSync(message: MastraDBMessage): number {
+    let payloadTokens = this.countStringSync(message.role);
     let overhead = TokenCounter.TOKENS_PER_MESSAGE;
     let extraMessageCount = 0;
 
@@ -1881,8 +1892,34 @@ export class TokenCounter {
     return Math.round(payloadTokens + overhead);
   }
 
+  async countMessage(message: MastraDBMessage): Promise<number> {
+    await this.ensureTokenEstimator();
+    return this.countMessageSync(message);
+  }
+
+  /**
+   * Count tokens in an array of messages
+   */
+  private countMessagesSync(messages: MastraDBMessage[]): number {
+    if (!messages || messages.length === 0) return 0;
+
+    let total = TokenCounter.TOKENS_PER_CONVERSATION;
+    for (const message of messages) {
+      total += this.countMessageSync(message);
+    }
+    return total;
+  }
+
+  async countMessages(messages: MastraDBMessage[]): Promise<number> {
+    if (!messages || messages.length === 0) return 0;
+    await this.ensureTokenEstimator();
+    const messageTotals = await Promise.all(messages.map(message => this.countMessage(message)));
+    return TokenCounter.TOKENS_PER_CONVERSATION + messageTotals.reduce((sum, count) => sum + count, 0);
+  }
+
   async countMessageAsync(message: MastraDBMessage): Promise<number> {
-    let payloadTokens = this.countString(message.role);
+    await this.ensureTokenEstimator();
+    let payloadTokens = this.countStringSync(message.role);
     let overhead = TokenCounter.TOKENS_PER_MESSAGE;
     let extraMessageCount = 0;
 
@@ -1914,30 +1951,14 @@ export class TokenCounter {
     return Math.round(payloadTokens + overhead);
   }
 
-  /**
-   * Count tokens in an array of messages
-   */
-  countMessages(messages: MastraDBMessage[]): number {
-    if (!messages || messages.length === 0) return 0;
-
-    let total = TokenCounter.TOKENS_PER_CONVERSATION;
-    for (const message of messages) {
-      total += this.countMessage(message);
-    }
-    return total;
-  }
-
   async countMessagesAsync(messages: MastraDBMessage[]): Promise<number> {
     if (!messages || messages.length === 0) return 0;
-
     const messageTotals = await Promise.all(messages.map(message => this.countMessageAsync(message)));
     return TokenCounter.TOKENS_PER_CONVERSATION + messageTotals.reduce((sum, count) => sum + count, 0);
   }
 
-  /**
-   * Count tokens in observations string
-   */
-  countObservations(observations: string): number {
-    return this.countString(observations);
+  /** Count tokens in an observations string. */
+  async countObservations(observations: string): Promise<number> {
+    return await this.countString(observations);
   }
 }

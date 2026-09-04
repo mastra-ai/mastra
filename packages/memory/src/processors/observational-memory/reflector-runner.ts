@@ -351,7 +351,7 @@ export class ReflectorRunner {
     usage?: { inputTokens?: number; outputTokens?: number; totalTokens?: number };
     providerMetadata?: ProviderMetadata;
   }> {
-    const originalTokens = this.tokenCounter.countObservations(observations);
+    const originalTokens = await this.tokenCounter.countObservations(observations);
     const resolvedModel = model ? { model } : this.resolveModel(originalTokens);
     const activeExtractors = await resolveExtractors(
       (skipContinuationHints
@@ -505,7 +505,7 @@ export class ReflectorRunner {
         );
         reflectedTokens = originalTokens;
       } else {
-        reflectedTokens = this.tokenCounter.countObservations(parsed.observations);
+        reflectedTokens = await this.tokenCounter.countObservations(parsed.observations);
       }
       omDebug(
         `[OM:callReflector] attempt #${attemptNumber} parsed: reflectedTokens=${reflectedTokens}, targetThreshold=${targetThreshold}, compressionValid=${validateCompression(reflectedTokens, targetThreshold)}, parsedObsLen=${parsed.observations?.length}, degenerate=${parsed.degenerate ?? false}`,
@@ -807,7 +807,7 @@ export class ReflectorRunner {
       reflectResult.extractedValues,
     );
 
-    const reflectionTokenCount = this.tokenCounter.countObservations(reflectResult.observations);
+    const reflectionTokenCount = await this.tokenCounter.countObservations(reflectResult.observations);
     omDebug(
       `[OM:reflect] doAsyncBufferedReflection: reflector returned ${reflectionTokenCount} tokens (${reflectResult.observations?.length} chars), saving to recordId=${currentRecord.id}`,
     );
@@ -913,7 +913,7 @@ export class ReflectorRunner {
     const combinedObservations = unreflectedContent
       ? `${freshRecord.bufferedReflection}\n\n${unreflectedContent}`
       : freshRecord.bufferedReflection!;
-    const combinedTokenCount = this.tokenCounter.countObservations(combinedObservations);
+    const combinedTokenCount = await this.tokenCounter.countObservations(combinedObservations);
 
     // Early-trigger overshoot guard:
     // TTL and provider-change triggers can fire immediately after a buffered reflection
@@ -935,7 +935,9 @@ export class ReflectorRunner {
     // If either check fails, keep the buffer in place for the eventual
     // threshold activation.
     if (activationMetadata?.triggeredBy === 'ttl' || activationMetadata?.triggeredBy === 'provider_change') {
-      const unreflectedTailTokens = unreflectedContent ? this.tokenCounter.countObservations(unreflectedContent) : 0;
+      const unreflectedTailTokens = unreflectedContent
+        ? await this.tokenCounter.countObservations(unreflectedContent)
+        : 0;
       const bufferedReflectionTokens = freshRecord.bufferedReflectionTokens ?? 0;
       if (unreflectedTailTokens < bufferedReflectionTokens) {
         omDebug(
@@ -1316,7 +1318,7 @@ export class ReflectorRunner {
         record.threadId ?? undefined,
         reflectResult.extractedValues,
       );
-      const reflectionTokenCount = this.tokenCounter.countObservations(reflectResult.observations);
+      const reflectionTokenCount = await this.tokenCounter.countObservations(reflectResult.observations);
 
       await this.storage.createReflectionGeneration({
         currentRecord: record,

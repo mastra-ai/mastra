@@ -17,76 +17,76 @@ function daysFrom(base: Date, days: number): Date {
 describe('formatRelativeTime', () => {
   const now = new Date('2025-06-15T12:00:00Z');
 
-  it('returns "today" for the same day', () => {
+  it('returns "today" for the same day', async () => {
     expect(formatRelativeTime(now, now)).toBe('today');
   });
 
-  it('returns "yesterday" for 1 day ago', () => {
+  it('returns "yesterday" for 1 day ago', async () => {
     expect(formatRelativeTime(daysFrom(now, -1), now)).toBe('yesterday');
   });
 
-  it('returns "N days ago" for 2-6 days', () => {
+  it('returns "N days ago" for 2-6 days', async () => {
     expect(formatRelativeTime(daysFrom(now, -3), now)).toBe('3 days ago');
     expect(formatRelativeTime(daysFrom(now, -6), now)).toBe('6 days ago');
   });
 
-  it('returns "1 week ago" for 7-13 days', () => {
+  it('returns "1 week ago" for 7-13 days', async () => {
     expect(formatRelativeTime(daysFrom(now, -7), now)).toBe('1 week ago');
     expect(formatRelativeTime(daysFrom(now, -13), now)).toBe('1 week ago');
   });
 
-  it('returns "N weeks ago" for 14-29 days', () => {
+  it('returns "N weeks ago" for 14-29 days', async () => {
     expect(formatRelativeTime(daysFrom(now, -14), now)).toBe('2 weeks ago');
     expect(formatRelativeTime(daysFrom(now, -21), now)).toBe('3 weeks ago');
   });
 
-  it('returns "1 month ago" for 30-59 days', () => {
+  it('returns "1 month ago" for 30-59 days', async () => {
     expect(formatRelativeTime(daysFrom(now, -30), now)).toBe('1 month ago');
     expect(formatRelativeTime(daysFrom(now, -59), now)).toBe('1 month ago');
   });
 
-  it('returns "N months ago" for 60-364 days', () => {
+  it('returns "N months ago" for 60-364 days', async () => {
     expect(formatRelativeTime(daysFrom(now, -90), now)).toBe('3 months ago');
     expect(formatRelativeTime(daysFrom(now, -180), now)).toBe('6 months ago');
   });
 
-  it('returns "1 year ago" for exactly 365 days', () => {
+  it('returns "1 year ago" for exactly 365 days', async () => {
     expect(formatRelativeTime(daysFrom(now, -365), now)).toBe('1 year ago');
   });
 
-  it('returns \"N years ago\" with plural for multiple years', () => {
+  it('returns \"N years ago\" with plural for multiple years', async () => {
     expect(formatRelativeTime(daysFrom(now, -730), now)).toBe('2 years ago');
     expect(formatRelativeTime(daysFrom(now, -1095), now)).toBe('3 years ago');
   });
 
-  it('returns \"tomorrow\" for 1 day in the future', () => {
+  it('returns \"tomorrow\" for 1 day in the future', async () => {
     expect(formatRelativeTime(daysFrom(now, 1), now)).toBe('tomorrow');
   });
 
-  it('returns \"in N days\" for 2-6 days in the future', () => {
+  it('returns \"in N days\" for 2-6 days in the future', async () => {
     expect(formatRelativeTime(daysFrom(now, 3), now)).toBe('in 3 days');
     expect(formatRelativeTime(daysFrom(now, 6), now)).toBe('in 6 days');
   });
 
-  it('returns \"in 1 week\" for 7-13 days in the future', () => {
+  it('returns \"in 1 week\" for 7-13 days in the future', async () => {
     expect(formatRelativeTime(daysFrom(now, 7), now)).toBe('in 1 week');
     expect(formatRelativeTime(daysFrom(now, 13), now)).toBe('in 1 week');
   });
 
-  it('returns \"in N weeks\" for 14-29 days in the future', () => {
+  it('returns \"in N weeks\" for 14-29 days in the future', async () => {
     expect(formatRelativeTime(daysFrom(now, 14), now)).toBe('in 2 weeks');
     expect(formatRelativeTime(daysFrom(now, 21), now)).toBe('in 3 weeks');
   });
 
-  it('returns \"in 1 month\" for 30-59 days in the future', () => {
+  it('returns \"in 1 month\" for 30-59 days in the future', async () => {
     expect(formatRelativeTime(daysFrom(now, 30), now)).toBe('in 1 month');
   });
 
-  it('returns \"in N months\" for 60-364 days in the future', () => {
+  it('returns \"in N months\" for 60-364 days in the future', async () => {
     expect(formatRelativeTime(daysFrom(now, 90), now)).toBe('in 3 months');
   });
 
-  it('returns \"in N years\" for 365+ days in the future', () => {
+  it('returns \"in N years\" for 365+ days in the future', async () => {
     expect(formatRelativeTime(daysFrom(now, 365), now)).toBe('in 1 year');
     expect(formatRelativeTime(daysFrom(now, 730), now)).toBe('in 2 years');
   });
@@ -95,42 +95,42 @@ describe('formatRelativeTime', () => {
 describe('formatGapBetweenDates', () => {
   const base = new Date('2025-06-01T12:00:00Z');
 
-  it('returns null for same day', () => {
+  it('returns null for same day', async () => {
     expect(formatGapBetweenDates(base, base)).toBeNull();
   });
 
-  it('returns null for consecutive days (1 day gap)', () => {
+  it('returns null for consecutive days (1 day gap)', async () => {
     expect(formatGapBetweenDates(base, daysFrom(base, 1))).toBeNull();
   });
 
-  it('returns "[N days later]" for 2-6 day gaps', () => {
+  it('returns "[N days later]" for 2-6 day gaps', async () => {
     expect(formatGapBetweenDates(base, daysFrom(base, 3))).toBe('[3 days later]');
     expect(formatGapBetweenDates(base, daysFrom(base, 6))).toBe('[6 days later]');
   });
 
-  it('returns "[1 week later]" for 7-13 day gaps', () => {
+  it('returns "[1 week later]" for 7-13 day gaps', async () => {
     expect(formatGapBetweenDates(base, daysFrom(base, 7))).toBe('[1 week later]');
     expect(formatGapBetweenDates(base, daysFrom(base, 13))).toBe('[1 week later]');
   });
 
-  it('returns "[N weeks later]" for 14-29 day gaps', () => {
+  it('returns "[N weeks later]" for 14-29 day gaps', async () => {
     expect(formatGapBetweenDates(base, daysFrom(base, 14))).toBe('[2 weeks later]');
     expect(formatGapBetweenDates(base, daysFrom(base, 25))).toBe('[3 weeks later]');
   });
 
-  it('returns "[1 month later]" for 30-59 day gaps', () => {
+  it('returns "[1 month later]" for 30-59 day gaps', async () => {
     expect(formatGapBetweenDates(base, daysFrom(base, 30))).toBe('[1 month later]');
     expect(formatGapBetweenDates(base, daysFrom(base, 59))).toBe('[1 month later]');
   });
 
-  it('returns "[N months later]" for 60+ day gaps', () => {
+  it('returns "[N months later]" for 60+ day gaps', async () => {
     expect(formatGapBetweenDates(base, daysFrom(base, 90))).toBe('[3 months later]');
     expect(formatGapBetweenDates(base, daysFrom(base, 180))).toBe('[6 months later]');
   });
 });
 
 describe('parseDateFromContent', () => {
-  it('parses simple date "May 30, 2023"', () => {
+  it('parses simple date "May 30, 2023"', async () => {
     const result = parseDateFromContent('May 30, 2023');
     expect(result).toBeInstanceOf(Date);
     expect(result!.getFullYear()).toBe(2023);
@@ -138,45 +138,45 @@ describe('parseDateFromContent', () => {
     expect(result!.getDate()).toBe(30);
   });
 
-  it('parses date without comma "May 30 2023"', () => {
+  it('parses date without comma "May 30 2023"', async () => {
     const result = parseDateFromContent('May 30 2023');
     expect(result).toBeInstanceOf(Date);
     expect(result!.getFullYear()).toBe(2023);
   });
 
-  it('parses range format "May 27-28, 2023" using first date', () => {
+  it('parses range format "May 27-28, 2023" using first date', async () => {
     const result = parseDateFromContent('May 27-28, 2023');
     expect(result).toBeInstanceOf(Date);
     expect(result!.getDate()).toBe(27);
   });
 
-  it('parses "early May 2023" as day 7', () => {
+  it('parses "early May 2023" as day 7', async () => {
     const result = parseDateFromContent('early May 2023');
     expect(result).toBeInstanceOf(Date);
     expect(result!.getDate()).toBe(7);
     expect(result!.getMonth()).toBe(4);
   });
 
-  it('parses "late April 2023" as day 23', () => {
+  it('parses "late April 2023" as day 23', async () => {
     const result = parseDateFromContent('late April 2023');
     expect(result).toBeInstanceOf(Date);
     expect(result!.getDate()).toBe(23);
     expect(result!.getMonth()).toBe(3); // April = 3
   });
 
-  it('parses "mid May 2023" as day 15', () => {
+  it('parses "mid May 2023" as day 15', async () => {
     const result = parseDateFromContent('mid May 2023');
     expect(result).toBeInstanceOf(Date);
     expect(result!.getDate()).toBe(15);
   });
 
-  it('parses "mid-to-late May 2023" using first modifier', () => {
+  it('parses "mid-to-late May 2023" using first modifier', async () => {
     const result = parseDateFromContent('mid-to-late May 2023');
     expect(result).toBeInstanceOf(Date);
     expect(result!.getMonth()).toBe(4);
   });
 
-  it('parses cross-month range "April to May 2023"', () => {
+  it('parses cross-month range "April to May 2023"', async () => {
     const result = parseDateFromContent('April to May 2023');
     expect(result).toBeInstanceOf(Date);
     // Uses second month (May) day 1
@@ -184,7 +184,7 @@ describe('parseDateFromContent', () => {
     expect(result!.getDate()).toBe(1);
   });
 
-  it('returns null for unparseable content', () => {
+  it('returns null for unparseable content', async () => {
     expect(parseDateFromContent('sometime soon')).toBeNull();
     expect(parseDateFromContent('next week')).toBeNull();
     expect(parseDateFromContent('')).toBeNull();
@@ -192,52 +192,52 @@ describe('parseDateFromContent', () => {
 });
 
 describe('isFutureIntentObservation', () => {
-  it('detects "will" patterns', () => {
+  it('detects "will" patterns', async () => {
     expect(isFutureIntentObservation('User will attend the meeting')).toBe(true);
     expect(isFutureIntentObservation('She will be traveling next week')).toBe(true);
   });
 
-  it('detects "plans to" and "plan to"', () => {
+  it('detects "plans to" and "plan to"', async () => {
     expect(isFutureIntentObservation('User plans to visit Paris')).toBe(true);
     expect(isFutureIntentObservation('They plan to refactor the code')).toBe(true);
   });
 
-  it('detects "planning to"', () => {
+  it('detects "planning to"', async () => {
     expect(isFutureIntentObservation('User is planning to move')).toBe(true);
   });
 
-  it('detects "looking forward to"', () => {
+  it('detects "looking forward to"', async () => {
     expect(isFutureIntentObservation('Looking forward to the concert')).toBe(true);
   });
 
-  it('detects "going to"', () => {
+  it('detects "going to"', async () => {
     expect(isFutureIntentObservation('User is going to start a new project')).toBe(true);
   });
 
-  it('detects "intends to" and "intend to"', () => {
+  it('detects "intends to" and "intend to"', async () => {
     expect(isFutureIntentObservation('User intends to apply')).toBe(true);
     expect(isFutureIntentObservation('They intend to finish by Friday')).toBe(true);
   });
 
-  it('detects "wants to" and "want to"', () => {
+  it('detects "wants to" and "want to"', async () => {
     expect(isFutureIntentObservation('User wants to learn Rust')).toBe(true);
   });
 
-  it('detects "needs to" and "need to"', () => {
+  it('detects "needs to" and "need to"', async () => {
     expect(isFutureIntentObservation('User needs to file taxes')).toBe(true);
   });
 
-  it('detects "about to"', () => {
+  it('detects "about to"', async () => {
     expect(isFutureIntentObservation('User is about to leave')).toBe(true);
   });
 
-  it('returns false for non-future-intent lines', () => {
+  it('returns false for non-future-intent lines', async () => {
     expect(isFutureIntentObservation('User completed the project')).toBe(false);
     expect(isFutureIntentObservation('Discussed options for lunch')).toBe(false);
     expect(isFutureIntentObservation('User prefers dark mode')).toBe(false);
   });
 
-  it('is case-insensitive', () => {
+  it('is case-insensitive', async () => {
     expect(isFutureIntentObservation('USER WILL ATTEND')).toBe(true);
     expect(isFutureIntentObservation('Plans To Visit')).toBe(true);
   });
@@ -246,38 +246,38 @@ describe('isFutureIntentObservation', () => {
 describe('expandInlineEstimatedDates', () => {
   const now = new Date('2025-06-15T12:00:00Z');
 
-  it('expands "(estimated May 30, 2023)" with relative time', () => {
+  it('expands "(estimated May 30, 2023)" with relative time', async () => {
     const input = 'User bought tickets (estimated May 30, 2023)';
     const result = expandInlineEstimatedDates(input, now);
     expect(result).toContain('estimated May 30, 2023 -');
     expect(result).toContain('ago)');
   });
 
-  it('expands "(meaning May 30, 2023)" with relative time', () => {
+  it('expands "(meaning May 30, 2023)" with relative time', async () => {
     const input = 'Started the job (meaning May 30, 2023)';
     const result = expandInlineEstimatedDates(input, now);
     expect(result).toContain('meaning May 30, 2023 -');
   });
 
-  it('adds "likely already happened" for past future-intent observations', () => {
+  it('adds "likely already happened" for past future-intent observations', async () => {
     const input = 'User will attend the conference (estimated May 30, 2023)';
     const result = expandInlineEstimatedDates(input, now);
     expect(result).toContain('likely already happened');
   });
 
-  it('does not add "likely already happened" for non-future-intent lines', () => {
+  it('does not add "likely already happened" for non-future-intent lines', async () => {
     const input = 'User bought tickets (estimated May 30, 2023)';
     const result = expandInlineEstimatedDates(input, now);
     expect(result).not.toContain('likely already happened');
   });
 
-  it('leaves unparseable inline dates unchanged', () => {
+  it('leaves unparseable inline dates unchanged', async () => {
     const input = 'User mentioned (estimated sometime soon)';
     // "sometime soon" has no year, so the outer regex won't match
     expect(expandInlineEstimatedDates(input, now)).toBe(input);
   });
 
-  it('handles multiple inline dates in one string', () => {
+  it('handles multiple inline dates in one string', async () => {
     const input = ['Bought item A (estimated May 10, 2023)', 'Bought item B (estimated June 1, 2023)'].join('\n');
     const result = expandInlineEstimatedDates(input, now);
     // Both should be expanded
@@ -285,7 +285,7 @@ describe('expandInlineEstimatedDates', () => {
     expect(result).toContain('June 1, 2023 -');
   });
 
-  it('correctly handles duplicate inline date snippets with different line contexts', () => {
+  it('correctly handles duplicate inline date snippets with different line contexts', async () => {
     // Both lines have the exact same date, but only the second is future-intent
     const input = [
       'Bought tickets for event (estimated May 30, 2023)',
@@ -299,7 +299,7 @@ describe('expandInlineEstimatedDates', () => {
     expect(lines[1]).toContain('likely already happened');
   });
 
-  it('uses forward-looking strings for future dates', () => {
+  it('uses forward-looking strings for future dates', async () => {
     const input = `Event scheduled (estimated July 15, 2025)`;
     const result = expandInlineEstimatedDates(input, now);
     expect(result).toContain('in 1 month');
@@ -309,13 +309,13 @@ describe('expandInlineEstimatedDates', () => {
 describe('addRelativeTimeToObservations', () => {
   const now = new Date('2025-06-15T12:00:00Z');
 
-  it('annotates "Date:" headers with relative time', () => {
+  it('annotates "Date:" headers with relative time', async () => {
     const input = 'Date: June 10, 2025\n- User said hello';
     const result = addRelativeTimeToObservations(input, now);
     expect(result).toContain('Date: June 10, 2025 (5 days ago)');
   });
 
-  it('handles multiple date headers', () => {
+  it('handles multiple date headers', async () => {
     const input = ['Date: June 1, 2025', '- First observation', 'Date: June 10, 2025', '- Second observation'].join(
       '\n',
     );
@@ -324,26 +324,26 @@ describe('addRelativeTimeToObservations', () => {
     expect(result).toContain('June 10, 2025 (5 days ago)');
   });
 
-  it('inserts gap markers between dates with significant gaps', () => {
+  it('inserts gap markers between dates with significant gaps', async () => {
     const input = ['Date: May 1, 2025', '- Early observation', 'Date: June 10, 2025', '- Later observation'].join('\n');
     const result = addRelativeTimeToObservations(input, now);
     // 40-day gap → should produce a gap marker
     expect(result).toMatch(/\[.*later\]/);
   });
 
-  it('does not insert gap markers for consecutive dates', () => {
+  it('does not insert gap markers for consecutive dates', async () => {
     const input = ['Date: June 14, 2025', '- Yesterday obs', 'Date: June 15, 2025', '- Today obs'].join('\n');
     const result = addRelativeTimeToObservations(input, now);
     expect(result).not.toMatch(/\[.*later\]/);
   });
 
-  it('returns observations unchanged when no date headers are present', () => {
+  it('returns observations unchanged when no date headers are present', async () => {
     const input = '- User prefers dark mode\n- User uses TypeScript';
     const result = addRelativeTimeToObservations(input, now);
     expect(result).toBe(input);
   });
 
-  it('also expands inline estimated dates', () => {
+  it('also expands inline estimated dates', async () => {
     const input = ['Date: June 10, 2025', '- User bought tickets (estimated May 30, 2025)'].join('\n');
     const result = addRelativeTimeToObservations(input, now);
     // Date header should be annotated
@@ -352,7 +352,7 @@ describe('addRelativeTimeToObservations', () => {
     expect(result).toContain('May 30, 2025 -');
   });
 
-  it('handles "today" for current date', () => {
+  it('handles "today" for current date', async () => {
     const input = 'Date: June 15, 2025\n- Something happened';
     const result = addRelativeTimeToObservations(input, now);
     expect(result).toContain('Date: June 15, 2025 (today)');

@@ -222,7 +222,7 @@ export class ObserverRunner {
     usage?: { inputTokens?: number; outputTokens?: number; totalTokens?: number };
     providerMetadata?: ProviderMetadata;
   }> {
-    const inputTokens = this.tokenCounter.countMessages(messagesToObserve);
+    const inputTokens = await this.tokenCounter.countMessages(messagesToObserve);
     const resolvedModel = options?.model ? { model: options.model } : this.resolveModel(inputTokens);
     const activeExtractors = await resolveExtractors(
       filterObserverExtractors(this.observationConfig.extractors, options?.skipContinuationHints),
@@ -254,7 +254,7 @@ export class ObserverRunner {
           extractors: activeExtractors,
         }),
       },
-      buildObserverHistoryMessage(messagesToObserve, {
+      await buildObserverHistoryMessage(messagesToObserve, {
         attachmentFilter,
       }),
     ];
@@ -402,10 +402,9 @@ export class ObserverRunner {
     usage?: { inputTokens?: number; outputTokens?: number; totalTokens?: number };
     providerMetadata?: ProviderMetadata;
   }> {
-    const inputTokens = Array.from(messagesByThread.values()).reduce(
-      (total, messages) => total + this.tokenCounter.countMessages(messages),
-      0,
-    );
+    const inputTokens = (
+      await Promise.all(Array.from(messagesByThread.values(), messages => this.tokenCounter.countMessages(messages)))
+    ).reduce((total, count) => total + count, 0);
     const resolvedModel = model ? { model } : this.resolveModel(inputTokens);
     const firstThreadMessages = messagesByThread.get(threadOrder[0] ?? '') ?? [];
     const activeExtractors = await resolveExtractors(this.observationConfig.extractors ?? [], {
@@ -477,7 +476,7 @@ export class ObserverRunner {
           activeExtractors,
         ),
       },
-      buildMultiThreadObserverHistoryMessage(messagesByThread, threadOrder, {
+      await buildMultiThreadObserverHistoryMessage(messagesByThread, threadOrder, {
         attachmentFilter: multiThreadAttachmentFilter,
       }),
     ];

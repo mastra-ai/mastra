@@ -1,9 +1,9 @@
 import type { CoreMessage as CoreMessageV4 } from '@internal/ai-sdk-v4';
-import { estimateTokenCount, sliceByTokens } from 'tokenx';
 import type { MastraDBMessage } from '../../agent/message-list';
 import { parseDataUri, resolveFilePartMediaTypeAndData } from '../../agent/message-list/prompt/image-utils';
 import { TripWire } from '../../agent/trip-wire';
 import type { ChunkType } from '../../stream';
+import { loadTokenx } from '../../utils/tokenx';
 import type { ProcessInputStepArgs, ProcessOutputStreamArgs, Processor } from '../index';
 
 /**
@@ -132,7 +132,8 @@ export class TokenLimiterProcessor implements Processor<'token-limiter', TokenLi
     }
   }
 
-  private countTokens(text: string): number {
+  private async countTokens(text: string): Promise<number> {
+    const { estimateTokenCount } = await loadTokenx();
     return estimateTokenCount(text);
   }
 
@@ -237,7 +238,7 @@ export class TokenLimiterProcessor implements Processor<'token-limiter', TokenLi
 
     const tokenString = message.role + message.content;
 
-    return this.countTokens(tokenString) + TokenLimiterProcessor.TOKENS_PER_MESSAGE;
+    return (await this.countTokens(tokenString)) + TokenLimiterProcessor.TOKENS_PER_MESSAGE;
   }
 
   /**
@@ -328,7 +329,7 @@ export class TokenLimiterProcessor implements Processor<'token-limiter', TokenLi
       overhead += toolResultCount * TokenLimiterProcessor.TOKENS_PER_MESSAGE;
     }
 
-    const tokenCount = this.countTokens(tokenString);
+    const tokenCount = await this.countTokens(tokenString);
     const total = tokenCount + overhead + mediaTokens;
     return total;
   }
@@ -393,12 +394,12 @@ export class TokenLimiterProcessor implements Processor<'token-limiter', TokenLi
   private async countTokensInChunk(part: ChunkType): Promise<number> {
     if (part.type === 'text-delta') {
       // For text chunks, count the text content directly
-      return this.countTokens(part.payload.text);
+      return await this.countTokens(part.payload.text);
     } else if (part.type === 'object') {
       // For object chunks, count the JSON representation
       // This is similar to how the memory processor handles object content
       const objectString = JSON.stringify(part.object);
-      return this.countTokens(objectString);
+      return await this.countTokens(objectString);
     }
 
     // Anything else carries no generated output and is not counted
@@ -420,49 +421,49 @@ export class TokenLimiterProcessor implements Processor<'token-limiter', TokenLi
     // Use a local variable to track tokens within this single result processing
     let cumulativeTokens = 0;
 
-    const processedMessages = messages.map(message => {
+    const { sliceByTokens } = await loadTokenx();
+    const processedMessages: MastraDBMessage[] = [];
+
+    for (const message of messages) {
       if (message.role !== 'assistant' || !message.content?.parts) {
-        return message;
+        processedMessages.push(message);
+        continue;
       }
 
-      const processedParts = message.content.parts.map(part => {
-        if (part.type === 'text') {
-          const textContent = part.text;
-          const tokens = this.countTokens(textContent);
-
-          // Check if adding this part's tokens would exceed the cumulative limit
-          if (cumulativeTokens + tokens <= limit) {
-            cumulativeTokens += tokens;
-            return part;
-          } else {
-            if (this.strategy === 'abort') {
-              abort(`Token limit of ${limit} exceeded (current: ${cumulativeTokens + tokens})`);
-            } else {
-              // Truncate the text to fit within the remaining token limit
-              const remainingTokens = Math.max(0, limit - cumulativeTokens);
-              const truncatedText = remainingTokens > 0 ? sliceByTokens(textContent, 0, remainingTokens) : '';
-              cumulativeTokens += this.countTokens(truncatedText);
-
-              return {
-                ...part,
-                text: truncatedText,
-              };
-            }
-          }
+      const processedParts = [];
+      for (const part of message.content.parts) {
+        if (part.type !== 'text') {
+          processedParts.push(part);
+          continue;
         }
 
-        // For non-text parts, just return them as-is
-        return part;
-      });
+        const textContent = part.text;
+        const tokens = await this.countTokens(textContent);
 
-      return {
+        if (cumulativeTokens + tokens <= limit) {
+          cumulativeTokens += tokens;
+          processedParts.push(part);
+          continue;
+        }
+
+        if (this.strategy === 'abort') {
+          abort(`Token limit of ${limit} exceeded (current: ${cumulativeTokens + tokens})`);
+        }
+
+        const remainingTokens = Math.max(0, limit - cumulativeTokens);
+        const truncatedText = remainingTokens > 0 ? sliceByTokens(textContent, 0, remainingTokens) : '';
+        cumulativeTokens += await this.countTokens(truncatedText);
+        processedParts.push({ ...part, text: truncatedText });
+      }
+
+      processedMessages.push({
         ...message,
         content: {
           ...message.content,
           parts: processedParts,
         },
-      };
-    });
+      });
+    }
 
     return processedMessages;
   }

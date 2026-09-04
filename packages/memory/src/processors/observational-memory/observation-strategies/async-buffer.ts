@@ -74,7 +74,7 @@ export class AsyncBufferObservationStrategy extends ObservationStrategy {
       failures: result.extractionFailures,
       previousValues: this.priorExtractedValues,
       rawObservations: result.observations,
-      recentMessages: formatMessagesForObserver(messages, { maxPartLength: 500 }),
+      recentMessages: await formatMessagesForObserver(messages, { maxPartLength: 500 }),
       threadId: this.opts.threadId,
       resourceId: this.opts.resourceId,
       mainAgent: this.opts.agent,
@@ -117,7 +117,7 @@ export class AsyncBufferObservationStrategy extends ObservationStrategy {
           : output.observations;
     }
 
-    const observationTokens = this.tokenCounter.countObservations(newObservations);
+    const observationTokens = await this.tokenCounter.countObservations(newObservations);
     const messageIds = messages.map(m => m.id);
     const maxTs = this.getMaxMessageTimestamp(messages);
     const lastObservedAt = new Date(maxTs.getTime() + 1);
@@ -141,7 +141,7 @@ export class AsyncBufferObservationStrategy extends ObservationStrategy {
     if (!processed.observations) return;
 
     const { record, threadId, resourceId, messages } = this.opts;
-    const messageTokens = await this.tokenCounter.countMessagesAsync(messages);
+    const messageTokens = await this.tokenCounter.countMessages(messages);
     await this.storage.updateBufferedObservations({
       id: record.id,
       chunk: {
@@ -207,7 +207,7 @@ export class AsyncBufferObservationStrategy extends ObservationStrategy {
     if (!processed.observations) return;
 
     const { record, threadId, messages } = this.opts;
-    const tokensBuffered = await this.tokenCounter.countMessagesAsync(messages);
+    const tokensBuffered = await this.tokenCounter.countMessages(messages);
     const updatedRecord = await this.storage.getObservationalMemory(record.threadId, record.resourceId);
     const updatedChunks = getBufferedChunks(updatedRecord);
     const totalBufferedTokens =
@@ -234,7 +234,7 @@ export class AsyncBufferObservationStrategy extends ObservationStrategy {
 
   async emitFailedMarkers(_cycleId: string, error: unknown) {
     const { record, threadId, messages } = this.opts;
-    const tokensAttempted = await this.tokenCounter.countMessagesAsync(messages);
+    const tokensAttempted = await this.tokenCounter.countMessages(messages);
     const failedMarker = createBufferingFailedMarker({
       cycleId: this.cycleId,
       operationType: 'observation',

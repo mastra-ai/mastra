@@ -436,6 +436,7 @@ export const environmentRoute = registerApiRoute('/environment', {
       expect(packageJson.dependencies).toEqual(
         expect.objectContaining({
           '@mastra/core': expect.any(String),
+          '@inner/hello-world': 'file:./workspace-module/inner-hello-world-1.0.0.tgz',
           bcrypt: expect.any(String),
           typescript: expect.any(String),
         }),

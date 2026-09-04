@@ -2174,7 +2174,7 @@ describe('om-tools', () => {
   });
 
   describe('Memory.listTools', () => {
-    it('should register recall when observational memory retrieval mode is enabled for thread scope', () => {
+    it('should register recall when observational memory retrieval mode is enabled for thread scope', async () => {
       const memory = new Memory({
         storage: new InMemoryStore(),
         options: {
@@ -2189,7 +2189,7 @@ describe('om-tools', () => {
       expect(memory.listTools()).toHaveProperty('recall');
     });
 
-    it('should register recall when retrieval mode is enabled for resource scope', () => {
+    it('should register recall when retrieval mode is enabled for resource scope', async () => {
       const memory = new Memory({
         storage: new InMemoryStore(),
         options: {
@@ -2204,7 +2204,7 @@ describe('om-tools', () => {
       expect(memory.listTools()).toHaveProperty('recall');
     });
 
-    it('should throw when retrieval has vector: true but no vector store', () => {
+    it('should throw when retrieval has vector: true but no vector store', async () => {
       expect(
         () =>
           new Memory({
@@ -2220,7 +2220,7 @@ describe('om-tools', () => {
       ).toThrow('requires a vector store');
     });
 
-    it('should throw when retrieval has vector: true but no embedder', () => {
+    it('should throw when retrieval has vector: true but no embedder', async () => {
       expect(
         () =>
           new Memory({
@@ -2237,7 +2237,7 @@ describe('om-tools', () => {
       ).toThrow('requires an embedder');
     });
 
-    it('should not register recall when retrieval mode is disabled', () => {
+    it('should not register recall when retrieval mode is disabled', async () => {
       const memory = new Memory({
         storage: new InMemoryStore(),
         options: {
@@ -2955,7 +2955,7 @@ describe('om-tools', () => {
   });
 
   describe('Memory.listTools with retrieval config shapes', () => {
-    it('should register recall with retrieval: true (boolean)', () => {
+    it('should register recall with retrieval: true (boolean)', async () => {
       const memory = new Memory({
         storage: new InMemoryStore(),
         options: {
@@ -2970,7 +2970,7 @@ describe('om-tools', () => {
       expect(memory.listTools()).toHaveProperty('recall');
     });
 
-    it('should register recall with retrieval object config', () => {
+    it('should register recall with retrieval object config', async () => {
       const memory = new Memory({
         storage: new InMemoryStore(),
         vector: { id: 'test' } as any,
@@ -2995,7 +2995,7 @@ describe('om-tools', () => {
         properties: Record<string, { enum?: string[]; description?: string }>;
       };
 
-    it('omits "search" from the mode enum and descriptions when search is not enabled', () => {
+    it('omits "search" from the mode enum and descriptions when search is not enabled', async () => {
       for (const retrievalScope of ['thread', 'resource'] as const) {
         const tool = recallTool(undefined, { retrievalScope, searchEnabled: false });
         const schema = getInputJSONSchema(tool);
@@ -3007,7 +3007,7 @@ describe('om-tools', () => {
       }
     });
 
-    it('keeps "search" advertised by default for direct callers', () => {
+    it('keeps "search" advertised by default for direct callers', async () => {
       const tool = recallTool(undefined, { retrievalScope: 'resource' });
       const schema = getInputJSONSchema(tool);
 
@@ -3046,7 +3046,7 @@ describe('om-tools', () => {
       expect((result as any).results).toContain('Search is not configured');
     });
 
-    it('does not advertise search from Memory.listTools when no vector store is configured', () => {
+    it('does not advertise search from Memory.listTools when no vector store is configured', async () => {
       const memory = new Memory({
         storage: new InMemoryStore(),
         options: {
@@ -3064,7 +3064,7 @@ describe('om-tools', () => {
       expect(recall.description).not.toContain('mode="search"');
     });
 
-    it('does not advertise search when a vector store exists but retrieval search is disabled', () => {
+    it('does not advertise search when a vector store exists but retrieval search is disabled', async () => {
       const memory = new Memory({
         storage: new InMemoryStore(),
         vector: { id: 'test' } as any,
@@ -3083,7 +3083,7 @@ describe('om-tools', () => {
       expect(recall.description).not.toContain('mode="search"');
     });
 
-    it('advertises search when retrieval search, a vector store, and an embedder are configured', () => {
+    it('advertises search when retrieval search, a vector store, and an embedder are configured', async () => {
       const memory = new Memory({
         storage: new InMemoryStore(),
         vector: { id: 'test' } as any,

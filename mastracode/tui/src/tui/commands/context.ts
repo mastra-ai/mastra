@@ -150,7 +150,7 @@ export async function handleContextCommand(ctx: SlashCommandContext): Promise<vo
     }
 
     const displayState = ctx.state.session.displayState.get();
-    const audit = buildContextAudit({
+    const audit = await buildContextAudit({
       instructionSections,
       skillsCatalog,
       tools: collectMcpTools(ctx),

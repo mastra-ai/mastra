@@ -99,7 +99,7 @@
     "string-similarity": "^4.0.4"
   },
   "peerDependencies": {
-    "@mastra/core": ">=1.0.0-0 <2.0.0-0",
+    "@mastra/core": ">=2.0.0-0 <3.0.0-0",
     "vitest": ">=3.0.0 <5.0.0"
   },
   "peerDependenciesMeta": {

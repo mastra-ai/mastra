@@ -175,7 +175,7 @@ describe('PinnedStateProcessor', () => {
     expect(result).toBeUndefined();
   });
 
-  it('folds the same KnowledgeRecord id added in one delta and removed in a later one order-stably', () => {
+  it('folds the same KnowledgeRecord id added in one delta and removed in a later one order-stably', async () => {
     const base: PinEntry[] = [];
     const afterAdd = applyPinOps(base, [{ op: 'add', pin: { id: 'f1', text: 'ephemeral' } }]);
     const afterRemove = applyPinOps(afterAdd, [{ op: 'remove', id: 'f1' }]);
@@ -197,7 +197,7 @@ describe('PinnedStateProcessor', () => {
     expect(result).toBeUndefined();
   });
 
-  it('cache keys for different pin sets cannot collide across field boundaries', () => {
+  it('cache keys for different pin sets cannot collide across field boundaries', async () => {
     const a = stablePinsCacheKey([{ id: 'a', text: 'b|c' }]);
     const b = stablePinsCacheKey([
       { id: 'a', text: 'b' },

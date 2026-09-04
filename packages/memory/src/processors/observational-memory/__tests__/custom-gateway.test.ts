@@ -91,7 +91,7 @@ describe('ObservationalMemory — custom gateway propagation', () => {
     expect((om!.reflector as any).createAgent('om-test/provider/model').getMastraInstance()).toBe(mastra);
   });
 
-  it('forwards the parent Mastra instance to the Observer agent', () => {
+  it('forwards the parent Mastra instance to the Observer agent', async () => {
     const mastra = new Mastra({ logger: false });
     const om = new ObservationalMemory({
       storage: createInMemoryStorage(),
@@ -105,7 +105,7 @@ describe('ObservationalMemory — custom gateway propagation', () => {
     expect(agent.getMastraInstance()).toBe(mastra);
   });
 
-  it('forwards the parent Mastra instance to the multi-thread Observer agent', () => {
+  it('forwards the parent Mastra instance to the multi-thread Observer agent', async () => {
     const mastra = new Mastra({ logger: false });
     const om = new ObservationalMemory({
       storage: createInMemoryStorage(),
@@ -119,7 +119,7 @@ describe('ObservationalMemory — custom gateway propagation', () => {
     expect(agent.getMastraInstance()).toBe(mastra);
   });
 
-  it('forwards the parent Mastra instance to the Reflector agent', () => {
+  it('forwards the parent Mastra instance to the Reflector agent', async () => {
     const mastra = new Mastra({ logger: false });
     const om = new ObservationalMemory({
       storage: createInMemoryStorage(),
@@ -133,7 +133,7 @@ describe('ObservationalMemory — custom gateway propagation', () => {
     expect(agent.getMastraInstance()).toBe(mastra);
   });
 
-  it('preserves prior behavior when no Mastra instance is supplied', () => {
+  it('preserves prior behavior when no Mastra instance is supplied', async () => {
     const om = new ObservationalMemory({
       storage: createInMemoryStorage(),
       observation: { messageTokens: 100_000, model: 'test-model' },

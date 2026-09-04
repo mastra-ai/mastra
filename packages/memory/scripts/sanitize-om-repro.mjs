@@ -3,7 +3,7 @@ import { createHash } from 'node:crypto';
 import { readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { join, relative, resolve } from 'node:path';
 
-import { estimateTokenCount } from 'tokenx';
+const { estimateTokenCount } = await import('tokenx');
 
 const DEFAULT_CACHE_SOURCE = 'v6:tokenx';
 const TOKEN_ESTIMATE_CACHE_VERSION = 6;

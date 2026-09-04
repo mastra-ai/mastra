@@ -29,7 +29,7 @@ describe('markers', () => {
   });
 
   describe('createObservationStartMarker', () => {
-    it('returns a data-om-observation-start part with correct fields', () => {
+    it('returns a data-om-observation-start part with correct fields', async () => {
       const marker = createObservationStartMarker({
         cycleId: 'cycle-1',
         operationType: 'observation',
@@ -55,7 +55,7 @@ describe('markers', () => {
       });
     });
 
-    it('supports reflection operationType', () => {
+    it('supports reflection operationType', async () => {
       const marker = createObservationStartMarker({
         cycleId: 'cycle-2',
         operationType: 'reflection',
@@ -69,7 +69,7 @@ describe('markers', () => {
       expect(marker.data.operationType).toBe('reflection');
     });
 
-    it('supports multiple threadIds for resource-scoped observation', () => {
+    it('supports multiple threadIds for resource-scoped observation', async () => {
       const marker = createObservationStartMarker({
         cycleId: 'cycle-3',
         operationType: 'observation',
@@ -86,7 +86,7 @@ describe('markers', () => {
   });
 
   describe('createObservationEndMarker', () => {
-    it('returns a data-om-observation-end part with duration', () => {
+    it('returns a data-om-observation-end part with duration', async () => {
       const startedAt = '2025-06-15T11:59:57.000Z';
 
       const marker = createObservationEndMarker({
@@ -116,7 +116,7 @@ describe('markers', () => {
       expect(marker.data.extractionFailures).toEqual([{ slug: 'profile', error: 'schema mismatch' }]);
     });
 
-    it('allows optional fields to be undefined', () => {
+    it('allows optional fields to be undefined', async () => {
       const marker = createObservationEndMarker({
         cycleId: 'cycle-2',
         operationType: 'observation',
@@ -135,7 +135,7 @@ describe('markers', () => {
   });
 
   describe('createThreadUpdateMarker', () => {
-    it('returns a data-om-thread-update part with title change fields', () => {
+    it('returns a data-om-thread-update part with title change fields', async () => {
       const marker = createThreadUpdateMarker({
         cycleId: 'cycle-1',
         threadId: 'thread-1',
@@ -157,7 +157,7 @@ describe('markers', () => {
   });
 
   describe('createObservationFailedMarker', () => {
-    it('returns a data-om-observation-failed part with error and duration', () => {
+    it('returns a data-om-observation-failed part with error and duration', async () => {
       const startedAt = '2025-06-15T11:59:55.000Z';
 
       const marker = createObservationFailedMarker({
@@ -177,7 +177,7 @@ describe('markers', () => {
       expect(marker.data.error).toBe('Observer model failed: rate limit exceeded');
     });
 
-    it('works with reflection operationType', () => {
+    it('works with reflection operationType', async () => {
       const marker = createObservationFailedMarker({
         cycleId: 'cycle-2',
         operationType: 'reflection',
@@ -193,7 +193,7 @@ describe('markers', () => {
   });
 
   describe('createBufferingStartMarker', () => {
-    it('returns a data-om-buffering-start part with correct fields', () => {
+    it('returns a data-om-buffering-start part with correct fields', async () => {
       const marker = createBufferingStartMarker({
         cycleId: 'cycle-1',
         operationType: 'observation',
@@ -221,7 +221,7 @@ describe('markers', () => {
   });
 
   describe('createBufferingEndMarker', () => {
-    it('returns a data-om-buffering-end part with duration', () => {
+    it('returns a data-om-buffering-end part with duration', async () => {
       const startedAt = '2025-06-15T11:59:58.000Z';
 
       const marker = createBufferingEndMarker({
@@ -247,7 +247,7 @@ describe('markers', () => {
       expect(marker.data.extractionFailures).toEqual([{ slug: 'status', error: 'missing value' }]);
     });
 
-    it('allows observations to be undefined', () => {
+    it('allows observations to be undefined', async () => {
       const marker = createBufferingEndMarker({
         cycleId: 'cycle-2',
         operationType: 'reflection',
@@ -263,7 +263,7 @@ describe('markers', () => {
   });
 
   describe('createBufferingFailedMarker', () => {
-    it('returns a data-om-buffering-failed part with error and duration', () => {
+    it('returns a data-om-buffering-failed part with error and duration', async () => {
       const startedAt = '2025-06-15T11:59:50.000Z';
 
       const marker = createBufferingFailedMarker({
@@ -285,7 +285,7 @@ describe('markers', () => {
   });
 
   describe('createActivationMarker', () => {
-    it('returns a data-om-activation part with correct fields', () => {
+    it('returns a data-om-activation part with correct fields', async () => {
       const marker = createActivationMarker({
         cycleId: 'cycle-1',
         operationType: 'observation',
@@ -325,7 +325,7 @@ describe('markers', () => {
       });
     });
 
-    it('allows observations to be undefined', () => {
+    it('allows observations to be undefined', async () => {
       const marker = createActivationMarker({
         cycleId: 'cycle-2',
         operationType: 'reflection',
@@ -344,7 +344,7 @@ describe('markers', () => {
   });
 
   describe('timestamp consistency', () => {
-    it('all start markers use the same frozen time', () => {
+    it('all start markers use the same frozen time', async () => {
       const obsStart = createObservationStartMarker({
         cycleId: 'c1',
         operationType: 'observation',
@@ -383,7 +383,7 @@ describe('markers', () => {
       expect(activation.data.activatedAt).toBe('2025-06-15T12:00:00.000Z');
     });
 
-    it('duration markers calculate correctly with time advancement', () => {
+    it('duration markers calculate correctly with time advancement', async () => {
       const startedAt = new Date().toISOString();
 
       // Advance time by 1.5 seconds

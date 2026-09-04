@@ -1,11 +1,11 @@
-import pMapModule from 'p-map';
-import { interopDefault } from './interop';
+type PMapModule = typeof import('p-map');
 
-export { pMapSkip } from 'p-map';
+let pMapModulePromise: Promise<PMapModule> | undefined;
 
 /**
- * `p-map` is ESM-only. Import pMap from here, not from the package, so that the
- * CommonJS build gets the function instead of the module namespace. See
- * {@link interopDefault}.
+ * Loads the ESM-only `p-map` module without making CommonJS consumers require
+ * it while evaluating Mastra's entry point.
  */
-export const pMap = interopDefault(pMapModule);
+export function loadPMap(): Promise<PMapModule> {
+  return (pMapModulePromise ??= import('p-map'));
+}

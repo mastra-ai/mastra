@@ -2435,7 +2435,7 @@ Notes:
           reachedLimit = true;
           break;
         }
-        const messageTokens = tokenCounter.countMessage(message);
+        const messageTokens = await tokenCounter.countMessage(message);
         if (collected.length + kept.length > 0 && tokens + messageTokens > maxInputTokens) {
           reachedLimit = true;
           break;

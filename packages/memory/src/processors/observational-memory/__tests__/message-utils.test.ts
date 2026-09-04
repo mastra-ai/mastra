@@ -19,7 +19,7 @@ function createMessage(id: string, text: string, role: 'user' | 'assistant' = 'u
 }
 
 describe('getObservableMessages', () => {
-  it('excludes context-sourced messages from the OM window', () => {
+  it('excludes context-sourced messages from the OM window', async () => {
     const messageList = new MessageList({ threadId: THREAD_ID, resourceId: RESOURCE_ID });
     messageList.add(createMessage('input-1', 'Suggest a collar'), 'input');
     messageList.add(createMessage('context-1', '<client-context>{"page":"/products"}</client-context>'), 'context');
@@ -31,7 +31,7 @@ describe('getObservableMessages', () => {
     expect(getObservableMessages(messageList).map(m => m.id)).toEqual(['input-1', 'response-1']);
   });
 
-  it('keeps the synthetic continuation live while excluding it from the OM window', () => {
+  it('keeps the synthetic continuation live while excluding it from the OM window', async () => {
     const messageList = new MessageList({ threadId: THREAD_ID, resourceId: RESOURCE_ID });
     messageList.add(createMessage('input-1', 'hello'), 'input');
     messageList.add(createMessage('memory-1', 'durable memory context'), 'memory');
@@ -47,29 +47,29 @@ describe('getObservableMessages', () => {
 });
 
 describe('stripThreadTags', () => {
-  it('removes <thread> open tags with attributes', () => {
+  it('removes <thread> open tags with attributes', async () => {
     expect(stripThreadTags('<thread id="abc">hello')).toBe('hello');
     expect(stripThreadTags('<thread>hello')).toBe('hello');
   });
 
-  it('removes </thread> close tags', () => {
+  it('removes </thread> close tags', async () => {
     expect(stripThreadTags('hello</thread>')).toBe('hello');
   });
 
-  it('removes both open and close tags, trimming whitespace', () => {
+  it('removes both open and close tags, trimming whitespace', async () => {
     expect(stripThreadTags('  <thread id="1">hello world</thread>  ')).toBe('hello world');
   });
 
-  it('is case-insensitive', () => {
+  it('is case-insensitive', async () => {
     expect(stripThreadTags('<THREAD>hello</Thread>')).toBe('hello');
   });
 
-  it('leaves unrelated angle-bracket text alone', () => {
+  it('leaves unrelated angle-bracket text alone', async () => {
     expect(stripThreadTags('<threading> kept')).toBe('<threading> kept');
     expect(stripThreadTags('a < b && c > d')).toBe('a < b && c > d');
   });
 
-  it('runs in linear time on pathological input (no ReDoS)', () => {
+  it('runs in linear time on pathological input (no ReDoS)', async () => {
     const input = '<thread'.repeat(5_000);
     stripThreadTags('<thread'.repeat(100)); // warm up JIT
     const start = performance.now();

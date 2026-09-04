@@ -30,36 +30,36 @@ function messageWithToolResult(result: unknown): MastraDBMessage {
 }
 
 describe('TokenCounter with oversized tool results', () => {
-  it('counts the full tool result, not the representation truncated for the Observer', () => {
+  it('counts the full tool result, not the representation truncated for the Observer', async () => {
     const counter = new TokenCounter();
     // Comfortably past the Observer's per-tool-result truncation budget.
     const hugeResult = { contents: 'lorem ipsum dolor sit amet '.repeat(40_000) };
 
-    const tokens = counter.countMessage(messageWithToolResult(hugeResult));
+    const tokens = await counter.countMessage(messageWithToolResult(hugeResult));
 
     expect(tokens).toBeGreaterThan(DEFAULT_OBSERVER_TOOL_RESULT_MAX_TOKENS * 5);
   });
 
-  it('scales with tool result size past the Observer truncation budget', () => {
+  it('scales with tool result size past the Observer truncation budget', async () => {
     const counter = new TokenCounter();
     const build = (repeats: number) =>
       messageWithToolResult({ contents: 'lorem ipsum dolor sit amet '.repeat(repeats) });
 
-    const smaller = counter.countMessage(build(40_000));
-    const larger = counter.countMessage(build(80_000));
+    const smaller = await counter.countMessage(build(40_000));
+    const larger = await counter.countMessage(build(80_000));
 
     expect(larger).toBeGreaterThan(smaller * 1.8);
   });
 
-  it('counts oversized entries inside multimodal tool result content', () => {
+  it('counts oversized entries inside multimodal tool result content', async () => {
     const counter = new TokenCounter();
     const build = (repeats: number) =>
       messageWithToolResult({
         content: [{ type: 'json', value: { contents: 'lorem ipsum dolor sit amet '.repeat(repeats) } }],
       });
 
-    const smaller = counter.countMessage(build(40_000));
-    const larger = counter.countMessage(build(80_000));
+    const smaller = await counter.countMessage(build(40_000));
+    const larger = await counter.countMessage(build(80_000));
 
     expect(smaller).toBeGreaterThan(DEFAULT_OBSERVER_TOOL_RESULT_MAX_TOKENS * 5);
     expect(larger).toBeGreaterThan(smaller * 1.8);

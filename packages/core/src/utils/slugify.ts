@@ -1,9 +1,11 @@
-import slugifyModule from '@sindresorhus/slugify';
-import { interopDefault } from './interop';
+type Slugify = (typeof import('@sindresorhus/slugify'))['default'];
+
+let slugifyPromise: Promise<Slugify> | undefined;
 
 /**
- * `@sindresorhus/slugify` is ESM-only. Import slugify from here, not from the
- * package, so that the CommonJS build gets the function instead of the module
- * namespace. See {@link interopDefault}.
+ * Loads the ESM-only `@sindresorhus/slugify` default export without making
+ * CommonJS consumers require it while evaluating Mastra's entry point.
  */
-export const slugify = interopDefault(slugifyModule);
+export function loadSlugify(): Promise<Slugify> {
+  return (slugifyPromise ??= import('@sindresorhus/slugify').then(module => module.default));
+}

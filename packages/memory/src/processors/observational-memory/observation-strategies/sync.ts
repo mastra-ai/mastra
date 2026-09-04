@@ -78,7 +78,7 @@ export class SyncObservationStrategy extends ObservationStrategy {
       }
     }
 
-    this.tokensToObserve = await this.tokenCounter.countMessagesAsync(messages);
+    this.tokensToObserve = await this.tokenCounter.countMessages(messages);
 
     const freshRecord = await this.storage.getObservationalMemory(record.threadId, record.resourceId);
     const existingObservations = freshRecord?.activeObservations ?? record.activeObservations ?? '';
@@ -124,7 +124,7 @@ export class SyncObservationStrategy extends ObservationStrategy {
       failures: result.extractionFailures,
       previousValues: this.priorExtractedValues,
       rawObservations: result.observations,
-      recentMessages: formatMessagesForObserver(this.opts.messages, { maxPartLength: 500 }),
+      recentMessages: await formatMessagesForObserver(this.opts.messages, { maxPartLength: 500 }),
       threadId: this.opts.threadId,
       resourceId: this.opts.resourceId,
       mainAgent: this.opts.agent,
@@ -156,8 +156,8 @@ export class SyncObservationStrategy extends ObservationStrategy {
       lastObservedAt,
       messageRange,
     );
-    const observationTokens = this.tokenCounter.countObservations(newObservations);
-    const cycleObservationTokens = this.tokenCounter.countObservations(output.observations);
+    const observationTokens = await this.tokenCounter.countObservations(newObservations);
+    const cycleObservationTokens = await this.tokenCounter.countObservations(output.observations);
 
     const newMessageIds = messages.map(m => m.id);
     const existingIds = record.observedMessageIds ?? [];
@@ -250,7 +250,7 @@ export class SyncObservationStrategy extends ObservationStrategy {
   }
 
   async emitEndMarkers(cycleId: string, processed: ProcessedObservation) {
-    const actualTokensObserved = await this.tokenCounter.countMessagesAsync(this.opts.messages);
+    const actualTokensObserved = await this.tokenCounter.countMessages(this.opts.messages);
     if (this.lastMessage?.id) {
       const endMarker = createObservationEndMarker({
         cycleId,

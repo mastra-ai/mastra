@@ -26,186 +26,186 @@ function makeChunk(messageTokens: number): BufferedObservationChunk {
 
 describe('thresholds', () => {
   describe('getMaxThreshold', () => {
-    it('returns the number for simple thresholds', () => {
+    it('returns the number for simple thresholds', async () => {
       expect(getMaxThreshold(30000)).toBe(30000);
     });
 
-    it('returns max for range thresholds', () => {
+    it('returns max for range thresholds', async () => {
       expect(getMaxThreshold({ min: 8000, max: 70000 })).toBe(70000);
     });
 
-    it('handles zero', () => {
+    it('handles zero', async () => {
       expect(getMaxThreshold(0)).toBe(0);
     });
   });
 
   describe('calculateDynamicThreshold', () => {
-    it('returns the number as-is for simple thresholds', () => {
+    it('returns the number as-is for simple thresholds', async () => {
       expect(calculateDynamicThreshold(30000, 10000)).toBe(30000);
       expect(calculateDynamicThreshold(30000, 0)).toBe(30000);
     });
 
-    it('expands into unused observation space for range thresholds', () => {
+    it('expands into unused observation space for range thresholds', async () => {
       // 30k:40k → total budget 70k
       // 0 observations → can use full 70k
       expect(calculateDynamicThreshold({ min: 30000, max: 70000 }, 0)).toBe(70000);
     });
 
-    it('shrinks as observations grow', () => {
+    it('shrinks as observations grow', async () => {
       // 10k observations → 70k - 10k = 60k
       expect(calculateDynamicThreshold({ min: 30000, max: 70000 }, 10000)).toBe(60000);
     });
 
-    it('never goes below the base threshold (min)', () => {
+    it('never goes below the base threshold (min)', async () => {
       // 50k observations → 70k - 50k = 20k, but min is 30k
       expect(calculateDynamicThreshold({ min: 30000, max: 70000 }, 50000)).toBe(30000);
     });
 
-    it('returns min when observations exceed the total budget', () => {
+    it('returns min when observations exceed the total budget', async () => {
       expect(calculateDynamicThreshold({ min: 30000, max: 70000 }, 100000)).toBe(30000);
     });
 
-    it('rounds the result', () => {
+    it('rounds the result', async () => {
       // 33333 observations → 70000 - 33333 = 36667
       expect(calculateDynamicThreshold({ min: 30000, max: 70000 }, 33333)).toBe(36667);
     });
   });
 
   describe('resolveBufferTokens', () => {
-    it('returns undefined for false', () => {
+    it('returns undefined for false', async () => {
       expect(resolveBufferTokens(false, 30000)).toBeUndefined();
     });
 
-    it('returns undefined for undefined', () => {
+    it('returns undefined for undefined', async () => {
       expect(resolveBufferTokens(undefined, 30000)).toBeUndefined();
     });
 
-    it('converts fractional values to absolute using simple threshold', () => {
+    it('converts fractional values to absolute using simple threshold', async () => {
       // 0.25 * 20000 = 5000
       expect(resolveBufferTokens(0.25, 20000)).toBe(5000);
     });
 
-    it('converts fractional values using range threshold max', () => {
+    it('converts fractional values using range threshold max', async () => {
       // 0.1 * 70000 = 7000
       expect(resolveBufferTokens(0.1, { min: 30000, max: 70000 })).toBe(7000);
     });
 
-    it('returns absolute values as-is', () => {
+    it('returns absolute values as-is', async () => {
       expect(resolveBufferTokens(5000, 30000)).toBe(5000);
     });
 
-    it('returns 1 as-is (not fractional — boundary)', () => {
+    it('returns 1 as-is (not fractional — boundary)', async () => {
       // 1 is not in (0, 1) so it's treated as absolute
       expect(resolveBufferTokens(1, 30000)).toBe(1);
     });
 
-    it('handles very small fractions', () => {
+    it('handles very small fractions', async () => {
       expect(resolveBufferTokens(0.01, 100000)).toBe(1000);
     });
   });
 
   describe('resolveBlockAfter', () => {
-    it('returns undefined for undefined', () => {
+    it('returns undefined for undefined', async () => {
       expect(resolveBlockAfter(undefined, 30000)).toBeUndefined();
     });
 
-    it('converts multipliers to absolute values', () => {
+    it('converts multipliers to absolute values', async () => {
       // 1.5 * 20000 = 30000
       expect(resolveBlockAfter(1.5, 20000)).toBe(30000);
     });
 
-    it('treats 1.0 as a multiplier (exactly at threshold)', () => {
+    it('treats 1.0 as a multiplier (exactly at threshold)', async () => {
       expect(resolveBlockAfter(1.0, 20000)).toBe(20000);
     });
 
-    it('uses range max for multiplier resolution', () => {
+    it('uses range max for multiplier resolution', async () => {
       // 1.2 * 70000 = 84000
       expect(resolveBlockAfter(1.2, { min: 30000, max: 70000 })).toBe(84000);
     });
 
-    it('treats values >= 100 as absolute token counts', () => {
+    it('treats values >= 100 as absolute token counts', async () => {
       expect(resolveBlockAfter(50000, 20000)).toBe(50000);
       expect(resolveBlockAfter(100, 20000)).toBe(100); // 100 is >= 100, so absolute
     });
 
-    it('rounds the result', () => {
+    it('rounds the result', async () => {
       // 1.3 * 33333 = 43332.9
       expect(resolveBlockAfter(1.3, 33333)).toBe(43333);
     });
   });
 
   describe('resolveRetentionFloor', () => {
-    it('uses ratio when bufferActivation < 1000', () => {
+    it('uses ratio when bufferActivation < 1000', async () => {
       // 0.7 ratio → retentionFloor = 30000 * (1 - 0.7) = 9000
       expect(resolveRetentionFloor(0.7, 30000)).toBeCloseTo(9000, 0);
     });
 
-    it('returns absolute value when bufferActivation >= 1000', () => {
+    it('returns absolute value when bufferActivation >= 1000', async () => {
       expect(resolveRetentionFloor(5000, 30000)).toBe(5000);
       expect(resolveRetentionFloor(1000, 30000)).toBe(1000);
     });
 
-    it('ratio of 1.0 means zero retention', () => {
+    it('ratio of 1.0 means zero retention', async () => {
       expect(resolveRetentionFloor(1.0, 30000)).toBe(0);
     });
 
-    it('ratio of 0.0 means full retention', () => {
+    it('ratio of 0.0 means full retention', async () => {
       expect(resolveRetentionFloor(0.0, 30000)).toBe(30000);
     });
 
-    it('clamps negative ratio to 0', () => {
+    it('clamps negative ratio to 0', async () => {
       expect(resolveRetentionFloor(-0.5, 30000)).toBe(30000);
     });
 
-    it('clamps ratio > 1 to 1', () => {
+    it('clamps ratio > 1 to 1', async () => {
       expect(resolveRetentionFloor(1.5, 30000)).toBe(0);
     });
   });
 
   describe('resolveActivationRatio', () => {
-    it('returns ratio as-is when < 1000', () => {
+    it('returns ratio as-is when < 1000', async () => {
       expect(resolveActivationRatio(0.7, 30000)).toBe(0.7);
     });
 
-    it('converts absolute to equivalent ratio when >= 1000', () => {
+    it('converts absolute to equivalent ratio when >= 1000', async () => {
       // 5000 absolute, 30000 threshold → 1 - (5000 / 30000) ≈ 0.833
       const result = resolveActivationRatio(5000, 30000);
       expect(result).toBeCloseTo(0.8333, 3);
     });
 
-    it('clamps to [0, 1]', () => {
+    it('clamps to [0, 1]', async () => {
       // bufferActivation > threshold → ratio would be negative, clamped to 0
       expect(resolveActivationRatio(50000, 30000)).toBe(0);
       // bufferActivation = 0 (>= 1000 is false) — handled by ratio path
     });
 
-    it('exact match returns 0', () => {
+    it('exact match returns 0', async () => {
       // 30000 / 30000 = 1, 1 - 1 = 0
       expect(resolveActivationRatio(30000, 30000)).toBe(0);
     });
 
-    it('clamps negative ratio to 0', () => {
+    it('clamps negative ratio to 0', async () => {
       expect(resolveActivationRatio(-0.5, 30000)).toBe(0);
     });
 
-    it('clamps ratio > 1 to 1', () => {
+    it('clamps ratio > 1 to 1', async () => {
       expect(resolveActivationRatio(1.5, 30000)).toBe(1);
     });
   });
 
   describe('calculateProjectedMessageRemoval', () => {
-    it('returns 0 for empty chunks', () => {
+    it('returns 0 for empty chunks', async () => {
       expect(calculateProjectedMessageRemoval([], 0.7, 30000, 25000)).toBe(0);
     });
 
-    it('returns 0 when already within retention floor', () => {
+    it('returns 0 when already within retention floor', async () => {
       // retentionFloor = 30000 * (1 - 0.7) = 9000
       // pendingTokens 5000 < retentionFloor → target = 0 → short-circuit
       const chunks = [makeChunk(5000), makeChunk(5000)];
       expect(calculateProjectedMessageRemoval(chunks, 0.7, 30000, 5000)).toBe(0);
     });
 
-    it('selects the best over-boundary when within safeguards', () => {
+    it('selects the best over-boundary when within safeguards', async () => {
       const chunks = [makeChunk(5000), makeChunk(5000), makeChunk(5000)];
       // bufferActivation 0.7, threshold 30000 → retentionFloor = 9000
       // pendingTokens 25000 → target = 25000 - 9000 = 16000
@@ -215,7 +215,7 @@ describe('thresholds', () => {
       expect(result).toBe(15000);
     });
 
-    it('prefers over-boundary when close to target', () => {
+    it('prefers over-boundary when close to target', async () => {
       const chunks = [makeChunk(8000), makeChunk(9000)];
       // bufferActivation 0.7, threshold 30000 → retentionFloor = 9000
       // pendingTokens 25000 → target = 16000
@@ -226,7 +226,7 @@ describe('thresholds', () => {
       expect(result).toBe(17000);
     });
 
-    it('falls back to under-boundary when over would overshoot too much', () => {
+    it('falls back to under-boundary when over would overshoot too much', async () => {
       const chunks = [makeChunk(3000), makeChunk(25000)];
       // bufferActivation 0.7, threshold 30000 → retentionFloor = 9000
       // pendingTokens 25000 → target = 16000
@@ -237,7 +237,7 @@ describe('thresholds', () => {
       expect(result).toBe(3000);
     });
 
-    it('returns first chunk for single chunk', () => {
+    it('returns first chunk for single chunk', async () => {
       const chunks = [makeChunk(10000)];
       // retentionFloor = 30000 * (1 - 0.7) = 9000
       // target = 25000 - 9000 = 16000
@@ -246,7 +246,7 @@ describe('thresholds', () => {
       expect(result).toBe(10000);
     });
 
-    it('handles activation ratio of 1.0 (remove everything)', () => {
+    it('handles activation ratio of 1.0 (remove everything)', async () => {
       const chunks = [makeChunk(5000), makeChunk(5000)];
       // retentionFloor = 30000 * (1 - 1.0) = 0
       // target = 10000 - 0 = 10000
@@ -255,7 +255,7 @@ describe('thresholds', () => {
       expect(result).toBe(10000);
     });
 
-    it('handles absolute retention floor (>= 1000)', () => {
+    it('handles absolute retention floor (>= 1000)', async () => {
       const chunks = [makeChunk(4000), makeChunk(4000), makeChunk(4000)];
       // bufferActivation = 5000 (absolute), retentionFloor = 5000
       // pendingTokens 15000 → target = 15000 - 5000 = 10000

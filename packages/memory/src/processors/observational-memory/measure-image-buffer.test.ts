@@ -26,23 +26,23 @@ function craftedIcns(): Buffer {
 }
 
 describe('measureImageBuffer', () => {
-  it('reads dimensions from a PNG', () => {
+  it('reads dimensions from a PNG', async () => {
     expect(measureImageBuffer(PNG_1X1)).toEqual({ width: 1, height: 1 });
   });
 
-  it('reads dimensions from a GIF', () => {
+  it('reads dimensions from a GIF', async () => {
     expect(measureImageBuffer(GIF_1X1)).toEqual({ width: 1, height: 1 });
   });
 
-  it('returns undefined for a buffer that is not an image', () => {
+  it('returns undefined for a buffer that is not an image', async () => {
     expect(measureImageBuffer(Buffer.from([1, 2, 3, 4]))).toBeUndefined();
   });
 
-  it('returns undefined for an empty buffer', () => {
+  it('returns undefined for an empty buffer', async () => {
     expect(measureImageBuffer(Buffer.alloc(0))).toBeUndefined();
   });
 
-  it('returns promptly on the malformed ICNS that hung the previous parser', () => {
+  it('returns promptly on the malformed ICNS that hung the previous parser', async () => {
     const startedAt = Date.now();
     expect(measureImageBuffer(craftedIcns())).toBeUndefined();
     expect(Date.now() - startedAt).toBeLessThan(1000);

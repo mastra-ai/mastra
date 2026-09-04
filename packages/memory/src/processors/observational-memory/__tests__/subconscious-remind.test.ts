@@ -527,7 +527,7 @@ describe('Subconscious remind', () => {
     }
   });
 
-  it('copies vector and embedding configuration into reconstructed sidekick memory', () => {
+  it('copies vector and embedding configuration into reconstructed sidekick memory', async () => {
     const vector = { id: 'vector' } as any;
     const embedder = { specificationVersion: 'v2', modelId: 'embedder' } as any;
     const embedderOptions = { providerOptions: { test: { dimensions: 16 } } };

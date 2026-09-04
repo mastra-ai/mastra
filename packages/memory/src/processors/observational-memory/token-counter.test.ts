@@ -88,56 +88,56 @@ describe('TokenCounter', () => {
   });
 
   describe('tokenx estimation', () => {
-    it('produces correct token counts for basic input', () => {
+    it('produces correct token counts for basic input', async () => {
       const counter = new TokenCounter();
-      const tokens = counter.countString('hello world');
+      const tokens = await counter.countString('hello world');
       expect(tokens).toBeGreaterThan(0);
       expect(typeof tokens).toBe('number');
     });
 
-    it('two instances produce identical counts for the same input', () => {
+    it('two instances produce identical counts for the same input', async () => {
       const a = new TokenCounter();
       const b = new TokenCounter();
       const text = 'The quick brown fox jumps over the lazy dog';
 
-      expect(a.countString(text)).toBe(b.countString(text));
+      expect(await a.countString(text)).toBe(await b.countString(text));
     });
 
-    it('uses a tokenx cache source marker', () => {
+    it('uses a tokenx cache source marker', async () => {
       const message = createMessage({
         format: 2,
         parts: [{ type: 'text', text: 'tokenx cache marker sample' }],
       });
 
       const counter = new TokenCounter();
-      counter.countMessage(message);
+      await counter.countMessage(message);
 
       expect(message.content.parts[0].providerMetadata.mastra.tokenEstimate.source).toContain('tokenx');
     });
   });
 
   describe('countString', () => {
-    it('returns 0 for empty string', () => {
+    it('returns 0 for empty string', async () => {
       const counter = new TokenCounter();
-      expect(counter.countString('')).toBe(0);
+      expect(await counter.countString('')).toBe(0);
     });
 
-    it('returns 0 for falsy input', () => {
+    it('returns 0 for falsy input', async () => {
       const counter = new TokenCounter();
-      expect(counter.countString(null as any)).toBe(0);
-      expect(counter.countString(undefined as any)).toBe(0);
+      expect(await counter.countString(null as any)).toBe(0);
+      expect(await counter.countString(undefined as any)).toBe(0);
     });
   });
 
   describe('image counting', () => {
-    it('counts image url parts with a stable integer estimate', () => {
+    it('counts image url parts with a stable integer estimate', async () => {
       const counter = new TokenCounter();
       const message = createMessage({
         format: 2,
         parts: [{ type: 'image', image: new URL('https://example.com/cat.png') }],
       });
 
-      const tokens = counter.countMessage(message);
+      const tokens = await counter.countMessage(message);
       const cachedEntry = message.content.parts[0].providerMetadata.mastra.tokenEstimate;
 
       expect(tokens).toBeGreaterThan(80);
@@ -145,14 +145,14 @@ describe('TokenCounter', () => {
       expect(cachedEntry.tokens).toBe(85);
     });
 
-    it('treats http image strings as urls instead of base64 payloads', () => {
+    it('treats http image strings as urls instead of base64 payloads', async () => {
       const counter = new TokenCounter();
       const message = createMessage({
         format: 2,
         parts: [{ type: 'image', image: 'https://example.com/cat.png' }],
       });
 
-      const tokens = counter.countMessage(message);
+      const tokens = await counter.countMessage(message);
       const cachedEntry = message.content.parts[0].providerMetadata.mastra.tokenEstimate;
 
       expect(tokens).toBeGreaterThan(80);
@@ -286,7 +286,7 @@ describe('TokenCounter', () => {
       expect(fetchMock).not.toHaveBeenCalled();
     });
 
-    it('extracts inline image dimensions from image bytes when metadata is missing', () => {
+    it('extracts inline image dimensions from image bytes when metadata is missing', async () => {
       const counter = new TokenCounter({ model: 'openai/gpt-4o' });
       const message = createMessage({
         format: 2,
@@ -299,7 +299,7 @@ describe('TokenCounter', () => {
         ],
       });
 
-      const tokens = counter.countMessage(message);
+      const tokens = await counter.countMessage(message);
       const part = message.content.parts[0];
 
       expect(tokens).toBeGreaterThan(80);
@@ -307,7 +307,7 @@ describe('TokenCounter', () => {
       expect(part.providerMetadata.mastra.tokenEstimate.tokens).toBe(85);
     });
 
-    it('counts data-uri image parts with deterministic fallback sizing', () => {
+    it('counts data-uri image parts with deterministic fallback sizing', async () => {
       const counter = new TokenCounter({ model: 'openai/gpt-4o' });
       const dataUriImage = `data:image/png;base64,${'a'.repeat(2000000)}`;
       const message = createMessage({
@@ -315,14 +315,14 @@ describe('TokenCounter', () => {
         parts: [{ type: 'image', image: dataUriImage }],
       });
 
-      const tokens = counter.countMessage(message);
+      const tokens = await counter.countMessage(message);
       const cachedEntry = message.content.parts[0].providerMetadata.mastra.tokenEstimate;
 
       expect(tokens).toBeGreaterThan(700);
       expect(cachedEntry.tokens).toBe(765);
     });
 
-    it('counts image-like file parts by mime type instead of serializing the full payload', () => {
+    it('counts image-like file parts by mime type instead of serializing the full payload', async () => {
       const counter = new TokenCounter({ model: 'openai/gpt-4o' });
       const dataUriImage = `data:image/png;base64,${'a'.repeat(2000000)}`;
       const message = createMessage({
@@ -330,7 +330,7 @@ describe('TokenCounter', () => {
         parts: [{ type: 'file', data: dataUriImage, mimeType: 'image/png', filename: 'cat.png' }],
       });
 
-      const tokens = counter.countMessage(message);
+      const tokens = await counter.countMessage(message);
       const cachedEntry = message.content.parts[0].providerMetadata.mastra.tokenEstimate;
 
       expect(tokens).toBeGreaterThan(700);
@@ -338,7 +338,7 @@ describe('TokenCounter', () => {
       expect(cachedEntry.tokens).toBe(765);
     });
 
-    it('counts image-like file parts by filename when mime type is missing or generic', () => {
+    it('counts image-like file parts by filename when mime type is missing or generic', async () => {
       const counter = new TokenCounter();
       const message = createMessage({
         format: 2,
@@ -351,7 +351,7 @@ describe('TokenCounter', () => {
         ],
       });
 
-      const tokens = counter.countMessage(message);
+      const tokens = await counter.countMessage(message);
       const cachedEntry = message.content.parts[0].providerMetadata.mastra.tokenEstimate;
 
       expect(tokens).toBeGreaterThan(80);
@@ -359,7 +359,7 @@ describe('TokenCounter', () => {
       expect(cachedEntry.tokens).toBe(85);
     });
 
-    it('keeps URL-only non-image files on descriptor-only local counting', () => {
+    it('keeps URL-only non-image files on descriptor-only local counting', async () => {
       const counter = new TokenCounter();
       const pdfUrlMessage = createMessage({
         format: 2,
@@ -373,7 +373,7 @@ describe('TokenCounter', () => {
         ],
       });
 
-      const pdfUrlTokens = counter.countMessage(pdfUrlMessage);
+      const pdfUrlTokens = await counter.countMessage(pdfUrlMessage);
 
       // URL-only file parts have no measurable body, so they fall back to the
       // small descriptor-only estimate.
@@ -388,7 +388,7 @@ describe('TokenCounter', () => {
     // so large inline files are reflected in OM and context budgets.
     // (countMessagesAsync() can still use provider token-count endpoints
     // for supported providers; this only improves the local fallback.)
-    it('counts inline PDF file bytes instead of only the file descriptor', () => {
+    it('counts inline PDF file bytes instead of only the file descriptor', async () => {
       const counter = new TokenCounter();
       const uploadedPdfMessage = createMessage({
         format: 2,
@@ -402,7 +402,7 @@ describe('TokenCounter', () => {
         ],
       });
 
-      const uploadedPdfTokens = counter.countMessage(uploadedPdfMessage);
+      const uploadedPdfTokens = await counter.countMessage(uploadedPdfMessage);
 
       // 200_000 base64 chars decodes to ~150_000 bytes; with the default
       // PDF heuristic (bytes/4) that's ~37_500 tokens — well above the
@@ -410,7 +410,7 @@ describe('TokenCounter', () => {
       expect(uploadedPdfTokens).toBeGreaterThan(10_000);
     });
 
-    it('scales local non-image file estimates with byte size for text mime types', () => {
+    it('scales local non-image file estimates with byte size for text mime types', async () => {
       const counter = new TokenCounter();
       const message = createMessage({
         format: 2,
@@ -424,13 +424,13 @@ describe('TokenCounter', () => {
         ],
       });
 
-      const tokens = counter.countMessage(message);
+      const tokens = await counter.countMessage(message);
 
       // 40_000 bytes / 4 ≈ 10_000 tokens (well over the descriptor estimate).
       expect(tokens).toBeGreaterThan(5_000);
     });
 
-    it('produces a smaller estimate for Google PDFs than Anthropic PDFs of the same size', () => {
+    it('produces a smaller estimate for Google PDFs than Anthropic PDFs of the same size', async () => {
       const data = `data:application/pdf;base64,${'a'.repeat(200000)}`;
       const buildMessage = () =>
         createMessage({
@@ -445,8 +445,8 @@ describe('TokenCounter', () => {
         model: { provider: 'anthropic', modelId: 'claude-3-5-sonnet' },
       });
 
-      const googleTokens = googleCounter.countMessage(buildMessage());
-      const anthropicTokens = anthropicCounter.countMessage(buildMessage());
+      const googleTokens = await googleCounter.countMessage(buildMessage());
+      const anthropicTokens = await anthropicCounter.countMessage(buildMessage());
 
       // Google bills PDFs at 258 tokens/page (~5KB/page); Anthropic bills at
       // 1500–3000 tokens/page. So for any given non-trivial size Google's
@@ -454,7 +454,7 @@ describe('TokenCounter', () => {
       expect(googleTokens).toBeLessThan(anthropicTokens);
     });
 
-    it('normalizes mime type casing and parameters when picking the PDF heuristic', () => {
+    it('normalizes mime type casing and parameters when picking the PDF heuristic', async () => {
       const data = `data:application/pdf;base64,${'a'.repeat(200000)}`;
       const buildMessage = (mimeType: string) =>
         createMessage({
@@ -466,11 +466,11 @@ describe('TokenCounter', () => {
         model: { provider: 'anthropic', modelId: 'claude-3-5-sonnet' },
       });
 
-      const canonical = anthropicCounter.countMessage(buildMessage('application/pdf'));
-      const uppercased = new TokenCounter({
+      const canonical = await anthropicCounter.countMessage(buildMessage('application/pdf'));
+      const uppercased = await new TokenCounter({
         model: { provider: 'anthropic', modelId: 'claude-3-5-sonnet' },
       }).countMessage(buildMessage('Application/PDF'));
-      const parameterized = new TokenCounter({
+      const parameterized = await new TokenCounter({
         model: { provider: 'anthropic', modelId: 'claude-3-5-sonnet' },
       }).countMessage(buildMessage('application/pdf; charset=binary'));
 
@@ -478,7 +478,7 @@ describe('TokenCounter', () => {
       expect(parameterized).toBe(canonical);
     });
 
-    it('reuses cached local non-image file estimates across fresh TokenCounter instances', () => {
+    it('reuses cached local non-image file estimates across fresh TokenCounter instances', async () => {
       const part: Record<string, any> = {
         type: 'file',
         data: `data:application/pdf;base64,${'a'.repeat(200000)}`,
@@ -487,9 +487,9 @@ describe('TokenCounter', () => {
       };
       const message = createMessage({ format: 2, parts: [part] });
 
-      const first = new TokenCounter().countMessage(message);
+      const first = await new TokenCounter().countMessage(message);
       const cachedAfterFirst = part.providerMetadata?.mastra?.tokenEstimate;
-      const second = new TokenCounter().countMessage(message);
+      const second = await new TokenCounter().countMessage(message);
 
       expect(second).toBe(first);
       // The byte-size estimate is persisted under the new 'non-image-file'
@@ -502,7 +502,7 @@ describe('TokenCounter', () => {
     // `data` field) cannot rely on the on-device file size. They can stamp an
     // authoritative estimate via `providerMetadata.mastra.tokenEstimate` so
     // Observational Memory thresholds and context budgets account for it.
-    it('honors a client-supplied tokenEstimate on non-image file parts', () => {
+    it('honors a client-supplied tokenEstimate on non-image file parts', async () => {
       const counter = new TokenCounter();
       const message = createMessage({
         format: 2,
@@ -521,12 +521,12 @@ describe('TokenCounter', () => {
         ],
       });
 
-      const tokens = counter.countMessage(message);
+      const tokens = await counter.countMessage(message);
 
       expect(tokens).toBeGreaterThanOrEqual(25_000);
     });
 
-    it('honors a client-supplied tokenEstimate on image parts', () => {
+    it('honors a client-supplied tokenEstimate on image parts', async () => {
       const counter = new TokenCounter();
       const message = createMessage({
         format: 2,
@@ -543,12 +543,12 @@ describe('TokenCounter', () => {
         ],
       });
 
-      const tokens = counter.countMessage(message);
+      const tokens = await counter.countMessage(message);
 
       expect(tokens).toBeGreaterThanOrEqual(5_000);
     });
 
-    it('preserves a client-supplied tokenEstimate across repeated counts', () => {
+    it('preserves a client-supplied tokenEstimate across repeated counts', async () => {
       const part: Record<string, any> = {
         type: 'file',
         data: 'storage://bucket/abc123',
@@ -562,8 +562,8 @@ describe('TokenCounter', () => {
       };
       const message = createMessage({ format: 2, parts: [part] });
 
-      const first = new TokenCounter().countMessage(message);
-      const second = new TokenCounter().countMessage(message);
+      const first = await new TokenCounter().countMessage(message);
+      const second = await new TokenCounter().countMessage(message);
 
       expect(second).toBe(first);
       const cache = part.providerMetadata.mastra.tokenEstimate;
@@ -572,7 +572,7 @@ describe('TokenCounter', () => {
       expect(clientEntry).toMatchObject({ source: 'client', tokens: 42_000 });
     });
 
-    it('falls back to the default estimator when the client tokenEstimate is invalid', () => {
+    it('falls back to the default estimator when the client tokenEstimate is invalid', async () => {
       const buildMessage = (tokens: unknown) =>
         createMessage({
           format: 2,
@@ -591,7 +591,7 @@ describe('TokenCounter', () => {
           ],
         });
 
-      const baseline = new TokenCounter().countMessage(
+      const baseline = await new TokenCounter().countMessage(
         createMessage({
           format: 2,
           parts: [
@@ -606,9 +606,9 @@ describe('TokenCounter', () => {
       );
 
       const counter = new TokenCounter();
-      const nan = counter.countMessage(buildMessage(Number.NaN));
-      const negative = counter.countMessage(buildMessage(-1));
-      const nonNumeric = counter.countMessage(buildMessage('lots'));
+      const nan = await counter.countMessage(buildMessage(Number.NaN));
+      const negative = await counter.countMessage(buildMessage(-1));
+      const nonNumeric = await counter.countMessage(buildMessage('lots'));
 
       // Invalid values fall through to the framework auto-estimator, not the
       // raw stringified value the caller supplied.
@@ -653,7 +653,7 @@ describe('TokenCounter', () => {
         format: 2,
         parts: [{ type: 'text', text }],
       });
-      const baseline = counter.countMessage(baselineMessage);
+      const baseline = await counter.countMessage(baselineMessage);
 
       const messageWithBogusEstimate = createMessage({
         format: 2,
@@ -670,7 +670,7 @@ describe('TokenCounter', () => {
         ],
       });
 
-      const sync = counter.countMessage(messageWithBogusEstimate);
+      const sync = await counter.countMessage(messageWithBogusEstimate);
       const async_ = await counter.countMessageAsync(messageWithBogusEstimate);
 
       expect(sync).toBe(baseline);
@@ -678,23 +678,23 @@ describe('TokenCounter', () => {
       expect(sync).toBeLessThan(500);
     });
 
-    it('reuses cached image estimates across repeated counts', () => {
+    it('reuses cached image estimates across repeated counts', async () => {
       const counter = new TokenCounter();
       const message = createMessage({
         format: 2,
         parts: [{ type: 'image', image: new URL('https://example.com/cached.png') }],
       });
 
-      const first = counter.countMessage(message);
+      const first = await counter.countMessage(message);
       const firstEntry = message.content.parts[0].providerMetadata?.mastra?.tokenEstimate;
-      const second = counter.countMessage(message);
+      const second = await counter.countMessage(message);
       const secondEntry = message.content.parts[0].providerMetadata?.mastra?.tokenEstimate;
 
       expect(second).toBe(first);
       expect(secondEntry).toEqual(firstEntry);
     });
 
-    it('changes image estimates when resolved model context changes', () => {
+    it('changes image estimates when resolved model context changes', async () => {
       const message = createMessage({
         format: 2,
         parts: [
@@ -721,12 +721,12 @@ describe('TokenCounter', () => {
       const defaultCounter = new TokenCounter({ model: 'openai/gpt-4o' });
       const miniCounter = new TokenCounter({ model: 'openai/gpt-4o-mini' });
 
-      const defaultTokens = defaultCounter.countMessage(message);
+      const defaultTokens = await defaultCounter.countMessage(message);
       const defaultCache = message.content.parts[0].providerMetadata.mastra.tokenEstimate as any;
       const defaultCachedEntry = (Object.values(defaultCache).find((entry: any) => entry?.tokens === 765) ??
         defaultCache) as any;
 
-      const miniTokens = miniCounter.countMessage(message);
+      const miniTokens = await miniCounter.countMessage(message);
       const miniCache = message.content.parts[0].providerMetadata.mastra.tokenEstimate as any;
       const miniCachedEntry = Object.values(miniCache).find((entry: any) => entry?.tokens === 25501) as any;
 
@@ -737,7 +737,7 @@ describe('TokenCounter', () => {
       expect(miniCachedEntry?.key).not.toBe(defaultCachedEntry.key);
     });
 
-    it('uses google media resolution when the provider is google', () => {
+    it('uses google media resolution when the provider is google', async () => {
       const counter = new TokenCounter({
         model: { provider: 'google', modelId: 'gemini-3-flash-preview' },
       });
@@ -756,13 +756,13 @@ describe('TokenCounter', () => {
         ],
       });
 
-      counter.countMessage(message);
+      await counter.countMessage(message);
       const cachedEntry = message.content.parts[0].providerMetadata.mastra.tokenEstimate;
 
       expect(cachedEntry.tokens).toBe(560);
     });
 
-    it('uses anthropic image sizing when the provider is anthropic even if the model id looks openai-ish', () => {
+    it('uses anthropic image sizing when the provider is anthropic even if the model id looks openai-ish', async () => {
       const counter = new TokenCounter({
         model: { provider: 'anthropic', modelId: 'gpt-4o' },
       });
@@ -784,13 +784,13 @@ describe('TokenCounter', () => {
         ],
       });
 
-      counter.countMessage(message);
+      await counter.countMessage(message);
       const cachedEntry = message.content.parts[0].providerMetadata.mastra.tokenEstimate;
 
       expect(cachedEntry.tokens).toBe(750);
     });
 
-    it('uses legacy google tiling for pre-gemini-3 google models', () => {
+    it('uses legacy google tiling for pre-gemini-3 google models', async () => {
       const counter = new TokenCounter({
         model: { provider: 'google', modelId: 'gemini-2.5-flash' },
       });
@@ -812,7 +812,7 @@ describe('TokenCounter', () => {
         ],
       });
 
-      counter.countMessage(message);
+      await counter.countMessage(message);
       const cachedEntry = message.content.parts[0].providerMetadata.mastra.tokenEstimate;
 
       expect(cachedEntry.tokens).toBe(1032);
@@ -820,19 +820,19 @@ describe('TokenCounter', () => {
   });
 
   describe('token estimate cache', () => {
-    it('writes and reuses part-level token estimates on text parts across repeated counts', () => {
+    it('writes and reuses part-level token estimates on text parts across repeated counts', async () => {
       const counter = new TokenCounter();
       const message = createMessage({
         format: 2,
         parts: [{ type: 'text', text: 'Hello from cached text part' }],
       });
 
-      const first = counter.countMessage(message);
+      const first = await counter.countMessage(message);
       expect(first).toBeGreaterThan(0);
       const firstEntry = message.content.parts[0].providerMetadata?.mastra?.tokenEstimate;
       expect(firstEntry).toBeTruthy();
 
-      const second = counter.countMessage(message);
+      const second = await counter.countMessage(message);
       const secondEntry = message.content.parts[0].providerMetadata?.mastra?.tokenEstimate;
 
       expect(second).toBe(first);
@@ -843,7 +843,7 @@ describe('TokenCounter', () => {
         createdAt: new Date(message.createdAt),
       };
 
-      const third = counter.countMessage(reloaded as any);
+      const third = await counter.countMessage(reloaded as any);
       const thirdEntry = reloaded.content.parts[0].providerMetadata?.mastra?.tokenEstimate;
 
       expect(third).toBe(first);
@@ -851,18 +851,18 @@ describe('TokenCounter', () => {
       expect(reloaded.content.parts[0].providerMetadata?.mastra?.tokenEstimate).toBeTruthy();
     });
 
-    it('ignores stale cache entries when the cache key no longer matches', () => {
+    it('ignores stale cache entries when the cache key no longer matches', async () => {
       const counter = new TokenCounter();
       const message = createMessage({
         format: 2,
         parts: [{ type: 'text', text: 'Original text payload' }],
       });
 
-      counter.countMessage(message);
+      await counter.countMessage(message);
       const firstEntry = message.content.parts[0].providerMetadata.mastra.tokenEstimate as any;
 
       message.content.parts[0].text = 'Mutated text payload with different size and tokens';
-      const recounted = counter.countMessage(message);
+      const recounted = await counter.countMessage(message);
       const secondEntry = message.content.parts[0].providerMetadata.mastra.tokenEstimate as any;
 
       expect(recounted).toBeGreaterThan(0);
@@ -871,21 +871,21 @@ describe('TokenCounter', () => {
       expect(secondEntry.tokens).not.toBe(firstEntry.tokens);
     });
 
-    it('recomputes when version or source markers mismatch', () => {
+    it('recomputes when version or source markers mismatch', async () => {
       const counter = new TokenCounter();
       const message = createMessage({
         format: 2,
         parts: [{ type: 'text', text: 'Version source mismatch sample text' }],
       });
 
-      counter.countMessage(message);
+      await counter.countMessage(message);
       const entry = message.content.parts[0].providerMetadata.mastra.tokenEstimate as any;
 
       message.content.parts[0].providerMetadata.mastra.tokenEstimate = {
         ...entry,
         v: entry.v + 1,
       };
-      counter.countMessage(message);
+      await counter.countMessage(message);
       const versionRefreshed = message.content.parts[0].providerMetadata.mastra.tokenEstimate as any;
       expect(versionRefreshed.v).toBe(entry.v);
 
@@ -893,30 +893,30 @@ describe('TokenCounter', () => {
         ...versionRefreshed,
         source: `${versionRefreshed.source}-mismatch`,
       };
-      counter.countMessage(message);
+      await counter.countMessage(message);
       const sourceRefreshed = message.content.parts[0].providerMetadata.mastra.tokenEstimate as any;
       expect(sourceRefreshed.source).toBe(entry.source);
     });
 
-    it('uses a stable estimator-scoped cache source', () => {
+    it('uses a stable estimator-scoped cache source', async () => {
       const message = createMessage({
         format: 2,
         parts: [{ type: 'text', text: 'Same payload, stable estimator identity' }],
       });
 
       const firstCounter = new TokenCounter();
-      firstCounter.countMessage(message);
+      await firstCounter.countMessage(message);
       const firstEntry = message.content.parts[0].providerMetadata.mastra.tokenEstimate as any;
 
       const secondCounter = new TokenCounter();
-      secondCounter.countMessage(message);
+      await secondCounter.countMessage(message);
 
       const refreshedEntry = message.content.parts[0].providerMetadata.mastra.tokenEstimate as any;
       expect(refreshedEntry.source).toBe(firstEntry.source);
       expect(refreshedEntry.source).toContain('tokenx');
     });
 
-    it('keeps data-* and reasoning skipped/uncached while caching eligible parts', () => {
+    it('keeps data-* and reasoning skipped/uncached while caching eligible parts', async () => {
       const counter = new TokenCounter();
       const message = createMessage({
         format: 2,
@@ -927,32 +927,32 @@ describe('TokenCounter', () => {
         ],
       });
 
-      counter.countMessage(message);
+      await counter.countMessage(message);
 
       expect(message.content.parts[0].providerMetadata?.mastra?.tokenEstimate).toBeTruthy();
       expect(message.content.parts[1].providerMetadata?.mastra?.tokenEstimate).toBeUndefined();
       expect(message.content.parts[2].providerMetadata?.mastra?.tokenEstimate).toBeUndefined();
     });
 
-    it('caches string-content fallback on content.metadata.mastra', () => {
+    it('caches string-content fallback on content.metadata.mastra', async () => {
       const counter = new TokenCounter();
       const message = createMessage({
         format: 2,
         content: 'Legacy string content path for fallback caching',
       });
 
-      const first = counter.countMessage(message);
+      const first = await counter.countMessage(message);
       expect(first).toBeGreaterThan(0);
       expect(message.content.metadata?.mastra?.tokenEstimate).toBeTruthy();
 
       const cachedEntry = message.content.metadata.mastra.tokenEstimate;
-      const second = counter.countMessage(message);
+      const second = await counter.countMessage(message);
 
       expect(second).toBe(first);
       expect(message.content.metadata.mastra.tokenEstimate).toEqual(cachedEntry);
     });
 
-    it('keeps overhead dynamic even when part payloads are cached', () => {
+    it('keeps overhead dynamic even when part payloads are cached', async () => {
       const counter = new TokenCounter();
       const message = createMessage({
         format: 2,
@@ -969,8 +969,8 @@ describe('TokenCounter', () => {
         ],
       });
 
-      const initial = counter.countMessage(message);
-      const stable = counter.countMessage(message);
+      const initial = await counter.countMessage(message);
+      const stable = await counter.countMessage(message);
       expect(stable).toBe(initial);
 
       message.content.parts.push({
@@ -983,8 +983,8 @@ describe('TokenCounter', () => {
         },
       });
 
-      const withToolResult = counter.countMessage(message);
-      const withToolResultAgain = counter.countMessage(message);
+      const withToolResult = await counter.countMessage(message);
+      const withToolResultAgain = await counter.countMessage(message);
 
       expect(withToolResult).not.toBe(initial);
       expect(withToolResultAgain).toBe(withToolResult);
@@ -1034,13 +1034,13 @@ describe('TokenCounter', () => {
         ],
       });
 
-      const rawResultTokens = counter.countMessage(withoutModelOutput);
-      const modelOutputTokens = counter.countMessage(withModelOutput);
+      const rawResultTokens = await counter.countMessage(withoutModelOutput);
+      const modelOutputTokens = await counter.countMessage(withModelOutput);
 
       expect(modelOutputTokens).toBeLessThan(rawResultTokens);
     });
 
-    it('counts stored multimodal tool modelOutput as media instead of base64 JSON text', () => {
+    it('counts stored multimodal tool modelOutput as media instead of base64 JSON text', async () => {
       const counter = new TokenCounter();
       const modelOutput = {
         type: 'content',
@@ -1067,15 +1067,15 @@ describe('TokenCounter', () => {
         ],
       });
 
-      const tokens = counter.countMessage(message);
+      const tokens = await counter.countMessage(message);
       const estimate = message.content.parts[0].providerMetadata.mastra.tokenEstimate;
 
       expect(tokens).toBeLessThan(2_000);
       expect(estimate.key).toContain('tool-result-multimodal-content');
-      expect(estimate.tokens).toBeLessThan(counter.countString(JSON.stringify(modelOutput)));
+      expect(estimate.tokens).toBeLessThan(await counter.countString(JSON.stringify(modelOutput)));
     });
 
-    it('reuses multimodal tool result counts while the part and result are unchanged', () => {
+    it('reuses multimodal tool result counts while the part and result are unchanged', async () => {
       const counter = new TokenCounter();
       const estimateImageTokensSpy = vi.spyOn(counter as any, 'estimateImageTokens');
       const message = createMessage({
@@ -1098,14 +1098,14 @@ describe('TokenCounter', () => {
         ],
       });
 
-      const firstCount = counter.countMessage(message);
-      const secondCount = counter.countMessage(message);
+      const firstCount = await counter.countMessage(message);
+      const secondCount = await counter.countMessage(message);
 
       expect(secondCount).toBe(firstCount);
       expect(estimateImageTokensSpy).toHaveBeenCalledTimes(1);
     });
 
-    it('recounts multimodal tool results mutated in place', () => {
+    it('recounts multimodal tool results mutated in place', async () => {
       const counter = new TokenCounter();
       const estimateImageTokensSpy = vi.spyOn(counter as any, 'estimateImageTokens');
       const result = {
@@ -1129,15 +1129,15 @@ describe('TokenCounter', () => {
         ],
       });
 
-      const firstCount = counter.countMessage(message);
+      const firstCount = await counter.countMessage(message);
       result.content[0]!.text += ' with additional details '.repeat(100);
-      const secondCount = counter.countMessage(message);
+      const secondCount = await counter.countMessage(message);
 
       expect(secondCount).toBeGreaterThan(firstCount);
       expect(estimateImageTokensSpy).toHaveBeenCalledTimes(2);
     });
 
-    it('counts raw MCP multimodal tool results as media instead of base64 JSON text', () => {
+    it('counts raw MCP multimodal tool results as media instead of base64 JSON text', async () => {
       const counter = new TokenCounter();
       const rawResultWithoutMalformed = {
         content: [
@@ -1166,17 +1166,17 @@ describe('TokenCounter', () => {
       const message = createScreenshotMessage(rawResult);
       const messageWithoutMalformed = createScreenshotMessage(rawResultWithoutMalformed);
 
-      const tokens = counter.countMessage(message);
-      const tokensWithoutMalformed = counter.countMessage(messageWithoutMalformed);
+      const tokens = await counter.countMessage(message);
+      const tokensWithoutMalformed = await counter.countMessage(messageWithoutMalformed);
       const estimate = message.content.parts[0].providerMetadata.mastra.tokenEstimate;
 
       expect(tokens).toBeGreaterThan(tokensWithoutMalformed);
       expect(tokens).toBeLessThan(2_000);
       expect(estimate.key).toContain('tool-result-multimodal-content');
-      expect(estimate.tokens).toBeLessThan(counter.countString(JSON.stringify(rawResult)));
+      expect(estimate.tokens).toBeLessThan(await counter.countString(JSON.stringify(rawResult)));
     });
 
-    it('honors client-supplied tokenEstimate on raw MCP multimodal content parts', () => {
+    it('honors client-supplied tokenEstimate on raw MCP multimodal content parts', async () => {
       const counter = new TokenCounter();
       const createCloudResult = (withClientEstimates: boolean) => ({
         content: [
@@ -1229,8 +1229,8 @@ describe('TokenCounter', () => {
       const withClientEstimates = createToolResultMessage(createCloudResult(true));
       const withoutClientEstimates = createToolResultMessage(createCloudResult(false));
 
-      const estimatedTokens = counter.countMessage(withClientEstimates);
-      const fallbackTokens = counter.countMessage(withoutClientEstimates);
+      const estimatedTokens = await counter.countMessage(withClientEstimates);
+      const fallbackTokens = await counter.countMessage(withoutClientEstimates);
       const estimate = withClientEstimates.content.parts[0].providerMetadata.mastra.tokenEstimate;
 
       expect(estimatedTokens).toBeGreaterThanOrEqual(12_000);
@@ -1261,7 +1261,7 @@ describe('TokenCounter', () => {
         ],
       });
 
-      const first = counter.countMessage(message);
+      const first = await counter.countMessage(message);
       const firstEstimate = message.content.parts[0].providerMetadata.mastra.tokenEstimate;
 
       message.content.parts[0].providerMetadata.mastra.modelOutput = {
@@ -1269,14 +1269,14 @@ describe('TokenCounter', () => {
         value: 'expanded output '.repeat(40),
       };
 
-      const second = counter.countMessage(message);
+      const second = await counter.countMessage(message);
       const secondEstimate = message.content.parts[0].providerMetadata.mastra.tokenEstimate;
 
       expect(second).toBeGreaterThan(first);
       expect(secondEstimate.key).not.toBe(firstEstimate.key);
     });
 
-    it('sanitizes and truncates raw tool results while counting tokens', () => {
+    it('sanitizes and truncates raw tool results while counting tokens', async () => {
       const counter = new TokenCounter();
       const message = createMessage({
         format: 2,
@@ -1297,13 +1297,13 @@ describe('TokenCounter', () => {
         ],
       });
 
-      const tokens = counter.countMessage(message);
+      const tokens = await counter.countMessage(message);
       const estimate = message.content.parts[0].providerMetadata?.mastra?.tokenEstimate;
 
       expect(tokens).toBeGreaterThan(0);
       expect(estimate?.key).toContain('tool-result-json');
       expect(estimate?.tokens).toBeLessThan(
-        counter.countString(JSON.stringify(message.content.parts[0].toolInvocation.result)),
+        await counter.countString(JSON.stringify(message.content.parts[0].toolInvocation.result)),
       );
     });
   });
@@ -1317,39 +1317,39 @@ describe('TokenCounter', () => {
     const createDeniedMessage = (approval?: { id: string; approved: boolean; reason?: string }) =>
       createToolInvocationMessage('output-denied', approval ? { approval } : {});
 
-    it('counts a declined approval by its approval reason instead of throwing', () => {
+    it('counts a declined approval by its approval reason instead of throwing', async () => {
       const counter = new TokenCounter();
       const reason = 'Manager rejected this lookup';
       const message = createDeniedMessage({ id: 'tool-1', approved: false, reason });
 
-      const tokens = counter.countMessage(message);
+      const tokens = await counter.countMessage(message);
       const estimate = message.content.parts[0].providerMetadata?.mastra?.tokenEstimate;
 
       expect(tokens).toBeGreaterThan(0);
       expect(estimate?.key).toContain('tool-result-denied');
-      expect(estimate?.tokens).toBe(counter.countString(reason));
+      expect(estimate?.tokens).toBe(await counter.countString(reason));
     });
 
-    it('falls back to the default decline reason when approval.reason is absent', () => {
+    it('falls back to the default decline reason when approval.reason is absent', async () => {
       const counter = new TokenCounter();
       const message = createDeniedMessage({ id: 'tool-1', approved: false });
 
-      const tokens = counter.countMessage(message);
+      const tokens = await counter.countMessage(message);
       const estimate = message.content.parts[0].providerMetadata?.mastra?.tokenEstimate;
 
       expect(tokens).toBeGreaterThan(0);
       expect(estimate?.key).toContain('tool-result-denied');
-      expect(estimate?.tokens).toBe(counter.countString(DEFAULT_DECLINE_REASON));
+      expect(estimate?.tokens).toBe(await counter.countString(DEFAULT_DECLINE_REASON));
     });
 
-    it('does not throw when the output-denied invocation has no approval object at all', () => {
+    it('does not throw when the output-denied invocation has no approval object at all', async () => {
       const counter = new TokenCounter();
       const message = createDeniedMessage();
 
-      expect(() => counter.countMessage(message)).not.toThrow();
+      await expect(counter.countMessage(message)).resolves.toBeGreaterThan(0);
       const estimate = message.content.parts[0].providerMetadata?.mastra?.tokenEstimate;
       expect(estimate?.key).toContain('tool-result-denied');
-      expect(estimate?.tokens).toBe(counter.countString(DEFAULT_DECLINE_REASON));
+      expect(estimate?.tokens).toBe(await counter.countString(DEFAULT_DECLINE_REASON));
     });
   });
 
@@ -1364,10 +1364,10 @@ describe('TokenCounter', () => {
       });
 
       await expect(counter.countMessagesAsync([message])).resolves.toBeGreaterThan(0);
-      expect(counter.countMessage(message)).toBeGreaterThan(0);
+      expect(await counter.countMessage(message)).toBeGreaterThan(0);
       const estimate = message.content.parts[0].providerMetadata?.mastra?.tokenEstimate;
       expect(estimate?.key).toContain('tool-result-error');
-      expect(estimate?.tokens).toBe(counter.countString(errorText));
+      expect(estimate?.tokens).toBe(await counter.countString(errorText));
     });
   });
 
@@ -1383,20 +1383,20 @@ describe('TokenCounter', () => {
     const JSON_ARGS_DISCOUNT = 12;
 
     /** Payload tokens of the fixture: the role, the tool name and the JSON arguments. */
-    const signatureTokens = (counter: TokenCounter) =>
-      counter.countString('assistant') +
-      counter.countString(TOOL_NAME) +
-      counter.countString(JSON.stringify(TOOL_ARGS));
+    const signatureTokens = async (counter: TokenCounter) =>
+      (await counter.countString('assistant')) +
+      (await counter.countString(TOOL_NAME)) +
+      (await counter.countString(JSON.stringify(TOOL_ARGS)));
 
-    it('counts a pending approval exactly like the tool call it holds instead of throwing', () => {
+    it('counts a pending approval exactly like the tool call it holds instead of throwing', async () => {
       const counter = new TokenCounter();
       const pending = createToolInvocationMessage('approval-requested');
       const call = createToolInvocationMessage('call');
 
-      expect(counter.countMessage(pending)).toBe(
-        Math.round(signatureTokens(counter) + TOKENS_PER_MESSAGE - JSON_ARGS_DISCOUNT),
+      expect(await counter.countMessage(pending)).toBe(
+        Math.round((await signatureTokens(counter)) + TOKENS_PER_MESSAGE - JSON_ARGS_DISCOUNT),
       );
-      expect(counter.countMessage(pending)).toBe(counter.countMessage(call));
+      expect(await counter.countMessage(pending)).toBe(await counter.countMessage(call));
     });
 
     it('charges an answered approval one extra message on top of the call it answers', async () => {
@@ -1404,48 +1404,51 @@ describe('TokenCounter', () => {
       const responded = createToolInvocationMessage('approval-responded', {
         approval: { id: 'tool-1', approved: true },
       });
-      const expected = Math.round(signatureTokens(counter) + 2 * TOKENS_PER_MESSAGE - JSON_ARGS_DISCOUNT);
+      const expected = Math.round((await signatureTokens(counter)) + 2 * TOKENS_PER_MESSAGE - JSON_ARGS_DISCOUNT);
 
-      expect(counter.countMessage(responded)).toBe(expected);
+      expect(await counter.countMessage(responded)).toBe(expected);
       // The async path walks the same parts, so it must reach the same total.
-      await expect(counter.countMessagesAsync([responded])).resolves.toBe(counter.countMessages([responded]));
+      await expect(counter.countMessagesAsync([responded])).resolves.toBe(await counter.countMessages([responded]));
     });
 
-    it('adds the approval reason text to an answered approval', () => {
+    it('adds the approval reason text to an answered approval', async () => {
       const counter = new TokenCounter();
       const reason = 'Manager approved this lookup for the on-call rotation';
       const withReason = createToolInvocationMessage('approval-responded', {
         approval: { id: 'tool-1', approved: true, reason },
       });
 
-      expect(counter.countMessage(withReason)).toBe(
+      expect(await counter.countMessage(withReason)).toBe(
         Math.round(
-          signatureTokens(counter) + counter.countString(reason) + 2 * TOKENS_PER_MESSAGE - JSON_ARGS_DISCOUNT,
+          (await signatureTokens(counter)) +
+            (await counter.countString(reason)) +
+            2 * TOKENS_PER_MESSAGE -
+            JSON_ARGS_DISCOUNT,
         ),
       );
     });
 
-    it('does not throw when the approval-responded invocation carries no approval object', () => {
+    it('does not throw when the approval-responded invocation carries no approval object', async () => {
       const counter = new TokenCounter();
       const message = createToolInvocationMessage('approval-responded');
 
-      expect(counter.countMessage(message)).toBe(
-        Math.round(signatureTokens(counter) + 2 * TOKENS_PER_MESSAGE - JSON_ARGS_DISCOUNT),
+      expect(await counter.countMessage(message)).toBe(
+        Math.round((await signatureTokens(counter)) + 2 * TOKENS_PER_MESSAGE - JSON_ARGS_DISCOUNT),
       );
     });
 
-    it('reuses the cached call estimate when the invocation moves from requested to responded', () => {
+    it('reuses the cached call estimate when the invocation moves from requested to responded', async () => {
       const counter = new TokenCounter();
       // MessageMerger mutates one part in place as the approval progresses, so the cache kinds
       // must not embed the state.
       const message = createToolInvocationMessage('approval-requested');
-      counter.countMessage(message);
+      await counter.countMessage(message);
       const keysAfterRequest = Object.keys(message.content.parts[0].providerMetadata.mastra.tokenEstimate);
       // Watch the second pass only, so a re-estimate of the call signature is visible.
       const countString = vi.spyOn(counter, 'countString');
 
       message.content.parts[0].toolInvocation.state = 'approval-responded';
-      counter.countMessage(message);
+      await counter.countMessage(message);
       const keysAfterResponse = Object.keys(message.content.parts[0].providerMetadata.mastra.tokenEstimate);
 
       expect(countString).not.toHaveBeenCalledWith(TOOL_NAME);
@@ -1458,17 +1461,17 @@ describe('TokenCounter', () => {
       const counter = new TokenCounter();
       const message = createToolInvocationMessage('future-state' as MastraToolInvocation['state']);
 
-      expect(counter.countMessage(message)).toBeGreaterThan(0);
+      expect(await counter.countMessage(message)).toBeGreaterThan(0);
       await expect(counter.countMessagesAsync([message])).resolves.toBeGreaterThan(0);
       expect(message.content.parts[0].providerMetadata?.mastra?.tokenEstimate).toBeTruthy();
     });
   });
 
   describe('countObservations', () => {
-    it('delegates to countString', () => {
+    it('delegates to countString', async () => {
       const counter = new TokenCounter();
       const text = 'Some observation text';
-      expect(counter.countObservations(text)).toBe(counter.countString(text));
+      expect(await counter.countObservations(text)).toBe(await counter.countString(text));
     });
   });
 });

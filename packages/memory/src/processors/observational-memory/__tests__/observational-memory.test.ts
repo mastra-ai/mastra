@@ -1443,10 +1443,10 @@ describe('Storage Operations', () => {
 
 describe('Observer Agent Helpers', () => {
   describe('formatMessagesForObserver', () => {
-    it('should format messages with role labels and content', () => {
+    it('should format messages with role labels and content', async () => {
       const messages = [createTestMessage('Hello', 'user'), createTestMessage('Hi there!', 'assistant')];
 
-      const formatted = formatMessagesForObserver(messages);
+      const formatted = await formatMessagesForObserver(messages);
       expect(formatted).toMatch(/^[A-Z][a-z]{2} \d{1,2} \d{4}:/);
       expect(formatted).toContain('User');
       expect(formatted).toContain('Hello');
@@ -1454,7 +1454,7 @@ describe('Observer Agent Helpers', () => {
       expect(formatted).toContain('Hi there!');
     });
 
-    it('should include date headers on part day changes and only repeat times when they change', () => {
+    it('should include date headers on part day changes and only repeat times when they change', async () => {
       const first = createTestMessage('ignored', 'assistant');
       first.createdAt = new Date('2024-12-04T10:30:00Z');
       first.content = {
@@ -1470,7 +1470,7 @@ describe('Observer Agent Helpers', () => {
       const second = createTestMessage('later', 'user');
       second.createdAt = new Date('2024-12-05T12:01:00Z');
 
-      const formatted = formatMessagesForObserver([first, second]);
+      const formatted = await formatMessagesForObserver([first, second]);
       expect((formatted.match(/Dec 4 2024:/g) ?? []).length).toBe(1);
       expect((formatted.match(/Dec 5 2024:/g) ?? []).length).toBe(1);
       expect(formatted).toMatch(/Assistant \([^)]*\): first/);
@@ -1480,7 +1480,7 @@ describe('Observer Agent Helpers', () => {
       expect(formatted).toContain('\nUser: later');
     });
 
-    it('should include attachment placeholders for image and file parts', () => {
+    it('should include attachment placeholders for image and file parts', async () => {
       const msg = createTestMessage('ignored', 'user');
       msg.content = {
         format: 2,
@@ -1496,12 +1496,12 @@ describe('Observer Agent Helpers', () => {
         ],
       };
 
-      const formatted = formatMessagesForObserver([msg]);
+      const formatted = await formatMessagesForObserver([msg]);
       expect(formatted).toContain('[Image #1: reference-board.png]');
       expect(formatted).toContain('[File #1: floorplan.pdf]');
     });
 
-    it('should skip messages with only data-* parts', () => {
+    it('should skip messages with only data-* parts', async () => {
       const dataMsg = createTestMessage('ignored', 'assistant');
       dataMsg.content = {
         format: 2,
@@ -1509,13 +1509,13 @@ describe('Observer Agent Helpers', () => {
       };
       const textMsg = createTestMessage('Hello', 'user');
 
-      const formatted = formatMessagesForObserver([dataMsg, textMsg]);
+      const formatted = await formatMessagesForObserver([dataMsg, textMsg]);
       expect(formatted).not.toMatch(/Assistant(?: \([^)]*\))?:/);
       expect(formatted).toMatch(/User( \([^)]*\))?:/);
       expect(formatted).toContain('Hello');
     });
 
-    it('should render persisted temporal gap markers as time-passed lines', () => {
+    it('should render persisted temporal gap markers as time-passed lines', async () => {
       const temporalGapMarker = createTestMessage('ignored', 'user');
       temporalGapMarker.id = '__temporal_gap_test';
       temporalGapMarker.content = {
@@ -1544,14 +1544,14 @@ describe('Observer Agent Helpers', () => {
       } as any;
       const textMsg = createTestMessage('Hello after the gap', 'user');
 
-      const formatted = formatMessagesForObserver([temporalGapMarker, textMsg]);
+      const formatted = await formatMessagesForObserver([temporalGapMarker, textMsg]);
       expect(formatted).toMatch(/(?:^|\n) ?(?:\([^)]*\): )?10 minutes later/);
       expect(formatted).toMatch(/User( \([^)]*\))?: Hello after the gap/);
       expect(formatted).not.toContain('Time passed:');
       expect(formatted).not.toContain('<system-reminder');
     });
 
-    it('should include non-obscured reasoning content', () => {
+    it('should include non-obscured reasoning content', async () => {
       const msg = createTestMessage('ignored', 'assistant');
       msg.content = {
         format: 2,
@@ -1561,12 +1561,12 @@ describe('Observer Agent Helpers', () => {
         ],
       };
 
-      const formatted = formatMessagesForObserver([msg]);
+      const formatted = await formatMessagesForObserver([msg]);
       expect(formatted).toContain('I need to think about this carefully');
       expect(formatted).toContain('Here is my answer');
     });
 
-    it('should skip obscured/encrypted reasoning parts', () => {
+    it('should skip obscured/encrypted reasoning parts', async () => {
       const msg = createTestMessage('ignored', 'assistant');
       msg.content = {
         format: 2,
@@ -1576,12 +1576,12 @@ describe('Observer Agent Helpers', () => {
         ],
       };
 
-      const formatted = formatMessagesForObserver([msg]);
+      const formatted = await formatMessagesForObserver([msg]);
       expect(formatted).not.toContain('reasoning');
       expect(formatted).toContain('Visible answer');
     });
 
-    it('should skip messages with only encrypted reasoning parts', () => {
+    it('should skip messages with only encrypted reasoning parts', async () => {
       const reasoningMsg = createTestMessage('ignored', 'assistant');
       reasoningMsg.content = {
         format: 2,
@@ -1589,13 +1589,13 @@ describe('Observer Agent Helpers', () => {
       };
       const textMsg = createTestMessage('Real content', 'user');
 
-      const formatted = formatMessagesForObserver([reasoningMsg, textMsg]);
+      const formatted = await formatMessagesForObserver([reasoningMsg, textMsg]);
       expect(formatted).not.toContain('Assistant:');
       expect(formatted).toMatch(/User( \([^)]*\))?:/);
       expect(formatted).toContain('Real content');
     });
 
-    it('should strip encryptedContent and truncate oversized tool results', () => {
+    it('should strip encryptedContent and truncate oversized tool results', async () => {
       const msg = createTestMessage('ignored', 'assistant');
       msg.content = {
         format: 2,
@@ -1616,14 +1616,14 @@ describe('Observer Agent Helpers', () => {
         ],
       } as any;
 
-      const formatted = formatMessagesForObserver([msg], { maxToolResultTokens: 200 });
+      const formatted = await formatMessagesForObserver([msg], { maxToolResultTokens: 200 });
       expect(formatted).toContain('Tool Result web_search_20250305');
       expect(formatted).toContain('[stripped encryptedContent: 6000 characters]');
       expect(formatted).toContain('[truncated ~');
       expect(formatted).not.toContain('x'.repeat(200));
     });
 
-    it('should replace image-data tool-result blocks with attachment placeholders', () => {
+    it('should replace image-data tool-result blocks with attachment placeholders', async () => {
       const base64 = 'A'.repeat(2000);
       const msg = createTestMessage('ignored', 'assistant');
       msg.content = {
@@ -1653,14 +1653,14 @@ describe('Observer Agent Helpers', () => {
         ],
       } as any;
 
-      const formatted = formatMessagesForObserver([msg]);
+      const formatted = await formatMessagesForObserver([msg]);
       expect(formatted).toContain('Tool Result screenshot');
       expect(formatted).toContain('Captured screenshot of the homepage.');
       expect(formatted).toContain('[Image #1: image/png]');
       expect(formatted).not.toContain(base64);
     });
 
-    it('should hoist file-data tool-result blocks under the file counter', () => {
+    it('should hoist file-data tool-result blocks under the file counter', async () => {
       const base64 = 'C'.repeat(2000);
       const msg = createTestMessage('ignored', 'assistant');
       msg.content = {
@@ -1690,7 +1690,7 @@ describe('Observer Agent Helpers', () => {
         ],
       } as any;
 
-      const formatted = formatMessagesForObserver([msg]);
+      const formatted = await formatMessagesForObserver([msg]);
       expect(formatted).toContain('Tool Result fetchInvoice');
       expect(formatted).toContain('Invoice retrieved.');
       expect(formatted).toContain('[File #1: invoice-42.pdf]');
@@ -1705,7 +1705,7 @@ describe('Observer Agent Helpers', () => {
     // surrogate of a non-BMP character (e.g. emoji like 🔥 U+1F525), leaving a
     // lone high surrogate in the <other-conversation> blocks we inject into
     // the actor's context.
-    it('should not leave lone UTF-16 surrogates when truncating emoji across maxPartLength boundary', () => {
+    it('should not leave lone UTF-16 surrogates when truncating emoji across maxPartLength boundary', async () => {
       // Place an emoji (surrogate pair) such that maxPartLength lands between
       // its high and low surrogate code units.
       const prefix = 'a'.repeat(9);
@@ -1715,7 +1715,7 @@ describe('Observer Agent Helpers', () => {
 
       const msg = createTestMessage(text, 'user');
       // Cut in the middle of the emoji's surrogate pair (after prefix + high surrogate).
-      const formatted = formatMessagesForObserver([msg], { maxPartLength: prefix.length + 1 });
+      const formatted = await formatMessagesForObserver([msg], { maxPartLength: prefix.length + 1 });
 
       // JSON.stringify is what the AI SDK / Anthropic client uses to serialize
       // the request body. A lone surrogate survives stringification and is
@@ -1731,7 +1731,7 @@ describe('Observer Agent Helpers', () => {
       expect(loneLowSurrogate.test(serialized)).toBe(false);
     });
 
-    it('should not leave lone UTF-16 surrogates when truncating tool results with emoji', () => {
+    it('should not leave lone UTF-16 surrogates when truncating tool results with emoji', async () => {
       // Regression for the same surrogate issue, but via the tool-result path.
       // formatToolResultForObserver serializes the value, then truncateStringByTokens
       // performs a binary-search slice. A large tool result containing an emoji at
@@ -1755,7 +1755,7 @@ describe('Observer Agent Helpers', () => {
   });
 
   describe('buildObserverHistoryMessage', () => {
-    it('should preserve image attachments and image-like file attachments in observer input order', () => {
+    it('should preserve image attachments and image-like file attachments in observer input order', async () => {
       const msg = createTestMessage('ignored', 'user');
       msg.content = {
         format: 2,
@@ -1777,7 +1777,7 @@ describe('Observer Agent Helpers', () => {
         ],
       };
 
-      const historyMessage = buildObserverHistoryMessage([msg]);
+      const historyMessage = await buildObserverHistoryMessage([msg]);
       expect(historyMessage.role).toBe('user');
       expect(Array.isArray(historyMessage.content)).toBe(true);
 
@@ -1792,7 +1792,7 @@ describe('Observer Agent Helpers', () => {
       expect(content).not.toContainEqual(expect.objectContaining({ image: 'https://example.com/floorplan.pdf' }));
     });
 
-    it('should hoist image-data tool-result blocks into observer input attachments', () => {
+    it('should hoist image-data tool-result blocks into observer input attachments', async () => {
       const base64 = 'B'.repeat(1500);
       const msg = createTestMessage('ignored', 'assistant');
       msg.content = {
@@ -1822,7 +1822,7 @@ describe('Observer Agent Helpers', () => {
         ],
       } as any;
 
-      const historyMessage = buildObserverHistoryMessage([msg]);
+      const historyMessage = await buildObserverHistoryMessage([msg]);
       const content = historyMessage.content as any[];
 
       const textParts = content.filter(part => part.type === 'text');
@@ -1841,7 +1841,7 @@ describe('Observer Agent Helpers', () => {
       expect(joinedText).not.toContain(base64);
     });
 
-    it('should hoist URL and media tool-result blocks into observer input attachments', () => {
+    it('should hoist URL and media tool-result blocks into observer input attachments', async () => {
       const imageData = 'E'.repeat(1500);
       const fileData = 'F'.repeat(1500);
       const msg = createTestMessage('ignored', 'assistant');
@@ -1880,7 +1880,7 @@ describe('Observer Agent Helpers', () => {
         ],
       } as any;
 
-      const historyMessage = buildObserverHistoryMessage([msg]);
+      const historyMessage = await buildObserverHistoryMessage([msg]);
       const content = historyMessage.content as any[];
       const imageParts = content.filter(part => part.type === 'image');
       const fileParts = content.filter(part => part.type === 'file');
@@ -1922,7 +1922,7 @@ describe('Observer Agent Helpers', () => {
       expect(joinedText).not.toContain(fileData);
     });
 
-    it('should hoist image-data without mediaType without leaking base64 into observer text', () => {
+    it('should hoist image-data without mediaType without leaking base64 into observer text', async () => {
       const base64 = 'G'.repeat(1500);
       const msg = createTestMessage('ignored', 'assistant');
       msg.content = {
@@ -1949,7 +1949,7 @@ describe('Observer Agent Helpers', () => {
         ],
       } as any;
 
-      const historyMessage = buildObserverHistoryMessage([msg]);
+      const historyMessage = await buildObserverHistoryMessage([msg]);
       const content = historyMessage.content as any[];
       const imageParts = content.filter(part => part.type === 'image');
       const joinedText = content
@@ -1963,7 +1963,7 @@ describe('Observer Agent Helpers', () => {
       expect(joinedText).not.toContain(base64);
     });
 
-    it('should share the image counter between user-attached and tool-result images', () => {
+    it('should share the image counter between user-attached and tool-result images', async () => {
       const toolBase64 = 'D'.repeat(1500);
 
       const userMsg = createTestMessage('ignored', 'user');
@@ -2000,7 +2000,7 @@ describe('Observer Agent Helpers', () => {
         ],
       } as any;
 
-      const historyMessage = buildObserverHistoryMessage([userMsg, toolMsg]);
+      const historyMessage = await buildObserverHistoryMessage([userMsg, toolMsg]);
       const content = historyMessage.content as any[];
       const imageParts = content.filter(part => part.type === 'image');
       const joinedText = content
@@ -2017,7 +2017,7 @@ describe('Observer Agent Helpers', () => {
       expect(joinedText).not.toMatch(/\[Image #1: image\/png\]/);
     });
 
-    it('should reuse part-level date grouping without message separators', () => {
+    it('should reuse part-level date grouping without message separators', async () => {
       const assistant = createTestMessage('ignored', 'assistant');
       assistant.createdAt = new Date('2024-12-04T10:30:00Z');
       assistant.content = {
@@ -2031,7 +2031,7 @@ describe('Observer Agent Helpers', () => {
       const user = createTestMessage('later', 'user');
       user.createdAt = new Date('2024-12-05T12:01:00Z');
 
-      const historyMessage = buildObserverHistoryMessage([assistant, user]) as any;
+      const historyMessage = (await buildObserverHistoryMessage([assistant, user])) as any;
       const joinedText = historyMessage.content
         .filter((part: any) => part.type === 'text')
         .map((part: any) => part.text)
@@ -2043,7 +2043,7 @@ describe('Observer Agent Helpers', () => {
       expect(joinedText).toContain('\nUser: later');
     });
 
-    it('should render mixed content parts into the exact observer history text the model sees', () => {
+    it('should render mixed content parts into the exact observer history text the model sees', async () => {
       const assistant = createTestMessage('ignored', 'assistant');
       assistant.createdAt = new Date(2024, 11, 4, 10, 30);
       assistant.content = {
@@ -2086,7 +2086,7 @@ describe('Observer Agent Helpers', () => {
         ],
       } as any;
 
-      const historyMessage = buildObserverHistoryMessage([assistant]) as any;
+      const historyMessage = (await buildObserverHistoryMessage([assistant])) as any;
       const textParts = historyMessage.content.filter((part: any) => part.type === 'text');
 
       expect(textParts[0].text).toContain('## New Message History to Observe');
@@ -2103,7 +2103,7 @@ describe('Observer Agent Helpers', () => {
       );
     });
 
-    it('should preserve thread grouping while attaching multimodal content for multi-thread observer input', () => {
+    it('should preserve thread grouping while attaching multimodal content for multi-thread observer input', async () => {
       const threadA = createTestMessage('ignored', 'user', 'msg-a');
       threadA.threadId = 'thread-a';
       threadA.content = {
@@ -2129,7 +2129,7 @@ describe('Observer Agent Helpers', () => {
         ],
       };
 
-      const historyMessage = buildMultiThreadObserverHistoryMessage(
+      const historyMessage = await buildMultiThreadObserverHistoryMessage(
         new Map([
           ['thread-a', [threadA]],
           ['thread-b', [threadB]],
@@ -2147,7 +2147,7 @@ describe('Observer Agent Helpers', () => {
       expect(content.some(part => part.type === 'image' && part.image === 'https://example.com/b.jpeg')).toBe(true);
     });
 
-    it('should apply tool-result truncation in multi-thread observer history', () => {
+    it('should apply tool-result truncation in multi-thread observer history', async () => {
       const threadA = createTestMessage('ignored', 'assistant', 'msg-a');
       threadA.threadId = 'thread-a';
       threadA.content = {
@@ -2169,9 +2169,13 @@ describe('Observer Agent Helpers', () => {
         ],
       } as any;
 
-      const historyMessage = buildMultiThreadObserverHistoryMessage(new Map([['thread-a', [threadA]]]), ['thread-a'], {
-        maxToolResultTokens: 200,
-      });
+      const historyMessage = await buildMultiThreadObserverHistoryMessage(
+        new Map([['thread-a', [threadA]]]),
+        ['thread-a'],
+        {
+          maxToolResultTokens: 200,
+        },
+      );
 
       const content = historyMessage.content as any[];
       const joinedText = content
@@ -2202,8 +2206,8 @@ describe('Observer Agent Helpers', () => {
         return msg;
       };
 
-      it('forwards all attachment parts when attachmentFilter is true', () => {
-        const historyMessage = buildObserverHistoryMessage([buildMessageWithAttachments()], {
+      it('forwards all attachment parts when attachmentFilter is true', async () => {
+        const historyMessage = await buildObserverHistoryMessage([buildMessageWithAttachments()], {
           attachmentFilter: true,
         });
         const content = historyMessage.content as any[];
@@ -2222,8 +2226,8 @@ describe('Observer Agent Helpers', () => {
         expect(joined).toContain('[File #1: floorplan.pdf]');
       });
 
-      it('drops every attachment part when attachmentFilter is false but keeps placeholders', () => {
-        const historyMessage = buildObserverHistoryMessage([buildMessageWithAttachments()], {
+      it('drops every attachment part when attachmentFilter is false but keeps placeholders', async () => {
+        const historyMessage = await buildObserverHistoryMessage([buildMessageWithAttachments()], {
           attachmentFilter: false,
         });
         const content = historyMessage.content as any[];
@@ -2239,8 +2243,8 @@ describe('Observer Agent Helpers', () => {
         expect(joined).toContain('[File #1: floorplan.pdf]');
       });
 
-      it('honors a mimeType allowlist with glob patterns', () => {
-        const historyMessage = buildObserverHistoryMessage([buildMessageWithAttachments()], {
+      it('honors a mimeType allowlist with glob patterns', async () => {
+        const historyMessage = await buildObserverHistoryMessage([buildMessageWithAttachments()], {
           attachmentFilter: ['image/*'],
         });
         const content = historyMessage.content as any[];
@@ -2260,8 +2264,8 @@ describe('Observer Agent Helpers', () => {
         expect(joined).toContain('[File #1: floorplan.pdf]');
       });
 
-      it('treats an empty allowlist like attachmentFilter: false', () => {
-        const historyMessage = buildObserverHistoryMessage([buildMessageWithAttachments()], {
+      it('treats an empty allowlist like attachmentFilter: false', async () => {
+        const historyMessage = await buildObserverHistoryMessage([buildMessageWithAttachments()], {
           attachmentFilter: [],
         });
         const content = historyMessage.content as any[];
@@ -2276,8 +2280,8 @@ describe('Observer Agent Helpers', () => {
         expect(joined).toContain('[File #1: floorplan.pdf]');
       });
 
-      it('treats a bare "*" allowlist as allow-all', () => {
-        const historyMessage = buildObserverHistoryMessage([buildMessageWithAttachments()], {
+      it('treats a bare "*" allowlist as allow-all', async () => {
+        const historyMessage = await buildObserverHistoryMessage([buildMessageWithAttachments()], {
           attachmentFilter: ['*'],
         });
         const content = historyMessage.content as any[];
@@ -2297,8 +2301,8 @@ describe('Observer Agent Helpers', () => {
         expect(joined).toContain('[File #1: floorplan.pdf]');
       });
 
-      it('matches exact mimeTypes case-insensitively', () => {
-        const historyMessage = buildObserverHistoryMessage([buildMessageWithAttachments()], {
+      it('matches exact mimeTypes case-insensitively', async () => {
+        const historyMessage = await buildObserverHistoryMessage([buildMessageWithAttachments()], {
           attachmentFilter: ['APPLICATION/PDF'],
         });
         const content = historyMessage.content as any[];
@@ -2309,7 +2313,7 @@ describe('Observer Agent Helpers', () => {
         );
       });
 
-      it('also filters hoisted tool-result attachments', () => {
+      it('also filters hoisted tool-result attachments', async () => {
         const base64 = 'B'.repeat(1500);
         const msg = createTestMessage('ignored', 'assistant');
         msg.content = {
@@ -2344,7 +2348,7 @@ describe('Observer Agent Helpers', () => {
           ],
         } as any;
 
-        const historyMessage = buildObserverHistoryMessage([msg], {
+        const historyMessage = await buildObserverHistoryMessage([msg], {
           attachmentFilter: ['image/*'],
         });
         const content = historyMessage.content as any[];
@@ -2361,7 +2365,7 @@ describe('Observer Agent Helpers', () => {
         expect(joined).not.toContain(base64);
       });
 
-      it('replaces tool-result attachments with placeholders even when attachmentFilter is false', () => {
+      it('replaces tool-result attachments with placeholders even when attachmentFilter is false', async () => {
         const base64 = 'C'.repeat(1500);
         const msg = createTestMessage('ignored', 'assistant');
         msg.content = {
@@ -2388,7 +2392,7 @@ describe('Observer Agent Helpers', () => {
           ],
         } as any;
 
-        const historyMessage = buildObserverHistoryMessage([msg], {
+        const historyMessage = await buildObserverHistoryMessage([msg], {
           attachmentFilter: false,
         });
         const content = historyMessage.content as any[];
@@ -2406,34 +2410,34 @@ describe('Observer Agent Helpers', () => {
   });
 
   describe('buildObserverPrompt', () => {
-    it('should include new messages in prompt', () => {
+    it('should include new messages in prompt', async () => {
       const messages = [createTestMessage('What is TypeScript?', 'user')];
-      const prompt = buildObserverPrompt(undefined, messages);
+      const prompt = await buildObserverPrompt(undefined, messages);
 
       expect(prompt).toContain('New Message History');
       expect(prompt).toContain('What is TypeScript?');
     });
 
-    it('should include existing observations if present', () => {
+    it('should include existing observations if present', async () => {
       const messages = [createTestMessage('Follow up question', 'user')];
       const existingObs = '- 🔴 User asked about TypeScript [topic_discussed]';
 
-      const prompt = buildObserverPrompt(existingObs, messages);
+      const prompt = await buildObserverPrompt(existingObs, messages);
 
       expect(prompt).toContain('Previous Observations');
       expect(prompt).toContain('User asked about TypeScript');
     });
 
-    it('should not include existing observations section if none', () => {
+    it('should not include existing observations section if none', async () => {
       const messages = [createTestMessage('Hello', 'user')];
-      const prompt = buildObserverPrompt(undefined, messages);
+      const prompt = await buildObserverPrompt(undefined, messages);
 
       expect(prompt).not.toContain('Previous Observations');
     });
 
-    it('should include prior current-task and suggested-response metadata when provided', () => {
+    it('should include prior current-task and suggested-response metadata when provided', async () => {
       const messages = [createTestMessage('Please continue', 'user')];
-      const prompt = buildObserverPrompt(undefined, messages, {
+      const prompt = await buildObserverPrompt(undefined, messages, {
         priorCurrentTask: 'Implement observer prompt improvements',
         priorSuggestedResponse: 'I will update the observer prompt next.',
       });
@@ -2443,16 +2447,16 @@ describe('Observer Agent Helpers', () => {
       expect(prompt).toContain('prior suggested-response: I will update the observer prompt next.');
     });
 
-    it('should omit prior metadata section when not provided', () => {
+    it('should omit prior metadata section when not provided', async () => {
       const messages = [createTestMessage('Please continue', 'user')];
-      const prompt = buildObserverPrompt(undefined, messages, {});
+      const prompt = await buildObserverPrompt(undefined, messages, {});
 
       expect(prompt).not.toContain('Prior Thread Metadata');
     });
   });
 
   describe('buildMultiThreadObserverPrompt', () => {
-    it('should include per-thread prior metadata when provided', () => {
+    it('should include per-thread prior metadata when provided', async () => {
       const messagesByThread = new Map<string, MastraDBMessage[]>([
         ['thread-1', [createTestMessage('Thread 1 message', 'user')]],
         ['thread-2', [createTestMessage('Thread 2 message', 'user')]],
@@ -2845,7 +2849,7 @@ describe('Observer Agent Helpers', () => {
       await om.observer.call(undefined, observerMessages);
       await (om as any).reflector.call('01234567890');
 
-      expect(observerResolveSpy).toHaveBeenCalledWith(om.getTokenCounter().countMessages(observerMessages));
+      expect(observerResolveSpy).toHaveBeenCalledWith(await om.getTokenCounter().countMessages(observerMessages));
       expect(reflectorResolveSpy).toHaveBeenCalledWith(1);
       expect(observerCreateAgentSpy.mock.calls[0][0]).toBe('openai/gpt-4o');
       expect(reflectorCreateAgentSpy.mock.calls[0][0]).toBe('openai/gpt-4o-mini');
@@ -2853,7 +2857,7 @@ describe('Observer Agent Helpers', () => {
   });
 
   describe('buildObserverHistoryMessage', () => {
-    it('should preserve placeholders and attachments in order', () => {
+    it('should preserve placeholders and attachments in order', async () => {
       const msg = createTestMessage('ignored', 'user');
       msg.content = {
         format: 2,
@@ -2869,7 +2873,7 @@ describe('Observer Agent Helpers', () => {
         ],
       };
 
-      const historyMessage = buildObserverHistoryMessage([msg]) as any;
+      const historyMessage = (await buildObserverHistoryMessage([msg])) as any;
 
       expect(historyMessage.role).toBe('user');
       expect(historyMessage.content[0].text).toContain('New Message History');
@@ -2889,7 +2893,7 @@ describe('Observer Agent Helpers', () => {
       );
     });
 
-    it('should preserve thread wrappers and attachments for multi-thread history', () => {
+    it('should preserve thread wrappers and attachments for multi-thread history', async () => {
       const imageMessage = createTestMessage('ignored', 'user', 'thread-a-image');
       imageMessage.threadId = 'thread-a';
       imageMessage.content = {
@@ -2915,13 +2919,13 @@ describe('Observer Agent Helpers', () => {
         ],
       };
 
-      const historyMessage = buildMultiThreadObserverHistoryMessage(
+      const historyMessage = (await buildMultiThreadObserverHistoryMessage(
         new Map([
           ['thread-a', [imageMessage]],
           ['thread-b', [fileMessage]],
         ]),
         ['thread-a', 'thread-b'],
-      ) as any;
+      )) as any;
 
       expect(historyMessage.content[0].text).toContain('2 different conversation threads');
       expect(
@@ -2948,7 +2952,7 @@ describe('Observer Agent Helpers', () => {
   });
 
   describe('parseObserverOutput', () => {
-    it('should extract observations from output', () => {
+    it('should extract observations from output', async () => {
       const output = `
 - 🔴 User asked about React [topic_discussed]
 - 🟡 User prefers examples [user_preference]
@@ -2959,7 +2963,7 @@ describe('Observer Agent Helpers', () => {
       expect(result.observations).toContain('🟡 User prefers examples');
     });
 
-    it('should extract continuation hint from XML suggested-response tag', () => {
+    it('should extract continuation hint from XML suggested-response tag', async () => {
       const output = `
 <observations>
 - 🔴 User asked about React [topic_discussed]
@@ -2978,7 +2982,7 @@ Let me show you an example...
       expect(result.suggestedContinuation).toContain('Let me show you an example');
     });
 
-    it('should handle XML format with all sections', () => {
+    it('should handle XML format with all sections', async () => {
       const output = `
 <observations>
 - 🔴 Observation here
@@ -3002,7 +3006,7 @@ Here's the implementation...
       expect(result.observations).not.toContain('<current-task>');
     });
 
-    it('should parse thread title and custom inline extractor sections together', () => {
+    it('should parse thread title and custom inline extractor sections together', async () => {
       const userInfo = new Extractor({ name: 'User info', instructions: 'Extract user information.' });
       const output = `
 <observations>
@@ -3026,7 +3030,7 @@ name: Tyler
       expect(result.observations).not.toContain('<user-info>');
     });
 
-    it('should handle output without continuation hint', () => {
+    it('should handle output without continuation hint', async () => {
       const output = '- 🔴 Simple observation';
       const result = parseObserverOutput(output);
 
@@ -3039,7 +3043,7 @@ name: Tyler
 
     // Edge case tests for XML parsing robustness
     describe('XML parsing edge cases', () => {
-      it('should handle malformed XML with unclosed tags by using fallback', () => {
+      it('should handle malformed XML with unclosed tags by using fallback', async () => {
         const output = `<observations>
 - 🔴 User preference noted
 - 🟡 Some context
@@ -3050,7 +3054,7 @@ name: Tyler
         expect(result.observations).toContain('🟡 Some context');
       });
 
-      it('should handle empty XML tags gracefully', () => {
+      it('should handle empty XML tags gracefully', async () => {
         const output = `<observations></observations>
 
 <current-task></current-task>
@@ -3063,7 +3067,7 @@ name: Tyler
         expect(result.observations).toBeDefined();
       });
 
-      it('should handle code blocks containing < characters', () => {
+      it('should handle code blocks containing < characters', async () => {
         const output = `<observations>
 - 🔴 User is working on React component
 - 🟡 Code example discussed: \`const x = a < b ? a : b;\`
@@ -3082,7 +3086,7 @@ Help user with conditional rendering
         expect(result.observations).not.toContain('Help user with conditional rendering');
       });
 
-      it('should NOT capture inline <observations> tags that appear mid-line', () => {
+      it('should NOT capture inline <observations> tags that appear mid-line', async () => {
         const output = `<observations>
 - 🔴 User asked about XML parsing
 - 🟡 Mentioned that <observations> tags are used for memory
@@ -3103,7 +3107,7 @@ Explain the <observations> tag format to user
         expect(result.observations).not.toContain('Explain the <observations> tag format');
       });
 
-      it('should NOT capture inline <current-task> tags that appear mid-line', () => {
+      it('should NOT capture inline <current-task> tags that appear mid-line', async () => {
         const output = `<observations>
 - 🔴 User discussed the <current-task> section format
 - 🟡 User wants to know how <current-task> is parsed
@@ -3120,7 +3124,7 @@ Help user understand memory XML structure
         expect(result.observations).not.toContain('Help user understand memory XML structure');
       });
 
-      it('should NOT capture inline <suggested-response> tags that appear mid-line', () => {
+      it('should NOT capture inline <suggested-response> tags that appear mid-line', async () => {
         const output = `<observations>
 - 🔴 User asked about <suggested-response> usage
 </observations>
@@ -3138,7 +3142,7 @@ The <suggested-response> tag helps maintain conversation flow
         expect(result.suggestedContinuation).toContain('<suggested-response> tag helps maintain');
       });
 
-      it('should handle nested code blocks with XML-like content', () => {
+      it('should handle nested code blocks with XML-like content', async () => {
         const output = `<observations>
 - 🔴 User is building an XML parser
 - 🟡 Example code discussed:
@@ -3159,7 +3163,7 @@ Help user implement XML parsing
         expect(result.observations).not.toContain('Help user implement XML parsing');
       });
 
-      it('should NOT be truncated by inline closing tags like </observations>', () => {
+      it('should NOT be truncated by inline closing tags like </observations>', async () => {
         const output = `<observations>
 - 🔴 User mentioned that </observations> ends the section
 - 🟡 User also discussed </current-task> syntax
@@ -3179,7 +3183,7 @@ Help user understand XML tag boundaries
         expect(result.observations).not.toContain('Help user understand XML tag boundaries');
       });
 
-      it('should NOT be truncated by inline closing </current-task> tag', () => {
+      it('should NOT be truncated by inline closing </current-task> tag', async () => {
         const output = `<observations>
 - 🔴 User info here
 </observations>
@@ -3198,14 +3202,14 @@ User asked about </current-task> parsing and how it works
   });
 
   describe('sanitizeObservationLines', () => {
-    it('should leave normal observation lines unchanged', () => {
+    it('should leave normal observation lines unchanged', async () => {
       const obs = '- 🔴 User asked about React\n- 🟡 Some context';
       const sanitized = sanitizeObservationLines(obs);
 
       expect(sanitized).toBe(obs);
     });
 
-    it('should preserve existing anchor IDs', () => {
+    it('should preserve existing anchor IDs', async () => {
       const obs = '[O1] - 🔴 Already anchored\nDate: Mar 11, 2026';
       const sanitized = sanitizeObservationLines(obs);
       const lines = sanitized.split('\n');
@@ -3214,7 +3218,7 @@ User asked about </current-task> parsing and how it works
       expect(lines[1]).toBe('Date: Mar 11, 2026');
     });
 
-    it('should truncate lines exceeding 10k characters', () => {
+    it('should truncate lines exceeding 10k characters', async () => {
       const longLine = 'x'.repeat(15_000);
       const obs = `- 🔴 Short line\n${longLine}\n- 🟡 Another line`;
       const result = sanitizeObservationLines(obs);
@@ -3226,13 +3230,13 @@ User asked about </current-task> parsing and how it works
       expect(lines[1]!.length).toBeLessThan(11_100);
     });
 
-    it('should handle empty input', () => {
+    it('should handle empty input', async () => {
       expect(sanitizeObservationLines('')).toBe('');
     });
   });
 
   describe('anchor IDs', () => {
-    it('should inject ordinal anchors into observation lines only', () => {
+    it('should inject ordinal anchors into observation lines only', async () => {
       const observations = `Date: Mar 11, 2026
 - 🔴 First observation
 <observation-group id="abcd" range="m1:m2">
@@ -3250,7 +3254,7 @@ User asked about </current-task> parsing and how it works
       expect(lines[5]).toBe('[O2] - 🔴 Second observation');
     });
 
-    it('should strip ephemeral anchors before canonical storage', () => {
+    it('should strip ephemeral anchors before canonical storage', async () => {
       const observations = `[O1] - 🔴 First observation\n  [O1-N1] - 🟡 Nested observation\n[O2] - 🔴 Second observation`;
 
       expect(stripEphemeralAnchorIds(observations)).toBe(
@@ -3258,7 +3262,7 @@ User asked about </current-task> parsing and how it works
       );
     });
 
-    it('should parse existing anchor IDs', () => {
+    it('should parse existing anchor IDs', async () => {
       expect(parseAnchorId('[O12] - 🔴 Observation')).toBe('O12');
       expect(parseAnchorId('[O12-N3] - 🔴 Observation')).toBe('O12-N3');
       expect(parseAnchorId('- 🔴 Observation')).toBeNull();
@@ -3266,16 +3270,16 @@ User asked about </current-task> parsing and how it works
   });
 
   describe('detectDegenerateRepetition', () => {
-    it('should return false for normal text', () => {
+    it('should return false for normal text', async () => {
       const text = '- 🔴 User asked about React\n- 🟡 Some context\n- 🔴 Another observation';
       expect(detectDegenerateRepetition(text)).toBe(false);
     });
 
-    it('should return false for short text', () => {
+    it('should return false for short text', async () => {
       expect(detectDegenerateRepetition('hello')).toBe(false);
     });
 
-    it('should detect repeated content patterns', () => {
+    it('should detect repeated content patterns', async () => {
       // Simulate Gemini Flash repetition bug - same ~200 char block repeated many times
       const block =
         'getLanguageModel().doGenerate(options: LanguageModelV2CallOptions): PromiseLike<LanguageModelV2GenerateResult>, ';
@@ -3283,12 +3287,12 @@ User asked about </current-task> parsing and how it works
       expect(detectDegenerateRepetition(text)).toBe(true);
     });
 
-    it('should detect extremely long single lines', () => {
+    it('should detect extremely long single lines', async () => {
       const line = 'a'.repeat(60_000);
       expect(detectDegenerateRepetition(line)).toBe(true);
     });
 
-    it('should flag degenerate output in parseObserverOutput', () => {
+    it('should flag degenerate output in parseObserverOutput', async () => {
       const block = 'StreamTextResult.getLanguageModel().doGenerate(options): PromiseLike<Result>, ';
       const text = `<observations>\n${block.repeat(100)}\n</observations>`;
       const result = parseObserverOutput(text);
@@ -3301,7 +3305,7 @@ User asked about </current-task> parsing and how it works
     // sample positions are congruent mod P, so ~50 samples land on ~50 distinct
     // phases and find zero duplicates. Both cases below reproduce real observer
     // output found in production records (2026-08-21).
-    it('should detect a long-period multi-line repetition loop (21-line block x 62)', () => {
+    it('should detect a long-period multi-line repetition loop (21-line block x 62)', async () => {
       const block = Array.from(
         { length: 21 },
         (_, i) =>
@@ -3321,7 +3325,7 @@ User asked about </current-task> parsing and how it works
       expect(description).toContain('countedLines=1332');
     });
 
-    it('should detect a short-period multi-line repetition loop (8-line block x 140)', () => {
+    it('should detect a short-period multi-line repetition loop (8-line block x 140)', async () => {
       const block = Array.from(
         { length: 8 },
         (_, i) =>
@@ -3331,7 +3335,7 @@ User asked about </current-task> parsing and how it works
       expect(detectDegenerateRepetition(text)).toBe(true);
     });
 
-    it('should detect duplicate substantial lines just over the ratio threshold', () => {
+    it('should detect duplicate substantial lines just over the ratio threshold', async () => {
       const repeatedConstraint =
         '- 🔴 User requires every production change to preserve backwards compatibility and include documented rollback instructions.';
       const uniqueObservations = Array.from(
@@ -3347,7 +3351,7 @@ User asked about </current-task> parsing and how it works
       expect(detectDegenerateRepetition(text)).toBe(true);
     });
 
-    it('should not flag long legitimate output with unique lines', () => {
+    it('should not flag long legitimate output with unique lines', async () => {
       const text = Array.from(
         { length: 300 },
         (_, i) =>
@@ -3357,7 +3361,7 @@ User asked about </current-task> parsing and how it works
       expect(detectDegenerateRepetition(text)).toBe(false);
     });
 
-    it('should not flag output where only short lines repeat', () => {
+    it('should not flag output where only short lines repeat', async () => {
       const unique = Array.from(
         { length: 40 },
         (_, i) =>
@@ -3370,7 +3374,7 @@ User asked about </current-task> parsing and how it works
   });
 
   describe('describeDegenerateOutput', () => {
-    it('reports length, duplicate stats, and the most-repeated window on one line', () => {
+    it('reports length, duplicate stats, and the most-repeated window on one line', async () => {
       const block =
         'getLanguageModel().doGenerate(options: LanguageModelV2CallOptions): PromiseLike<LanguageModelV2GenerateResult>, ';
       const text = block.repeat(100);
@@ -3386,7 +3390,7 @@ User asked about </current-task> parsing and how it works
       expect(description).not.toContain('\n');
     });
 
-    it('bounds snippets to the requested size', () => {
+    it('bounds snippets to the requested size', async () => {
       const text = 'x'.repeat(10_000);
       const description = describeDegenerateOutput(text, 100);
       const head = /head="(x+)"/.exec(description)?.[1];
@@ -3395,7 +3399,7 @@ User asked about </current-task> parsing and how it works
       expect(tail?.length).toBe(100);
     });
 
-    it('omits the tail when the text is short', () => {
+    it('omits the tail when the text is short', async () => {
       const description = describeDegenerateOutput('short text', 400);
       expect(description).toContain('head="short text"');
       expect(description).not.toContain('tail=');
@@ -3408,28 +3412,28 @@ User asked about </current-task> parsing and how it works
 // =============================================================================
 
 describe('didProviderChange', () => {
-  it('returns false when either side is undefined', () => {
+  it('returns false when either side is undefined', async () => {
     expect(didProviderChange(undefined, 'openai/gpt-4o')).toBe(false);
     expect(didProviderChange('openai/gpt-4o', undefined)).toBe(false);
     expect(didProviderChange(undefined, undefined)).toBe(false);
   });
 
-  it('returns false when both sides are identical fully-formatted strings', () => {
+  it('returns false when both sides are identical fully-formatted strings', async () => {
     expect(didProviderChange('openai/gpt-4o', 'openai/gpt-4o')).toBe(false);
   });
 
-  it('returns true when both sides are fully-formatted but differ', () => {
+  it('returns true when both sides are fully-formatted but differ', async () => {
     expect(didProviderChange('openai/gpt-4o', 'anthropic/claude-opus-4-7')).toBe(true);
     expect(didProviderChange('openai/gpt-4o', 'openai/gpt-5.4')).toBe(true);
     expect(didProviderChange('openai.responses/gpt-4o', 'openai/gpt-5.4')).toBe(true);
   });
 
-  it('returns false when provider subnamespaces differ but base provider and modelId match', () => {
+  it('returns false when provider subnamespaces differ but base provider and modelId match', async () => {
     expect(didProviderChange('openai.responses/gpt-5.4', 'openai/gpt-5.4')).toBe(false);
     expect(didProviderChange('openai/gpt-5.4', 'openai.responses/gpt-5.4')).toBe(false);
   });
 
-  it('returns false when persisted history has bare modelId that matches actor modelId', () => {
+  it('returns false when persisted history has bare modelId that matches actor modelId', async () => {
     // Legacy persisted metadata: { provider: null, modelId: 'gpt-5.4' } -> 'gpt-5.4'
     // Current actor formatted: 'openai.responses/gpt-5.4'
     // Should NOT trigger a provider change.
@@ -3437,26 +3441,26 @@ describe('didProviderChange', () => {
     expect(didProviderChange('gpt-5.4', 'openai.responses/gpt-5.4')).toBe(false);
   });
 
-  it('returns true when bare modelId differs from actor modelId', () => {
+  it('returns true when bare modelId differs from actor modelId', async () => {
     expect(didProviderChange('openai/gpt-4o', 'gpt-5.4')).toBe(true);
     expect(didProviderChange('gpt-5.4', 'openai/gpt-4o')).toBe(true);
   });
 
-  it('returns false when both sides are identical bare modelIds', () => {
+  it('returns false when both sides are identical bare modelIds', async () => {
     expect(didProviderChange('gpt-5.4', 'gpt-5.4')).toBe(false);
   });
 });
 
 describe('Reflector Agent Helpers', () => {
   describe('buildReflectorSystemPrompt', () => {
-    it('should include base reflector instructions', () => {
+    it('should include base reflector instructions', async () => {
       const systemPrompt = buildReflectorSystemPrompt();
 
       expect(systemPrompt).toContain('observational-memory-instruction');
       expect(systemPrompt).toContain('observation reflector');
     });
 
-    it('should include custom instruction when provided', () => {
+    it('should include custom instruction when provided', async () => {
       const customInstruction = 'Prioritize consolidating health-related observations together.';
       const systemPrompt = buildReflectorSystemPrompt(customInstruction);
 
@@ -3464,7 +3468,7 @@ describe('Reflector Agent Helpers', () => {
       expect(systemPrompt).toContain('observational-memory-instruction');
     });
 
-    it('should work without custom instruction', () => {
+    it('should work without custom instruction', async () => {
       const systemPrompt = buildReflectorSystemPrompt();
       const systemPromptWithUndefined = buildReflectorSystemPrompt(undefined);
 
@@ -3474,7 +3478,7 @@ describe('Reflector Agent Helpers', () => {
   });
 
   describe('buildReflectorPrompt', () => {
-    it('should include plain observations to reflect on', () => {
+    it('should include plain observations to reflect on', async () => {
       const observations = '- 🔴 User is building a React app';
       const prompt = buildReflectorPrompt(observations);
 
@@ -3483,7 +3487,7 @@ describe('Reflector Agent Helpers', () => {
       expect(prompt).not.toContain('[O1]');
     });
 
-    it('should strip observation group wrappers before building the reflection prompt', () => {
+    it('should strip observation group wrappers before building the reflection prompt', async () => {
       const observations = `<observation-group id="group-a" range="m1:m2">
 - 🔴 User is building a React app
 </observation-group>
@@ -3502,7 +3506,7 @@ describe('Reflector Agent Helpers', () => {
       expect(prompt).not.toContain('<observation-group');
     });
 
-    it('should include manual prompt guidance if provided', () => {
+    it('should include manual prompt guidance if provided', async () => {
       const observations = '- 🔴 Test';
       const manualPrompt = 'Focus on authentication implementation';
 
@@ -3511,7 +3515,7 @@ describe('Reflector Agent Helpers', () => {
       expect(prompt).toContain('Focus on authentication implementation');
     });
 
-    it('should include compression retry guidance when flagged', () => {
+    it('should include compression retry guidance when flagged', async () => {
       const observations = '- 🔴 Test';
       const prompt = buildReflectorPrompt(observations, undefined, true);
 
@@ -3521,7 +3525,7 @@ describe('Reflector Agent Helpers', () => {
   });
 
   describe('Observation Groups', () => {
-    it('should render canonical groups into reflection markdown', () => {
+    it('should render canonical groups into reflection markdown', async () => {
       const observations = `<observation-group id="group-a" range="m1:m2">
 - 🔴 User is building a React app
 </observation-group>
@@ -3541,7 +3545,7 @@ _range: \`m3:m4\`_
 - 🟡 Needs help with auth flow`);
     });
 
-    it('should preserve ungrouped text in order when mixed with observation groups', () => {
+    it('should preserve ungrouped text in order when mixed with observation groups', async () => {
       const observations = `## Monday Jan 6
 
 - Legacy observation from before retrieval was enabled
@@ -3585,7 +3589,7 @@ _range: \`m3:m4\`_
       expect(rendered).toContain('_range: `m3:m4`_');
     });
 
-    it('should derive merged group provenance from reflection edits', () => {
+    it('should derive merged group provenance from reflection edits', async () => {
       const sourceObservations = `<observation-group id="group-a" range="m1:m2">
 - 🔴 User is building a React app
 </observation-group>
@@ -3609,7 +3613,7 @@ _range: \`ignored-by-reconciler\`_
       ]);
     });
 
-    it('should reconcile reflected markdown back into canonical grouped observations', () => {
+    it('should reconcile reflected markdown back into canonical grouped observations', async () => {
       const sourceObservations = `<observation-group id="group-a" range="m1:m2">
 - 🔴 User is building a React app
 </observation-group>
@@ -3632,7 +3636,7 @@ _range: \`ignored-by-reconciler\`_
   });
 
   describe('parseReflectorOutput', () => {
-    it('should extract observations from output', () => {
+    it('should extract observations from output', async () => {
       const output = `
 - 🔴 **Project Context** [current_project]
   - User is building a dashboard
@@ -3645,7 +3649,7 @@ _range: \`ignored-by-reconciler\`_
       expect(result.observations).toContain('Completed auth implementation');
     });
 
-    it('should preserve substantial repeated lines at the duplicate ratio boundary', () => {
+    it('should preserve substantial repeated lines at the duplicate ratio boundary', async () => {
       const repeatedConstraint =
         '- 🔴 User requires every production change to preserve backwards compatibility and include documented rollback instructions.';
       const uniqueObservations = Array.from(
@@ -3665,7 +3669,7 @@ _range: \`ignored-by-reconciler\`_
       expect(result.observations).toContain('Distinct reflected project fact 8');
     });
 
-    it('should strip ephemeral anchor IDs from reflector output', () => {
+    it('should strip ephemeral anchor IDs from reflector output', async () => {
       const output = `
 <observations>
 [O1] - 🔴 Critical project context
@@ -3680,7 +3684,7 @@ _range: \`ignored-by-reconciler\`_
       expect(result.observations).not.toContain('[O1-N1]');
     });
 
-    it('should reconcile reflected markdown groups back to canonical grouped observations', () => {
+    it('should reconcile reflected markdown groups back to canonical grouped observations', async () => {
       const sourceObservations = `<observation-group id="group-a" range="m1:m2">
 - 🔴 User is building a React app
 </observation-group>
@@ -3706,7 +3710,7 @@ _range: \`ignored-by-reconciler\`_
 </observation-group>`);
     });
 
-    it('should keep original group ids for unchanged reflected sections', () => {
+    it('should keep original group ids for unchanged reflected sections', async () => {
       const sourceObservations = `<observation-group id="group-a" range="m1:m2">
 - 🔴 User is building a React app
 </observation-group>`;
@@ -3726,7 +3730,7 @@ _range: \`ignored-by-reconciler\`_
 </observation-group>`);
     });
 
-    it('should compact merged ranges across already-merged source groups', () => {
+    it('should compact merged ranges across already-merged source groups', async () => {
       const sourceObservations = `<observation-group id="group-a" range="m1:m2">
 - 🔴 User is building a React app
 </observation-group>
@@ -3752,7 +3756,7 @@ _range: \`ignored-by-reconciler\`_
 </observation-group>`);
     });
 
-    it('should compact a real reflected group with bloated legacy reflection metadata', () => {
+    it('should compact a real reflected group with bloated legacy reflection metadata', async () => {
       const sourceObservations = `<observation-group id="b02a82c879fc7470" range="7250b0a4-9d0a-4504-99ff-35762ec557a5:98b8a7a1-a81f-4fa2-b573-eff69a0f69db,70ed3b4a-061f-4d54-8d3b-1c647359ea9b:0087f0cd-6ee0-44dc-9b19-90fb2775dbd4,48e1dfec-5db1-488f-a0fd-11d49ac6e185:f90a7382-a022-4f4b-ad62-6993eea9efc5,e783ca03-1e88-4d37-a613-9d3ec0247d3c:2892a09a-351d-4ed0-b875-a05f06320434,98b8a7a1-a81f-4fa2-b573-eff69a0f69db:98b8a7a1-a81f-4fa2-b573-eff69a0f69db,2d7b784d-b638-4aac-9528-95e2ebec7edb:f08cf1f9-93e0-4182-a59b-9e360917a8e8,f8b860b4-67d7-4b9c-b5aa-2943a5ddb84a:9fe9dbe7-1d0b-4cdb-b318-23a1dda318ec,2c35b1b5-f59d-4bb6-8f4a-f8dd9d2ecd9c:cb0a9f1c-f2eb-4e11-af52-faab1be1a5d9,5719cf4a-e597-423d-9715-5f6fc0b7fb9f:ce3ffdf6-7cb1-494d-9271-fe52bbc1c8d1,26114b9d-dafd-4da9-941f-6b2a03f652ae:8f1fda4f-f118-4756-ad69-41d13990500c,f84edc84-cc70-49be-a373-4dbb53a9e73d:abf4e97e-f532-4e9e-87ca-9af97b6aa76e,a15c130d-25fc-4545-87c6-4a86fd6b2e03:b82a6a00-d723-438b-84e4-a8646b74c1ad,75b274fb-6284-47ba-b68f-b9fad548453b:3847b369-5406-47da-9a84-c6776709e74c,b25363d6-dc79-4f72-b3cb-2b6012b0f1ed:69c2b306-3f53-4d1d-aaee-8644a5702952,8c2353e5-53db-475e-8ffd-cde8c4705583:e2c93ad7-922d-49d3-8007-354919b3e790,c70381df-6870-4d60-91ec-74a8f98df96f:ad4f0164-9213-42f8-a1ab-e0597a20e946,abf4e97e-f532-4e9e-87ca-9af97b6aa76e:abf4e97e-f532-4e9e-87ca-9af97b6aa76e,092065a5-351d-4b16-abac-65a1c8440681:79c7804e-b9b7-43ec-9318-fc22e5a662be,b03dbc3b-370a-4636-8cad-5be7cc5f2ccb:cd864363-1621-4567-aaed-e7e646ee9a70,5f2dc707-5d2e-4854-8f86-8ddbc520bc33:acbb10c8-6b57-4868-964a-1671b9b12185,7bf9339b-5eef-41e7-9470-4187ff2b2f13:63b60691-5cd0-47db-a03e-618c733994ca,59db30e7-4759-4ed1-a059-5bbb9cdb5cf4:ce02ea43-359f-44ca-91f2-b5db4074cbf1,8f4ec250-a8a3-4803-ae48-2424979514b9:1ab9ef15-da42-4527-8672-1d3209dd90a5,c156c8a3-3f4a-4f0c-986a-7ae9a9c1b5ed:10ca26ac-10e7-4a47-809e-d0e9e6cd8f3e,2fa74f4a-c8b9-48c8-a8b6-2a129b3c638c:2bac851a-ba93-4dd1-9bfb-96f9e9c26911,97b91de1-922f-4acf-9423-3d8732716b3a:a8329f20-350b-4215-ba8c-df08dcf7b901,15bc318d-ccd1-43bc-8258-55d6b48e6371:96e4311d-a07e-4d37-a885-3354337e010b,ee82cec7-2ef4-437d-b85c-c0dc3ce0c422:2d4a6e84-b92d-4091-84fe-c6d1c6c394d1,cf4e3a6f-da92-4b8f-a34b-ab2fc44fd4c7:9225e7ed-f8b5-421f-a6cc-9d01da6b7617,cd2e29ee-7567-43c4-a6ac-3aed94620e9e:18956442-dc45-4388-b2db-76f4bee7293e,40dca7fa-bdfd-4111-9455-bc5b0671bc8b:85ded820-3c56-453a-9733-c63072249276,ceb18582-13dc-479c-979b-9c9487a217a4:ae7d5315-8bab-49b5-8da7-70c76eab652b,32bf0848-5611-4dbe-a67c-0d903f4aaf31:27f2cb5b-d760-4089-8f01-00bd017046ec,3c4d9e9c-678b-4a8e-9c94-5cdca17d470f:82ef6cc8-9ef5-4834-8867-0b823b1f6627,34f37394-c3ce-43c0-90b2-f9ebeea0e85b:0f7b400b-61a9-46a1-b93e-d90aa880aff3,44991d14-dc65-4958-8df6-16698e08fe86:7eba5066-ca89-451a-8efb-3862a8333825,140178a1-bafe-49e0-89cf-0dd3658b752a:451f2170-7b70-475c-ab64-41d323f91606,6595b5c3-b509-4376-a421-495f894eeee2:f685b009-7033-4d1d-9318-ccdc0ad9bcb4,3a7b5792-5c75-41f0-9e66-f8634a3eeea4:efe5c434-5658-44a3-a0dc-f01faecb168a,11095a53-4036-4dc9-b13d-aff0772e6749:b1acd62a-4a20-4a9b-9f9d-90f9b2d5d148,451f2170-7b70-475c-ab64-41d323f91606:451f2170-7b70-475c-ab64-41d323f91606,00834e29-d8c9-4a3d-bfa1-533bd11eb31d:55cd0283-6ffd-464e-8572-455811a7d61c,ea4f0ef8-351c-4766-a341-9c0dc27c8587:cce1f4fc-4316-4ff6-9030-3016fc6f6d7c,74aba1a1-b27d-4a8c-b8fc-d7ec7d36f879:3fca3703-722f-4ef5-be57-a96b1085af18,23a07ab2-4904-46d9-9132-5fa17f044e49:bbeed355-22fc-4ef9-aead-386d8f46e067,6bbac5fc-337b-4717-8d2c-d1fdc5a07444:299913d7-23c1-4606-9c2c-d5e25247c696,14770d82-6855-441f-9f8d-7a2e9fcbd44c:a60b87a2-f93b-45bb-b153-b9b7b72a38ff,bbeed355-22fc-4ef9-aead-386d8f46e067:bbeed355-22fc-4ef9-aead-386d8f46e067,9025d90c-e274-4fa7-8fa3-378073863d80:0d5fb60c-0d91-46d2-b791-23c651362de2,168a713a-2049-413e-a122-d424f642070d:e1e4f158-eb82-45e5-a40c-f1f82f90d117,32863afc-ade2-4eda-9667-2a24de5e7ce4:26cbe75a-8fe0-4a26-ad21-44da25128f1c,8cd79662-308c-48e0-bfea-3da0f5289ff7:19563f5e-a3c8-44a8-b5c6-5965d0015337,c38f2399-5dad-4fee-be26-f5e34b2ac729:320ceb2c-71df-41d0-a742-3e46867ae5d4,ef6e0468-2982-4d4a-b0d7-b8db28984007:99716983-505f-4bba-981f-4642ddd086d8,6fd34cf6-7867-47d8-83f8-332b3c62495d:f3523cc5-3f60-40de-9de2-5c49ded97b52,9b599436-f4b4-482e-be11-f260e184d2d3:6a792350-3dfd-4cf7-bd99-52da42d7f17b,28387d0a-ef5b-4f83-85e4-22735fde7bd2:b9693350-a964-4e16-9c6b-2a4830fec1fc,be382e37-000b-420a-a184-450834f2ff7e:0d703290-a672-499a-9873-175e845bb2aa,962b3951-db61-4184-ba1d-90edcff6e87e:1a020c21-ff6b-47e6-8f20-ae6d0ab33826,2c774241-b800-4f09-9136-53315749b4ce:46072882-5860-4fe8-a9f4-a3802734f323,0f6402fa-cb17-4c16-801c-6e084d38ebab:922f645b-eff7-4233-bf2a-fff33f74b012,29140929-2ab8-451d-be23-0939afa7b937:5d3e015d-cd1c-4f85-8555-4ff0309986a4,04ee483e-e589-416d-b250-84ff6bbca6fb:b354a453-1074-4e55-95bd-2e7eed1a87af,8455bbac-8015-4017-8d77-daac6d5eccf7:a172fe73-2e02-4d19-9b68-8025a50f1b95">
 Date: Mar 25, 2026
 * 🔴 User asked to get familiar with observational memory, especially message saving; later reported a persistence bug where reload showed older/mixed-up history, first as “latest messages sometimes are not saved,” then as “message order is sometimes mixed up,” suggesting writes may target an older message ID rather than disappearing.
@@ -3795,7 +3799,7 @@ Date: Mar 25, 2026
       ]);
     });
 
-    it('should extract continuation hint from XML suggested-response tag', () => {
+    it('should extract continuation hint from XML suggested-response tag', async () => {
       const output = `
 <observations>
 - 🔴 Observations here
@@ -3816,7 +3820,7 @@ Start by implementing the chart component...
 
     // Edge case tests for XML parsing robustness
     describe('XML parsing edge cases', () => {
-      it('should handle malformed XML with unclosed tags by using fallback', () => {
+      it('should handle malformed XML with unclosed tags by using fallback', async () => {
         const output = `<observations>
 - 🔴 User preference noted
 - 🟡 Some context
@@ -3826,7 +3830,7 @@ Start by implementing the chart component...
         expect(result.observations).toContain('🔴 User preference noted');
       });
 
-      it('should NOT be truncated by inline closing tags like </observations>', () => {
+      it('should NOT be truncated by inline closing tags like </observations>', async () => {
         const output = `<observations>
 - 🔴 User mentioned that </observations> ends the section
 - 🟡 User also discussed </current-task> syntax
@@ -3843,7 +3847,7 @@ Help user understand XML tag boundaries
         expect(result.observations).toContain('Important: preserve all content');
       });
 
-      it('should handle code blocks with XML-like content', () => {
+      it('should handle code blocks with XML-like content', async () => {
         const output = `<observations>
 - 🔴 User is building an XML parser
 - 🟡 Example: \`const xml = '<observations>test</observations>';\`
@@ -3863,22 +3867,22 @@ Help user implement XML parsing
   });
 
   describe('validateCompression', () => {
-    it('should return true when reflected tokens are below threshold', () => {
+    it('should return true when reflected tokens are below threshold', async () => {
       // reflectedTokens=5000, targetThreshold=10000 -> 5000 < 10000 = true
       expect(validateCompression(5000, 10000)).toBe(true);
     });
 
-    it('should return false when reflected tokens equal threshold', () => {
+    it('should return false when reflected tokens equal threshold', async () => {
       // reflectedTokens=10000, targetThreshold=10000 -> 10000 < 10000 = false
       expect(validateCompression(10000, 10000)).toBe(false);
     });
 
-    it('should return false when reflected tokens exceed threshold', () => {
+    it('should return false when reflected tokens exceed threshold', async () => {
       // reflectedTokens=12000, targetThreshold=10000 -> 12000 < 10000 = false
       expect(validateCompression(12000, 10000)).toBe(false);
     });
 
-    it('should validate against target threshold', () => {
+    it('should validate against target threshold', async () => {
       // reflectedTokens=8500, targetThreshold=10000 -> 8500 < 10000 = true
       expect(validateCompression(8500, 10000)).toBe(true);
       // reflectedTokens=9500, targetThreshold=10000 -> 9500 < 10000 = true (still below)
@@ -3887,7 +3891,7 @@ Help user implement XML parsing
       expect(validateCompression(10500, 10000)).toBe(false);
     });
 
-    it('should work with different thresholds', () => {
+    it('should work with different thresholds', async () => {
       // reflectedTokens=7500, targetThreshold=8000 -> 7500 < 8000 = true
       expect(validateCompression(7500, 8000)).toBe(true);
       // reflectedTokens=8500, targetThreshold=8000 -> 8500 < 8000 = false
@@ -3908,44 +3912,44 @@ describe('Token Counter', () => {
   });
 
   describe('countString', () => {
-    it('should count tokens in a string', () => {
-      const count = counter.countString('Hello, world!');
+    it('should count tokens in a string', async () => {
+      const count = await counter.countString('Hello, world!');
       expect(count).toBeGreaterThan(0);
     });
 
-    it('should return 0 for empty string', () => {
-      expect(counter.countString('')).toBe(0);
+    it('should return 0 for empty string', async () => {
+      expect(await counter.countString('')).toBe(0);
     });
 
-    it('should count more tokens for longer strings', () => {
-      const short = counter.countString('Hello');
-      const long = counter.countString('Hello, this is a much longer string with many more words');
+    it('should count more tokens for longer strings', async () => {
+      const short = await counter.countString('Hello');
+      const long = await counter.countString('Hello, this is a much longer string with many more words');
       expect(long).toBeGreaterThan(short);
     });
   });
 
   describe('countMessage', () => {
-    it('should count tokens in a message', () => {
+    it('should count tokens in a message', async () => {
       const msg = createTestMessage('Hello, how can I help you today?');
-      const count = counter.countMessage(msg);
+      const count = await counter.countMessage(msg);
       expect(count).toBeGreaterThan(0);
     });
 
-    it('should include overhead for message structure', () => {
+    it('should include overhead for message structure', async () => {
       const msg = createTestMessage('Hi');
-      const stringCount = counter.countString('Hi');
-      const msgCount = counter.countMessage(msg);
+      const stringCount = await counter.countString('Hi');
+      const msgCount = await counter.countMessage(msg);
       // Message should have overhead beyond just the content
       expect(msgCount).toBeGreaterThan(stringCount);
     });
 
-    it('should always return an integer', () => {
+    it('should always return an integer', async () => {
       const msg = createTestMessage('Hello, world!');
-      const count = counter.countMessage(msg);
+      const count = await counter.countMessage(msg);
       expect(Number.isInteger(count)).toBe(true);
     });
 
-    it('should skip data-* parts when counting tokens', () => {
+    it('should skip data-* parts when counting tokens', async () => {
       const largeObservationText = 'x'.repeat(10000);
       const msgWithDataParts: MastraDBMessage = {
         id: 'msg-data-parts',
@@ -3981,46 +3985,49 @@ describe('Token Counter', () => {
         createdAt: new Date(),
       };
 
-      const countWith = counter.countMessage(msgWithDataParts);
-      const countWithout = counter.countMessage(msgWithoutDataParts);
+      const countWith = await counter.countMessage(msgWithDataParts);
+      const countWithout = await counter.countMessage(msgWithoutDataParts);
       // data-* parts should be skipped, so counts should be equal
       expect(countWith).toBe(countWithout);
     });
   });
 
   describe('countMessages', () => {
-    it('should count tokens in multiple messages', () => {
+    it('should count tokens in multiple messages', async () => {
       const messages = createTestMessages(5);
-      const count = counter.countMessages(messages);
+      const count = await counter.countMessages(messages);
       expect(count).toBeGreaterThan(0);
     });
 
-    it('should include conversation overhead', () => {
+    it('should include conversation overhead', async () => {
       const messages = createTestMessages(3);
-      const individualSum = messages.reduce((sum, m) => sum + counter.countMessage(m), 0);
-      const totalCount = counter.countMessages(messages);
+      const individualSum = (await Promise.all(messages.map(m => counter.countMessage(m)))).reduce(
+        (sum, count) => sum + count,
+        0,
+      );
+      const totalCount = await counter.countMessages(messages);
       // Should have conversation overhead
       expect(totalCount).toBeGreaterThan(individualSum);
     });
 
-    it('should return 0 for empty array', () => {
-      expect(counter.countMessages([])).toBe(0);
+    it('should return 0 for empty array', async () => {
+      expect(await counter.countMessages([])).toBe(0);
     });
 
-    it('should always return an integer', () => {
+    it('should always return an integer', async () => {
       const messages = createTestMessages(3);
-      const count = counter.countMessages(messages);
+      const count = await counter.countMessages(messages);
       expect(Number.isInteger(count)).toBe(true);
     });
   });
 
   describe('countObservations', () => {
-    it('should count tokens in observation string', () => {
+    it('should count tokens in observation string', async () => {
       const observations = `
 - 🔴 User is building a React app [current_project]
 - 🟡 User prefers TypeScript [user_preference]
       `;
-      const count = counter.countObservations(observations);
+      const count = await counter.countObservations(observations);
       expect(count).toBeGreaterThan(0);
     });
   });
@@ -4160,7 +4167,7 @@ describe('ObservationalMemory Integration', () => {
   });
 
   describe('config', () => {
-    it('should expose retrieval mode when enabled', () => {
+    it('should expose retrieval mode when enabled', async () => {
       const retrievalOm = new ObservationalMemory({
         storage,
         retrieval: true,
@@ -4187,7 +4194,7 @@ describe('ObservationalMemory Integration', () => {
       });
     });
 
-    it('should preserve observation group ranges in actor context when retrieval mode is enabled', () => {
+    it('should preserve observation group ranges in actor context when retrieval mode is enabled', async () => {
       const retrievalOm = new ObservationalMemory({
         storage,
         retrieval: true,
@@ -4216,7 +4223,7 @@ describe('ObservationalMemory Integration', () => {
       expect(formattedText).toContain('</observation-group>');
     });
 
-    it('should default retrieval mode to false', () => {
+    it('should default retrieval mode to false', async () => {
       expect(om.config.retrieval).toBe(false);
     });
   });
@@ -4238,7 +4245,7 @@ describe('ObservationalMemory Integration', () => {
         },
       });
 
-    it('describes cross-thread routing between search, threads, and messages for resource scope', () => {
+    it('describes cross-thread routing between search, threads, and messages for resource scope', async () => {
       const instructions = getRetrievalInstructions('resource');
 
       expect(instructions).toContain('mode: "search"');
@@ -4251,7 +4258,7 @@ describe('ObservationalMemory Integration', () => {
       expect(instructions).toContain('raw history may exist for threads that have no observations yet');
     });
 
-    it('omits search routing for browsing-only resource retrieval', () => {
+    it('omits search routing for browsing-only resource retrieval', async () => {
       const instructions = getRetrievalInstructions('resource', undefined, false);
 
       expect(instructions).not.toContain('mode: "search"');
@@ -4262,7 +4269,7 @@ describe('ObservationalMemory Integration', () => {
       expect(instructions).toContain('Raw history may exist for threads that have no observations yet');
     });
 
-    it('omits search routing for browsing-only thread retrieval', () => {
+    it('omits search routing for browsing-only thread retrieval', async () => {
       const instructions = getRetrievalInstructions('thread', undefined, false);
 
       expect(instructions).not.toContain('mode: "search"');
@@ -4270,7 +4277,7 @@ describe('ObservationalMemory Integration', () => {
       expect(instructions).toContain('mode: "threads"');
     });
 
-    it('describes current-thread usage for thread scope', () => {
+    it('describes current-thread usage for thread scope', async () => {
       const instructions = getRetrievalInstructions('thread');
 
       expect(instructions).toContain('limited to the current conversation thread');
@@ -4280,7 +4287,7 @@ describe('ObservationalMemory Integration', () => {
       expect(instructions).not.toContain('do not give up');
     });
 
-    it('appends custom instructions after the native guidance without replacing it', () => {
+    it('appends custom instructions after the native guidance without replacing it', async () => {
       const custom = 'Prefer the current conversation when it already contains the answer.';
       const instructions = getRetrievalInstructions('resource', custom);
 
@@ -4289,12 +4296,12 @@ describe('ObservationalMemory Integration', () => {
       expect(instructions.indexOf(custom)).toBeGreaterThan(instructions.indexOf('### Additional recall guidance'));
     });
 
-    it('omits the custom guidance section when custom instructions are empty', () => {
+    it('omits the custom guidance section when custom instructions are empty', async () => {
       expect(getRetrievalInstructions('resource', '   ')).not.toContain('### Additional recall guidance');
       expect(getRetrievalInstructions('resource')).not.toContain('### Additional recall guidance');
     });
 
-    it('injects scope-aware instructions into actor context', () => {
+    it('injects scope-aware instructions into actor context', async () => {
       const observations = '<observation-group id="group-1" range="msg-1:msg-2">\n- 🔴 Fact\n</observation-group>';
 
       const resourceText = (makeRetrievalOm({ vector: true, scope: 'resource' }) as any)
@@ -4315,7 +4322,7 @@ describe('ObservationalMemory Integration', () => {
       expect(threadText).toContain('limited to the current conversation thread');
     });
 
-    it('injects appended custom instructions into actor context', () => {
+    it('injects appended custom instructions into actor context', async () => {
       const custom = 'Use a small limit with detail="low" for an initial scan.';
       const text = (makeRetrievalOm({ scope: 'resource', instructions: custom }) as any)
         .formatObservationsForContext('- 🔴 Fact', undefined, undefined, undefined, undefined, undefined, true)
@@ -4356,14 +4363,14 @@ describe('ObservationalMemory Integration', () => {
       expect(messages).toBeUndefined();
     });
 
-    it('defaults retrieval scope to resource when retrieval is true', () => {
+    it('defaults retrieval scope to resource when retrieval is true', async () => {
       expect(makeRetrievalOm(true).retrievalScope).toBe('resource');
       expect(makeRetrievalOm({ scope: 'thread' }).retrievalScope).toBe('thread');
     });
   });
 
   describe('getTokenCounter', () => {
-    it('should return the token counter instance', () => {
+    it('should return the token counter instance', async () => {
       const counter = om.getTokenCounter();
       expect(counter).toBeInstanceOf(TokenCounter);
     });
@@ -4445,7 +4452,7 @@ describe('ObservationalMemory Integration', () => {
   });
 
   describe('getStorage', () => {
-    it('should return the storage instance', () => {
+    it('should return the storage instance', async () => {
       const s = om.getStorage();
       expect(s).toBe(storage);
     });
@@ -4513,8 +4520,8 @@ describe('ObservationalMemory Integration', () => {
     });
 
     const threshold = 500;
-    const textTokens = multimodalOm.getTokenCounter().countMessage(textOnlyMessage);
-    const imageTokens = multimodalOm.getTokenCounter().countMessage(imageMessage as any);
+    const textTokens = await multimodalOm.getTokenCounter().countMessage(textOnlyMessage);
+    const imageTokens = await multimodalOm.getTokenCounter().countMessage(imageMessage as any);
 
     expect(textTokens).toBeLessThan(threshold);
     expect(imageTokens).toBeGreaterThan(threshold);
@@ -4584,8 +4591,8 @@ describe('ObservationalMemory Integration', () => {
     });
 
     const threshold = 500;
-    const textTokens = multimodalOm.getTokenCounter().countMessage(textOnlyMessage);
-    const imageLikeFileTokens = multimodalOm.getTokenCounter().countMessage(imageLikeFileMessage as any);
+    const textTokens = await multimodalOm.getTokenCounter().countMessage(textOnlyMessage);
+    const imageLikeFileTokens = await multimodalOm.getTokenCounter().countMessage(imageLikeFileMessage as any);
 
     expect(textTokens).toBeLessThan(threshold);
     expect(imageLikeFileTokens).toBeGreaterThan(threshold);
@@ -5310,7 +5317,7 @@ describe('Scenario: Reflection Creates New Generation', () => {
 
 describe('Current Task Validation', () => {
   describe('hasCurrentTaskSection', () => {
-    it('should detect <current-task> XML tag', () => {
+    it('should detect <current-task> XML tag', async () => {
       const observations = `<observations>
 - 🔴 User preference
 - 🟡 Some task
@@ -5323,7 +5330,7 @@ Implement the login feature
       expect(hasCurrentTaskSection(observations)).toBe(true);
     });
 
-    it('should detect <current-task> tag case-insensitively', () => {
+    it('should detect <current-task> tag case-insensitively', async () => {
       const observations = `<Current-Task>
 The user wants to refactor the API
 </Current-Task>`;
@@ -5331,7 +5338,7 @@ The user wants to refactor the API
       expect(hasCurrentTaskSection(observations)).toBe(true);
     });
 
-    it('should return false when missing', () => {
+    it('should return false when missing', async () => {
       const observations = `- 🔴 User preference
 - 🟡 Some observation
 - ������ Minor note`;
@@ -5341,7 +5348,7 @@ The user wants to refactor the API
   });
 
   describe('extractCurrentTask', () => {
-    it('should extract task content from XML current-task tag', () => {
+    it('should extract task content from XML current-task tag', async () => {
       const observations = `<observations>
 - 🔴 User info
 - 🟡 Follow up
@@ -5355,7 +5362,7 @@ Implement user authentication with OAuth2
       expect(task).toBe('Implement user authentication with OAuth2');
     });
 
-    it('should handle multiline task description', () => {
+    it('should handle multiline task description', async () => {
       const observations = `<current-task>
 Complete the dashboard feature
 with all the charts and graphs
@@ -5366,7 +5373,7 @@ with all the charts and graphs
       expect(task).toContain('charts and graphs');
     });
 
-    it('should return null when no current task', () => {
+    it('should return null when no current task', async () => {
       const observations = `- Just some observations
 - Nothing about current task`;
 
@@ -5375,7 +5382,7 @@ with all the charts and graphs
   });
 
   describe('parseObserverOutput with Current Task validation', () => {
-    it('should add default Current Task if missing', () => {
+    it('should add default Current Task if missing', async () => {
       const output = `- 🔴 User asked about React
 - 🟡 User prefers TypeScript`;
 
@@ -5387,7 +5394,7 @@ with all the charts and graphs
       expect(result.currentTask).toBeUndefined();
     });
 
-    it('should extract Current Task separately when present (XML format)', () => {
+    it('should extract Current Task separately when present (XML format)', async () => {
       const output = `<observations>
 - 🔴 User asked about React
 </observations>
@@ -5411,7 +5418,7 @@ Help user set up React project
 // =============================================================================
 
 describe('Scenario: Information should be preserved through observation cycle', () => {
-  it('should preserve key facts in observations', () => {
+  it('should preserve key facts in observations', async () => {
     // This test verifies the observation format preserves important information
     const messages = [
       createTestMessage('My name is John and I work at Acme Corp as a software engineer.', 'user'),
@@ -5419,7 +5426,7 @@ describe('Scenario: Information should be preserved through observation cycle', 
       createTestMessage('Yes, I started there in 2020 and I mainly work with TypeScript and React.', 'user'),
     ];
 
-    const formatted = formatMessagesForObserver(messages);
+    const formatted = await formatMessagesForObserver(messages);
 
     // The formatted messages should contain all the key facts
     expect(formatted).toContain('John');
@@ -5430,17 +5437,17 @@ describe('Scenario: Information should be preserved through observation cycle', 
     expect(formatted).toContain('React');
   });
 
-  it('should include timestamps for temporal context', () => {
+  it('should include timestamps for temporal context', async () => {
     const msg = createTestMessage('I have a meeting tomorrow at 3pm', 'user');
     msg.createdAt = new Date('2024-12-04T14:00:00Z');
 
-    const formatted = formatMessagesForObserver([msg]);
+    const formatted = await formatMessagesForObserver([msg]);
 
     // Should include the date for temporal context
     expect(formatted).toContain('Dec 4 2024:');
   });
 
-  it('observer system prompt should require Current Task section', () => {
+  it('observer system prompt should require Current Task section', async () => {
     const systemPrompt = buildObserverSystemPrompt();
 
     // Check for XML-based current task requirement in the system prompt
@@ -5448,7 +5455,7 @@ describe('Scenario: Information should be preserved through observation cycle', 
     expect(systemPrompt).toContain('MUST use XML tags');
   });
 
-  it('observer system prompt should include custom instruction when provided', () => {
+  it('observer system prompt should include custom instruction when provided', async () => {
     const customInstruction = 'Focus on capturing user dietary preferences and allergies.';
     const systemPrompt = buildObserverSystemPrompt(false, customInstruction);
 
@@ -5457,7 +5464,7 @@ describe('Scenario: Information should be preserved through observation cycle', 
     expect(systemPrompt).toContain('<current-task>');
   });
 
-  it('observer system prompt should work without custom instruction', () => {
+  it('observer system prompt should work without custom instruction', async () => {
     const systemPrompt = buildObserverSystemPrompt(false);
     const systemPromptWithUndefined = buildObserverSystemPrompt(false, undefined);
 
@@ -5467,14 +5474,14 @@ describe('Scenario: Information should be preserved through observation cycle', 
     expect(systemPrompt).not.toContain('<thread-title>');
   });
 
-  it('observer system prompt should include thread title instructions from the extractor list', () => {
+  it('observer system prompt should include thread title instructions from the extractor list', async () => {
     const systemPrompt = buildObserverSystemPrompt(false, undefined, true, [createThreadTitleExtractor()]);
 
     expect(systemPrompt).toContain('<thread-title>');
     expect(systemPrompt).toContain('A short, noun-phrase title for this conversation');
   });
 
-  it('multi-thread observer system prompt should include custom instruction', () => {
+  it('multi-thread observer system prompt should include custom instruction', async () => {
     const customInstruction = 'Prioritize cross-thread patterns and recurring topics.';
     const systemPrompt = buildObserverSystemPrompt(true, customInstruction);
 
@@ -5483,7 +5490,7 @@ describe('Scenario: Information should be preserved through observation cycle', 
     expect(systemPrompt).not.toContain('<thread-title>');
   });
 
-  it('multi-thread observer system prompt should include thread title instructions when enabled', () => {
+  it('multi-thread observer system prompt should include thread title instructions when enabled', async () => {
     const systemPrompt = buildObserverSystemPrompt(true, undefined, true);
 
     expect(systemPrompt).toContain('<thread-title>Feature X implementation</thread-title>');
@@ -5816,7 +5823,7 @@ describe('Scenario: Cross-session memory (resource scope)', () => {
 });
 
 describe('Scenario: Observation quality checks', () => {
-  it('formatted messages should be readable for observer', () => {
+  it('formatted messages should be readable for observer', async () => {
     const messages = [
       createTestMessage('Can you help me debug this error: TypeError: Cannot read property "map" of undefined', 'user'),
       createTestMessage(
@@ -5825,7 +5832,7 @@ describe('Scenario: Observation quality checks', () => {
       ),
     ];
 
-    const formatted = formatMessagesForObserver(messages);
+    const formatted = await formatMessagesForObserver(messages);
 
     // Should preserve the error message
     expect(formatted).toContain('TypeError');
@@ -5837,22 +5844,22 @@ describe('Scenario: Observation quality checks', () => {
     expect(formatted).toContain('array is properly initialized');
   });
 
-  it('token counter should give reasonable estimates', () => {
+  it('token counter should give reasonable estimates', async () => {
     const counter = new TokenCounter();
 
     // A simple sentence
-    const simple = counter.countString('Hello world');
+    const simple = await counter.countString('Hello world');
     expect(simple).toBeGreaterThan(0);
     expect(simple).toBeLessThan(10);
 
     // A longer paragraph
-    const paragraph = counter.countString(
+    const paragraph = await counter.countString(
       'The quick brown fox jumps over the lazy dog. This is a longer sentence with more words to count.',
     );
     expect(paragraph).toBeGreaterThan(simple);
 
     // Observations should be countable
-    const observations = counter.countObservations(`
+    const observations = await counter.countObservations(`
 - 🔴 User preference: prefers short answers [user_preference]
 - 🟡 Current project: building a React dashboard [current_project]
 - 🟢 Minor note: mentioned liking coffee [personal]
@@ -5861,7 +5868,7 @@ describe('Scenario: Observation quality checks', () => {
     expect(observations).toBeLessThan(100);
   });
 
-  it('reuses cached part token metadata across repeated counting and message lifecycle copy', () => {
+  it('reuses cached part token metadata across repeated counting and message lifecycle copy', async () => {
     const counter = new TokenCounter();
     const message = createTestMessage('ignored-content', 'assistant');
     message.content = {
@@ -5869,7 +5876,7 @@ describe('Scenario: Observation quality checks', () => {
       parts: [{ type: 'text', text: 'Persistent token estimate on part metadata' } as any],
     } as any;
 
-    const firstCount = counter.countMessage(message);
+    const firstCount = await counter.countMessage(message);
     const firstCache = (message.content as any).parts[0].providerMetadata?.mastra?.tokenEstimate;
 
     expect(firstCache).toBeTruthy();
@@ -5879,7 +5886,7 @@ describe('Scenario: Observation quality checks', () => {
       createdAt: new Date(message.createdAt),
     } as MastraDBMessage;
 
-    const secondCount = counter.countMessage(reloaded);
+    const secondCount = await counter.countMessage(reloaded);
     const secondCache = (reloaded.content as any).parts[0].providerMetadata?.mastra?.tokenEstimate;
 
     expect(secondCount).toBe(firstCount);
@@ -5945,7 +5952,7 @@ describe('Thread Attribution Helpers', () => {
   });
 
   describe('replaceOrAppendThreadSection', () => {
-    it('should append new thread section when none exists', () => {
+    it('should append new thread section when none exists', async () => {
       const existing = '';
       const threadId = 'thread-1';
       const newSection = '<thread id="thread-1">\n- 🔴 New observation\n</thread>';
@@ -5955,7 +5962,7 @@ describe('Thread Attribution Helpers', () => {
       expect(result).toBe(newSection);
     });
 
-    it('should append to existing observations when thread section does not exist', () => {
+    it('should append to existing observations when thread section does not exist', async () => {
       const existing = '<thread id="thread-other">\n- 🔴 Other thread obs\n</thread>';
       const threadId = 'thread-1';
       const newSection = '<thread id="thread-1">\n- 🔴 New observation\n</thread>';
@@ -5968,7 +5975,7 @@ describe('Thread Attribution Helpers', () => {
       expect(result).toMatch(/--- message boundary \(\d{4}-\d{2}-\d{2}T[^)]+\) ---/);
     });
 
-    it('should always append new thread sections (preserves temporal ordering)', () => {
+    it('should always append new thread sections (preserves temporal ordering)', async () => {
       const existing = `<thread id="thread-1">
 - 🔴 Old observation
 </thread>
@@ -5992,7 +5999,7 @@ describe('Thread Attribution Helpers', () => {
   });
 
   describe('getObservationsAsOf', () => {
-    it('should return all chunks when asOf is after all boundaries', () => {
+    it('should return all chunks when asOf is after all boundaries', async () => {
       const observations = [
         '- User likes cats',
         ObservationalMemory.createMessageBoundary(new Date('2025-01-01T10:00:00Z')),
@@ -6007,7 +6014,7 @@ describe('Thread Attribution Helpers', () => {
       expect(result).toContain('User is working on a TypeScript project');
     });
 
-    it('should exclude chunks after the asOf date', () => {
+    it('should exclude chunks after the asOf date', async () => {
       const observations = [
         '- User likes cats',
         ObservationalMemory.createMessageBoundary(new Date('2025-01-01T10:00:00Z')),
@@ -6022,7 +6029,7 @@ describe('Thread Attribution Helpers', () => {
       expect(result).not.toContain('User is working on a TypeScript project');
     });
 
-    it('should return only the first chunk when asOf is before all boundaries', () => {
+    it('should return only the first chunk when asOf is before all boundaries', async () => {
       const observations = [
         '- User likes cats',
         ObservationalMemory.createMessageBoundary(new Date('2025-01-01T10:00:00Z')),
@@ -6034,7 +6041,7 @@ describe('Thread Attribution Helpers', () => {
       expect(result).not.toContain('User prefers dark mode');
     });
 
-    it('should include a chunk when asOf exactly matches its boundary date', () => {
+    it('should include a chunk when asOf exactly matches its boundary date', async () => {
       const boundary = new Date('2025-01-01T10:00:00Z');
       const observations = [
         '- User likes cats',
@@ -6047,12 +6054,12 @@ describe('Thread Attribution Helpers', () => {
       expect(result).toContain('User prefers dark mode');
     });
 
-    it('should return empty string for empty observations', () => {
+    it('should return empty string for empty observations', async () => {
       expect(getObservationsAsOf('', new Date())).toBe('');
       expect(getObservationsAsOf('  ', new Date())).toBe('');
     });
 
-    it('should return the full text when there are no boundaries', () => {
+    it('should return the full text when there are no boundaries', async () => {
       const observations = '- User likes cats\n- User prefers dark mode';
       const result = getObservationsAsOf(observations, new Date('2020-01-01'));
       expect(result).toBe(observations);
@@ -6060,7 +6067,7 @@ describe('Thread Attribution Helpers', () => {
   });
 
   describe('sortThreadsByOldestMessage', () => {
-    it('should sort threads by oldest message timestamp', () => {
+    it('should sort threads by oldest message timestamp', async () => {
       const now = Date.now();
       const messagesByThread = new Map<string, MastraDBMessage[]>([
         [
@@ -6085,7 +6092,7 @@ describe('Thread Attribution Helpers', () => {
       expect(result).toEqual(['thread-oldest', 'thread-middle', 'thread-recent']);
     });
 
-    it('should handle threads with missing timestamps', () => {
+    it('should handle threads with missing timestamps', async () => {
       const now = Date.now();
       const messagesByThread = new Map<string, MastraDBMessage[]>([
         ['thread-with-date', [{ ...createTestMessage('msg1'), createdAt: new Date(now - 10000) }]],
@@ -6818,7 +6825,7 @@ describe('Locking Behavior', () => {
         await storage.updateActiveObservations({
           id: record.id,
           observations: activeObservations,
-          tokenCount: om.getTokenCounter().countObservations(activeObservations),
+          tokenCount: await om.getTokenCounter().countObservations(activeObservations),
           lastObservedAt: new Date(now.getTime() - 301_000),
         });
 
@@ -6882,12 +6889,12 @@ describe('Locking Behavior', () => {
         await storage.updateActiveObservations({
           id: record.id,
           observations: activeObservations,
-          tokenCount: om.getTokenCounter().countObservations(activeObservations),
+          tokenCount: await om.getTokenCounter().countObservations(activeObservations),
           lastObservedAt: new Date(now.getTime() - 301_000),
         });
 
         const reflection = '- 🔴 Condensed reflection';
-        const reflectionTokens = om.getTokenCounter().countObservations(reflection);
+        const reflectionTokens = await om.getTokenCounter().countObservations(reflection);
         await storage.updateBufferedReflection({
           id: record.id,
           reflection,
@@ -6932,7 +6939,7 @@ describe('Locking Behavior', () => {
       await storage.updateActiveObservations({
         id: record.id,
         observations: activeObservations,
-        tokenCount: om.getTokenCounter().countObservations(activeObservations),
+        tokenCount: await om.getTokenCounter().countObservations(activeObservations),
         lastObservedAt: new Date(),
       });
 
@@ -7002,12 +7009,12 @@ describe('Locking Behavior', () => {
       await storage.updateActiveObservations({
         id: record.id,
         observations: activeObservations,
-        tokenCount: om.getTokenCounter().countObservations(activeObservations),
+        tokenCount: await om.getTokenCounter().countObservations(activeObservations),
         lastObservedAt: new Date(),
       });
 
       const reflection = '- 🔴 Condensed reflection';
-      const reflectionTokens = om.getTokenCounter().countObservations(reflection);
+      const reflectionTokens = await om.getTokenCounter().countObservations(reflection);
       await storage.updateBufferedReflection({
         id: record.id,
         reflection,
@@ -7071,12 +7078,12 @@ describe('Locking Behavior', () => {
       await storage.updateActiveObservations({
         id: record.id,
         observations: activeObservations,
-        tokenCount: om.getTokenCounter().countObservations(activeObservations),
+        tokenCount: await om.getTokenCounter().countObservations(activeObservations),
         lastObservedAt: new Date(),
       });
 
       const reflection = '- 🔴 Condensed reflection';
-      const reflectionTokens = om.getTokenCounter().countObservations(reflection);
+      const reflectionTokens = await om.getTokenCounter().countObservations(reflection);
       await storage.updateBufferedReflection({
         id: record.id,
         reflection,
@@ -7151,12 +7158,12 @@ describe('Locking Behavior', () => {
         await storage.updateActiveObservations({
           id: record.id,
           observations: activeObservations,
-          tokenCount: om.getTokenCounter().countObservations(activeObservations),
+          tokenCount: await om.getTokenCounter().countObservations(activeObservations),
           lastObservedAt: new Date(now.getTime() - 301_000),
         });
 
         const reflection = '- 🔴 Small reflection';
-        const reflectionTokens = om.getTokenCounter().countObservations(reflection);
+        const reflectionTokens = await om.getTokenCounter().countObservations(reflection);
         await storage.updateBufferedReflection({
           id: record.id,
           reflection,
@@ -7211,12 +7218,12 @@ describe('Locking Behavior', () => {
         await storage.updateActiveObservations({
           id: record.id,
           observations: activeObservations,
-          tokenCount: om.getTokenCounter().countObservations(activeObservations),
+          tokenCount: await om.getTokenCounter().countObservations(activeObservations),
           lastObservedAt: new Date(now.getTime() - 301_000),
         });
 
         const reflection = '- 🔴 Condensed reflection';
-        const reflectionTokens = om.getTokenCounter().countObservations(reflection);
+        const reflectionTokens = await om.getTokenCounter().countObservations(reflection);
         await storage.updateBufferedReflection({
           id: record.id,
           reflection,
@@ -7269,12 +7276,12 @@ describe('Locking Behavior', () => {
         await storage.updateActiveObservations({
           id: record.id,
           observations: activeObservations,
-          tokenCount: om.getTokenCounter().countObservations(activeObservations),
+          tokenCount: await om.getTokenCounter().countObservations(activeObservations),
           lastObservedAt: new Date(now.getTime() - 301_000),
         });
 
         const reflection = '- 🔴 Condensed reflection';
-        const reflectionTokens = om.getTokenCounter().countObservations(reflection);
+        const reflectionTokens = await om.getTokenCounter().countObservations(reflection);
         await storage.updateBufferedReflection({
           id: record.id,
           reflection,
@@ -7326,7 +7333,7 @@ describe('Locking Behavior', () => {
           (_, i) => `- 🟢 Reflected observation content line number ${i + 1} with enough text to exceed the threshold`,
         );
         const activeObservations = reflectedLines.join('\n');
-        const observationTokens = om.getTokenCounter().countObservations(activeObservations);
+        const observationTokens = await om.getTokenCounter().countObservations(activeObservations);
         expect(observationTokens).toBeGreaterThanOrEqual(500);
         await storage.updateActiveObservations({
           id: record.id,
@@ -7389,7 +7396,7 @@ describe('Locking Behavior', () => {
         await storage.updateActiveObservations({
           id: record.id,
           observations: activeObservations,
-          tokenCount: om.getTokenCounter().countObservations(activeObservations),
+          tokenCount: await om.getTokenCounter().countObservations(activeObservations),
           lastObservedAt: new Date(now.getTime() - 301_000),
         });
         const reflection = '- 🔴 Condensed reflection';
@@ -7425,7 +7432,7 @@ describe('Locking Behavior', () => {
           (_, i) => `- 🟢 Later observation capturing substantive tail content line number ${i + 1}`,
         );
         const grownObservations = [...reflectedLines, ...tailLines].join('\n');
-        const grownTokens = om.getTokenCounter().countObservations(grownObservations);
+        const grownTokens = await om.getTokenCounter().countObservations(grownObservations);
         // Threshold=500. With enough tail content this clears it.
         expect(grownTokens).toBeGreaterThanOrEqual(500);
         await storage.updateActiveObservations({
@@ -7478,7 +7485,7 @@ describe('Locking Behavior', () => {
         // Seed active observations with a small token count (well below the 10k activation point)
         const activeObservations = '- Small observation line 1\n- Small observation line 2';
         const record = (await storage.getObservationalMemory(threadId, resourceId))!;
-        const obsTokens = om.getTokenCounter().countObservations(activeObservations);
+        const obsTokens = await om.getTokenCounter().countObservations(activeObservations);
         await storage.updateActiveObservations({
           id: record.id,
           observations: activeObservations,
@@ -7523,7 +7530,7 @@ describe('Locking Behavior', () => {
       // Seed active observations with a small token count (well below 10k activation point)
       const activeObservations = '- Small observation line 1\n- Small observation line 2';
       const record = (await storage.getObservationalMemory(threadId, resourceId))!;
-      const obsTokens = om.getTokenCounter().countObservations(activeObservations);
+      const obsTokens = await om.getTokenCounter().countObservations(activeObservations);
       await storage.updateActiveObservations({
         id: record.id,
         observations: activeObservations,
@@ -7590,7 +7597,7 @@ describe('Locking Behavior', () => {
         );
         const activeObservations = observationLines.join('\n');
         const record = (await storage.getObservationalMemory(threadId, resourceId))!;
-        const obsTokens = om.getTokenCounter().countObservations(activeObservations);
+        const obsTokens = await om.getTokenCounter().countObservations(activeObservations);
         expect(obsTokens).toBeGreaterThan(250);
         await storage.updateActiveObservations({
           id: record.id,
@@ -8843,7 +8850,7 @@ describe('Model Requirement', () => {
     }
   });
 
-  it('should throw when core does not support request-response-id-rotation', () => {
+  it('should throw when core does not support request-response-id-rotation', async () => {
     coreFeatures.delete('request-response-id-rotation');
 
     expect(
@@ -8858,7 +8865,7 @@ describe('Model Requirement', () => {
     ).toThrow('Please bump @mastra/core to a newer version');
   });
 
-  it('should use the default model when no model is provided', () => {
+  it('should use the default model when no model is provided', async () => {
     expect(
       () =>
         new ObservationalMemory({
@@ -8870,7 +8877,7 @@ describe('Model Requirement', () => {
     ).not.toThrow();
   });
 
-  it('should accept a top-level model', () => {
+  it('should accept a top-level model', async () => {
     expect(
       () =>
         new ObservationalMemory({
@@ -8883,7 +8890,7 @@ describe('Model Requirement', () => {
     ).not.toThrow();
   });
 
-  it('should accept observation.model and use it for both', () => {
+  it('should accept observation.model and use it for both', async () => {
     expect(
       () =>
         new ObservationalMemory({
@@ -8898,7 +8905,7 @@ describe('Model Requirement', () => {
     ).not.toThrow();
   });
 
-  it('should accept reflection.model and use it for both', () => {
+  it('should accept reflection.model and use it for both', async () => {
     expect(
       () =>
         new ObservationalMemory({
@@ -8913,7 +8920,7 @@ describe('Model Requirement', () => {
     ).not.toThrow();
   });
 
-  it('should accept model: "default" as gemini flash', () => {
+  it('should accept model: "default" as gemini flash', async () => {
     expect(
       () =>
         new ObservationalMemory({
@@ -8926,7 +8933,7 @@ describe('Model Requirement', () => {
     ).not.toThrow();
   });
 
-  it('should resolve model: "default" using contextual observation and reflection defaults', () => {
+  it('should resolve model: "default" using contextual observation and reflection defaults', async () => {
     const originalObservationModel = OBSERVATIONAL_MEMORY_DEFAULTS.observation.model;
     const originalReflectionModel = OBSERVATIONAL_MEMORY_DEFAULTS.reflection.model;
 
@@ -8950,7 +8957,7 @@ describe('Model Requirement', () => {
     }
   });
 
-  it('should not allow top-level model with observation.model', () => {
+  it('should not allow top-level model with observation.model', async () => {
     expect(
       () =>
         new ObservationalMemory({
@@ -8968,7 +8975,7 @@ describe('Model Requirement', () => {
 });
 
 describe('Model Settings Defaults', () => {
-  it('should default maxOutputTokens when using model: "default"', () => {
+  it('should default maxOutputTokens when using model: "default"', async () => {
     const om = new ObservationalMemory({
       storage: createInMemoryStorage(),
       scope: 'thread',
@@ -8981,7 +8988,7 @@ describe('Model Settings Defaults', () => {
     expect((om as any).reflectionConfig.modelSettings.maxOutputTokens).toBe(100_000);
   });
 
-  it('should not default maxOutputTokens for non-default models', () => {
+  it('should not default maxOutputTokens for non-default models', async () => {
     const om = new ObservationalMemory({
       storage: createInMemoryStorage(),
       scope: 'thread',
@@ -8996,7 +9003,7 @@ describe('Model Settings Defaults', () => {
 });
 
 describe('Async Buffering Config Validation', () => {
-  it('should throw if async buffering is explicitly enabled with shareTokenBudget', () => {
+  it('should throw if async buffering is explicitly enabled with shareTokenBudget', async () => {
     expect(
       () =>
         new ObservationalMemory({
@@ -9016,7 +9023,7 @@ describe('Async Buffering Config Validation', () => {
     ).toThrow('Remove any other async buffering settings');
   });
 
-  it('should throw if shareTokenBudget is true with default async buffering', () => {
+  it('should throw if shareTokenBudget is true with default async buffering', async () => {
     expect(
       () =>
         new ObservationalMemory({
@@ -9030,7 +9037,7 @@ describe('Async Buffering Config Validation', () => {
     ).toThrow('Async buffering is enabled by default');
   });
 
-  it('should allow shareTokenBudget with bufferTokens: false', () => {
+  it('should allow shareTokenBudget with bufferTokens: false', async () => {
     const om = new ObservationalMemory({
       storage: createInMemoryStorage(),
       scope: 'thread',
@@ -9043,7 +9050,7 @@ describe('Async Buffering Config Validation', () => {
     expect(om.buffering.isAsyncReflectionEnabled()).toBe(false);
   });
 
-  it('should throw if bufferActivation is zero', () => {
+  it('should throw if bufferActivation is zero', async () => {
     expect(
       () =>
         new ObservationalMemory({
@@ -9063,7 +9070,7 @@ describe('Async Buffering Config Validation', () => {
     ).toThrow('bufferActivation must be > 0');
   });
 
-  it('should throw if bufferActivation is in dead zone (1, 1000)', () => {
+  it('should throw if bufferActivation is in dead zone (1, 1000)', async () => {
     expect(
       () =>
         new ObservationalMemory({
@@ -9083,7 +9090,7 @@ describe('Async Buffering Config Validation', () => {
     ).toThrow('must be <= 1 (ratio) or >= 1000 (absolute token retention)');
   });
 
-  it('should throw if absolute bufferActivation >= messageTokens', () => {
+  it('should throw if absolute bufferActivation >= messageTokens', async () => {
     expect(
       () =>
         new ObservationalMemory({
@@ -9103,7 +9110,7 @@ describe('Async Buffering Config Validation', () => {
     ).toThrow('bufferActivation as absolute retention');
   });
 
-  it('should accept bufferActivation > 1000 as absolute retention target', () => {
+  it('should accept bufferActivation > 1000 as absolute retention target', async () => {
     expect(
       () =>
         new ObservationalMemory({
@@ -9123,7 +9130,7 @@ describe('Async Buffering Config Validation', () => {
     ).not.toThrow();
   });
 
-  it('should default reflection.bufferActivation when observation.bufferTokens is set', () => {
+  it('should default reflection.bufferActivation when observation.bufferTokens is set', async () => {
     // reflection.bufferActivation defaults to 0.5 so this should not throw
     expect(
       () =>
@@ -9144,7 +9151,7 @@ describe('Async Buffering Config Validation', () => {
     ).not.toThrow();
   });
 
-  it('should throw if bufferTokens >= messageTokens', () => {
+  it('should throw if bufferTokens >= messageTokens', async () => {
     expect(
       () =>
         new ObservationalMemory({
@@ -9164,7 +9171,7 @@ describe('Async Buffering Config Validation', () => {
     ).toThrow('bufferTokens');
   });
 
-  it('should accept valid async config', () => {
+  it('should accept valid async config', async () => {
     expect(
       () =>
         new ObservationalMemory({
@@ -9184,7 +9191,7 @@ describe('Async Buffering Config Validation', () => {
     ).not.toThrow();
   });
 
-  it('should throw if observation has bufferTokens but reflection has bufferActivation of 0', () => {
+  it('should throw if observation has bufferTokens but reflection has bufferActivation of 0', async () => {
     expect(
       () =>
         new ObservationalMemory({
@@ -9204,7 +9211,7 @@ describe('Async Buffering Config Validation', () => {
     ).toThrow();
   });
 
-  it('should accept config with only bufferActivation on reflection (no bufferTokens)', () => {
+  it('should accept config with only bufferActivation on reflection (no bufferTokens)', async () => {
     expect(
       () =>
         new ObservationalMemory({
@@ -9230,7 +9237,7 @@ describe('Async Buffering Config Validation', () => {
 // =============================================================================
 
 describe('Async Buffering Defaults & Disabling', () => {
-  it('should enable async buffering by default (no explicit config)', () => {
+  it('should enable async buffering by default (no explicit config)', async () => {
     const om = new ObservationalMemory({
       storage: createInMemoryStorage(),
       scope: 'thread',
@@ -9243,7 +9250,7 @@ describe('Async Buffering Defaults & Disabling', () => {
     expect(om.buffering.isAsyncReflectionEnabled()).toBe(true);
   });
 
-  it('should apply correct default values for async buffering', () => {
+  it('should apply correct default values for async buffering', async () => {
     const om = new ObservationalMemory({
       storage: createInMemoryStorage(),
       scope: 'thread',
@@ -9267,7 +9274,7 @@ describe('Async Buffering Defaults & Disabling', () => {
     expect(reflConfig.blockAfter).toBe(20000 * 1.2);
   });
 
-  it('should disable all async buffering with bufferTokens: false', () => {
+  it('should disable all async buffering with bufferTokens: false', async () => {
     const om = new ObservationalMemory({
       storage: createInMemoryStorage(),
       scope: 'thread',
@@ -9289,7 +9296,7 @@ describe('Async Buffering Defaults & Disabling', () => {
     expect(reflConfig.blockAfter).toBeUndefined();
   });
 
-  it('should disable async buffering by default for resource scope', () => {
+  it('should disable async buffering by default for resource scope', async () => {
     const om = new ObservationalMemory({
       storage: createInMemoryStorage(),
       scope: 'resource',
@@ -9302,7 +9309,7 @@ describe('Async Buffering Defaults & Disabling', () => {
     expect(om.buffering.isAsyncReflectionEnabled()).toBe(false);
   });
 
-  it('should throw when resource scope has explicit async config', () => {
+  it('should throw when resource scope has explicit async config', async () => {
     expect(
       () =>
         new ObservationalMemory({
@@ -9318,7 +9325,7 @@ describe('Async Buffering Defaults & Disabling', () => {
     ).toThrow();
   });
 
-  it('should allow overriding default bufferTokens with a custom value', () => {
+  it('should allow overriding default bufferTokens with a custom value', async () => {
     const om = new ObservationalMemory({
       storage: createInMemoryStorage(),
       scope: 'thread',
@@ -9332,7 +9339,7 @@ describe('Async Buffering Defaults & Disabling', () => {
     expect(obsConfig.bufferActivation).toBe(0.8); // still uses default
   });
 
-  it('should allow overriding default bufferActivation', () => {
+  it('should allow overriding default bufferActivation', async () => {
     const om = new ObservationalMemory({
       storage: createInMemoryStorage(),
       scope: 'thread',
@@ -9348,7 +9355,7 @@ describe('Async Buffering Defaults & Disabling', () => {
     expect(reflConfig.bufferActivation).toBe(0.3);
   });
 
-  it('should use fractional bufferTokens as a ratio of messageTokens', () => {
+  it('should use fractional bufferTokens as a ratio of messageTokens', async () => {
     const om = new ObservationalMemory({
       storage: createInMemoryStorage(),
       scope: 'thread',
@@ -9507,17 +9514,17 @@ describe('Async Buffering Processor Logic', () => {
   });
 
   describe('getBufferedChunks defensive parsing', () => {
-    it('should return empty array for null record', () => {
+    it('should return empty array for null record', async () => {
       expect(getBufferedChunks(null)).toEqual([]);
       expect(getBufferedChunks(undefined)).toEqual([]);
     });
 
-    it('should return empty array for record without chunks', () => {
+    it('should return empty array for record without chunks', async () => {
       expect(getBufferedChunks({} as any)).toEqual([]);
       expect(getBufferedChunks({ bufferedObservationChunks: undefined } as any)).toEqual([]);
     });
 
-    it('should parse JSON string chunks', () => {
+    it('should parse JSON string chunks', async () => {
       const chunks = [{ observations: '- test', tokenCount: 10, messageIds: ['msg-1'], cycleId: 'c1' }];
       const result = getBufferedChunks({
         bufferedObservationChunks: JSON.stringify(chunks),
@@ -9527,32 +9534,32 @@ describe('Async Buffering Processor Logic', () => {
       expect(result[0].observations).toBe('- test');
     });
 
-    it('should return empty array for invalid JSON string', () => {
+    it('should return empty array for invalid JSON string', async () => {
       expect(getBufferedChunks({ bufferedObservationChunks: 'not-json' } as any)).toEqual([]);
       expect(getBufferedChunks({ bufferedObservationChunks: '42' } as any)).toEqual([]);
     });
 
-    it('should pass through array chunks directly', () => {
+    it('should pass through array chunks directly', async () => {
       const chunks = [{ observations: '- test', tokenCount: 10, messageIds: ['msg-1'], cycleId: 'c1' }] as any;
       expect(getBufferedChunks({ bufferedObservationChunks: chunks } as any)).toBe(chunks);
     });
   });
 
   describe('combineObservationsForBuffering', () => {
-    it('should return undefined when both are empty', () => {
+    it('should return undefined when both are empty', async () => {
       expect(combineObservationsForBuffering(undefined, undefined)).toBeUndefined();
       expect(combineObservationsForBuffering('', '')).toBeUndefined();
     });
 
-    it('should return active observations when no buffered', () => {
+    it('should return active observations when no buffered', async () => {
       expect(combineObservationsForBuffering('- Active obs', undefined)).toBe('- Active obs');
     });
 
-    it('should return buffered observations when no active', () => {
+    it('should return buffered observations when no active', async () => {
       expect(combineObservationsForBuffering(undefined, '- Buffered obs')).toBe('- Buffered obs');
     });
 
-    it('should combine both with separator when both present', () => {
+    it('should combine both with separator when both present', async () => {
       const result = combineObservationsForBuffering('- Active', '- Buffered');
       expect(result).toContain('- Active');
       expect(result).toContain('- Buffered');
@@ -9562,7 +9569,7 @@ describe('Async Buffering Processor Logic', () => {
   describe('shouldTriggerAsyncObservation', () => {
     const mockRecord = { isBufferingObservation: false, lastBufferedAtTokens: 0 } as any;
 
-    it('should return false when async buffering is explicitly disabled', () => {
+    it('should return false when async buffering is explicitly disabled', async () => {
       const om = new ObservationalMemory({
         storage: createInMemoryStorage(),
         scope: 'thread',
@@ -9574,7 +9581,7 @@ describe('Async Buffering Processor Logic', () => {
       expect(om.buffering.shouldTriggerAsyncObservation(10000, 'thread:test', mockRecord)).toBe(false);
     });
 
-    it('should return true when crossing a bufferTokens interval boundary', () => {
+    it('should return true when crossing a bufferTokens interval boundary', async () => {
       const om = new ObservationalMemory({
         storage: createInMemoryStorage(),
         scope: 'thread',
@@ -9594,7 +9601,7 @@ describe('Async Buffering Processor Logic', () => {
       expect(om.buffering.shouldTriggerAsyncObservation(10000, 'thread:test', mockRecord)).toBe(true);
     });
 
-    it('should treat stale isBufferingObservation flag as cleared (no active op in process)', () => {
+    it('should treat stale isBufferingObservation flag as cleared (no active op in process)', async () => {
       const om = new ObservationalMemory({
         storage: createInMemoryStorage(),
         scope: 'thread',
@@ -9612,7 +9619,7 @@ describe('Async Buffering Processor Logic', () => {
       expect(om.buffering.shouldTriggerAsyncObservation(10000, 'thread:test', bufferingRecord)).toBe(true);
     });
 
-    it('should not re-trigger for the same interval using record.lastBufferedAtTokens', () => {
+    it('should not re-trigger for the same interval using record.lastBufferedAtTokens', async () => {
       const om = new ObservationalMemory({
         storage: createInMemoryStorage(),
         scope: 'thread',
@@ -9640,7 +9647,7 @@ describe('Async Buffering Processor Logic', () => {
       expect(om.buffering.shouldTriggerAsyncObservation(20000, lockKey, afterBufferRecord)).toBe(true);
     });
 
-    it('should not re-trigger for the same interval after lastBufferedBoundary is set (in-memory fallback)', () => {
+    it('should not re-trigger for the same interval after lastBufferedBoundary is set (in-memory fallback)', async () => {
       const om = new ObservationalMemory({
         storage: createInMemoryStorage(),
         scope: 'thread',
@@ -9669,7 +9676,7 @@ describe('Async Buffering Processor Logic', () => {
       expect(om.buffering.shouldTriggerAsyncObservation(20000, lockKey, mockRecord)).toBe(true);
     });
 
-    it('should halve the buffer interval when within ~1 bufferTokens of the threshold', () => {
+    it('should halve the buffer interval when within ~1 bufferTokens of the threshold', async () => {
       const om = new ObservationalMemory({
         storage: createInMemoryStorage(),
         scope: 'thread',
@@ -9709,7 +9716,7 @@ describe('Async Buffering Processor Logic', () => {
       expect(om.buffering.shouldTriggerAsyncObservation(38000, lockKey, recordAt36k, undefined, 40000)).toBe(true);
     });
 
-    it('should not halve interval when no threshold is provided', () => {
+    it('should not halve interval when no threshold is provided', async () => {
       const om = new ObservationalMemory({
         storage: createInMemoryStorage(),
         scope: 'thread',
@@ -9737,7 +9744,7 @@ describe('Async Buffering Processor Logic', () => {
   // covered by integration tests that exercise the full maybeReflect path.
 
   describe('isAsyncBufferingInProgress', () => {
-    it('should return false when no operation is in progress', () => {
+    it('should return false when no operation is in progress', async () => {
       const om = new ObservationalMemory({
         storage: createInMemoryStorage(),
         scope: 'thread',
@@ -9749,7 +9756,7 @@ describe('Async Buffering Processor Logic', () => {
       expect(om.buffering.isAsyncBufferingInProgress('obs:thread:test')).toBe(false);
     });
 
-    it('should return true when an operation is tracked', () => {
+    it('should return true when an operation is tracked', async () => {
       const om = new ObservationalMemory({
         storage: createInMemoryStorage(),
         scope: 'thread',
@@ -9764,7 +9771,7 @@ describe('Async Buffering Processor Logic', () => {
   });
 
   describe('sealMessagesForBuffering', () => {
-    it('should set sealed metadata on messages', () => {
+    it('should set sealed metadata on messages', async () => {
       const om = new ObservationalMemory({
         storage: createInMemoryStorage(),
         scope: 'thread',
@@ -9791,7 +9798,7 @@ describe('Async Buffering Processor Logic', () => {
       }
     });
 
-    it('should skip messages without parts', () => {
+    it('should skip messages without parts', async () => {
       const om = new ObservationalMemory({
         storage: createInMemoryStorage(),
         scope: 'thread',
@@ -11063,7 +11070,7 @@ describe('Full Async Buffering Flow', () => {
     expect(omAfterActivation.suggestedResponse).toBeUndefined();
   });
 
-  it('should default reflection.bufferActivation when observation.bufferTokens is set', () => {
+  it('should default reflection.bufferActivation when observation.bufferTokens is set', async () => {
     // reflection.bufferActivation defaults to 0.5 so this should not throw
     expect(() => {
       new ObservationalMemory({
@@ -11083,7 +11090,7 @@ describe('Full Async Buffering Flow', () => {
     }).not.toThrow();
   });
 
-  it('should validate bufferActivation must be in (0, 1] range', () => {
+  it('should validate bufferActivation must be in (0, 1] range', async () => {
     expect(() => {
       new ObservationalMemory({
         storage: createInMemoryStorage(),
@@ -11113,7 +11120,7 @@ describe('Full Async Buffering Flow', () => {
     }).toThrow();
   });
 
-  it('should resolve fractional bufferTokens to absolute token count', () => {
+  it('should resolve fractional bufferTokens to absolute token count', async () => {
     // bufferTokens: 0.25 with messageTokens: 20000 → 5000
     const om = new ObservationalMemory({
       storage: createInMemoryStorage(),
@@ -11129,7 +11136,7 @@ describe('Full Async Buffering Flow', () => {
     expect((om as any).observationConfig.bufferTokens).toBe(5000);
   });
 
-  it('should resolve fractional blockAfter to absolute token count with multiplier', () => {
+  it('should resolve fractional blockAfter to absolute token count with multiplier', async () => {
     // blockAfter: 1.25 with messageTokens: 20000 → 25000 (20000 * 1.25)
     const om = new ObservationalMemory({
       storage: createInMemoryStorage(),
@@ -13031,7 +13038,7 @@ describe('Full Async Buffering Flow', () => {
     await waitForAsyncOps();
 
     const contextMsgs = messageListAfterStep0.get.all.db();
-    const tokensBeforeActivation = new TokenCounter().countMessages(contextMsgs);
+    const tokensBeforeActivation = await new TokenCounter().countMessages(contextMsgs);
     expect(tokensBeforeActivation).toBeGreaterThan(0);
 
     const chunkMsgIds = contextMsgs.slice(0, 6).map((m: any) => m.id);
@@ -13077,7 +13084,7 @@ describe('Full Async Buffering Flow', () => {
     expect(capturedMinRemaining).toBe(expectedFloor);
 
     const remainingMessages = messageListAfterStep1.get.all.db();
-    const remainingTokens = new TokenCounter().countMessages(remainingMessages);
+    const remainingTokens = await new TokenCounter().countMessages(remainingMessages);
     expect(remainingTokens).toBeGreaterThanOrEqual(Math.floor(expectedFloor * 0.9));
 
     const remainingIds = new Set(remainingMessages.map((m: any) => m.id));
@@ -13410,24 +13417,24 @@ describe('Observer Context Optimization', () => {
   }
 
   // Helper to call the private method
-  function prepareObserverContextFull(
+  async function prepareObserverContextFull(
     om: ObservationalMemory,
     existingObservations: string | undefined,
     record?: Record<string, unknown> | null,
-  ): { context: string | undefined; wasTruncated: boolean } {
+  ): Promise<{ context: string | undefined; wasTruncated: boolean }> {
     return (om as any).prepareObserverContext(existingObservations, record);
   }
 
-  function prepareObserverContext(
+  async function prepareObserverContext(
     om: ObservationalMemory,
     existingObservations: string | undefined,
     record?: Record<string, unknown> | null,
-  ): string | undefined {
-    return prepareObserverContextFull(om, existingObservations, record).context;
+  ): Promise<string | undefined> {
+    return (await prepareObserverContextFull(om, existingObservations, record)).context;
   }
 
   describe('config validation', () => {
-    it('should throw if observation.previousObserverTokens is invalid', () => {
+    it('should throw if observation.previousObserverTokens is invalid', async () => {
       expect(() => createOM({ previousObserverTokens: -100 })).toThrow(
         'observation.previousObserverTokens must be false or a finite number >= 0',
       );
@@ -13439,20 +13446,20 @@ describe('Observer Context Optimization', () => {
       );
     });
 
-    it('should accept valid observation.previousObserverTokens including 0 and false', () => {
+    it('should accept valid observation.previousObserverTokens including 0 and false', async () => {
       expect(() => createOM({ previousObserverTokens: false })).not.toThrow();
       expect(() => createOM({ previousObserverTokens: 0 })).not.toThrow();
       expect(() => createOM({ previousObserverTokens: 1 })).not.toThrow();
       expect(() => createOM({ previousObserverTokens: 5000 })).not.toThrow();
     });
 
-    it('should accept duration strings for activateAfterIdle', () => {
+    it('should accept duration strings for activateAfterIdle', async () => {
       expect(() => createOM({ activateAfterIdle: '5m' })).not.toThrow();
       expect(() => createOM({ activateAfterIdle: '1hr' })).not.toThrow();
       expect(() => createOM({ activateAfterIdle: '30s' })).not.toThrow();
     });
 
-    it('should throw if activateAfterIdle is an invalid duration string', () => {
+    it('should throw if activateAfterIdle is an invalid duration string', async () => {
       expect(() => createOM({ activateAfterIdle: 'later' as any })).toThrow(
         'activateAfterIdle must be a non-negative number of milliseconds or a duration string like "5m" or "1hr".',
       );
@@ -13460,58 +13467,58 @@ describe('Observer Context Optimization', () => {
   });
 
   describe('prepareObserverContext - default behavior', () => {
-    it('should return existingObservations unchanged when observations fit within default budget', () => {
+    it('should return existingObservations unchanged when observations fit within default budget', async () => {
       const om = createOM();
       const observations = '- User likes TypeScript\n- User prefers dark mode\n- User uses React';
-      expect(prepareObserverContext(om, observations)).toBe(observations);
+      expect(await prepareObserverContext(om, observations)).toBe(observations);
     });
 
-    it('should return undefined when existingObservations is undefined', () => {
+    it('should return undefined when existingObservations is undefined', async () => {
       const om = createOM({ previousObserverTokens: 100 });
-      expect(prepareObserverContext(om, undefined)).toBeUndefined();
+      expect(await prepareObserverContext(om, undefined)).toBeUndefined();
     });
 
-    it('should set wasTruncated to false when observations fit within budget', () => {
+    it('should set wasTruncated to false when observations fit within budget', async () => {
       const om = createOM({ previousObserverTokens: 1000 });
       const observations = '- User likes TypeScript';
-      const result = prepareObserverContextFull(om, observations);
+      const result = await prepareObserverContextFull(om, observations);
       expect(result.wasTruncated).toBe(false);
       expect(result.context).toBe(observations);
     });
 
-    it('should set wasTruncated to true when observations exceed budget', () => {
+    it('should set wasTruncated to true when observations exceed budget', async () => {
       const om = createOM({ previousObserverTokens: 5 });
       const observations = Array.from({ length: 20 }, (_, i) => `- Observation line ${i + 1}`).join('\n');
-      const result = prepareObserverContextFull(om, observations);
+      const result = await prepareObserverContextFull(om, observations);
       expect(result.wasTruncated).toBe(true);
     });
 
-    it('should set wasTruncated to false when truncation is disabled', () => {
+    it('should set wasTruncated to false when truncation is disabled', async () => {
       const om = createOM({ previousObserverTokens: false });
       const observations = '- User likes TypeScript';
-      const result = prepareObserverContextFull(om, observations);
+      const result = await prepareObserverContextFull(om, observations);
       expect(result.wasTruncated).toBe(false);
     });
   });
 
   describe('prepareObserverContext - observation.previousObserverTokens truncation', () => {
-    it('should truncate observations from the start to fit within token budget', () => {
+    it('should truncate observations from the start to fit within token budget', async () => {
       const om = createOM({ previousObserverTokens: 20 });
       const tc = new TokenCounter();
 
       const lines = Array.from({ length: 20 }, (_, i) => `- Observation line ${i + 1}`);
       const observations = lines.join('\n');
-      expect(tc.countObservations(observations)).toBeGreaterThan(20);
+      expect(await tc.countObservations(observations)).toBeGreaterThan(20);
 
-      const result = prepareObserverContext(om, observations);
+      const result = await prepareObserverContext(om, observations);
       expect(result).toBeDefined();
-      expect(tc.countObservations(result!)).toBeLessThanOrEqual(20);
+      expect(await tc.countObservations(result!)).toBeLessThanOrEqual(20);
       expect(result!).toMatch(/\[\d+ observations truncated here\]/);
       expect(result!).toContain('Observation line 20');
       expect(result!).not.toContain('- Observation line 1\n');
     });
 
-    it('should preserve important observations around truncation when budget allows', () => {
+    it('should preserve important observations around truncation when budget allows', async () => {
       const tc = new TokenCounter();
       const observations = [
         '- 🔴 Critical early item 1',
@@ -13531,21 +13538,21 @@ describe('Observer Context Optimization', () => {
         '- Observation line 18',
         '- Observation line 19',
       ].join('\n');
-      const budget = tc.countObservations(desired) + 2;
+      const budget = (await tc.countObservations(desired)) + 2;
       const om = createOM({ previousObserverTokens: budget });
 
-      const result = prepareObserverContext(om, observations)!;
+      const result = await prepareObserverContext(om, observations)!;
       const lines = result.split('\n').filter(Boolean);
       const kept = lines.filter(line => !/^\[\d+ observations truncated here\]$/.test(line));
       const tailKept = kept.filter(line => /^- Observation line \d+$/.test(line));
 
       expect(result).toMatch(/\[\d+ observations truncated here\]/);
       expect(result).toContain('🔴 Critical early item 3');
-      expect(tc.countObservations(result)).toBeLessThanOrEqual(budget);
+      expect(await tc.countObservations(result)).toBeLessThanOrEqual(budget);
       expect(tailKept.length).toBeGreaterThanOrEqual(Math.ceil(kept.length / 2));
     });
 
-    it('should preserve ✅ completion observations around truncation when budget allows', () => {
+    it('should preserve ✅ completion observations around truncation when budget allows', async () => {
       const tc = new TokenCounter();
       const observations = [
         '- Detail early 1',
@@ -13565,21 +13572,21 @@ describe('Observer Context Optimization', () => {
         '- Observation line 18',
         '- Observation line 19',
       ].join('\n');
-      const budget = tc.countObservations(desired) + 2;
+      const budget = (await tc.countObservations(desired)) + 2;
       const om = createOM({ previousObserverTokens: budget });
 
-      const result = prepareObserverContext(om, observations)!;
+      const result = await prepareObserverContext(om, observations)!;
       const lines = result.split('\n').filter(Boolean);
       const kept = lines.filter(line => !/^\[\d+ observations truncated here\]$/.test(line));
       const tailKept = kept.filter(line => /^- Observation line \d+$/.test(line));
 
       expect(result).toMatch(/\[\d+ observations truncated here\]/);
       expect(result).toContain('✅ Early completion marker');
-      expect(tc.countObservations(result)).toBeLessThanOrEqual(budget);
+      expect(await tc.countObservations(result)).toBeLessThanOrEqual(budget);
       expect(tailKept.length).toBeGreaterThanOrEqual(Math.ceil(kept.length / 2));
     });
 
-    it('should drop oldest important observations first when still over budget', () => {
+    it('should drop oldest important observations first when still over budget', async () => {
       const tc = new TokenCounter();
       // Budget just large enough to keep the newest important line + a small tail,
       // but not all three important lines.
@@ -13589,7 +13596,7 @@ describe('Observer Context Optimization', () => {
         '[19 observations truncated here]',
         '- Observation line 20',
       ].join('\n');
-      const budget = tc.countObservations(desired) + 2;
+      const budget = (await tc.countObservations(desired)) + 2;
       const om = createOM({ previousObserverTokens: budget });
       const observations = [
         '- 🔴 Very old critical 1',
@@ -13598,67 +13605,67 @@ describe('Observer Context Optimization', () => {
         ...Array.from({ length: 20 }, (_, i) => `- Observation line ${i + 1}`),
       ].join('\n');
 
-      const result = prepareObserverContext(om, observations)!;
+      const result = await prepareObserverContext(om, observations)!;
       expect(result).toMatch(/\[\d+ observations truncated here\]/);
       expect(result).toContain('🔴 Newer critical 3');
       expect(result).not.toContain('🔴 Very old critical 1');
     });
 
-    it('should return observations unchanged when within budget', () => {
+    it('should return observations unchanged when within budget', async () => {
       const om = createOM({ previousObserverTokens: 100_000 });
       const observations = '- User likes TypeScript\n- User prefers dark mode';
-      expect(prepareObserverContext(om, observations)).toBe(observations);
+      expect(await prepareObserverContext(om, observations)).toBe(observations);
     });
 
-    it('should return truncation marker when budget is too small', () => {
+    it('should return truncation marker when budget is too small', async () => {
       const om = createOM({ previousObserverTokens: 1 });
       const observations = 'Line one\nLine two\nLine three';
-      const result = prepareObserverContext(om, observations);
+      const result = await prepareObserverContext(om, observations);
       expect(result).toBe('[3 observations truncated here]');
     });
 
-    it('should fully truncate context when observation.previousObserverTokens is 0', () => {
+    it('should fully truncate context when observation.previousObserverTokens is 0', async () => {
       const om = createOM({ previousObserverTokens: 0 });
       const observations = '- User likes TypeScript\n- User prefers dark mode';
-      const result = prepareObserverContext(om, observations);
+      const result = await prepareObserverContext(om, observations);
       expect(result).toBe('');
     });
 
-    it('should fully truncate everything when observation.previousObserverTokens is 0 even with buffered reflection', () => {
+    it('should fully truncate everything when observation.previousObserverTokens is 0 even with buffered reflection', async () => {
       const om = createOM({ previousObserverTokens: 0 });
       const observations = '- User likes TypeScript\n- User prefers dark mode';
       const record = { bufferedReflection: '- Condensed reflection content', reflectedObservationLineCount: 1 };
-      const result = prepareObserverContext(om, observations, record);
+      const result = await prepareObserverContext(om, observations, record);
       // Budget is 0 so everything is truncated — reflection is inside the budget
       expect(result).toBe('');
     });
 
-    it('should disable truncation when observation.previousObserverTokens is false', () => {
+    it('should disable truncation when observation.previousObserverTokens is false', async () => {
       const om = createOM({ previousObserverTokens: false });
       const observations = '- User likes TypeScript\n- User prefers dark mode';
-      const result = prepareObserverContext(om, observations);
+      const result = await prepareObserverContext(om, observations);
       expect(result).toBe(observations);
     });
   });
 
   describe('prepareObserverContext - automatic buffered reflection', () => {
-    it('should NOT include buffered reflection when previousObserverTokens is false', () => {
+    it('should NOT include buffered reflection when previousObserverTokens is false', async () => {
       const om = createOM({ previousObserverTokens: false });
       const observations = '- User likes TypeScript';
       const record = { bufferedReflection: '- Condensed reflection content', reflectedObservationLineCount: 1 };
-      const result = prepareObserverContext(om, observations, record);
+      const result = await prepareObserverContext(om, observations, record);
       // Truncation explicitly disabled, so no buffered reflection replacement
       expect(result).toBe(observations);
     });
 
-    it('should replace reflected lines with buffered reflection when previousObserverTokens is set', () => {
+    it('should replace reflected lines with buffered reflection when previousObserverTokens is set', async () => {
       const om = createOM({ previousObserverTokens: 5000 });
       const observations = '- Old observation 1\n- Old observation 2\n- Recent observation 3';
       const record = {
         bufferedReflection: '- Summary of old observations',
         reflectedObservationLineCount: 2,
       };
-      const result = prepareObserverContext(om, observations, record);
+      const result = await prepareObserverContext(om, observations, record);
       // Reflected lines (first 2) are replaced by the summary
       expect(result).toContain('- Summary of old observations');
       expect(result).toContain('- Recent observation 3');
@@ -13666,33 +13673,33 @@ describe('Observer Context Optimization', () => {
       expect(result).not.toContain('- Old observation 2');
     });
 
-    it('should ignore buffered reflection when no reflectedObservationLineCount exists', () => {
+    it('should ignore buffered reflection when no reflectedObservationLineCount exists', async () => {
       const om = createOM({ previousObserverTokens: 5000 });
       const observations = '- User likes TypeScript';
       const record = { bufferedReflection: '- Condensed reflection content' };
-      const result = prepareObserverContext(om, observations, record);
+      const result = await prepareObserverContext(om, observations, record);
       expect(result).toBe(observations);
     });
 
-    it('should not replace anything when no buffered reflection exists', () => {
+    it('should not replace anything when no buffered reflection exists', async () => {
       const om = createOM({ previousObserverTokens: 5000 });
       const observations = '- User likes TypeScript';
       // No bufferedReflection in record
       const record = {};
-      const result = prepareObserverContext(om, observations, record);
+      const result = await prepareObserverContext(om, observations, record);
       expect(result).toBe(observations);
     });
 
-    it('should not replace anything when record is null', () => {
+    it('should not replace anything when record is null', async () => {
       const om = createOM({ previousObserverTokens: 5000 });
       const observations = '- User likes TypeScript';
-      const result = prepareObserverContext(om, observations, null);
+      const result = await prepareObserverContext(om, observations, null);
       expect(result).toBe(observations);
     });
   });
 
   describe('prepareObserverContext - combined optimizations', () => {
-    it('should replace reflected lines and truncate assembled result to fit budget', () => {
+    it('should replace reflected lines and truncate assembled result to fit budget', async () => {
       const tc = new TokenCounter();
       // 10 old lines (reflected) + 30 new lines
       const oldLines = Array.from({ length: 10 }, (_, i) => `- Old observation ${i + 1}`);
@@ -13707,17 +13714,17 @@ describe('Observer Context Optimization', () => {
         reflectedObservationLineCount: 10,
       };
 
-      const result = prepareObserverContext(om, observations, record);
+      const result = await prepareObserverContext(om, observations, record);
       expect(result).toBeDefined();
       // Reflected lines are replaced, not present as raw lines
       expect(result!).not.toContain('Old observation 1');
       // Most recent observations preserved (tail)
       expect(result!).toContain('New observation 40');
       // Total fits within budget — truncation applies to the full assembled string
-      expect(tc.countObservations(result!)).toBeLessThanOrEqual(budget);
+      expect(await tc.countObservations(result!)).toBeLessThanOrEqual(budget);
     });
 
-    it('should preserve reflection when budget fits assembled result', () => {
+    it('should preserve reflection when budget fits assembled result', async () => {
       const tc = new TokenCounter();
       // 20 old lines (reflected) + 5 new lines — small enough that reflection + new lines fit in budget
       const oldLines = Array.from({ length: 20 }, (_, i) => `- Old line ${i + 1}`);
@@ -13727,7 +13734,7 @@ describe('Observer Context Optimization', () => {
 
       // Budget generous enough for reflection + all 5 new lines
       const assembled = `${reflectionContent}\n\n${newLines.join('\n')}`;
-      const budget = tc.countObservations(assembled) + 5;
+      const budget = (await tc.countObservations(assembled)) + 5;
       const om = createOM({
         previousObserverTokens: budget,
       });
@@ -13736,7 +13743,7 @@ describe('Observer Context Optimization', () => {
         reflectedObservationLineCount: 20,
       };
 
-      const result = prepareObserverContext(om, observations, record);
+      const result = await prepareObserverContext(om, observations, record);
       // Old lines replaced
       expect(result!).not.toContain('Old line 1');
       // Reflection present (budget is generous)
@@ -13744,10 +13751,10 @@ describe('Observer Context Optimization', () => {
       // All new lines present
       expect(result!).toContain('New line 25');
       // Total fits within budget
-      expect(tc.countObservations(result!)).toBeLessThanOrEqual(budget);
+      expect(await tc.countObservations(result!)).toBeLessThanOrEqual(budget);
     });
 
-    it('should truncate reflection when budget is too tight for assembled result', () => {
+    it('should truncate reflection when budget is too tight for assembled result', async () => {
       const tc = new TokenCounter();
       // 10 old lines (reflected) + 30 new lines — assembled result exceeds budget
       const oldLines = Array.from({ length: 10 }, (_, i) => `- Old line ${i + 1}`);
@@ -13764,23 +13771,23 @@ describe('Observer Context Optimization', () => {
         reflectedObservationLineCount: 10,
       };
 
-      const result = prepareObserverContext(om, observations, record);
+      const result = await prepareObserverContext(om, observations, record);
       expect(result).toBeDefined();
       // Old raw lines are not present (were replaced)
       expect(result!).not.toContain('Old line 1');
       // Most recent observations preserved (tail)
       expect(result!).toContain('New line 40');
       // Total fits within budget
-      expect(tc.countObservations(result!)).toBeLessThanOrEqual(budget);
+      expect(await tc.countObservations(result!)).toBeLessThanOrEqual(budget);
     });
   });
 
   describe('truncateObservationsToTokenBudget', () => {
-    function truncate(om: ObservationalMemory, observations: string, budget: number): string {
+    async function truncate(om: ObservationalMemory, observations: string, budget: number): Promise<string> {
       return (om as any).truncateObservationsToTokenBudget(observations, budget);
     }
 
-    it('should preserve recent lines, drop oldest, and include truncation marker', () => {
+    it('should preserve recent lines, drop oldest, and include truncation marker', async () => {
       const om = createOM();
       const tc = new TokenCounter();
       // Use longer lines so that dropping even one line frees meaningful space
@@ -13793,24 +13800,24 @@ describe('Observer Context Optimization', () => {
       ];
       const observations = lines.join('\n');
       // Budget allows most but not all lines, forcing truncation
-      const budget = tc.countObservations(observations) - tc.countString(lines[0]!);
-      const result = truncate(om, observations, budget);
+      const budget = (await tc.countObservations(observations)) - (await tc.countString(lines[0]!));
+      const result = await truncate(om, observations, budget);
       expect(result).toMatch(/\[\d+ observations truncated here\]/);
       expect(result).toContain('Line E with extra content');
       expect(result).not.toContain('Line A with extra content');
     });
 
-    it('should return truncation marker when budget is very small', () => {
+    it('should return truncation marker when budget is very small', async () => {
       const om = createOM();
       const observations = 'First line\nSecond line\nThird line';
-      const result = truncate(om, observations, 1);
+      const result = await truncate(om, observations, 1);
       expect(result).toBe('[3 observations truncated here]');
     });
 
-    it('should return full observations when budget exceeds total tokens', () => {
+    it('should return full observations when budget exceeds total tokens', async () => {
       const om = createOM();
       const observations = 'Short obs';
-      const result = truncate(om, observations, 100_000);
+      const result = await truncate(om, observations, 100_000);
       expect(result).toBe(observations);
     });
   });

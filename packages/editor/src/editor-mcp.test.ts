@@ -24,10 +24,10 @@ class TestMCPServer extends MCPServerBase {
   }
   async startHTTP() {}
   async close() {}
-  getServerInfo() {
+  async getServerInfo() {
     return {} as any;
   }
-  getServerDetail() {
+  async getServerDetail() {
     return {} as any;
   }
   getToolListInfo() {

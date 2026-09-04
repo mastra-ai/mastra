@@ -30,7 +30,7 @@ async function getStore(memory: ReturnType<typeof createMemory>) {
 }
 
 describe('Subconscious pinned knowledge', () => {
-  it('is off unless configured, and resolves a bounded budget when enabled', () => {
+  it('is off unless configured, and resolves a bounded budget when enabled', async () => {
     expect(new Subconscious().resolved.pins).toBe(false);
     expect(new Subconscious({ pins: false }).resolved.pins).toBe(false);
     expect(new Subconscious({ pins: true }).resolved.pins).toEqual({

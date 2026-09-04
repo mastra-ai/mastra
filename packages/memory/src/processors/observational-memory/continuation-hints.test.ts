@@ -10,16 +10,16 @@ import { buildObserverSystemPrompt } from './observer-agent';
 import { buildReflectorSystemPrompt } from './reflector-agent';
 
 describe('resolveContinuationHints', () => {
-  it('enables both sections by default', () => {
+  it('enables both sections by default', async () => {
     expect(resolveContinuationHints(undefined)).toEqual({ currentTask: true, suggestedResponse: true });
     expect(resolveContinuationHints(true)).toEqual({ currentTask: true, suggestedResponse: true });
   });
 
-  it('disables both sections when false', () => {
+  it('disables both sections when false', async () => {
     expect(resolveContinuationHints(false)).toEqual({ currentTask: false, suggestedResponse: false });
   });
 
-  it('supports disabling sections individually', () => {
+  it('supports disabling sections individually', async () => {
     expect(resolveContinuationHints({ suggestedResponse: false })).toEqual({
       currentTask: true,
       suggestedResponse: false,
@@ -34,7 +34,7 @@ describe('resolveContinuationHints', () => {
 describe('continuationHints extractor composition', () => {
   const user = new Extractor({ name: 'Preference', instructions: 'Extract preference.' });
 
-  it('registers both continuation extractors by default', () => {
+  it('registers both continuation extractors by default', async () => {
     expect(composeObservationExtractors({ threadTitle: false, extract: [user] }).map(e => e.slug)).toEqual([
       'current-task',
       'suggested-response',
@@ -42,13 +42,13 @@ describe('continuationHints extractor composition', () => {
     ]);
   });
 
-  it('omits both continuation extractors when disabled', () => {
+  it('omits both continuation extractors when disabled', async () => {
     expect(
       composeObservationExtractors({ threadTitle: false, extract: [user], continuationHints: false }).map(e => e.slug),
     ).toEqual(['preference']);
   });
 
-  it('omits only the suggested-response extractor when disabled individually', () => {
+  it('omits only the suggested-response extractor when disabled individually', async () => {
     expect(
       composeObservationExtractors({
         threadTitle: true,
@@ -58,7 +58,7 @@ describe('continuationHints extractor composition', () => {
     ).toEqual(['current-task', 'thread-title', 'preference']);
   });
 
-  it('applies continuation hints to reflection extractors too', () => {
+  it('applies continuation hints to reflection extractors too', async () => {
     expect(
       composeReflectionExtractors({ extract: [user], continuationHints: { suggestedResponse: false } }).map(
         e => e.slug,
@@ -68,7 +68,7 @@ describe('continuationHints extractor composition', () => {
 });
 
 describe('prompts only reference continuation sections they define', () => {
-  it('drops suggested-response guidance from the observer prompt when disabled', () => {
+  it('drops suggested-response guidance from the observer prompt when disabled', async () => {
     const extractors = composeObservationExtractors({
       threadTitle: false,
       continuationHints: { suggestedResponse: false },
@@ -79,7 +79,7 @@ describe('prompts only reference continuation sections they define', () => {
     expect(prompt).toContain('<current-task>');
   });
 
-  it('drops all continuation guidance from the observer prompt when both are disabled', () => {
+  it('drops all continuation guidance from the observer prompt when both are disabled', async () => {
     const extractors = composeObservationExtractors({ threadTitle: false, continuationHints: false });
     const prompt = buildObserverSystemPrompt(false, undefined, false, extractors);
 
@@ -88,7 +88,7 @@ describe('prompts only reference continuation sections they define', () => {
     expect(prompt).toContain('User messages are extremely important.');
   });
 
-  it('drops suggested-response guidance from the reflector prompt when disabled', () => {
+  it('drops suggested-response guidance from the reflector prompt when disabled', async () => {
     const extractors = composeReflectionExtractors({ continuationHints: { suggestedResponse: false } });
     const prompt = buildReflectorSystemPrompt(undefined, extractors);
 
@@ -96,7 +96,7 @@ describe('prompts only reference continuation sections they define', () => {
     expect(prompt).toContain('<current-task>');
   });
 
-  it('still describes both sections on the legacy path with no extractors', () => {
+  it('still describes both sections on the legacy path with no extractors', async () => {
     const prompt = buildObserverSystemPrompt();
 
     expect(prompt).toContain('<current-task>');
@@ -115,7 +115,7 @@ describe('multi-thread prompt follows the active continuation sections', () => {
       composeObservationExtractors({ threadTitle: false, continuationHints }),
     );
 
-  it('nests and demonstrates both sections by default', () => {
+  it('nests and demonstrates both sections by default', async () => {
     const prompt = multiThreadPrompt(undefined);
 
     expect(prompt).toContain(
@@ -125,7 +125,7 @@ describe('multi-thread prompt follows the active continuation sections', () => {
     expect(prompt).toContain('<suggested-response>');
   });
 
-  it('omits suggested-response from the nesting instruction and examples when disabled', () => {
+  it('omits suggested-response from the nesting instruction and examples when disabled', async () => {
     const prompt = multiThreadPrompt({ suggestedResponse: false });
 
     expect(prompt).toContain("Each thread's observations and current-task should be nested inside");
@@ -133,7 +133,7 @@ describe('multi-thread prompt follows the active continuation sections', () => {
     expect(prompt).not.toContain('<suggested-response>');
   });
 
-  it('omits current-task from the nesting instruction and examples when disabled', () => {
+  it('omits current-task from the nesting instruction and examples when disabled', async () => {
     const prompt = multiThreadPrompt({ currentTask: false });
 
     expect(prompt).toContain("Each thread's observations and suggested-response should be nested inside");
@@ -141,7 +141,7 @@ describe('multi-thread prompt follows the active continuation sections', () => {
     expect(prompt).not.toContain('<current-task>');
   });
 
-  it('drops both sections entirely when continuation hints are disabled', () => {
+  it('drops both sections entirely when continuation hints are disabled', async () => {
     const prompt = multiThreadPrompt(false);
 
     expect(prompt).toContain("Each thread's observations should be nested inside");
@@ -152,7 +152,7 @@ describe('multi-thread prompt follows the active continuation sections', () => {
     expect(prompt).toContain('=== MULTI-THREAD INPUT ===');
   });
 
-  it('still lists thread-title alongside the enabled sections', () => {
+  it('still lists thread-title alongside the enabled sections', async () => {
     const prompt = buildObserverSystemPrompt(
       true,
       undefined,
@@ -165,7 +165,7 @@ describe('multi-thread prompt follows the active continuation sections', () => {
     expect(prompt).not.toContain('<suggested-response>');
   });
 
-  it('leaves the default multi-thread prompt unchanged on the legacy path', () => {
+  it('leaves the default multi-thread prompt unchanged on the legacy path', async () => {
     expect(buildObserverSystemPrompt(true, undefined, false, undefined)).toContain(
       "Each thread's observations, current-task, and suggested-response should be nested inside",
     );
@@ -173,7 +173,7 @@ describe('multi-thread prompt follows the active continuation sections', () => {
 
   // Pins the exact default example so the section-driven template can't silently drift
   // from the shape the multi-thread parser expects.
-  it('renders the default per-thread example verbatim', () => {
+  it('renders the default per-thread example verbatim', async () => {
     expect(buildObserverSystemPrompt(true, undefined, true, undefined)).toContain(
       `<observations>
 <thread id="thread_id_1">

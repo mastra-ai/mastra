@@ -24,7 +24,7 @@ import {
 import { WorkingMemoryExtractor } from '../working-memory-extractor';
 
 describe('Extractor', () => {
-  it('creates an inline string carry-forward extractor when no schema is provided', () => {
+  it('creates an inline string carry-forward extractor when no schema is provided', async () => {
     const extractor = new Extractor({ name: 'Project Status', instructions: 'Extract the project status.' });
 
     expect(extractor.slug).toBe('project-status');
@@ -34,7 +34,7 @@ describe('Extractor', () => {
     expect(extractor.schema.parse('active')).toBe('active');
   });
 
-  it('creates a structured carry-forward extractor when a schema is provided', () => {
+  it('creates a structured carry-forward extractor when a schema is provided', async () => {
     const extractor = new Extractor({
       name: 'Project Status',
       instructions: 'Extract the project status.',
@@ -44,11 +44,11 @@ describe('Extractor', () => {
     expect(extractor.mode).toBe('structured');
   });
 
-  it('trims repeated slug separators without regex backtracking', () => {
+  it('trims repeated slug separators without regex backtracking', async () => {
     expect(slugifyExtractorName('---Project---Status---')).toBe('project-status');
   });
 
-  it('routes extracted values through string metadata key paths', () => {
+  it('routes extracted values through string metadata key paths', async () => {
     const priority = new Extractor({
       name: 'Priority',
       instructions: 'Extract priority.',
@@ -81,7 +81,7 @@ describe('Extractor', () => {
     });
   });
 
-  it('rejects unsafe metadata key path segments', () => {
+  it('rejects unsafe metadata key path segments', async () => {
     const extractor = new Extractor({
       name: 'Unsafe',
       instructions: 'Extract unsafe value.',
@@ -92,7 +92,7 @@ describe('Extractor', () => {
     expect(({} as Record<string, unknown>).polluted).toBeUndefined();
   });
 
-  it('rejects empty, duplicate, and reserved slugs', () => {
+  it('rejects empty, duplicate, and reserved slugs', async () => {
     expect(() => new Extractor({ name: '!!!', instructions: 'No usable slug.' })).toThrow(/non-empty slug/);
     expect(() => new Extractor({ name: 'current-task', instructions: 'Reserved.' })).toThrow(/reserved/);
 
@@ -102,7 +102,7 @@ describe('Extractor', () => {
     expect(() => validateExtractorList([first, second])).toThrow(/Duplicate extractor slug "priority"/);
   });
 
-  it('parses combined inline JSON string extractor values', () => {
+  it('parses combined inline JSON string extractor values', async () => {
     const mood = new Extractor({ name: 'Mood', instructions: 'Extract mood.' });
     const details = new Extractor({ name: 'Details', instructions: 'Extract details.' });
 
@@ -118,7 +118,7 @@ describe('Extractor', () => {
     expect(parsed.failures).toEqual([]);
   });
 
-  it('parses legacy per-extractor XML tags for schema-less inline values', () => {
+  it('parses legacy per-extractor XML tags for schema-less inline values', async () => {
     const userInfo = new Extractor({ name: 'User info', instructions: 'Extract user details.' });
 
     const parsed = parseExtractedValues(
@@ -130,7 +130,7 @@ describe('Extractor', () => {
     expect(parsed.failures).toEqual([]);
   });
 
-  it('ignores structured extractors when parsing inline extracted values', () => {
+  it('ignores structured extractors when parsing inline extracted values', async () => {
     const valid = new Extractor({ name: 'Valid', instructions: 'Extract valid.' });
     const count = new Extractor({ name: 'Count', instructions: 'Extract count.', schema: z.number() });
 
@@ -143,7 +143,7 @@ describe('Extractor', () => {
     expect(parsed.failures).toEqual([]);
   });
 
-  it('strips inline extractor sections before observation parsing', () => {
+  it('strips inline extractor sections before observation parsing', async () => {
     const status = new Extractor({ name: 'Status', instructions: 'Extract status.' });
 
     expect(
@@ -154,14 +154,14 @@ describe('Extractor', () => {
     ).toBe('<observations>Keep me</observations>\n');
   });
 
-  it('validates raw values with JSON-first fallback for structured values', () => {
+  it('validates raw values with JSON-first fallback for structured values', async () => {
     const score = new Extractor({ name: 'Score', instructions: 'Extract score.', schema: z.number() });
 
     expect(parseExtractorValue(score, '7')).toBe(7);
     expect(() => parseExtractorValue(score, 'seven')).toThrow(/did not match/);
   });
 
-  it('builds per-extractor inline output sections for schema-less string extractors', () => {
+  it('builds per-extractor inline output sections for schema-less string extractors', async () => {
     const location = new Extractor({
       name: 'Weather Locations',
       instructions: 'Extract requested weather locations.',
@@ -180,7 +180,7 @@ describe('Extractor', () => {
     expect(section).not.toContain('<extracted-values>');
   });
 
-  it('ignores copied combined inline output placeholders', () => {
+  it('ignores copied combined inline output placeholders', async () => {
     const location = new Extractor({
       name: 'Weather Locations',
       instructions: 'Extract requested weather locations.',
@@ -195,7 +195,7 @@ describe('Extractor', () => {
     expect(parsed.failures).toEqual([]);
   });
 
-  it('builds previous extraction prompt sections only for opted-in extractors with values', () => {
+  it('builds previous extraction prompt sections only for opted-in extractors with values', async () => {
     const keep = new Extractor({ name: 'Keep', instructions: 'Keep it.' });
     const skip = new Extractor({ name: 'Skip', instructions: 'Skip it.', includePreviousExtraction: false });
 
@@ -562,7 +562,7 @@ describe('Extractor', () => {
     expect(result.failures).toEqual([{ slug: 'bad', error: 'hook failed' }]);
   });
 
-  it('composes enabled built-ins before user extractors', () => {
+  it('composes enabled built-ins before user extractors', async () => {
     const user = new Extractor({ name: 'Preference', instructions: 'Extract preference.' });
 
     expect(

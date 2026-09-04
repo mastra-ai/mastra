@@ -1,6 +1,5 @@
-import { estimateTokenCount, sliceByTokens } from 'tokenx';
-
 import { isValidationError } from '../../tools/validation';
+import { loadTokenx } from '../../utils/tokenx';
 
 /** Default number of lines to return (tail). */
 export const DEFAULT_TAIL_LINES = 200;
@@ -93,6 +92,7 @@ export async function applyTokenLimit(
 ): Promise<string> {
   if (!output) return output;
 
+  const { estimateTokenCount, sliceByTokens } = await loadTokenx();
   const totalTokens = estimateTokenCount(output);
   if (totalTokens <= limit) return output;
 
@@ -120,6 +120,7 @@ export async function applyTokenLimitSandwich(
 ): Promise<string> {
   if (!output) return output;
 
+  const { estimateTokenCount, sliceByTokens } = await loadTokenx();
   const totalTokens = estimateTokenCount(output);
   if (totalTokens <= limit) return output;
   const headBudget = Math.floor(limit * headRatio);

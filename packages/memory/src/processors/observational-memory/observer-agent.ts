@@ -977,11 +977,11 @@ function getTemporalGapMarkerText(msg: MastraDBMessage): string | undefined {
   return undefined;
 }
 
-function formatObserverMessage(
+async function formatObserverMessage(
   msg: MastraDBMessage,
   counter: ObserverAttachmentCounter,
   options?: ObserverFormatOptions,
-): ObserverFormattedMessage {
+): Promise<ObserverFormattedMessage> {
   const maxLen = options?.maxPartLength;
   const maxToolResultTokens = options?.maxToolResultTokens ?? DEFAULT_OBSERVER_TOOL_RESULT_MAX_TOKENS;
   const attachmentFilter = options?.attachmentFilter;
@@ -1012,12 +1012,12 @@ function formatObserverMessage(
   } else if (typeof msg.content === 'string') {
     pushLine(role, maybeTruncate(msg.content, maxLen), messageCreatedAt);
   } else if (msg.content?.parts && Array.isArray(msg.content.parts) && msg.content.parts.length > 0) {
-    msg.content.parts.forEach(part => {
+    for (const part of msg.content.parts) {
       const partCreatedAt = normalizeObserverCreatedAt((part as { createdAt?: unknown }).createdAt) ?? messageCreatedAt;
 
       if (part.type === 'text') {
         pushLine(role, maybeTruncate(part.text, maxLen), partCreatedAt);
-        return;
+        continue;
       }
 
       if (part.type === 'tool-invocation') {
@@ -1038,26 +1038,26 @@ function formatObserverMessage(
           pushLine(
             `Tool Result ${inv.toolName}`,
             maybeTruncate(
-              formatToolResultForObserver(resultWithoutAttachments, { maxTokens: maxToolResultTokens }),
+              await formatToolResultForObserver(resultWithoutAttachments, { maxTokens: maxToolResultTokens }),
               maxLen,
             ),
             partCreatedAt,
           );
-          return;
+          continue;
         }
 
         pushLine(`Tool Call ${inv.toolName}`, maybeTruncate(JSON.stringify(inv.args, null, 2), maxLen), partCreatedAt);
-        return;
+        continue;
       }
 
       const partType = (part as { type?: string }).type;
       if (partType === 'reasoning') {
         const reasoning = (part as { reasoning?: string }).reasoning;
         if (!reasoning) {
-          return;
+          continue;
         }
         pushLine('Reasoning', maybeTruncate(reasoning, maxLen), partCreatedAt);
-        return;
+        continue;
       }
 
       if (partType === 'image' || partType === 'file') {
@@ -1074,7 +1074,7 @@ function formatObserverMessage(
           partCreatedAt,
         );
       }
-    });
+    }
   } else if (msg.content?.content) {
     pushLine(role, maybeTruncate(msg.content.content, maxLen), messageCreatedAt);
   }
@@ -1089,13 +1089,16 @@ function formatObserverMessage(
   };
 }
 
-export function formatMessagesForObserver(messages: MastraDBMessage[], options?: ObserverFormatOptions): string {
+export async function formatMessagesForObserver(
+  messages: MastraDBMessage[],
+  options?: ObserverFormatOptions,
+): Promise<string> {
   const counter = { nextImageId: 1, nextFileId: 1 };
   const sections: string[] = [];
   let context: ObserverFormattingContext = {};
 
   for (const message of messages) {
-    const formatted = formatObserverMessage(message, counter, options);
+    const formatted = await formatObserverMessage(message, counter, options);
     if (formatted.lines.length === 0) {
       continue;
     }
@@ -1125,16 +1128,19 @@ function appendFormattedObserverMessage(
   return rendered.context;
 }
 
-export function buildObserverHistoryMessage(messages: MastraDBMessage[], options?: ObserverFormatOptions): CoreMessage {
+export async function buildObserverHistoryMessage(
+  messages: MastraDBMessage[],
+  options?: ObserverFormatOptions,
+): Promise<CoreMessage> {
   const counter = { nextImageId: 1, nextFileId: 1 };
   const content: any[] = [{ type: 'text', text: '## New Message History to Observe\n\n' }];
 
   let context: ObserverFormattingContext = {};
-  messages.forEach(message => {
-    const formatted = formatObserverMessage(message, counter, options);
-    if (formatted.lines.length === 0 && formatted.attachments.length === 0) return;
+  for (const message of messages) {
+    const formatted = await formatObserverMessage(message, counter, options);
+    if (formatted.lines.length === 0 && formatted.attachments.length === 0) continue;
     context = appendFormattedObserverMessage(content, formatted, context);
-  });
+  }
 
   return {
     role: 'user',
@@ -1154,29 +1160,29 @@ function maybeTruncate(str: string, maxLen?: number): string {
  * Format messages from multiple threads for batched observation.
  * Each thread's messages are wrapped in a <thread id="..."> block.
  */
-export function formatMultiThreadMessagesForObserver(
+export async function formatMultiThreadMessagesForObserver(
   messagesByThread: Map<string, MastraDBMessage[]>,
   threadOrder: string[],
   options?: ObserverFormatOptions,
-): string {
+): Promise<string> {
   const sections: string[] = [];
 
   for (const threadId of threadOrder) {
     const messages = messagesByThread.get(threadId);
     if (!messages || messages.length === 0) continue;
 
-    const formattedMessages = formatMessagesForObserver(messages, options);
+    const formattedMessages = await formatMessagesForObserver(messages, options);
     sections.push(`<thread id="${threadId}">\n${formattedMessages}\n</thread>`);
   }
 
   return sections.join('\n\n');
 }
 
-export function buildMultiThreadObserverHistoryMessage(
+export async function buildMultiThreadObserverHistoryMessage(
   messagesByThread: Map<string, MastraDBMessage[]>,
   threadOrder: string[],
   options?: ObserverFormatOptions,
-): CoreMessage {
+): Promise<CoreMessage> {
   const counter = { nextImageId: 1, nextFileId: 1 };
   const content: any[] = [
     {
@@ -1185,21 +1191,21 @@ export function buildMultiThreadObserverHistoryMessage(
     },
   ];
 
-  threadOrder.forEach((threadId, threadIndex) => {
+  for (const [threadIndex, threadId] of threadOrder.entries()) {
     const messages = messagesByThread.get(threadId);
-    if (!messages || messages.length === 0) return;
+    if (!messages || messages.length === 0) continue;
 
     const threadContent: any[] = [];
     let context: ObserverFormattingContext = {};
     let hasVisibleContent = false;
-    messages.forEach(message => {
-      const formatted = formatObserverMessage(message, counter, options);
-      if (formatted.lines.length === 0 && formatted.attachments.length === 0) return;
+    for (const message of messages) {
+      const formatted = await formatObserverMessage(message, counter, options);
+      if (formatted.lines.length === 0 && formatted.attachments.length === 0) continue;
       context = appendFormattedObserverMessage(threadContent, formatted, context);
       hasVisibleContent = true;
-    });
+    }
 
-    if (!hasVisibleContent) return;
+    if (!hasVisibleContent) continue;
 
     content.push({ type: 'text', text: `<thread id="${threadId}">\n` });
     content.push(...threadContent);
@@ -1207,7 +1213,7 @@ export function buildMultiThreadObserverHistoryMessage(
     if (threadIndex < threadOrder.length - 1) {
       content.push({ type: 'text', text: '\n\n' });
     }
-  });
+  }
 
   return {
     role: 'user',
@@ -1472,7 +1478,7 @@ export function buildObserverTaskPrompt(
  * Build the full prompt for the Observer agent.
  * Includes emphasis on the most recent user message for priority handling.
  */
-export function buildObserverPrompt(
+export async function buildObserverPrompt(
   existingObservations: string | undefined,
   messagesToObserve: MastraDBMessage[],
   options?: {
@@ -1485,8 +1491,8 @@ export function buildObserverPrompt(
     extractors?: readonly Extractor<any>[];
     priorExtractedValues?: Record<string, unknown>;
   },
-): string {
-  const formattedMessages = formatMessagesForObserver(messagesToObserve);
+): Promise<string> {
+  const formattedMessages = await formatMessagesForObserver(messagesToObserve);
   return `## New Message History to Observe\n\n${formattedMessages}\n\n---\n\n${buildObserverTaskPrompt(existingObservations, options)}`;
 }
 

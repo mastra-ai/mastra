@@ -1,4 +1,10 @@
-import { estimateTokenCount, sliceByTokens } from 'tokenx';
+import type * as Tokenx from 'tokenx';
+
+let tokenxPromise: Promise<typeof Tokenx> | undefined;
+
+function loadTokenx(): Promise<typeof Tokenx> {
+  return (tokenxPromise ??= import('tokenx'));
+}
 
 function sanitizeInput(text: string | object) {
   if (!text) return '';
@@ -7,11 +13,13 @@ function sanitizeInput(text: string | object) {
     .replaceAll(`<|endofprompt|>`, ``);
 }
 
-export function tokenEstimate(text: string | object): number {
+export async function tokenEstimate(text: string | object): Promise<number> {
+  const { estimateTokenCount } = await loadTokenx();
   return estimateTokenCount(sanitizeInput(text));
 }
 
-export function truncateStringForTokenEstimate(text: string, desiredTokenCount: number, fromEnd = true) {
+export async function truncateStringForTokenEstimate(text: string, desiredTokenCount: number, fromEnd = true) {
+  const { estimateTokenCount, sliceByTokens } = await loadTokenx();
   const sanitized = sanitizeInput(text);
   const totalTokens = estimateTokenCount(sanitized);
 

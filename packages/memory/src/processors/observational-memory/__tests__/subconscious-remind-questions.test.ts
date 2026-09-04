@@ -67,7 +67,7 @@ describe('Subconscious reminder questions', () => {
     vi.restoreAllMocks();
   });
 
-  it('exposes ask_memory only when Subconscious tools are enabled', () => {
+  it('exposes ask_memory only when Subconscious tools are enabled', async () => {
     const memory = new Memory({ storage: new InMemoryStore() });
 
     expect(

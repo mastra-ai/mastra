@@ -15,7 +15,7 @@
   "dependencies": {
     "@ai-sdk/openai": "^3.0.37",
     "@mastra/core": "commonjs-e2e-test",
-    "@mastra/loggers": "commonjs-e2e-test",
+    "@mastra/memory": "commonjs-e2e-test",
     "zod": "4.3.6"
   },
   "devDependencies": {

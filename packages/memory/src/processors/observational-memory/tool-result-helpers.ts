@@ -1,6 +1,5 @@
-import { estimateTokenCount } from 'tokenx';
-
 import { safeSlice } from './string-utils';
+import { loadTokenx } from './tokenx';
 
 const ENCRYPTED_CONTENT_KEY = 'encryptedContent';
 const ENCRYPTED_CONTENT_REDACTION_THRESHOLD = 256;
@@ -93,11 +92,12 @@ export function resolveToolResultValue(
   };
 }
 
-export function truncateStringByTokens(text: string, maxTokens: number): string {
+export async function truncateStringByTokens(text: string, maxTokens: number): Promise<string> {
   if (!text || maxTokens <= 0) {
     return '';
   }
 
+  const { estimateTokenCount } = await loadTokenx();
   const totalTokens = estimateTokenCount(text);
   if (totalTokens <= maxTokens) {
     return text;
@@ -128,12 +128,12 @@ export function truncateStringByTokens(text: string, maxTokens: number): string 
   return best;
 }
 
-export function formatToolResultForObserver(
+export async function formatToolResultForObserver(
   value: unknown,
   options?: {
     maxTokens?: number;
   },
-): string {
+): Promise<string> {
   const serialized = stringifyToolResult(value);
   const maxTokens = options?.maxTokens ?? DEFAULT_OBSERVER_TOOL_RESULT_MAX_TOKENS;
   return truncateStringByTokens(serialized, maxTokens);

@@ -40,7 +40,7 @@ function getTextParts(message: MastraDBMessage): string[] {
 
 describe('Memory', () => {
   describe('constructor', () => {
-    it('throws when working memory vNext is combined with state signals', () => {
+    it('throws when working memory vNext is combined with state signals', async () => {
       expect(
         () =>
           new Memory({
@@ -103,7 +103,7 @@ describe('Memory', () => {
   });
 
   describe('listTools', () => {
-    it('omits working memory tools when agentManaged is false', () => {
+    it('omits working memory tools when agentManaged is false', async () => {
       const memory = new Memory({
         storage: new InMemoryStore(),
         options: { workingMemory: { enabled: true, agentManaged: false } },
@@ -112,7 +112,7 @@ describe('Memory', () => {
       expect(memory.listTools()).not.toHaveProperty('updateWorkingMemory');
     });
 
-    it('includes working memory tools by default when working memory is enabled', () => {
+    it('includes working memory tools by default when working memory is enabled', async () => {
       const memory = new Memory({
         storage: new InMemoryStore(),
         options: { workingMemory: { enabled: true } },
@@ -121,7 +121,7 @@ describe('Memory', () => {
       expect(memory.listTools()).toHaveProperty('updateWorkingMemory');
     });
 
-    it('uses manageWorkingMemory to add the working memory extractor and disable agent-managed tools by default', () => {
+    it('uses manageWorkingMemory to add the working memory extractor and disable agent-managed tools by default', async () => {
       const memory = new Memory({
         storage: new InMemoryStore(),
         options: {
@@ -142,7 +142,7 @@ describe('Memory', () => {
       expect(omConfig.observation?.extract?.some(extractor => extractor.slug === 'working-memory')).toBe(true);
     });
 
-    it('keeps explicit useStateSignals false when manageWorkingMemory supplies defaults', () => {
+    it('keeps explicit useStateSignals false when manageWorkingMemory supplies defaults', async () => {
       const memory = new Memory({
         storage: new InMemoryStore(),
         options: {
@@ -156,7 +156,7 @@ describe('Memory', () => {
       expect(config.workingMemory?.useStateSignals).toBe(false);
     });
 
-    it('keeps agent-managed tools when agentManaged explicitly overrides manageWorkingMemory defaults', () => {
+    it('keeps agent-managed tools when agentManaged explicitly overrides manageWorkingMemory defaults', async () => {
       const memory = new Memory({
         storage: new InMemoryStore(),
         options: {
@@ -209,7 +209,7 @@ describe('Memory', () => {
   describe('updateMessageToHideWorkingMemoryV2', () => {
     const memory = new TestableMemory();
 
-    it('should handle proper V2 message content', () => {
+    it('should handle proper V2 message content', async () => {
       const message: MastraDBMessage = {
         id: 'test-1',
         role: 'user',
@@ -227,7 +227,7 @@ describe('Memory', () => {
       expect(result?.content.parts[0]).toEqual({ type: 'text', text: 'Hello world' });
     });
 
-    it('should strip working memory tags from text parts', () => {
+    it('should strip working memory tags from text parts', async () => {
       const message: MastraDBMessage = {
         id: 'test-2',
         role: 'assistant',
@@ -244,7 +244,7 @@ describe('Memory', () => {
       expect(result?.content.parts[0]).toEqual({ type: 'text', text: 'Hello  world' });
     });
 
-    it('should not crash when content is undefined', () => {
+    it('should not crash when content is undefined', async () => {
       const message = {
         id: 'test-3',
         role: 'user',
@@ -258,7 +258,7 @@ describe('Memory', () => {
       expect(result?.content).toBeUndefined();
     });
 
-    it('should not crash when content is a string (legacy format)', () => {
+    it('should not crash when content is a string (legacy format)', async () => {
       const message = {
         id: 'test-4',
         role: 'user',
@@ -273,7 +273,7 @@ describe('Memory', () => {
       expect(result?.content).toBe('Hello world');
     });
 
-    it('should not crash when content is an array (legacy format)', () => {
+    it('should not crash when content is an array (legacy format)', async () => {
       const message = {
         id: 'test-5',
         role: 'user',
@@ -288,7 +288,7 @@ describe('Memory', () => {
       expect(Array.isArray(result?.content)).toBe(true);
     });
 
-    it('should not crash when parts contain null or undefined elements', () => {
+    it('should not crash when parts contain null or undefined elements', async () => {
       const message: MastraDBMessage = {
         id: 'test-6',
         role: 'assistant',
@@ -304,7 +304,7 @@ describe('Memory', () => {
       expect(result).not.toBeNull();
     });
 
-    it('should not drop messages with empty parts array but valid content.content (issue #13824)', () => {
+    it('should not drop messages with empty parts array but valid content.content (issue #13824)', async () => {
       const message: MastraDBMessage = {
         id: 'test-empty-parts',
         threadId: 'thread-1',
@@ -326,7 +326,7 @@ describe('Memory', () => {
       expect(result?.content.content).toBe('Hello from a real message');
     });
 
-    it('should not drop assistant messages with empty parts array but valid content.content (issue #13824)', () => {
+    it('should not drop assistant messages with empty parts array but valid content.content (issue #13824)', async () => {
       const message: MastraDBMessage = {
         id: 'test-empty-parts-assistant',
         threadId: 'thread-1',
@@ -347,7 +347,7 @@ describe('Memory', () => {
       expect(result?.content.content).toBe('I am the assistant reply');
     });
 
-    it('should filter out updateWorkingMemory tool invocations', () => {
+    it('should filter out updateWorkingMemory tool invocations', async () => {
       const message: MastraDBMessage = {
         id: 'test-7',
         role: 'assistant',
@@ -1078,7 +1078,7 @@ describe('Memory', () => {
         expect(memory.isClone(thread)).toBe(false);
       });
 
-      it('should return false for null', () => {
+      it('should return false for null', async () => {
         expect(memory.isClone(null)).toBe(false);
       });
     });
@@ -2540,19 +2540,19 @@ describe('Memory', () => {
       expect(result.messages).toHaveLength(2);
     });
 
-    it('threadConfig should preserve lastMessages: false after construction', () => {
+    it('threadConfig should preserve lastMessages: false after construction', async () => {
       const config = memory.getMergedThreadConfig();
 
       expect(config.lastMessages).toBe(false);
     });
 
-    it('threadConfig should preserve lastMessages: false when merging with empty config', () => {
+    it('threadConfig should preserve lastMessages: false when merging with empty config', async () => {
       const config = memory.getMergedThreadConfig({});
 
       expect(config.lastMessages).toBe(false);
     });
 
-    it('threadConfig should preserve lastMessages: false when merging with unrelated options', () => {
+    it('threadConfig should preserve lastMessages: false when merging with unrelated options', async () => {
       const config = memory.getMergedThreadConfig({
         workingMemory: { enabled: false },
       });
@@ -2560,7 +2560,7 @@ describe('Memory', () => {
       expect(config.lastMessages).toBe(false);
     });
 
-    it('per-request config can override lastMessages: false back to a number', () => {
+    it('per-request config can override lastMessages: false back to a number', async () => {
       const config = memory.getMergedThreadConfig({
         lastMessages: 10,
       });

@@ -2,9 +2,9 @@ import type { MastraDBMessage } from '@mastra/core/agent';
 import type { MemoryConfigInternal } from '@mastra/core/memory';
 import { createTool } from '@mastra/core/tools';
 import type { JSONSchema7 } from 'json-schema';
-import { estimateTokenCount } from 'tokenx';
-
 import { safeSlice } from '../processors/observational-memory/string-utils';
+import { loadTokenx } from '../processors/observational-memory/tokenx';
+
 import {
   formatToolResultForObserver,
   resolveToolResultValue,
@@ -419,7 +419,7 @@ export async function searchMessagesForResource({
   });
 
   const assembled = sections.join('\n\n');
-  const { text: limited } = truncateByTokens(assembled, maxTokens);
+  const { text: limited } = await truncateByTokens(assembled, maxTokens);
 
   return {
     results: limited,
@@ -453,19 +453,25 @@ interface FormattedPart {
   toolName?: string;
 }
 
-function truncateByTokens(text: string, maxTokens: number, hint?: string): { text: string; wasTruncated: boolean } {
+async function truncateByTokens(
+  text: string,
+  maxTokens: number,
+  hint?: string,
+): Promise<{ text: string; wasTruncated: boolean }> {
+  const { estimateTokenCount } = await loadTokenx();
   if (estimateTokenCount(text) <= maxTokens) return { text, wasTruncated: false };
   // Truncate content to maxTokens, then append hint outside the budget
-  const truncated = truncateStringByTokens(text, maxTokens);
+  const truncated = await truncateStringByTokens(text, maxTokens);
   const suffix = hint ? ` [${hint} for more]` : '';
   return { text: truncated + suffix, wasTruncated: true };
 }
 
-function chunkTextByTokens(
+async function chunkTextByTokens(
   text: string,
   maxTokens: number,
   charOffset = 0,
-): { text: string; nextCharOffset?: number; charOffset: number; truncated: boolean } {
+): Promise<{ text: string; nextCharOffset?: number; charOffset: number; truncated: boolean }> {
+  const { estimateTokenCount } = await loadTokenx();
   let startOffset = Math.max(0, Math.min(Math.floor(charOffset), text.length));
   // Caller-provided offsets can land between the two halves of a surrogate
   // pair; skip the lone low surrogate so the chunk stays valid JSON text.
@@ -509,27 +515,27 @@ function lowDetailPartLimit(type: string): number {
   return LOW_DETAIL_PART_TOKENS;
 }
 
-function makePart(
+async function makePart(
   msg: MastraDBMessage,
   partIndex: number,
   type: string,
   fullText: string,
   detail: RecallDetail,
   toolName?: string,
-): FormattedPart {
+): Promise<FormattedPart> {
   if (detail === 'high') {
     return { messageId: msg.id, partIndex, role: msg.role, type, text: fullText, fullText, toolName };
   }
   const hint = `recall cursor="${msg.id}" partIndex=${partIndex} detail="high"`;
-  const { text } = truncateByTokens(fullText, lowDetailPartLimit(type), hint);
+  const { text } = await truncateByTokens(fullText, lowDetailPartLimit(type), hint);
   return { messageId: msg.id, partIndex, role: msg.role, type, text, fullText, toolName };
 }
 
-function formatMessageParts(msg: MastraDBMessage, detail: RecallDetail): FormattedPart[] {
+async function formatMessageParts(msg: MastraDBMessage, detail: RecallDetail): Promise<FormattedPart[]> {
   const parts: FormattedPart[] = [];
 
   if (typeof msg.content === 'string') {
-    parts.push(makePart(msg, 0, 'text', msg.content, detail));
+    parts.push(await makePart(msg, 0, 'text', msg.content, detail));
     return parts;
   }
 
@@ -542,7 +548,7 @@ function formatMessageParts(msg: MastraDBMessage, detail: RecallDetail): Formatt
       if (partType === 'text') {
         const text = (part as { text?: string }).text;
         if (text) {
-          parts.push(makePart(msg, i, 'text', text, detail));
+          parts.push(await makePart(msg, i, 'text', text, detail));
         }
       } else if (partType === 'tool-invocation') {
         const inv = (part as any).toolInvocation;
@@ -567,9 +573,11 @@ function formatMessageParts(msg: MastraDBMessage, detail: RecallDetail): Formatt
               part as { providerMetadata?: Record<string, any> },
               inv.result,
             );
-            const resultStr = formatToolResultForObserver(resultValue, { maxTokens: HIGH_DETAIL_TOOL_RESULT_TOKENS });
+            const resultStr = await formatToolResultForObserver(resultValue, {
+              maxTokens: HIGH_DETAIL_TOOL_RESULT_TOKENS,
+            });
             const fullText = `[Tool Result: ${inv.toolName}]\n${resultStr}`;
-            parts.push(makePart(msg, i, 'tool-result', fullText, detail, inv.toolName));
+            parts.push(await makePart(msg, i, 'tool-result', fullText, detail, inv.toolName));
           }
         }
       } else if (partType === 'tool-call') {
@@ -595,14 +603,14 @@ function formatMessageParts(msg: MastraDBMessage, detail: RecallDetail): Formatt
         const toolName = (part as any).toolName;
         if (toolName) {
           const rawResult = (part as any).output ?? (part as any).result;
-          const resultStr = formatToolResultForObserver(rawResult, { maxTokens: HIGH_DETAIL_TOOL_RESULT_TOKENS });
+          const resultStr = await formatToolResultForObserver(rawResult, { maxTokens: HIGH_DETAIL_TOOL_RESULT_TOKENS });
           const fullText = `[Tool Result: ${toolName}]\n${resultStr}`;
-          parts.push(makePart(msg, i, 'tool-result', fullText, detail, toolName));
+          parts.push(await makePart(msg, i, 'tool-result', fullText, detail, toolName));
         }
       } else if (partType === 'reasoning') {
         const reasoning = (part as { reasoning?: string; text?: string }).reasoning ?? (part as { text?: string }).text;
         if (reasoning) {
-          parts.push(makePart(msg, i, 'reasoning', reasoning, detail));
+          parts.push(await makePart(msg, i, 'reasoning', reasoning, detail));
         }
       } else if (partType === 'image' || partType === 'file') {
         const filename = (part as any).filename;
@@ -617,7 +625,7 @@ function formatMessageParts(msg: MastraDBMessage, detail: RecallDetail): Formatt
       }
     }
   } else if (msg.content?.content) {
-    parts.push(makePart(msg, 0, 'text', msg.content.content, detail));
+    parts.push(await makePart(msg, 0, 'text', msg.content.content, detail));
   }
 
   return parts;
@@ -688,18 +696,19 @@ function expandPriority(part: FormattedPart): number {
   return 4;
 }
 
-function renderFormattedParts(
+async function renderFormattedParts(
   parts: FormattedPart[],
   timestamps: Map<string, Date>,
   options: { detail: RecallDetail; maxTokens: number },
-): { text: string; truncated: boolean; tokenOffset: number } {
+): Promise<{ text: string; truncated: boolean; tokenOffset: number }> {
+  const { estimateTokenCount } = await loadTokenx();
   // Step 1: render with per-part truncated text
   const text = buildRenderedText(parts, timestamps);
   let totalTokens = estimateTokenCount(text);
 
   if (totalTokens > options.maxTokens) {
     // Already over budget even with truncated text — hard-truncate
-    const truncated = truncateStringByTokens(text, options.maxTokens);
+    const truncated = await truncateStringByTokens(text, options.maxTokens);
     return { text: truncated, truncated: true, tokenOffset: totalTokens - options.maxTokens };
   }
 
@@ -736,7 +745,7 @@ function renderFormattedParts(
       // Partial expand — cap at expand limit or remaining budget, whichever is smaller
       const expandedLimit = Math.min(currentTokens + remaining, maxTokens);
       const hint = `recall cursor="${part.messageId}" partIndex=${part.partIndex} detail="high"`;
-      const { text: expanded } = truncateByTokens(part.fullText, expandedLimit, hint);
+      const { text: expanded } = await truncateByTokens(part.fullText, expandedLimit, hint);
       const expandedDelta = estimateTokenCount(expanded) - currentTokens;
       parts[index] = { ...part, text: expanded };
       remaining -= expandedDelta;
@@ -752,7 +761,7 @@ function renderFormattedParts(
   }
 
   // Safety net: if token estimates drifted, hard-truncate
-  const hardTruncated = truncateStringByTokens(expanded, options.maxTokens);
+  const hardTruncated = await truncateStringByTokens(expanded, options.maxTokens);
   return { text: hardTruncated, truncated: true, tokenOffset: expandedTokens - options.maxTokens };
 }
 
@@ -805,7 +814,7 @@ export async function recallPart({
     throw new Error(resolved.hint);
   }
 
-  const allParts = formatMessageParts(resolved, 'high');
+  const allParts = await formatMessageParts(resolved, 'high');
 
   if (allParts.length === 0) {
     throw new Error(
@@ -828,13 +837,13 @@ export async function recallPart({
       });
 
       if (nextMessage) {
-        const nextParts = formatMessageParts(nextMessage, 'high');
+        const nextParts = await formatMessageParts(nextMessage, 'high');
         const firstNextPart = nextParts[0];
 
         if (firstNextPart) {
           const fallbackNote = `Part index ${partIndex} not found in message ${cursor}; showing partIndex ${firstNextPart.partIndex} from next message ${firstNextPart.messageId}.\n\n`;
           const fallbackText = `${fallbackNote}${firstNextPart.text}`;
-          const fallbackChunk = chunkTextByTokens(fallbackText, maxTokens, charOffset);
+          const fallbackChunk = await chunkTextByTokens(fallbackText, maxTokens, charOffset);
           const fallbackContinuation = fallbackChunk.nextCharOffset
             ? `To continue this part, call recall cursor="${cursor}" partIndex=${partIndex} detail="high" charOffset=${fallbackChunk.nextCharOffset}.`
             : undefined;
@@ -857,7 +866,7 @@ export async function recallPart({
     throw new Error(`Part index ${partIndex} not found in message ${cursor}. Available indices: ${availableIndices}`);
   }
 
-  const chunk = chunkTextByTokens(target.text, maxTokens, charOffset);
+  const chunk = await chunkTextByTokens(target.text, maxTokens, charOffset);
   const note = chunk.nextCharOffset
     ? `To continue this part, call recall cursor="${target.messageId}" partIndex=${target.partIndex} detail="high" charOffset=${chunk.nextCharOffset}.`
     : undefined;
@@ -1033,7 +1042,7 @@ export async function recallMessages({
   const timestamps = new Map<string, Date>();
   for (const msg of messages) {
     timestamps.set(msg.id, msg.createdAt);
-    allParts.push(...formatMessageParts(msg, detail));
+    allParts.push(...(await formatMessageParts(msg, detail)));
   }
 
   if (toolName) {
@@ -1050,7 +1059,7 @@ export async function recallMessages({
     const sameMsgParts = allParts.filter(p => p.messageId === firstPart.messageId);
     const otherMsgParts = allParts.filter(p => p.messageId !== firstPart.messageId);
 
-    const rendered = renderFormattedParts([firstPart], timestamps, { detail, maxTokens });
+    const rendered = await renderFormattedParts([firstPart], timestamps, { detail, maxTokens });
 
     let text = rendered.text;
 
@@ -1085,7 +1094,7 @@ export async function recallMessages({
     };
   }
 
-  const rendered = renderFormattedParts(allParts, timestamps, { detail, maxTokens });
+  const rendered = await renderFormattedParts(allParts, timestamps, { detail, maxTokens });
   const emptyMessage =
     allParts.length === 0
       ? partType || toolName
@@ -1176,7 +1185,7 @@ export async function recallThreadFromStart({
   const timestamps = new Map<string, Date>();
   for (const msg of messages) {
     timestamps.set(msg.id, msg.createdAt);
-    allParts.push(...formatMessageParts(msg, detail));
+    allParts.push(...(await formatMessageParts(msg, detail)));
   }
 
   if (toolName) {
@@ -1187,7 +1196,7 @@ export async function recallThreadFromStart({
     allParts = allParts.filter(p => p.type === partType);
   }
 
-  const rendered = renderFormattedParts(allParts, timestamps, { detail, maxTokens });
+  const rendered = await renderFormattedParts(allParts, timestamps, { detail, maxTokens });
   const emptyMessage =
     messages.length === 0
       ? pageIndex > 0

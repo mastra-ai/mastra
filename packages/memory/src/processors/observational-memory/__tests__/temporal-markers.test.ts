@@ -99,7 +99,7 @@ function createTestSendSignal(messageList: MessageList, capturedParts: unknown[]
 }
 
 describe('ObservationalMemoryProcessor temporal markers', () => {
-  it('formats temporal gaps using two-unit durations', () => {
+  it('formats temporal gaps using two-unit durations', async () => {
     expect(formatTemporalGap(10 * 60 * 1000 - 1)).toBeNull();
 
     const cases = [
@@ -125,7 +125,7 @@ describe('ObservationalMemoryProcessor temporal markers', () => {
     }
   });
 
-  it('labels the reported db fixture gap honestly', () => {
+  it('labels the reported db fixture gap honestly', async () => {
     const rows = loadTemporalGapDbFixture();
     const newerMessage = rows[0]!;
     const markerRow = rows[1]!;

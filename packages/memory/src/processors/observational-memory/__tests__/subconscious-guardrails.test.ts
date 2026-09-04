@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest';
 import { stripSubconsciousSignals } from '../subconscious/origin';
 
 describe('Subconscious guardrails', () => {
-  it('structurally removes Subconscious-originated signals before observation', () => {
+  it('structurally removes Subconscious-originated signals before observation', async () => {
     const messages = [
       {
         id: 'assistant-with-signals',
@@ -63,7 +63,7 @@ describe('Subconscious guardrails', () => {
     expect(typeof messages[0]?.content === 'string' ? [] : messages[0]?.content.parts).toHaveLength(3);
   });
 
-  it('removes persisted Subconscious signal messages after reload', () => {
+  it('removes persisted Subconscious signal messages after reload', async () => {
     const remembered = createSignal({
       id: 'remembered',
       type: 'reactive',

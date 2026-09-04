@@ -31,17 +31,13 @@ describe('commonjs', () => {
   });
 
   it('should pass tsc type check', { timeout: 30 * 1000 }, async () => {
-    const tsc = await execa({
-      cwd: fixturePath,
-    })`tsc`;
+    const tsc = await execa('pnpm', ['exec', 'tsc'], { cwd: fixturePath });
 
     expect(tsc.exitCode).toBe(0);
   });
 
   it('should return all agents', async () => {
-    const tsc = await execa({
-      cwd: fixturePath,
-    })`tsc`;
+    await execa('pnpm', ['exec', 'tsc'], { cwd: fixturePath });
 
     const { stdout } = await execa(process.execPath, [join(fixturePath, 'dist', 'index.js')], {
       cwd: fixturePath,
@@ -65,5 +61,16 @@ describe('commonjs', () => {
             Use the weatherTool to fetch current weather data.
       "
     `);
+  });
+
+  it('executes dynamically loaded ESM-only dependencies from CommonJS', async () => {
+    const { stdout } = await execa(process.execPath, [join(fixturePath, 'dist', 'runtime-check.js')], {
+      cwd: fixturePath,
+    });
+
+    const parsedOutput = JSON.parse(stdout);
+    expect(parsedOutput.indexed).toBeGreaterThan(0);
+    expect(parsedOutput.scheduleId).toBe('agent_common-js-esm-only');
+    expect(parsedOutput.tokens).toBeGreaterThan(0);
   });
 });

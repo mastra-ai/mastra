@@ -74,11 +74,11 @@ function createParentRequestContext() {
 }
 
 describe('withOmInternalThreadId', () => {
-  it('returns undefined when no request context is provided', () => {
+  it('returns undefined when no request context is provided', async () => {
     expect(withOmInternalThreadId(undefined, 'observational-memory-observer')).toBeUndefined();
   });
 
-  it('returns an isolated clone (never the original) when there is no parent thread id', () => {
+  it('returns an isolated clone (never the original) when there is no parent thread id', async () => {
     const requestContext = new RequestContext();
     requestContext.set('tenantId', 'tenant-1');
 
@@ -93,7 +93,7 @@ describe('withOmInternalThreadId', () => {
     expect(requestContext.get('MastraMemory')).toBeUndefined();
   });
 
-  it('derives an OM-internal thread id from the parent thread id and OM agent id', () => {
+  it('derives an OM-internal thread id from the parent thread id and OM agent id', async () => {
     const requestContext = createParentRequestContext();
 
     const result = withOmInternalThreadId(requestContext, 'observational-memory-observer');
@@ -105,7 +105,7 @@ describe('withOmInternalThreadId', () => {
     expect(requestContext.get(MASTRA_THREAD_ID_KEY)).toBe('parent-thread');
   });
 
-  it('does not leak internal MastraMemory writes back into the parent context', () => {
+  it('does not leak internal MastraMemory writes back into the parent context', async () => {
     const requestContext = createParentRequestContext();
     requestContext.set('MastraMemory', { thread: { id: 'parent-thread' }, resourceId: 'resource-1' });
 

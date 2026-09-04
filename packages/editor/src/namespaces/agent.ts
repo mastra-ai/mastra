@@ -1358,7 +1358,7 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
         } else {
           // 2. Fallback to code-defined MCP server on the Mastra instance
           //    Check by registration key first, then by server ID
-          const mcpServer = this.mastra.getMCPServer(clientId) ?? this.mastra.getMCPServerById(clientId);
+          const mcpServer = this.mastra.getMCPServer(clientId) ?? (await this.mastra.getMCPServerById(clientId));
           if (mcpServer) {
             tools = mcpServer.tools() as Record<string, any>;
             this.logger?.debug(`[resolveStoredMCPTools] Loaded tools from code-defined MCP server "${clientId}"`);

@@ -4,7 +4,7 @@ import { deepMergeWorkingMemory, updateWorkingMemoryTool } from './working-memor
 
 describe('deepMergeWorkingMemory', () => {
   describe('null/undefined/empty update handling', () => {
-    it('should return shallow copy of existing when update is null', () => {
+    it('should return shallow copy of existing when update is null', async () => {
       const existing = { name: 'Alice', age: 30 };
       const result = deepMergeWorkingMemory(existing, null);
 
@@ -12,7 +12,7 @@ describe('deepMergeWorkingMemory', () => {
       expect(result).not.toBe(existing); // Must be a new object
     });
 
-    it('should return shallow copy of existing when update is undefined', () => {
+    it('should return shallow copy of existing when update is undefined', async () => {
       const existing = { name: 'Bob', location: 'NYC' };
       const result = deepMergeWorkingMemory(existing, undefined);
 
@@ -20,7 +20,7 @@ describe('deepMergeWorkingMemory', () => {
       expect(result).not.toBe(existing); // Must be a new object
     });
 
-    it('should return shallow copy of existing when update is empty object', () => {
+    it('should return shallow copy of existing when update is empty object', async () => {
       const existing = { foo: 'bar', count: 42 };
       const result = deepMergeWorkingMemory(existing, {});
 
@@ -28,19 +28,19 @@ describe('deepMergeWorkingMemory', () => {
       expect(result).not.toBe(existing); // Must be a new object
     });
 
-    it('should return empty object when both existing and update are null', () => {
+    it('should return empty object when both existing and update are null', async () => {
       const result = deepMergeWorkingMemory(null, null);
 
       expect(result).toEqual({});
     });
 
-    it('should return empty object when existing is null and update is empty', () => {
+    it('should return empty object when existing is null and update is empty', async () => {
       const result = deepMergeWorkingMemory(null, {});
 
       expect(result).toEqual({});
     });
 
-    it('should return empty object when existing is undefined and update is null', () => {
+    it('should return empty object when existing is undefined and update is null', async () => {
       const result = deepMergeWorkingMemory(undefined, null);
 
       expect(result).toEqual({});
@@ -48,7 +48,7 @@ describe('deepMergeWorkingMemory', () => {
   });
 
   describe('basic merging', () => {
-    it('should merge new keys into existing object', () => {
+    it('should merge new keys into existing object', async () => {
       const existing = { name: 'Alice' };
       const update = { age: 25 };
       const result = deepMergeWorkingMemory(existing, update);
@@ -57,7 +57,7 @@ describe('deepMergeWorkingMemory', () => {
       expect(result).not.toBe(existing);
     });
 
-    it('should overwrite existing keys with update values', () => {
+    it('should overwrite existing keys with update values', async () => {
       const existing = { name: 'Alice', age: 25 };
       const update = { age: 26 };
       const result = deepMergeWorkingMemory(existing, update);
@@ -65,14 +65,14 @@ describe('deepMergeWorkingMemory', () => {
       expect(result).toEqual({ name: 'Alice', age: 26 });
     });
 
-    it('should return update when existing is null', () => {
+    it('should return update when existing is null', async () => {
       const update = { name: 'Charlie', role: 'admin' };
       const result = deepMergeWorkingMemory(null, update);
 
       expect(result).toEqual({ name: 'Charlie', role: 'admin' });
     });
 
-    it('should return update when existing is undefined', () => {
+    it('should return update when existing is undefined', async () => {
       const update = { status: 'active' };
       const result = deepMergeWorkingMemory(undefined, update);
 
@@ -81,7 +81,7 @@ describe('deepMergeWorkingMemory', () => {
   });
 
   describe('null value deletion', () => {
-    it('should delete property when update value is null', () => {
+    it('should delete property when update value is null', async () => {
       const existing = { name: 'Alice', location: 'Seattle', age: 30 };
       const update = { location: null };
       const result = deepMergeWorkingMemory(existing, update);
@@ -90,7 +90,7 @@ describe('deepMergeWorkingMemory', () => {
       expect('location' in result).toBe(false);
     });
 
-    it('should delete multiple properties when multiple null values', () => {
+    it('should delete multiple properties when multiple null values', async () => {
       const existing = { a: 1, b: 2, c: 3, d: 4 };
       const update = { b: null, d: null };
       const result = deepMergeWorkingMemory(existing, update);
@@ -98,20 +98,20 @@ describe('deepMergeWorkingMemory', () => {
       expect(result).toEqual({ a: 1, c: 3 });
     });
 
-    it('should drop null values on a first write when no existing memory exists', () => {
+    it('should drop null values on a first write when no existing memory exists', async () => {
       const result = deepMergeWorkingMemory(null, { name: 'Ada', role: null });
 
       expect(result).toEqual({ name: 'Ada' });
       expect('role' in result).toBe(false);
     });
 
-    it('should drop null values on a first write when existing memory is undefined', () => {
+    it('should drop null values on a first write when existing memory is undefined', async () => {
       const result = deepMergeWorkingMemory(undefined, { name: 'Ada', role: null });
 
       expect(result).toEqual({ name: 'Ada' });
     });
 
-    it('should return an empty object when a first write contains only nulls', () => {
+    it('should return an empty object when a first write contains only nulls', async () => {
       const result = deepMergeWorkingMemory(null, { name: null, role: null });
 
       expect(result).toEqual({});
@@ -119,7 +119,7 @@ describe('deepMergeWorkingMemory', () => {
   });
 
   describe('nested object merging', () => {
-    it('should recursively merge nested objects', () => {
+    it('should recursively merge nested objects', async () => {
       const existing = {
         about: { name: 'Alice', location: 'NYC' },
         work: { company: 'Acme' },
@@ -135,7 +135,7 @@ describe('deepMergeWorkingMemory', () => {
       });
     });
 
-    it('should overwrite nested values', () => {
+    it('should overwrite nested values', async () => {
       const existing = {
         about: { name: 'Alice', location: 'NYC' },
       };
@@ -149,7 +149,7 @@ describe('deepMergeWorkingMemory', () => {
       });
     });
 
-    it('should delete nested properties with null', () => {
+    it('should delete nested properties with null', async () => {
       const existing = {
         about: { name: 'Alice', location: 'NYC', timezone: 'EST' },
       };
@@ -163,7 +163,7 @@ describe('deepMergeWorkingMemory', () => {
       });
     });
 
-    it('should create nested objects when they do not exist', () => {
+    it('should create nested objects when they do not exist', async () => {
       const existing = { name: 'Alice' };
       const update = { work: { company: 'Acme', role: 'Engineer' } };
       const result = deepMergeWorkingMemory(existing, update);
@@ -174,7 +174,7 @@ describe('deepMergeWorkingMemory', () => {
       });
     });
 
-    it('should drop nulls inside a nested object that did not exist before', () => {
+    it('should drop nulls inside a nested object that did not exist before', async () => {
       const existing = { name: 'Ada' };
       const update = { work: { company: 'Acme', manager: null } };
       const result = deepMergeWorkingMemory(existing, update);
@@ -183,7 +183,7 @@ describe('deepMergeWorkingMemory', () => {
       expect('manager' in (result.work as Record<string, unknown>)).toBe(false);
     });
 
-    it('should drop nulls in deeply nested branches that did not exist before', () => {
+    it('should drop nulls in deeply nested branches that did not exist before', async () => {
       const result = deepMergeWorkingMemory(null, {
         profile: { work: { company: 'Acme', manager: null }, alias: null },
       });
@@ -193,7 +193,7 @@ describe('deepMergeWorkingMemory', () => {
   });
 
   describe('array handling', () => {
-    it('should replace arrays entirely instead of merging', () => {
+    it('should replace arrays entirely instead of merging', async () => {
       const existing = {
         people: [
           { name: 'Alice', role: 'manager' },
@@ -210,7 +210,7 @@ describe('deepMergeWorkingMemory', () => {
       });
     });
 
-    it('should allow setting an array where none existed', () => {
+    it('should allow setting an array where none existed', async () => {
       const existing = { name: 'Alice' };
       const update = { tags: ['important', 'vip'] };
       const result = deepMergeWorkingMemory(existing, update);
@@ -221,7 +221,7 @@ describe('deepMergeWorkingMemory', () => {
       });
     });
 
-    it('should replace existing array with empty array', () => {
+    it('should replace existing array with empty array', async () => {
       const existing = { items: [1, 2, 3] };
       const update = { items: [] };
       const result = deepMergeWorkingMemory(existing, update);
@@ -231,7 +231,7 @@ describe('deepMergeWorkingMemory', () => {
   });
 
   describe('type coercion edge cases', () => {
-    it('should replace object with primitive', () => {
+    it('should replace object with primitive', async () => {
       const existing = { data: { nested: 'value' } };
       const update = { data: 'simple string' };
       const result = deepMergeWorkingMemory(existing, update);
@@ -239,7 +239,7 @@ describe('deepMergeWorkingMemory', () => {
       expect(result).toEqual({ data: 'simple string' });
     });
 
-    it('should replace primitive with object', () => {
+    it('should replace primitive with object', async () => {
       const existing = { data: 'simple string' };
       const update = { data: { nested: 'value' } };
       const result = deepMergeWorkingMemory(existing, update);
@@ -247,7 +247,7 @@ describe('deepMergeWorkingMemory', () => {
       expect(result).toEqual({ data: { nested: 'value' } });
     });
 
-    it('should replace array with object', () => {
+    it('should replace array with object', async () => {
       const existing = { data: [1, 2, 3] };
       const update = { data: { key: 'value' } };
       const result = deepMergeWorkingMemory(existing, update);
@@ -255,7 +255,7 @@ describe('deepMergeWorkingMemory', () => {
       expect(result).toEqual({ data: { key: 'value' } });
     });
 
-    it('should replace object with array', () => {
+    it('should replace object with array', async () => {
       const existing = { data: { key: 'value' } };
       const update = { data: [1, 2, 3] };
       const result = deepMergeWorkingMemory(existing, update);
@@ -265,7 +265,7 @@ describe('deepMergeWorkingMemory', () => {
   });
 
   describe('immutability', () => {
-    it('should not mutate the existing object', () => {
+    it('should not mutate the existing object', async () => {
       const existing = { name: 'Alice', nested: { a: 1 } };
       const existingCopy = JSON.parse(JSON.stringify(existing));
       const update = { name: 'Bob', nested: { b: 2 } };
@@ -275,7 +275,7 @@ describe('deepMergeWorkingMemory', () => {
       expect(existing).toEqual(existingCopy);
     });
 
-    it('should not mutate the update object', () => {
+    it('should not mutate the update object', async () => {
       const existing = { name: 'Alice' };
       const update = { age: 30, nested: { key: 'value' } };
       const updateCopy = JSON.parse(JSON.stringify(update));
@@ -285,7 +285,7 @@ describe('deepMergeWorkingMemory', () => {
       expect(update).toEqual(updateCopy);
     });
 
-    it('should not return the update object by reference when existing is null', () => {
+    it('should not return the update object by reference when existing is null', async () => {
       const update = { name: 'Ada', nested: { key: 'value' } };
       const result = deepMergeWorkingMemory(null, update);
 
@@ -383,7 +383,7 @@ describe('updateWorkingMemoryTool schema validation (issue #17301)', () => {
 });
 
 describe('deepMergeWorkingMemory undefined padding', () => {
-  it('leaves existing values untouched when the update sends undefined', () => {
+  it('leaves existing values untouched when the update sends undefined', async () => {
     const existing = { people: ['Alice', 'Bob'], work: { company: 'Old Co' } };
     const merged = deepMergeWorkingMemory(existing, { people: undefined, work: { company: 'TechStartup Inc' } });
 

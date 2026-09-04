@@ -36,7 +36,7 @@ function fixture() {
 afterEach(() => vi.restoreAllMocks());
 
 describe('Subconscious observation curator', () => {
-  it('uses the thread as the resource scope fallback', () => {
+  it('uses the thread as the resource scope fallback', async () => {
     const { context } = fixture();
 
     expect(resolveCuratorScope({ ...context, resourceId: undefined })).toEqual([

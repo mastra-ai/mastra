@@ -27,9 +27,9 @@ class MockMCPServer extends MCPServerBase {
   async close() {
     /* no-op */
   }
-  getServerInfo() {
+  async getServerInfo() {
     return {
-      id: this.id,
+      id: await this.getId(),
       name: this.name,
       description: this.description,
       repository: this.repository,
@@ -40,9 +40,9 @@ class MockMCPServer extends MCPServerBase {
       },
     };
   }
-  getServerDetail() {
+  async getServerDetail() {
     return {
-      ...this.getServerInfo(),
+      ...(await this.getServerInfo()),
       package_canonical: this.packageCanonical,
       packages: this.packages,
       remotes: this.remotes,
@@ -130,23 +130,23 @@ describe('Mastra - getMCPServer Versioning Logic', () => {
     serverC_invalid_date = new MockMCPServer(serverC_invalid_date_config);
   });
 
-  it('should return undefined if no mcpServers are configured', () => {
+  it('should return undefined if no mcpServers are configured', async () => {
     const mastra = new Mastra({ logger: mockLogger });
-    expect(mastra.getMCPServerById(serverIdA)).toBeUndefined();
+    expect(await mastra.getMCPServerById(serverIdA)).toBeUndefined();
   });
 
-  it('should return undefined if the logical serverId is not found', () => {
+  it('should return undefined if the logical serverId is not found', async () => {
     const mastra = new Mastra({
       logger: mockLogger,
       mcpServers: {
         instanceKeyForB: serverB_v1, // Only server B is present
       },
     });
-    expect(mastra.getMCPServerById(serverIdA)).toBeUndefined();
+    expect(await mastra.getMCPServerById(serverIdA)).toBeUndefined();
     expect(loggerDebugMock).toHaveBeenCalledWith(`No MCP servers found with logical ID: ${serverIdA}`);
   });
 
-  it('should fetch a specific version when it exists', () => {
+  it('should fetch a specific version when it exists', async () => {
     const mastra = new Mastra({
       logger: mockLogger,
       mcpServers: {
@@ -155,12 +155,12 @@ describe('Mastra - getMCPServer Versioning Logic', () => {
         instanceKey3: serverA_v3_latest,
       },
     });
-    const result = mastra.getMCPServerById(serverIdA, '2.0.0');
+    const result = await mastra.getMCPServerById(serverIdA, '2.0.0');
     expect(result).toBe(serverA_v2);
     expect(result?.version).toBe('2.0.0');
   });
 
-  it('should return undefined when a specific version does not exist for a logical ID', () => {
+  it('should return undefined when a specific version does not exist for a logical ID', async () => {
     const mastra = new Mastra({
       logger: mockLogger,
       mcpServers: {
@@ -168,14 +168,14 @@ describe('Mastra - getMCPServer Versioning Logic', () => {
         instanceKey3: serverA_v3_latest,
       },
     });
-    const result = mastra.getMCPServerById(serverIdA, '2.0.0'); // v2.0.0 is missing
+    const result = await mastra.getMCPServerById(serverIdA, '2.0.0'); // v2.0.0 is missing
     expect(result).toBeUndefined();
     expect(loggerDebugMock).toHaveBeenCalledWith(
       `MCP server with logical ID '${serverIdA}' found, but not version '2.0.0'.`,
     );
   });
 
-  it('should fetch the latest version when no version is specified', () => {
+  it('should fetch the latest version when no version is specified', async () => {
     const mastra = new Mastra({
       logger: mockLogger,
       mcpServers: {
@@ -184,12 +184,12 @@ describe('Mastra - getMCPServer Versioning Logic', () => {
         instanceKey3: serverA_v3_latest, // Newest
       },
     });
-    const result = mastra.getMCPServerById(serverIdA);
+    const result = await mastra.getMCPServerById(serverIdA);
     expect(result).toBe(serverA_v3_latest);
     expect(result?.version).toBe('3.0.0');
   });
 
-  it('should fetch the correct latest version when order of registration is mixed', () => {
+  it('should fetch the correct latest version when order of registration is mixed', async () => {
     const mastra = new Mastra({
       logger: mockLogger,
       mcpServers: {
@@ -198,11 +198,11 @@ describe('Mastra - getMCPServer Versioning Logic', () => {
         instanceKey2: serverA_v2,
       },
     });
-    const result = mastra.getMCPServerById(serverIdA);
+    const result = await mastra.getMCPServerById(serverIdA);
     expect(result).toBe(serverA_v3_latest);
   });
 
-  it('should return the single available version if only one exists for the logical ID (no version specified)', () => {
+  it('should return the single available version if only one exists for the logical ID (no version specified)', async () => {
     const mastra = new Mastra({
       logger: mockLogger,
       mcpServers: {
@@ -214,18 +214,18 @@ describe('Mastra - getMCPServer Versioning Logic', () => {
     expect(result?.version).toBe('1.0.0');
   });
 
-  it('should return the single available version if only one exists (specific version matching requested)', () => {
+  it('should return the single available version if only one exists (specific version matching requested)', async () => {
     const mastra = new Mastra({
       logger: mockLogger,
       mcpServers: {
         instanceKeyB: serverB_v1,
       },
     });
-    const result = mastra.getMCPServerById('logical-server-b', '1.0.0');
+    const result = await mastra.getMCPServerById('logical-server-b', '1.0.0');
     expect(result).toBe(serverB_v1);
   });
 
-  it('should handle servers with invalid release dates when fetching latest', () => {
+  it('should handle servers with invalid release dates when fetching latest', async () => {
     const mastra = new Mastra({
       logger: mockLogger,
       mcpServers: {
@@ -234,12 +234,12 @@ describe('Mastra - getMCPServer Versioning Logic', () => {
         instanceKeyA2: serverA_v2, // Valid date, latest among valid
       },
     });
-    const result = mastra.getMCPServerById(serverIdA);
+    const result = await mastra.getMCPServerById(serverIdA);
     expect(result).toBe(serverA_v2); // Should pick serverA_v2 as latest valid
     expect(loggerWarnMock).not.toHaveBeenCalledWith(expect.stringContaining('Could not determine the latest server'));
   });
 
-  it('should return undefined and warn if all servers for a logical ID have invalid dates when fetching latest', () => {
+  it('should return undefined and warn if all servers for a logical ID have invalid dates when fetching latest', async () => {
     const serverA_v5_invalid_too = new MockMCPServer({
       id: serverIdA,
       name: 'Server A Invalid Date 2',
@@ -254,14 +254,14 @@ describe('Mastra - getMCPServer Versioning Logic', () => {
         instanceKeyA5Invalid: serverA_v5_invalid_too,
       },
     });
-    const result = mastra.getMCPServerById(serverIdA);
+    const result = await mastra.getMCPServerById(serverIdA);
     expect(result).toBeUndefined();
     expect(loggerWarnMock).toHaveBeenCalledWith(
       expect.stringContaining(`Could not determine the latest server for logical ID '${serverIdA}'`),
     );
   });
 
-  it('should return the correct latest version if one server has an invalid date but others are valid', () => {
+  it('should return the correct latest version if one server has an invalid date but others are valid', async () => {
     const mastra = new Mastra({
       logger: mockLogger,
       mcpServers: {
@@ -270,7 +270,7 @@ describe('Mastra - getMCPServer Versioning Logic', () => {
         instanceKeyA1: serverA_v1, // Valid, older
       },
     });
-    const result = mastra.getMCPServerById(serverIdA);
+    const result = await mastra.getMCPServerById(serverIdA);
     expect(result).toBe(serverA_v3_latest);
   });
 });

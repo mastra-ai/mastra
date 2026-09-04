@@ -49,7 +49,7 @@ function buildArgs(overrides: Partial<ComputeStateSignalArgs> = {}): ComputeStat
 }
 
 describe('WorkingMemoryStateProcessor', () => {
-  it('exports stable id and stateId', () => {
+  it('exports stable id and stateId', async () => {
     expect(WORKING_MEMORY_STATE_PROCESSOR_ID).toBe('working-memory-state');
     expect(WORKING_MEMORY_STATE_ID).toBe('working-memory');
     const memory = buildMemoryMock({ template: null, data: null });
@@ -191,7 +191,7 @@ describe('WorkingMemoryStateProcessor', () => {
     expect(result).toBeUndefined();
   });
 
-  it('produces compact, stable, content-addressed cacheKeys', () => {
+  it('produces compact, stable, content-addressed cacheKeys', async () => {
     const longBlob = '# User Profile\n' + '- Name: Caleb\n'.repeat(1000);
     const a = stableWorkingMemoryCacheKey({ format: 'markdown', data: longBlob });
     const b = stableWorkingMemoryCacheKey({ format: 'markdown', data: longBlob });
@@ -203,7 +203,7 @@ describe('WorkingMemoryStateProcessor', () => {
     expect(a.length).toBe(71);
   });
 
-  it('treats format as part of the cache key', () => {
+  it('treats format as part of the cache key', async () => {
     const md = stableWorkingMemoryCacheKey({ format: 'markdown', data: '{}' });
     const json = stableWorkingMemoryCacheKey({ format: 'json', data: '{}' });
     expect(md).not.toBe(json);

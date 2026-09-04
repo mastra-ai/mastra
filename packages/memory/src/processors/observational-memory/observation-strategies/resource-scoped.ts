@@ -145,7 +145,7 @@ export class ResourceScopedObservationStrategy extends ObservationStrategy {
     const threshold = getMaxThreshold(this.observationConfig.messageTokens);
 
     for (const [threadId, msgs] of this.messagesByThread) {
-      const tokens = await this.tokenCounter.countMessagesAsync(msgs);
+      const tokens = await this.tokenCounter.countMessages(msgs);
       this.threadTokenCounts.set(threadId, tokens);
     }
 
@@ -205,7 +205,7 @@ export class ResourceScopedObservationStrategy extends ObservationStrategy {
 
     for (const [threadId, msgs] of this.threadsWithMessages) {
       const lastMessage = msgs[msgs.length - 1];
-      const tokensToObserve = await this.tokenCounter.countMessagesAsync(msgs);
+      const tokensToObserve = await this.tokenCounter.countMessages(msgs);
       this.threadTokensToObserve.set(threadId, tokensToObserve);
 
       if (lastMessage?.id) {
@@ -311,7 +311,7 @@ export class ResourceScopedObservationStrategy extends ObservationStrategy {
         failures: result.extractionFailures,
         previousValues,
         rawObservations: result.observations,
-        recentMessages: formatMessagesForObserver(threadMessages, { maxPartLength: 500 }),
+        recentMessages: await formatMessagesForObserver(threadMessages, { maxPartLength: 500 }),
         threadId,
         resourceId: this.resourceId,
         mainAgent: this.opts.agent,
@@ -351,7 +351,7 @@ export class ResourceScopedObservationStrategy extends ObservationStrategy {
     for (const obsResult of this.observationResults) {
       const { threadId, threadMessages, result } = obsResult;
 
-      cycleObservationTokens += this.tokenCounter.countObservations(result.observations);
+      cycleObservationTokens += await this.tokenCounter.countObservations(result.observations);
 
       const messageRange = this.retrieval ? buildMessageRange(threadMessages) : undefined;
       const threadSection = await this.wrapWithThreadTag(threadId, result.observations, messageRange);
@@ -396,7 +396,7 @@ export class ResourceScopedObservationStrategy extends ObservationStrategy {
     const newMessageIds = observedMessages.map(m => m.id);
     const existingIds = record.observedMessageIds ?? [];
     const observedMessageIds = [...new Set([...existingIds, ...newMessageIds])];
-    const observationTokens = this.tokenCounter.countObservations(currentObservations);
+    const observationTokens = await this.tokenCounter.countObservations(currentObservations);
 
     return {
       observations: currentObservations,
@@ -487,7 +487,7 @@ export class ResourceScopedObservationStrategy extends ObservationStrategy {
       const lastMessage = threadMessages[threadMessages.length - 1];
       if (lastMessage?.id) {
         const tokensObserved =
-          this.threadTokensToObserve.get(threadId) ?? (await this.tokenCounter.countMessagesAsync(threadMessages));
+          this.threadTokensToObserve.get(threadId) ?? (await this.tokenCounter.countMessages(threadMessages));
         const endMarker = createObservationEndMarker({
           cycleId,
           operationType: 'observation',

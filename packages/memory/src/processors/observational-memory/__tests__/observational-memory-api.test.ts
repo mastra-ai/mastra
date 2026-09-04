@@ -2250,29 +2250,29 @@ describe('accessor methods', () => {
     om = createOM(storage);
   });
 
-  it('getStorage should return the storage instance', () => {
+  it('getStorage should return the storage instance', async () => {
     expect(om.getStorage()).toBe(storage);
   });
 
-  it('getTokenCounter should return a TokenCounter', () => {
+  it('getTokenCounter should return a TokenCounter', async () => {
     const counter = om.getTokenCounter();
     expect(counter).toBeTruthy();
     expect(typeof counter.countString).toBe('function');
   });
 
-  it('getObservationConfig should return observation config', () => {
+  it('getObservationConfig should return observation config', async () => {
     const config = om.getObservationConfig();
     expect(config).toBeTruthy();
     expect(config.messageTokens).toBeDefined();
   });
 
-  it('getReflectionConfig should return reflection config', () => {
+  it('getReflectionConfig should return reflection config', async () => {
     const config = om.getReflectionConfig();
     expect(config).toBeTruthy();
     expect(config.observationTokens).toBeDefined();
   });
 
-  it('config getter should return scope and token thresholds', () => {
+  it('config getter should return scope and token thresholds', async () => {
     const config = om.config;
     expect(config.scope).toBe('thread');
     expect(config.observation.messageTokens).toBeDefined();
@@ -2669,25 +2669,25 @@ describe('token counting methods', () => {
     om = createOM(storage);
   });
 
-  it('getTokenCounter should count tokens in strings', () => {
-    const count = om.getTokenCounter().countString('Hello, this is a test string for token counting.');
+  it('getTokenCounter should count tokens in strings', async () => {
+    const count = await om.getTokenCounter().countString('Hello, this is a test string for token counting.');
     expect(count).toBeGreaterThan(0);
     expect(Number.isInteger(count)).toBe(true);
   });
 
-  it('getTokenCounter should return 0 for empty string', () => {
-    expect(om.getTokenCounter().countString('')).toBe(0);
+  it('getTokenCounter should return 0 for empty string', async () => {
+    expect(await om.getTokenCounter().countString('')).toBe(0);
   });
 
-  it('getTokenCounter should count tokens in messages', () => {
+  it('getTokenCounter should count tokens in messages', async () => {
     const messages = [createTestMessage('Hello world', 'user'), createTestMessage('Hi there', 'assistant')];
-    const count = om.getTokenCounter().countMessages(messages);
+    const count = await om.getTokenCounter().countMessages(messages);
     expect(count).toBeGreaterThan(0);
   });
 
   it('getTokenCounter async should return consistent results', async () => {
     const messages = [createTestMessage('Hello world', 'user')];
-    const sync = om.getTokenCounter().countMessages(messages);
+    const sync = await om.getTokenCounter().countMessages(messages);
     const asyncCount = await om.getTokenCounter().countMessagesAsync(messages);
 
     // Async may be slightly different due to image probing, but for text-only they should match
@@ -3109,7 +3109,7 @@ describe('sealMessagesForBuffering', () => {
     om = createOM(storage, { messageTokens: 500, bufferTokens: 0.2 });
   });
 
-  it('should set sealed metadata on messages with parts', () => {
+  it('should set sealed metadata on messages with parts', async () => {
     const messages: MastraDBMessage[] = [
       {
         ...createTestMessage('Hello', 'user', 'msg-1'),
@@ -3131,7 +3131,7 @@ describe('sealMessagesForBuffering', () => {
     expect(lastPart.metadata?.mastra?.sealedAt).toBeGreaterThan(0);
   });
 
-  it('should not throw on messages without parts', () => {
+  it('should not throw on messages without parts', async () => {
     const messages: MastraDBMessage[] = [
       {
         id: 'msg-noparts',

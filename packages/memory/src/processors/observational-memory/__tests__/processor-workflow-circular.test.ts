@@ -218,7 +218,7 @@ describe('processor workflow + observational memory (issue #17933)', () => {
 });
 
 describe('ObservationTurn/ObservationStep serialization contract', () => {
-  it('projects the turn<->step cycle to a minimal acyclic value without mutating the live objects', () => {
+  it('projects the turn<->step cycle to a minimal acyclic value without mutating the live objects', async () => {
     const turn = new ObservationTurn({
       om: { scope: 'thread' } as any,
       threadId: 'thread-1',

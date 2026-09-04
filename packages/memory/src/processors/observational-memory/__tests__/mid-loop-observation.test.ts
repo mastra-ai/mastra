@@ -182,7 +182,7 @@ describe('Mid-Loop Observation', () => {
         createTestMessage('This is a response from the assistant', 'assistant', 'msg-2'),
       ];
 
-      const totalTokens = tokenCounter.countMessages(messages);
+      const totalTokens = await tokenCounter.countMessages(messages);
 
       expect(totalTokens).toBeGreaterThan(0);
     });
@@ -195,7 +195,7 @@ describe('Mid-Loop Observation', () => {
         messages.push(createTestMessage(`Message ${i}: `.padEnd(150, 'x'), 'user', `msg-${i}`));
       }
 
-      const totalTokens = tokenCounter.countMessages(messages);
+      const totalTokens = await tokenCounter.countMessages(messages);
 
       // With 500 token threshold, 20 150-char messages should exceed it
       expect(totalTokens).toBeGreaterThan(500);
