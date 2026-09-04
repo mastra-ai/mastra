@@ -956,7 +956,7 @@ export class DatasetsPG extends DatasetsStorage {
         );
         if (experimentTablesExist.exists) {
           await t.none(
-            `UPDATE ${experimentResultsTable} SET "input" = 'null'::jsonb, "output" = NULL, "groundTruth" = NULL, "error" = NULL, "toolMockReport" = NULL, "metadata" = $2::jsonb WHERE "itemId" = $1 AND "experimentId" IN (SELECT "id" FROM ${experimentsTable} WHERE "datasetId" = $3)`,
+            `UPDATE ${experimentResultsTable} SET "input" = 'null'::jsonb, "output" = NULL, "groundTruth" = NULL, "error" = NULL, "toolMockReport" = NULL, "tags" = NULL, "comment" = NULL, "metadata" = $2::jsonb WHERE "itemId" = $1 AND "experimentId" IN (SELECT "id" FROM ${experimentsTable} WHERE "datasetId" = $3)`,
             [id, purgedMetadata, datasetId],
           );
         }

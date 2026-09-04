@@ -860,7 +860,18 @@ export class MongoDBDatasetsStorage extends DatasetsStorage {
           if (experimentIds.length > 0) {
             await experimentResultsCollection.updateMany(
               { itemId: id, experimentId: { $in: experimentIds } },
-              { $set: { input: null, output: null, groundTruth: null, error: null, toolMockReport: null, metadata } },
+              {
+                $set: {
+                  input: null,
+                  output: null,
+                  groundTruth: null,
+                  error: null,
+                  toolMockReport: null,
+                  tags: null,
+                  comment: null,
+                  metadata,
+                },
+              },
               { session },
             );
           }

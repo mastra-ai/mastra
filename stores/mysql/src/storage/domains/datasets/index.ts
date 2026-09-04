@@ -46,7 +46,6 @@ import { formatTableName, parseDateTime, quoteIdentifier, transformToSqlValue } 
 function parseJSON<T>(value: unknown): T | undefined {
   if (value === null || value === undefined) return undefined;
   if (typeof value === 'string') {
-    if (!value) return undefined;
     try {
       return JSON.parse(value) as T;
     } catch {
@@ -58,6 +57,10 @@ function parseJSON<T>(value: unknown): T | undefined {
   }
   if (typeof value === 'object') return value as T;
   return value as T;
+}
+
+function parseOptionalJSON<T>(value: unknown, emptyValue: null | undefined): T | null | undefined {
+  return value === null || value === undefined ? emptyValue : parseJSON<T>(value);
 }
 
 function jsonArg(value: unknown): string | null {
@@ -256,16 +259,14 @@ export class DatasetsMySQL extends DatasetsStorage {
       organizationId: (row.organizationId as string | null | undefined) ?? null,
       projectId: (row.projectId as string | null | undefined) ?? null,
       input: row.input === null ? null : parseJSON<Record<string, unknown>>(row.input),
-      groundTruth: row.groundTruth ? parseJSON<Record<string, unknown>>(row.groundTruth) : emptyValue,
-      expectedTrajectory: row.expectedTrajectory
-        ? parseJSON<DatasetItem['expectedTrajectory']>(row.expectedTrajectory)
-        : emptyValue,
-      toolMocks: row.toolMocks ? parseJSON<DatasetItem['toolMocks']>(row.toolMocks) : emptyValue,
+      groundTruth: parseOptionalJSON<Record<string, unknown>>(row.groundTruth, emptyValue),
+      expectedTrajectory: parseOptionalJSON<DatasetItem['expectedTrajectory']>(row.expectedTrajectory, emptyValue),
+      toolMocks: parseOptionalJSON<DatasetItem['toolMocks']>(row.toolMocks, emptyValue),
       unmockedToolPolicy: row.unmockedToolPolicy ?? emptyValue,
-      scorerIds: row.scorerIds ? parseJSON<string[]>(row.scorerIds) : emptyValue,
-      requestContext: row.requestContext ? parseJSON<Record<string, unknown>>(row.requestContext) : emptyValue,
+      scorerIds: parseOptionalJSON<string[]>(row.scorerIds, emptyValue),
+      requestContext: parseOptionalJSON<Record<string, unknown>>(row.requestContext, emptyValue),
       metadata,
-      source: row.source ? parseJSON<DatasetItem['source']>(row.source) : emptyValue,
+      source: parseOptionalJSON<DatasetItem['source']>(row.source, emptyValue),
       createdAt: parseDateTime(row.createdAt) ?? new Date(),
       updatedAt: parseDateTime(row.updatedAt) ?? new Date(),
     };
@@ -284,16 +285,14 @@ export class DatasetsMySQL extends DatasetsStorage {
       validTo: row.validTo as number | null,
       isDeleted: Boolean(row.isDeleted),
       input: row.input === null ? null : parseJSON<Record<string, unknown>>(row.input),
-      groundTruth: row.groundTruth ? parseJSON<Record<string, unknown>>(row.groundTruth) : emptyValue,
-      expectedTrajectory: row.expectedTrajectory
-        ? parseJSON<DatasetItem['expectedTrajectory']>(row.expectedTrajectory)
-        : emptyValue,
-      toolMocks: row.toolMocks ? parseJSON<DatasetItem['toolMocks']>(row.toolMocks) : emptyValue,
+      groundTruth: parseOptionalJSON<Record<string, unknown>>(row.groundTruth, emptyValue),
+      expectedTrajectory: parseOptionalJSON<DatasetItem['expectedTrajectory']>(row.expectedTrajectory, emptyValue),
+      toolMocks: parseOptionalJSON<DatasetItem['toolMocks']>(row.toolMocks, emptyValue),
       unmockedToolPolicy: row.unmockedToolPolicy ?? emptyValue,
-      scorerIds: row.scorerIds ? parseJSON<string[]>(row.scorerIds) : emptyValue,
-      requestContext: row.requestContext ? parseJSON<Record<string, unknown>>(row.requestContext) : emptyValue,
+      scorerIds: parseOptionalJSON<string[]>(row.scorerIds, emptyValue),
+      requestContext: parseOptionalJSON<Record<string, unknown>>(row.requestContext, emptyValue),
       metadata,
-      source: row.source ? parseJSON<DatasetItem['source']>(row.source) : emptyValue,
+      source: parseOptionalJSON<DatasetItem['source']>(row.source, emptyValue),
       createdAt: parseDateTime(row.createdAt) ?? new Date(),
       updatedAt: parseDateTime(row.updatedAt) ?? new Date(),
     };
@@ -958,7 +957,7 @@ export class DatasetsMySQL extends DatasetsStorage {
 
       if (experimentTablesExist) {
         await connection.execute(
-          `UPDATE ${formatTableName(TABLE_EXPERIMENT_RESULTS)} SET ${quoteIdentifier('input', 'column name')} = ?, ${quoteIdentifier('output', 'column name')} = NULL, ${quoteIdentifier('groundTruth', 'column name')} = NULL, ${quoteIdentifier('error', 'column name')} = NULL, ${quoteIdentifier('toolMockReport', 'column name')} = NULL, ${quoteIdentifier('metadata', 'column name')} = ? WHERE ${quoteIdentifier('itemId', 'column name')} = ? AND ${quoteIdentifier('experimentId', 'column name')} IN (SELECT id FROM ${formatTableName(TABLE_EXPERIMENTS)} WHERE ${quoteIdentifier('datasetId', 'column name')} = ?)`,
+          `UPDATE ${formatTableName(TABLE_EXPERIMENT_RESULTS)} SET ${quoteIdentifier('input', 'column name')} = ?, ${quoteIdentifier('output', 'column name')} = NULL, ${quoteIdentifier('groundTruth', 'column name')} = NULL, ${quoteIdentifier('error', 'column name')} = NULL, ${quoteIdentifier('toolMockReport', 'column name')} = NULL, ${quoteIdentifier('tags', 'column name')} = NULL, ${quoteIdentifier('comment', 'column name')} = NULL, ${quoteIdentifier('metadata', 'column name')} = ? WHERE ${quoteIdentifier('itemId', 'column name')} = ? AND ${quoteIdentifier('experimentId', 'column name')} IN (SELECT id FROM ${formatTableName(TABLE_EXPERIMENTS)} WHERE ${quoteIdentifier('datasetId', 'column name')} = ?)`,
           ['null', purgedMetadata, id, datasetId],
         );
       }

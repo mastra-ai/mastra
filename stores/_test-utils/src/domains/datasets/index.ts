@@ -1002,8 +1002,8 @@ export function createDatasetsTests({
           id: result.id,
           experimentId: experiment.id,
           status: 'needs-review',
-          tags: ['retain-me'],
-          comment: 'retain this reviewer state',
+          tags: ['contains-patient-name'],
+          comment: 'Patient Alice requires review',
         });
         const otherDataset = await datasetsStorage.createDataset({ name: 'other-purge-experiment-results' });
         const otherExperiment = await experimentsStorage!.createExperiment({
@@ -1045,8 +1045,8 @@ export function createDatasetsTests({
           error: null,
           metadata: { __purged: true },
           status: 'needs-review',
-          tags: ['retain-me'],
-          comment: 'retain this reviewer state',
+          tags: null,
+          comment: null,
         });
         if (supportsToolMocks) {
           expect(listed.results[0]!.toolMockReport).toBeNull();

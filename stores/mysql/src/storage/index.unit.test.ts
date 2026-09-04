@@ -204,6 +204,50 @@ describe('MySQLStore configuration', () => {
   });
 });
 
+describe('MySQL dataset item mapping', () => {
+  beforeEach(() => {
+    poolInstances.length = 0;
+    const maybeMock = createPool as unknown as { mockClear?: () => void };
+    maybeMock.mockClear?.();
+  });
+
+  it('preserves falsy JSON scalar ground-truth values', async () => {
+    const store = new MySQLStore({ host: 'localhost', user: 'user', password: 'pw', database: 'db' });
+    const datasets = (await store.getStore('datasets'))!;
+    const { pool } = poolInstances[poolInstances.length - 1];
+    const rows = [false, 0, ''].map((groundTruth, index) => ({
+      id: `i${index}`,
+      datasetId: 'd1',
+      datasetVersion: 1,
+      externalId: null,
+      organizationId: null,
+      projectId: null,
+      validTo: null,
+      isDeleted: 0,
+      input: { prompt: index },
+      groundTruth,
+      expectedTrajectory: null,
+      toolMocks: null,
+      unmockedToolPolicy: null,
+      scorerIds: null,
+      requestContext: null,
+      metadata: null,
+      source: null,
+      createdAt: '2026-09-04 12:00:00',
+      updatedAt: '2026-09-04 12:00:00',
+    }));
+    pool.execute.mockResolvedValueOnce([rows]).mockResolvedValueOnce([rows]);
+
+    const items = await datasets.getItemsByVersion({ datasetId: 'd1', version: 1 });
+    const history = await datasets.getItemHistory('i0');
+
+    expect(items.map(item => item.groundTruth)).toEqual([false, 0, '']);
+    expect(history.map(item => item.groundTruth)).toEqual([false, 0, '']);
+
+    await store.close();
+  });
+});
+
 describe('MySQLStore tool mocks rejection', () => {
   beforeEach(() => {
     poolInstances.length = 0;
@@ -269,7 +313,7 @@ describe('MySQLStore tool mocks rejection', () => {
     await store.close();
   });
 
-  it('clears tool mock reports from linked experiment results during purge', async () => {
+  it('clears user content from linked experiment results during purge', async () => {
     const store = newStore();
     const datasets = (await store.getStore('datasets')) as any;
     const { pool, connection } = poolInstances[poolInstances.length - 1];
@@ -286,6 +330,8 @@ describe('MySQLStore tool mocks rejection', () => {
     );
     expect(resultUpdate?.[0]).toContain('`error` = NULL');
     expect(resultUpdate?.[0]).toContain('`toolMockReport` = NULL');
+    expect(resultUpdate?.[0]).toContain('`tags` = NULL');
+    expect(resultUpdate?.[0]).toContain('`comment` = NULL');
     expect(resultUpdate?.[1]).toEqual(expect.arrayContaining(['i1', 'd1']));
     expect(connection.commit).toHaveBeenCalledOnce();
 

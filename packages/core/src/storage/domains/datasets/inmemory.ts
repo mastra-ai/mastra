@@ -420,6 +420,8 @@ export class DatasetsInMemory extends DatasetsStorage {
       result.groundTruth = null;
       result.error = null;
       result.toolMockReport = null;
+      result.tags = null;
+      result.comment = null;
       result.metadata = { __purged: true, purgedAt };
     }
   }

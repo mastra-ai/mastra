@@ -10,7 +10,7 @@
 '@mastra/pg': patch
 ---
 
-Added `dataset.purgeItem()` to permanently redact item content from every stored dataset version and linked experiment results while preserving version and review metadata.
+Added `dataset.purgeItem()` to permanently redact item content from every stored dataset version and linked experiment results while preserving version history and review status.
 
 ```typescript
 await dataset.purgeItem({ itemId: 'item-123' });
