@@ -22,7 +22,7 @@
     "dist"
   ],
   "scripts": {
-    "generate:api-manifest": "pnpm --filter @mastra/server generate:api-cli-route-metadata",
+    "generate:api-manifest": "pnpm --filter @mastra/server generate:api-cli-route-metadata && pnpm --filter @mastra/factory generate:api-cli-route-metadata",
     "build:lib": "tsdown --silent --config tsdown.config.ts",
     "prepack": "tsx ../../scripts/generate-package-docs.ts",
     "test": "vitest run",

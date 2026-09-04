@@ -13,6 +13,7 @@ import { registerApiRoute } from '@mastra/core/server';
 import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import { runFactoryHealthCheck } from '../supervisor/health.js';
 import { supervisorResourceId, supervisorThreadId } from '../supervisor/session.js';
+import { FACTORY_ROUTE_CONTRACTS } from './contracts.js';
 
 interface SupervisorRouteDependencies {
   workItems: WorkItemsStorage;
@@ -27,8 +28,8 @@ export function buildSupervisorRoutes(dependencies: SupervisorRouteDependencies)
     // The session is addressed deterministically and created lazily by the
     // agent controller on first reach (see hydrateSupervisorSession), so
     // "ensure" only has to hand back the address once ownership is verified.
-    registerApiRoute('/web/factory/projects/:id/supervisor/session', {
-      method: 'POST',
+    registerApiRoute(FACTORY_ROUTE_CONTRACTS.supervisorSession.path, {
+      method: FACTORY_ROUTE_CONTRACTS.supervisorSession.method,
       requiresAuth: false,
       handler: async context => {
         const resolved = await dependencies.resolveProject(context);
@@ -40,8 +41,8 @@ export function buildSupervisorRoutes(dependencies: SupervisorRouteDependencies)
         });
       },
     }),
-    registerApiRoute('/web/factory/projects/:id/supervisor/health', {
-      method: 'GET',
+    registerApiRoute(FACTORY_ROUTE_CONTRACTS.supervisorHealth.path, {
+      method: FACTORY_ROUTE_CONTRACTS.supervisorHealth.method,
       requiresAuth: false,
       handler: async context => {
         const resolved = await dependencies.resolveProject(context);
