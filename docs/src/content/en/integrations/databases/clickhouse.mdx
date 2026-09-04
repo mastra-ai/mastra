@@ -75,7 +75,7 @@ Trace deletion cascades to spans, trace roots and branches, metrics, logs, score
 
 Lightweight deletion is a hide-only operation that marks rows with ClickHouse's `_row_exists` mask. Physical removal depends on merges and deployment-configured retention TTLs. `ObservabilityStorageClickhouseVNext` applies retention only when you provide a `RetentionConfig`; Mastra OSS doesn't configure a default retention TTL.
 
-Mastra retains each deletion predicate for 45 days so an external scheduler can reapply requests and verify physical purging. Mastra OSS provides the storage primitives but doesn't run this scheduler.
+Deletion requests aren't purged automatically in Mastra OSS. Automatic retirement will be introduced with future database-agnostic retention configuration.
 
 ### Observability with the legacy domain
 

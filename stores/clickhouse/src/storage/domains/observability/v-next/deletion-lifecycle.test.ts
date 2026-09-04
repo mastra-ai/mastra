@@ -10,7 +10,7 @@ describe('deletion request DDL', () => {
     expect(DELETION_REQUESTS_DDL).toContain('predicateValues Array(String)');
     expect(DELETION_REQUESTS_DDL).toContain('ENGINE = ReplacingMergeTree(updatedAt)');
     expect(DELETION_REQUESTS_DDL).toContain('ORDER BY (organizationId, resourceId, requestId)');
-    expect(DELETION_REQUESTS_DDL).toContain('TTL toDateTime(requestedAt) + INTERVAL 45 DAY');
+    expect(DELETION_REQUESTS_DDL).not.toContain('TTL');
     expect(ALL_TABLE_NAMES).toContain(TABLE_DELETION_REQUESTS);
   });
 });
