@@ -259,6 +259,30 @@ describe('DuckDB advanced trace query', () => {
     expect(compiled.values.at(-1)).toBe(5);
   });
 
+  it('qualifies grouped threads with correlated eligible trace predicates', () => {
+    const compiled = compileDuckDBTraceQuery(
+      plan({
+        group: {
+          by: ['threadId'],
+          where: {
+            traces: {
+              some: {
+                scores: {
+                  some: { op: 'lt', left: { path: 'score' }, right: { literal: 0.6 } },
+                },
+              },
+            },
+          },
+        },
+      }),
+    );
+
+    expect(compiled.sql).toContain('SELECT 1 FROM candidates r');
+    expect(compiled.sql).toContain('r.threadId = g.threadId');
+    expect(compiled.sql).toContain('SELECT 1 FROM current_scores s');
+    expect(compiled.values).toContain(0.6);
+  });
+
   it('fails closed when a trusted plan contains an unmapped field', () => {
     const trusted = plan({ where: { op: 'eq', left: { path: 'traceId' }, right: { literal: 'trace-a' } } });
     const invalid = {

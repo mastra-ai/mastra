@@ -64,6 +64,15 @@ describe('traceQueryRequestSchema', () => {
     expect(traceQueryRequestSchema.safeParse({ ...baseRequest, group: { by: ['threadId'], where: {} } }).success).toBe(
       false,
     );
+    expect(
+      traceQueryRequestSchema.safeParse({
+        ...baseRequest,
+        group: {
+          by: ['threadId'],
+          where: { traces: { some: { op: 'exists', path: 'traceId' } } },
+        },
+      }).success,
+    ).toBe(true);
   });
 
   it('bounds membership sets and predicate string payloads by UTF-8 bytes', () => {
@@ -111,6 +120,13 @@ describe('traceQueryRequestSchema', () => {
 
     const error = validationError(() => parsed({ ...baseRequest, where: { op: 'exists', path: `${maxPath}p` } }));
     expect(error.issues).toContainEqual(expect.objectContaining({ code: 'invalid_request', path: ['where', 'path'] }));
+  });
+
+  it('rejects conversation predicates outside thread grouping', () => {
+    const predicate = { traces: { some: { op: 'exists', path: 'traceId' } } };
+    expect(traceQueryRequestSchema.safeParse({ ...baseRequest, where: predicate }).success).toBe(false);
+    expect(traceQueryRequestSchema.safeParse({ ...baseRequest, groupWhere: predicate }).success).toBe(false);
+    expect(traceQueryRequestSchema.safeParse({ ...baseRequest, having: predicate }).success).toBe(false);
   });
 
   it('does not expose truthy or falsy predicates', () => {
@@ -208,6 +224,80 @@ describe('planTraceQuery', () => {
           predicate: { type: 'presence', field: 'error', operator: 'exists' },
         },
       ],
+    });
+  });
+
+  it('plans conversation predicates with trace and related-record binding', () => {
+    const plan = planTraceQuery(
+      parsed({
+        ...baseRequest,
+        group: {
+          by: ['threadId'],
+          where: {
+            op: 'and',
+            args: [
+              {
+                traces: {
+                  some: {
+                    scores: {
+                      some: {
+                        op: 'and',
+                        args: [
+                          { op: 'eq', left: { path: 'scorerId' }, right: { literal: 'factuality' } },
+                          { op: 'lt', left: { path: 'score' }, right: { literal: 0.6 } },
+                        ],
+                      },
+                    },
+                  },
+                },
+              },
+              {
+                traces: {
+                  none: {
+                    feedback: {
+                      some: {
+                        op: 'eq',
+                        left: { path: 'feedbackType' },
+                        right: { literal: 'clinician-correction' },
+                      },
+                    },
+                  },
+                },
+              },
+            ],
+          },
+        },
+      }),
+    );
+
+    expect(plan).toMatchObject({
+      result: 'groups',
+      groupWhere: {
+        type: 'boolean',
+        operator: 'and',
+        args: [
+          {
+            type: 'relation',
+            collection: 'traces',
+            quantifier: 'some',
+            predicate: {
+              type: 'relation',
+              collection: 'scores',
+              quantifier: 'some',
+            },
+          },
+          {
+            type: 'relation',
+            collection: 'traces',
+            quantifier: 'none',
+            predicate: {
+              type: 'relation',
+              collection: 'feedback',
+              quantifier: 'some',
+            },
+          },
+        ],
+      },
     });
   });
 
@@ -840,6 +930,29 @@ describe('planTraceQuery', () => {
     );
   });
 
+  it('shares the related collection budget across execution and conversation predicates', () => {
+    const relations: TraceQueryPredicate[] = Array.from({ length: TRACE_QUERY_MAX_RELATED_CLAUSES }, (_, index) => ({
+      scores: {
+        some: { op: 'eq', left: { path: 'scorerId' }, right: { literal: `scorer-${index}` } },
+      },
+    }));
+    const error = validationError(() =>
+      planTraceQuery(
+        parsed({
+          ...baseRequest,
+          where: { op: 'and', args: relations },
+          group: {
+            by: ['threadId'],
+            where: { traces: { some: { op: 'exists', path: 'traceId' } } },
+          },
+        }),
+      ),
+    );
+    expect(error.issues).toContainEqual(
+      expect.objectContaining({ code: 'predicate_too_complex', path: ['group', 'where'] }),
+    );
+  });
+
   it('counts every scalar and membership member toward the global literal budget', () => {
     const setSize = TRACE_QUERY_MAX_SET_VALUES - 1;
     const setCount = Math.floor(TRACE_QUERY_MAX_LITERAL_UNITS / setSize);
@@ -991,6 +1104,30 @@ describe('trace-query cursors', () => {
     expect(
       planTraceQuery(parsed({ ...baseRequest, group: { by: ['threadId'] }, page: { after: groupCursor } })),
     ).toMatchObject({ cursor: { threadId: 'thread-2' } });
+  });
+
+  it('binds group cursors to conversation conditions', () => {
+    const group = {
+      by: ['threadId'] as ['threadId'],
+      where: {
+        traces: { some: { op: 'eq' as const, left: { path: 'environment' }, right: { literal: 'production' } } },
+      },
+    };
+    const plan = planTraceQuery(parsed({ ...baseRequest, group }));
+    const cursor = encodeTraceQueryCursor(plan, { result: 'groups', threadId: 'thread-2' });
+
+    expect(() =>
+      planTraceQuery(
+        parsed({
+          ...baseRequest,
+          group: {
+            ...group,
+            where: { traces: { some: { op: 'eq', left: { path: 'environment' }, right: { literal: 'staging' } } } },
+          },
+          page: { after: cursor },
+        }),
+      ),
+    ).toThrowError(expect.objectContaining<Partial<TraceQueryCursorError>>({ code: 'TRACE_QUERY_CURSOR_CONFLICT' }));
   });
 
   it('distinguishes malformed cursors from binding conflicts', () => {
