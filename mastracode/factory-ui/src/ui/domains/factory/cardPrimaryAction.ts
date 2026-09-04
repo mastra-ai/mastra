@@ -150,7 +150,8 @@ export function cardPrimaryAction({
 }
 
 export type CardAction = { label: string; ariaLabel?: string; disabled?: boolean; urgent?: boolean } & (
-  { href: string } | { start: () => void }
+  | { href: string }
+  | { start: () => void }
 );
 
 export function sessionLink(href: string | undefined): CardAction | undefined {
