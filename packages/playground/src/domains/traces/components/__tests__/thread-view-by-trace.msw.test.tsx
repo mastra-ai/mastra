@@ -91,15 +91,73 @@ describe('ThreadViewByTrace', () => {
 
     fireEvent.click(await screen.findByText('Chef agent run'));
 
-    expect(await screen.findByText(/cook pasta/)).not.toBeNull();
-    expect(screen.getByText(/carbonara/)).not.toBeNull();
+    // The span panel is the only place with a close button; its detail body shows the span input.
+    const closeButton = await screen.findByRole('button', { name: /close/i });
     // The conversation column stays mounted while the span panel is open.
     expect(screen.getByTestId('thread-view-by-trace')).not.toBeNull();
     expect(screen.getByText('Chef agent follow-up')).not.toBeNull();
     await waitFor(() => expect(queryClient.isFetching()).toBe(0));
 
-    fireEvent.click(screen.getByRole('button', { name: /close/i }));
-    await waitFor(() => expect(screen.queryByText(/cook pasta/)).toBeNull());
+    fireEvent.click(closeButton);
+    await waitFor(() => expect(screen.queryByRole('button', { name: /close/i })).toBeNull());
+  });
+
+  describe('highlighting the spans behind a message', () => {
+    const spanLabel = (name: string) => screen.getByLabelText(`View details for span ${name}`);
+
+    it('fades the other spans of that trace and opens the first highlighted span', async () => {
+      installHandlers();
+      const { queryClient } = renderView();
+
+      // The assistant reply of trace-a is backed by the root span and its tool call.
+      const [, assistantAction] = await screen.findAllByRole('button', { name: 'Highlight spans' });
+      if (!assistantAction) throw new Error('expected a highlight action per message');
+      await screen.findByLabelText('View details for span Recipe lookup');
+
+      expect(spanLabel('Recipe lookup').className).not.toContain('opacity-30');
+      fireEvent.click(assistantAction);
+
+      // Nothing to fade in trace-a for the assistant turn (all its spans are featured)...
+      expect(spanLabel('Chef agent run').className).not.toContain('opacity-30');
+      expect(spanLabel('Recipe lookup').className).not.toContain('opacity-30');
+      // ...and the other trace's tree is untouched.
+      expect(spanLabel('Chef agent follow-up').className).not.toContain('opacity-30');
+      // The detail panel opens on the first highlighted span.
+      expect(await screen.findByRole('button', { name: /close/i })).not.toBeNull();
+      await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+    });
+
+    it('only keeps the spans behind the user message visible', async () => {
+      installHandlers();
+      const { queryClient } = renderView();
+
+      const [userAction] = await screen.findAllByRole('button', { name: 'Highlight spans' });
+      if (!userAction) throw new Error('expected a highlight action per message');
+      await screen.findByLabelText('View details for span Recipe lookup');
+
+      fireEvent.click(userAction);
+
+      expect(spanLabel('Chef agent run').className).not.toContain('opacity-30');
+      expect(spanLabel('Recipe lookup').className).toContain('opacity-30');
+      expect(spanLabel('Chef agent follow-up').className).not.toContain('opacity-30');
+      await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+    });
+
+    it('clears the highlight when the span panel is closed', async () => {
+      installHandlers();
+      const { queryClient } = renderView();
+
+      const [userAction] = await screen.findAllByRole('button', { name: 'Highlight spans' });
+      if (!userAction) throw new Error('expected a highlight action per message');
+      await screen.findByLabelText('View details for span Recipe lookup');
+
+      fireEvent.click(userAction);
+      expect(spanLabel('Recipe lookup').className).toContain('opacity-30');
+
+      fireEvent.click(await screen.findByRole('button', { name: /close/i }));
+      await waitFor(() => expect(spanLabel('Recipe lookup').className).not.toContain('opacity-30'));
+      await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+    });
   });
 
   it('toggles an embed feedback panel from the icon button', async () => {

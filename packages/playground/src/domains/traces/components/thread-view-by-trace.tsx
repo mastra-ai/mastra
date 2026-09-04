@@ -38,6 +38,25 @@ export function ThreadViewByTrace({ threadId }: ThreadViewByTraceProps) {
   const traces = useMemo(() => [...(tracesData?.spans ?? [])].reverse(), [tracesData]);
 
   const [selected, setSelected] = useState<SelectedSpan | null>(null);
+  // Spans behind the message the user asked to highlight; scoped to one trace since each row has its own tree.
+  const [highlight, setHighlight] = useState<{ traceId: string; spanIds: string[] } | null>(null);
+
+  const selectSpan = (traceId: string, spanId: string | undefined) => {
+    setSelected(spanId ? { traceId, spanId } : null);
+    // Closing the panel also ends the highlight, like clearing the URL param on the traces page.
+    if (!spanId) setHighlight(null);
+  };
+
+  const highlightSpans = (traceId: string, spanIds: string[]) => {
+    const [firstSpanId] = spanIds;
+    if (!firstSpanId) {
+      setHighlight(null);
+      return;
+    }
+    setHighlight({ traceId, spanIds });
+    // Open the detail panel on the first highlighted span, mirroring the traces page.
+    setSelected({ traceId, spanId: firstSpanId });
+  };
 
   if (error) {
     return (
@@ -80,7 +99,9 @@ export function ThreadViewByTrace({ threadId }: ThreadViewByTraceProps) {
             key={trace.traceId}
             traceId={trace.traceId}
             selectedSpanId={selected?.traceId === trace.traceId ? selected.spanId : undefined}
-            onSpanSelect={spanId => setSelected(spanId ? { traceId: trace.traceId, spanId } : null)}
+            featuredSpanIds={highlight?.traceId === trace.traceId ? highlight.spanIds : undefined}
+            onSpanSelect={spanId => selectSpan(trace.traceId, spanId)}
+            onHighlightSpans={spanIds => highlightSpans(trace.traceId, spanIds)}
           />
         ))}
         <div ref={setEndOfListElement} />
@@ -90,7 +111,7 @@ export function ThreadViewByTrace({ threadId }: ThreadViewByTraceProps) {
           key={`${selected.traceId}:${selected.spanId}`}
           traceId={selected.traceId}
           spanId={selected.spanId}
-          onSpanSelect={spanId => setSelected(spanId ? { traceId: selected.traceId, spanId } : null)}
+          onSpanSelect={spanId => selectSpan(selected.traceId, spanId)}
         />
       )}
     </div>
@@ -100,10 +121,18 @@ export function ThreadViewByTrace({ threadId }: ThreadViewByTraceProps) {
 interface TraceThreadRowProps {
   traceId: string;
   selectedSpanId?: string;
+  featuredSpanIds?: string[];
   onSpanSelect: (spanId: string | undefined) => void;
+  onHighlightSpans: (spanIds: string[]) => void;
 }
 
-function TraceThreadRow({ traceId, selectedSpanId, onSpanSelect }: TraceThreadRowProps) {
+function TraceThreadRow({
+  traceId,
+  selectedSpanId,
+  featuredSpanIds,
+  onSpanSelect,
+  onHighlightSpans,
+}: TraceThreadRowProps) {
   // Deduped with the fetch inside TraceThreadItemView (same query key).
   const { data, isLoading } = useTraceSpans(traceId);
 
@@ -137,7 +166,7 @@ function TraceThreadRow({ traceId, selectedSpanId, onSpanSelect }: TraceThreadRo
           </Button>
         </div>
         <div className="min-h-0 flex-1">
-          <TraceThreadItemView traceId={traceId} />
+          <TraceThreadItemView traceId={traceId} onHighlightSpans={onHighlightSpans} />
         </div>
         {showFeedback && (
           <div className="border-border1 bg-surface3 absolute top-8 right-0 z-20 max-h-[calc(100%-2rem)] w-80 overflow-y-auto rounded-lg border shadow-lg">
@@ -153,6 +182,7 @@ function TraceThreadRow({ traceId, selectedSpanId, onSpanSelect }: TraceThreadRo
           <TraceTimeline
             hierarchicalSpans={hierarchicalSpans}
             selectedSpanId={selectedSpanId}
+            featuredSpanIds={featuredSpanIds}
             onSpanClick={id => onSpanSelect(selectedSpanId === id ? undefined : id)}
             expandedSpanIds={expandedSpanIds}
             setExpandedSpanIds={setExpandedSpanIds}
