@@ -146,6 +146,36 @@ interface HealthInputs {
 }
 
 /** Pure: findings from rows. Exported so tests can feed fixtures directly. */
+/** The subject a finding is about: the card, or nothing when there is no card. */
+export type FactoryHealthSubject = Pick<FactoryHealthFinding, 'workItemId' | 'workItemNumber' | 'title'>;
+
+export function factoryHealthSubject(workItemId: string | null, item: WorkItemRow | undefined): FactoryHealthSubject {
+  return { workItemId, workItemNumber: itemNumber(item), title: item?.title ?? '' };
+}
+
+/**
+ * The ONE derivation of a `decision-failed` finding (key and evidence). The
+ * sweep computes it from every failed decision; the dispatcher computes it
+ * the moment a decision fails terminally. Reconciliation keys on
+ * `finding.id`, so the two call sites must never drift: a row the sweep does
+ * not recognize is auto-resolved, and a key it derives differently is a
+ * duplicate.
+ */
+export function decisionFailedFinding(
+  decision: FactoryDeferredDecisionRecord,
+  subject: FactoryHealthSubject,
+  now: Date,
+): FactoryHealthFinding {
+  return {
+    kind: 'decision-failed',
+    id: `decision-failed:${decision.id}`,
+    ...subject,
+    evidence: `Decision ${decision.id} (${describeDecision(decision)}) failed after ${decision.attempts} attempt(s) at ${decision.updatedAt.toISOString()}${decision.failureCode ? ` [${decision.failureCode}]` : ''}: ${truncate(decision.lastError ?? 'no error recorded')}`,
+    ageMs: now.getTime() - decision.updatedAt.getTime(),
+    suggestedRepair: { action: 'retry-decision', decisionId: decision.id },
+  };
+}
+
 export function computeFactoryHealth(
   inputs: HealthInputs,
   now: Date,
@@ -153,22 +183,13 @@ export function computeFactoryHealth(
 ): FactoryHealthReport {
   const itemsById = new Map(inputs.items.map(item => [item.id, item]));
   const findings: FactoryHealthFinding[] = [];
-  const subject = (workItemId: string | null) => {
-    const item = workItemId ? itemsById.get(workItemId) : undefined;
-    return { workItemId, workItemNumber: itemNumber(item), title: item?.title ?? '' };
-  };
+  const subject = (workItemId: string | null) =>
+    factoryHealthSubject(workItemId, workItemId ? itemsById.get(workItemId) : undefined);
 
   for (const decision of inputs.decisions) {
     const base = subject(decision.workItemId);
     if (decision.status === 'failed') {
-      findings.push({
-        kind: 'decision-failed',
-        id: `decision-failed:${decision.id}`,
-        ...base,
-        evidence: `Decision ${decision.id} (${describeDecision(decision)}) failed after ${decision.attempts} attempt(s) at ${decision.updatedAt.toISOString()}${decision.failureCode ? ` [${decision.failureCode}]` : ''}: ${truncate(decision.lastError ?? 'no error recorded')}`,
-        ageMs: now.getTime() - decision.updatedAt.getTime(),
-        suggestedRepair: { action: 'retry-decision', decisionId: decision.id },
-      });
+      findings.push(decisionFailedFinding(decision, base, now));
       continue;
     }
     if (decision.status === 'retry' || decision.status === 'pending') {
