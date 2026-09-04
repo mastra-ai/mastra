@@ -1,5 +1,6 @@
 import { Command } from 'commander';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { ApiCommandDescriptor } from './types';
 import { API_COMMANDS, executeDescriptor, registerApiCommand } from './index';
 
 const fetchMock = vi.fn();
@@ -133,6 +134,49 @@ describe('api command executor', () => {
       headers: {},
       signal: expect.any(AbortSignal),
     });
+  });
+
+  it('routes origin descriptors outside the API prefix while preserving shared options', async () => {
+    const descriptor: ApiCommandDescriptor = {
+      key: 'rootItemList',
+      name: 'root-item list',
+      description: 'List root-level items',
+      method: 'GET',
+      path: '/web/items',
+      positionals: [],
+      acceptsInput: true,
+      inputRequired: false,
+      list: true,
+      responseShape: { kind: 'array' },
+      queryParams: ['status'],
+      bodyParams: [],
+      routePlacement: 'origin',
+    };
+    fetchMock.mockResolvedValueOnce(jsonResponse([{ id: 'item-1' }]));
+
+    await executeDescriptor(descriptor, [], '{"status":"open"}', {
+      url: 'https://example.com',
+      serverApiPrefix: '/custom-api',
+      header: ['X-Test-Run: root-route'],
+      timeout: '2500',
+      pretty: true,
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith('https://example.com/web/items?status=open', {
+      method: 'GET',
+      headers: { 'X-Test-Run': 'root-route' },
+      signal: expect.any(AbortSignal),
+    });
+    expect(stdout).toBe(
+      `${JSON.stringify(
+        {
+          data: [{ id: 'item-1' }],
+          page: { total: 1, page: 0, perPage: 1, hasMore: false },
+        },
+        null,
+        2,
+      )}\n`,
+    );
   });
 
   it('runs an agent with JSON body and writes concise normalized output', async () => {
