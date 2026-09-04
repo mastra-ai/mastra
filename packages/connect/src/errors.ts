@@ -2,6 +2,7 @@ export type MastraConnectErrorCode =
   | 'missing_access_token'
   | 'missing_project_id'
   | 'missing_connection_id'
+  | 'invalid_options'
   | 'connection_not_found'
   | 'multiple_connections'
   | 'needs_reauth'
