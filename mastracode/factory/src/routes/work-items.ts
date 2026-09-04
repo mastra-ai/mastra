@@ -11,6 +11,8 @@ import type { ApiRoute } from '@mastra/core/server';
 import { registerApiRoute } from '@mastra/core/server';
 import type { Context } from 'hono';
 
+import { createBoardRegistry } from '../boards/index.js';
+import type { BoardRegistry } from '../boards/index.js';
 import { factoryDispatchFailureMetadata } from '../rules/dispatch-errors.js';
 import type {
   FactoryStartCoordinator,
@@ -57,6 +59,8 @@ export interface WorkItemRoutesDeps extends RouteDependencies {
   projects: FactoryProjectsStorage;
   /** Work-items domain backing the kanban board. */
   workItems: WorkItemsStorage;
+  /** Boards installed for this Factory instance. */
+  boardRegistry?: BoardRegistry;
   /** Comments domain — backs the mention attention provider. */
   comments: WorkItemCommentsStorage;
   /** Per-project queue-health threshold config. */
@@ -172,8 +176,9 @@ function parseSessions(value: unknown): Record<string, WorkItemSessionInput> | u
 /** Validate an untrusted create body. Unknown keys are dropped. */
 export function parseCreateWorkItem(body: unknown): CreateWorkItemInput | null {
   if (!isRecord(body)) return null;
-  const { externalSource, title, stages, sessions, metadata } = body;
+  const { board, externalSource, title, stages, sessions, metadata } = body;
   if (typeof title !== 'string' || title.trim().length === 0 || title.length > 500) return null;
+  if (board !== undefined && (typeof board !== 'string' || board.length === 0 || board.length > 128)) return null;
 
   const hasParentWorkItemId = 'parentWorkItemId' in body;
   const parentWorkItemId = hasParentWorkItemId ? parseParentWorkItemId(body.parentWorkItemId) : undefined;
@@ -191,6 +196,7 @@ export function parseCreateWorkItem(body: unknown): CreateWorkItemInput | null {
 
   return {
     title: title.trim(),
+    ...(board !== undefined ? { board } : {}),
     ...(parsedSource !== undefined ? { externalSource: parsedSource } : {}),
     ...(hasParentWorkItemId ? { parentWorkItemId: parentWorkItemId ?? null } : {}),
     ...(stages !== undefined ? { stages } : {}),
@@ -700,9 +706,16 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
           if (body === undefined) return c.json({ error: 'Invalid JSON body' }, 400);
           const input = parseCreateWorkItem(body);
           if (!input) return c.json({ error: 'invalid_work_item' }, 400);
-          if ((input.stages ?? ['intake']).length !== 1 || (input.stages ?? ['intake'])[0] !== 'intake') {
+          const boardId = input.board ?? (input.externalSource?.type === 'pull-request' ? 'review' : 'work');
+          const board = (this.deps.boardRegistry ?? createBoardRegistry()).get(boardId);
+          if (!board) return c.json({ error: 'invalid_board', message: `Board '${boardId}' is not installed.` }, 422);
+          const initialStages = input.stages ?? [board.initialPhase];
+          if (initialStages.length !== 1 || initialStages[0] !== board.initialPhase) {
             return c.json(
-              { error: 'governed_transition_required', message: 'New work items must enter through Factory intake.' },
+              {
+                error: 'governed_transition_required',
+                message: `New work items must enter through the '${board.initialPhase}' phase of board '${boardId}'.`,
+              },
               409,
             );
           }
@@ -713,7 +726,7 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
               orgId: resolved.orgId,
               userId: resolved.userId,
               factoryProjectId: resolved.factoryProjectId,
-              input,
+              input: { ...input, board: boardId, stages: initialStages },
               reuseMode: 'non-stage',
             });
             let item = result.item;
@@ -726,8 +739,8 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
                 orgId: resolved.orgId,
                 factoryProjectId: resolved.factoryProjectId,
                 workItemId: item.id,
-                board: item.externalSource?.type === 'pull-request' ? 'review' : 'work',
-                stage: 'intake',
+                board: boardId,
+                stage: board.initialPhase,
                 expectedRevision: item.revision,
                 actor: { type: 'human', id: resolved.userId },
                 ingress: { type: 'human', identity: `work-item:${item.id}:initial-entry` },

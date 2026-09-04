@@ -18,6 +18,7 @@ async function createItem(
     orgId: string;
     source: 'github-issue' | 'github-pr' | 'slack-thread';
     sourceKey: string;
+    board: string;
     stages: string[];
     metadata: Record<string, unknown>;
   }> = {},
@@ -30,6 +31,7 @@ async function createItem(
       userId: 'user-1',
       factoryProjectId: PROJECT_ID,
       input: {
+        ...(overrides.board ? { board: overrides.board } : {}),
         externalSource: {
           integrationId: source === 'slack-thread' ? 'slack' : 'github',
           type: source === 'slack-thread' ? 'slack-thread' : source === 'github-pr' ? 'pull-request' : 'issue',
@@ -1051,7 +1053,7 @@ describe('FactoryTransitionService', () => {
 
   it('validates and runs phase behavior from an installed custom board', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
-    const item = await createItem(storage, { stages: ['queued'] });
+    const item = await createItem(storage, { board: 'release', stages: ['queued'] });
     const onEnter = vi.fn();
     const board = createTestBoard({ onShipped: onEnter });
     const service = new FactoryTransitionService({
@@ -1074,7 +1076,7 @@ describe('FactoryTransitionService', () => {
     ).resolves.toMatchObject({
       status: 'rejected',
       code: 'invalid_transition',
-      reason: 'Board "work" is not installed.',
+      reason: 'The work item belongs to board "release", not "work".',
     });
   });
 });

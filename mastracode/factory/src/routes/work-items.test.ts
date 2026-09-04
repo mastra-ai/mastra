@@ -4,6 +4,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 // ── Mocks ────────────────────────────────────────────────────────────────
 
+import { createBoardRegistry, defineBoard } from '../boards/index.js';
+import type { BoardRegistry } from '../boards/index.js';
 import { builtInFactoryRules } from '../rules/defaults.js';
 import { FactoryTransitionService } from '../rules/transition-service.js';
 import type { FactoryRuleActor } from '../rules/types.js';
@@ -51,6 +53,7 @@ function buildApp(
   startCoordinator?: { prepare: (input: any) => Promise<any> },
   requestContext?: RequestContext,
   running: ReadonlySet<string> = new Set(),
+  boardRegistry: BoardRegistry = createBoardRegistry(),
 ) {
   const app = new Hono();
   app.use('*', async (c, next) => {
@@ -65,9 +68,14 @@ function buildApp(
       audit,
       projects: seed.projects,
       workItems: seed.workItems,
+      boardRegistry,
       comments: seed.comments,
       queueHealth: seed.queueHealth,
-      transitionService: new FactoryTransitionService({ rules: builtInFactoryRules(), storage: seed.workItems }),
+      transitionService: new FactoryTransitionService({
+        rules: builtInFactoryRules(),
+        storage: seed.workItems,
+        boards: boardRegistry,
+      }),
       startCoordinator,
       liveSessions: { isRunning: sessionId => running.has(sessionId) },
     }).routes(),
@@ -177,6 +185,7 @@ describe('POST /web/factory/projects/:id/work-items', () => {
         url: 'https://github.com/acme/app/issues/42',
       },
       title: 'Fix the login flow',
+      board: 'work',
       stages: ['intake'],
       metadata: { number: 42 },
     });
@@ -184,6 +193,32 @@ describe('POST /web/factory/projects/:id/work-items', () => {
     expect(workItem.stageHistory[0]).toMatchObject({ stage: 'intake', by: 'u1' });
     expect(workItem.stageHistory[0].enteredAt).toBeTruthy();
     expect(workItem.stageHistory[0].exitedAt).toBeUndefined();
+  });
+
+  it('creates a work item on an installed custom board at its initial phase', async () => {
+    const releaseBoard = defineBoard({
+      id: 'release',
+      title: 'Release',
+      initialPhase: 'queued',
+      phases: {
+        queued: { title: 'Queued', next: 'shipped' },
+        shipped: { title: 'Shipped' },
+      },
+    });
+    const boardRegistry = createBoardRegistry({ boards: [releaseBoard], includeDefaultBoards: false });
+    const res = await buildApp(orgUser, undefined, undefined, new Set(), boardRegistry).request(
+      `/web/factory/projects/${PROJECT_ID}/work-items`,
+      {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(createBody({ board: 'release', stages: undefined })),
+      },
+    );
+
+    expect(res.status).toBe(200);
+    expect((await res.json()).workItem).toMatchObject({ board: 'release', stages: ['queued'] });
+    const [stored] = await listItems();
+    expect(stored).toMatchObject({ board: 'release', stages: ['queued'] });
   });
 
   it('rejects an external-source upsert that tries to bypass governed stage transition', async () => {

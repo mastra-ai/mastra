@@ -260,10 +260,16 @@ export class FactoryTransitionService {
     }
     const itemSource = workItemSource(item.externalSource);
     const source = factoryRuleSourceForWorkItem(itemSource);
-    if (
-      (request.board === 'review' && source !== 'pullRequest') ||
-      (request.board === 'work' && source === 'pullRequest')
-    ) {
+    const itemBoard = item.board ?? (source === 'pullRequest' ? 'review' : 'work');
+    if (request.board !== itemBoard) {
+      return this.#commitRejection(
+        request,
+        transitionId,
+        'invalid_transition',
+        `The work item belongs to board "${itemBoard}", not "${request.board}".`,
+      );
+    }
+    if ((itemBoard === 'review' && source !== 'pullRequest') || (itemBoard === 'work' && source === 'pullRequest')) {
       return this.#commitRejection(
         request,
         transitionId,

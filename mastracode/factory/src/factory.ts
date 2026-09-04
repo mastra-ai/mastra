@@ -647,6 +647,7 @@ export class MastraFactory {
       ? new FactoryPhaseStateProcessor({
           rules,
           storage: workItemsStorage,
+          boardRegistry: this.#boards,
           ...(transitionService ? { transitionService } : {}),
           ...(githubIntegration
             ? {
@@ -911,6 +912,7 @@ export class MastraFactory {
             factoryReady,
             knowledgeEnabled,
             rules,
+            boardRegistry: this.#boards,
             factoryTransitionService: transitionService,
             onFactoryRuntime: ({ transitionService: runtimeTransitionService, prepareBinding }) => {
               this.#dispatcher ??= new FactoryDecisionDispatcher({
