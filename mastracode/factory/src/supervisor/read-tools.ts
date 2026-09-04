@@ -23,6 +23,7 @@ import type {
 } from '../storage/domains/work-items/base.js';
 import type { FactoryHealthFinding, FactoryHealthThresholds } from './health.js';
 import { runFactoryHealthCheck } from './health.js';
+import { MAX_TEXT, truncateText } from './text.js';
 
 export interface SupervisorScope {
   orgId: string;
@@ -49,7 +50,6 @@ export interface SupervisorReadDependencies {
   now?: () => Date;
 }
 
-const MAX_TEXT = 600;
 const MAX_ERROR = 400;
 const MAX_LIST = 50;
 
@@ -91,9 +91,7 @@ function withFindingStatus(
   };
 }
 
-function truncate(text: string, max: number): string {
-  return text.length > max ? `${text.slice(0, max - 1)}…` : text;
-}
+const truncate = truncateText;
 
 function iso(value: Date | string | null | undefined): string | null {
   if (!value) return null;

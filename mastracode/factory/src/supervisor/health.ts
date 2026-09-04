@@ -170,10 +170,18 @@ export function decisionFailedFinding(
     kind: 'decision-failed',
     id: `decision-failed:${decision.id}`,
     ...subject,
-    evidence: `${decisionFailedEvidencePrefix(decision)}${decision.failureCode ? ` [${decision.failureCode}]` : ''}: ${truncate(decision.lastError ?? 'no error recorded')}`,
+    evidence: `${decisionFailedEvidencePrefix(decision)}${decision.failureCode ? ` [${decision.failureCode}]` : ''}: ${truncate(decision.lastError ?? 'no error recorded')}${parkedQuestion(decision)}`,
     ageMs: now.getTime() - decision.updatedAt.getTime(),
     suggestedRepair: { action: 'retry-decision', decisionId: decision.id },
   };
+}
+
+/** The worker's question, when the failure is a parked run, so the reader needs no second lookup. */
+function parkedQuestion(decision: FactoryDeferredDecisionRecord): string {
+  const parked = decision.suspension;
+  if (!parked) return '';
+  const choices = parked.options?.length ? ` Options: ${parked.options.join(' | ')}.` : '';
+  return ` Parked on ${parked.toolName}: ${JSON.stringify(parked.question)}.${choices}`;
 }
 
 /** Everything the evidence line says before the optional ` [code]` slot; nothing here comes from error text. */

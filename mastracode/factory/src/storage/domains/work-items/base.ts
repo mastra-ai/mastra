@@ -198,6 +198,22 @@ export interface FactoryDecisionStatusPageInput {
   limit: number;
 }
 
+/**
+ * What a run was parked on when its decision failed terminally: the question
+ * as the worker asked it, and the exact session it is parked in. The session
+ * identity is the join key an answer needs — a card holds one session per
+ * role, so nothing derivable from the card names the right one.
+ */
+export interface FactoryParkedSuspension {
+  toolName: string;
+  toolCallId: string;
+  /** The worker's question (or a description of the suspension), bounded text. */
+  question: string;
+  options?: string[];
+  selectionMode?: string;
+  session: { bindingId: string; resourceId: string; threadId: string };
+}
+
 export interface FactoryDeferredDecisionRecord {
   id: string;
   orgId: string;
@@ -219,6 +235,8 @@ export interface FactoryDeferredDecisionRecord {
   leaseExpiresAt: Date | null;
   lastError: string | null;
   failureCode: FactoryDispatchFailureCode | null;
+  /** Set with a question-shaped terminal failure; what an answer resumes. */
+  suspension: FactoryParkedSuspension | null;
   /** When a human released this run; set once, so the gate never parks it again. */
   approvedAt: Date | null;
   /** Who released this run — the run is attributed to them, not the repo connector. */
@@ -417,6 +435,8 @@ export interface FactoryDispatchFailureInput extends FactoryLeaseIdentity {
   failureCode: FactoryDispatchFailureCode;
   terminal: boolean;
   advanceDeliveryGeneration?: boolean;
+  /** Decisions only: the parked suspension behind a question-shaped failure. */
+  suspension?: FactoryParkedSuspension;
 }
 
 export interface CommitFactoryTransitionInput {
@@ -865,6 +885,7 @@ const FACTORY_GOVERNANCE_SCHEMAS: CollectionSchema[] = [
       lease_expires_at: { type: 'timestamp', nullable: true },
       last_error: { type: 'text', nullable: true },
       failure_code: { type: 'text', nullable: true },
+      suspension: { type: 'json', nullable: true },
       approved_at: { type: 'timestamp', nullable: true },
       approved_by: { type: 'text', nullable: true },
       completed_at: { type: 'timestamp', nullable: true },
@@ -1070,6 +1091,7 @@ function toDeferredDecision(row: GovernanceDbRow): FactoryDeferredDecisionRecord
     leaseExpiresAt: (row.lease_expires_at as Date | null) ?? null,
     lastError: (row.last_error as string | null) ?? null,
     failureCode: isFactoryDispatchFailureCode(row.failure_code) ? row.failure_code : null,
+    suspension: (row.suspension as FactoryParkedSuspension | null) ?? null,
     approvedAt: (row.approved_at as Date | null) ?? null,
     approvedBy: (row.approved_by as string | null) ?? null,
     completedAt: (row.completed_at as Date | null) ?? null,
@@ -1585,6 +1607,9 @@ export class WorkItemsStorage extends FactoryStorageDomain {
           lease_expires_at: null,
           last_error: input.lastError,
           failure_code: input.failureCode,
+          // Each failure describes itself: a later, differently-shaped failure
+          // must not leave an old question behind.
+          ...(table === 'factory_deferred_decisions' ? { suspension: input.suspension ?? null } : {}),
           completed_at: input.terminal ? input.now : null,
           ...(table === 'factory_deferred_decisions' && input.terminal
             ? { failure_occurrence: Number(current.failure_occurrence ?? 0) + 1 }
@@ -2677,6 +2702,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
             lease_expires_at: null,
             last_error: null,
             failure_code: null,
+            suspension: null,
             completed_at: null,
             updated_at: now,
           };

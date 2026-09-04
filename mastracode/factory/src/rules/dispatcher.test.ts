@@ -58,13 +58,15 @@ function createSession(
     suspendsOnPlan?: boolean;
     /** The kicked-off run suspends on this tool instead of a plan (e.g. `ask_user`). */
     suspendsOnTool?: string;
+    /** What the suspended tool carried on its event, as core emits it. */
+    suspendedWith?: { args?: unknown; suspendPayload?: unknown };
     /** The resumed run writes another plan, so an uncapped gate would never end. */
     replansAfterApproval?: boolean;
     streamActive?: boolean;
   },
 ) {
   let threadId = 'thread-1';
-  const agentEndListeners = new Set<(event: { type: string; reason?: string }) => void>();
+  const agentEndListeners = new Set<(event: { type: string; reason?: string; [key: string]: unknown }) => void>();
   const emitAgentEnd = (reason = options?.agentEndReason) => {
     for (const listener of agentEndListeners) {
       listener({ type: 'agent_end', reason });
@@ -72,7 +74,7 @@ function createSession(
   };
   const emitSuspension = (toolName: string, toolCallId: string) => {
     for (const listener of agentEndListeners) {
-      listener({ type: 'tool_suspended', toolName, toolCallId });
+      listener({ type: 'tool_suspended', toolName, toolCallId, ...(options?.suspendedWith ?? {}) });
     }
     emitAgentEnd('suspended');
   };
@@ -267,7 +269,7 @@ async function preapprovePlans(storage: WorkItemsStorage, workItemId: string) {
 
 async function bindWorkRun(storage: WorkItemsStorage, workItemId: string, options?: { preapprovePlans?: boolean }) {
   if (options?.preapprovePlans) await preapprovePlans(storage, workItemId);
-  const prepared = await storage.prepareRunStart({
+  const { binding } = await storage.prepareRunStart({
     orgId: 'org-1',
     userId: 'user-1',
     factoryProjectId: PROJECT_ID,
@@ -287,7 +289,8 @@ async function bindWorkRun(storage: WorkItemsStorage, workItemId: string, option
     kickoffKey: `kickoff-${workItemId}`,
     kickoffMessage: null,
   });
-  await storage.markPendingStart(prepared.binding.id, 'sent');
+  await storage.markPendingStart(binding.id, 'sent');
+  return binding;
 }
 
 /** A card whose run someone asked for: a pending start still waiting to be sent. */
@@ -4293,6 +4296,122 @@ describe('FactoryDecisionDispatcher', () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  describe('a parked question is captured with the failure', () => {
+    const park = async (
+      storage: WorkItemsStorage,
+      suspendedWith: { args?: unknown; suspendPayload?: unknown } | undefined,
+      toolName = 'ask_user',
+    ) => {
+      const { item, transitionService } = await queueDecision(storage, {
+        type: 'invokeSkill',
+        role: 'work',
+        skillName: 'understand-issue',
+        idempotencyKey: 'skill-ask-user-parked',
+      });
+      const binding = await bindWorkRun(storage, item.id);
+      const { controller } = createSession(undefined, { suspendsOnTool: toolName, suspendedWith });
+      const dispatcher = new FactoryDecisionDispatcher({
+        controller: controller as never,
+        transitionService,
+        storage,
+        ownerId: 'worker-1',
+        isAutoRunEnabled: async () => true,
+        autoApprovePlans: async () => false,
+      });
+      await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
+      const [record] = await storage.listDeferredDecisions('org-1', PROJECT_ID);
+      return { record: record!, binding, item };
+    };
+
+    it('persists the question, its choices and the exact session it is parked in', async () => {
+      const storage = (await createFactoryStorageForTests()).workItems;
+      const { record, binding } = await park(storage, {
+        args: { question: 'Which database?', options: ['postgres', 'libsql'], selectionMode: 'single_select' },
+        suspendPayload: {
+          question: 'Which database?',
+          options: ['postgres', 'libsql'],
+          selectionMode: 'single_select',
+        },
+      });
+
+      expect(record).toMatchObject({ status: 'failed', failureCode: 'run_awaiting_input' });
+      expect(record.suspension).toEqual({
+        toolName: 'ask_user',
+        toolCallId: 'call-tool',
+        question: 'Which database?',
+        options: ['postgres', 'libsql'],
+        selectionMode: 'single_select',
+        // The join key: the binding the dispatcher actually dispatched into.
+        session: { bindingId: binding.id, resourceId: binding.resourceId, threadId: binding.threadId },
+      });
+      expect(binding.resourceId).toBe(PROJECT_ID);
+      expect(binding.threadId).toBe('thread-1');
+
+      // The finding evidence carries the question, so the woken supervisor reads it without another lookup.
+      const [row] = (
+        await storage.listSupervisorFindingPage({ orgId: 'org-1', factoryProjectId: PROJECT_ID, limit: 5 })
+      ).rows;
+      expect(String(row!.finding.evidence)).toContain(
+        'Parked on ask_user: "Which database?". Options: postgres | libsql.',
+      );
+    });
+
+    it('bounds the captured question at MAX_TEXT', async () => {
+      const storage = (await createFactoryStorageForTests()).workItems;
+      const { record } = await park(storage, { suspendPayload: { question: 'q'.repeat(2_000) } });
+      expect(record.suspension?.question).toHaveLength(600);
+      expect(record.suspension?.question.endsWith('…')).toBe(true);
+    });
+
+    it('falls back to the tool and call id when the suspension carries no text', async () => {
+      const storage = (await createFactoryStorageForTests()).workItems;
+      const { record } = await park(storage, undefined);
+      expect(record.suspension).toMatchObject({
+        toolName: 'ask_user',
+        toolCallId: 'call-tool',
+        question: 'ask_user (call-tool)',
+      });
+      expect(record.suspension).not.toHaveProperty('options');
+    });
+
+    it('records a parked plan too, and leaves the auto-approve loop alone', async () => {
+      const storage = (await createFactoryStorageForTests()).workItems;
+      const { item, transitionService } = await queueDecision(storage, {
+        type: 'invokeSkill',
+        role: 'work',
+        skillName: 'understand-issue',
+        idempotencyKey: 'skill-plan',
+      });
+      await bindWorkRun(storage, item.id);
+      const { controller, session } = createSession(undefined, {
+        suspendsOnPlan: true,
+        suspendedWith: { suspendPayload: { plan: 'Do the thing.' } },
+      });
+      const dispatcher = new FactoryDecisionDispatcher({
+        controller: controller as never,
+        transitionService,
+        storage,
+        ownerId: 'worker-1',
+        isAutoRunEnabled: async () => true,
+        autoApprovePlans: async () => true,
+      });
+      await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
+      // Auto-approved: nothing parked, nothing captured.
+      expect(session.respondToToolSuspension).toHaveBeenCalledWith({
+        resumeData: { action: 'approved' },
+        toolCallId: 'call-plan',
+      });
+      const [record] = await storage.listDeferredDecisions('org-1', PROJECT_ID);
+      expect(record).toMatchObject({ status: 'succeeded', suspension: null });
+
+      // Not auto-approved: the parked plan is captured like a question.
+      const other = (await createFactoryStorageForTests()).workItems;
+      const { record: parked } = await park(other, { suspendPayload: { plan: 'Do the thing.' } }, 'submit_plan');
+      expect(parked).toMatchObject({ status: 'failed', failureCode: 'plan_awaiting_approval' });
+      expect(parked.suspension).toMatchObject({ toolName: 'submit_plan', question: '{"plan":"Do the thing."}' });
+    });
   });
 
   describe('terminal failures ring the supervisor immediately', () => {
