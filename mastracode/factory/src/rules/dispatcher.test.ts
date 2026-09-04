@@ -4327,13 +4327,11 @@ describe('FactoryDecisionDispatcher', () => {
 
     it('persists the question, its choices and the exact session it is parked in', async () => {
       const storage = (await createFactoryStorageForTests()).workItems;
+      // The real `ask_user` shape: options are `{ label, description? }` objects.
+      const options = [{ label: 'postgres', description: 'shared' }, { label: 'libsql' }];
       const { record, binding } = await park(storage, {
-        args: { question: 'Which database?', options: ['postgres', 'libsql'], selectionMode: 'single_select' },
-        suspendPayload: {
-          question: 'Which database?',
-          options: ['postgres', 'libsql'],
-          selectionMode: 'single_select',
-        },
+        args: { question: 'Which database?', options, selectionMode: 'single_select' },
+        suspendPayload: { question: 'Which database?', options, selectionMode: 'single_select' },
       });
 
       expect(record).toMatchObject({ status: 'failed', failureCode: 'run_awaiting_input' });

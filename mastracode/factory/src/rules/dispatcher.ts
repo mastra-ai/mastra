@@ -89,9 +89,17 @@ function describeParkedTool(parked: ParkedTool, binding: FactoryRunBindingRecord
       : parked.args !== undefined && parked.args !== null
         ? JSON.stringify(parked.args)
         : undefined);
-  const options = [payload.options, args.options].find(
-    (value): value is string[] => Array.isArray(value) && value.every(item => typeof item === 'string'),
-  );
+  // `ask_user` offers `{ label, description? }` objects; other tools may offer
+  // plain strings. Either way the answer is submitted as the label text.
+  const options = [payload.options, args.options]
+    .map(value =>
+      Array.isArray(value)
+        ? value
+            .map(item => (typeof item === 'string' ? item : asRecord(item).label))
+            .filter((item): item is string => typeof item === 'string' && item.length > 0)
+        : [],
+    )
+    .find(labels => labels.length > 0);
   const selectionMode = [payload.selectionMode, args.selectionMode].find(
     (value): value is string => typeof value === 'string',
   );
@@ -175,7 +183,10 @@ function watchRun(
           const { toolCallId } = parked;
           parked = undefined;
           arm();
-          await session.respondToToolSuspension({ resumeData: { action: 'approved' }, toolCallId });
+          await session.respondToToolSuspension({
+            resumeData: { action: 'approved' } satisfies SubmitPlanResumeData,
+            toolCallId,
+          });
           observed = await wait();
         }
       }
@@ -256,7 +267,12 @@ interface DispatcherSession extends SkillSession {
     options: { requestContext: RequestContext; requireDelivery?: boolean },
   ): { accepted: Promise<{ accepted: true; runId?: string; action?: string }> };
   subscribe(listener: AgentControllerEventListener): () => void;
-  respondToToolSuspension(input: { resumeData: SubmitPlanResumeData; toolCallId?: string }): Promise<void>;
+  /**
+   * Resume data is whatever the suspended tool's resume schema accepts — a
+   * plan verdict for `submit_plan`, a string or string list for `ask_user` —
+   * which is why the underlying session types it loosely. Mirrored here.
+   */
+  respondToToolSuspension(input: { resumeData: unknown; toolCallId?: string }): Promise<void>;
 }
 
 type FactoryController = Pick<AgentController<MastraCodeState>, 'getSessionByResource'>;
@@ -1371,5 +1387,6 @@ export const FACTORY_DISPATCH_CONSTANTS = {
   maxBackoffMs: MAX_BACKOFF_MS,
   skillCompletionObservationTimeoutMs: SKILL_COMPLETION_OBSERVATION_TIMEOUT_MS,
   maxInFlight: MAX_IN_FLIGHT,
+  maxPlanApprovals: MAX_PLAN_APPROVALS,
   stages: FACTORY_RULE_STAGES,
 } as const;
