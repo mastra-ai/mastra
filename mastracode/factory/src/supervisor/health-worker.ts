@@ -167,6 +167,7 @@ export class FactorySupervisorHealthWorker extends MastraWorker {
             findingKey: row.findingKey,
             occurrence: row.occurrence,
             notifiedAt: new Date(),
+            finding: row.finding,
           });
         } catch (error) {
           this.deps?.logger.warn('Factory supervisor notify failed', {

@@ -737,18 +737,25 @@ describe('supervisor finding notification stamps', () => {
     return page.rows.find(row => row.findingKey === key);
   }
 
+  /** Stamps the row's current content, as a sender that just rang it would. */
+  async function stamp(storage: WorkItemsStorage, key: string, occurrence: number, notifiedAt: Date) {
+    const row = await getRow(storage, key);
+    await storage.markSupervisorFindingNotified({
+      ...scope,
+      findingKey: key,
+      occurrence,
+      notifiedAt,
+      finding: row?.finding ?? {},
+    });
+  }
+
   it('round-trips last_notified_at through the stamp method', async () => {
     const storage = await makeStorage();
     await openFinding(storage, 'decision-failed:item-1', new Date('2030-01-01T00:00:00.000Z'));
     expect((await getRow(storage, 'decision-failed:item-1'))?.lastNotifiedAt).toBeNull();
 
     const notifiedAt = new Date('2030-01-01T00:01:00.000Z');
-    await storage.markSupervisorFindingNotified({
-      ...scope,
-      findingKey: 'decision-failed:item-1',
-      occurrence: 0,
-      notifiedAt,
-    });
+    await stamp(storage, 'decision-failed:item-1', 0, notifiedAt);
     expect((await getRow(storage, 'decision-failed:item-1'))?.lastNotifiedAt?.getTime()).toBe(notifiedAt.getTime());
   });
 
@@ -757,7 +764,7 @@ describe('supervisor finding notification stamps', () => {
     const key = 'decision-failed:item-1';
     const t0 = new Date('2030-01-01T00:00:00.000Z');
     await openFinding(storage, key, t0);
-    await storage.markSupervisorFindingNotified({ ...scope, findingKey: key, occurrence: 0, notifiedAt: t0 });
+    await stamp(storage, key, 0, t0);
     await storage.escalateSupervisorFinding({
       ...scope,
       findingKey: key,
@@ -798,7 +805,7 @@ describe('supervisor finding notification stamps', () => {
       findingKey: key,
       occurrence: 0,
       notifiedAt: new Date('2030-01-01T00:06:30.000Z'),
-      ifFinding: refreshed.finding,
+      finding: refreshed.finding,
     });
     expect((await getRow(storage, key))?.lastNotifiedAt).toBeNull();
     // Question three's own ring does.
@@ -808,7 +815,7 @@ describe('supervisor finding notification stamps', () => {
       findingKey: key,
       occurrence: 0,
       notifiedAt: new Date('2030-01-01T00:07:00.000Z'),
-      ifFinding: current.finding,
+      finding: current.finding,
     });
     expect((await getRow(storage, key))?.lastNotifiedAt).toBeInstanceOf(Date);
   });
@@ -818,12 +825,7 @@ describe('supervisor finding notification stamps', () => {
     const t0 = new Date('2030-01-01T00:00:00.000Z');
     const keys = ['decision-failed:a', 'decision-failed:b', 'decision-failed:c', 'decision-failed:d'];
     await storage.syncSupervisorFindings({ ...scope, findings: keys.map(finding), now: t0 });
-    await storage.markSupervisorFindingNotified({
-      ...scope,
-      findingKey: 'decision-failed:b',
-      occurrence: 0,
-      notifiedAt: t0,
-    });
+    await stamp(storage, 'decision-failed:b', 0, t0);
     // Resolve `c` and `d` by syncing a snapshot without them; `d` stays resolved.
     await storage.syncSupervisorFindings({
       ...scope,
@@ -861,12 +863,7 @@ describe('supervisor finding notification stamps', () => {
     expect(reopened?.occurrence).toBe(1);
 
     // The stale stamp was emitted for occurrence 0 — it must not land.
-    await storage.markSupervisorFindingNotified({
-      ...scope,
-      findingKey: 'decision-failed:item-1',
-      occurrence: 0,
-      notifiedAt: new Date('2030-01-01T00:04:00.000Z'),
-    });
+    await stamp(storage, 'decision-failed:item-1', 0, new Date('2030-01-01T00:04:00.000Z'));
     expect((await getRow(storage, 'decision-failed:item-1'))?.lastNotifiedAt).toBeNull();
   });
 
@@ -874,30 +871,15 @@ describe('supervisor finding notification stamps', () => {
     const storage = await makeStorage();
     await openFinding(storage, 'decision-failed:item-1', new Date('2030-01-01T00:00:00.000Z'));
     const first = new Date('2030-01-01T00:01:00.000Z');
-    await storage.markSupervisorFindingNotified({
-      ...scope,
-      findingKey: 'decision-failed:item-1',
-      occurrence: 0,
-      notifiedAt: first,
-    });
-    await storage.markSupervisorFindingNotified({
-      ...scope,
-      findingKey: 'decision-failed:item-1',
-      occurrence: 0,
-      notifiedAt: new Date('2030-01-01T00:05:00.000Z'),
-    });
+    await stamp(storage, 'decision-failed:item-1', 0, first);
+    await stamp(storage, 'decision-failed:item-1', 0, new Date('2030-01-01T00:05:00.000Z'));
     expect((await getRow(storage, 'decision-failed:item-1'))?.lastNotifiedAt?.getTime()).toBe(first.getTime());
   });
 
   it('reopen clears the stamp so a reopened incident re-emits', async () => {
     const storage = await makeStorage();
     await openFinding(storage, 'decision-failed:item-1', new Date('2030-01-01T00:00:00.000Z'));
-    await storage.markSupervisorFindingNotified({
-      ...scope,
-      findingKey: 'decision-failed:item-1',
-      occurrence: 0,
-      notifiedAt: new Date('2030-01-01T00:01:00.000Z'),
-    });
+    await stamp(storage, 'decision-failed:item-1', 0, new Date('2030-01-01T00:01:00.000Z'));
 
     await storage.syncSupervisorFindings({ ...scope, findings: [], now: new Date('2030-01-01T00:02:00.000Z') });
     await openFinding(storage, 'decision-failed:item-1', new Date('2030-01-01T00:03:00.000Z'));
@@ -911,12 +893,7 @@ describe('supervisor finding notification stamps', () => {
     const storage = await makeStorage();
     await openFinding(storage, 'decision-failed:item-1', new Date('2030-01-01T00:00:00.000Z'));
     const notifiedAt = new Date('2030-01-01T00:01:00.000Z');
-    await storage.markSupervisorFindingNotified({
-      ...scope,
-      findingKey: 'decision-failed:item-1',
-      occurrence: 0,
-      notifiedAt,
-    });
+    await stamp(storage, 'decision-failed:item-1', 0, notifiedAt);
 
     // Resolve via reconciliation (finding absent from the sweep).
     await storage.syncSupervisorFindings({ ...scope, findings: [], now: new Date('2030-01-01T00:02:00.000Z') });
@@ -1086,6 +1063,16 @@ describe('openSupervisorFinding (single-finding, non-reconciling)', () => {
   });
   const rows = async (storage: WorkItemsStorage) =>
     (await storage.listSupervisorFindingPage({ ...scope, limit: 10 })).rows;
+  async function stamp(storage: WorkItemsStorage, key: string, occurrence: number, notifiedAt: Date) {
+    const row = (await rows(storage)).find(r => r.findingKey === key);
+    await storage.markSupervisorFindingNotified({
+      ...scope,
+      findingKey: key,
+      occurrence,
+      notifiedAt,
+      finding: row?.finding ?? {},
+    });
+  }
 
   it('inserts exactly one row and leaves unrelated open findings untouched', async () => {
     const storage = await makeStorage();
@@ -1113,12 +1100,7 @@ describe('openSupervisorFinding (single-finding, non-reconciling)', () => {
     const storage = await makeStorage();
     const t0 = new Date('2030-01-01T00:00:00.000Z');
     await storage.openSupervisorFinding({ ...scope, finding: finding('decision-failed:d1'), now: t0 });
-    await storage.markSupervisorFindingNotified({
-      ...scope,
-      findingKey: 'decision-failed:d1',
-      occurrence: 0,
-      notifiedAt: t0,
-    });
+    await stamp(storage, 'decision-failed:d1', 0, t0);
     await storage.escalateSupervisorFinding({ ...scope, findingKey: 'decision-failed:d1', note: 'n', escalatedAt: t0 });
     await storage.syncSupervisorFindings({ ...scope, findings: [], now: new Date('2030-01-01T00:01:00.000Z') });
 
@@ -1142,12 +1124,7 @@ describe('openSupervisorFinding (single-finding, non-reconciling)', () => {
     const storage = await makeStorage();
     const t0 = new Date('2030-01-01T00:00:00.000Z');
     await storage.openSupervisorFinding({ ...scope, finding: finding('decision-failed:d1'), now: t0 });
-    await storage.markSupervisorFindingNotified({
-      ...scope,
-      findingKey: 'decision-failed:d1',
-      occurrence: 0,
-      notifiedAt: t0,
-    });
+    await stamp(storage, 'decision-failed:d1', 0, t0);
 
     const same = await storage.openSupervisorFinding({ ...scope, finding: finding('decision-failed:d1'), now: t0 });
     expect(same).toMatchObject({ occurrence: 0, lastNotifiedAt: t0 });
@@ -1164,12 +1141,7 @@ describe('openSupervisorFinding (single-finding, non-reconciling)', () => {
     const storage = await makeStorage();
     const t0 = new Date('2030-01-01T00:00:00.000Z');
     await storage.openSupervisorFinding({ ...scope, finding: finding('decision-failed:d1'), now: t0 });
-    await storage.markSupervisorFindingNotified({
-      ...scope,
-      findingKey: 'decision-failed:d1',
-      occurrence: 0,
-      notifiedAt: t0,
-    });
+    await stamp(storage, 'decision-failed:d1', 0, t0);
 
     // The sweep recomputes the same finding (different ageMs, as it would).
     await storage.syncSupervisorFindings({
