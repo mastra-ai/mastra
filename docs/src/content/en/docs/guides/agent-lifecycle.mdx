@@ -138,7 +138,7 @@ Processor methods don't all modify the same representation:
 - `processLLMRequest` changes only the prompt sent for that provider call. Use it for temporary provider-facing changes that shouldn't alter stored conversation history.
 - `processOutputStream` changes streamed chunks. Processor state can carry data across chunks and later output callbacks for the same request.
 - `processToolResult` runs before a raw tool result enters the message list, allowing validation or redaction before later model steps or persistence.
-- [`processOutputResult`](/reference/processors/processor-interface#processoutputresult) can change returned messages or metadata during finalization.
+- During finalization, [`processOutputResult`](/reference/processors/processor-interface#processoutputresult) can change returned messages and their message metadata.
 
 ## How the loop decides to continue
 
