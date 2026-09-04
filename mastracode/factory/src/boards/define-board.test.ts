@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { BoardDefinitionError, defineBoard } from './define-board.js';
 import { reviewBoard } from './review.js';
 import { workBoard } from './work.js';
+import { allowsBuiltInBoardTransition } from './index.js';
 
 describe('defineBoard', () => {
   it('normalizes linear and outcome transitions', () => {
@@ -114,5 +115,11 @@ describe('defineBoard', () => {
     expect(workBoard.rules.planning?.manual?.onEnter).toBeTypeOf('function');
     expect(workBoard.rules.execute?.issue?.onEnter).toBeTypeOf('function');
     expect(workBoard.rules.done?.issue?.onEnter).toBeTypeOf('function');
+  });
+
+  it('rejects inherited property names as Work phases', () => {
+    expect(() => allowsBuiltInBoardTransition('work', 'toString', 'done')).not.toThrow();
+    expect(allowsBuiltInBoardTransition('work', 'toString', 'done')).toBe(false);
+    expect(allowsBuiltInBoardTransition('work', 'intake', 'constructor')).toBe(false);
   });
 });

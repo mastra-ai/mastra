@@ -2,7 +2,7 @@
 '@mastra/factory': minor
 ---
 
-Added the built-in Work board definition so its phases and phase behavior use the typed board lifecycle API alongside the Review board.
+Added `workBoard` and `WorkBoardPhase` exports so developers can inspect the built-in Work board phases and validate lifecycle transitions.
 
 ```ts
 import { workBoard } from '@mastra/factory';
