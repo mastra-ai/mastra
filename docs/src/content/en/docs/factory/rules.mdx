@@ -1,0 +1,92 @@
+---
+title: Factory rules
+description: The rules tree, decision types, and how to author overrides without forking the template.
+---
+
+Factory rules are the primary customization surface for Factory: every built-in behavior is a replaceable leaf in one tree, and you can swap any leaf without forking the template. This page documents the tree, the decision types a rule can return, and the exact-leaf replacement semantics you need to know before authoring an override.
+
+## The rules tree
+
+One tree, four groups (see `mastracode/factory/src/rules/types.ts`):
+
+- `work.<stage>.<source>.onEnter | onExit`
+- `review.<stage>.<source>.onEnter | onExit`
+- `tools.<toolName>.onResult`
+- `github.<event>.onEvent`
+- `linear.<event>.onEvent`
+
+Valid enum values:
+
+- boards: `work`, `review`
+- stages: `intake`, `triage`, `planning`, `execute`, `review`, `done`, `canceled`
+- sources: `issue`, `pullRequest`, `linearIssue`, `manual`
+- GitHub events: `issueOpened`, `issueEdited`, `issueClosed`, `issueCommentCreated`, `issueCommentEdited`, `issueCommentDeleted`, `pullRequestOpened`, `pullRequestUpdated`, `pullRequestCommentCreated`, `pullRequestReviewRequested`, `pullRequestReviewSubmitted`, `pullRequestMerged`, `pullRequestClosed`
+- Linear events: `issueObserved`, `issueClosed`
+
+## What the built-in defaults do
+
+`BUILT_IN_DEFAULTS` (in `mastracode/factory/src/rules/defaults.ts`) populates a subset of leaves. The non-obvious ones:
+
+- `review.review.pullRequest.onEnter` picks `factory-rereview` over `factory-review` when the card is returning from `done` (a prior pass actually completed), and sets `cancelInFlight` on Review-to-Review re-entry so an active review pass is superseded rather than doubled.
+- `work.triage.issue.onEnter` invokes the `factory-triage` investigation skill when an issue arrives at triage; re-triage is driven separately by GitHub `issueEdited` / issue-comment events, and skips issues whose edits were authored by Factory itself.
+- `github.pullRequestMerged.onEvent` moves the **Review** card to `done` but only **messages** the linked Work item — it never auto-completes Work. Boards move independently; do not assume a merged PR finishes the Work card.
+
+Read `defaults.ts` for the full list of populated leaves before replacing one, so you know what you are giving up.
+
+## Exact-leaf replacement semantics
+
+`mergeFactoryRuleOverrides` replaces the **whole handler at a leaf**; it does not chain or compose with the built-in. Sibling leaves are untouched. If you want part of the built-in behavior, reproduce it inside your handler. This is the single most likely source of "my override broke triage".
+
+## Decision types
+
+A handler returns either a rejection or a commit decision. The commit union:
+
+| Decision | Effect |
+| --- | --- |
+| `reject` | blocks the ingress, with a `FactoryRuleRejectionCode` and a short reason |
+| `transition` | moves a card to a stage on a board, with an optional message delivered to the item's active session |
+| `upsertLinkedWorkItem` | materializes a linked card from an external source |
+| `invokeSkill` | runs a named skill under a role |
+| `sendMessage` | messages a role's session |
+| `notify` | raises a notification |
+
+### Validation limits
+
+From `mastracode/factory/src/rules/validation.ts`:
+
+- role: ≤ 32 chars, `/^[a-z0-9][a-z0-9_-]*$/i`
+- skill name: ≤ 128 chars, `/^[a-z0-9]+(?:-[a-z0-9]+)*$/`
+- arguments: ≤ 4096; messages: ≤ 8192; metadata JSON: ≤ 16384 with depth ≤ 8
+- version: ≤ 128; idempotency key: ≤ 256
+
+### Runtime constraints
+
+- Handlers get a 5s budget (`RULE_TIMEOUT_MS` in `processor.ts`); exceeding it yields a `timeout` rejection.
+- Causal chains are bounded at depth 8 (`MAX_FACTORY_RULE_CAUSAL_DEPTH`).
+- Every commit decision needs a stable `idempotencyKey` derived from immutable ingress identity, so replays after a failure do not double-apply.
+
+## Worked example
+
+Start from `defaultFactoryRules({ version, overrides })`, replace one leaf, and pass the result to `MastraFactory`:
+
+```ts
+const rules = defaultFactoryRules({
+  version: '2026-09-custom-1',
+  overrides: {
+    work: {
+      triage: {
+        issue: {
+          onEnter: async (ctx) => ({
+            type: 'invokeSkill',
+            role: 'triage',
+            skillName: 'my-triage-skill',
+            idempotencyKey: `triage:${ctx.item.id}:${ctx.item.revision}`,
+          }),
+        },
+      },
+    },
+  },
+});
+```
+
+Why `version` matters: it identifies persisted evaluations and audit records. Bump it whenever rule behavior changes, and do not reuse it as event identity or fold it into ingress dedupe keys.
