@@ -12,6 +12,7 @@ import type { FactoryFeedReader } from '../storage/domains/comments/feed-context
 import type {
   FactoryDeferredDecisionRecord,
   FactoryDispatchFailureCode,
+  FactoryParkedSuspension,
   FactoryPendingStartRecord,
   FactoryRunBindingRecord,
   WorkItemRow,
@@ -20,6 +21,7 @@ import type {
 import { FACTORY_RULE_MATERIALIZATION_KEY } from '../storage/domains/work-items/base.js';
 import { decisionFailedFinding, factoryHealthSubject } from '../supervisor/health.js';
 import type { NotifySupervisorInput } from '../supervisor/notify.js';
+import { truncateText } from '../supervisor/text.js';
 import { FactoryDispatchError, factoryDispatchFailureCode, factoryDispatchFailureMetadata } from './dispatch-errors.js';
 import type { FactoryTransitionService } from './transition-service.js';
 import type { FactoryCommitDecision, FactoryRuleActor, FactoryRuleCausalEntry } from './types.js';
@@ -64,6 +66,45 @@ function isTerminalFailure(attempts: number, failureCode: FactoryDispatchFailure
  */
 type ParkedRunPolicy = 'escalate' | 'await';
 
+type ParkedTool = { toolName: string; toolCallId: string; args: unknown; suspendPayload: unknown };
+
+const asRecord = (value: unknown): Record<string, unknown> =>
+  value !== null && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
+
+/**
+ * What the run is parked on, in the shape an answer needs later: the question
+ * text (from the suspend payload, else the tool args, else the tool itself),
+ * any choices offered, and the exact session the suspension lives in.
+ */
+function describeParkedTool(parked: ParkedTool, binding: FactoryRunBindingRecord): FactoryParkedSuspension {
+  const payload = asRecord(parked.suspendPayload);
+  const args = asRecord(parked.args);
+  const questionText = [payload.question, args.question, payload.message, args.message].find(
+    (value): value is string => typeof value === 'string' && value.trim().length > 0,
+  );
+  const raw =
+    questionText ??
+    (parked.suspendPayload !== undefined && parked.suspendPayload !== null
+      ? JSON.stringify(parked.suspendPayload)
+      : parked.args !== undefined && parked.args !== null
+        ? JSON.stringify(parked.args)
+        : undefined);
+  const options = [payload.options, args.options].find(
+    (value): value is string[] => Array.isArray(value) && value.every(item => typeof item === 'string'),
+  );
+  const selectionMode = [payload.selectionMode, args.selectionMode].find(
+    (value): value is string => typeof value === 'string',
+  );
+  return {
+    toolName: parked.toolName,
+    toolCallId: parked.toolCallId,
+    question: raw && raw !== '{}' ? truncateText(raw) : `${parked.toolName} (${parked.toolCallId})`,
+    ...(options ? { options } : {}),
+    ...(selectionMode ? { selectionMode } : {}),
+    session: { bindingId: binding.id, resourceId: binding.resourceId, threadId: binding.threadId },
+  };
+}
+
 function watchRun(
   session: Pick<DispatcherSession, 'subscribe' | 'respondToToolSuspension'>,
   {
@@ -72,19 +113,22 @@ function watchRun(
     onParkedRun,
     onAgentEnd,
     label,
+    binding,
   }: {
     timeoutMs: number;
     approvePlans: boolean;
     onParkedRun: ParkedRunPolicy;
     onAgentEnd?: () => Promise<boolean>;
     label: string;
+    /** The session the run lives in; persisted with a parked suspension as the answer's join key. */
+    binding: FactoryRunBindingRecord;
   },
 ) {
   let resolveAgentEnd!: () => void;
   let agentEnd!: Promise<void>;
   let endReason: 'complete' | 'aborted' | 'error' | 'suspended' | undefined;
   let supersededAtEnd: Promise<boolean> | undefined;
-  let parked: { toolName: string; toolCallId: string } | undefined;
+  let parked: ParkedTool | undefined;
   // Re-armed before a redelivery so the second send waits on its own run's
   // ending rather than seeing the one that already resolved.
   const arm = () => {
@@ -103,7 +147,12 @@ function watchRun(
       return;
     }
     if (event.type === 'tool_suspended') {
-      parked = { toolName: event.toolName, toolCallId: event.toolCallId };
+      parked = {
+        toolName: event.toolName,
+        toolCallId: event.toolCallId,
+        args: event.args,
+        suspendPayload: event.suspendPayload,
+      };
       return;
     }
     if (event.type === 'tool_suspension_cancelled' && parked?.toolCallId === event.toolCallId) {
@@ -132,15 +181,18 @@ function watchRun(
       }
       if (parked !== undefined && (!observed || endReason === 'suspended')) {
         if (onParkedRun === 'await') return;
+        const suspension = describeParkedTool(parked, binding);
         if (parked.toolName === 'submit_plan') {
           throw new FactoryDispatchError(
             'plan_awaiting_approval',
             'Factory run wrote a plan and is waiting for it to be reviewed.',
+            { suspension },
           );
         }
         throw new FactoryDispatchError(
           'run_awaiting_input',
           `Factory run is waiting on ${parked.toolName} for an answer.`,
+          { suspension },
         );
       }
       if (!observed) {
@@ -591,6 +643,7 @@ export class FactoryDecisionDispatcher {
         failureCode,
         terminal,
         advanceDeliveryGeneration: !executionCompleted,
+        ...(error instanceof FactoryDispatchError && error.suspension ? { suspension: error.suspension } : {}),
       });
       if (terminal && failed) await this.#raiseTerminalFailure(failed);
     }
@@ -828,6 +881,7 @@ export class FactoryDecisionDispatcher {
           onParkedRun: 'escalate',
           onAgentEnd: () => this.#roleSuperseded(record, decision.role),
           label: 'Factory skill run',
+          binding,
         });
 
         const sendKickoff = async () => {
@@ -1247,6 +1301,7 @@ export class FactoryDecisionDispatcher {
             approvePlans: await this.#plansAreAutoApproved(record, item),
             onParkedRun: 'await',
             label: 'Factory kickoff run',
+            binding,
           });
           const sendKickoff = (dedupeKey: string) =>
             awaitNotification(
