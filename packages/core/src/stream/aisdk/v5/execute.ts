@@ -9,6 +9,7 @@ import { modelSupportsStructuredOutput } from '../../../llm/model/provider-regis
 import type { MastraLanguageModel, SharedProviderOptions } from '../../../llm/model/shared.types';
 import {
   createTimeoutAbortSignal,
+  guardStreamUntilMatch,
   guardStreamWithAbort,
   isMastraTimeoutError,
   raceAgainstAbort,
@@ -31,6 +32,25 @@ type ResolvedJsonPromptInjection = Exclude<JsonPromptInjection, 'auto'>;
  */
 const RETRY_MIN_TIMEOUT_MS = 1_000;
 const RETRY_BACKOFF_FACTOR = 2;
+
+const CONTENT_CHUNK_TYPES = new Set([
+  'text-delta',
+  'reasoning-delta',
+  'tool-call',
+  'tool-call-delta',
+  'tool-input-delta',
+  'tool-result',
+  'object',
+  'object-result',
+  'file',
+  'source',
+]);
+
+function isContentChunk(chunk: unknown): boolean {
+  return (
+    typeof chunk === 'object' && chunk !== null && CONTENT_CHUNK_TYPES.has((chunk as { type?: string }).type ?? '')
+  );
+}
 
 /**
  * Whether a failed model call will be retried. Used by both `onFailedAttempt` and
@@ -268,6 +288,11 @@ export function execute<OUTPUT = undefined>({
           timeoutMs: modelSettings?.timeout?.stepMs,
           timeoutType: 'step',
         });
+        const { signal: callAbortSignal, cleanup: cleanupFirstChunkTimeout } = createTimeoutAbortSignal({
+          parentSignal: abortSignal,
+          timeoutMs: methodType === 'stream' ? modelSettings?.timeout?.firstChunkMs : undefined,
+          timeoutType: 'firstChunk',
+        });
 
         const pRetry = await import('p-retry');
         const retryResult = await pRetry
@@ -284,13 +309,13 @@ export function execute<OUTPUT = undefined>({
                   ...toolsAndToolChoice,
                   prompt,
                   providerOptions: providerOptionsToUse,
-                  abortSignal,
+                  abortSignal: callAbortSignal,
                   includeRawChunks,
                   responseFormat: structuredOutputMode === 'direct' && !injectionMode ? responseFormat : undefined,
                   ...filteredModelSettings,
                   headers,
                 }),
-                abortSignal,
+                callAbortSignal,
               );
 
               // We have to cast this because doStream is missing the warnings property in its return type even though it exists
@@ -298,7 +323,7 @@ export function execute<OUTPUT = undefined>({
             },
             {
               retries: modelSettings?.maxRetries ?? 2,
-              signal: abortSignal,
+              signal: callAbortSignal,
               // Pinned to p-retry's own defaults so the backoff it schedules stays
               // unchanged while remaining computable in onFailedAttempt below.
               minTimeout: RETRY_MIN_TIMEOUT_MS,
@@ -318,7 +343,7 @@ export function execute<OUTPUT = undefined>({
                 // Retry-After from wedging the run.
                 const boundedRetryAfterMs = Math.min(retryAfterMs, DEFAULT_MAX_RETRY_AFTER_MS);
                 const scheduledBackoffMs = RETRY_MIN_TIMEOUT_MS * RETRY_BACKOFF_FACTOR ** (context.attemptNumber - 1);
-                await waitDelay(boundedRetryAfterMs - scheduledBackoffMs, abortSignal);
+                await waitDelay(boundedRetryAfterMs - scheduledBackoffMs, callAbortSignal);
               },
               shouldRetry(context) {
                 return isRetryableModelError(context.error);
@@ -326,18 +351,26 @@ export function execute<OUTPUT = undefined>({
             },
           )
           .catch(error => {
+            cleanupFirstChunkTimeout();
             cleanupStepTimeout();
             throw error;
           });
 
         if (!retryResult?.stream) {
+          cleanupFirstChunkTimeout();
           cleanupStepTimeout();
           return retryResult;
         }
 
+        const firstChunkGuardedStream = guardStreamUntilMatch(
+          retryResult.stream,
+          callAbortSignal,
+          isContentChunk,
+          cleanupFirstChunkTimeout,
+        );
         const guardedResult = {
           ...retryResult,
-          stream: guardStreamWithAbort(retryResult.stream, abortSignal, cleanupStepTimeout),
+          stream: guardStreamWithAbort(firstChunkGuardedStream, abortSignal, cleanupStepTimeout),
         } as unknown as LanguageModelV2StreamResult;
         // The router attaches its stream transport as a non-enumerable symbol,
         // which object spread drops. Re-attach it so transport handles survive
