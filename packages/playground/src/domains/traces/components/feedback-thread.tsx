@@ -2,6 +2,7 @@ import type { FeedbackRecord, ListFeedbackResponse } from '@mastra/core/storage'
 import { Button } from '@mastra/playground-ui/components/Button';
 import {
   Comment,
+  type CommentVariant,
   CommentComposer,
   CommentComposerInput,
   CommentComposerSend,
@@ -27,6 +28,8 @@ type FeedbackThreadProps = {
   /** When provided, records with a feedbackId get a delete action. */
   onDelete?: (feedbackId: string) => void | Promise<unknown>;
   isDeleting?: boolean;
+  /** Comment layout variant — `embed` renders a compact card suitable for inline use. */
+  variant?: CommentVariant;
 };
 
 function formatBody(fb: FeedbackRecord): string {
@@ -48,6 +51,7 @@ export function FeedbackThread({
   isSubmitting = false,
   onDelete,
   isDeleting = false,
+  variant,
 }: FeedbackThreadProps) {
   const [text, setText] = useState('');
   const sendBlocked = text.trim().length === 0 || isSubmitting;
@@ -57,7 +61,7 @@ export function FeedbackThread({
   const hasMore = feedbackData?.pagination?.hasMore ?? false;
 
   return (
-    <Comment className="min-h-0 gap-4 px-3">
+    <Comment variant={variant} className="min-h-0 gap-4 px-3">
       <div className="min-h-0 overflow-y-auto">
         {isLoadingFeedbackData ? (
           <Txt variant="ui-md" className="text-neutral3">

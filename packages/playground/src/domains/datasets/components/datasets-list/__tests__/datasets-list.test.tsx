@@ -49,6 +49,12 @@ describe('DatasetsList', () => {
     expect(link.getAttribute('href')).toBe('/experiments?dataset=ds-a');
   });
 
+  it('still shows the Target column derived from experiments', () => {
+    renderList();
+    expect(screen.getByText('Target')).not.toBeNull();
+    expect(screen.getByText('agent')).not.toBeNull();
+  });
+
   it('does not render an experiments action for datasets without experiments', () => {
     renderList();
     expect(screen.queryByRole('link', { name: /0 \(/ })).toBeNull();

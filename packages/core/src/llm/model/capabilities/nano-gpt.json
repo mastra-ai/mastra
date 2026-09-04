@@ -547,6 +547,7 @@
     "TEE/glm-5.3-flash",
     "TEE/kimi-k3",
     "TEE/muse-glimmer-30b",
+    "TEE/qwen3-8b",
     "TEE/qwen3.6-35b-a3b-uncensored",
     "TEE/qwen3.8-27b",
     "abliteration-ai/abliterated-model",
