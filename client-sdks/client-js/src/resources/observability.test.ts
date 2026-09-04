@@ -447,6 +447,38 @@ describe('Observability Methods', () => {
     });
   });
 
+  describe('queryTraces()', () => {
+    it('should post the advanced query body unchanged', async () => {
+      mockSuccessfulResponse();
+      const request = {
+        timeRange: { from: '2026-08-01T00:00:00Z', to: '2026-09-01T00:00:00Z' },
+        where: {
+          scores: {
+            some: {
+              op: 'and' as const,
+              args: [
+                { op: 'eq' as const, left: { path: 'scorerId' }, right: { literal: 'factuality' } },
+                { op: 'lt' as const, left: { path: 'score' }, right: { literal: 0.6 } },
+              ],
+            },
+          },
+        },
+        page: { limit: 25 },
+      };
+
+      await client.queryTraces(request);
+
+      expect(global.fetch).toHaveBeenCalledWith(
+        `${clientOptions.baseUrl}/api/observability/traces/query`,
+        expect.objectContaining({
+          method: 'POST',
+          headers: expect.objectContaining({ ...clientOptions.headers, 'content-type': 'application/json' }),
+          body: JSON.stringify(request),
+        }),
+      );
+    });
+  });
+
   describe('listBranches()', () => {
     it('should fetch branches without any parameters', async () => {
       mockSuccessfulResponse();

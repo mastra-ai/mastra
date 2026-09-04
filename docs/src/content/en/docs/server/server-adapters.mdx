@@ -1,11 +1,13 @@
 ---
 title: "Server Adapters | Server"
-description: "Run Mastra with Elysia, Express, Fastify, Hono, Koa, or NestJS server adapters and control initialization, middleware, routes, prefixes, and OpenAPI."
+description: "Run Mastra with Elysia, Express, Fastify, Hono, Koa, NestJS, Next.js, or TanStack Start server adapters and control initialization, middleware, routes, prefixes, and OpenAPI."
 packages:
   - "@mastra/elysia"
   - "@mastra/express"
   - "@mastra/hono"
   - "@mastra/nestjs"
+  - "@mastra/next"
+  - "@mastra/tanstack-start"
 ---
 
 import Tabs from "@theme/Tabs";
@@ -45,6 +47,8 @@ Mastra currently provides these official server adapters:
 - [@mastra/fastify](/reference/server/fastify-adapter)
 - [@mastra/koa](/reference/server/koa-adapter)
 - [@mastra/nestjs](/reference/server/nestjs-adapter)
+- [@mastra/next](/reference/server/next-adapter)
+- [@mastra/tanstack-start](/reference/server/tanstack-start-adapter)
 
 You can build your own adapter, read [custom adapters](/docs/server/custom-adapters) for details.
 
@@ -86,6 +90,18 @@ Install the adapter for the framework of your choice.
   <TabItem value="nestjs" label="NestJS">
     ```bash npm2yarn
     npm install @mastra/nestjs@latest
+    ```
+  </TabItem>
+
+  <TabItem value="nextjs" label="Next.js">
+    ```bash npm2yarn
+    npm install @mastra/next@latest hono
+    ```
+  </TabItem>
+
+  <TabItem value="tanstack-start" label="TanStack Start">
+    ```bash npm2yarn
+    npm install @mastra/tanstack-start@latest hono
     ```
   </TabItem>
 </Tabs>
@@ -484,6 +500,8 @@ See [MCP](/docs/connections/mcp) for configuration details and how to set up MCP
 - [Hono Adapter](/reference/server/hono-adapter) - Hono-specific setup
 - [Express Adapter](/reference/server/express-adapter) - Express-specific setup
 - [NestJS Adapter](/reference/server/nestjs-adapter) - NestJS-specific setup
+- [Next.js Adapter](/reference/server/next-adapter) - Next.js-specific setup
+- [TanStack Start Adapter](/reference/server/tanstack-start-adapter) - TanStack Start-specific setup
 - [Custom Adapters](/docs/server/custom-adapters) - Building adapters for other frameworks
 - [Server Configuration](/docs/server/overview) - Using `mastra build` instead
 - [Authentication](/docs/auth/overview) - Configuring auth for your server

@@ -936,11 +936,6 @@
       "permanent": true
     },
     {
-      "source": "/docs/harness/overview",
-      "destination": "/docs/harness/agent-controller",
-      "permanent": true
-    },
-    {
       "source": "/docs/harness/session",
       "destination": "/docs/harness/agent-controller",
       "permanent": true

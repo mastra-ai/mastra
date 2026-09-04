@@ -10,10 +10,12 @@
  * Requires a running ClickHouse instance. Use `docker compose up -d` in the
  * clickhouse store directory, or set CLICKHOUSE_URL/CLICKHOUSE_USERNAME/CLICKHOUSE_PASSWORD.
  */
+import { randomUUID } from 'node:crypto';
 import { createClient } from '@clickhouse/client';
 import { createObservabilityVNextTests } from '@internal/storage-test-utils';
 import { coreFeatures } from '@mastra/core/features';
 import { EntityType, SpanType } from '@mastra/core/observability';
+import { parseTraceQueryRequest, planTraceQuery, TraceQueryExecutionError } from '@mastra/core/storage';
 import type { ObservabilityStorage } from '@mastra/core/storage';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
@@ -27,9 +29,12 @@ import {
   parseTtlExpression,
   TABLE_DISCOVERY_PAIRS,
   TABLE_DISCOVERY_VALUES,
+  TABLE_SCORE_EVENTS,
   TABLE_SPAN_EVENTS,
+  TABLE_TRACE_ROOTS,
 } from './ddl';
 import { isReplacingMergeTreeEngine } from './migration';
+import { compileClickHouseTraceQuery, runWithClickHouseTraceQueryTimeout } from './trace-query';
 import { ObservabilityStorageClickhouseVNext } from '.';
 
 vi.setConfig({ testTimeout: 60_000, hookTimeout: 60_000 });
@@ -44,6 +49,8 @@ createObservabilityVNextTests({
   capabilities: {
     label: 'ClickHouse vNext',
     preferredStrategy: 'insert-only',
+    traceQuery: true,
+    traceQueryWriteModel: 'completion-only',
   },
   getStorage: async () => {
     if (!sharedSuiteStorage) {
@@ -122,6 +129,208 @@ describe('ObservabilityStorageClickhouseVNext', () => {
   // Strategy
   // ==========================================================================
 
+  it('cancels timed-out trace-query work without affecting the next query', async () => {
+    const client = createClient({
+      url: process.env.CLICKHOUSE_URL || 'http://localhost:8123',
+      username: process.env.CLICKHOUSE_USERNAME || 'default',
+      password: process.env.CLICKHOUSE_PASSWORD || 'password',
+    });
+
+    try {
+      await expect(
+        runWithClickHouseTraceQueryTimeout(client, 10, {
+          query: 'SELECT sleep(0.1)',
+          query_params: {},
+        }),
+      ).rejects.toBeInstanceOf(TraceQueryExecutionError);
+
+      const result = await client.query({ query: 'SELECT 1 AS value', format: 'JSONEachRow' });
+      expect(await result.json<{ value: number }>()).toEqual([{ value: 1 }]);
+    } finally {
+      await client.close();
+    }
+  });
+
+  it('pushes candidate trace IDs into related-table reads', async () => {
+    const client = createClient({
+      url: process.env.CLICKHOUSE_URL || 'http://localhost:8123',
+      username: process.env.CLICKHOUSE_USERNAME || 'default',
+      password: process.env.CLICKHOUSE_PASSWORD || 'password',
+    });
+    const startedAt = new Date('2026-08-26T10:00:00.000Z');
+    const fixtureSize = 20_000;
+    const unrelatedSpans = Array.from({ length: fixtureSize }, (_, index) => ({
+      traceId: `irrelevant-${String(index).padStart(5, '0')}`,
+      spanId: `irrelevant-span-${index}`,
+      parentSpanId: 'irrelevant-root',
+      name: 'irrelevant child',
+      spanType: SpanType.AGENT_RUN,
+      isEvent: false,
+      startedAt,
+      endedAt: new Date(startedAt.getTime() + 500),
+    }));
+    const unrelatedScores = Array.from({ length: fixtureSize }, (_, index) => ({
+      id: `irrelevant-score-${index}`,
+      scoreId: `irrelevant-score-${index}`,
+      traceId: `irrelevant-${String(index).padStart(5, '0')}`,
+      scorerId: 'quality',
+      score: 0.5,
+      timestamp: startedAt,
+      createdAt: startedAt,
+      updatedAt: null,
+    }));
+
+    try {
+      await storage.batchCreateSpans({
+        records: [
+          {
+            traceId: 'candidate-trace',
+            spanId: 'candidate-root',
+            parentSpanId: null,
+            name: 'candidate root',
+            spanType: SpanType.AGENT_RUN,
+            isEvent: false,
+            startedAt,
+            endedAt: new Date(startedAt.getTime() + 1_000),
+          },
+          {
+            traceId: 'candidate-trace',
+            spanId: 'candidate-child',
+            parentSpanId: 'candidate-root',
+            name: 'candidate child',
+            spanType: SpanType.TOOL_CALL,
+            isEvent: false,
+            startedAt,
+            endedAt: new Date(startedAt.getTime() + 500),
+          },
+          ...unrelatedSpans,
+        ],
+      });
+      await storage.batchCreateScores({
+        scores: [
+          {
+            id: 'candidate-score',
+            scoreId: 'candidate-score',
+            traceId: 'candidate-trace',
+            scorerId: 'quality',
+            score: 0.5,
+            timestamp: startedAt,
+            createdAt: startedAt,
+            updatedAt: null,
+          },
+          ...unrelatedScores,
+        ],
+      });
+
+      const executeAndReadRows = async (
+        request: Record<string, unknown>,
+        expectedTable: string,
+        expectPrimaryKey = true,
+      ) => {
+        const plan = planTraceQuery(
+          parseTraceQueryRequest({
+            timeRange: {
+              from: new Date(startedAt.getTime() - 1_000).toISOString(),
+              to: new Date(startedAt.getTime() + 2_000).toISOString(),
+            },
+            ...request,
+          }),
+        );
+        const compiled = compileClickHouseTraceQuery(plan);
+        const explainResult = await client.query({
+          query: `EXPLAIN indexes = 1 ${compiled.query}`,
+          query_params: compiled.query_params,
+          format: 'TabSeparatedRaw',
+        });
+        const explain = await explainResult.text();
+        expect(explain).toContain(expectedTable);
+        if (expectPrimaryKey) expect(explain).toContain('PrimaryKey');
+
+        const queryId = `trace-query-perf-${randomUUID()}`;
+        await runWithClickHouseTraceQueryTimeout(client, 15_000, compiled, queryId);
+        await client.command({ query: 'SYSTEM FLUSH LOGS' });
+        const logResult = await client.query({
+          query: `SELECT read_rows AS readRows, read_bytes AS readBytes
+FROM system.query_log
+WHERE query_id = {queryId:String} AND type = 'QueryFinish'
+ORDER BY event_time_microseconds DESC
+LIMIT 1`,
+          query_params: { queryId },
+          format: 'JSONEachRow',
+        });
+        const [log] = await logResult.json<{ readRows: number; readBytes: number }>();
+        expect(Number(log?.readBytes)).toBeGreaterThan(0);
+        return Number(log?.readRows);
+      };
+
+      const spanReadRows = await executeAndReadRows(
+        {
+          where: {
+            spans: { some: { op: 'eq', left: { path: 'spanType' }, right: { literal: SpanType.TOOL_CALL } } },
+          },
+        },
+        TABLE_SPAN_EVENTS,
+      );
+      const scoreReadRows = await executeAndReadRows(
+        { where: { scores: { some: { op: 'lt', left: { path: 'score' }, right: { literal: 0.6 } } } } },
+        TABLE_SCORE_EVENTS,
+      );
+      const repeatedSpanReadRows = await executeAndReadRows(
+        {
+          where: {
+            op: 'and',
+            args: [
+              { spans: { some: { op: 'eq', left: { path: 'spanType' }, right: { literal: SpanType.TOOL_CALL } } } },
+              { spans: { none: { op: 'exists', path: 'error' } } },
+            ],
+          },
+        },
+        TABLE_SPAN_EVENTS,
+      );
+      const repeatedScoreReadRows = await executeAndReadRows(
+        {
+          where: {
+            op: 'and',
+            args: [
+              { scores: { some: { op: 'lt', left: { path: 'score' }, right: { literal: 0.6 } } } },
+              { scores: { some: { op: 'eq', left: { path: 'scorerId' }, right: { literal: 'quality' } } } },
+            ],
+          },
+        },
+        TABLE_SCORE_EVENTS,
+      );
+      const mixedReadRows = await executeAndReadRows(
+        {
+          where: {
+            op: 'and',
+            args: [
+              { spans: { some: { op: 'eq', left: { path: 'spanType' }, right: { literal: SpanType.TOOL_CALL } } } },
+              { scores: { some: { op: 'lt', left: { path: 'score' }, right: { literal: 0.6 } } } },
+            ],
+          },
+        },
+        TABLE_SPAN_EVENTS,
+      );
+      const groupedReadRows = await executeAndReadRows({ group: { by: ['threadId'] } }, TABLE_TRACE_ROOTS, false);
+
+      for (const readRows of [
+        spanReadRows,
+        scoreReadRows,
+        repeatedSpanReadRows,
+        repeatedScoreReadRows,
+        mixedReadRows,
+      ]) {
+        expect(readRows).toBeLessThan(fixtureSize);
+      }
+      expect(groupedReadRows).toBeLessThan(10);
+    } finally {
+      await client.close();
+    }
+  });
+
+  // ClickHouse vNext is completion-only. The tied-version fixture models event-sourced
+  // replacement writes and intentionally remains covered by PostgreSQL and DuckDB only.
+
   it('reports insert-only as preferred strategy', () => {
     expect(storage.observabilityStrategy).toEqual({
       preferred: 'insert-only',
@@ -183,15 +392,15 @@ describe('ObservabilityStorageClickhouseVNext', () => {
       }
     }
 
-    it('advertises metrics, logs, and delta polling when the feature is enabled', () => {
-      expect(storage.getFeatures()).toEqual(['metrics', 'logs', 'delta-polling']);
+    it('advertises metrics, logs, delta polling, and trace queries when the feature is enabled', () => {
+      expect(storage.getFeatures()).toEqual(['metrics', 'logs', 'delta-polling', 'trace-query']);
     });
 
-    it('advertises metrics and logs when delta polling is disabled', () => {
+    it('continues advertising trace queries when delta polling is disabled', () => {
       coreFeatures.delete('observability-delta-polling');
 
       try {
-        expect(storage.getFeatures()).toEqual(['metrics', 'logs']);
+        expect(storage.getFeatures()).toEqual(['metrics', 'logs', 'trace-query']);
       } finally {
         coreFeatures.add('observability-delta-polling');
       }

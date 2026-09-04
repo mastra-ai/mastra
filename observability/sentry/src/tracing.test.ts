@@ -12,11 +12,27 @@ import type { TracingEvent, AnyExportedSpan, ToolCallAttributes } from '@mastra/
 import { SpanType, TracingEventType } from '@mastra/core/observability';
 import * as Sentry from '@sentry/node';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { SentryExporter } from './tracing';
+import { SentryExporter, buildSpanTypeConfig } from './tracing';
 import type { SentryExporterConfig } from './tracing';
 
 // Mock Sentry module
 vi.mock('@sentry/node');
+
+describe('buildSpanTypeConfig', () => {
+  // @mastra/sentry's peer range admits a @mastra/core older than the one that
+  // introduced a given SpanType member. There, `SpanType.X` is undefined, and a
+  // plain object literal would map it under a literal "undefined" key that then
+  // matches any span whose type is undefined.
+  it('drops entries whose span type is missing from the paired core', () => {
+    const config = buildSpanTypeConfig([
+      [SpanType.AGENT_RUN, { opType: 'gen_ai.invoke_agent', opName: 'invoke_agent' }],
+      [undefined, { opType: 'ai.skill', opName: 'skill' }],
+    ]);
+
+    expect(config).toEqual({ [SpanType.AGENT_RUN]: { opType: 'gen_ai.invoke_agent', opName: 'invoke_agent' } });
+    expect(Object.keys(config)).not.toContain('undefined');
+  });
+});
 
 describe('SentryExporter', () => {
   // Mock objects

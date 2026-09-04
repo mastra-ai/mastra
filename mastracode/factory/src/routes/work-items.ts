@@ -49,6 +49,7 @@ import { computeFactoryMetrics, parseMetricsRange } from '../storage/domains/wor
 import { buildAttentionRoutes, factoryDecisionType } from './attention.js';
 import type { RouteDependencies } from './route.js';
 import { Route } from './route.js';
+import { buildSupervisorRoutes } from './supervisor.js';
 
 export interface WorkItemRoutesDeps extends RouteDependencies {
   audit: AuditEmitter;
@@ -649,6 +650,11 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
       ...buildAttentionRoutes({
         workItems,
         comments: this.deps.comments,
+        resolveProject: context => this.#resolveProject(loose(context)),
+      }),
+
+      ...buildSupervisorRoutes({
+        workItems,
         resolveProject: context => this.#resolveProject(loose(context)),
       }),
 

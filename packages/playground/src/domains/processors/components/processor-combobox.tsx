@@ -14,6 +14,7 @@ export interface ProcessorComboboxProps {
   className?: string;
   disabled?: boolean;
   variant?: ComboboxProps['variant'];
+  size?: ComboboxProps['size'];
 }
 
 export function ProcessorCombobox({
@@ -25,6 +26,7 @@ export function ProcessorCombobox({
   className,
   disabled = false,
   variant,
+  size,
 }: ProcessorComboboxProps) {
   const { data: processors = {}, isLoading, isError, error } = useProcessors();
   const { navigate, paths } = useLinkComponent();
@@ -70,6 +72,7 @@ export function ProcessorCombobox({
       className={className}
       disabled={disabled || isLoading || isError}
       variant={variant}
+      size={size}
     />
   );
 }

@@ -7,7 +7,7 @@ description: "Browse Requesty model IDs, capabilities, context windows, and pric
 
 # <img src="https://models.dev/logos/requesty.svg" alt="Requesty logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Requesty
 
-Access 142 Requesty models through Mastra's model router. Authentication is handled automatically using the `REQUESTY_API_KEY` environment variable.
+Access 152 Requesty models through Mastra's model router. Authentication is handled automatically using the `REQUESTY_API_KEY` environment variable.
 
 Learn more in the [Requesty documentation](https://requesty.ai/solution/llm-routing/models).
 
@@ -56,6 +56,30 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 128000,
     "inputCost": 10,
     "outputCost": 50
+  },
+  {
+    "model": "requesty/claude-fable-5.1",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1000000,
+    "maxOutput": 128000,
+    "inputCost": 10,
+    "outputCost": 50
+  },
+  {
+    "model": "requesty/claude-fable-5.1@eu",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1000000,
+    "maxOutput": 128000,
+    "inputCost": 11,
+    "outputCost": 55
   },
   {
     "model": "requesty/claude-fable-5@eu",
@@ -315,11 +339,11 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "audioInput": false,
     "videoInput": false,
     "toolUsage": true,
-    "reasoning": false,
-    "contextWindow": 1000000,
-    "maxOutput": 384000,
-    "inputCost": 0.44,
-    "outputCost": 1.32
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 131072,
+    "inputCost": 0.14,
+    "outputCost": 0.28
   },
   {
     "model": "requesty/deepseek-v4-flash-0731",
@@ -327,11 +351,11 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "audioInput": false,
     "videoInput": false,
     "toolUsage": true,
-    "reasoning": false,
+    "reasoning": true,
     "contextWindow": 1048576,
-    "maxOutput": 384000,
-    "inputCost": 0.076,
-    "outputCost": 0.153
+    "maxOutput": 131072,
+    "inputCost": 0.14,
+    "outputCost": 0.28
   },
   {
     "model": "requesty/deepseek-v4-flash-0731@eu",
@@ -353,7 +377,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "toolUsage": true,
     "reasoning": true,
     "contextWindow": 1000000,
-    "maxOutput": 384000,
+    "maxOutput": 131072,
     "inputCost": 1.32,
     "outputCost": 3.96
   },
@@ -368,6 +392,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 131072,
     "inputCost": 1.32,
     "outputCost": 3.96
+  },
+  {
+    "model": "requesty/deepseek-v4-pro-0813@eu",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 1048576,
+    "inputCost": 1.75,
+    "outputCost": 3.5
   },
   {
     "model": "requesty/deepseek-v4-pro@eu",
@@ -411,7 +447,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "audioInput": false,
     "videoInput": false,
     "toolUsage": true,
-    "reasoning": false,
+    "reasoning": true,
     "contextWindow": 1048576,
     "maxOutput": 131072,
     "inputCost": 5,
@@ -598,6 +634,30 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 4.125
   },
   {
+    "model": "requesty/gemini-3.8-flash",
+    "imageInput": true,
+    "audioInput": true,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 65535,
+    "inputCost": 0.75,
+    "outputCost": 3.75
+  },
+  {
+    "model": "requesty/gemini-3.8-flash@eu",
+    "imageInput": true,
+    "audioInput": true,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 65535,
+    "inputCost": 0.825,
+    "outputCost": 4.125
+  },
+  {
     "model": "requesty/gemma-4-26b-a4b-it",
     "imageInput": true,
     "audioInput": false,
@@ -700,10 +760,22 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "videoInput": true,
     "toolUsage": true,
     "reasoning": true,
-    "contextWindow": 1048576,
-    "maxOutput": 131072,
-    "inputCost": 0.075,
-    "outputCost": 0.25
+    "contextWindow": 1000000,
+    "maxOutput": 262144,
+    "inputCost": 0.2,
+    "outputCost": 0.5
+  },
+  {
+    "model": "requesty/glm-5.3-flash@eu",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1000000,
+    "maxOutput": 262144,
+    "inputCost": 0.2,
+    "outputCost": 0.5
   },
   {
     "model": "requesty/glm-5.3@eu",
@@ -1263,7 +1335,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "audioInput": true,
     "videoInput": true,
     "toolUsage": true,
-    "reasoning": false,
+    "reasoning": true,
     "contextWindow": 1048576,
     "maxOutput": 131072,
     "inputCost": 0.14,
@@ -1275,7 +1347,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "audioInput": false,
     "videoInput": false,
     "toolUsage": true,
-    "reasoning": false,
+    "reasoning": true,
     "contextWindow": 1048576,
     "maxOutput": 131072,
     "inputCost": 0.435,
@@ -1640,6 +1712,54 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 262144,
     "inputCost": 2,
     "outputCost": 6
+  },
+  {
+    "model": "requesty/qwen3.8-2.4T-A95B@eu",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1000000,
+    "maxOutput": 262144,
+    "inputCost": 2.5,
+    "outputCost": 6
+  },
+  {
+    "model": "requesty/qwen3.8-flash",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 131072,
+    "inputCost": 0.16,
+    "outputCost": 0.47
+  },
+  {
+    "model": "requesty/qwen3.8-flash-next",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 262144,
+    "maxOutput": 262144,
+    "inputCost": 0.2,
+    "outputCost": 0.5
+  },
+  {
+    "model": "requesty/qwen3.8-flash-next@eu",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 262144,
+    "maxOutput": 262144,
+    "inputCost": 0.2,
+    "outputCost": 0.5
   },
   {
     "model": "requesty/qwen3.8-max",
