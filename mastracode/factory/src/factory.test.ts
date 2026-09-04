@@ -20,6 +20,7 @@ import type * as dispatcherModule from './rules/dispatcher.js';
 import type * as terminalCleanupModule from './rules/terminal-cleanup.js';
 import type * as transitionServiceModule from './rules/transition-service.js';
 import { createFactorySecretEncryption } from './secret-encryption.js';
+import type { AuditStorage } from './storage/domains/audit/base.js';
 import type { MemorySettingsStorage } from './storage/domains/memory-settings/base.js';
 import type { FactoryProjectsStorage } from './storage/domains/projects/base.js';
 import type { SourceControlStorage } from './storage/domains/source-control/base.js';
@@ -595,6 +596,7 @@ describe('MastraFactory.prepare', () => {
     'factory_list_attention',
     'factory_read_session',
   ];
+  const SUPERVISOR_ACTION_TOOLS = ['factory_escalate_finding'];
   const SUPERVISOR_HUMAN_WRITE_TOOLS = [
     'factory_retry_decision',
     'factory_dismiss_decision',
@@ -637,7 +639,7 @@ describe('MastraFactory.prepare', () => {
     const signalTurn = new RequestContext();
     signalTurn.set('controller', controller({ factoryProjectId: project.id, factoryOrgId: 'org-1' }));
     const signalTools = Object.keys(await extraTools({ requestContext: signalTurn }));
-    expect(signalTools.sort()).toEqual([...SUPERVISOR_READ_TOOLS].sort());
+    expect(signalTools.sort()).toEqual([...SUPERVISOR_READ_TOOLS, ...SUPERVISOR_ACTION_TOOLS].sort());
 
     // Forged/foreign state: org does not own the project → no supervisor tools at all.
     const forged = new RequestContext();
@@ -650,8 +652,68 @@ describe('MastraFactory.prepare', () => {
     humanTurn.set('controller', controller({ factoryProjectId: project.id, factoryOrgId: 'org-1' }));
     const humanTools = Object.keys(await extraTools({ requestContext: humanTurn }));
     expect(humanTools.sort()).toEqual(
-      [...SUPERVISOR_READ_TOOLS, ...SUPERVISOR_HUMAN_WRITE_TOOLS, 'custom_write'].sort(),
+      [...SUPERVISOR_READ_TOOLS, ...SUPERVISOR_ACTION_TOOLS, ...SUPERVISOR_HUMAN_WRITE_TOOLS, 'custom_write'].sort(),
     );
+  });
+
+  it('attributes approval-free supervisor actions to the human on auth turns and to the agent on signal turns', async () => {
+    const storage = fakeStorage();
+    const config = await prepareFactory({ storage });
+    const projects = storage.getDomain<FactoryProjectsStorage>('projects');
+    const workItems = storage.getDomain<WorkItemsStorage>('work-items');
+    const audit = storage.getDomain<AuditStorage>('audit');
+    const project = await projects.create({ orgId: 'org-1', userId: 'user-1', input: { name: 'p' } });
+    const scope = { orgId: 'org-1', factoryProjectId: project.id };
+    const finding = (key: string) => ({
+      kind: 'decision-failed' as const,
+      id: key,
+      workItemId: null,
+      workItemNumber: null,
+      title: 't',
+      evidence: 'e',
+      ageMs: 1_000,
+      suggestedRepair: null,
+    });
+    await workItems.syncSupervisorFindings({
+      ...scope,
+      findings: [finding('decision-failed:a'), finding('decision-failed:b')],
+      now: new Date(),
+    });
+    const extraTools = config.extraTools as (args: {
+      requestContext: RequestContext;
+    }) => Promise<Record<string, { execute: (input: unknown, ctx?: unknown) => Promise<unknown> }>>;
+    const state = { factoryProjectId: project.id, factoryOrgId: 'org-1' };
+    const controller = {
+      resourceId: `factory-supervisor:${project.id}`,
+      threadId: `factory-supervisor:${project.id}`,
+      scope: '/worktree',
+      state,
+      getState: () => state,
+    };
+
+    const signalTurn = new RequestContext();
+    signalTurn.set('controller', controller);
+    const signalTools = await extraTools({ requestContext: signalTurn });
+    await signalTools.factory_escalate_finding!.execute({ findingKey: 'decision-failed:a', note: 'needs a person' });
+
+    const humanTurn = new RequestContext();
+    humanTurn.set('user', { workosId: 'user-1', organizationId: 'org-1' });
+    humanTurn.set('controller', controller);
+    const humanTools = await extraTools({ requestContext: humanTurn });
+    await humanTools.factory_escalate_finding!.execute({
+      findingKey: 'decision-failed:b',
+      note: 'also needs a person',
+    });
+
+    const events = (await audit.list({ orgId: 'org-1', factoryProjectId: project.id, limit: 10 })).events.filter(
+      event => event.action === 'factory.supervisor.finding_escalated',
+    );
+    const byKey = Object.fromEntries(events.map(event => [event.targets[0]!.id, event]));
+    expect(byKey['decision-failed:a']).toMatchObject({
+      actorType: 'agent',
+      actorId: `agent:factory-supervisor:${project.id}`,
+    });
+    expect(byKey['decision-failed:b']).toMatchObject({ actorType: 'human', actorId: 'user-1' });
   });
 
   it('gives a supervisor session no tools when the factory domain is unavailable, even with tool integrations', async () => {

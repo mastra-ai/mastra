@@ -16,10 +16,12 @@ import type { AuditStorage } from '../storage/domains/audit/base.js';
 import type { WorkItemCommentsStorage } from '../storage/domains/comments/base.js';
 import type {
   FactoryDeferredDecisionRecord,
+  FactorySupervisorFindingRecord,
+  FactorySupervisorFindingStatus,
   WorkItemRow,
   WorkItemsStorage,
 } from '../storage/domains/work-items/base.js';
-import type { FactoryHealthReport, FactoryHealthThresholds } from './health.js';
+import type { FactoryHealthFinding, FactoryHealthThresholds } from './health.js';
 import { runFactoryHealthCheck } from './health.js';
 
 export interface SupervisorScope {
@@ -50,6 +52,44 @@ export interface SupervisorReadDependencies {
 const MAX_TEXT = 600;
 const MAX_ERROR = 400;
 const MAX_LIST = 50;
+
+/** The persisted rows behind the computed findings, keyed by finding key. */
+async function openFindingRows(
+  workItems: WorkItemsStorage,
+  scope: SupervisorScope,
+): Promise<Map<string, FactorySupervisorFindingRecord>> {
+  const rows = new Map<string, FactorySupervisorFindingRecord>();
+  let before: { occurredAt: Date; id: string } | undefined;
+  for (;;) {
+    const page = await workItems.listSupervisorFindingPage({
+      ...scope,
+      ...(before ? { before } : {}),
+      limit: MAX_LIST,
+    });
+    for (const row of page.rows) rows.set(row.findingKey, row);
+    const last = page.rows[page.rows.length - 1];
+    if (!page.hasMore || !last) return rows;
+    before = { occurredAt: last.updatedAt, id: last.id };
+  }
+}
+
+/** Visibility state from the persisted row, when the sweep has already tracked this finding. */
+function withFindingStatus(
+  finding: FactoryHealthFinding,
+  tracked: Map<string, FactorySupervisorFindingRecord>,
+): FactoryHealthFinding & {
+  status: FactorySupervisorFindingStatus | null;
+  escalatedAt: string | null;
+  escalationNote: string | null;
+} {
+  const row = tracked.get(finding.id);
+  return {
+    ...finding,
+    status: row?.status ?? null,
+    escalatedAt: iso(row?.escalatedAt),
+    escalationNote: row?.escalationNote ?? null,
+  };
+}
 
 function truncate(text: string, max: number): string {
   return text.length > max ? `${text.slice(0, max - 1)}…` : text;
@@ -233,8 +273,13 @@ export function createFactorySupervisorReadTools(deps: SupervisorReadDependencie
       description:
         'Deterministic list of things wrong with this Factory right now (failed or stuck decisions, stalled starts, orphaned or missing seats, proposals and held cards waiting on a person, label drift). Each finding carries evidence and the standard repair. Explain these; do not invent findings that are not listed.',
       inputSchema: z.object({}).strict(),
-      execute: async (): Promise<FactoryHealthReport> =>
-        runFactoryHealthCheck(deps.workItems, scope, { now: now(), thresholds: deps.healthThresholds }),
+      execute: async () => {
+        const [report, tracked] = await Promise.all([
+          runFactoryHealthCheck(deps.workItems, scope, { now: now(), thresholds: deps.healthThresholds }),
+          openFindingRows(deps.workItems, scope),
+        ]);
+        return { ...report, findings: report.findings.map(finding => withFindingStatus(finding, tracked)) };
+      },
     }),
 
     factory_inspect_work_item: createTool({
@@ -245,12 +290,13 @@ export function createFactorySupervisorReadTools(deps: SupervisorReadDependencie
       execute: async ref => {
         const item = await findItem(deps, ref);
         if (!item) throw new Error(`No work item matches ${ref.id ?? `#${ref.number}`} in this Factory.`);
-        const [decisions, bindings, audit, feed, all] = await Promise.all([
+        const [decisions, bindings, audit, feed, all, tracked] = await Promise.all([
           deps.workItems.listDeferredDecisions(scope.orgId, scope.factoryProjectId),
           deps.workItems.listRunBindings(scope.orgId, scope.factoryProjectId, item.id),
           deps.audit.list({ orgId: scope.orgId, factoryProjectId: scope.factoryProjectId, limit: 200 }),
           deps.comments.listRecent({ ...scope, workItemId: item.id, limit: 10 }),
           deps.workItems.list(scope),
+          openFindingRows(deps.workItems, scope),
         ]);
         const parent = item.parentWorkItemId
           ? all.find(candidate => candidate.id === item.parentWorkItemId)
@@ -303,6 +349,16 @@ export function createFactorySupervisorReadTools(deps: SupervisorReadDependencie
             occurredAt: iso(comment.occurredAt),
             body: truncate(comment.body, MAX_TEXT),
           })),
+          findings: [...tracked.values()]
+            .filter(row => row.finding.workItemId === item.id)
+            .map(row => ({
+              findingKey: row.findingKey,
+              kind: String(row.finding.kind ?? 'unknown'),
+              status: row.status,
+              openedAt: iso(row.openedAt),
+              escalatedAt: iso(row.escalatedAt),
+              escalationNote: row.escalationNote,
+            })),
           parent: parent ? summarizeItem(parent) : null,
           children: children.map(summarizeItem),
         };

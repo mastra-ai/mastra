@@ -247,7 +247,11 @@ export interface FactorySupervisorFindingRecord {
   updatedAt: Date;
   resolvedAt: Date | null;
   lastNotifiedAt: Date | null;
+  status: FactorySupervisorFindingStatus;
+  escalatedAt: Date | null;
+  escalationNote: string | null;
 }
+export type FactorySupervisorFindingStatus = 'open' | 'escalated';
 export type FactoryAttentionReceiptAction = 'read' | 'archive' | 'restore';
 
 export interface FactoryAttentionIdentity {
@@ -898,6 +902,13 @@ const FACTORY_GOVERNANCE_SCHEMAS: CollectionSchema[] = [
       updated_at: { type: 'timestamp' },
       resolved_at: { type: 'timestamp', nullable: true },
       last_notified_at: { type: 'timestamp', nullable: true },
+      // Visibility refinement while the row is open: 'open' findings in the
+      // supervisor-actionable kinds stay off the human Attention rail until
+      // the supervisor escalates (or the force-surface backstop fires).
+      // Meaningless once resolved_at is set.
+      status: { type: 'text', default: 'open' },
+      escalated_at: { type: 'timestamp', nullable: true },
+      escalation_note: { type: 'text', nullable: true },
     },
     uniqueIndexes: [
       {
@@ -1091,6 +1102,9 @@ function toSupervisorFinding(row: GovernanceDbRow): FactorySupervisorFindingReco
     updatedAt: row.updated_at as Date,
     resolvedAt: (row.resolved_at as Date | null) ?? null,
     lastNotifiedAt: (row.last_notified_at as Date | null) ?? null,
+    status: row.status === 'escalated' ? 'escalated' : 'open',
+    escalatedAt: (row.escalated_at as Date | null) ?? null,
+    escalationNote: (row.escalation_note as string | null) ?? null,
   };
 }
 
@@ -1243,6 +1257,9 @@ export class WorkItemsStorage extends FactoryStorageDomain {
             updated_at: input.now,
             resolved_at: null,
             last_notified_at: null,
+            status: 'open',
+            escalated_at: null,
+            escalation_note: null,
           });
           changed = true;
           continue;
@@ -1259,6 +1276,11 @@ export class WorkItemsStorage extends FactoryStorageDomain {
           // A reopened incident re-rings the doorbell: clear the notification
           // stamp so the next sweep emits for it again.
           last_notified_at: current.resolved_at !== null ? null : current.last_notified_at,
+          // A reopened incident is a new incident: stale escalation state
+          // must never keep it visible (or hidden) on the old terms.
+          status: current.resolved_at !== null ? 'open' : current.status,
+          escalated_at: current.resolved_at !== null ? null : current.escalated_at,
+          escalation_note: current.resolved_at !== null ? null : current.escalation_note,
         }));
         changed = true;
       }
@@ -1342,6 +1364,38 @@ export class WorkItemsStorage extends FactoryStorageDomain {
       },
       () => ({ last_notified_at: input.notifiedAt }),
     );
+  }
+
+  /**
+   * Mark an open finding escalated so it surfaces to humans. Returns the
+   * updated row, or null when no open row has that key (unknown or already
+   * resolved). Re-escalating an escalated row refreshes the note and time.
+   */
+  async escalateSupervisorFinding(input: {
+    orgId: string;
+    factoryProjectId: string;
+    findingKey: string;
+    note: string;
+    escalatedAt: Date;
+  }): Promise<FactorySupervisorFindingRecord | null> {
+    const updated = await this.#db.updateAtomic<GovernanceDbRow>(
+      'factory_supervisor_findings',
+      {
+        org_id: input.orgId,
+        factory_project_id: input.factoryProjectId,
+        finding_key: input.findingKey,
+        resolved_at: null,
+      },
+      () => ({
+        status: 'escalated',
+        escalated_at: input.escalatedAt,
+        escalation_note: input.note,
+        updated_at: input.escalatedAt,
+      }),
+    );
+    if (!updated) return null;
+    this.#attentionChanged?.({ orgId: input.orgId, factoryProjectId: input.factoryProjectId });
+    return toSupervisorFinding(updated);
   }
 
   async countOpenSupervisorFindings(input: { orgId: string; factoryProjectId: string }): Promise<number> {
