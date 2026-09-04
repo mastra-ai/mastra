@@ -40,7 +40,7 @@ import {
   getFactoryAuthUserFromContext,
   getFactoryAuthUserId,
 } from './auth.js';
-import { touchFeed } from './feed-events.js';
+import { publishFeedTouch, touchFeed } from './feed-events.js';
 import type { FactoryIntegration, IntegrationPostToolContext, IntegrationTools } from './integrations/base.js';
 import { reconcileGithubAcceptanceLabels } from './integrations/github/acceptance-labels.js';
 import type { GithubIntegration } from './integrations/github/integration.js';
@@ -102,11 +102,17 @@ import { QueueHealthStorage } from './storage/domains/queue-health/base.js';
 import { SourceControlStorage } from './storage/domains/source-control/base.js';
 import { WorkItemsStorage } from './storage/domains/work-items/base.js';
 import type { WorkItemRow } from './storage/domains/work-items/base.js';
+import { createFactorySupervisorActionTools } from './supervisor/action-tools.js';
 import { FactorySupervisorHealthWorker } from './supervisor/health-worker.js';
 import { SUPERVISOR_INSTRUCTIONS } from './supervisor/instructions.js';
 import { notifySupervisor } from './supervisor/notify.js';
 import { createFactorySupervisorReadTools } from './supervisor/read-tools.js';
-import { hydrateSupervisorSession, parseSupervisorResourceId, resolveSupervisorScope } from './supervisor/session.js';
+import {
+  hydrateSupervisorSession,
+  parseSupervisorResourceId,
+  resolveSupervisorScope,
+  supervisorResourceId,
+} from './supervisor/session.js';
 import { createFactorySupervisorWriteTools } from './supervisor/write-tools.js';
 import { timedPhase } from './timing.js';
 import { createWorkspaceFactory, FactoryWorkspaceRegistry } from './workspace.js';
@@ -805,6 +811,27 @@ export class MastraFactory {
                         },
                       }),
                     );
+                    // Approval-free supervisor actions run on every turn,
+                    // attributed to the human when there is one and to the
+                    // agent identity otherwise (the audit trail's convention).
+                    const supervisorThreadId = (requestContext.get('controller') as { threadId?: string } | undefined)
+                      ?.threadId;
+                    mergeTools(
+                      'factory-supervisor-actions',
+                      createFactorySupervisorActionTools({
+                        scope: supervisorScope,
+                        actor:
+                          supervisorScope.via === 'auth' && userId
+                            ? { type: 'human', id: userId }
+                            : {
+                                type: 'agent',
+                                id: `agent:${supervisorThreadId ?? supervisorResourceId(supervisorScope.factoryProjectId)}`,
+                              },
+                        workItems: workItemsStorage,
+                        audit: auditStorage,
+                        logger: { warn: (message, meta) => console.warn(`[Factory Supervisor] ${message}`, meta) },
+                      }),
+                    );
                     // The approval-gated write tools stamp the human who asked
                     // (approvedBy, actor.type 'human'); a signal turn has no
                     // such person, so it never gets them.
@@ -1138,6 +1165,11 @@ export class MastraFactory {
               // through the controller, then emits via the code agent's
               // notification stack (same send handle the dispatcher uses).
               notify: input => notifySupervisor({ controller: prepared.base.controller }, input),
+              // Same doorbell storage writes ring: the 30-minute force-surface
+              // backstop changes the Attention projection without a write.
+              // Awaited (unlike a write's touch) so a failed publish leaves the
+              // sweep's checkpoint behind and the next sweep rings again.
+              attentionChanged: scope => publishFeedTouch(eventBus, scope),
             }),
           ]
         : []),
