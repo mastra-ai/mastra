@@ -18,12 +18,12 @@ function queryResult(rows: unknown[]) {
 }
 
 describe('ClickHouse deletion lifecycle', () => {
-  it('defines the shared deletion request table with a 45-day audit TTL', () => {
+  it('defines the shared deletion request table without an OSS retention TTL', () => {
     expect(DELETION_REQUESTS_DDL).toContain('requestId       UUID');
     expect(DELETION_REQUESTS_DDL).toContain("requestedAt     DateTime64(3, 'UTC')");
     expect(DELETION_REQUESTS_DDL).toContain('scoreIds        Array(String)');
     expect(DELETION_REQUESTS_DDL).toContain('feedbackIds     Array(String)');
-    expect(DELETION_REQUESTS_DDL).toContain('TTL requestedAt + INTERVAL 45 DAY');
+    expect(DELETION_REQUESTS_DDL).not.toContain('TTL requestedAt');
     expect(DELETION_REQUESTS_DDL).not.toContain('deletedAt');
   });
 
@@ -144,7 +144,22 @@ describe('ClickHouse deletion lifecycle', () => {
       ),
     ).rejects.toThrow('Feedback record not found');
 
-    expect(insert).toHaveBeenCalledOnce();
+    expect(insert).toHaveBeenCalledTimes(2);
+    expect(insert).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        table: TABLE_DELETION_REQUESTS,
+        values: [
+          expect.objectContaining({
+            requestType: 'feedback',
+            organizationId: 'org-1',
+            resourceId: 'resource-1',
+            feedbackIds: ['feedback-1'],
+            status: 'pending',
+          }),
+        ],
+      }),
+    );
     expect(command).toHaveBeenCalledWith({
       query: `DELETE FROM ${TABLE_FEEDBACK_EVENTS} WHERE feedbackId IN ({fid_0:String}) AND organizationId = {delOrganizationId:String} AND resourceId = {delResourceId:String}`,
       query_params: {
@@ -154,7 +169,7 @@ describe('ClickHouse deletion lifecycle', () => {
       },
       clickhouse_settings: { lightweight_deletes_sync: '2' },
     });
-    expect(insert.mock.invocationCallOrder[0]).toBeLessThan(command.mock.invocationCallOrder[0]!);
+    expect(insert.mock.invocationCallOrder[1]).toBeLessThan(command.mock.invocationCallOrder[0]!);
   });
 
   it('is a complete no-op for empty id arrays', async () => {

@@ -857,7 +857,6 @@ CREATE TABLE IF NOT EXISTS ${TABLE_DELETION_REQUESTS} (
 )
 ENGINE = MergeTree
 ORDER BY (requestedAt, requestId)
-TTL requestedAt + INTERVAL 45 DAY
 `;
 
 export function buildFeedbackEventsDeltaDDL(): string {

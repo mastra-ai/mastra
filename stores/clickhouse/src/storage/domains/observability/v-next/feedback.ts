@@ -200,11 +200,21 @@ export async function batchCreateFeedback(client: ClickHouseClient, args: BatchC
  * the table's configured retention TTL. The delta table is intentionally not
  * touched and expires through its fixed two-day TTL.
  */
-async function hideFeedback(
+export async function deleteFeedback(
   client: ClickHouseClient,
   args: DeleteFeedbackArgs,
   replication?: ClickhouseReplicationConfig,
 ): Promise<void> {
+  if (args.feedbackIds.length === 0) return;
+
+  await recordDeletionRequest(client, {
+    requestType: 'feedback',
+    feedbackIds: args.feedbackIds,
+    organizationId: args.organizationId,
+    resourceId: args.resourceId,
+    replication,
+  });
+
   const params: Record<string, string> = {};
   const idPlaceholders: string[] = [];
   for (let i = 0; i < args.feedbackIds.length; i++) {
@@ -228,24 +238,6 @@ async function hideFeedback(
     query_params: params,
     clickhouse_settings: { lightweight_deletes_sync: isReplicationConfigured(replication) ? '2' : '1' },
   });
-}
-
-export async function deleteFeedback(
-  client: ClickHouseClient,
-  args: DeleteFeedbackArgs,
-  replication?: ClickhouseReplicationConfig,
-): Promise<void> {
-  if (args.feedbackIds.length === 0) return;
-
-  await recordDeletionRequest(client, {
-    requestType: 'feedback',
-    feedbackIds: args.feedbackIds,
-    organizationId: args.organizationId,
-    resourceId: args.resourceId,
-    replication,
-  });
-
-  await hideFeedback(client, args, replication);
 }
 
 // ============================================================================
@@ -317,7 +309,7 @@ export async function updateFeedbackReviewStatus(
   });
 
   if (await hasPendingFeedbackDeletion(client, feedbackId, existingRow.organizationId, existingRow.resourceId)) {
-    await hideFeedback(
+    await deleteFeedback(
       client,
       {
         feedbackIds: [feedbackId],

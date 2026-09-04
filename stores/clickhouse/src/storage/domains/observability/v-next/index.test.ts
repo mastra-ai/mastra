@@ -4208,7 +4208,7 @@ LIMIT 1`,
           format: 'TabSeparatedRaw',
         });
         const requestTableDDL = await requestTableResult.text();
-        expect(requestTableDDL).toContain('TTL requestedAt + toIntervalDay(45)');
+        expect(requestTableDDL).not.toContain('TTL requestedAt');
         expect(requestTableDDL).not.toContain('deletedAt');
 
         const deletedAtResult = await client.query({
