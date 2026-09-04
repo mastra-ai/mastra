@@ -10,7 +10,12 @@ import type {
   FactoryRunBindingRecord,
   WorkItemsStorage,
 } from '../storage/domains/work-items/base.js';
-import { decisionIdFromFindingKey, QUESTION_FAILURE_CODES } from './health.js';
+import {
+  decisionFailedFinding,
+  decisionIdFromFindingKey,
+  factoryHealthSubject,
+  QUESTION_FAILURE_CODES,
+} from './health.js';
 import type { NotifySupervisorInput } from './notify.js';
 import type { SupervisorScope } from './read-tools.js';
 import { MAX_TEXT, truncateText } from './text.js';
@@ -53,6 +58,8 @@ interface SupervisorActionDependencies {
     | 'listRunBindings'
     | 'resolveAnsweredDecision'
     | 'reparkDecision'
+    | 'openSupervisorFinding'
+    | 'get'
   >;
   audit: Pick<AuditStorage, 'record'>;
   /** Session lookup by resource id, the join key persisted with a parked suspension. */
@@ -89,20 +96,24 @@ export function createFactorySupervisorActionTools(deps: SupervisorActionDepende
   // Mutations land before their audit row. An audit failure must not read as
   // "the action failed" (a retry would repeat an irreversible action), so the
   // outcome is reported alongside; the raw storage error stays in the log.
-  const auditAfter = async (
+  const auditAfter = async <Field extends string>(
+    field: Field,
     action: string,
     target: { type: string; id: string },
     metadata: Record<string, unknown>,
-  ): Promise<{ audited: boolean; auditError?: string }> => {
+  ): Promise<Record<Field, boolean> & { auditError?: string }> => {
     try {
       await audit(action, target, metadata);
-      return { audited: true };
+      return { [field]: true } as Record<Field, boolean>;
     } catch (error) {
       deps.logger?.warn(`Factory supervisor audit failed: ${action}`, {
         target,
         error: error instanceof Error ? error.message : String(error),
       });
-      return { audited: false, auditError: 'Done, but recording the audit entry failed. Do not retry.' };
+      return {
+        [field]: false,
+        auditError: 'Done, but recording the audit entry failed. Do not retry.',
+      } as Record<Field, boolean> & { auditError: string };
     }
   };
 
@@ -138,19 +149,44 @@ export function createFactorySupervisorActionTools(deps: SupervisorActionDepende
         },
         binding,
       );
-      await deps.workItems.reparkDecision({
+      const reparked = await deps.workItems.reparkDecision({
         ...tenant,
         suspension: next,
         lastError: `Factory run is waiting on ${next.toolName} for an answer.`,
         now: now(),
       });
+      if (!reparked) {
+        // The decision moved on underneath (superseded, dismissed): the parked
+        // run is not this decision's to track any more. Say so, ring nothing.
+        deps.logger?.warn('Factory supervisor answered run parked again, but its decision is no longer failed', {
+          decisionId: decision.id,
+        });
+        return {
+          run: 'parked-again',
+          recorded: false,
+          nextQuestion: next.question,
+          note: 'The worker asked another question, but its decision is no longer open, so the question was not recorded.',
+        };
+      }
+      // The finding is what a woken supervisor reads: refresh it with the
+      // new question BEFORE ringing, through the same derivation the sweep
+      // and the dispatcher use, so all three agree byte for byte.
+      const item = reparked.workItemId
+        ? await deps.workItems.get({ orgId: deps.scope.orgId, id: reparked.workItemId })
+        : null;
+      const finding = await deps.workItems.openSupervisorFinding({
+        orgId: deps.scope.orgId,
+        factoryProjectId: deps.scope.factoryProjectId,
+        finding: decisionFailedFinding(reparked, factoryHealthSubject(reparked.workItemId, item ?? undefined), now()),
+        now: now(),
+      });
       try {
         await deps.notifySupervisor?.({
           projectId: deps.scope.factoryProjectId,
-          findingKey: `decision-failed:${decision.id}`,
+          findingKey: finding.findingKey,
           kind: 'decision-failed',
-          summary: `Worker answered, then asked again: ${next.question}`,
-          ...(decision.failureCode ? { failureCode: decision.failureCode } : {}),
+          summary: String(finding.finding.evidence ?? finding.findingKey),
+          ...(reparked.failureCode ? { failureCode: reparked.failureCode } : {}),
           priority: 'high',
         });
       } catch (error) {
@@ -161,18 +197,25 @@ export function createFactorySupervisorActionTools(deps: SupervisorActionDepende
       }
       return {
         run: 'parked-again',
+        recorded: true,
         nextQuestion: next.question,
         ...(next.options ? { nextOptions: next.options } : {}),
         note: 'The worker took the answer and asked another question; answer it the same way (same decision id).',
       };
     }
     if (event?.type === 'agent_end' && 'reason' in event && event.reason === 'complete') {
-      await deps.workItems.resolveAnsweredDecision({ ...tenant, now: now() });
-      return {
-        run: 'completed',
-        decisionStatus: 'succeeded',
-        note: 'The run finished; its finding clears at the next sweep.',
-      };
+      const resolved = await deps.workItems.resolveAnsweredDecision({ ...tenant, now: now() });
+      return resolved
+        ? {
+            run: 'completed',
+            decisionStatus: resolved.status,
+            note: 'The run finished; its finding clears at the next sweep.',
+          }
+        : {
+            run: 'completed',
+            decisionStatus: 'unchanged',
+            note: 'The run finished; its decision had already moved on.',
+          };
     }
     if (event?.type === 'agent_end' && 'reason' in event && event.reason === 'suspended') {
       return escalate(
@@ -290,6 +333,7 @@ export function createFactorySupervisorActionTools(deps: SupervisorActionDepende
             );
           }
           const audited = await auditAfter(
+            'escalationAudited',
             'factory.supervisor.suspension_escalated',
             { type: 'deferred_decision', id: decisionId },
             { findingKey: key, note: bounded, answer },
@@ -376,6 +420,7 @@ export function createFactorySupervisorActionTools(deps: SupervisorActionDepende
           new Promise<undefined>(resolve => setTimeout(() => resolve(undefined), deps.resumeAckMs ?? RESUME_ACK_MS)),
         ]);
         const audited = await auditAfter(
+          'answerAudited',
           'factory.supervisor.suspension_answered',
           { type: 'deferred_decision', id: decisionId },
           { toolName: parked.toolName, toolCallId: parked.toolCallId, question: parked.question, answer: resumeData },

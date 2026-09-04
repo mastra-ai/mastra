@@ -326,7 +326,7 @@ describe('factory_answer_suspension', () => {
       outcome: 'answered',
       question: 'Which database should the fixture use?',
       answer: 'Use libsql.',
-      audited: true,
+      answerAudited: true,
       run: 'completed',
       decisionStatus: 'succeeded',
       note: expect.any(String),
@@ -370,7 +370,7 @@ describe('factory_answer_suspension', () => {
 
     const result = await execute<any>(tools.factory_answer_suspension, { decisionId: decision.id, answer: 'mysql' });
 
-    expect(result).toMatchObject({ outcome: 'escalated', audited: true });
+    expect(result).toMatchObject({ outcome: 'escalated', escalationAudited: true });
     expect(session.respondToToolSuspension).not.toHaveBeenCalled();
     const row = (await workItems.listSupervisorFindingPage({ ...SCOPE, limit: 5 })).rows[0];
     expect(row).toMatchObject({ status: 'escalated' });
@@ -546,7 +546,7 @@ describe('factory_answer_suspension', () => {
       decisionId: answered.decision.id,
       answer: 'x',
     });
-    expect(result).toMatchObject({ outcome: 'answered', audited: false, auditError: expect.any(String) });
+    expect(result).toMatchObject({ outcome: 'answered', answerAudited: false, auditError: expect.any(String) });
     expect(result.auditError).not.toContain('postgres');
     expect(answered.session.respondToToolSuspension).toHaveBeenCalledTimes(1);
 
@@ -559,7 +559,7 @@ describe('factory_answer_suspension', () => {
       decisionId: escalated.decision.id,
       answer: 'x',
     });
-    expect(second).toMatchObject({ outcome: 'escalated', audited: false });
+    expect(second).toMatchObject({ outcome: 'escalated', escalationAudited: false });
     expect((await escalated.workItems.listSupervisorFindingPage({ ...SCOPE, limit: 5 })).rows[0]).toMatchObject({
       status: 'escalated',
     });
@@ -619,8 +619,17 @@ describe('factory_answer_suspension', () => {
         findingKey: `decision-failed:${decision.id}`,
         priority: 'high',
         failureCode: 'run_awaiting_input',
+        summary: expect.stringContaining('And which port?'),
       }),
     );
+    // The finding a woken supervisor reads already carries question two.
+    const row = (await workItems.listSupervisorFindingPage({ ...SCOPE, limit: 5 })).rows.find(
+      r => r.findingKey === `decision-failed:${decision.id}`,
+    )!;
+    expect(row.finding.evidence).toContain('And which port?');
+    expect(row.finding.evidence).not.toContain('Which database should the fixture use?');
+    expect(row.resolvedAt).toBeNull();
+    expect(first).toMatchObject({ recorded: true });
 
     const again = await execute<any>(tools.factory_answer_suspension, { decisionId: decision.id, answer: '5433' });
     expect(again).toMatchObject({ outcome: 'answered' });
@@ -698,5 +707,58 @@ describe('factory_answer_suspension', () => {
         answer: 'y'.repeat(601),
       }),
     ).resolves.toMatchObject({ error: true });
+  });
+
+  it('does not claim a transition the storage refused (decision moved on underneath)', async () => {
+    const second = {
+      type: 'tool_suspended' as const,
+      toolCallId: 'call-2',
+      toolName: 'ask_user',
+      suspendPayload: { question: 'Again?' },
+    };
+    for (const [boundary, expected] of [
+      [second, { run: 'parked-again', recorded: false }],
+      [
+        { type: 'agent_end' as const, reason: 'complete' as const },
+        { run: 'completed', decisionStatus: 'unchanged' },
+      ],
+    ] as const) {
+      const seed = await createFactoryStorageForTests();
+      const { decision } = await parkDecision(seed);
+      const notify = vi.fn(async () => {});
+      const session = fakeSession(['call-1'], boundary);
+      const tools = createFactorySupervisorActionTools({
+        scope: SCOPE,
+        actor: { type: 'agent', id: 'agent:thread-1' },
+        workItems: {
+          getDeferredDecision: (...args: Parameters<typeof seed.workItems.getDeferredDecision>) =>
+            seed.workItems.getDeferredDecision(...args),
+          listRunBindings: (...args: Parameters<typeof seed.workItems.listRunBindings>) =>
+            seed.workItems.listRunBindings(...args),
+          escalateSupervisorFinding: (...args: Parameters<typeof seed.workItems.escalateSupervisorFinding>) =>
+            seed.workItems.escalateSupervisorFinding(...args),
+          openSupervisorFinding: (...args: Parameters<typeof seed.workItems.openSupervisorFinding>) =>
+            seed.workItems.openSupervisorFinding(...args),
+          get: (...args: Parameters<typeof seed.workItems.get>) => seed.workItems.get(...args),
+          // Both compare-and-set writes lose: the decision is no longer failed.
+          resolveAnsweredDecision: async () => null,
+          reparkDecision: async () => null,
+        },
+        audit: seed.audit,
+        controller: { getSessionByResource: async () => session },
+        notifySupervisor: notify,
+        now: () => NOW,
+        resumeAckMs: 50,
+      });
+      const result = await execute<any>(tools.factory_answer_suspension, { decisionId: decision.id, answer: 'x' });
+      expect(result).toMatchObject({ outcome: 'answered', ...expected });
+      expect(notify).not.toHaveBeenCalled();
+    }
+  });
+
+  it('keeps the answer audit and the escalation audit apart on a fast failure', async () => {
+    const { tools, decision } = await answerSetup({}, fakeSession(['call-1'], new Error('boom')));
+    const result = await execute<any>(tools.factory_answer_suspension, { decisionId: decision.id, answer: 'x' });
+    expect(result).toMatchObject({ outcome: 'escalated', answerAudited: true, escalationAudited: true });
   });
 });
