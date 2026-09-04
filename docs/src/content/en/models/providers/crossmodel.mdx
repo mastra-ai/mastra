@@ -7,7 +7,7 @@ description: "Browse CrossModel model IDs, capabilities, context windows, and pr
 
 # <img src="https://models.dev/logos/crossmodel.svg" alt="CrossModel logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />CrossModel
 
-Access 57 CrossModel models through Mastra's model router. Authentication is handled automatically using the `CROSSMODEL_API_KEY` environment variable.
+Access 58 CrossModel models through Mastra's model router. Authentication is handled automatically using the `CROSSMODEL_API_KEY` environment variable.
 
 Learn more in the [CrossModel documentation](https://www.crossmodel.ai/docs).
 
@@ -275,6 +275,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
   },
   {
     "model": "crossmodel/gemini/gemini-3.7-flash",
+    "imageInput": true,
+    "audioInput": true,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 65536,
+    "inputCost": 0.75,
+    "outputCost": 3.75
+  },
+  {
+    "model": "crossmodel/gemini/gemini-3.8-flash",
     "imageInput": true,
     "audioInput": true,
     "videoInput": true,
