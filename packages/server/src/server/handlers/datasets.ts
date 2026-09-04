@@ -1,5 +1,4 @@
 import { Agent } from '@mastra/core/agent';
-import { deleteExperimentTraces } from '@mastra/core/datasets';
 import { MastraError } from '@mastra/core/error';
 import { coreFeatures } from '@mastra/core/features';
 import { resolveModelConfig } from '@mastra/core/llm';
@@ -695,38 +694,23 @@ export const DELETE_ANY_EXPERIMENT_ROUTE = createRoute({
         projectId,
         deleteTraces = true,
       } = params as { organizationId?: string; projectId?: string; deleteTraces?: boolean };
-      const storage = mastra.getStorage();
-      if (!storage) {
-        throw new HTTPException(500, { message: 'Storage not configured' });
-      }
-      const experimentsStore = await storage.getStore('experiments');
-      if (!experimentsStore) {
-        throw new HTTPException(500, { message: 'Experiments storage not available' });
-      }
-      const filters =
-        organizationId !== undefined || projectId !== undefined ? { organizationId, projectId } : undefined;
+      const scoped = organizationId !== undefined || projectId !== undefined;
       // For unscoped deletes, 404 on missing experiments. For scoped deletes,
       // skip the preflight: a tenancy mismatch must be a silent no-op so
       // cross-tenant existence is not leaked (mirrors DELETE_DATASET_ROUTE).
-      if (filters === undefined) {
-        const existing = await experimentsStore.getExperimentById({ id: experimentId });
+      if (!scoped) {
+        const existing = await mastra.datasets.getExperiment({ experimentId });
         if (!existing) {
           throw new HTTPException(404, { message: `Experiment not found: ${experimentId}` });
         }
       }
-      // Must run before the relational delete: that cascade removes the result
-      // rows carrying the trace ids.
-      if (deleteTraces) {
-        await deleteExperimentTraces({
-          storage,
-          experimentsStore,
-          experimentId,
-          ...(filters !== undefined ? { filters } : {}),
-          logger: mastra.getLogger(),
-        });
-      }
       // Note: experiment-linked score_events are not cascaded here (tracked separately).
-      await experimentsStore.deleteExperiment({ id: experimentId, filters });
+      await mastra.datasets.deleteExperiment({
+        experimentId,
+        ...(organizationId !== undefined ? { organizationId } : {}),
+        ...(projectId !== undefined ? { projectId } : {}),
+        deleteTraces,
+      });
       return { success: true };
     } catch (error) {
       if (error instanceof MastraError) {

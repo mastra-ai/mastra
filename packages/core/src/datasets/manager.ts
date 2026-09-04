@@ -7,6 +7,7 @@ import type { ExperimentsStorage } from '../storage/domains/experiments/base.js'
 import type { DatasetTenancyFilters, TargetType } from '../storage/types.js';
 import { Dataset } from './dataset.js';
 import { compareExperiments as compareExperimentsInternal } from './experiment/analytics/compare.js';
+import { deleteExperimentTraces } from './experiment-traces.js';
 
 /**
  * Build a {@link DatasetTenancyFilters} from public manager args. Returns
@@ -234,6 +235,48 @@ export class DatasetsManager {
       id: args.experimentId,
       filters: scopeFromArgs(args),
     });
+  }
+
+  /**
+   * Delete an experiment (run) by ID, optionally scoped to a tenant.
+   *
+   * Unlike {@link Dataset.deleteExperiment} this does not require the experiment
+   * to still belong to a dataset, so it can clean up experiments orphaned by
+   * dataset deletion (their `datasetId` is nulled out).
+   *
+   * When `organizationId` / `projectId` are provided, the delete is scoped to
+   * that tenancy: an experiment row in another tenant is a silent no-op (no
+   * error) so cross-tenant existence is not leaked via error timing/text.
+   *
+   * `deleteTraces` defaults to `true`: an experiment's traces are excluded from
+   * normal trace reads, so leaving them behind makes them invisible but
+   * still-retained data. Stores without an observability domain — or without
+   * tenant-scoped trace deletion — log a warning and skip the trace cascade so
+   * the experiment itself is still deleted.
+   */
+  async deleteExperiment(args: {
+    experimentId: string;
+    organizationId?: string;
+    projectId?: string;
+    deleteTraces?: boolean;
+  }) {
+    const experimentsStore = await this.#getExperimentsStore();
+    const filters = scopeFromArgs(args);
+
+    // Must run before the relational delete: that cascade removes the result
+    // rows carrying the trace ids.
+    const storage = this.#mastra.getStorage();
+    if ((args.deleteTraces ?? true) && storage) {
+      await deleteExperimentTraces({
+        storage,
+        experimentsStore,
+        experimentId: args.experimentId,
+        ...(filters !== undefined ? { filters } : {}),
+        logger: this.#mastra.getLogger(),
+      });
+    }
+
+    return experimentsStore.deleteExperiment({ id: args.experimentId, filters });
   }
 
   /**
