@@ -55,6 +55,42 @@ describe('DuckDB advanced trace query', () => {
     expect(compiled.values).toContain('2026-01-01T12:00:00.000Z');
   });
 
+  it('projects canonical span values with guarded JSON strings and typed timestamps', () => {
+    const compiled = compileDuckDBTraceQuery(
+      plan({
+        where: {
+          spans: {
+            some: {
+              op: 'and',
+              args: [
+                { op: 'eq', left: { path: 'name' }, right: { literal: 'medication_lookup' } },
+                { op: 'eq', left: { path: 'model' }, right: { literal: 'claude-sonnet-4-6' } },
+                { op: 'eq', left: { path: 'provider' }, right: { literal: 'anthropic' } },
+                {
+                  op: 'gte',
+                  left: { path: 'startedAt' },
+                  right: { literal: '2026-01-01T06:00:00-06:00' },
+                },
+                { op: 'gt', left: { path: 'durationMs' }, right: { literal: 5000 } },
+                { op: 'eq', left: { path: 'status' }, right: { literal: 'success' } },
+              ],
+            },
+          },
+        },
+      }),
+    );
+
+    expect(compiled.sql.match(/FROM current_spans s/g)).toHaveLength(1);
+    expect(compiled.sql).toContain(`json_type(attributes, '$.model') = 'VARCHAR'`);
+    expect(compiled.sql).toContain(`json_extract_string(attributes, '$.model')`);
+    expect(compiled.sql).toContain(`json_type(attributes, '$.provider') = 'VARCHAR'`);
+    expect(compiled.sql).toContain(`date_diff('millisecond', startedAt, endedAt) AS durationMs`);
+    expect(compiled.sql).toContain('s.startedAt IS NOT NULL AND s.startedAt >= CAST(? AS TIMESTAMP)');
+    expect(compiled.sql).toContain('s.durationMs IS NOT NULL AND s.durationMs > ?');
+    expect(compiled.values).toContain('2026-01-01T12:00:00.000Z');
+    expect(compiled.values).toContain(5000);
+  });
+
   it('selects the latest logical root before applying completion and time filters', () => {
     const compiled = compileDuckDBTraceQuery(plan());
 

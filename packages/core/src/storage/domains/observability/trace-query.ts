@@ -215,7 +215,22 @@ export type TraceQueryField =
   | 'entityType'
   | 'environment'
   | 'status';
-export type TraceQuerySpanField = 'spanType' | 'error';
+export type TraceQuerySpanField =
+  | 'name'
+  | 'spanType'
+  | 'model'
+  | 'provider'
+  | 'startedAt'
+  | 'endedAt'
+  | 'durationMs'
+  | 'status'
+  | 'error'
+  | 'entityType'
+  | 'entityId'
+  | 'entityName'
+  | 'entityVersionId'
+  | 'parentEntityVersionId'
+  | 'rootEntityVersionId';
 export type TraceQueryScoreField =
   | 'scorerId'
   | 'scorerVersion'
@@ -366,8 +381,21 @@ const TRACE_FIELD_RULES: Record<TraceQueryField, FieldRule> = {
 };
 
 const SPAN_FIELD_RULES: Record<TraceQuerySpanField, FieldRule> = {
+  name: { type: 'string', operators: STRING_OPERATORS },
   spanType: { type: 'string', operators: STRING_OPERATORS },
+  model: { type: 'string', operators: STRING_OPERATORS },
+  provider: { type: 'string', operators: STRING_OPERATORS },
+  startedAt: { type: 'timestamp', operators: ORDERED_OPERATORS },
+  endedAt: { type: 'timestamp', operators: ORDERED_OPERATORS },
+  durationMs: { type: 'number', operators: ORDERED_OPERATORS },
+  status: { type: 'string', operators: STRING_OPERATORS },
   error: { type: 'presence', operators: PRESENCE_OPERATORS },
+  entityType: { type: 'string', operators: STRING_OPERATORS },
+  entityId: { type: 'string', operators: STRING_OPERATORS },
+  entityName: { type: 'string', operators: STRING_OPERATORS },
+  entityVersionId: { type: 'string', operators: STRING_OPERATORS },
+  parentEntityVersionId: { type: 'string', operators: STRING_OPERATORS },
+  rootEntityVersionId: { type: 'string', operators: STRING_OPERATORS },
 };
 
 const SCORE_FIELD_RULES: Record<TraceQueryScoreField, FieldRule> = {

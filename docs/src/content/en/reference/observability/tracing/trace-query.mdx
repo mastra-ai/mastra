@@ -108,7 +108,8 @@ Hono and Fastify enforce the request-body limit before JSON parsing. Express and
 | - | - | - |
 | Trace | `traceId`, `threadId`, `resourceId`, `entityName`, `entityType`, `environment`, `status` | `eq`, `ne`, `in`, `notIn`, `exists`, `notExists` |
 | Trace | `startedAt`, `endedAt` | `eq`, `ne`, `in`, `notIn`, `lt`, `lte`, `gt`, `gte`, `exists`, `notExists` |
-| Span | `spanType` | `eq`, `ne`, `in`, `notIn`, `exists`, `notExists` |
+| Span | `name`, `spanType`, `model`, `provider`, `status`, `entityType`, `entityId`, `entityName`, `entityVersionId`, `parentEntityVersionId`, `rootEntityVersionId` | `eq`, `ne`, `in`, `notIn`, `exists`, `notExists` |
+| Span | `startedAt`, `endedAt`, `durationMs` | `eq`, `ne`, `in`, `notIn`, `lt`, `lte`, `gt`, `gte`, `exists`, `notExists` |
 | Span | `error` | `exists`, `notExists` |
 | Score | `scorerId`, `scorerVersion`, `scoreSource`, `entityVersionId`, `parentEntityVersionId`, `rootEntityVersionId` | `eq`, `ne`, `in`, `notIn`, `exists`, `notExists` |
 | Score | `score`, `timestamp` | `eq`, `ne`, `in`, `notIn`, `lt`, `lte`, `gt`, `gte`, `exists`, `notExists` |
@@ -116,7 +117,83 @@ Hono and Fastify enforce the request-body limit before JSON parsing. Express and
 
 Compose predicates with `{ op: 'and', args: [...] }`, `{ op: 'or', args: [...] }`, and `{ op: 'not', arg: ... }`. Comparison predicates place a field reference on the left and a literal on the right. Membership predicates use a field reference in `value` and a homogeneous literal array in `set`.
 
-String comparisons are exact and case-sensitive, and literals are never coerced. Numeric score predicates therefore require numbers, while timestamp predicates require ISO timestamp strings. A missing value satisfies neither positive nor ordered predicates, although it does satisfy the negative operators `ne` and `notIn`. Combine a negative predicate with `exists` when the field must also be present.
+String comparisons are exact and case-sensitive. The planner rejects a string where a number is required, including for score and `durationMs`, and accepts only ISO timestamp strings for timestamp predicates. A missing field satisfies neither positive nor ordered predicates, although the negative operators `ne` and `notIn` do match it. Combine a negative predicate with `exists` when the field must also be present.
+
+### Filter by span properties
+
+Every condition inside one `spans.some` or `spans.none` clause applies to the same current span. For example, this predicate finds a failed tool span whose name is `medication_lookup`; a matching name on one span and an error on another don't satisfy it:
+
+```typescript
+const failedMedicationLookup = {
+  spans: {
+    some: {
+      op: 'and',
+      args: [
+        { op: 'eq', left: { path: 'name' }, right: { literal: 'medication_lookup' } },
+        { op: 'eq', left: { path: 'spanType' }, right: { literal: 'tool_call' } },
+        { op: 'exists', path: 'error' },
+      ],
+    },
+  },
+}
+```
+
+Use `status` for the derived `success` or `error` outcome. Use `error` when you only need to test whether error details are present.
+
+`durationMs` is the span's elapsed time in milliseconds. Span `startedAt` and `endedAt` conditions filter related spans independently of the top-level root `timeRange`:
+
+```typescript
+const slowModelCalls = {
+  spans: {
+    some: {
+      op: 'and',
+      args: [
+        { op: 'eq', left: { path: 'spanType' }, right: { literal: 'model_generation' } },
+        { op: 'gt', left: { path: 'durationMs' }, right: { literal: 5000 } },
+        {
+          op: 'gte',
+          left: { path: 'startedAt' },
+          right: { literal: '2026-07-15T00:00:00.000Z' },
+        },
+      ],
+    },
+  },
+}
+```
+
+`model` and `provider` read the canonical `attributes.model` and `attributes.provider` span attributes. Only stored string values are queryable; missing, null, and non-string values count as missing.
+
+```typescript
+const selectedModel = {
+  spans: {
+    some: {
+      op: 'and',
+      args: [
+        { op: 'eq', left: { path: 'model' }, right: { literal: 'claude-sonnet-4-6' } },
+        { op: 'eq', left: { path: 'provider' }, right: { literal: 'anthropic' } },
+      ],
+    },
+  },
+}
+```
+
+Use generic entity fields for tool and retrieval identity. The version fields let one clause qualify the same span by its entity lineage:
+
+```typescript
+const versionedRetrieval = {
+  spans: {
+    some: {
+      op: 'and',
+      args: [
+        { op: 'eq', left: { path: 'entityType' }, right: { literal: 'rag_ingestion' } },
+        { op: 'eq', left: { path: 'entityId' }, right: { literal: 'medication-index' } },
+        { op: 'eq', left: { path: 'entityVersionId' }, right: { literal: 'index-v3' } },
+        { op: 'eq', left: { path: 'rootEntityVersionId' }, right: { literal: 'agent-v2' } },
+      ],
+    },
+  },
+}
+```
 
 ### Filter by score time
 

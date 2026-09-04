@@ -20,14 +20,20 @@ export interface RawTraceQuerySpan {
   spanId: string;
   parentSpanId: string | null;
   isPending: boolean;
+  name: string;
   spanType: string;
+  attributes: Record<string, unknown> | null;
   error: unknown | null;
   threadId: string | null;
   resourceId: string | null;
   startedAt: string;
   endedAt: string | null;
-  entityName: string | null;
   entityType: string | null;
+  entityId: string | null;
+  entityName: string | null;
+  entityVersionId: string | null;
+  parentEntityVersionId: string | null;
+  rootEntityVersionId: string | null;
   environment: string | null;
 }
 
@@ -62,14 +68,20 @@ const span = (
   spanId,
   parentSpanId: null,
   isPending: false,
+  name: spanId,
   spanType: 'agent_run',
+  attributes: null,
   error: null,
   threadId: null,
   resourceId: null,
   startedAt: '2026-08-10T00:00:00.000Z',
   endedAt: '2026-08-10T00:00:01.000Z',
-  entityName: 'agent',
   entityType: 'agent',
+  entityId: null,
+  entityName: 'agent',
+  entityVersionId: null,
+  parentEntityVersionId: null,
+  rootEntityVersionId: null,
   environment: 'production',
   ...overrides,
 });
@@ -114,16 +126,37 @@ export const TRACE_QUERY_FIXTURE_DATA: TraceQueryFixtureData = {
     }),
     span(11, 'trace-a', 'span-a-tool', {
       parentSpanId: 'root-a',
+      name: 'superseded_lookup',
       spanType: 'tool_call',
+      attributes: { provider: 'superseded-provider' },
+      entityType: 'tool',
+      entityId: 'medication_lookup',
+      entityName: 'Medication lookup',
+      entityVersionId: 'tool-v1',
+      rootEntityVersionId: 'agent-v1',
       startedAt: '2026-08-05T10:00:00.500Z',
       endedAt: '2026-08-05T10:00:01.000Z',
     }),
     span(12, 'trace-a', 'span-a-tool', {
       parentSpanId: 'root-a',
+      name: 'medication_lookup',
       spanType: 'tool_call',
       error: { message: 'latest failed attempt' },
+      entityType: 'tool',
+      entityId: 'medication_lookup',
+      entityName: 'Medication lookup',
+      entityVersionId: 'tool-v2',
+      rootEntityVersionId: 'agent-v1',
       startedAt: '2026-08-05T10:00:00.500Z',
       endedAt: '2026-08-05T10:00:01.500Z',
+    }),
+    span(13, 'trace-a', 'span-a-model', {
+      parentSpanId: 'root-a',
+      name: "llm: 'claude-sonnet-4-6'",
+      spanType: 'model_generation',
+      attributes: { model: 'claude-sonnet-4-6', provider: 'anthropic' },
+      startedAt: '2026-07-15T10:00:00.000Z',
+      endedAt: '2026-07-15T10:00:06.250Z',
     }),
     span(20, 'trace-b', 'root-b', {
       threadId: 'thread-1',
@@ -134,8 +167,22 @@ export const TRACE_QUERY_FIXTURE_DATA: TraceQueryFixtureData = {
     }),
     span(21, 'trace-b', 'span-b-tool', {
       parentSpanId: 'root-b',
+      name: 'medication_lookup',
       spanType: 'tool_call',
+      entityType: 'tool',
+      entityId: 'medication_lookup',
+      entityName: 'Medication lookup',
+      entityVersionId: 'tool-v1',
+      rootEntityVersionId: 'agent-v1',
       error: null,
+    }),
+    span(22, 'trace-b', 'span-b-model', {
+      parentSpanId: 'root-b',
+      name: "llm: 'gpt-5'",
+      spanType: 'model_generation',
+      attributes: { model: 'gpt-5', provider: 'openai' },
+      startedAt: '2026-08-05T10:00:00.250Z',
+      endedAt: '2026-08-05T10:00:02.250Z',
     }),
     span(30, 'trace-c', 'root-c', {
       threadId: 'thread-2',
@@ -143,6 +190,20 @@ export const TRACE_QUERY_FIXTURE_DATA: TraceQueryFixtureData = {
       startedAt: '2026-08-07T10:00:00.000Z',
       endedAt: '2026-08-07T10:00:02.000Z',
       error: { message: 'root failed' },
+    }),
+    span(31, 'trace-c', 'span-c-retrieval', {
+      parentSpanId: 'root-c',
+      name: 'retrieve_medications',
+      spanType: 'rag_action',
+      attributes: { model: 42, provider: { name: 'not-a-string' } },
+      entityType: 'rag_ingestion',
+      entityId: 'medication-index',
+      entityName: 'Medication index',
+      entityVersionId: 'index-v3',
+      parentEntityVersionId: 'agent-v2',
+      rootEntityVersionId: 'agent-v2',
+      startedAt: '2026-08-07T10:00:00.250Z',
+      endedAt: '2026-08-07T10:00:01.250Z',
     }),
     span(40, 'trace-d', 'root-d', {
       threadId: null,
@@ -168,7 +229,9 @@ export const TRACE_QUERY_FIXTURE_DATA: TraceQueryFixtureData = {
     }),
     span(70, null, 'span-uncorrelated', {
       parentSpanId: 'other-root',
+      name: 'medication_lookup',
       spanType: 'tool_call',
+      attributes: { model: 'uncorrelated-model', provider: 'uncorrelated-provider' },
       error: { message: 'must not correlate' },
     }),
   ],
@@ -340,6 +403,144 @@ export const TRACE_QUERY_CONFORMANCE_CASES: TraceQueryConformanceCase[] = [
       },
     },
     expected: [{ traceId: 'trace-d' }, { traceId: 'trace-a' }],
+  },
+  {
+    name: 'binds tool name, failure, identity, and lineage to one current span',
+    request: {
+      timeRange: fullRange,
+      where: {
+        spans: {
+          some: {
+            op: 'and',
+            args: [
+              { op: 'eq', left: { path: 'name' }, right: { literal: 'medication_lookup' } },
+              { op: 'eq', left: { path: 'status' }, right: { literal: 'error' } },
+              { op: 'eq', left: { path: 'entityType' }, right: { literal: 'tool' } },
+              { op: 'eq', left: { path: 'entityId' }, right: { literal: 'medication_lookup' } },
+              { op: 'eq', left: { path: 'entityName' }, right: { literal: 'Medication lookup' } },
+              { op: 'eq', left: { path: 'entityVersionId' }, right: { literal: 'tool-v2' } },
+              { op: 'notExists', path: 'parentEntityVersionId' },
+              { op: 'eq', left: { path: 'rootEntityVersionId' }, right: { literal: 'agent-v1' } },
+            ],
+          },
+        },
+      },
+    },
+    expected: [{ traceId: 'trace-a' }],
+  },
+  {
+    name: 'does not combine a span name with a model from another span',
+    request: {
+      timeRange: fullRange,
+      where: {
+        spans: {
+          some: {
+            op: 'and',
+            args: [
+              { op: 'eq', left: { path: 'name' }, right: { literal: 'medication_lookup' } },
+              { op: 'eq', left: { path: 'model' }, right: { literal: 'claude-sonnet-4-6' } },
+            ],
+          },
+        },
+      },
+    },
+    expected: [],
+  },
+  {
+    name: 'filters slow model spans by model, provider, and independent span timestamps',
+    request: {
+      timeRange: fullRange,
+      where: {
+        spans: {
+          some: {
+            op: 'and',
+            args: [
+              { op: 'eq', left: { path: 'spanType' }, right: { literal: 'model_generation' } },
+              { op: 'eq', left: { path: 'model' }, right: { literal: 'claude-sonnet-4-6' } },
+              { op: 'eq', left: { path: 'provider' }, right: { literal: 'anthropic' } },
+              {
+                op: 'gte',
+                left: { path: 'startedAt' },
+                right: { literal: '2026-07-15T09:00:00Z' },
+              },
+              {
+                op: 'lt',
+                left: { path: 'endedAt' },
+                right: { literal: '2026-07-15T11:00:00Z' },
+              },
+              { op: 'gt', left: { path: 'durationMs' }, right: { literal: 5000 } },
+            ],
+          },
+        },
+      },
+    },
+    expected: [{ traceId: 'trace-a' }],
+  },
+  {
+    name: 'normalizes non-string model and provider attributes as missing',
+    request: {
+      timeRange: fullRange,
+      where: {
+        spans: {
+          some: {
+            op: 'and',
+            args: [
+              { op: 'eq', left: { path: 'name' }, right: { literal: 'retrieve_medications' } },
+              { op: 'notExists', path: 'model' },
+              { op: 'notExists', path: 'provider' },
+              { op: 'eq', left: { path: 'entityVersionId' }, right: { literal: 'index-v3' } },
+              { op: 'eq', left: { path: 'parentEntityVersionId' }, right: { literal: 'agent-v2' } },
+              { op: 'eq', left: { path: 'rootEntityVersionId' }, right: { literal: 'agent-v2' } },
+            ],
+          },
+        },
+      },
+    },
+    expected: [{ traceId: 'trace-c' }],
+  },
+  {
+    name: 'applies nullable negative membership semantics to current spans',
+    request: {
+      timeRange: fullRange,
+      where: {
+        spans: {
+          some: {
+            op: 'and',
+            args: [
+              { op: 'eq', left: { path: 'entityId' }, right: { literal: 'medication_lookup' } },
+              { op: 'notIn', value: { path: 'provider' }, set: ['anthropic'] },
+            ],
+          },
+        },
+      },
+    },
+    expected: [{ traceId: 'trace-a' }, { traceId: 'trace-b' }],
+  },
+  {
+    name: 'does not resurrect superseded span values',
+    request: {
+      timeRange: fullRange,
+      where: { spans: { some: { op: 'eq', left: { path: 'name' }, right: { literal: 'superseded_lookup' } } } },
+    },
+    expected: [],
+  },
+  {
+    name: 'uses correlated anti-existence for failed tool spans',
+    request: {
+      timeRange: fullRange,
+      where: {
+        spans: {
+          none: {
+            op: 'and',
+            args: [
+              { op: 'eq', left: { path: 'spanType' }, right: { literal: 'tool_call' } },
+              { op: 'exists', path: 'error' },
+            ],
+          },
+        },
+      },
+    },
+    expected: [{ traceId: 'trace-d' }, { traceId: 'trace-c' }, { traceId: 'trace-b' }],
   },
   {
     name: 'binds scorer and score predicates to one current score record',
@@ -732,7 +933,12 @@ function evaluateTracePredicate(
     const records = (predicate.collection === 'spans' ? spans : scores).filter(
       record => root.traceId !== null && record.traceId !== null && record.traceId === root.traceId,
     );
-    const matched = records.some(record => evaluateScalarPredicate(predicate.predicate, record));
+    const matched = records.some(record =>
+      evaluateScalarPredicate(
+        predicate.predicate,
+        predicate.collection === 'spans' ? spanValues(record as RawTraceQuerySpan) : record,
+      ),
+    );
     return predicate.quantifier === 'some' ? matched : !matched;
   }
   if (predicate.type === 'boolean') {
@@ -777,6 +983,28 @@ function evaluateScalarPredicate(
     case 'gte':
       return value >= predicate.value;
   }
+}
+
+function spanValues(span: RawTraceQuerySpan): Record<string, unknown> {
+  const model = typeof span.attributes?.model === 'string' ? span.attributes.model : null;
+  const provider = typeof span.attributes?.provider === 'string' ? span.attributes.provider : null;
+  return {
+    name: span.name,
+    spanType: span.spanType,
+    model,
+    provider,
+    startedAt: span.startedAt,
+    endedAt: span.endedAt,
+    durationMs: span.endedAt === null ? null : new Date(span.endedAt).getTime() - new Date(span.startedAt).getTime(),
+    status: span.error === null ? 'success' : 'error',
+    error: span.error,
+    entityType: span.entityType,
+    entityId: span.entityId,
+    entityName: span.entityName,
+    entityVersionId: span.entityVersionId,
+    parentEntityVersionId: span.parentEntityVersionId,
+    rootEntityVersionId: span.rootEntityVersionId,
+  };
 }
 
 function traceValues(root: RawTraceQuerySpan): Record<string, unknown> {
