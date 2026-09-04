@@ -85,7 +85,7 @@
     "react-resizable-panels": "^4.7.3",
     "react-router": "^8.0.0",
     "react-syntax-highlighter": "^15.6.6",
-    "recharts": "^3.8.0",
+    "recharts": "^3.10.1",
     "remark-gfm": "^4.0.1",
     "semver": "^7.7.4",
     "sonner": "^2.0.7",
