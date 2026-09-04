@@ -801,33 +801,63 @@ describe('TraceDataPanelView — following the URL to another span', () => {
   });
 });
 
-describe('TraceDataPanelView — trace-level tabs', () => {
-  describe('when a partial thread slot is provided', () => {
-    it('renders Messages immediately after Spans', () => {
-      render(<TraceDataPanelView {...baseProps} partialThreadTabSlot={() => <div>partial thread here</div>} />);
+describe('TraceDataPanelView — messages column', () => {
+  const messages = <div data-testid="messages-panel">messages here</div>;
+  const spanDetail = <div data-testid="span-detail">span content</div>;
+  const columns = (container: HTMLElement) => container.querySelector('[data-trace-columns]') as HTMLElement;
+  const precedes = (a: Element, b: Element) => !!(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
 
-      expect(screen.getAllByRole('tab').map(tab => tab.textContent)).toEqual(['Spans', 'Messages']);
-      expect(screen.getByText('agent run')).toBeTruthy();
-      expect(screen.queryByText('partial thread here')).toBeNull();
+  describe('given a messages slot', () => {
+    it('renders it inside the same card, before the trace content', () => {
+      const { container } = render(<TraceDataPanelView {...baseProps} messagesPanelSlot={messages} />);
+
+      const panel = screen.getByTestId('messages-panel');
+      expect(container.querySelector('section')?.contains(panel)).toBe(true);
+      expect(precedes(panel, screen.getByText('agent run'))).toBe(true);
+      // The column is a layout concern, not a tab.
+      expect(screen.queryByRole('tab', { name: 'Messages' })).toBeNull();
     });
 
-    it('renders the selected trace in the Messages tab', () => {
-      const partialThreadTabSlot = vi.fn(({ traceId }: { traceId: string }) => <div>partial thread for {traceId}</div>);
+    it('uses an animated messages + trace grid', () => {
+      const { container } = render(<TraceDataPanelView {...baseProps} messagesPanelSlot={messages} />);
 
-      render(
-        <TraceDataPanelView
-          {...baseProps}
-          activeTab="partial-thread"
-          onTabChange={vi.fn()}
-          partialThreadTabSlot={partialThreadTabSlot}
-        />,
-      );
-
-      expect(partialThreadTabSlot).toHaveBeenCalledWith({ traceId: 'trace-1' });
-      expect(screen.getByText('partial thread for trace-1')).toBeTruthy();
+      expect(columns(container).className).toContain('grid-cols-[1fr_1fr_0fr]');
+      expect(columns(container).className).toContain('transition-[grid-template-columns]');
     });
   });
 
+  describe('given both a messages slot and a span panel slot', () => {
+    it('orders the columns messages → trace → span', () => {
+      const { container } = render(
+        <TraceDataPanelView {...baseProps} messagesPanelSlot={messages} spanPanelSlot={spanDetail} />,
+      );
+
+      const panel = screen.getByTestId('messages-panel');
+      const trace = screen.getByText('agent run');
+      const span = screen.getByTestId('span-detail');
+      expect(precedes(panel, trace)).toBe(true);
+      expect(precedes(trace, span)).toBe(true);
+      expect(columns(container).className).toContain('grid-cols-[1fr_1fr_1fr]');
+    });
+  });
+
+  describe('given no messages slot', () => {
+    it('renders no messages column', () => {
+      const { container } = render(<TraceDataPanelView {...baseProps} />);
+
+      expect(screen.queryByTestId('messages-panel')).toBeNull();
+      expect(columns(container).className).toContain('grid-cols-[0fr_1fr_0fr]');
+    });
+
+    it('keeps the span column animatable', () => {
+      const { container } = render(<TraceDataPanelView {...baseProps} spanPanelSlot={spanDetail} />);
+
+      expect(columns(container).className).toContain('grid-cols-[0fr_1fr_1fr]');
+    });
+  });
+});
+
+describe('TraceDataPanelView — trace-level tabs', () => {
   it('renders no tabs when no scores slot is provided', () => {
     render(<TraceDataPanelView {...baseProps} />);
 
@@ -883,17 +913,16 @@ describe('TraceDataPanelView — trace-level tabs', () => {
 });
 
 describe('TraceDataPanelView — trace feedback tab', () => {
-  it('renders Feedback before Scores and after Messages', () => {
+  it('renders Feedback before Scores', () => {
     render(
       <TraceDataPanelView
         {...baseProps}
-        partialThreadTabSlot={() => <div>trace messages here</div>}
         scoresTabSlot={() => <div>trace scores here</div>}
         feedbackTabSlot={() => <div>trace feedback here</div>}
       />,
     );
 
-    expect(screen.getAllByRole('tab').map(tab => tab.textContent)).toEqual(['Spans', 'Messages', 'Feedback', 'Scores']);
+    expect(screen.getAllByRole('tab').map(tab => tab.textContent)).toEqual(['Spans', 'Feedback', 'Scores']);
   });
 
   it('renders the Feedback tab even when no scores slot is provided', () => {
