@@ -10,7 +10,8 @@ function createTask(status: BackgroundTask['status']): BackgroundTask {
     status,
     toolName: 'mastra_expert',
     toolCallId: 'call-1',
-    args: { question: 'test' },
+    args: { question: 'test', token: 'secret-token' },
+    error: { message: 'request failed with secret-token' },
     agentId: 'agent-1',
     threadId: 'thread-1',
     resourceId: 'resource-1',
@@ -64,8 +65,6 @@ describe('createBackgroundCompletionCallbacks', () => {
               originToolCallId: 'call-1',
               toolName: 'mastra_expert',
               status,
-              argsSummary: '{"question":"test"}',
-              errorSummary: undefined,
             },
           },
         },
@@ -91,8 +90,6 @@ describe('createBackgroundCompletionCallbacks', () => {
       threadId: 'thread-1',
       toolName: 'mastra_expert',
       status: 'completed',
-      argsSummary: '{"question":"test"}',
-      errorSummary: undefined,
     });
   });
 

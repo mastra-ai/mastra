@@ -7,8 +7,6 @@ export interface BackgroundCompletionEvent {
   threadId: string;
   toolName: string;
   status: 'completed' | 'failed' | 'cancelled';
-  argsSummary?: string;
-  errorSummary?: string;
 }
 
 export interface BackgroundCompletionEvents {

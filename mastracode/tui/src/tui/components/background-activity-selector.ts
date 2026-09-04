@@ -40,8 +40,7 @@ export class BackgroundActivitySelectorComponent extends Box {
     const detailText = new Text('', 0, 0);
     const updateDetail = (activity: BackgroundActivity) => {
       const state = activity.status === 'accepted' ? 'running' : activity.status;
-      const error = activity.errorSummary ? `\n${theme.fg('error', activity.errorSummary)}` : '';
-      detailText.setText(`${theme.fg('dim', `${state} · task ${activity.taskId}`)}${error}`);
+      detailText.setText(theme.fg('dim', `${state} · task ${activity.taskId}`));
       options.tui.requestRender();
     };
 
