@@ -80,7 +80,7 @@
     "prism-react-renderer": "^2.4.1",
     "react": "catalog:",
     "react-dom": "catalog:",
-    "react-hook-form": "^7.71.2",
+    "react-hook-form": "^7.81.0",
     "react-markdown": "^9.1.0",
     "react-resizable-panels": "^4.7.3",
     "react-router": "^8.0.0",

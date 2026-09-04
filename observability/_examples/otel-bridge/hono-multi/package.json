@@ -33,6 +33,7 @@
       "@mastra/observability": "link:../../../mastra",
       "@mastra/otel-bridge": "link:../../../otel-bridge",
       "@mastra/otel-exporter": "link:../../../otel-exporter",
+      "brace-expansion@>=2.0.0 <2.1.4": "2.1.4",
       "mastra": "link:../../../../packages/cli"
     }
   }
