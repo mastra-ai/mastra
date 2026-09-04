@@ -9,6 +9,7 @@ import { useSpanDetail } from '@mastra/playground-ui/domains/traces/hooks/use-sp
 import { useTraceSpanNavigation } from '@mastra/playground-ui/domains/traces/hooks/use-trace-span-navigation';
 import { useTraceSpans } from '@mastra/playground-ui/domains/traces/hooks/use-trace-spans';
 import { useTraces } from '@mastra/playground-ui/domains/traces/hooks/use-traces';
+import { TraceIcon } from '@mastra/playground-ui/icons/TraceIcon';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { MessageSquare } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
@@ -184,10 +185,11 @@ function TraceThreadRow({
             as={Link}
             to={`/traces?traceId=${encodeURIComponent(traceId)}`}
             variant="ghost"
-            size="xs"
-            className="font-mono"
+            size="icon-sm"
+            tooltip="Go to trace"
+            aria-label="Go to trace"
           >
-            {traceId}
+            <TraceIcon />
           </Button>
         </div>
         <div className="min-h-0 flex-1">

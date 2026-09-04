@@ -108,7 +108,7 @@ describe('ThreadViewByTrace', () => {
     installHandlers();
     const { queryClient } = renderView();
 
-    const link = await screen.findByRole('link', { name: 'trace-a' });
+    const [link] = await screen.findAllByRole('link', { name: 'Go to trace' });
     expect(link.getAttribute('href')).toBe('/traces?traceId=trace-a');
     await waitFor(() => expect(queryClient.isFetching()).toBe(0));
   });
