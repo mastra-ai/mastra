@@ -1,3 +1,4 @@
+import { AUTO_TRIAGED_LABEL } from '@mastra/factory/rules/types';
 import { useMemo, useState } from 'react';
 
 import { useFactoriesQuery } from '../../../../hooks/useFactories';
@@ -7,7 +8,7 @@ import { useLinearIssuesQuery, useLinearStatusQuery } from '../../../../hooks/us
 import type { LinkedRepositoryPayload } from '../../workspaces/services/github';
 import { issueCandidate, linearCandidate, pullRequestCandidate } from '../boardCandidates';
 import type { BoardCandidate, IntakeFeed, IntakeSource } from '../boardCandidates';
-import { AUTO_TRIAGED_LABEL, hasLabel } from '../boardItems';
+import { hasLabel } from '../boardItems';
 import type { BoardKind } from '../boardStages';
 import type { BoardStageId } from '../stages';
 

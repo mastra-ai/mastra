@@ -268,7 +268,8 @@ describe('defaultFactoryRules', () => {
       item: {
         ...item,
         source: 'linear-issue',
-        sourceKey: 'linear:ENG-42',
+        sourceKey: 'linear:issue:linear:ENG-42',
+        metadata: { identifier: 'ENG-42' },
         title: 'ENG-42: Fix intake sync',
         url: 'https://linear.app/acme/issue/ENG-42',
       },
@@ -282,7 +283,30 @@ describe('defaultFactoryRules', () => {
       type: 'invokeSkill',
       role: 'triage',
       skillName: 'factory-triage',
-      arguments: 'Linear issue ENG-42 (https://linear.app/acme/issue/ENG-42)',
+      arguments: expect.stringContaining('Linear issue ENG-42 (https://linear.app/acme/issue/ENG-42)'),
+    });
+  });
+
+  it('carries the linear fetch hint into a Linear triage entry', async () => {
+    const rule = defaultFactoryRules({ version: 'deployment-7' }).work.triage?.linearIssue?.onEnter;
+    const context = {
+      ...stageContext({ type: 'human', id: 'user-1' }, 'work'),
+      item: {
+        ...item,
+        source: 'linear-issue',
+        sourceKey: 'linear:issue:linear:ENG-42',
+        metadata: { identifier: 'ENG-42' },
+      },
+      source: 'linearIssue',
+      stage: 'triage',
+      fromStage: 'intake',
+      toStage: 'triage',
+    } as FactoryStageRuleContext;
+
+    expect(await rule?.(context)).toMatchObject({
+      arguments: expect.stringContaining(
+        "Start by fetching the issue's full details (description and comments) with the linear_get_issue tool.",
+      ),
     });
   });
 
@@ -328,6 +352,59 @@ describe('defaultFactoryRules', () => {
     });
   });
 
+  it('names the issue by its number when the card carries one', async () => {
+    const rule = defaultFactoryRules({ version: 'deployment-7' }).work.triage?.issue?.onEnter;
+    const context = {
+      ...stageContext({ type: 'human', id: 'user-1' }, 'work'),
+      item: { ...item, metadata: { githubIssueNumber: 42 } },
+      stage: 'triage',
+      fromStage: 'intake',
+      toStage: 'triage',
+    } as FactoryStageRuleContext;
+
+    expect(await rule?.(context)).toMatchObject({
+      arguments: 'GitHub issue #42 (https://github.test/acme/repo/issues/42)',
+    });
+  });
+
+  it('prepares the approval instead of investigating when a needs-approval issue enters Triage', async () => {
+    const rule = defaultFactoryRules({ version: 'deployment-7' }).work.triage?.issue?.onEnter;
+    const context = {
+      ...stageContext({ type: 'human', id: 'user-1' }, 'work'),
+      item: { ...item, metadata: { githubIssueNumber: 42, labels: ['Status: Needs Approval'] } },
+      stage: 'triage',
+      fromStage: 'intake',
+      toStage: 'triage',
+    } as FactoryStageRuleContext;
+
+    const decision = await rule?.(context);
+    expect(decision).toMatchObject({
+      type: 'invokeSkill',
+      role: 'triage',
+      prompt: expect.stringContaining(
+        'Prepare approval for GitHub issue #42 (https://github.test/acme/repo/issues/42).',
+      ),
+    });
+    expect(decision).not.toHaveProperty('skillName');
+  });
+
+  it('investigates an accepted issue whose needs-approval label has not caught up yet', async () => {
+    const rule = defaultFactoryRules({ version: 'deployment-7' }).work.triage?.issue?.onEnter;
+    const context = {
+      ...stageContext({ type: 'human', id: 'user-1' }, 'work'),
+      item: {
+        ...item,
+        acceptedAt: new Date('2026-08-30T00:00:00.000Z'),
+        metadata: { githubIssueNumber: 42, labels: ['Status: Needs Approval'] },
+      },
+      stage: 'triage',
+      fromStage: 'intake',
+      toStage: 'triage',
+    } as FactoryStageRuleContext;
+
+    expect(await rule?.(context)).toMatchObject({ skillName: 'factory-triage' });
+  });
+
   it('cleans up triage labels whenever a GitHub issue moves to Done', async () => {
     const rule = defaultFactoryRules({ version: 'deployment-7' }).work.done?.issue?.onEnter;
     const context = {
@@ -363,10 +440,26 @@ describe('defaultFactoryRules', () => {
       type: 'invokeSkill',
       role: 'review',
       skillName: 'factory-review',
-      arguments: 'GitHub pull request (https://github.test/acme/repo/issues/42)',
+      arguments: expect.stringContaining('GitHub pull request (https://github.test/acme/repo/issues/42)'),
     });
     // Human-triggered review passes must not cancel any in-flight run.
     expect(decision).not.toHaveProperty('cancelInFlight');
+  });
+
+  it('tells the review agent how to check the pull request out and which branch to expect', async () => {
+    const rule = defaultFactoryRules({ version: 'deployment-7' }).review.review?.pullRequest?.onEnter;
+    const context = {
+      ...stageContext({ type: 'human', id: 'user-1' }, 'review'),
+      item: { ...item, source: 'github-pr', metadata: { githubPullRequestNumber: 7, headBranch: 'factory/issue-42' } },
+      stage: 'review',
+      fromStage: 'intake',
+      toStage: 'review',
+    } as FactoryStageRuleContext;
+
+    expect(await rule?.(context)).toMatchObject({
+      arguments:
+        'GitHub pull request #7 (https://github.test/acme/repo/issues/42)\n\nCheck out the PR in this worktree first with `gh pr checkout 7`. Expected head branch: `factory/issue-42`.',
+    });
   });
 
   it('dispatches factory-rereview without cancellation when a completed review restarts', async () => {
@@ -453,10 +546,29 @@ describe('defaultFactoryRules', () => {
       type: 'invokeSkill',
       idempotencyKey: 'delivery-1:build',
       role: 'work',
-      prompt:
-        'Implement the approved plan for https://github.test/acme/repo/issues/42. Open a pull request when the work is ready for review.',
+      prompt: expect.stringContaining('Implement the approved plan for'),
     });
     expect(decision).not.toHaveProperty('skillName');
+  });
+
+  it('asks for the fix when Building starts from Intake and for the approved plan when it starts from Planning', async () => {
+    const rule = defaultFactoryRules({ version: 'deployment-7' }).work.execute?.issue?.onEnter;
+    const context = {
+      ...stageContext({ type: 'human', id: 'user-1' }, 'work'),
+      item: { ...item, metadata: { githubIssueNumber: 42 } },
+      stage: 'execute',
+      fromStage: 'intake',
+      toStage: 'execute',
+    } as FactoryStageRuleContext;
+
+    expect(await rule?.(context)).toMatchObject({
+      prompt:
+        'Implement a fix for GitHub issue #42 (https://github.test/acme/repo/issues/42): investigate the root cause, make the change with tests, and open a pull request.',
+    });
+    expect(await rule?.({ ...context, fromStage: 'planning' })).toMatchObject({
+      prompt:
+        'Implement the approved plan for GitHub issue #42 (https://github.test/acme/repo/issues/42). Open a pull request when the work is ready for review.',
+    });
   });
 
   function buildPrompt(source: 'issue' | 'linearIssue' | 'manual', metadata: Record<string, unknown> | null) {

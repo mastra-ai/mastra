@@ -3,11 +3,10 @@ import { ArrowUpRight, CircleSlash, FastForward, ShieldCheck, Trash2 } from 'luc
 import type { ReactElement } from 'react';
 import { Link, useParams } from 'react-router';
 
-import type { FactoryRunPhase } from '../../../../hooks/useStartFactoryRun';
-import type { ItemRunSpec, RunAction } from '../boardRunSpecs';
 import { externalLinkLabel, githubNumberForItem } from '../boardItems';
 import { itemStageOptions } from '../boardStages';
 import { TRIAGE_DECISIONS, awaitsTriageDecision } from '../cardPrimaryAction';
+import type { CardMove } from '../cardPrimaryAction';
 import { workItemPrompt } from '../../supervisor/services/supervisor';
 import type { FactoryDecisionSummary } from '../services/decisions';
 import type { WorkItem } from '../services/workItems';
@@ -17,21 +16,13 @@ import { BoardStageIcon, actionIcon } from './BoardIcons';
 export interface WorkItemMenuProps {
   item: WorkItem;
   columnStage: BoardStageId;
-  runSpec?: ItemRunSpec;
-  runActions: RunAction[];
-  reReviewAction?: RunAction;
-  laneAction?: RunAction;
+  moves: CardMove[];
   proposal?: FactoryDecisionSummary;
   proposedRunLabel?: string;
-  pendingRunRoles: ReadonlyMap<string, FactoryRunPhase | undefined>;
-  runDisabled: boolean;
   approvingDecisionId?: string;
-  onStartRun: (spec: ItemRunSpec, action: RunAction, options?: { preapprovePlans?: boolean }) => void;
-  /** Re-run an action whose session slot is already used (e.g. re-review an updated PR). */
-  onRestartRun: (spec: ItemRunSpec, action: RunAction, options?: { preapprovePlans?: boolean }) => void;
   onApproveProposal: (decisionId: string) => void;
   onDismissProposal: (decisionId: string) => void;
-  onMove: (toStage: string) => void;
+  onMove: (toStage: string, options?: { preapprovePlans?: boolean }) => void;
   onRemove: () => void;
 }
 
@@ -45,30 +36,22 @@ export function askSupervisorPath(
   return `/factories/${factoryId}/supervisor?ask=${encodeURIComponent(ask)}`;
 }
 
-/** An action's menu entries: the plain run and, unless a person must decide its outcome, a hands-off twin. */
-function runItemPair(
-  spec: ItemRunSpec,
-  action: RunAction,
-  label: string,
-  startRun: WorkItemMenuProps['onStartRun'],
-  { runDisabled, pendingRunRoles }: Pick<WorkItemMenuProps, 'runDisabled' | 'pendingRunRoles'>,
-): ReactElement[] {
-  const starting = pendingRunRoles.has(action.role);
+/** A lane's menu entries: the plain move and, unless a person must decide its outcome, a hands-off twin. */
+function moveItemPair(move: CardMove, onMove: WorkItemMenuProps['onMove']): ReactElement[] {
   return [
-    <DropdownMenu.Item key={label} disabled={runDisabled || starting} onClick={() => startRun(spec, action)}>
-      {actionIcon(action.label)}
-      <span>{starting ? 'Starting…' : label}</span>
+    <DropdownMenu.Item key={move.label} onClick={() => onMove(move.stage)}>
+      {actionIcon(move.label)}
+      <span>{move.label}</span>
     </DropdownMenu.Item>,
-    ...(action.awaitsHumanDecision
+    ...(move.awaitsHumanDecision
       ? []
       : [
           <DropdownMenu.Item
-            key={`${label} hands-off`}
-            disabled={runDisabled || starting}
-            onClick={() => startRun(spec, action, { preapprovePlans: true })}
+            key={`${move.label} hands-off`}
+            onClick={() => onMove(move.stage, { preapprovePlans: true })}
           >
             <FastForward aria-hidden />
-            <span>{`${label} hands-off`}</span>
+            <span>{`${move.label} hands-off`}</span>
           </DropdownMenu.Item>,
         ]),
   ];
@@ -77,17 +60,10 @@ function runItemPair(
 export function WorkItemMenuItems({
   item,
   columnStage,
-  runSpec,
-  runActions,
-  reReviewAction,
-  laneAction,
+  moves,
   proposal,
   proposedRunLabel,
-  pendingRunRoles,
-  runDisabled,
   approvingDecisionId,
-  onStartRun,
-  onRestartRun,
   onApproveProposal,
   onDismissProposal,
   onMove,
@@ -99,7 +75,6 @@ export function WorkItemMenuItems({
   // one of those would advance it as a side effect. Dismissing a stale
   // suggestion stays, since that starts nothing.
   const decision = awaitsTriageDecision(item, columnStage);
-  const runsOffered = runSpec !== undefined && !decision;
   return (
     <>
       {decision &&
@@ -109,21 +84,12 @@ export function WorkItemMenuItems({
             <span>{choice.label}</span>
           </DropdownMenu.Item>
         ))}
-      {runsOffered &&
-        runActions.flatMap(action =>
-          runItemPair(runSpec, action, action.label, onStartRun, { runDisabled, pendingRunRoles }),
-        )}
-      {runsOffered &&
-        reReviewAction !== undefined &&
-        runItemPair(runSpec, reReviewAction, 'Re-review', onRestartRun, { runDisabled, pendingRunRoles })}
-      {runsOffered &&
-        laneAction !== undefined &&
-        runItemPair(runSpec, laneAction, laneAction.label, onRestartRun, { runDisabled, pendingRunRoles })}
+      {!decision && moves.flatMap(move => moveItemPair(move, onMove))}
       {/* Once the card has a live session its surface opens details, so the
           menus stay the only place left to release a proposed run. */}
       {proposal !== undefined && !decision && (
         <DropdownMenu.Item
-          disabled={runDisabled || approvingDecisionId === proposal.id}
+          disabled={approvingDecisionId === proposal.id}
           onClick={() => onApproveProposal(proposal.id)}
         >
           {actionIcon(proposedRunLabel ?? 'Start run')}

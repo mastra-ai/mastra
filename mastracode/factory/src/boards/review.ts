@@ -1,8 +1,36 @@
-import type { FactoryStageRuleContext } from '../rules/types.js';
+import type { FactoryRuleItemContext, FactoryStageRuleContext } from '../rules/types.js';
+import { workItemNumber } from '../work-item-branch.js';
 import { defineBoard } from './define-board.js';
 
+function sourceRef(item: FactoryRuleItemContext): string {
+  const link = item.url ? ` (${item.url})` : '';
+  const number = workItemNumber(item);
+  if (number === undefined) return item.url ? `GitHub pull request${link}` : item.title;
+  return `GitHub pull request #${number}${link}`;
+}
+
+/** The review agent lands in a bare worktree, so it needs the PR checked out and the branch it should expect. */
+function checkoutHint(item: FactoryRuleItemContext): string {
+  const number = workItemNumber(item);
+  const checkout =
+    number === undefined
+      ? 'Check out the PR in this worktree first.'
+      : `Check out the PR in this worktree first with \`gh pr checkout ${number}\`.`;
+  // Backticked because a branch name is written by whoever opened the PR: it stays a quoted value, not a sentence.
+  const headBranch =
+    typeof item.metadata?.headBranch === 'string' ? ` Expected head branch: \`${item.metadata.headBranch}\`.` : '';
+  return `${checkout}${headBranch}`;
+}
+
 function reviewPullRequest(context: FactoryStageRuleContext) {
+  // Only a Review-to-Review re-entry can supersede an active pass. A card
+  // returning from Done has no live review to cancel; aborting its bound session
+  // would instead cancel the fresh re-review kickoff.
   const supersedes = context.fromStage === 'review';
+  // The re-review skill only applies when a prior review pass actually completed
+  // (the card is returning from `done`). A cancelled first-time review that
+  // re-enters Review from `review` itself still has no prior pass to reconcile —
+  // it gets the regular factory-review skill.
   const priorReviewCompleted = context.fromStage === 'done';
   const skillName = priorReviewCompleted ? 'factory-rereview' : 'factory-review';
   return {
@@ -10,7 +38,7 @@ function reviewPullRequest(context: FactoryStageRuleContext) {
     idempotencyKey: `${context.ingress.id}:${skillName}`,
     role: 'review',
     skillName,
-    arguments: context.item.url ? `GitHub pull request (${context.item.url})` : context.item.title,
+    arguments: `${sourceRef(context.item)}\n\n${checkoutHint(context.item)}`,
     ...(supersedes ? { cancelInFlight: true } : {}),
   } as const;
 }

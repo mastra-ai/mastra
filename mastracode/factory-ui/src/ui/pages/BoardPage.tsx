@@ -45,6 +45,7 @@ import {
   workItemMatchesRelevance,
 } from '../domains/factory/boardRelevance';
 import type { BoardRelevanceType } from '../domains/factory/boardRelevance';
+import { candidatePayload } from '../domains/factory/boardDrag';
 import { cardMatchesSearch } from '../domains/factory/boardItems';
 import { relatedWorkItemIndex } from '../domains/factory/services/relationships';
 import { workItemHumanActorIds } from '../domains/factory/workItemActivity';
@@ -130,11 +131,7 @@ function BoardContent({
   const auth = useFactoryAuth();
   const items = useBoardItems({ factoryProjectId, kind });
   const intake = useBoardIntake({ factoryProjectId, repository, kind, knownSourceKeys: items.knownSourceKeys });
-  const runs = useBoardRuns({
-    factoryProjectId,
-    workItems: items.all,
-    refetchItems: items.refetch,
-  });
+  const runs = useBoardRuns({ factoryProjectId, refetchItems: items.refetch });
   const relatedItemsFor = relatedWorkItemIndex(items.all);
   const sessionStatuses = useItemSessionStatuses({
     projectRepositoryId: repository.projectRepositoryId,
@@ -408,7 +405,6 @@ function BoardContent({
                           sessionStatus={sessionStatuses.get(item.id)}
                           projectRepositoryId={repository.projectRepositoryId}
                           activityPage={activityPage}
-                          runDisabled={runs.disabled}
                           preparing={runs.preparingFor(item.id)}
                           evaluatingStage={items.evaluatingStages.get(item.id)}
                           transitionReason={items.transitionReasons[item.id]}
@@ -419,11 +415,8 @@ function BoardContent({
                           onApproveProposal={decisions.approve}
                           onDismissProposal={decisions.dismiss}
                           onRetryDecision={decisions.retry}
-                          pendingRunRoles={runs.pendingRolesFor(item.id)}
-                          onCreateSession={() => void runs.openOrCreateSession(item, stage.id)}
-                          onStartRun={(_spec, action, options) => void runs.openOrStartRun(item, action.role, options)}
-                          onRestartRun={(_spec, action, options) => void runs.restartRun(item, action.role, options)}
-                          onMove={toStage => items.move(item.id, toStage)}
+                          onCreateSession={() => void runs.openOrCreateSession(item)}
+                          onMove={(toStage, options) => items.move(item.id, toStage, options)}
                           onRemove={() => items.remove(item.id)}
                         />
                       )}
@@ -436,11 +429,10 @@ function BoardContent({
                           candidate={candidate}
                           projectRepositoryId={repository.projectRepositoryId}
                           factoryProjectId={factoryProjectId}
-                          pendingRunRoles={runs.pendingRolesForSource(candidate.sourceKey)}
-                          preparing={runs.preparingForSource(candidate.sourceKey)}
-                          disabled={!runs.enabled}
-                          onRun={(action, prompt) => runs.startCandidateRun(candidate, action, prompt)}
-                          onFile={() => items.handleDrop({ kind: 'candidate', candidate }, candidate.column)}
+                          onRun={(move, prompt) =>
+                            items.handleDrop(candidatePayload(candidate, prompt), move.stage, 'card_action')
+                          }
+                          onFile={() => items.handleDrop(candidatePayload(candidate), candidate.column)}
                         />
                       )}
                     />

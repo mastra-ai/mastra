@@ -7,11 +7,14 @@ import {
   Archive,
   ArchiveRestore,
   Brain,
+  Check,
   MailOpen,
   MessageSquare,
   MessagesSquare,
   RotateCw,
+  Sparkles,
   TriangleAlert,
+  X,
 } from 'lucide-react';
 import { createElement, type ReactElement, type ReactNode } from 'react';
 import { Link, useNavigate } from 'react-router';
@@ -28,6 +31,7 @@ const KIND = {
   mention: { glyph: MessageSquare, label: 'mention', tone: 'text-accent1', badge: 'green' },
   activity: { glyph: MessagesSquare, label: 'comment', tone: 'text-icon3', badge: 'neutral' },
   'automation-failed': { glyph: TriangleAlert, label: 'failed', tone: 'text-error', badge: 'red' },
+  'automation-proposed': { glyph: Sparkles, label: 'suggested', tone: 'text-warning1', badge: 'orange' },
   'supervisor-finding': { glyph: Brain, label: 'finding', tone: 'text-accent1', badge: 'blue' },
 } satisfies Record<
   FactoryAttentionItem['kind'],
@@ -84,9 +88,12 @@ export function AttentionItemRow({
   factoryId,
   item,
   retrying,
+  settling,
   updatingReceipt,
   onOpen,
   onRetry,
+  onApprove,
+  onDismiss,
   onRead,
   onArchive,
   onRestore,
@@ -94,9 +101,12 @@ export function AttentionItemRow({
   factoryId: string;
   item: FactoryAttentionItem;
   retrying: boolean;
+  settling: boolean;
   updatingReceipt: boolean;
   onOpen?: () => void;
   onRetry?: () => void;
+  onApprove?: () => void;
+  onDismiss?: () => void;
   onRead: () => void;
   onArchive: () => void;
   onRestore: () => void;
@@ -149,6 +159,16 @@ export function AttentionItemRow({
                 onClick={onRetry}
               >
                 {retrying ? <Spinner size="sm" aria-hidden className="size-3.5" /> : <RotateCw aria-hidden />}
+              </RowAction>
+            ) : null}
+            {onApprove ? (
+              <RowAction tooltip="Run it" label={`Run ${item.title}`} disabled={settling} onClick={onApprove}>
+                {settling ? <Spinner size="sm" aria-hidden className="size-3.5" /> : <Check aria-hidden />}
+              </RowAction>
+            ) : null}
+            {onDismiss ? (
+              <RowAction tooltip="Dismiss" label={`Dismiss ${item.title}`} disabled={settling} onClick={onDismiss}>
+                <X aria-hidden />
               </RowAction>
             ) : null}
             {!item.read ? (

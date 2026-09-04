@@ -28,6 +28,23 @@ function branchNumber(metadata: Record<string, unknown>, key: string): number | 
   return typeof value === 'number' && Number.isInteger(value) && value > 0 ? value : undefined;
 }
 
+/** The provider number a GitHub card carries — the `#12` its runs and thread titles name it by. */
+export function workItemNumber(item: Pick<WorkItemBranchInput, 'source' | 'metadata'>): number | undefined {
+  const metadata = item.metadata ?? {};
+  if (item.source === 'github-issue') return branchNumber(metadata, 'githubIssueNumber');
+  if (item.source === 'github-pr') return branchNumber(metadata, 'githubPullRequestNumber');
+  return;
+}
+
+/** How a card names its thread: a Linear title already opens with its identifier, a GitHub card gets its number here. */
+export function workItemThreadTitle(
+  item: Pick<WorkItemBranchInput, 'source' | 'metadata'> & { title: string },
+): string {
+  const number = workItemNumber(item);
+  if (number === undefined) return item.title;
+  return `${item.source === 'github-pr' ? 'PR' : 'Issue'} #${number}: ${item.title}`;
+}
+
 /**
  * The git branch an item's runs and sessions share, one grammar for both sides
  * of the wire: the dispatcher names autonomous run branches with it and the
@@ -37,13 +54,9 @@ function branchNumber(metadata: Record<string, unknown>, key: string): number | 
  */
 export function workItemBranch(item: WorkItemBranchInput): string {
   const metadata = item.metadata ?? {};
-  if (item.source === 'github-issue') {
-    const issueNumber = branchNumber(metadata, 'githubIssueNumber');
-    if (issueNumber !== undefined) return `factory/issue-${issueNumber}`;
-  }
-  if (item.source === 'github-pr') {
-    const pullRequestNumber = branchNumber(metadata, 'githubPullRequestNumber');
-    if (pullRequestNumber !== undefined) return `factory/pr-${pullRequestNumber}`;
+  const githubNumber = workItemNumber(item);
+  if (githubNumber !== undefined) {
+    return item.source === 'github-issue' ? `factory/issue-${githubNumber}` : `factory/pr-${githubNumber}`;
   }
   if (item.source === 'linear-issue' && typeof metadata.identifier === 'string') {
     const identifier = metadata.identifier.trim();

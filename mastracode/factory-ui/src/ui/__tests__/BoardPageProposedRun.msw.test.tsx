@@ -126,7 +126,6 @@ function stubBoardEndpoints({
   held = false,
 }: { withLiveSession?: boolean; building?: boolean; closedPullRequest?: boolean; held?: boolean } = {}) {
   const settled: string[] = [];
-  const startRequests: unknown[] = [];
   const transitions: unknown[] = [];
   let status: 'proposed' | 'pending' | 'dismissed' = 'proposed';
   const item = held
@@ -190,33 +189,20 @@ function stubBoardEndpoints({
     http.post(
       `${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items/${ITEM_ID}/transition`,
       async ({ request }) => {
-        transitions.push(await request.json());
+        const body = (await request.json()) as Record<string, unknown>;
+        transitions.push(body);
         return HttpResponse.json({
-          status: 'accepted',
-          transitionId: 'transition-1',
-          itemId: ITEM_ID,
-          revision: 2,
-          stage: 'planning',
-          decisions: [],
+          result: {
+            status: 'accepted',
+            transitionId: 'transition-1',
+            itemId: ITEM_ID,
+            revision: 2,
+            stage: body.stage,
+            decisions: [],
+          },
         });
       },
     ),
-    http.post(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/runs/start`, async ({ request }) => {
-      startRequests.push(await request.json());
-      return HttpResponse.json({
-        prepared: {
-          workItemId: ITEM_ID,
-          bindingId: 'binding-1',
-          threadId: 'thread-1',
-          resourceId: 'resource-1',
-          sessionId: SESSION_ID,
-          branch: 'factory/issue-1',
-          revision: 2,
-          kickoffStatus: 'queued',
-          replayed: false,
-        },
-      });
-    }),
     http.get(`${TEST_BASE_URL}/web/intake/config`, () =>
       HttpResponse.json({
         config: {
@@ -241,7 +227,7 @@ function stubBoardEndpoints({
     ),
   );
 
-  return { settled, startRequests, transitions };
+  return { settled, transitions };
 }
 
 function renderBoard(board: 'work' | 'review' = 'work', initialEntry = `/factories/${FACTORY_ID}/${board}`) {
@@ -306,36 +292,8 @@ describe('Board card with a proposed run', () => {
     await waitFor(() => expect(within(card).getByRole('button', { name: 'Details for Fix login bug' })).toHaveFocus());
   });
 
-  it('summarizes proposed runs as one approval queue', async () => {
-    stubBoardEndpoints();
-    server.use(
-      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/attention`, () =>
-        HttpResponse.json({
-          items: [],
-          openCount: 1,
-          approvalCount: 1,
-          badgeCount: 1,
-          unreadCount: 0,
-          hasMore: false,
-          latestOccurrenceKey: null,
-          latestOccurrenceAt: null,
-          latestOccurrenceUnread: false,
-        }),
-      ),
-    );
-    const user = userEvent.setup();
-    renderWorkBoard();
-
-    await user.click(await screen.findByRole('button', { name: 'Needs attention, 1 waiting for approval, 1 open' }));
-    expect(await screen.findByText('waiting for approval')).toBeVisible();
-    expect(screen.getByRole('link', { name: 'View all attention' })).toHaveAttribute(
-      'href',
-      `/factories/${FACTORY_ID}/attention`,
-    );
-  });
-
   it('releases the proposal instead of starting a second run from the card details', async () => {
-    const { settled, startRequests } = stubBoardEndpoints();
+    const { settled, transitions } = stubBoardEndpoints();
     const user = userEvent.setup();
     renderWorkBoard();
 
@@ -344,11 +302,11 @@ describe('Board card with a proposed run', () => {
     await user.click(within(dialog).getByRole('button', { name: 'Start suggested run: Investigate' }));
 
     await waitFor(() => expect(settled).toEqual(['approve']));
-    expect(startRequests).toHaveLength(0);
+    expect(transitions).toEqual([]);
   });
 
   it('turns the proposal down from the card menu', async () => {
-    const { settled, startRequests } = stubBoardEndpoints();
+    const { settled, transitions } = stubBoardEndpoints();
     const user = userEvent.setup();
     renderWorkBoard();
 
@@ -357,11 +315,11 @@ describe('Board card with a proposed run', () => {
     await user.click(await screen.findByRole('menuitem', { name: 'Dismiss suggested run' }));
 
     await waitFor(() => expect(settled).toEqual(['dismiss']));
-    expect(startRequests).toHaveLength(0);
+    expect(transitions).toEqual([]);
   });
 
   it('releases the proposal from the menu when the card already links to a session', async () => {
-    const { settled, startRequests } = stubBoardEndpoints({ withLiveSession: true });
+    const { settled, transitions } = stubBoardEndpoints({ withLiveSession: true });
     const user = userEvent.setup();
     renderWorkBoard();
 
@@ -371,11 +329,11 @@ describe('Board card with a proposed run', () => {
     await user.click(await screen.findByRole('menuitem', { name: 'Start suggested run' }));
 
     await waitFor(() => expect(settled).toEqual(['approve']));
-    expect(startRequests).toHaveLength(0);
+    expect(transitions).toEqual([]);
   });
 
   it('says a run is waiting on a card that would otherwise look idle', async () => {
-    const { settled, startRequests } = stubBoardEndpoints({ withLiveSession: true });
+    const { settled, transitions } = stubBoardEndpoints({ withLiveSession: true });
     const user = userEvent.setup();
     renderWorkBoard();
 
@@ -390,11 +348,11 @@ describe('Board card with a proposed run', () => {
     await user.click(release);
 
     await waitFor(() => expect(settled).toEqual(['approve']));
-    expect(startRequests).toHaveLength(0);
+    expect(transitions).toEqual([]);
   });
 
   it('asks for the maintainer decision on a held card, not the run parked on it', async () => {
-    const { settled, startRequests, transitions } = stubBoardEndpoints({ held: true });
+    const { settled, transitions } = stubBoardEndpoints({ held: true });
     const user = userEvent.setup();
     renderWorkBoard();
 
@@ -417,7 +375,6 @@ describe('Board card with a proposed run', () => {
 
     await waitFor(() => expect(transitions).toEqual([expect.objectContaining({ stage: 'planning' })]));
     expect(settled).toEqual([]);
-    expect(startRequests).toHaveLength(0);
   });
 
   it('stops asking about a run parked on a pull request that already closed', async () => {
@@ -434,7 +391,7 @@ describe('Board card with a proposed run', () => {
   });
 
   it('still offers the Building run when the plan already filled the work session slot', async () => {
-    const { startRequests } = stubBoardEndpoints({ building: true });
+    const { transitions } = stubBoardEndpoints({ building: true });
     const user = userEvent.setup();
     renderWorkBoard();
 
@@ -442,6 +399,8 @@ describe('Board card with a proposed run', () => {
     await user.click(within(card).getByRole('button', { name: 'Actions for Fix login bug' }));
     await user.click(await screen.findByRole('menuitem', { name: 'Build' }));
 
-    await waitFor(() => expect(startRequests).toHaveLength(1));
+    await waitFor(() =>
+      expect(transitions).toEqual([expect.objectContaining({ stage: 'execute', cause: 'card_action', reenter: true })]),
+    );
   });
 });
