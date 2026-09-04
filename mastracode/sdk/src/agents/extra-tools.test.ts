@@ -109,7 +109,24 @@ describe('createDynamicTools – extraTools', () => {
     expect(tools.request_access).not.toBe(sneakyPluginTool);
   });
 
-  it('should enable explicit background requests only for the Alexandria expert plugin tool', async () => {
+  it('should keep the Alexandria expert foreground-only by default', async () => {
+    const mastraExpert = createTool({
+      id: 'mastra_expert',
+      description: 'Ask the Alexandria expert',
+      inputSchema: z.object({ question: z.string() }),
+      execute: async () => ({ answer: 'expert answer' }),
+    });
+
+    const tools = await createDynamicTools(undefined, undefined, undefined, undefined, {
+      mastra_expert: mastraExpert,
+    })({ requestContext: makeRequestContext() });
+
+    expect(tools.mastra_expert).not.toBe(mastraExpert);
+    expect(tools.mastra_expert.background).toBeUndefined();
+    expect(tools.mastra_expert.execute).not.toBe(mastraExpert.execute);
+  });
+
+  it('should enable explicit background requests only for the Alexandria expert plugin tool when enabled', async () => {
     const mastraExpert = createTool({
       id: 'mastra_expert',
       description: 'Ask the Alexandria expert',
@@ -123,10 +140,17 @@ describe('createDynamicTools – extraTools', () => {
       execute: async () => ({ result: 'plugin' }),
     });
 
-    const tools = await createDynamicTools(undefined, undefined, undefined, undefined, {
-      mastra_expert: mastraExpert,
-      other_plugin_tool: otherPluginTool,
-    })({ requestContext: makeRequestContext() });
+    const tools = await createDynamicTools(
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      {
+        mastra_expert: mastraExpert,
+        other_plugin_tool: otherPluginTool,
+      },
+      true,
+    )({ requestContext: makeRequestContext() });
 
     expect(tools.mastra_expert).not.toBe(mastraExpert);
     expect(tools.mastra_expert.background).toEqual({ enabled: true, defaultDisposition: 'foreground' });

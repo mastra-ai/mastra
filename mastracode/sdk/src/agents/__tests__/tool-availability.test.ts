@@ -1,6 +1,6 @@
 import { WORKSPACE_TOOLS } from '@mastra/core/workspace';
 import { describe, expect, it } from 'vitest';
-import { MASTRACODE_WORKSPACE_TOOLS } from '../tool-availability.js';
+import { createMastraCodeWorkspaceTools } from '../tool-availability.js';
 
 const BACKGROUND_ELIGIBLE_WORKSPACE_TOOLS = [
   WORKSPACE_TOOLS.FILESYSTEM.READ_FILE,
@@ -22,18 +22,27 @@ const FOREGROUND_ONLY_WORKSPACE_TOOLS = [
 ] as const;
 
 describe('MastraCode workspace tool background policy', () => {
-  it('allows native background execution only for side-effect-free workspace reads', () => {
+  it('keeps all workspace tools foreground-only by default', () => {
+    const workspaceTools = createMastraCodeWorkspaceTools();
     for (const toolName of BACKGROUND_ELIGIBLE_WORKSPACE_TOOLS) {
-      expect(MASTRACODE_WORKSPACE_TOOLS[toolName]?.background).toEqual({
+      expect(workspaceTools[toolName]?.background).toBeUndefined();
+    }
+  });
+
+  it('allows native background execution for side-effect-free workspace reads when enabled', () => {
+    const workspaceTools = createMastraCodeWorkspaceTools(true);
+    for (const toolName of BACKGROUND_ELIGIBLE_WORKSPACE_TOOLS) {
+      expect(workspaceTools[toolName]?.background).toEqual({
         enabled: true,
         defaultDisposition: 'foreground',
       });
     }
   });
 
-  it('keeps mutating, process, and stateful workspace tools foreground-only', () => {
+  it('keeps mutating, process, and stateful workspace tools foreground-only when enabled', () => {
+    const workspaceTools = createMastraCodeWorkspaceTools(true);
     for (const toolName of FOREGROUND_ONLY_WORKSPACE_TOOLS) {
-      expect(MASTRACODE_WORKSPACE_TOOLS[toolName]?.background).toBeUndefined();
+      expect(workspaceTools[toolName]?.background).toBeUndefined();
     }
   });
 });

@@ -143,6 +143,7 @@ function createMockSettings() {
       stagehand: { env: 'LOCAL' },
     },
     observability: { resources: {}, localTracing: false },
+    backgroundTools: { enabled: false },
     signals: {
       unixSocketPubSub: false,
       experimentalGithubSignals: false,

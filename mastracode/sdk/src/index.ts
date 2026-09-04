@@ -911,7 +911,14 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
         },
       },
     },
-    tools: createDynamicTools(mcpManager, config?.extraTools, config?.disabledTools, storage, pluginTools),
+    tools: createDynamicTools(
+      mcpManager,
+      config?.extraTools,
+      config?.disabledTools,
+      storage,
+      pluginTools,
+      globalSettings.backgroundTools?.enabled ?? false,
+    ),
     hooks: createToolHooks(hookManager, config?.postToolObserver),
     scorers: {
       outcome: {
@@ -1191,7 +1198,10 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
     agent: codeAgent,
     subagents,
     gateways: [amazonBedrockGateway, mastraCodeGateway],
-    workspace: config?.workspace ?? (args => getDynamicWorkspace(args)),
+    workspace:
+      config?.workspace ??
+      (args =>
+        getDynamicWorkspace({ ...args, backgroundToolsEnabled: globalSettings.backgroundTools?.enabled ?? false })),
     browser: config?.browser,
     idGenerator: config?.idGenerator,
     toolCategoryResolver: getToolCategory,
