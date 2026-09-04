@@ -111,6 +111,26 @@ export const traceQueryPredicateSchema: z.ZodType<TraceQueryPredicate> = z.lazy(
   ]),
 );
 
+export const traceQueryGroupPredicateSchema: z.ZodType<TraceQueryGroupPredicate> = z.lazy(() =>
+  z.union([
+    z
+      .object({
+        op: z.enum(['and', 'or']),
+        args: z.array(traceQueryGroupPredicateSchema).min(1),
+      })
+      .strict(),
+    z.object({ op: z.literal('not'), arg: traceQueryGroupPredicateSchema }).strict(),
+    z
+      .object({
+        traces: z.union([
+          z.object({ some: traceQueryPredicateSchema }).strict(),
+          z.object({ none: traceQueryPredicateSchema }).strict(),
+        ]),
+      })
+      .strict(),
+  ]),
+);
+
 const timeRangeSchema = z
   .object({
     from: z.string().datetime({ offset: true }),
@@ -131,7 +151,10 @@ const traceQueryRequestObjectSchema = z
     timeRange: timeRangeSchema,
     where: traceQueryPredicateSchema.optional(),
     group: z
-      .object({ by: z.tuple([z.literal('threadId')]) })
+      .object({
+        by: z.tuple([z.literal('threadId')]),
+        where: traceQueryGroupPredicateSchema.optional(),
+      })
       .strict()
       .optional(),
     orderBy: z
@@ -206,6 +229,11 @@ export type TraceQueryPredicate =
   | { spans: { some: TraceQueryScalarPredicate } | { none: TraceQueryScalarPredicate } }
   | { scores: { some: TraceQueryScalarPredicate } | { none: TraceQueryScalarPredicate } }
   | { feedback: { some: TraceQueryScalarPredicate } | { none: TraceQueryScalarPredicate } };
+
+export type TraceQueryGroupPredicate =
+  | { op: 'and' | 'or'; args: TraceQueryGroupPredicate[] }
+  | { op: 'not'; arg: TraceQueryGroupPredicate }
+  | { traces: { some: TraceQueryPredicate } | { none: TraceQueryPredicate } };
 
 export type TraceQueryRequest = z.input<typeof traceQueryRequestObjectSchema>;
 export type NormalizedTraceQueryRequest = z.output<typeof traceQueryRequestObjectSchema>;
@@ -300,6 +328,16 @@ export type TrustedTraceQueryPredicate =
       predicate: TrustedTraceQueryScalarPredicate;
     };
 
+export type TrustedTraceQueryGroupPredicate =
+  | { type: 'boolean'; operator: 'and' | 'or'; args: TrustedTraceQueryGroupPredicate[] }
+  | { type: 'not'; arg: TrustedTraceQueryGroupPredicate }
+  | {
+      type: 'relation';
+      collection: 'traces';
+      quantifier: 'some' | 'none';
+      predicate: TrustedTraceQueryPredicate;
+    };
+
 export interface TrustedTraceQueryBasePlan {
   timeRange: { from: string; to: string };
   where?: TrustedTraceQueryPredicate;
@@ -318,6 +356,7 @@ export interface TrustedTraceQueryTracesPlan extends TrustedTraceQueryBasePlan {
 
 export interface TrustedTraceQueryGroupsPlan extends TrustedTraceQueryBasePlan {
   result: 'groups';
+  groupWhere?: TrustedTraceQueryGroupPredicate;
   orderBy: { field: 'threadId'; direction: 'asc' };
   cursor?: { threadId: string };
 }
@@ -468,14 +507,15 @@ function addPredicateComplexityIssue(path: Array<string | number>, message: stri
 }
 
 function findPredicateComplexityIssue(input: unknown): Array<string | number> | undefined {
-  if (!input || typeof input !== 'object' || !Object.hasOwn(input, 'where')) return undefined;
+  if (!input || typeof input !== 'object') return undefined;
 
-  const where = (input as { where?: unknown }).where;
-  if (where === undefined) return undefined;
-
-  const stack: Array<{ predicate: unknown; path: Array<string | number>; depth: number }> = [
-    { predicate: where, path: ['where'], depth: 1 },
-  ];
+  const request = input as { where?: unknown; group?: unknown };
+  const stack: Array<{ predicate: unknown; path: Array<string | number>; depth: number }> = [];
+  if (request.where !== undefined) stack.push({ predicate: request.where, path: ['where'], depth: 1 });
+  if (request.group && typeof request.group === 'object' && Object.hasOwn(request.group, 'where')) {
+    const groupWhere = (request.group as { where?: unknown }).where;
+    if (groupWhere !== undefined) stack.push({ predicate: groupWhere, path: ['group', 'where'], depth: 1 });
+  }
   let nodes = 0;
 
   while (stack.length > 0) {
@@ -496,7 +536,7 @@ function findPredicateComplexityIssue(input: unknown): Array<string | number> | 
       continue;
     }
 
-    for (const collection of ['feedback', 'scores', 'spans'] as const) {
+    for (const collection of ['feedback', 'scores', 'spans', 'traces'] as const) {
       const clause = predicate[collection];
       if (!clause || typeof clause !== 'object') continue;
       for (const quantifier of ['none', 'some'] as const) {
@@ -565,6 +605,9 @@ export function planTraceQuery(
 
   const state: PlannerState = { nodes: 0, relatedClauses: 0, literalUnits: 0, issues };
   const where = request.where ? planPredicate(request.where, 'trace', ['where'], 1, state) : undefined;
+  const groupWhere = request.group?.where
+    ? planGroupPredicate(request.group.where, ['group', 'where'], 1, state)
+    : undefined;
   if (issues.length > 0) throw new TraceQueryValidationError(issues);
 
   const timeRange = { from: from.toISOString(), to: to.toISOString() };
@@ -573,12 +616,20 @@ export function planTraceQuery(
   if (request.group) {
     const result = 'groups' as const;
     const orderBy = { field: 'threadId', direction: 'asc' } as const;
-    const binding = digestBinding({ timeRange, where, result, orderBy, authorization: options.authorizationBinding });
+    const binding = digestBinding({
+      timeRange,
+      where,
+      groupWhere,
+      result,
+      orderBy,
+      authorization: options.authorizationBinding,
+    });
     const cursor = request.page.after ? decodeTraceQueryCursor(request.page.after, result, binding) : undefined;
     return {
       result,
       timeRange,
       where,
+      groupWhere,
       orderBy,
       limit,
       binding,
@@ -642,6 +693,47 @@ const cursorEnvelopeSchema = z
     ]),
   })
   .strict();
+
+function planGroupPredicate(
+  predicate: TraceQueryGroupPredicate,
+  path: Array<string | number>,
+  depth: number,
+  state: PlannerState,
+): TrustedTraceQueryGroupPredicate | undefined {
+  state.nodes += 1;
+  if (depth > TRACE_QUERY_MAX_DEPTH || state.nodes > TRACE_QUERY_MAX_NODES) {
+    addPredicateComplexityIssue(path, PREDICATE_COMPLEXITY_MESSAGE, state);
+    return undefined;
+  }
+
+  if ('traces' in predicate) {
+    state.relatedClauses += 1;
+    if (state.relatedClauses > TRACE_QUERY_MAX_RELATED_CLAUSES) {
+      addPredicateComplexityIssue(
+        path,
+        `Trace queries are limited to ${TRACE_QUERY_MAX_RELATED_CLAUSES} related collection clauses`,
+        state,
+      );
+    }
+    const quantifier = 'some' in predicate.traces ? 'some' : 'none';
+    const nested = 'some' in predicate.traces ? predicate.traces.some : predicate.traces.none;
+    const planned = planPredicate(nested, 'trace', [...path, 'traces', quantifier], depth + 1, state);
+    return planned ? { type: 'relation', collection: 'traces', quantifier, predicate: planned } : undefined;
+  }
+
+  if (predicate.op === 'and' || predicate.op === 'or') {
+    const args = predicate.args
+      .map((arg, index) => planGroupPredicate(arg, [...path, 'args', index], depth + 1, state))
+      .filter((arg): arg is TrustedTraceQueryGroupPredicate => arg !== undefined);
+    return { type: 'boolean', operator: predicate.op, args };
+  }
+
+  if (predicate.op === 'not') {
+    const arg = planGroupPredicate(predicate.arg, [...path, 'arg'], depth + 1, state);
+    return arg ? { type: 'not', arg } : undefined;
+  }
+  return undefined;
+}
 
 function planPredicate(
   predicate: TraceQueryPredicate | TraceQueryScalarPredicate,

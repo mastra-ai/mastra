@@ -7,6 +7,7 @@ import type {
   TraceQueryResponse,
   TraceQueryScoreField,
   TraceQuerySpanField,
+  TrustedTraceQueryGroupPredicate,
   TrustedTraceQueryPlan,
   TrustedTraceQueryPredicate,
   TrustedTraceQueryScalarPredicate,
@@ -85,6 +86,7 @@ const TRACE_SELECT = `
   r.entityName AS entityName,
   r.entityType AS entityType,
   r.environment AS environment,
+  r.metadata AS metadata,
   ${TRACE_STATUS_SQL} AS status`;
 
 function fieldDefinition<TField extends string>(
@@ -241,6 +243,34 @@ function compilePredicate(predicate: TrustedTraceQueryPredicate): SqlFragment {
   return compileScalarPredicate(predicate, TRACE_FIELDS, true);
 }
 
+function compileGroupPredicate(predicate: TrustedTraceQueryGroupPredicate): SqlFragment {
+  if (predicate.type === 'relation') {
+    const compiled = compilePredicate(predicate.predicate);
+    const existence = `EXISTS (
+      SELECT 1 FROM candidates r
+      WHERE r.threadId = g.threadId
+        AND (${compiled.sql})
+    )`;
+    return {
+      sql: predicate.quantifier === 'some' ? existence : `NOT ${existence}`,
+      values: compiled.values,
+    };
+  }
+
+  if (predicate.type === 'boolean') {
+    const values: unknown[] = [];
+    const parts = predicate.args.map(arg => {
+      const compiled = compileGroupPredicate(arg);
+      values.push(...compiled.values);
+      return `(${compiled.sql})`;
+    });
+    return { sql: parts.join(predicate.operator === 'and' ? ' AND ' : ' OR '), values };
+  }
+
+  const compiled = compileGroupPredicate(predicate.arg);
+  return { sql: `NOT (${compiled.sql})`, values: compiled.values };
+}
+
 function collectRelatedCollections(
   predicate: TrustedTraceQueryPredicate | undefined,
   collections = new Set<'spans' | 'scores' | 'feedback'>(),
@@ -254,6 +284,20 @@ function collectRelatedCollections(
     collectRelatedCollections(predicate.arg, collections);
   }
   return collections;
+}
+
+function collectGroupRelatedCollections(
+  predicate: TrustedTraceQueryGroupPredicate | undefined,
+  collections: Set<'spans' | 'scores' | 'feedback'>,
+): void {
+  if (!predicate) return;
+  if (predicate.type === 'relation') {
+    collectRelatedCollections(predicate.predicate, collections);
+  } else if (predicate.type === 'boolean') {
+    for (const arg of predicate.args) collectGroupRelatedCollections(arg, collections);
+  } else {
+    collectGroupRelatedCollections(predicate.arg, collections);
+  }
 }
 
 export interface CompiledDuckDBTraceQuery {
@@ -276,6 +320,7 @@ export function compileDuckDBTraceQuery(plan: TrustedTraceQueryPlan): CompiledDu
   }
 
   const relatedCollections = collectRelatedCollections(plan.where);
+  if (plan.result === 'groups') collectGroupRelatedCollections(plan.groupWhere, relatedCollections);
   const ctes = [
     `root_events AS (
       SELECT
@@ -372,15 +417,25 @@ export function compileDuckDBTraceQuery(plan: TrustedTraceQueryPlan): CompiledDu
   const candidates = `WITH ${ctes.join(',\n  ')}`;
 
   if (plan.result === 'groups') {
-    const pageCondition = plan.cursor ? `AND threadId > ?` : '';
+    let groupCondition = 'TRUE';
+    if (plan.groupWhere) {
+      const compiled = compileGroupPredicate(plan.groupWhere);
+      groupCondition = compiled.sql;
+      values.push(...compiled.values);
+    }
+    const pageCondition = plan.cursor ? `AND g.threadId > ?` : '';
     if (plan.cursor) values.push(plan.cursor.threadId);
     values.push(plan.limit + 1);
     return {
       sql: `${candidates}
-SELECT threadId
-FROM candidates
-WHERE threadId IS NOT NULL ${pageCondition}
-GROUP BY threadId
+SELECT g.threadId
+FROM (
+  SELECT threadId
+  FROM candidates
+  WHERE threadId IS NOT NULL
+  GROUP BY threadId
+) g
+WHERE (${groupCondition}) ${pageCondition}
 ORDER BY threadId ASC
 LIMIT ?`,
       values,
@@ -399,7 +454,7 @@ LIMIT ?`,
 
   return {
     sql: `${candidates}
-SELECT *
+SELECT traceId, rootSpanId, threadId, resourceId, startedAt, endedAt, entityName, entityType, environment, status
 FROM candidates
 ${pageCondition}
 ORDER BY ${orderField} ${direction}, traceId ASC

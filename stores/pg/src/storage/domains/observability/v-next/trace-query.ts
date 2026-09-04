@@ -7,6 +7,7 @@ import type {
   TraceQueryResponse,
   TraceQueryScoreField,
   TraceQuerySpanField,
+  TrustedTraceQueryGroupPredicate,
   TrustedTraceQueryPlan,
   TrustedTraceQueryPredicate,
   TrustedTraceQueryScalarPredicate,
@@ -84,6 +85,7 @@ const TRACE_SELECT = `
   r."entityName" AS "entityName",
   r."entityType" AS "entityType",
   r."environment" AS "environment",
+  r."metadataSearch" AS "metadataSearch",
   ${TRACE_STATUS_SQL} AS "status"`;
 
 function fieldSql<TField extends string>(
@@ -239,6 +241,20 @@ function collectRelationCollections(
   return collections;
 }
 
+function collectGroupRelationCollections(
+  predicate: TrustedTraceQueryGroupPredicate | undefined,
+  collections: Set<'spans' | 'scores' | 'feedback'>,
+): void {
+  if (!predicate) return;
+  if (predicate.type === 'relation') {
+    collectRelationCollections(predicate.predicate, collections);
+  } else if (predicate.type === 'boolean') {
+    for (const arg of predicate.args) collectGroupRelationCollections(arg, collections);
+  } else {
+    collectGroupRelationCollections(predicate.arg, collections);
+  }
+}
+
 function compilePredicate(predicate: TrustedTraceQueryPredicate, parameterOffset: number): SqlFragment {
   if (predicate.type === 'relation') {
     const compiled =
@@ -285,6 +301,34 @@ function compilePredicate(predicate: TrustedTraceQueryPredicate, parameterOffset
   return compileScalarPredicate(predicate, TRACE_FIELDS, parameterOffset, true);
 }
 
+function compileGroupPredicate(predicate: TrustedTraceQueryGroupPredicate, parameterOffset: number): SqlFragment {
+  if (predicate.type === 'relation') {
+    const compiled = compilePredicate(predicate.predicate, parameterOffset);
+    const existence = `EXISTS (
+      SELECT 1 FROM candidates r
+      WHERE r."threadId" = g."threadId"
+        AND (${compiled.sql})
+    )`;
+    return {
+      sql: predicate.quantifier === 'some' ? existence : `NOT ${existence}`,
+      values: compiled.values,
+    };
+  }
+
+  if (predicate.type === 'boolean') {
+    const values: unknown[] = [];
+    const parts = predicate.args.map(arg => {
+      const compiled = compileGroupPredicate(arg, parameterOffset + values.length);
+      values.push(...compiled.values);
+      return `(${compiled.sql})`;
+    });
+    return { sql: parts.join(predicate.operator === 'and' ? ' AND ' : ' OR '), values };
+  }
+
+  const compiled = compileGroupPredicate(predicate.arg, parameterOffset);
+  return { sql: `NOT (${compiled.sql})`, values: compiled.values };
+}
+
 export interface CompiledPostgresTraceQuery {
   text: string;
   values: unknown[];
@@ -296,6 +340,7 @@ export function compilePostgresTraceQuery(schema: string, plan: TrustedTraceQuer
   const feedbackTable = qualifiedTable(schema, TABLE_FEEDBACK_EVENTS);
   const values: unknown[] = [plan.timeRange.from, plan.timeRange.to];
   const relationCollections = collectRelationCollections(plan.where);
+  if (plan.result === 'groups') collectGroupRelationCollections(plan.groupWhere, relationCollections);
   const rootConditions = [
     `r."parentSpanId" IS NULL`,
     latestRootPredicate(spanTable),
@@ -394,15 +439,25 @@ export function compilePostgresTraceQuery(schema: string, plan: TrustedTraceQuer
   const candidates = `WITH ${ctes.join(',\n')}`;
 
   if (plan.result === 'groups') {
-    const pageCondition = plan.cursor ? `AND "threadId" > $${values.length + 1}` : '';
+    let groupCondition = 'TRUE';
+    if (plan.groupWhere) {
+      const compiled = compileGroupPredicate(plan.groupWhere, values.length + 1);
+      groupCondition = compiled.sql;
+      values.push(...compiled.values);
+    }
+    const pageCondition = plan.cursor ? `AND g."threadId" > $${values.length + 1}` : '';
     if (plan.cursor) values.push(plan.cursor.threadId);
     values.push(plan.limit + 1);
     return {
       text: `${candidates}
-SELECT "threadId"
-FROM candidates
-WHERE "threadId" IS NOT NULL ${pageCondition}
-GROUP BY "threadId"
+SELECT g."threadId"
+FROM (
+  SELECT "threadId"
+  FROM candidates
+  WHERE "threadId" IS NOT NULL
+  GROUP BY "threadId"
+) g
+WHERE (${groupCondition}) ${pageCondition}
 ORDER BY "threadId" ASC
 LIMIT $${values.length}`,
       values,
@@ -423,7 +478,7 @@ LIMIT $${values.length}`,
 
   return {
     text: `${candidates}
-SELECT *
+SELECT "traceId", "rootSpanId", "threadId", "resourceId", "startedAt", "endedAt", "entityName", "entityType", "environment", "status"
 FROM candidates
 ${pageCondition}
 ORDER BY ${orderField} ${direction}, "traceId" ASC

@@ -8,6 +8,7 @@ import type {
   TraceQueryResponse,
   TraceQueryScoreField,
   TraceQuerySpanField,
+  TrustedTraceQueryGroupPredicate,
   TrustedTraceQueryPlan,
   TrustedTraceQueryPredicate,
   TrustedTraceQueryScalarPredicate,
@@ -88,6 +89,7 @@ const TRACE_SELECT = `
   r.entityName AS entityName,
   r.entityType AS entityType,
   r.environment AS environment,
+  r.metadataSearch AS metadataSearch,
   ${TRACE_STATUS_SQL} AS status`;
 
 class ParameterBuilder {
@@ -199,6 +201,20 @@ function collectRelationCollections(
   return collections;
 }
 
+function collectGroupRelationCollections(
+  predicate: TrustedTraceQueryGroupPredicate | undefined,
+  collections: Set<'spans' | 'scores' | 'feedback'>,
+): void {
+  if (!predicate) return;
+  if (predicate.type === 'relation') {
+    collectRelationCollections(predicate.predicate, collections);
+  } else if (predicate.type === 'boolean') {
+    for (const arg of predicate.args) collectGroupRelationCollections(arg, collections);
+  } else {
+    collectGroupRelationCollections(predicate.arg, collections);
+  }
+}
+
 function compilePredicate(predicate: TrustedTraceQueryPredicate, parameters: ParameterBuilder): string {
   if (predicate.type === 'relation') {
     const table =
@@ -233,6 +249,23 @@ function compilePredicate(predicate: TrustedTraceQueryPredicate, parameters: Par
   return compileScalarPredicate(predicate, TRACE_FIELDS, parameters, true);
 }
 
+function compileGroupPredicate(predicate: TrustedTraceQueryGroupPredicate, parameters: ParameterBuilder): string {
+  if (predicate.type === 'relation') {
+    const nested = compilePredicate(predicate.predicate, parameters);
+    const existence = `EXISTS (
+      SELECT 1 FROM candidates r
+      WHERE r.threadId = g.threadId
+        AND (${nested})
+    )`;
+    return predicate.quantifier === 'some' ? existence : `NOT ${existence}`;
+  }
+  if (predicate.type === 'boolean') {
+    const parts = predicate.args.map(arg => `(${compileGroupPredicate(arg, parameters)})`);
+    return parts.join(predicate.operator === 'and' ? ' AND ' : ' OR ');
+  }
+  return `NOT (${compileGroupPredicate(predicate.arg, parameters)})`;
+}
+
 export interface CompiledClickHouseTraceQuery {
   query: string;
   query_params: QueryParams;
@@ -243,6 +276,7 @@ export function compileClickHouseTraceQuery(plan: TrustedTraceQueryPlan): Compil
   const from = parameters.add(plan.timeRange.from, "DateTime64(3, 'UTC')");
   const to = parameters.add(plan.timeRange.to, "DateTime64(3, 'UTC')");
   const relationCollections = collectRelationCollections(plan.where);
+  if (plan.result === 'groups') collectGroupRelationCollections(plan.groupWhere, relationCollections);
   const ctes = [
     `current_roots AS (
     SELECT * FROM (
@@ -338,14 +372,19 @@ export function compileClickHouseTraceQuery(plan: TrustedTraceQueryPlan): Compil
   const candidates = `WITH ${ctes.join(',\n')}`;
 
   if (plan.result === 'groups') {
-    const pageCondition = plan.cursor ? `AND threadId > ${parameters.add(plan.cursor.threadId, 'String')}` : '';
+    const groupCondition = plan.groupWhere ? compileGroupPredicate(plan.groupWhere, parameters) : '1';
+    const pageCondition = plan.cursor ? `AND g.threadId > ${parameters.add(plan.cursor.threadId, 'String')}` : '';
     const limit = parameters.add(plan.limit + 1, 'UInt64');
     return {
       query: `${candidates}
-SELECT threadId
-FROM candidates
-WHERE isNotNull(threadId) ${pageCondition}
-GROUP BY threadId
+SELECT g.threadId
+FROM (
+  SELECT threadId
+  FROM candidates
+  WHERE isNotNull(threadId)
+  GROUP BY threadId
+) g
+WHERE (${groupCondition}) ${pageCondition}
 ORDER BY threadId ASC
 LIMIT ${limit}`,
       query_params: parameters.params,
@@ -364,7 +403,7 @@ LIMIT ${limit}`,
   const limit = parameters.add(plan.limit + 1, 'UInt64');
   return {
     query: `${candidates}
-SELECT *
+SELECT traceId, rootSpanId, threadId, resourceId, startedAt, endedAt, entityName, entityType, environment, status
 FROM candidates
 ${pageCondition}
 ORDER BY ${orderField} ${direction}, traceId ASC

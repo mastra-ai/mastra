@@ -168,6 +168,45 @@ describe('QUERY_TRACES', () => {
     expect(response).not.toHaveProperty('matches');
   });
 
+  it('passes conversation predicates through as a separate group qualification plan', async () => {
+    const { mastra, observabilityStore } = createHarness();
+    observabilityStore.queryTraces.mockResolvedValue({ groups: [], page: { next: null } });
+
+    const response = await QUERY_TRACES.handler(
+      params(mastra, {
+        timeRange: TIME_RANGE,
+        group: {
+          by: ['threadId'],
+          where: {
+            traces: {
+              some: {
+                feedback: {
+                  some: {
+                    op: 'eq',
+                    left: { path: 'feedbackType' },
+                    right: { literal: 'clinician-correction' },
+                  },
+                },
+              },
+            },
+          },
+        },
+      }),
+    );
+
+    expect(observabilityStore.queryTraces).toHaveBeenCalledWith(
+      expect.objectContaining({
+        result: 'groups',
+        groupWhere: expect.objectContaining({
+          type: 'relation',
+          collection: 'traces',
+          quantifier: 'some',
+        }),
+      }),
+    );
+    expect(response).toEqual({ groups: [], page: { next: null } });
+  });
+
   it('preserves the shared canonical semantics and fixed response projections', async () => {
     const { mastra, observabilityStore } = createHarness();
     observabilityStore.queryTraces.mockImplementation(plan => evaluateTraceQuery(TRACE_QUERY_FIXTURE_DATA, plan));
@@ -439,6 +478,8 @@ describe('QUERY_TRACES', () => {
     const operation = document.paths['/observability/traces/query'].post;
     const requestSchema = JSON.stringify(operation.requestBody.content['application/json'].schema);
     expect(requestSchema).toContain('"feedback"');
+    expect(requestSchema).toContain('"traces"');
+    expect(requestSchema).toContain('"group"');
     expect(requestSchema).toContain('"some"');
     expect(requestSchema).toContain('"none"');
     expect(requestSchema).not.toContain('"source":');

@@ -9,6 +9,7 @@ import {
   type TraceQueryResponse,
   type TraceQueryTrace,
   type TraceQueryTraceResponse,
+  type TrustedTraceQueryGroupPredicate,
   type TrustedTraceQueryPlan,
   type TrustedTraceQueryPredicate,
   type TrustedTraceQueryScalarPredicate,
@@ -369,7 +370,7 @@ export const TRACE_QUERY_FIXTURE_DATA: TraceQueryFixtureData = {
       parentEntityVersionId: 'parent-v2',
       rootEntityVersionId: 'root-v1',
     }),
-    feedbackRecord(3, 'feedback-a-correction', 'trace-a', 'clinician-correction', 'clinician', 'Use 20 mg', {
+    feedbackRecord(3, 'feedback-b-correction', 'trace-b', 'clinician-correction', 'clinician', 'Use 20 mg', {
       timestamp: '2026-08-12T10:00:00.000Z',
       feedbackUserId: 'clinician-1',
     }),
@@ -1003,7 +1004,7 @@ export const TRACE_QUERY_CONFORMANCE_CASES: TraceQueryConformanceCase[] = [
         },
       },
     },
-    expected: [{ traceId: 'trace-a' }],
+    expected: [{ traceId: 'trace-b' }],
   },
   {
     name: 'anti-matches clinician review with same-record binding and includes traces without feedback',
@@ -1031,7 +1032,7 @@ export const TRACE_QUERY_CONFORMANCE_CASES: TraceQueryConformanceCase[] = [
   {
     name: 'matches feedback without comments',
     request: { timeRange: fullRange, where: { feedback: { some: { op: 'notExists', path: 'comment' } } } },
-    expected: [{ traceId: 'trace-a' }, { traceId: 'trace-b' }],
+    expected: [{ traceId: 'trace-b' }],
   },
   {
     name: 'matches application-defined feedback sources in an independent feedback time range',
@@ -1111,6 +1112,283 @@ export const TRACE_QUERY_CONFORMANCE_CASES: TraceQueryConformanceCase[] = [
     expected: [{ traceId: 'trace-a' }],
   },
   {
+    name: 'qualifies conversations across separate trace evidence clauses',
+    request: {
+      timeRange: fullRange,
+      group: {
+        by: ['threadId'],
+        where: {
+          op: 'and',
+          args: [
+            {
+              traces: {
+                some: {
+                  scores: {
+                    some: {
+                      op: 'and',
+                      args: [
+                        { op: 'eq', left: { path: 'scorerId' }, right: { literal: 'factuality' } },
+                        { op: 'lt', left: { path: 'score' }, right: { literal: 0.6 } },
+                      ],
+                    },
+                  },
+                },
+              },
+            },
+            {
+              traces: {
+                some: {
+                  feedback: {
+                    some: {
+                      op: 'eq',
+                      left: { path: 'feedbackType' },
+                      right: { literal: 'clinician-correction' },
+                    },
+                  },
+                },
+              },
+            },
+          ],
+        },
+      },
+    },
+    expected: [{ threadId: 'thread-1' }],
+  },
+  {
+    name: 'qualifies a conversation when all evidence is on one eligible trace',
+    request: {
+      timeRange: fullRange,
+      group: {
+        by: ['threadId'],
+        where: {
+          traces: {
+            some: {
+              op: 'and',
+              args: [
+                {
+                  scores: {
+                    some: {
+                      op: 'and',
+                      args: [
+                        { op: 'eq', left: { path: 'scorerId' }, right: { literal: 'factuality' } },
+                        { op: 'lt', left: { path: 'score' }, right: { literal: 0.6 } },
+                      ],
+                    },
+                  },
+                },
+                {
+                  feedback: {
+                    some: {
+                      op: 'and',
+                      args: [
+                        { op: 'eq', left: { path: 'feedbackType' }, right: { literal: 'rating' } },
+                        { op: 'lt', left: { path: 'value' }, right: { literal: 0 } },
+                      ],
+                    },
+                  },
+                },
+              ],
+            },
+          },
+        },
+      },
+    },
+    expected: [{ threadId: 'thread-1' }],
+  },
+  {
+    name: 'does not combine evidence from different conversations',
+    request: {
+      timeRange: fullRange,
+      group: {
+        by: ['threadId'],
+        where: {
+          op: 'and',
+          args: [
+            {
+              traces: {
+                some: {
+                  scores: {
+                    some: {
+                      op: 'and',
+                      args: [
+                        { op: 'eq', left: { path: 'scorerId' }, right: { literal: 'factuality' } },
+                        { op: 'lt', left: { path: 'score' }, right: { literal: 0.6 } },
+                      ],
+                    },
+                  },
+                },
+              },
+            },
+            {
+              traces: {
+                some: {
+                  feedback: {
+                    some: {
+                      op: 'and',
+                      args: [
+                        { op: 'eq', left: { path: 'feedbackType' }, right: { literal: 'clinical-review' } },
+                        { op: 'eq', left: { path: 'feedbackSource' }, right: { literal: 'clinician' } },
+                      ],
+                    },
+                  },
+                },
+              },
+            },
+          ],
+        },
+      },
+    },
+    expected: [],
+  },
+  {
+    name: 'allows separate trace clauses to match different eligible traces',
+    request: {
+      timeRange: fullRange,
+      group: {
+        by: ['threadId'],
+        where: {
+          op: 'and',
+          args: [
+            {
+              traces: {
+                some: {
+                  scores: {
+                    some: {
+                      op: 'and',
+                      args: [
+                        { op: 'eq', left: { path: 'scorerId' }, right: { literal: 'factuality' } },
+                        { op: 'lt', left: { path: 'score' }, right: { literal: 0.6 } },
+                      ],
+                    },
+                  },
+                },
+              },
+            },
+            {
+              traces: {
+                some: { op: 'eq', left: { path: 'environment' }, right: { literal: 'staging' } },
+              },
+            },
+          ],
+        },
+      },
+    },
+    expected: [{ threadId: 'thread-1' }],
+  },
+  {
+    name: 'binds all conditions in one trace clause to one eligible trace',
+    request: {
+      timeRange: fullRange,
+      group: {
+        by: ['threadId'],
+        where: {
+          traces: {
+            some: {
+              op: 'and',
+              args: [
+                { op: 'eq', left: { path: 'environment' }, right: { literal: 'staging' } },
+                {
+                  scores: {
+                    some: {
+                      op: 'and',
+                      args: [
+                        { op: 'eq', left: { path: 'scorerId' }, right: { literal: 'factuality' } },
+                        { op: 'lt', left: { path: 'score' }, right: { literal: 0.6 } },
+                      ],
+                    },
+                  },
+                },
+              ],
+            },
+          },
+        },
+      },
+    },
+    expected: [],
+  },
+  {
+    name: 'applies trace some with nested feedback none',
+    request: {
+      timeRange: fullRange,
+      group: {
+        by: ['threadId'],
+        where: {
+          traces: {
+            some: {
+              feedback: {
+                none: {
+                  op: 'eq',
+                  left: { path: 'feedbackType' },
+                  right: { literal: 'clinician-correction' },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+    expected: [{ threadId: 'thread-1' }, { threadId: 'thread-2' }],
+  },
+  {
+    name: 'applies trace none with nested feedback some',
+    request: {
+      timeRange: fullRange,
+      group: {
+        by: ['threadId'],
+        where: {
+          traces: {
+            none: {
+              feedback: {
+                some: {
+                  op: 'eq',
+                  left: { path: 'feedbackType' },
+                  right: { literal: 'clinician-correction' },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+    expected: [{ threadId: 'thread-2' }],
+  },
+  {
+    name: 'qualifies conversations using only top-level eligible traces',
+    request: {
+      timeRange: fullRange,
+      where: { op: 'eq', left: { path: 'environment' }, right: { literal: 'production' } },
+      group: {
+        by: ['threadId'],
+        where: {
+          op: 'and',
+          args: [
+            {
+              traces: {
+                some: {
+                  scores: {
+                    some: {
+                      op: 'and',
+                      args: [
+                        { op: 'eq', left: { path: 'scorerId' }, right: { literal: 'factuality' } },
+                        { op: 'lt', left: { path: 'score' }, right: { literal: 0.6 } },
+                      ],
+                    },
+                  },
+                },
+              },
+            },
+            {
+              traces: {
+                some: { op: 'eq', left: { path: 'environment' }, right: { literal: 'staging' } },
+              },
+            },
+          ],
+        },
+      },
+    },
+    expected: [],
+  },
+  {
     name: 'returns distinct non-null thread groups',
     request: { timeRange: fullRange, group: { by: ['threadId'] } },
     expected: [{ threadId: 'thread-1' }, { threadId: 'thread-2' }],
@@ -1127,9 +1405,12 @@ export function evaluateTraceQuery(data: TraceQueryFixtureData, plan: TrustedTra
     .filter(root => !plan.where || evaluateTracePredicate(plan.where, root, spans, scores, feedback));
 
   if (plan.result === 'groups') {
-    let groups = [...new Set(roots.map(root => root.threadId).filter((value): value is string => value !== null))].sort(
-      compareTraceQueryStrings,
-    );
+    let groups = [...new Set(roots.map(root => root.threadId).filter((value): value is string => value !== null))]
+      .filter(
+        threadId =>
+          !plan.groupWhere || evaluateGroupPredicate(plan.groupWhere, threadId, roots, spans, scores, feedback),
+      )
+      .sort(compareTraceQueryStrings);
     if (plan.cursor) groups = groups.filter(threadId => compareTraceQueryStrings(threadId, plan.cursor!.threadId) > 0);
     const visible = groups.slice(0, plan.limit + 1);
     const hasNext = visible.length > plan.limit;
@@ -1229,6 +1510,28 @@ function currentFeedback(feedback: RawTraceQueryFeedback[]): RawTraceQueryFeedba
     if (!current || candidate.cursorId > current.cursorId) records.set(key, candidate);
   }
   return [...records.values()];
+}
+
+function evaluateGroupPredicate(
+  predicate: TrustedTraceQueryGroupPredicate,
+  threadId: string,
+  roots: RawTraceQuerySpan[],
+  spans: RawTraceQuerySpan[],
+  scores: RawTraceQueryScore[],
+  feedback: RawTraceQueryFeedback[],
+): boolean {
+  if (predicate.type === 'relation') {
+    const matched = roots.some(
+      root => root.threadId === threadId && evaluateTracePredicate(predicate.predicate, root, spans, scores, feedback),
+    );
+    return predicate.quantifier === 'some' ? matched : !matched;
+  }
+  if (predicate.type === 'boolean') {
+    return predicate.operator === 'and'
+      ? predicate.args.every(arg => evaluateGroupPredicate(arg, threadId, roots, spans, scores, feedback))
+      : predicate.args.some(arg => evaluateGroupPredicate(arg, threadId, roots, spans, scores, feedback));
+  }
+  return !evaluateGroupPredicate(predicate.arg, threadId, roots, spans, scores, feedback);
 }
 
 function evaluateTracePredicate(

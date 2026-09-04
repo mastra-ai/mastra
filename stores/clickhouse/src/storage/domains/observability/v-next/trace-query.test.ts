@@ -283,6 +283,30 @@ describe('ClickHouse advanced trace query', () => {
     expect(Object.values(compiled.query_params).at(-1)).toBe(5);
   });
 
+  it('qualifies grouped threads with correlated eligible trace predicates', () => {
+    const compiled = compileClickHouseTraceQuery(
+      plan({
+        group: {
+          by: ['threadId'],
+          where: {
+            traces: {
+              some: {
+                scores: {
+                  some: { op: 'lt', left: { path: 'score' }, right: { literal: 0.6 } },
+                },
+              },
+            },
+          },
+        },
+      }),
+    );
+
+    expect(compiled.query).toContain('SELECT 1 FROM candidates r');
+    expect(compiled.query).toContain('r.threadId = g.threadId');
+    expect(compiled.query).toContain('SELECT 1 FROM current_scores s');
+    expect(Object.values(compiled.query_params)).toContain(0.6);
+  });
+
   it('fails closed when a trusted plan contains an unmapped field', () => {
     const trusted = plan({ where: { op: 'eq', left: { path: 'traceId' }, right: { literal: 'trace-a' } } });
     const invalid = {

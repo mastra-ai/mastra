@@ -313,6 +313,61 @@ const missingClinicianReview = {
 
 Feedback `timestamp` predicates are independent of the root `timeRange`. Use `comment` only with `exists` or `notExists`. Comment contents aren't searchable. The deprecated feedback fields `source` and `userId` aren't available. Use `feedbackSource` and `feedbackUserId`.
 
+### Qualify conversations across traces
+
+Set `group.by` to `['threadId']` and use `group.where` to qualify a conversation using evidence from its eligible traces. The top-level `timeRange` and `where` first select completed traces. `group.where` then evaluates only those traces within each non-null thread.
+
+This query finds conversations where one eligible trace has a factuality score below `0.6` and one eligible trace has a clinician correction:
+
+```typescript
+const result = await mastraClient.queryTraces({
+  timeRange: {
+    from: '2026-08-01T00:00:00.000Z',
+    to: '2026-09-01T00:00:00.000Z',
+  },
+  group: {
+    by: ['threadId'],
+    where: {
+      op: 'and',
+      args: [
+        {
+          traces: {
+            some: {
+              scores: {
+                some: {
+                  op: 'and',
+                  args: [
+                    { op: 'eq', left: { path: 'scorerId' }, right: { literal: 'factuality' } },
+                    { op: 'lt', left: { path: 'score' }, right: { literal: 0.6 } },
+                  ],
+                },
+              },
+            },
+          },
+        },
+        {
+          traces: {
+            some: {
+              feedback: {
+                some: {
+                  op: 'eq',
+                  left: { path: 'feedbackType' },
+                  right: { literal: 'clinician-correction' },
+                },
+              },
+            },
+          },
+        },
+      ],
+    },
+  },
+})
+```
+
+Every condition inside one `traces.some` applies to the same trace. Separate `traces.some` clauses may match the same trace or different traces in the conversation. `traces.none` requires that no eligible trace matches its complete nested predicate. Nested `spans`, `scores`, and `feedback` clauses retain their same-record binding.
+
+`traces.some` and `traces.none` are available only inside `group.where`. A `group.where` condition requires `group.by: ['threadId']`. The API doesn't expose `groupBy`, top-level `having`, or `anyTrace` aliases.
+
 ## Responses
 
 An ungrouped query returns only lightweight completed traces:
