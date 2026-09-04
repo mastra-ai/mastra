@@ -1,8 +1,8 @@
 ---
-'@mastra/playground-ui': major
+'@mastra/playground-ui': minor
 ---
 
-Replaced the Behavior trace-intelligence stage with Issues so recurring themes focus on actionable failure patterns.
+Replaced the Behavior stage in the beta Trace Intelligence feature with Issues so recurring themes focus on actionable failure patterns.
 
 **Migration**
 
