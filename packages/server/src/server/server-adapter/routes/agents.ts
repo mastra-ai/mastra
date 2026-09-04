@@ -172,6 +172,7 @@ export type AgentRoutes = readonly [
   typeof EXECUTE_AGENT_TOOL_ROUTE,
   typeof APPROVE_TOOL_CALL_ROUTE,
   typeof SEND_TOOL_APPROVAL_ROUTE,
+  typeof LIST_AGENT_RUNS_ROUTE,
   typeof LIST_SUSPENDED_RUNS_ROUTE,
   typeof DECLINE_TOOL_CALL_ROUTE,
   typeof RESUME_STREAM_ROUTE,
