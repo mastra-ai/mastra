@@ -1121,6 +1121,36 @@ mastra api --url https://observability.eu.mastra.ai trace list
 
 Use `--url` and `--header` when you need to override another target or its credentials.
 
+### Factory commands
+
+Use `mastra api factory` to manage Factory projects, work items, decisions, attention items, queue health, and supervisor sessions. These commands use the same JSON input, output, authentication, headers, timeout, and target resolution as other `mastra api` commands.
+
+List the Factory projects available to the current organization:
+
+```bash
+mastra api factory project list
+```
+
+Inspect the generated request schema before sending a governed work-item transition:
+
+```bash
+mastra api factory work-item transition --schema
+```
+
+Move a work item using its current revision:
+
+```bash
+mastra api factory work-item transition <project-id> <work-item-id> '{"board":"work","stage":"planning","requestId":"00000000-0000-4000-8000-000000000000","cause":"manual","expectedRevision":1}'
+```
+
+A project provisioned by `create-factory` contains a non-secret `.mastra-project.json` file. From that project directory, the CLI uses the file to find the hosted Factory instance and applies your Mastra CLI credentials automatically. Pass `--url` to target a specific local, remote, or self-hosted Factory server instead:
+
+```bash
+mastra api --url http://localhost:4111 factory project list
+```
+
+Factory endpoints use their root-level `/web/factory/...` paths. `--server-api-prefix` still controls local target probing, but it isn't prepended to Factory requests.
+
 ### Flags
 
 #### `--url <url>`
