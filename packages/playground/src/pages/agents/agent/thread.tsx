@@ -149,7 +149,7 @@ function AgentThread() {
                             <div className="relative min-h-0">
                               <div className="rounded-studio-frame border-border1 bg-surface2 shadow-main-frame m-1.5 flex h-[calc(100%-0.75rem)] min-h-0 flex-col overflow-hidden border [--studio-frame-inset:0.5rem] [--studio-frame-radius:1.5rem] lg:m-2 lg:ml-0 lg:h-[calc(100%-1rem)]">
                                 <Header>
-                                  <HeaderTitle>Threads</HeaderTitle>
+                                  <HeaderTitle>Thread</HeaderTitle>
                                   <HeaderAction>
                                     <Switch
                                       id="thread-advanced-view"
@@ -229,7 +229,7 @@ const ThreadTracesOverlay = ({ threadId }: { threadId: string }) => {
 
   return (
     <>
-      {/* Below the Threads header (48px), which now holds the advanced-view switch on the right. */}
+      {/* Below the Thread header (48px), which now holds the advanced-view switch on the right. */}
       <div className="absolute top-[calc(0.75rem+3rem+0.5rem)] right-3 z-10 hidden lg:top-[calc(1rem+3rem+0.5rem)] lg:right-4 lg:block">
         <Button variant="outline" onClick={() => (asideState === 'open' ? closeAside() : setAsideState('open'))}>
           <ChartNoAxesGantt />

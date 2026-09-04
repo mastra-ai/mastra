@@ -406,12 +406,12 @@ describe('Standalone thread page', () => {
       expect(screen.queryByTestId('thread-view-by-trace')).toBeNull();
     });
 
-    it('is toggled from the "Advanced view" switch in the Threads header', async () => {
+    it('is toggled from the "Advanced view" switch in the Thread header', async () => {
       installHandlers();
       installTraceHandlers();
       renderAt(`/agents/${AGENT_ID}/threads/${THREAD_ID}`);
 
-      expect(await screen.findByRole('heading', { name: 'Threads' })).not.toBeNull();
+      expect(await screen.findByRole('heading', { name: 'Thread' })).not.toBeNull();
       const toggle = screen.getByRole('switch', { name: 'Advanced view' });
       expect(toggle.getAttribute('aria-checked')).toBe('false');
 
