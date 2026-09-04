@@ -236,7 +236,7 @@ describe('api command executor', () => {
     await executeDescriptor(
       API_COMMANDS['factoryWork-itemTransition'],
       ['project-1', 'work-item-1'],
-      '{"board":"engineering","stage":"planning","requestId":"00000000-0000-4000-8000-000000000000","cause":"manual","expectedRevision":1}',
+      '{"board":"work","stage":"planning","requestId":"00000000-0000-4000-8000-000000000000","cause":"manual","expectedRevision":1}',
       { url: 'https://example.com', header: [], pretty: false },
     );
 
@@ -254,7 +254,7 @@ describe('api command executor', () => {
         headers: { 'content-type': 'application/json' },
         signal: expect.any(AbortSignal),
         body: JSON.stringify({
-          board: 'engineering',
+          board: 'work',
           stage: 'planning',
           requestId: '00000000-0000-4000-8000-000000000000',
           cause: 'manual',
@@ -346,7 +346,7 @@ describe('api command executor', () => {
     await executeDescriptor(
       API_COMMANDS['factoryWork-itemTransition'],
       ['project-1', 'work-item-1'],
-      '{"board":"engineering","stage":"planning","requestId":"00000000-0000-4000-8000-000000000000","cause":"manual","expectedRevision":1}',
+      '{"board":"work","stage":"planning","requestId":"00000000-0000-4000-8000-000000000000","cause":"manual","expectedRevision":1}',
       { serverApiPrefix: '/custom-api', header: [], pretty: false },
     );
 

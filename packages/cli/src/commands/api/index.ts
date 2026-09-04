@@ -476,7 +476,7 @@ export function registerApiCommand(program: CommanderCommand): void {
     examples: [
       {
         description: 'Move a work item with optimistic concurrency',
-        command: `mastra api factory work-item transition <project-id> <work-item-id> '{"board":"engineering","stage":"planning","requestId":"00000000-0000-4000-8000-000000000000","cause":"manual","expectedRevision":1}'`,
+        command: `mastra api factory work-item transition <project-id> <work-item-id> '{"board":"work","stage":"planning","requestId":"00000000-0000-4000-8000-000000000000","cause":"manual","expectedRevision":1}'`,
       },
     ],
   });
