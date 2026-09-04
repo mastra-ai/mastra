@@ -14,6 +14,34 @@ Note that if you only need to use your tools or agents directly within your Mast
 
 It supports both [stdio (subprocess) and SSE (HTTP) MCP transports](https://modelcontextprotocol.io/docs/concepts/transports).
 
+## Operate a remote Mastra server
+
+Use `MastraApiMCPServer` to give MCP clients the same operations as the `mastra api` CLI. It reads the target server's API schema when it starts and only registers operations supported by that server.
+
+```typescript
+import { Mastra } from '@mastra/core/mastra'
+import { MastraApiMCPServer } from '@mastra/mcp'
+
+const operations = await MastraApiMCPServer.create({
+  url: 'https://my-mastra-server.example.com',
+  headers: {
+    Authorization: `Bearer ${process.env.MASTRA_API_TOKEN}`,
+  },
+})
+
+export const mastra = new Mastra({
+  mcpServers: { operations },
+})
+```
+
+Tool names follow the CLI command hierarchy. For example, `mastra api workflow run start` becomes `workflow_run_start`.
+
+The server can expose 60 tools across agents, workflows, tools, MCP servers, memory threads, working memory, traces, logs, metrics, scores, datasets, experiments, and Trace Intelligence. Each tool uses the input schema returned by the target server. Trace list and get tools also support the CLI's `verbose` option.
+
+The server uses stateless MCP transport. Read operations, mutations, and destructive operations have separate MCP tool annotations. Each tool call sends one request to the target API and does not retry mutations. Routes outside the CLI catalog are not exposed.
+
+Use `headers` to authenticate the API schema request. For tool calls, the MCP caller's bearer token replaces the configured `Authorization` header. You can also set `apiPrefix`, `timeoutMs`, `id`, `name`, and `version`.
+
 ## Constructor
 
 To create a new `MCPServer`, you need to provide some basic information about your server, the tools it will offer, and optionally, any agents you want to expose as tools.
