@@ -1,7 +1,7 @@
 import { v4 as uuid } from '@lukeed/uuid';
 import { AlertDialog } from '@mastra/playground-ui/components/AlertDialog';
 import { Button } from '@mastra/playground-ui/components/Button';
-import { Header, HeaderGroup, HeaderTitle } from '@mastra/playground-ui/components/Header';
+import { Header, HeaderAction, HeaderTitle } from '@mastra/playground-ui/components/Header';
 import { LogoWithoutText } from '@mastra/playground-ui/components/Logo';
 import { MainContentLayout } from '@mastra/playground-ui/components/MainContent';
 import { MainSidebar, MainSidebarProvider, useMainSidebar } from '@mastra/playground-ui/components/MainSidebar';
@@ -150,7 +150,7 @@ function AgentThread() {
                               <div className="rounded-studio-frame border-border1 bg-surface2 shadow-main-frame m-1.5 flex h-[calc(100%-0.75rem)] min-h-0 flex-col overflow-hidden border [--studio-frame-inset:0.5rem] [--studio-frame-radius:1.5rem] lg:m-2 lg:ml-0 lg:h-[calc(100%-1rem)]">
                                 <Header>
                                   <HeaderTitle>Threads</HeaderTitle>
-                                  <HeaderGroup>
+                                  <HeaderAction>
                                     <Switch
                                       id="thread-advanced-view"
                                       checked={isAdvancedVariant}
@@ -160,7 +160,7 @@ function AgentThread() {
                                     <label htmlFor="thread-advanced-view" className="text-ui-sm text-neutral4">
                                       Advanced view
                                     </label>
-                                  </HeaderGroup>
+                                  </HeaderAction>
                                 </Header>
                                 <div
                                   className={cn(
@@ -229,7 +229,8 @@ const ThreadTracesOverlay = ({ threadId }: { threadId: string }) => {
 
   return (
     <>
-      <div className="absolute top-3 right-3 z-10 hidden lg:top-4 lg:right-4 lg:block">
+      {/* Below the Threads header (48px), which now holds the advanced-view switch on the right. */}
+      <div className="absolute top-[calc(0.75rem+3rem+0.5rem)] right-3 z-10 hidden lg:top-[calc(1rem+3rem+0.5rem)] lg:right-4 lg:block">
         <Button variant="outline" onClick={() => (asideState === 'open' ? closeAside() : setAsideState('open'))}>
           <ChartNoAxesGantt />
           Traces

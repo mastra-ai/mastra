@@ -258,45 +258,48 @@ function TraceThreadRow({
     >
       {/* The messages column has no bottom border so consecutive turns read as one
           continuous conversation; the vertical border separates it from the trace. */}
-      <div className="border-border1 relative flex min-h-[240px] min-w-0 flex-col gap-2 border-r py-4 pr-4">
-        <div
-          className={cn(
-            'z-30 flex items-center gap-1 transition-opacity',
-            showFeedback ? 'opacity-100' : 'opacity-0 group-hover:opacity-100',
-          )}
-        >
-          <Button
-            size="icon-sm"
-            variant="ghost"
-            tooltip="Feedback"
-            aria-label="Toggle feedback"
-            onClick={() => setShowFeedback(v => !v)}
+      <div className="border-border1 relative min-h-[240px] min-w-0 border-r pr-4">
+        {/* Sticky within the row, so a long trace on the right never scrolls its messages away. */}
+        <div className="sticky top-0 flex flex-col gap-2 py-4">
+          <div
+            className={cn(
+              'z-30 flex items-center gap-1 transition-opacity',
+              showFeedback ? 'opacity-100' : 'opacity-0 group-hover:opacity-100',
+            )}
           >
-            <MessageSquare />
-          </Button>
-          <Button
-            as={Link}
-            to={`/traces?traceId=${encodeURIComponent(traceId)}`}
-            variant="ghost"
-            size="icon-sm"
-            tooltip="Go to trace"
-            aria-label="Go to trace"
-          >
-            <TraceIcon />
-          </Button>
-        </div>
-        <div className="flex min-h-0 flex-1 flex-col justify-center">
-          <TraceThreadItemView
-            traceId={traceId}
-            onHighlightSpans={onHighlightSpans}
-            className="h-auto overflow-visible"
-          />
-        </div>
-        {showFeedback && (
-          <div className="border-border1 bg-surface3 absolute top-8 left-0 z-20 max-h-[calc(100%-2rem)] w-80 overflow-y-auto rounded-lg border shadow-lg">
-            <TraceFeedbackTab key={traceId} traceId={traceId} variant="embed" />
+            <Button
+              size="icon-sm"
+              variant="ghost"
+              tooltip="Feedback"
+              aria-label="Toggle feedback"
+              onClick={() => setShowFeedback(v => !v)}
+            >
+              <MessageSquare />
+            </Button>
+            <Button
+              as={Link}
+              to={`/traces?traceId=${encodeURIComponent(traceId)}`}
+              variant="ghost"
+              size="icon-sm"
+              tooltip="Go to trace"
+              aria-label="Go to trace"
+            >
+              <TraceIcon />
+            </Button>
           </div>
-        )}
+          <div className="min-h-0">
+            <TraceThreadItemView
+              traceId={traceId}
+              onHighlightSpans={onHighlightSpans}
+              className="h-auto overflow-visible"
+            />
+          </div>
+          {showFeedback && (
+            <div className="border-border1 bg-surface3 absolute top-12 left-0 z-20 w-80 overflow-y-auto rounded-lg border shadow-lg">
+              <TraceFeedbackTab key={traceId} traceId={traceId} variant="embed" />
+            </div>
+          )}
+        </div>
       </div>
       <div className="border-border1 min-w-0 border-b">
         <div className="py-4 pl-4">
