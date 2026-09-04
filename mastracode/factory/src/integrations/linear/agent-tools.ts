@@ -2,9 +2,9 @@
  * Linear tools exposed to the coding agent.
  *
  * Wired into the agent through the SDK's async `extraTools` provider: on each
- * tool-set resolution we map the session's resourceId (the factory project id)
- * to its owning org and only expose the Linear tools when that org has a
- * Linear connection. Projects whose org never connected Linear (or when the
+ * tool-set resolution we map the session to the factory project it belongs to,
+ * that project to its owning org, and only expose the Linear tools when that
+ * org has a Linear connection. Projects whose org never connected Linear (or when the
  * feature is disabled) see no Linear tools at all — the model is never shown
  * tools it can't use.
  *
@@ -20,6 +20,12 @@ import { z } from 'zod';
 
 import type { LinearIntegration } from './integration.js';
 import { LinearReauthRequiredError } from './integration.js';
+
+/**
+ * The slice of controller state these tools resolve against. Optional because a
+ * project-scoped session carries no factory state at all.
+ */
+type LinearToolsControllerContext = AgentControllerRequestContext<{ factoryProjectId?: string }>;
 
 function createLinearGetIssueTool(linear: LinearIntegration, orgId: string) {
   return createTool({
@@ -108,8 +114,20 @@ export async function buildLinearAgentTools({
 }): Promise<Record<string, ReturnType<typeof createLinearGetIssueTool> | ReturnType<typeof createLinearCommentTool>>> {
   if (!linear.authEnabled) return {};
 
-  const ctx = requestContext.get('controller') as AgentControllerRequestContext | undefined;
-  const resourceId = ctx?.resourceId;
+  const ctx = requestContext.get('controller') as LinearToolsControllerContext | undefined;
+  if (!ctx) return {};
+
+  // A Factory board run is bound per work item, so its session resourceId is
+  // the work-item session id — not the project id `resolveOrgId` looks up in
+  // `factory_projects`. Reading `resourceId` alone therefore resolved no org
+  // for any board run, and every one of them was handed an empty tool set: the
+  // agent silently lost `linear_get_issue` and triaged from the issue title.
+  //
+  // A bound run's controller state carries the project it belongs to (the same
+  // field `getFactorySessionCoordinates` reads), so prefer that, and fall back
+  // to the resourceId for a project-scoped session where it is already the
+  // project id.
+  const resourceId = ctx.getState().factoryProjectId ?? ctx.resourceId;
   if (!resourceId) return {};
 
   const orgId = await linear.resolveOrgId(resourceId);

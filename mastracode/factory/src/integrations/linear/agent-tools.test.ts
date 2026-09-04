@@ -25,8 +25,23 @@ const ORG_ID = 'org-1';
 function requestContextFor(resourceId: string | undefined): RequestContext {
   const ctx = new RequestContext();
   if (resourceId !== undefined) {
-    ctx.set('controller', { resourceId });
+    ctx.set('controller', { resourceId, getState: () => ({}) });
   }
+  return ctx;
+}
+
+/**
+ * A Factory board run: bound per work item, so the session resourceId is the
+ * work-item session id and the project it belongs to is carried in controller
+ * state instead.
+ */
+function boardRunRequestContextFor(sessionId: string, factoryProjectId: string | undefined): RequestContext {
+  const ctx = new RequestContext();
+  ctx.set('controller', {
+    resourceId: sessionId,
+    threadId: sessionId,
+    getState: () => (factoryProjectId === undefined ? {} : { factoryProjectId }),
+  });
   return ctx;
 }
 
@@ -155,6 +170,36 @@ describe('buildLinearAgentTools — exposure gating', () => {
   it('exposes nothing when there is no controller context', async () => {
     const tools = await buildLinearAgentTools({ linear, requestContext: requestContextFor(undefined) });
     expect(tools).toEqual({});
+  });
+
+  it('exposes the Linear tools to a board run, whose resourceId is not the project id', async () => {
+    await seedProject();
+    await seedConnection();
+    const tools = await buildLinearAgentTools({
+      linear,
+      requestContext: boardRunRequestContextFor('work-item-session-1', PROJECT_ID),
+    });
+    expect(tools).toHaveProperty('linear_get_issue');
+    expect(tools).toHaveProperty('linear_create_comment');
+  });
+
+  it('exposes nothing to a board run whose project org has not connected Linear', async () => {
+    await seedProject();
+    const tools = await buildLinearAgentTools({
+      linear,
+      requestContext: boardRunRequestContextFor('work-item-session-1', PROJECT_ID),
+    });
+    expect(tools).toEqual({});
+  });
+
+  it('falls back to the resourceId when controller state carries no project', async () => {
+    await seedProject();
+    await seedConnection();
+    const tools = await buildLinearAgentTools({
+      linear,
+      requestContext: boardRunRequestContextFor(PROJECT_ID, undefined),
+    });
+    expect(tools).toHaveProperty('linear_get_issue');
   });
 
   it('does not cache a transient database failure as "not a project"', async () => {
