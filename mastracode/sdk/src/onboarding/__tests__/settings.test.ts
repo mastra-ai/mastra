@@ -76,6 +76,7 @@ function createSettings(overrides?: Partial<GlobalSettings>): GlobalSettings {
     },
     shellPassthrough: { mode: 'default' },
     voice: { enabled: false, engine: 'cloud', provider: 'openai', model: 'whisper-1' },
+    backgroundTools: { enabled: false },
     signals: { unixSocketPubSub: false, experimentalGithubSignals: false, githubPollIntervalMs: 300_000 },
     mcp: { claudeCodeGlobal: false, codexGlobal: false },
     observability: { resources: {}, localTracing: false },
@@ -388,6 +389,31 @@ describe('customProviders parsing/persistence', () => {
       });
       expect(loadSettings(filePath).preferences.quietModeMaxToolPreviewLines).toBe(2);
       vi.mocked(JSON.parse).mockRestore();
+    });
+  });
+
+  it('keeps native background tools disabled unless explicitly enabled', () => {
+    withTempSettingsFile(filePath => {
+      writeFileSync(filePath, JSON.stringify({ onboarding: {}, models: {}, preferences: {}, storage: {} }), 'utf-8');
+      expect(loadSettings(filePath).backgroundTools.enabled).toBe(false);
+
+      const settings = createSettings();
+      settings.backgroundTools.enabled = true;
+      saveSettings(settings, filePath);
+      expect(loadSettings(filePath).backgroundTools.enabled).toBe(true);
+
+      writeFileSync(
+        filePath,
+        JSON.stringify({
+          onboarding: {},
+          models: {},
+          preferences: {},
+          storage: {},
+          backgroundTools: { enabled: 'yes' },
+        }),
+        'utf-8',
+      );
+      expect(loadSettings(filePath).backgroundTools.enabled).toBe(false);
     });
   });
 

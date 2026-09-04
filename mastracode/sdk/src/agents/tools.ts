@@ -51,13 +51,17 @@ async function executeAlexandriaSerially(tool: ToolLike, args: any[]): Promise<u
   }
 }
 
-function configurePluginTool(name: string, tool: ToolLike): ToolLike {
+function configurePluginTool(name: string, tool: ToolLike, backgroundToolsEnabled: boolean): ToolLike {
   if (!BACKGROUND_ELIGIBLE_PLUGIN_TOOLS.has(name)) return tool;
   return {
     ...tool,
-    // Eligible for backgrounding, but the agent must opt in per call — a plain
-    // expert question should stay a normal awaited foreground call.
-    background: { enabled: true, defaultDisposition: 'foreground' },
+    ...(backgroundToolsEnabled
+      ? {
+          // Eligible for backgrounding, but the agent must opt in per call — a plain
+          // expert question should stay a normal awaited foreground call.
+          background: { enabled: true, defaultDisposition: 'foreground' as const },
+        }
+      : {}),
     execute: (...args: any[]) => executeAlexandriaSerially(tool, args),
   };
 }
@@ -152,6 +156,7 @@ export function createDynamicTools(
   disabledTools?: string[],
   storage?: MastraCompositeStore,
   pluginTools?: Record<string, ToolLike>,
+  backgroundToolsEnabled = false,
 ) {
   return function getDynamicTools({
     requestContext,
@@ -214,7 +219,7 @@ export function createDynamicTools(
       if (pluginTools) {
         for (const [name, tool] of Object.entries(pluginTools)) {
           if (!(name in tools)) {
-            tools[name] = configurePluginTool(name, tool);
+            tools[name] = configurePluginTool(name, tool, backgroundToolsEnabled);
           }
         }
       }
