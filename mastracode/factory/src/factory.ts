@@ -104,6 +104,7 @@ import { WorkItemsStorage } from './storage/domains/work-items/base.js';
 import type { WorkItemRow } from './storage/domains/work-items/base.js';
 import { FactorySupervisorHealthWorker } from './supervisor/health-worker.js';
 import { SUPERVISOR_INSTRUCTIONS } from './supervisor/instructions.js';
+import { notifySupervisor } from './supervisor/notify.js';
 import { createFactorySupervisorReadTools } from './supervisor/read-tools.js';
 import { hydrateSupervisorSession, parseSupervisorResourceId, resolveSupervisorScope } from './supervisor/session.js';
 import { createFactorySupervisorWriteTools } from './supervisor/write-tools.js';
@@ -1107,7 +1108,16 @@ export class MastraFactory {
     // an unavailable integration must not run.
     const integrationWorkers = [
       ...(factoryReady
-        ? [new FactorySupervisorHealthWorker({ projects: factoryProjectsStorage, workItems: workItemsStorage })]
+        ? [
+            new FactorySupervisorHealthWorker({
+              projects: factoryProjectsStorage,
+              workItems: workItemsStorage,
+              // The sweep's doorbell: ensure-creates the supervisor session
+              // through the controller, then emits via the code agent's
+              // notification stack (same send handle the dispatcher uses).
+              notify: input => notifySupervisor({ controller: prepared.base.controller }, input),
+            }),
+          ]
         : []),
       ...integrationRegistrations
         .filter(({ integration, ready }) => ready && integration.workers)

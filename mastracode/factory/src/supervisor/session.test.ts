@@ -10,15 +10,22 @@ import {
   supervisorThreadId,
 } from './session.js';
 
-function requestContext(overrides: Partial<{ orgId: string; resourceId: string }> = {}) {
+function requestContext(
+  overrides: Partial<{ orgId: string; resourceId: string; user: boolean; state: Record<string, unknown> }> = {},
+) {
   const context = new RequestContext();
-  context.set('user', { workosId: 'user-1', organizationId: overrides.orgId ?? 'org-1' });
+  // `user: false` models a signal-driven turn (e.g. notification delivery),
+  // whose reconstructed context carries only the controller entry.
+  if (overrides.user !== false) {
+    context.set('user', { workosId: 'user-1', organizationId: overrides.orgId ?? 'org-1' });
+  }
   context.set('controller', {
     resourceId: overrides.resourceId ?? 'resource-1',
     threadId: 'thread-1',
     scope: '/',
     session: { id: 'session-1', ownerId: 'code', modeId: 'build' },
-    getState: () => ({}),
+    state: overrides.state ?? {},
+    getState: () => overrides.state ?? {},
   });
   return context;
 }
@@ -52,7 +59,7 @@ describe('resolveSupervisorScope', () => {
         requestContext: requestContext({ resourceId: supervisorResourceId(project.id) }),
         projects,
       }),
-    ).resolves.toEqual({ orgId: 'org-1', factoryProjectId: project.id });
+    ).resolves.toEqual({ orgId: 'org-1', factoryProjectId: project.id, via: 'auth' });
   });
 
   it('yields nothing for ordinary sessions, foreign orgs, or unknown projects', async () => {
@@ -67,6 +74,88 @@ describe('resolveSupervisorScope', () => {
     await expect(
       resolveSupervisorScope({
         requestContext: requestContext({ resourceId: supervisorResourceId('missing') }),
+        projects,
+      }),
+    ).resolves.toBeNull();
+  });
+});
+
+describe('resolveSupervisorScope on signal turns (no factory auth)', () => {
+  it('trusts hydration-stamped state once storage confirms ownership', async () => {
+    const { projects, project } = await seedProject();
+    await expect(
+      resolveSupervisorScope({
+        requestContext: requestContext({
+          user: false,
+          resourceId: supervisorResourceId(project.id),
+          state: { factoryProjectId: project.id, factoryOrgId: 'org-1' },
+        }),
+        projects,
+      }),
+    ).resolves.toEqual({ orgId: 'org-1', factoryProjectId: project.id, via: 'session-state' });
+  });
+
+  it('yields nothing without stamped state', async () => {
+    const { projects, project } = await seedProject();
+    await expect(
+      resolveSupervisorScope({
+        requestContext: requestContext({ user: false, resourceId: supervisorResourceId(project.id) }),
+        projects,
+      }),
+    ).resolves.toBeNull();
+  });
+
+  it('rejects state whose project id does not match the resourceId', async () => {
+    const { projects, project } = await seedProject();
+    await expect(
+      resolveSupervisorScope({
+        requestContext: requestContext({
+          user: false,
+          resourceId: supervisorResourceId(project.id),
+          state: { factoryProjectId: 'some-other-project', factoryOrgId: 'org-1' },
+        }),
+        projects,
+      }),
+    ).resolves.toBeNull();
+  });
+
+  it('rejects forged state naming an org that does not own the project', async () => {
+    const { projects, project } = await seedProject();
+    await expect(
+      resolveSupervisorScope({
+        requestContext: requestContext({
+          user: false,
+          resourceId: supervisorResourceId(project.id),
+          state: { factoryProjectId: project.id, factoryOrgId: 'org-evil' },
+        }),
+        projects,
+      }),
+    ).resolves.toBeNull();
+  });
+
+  it('rejects stale state when the project no longer exists', async () => {
+    const { projects } = await seedProject();
+    await expect(
+      resolveSupervisorScope({
+        requestContext: requestContext({
+          user: false,
+          resourceId: supervisorResourceId('deleted-project'),
+          state: { factoryProjectId: 'deleted-project', factoryOrgId: 'org-1' },
+        }),
+        projects,
+      }),
+    ).resolves.toBeNull();
+  });
+
+  it('never falls back to state for an authenticated caller with a foreign org', async () => {
+    const { projects, project } = await seedProject();
+    await expect(
+      resolveSupervisorScope({
+        requestContext: requestContext({
+          orgId: 'org-2',
+          resourceId: supervisorResourceId(project.id),
+          state: { factoryProjectId: project.id, factoryOrgId: 'org-1' },
+        }),
         projects,
       }),
     ).resolves.toBeNull();

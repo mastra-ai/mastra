@@ -34,25 +34,59 @@ export function parseSupervisorResourceId(resourceId: string | undefined | null)
   return factoryProjectId.length > 0 ? factoryProjectId : null;
 }
 
+/** How a supervisor scope was established — drives which tools register. */
+export interface ResolvedSupervisorScope extends SupervisorScope {
+  /**
+   * `auth`: a factory-authenticated caller whose org owns the project.
+   * `session-state`: a signal-driven turn (notification wake) with no factory
+   * auth, trusted from the hydration-stamped session state. Signal turns get
+   * the read tools plus the approval-free v1 tools only, with agent-actor
+   * attribution — never the human-gated write tools.
+   */
+  via: 'auth' | 'session-state';
+}
+
 /**
- * Scope a request to a supervisor session the caller is allowed to drive:
- * the resourceId must name a project, and the caller's org must own it.
+ * Scope a request to a supervisor session the caller is allowed to drive.
+ * Two paths:
+ *
+ * - Authenticated: the resourceId must name a project and the caller's auth
+ *   org must own it. An authenticated caller whose org does NOT own the
+ *   project gets null — never a fallback to session state.
+ * - Signal turn (no factory auth, e.g. a notification wake whose request
+ *   context carries only the controller context): trust the session state
+ *   that `hydrateSupervisorSession` stamped at (re)creation, but only when
+ *   ALL of: the resourceId is supervisor-prefixed; the state's project id
+ *   exactly equals the id parsed from the resourceId; and a fresh project
+ *   lookup confirms the stated org still owns that project.
+ *
  * Anything else yields null and the supervisor tools stay unregistered.
  */
 export async function resolveSupervisorScope(options: {
   requestContext: RequestContext | undefined;
-  projects: Pick<FactoryProjectsStorage, 'get'>;
-}): Promise<SupervisorScope | null> {
+  projects: Pick<FactoryProjectsStorage, 'get' | 'getById'>;
+}): Promise<ResolvedSupervisorScope | null> {
   const { requestContext } = options;
   if (!requestContext || typeof requestContext.get !== 'function') return null;
   const context = requestContext.get('controller') as AgentControllerRequestContext<MastraCodeState> | undefined;
   const factoryProjectId = parseSupervisorResourceId(context?.resourceId);
   if (!factoryProjectId) return null;
-  const orgId = getFactoryAuthOrgId(getFactoryAuthUserFromContext(requestContext));
-  if (!orgId) return null;
-  const project = await options.projects.get({ orgId, id: factoryProjectId });
-  if (!project) return null;
-  return { orgId, factoryProjectId };
+  const authOrgId = getFactoryAuthOrgId(getFactoryAuthUserFromContext(requestContext));
+  if (authOrgId) {
+    const project = await options.projects.get({ orgId: authOrgId, id: factoryProjectId });
+    if (!project) return null;
+    return { orgId: authOrgId, factoryProjectId, via: 'auth' };
+  }
+  // Signal turn: no factory auth anywhere in the request context. Trust the
+  // state stamped by hydrateSupervisorSession, verified against storage.
+  const state = context?.state as Partial<Pick<MastraCodeState, 'factoryProjectId' | 'factoryOrgId'>> | undefined;
+  const stateProjectId = typeof state?.factoryProjectId === 'string' ? state.factoryProjectId : null;
+  const stateOrgId = typeof state?.factoryOrgId === 'string' ? state.factoryOrgId : null;
+  if (!stateProjectId || !stateOrgId) return null;
+  if (stateProjectId !== factoryProjectId) return null;
+  const project = await options.projects.getById({ id: factoryProjectId });
+  if (!project || project.orgId !== stateOrgId) return null;
+  return { orgId: project.orgId, factoryProjectId, via: 'session-state' };
 }
 
 /**
